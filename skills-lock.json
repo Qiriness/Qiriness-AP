@@ -1,0 +1,41 @@
+{
+  "version": 1,
+  "skills": {
+    "diagnosing-bugs": {
+      "source": "mattpocock/skills",
+      "sourceType": "github",
+      "skillPath": "skills/engineering/diagnosing-bugs/SKILL.md",
+      "computedHash": "44417076a76b40331f3816f21e76ea7c9d129e3f73cca2e159b69a56aaa838b2"
+    },
+    "grill-me": {
+      "source": "mattpocock/skills",
+      "sourceType": "github",
+      "skillPath": "skills/productivity/grill-me/SKILL.md",
+      "computedHash": "7edd436132b43ea2973710f0c28a9879c9b0910651eb89a991a7e98cb6dbbacb"
+    },
+    "handoff": {
+      "source": "mattpocock/skills",
+      "sourceType": "github",
+      "skillPath": "skills/productivity/handoff/SKILL.md",
+      "computedHash": "7b03a812d5ca10fa8fe69d4cf8a34542684db51f5db0271254b96074e9f3a243"
+    },
+    "improve-codebase-architecture": {
+      "source": "mattpocock/skills",
+      "sourceType": "github",
+      "skillPath": "skills/engineering/improve-codebase-architecture/SKILL.md",
+      "computedHash": "569299a60c8e93880f3b3c1eca55578f58f7e1a4155876edb4cb814da3d6b3ea"
+    },
+    "prototype": {
+      "source": "mattpocock/skills",
+      "sourceType": "github",
+      "skillPath": "skills/engineering/prototype/SKILL.md",
+      "computedHash": "aa385376b4bf4b5d69378e606f1cce3d98578ecba02c25273cd4a3e4deaceedb"
+    },
+    "write-a-prd": {
+      "source": "mattpocock/ai-engineer-workshop-2026-project",
+      "sourceType": "github",
+      "skillPath": ".claude/skills/write-a-prd/SKILL.md",
+      "computedHash": "183b6824b209593f1c5fe5ad0e96e1a60d0bfe9782787c0a9733990961345e54"
+    }
+  }
+}
