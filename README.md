@@ -46,6 +46,8 @@ Target architecture:
 - Product status values include Shopify's `active`, `archived`, `draft`, and `unlisted` statuses.
 - Product stock is stored as one product-level `available_stock` summary, synced from Shopify variant inventory quantities when available.
 - Shopify text and rich-text JSON used for AI context is normalized before storage to repair common UTF-8/Windows-1252 mojibake in French content while keeping raw Shopify payloads for traceability.
+- Header/footer pages and policies are modeled as `knowledge_documents`, with section-level `knowledge_chunks` for retrieval.
+- Knowledge categories are stored as unrestricted text for now and can be restricted once the support taxonomy is finalized.
 - Raw Shopify API payloads should be retained only where useful and should be sanitized to avoid unnecessary personal data.
 - Customer personal data should be minimised, protected, and excluded from AI prompts unless strictly required.
 - AI workflows should retrieve context progressively instead of loading complete records by default.
@@ -104,7 +106,7 @@ Current status:
 - repository initialised;
 - project purpose and engineering constraints documented;
 - implementation stack still undecided in code;
-- initial Supabase migration added for `shops`, `products`, and shared Shopify metaobjects;
+- initial Supabase migration added for `shops`, `products`, shared Shopify metaobjects, and knowledge context tables;
 - Shopify product/metaobject sync script added;
 - no application or integration code committed yet.
 
@@ -115,7 +117,7 @@ Recommended next steps:
 1. Choose the implementation stack and local developer workflow.
 2. Add application scaffolding with clear module boundaries.
 3. Set up Supabase development and production projects.
-4. Add the remaining support database tables for knowledge, customers, orders, messages, AI events, integration events, and privacy requests.
+4. Add the remaining support database tables for customers, orders, messages, AI events, integration events, and privacy requests.
 5. Validate Shopify initial import for shops, products, and linked metaobjects against dummy development data.
 6. Add webhook ingestion with signature validation and deduplication.
 7. Add reconciliation jobs and observability.

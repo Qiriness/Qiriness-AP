@@ -33,6 +33,10 @@
 - `public.shopify_metaobjects` - Shared Shopify metaobject snapshots, such as predefined FAQ and ingredient records linked from products.
   - The sync stores targeted full metaobject definitions/entries from Shopify Metaobjects, plus any product-linked entries.
   - AI-facing product/metaobject text is cleaned for common French mojibake before storage; raw Shopify payloads remain unmodified for traceability.
+- `public.knowledge_documents` - Cleaned Shopify header/footer page and policy documents for AI support context.
+  - Stores source identity, navigation area, loose category, French canonical text, and parsed sections.
+- `public.knowledge_chunks` - Lean retrieval chunks linked to knowledge documents.
+  - Keeps chunk category, token count, text, hash, and optional vector embedding; document-level source fields stay on `knowledge_documents`.
 
 ## Read Order
 1. [AGENTS.md](/C:/Users/gnoua/Desktop_backup/APP_DEV/03_Qiriness_Email/Qirines_Email_Automation/AGENTS.md) - coding rules
@@ -44,7 +48,7 @@
 
 - App code: missing
 - Routes: missing
-- Migrations: initial `shops`, `products`, and shared Shopify metaobjects schema added
+- Migrations: initial `shops`, `products`, shared Shopify metaobjects, and knowledge context schema added
 - Scripts: Shopify product/metaobject sync script added
 - Tests: missing
 - Config: missing

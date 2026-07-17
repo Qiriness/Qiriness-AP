@@ -3,6 +3,7 @@
 -- for sync, dashboard, and AI context.
 
 create extension if not exists pgcrypto;
+create extension if not exists vector;
 
 create or replace function public.set_updated_at()
 returns trigger
@@ -151,6 +152,63 @@ create table public.shopify_metaobjects (
   )
 );
 
+create table public.knowledge_documents (
+  id uuid primary key default gen_random_uuid(),
+  shop_id uuid not null references public.shops(id) on delete cascade,
+  source_type text not null,
+  shopify_source_id text,
+  handle text,
+  title text not null,
+  url_path text,
+  navigation_area text,
+  category text,
+  locale text not null default 'fr',
+  status text,
+  content_text text not null,
+  sections jsonb not null default '[]'::jsonb,
+  content_hash text not null,
+  synced_at timestamptz not null default now(),
+  shopify_updated_at timestamptz,
+  source_metadata jsonb not null default '{}'::jsonb,
+  deleted_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+
+  constraint knowledge_documents_navigation_area_check check (
+    navigation_area is null or navigation_area in ('header', 'footer', 'manual')
+  ),
+  constraint knowledge_documents_sections_array_check check (
+    jsonb_typeof(sections) = 'array'
+  ),
+  constraint knowledge_documents_source_metadata_object_check check (
+    jsonb_typeof(source_metadata) = 'object'
+  )
+);
+
+create table public.knowledge_chunks (
+  id uuid primary key default gen_random_uuid(),
+  knowledge_document_id uuid not null references public.knowledge_documents(id) on delete cascade,
+  chunk_index integer not null,
+  section_index integer,
+  section_heading text,
+  category text,
+  chunk_text text not null,
+  token_count integer,
+  content_hash text not null,
+  embedding vector,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+
+  constraint knowledge_chunks_document_chunk_unique unique (knowledge_document_id, chunk_index),
+  constraint knowledge_chunks_chunk_index_check check (chunk_index >= 0),
+  constraint knowledge_chunks_section_index_check check (
+    section_index is null or section_index >= 0
+  ),
+  constraint knowledge_chunks_token_count_check check (
+    token_count is null or token_count >= 0
+  )
+);
+
 create index shops_shopify_shop_id_idx on public.shops (shopify_shop_id);
 
 create index products_shop_handle_idx on public.products (shop_id, handle);
@@ -168,6 +226,22 @@ create index shopify_metaobjects_shop_handle_idx on public.shopify_metaobjects (
 create index shopify_metaobjects_shop_deleted_at_idx on public.shopify_metaobjects (shop_id, deleted_at);
 create index shopify_metaobjects_fields_gin_idx on public.shopify_metaobjects using gin (fields);
 
+create unique index knowledge_documents_shop_source_id_unique
+  on public.knowledge_documents (shop_id, source_type, shopify_source_id)
+  where shopify_source_id is not null;
+
+create unique index knowledge_documents_shop_source_handle_unique
+  on public.knowledge_documents (shop_id, source_type, handle)
+  where shopify_source_id is null and handle is not null;
+
+create index knowledge_documents_shop_category_idx on public.knowledge_documents (shop_id, category);
+create index knowledge_documents_shop_navigation_area_idx on public.knowledge_documents (shop_id, navigation_area);
+create index knowledge_documents_shop_deleted_at_idx on public.knowledge_documents (shop_id, deleted_at);
+create index knowledge_documents_sections_gin_idx on public.knowledge_documents using gin (sections);
+
+create index knowledge_chunks_document_id_idx on public.knowledge_chunks (knowledge_document_id);
+create index knowledge_chunks_category_idx on public.knowledge_chunks (category);
+
 create trigger shops_set_updated_at
 before update on public.shops
 for each row
@@ -183,9 +257,21 @@ before update on public.shopify_metaobjects
 for each row
 execute function public.set_updated_at();
 
+create trigger knowledge_documents_set_updated_at
+before update on public.knowledge_documents
+for each row
+execute function public.set_updated_at();
+
+create trigger knowledge_chunks_set_updated_at
+before update on public.knowledge_chunks
+for each row
+execute function public.set_updated_at();
+
 alter table public.shops enable row level security;
 alter table public.products enable row level security;
 alter table public.shopify_metaobjects enable row level security;
+alter table public.knowledge_documents enable row level security;
+alter table public.knowledge_chunks enable row level security;
 
 comment on table public.shops is
   'Shopify shop records and app-level sync state. Shopify remains the source of truth.';
@@ -255,3 +341,36 @@ comment on column public.shopify_metaobjects.fields is
 
 comment on column public.shopify_metaobjects.raw_shopify_payload is
   'Sanitized raw Shopify metaobject payload for traceability. Do not store image binaries or unnecessary personal data.';
+
+comment on table public.knowledge_documents is
+  'Cleaned Shopify header/footer page and policy content used as source material for AI support context.';
+
+comment on column public.knowledge_documents.source_type is
+  'Source content type, such as shopify_page, shopify_policy, or shopify_menu_page.';
+
+comment on column public.knowledge_documents.navigation_area is
+  'Where the page is exposed in the storefront navigation: header, footer, or manual.';
+
+comment on column public.knowledge_documents.category is
+  'Loose knowledge category for routing and retrieval. This is intentionally unrestricted until the support taxonomy is finalized.';
+
+comment on column public.knowledge_documents.content_text is
+  'Cleaned canonical plain text used for AI context.';
+
+comment on column public.knowledge_documents.sections is
+  'Ordered section objects parsed from the page content, usually containing heading, text, order, and anchor.';
+
+comment on column public.knowledge_documents.source_metadata is
+  'Small sanitized source metadata snapshot. Do not store full page HTML or unnecessary raw payloads here.';
+
+comment on table public.knowledge_chunks is
+  'AI retrieval chunks generated from knowledge_documents sections.';
+
+comment on column public.knowledge_chunks.category is
+  'Chunk category copied from the source document for direct filtering during retrieval.';
+
+comment on column public.knowledge_chunks.token_count is
+  'Approximate token count used to tune chunking and prompt budgets.';
+
+comment on column public.knowledge_chunks.embedding is
+  'Optional pgvector embedding for semantic retrieval. Stored without fixed dimensions until the embedding model is finalized.';
