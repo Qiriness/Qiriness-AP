@@ -1,0 +1,13 @@
+{
+  "name": "qiriness-email-automation",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "sync:shopify:products": "node scripts/sync-shopify-products.mjs",
+    "sync:shopify:products:dry-run": "node scripts/sync-shopify-products.mjs --dry-run --limit=5 --page-size=5"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
