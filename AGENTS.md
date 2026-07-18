@@ -27,6 +27,11 @@ This project is a customer-support operating system for **Qiriness**. Read [READ
 - Treat Shopify as the source of truth for products, variants, customers, orders, fulfilments, and refunds.
 - Design AI workflows to retrieve context progressively instead of loading entire records by default.
 - Minimise personal data usage and exclude personal customer data from AI prompts unless it is strictly required for the task.
+- Avoid placing business logic directly inside routes, webhooks, UI components, or database queries.
+- Modules should communicate through well-defined interfaces and typed data contracts.
+- Prefer small, focused services over large files or catch-all utility modules.
+- New integrations must be replaceable without requiring major changes elsewhere in the codebase.
+- Shared functionality should be reusable, but avoid premature abstraction.
 
 ## Database and Sync Rules
 

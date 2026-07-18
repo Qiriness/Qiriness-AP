@@ -5,7 +5,9 @@
   "type": "module",
   "scripts": {
     "sync:shopify:products": "node scripts/sync-shopify-products.mjs",
-    "sync:shopify:products:dry-run": "node scripts/sync-shopify-products.mjs --dry-run --limit=5 --page-size=5"
+    "sync:shopify:products:dry-run": "node scripts/sync-shopify-products.mjs --dry-run --limit=5 --page-size=5",
+    "sync:shopify:knowledge": "node scripts/sync-shopify-knowledge.mjs",
+    "sync:shopify:knowledge:dry-run": "node scripts/sync-shopify-knowledge.mjs --dry-run --limit=10 --page-size=10"
   },
   "engines": {
     "node": ">=20"

@@ -46,7 +46,10 @@ Target architecture:
 - Product status values include Shopify's `active`, `archived`, `draft`, and `unlisted` statuses.
 - Product stock is stored as one product-level `available_stock` summary, synced from Shopify variant inventory quantities when available.
 - Shopify text and rich-text JSON used for AI context is normalized before storage to repair common UTF-8/Windows-1252 mojibake in French content while keeping raw Shopify payloads for traceability.
-- Header/footer pages and policies are modeled as `knowledge_documents`, with section-level `knowledge_chunks` for retrieval.
+- Shopify synchronization is split into small script modules for CLI/env configuration, Shopify Admin API access, Supabase persistence, mapping, hashing, chunking, and AI-facing text cleanup.
+- Header/footer pages and policies are modeled as `knowledge_documents`, with section-level `knowledge_chunks` for retrieval. Shopify menus are used to infer whether source pages and policies are exposed in header or footer navigation when that API scope is available.
+- Shopify page content is resolved through ordered, replaceable resolvers: manual override, dedicated page metafield, Shopify `Page.body`, then Shopify theme template settings. The winning content origin and attempted resolver list are stored in `source_metadata`.
+- Knowledge document sync merges by Shopify source identity before regenerating chunks, so it can work against the current partial unique indexes in existing Supabase databases.
 - Knowledge categories are stored as unrestricted text for now and can be restricted once the support taxonomy is finalized.
 - Raw Shopify API payloads should be retained only where useful and should be sanitized to avoid unnecessary personal data.
 - Customer personal data should be minimised, protected, and excluded from AI prompts unless strictly required.
@@ -81,8 +84,12 @@ See `APP_SCHEMA.md`
 3. Apply `supabase/migrations/001_initial_schema.sql`, then seed development data.
 4. Run `npm run sync:shopify:products:dry-run` to verify Shopify product access.
 5. Run `npm run sync:shopify:products` to upsert Shopify shops, products, targeted Product FAQ/Ingredients List metaobjects, and linked product metaobjects into Supabase.
+6. Run `npm run sync:shopify:knowledge:dry-run` to verify Shopify page, policy, and menu access.
+7. Run `npm run sync:shopify:knowledge` to upsert cleaned Shopify pages/policies into `knowledge_documents` and regenerate their `knowledge_chunks`.
 
 For Shopify Dev Dashboard apps, `SHOPIFY_ADMIN_API_ACCESS_TOKEN` can stay blank. The sync script requests a short-lived Admin API token at runtime from `SHOPIFY_CLIENT_ID` and `SHOPIFY_CLIENT_SECRET`.
+
+The knowledge sync requires Shopify Admin API access to online store pages, online store navigation, and legal policies. Required scopes are `read_content` or `read_online_store_pages` for pages, `read_online_store_navigation` for menus, and `read_legal_policies` for policies. Theme template fallback requires theme read access (`read_themes` in the app scope approval flow). If optional scopes are not granted to the app, the script skips that source and reports unresolved page content.
 
 
 ## Shopify Synchronisation and Webhooks
@@ -107,18 +114,19 @@ Current status:
 - project purpose and engineering constraints documented;
 - implementation stack still undecided in code;
 - initial Supabase migration added for `shops`, `products`, shared Shopify metaobjects, and knowledge context tables;
-- Shopify product/metaobject sync script added;
-- no application or integration code committed yet.
+- Shopify product/metaobject sync script added and refactored into focused script modules;
+- Shopify knowledge document/chunk sync script added for pages, legal policies, and menu-derived navigation metadata;
+- no application runtime, UI, or webhook processing code committed yet.
 
 ## Next Steps
 
 Recommended next steps:
 
 1. Choose the implementation stack and local developer workflow.
-2. Add application scaffolding with clear module boundaries.
+2. Add application scaffolding with clear module boundaries that follow the script module pattern.
 3. Set up Supabase development and production projects.
 4. Add the remaining support database tables for customers, orders, messages, AI events, integration events, and privacy requests.
-5. Validate Shopify initial import for shops, products, and linked metaobjects against dummy development data.
+5. Validate Shopify initial import for shops, products, linked metaobjects, knowledge documents, and chunks against dummy development data.
 6. Add webhook ingestion with signature validation and deduplication.
 7. Add reconciliation jobs and observability.
 8. Introduce tests, linting, and type checking with documented commands.
