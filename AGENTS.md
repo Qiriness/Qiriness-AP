@@ -18,7 +18,8 @@ This project is a customer-support operating system for **Qiriness**. Read [READ
 - Update the '## Development Status' and '## Next Steps' in `README.md` when architecture, setup, or behaviour changes.
 - State assumptions and unresolved questions in the implementation summary.
 - Run the relevant tests, linting, and type checks before completing a task. If they do not exist yet, say so explicitly.
-- Local agent skills are lcoated in `.agent\skills` folder
+- Local agent skills are lcoated in `.agents
+\skills` folder
 
 ## Architecture Constraints
 
