@@ -33,7 +33,7 @@ No application functionality is implemented yet in this repository.
 
 Target architecture:
 
-- **Shopify** is the source of truth for products, variants, customers, orders, fulfilments, and refunds.
+- **Shopify** is the source of truth for products, variants, customers, orders, fulfilments, refunds, and discounts/promotions.
 - **Supabase PostgreSQL** will act as the operational database.
 - Initial synchronisation will be **Shopify -> Supabase only**.
 - Data flow should combine:
@@ -47,6 +47,8 @@ Target architecture:
 - Product stock is stored as one product-level `available_stock` summary, synced from Shopify variant inventory quantities when available.
 - Shopify text and rich-text JSON used for AI context is normalized before storage to repair common UTF-8/Windows-1252 mojibake in French content while keeping raw Shopify payloads for traceability.
 - Shopify synchronization is split into small script modules for CLI/env configuration, Shopify Admin API access, Supabase persistence, mapping, hashing, chunking, and AI-facing text cleanup.
+- Promotions are modeled as Shopify discount snapshots in `promotions`, including code-based and automatic discounts, status, summaries, usage counts, timing, combines-with flags, and `applies_once_per_customer` for manual filtering.
+- Promotion sync intentionally includes active, scheduled, expired, automatic, code-based, app-generated, and referral-style discounts returned by Shopify; a full sync only deletes rows no longer returned by Shopify.
 - Header/footer pages and policies are modeled as `knowledge_documents`, with section-level `knowledge_chunks` for retrieval. Shopify menus are used to infer whether source pages and policies are exposed in header or footer navigation when that API scope is available.
 - Shopify page content is resolved through ordered, replaceable resolvers: manual override, dedicated page metafield, Shopify `Page.body`, then Shopify theme template settings. The winning content origin and attempted resolver list are stored in `source_metadata`.
 - Knowledge document sync merges by Shopify source identity before regenerating chunks, so it can work against the current partial unique indexes in existing Supabase databases.
@@ -81,15 +83,24 @@ See `APP_SCHEMA.md`
 
 1. Run `npm install`.
 2. Copy `.env.example` to `.env.local` and add the Supabase settings.
-3. Apply `supabase/migrations/001_initial_schema.sql`, then seed development data.
+3. Apply `supabase/migrations/001_initial_schema.sql` and `supabase/migrations/002_promotions.sql`, then seed development data.
 4. Run `npm run sync:shopify:products:dry-run` to verify Shopify product access.
 5. Run `npm run sync:shopify:products` to upsert Shopify shops, products, targeted Product FAQ/Ingredients List metaobjects, and linked product metaobjects into Supabase.
-6. Run `npm run sync:shopify:knowledge:dry-run` to verify Shopify page, policy, and menu access.
-7. Run `npm run sync:shopify:knowledge` to upsert cleaned Shopify pages/policies into `knowledge_documents` and regenerate their `knowledge_chunks`.
+6. Run `npm run sync:shopify:customers:dry-run` to verify Shopify customer access and RFM group retrieval.
+7. Run `npm run sync:shopify:customers` to upsert Shopify customer snapshots into Supabase.
+8. Run `npm run sync:shopify:orders:dry-run` to verify Shopify order access and retention mapping.
+9. Run `npm run sync:shopify:orders` to upsert Shopify order snapshots into Supabase and remove local orders past retention.
+10. Run `npm run sync:shopify:promotions:dry-run` to verify Shopify discount/promotion access.
+11. Run `npm run sync:shopify:promotions` to upsert Shopify promotion snapshots into Supabase.
+12. Run `npm run sync:shopify:knowledge:dry-run` to verify Shopify page, policy, and menu access.
+13. Run `npm run sync:shopify:knowledge` to upsert cleaned Shopify pages/policies into `knowledge_documents` and regenerate their `knowledge_chunks`.
+14. Run `npm run sync:shopify:nightly:dry-run` to verify the full nightly sync order.
 
 For Shopify Dev Dashboard apps, `SHOPIFY_ADMIN_API_ACCESS_TOKEN` can stay blank. The sync script requests a short-lived Admin API token at runtime from `SHOPIFY_CLIENT_ID` and `SHOPIFY_CLIENT_SECRET`.
 
 The knowledge sync requires Shopify Admin API access to online store pages, online store navigation, and legal policies. Required scopes are `read_content` or `read_online_store_pages` for pages, `read_online_store_navigation` for menus, and `read_legal_policies` for policies. Theme template fallback requires theme read access (`read_themes` in the app scope approval flow). If optional scopes are not granted to the app, the script skips that source and reports unresolved page content.
+
+The promotion sync requires Shopify Admin API `read_discounts`. The current Shopify app config includes `read_discounts`.
 
 
 ## Shopify Synchronisation and Webhooks
@@ -115,8 +126,9 @@ Current status:
 - implementation stack still undecided in code;
 - initial Supabase migration added for `shops`, `products`, shared Shopify metaobjects, and knowledge context tables;
 - Shopify product/metaobject sync script added and refactored into focused script modules;
+- Shopify customer, order, and promotion sync scripts added for support operational snapshots;
 - Shopify knowledge document/chunk sync script added for pages, legal policies, and menu-derived navigation metadata;
-- no application runtime, UI, or webhook processing code committed yet.
+- no application runtime, UI, or deployed webhook route committed yet.
 
 ## Next Steps
 
@@ -125,8 +137,8 @@ Recommended next steps:
 1. Choose the implementation stack and local developer workflow.
 2. Add application scaffolding with clear module boundaries that follow the script module pattern.
 3. Set up Supabase development and production projects.
-4. Add the remaining support database tables for customers, orders, messages, AI events, integration events, and privacy requests.
-5. Validate Shopify initial import for shops, products, linked metaobjects, knowledge documents, and chunks against dummy development data.
-6. Add webhook ingestion with signature validation and deduplication.
-7. Add reconciliation jobs and observability.
-8. Introduce tests, linting, and type checking with documented commands.
+4. Add the remaining support database tables for messages and AI events.
+5. Validate Shopify initial import for shops, customers, orders, promotions, products, linked metaobjects, knowledge documents, and chunks against dummy development data.
+6. Add application runtime routes that call reusable webhook handlers.
+7. Add dashboard role policies and human personal-data access logging before exposing customer data in a UI.
+8. Expand tests, linting, and type checking beyond the current Node regression coverage.

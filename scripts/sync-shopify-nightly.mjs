@@ -12,6 +12,7 @@ import {
 import { runShopifyCustomersSync } from './sync-shopify-customers.mjs';
 import { runShopifyOrdersSync } from './sync-shopify-orders.mjs';
 import { runShopifyProductsSync } from './sync-shopify-products.mjs';
+import { runShopifyPromotionsSync } from './sync-shopify-promotions.mjs';
 import { runShopifyKnowledgeSync } from './sync-shopify-knowledge.mjs';
 
 if (isDirectRun()) {
@@ -90,6 +91,7 @@ export async function runNightlySync({
     customers: runShopifyCustomersSync,
     orders: runShopifyOrdersSync,
     products: runShopifyProductsSync,
+    promotions: runShopifyPromotionsSync,
     knowledge: runShopifyKnowledgeSync
   }
 }) {
@@ -117,6 +119,14 @@ export async function runNightlySync({
     shopRow,
     syncedAt
   });
+  const promotionCounts = await runners.promotions({
+    args,
+    shopify,
+    supabase,
+    shopRow,
+    syncedAt,
+    integrationEventId
+  });
   const knowledgeCounts = await runners.knowledge({
     args,
     config,
@@ -134,6 +144,9 @@ export async function runNightlySync({
     products: productCounts.products,
     linked_metaobjects: productCounts.linkedMetaobjects,
     target_metaobjects: productCounts.targetMetaobjects,
+    discounts: promotionCounts.discounts,
+    promotions: promotionCounts.promotions,
+    deleted_promotions: promotionCounts.deletedPromotions,
     knowledge_documents: knowledgeCounts.documents,
     knowledge_chunks: knowledgeCounts.chunks,
     unresolved_knowledge_sources: knowledgeCounts.unresolvedSources

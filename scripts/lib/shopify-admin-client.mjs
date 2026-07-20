@@ -4,6 +4,7 @@ export const METAFIELD_REFERENCE_PAGE_SIZE = 10;
 export const ORDER_LINE_ITEM_PAGE_SIZE = 50;
 export const ORDER_FULFILLMENT_PAGE_SIZE = 10;
 export const ORDER_RETURN_PAGE_SIZE = 10;
+export const DISCOUNT_CODE_PAGE_SIZE = 100;
 
 const METAOBJECT_DEFINITION_PAGE_SIZE = 50;
 const METAOBJECT_PAGE_SIZE = 50;
@@ -413,6 +414,368 @@ const ORDERS_WITHOUT_RETURN_LINKS_QUERY = ORDERS_WITHOUT_RETURNS_QUERY
             id
           }`, '');
 
+const DISCOUNTS_QUERY = `#graphql
+  query DiscountSyncPage($first: Int!, $after: String, $codeFirst: Int!) {
+    discountNodes(first: $first, after: $after) {
+      pageInfo {
+        hasNextPage
+        endCursor
+      }
+      nodes {
+        id
+        discount {
+          __typename
+          ... on DiscountCodeBasic {
+            title
+            summary
+            shortSummary
+            status
+            startsAt
+            endsAt
+            createdAt
+            updatedAt
+            usageLimit
+            asyncUsageCount
+            appliesOncePerCustomer
+            discountClasses
+            combinesWith {
+              orderDiscounts
+              productDiscounts
+              shippingDiscounts
+            }
+            codes(first: $codeFirst) {
+              pageInfo {
+                hasNextPage
+                endCursor
+              }
+              nodes {
+                id
+                code
+                asyncUsageCount
+                createdBy {
+                  title
+                }
+              }
+            }
+            codesCount {
+              count
+            }
+            customerGets {
+              __typename
+            }
+            minimumRequirement {
+              __typename
+            }
+          }
+          ... on DiscountCodeBxgy {
+            title
+            summary
+            status
+            startsAt
+            endsAt
+            createdAt
+            updatedAt
+            usageLimit
+            asyncUsageCount
+            appliesOncePerCustomer
+            discountClasses
+            combinesWith {
+              orderDiscounts
+              productDiscounts
+              shippingDiscounts
+            }
+            codes(first: $codeFirst) {
+              pageInfo {
+                hasNextPage
+                endCursor
+              }
+              nodes {
+                id
+                code
+                asyncUsageCount
+                createdBy {
+                  title
+                }
+              }
+            }
+            codesCount {
+              count
+            }
+            customerBuys {
+              __typename
+            }
+            customerGets {
+              __typename
+            }
+          }
+          ... on DiscountCodeFreeShipping {
+            title
+            summary
+            shortSummary
+            status
+            startsAt
+            endsAt
+            createdAt
+            updatedAt
+            usageLimit
+            asyncUsageCount
+            appliesOncePerCustomer
+            discountClasses
+            combinesWith {
+              orderDiscounts
+              productDiscounts
+              shippingDiscounts
+            }
+            codes(first: $codeFirst) {
+              pageInfo {
+                hasNextPage
+                endCursor
+              }
+              nodes {
+                id
+                code
+                asyncUsageCount
+                createdBy {
+                  title
+                }
+              }
+            }
+            codesCount {
+              count
+            }
+            destinationSelection {
+              __typename
+            }
+            minimumRequirement {
+              __typename
+            }
+            maximumShippingPrice {
+              amount
+              currencyCode
+            }
+          }
+          ... on DiscountCodeApp {
+            title
+            status
+            startsAt
+            endsAt
+            createdAt
+            updatedAt
+            usageLimit
+            asyncUsageCount
+            appliesOncePerCustomer
+            discountClasses
+            combinesWith {
+              orderDiscounts
+              productDiscounts
+              shippingDiscounts
+            }
+            codes(first: $codeFirst) {
+              pageInfo {
+                hasNextPage
+                endCursor
+              }
+              nodes {
+                id
+                code
+                asyncUsageCount
+                createdBy {
+                  title
+                }
+              }
+            }
+            codesCount {
+              count
+            }
+            appDiscountType {
+              app {
+                title
+              }
+              appKey
+              functionId
+              title
+              description
+              discountClasses
+            }
+          }
+          ... on DiscountAutomaticBasic {
+            title
+            summary
+            shortSummary
+            status
+            startsAt
+            endsAt
+            createdAt
+            updatedAt
+            asyncUsageCount
+            discountClasses
+            combinesWith {
+              orderDiscounts
+              productDiscounts
+              shippingDiscounts
+            }
+            customerGets {
+              __typename
+            }
+            minimumRequirement {
+              __typename
+            }
+          }
+          ... on DiscountAutomaticBxgy {
+            title
+            summary
+            status
+            startsAt
+            endsAt
+            createdAt
+            updatedAt
+            asyncUsageCount
+            discountClasses
+            combinesWith {
+              orderDiscounts
+              productDiscounts
+              shippingDiscounts
+            }
+            customerBuys {
+              __typename
+            }
+            customerGets {
+              __typename
+            }
+          }
+          ... on DiscountAutomaticFreeShipping {
+            title
+            summary
+            shortSummary
+            status
+            startsAt
+            endsAt
+            createdAt
+            updatedAt
+            asyncUsageCount
+            discountClasses
+            combinesWith {
+              orderDiscounts
+              productDiscounts
+              shippingDiscounts
+            }
+            destinationSelection {
+              __typename
+            }
+            minimumRequirement {
+              __typename
+            }
+            maximumShippingPrice {
+              amount
+              currencyCode
+            }
+          }
+          ... on DiscountAutomaticApp {
+            title
+            status
+            startsAt
+            endsAt
+            createdAt
+            updatedAt
+            asyncUsageCount
+            discountClasses
+            combinesWith {
+              orderDiscounts
+              productDiscounts
+              shippingDiscounts
+            }
+            appDiscountType {
+              app {
+                title
+              }
+              appKey
+              functionId
+              title
+              description
+              discountClasses
+            }
+          }
+        }
+      }
+    }
+  }
+`;
+
+const DISCOUNT_CODES_QUERY = `#graphql
+  query DiscountCodesPage($id: ID!, $codeFirst: Int!, $after: String) {
+    discountNode(id: $id) {
+      id
+      discount {
+        __typename
+        ... on DiscountCodeBasic {
+          codes(first: $codeFirst, after: $after) {
+            pageInfo {
+              hasNextPage
+              endCursor
+            }
+            nodes {
+              id
+              code
+              asyncUsageCount
+              createdBy {
+                title
+              }
+            }
+          }
+        }
+        ... on DiscountCodeBxgy {
+          codes(first: $codeFirst, after: $after) {
+            pageInfo {
+              hasNextPage
+              endCursor
+            }
+            nodes {
+              id
+              code
+              asyncUsageCount
+              createdBy {
+                title
+              }
+            }
+          }
+        }
+        ... on DiscountCodeFreeShipping {
+          codes(first: $codeFirst, after: $after) {
+            pageInfo {
+              hasNextPage
+              endCursor
+            }
+            nodes {
+              id
+              code
+              asyncUsageCount
+              createdBy {
+                title
+              }
+            }
+          }
+        }
+        ... on DiscountCodeApp {
+          codes(first: $codeFirst, after: $after) {
+            pageInfo {
+              hasNextPage
+              endCursor
+            }
+            nodes {
+              id
+              code
+              asyncUsageCount
+              createdBy {
+                title
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+`;
+
 export async function createShopifyClient(config) {
   const token = config.shopifyToken || await requestShopifyAccessToken(config);
 
@@ -521,6 +884,30 @@ export async function fetchOrderPage(shopify, args, cursor) {
     console.warn('Shopify order sync warning: read_returns is not granted; syncing orders without detailed return rows.');
     return fetchOrderPage(shopify, args, cursor);
   }
+}
+
+export async function fetchDiscountPage(shopify, args, cursor) {
+  return shopifyGraphql(shopify, DISCOUNTS_QUERY, {
+    first: args.pageSize,
+    after: cursor,
+    codeFirst: DISCOUNT_CODE_PAGE_SIZE
+  });
+}
+
+export async function fetchDiscountRedeemCodePage(shopify, discountNodeId, cursor) {
+  const data = await shopifyGraphql(shopify, DISCOUNT_CODES_QUERY, {
+    id: discountNodeId,
+    after: cursor,
+    codeFirst: DISCOUNT_CODE_PAGE_SIZE
+  });
+
+  return data.discountNode?.discount?.codes || {
+    nodes: [],
+    pageInfo: {
+      hasNextPage: false,
+      endCursor: null
+    }
+  };
 }
 
 async function requestShopifyAccessToken(config) {

@@ -30,7 +30,7 @@ test('loadConfig allows nightly schedule overrides', () => {
   assert.equal(config.syncTimezone, 'Europe/Paris');
 });
 
-test('runNightlySync runs customers, orders, products, then knowledge', async () => {
+test('runNightlySync runs customers, orders, products, promotions, then knowledge', async () => {
   const order = [];
   const result = await runNightlySync({
     args: { dryRun: false },
@@ -53,6 +53,10 @@ test('runNightlySync runs customers, orders, products, then knowledge', async ()
         order.push('products');
         return { products: 20, linkedMetaobjects: 2, targetMetaobjects: 3 };
       },
+      promotions: async () => {
+        order.push('promotions');
+        return { discounts: 6, promotions: 8, deletedPromotions: 1 };
+      },
       knowledge: async () => {
         order.push('knowledge');
         return { documents: 4, chunks: 8, unresolvedSources: 0 };
@@ -60,7 +64,7 @@ test('runNightlySync runs customers, orders, products, then knowledge', async ()
     }
   });
 
-  assert.deepEqual(order, ['customers', 'orders', 'products', 'knowledge']);
+  assert.deepEqual(order, ['customers', 'orders', 'products', 'promotions', 'knowledge']);
   assert.deepEqual(result, {
     customers: 10,
     deleted_customers: 1,
@@ -69,6 +73,9 @@ test('runNightlySync runs customers, orders, products, then knowledge', async ()
     products: 20,
     linked_metaobjects: 2,
     target_metaobjects: 3,
+    discounts: 6,
+    promotions: 8,
+    deleted_promotions: 1,
     knowledge_documents: 4,
     knowledge_chunks: 8,
     unresolved_knowledge_sources: 0

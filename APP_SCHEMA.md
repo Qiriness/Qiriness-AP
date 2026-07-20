@@ -24,6 +24,7 @@
 |   |-- sync-shopify-products.mjs # Shopify product/metaobject sync orchestration
 |   |-- sync-shopify-customers.mjs # Shopify customer sync orchestration
 |   |-- sync-shopify-orders.mjs # Shopify order sync orchestration and retention cleanup
+|   |-- sync-shopify-promotions.mjs # Shopify promotion/discount sync orchestration
 |   |-- sync-shopify-knowledge.mjs # Shopify page/policy sync and chunk orchestration
 |   |-- sync-shopify-nightly.mjs # nightly Shopify sync orchestrator
 |   |-- sync-shopify-nightly.test.mjs # nightly schedule/order tests
@@ -45,6 +46,8 @@
 |       |-- shopify-customer-mapper.test.mjs # customer mapper privacy/consent tests
 |       |-- shopify-order-mapper.mjs # Shopify order to orders row mapper, including retention metadata
 |       |-- shopify-order-mapper.test.mjs # order mapper privacy/channel/retention tests
+|       |-- shopify-promotion-mapper.mjs # Shopify discount/promotion row mapper
+|       |-- shopify-promotion-mapper.test.mjs # promotion mapper tests
 |       |-- shopify-knowledge-client.mjs # Shopify pages, policies, and menus reader
 |       |-- shopify-metaobject-mapper.mjs # Shopify metaobject row mapping
 |       |-- shopify-product-mapper.mjs   # Shopify product row mapping
@@ -66,8 +69,10 @@
 `-- supabase/
     `-- migrations/
         `-- 001_initial_schema.sql # consolidated Supabase schema for shops, customers, orders, products, knowledge, and compliance metadata
+        `-- 002_promotions.sql # Shopify promotion and discount snapshot table
         `-- compliance-migrations.test.mjs # static migration coverage for compliance tables
         `-- orders-migration.test.mjs # static migration coverage for order table shape
+        `-- promotions-migration.test.mjs # static migration coverage for promotion table shape
 ```
 
 ## Database Map
@@ -91,6 +96,12 @@
   - First-class Shopify metafields: Usage Instructions, Short description, Conseils d'utilisation, Actifs & ingredients, ingredients popup, Product Ingredients.
   - Product-level stock is stored in `available_stock` as a simple support/dashboard summary.
   - Product FAQ and Product Ingredients metafields can reference shared Shopify metaobjects by ID.
+- `public.promotions` - Shopify discount and promotion snapshots for support lookup and manual filtering.
+  - Stores code-based and automatic discounts returned by Shopify `discountNodes`.
+  - Code discounts store one row per redeem code; automatic discounts store one row with `code = null`.
+  - `applies_once_per_customer` is a first-class column for later manual filtering of one-use/customer-specific promotions.
+  - Raw payloads and rule snapshots exclude customer targeting details and personal data.
+  - Synced by `scripts/sync-shopify-promotions.mjs`; a full non-limited sync deletes local rows no longer returned by Shopify.
 - `public.shopify_metaobjects` - Shared Shopify metaobject snapshots, such as predefined FAQ and ingredient records linked from products.
   - The sync stores targeted full metaobject definitions/entries from Shopify Metaobjects, plus any product-linked entries.
   - AI-facing product/metaobject text is cleaned for common French mojibake before storage; raw Shopify payloads remain unmodified for traceability.
@@ -120,9 +131,9 @@
 
 - App code: missing
 - Routes: missing
-- Migrations: single consolidated `001_initial_schema.sql` defines shops, customers, orders, products, shared Shopify metaobjects, knowledge context, compliance metadata, and audit tables
-- Scripts: Shopify product/metaobject sync, customer sync, order sync, knowledge sync, nightly sync orchestration, and compliance webhook CLI harness added
+- Migrations: consolidated `001_initial_schema.sql` defines core operational tables; `002_promotions.sql` adds Shopify promotion snapshots
+- Scripts: Shopify product/metaobject sync, customer sync, order sync, promotion sync, knowledge sync, nightly sync orchestration, and compliance webhook CLI harness added
 - Script modules: Shopify sync, compliance audit, compliance webhook, persistence, config, mapper, hashing, chunking, and text-cleaning modules added or split into focused units
-- Tests: Node built-in regression tests added for Supabase REST bulk payload normalization, customer consent/RFM mapping, order privacy/channel/retention mapping, nightly schedule/order, compliance/order migrations, and webhook redaction/HMAC
+- Tests: Node built-in regression tests added for Supabase REST bulk payload normalization, customer consent/RFM mapping, order privacy/channel/retention mapping, promotion mapping/migration coverage, nightly schedule/order, compliance/order migrations, and webhook redaction/HMAC
 - Config: missing
 - Compliance docs: Shopify personal data protection checklist and merchant data-use disclosure added

@@ -12,6 +12,8 @@
     "sync:shopify:customers:dry-run": "node scripts/sync-shopify-customers.mjs --dry-run --limit=5 --page-size=5",
     "sync:shopify:orders": "node scripts/sync-shopify-orders.mjs",
     "sync:shopify:orders:dry-run": "node scripts/sync-shopify-orders.mjs --dry-run --limit=5 --page-size=5",
+    "sync:shopify:promotions": "node scripts/sync-shopify-promotions.mjs",
+    "sync:shopify:promotions:dry-run": "node scripts/sync-shopify-promotions.mjs --dry-run --limit=5 --page-size=5",
     "sync:shopify:knowledge": "node scripts/sync-shopify-knowledge.mjs",
     "sync:shopify:knowledge:dry-run": "node scripts/sync-shopify-knowledge.mjs --dry-run --limit=10 --page-size=10",
     "sync:shopify:nightly": "node scripts/sync-shopify-nightly.mjs",
