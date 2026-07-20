@@ -1,3 +1,4 @@
+import { pathToFileURL } from 'node:url';
 import { parseArgs, loadConfig, loadEnv } from './lib/sync-config.mjs';
 import { createShopifyClient, fetchShop } from './lib/shopify-admin-client.mjs';
 import { createShopifyThemeClient } from './lib/shopify-theme-client.mjs';
@@ -15,32 +16,46 @@ import { buildNavigationIndex } from './lib/knowledge-navigation.mjs';
 import { discoverPageKnowledgeSources } from './lib/knowledge/source-discovery.mjs';
 import { createKnowledgeSourceResolver } from './lib/knowledge/knowledge-source-resolver.mjs';
 
-main().catch((error) => {
-  console.error(error.message);
-  process.exitCode = 1;
-});
+if (isDirectRun()) {
+  main().catch((error) => {
+    console.error(error.message);
+    process.exitCode = 1;
+  });
+}
 
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   const config = loadConfig(loadEnv());
   const shopify = await createShopifyClient(config);
-  const themeClient = createShopifyThemeClient(config, shopify);
   const supabase = createSupabaseClient(config);
   const syncedAt = new Date().toISOString();
 
   const shop = await fetchShop(shopify);
   const shopRow = await syncShop({ args, config, supabase, shop });
+  await runShopifyKnowledgeSync({ args, config, shopify, supabase, shopRow, syncedAt });
+}
+
+export async function runShopifyKnowledgeSync({ args, config, shopify, supabase, shopRow, syncedAt }) {
+  const themeClient = createShopifyThemeClient(config, shopify);
   const result = await buildKnowledgeDocuments({ args, shopify, themeClient, config, shopId: shopRow.id, syncedAt });
   const { documents, unresolvedSources } = result;
 
   if (args.dryRun) {
     reportDryRun(documents, unresolvedSources);
-    return;
+    return {
+      documents: documents.length,
+      chunks: documents.flatMap((document, index) => buildKnowledgeChunks({ ...document, id: `dry-run-${index}` })).length,
+      unresolvedSources: unresolvedSources.length
+    };
   }
 
   if (documents.length === 0) {
     console.log('Knowledge sync complete: 0 documents, 0 chunks.');
-    return;
+    return {
+      documents: 0,
+      chunks: 0,
+      unresolvedSources: unresolvedSources.length
+    };
   }
 
   const documentRows = await mergeKnowledgeDocuments(supabase, documents);
@@ -64,6 +79,11 @@ async function main() {
 
   reportUnresolvedSources(unresolvedSources);
   console.log(`Knowledge sync complete: ${documentRows.length} documents, ${chunks.length} chunks.`);
+  return {
+    documents: documentRows.length,
+    chunks: chunks.length,
+    unresolvedSources: unresolvedSources.length
+  };
 }
 
 async function buildKnowledgeDocuments({ args, shopify, themeClient, config, shopId, syncedAt }) {
@@ -127,4 +147,8 @@ function reportUnresolvedSources(unresolvedSources) {
     const lastAttempt = content.attemptedResolvers.at(-1);
     console.warn(`- ${source.title} (${source.handle}): ${lastAttempt?.reason || 'no resolver found content'}`);
   }
+}
+
+function isDirectRun() {
+  return import.meta.url === pathToFileURL(process.argv[1] || '').href;
 }

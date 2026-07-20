@@ -4,12 +4,24 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "test": "node --test",
+    "db:apply:migration": "node scripts/apply-supabase-migration.mjs",
     "sync:shopify:products": "node scripts/sync-shopify-products.mjs",
     "sync:shopify:products:dry-run": "node scripts/sync-shopify-products.mjs --dry-run --limit=5 --page-size=5",
+    "sync:shopify:customers": "node scripts/sync-shopify-customers.mjs",
+    "sync:shopify:customers:dry-run": "node scripts/sync-shopify-customers.mjs --dry-run --limit=5 --page-size=5",
+    "sync:shopify:orders": "node scripts/sync-shopify-orders.mjs",
+    "sync:shopify:orders:dry-run": "node scripts/sync-shopify-orders.mjs --dry-run --limit=5 --page-size=5",
     "sync:shopify:knowledge": "node scripts/sync-shopify-knowledge.mjs",
-    "sync:shopify:knowledge:dry-run": "node scripts/sync-shopify-knowledge.mjs --dry-run --limit=10 --page-size=10"
+    "sync:shopify:knowledge:dry-run": "node scripts/sync-shopify-knowledge.mjs --dry-run --limit=10 --page-size=10",
+    "sync:shopify:nightly": "node scripts/sync-shopify-nightly.mjs",
+    "sync:shopify:nightly:dry-run": "node scripts/sync-shopify-nightly.mjs --dry-run --limit=5 --page-size=5",
+    "webhook:shopify:compliance": "node scripts/process-shopify-compliance-webhook.mjs"
   },
   "engines": {
     "node": ">=20"
+  },
+  "dependencies": {
+    "pg": "^8.22.0"
   }
 }

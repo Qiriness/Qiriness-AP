@@ -1,6 +1,9 @@
 export const PRODUCT_VARIANT_PAGE_SIZE = 25;
 export const PRODUCT_METAFIELD_PAGE_SIZE = 25;
 export const METAFIELD_REFERENCE_PAGE_SIZE = 10;
+export const ORDER_LINE_ITEM_PAGE_SIZE = 50;
+export const ORDER_FULFILLMENT_PAGE_SIZE = 10;
+export const ORDER_RETURN_PAGE_SIZE = 10;
 
 const METAOBJECT_DEFINITION_PAGE_SIZE = 50;
 const METAOBJECT_PAGE_SIZE = 50;
@@ -159,6 +162,257 @@ const PRODUCTS_QUERY = `#graphql
   }
 `;
 
+const CUSTOMERS_QUERY = `#graphql
+  query CustomerSyncPage($first: Int!, $after: String) {
+    customers(first: $first, after: $after) {
+      pageInfo {
+        hasNextPage
+        endCursor
+      }
+      nodes {
+        id
+        legacyResourceId
+        displayName
+        firstName
+        lastName
+        locale
+        state
+        tags
+        numberOfOrders
+        verifiedEmail
+        createdAt
+        updatedAt
+        statistics {
+          rfmGroup
+        }
+        amountSpent {
+          amount
+          currencyCode
+        }
+        defaultEmailAddress {
+          emailAddress
+          marketingState
+          marketingOptInLevel
+          marketingUpdatedAt
+          validFormat
+        }
+        defaultPhoneNumber {
+          phoneNumber
+        }
+        defaultAddress {
+          city
+          province
+          country
+          countryCodeV2
+          formattedArea
+        }
+        lastOrder {
+          id
+          name
+          createdAt
+          currentTotalPriceSet {
+            shopMoney {
+              amount
+              currencyCode
+            }
+          }
+        }
+      }
+    }
+  }
+`;
+
+const ORDERS_QUERY = `#graphql
+  query OrderSyncPage(
+    $first: Int!,
+    $after: String,
+    $lineItemFirst: Int!,
+    $fulfillmentFirst: Int!,
+    $returnFirst: Int!
+  ) {
+    orders(first: $first, after: $after, sortKey: UPDATED_AT) {
+      pageInfo {
+        hasNextPage
+        endCursor
+      }
+      nodes {
+        id
+        legacyResourceId
+        name
+        number
+        sourceName
+        displayFinancialStatus
+        displayFulfillmentStatus
+        returnStatus
+        cancelReason
+        currencyCode
+        presentmentCurrencyCode
+        tags
+        email
+        phone
+        processedAt
+        cancelledAt
+        closedAt
+        createdAt
+        updatedAt
+        totalWeight
+        attribution {
+          displayName
+          handle
+        }
+        customer {
+          id
+        }
+        shippingAddress {
+          city
+          province
+          country
+          countryCodeV2
+          formattedArea
+        }
+        subtotalPriceSet {
+          shopMoney {
+            amount
+            currencyCode
+          }
+        }
+        totalDiscountsSet {
+          shopMoney {
+            amount
+            currencyCode
+          }
+        }
+        totalShippingPriceSet {
+          shopMoney {
+            amount
+            currencyCode
+          }
+        }
+        totalTaxSet {
+          shopMoney {
+            amount
+            currencyCode
+          }
+        }
+        totalPriceSet {
+          shopMoney {
+            amount
+            currencyCode
+          }
+        }
+        totalRefundedSet {
+          shopMoney {
+            amount
+            currencyCode
+          }
+        }
+        totalOutstandingSet {
+          shopMoney {
+            amount
+            currencyCode
+          }
+        }
+        lineItems(first: $lineItemFirst) {
+          nodes {
+            id
+            name
+            title
+            sku
+            quantity
+            currentQuantity
+            unfulfilledQuantity
+            refundableQuantity
+            requiresShipping
+            vendor
+            variantTitle
+            discountedTotalSet {
+              shopMoney {
+                amount
+                currencyCode
+              }
+            }
+            originalTotalSet {
+              shopMoney {
+                amount
+                currencyCode
+              }
+            }
+            product {
+              id
+            }
+            variant {
+              id
+            }
+          }
+        }
+        fulfillments(first: $fulfillmentFirst) {
+          id
+          name
+          status
+          displayStatus
+          totalQuantity
+          createdAt
+          updatedAt
+          inTransitAt
+          estimatedDeliveryAt
+          deliveredAt
+          trackingInfo {
+            company
+            number
+            url
+          }
+        }
+        returns(first: $returnFirst) {
+          nodes {
+            id
+            name
+            status
+            createdAt
+            closedAt
+            requestApprovedAt
+          }
+        }
+        refunds {
+          id
+          legacyResourceId
+          createdAt
+          processedAt
+          updatedAt
+          totalRefundedSet {
+            shopMoney {
+              amount
+              currencyCode
+            }
+          }
+          return {
+            id
+          }
+        }
+      }
+    }
+  }
+`;
+
+const ORDERS_WITHOUT_RETURNS_QUERY = ORDERS_QUERY
+  .replace(/,\n    \$returnFirst: Int!/u, '')
+  .replace(`
+        returns(first: $returnFirst) {
+          nodes {
+            id
+            name
+            status
+            createdAt
+            closedAt
+            requestApprovedAt
+          }
+        }`, '');
+
+const ORDERS_WITHOUT_RETURN_LINKS_QUERY = ORDERS_WITHOUT_RETURNS_QUERY
+  .replace(`
+          return {
+            id
+          }`, '');
+
 export async function createShopifyClient(config) {
   const token = config.shopifyToken || await requestShopifyAccessToken(config);
 
@@ -230,6 +484,43 @@ export async function fetchProductPage(shopify, args, cursor) {
     metafieldFirst: PRODUCT_METAFIELD_PAGE_SIZE,
     referenceFirst: METAFIELD_REFERENCE_PAGE_SIZE
   });
+}
+
+export async function fetchCustomerPage(shopify, args, cursor) {
+  return shopifyGraphql(shopify, CUSTOMERS_QUERY, {
+    first: args.pageSize,
+    after: cursor
+  });
+}
+
+export async function fetchOrderPage(shopify, args, cursor) {
+  const includeReturns = !shopify.orderReturnsAccessDenied;
+  const variables = {
+    first: args.pageSize,
+    after: cursor,
+    lineItemFirst: ORDER_LINE_ITEM_PAGE_SIZE,
+    fulfillmentFirst: ORDER_FULFILLMENT_PAGE_SIZE
+  };
+
+  if (includeReturns) {
+    variables.returnFirst = ORDER_RETURN_PAGE_SIZE;
+  }
+
+  try {
+    return await shopifyGraphql(
+      shopify,
+      includeReturns ? ORDERS_QUERY : ORDERS_WITHOUT_RETURN_LINKS_QUERY,
+      variables
+    );
+  } catch (error) {
+    if (!includeReturns || !/Access denied for returns field/i.test(error.message)) {
+      throw error;
+    }
+
+    shopify.orderReturnsAccessDenied = true;
+    console.warn('Shopify order sync warning: read_returns is not granted; syncing orders without detailed return rows.');
+    return fetchOrderPage(shopify, args, cursor);
+  }
 }
 
 async function requestShopifyAccessToken(config) {

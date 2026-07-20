@@ -7,7 +7,7 @@ embedded = true
 
 [access_scopes]
 # Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
-scopes = "read_cart_transforms,read_validations,read_customers,read_customer_data_erasure,read_price_rules,read_discounts,read_discounts_allocator_functions,read_draft_orders,read_files,read_fulfillments,read_inventory,read_inventory_shipments,read_inventory_shipments_received_items,read_locales,read_metaobject_definitions,read_metaobjects,read_order_edits,read_orders,read_product_listings,read_products"
+scopes = "read_cart_transforms,read_validations,read_customers,read_customer_data_erasure,read_price_rules,read_discounts,read_discounts_allocator_functions,read_draft_orders,read_files,read_fulfillments,read_inventory,read_inventory_shipments,read_inventory_shipments_received_items,read_locales,read_metaobject_definitions,read_metaobjects,read_order_edits,read_orders,read_returns,read_product_listings,read_products"
 optional_scopes = [ ]
 use_legacy_install_flow = false
 

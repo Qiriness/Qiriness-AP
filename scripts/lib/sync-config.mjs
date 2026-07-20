@@ -7,7 +7,8 @@ export function parseArgs(argv) {
   const args = {
     dryRun: false,
     limit: null,
-    pageSize: DEFAULT_PAGE_SIZE
+    pageSize: DEFAULT_PAGE_SIZE,
+    bodyFile: null
   };
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -23,6 +24,11 @@ export function parseArgs(argv) {
       args.pageSize = Number.parseInt(arg.slice('--page-size='.length), 10);
     } else if (arg === '--page-size') {
       args.pageSize = Number.parseInt(argv[index + 1], 10);
+      index += 1;
+    } else if (arg.startsWith('--body-file=')) {
+      args.bodyFile = arg.slice('--body-file='.length);
+    } else if (arg === '--body-file') {
+      args.bodyFile = argv[index + 1];
       index += 1;
     }
   }
@@ -89,13 +95,16 @@ export function loadConfig(env) {
     shopifyToken: env.SHOPIFY_ADMIN_API_ACCESS_TOKEN,
     shopifyClientId: env.SHOPIFY_CLIENT_ID,
     shopifyClientSecret: env.SHOPIFY_CLIENT_SECRET,
+    shopifyWebhookSecret: env.SHOPIFY_WEBHOOK_SECRET || env.SHOPIFY_CLIENT_SECRET,
     shopifyApiVersion: env.SHOPIFY_API_VERSION || DEFAULT_API_VERSION,
     shopifyMetaobjectTypes: splitCsv(env.SHOPIFY_METAOBJECT_TYPES),
     knowledgePageMetafieldKeys: splitCsv(env.KNOWLEDGE_PAGE_METAFIELD_KEYS),
     knowledgeManualOverridesPath: env.KNOWLEDGE_MANUAL_OVERRIDES_PATH,
     supabaseUrl: env.SUPABASE_URL.replace(/\/$/, ''),
     supabaseKey: env.SUPABASE_SECRET_KEY,
-    appEnv: env.APP_ENV || 'development'
+    appEnv: env.APP_ENV || 'development',
+    syncCron: env.SYNC_CRON || '0 2 * * *',
+    syncTimezone: env.SYNC_TIMEZONE || 'Europe/London'
   };
 }
 

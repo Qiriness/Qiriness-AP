@@ -1,4 +1,5 @@
 import { dedupeRows } from './lib/collections.mjs';
+import { pathToFileURL } from 'node:url';
 import { parseArgs, loadConfig, loadEnv } from './lib/sync-config.mjs';
 import {
   createShopifyClient,
@@ -11,10 +12,12 @@ import { createSupabaseClient, supabaseUpsert } from './lib/supabase-rest-client
 import { syncShop } from './lib/shop-sync-service.mjs';
 import { mapMetaobject, mapProduct } from './lib/shopify-sync-mappers.mjs';
 
-main().catch((error) => {
-  console.error(error.message);
-  process.exitCode = 1;
-});
+if (isDirectRun()) {
+  main().catch((error) => {
+    console.error(error.message);
+    process.exitCode = 1;
+  });
+}
 
 async function main() {
   const args = parseArgs(process.argv.slice(2));
@@ -27,11 +30,28 @@ async function main() {
   const shop = await fetchShop(shopify);
   const shopRow = await syncShop({ args, config, supabase, shop });
 
-  await syncTargetMetaobjects({ args, shopify, supabase, shopId: shopRow.id, syncedAt, config });
-  await syncProducts({ args, shopify, supabase, shopId: shopRow.id, syncedAt });
+  await runShopifyProductsSync({ args, config, shopify, supabase, shopRow, syncedAt });
 }
 
-async function syncTargetMetaobjects({ args, shopify, supabase, shopId, syncedAt, config }) {
+export async function runShopifyProductsSync({ args, config, shopify, supabase, shopRow, syncedAt }) {
+  const metaobjectResult = await syncTargetMetaobjects({
+    args,
+    shopify,
+    supabase,
+    shopId: shopRow.id,
+    syncedAt,
+    config
+  });
+  const productResult = await syncProducts({ args, shopify, supabase, shopId: shopRow.id, syncedAt });
+
+  return {
+    products: productResult.totalProducts,
+    linkedMetaobjects: productResult.totalMetaobjects,
+    targetMetaobjects: metaobjectResult.totalMetaobjects
+  };
+}
+
+export async function syncTargetMetaobjects({ args, shopify, supabase, shopId, syncedAt, config }) {
   const targetDefinitions = await fetchTargetMetaobjectDefinitions(shopify, config);
   const fullMetaobjectRows = [];
 
@@ -46,11 +66,17 @@ async function syncTargetMetaobjects({ args, shopify, supabase, shopId, syncedAt
     console.log(
       `Dry run: would upsert ${fullMetaobjectRows.length} metaobjects from ${targetDefinitions.length} target definitions.`
     );
-    return;
+    return {
+      totalMetaobjects: fullMetaobjectRows.length,
+      targetDefinitions: targetDefinitions.length
+    };
   }
 
   if (fullMetaobjectRows.length === 0) {
-    return;
+    return {
+      totalMetaobjects: 0,
+      targetDefinitions: targetDefinitions.length
+    };
   }
 
   await supabaseUpsert(
@@ -62,9 +88,13 @@ async function syncTargetMetaobjects({ args, shopify, supabase, shopId, syncedAt
   console.log(
     `Synced ${fullMetaobjectRows.length} metaobjects from ${targetDefinitions.length} target definitions.`
   );
+  return {
+    totalMetaobjects: fullMetaobjectRows.length,
+    targetDefinitions: targetDefinitions.length
+  };
 }
 
-async function syncProducts({ args, shopify, supabase, shopId, syncedAt }) {
+export async function syncProducts({ args, shopify, supabase, shopId, syncedAt }) {
   let cursor = null;
   let totalProducts = 0;
   let totalMetaobjects = 0;
@@ -101,6 +131,7 @@ async function syncProducts({ args, shopify, supabase, shopId, syncedAt }) {
   console.log(
     `${args.dryRun ? 'Dry run complete' : 'Sync complete'}: ${totalProducts} products, ${totalMetaobjects} linked metaobjects.`
   );
+  return { totalProducts, totalMetaobjects };
 }
 
 async function upsertProductPage({ supabase, productRows, metaobjectRows }) {
@@ -121,4 +152,8 @@ async function upsertProductPage({ supabase, productRows, metaobjectRows }) {
       'shop_id,shopify_product_id'
     );
   }
+}
+
+function isDirectRun() {
+  return import.meta.url === pathToFileURL(process.argv[1] || '').href;
 }

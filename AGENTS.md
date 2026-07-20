@@ -45,6 +45,7 @@ This project is a customer-support operating system for **Qiriness**. Read [READ
 
 ## Security and Data Handling
 
+- Follow `SHOPIFY_PERSONAL_DATA_PROTECTION.md` for all work involving customer data, personal data, Shopify protected customer data access, consent, retention, access control, audit logging, or security review evidence.
 - Never expose Shopify tokens, Supabase service-role keys, or personal customer data.
 - Do not place secrets in source code, logs, test fixtures, or documentation.
 - Use dummy data in development and automated tests.
