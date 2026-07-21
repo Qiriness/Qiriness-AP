@@ -15,7 +15,6 @@ import { ArticleWorkspace } from "./ArticleWorkspace";
 import { EmptyWorkspace } from "./EmptyWorkspace";
 import { LoadError } from "./LoadError";
 import { Toast, type ToastMessage, type ToastVariant } from "./Toast";
-import { CORE_TOPICS, type CoreTopic } from "@/lib/types";
 import styles from "./AgentSetup.module.css";
 
 /** Brand tone isn't backed by any data model yet — no knowledge_documents column for it. */
@@ -93,17 +92,6 @@ export function AgentSetup({ initialArticles, initialSources, loadError }: Agent
 
   const approvedCount = useMemo(
     () => articles.filter((a) => a.status === "approved").length,
-    [articles],
-  );
-
-  const coreTopicStatus = useMemo(
-    () =>
-      CORE_TOPICS.map((topic) => ({
-        topic,
-        isFilled: articles.some(
-          (a) => a.coreTopic === topic && a.status === "approved",
-        ),
-      })),
     [articles],
   );
 
@@ -286,11 +274,7 @@ export function AgentSetup({ initialArticles, initialSources, loadError }: Agent
   return (
     <div className={styles.page}>
       <div className={styles.inner}>
-        <SetupHeader
-          approved={approvedCount}
-          total={articles.length}
-          coreTopicStatus={coreTopicStatus}
-        />
+        <SetupHeader approved={approvedCount} total={articles.length} />
 
         <div className={styles.panes} data-pane={mobilePane}>
           <div className={styles.listPane}>

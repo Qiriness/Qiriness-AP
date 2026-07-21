@@ -65,35 +65,6 @@ export interface ShopifySource {
   sourceType: "shopify_page" | "shopify_policy";
 }
 
-export type CoreTopic =
-  | "order_policies"
-  | "brand"
-  | "confidentiality"
-  | "delivery"
-  | "returns_exchanges"
-  | "locations"
-  | "faqs";
-
-export const CORE_TOPIC_LABELS: Record<CoreTopic, string> = {
-  order_policies: "Order policies",
-  brand: "Brand voice & identity",
-  confidentiality: "Confidentiality & privacy",
-  delivery: "Delivery & shipping",
-  returns_exchanges: "Returns & exchanges",
-  locations: "Shop locations",
-  faqs: "Common FAQs",
-};
-
-export const CORE_TOPICS: CoreTopic[] = [
-  "order_policies",
-  "brand",
-  "confidentiality",
-  "delivery",
-  "returns_exchanges",
-  "locations",
-  "faqs",
-];
-
 export interface Article {
   id: string;
   title: string;
@@ -101,8 +72,8 @@ export interface Article {
   /** Article body as HTML. Optimized/edited by the team, agent-facing. */
   content: string;
   category: KnowledgeCategory;
-  /** Required-knowledge slot this article fulfills, if any. */
-  coreTopic: CoreTopic | null;
+  /** Required-knowledge slot this article fulfills, if any (see the 7 core topics). */
+  coreTopic: string | null;
   /** Optional Shopify source (page or policy) this article was initialized from. */
   sourcePageId: string | null;
   syncState: SyncState;
