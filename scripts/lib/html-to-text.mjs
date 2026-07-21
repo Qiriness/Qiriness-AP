@@ -68,6 +68,42 @@ function sectionObject(heading, text, order) {
   };
 }
 
+/**
+ * Renders resolved sections (heading/text pairs) back into simple HTML, for
+ * seeding the Agent Setup dashboard's rich-text editor at import time. None of
+ * the four content resolvers preserve raw source HTML (theme-template and
+ * manual-override sources often have no HTML to begin with), so this derives
+ * a reasonable starter document from the structured text every resolver
+ * already produces, rather than threading HTML through all four.
+ */
+export function sectionsToHtml(sections, fallbackTitle) {
+  if (!Array.isArray(sections) || sections.length === 0) {
+    return '';
+  }
+
+  return sections
+    .map((section) => {
+      const heading = section.heading && section.heading !== fallbackTitle
+        ? `<h3>${escapeHtml(section.heading)}</h3>`
+        : '';
+      const paragraphs = String(section.text || '')
+        .split(/\n{2,}/)
+        .map((paragraph) => paragraph.trim())
+        .filter(Boolean)
+        .map((paragraph) => `<p>${escapeHtml(paragraph).replace(/\n/g, '<br>')}</p>`)
+        .join('');
+      return heading + paragraphs;
+    })
+    .join('');
+}
+
+function escapeHtml(value) {
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
 export function normalizePlainText(value) {
   return cleanTextValue(String(value || ''))
     .replace(/\r\n/g, '\n')

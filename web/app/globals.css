@@ -1,0 +1,205 @@
+/*
+ * Qiriness dashboard — design tokens & base styles.
+ * Palette, scale, and radii are the confirmed "Agent Setup" design system.
+ * Teal #008080 is a controlled accent: selection, primary action, focus only.
+ */
+
+:root {
+  /* Brand + neutral ramp (from the approved palette artifact) */
+  --teal: #008080;
+  --teal-strong: #006d6d; /* hover/active for primary */
+  --teal-ink: #005757; /* text on faint teal tints */
+  --teal-050: #f0f7f7; /* faint teal wash — selected row, active nav */
+  --teal-100: #dcecec; /* teal border tint */
+
+  --ink: #0f141b; /* near-black text */
+  --slate: #4b5563; /* secondary text */
+  --stone: #6b7280; /* muted text, placeholders held above this */
+  --mist: #e5e7eb; /* hairline borders */
+  --mist-050: #eef1f3; /* subtle dividers */
+  --linen: #f5f7f8; /* app canvas / second neutral layer */
+  --white: #ffffff;
+
+  /* Semantic — kept distinct from brand teal */
+  --success: #16a34a;
+  --success-050: #ecfdf3;
+  --success-100: #cdebd6;
+  --info: #2563eb;
+  --info-050: #eff4ff;
+  --info-100: #d5e2fb;
+  --warning: #d97706;
+  --warning-050: #fdf5ea;
+  --warning-100: #f5e2c4;
+  --error: #dc2626;
+  --error-050: #fef2f2;
+  --error-100: #f6d5d5;
+
+  /* Text roles */
+  --text-strong: var(--ink);
+  --text-default: #23303b;
+  --text-muted: var(--slate);
+  --text-subtle: var(--stone);
+  --text-on-teal: #ffffff;
+
+  /* Surfaces */
+  --canvas: var(--linen);
+  --surface: var(--white);
+  --surface-sunken: #fbfcfc;
+  --nav-surface: #fbfcfd;
+
+  /* Borders */
+  --border: var(--mist);
+  --border-strong: #d5dade;
+  --border-teal: var(--teal-100);
+
+  /* Radii — tight, ~6px */
+  --radius-sm: 4px;
+  --radius: 6px;
+  --radius-md: 8px;
+  --radius-lg: 10px;
+  --radius-pill: 999px;
+
+  /* Spacing scale — 4 / 8 / 12 / 16 / 24 / 32 / 48 */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --space-6: 2rem;
+  --space-8: 3rem;
+
+  /* Type scale — fixed rem, ~1.2 ratio (product register) */
+  --text-caption: 0.75rem; /* 12 */
+  --text-sm: 0.8125rem; /* 13 */
+  --text-body: 0.875rem; /* 14 */
+  --text-md: 0.9375rem; /* 15 */
+  --text-lg: 1.0625rem; /* 17 */
+  --text-xl: 1.375rem; /* 22 */
+  --text-2xl: 1.75rem; /* 28 */
+
+  --weight-regular: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+  --weight-bold: 700;
+
+  /* Elevation — subtle only */
+  --shadow-xs: 0 1px 2px rgba(15, 20, 27, 0.05);
+  --shadow-sm: 0 1px 3px rgba(15, 20, 27, 0.08), 0 1px 2px rgba(15, 20, 27, 0.04);
+  --shadow-md: 0 8px 24px rgba(15, 20, 27, 0.1);
+  --shadow-focus: 0 0 0 2px var(--teal);
+
+  /* Layout */
+  --container-max: 2400px;
+  --sidebar-w: 236px;
+  --sidebar-w-collapsed: 68px;
+
+  /* Motion */
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --dur-fast: 130ms;
+  --dur: 190ms;
+
+  /* Z-index scale */
+  --z-sticky: 100;
+  --z-dropdown: 200;
+  --z-toast: 400;
+
+  --font-sans: var(--font-jakarta), "Satoshi", -apple-system, BlinkMacSystemFont,
+    "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  padding: 0;
+  margin: 0;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  font-family: var(--font-sans);
+  background: var(--canvas);
+  color: var(--text-default);
+  font-size: var(--text-body);
+  line-height: 1.55;
+  font-kerning: normal;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-feature-settings: "cv01", "ss01";
+}
+
+h1,
+h2,
+h3,
+h4,
+p {
+  margin: 0;
+}
+
+a {
+  color: var(--teal-ink);
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+button {
+  font-family: inherit;
+}
+
+/* Accessible focus — teal ring, never removed */
+:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus);
+  border-radius: var(--radius-sm);
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Restrained, native-feeling scrollbars */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #cbd2d6 transparent;
+}
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+*::-webkit-scrollbar-thumb {
+  background: #cbd2d6;
+  border-radius: 999px;
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: #b4bcc1;
+  background-clip: content-box;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

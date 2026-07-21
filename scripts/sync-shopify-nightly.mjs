@@ -13,7 +13,7 @@ import { runShopifyCustomersSync } from './sync-shopify-customers.mjs';
 import { runShopifyOrdersSync } from './sync-shopify-orders.mjs';
 import { runShopifyProductsSync } from './sync-shopify-products.mjs';
 import { runShopifyPromotionsSync } from './sync-shopify-promotions.mjs';
-import { runShopifyKnowledgeSync } from './sync-shopify-knowledge.mjs';
+import { runShopifyContentCatalogSync } from './sync-shopify-content-catalog.mjs';
 
 if (isDirectRun()) {
   main().catch((error) => {
@@ -92,7 +92,7 @@ export async function runNightlySync({
     orders: runShopifyOrdersSync,
     products: runShopifyProductsSync,
     promotions: runShopifyPromotionsSync,
-    knowledge: runShopifyKnowledgeSync
+    contentCatalog: runShopifyContentCatalogSync
   }
 }) {
   const customerCounts = await runners.customers({
@@ -127,9 +127,8 @@ export async function runNightlySync({
     syncedAt,
     integrationEventId
   });
-  const knowledgeCounts = await runners.knowledge({
+  const contentCatalogCounts = await runners.contentCatalog({
     args,
-    config,
     shopify,
     supabase,
     shopRow,
@@ -147,9 +146,8 @@ export async function runNightlySync({
     discounts: promotionCounts.discounts,
     promotions: promotionCounts.promotions,
     deleted_promotions: promotionCounts.deletedPromotions,
-    knowledge_documents: knowledgeCounts.documents,
-    knowledge_chunks: knowledgeCounts.chunks,
-    unresolved_knowledge_sources: knowledgeCounts.unresolvedSources
+    shopify_content_sources: contentCatalogCounts.sources,
+    deleted_shopify_content_sources: contentCatalogCounts.deletedSources
   };
 }
 

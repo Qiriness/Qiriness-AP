@@ -1,0 +1,54 @@
+.page {
+  padding: var(--space-5) var(--space-6) var(--space-8);
+}
+
+.inner {
+  max-width: var(--container-max);
+  margin: 0 auto;
+}
+
+.panes {
+  display: grid;
+  grid-template-columns: minmax(300px, 380px) minmax(0, 1fr);
+  gap: var(--space-4);
+  align-items: start;
+}
+
+.listPane {
+  min-width: 0;
+  /* Keep the article library in view while the workspace scrolls. */
+  position: sticky;
+  top: 0;
+  max-height: calc(100dvh - 56px - var(--space-8));
+}
+
+.workPane {
+  min-width: 0;
+}
+
+/* ---- Tablet: single column, both panes stacked ---- */
+@media (max-width: 980px) {
+  .page {
+    padding: var(--space-5) var(--space-5) var(--space-6);
+  }
+  .panes {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .listPane {
+    position: static;
+    max-height: none;
+  }
+}
+
+/* ---- Mobile: one pane at a time, switched by selection ---- */
+@media (max-width: 720px) {
+  .page {
+    padding: var(--space-4);
+  }
+  .panes[data-pane="list"] .workPane {
+    display: none;
+  }
+  .panes[data-pane="workspace"] .listPane {
+    display: none;
+  }
+}

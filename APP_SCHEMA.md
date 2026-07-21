@@ -5,7 +5,8 @@
 - Shopify
 - Supabase
 - PostgreSQL
-- App stack: pending
+- Frontend app: Next.js (App Router) + TypeScript + React 18, in `web/` (CSS Modules, no UI framework)
+- Backend/sync: Node ESM scripts at repo root (`scripts/`), separate `package.json` from `web/`
 
 ## Route Map
 
@@ -18,7 +19,48 @@
 |-- APP_SCHEMA.md      # repo map
 |-- MERCHANT_DATA_USE_DISCLOSURE.md # merchant-facing Shopify data-use disclosure draft
 |-- SHOPIFY_PERSONAL_DATA_PROTECTION.md # Shopify protected customer data checklist
-|-- package.json       # Node scripts for Shopify/Supabase sync
+|-- package.json       # Node scripts for Shopify/Supabase sync (root; type: module)
+|-- web/               # Next.js + TypeScript dashboard app (own package.json)
+|   |-- app/
+|   |   |-- layout.tsx        # root layout, Plus Jakarta Sans font, metadata
+|   |   |-- globals.css       # design tokens (teal palette, scale, radii) + base styles
+|   |   |-- page.tsx          # redirects / -> /agent-setup
+|   |   `-- agent-setup/
+|   |       `-- page.tsx      # Agent Setup route (renders AppShell + AgentSetup)
+|   |-- components/
+|   |   |-- icons.tsx         # single coherent inline SVG icon set
+|   |   |-- app-shell/
+|   |   |   |-- AppShell.tsx  # top bar + sidebar slot + mobile drawer state
+|   |   |   `-- Sidebar.tsx   # primary nav (Agent Setup active; others "Soon"), store footer, collapse
+|   |   |-- ui/
+|   |   |   |-- Button.tsx    # shared button, all states (hover/focus/active/disabled/loading)
+|   |   |   `-- StatusChip.tsx # article status pill + error chip (semantic colors)
+|   |   `-- agent-setup/
+|   |       |-- AgentSetup.tsx     # stateful orchestrator (articles, selection, save/sync/optimize/approve)
+|   |       |-- SetupHeader.tsx    # title + readiness line + agent preview action
+|   |       |-- ArticleLibrary.tsx # left pane: search, status filters, list, create, empty states
+|   |       |-- ArticleListItem.tsx # one article row
+|   |       |-- ArticleWorkspace.tsx # right pane: title, source, sync state, editor, context, actions
+|   |       |-- RichTextEditor.tsx # dependency-free contentEditable editor + Preview toggle
+|   |       |-- SourcePageSelect.tsx # accessible Shopify source-page listbox
+|   |       |-- ContextSummary.tsx # brand voice + tone summary panel
+|   |       |-- WorkspaceActions.tsx # Save draft / Optimize draft / Approve for agent
+|   |       |-- EmptyWorkspace.tsx # no-selection state
+|   |       `-- Toast.tsx          # transient feedback (aria-live)
+|   |-- app/api/knowledge/         # server-only Route Handlers backing Agent Setup (see Knowledge API below)
+|   |   |-- shopify-sources/route.ts     # GET: live Shopify page + policy catalog for the source dropdown
+|   |   |-- articles/route.ts            # GET list, POST create (optionally imports a Shopify page or policy)
+|   |   |-- articles/[id]/route.ts       # PATCH edit (title/content/category/core topic/status), DELETE
+|   |   `-- articles/[id]/resync/route.ts # POST re-pull from the linked Shopify source (400 once the article is manual)
+|   |-- lib/
+|   |   |-- types.ts         # Article/ArticleStatus/SyncState/SaveState/ShopifyPage UI types
+|   |   |-- demo-data.ts     # static dummy articles + Shopify pages (no real customer data; still used by the UI until it's wired to the API above)
+|   |   `-- server/
+|   |       |-- knowledge-service.ts # server-only service backing the Knowledge API; imports scripts/lib directly (see Knowledge API below)
+|   |       `-- knowledge-errors.ts  # typed errors -> HTTP status mapping for the knowledge API routes
+|   |-- next.config.mjs      # sets experimental.outputFileTracingRoot to the repo root for the scripts/lib import below
+|   |-- tsconfig.json        # allowJs: true, so knowledge-service.ts can import scripts/lib/*.mjs directly
+|   `-- package.json         # next/react/typescript; scripts: dev/build/start/lint/typecheck
 |-- scripts/
 |   |-- apply-supabase-migration.mjs # SQL migration runner using SUPABASE_DB_URL
 |   |-- process-shopify-compliance-webhook.mjs # CLI harness for compliance webhook handler
@@ -26,7 +68,7 @@
 |   |-- sync-shopify-customers.mjs # Shopify customer sync orchestration
 |   |-- sync-shopify-orders.mjs # Shopify order sync orchestration and retention cleanup
 |   |-- sync-shopify-promotions.mjs # Shopify promotion/discount sync orchestration
-|   |-- sync-shopify-knowledge.mjs # Shopify page/policy sync and chunk orchestration
+|   |-- sync-shopify-content-catalog.mjs # lightweight nightly sync of all Shopify page + policy names/handles into shopify_content_sources (dropdown catalog only, no content, nothing writes to knowledge_documents)
 |   |-- sync-shopify-nightly.mjs # nightly Shopify sync orchestrator
 |   |-- sync-shopify-nightly.test.mjs # nightly schedule/order tests
 |   `-- lib/
@@ -37,7 +79,6 @@
 |       |-- knowledge-categories.mjs     # loose support category inference
 |       |-- knowledge-chunker.mjs        # knowledge document chunk generation
 |       |-- knowledge-document-mapper.mjs # Shopify page/policy to knowledge_documents rows
-|       |-- knowledge-document-repository.mjs # Supabase merge logic for knowledge_documents
 |       |-- knowledge-navigation.mjs     # Shopify menu to navigation-area metadata
 |       |-- shopify-theme-client.mjs     # read-only Shopify theme/asset client for template fallback
 |       |-- shopify-admin-client.mjs     # Shopify Admin API queries and pagination
@@ -49,7 +90,7 @@
 |       |-- shopify-order-mapper.test.mjs # order mapper privacy/channel/retention tests
 |       |-- shopify-promotion-mapper.mjs # Shopify discount/promotion row mapper
 |       |-- shopify-promotion-mapper.test.mjs # promotion mapper tests
-|       |-- shopify-knowledge-client.mjs # Shopify pages, policies, and menus reader
+|       |-- shopify-knowledge-client.mjs # Shopify pages (list + single-by-id), policies, and menus reader
 |       |-- shopify-metaobject-mapper.mjs # Shopify metaobject row mapping
 |       |-- shopify-product-mapper.mjs   # Shopify product row mapping
 |       |-- shopify-shop-mapper.mjs      # Shopify shop row mapping
@@ -60,7 +101,7 @@
 |       |-- sync-config.mjs              # CLI/env parsing for sync scripts
 |       |-- text-cleaning.mjs            # AI-facing French text normalization
 |       `-- knowledge/
-|           |-- source-discovery.mjs      # Shopify page identity/navigation source discovery
+|           |-- source-discovery.mjs      # Shopify page identity/navigation source discovery (batch + single-page variants)
 |           |-- knowledge-source-resolver.mjs # ordered content resolver coordinator
 |           `-- content-resolvers/
 |               |-- manual-override-resolver.mjs # optional local canonical text override
@@ -69,11 +110,13 @@
 |               `-- theme-template-resolver.mjs # Shopify theme template/section settings fallback
 `-- supabase/
     `-- migrations/
-        `-- 001_initial_schema.sql # consolidated Supabase schema for shops, customers, orders, products, knowledge, and compliance metadata
-        `-- 002_promotions.sql # Shopify promotion and discount snapshot table
-        `-- compliance-migrations.test.mjs # static migration coverage for compliance tables
-        `-- orders-migration.test.mjs # static migration coverage for order table shape
-        `-- promotions-migration.test.mjs # static migration coverage for promotion table shape
+        |-- 001_initial_schema.sql # consolidated Supabase schema for shops, customers, orders, products, knowledge, and compliance metadata
+        |-- 002_promotions.sql # Shopify promotion and discount snapshot table
+        |-- 003_knowledge_page_catalog.sql # shopify_content_sources catalog table (pages + policies) + knowledge_documents columns for the Agent Setup workflow
+        |-- compliance-migrations.test.mjs # static migration coverage for compliance tables
+        |-- orders-migration.test.mjs # static migration coverage for order table shape
+        |-- promotions-migration.test.mjs # static migration coverage for promotion table shape
+        `-- knowledge-page-catalog-migration.test.mjs # static migration coverage for shopify_content_sources + knowledge_documents additions
 ```
 
 ## Database Map
@@ -106,19 +149,35 @@
 - `public.shopify_metaobjects` - Shared Shopify metaobject snapshots, such as predefined FAQ and ingredient records linked from products.
   - The sync stores targeted full metaobject definitions/entries from Shopify Metaobjects, plus any product-linked entries.
   - AI-facing product/metaobject text is cleaned for common French mojibake before storage; raw Shopify payloads remain unmodified for traceability.
-- `public.knowledge_documents` - Cleaned Shopify header/footer page and policy documents for AI support context.
-  - Stores source identity, navigation area, loose category, French canonical text, and parsed sections.
-  - Shopify pages and legal policies are synced by `scripts/sync-shopify-knowledge.mjs`; navigation area is inferred from Shopify menus when menu access is available.
-  - Page content is resolved in priority order: manual override, dedicated page metafield, Shopify `Page.body`, then theme template settings.
+- `public.shopify_content_sources` - Unified, content-free catalog of every live Shopify Online Store page **and** shop policy (refund, privacy, shipping, terms of service, etc.), keyed by `source_type` ('shopify_page' | 'shopify_policy') + `shopify_source_id`. Populates the single Agent Setup "Shopify source" dropdown without pulling any body content for sources nobody has chosen to use yet.
+  - Synced by `scripts/sync-shopify-content-catalog.mjs`; a full non-limited sync deletes local rows no longer returned by Shopify. Nothing here ever writes to `knowledge_documents` — that table is populated only by explicit user action.
+  - Loosely coupled to `knowledge_documents` via matching `source_type` + `shopify_source_id` values, not a foreign key.
+- `public.knowledge_documents` - Curated knowledge articles for AI support context and the Agent Setup dashboard. Nothing auto-syncs into this table; every row exists because a team member either imported a Shopify page/policy or wrote a manual article (see Knowledge API below), per PRODUCT.md's curated-library principle.
+  - Stores source identity, navigation area, loose category, French canonical text, and parsed sections, plus the dashboard-workflow columns added in `003_knowledge_page_catalog.sql`: `content_html` (rich-text source of truth for the editor; `content_text`/`sections` are regenerated from it on every save/import/resync), `approval_status` (draft/in_review/approved/needs_optimization, independent of the Shopify-publish `status` column), and `core_topic` (optional one-of-seven required-knowledge slot: order_policies, brand, confidentiality, delivery, returns_exchanges, locations, faqs — at most one active article per shop per slot).
+  - `source_type` is `shopify_page`, `shopify_policy`, or `manual`. Editing an imported article in the dashboard converts `source_type` to `manual` (keeping `shopify_source_id`/`handle` for provenance) — that conversion **is** the mechanism that stops it from being resynced; there is no separate "locally modified" flag.
+  - Page content is resolved in priority order: manual override, dedicated page metafield, Shopify `Page.body`, then theme template settings; policy content comes directly from Shopify's `shop.shopPolicies`, which has no per-item resolver chain.
 - `public.knowledge_chunks` - Lean retrieval chunks linked to knowledge documents.
   - Keeps chunk category, token count, text, hash, and optional vector embedding; document-level source fields stay on `knowledge_documents`.
-  - Chunks are regenerated for each synced document so changed source text does not leave stale chunks behind.
+  - Chunks are regenerated for each synced or edited document so changed source text does not leave stale chunks behind.
 - `public.integration_events` - Metadata-only log for sync, webhook, and reconciliation events.
   - Uses `event_key` for idempotency and stores sanitized counts/errors instead of raw payloads.
 - `public.privacy_requests` - Shopify compliance webhook lifecycle records.
   - Stores topic, shop/customer identifiers, hashed contact values, processing status, deletion counts, and sanitized metadata.
 - `public.data_access_events` - Service-level personal-data access audit trail.
   - Current sync paths write service events; future dashboard user views must write human access events here.
+
+## Knowledge API
+
+Server-only Next.js Route Handlers under `web/app/api/knowledge/` that back the Agent Setup dashboard. All routes use the Supabase service-role key server-side (never exposed to the browser) since every table has row level security enabled with no policies defined — see `001_initial_schema.sql`. Business logic lives in `web/lib/server/knowledge-service.ts`, which imports directly from `scripts/lib/*` (the same resolver pipeline, mapper, and chunker the sync scripts use) rather than duplicating it; `web/tsconfig.json` sets `allowJs: true` and `web/next.config.mjs` sets `experimental.outputFileTracingRoot` to the repo root to support this cross-package import.
+
+- `GET /api/knowledge/shopify-sources` - lists the `shopify_content_sources` catalog (pages + policies), flagging which are already imported as articles.
+- `GET /api/knowledge/articles` - lists every `knowledge_documents` row for the shop, mapped to the dashboard's article shape.
+- `POST /api/knowledge/articles` - creates an article. With `sourceId` (a `shopify_content_sources.id`), resolves that page or policy's live content from Shopify and fills it in immediately; without it, creates an empty standalone article.
+- `PATCH /api/knowledge/articles/:id` - saves title/content/category/core-topic/approval-status edits; converts `source_type` to `manual` if the article had a Shopify source (see the `source_type` note above — this is the whole lock mechanism).
+- `POST /api/knowledge/articles/:id/resync` - re-pulls the linked Shopify page or policy's content; 400 once the article is `manual` (nothing left to resync from).
+- `DELETE /api/knowledge/articles/:id` - hard-deletes the article (chunks cascade via FK); the source stays in the catalog and can be re-imported later.
+
+The frontend (`web/lib/demo-data.ts`, `web/components/agent-setup/*`) is not wired to these routes yet — that's the next step once this API is exercised against real Shopify/Supabase credentials.
 
 ## Read Order
 1. [AGENTS.md](/C:/Users/gnoua/Desktop_backup/APP_DEV/03_Qiriness_Email/Qirines_Email_Automation/AGENTS.md) - coding rules
@@ -131,11 +190,13 @@
 
 ## Status
 
-- App code: missing
-- Routes: missing
-- Migrations: consolidated `001_initial_schema.sql` defines core operational tables; `002_promotions.sql` adds Shopify promotion snapshots
-- Scripts: Shopify product/metaobject sync, customer sync, order sync, promotion sync, knowledge sync, nightly sync orchestration, and compliance webhook CLI harness added
+- App code: Next.js + TypeScript dashboard scaffolded in `web/`; first surface is the `Agent Setup` tab (UI still runs on static demo data; a real backend API now exists but isn't wired into the components yet)
+- Routes: `/` (redirect) and `/agent-setup` (production-quality UI: article library, two-pane editor, source import, save/optimize/approve, responsive + a11y states)
+- Knowledge API: `web/app/api/knowledge/*` Route Handlers for listing the unified Shopify source catalog and creating/editing/resyncing/deleting knowledge articles — see Knowledge API above. Structurally verified (typecheck, build, curl smoke tests against a missing-config error); the underlying sync pipeline (`sync-shopify-content-catalog.mjs`, run via `npm run sync:shopify:nightly`) has been run successfully against the real dev Shopify store and Supabase, but the on-demand single-page/policy import and resync paths the Knowledge API itself uses have not been exercised against live data yet, and the frontend components don't call this API yet.
+- Frontend data: dummy static data only (`web/lib/demo-data.ts`); no real customer personal data. The UI does not call the Knowledge API yet — that wiring, plus a core-topics checklist affordance, is the next step.
+- Migrations: consolidated `001_initial_schema.sql` defines core operational tables; `002_promotions.sql` adds Shopify promotion snapshots; `003_knowledge_page_catalog.sql` adds the unified `shopify_content_sources` catalog table and the Agent Setup workflow columns on `knowledge_documents`. Applied once already to the dev Supabase database under an earlier (renamed/superseded) shape — that database needs re-syncing against the current migration before the Knowledge API will work against it.
+- Scripts: Shopify product/metaobject sync, customer sync, order sync, promotion sync, unified content-catalog sync (pages + policies), nightly sync orchestration, and compliance webhook CLI harness added
 - Script modules: Shopify sync, compliance audit, compliance webhook, persistence, config, mapper, hashing, chunking, and text-cleaning modules added or split into focused units
-- Tests: Node built-in regression tests added for Supabase REST bulk payload normalization, customer consent/RFM mapping, order privacy/channel/retention mapping, promotion mapping/migration coverage, nightly schedule/order, compliance/order migrations, and webhook redaction/HMAC
-- Config: missing
+- Tests: Node built-in regression tests added for Supabase REST bulk payload normalization, customer consent/RFM mapping, order privacy/channel/retention mapping, promotion mapping/migration coverage, nightly schedule/order (now including the content-catalog step), compliance/order/knowledge-page-catalog migrations, and webhook redaction/HMAC (43 tests, all passing)
+- Config: frontend app config present in `web/` (Next.js, TypeScript, ESLint, `allowJs` for the cross-package knowledge-service import); backend/deploy config still pending
 - Compliance docs: Shopify personal data protection checklist and merchant data-use disclosure added

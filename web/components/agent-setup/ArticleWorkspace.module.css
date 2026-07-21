@@ -1,0 +1,261 @@
+.workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 264px;
+  gap: var(--space-4);
+  align-items: start;
+}
+
+.editorCol {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  padding: var(--space-5);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-xs);
+  min-width: 0;
+}
+
+.topRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.back {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  flex: none;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.back:hover {
+  background: var(--surface-sunken);
+}
+
+.titleField {
+  flex: 1;
+  min-width: 0;
+}
+
+.titleInput {
+  width: 100%;
+  border: none;
+  background: transparent;
+  padding: var(--space-1) 0;
+  font-size: var(--text-xl);
+  font-weight: var(--weight-bold);
+  letter-spacing: -0.015em;
+  color: var(--text-strong);
+}
+.titleInput::placeholder {
+  color: var(--text-subtle);
+  font-weight: var(--weight-semibold);
+}
+.titleInput:focus-visible {
+  outline: none;
+  box-shadow: none;
+  border-bottom: 2px solid var(--teal-100);
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.label {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--text-muted);
+}
+
+.sourceRow {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+}
+
+.categoryRow {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+}
+
+.sourceSelect {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 240px;
+  flex: 1;
+}
+
+.syncState {
+  display: flex;
+  align-items: center;
+  min-height: 38px;
+  padding-bottom: 1px;
+}
+
+.syncBlock {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.synced {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: var(--text-body);
+  font-weight: var(--weight-medium);
+  color: #147a3a;
+}
+
+.syncError {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: var(--text-body);
+  font-weight: var(--weight-semibold);
+  color: var(--error);
+}
+
+.syncMeta {
+  font-size: var(--text-caption);
+  color: var(--text-subtle);
+}
+
+.syncMuted {
+  font-size: var(--text-body);
+  color: var(--text-subtle);
+}
+
+.syncing {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: var(--text-body);
+  font-weight: var(--weight-medium);
+  color: var(--text-muted);
+}
+
+.resync {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: none;
+  background: transparent;
+  color: var(--teal-ink);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  cursor: pointer;
+  padding: 2px;
+}
+.resync:hover {
+  text-decoration: underline;
+}
+
+.spinner {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid var(--teal-100);
+  border-top-color: var(--teal);
+  animation: ws-spin 0.7s linear infinite;
+}
+
+@keyframes ws-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.editorFooter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding-top: 2px;
+}
+
+.wordCount {
+  font-size: var(--text-caption);
+  color: var(--text-subtle);
+}
+
+.saveState {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--text-caption);
+  color: var(--text-muted);
+}
+
+.saveDot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--warning);
+}
+.saveDotBusy {
+  background: var(--teal);
+  animation: pulse 1s var(--ease-out) infinite;
+}
+
+.saved {
+  color: #147a3a;
+}
+
+@keyframes pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+
+.rail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  position: sticky;
+  top: 0;
+}
+
+/* ---- Responsive ---- */
+@media (max-width: 1080px) {
+  .workspace {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .rail {
+    position: static;
+  }
+}
+
+@media (max-width: 720px) {
+  .editorCol {
+    padding: var(--space-4);
+  }
+  .back {
+    display: inline-flex;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spinner {
+    animation-duration: 0.9s;
+  }
+  .saveDotBusy {
+    animation: none;
+  }
+}

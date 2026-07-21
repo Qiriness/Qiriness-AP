@@ -39,6 +39,36 @@ const PAGES_QUERY = `#graphql
   }
 `;
 
+const PAGE_BY_ID_QUERY = `#graphql
+  query KnowledgePageById($id: ID!) {
+    page(id: $id) {
+      id
+      handle
+      title
+      body
+      bodySummary
+      templateSuffix
+      createdAt
+      updatedAt
+      publishedAt
+      metafields(first: 50) {
+        nodes {
+          id
+          namespace
+          key
+          type
+          value
+          jsonValue
+          updatedAt
+          definition {
+            name
+          }
+        }
+      }
+    }
+  }
+`;
+
 const SHOP_POLICIES_QUERY = `#graphql
   query KnowledgePolicies {
     shop {
@@ -104,6 +134,19 @@ export async function fetchKnowledgePages(shopify, args) {
   } while (cursor && (!args.limit || pages.length < args.limit));
 
   return args.limit ? pages.slice(0, args.limit) : pages;
+}
+
+/**
+ * Fetches a single Shopify page by its GID, for the Agent Setup dashboard's
+ * on-demand "import this page as an article" flow (POST /api/knowledge/articles),
+ * which needs full page content rather than the lightweight shopify_pages catalog.
+ */
+export async function fetchKnowledgePageById(shopify, pageId) {
+  const data = await shopifyGraphql(shopify, PAGE_BY_ID_QUERY, { id: pageId });
+  if (!data.page) {
+    throw new Error(`Shopify page not found: ${pageId}`);
+  }
+  return data.page;
 }
 
 export async function fetchShopPolicies(shopify) {

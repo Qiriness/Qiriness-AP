@@ -1,0 +1,54 @@
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border-radius: var(--radius-pill);
+  border: 1px solid transparent;
+  font-weight: var(--weight-semibold);
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.sm {
+  padding: 4px 9px 4px 7px;
+  font-size: var(--text-caption);
+}
+
+.md {
+  padding: 5px 11px 5px 9px;
+  font-size: var(--text-sm);
+}
+
+.icon {
+  flex: none;
+}
+
+.draft {
+  background: var(--surface-sunken);
+  border-color: var(--border-strong);
+  color: var(--text-muted);
+}
+
+.in_review {
+  background: var(--info-050);
+  border-color: var(--info-100);
+  color: #1d4ed8;
+}
+
+.approved {
+  background: var(--success-050);
+  border-color: var(--success-100);
+  color: #147a3a;
+}
+
+.needs_optimization {
+  background: var(--warning-050);
+  border-color: var(--warning-100);
+  color: #b45c05;
+}
+
+.error {
+  background: var(--error-050);
+  border-color: var(--error-100);
+  color: var(--error);
+}

@@ -30,7 +30,7 @@ test('loadConfig allows nightly schedule overrides', () => {
   assert.equal(config.syncTimezone, 'Europe/Paris');
 });
 
-test('runNightlySync runs customers, orders, products, promotions, then knowledge', async () => {
+test('runNightlySync runs customers, orders, products, promotions, then content catalog', async () => {
   const order = [];
   const result = await runNightlySync({
     args: { dryRun: false },
@@ -57,14 +57,14 @@ test('runNightlySync runs customers, orders, products, promotions, then knowledg
         order.push('promotions');
         return { discounts: 6, promotions: 8, deletedPromotions: 1 };
       },
-      knowledge: async () => {
-        order.push('knowledge');
-        return { documents: 4, chunks: 8, unresolvedSources: 0 };
+      contentCatalog: async () => {
+        order.push('contentCatalog');
+        return { sources: 16, deletedSources: 1 };
       }
     }
   });
 
-  assert.deepEqual(order, ['customers', 'orders', 'products', 'promotions', 'knowledge']);
+  assert.deepEqual(order, ['customers', 'orders', 'products', 'promotions', 'contentCatalog']);
   assert.deepEqual(result, {
     customers: 10,
     deleted_customers: 1,
@@ -76,8 +76,7 @@ test('runNightlySync runs customers, orders, products, promotions, then knowledg
     discounts: 6,
     promotions: 8,
     deleted_promotions: 1,
-    knowledge_documents: 4,
-    knowledge_chunks: 8,
-    unresolved_knowledge_sources: 0
+    shopify_content_sources: 16,
+    deleted_shopify_content_sources: 1
   });
 });

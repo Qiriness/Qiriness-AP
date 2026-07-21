@@ -1,0 +1,152 @@
+.editor {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-2) var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-sunken);
+}
+
+.blockLabel {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  color: var(--text-muted);
+  padding-inline: 2px;
+}
+
+.divider {
+  width: 1px;
+  height: 18px;
+  background: var(--border);
+}
+
+.tools {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.toolBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out);
+}
+.toolBtn:hover:not(:disabled) {
+  background: var(--mist);
+  color: var(--text-strong);
+}
+.toolBtn:active:not(:disabled) {
+  background: #d8dde1;
+}
+.toolBtn:disabled {
+  color: #c0c7cc;
+  cursor: not-allowed;
+}
+
+.previewToggle {
+  margin-inline-start: auto;
+  height: 30px;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out);
+}
+.previewToggle:hover {
+  background: var(--surface-sunken);
+  color: var(--text-strong);
+}
+.previewOn {
+  background: var(--teal-050);
+  border-color: var(--teal-100);
+  color: var(--teal-ink);
+}
+
+.surface {
+  position: relative;
+}
+
+.placeholder {
+  position: absolute;
+  top: var(--space-4);
+  inset-inline-start: var(--space-4);
+  inset-inline-end: var(--space-4);
+  max-width: 74ch;
+  color: var(--text-subtle);
+  pointer-events: none;
+  font-size: var(--text-md);
+}
+
+.content {
+  /*
+   * Card and toolbar fill the available pane so the workspace uses the
+   * screen; only the prose measure is capped for readability (65-75ch).
+   */
+  max-width: 74ch;
+  min-height: 220px;
+  max-height: 46vh;
+  overflow-y: auto;
+  padding: var(--space-4);
+  font-size: var(--text-md);
+  line-height: 1.62;
+  color: var(--text-default);
+}
+.content:focus {
+  outline: none;
+}
+.editor:focus-within {
+  border-color: var(--teal-100);
+  box-shadow: 0 0 0 3px rgba(0, 128, 128, 0.09);
+}
+
+.content p {
+  margin: 0 0 0.85em;
+}
+.content p:last-child {
+  margin-bottom: 0;
+}
+.content strong {
+  font-weight: var(--weight-semibold);
+  color: var(--text-strong);
+}
+.content ul,
+.content ol {
+  margin: 0 0 0.85em;
+  padding-inline-start: 1.4em;
+}
+.content li {
+  margin-bottom: 0.3em;
+}
+.content a {
+  color: var(--teal-ink);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.editor[data-preview] .content {
+  background: var(--surface);
+  color: var(--text-strong);
+}
