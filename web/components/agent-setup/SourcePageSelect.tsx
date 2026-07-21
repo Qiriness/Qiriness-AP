@@ -1,21 +1,21 @@
 "use client";
 
 import { useEffect, useId, useRef, useState } from "react";
-import type { ShopifyPage } from "@/lib/types";
+import type { ShopifySource } from "@/lib/types";
 import { ChevronDownIcon, PageIcon } from "@/components/icons";
 import styles from "./SourcePageSelect.module.css";
 
 interface SourcePageSelectProps {
-  pages: ShopifyPage[];
+  sources: ShopifySource[];
   value: string | null;
   disabled?: boolean;
-  onChange: (pageId: string | null) => void;
+  onChange: (sourceId: string | null) => void;
 }
 
 const NONE = "__none__";
 
 export function SourcePageSelect({
-  pages,
+  sources,
   value,
   disabled,
   onChange,
@@ -25,11 +25,19 @@ export function SourcePageSelect({
   const wrapRef = useRef<HTMLDivElement>(null);
   const listId = useId();
 
-  const options = [
-    { id: NONE, title: "No source page", handle: "Standalone article" },
-    ...pages,
+  // Pages first, then policies, each internally alphabetical — matches how
+  // shopify_content_sources.title is already sorted by the API, but keep it
+  // deterministic here too since NONE is prepended client-side.
+  const options: Array<{ id: string; title: string; handle: string; group: "page" | "policy" | "none" }> = [
+    { id: NONE, title: "No source", handle: "Standalone article", group: "none" },
+    ...sources
+      .filter((s) => s.sourceType === "shopify_page")
+      .map((s) => ({ id: s.id, title: s.title, handle: s.handle, group: "page" as const })),
+    ...sources
+      .filter((s) => s.sourceType === "shopify_policy")
+      .map((s) => ({ id: s.id, title: s.title, handle: s.handle, group: "policy" as const })),
   ];
-  const selected = pages.find((p) => p.id === value) ?? null;
+  const selected = sources.find((s) => s.id === value) ?? null;
   const selectedIndex = value ? options.findIndex((o) => o.id === value) : 0;
 
   useEffect(() => {
@@ -72,6 +80,8 @@ export function SourcePageSelect({
     }
   }
 
+  let lastGroup: string | null = null;
+
   return (
     <div className={styles.wrap} ref={wrapRef}>
       <button
@@ -86,7 +96,7 @@ export function SourcePageSelect({
       >
         <PageIcon size={17} className={styles.leadingIcon} />
         <span className={styles.triggerText}>
-          {selected ? selected.title : "No source page"}
+          {selected ? selected.title : "No source"}
         </span>
         <ChevronDownIcon
           size={17}
@@ -99,22 +109,30 @@ export function SourcePageSelect({
           {options.map((opt, i) => {
             const isSelected = opt.id === (value ?? NONE);
             const isActive = i === activeIndex;
+            const showHeading = opt.group !== "none" && opt.group !== lastGroup;
+            lastGroup = opt.group;
             return (
-              <li
-                key={opt.id}
-                role="option"
-                aria-selected={isSelected}
-                className={`${styles.option} ${isActive ? styles.active : ""} ${
-                  isSelected ? styles.selected : ""
-                }`}
-                onMouseEnter={() => setActiveIndex(i)}
-                onClick={() => choose(opt.id)}
-              >
-                <PageIcon size={16} className={styles.optionIcon} />
-                <span className={styles.optionText}>
-                  <span className={styles.optionTitle}>{opt.title}</span>
-                  <span className={styles.optionHandle}>{opt.handle}</span>
-                </span>
+              <li key={opt.id} role="presentation">
+                {showHeading && (
+                  <div className={styles.groupHeading} role="presentation">
+                    {opt.group === "page" ? "Pages" : "Policies"}
+                  </div>
+                )}
+                <div
+                  role="option"
+                  aria-selected={isSelected}
+                  className={`${styles.option} ${isActive ? styles.active : ""} ${
+                    isSelected ? styles.selected : ""
+                  }`}
+                  onMouseEnter={() => setActiveIndex(i)}
+                  onClick={() => choose(opt.id)}
+                >
+                  <PageIcon size={16} className={styles.optionIcon} />
+                  <span className={styles.optionText}>
+                    <span className={styles.optionTitle}>{opt.title}</span>
+                    <span className={styles.optionHandle}>{opt.handle}</span>
+                  </span>
+                </div>
               </li>
             );
           })}

@@ -1,24 +1,32 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { Article, KnowledgeCategory, SaveState } from "@/lib/types";
+import type { Article, KnowledgeCategory, SaveState, ShopifySource } from "@/lib/types";
 import {
-  DEMO_ARTICLES,
-  DEMO_CONTEXT,
-  SHOPIFY_PAGES,
-} from "@/lib/demo-data";
+  createArticle,
+  deleteArticle,
+  knowledgeErrorMessage,
+  resyncArticle,
+  updateArticle,
+} from "@/lib/api/knowledge";
 import { SetupHeader } from "./SetupHeader";
 import { ArticleLibrary, type StatusFilter } from "./ArticleLibrary";
 import { ArticleWorkspace } from "./ArticleWorkspace";
 import { EmptyWorkspace } from "./EmptyWorkspace";
+import { LoadError } from "./LoadError";
 import { Toast, type ToastMessage, type ToastVariant } from "./Toast";
+import { CORE_TOPICS, type CoreTopic } from "@/lib/types";
 import styles from "./AgentSetup.module.css";
 
-/** Simulated latencies for the demo interaction flows (no backend yet). */
-const IMPORT_MS = 1100;
-const SAVE_MS = 700;
+/** Brand tone isn't backed by any data model yet — no knowledge_documents column for it. */
+const STATIC_TONE = ["Warm", "Precise", "Helpful"];
 const OPTIMIZE_MS = 1300;
-const FAILING_PAGE_ID = "page-returns"; // demonstrates the import error path
+
+interface AgentSetupProps {
+  initialArticles: Article[];
+  initialSources: ShopifySource[];
+  loadError: string | null;
+}
 
 function wordsIn(html: string): number {
   const text = html.replace(/<[^>]*>/g, " ").replace(/&nbsp;/g, " ");
@@ -26,23 +34,18 @@ function wordsIn(html: string): number {
   return trimmed ? trimmed.split(/\s+/).length : 0;
 }
 
-function importedContentFor(title: string, handle: string): string {
-  return (
-    `<p>Imported from the Shopify page <strong>${title}</strong> (${handle}).</p>` +
-    `<p>Review this draft and rewrite it in the Qiriness brand voice before approving it for the agent.</p>`
-  );
-}
-
+/** Client-only placeholder for the future AI "optimize" feature — no backend endpoint exists yet. */
 function tidyContent(html: string): string {
   return html
-    .replace(/<p>\s*(&nbsp;)?\s*<\/p>/g, "") // drop empty paragraphs
+    .replace(/<p>\s*(&nbsp;)?\s*<\/p>/g, "")
     .replace(/[ \t]{2,}/g, " ")
     .trim();
 }
 
-export function AgentSetup() {
-  const [articles, setArticles] = useState<Article[]>(DEMO_ARTICLES);
-  const [selectedId, setSelectedId] = useState<string | null>("art-refund");
+export function AgentSetup({ initialArticles, initialSources, loadError }: AgentSetupProps) {
+  const [articles, setArticles] = useState<Article[]>(initialArticles);
+  const [sources] = useState<ShopifySource[]>(initialSources);
+  const [selectedId, setSelectedId] = useState<string | null>(initialArticles[0]?.id ?? null);
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [saveState, setSaveState] = useState<SaveState>("saved");
@@ -52,6 +55,8 @@ export function AgentSetup() {
   const [mobilePane, setMobilePane] = useState<"list" | "workspace">("list");
   const [focusNonce, setFocusNonce] = useState(0);
   const [toast, setToast] = useState<ToastMessage | null>(null);
+  const [creating, setCreating] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
   const toastId = useRef(0);
@@ -91,7 +96,18 @@ export function AgentSetup() {
     [articles],
   );
 
-  const brandVoice = articles.find((a) => a.id === DEMO_CONTEXT.brandVoiceArticleId);
+  const coreTopicStatus = useMemo(
+    () =>
+      CORE_TOPICS.map((topic) => ({
+        topic,
+        isFilled: articles.some(
+          (a) => a.coreTopic === topic && a.status === "approved",
+        ),
+      })),
+    [articles],
+  );
+
+  const brandVoice = articles.find((a) => a.coreTopic === "brand");
 
   // Recompute word count whenever the selected article changes.
   useEffect(() => {
@@ -136,69 +152,54 @@ export function AgentSetup() {
     setSaveState("unsaved");
   }
 
-  function handleSourceChange(pageId: string | null) {
-    if (!selected || pageId === selected.sourcePageId) return;
+  async function handleSourceChange(sourceId: string | null) {
+    if (!selected || sourceId === null || sourceId === selected.sourcePageId) return;
     const id = selected.id;
+    const source = sources.find((s) => s.id === sourceId);
 
-    if (pageId === null) {
-      patchArticle(id, { sourcePageId: null, syncState: "none" });
-      setSaveState("unsaved");
-      return;
+    patchArticle(id, { syncState: "syncing" });
+    try {
+      const updated = await updateArticle(id, { sourceId });
+      patchArticle(id, updated);
+      bumpEditor(id);
+      showToast(`Imported from ${source?.title ?? "Shopify"}.`);
+    } catch (error) {
+      patchArticle(id, { syncState: "error" });
+      showToast(knowledgeErrorMessage(error), "error");
     }
-
-    patchArticle(id, { sourcePageId: pageId, syncState: "syncing" });
-    setSaveState("unsaved");
-    const page = SHOPIFY_PAGES.find((p) => p.id === pageId);
-
-    later(() => {
-      if (pageId === FAILING_PAGE_ID) {
-        patchArticle(id, { syncState: "error" });
-        showToast(`Couldn't import from ${page?.title ?? "Shopify"}.`, "error");
-        return;
-      }
-      const current = articles.find((a) => a.id === id);
-      const isEmpty = !current || wordsIn(current.content) === 0;
-      const nextContent =
-        isEmpty && page
-          ? importedContentFor(page.title, page.handle)
-          : undefined;
-      patchArticle(id, {
-        syncState: "synced",
-        lastSyncedLabel: "just now",
-        ...(nextContent ? { content: nextContent } : {}),
-      });
-      if (nextContent) bumpEditor(id);
-      showToast(`Imported from ${page?.title ?? "Shopify"}.`);
-    }, IMPORT_MS);
   }
 
-  function handleResync() {
+  async function handleResync() {
     if (!selected?.sourcePageId) return;
     const id = selected.id;
-    const pageId = selected.sourcePageId;
-    const page = SHOPIFY_PAGES.find((p) => p.id === pageId);
-    patchArticle(id, { syncState: "syncing" });
+    const source = sources.find((s) => s.id === selected.sourcePageId);
 
-    later(() => {
-      if (pageId === FAILING_PAGE_ID) {
-        patchArticle(id, { syncState: "error" });
-        showToast(`Couldn't import from ${page?.title ?? "Shopify"}.`, "error");
-        return;
-      }
-      patchArticle(id, { syncState: "synced", lastSyncedLabel: "just now" });
-      showToast(`Resynced from ${page?.title ?? "Shopify"}.`);
-    }, IMPORT_MS);
+    patchArticle(id, { syncState: "syncing" });
+    try {
+      const updated = await resyncArticle(id);
+      patchArticle(id, updated);
+      bumpEditor(id);
+      showToast(`Resynced from ${source?.title ?? "Shopify"}.`);
+    } catch (error) {
+      patchArticle(id, { syncState: "error" });
+      showToast(knowledgeErrorMessage(error), "error");
+    }
   }
 
-  function handleSave() {
+  async function handleSave() {
     if (!selected || saveState !== "unsaved") return;
     const id = selected.id;
+    const { title, content, category } = selected;
     setSaveState("saving");
-    later(() => {
-      patchArticle(id, { updatedLabel: "just now" });
+    try {
+      const updated = await updateArticle(id, { title, content, category });
+      patchArticle(id, updated);
       setSaveState("saved");
       showToast("Draft saved.");
-    }, SAVE_MS);
+    } catch (error) {
+      setSaveState("unsaved");
+      showToast(knowledgeErrorMessage(error), "error");
+    }
   }
 
   function handleOptimize() {
@@ -217,33 +218,60 @@ export function AgentSetup() {
     }, OPTIMIZE_MS);
   }
 
-  function handleApprove() {
+  async function handleApprove() {
     if (!selected || selected.status === "approved") return;
-    patchArticle(selected.id, { status: "approved", updatedLabel: "just now" });
-    setSaveState("saved");
-    showToast("Approved for the agent.");
+    const id = selected.id;
+    const { title, content, category } = selected;
+    setSaveState("saving");
+    try {
+      const updated = await updateArticle(id, { title, content, category, approvalStatus: "approved" });
+      patchArticle(id, updated);
+      setSaveState("saved");
+      showToast("Approved for the agent.");
+    } catch (error) {
+      setSaveState("unsaved");
+      showToast(knowledgeErrorMessage(error), "error");
+    }
   }
 
-  function handleCreate() {
-    const id = `art-${Date.now()}`;
-    const article: Article = {
-      id,
-      title: "",
-      status: "draft",
-      content: "",
-      category: "general",
-      sourcePageId: null,
-      syncState: "none",
-      updatedLabel: "just now",
-    };
-    setArticles((prev) => [article, ...prev]);
-    setSelectedId(id);
-    setQuery("");
-    setStatusFilter("all");
-    setSaveState("saved");
-    setOptimizing(false);
-    setMobilePane("workspace");
-    setFocusNonce((n) => n + 1);
+  async function handleCreate() {
+    if (creating) return;
+    setCreating(true);
+    try {
+      const article = await createArticle({});
+      setArticles((prev) => [article, ...prev]);
+      setSelectedId(article.id);
+      setQuery("");
+      setStatusFilter("all");
+      setSaveState("saved");
+      setOptimizing(false);
+      setMobilePane("workspace");
+      setFocusNonce((n) => n + 1);
+    } catch (error) {
+      showToast(knowledgeErrorMessage(error), "error");
+    } finally {
+      setCreating(false);
+    }
+  }
+
+  async function handleDelete() {
+    if (!selected || deleting) return;
+    const id = selected.id;
+    setDeleting(true);
+    try {
+      await deleteArticle(id);
+      setArticles((prev) => {
+        const next = prev.filter((a) => a.id !== id);
+        setSelectedId(next[0]?.id ?? null);
+        return next;
+      });
+      setMobilePane("list");
+      showToast("Article deleted.");
+    } catch (error) {
+      showToast(knowledgeErrorMessage(error), "error");
+    } finally {
+      setDeleting(false);
+    }
   }
 
   function handleClearFilters() {
@@ -251,10 +279,18 @@ export function AgentSetup() {
     setStatusFilter("all");
   }
 
+  if (loadError) {
+    return <LoadError message={loadError} />;
+  }
+
   return (
     <div className={styles.page}>
       <div className={styles.inner}>
-        <SetupHeader approved={approvedCount} total={articles.length} />
+        <SetupHeader
+          approved={approvedCount}
+          total={articles.length}
+          coreTopicStatus={coreTopicStatus}
+        />
 
         <div className={styles.panes} data-pane={mobilePane}>
           <div className={styles.listPane}>
@@ -276,15 +312,16 @@ export function AgentSetup() {
             {selected ? (
               <ArticleWorkspace
                 article={selected}
-                pages={SHOPIFY_PAGES}
+                sources={sources}
                 saveState={saveState}
                 optimizing={optimizing}
+                deleting={deleting}
                 wordCount={wordCount}
                 editorVersion={editorVersion[selected.id] ?? 0}
                 focusTitleNonce={focusNonce}
-                brandVoiceTitle={brandVoice?.title || "Brand voice"}
+                brandVoiceTitle={brandVoice?.title ?? null}
                 brandVoiceApproved={brandVoice?.status === "approved"}
-                tone={DEMO_CONTEXT.tone}
+                tone={STATIC_TONE}
                 onBack={() => setMobilePane("list")}
                 onTitleChange={handleTitleChange}
                 onContentChange={handleContentChange}
@@ -294,6 +331,7 @@ export function AgentSetup() {
                 onSave={handleSave}
                 onOptimize={handleOptimize}
                 onApprove={handleApprove}
+                onDelete={handleDelete}
               />
             ) : (
               <EmptyWorkspace onCreate={handleCreate} />

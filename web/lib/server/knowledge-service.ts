@@ -89,6 +89,15 @@ export interface UpdateArticleInput {
   category?: string;
   coreTopic?: string | null;
   approvalStatus?: "draft" | "in_review" | "approved" | "needs_optimization";
+  /**
+   * shopify_content_sources.id. Only valid on an article that has never had a
+   * Shopify source (a fresh manual article) — attaches and imports it,
+   * exactly like creating with a source, but reusing this article's id. This
+   * is what lets the dashboard's single workspace dropdown pick a source
+   * right after creating an empty article, without a second POST creating a
+   * duplicate row.
+   */
+  sourceId?: string;
 }
 
 let cachedConfig: any = null;
@@ -231,6 +240,46 @@ export async function updateArticle(
 ): Promise<KnowledgeArticleResponse> {
   const supabase = getSupabaseClient();
   const existing = await getArticleRow(supabase, shopId, articleId);
+
+  if (input.sourceId) {
+    if (existing.shopify_source_id) {
+      throw new KnowledgeValidationError(
+        "This article already has a Shopify source; use resync to refresh it, or create a new article to import a different one."
+      );
+    }
+
+    const catalogRows = await supabaseSelect(
+      supabase,
+      "shopify_content_sources",
+      { id: input.sourceId, shop_id: shopId },
+      "*"
+    );
+    const catalogRow = catalogRows[0];
+    if (!catalogRow) {
+      throw new KnowledgeNotFoundError(`Shopify source not found in catalog: ${input.sourceId}`);
+    }
+
+    const overrides = { category: input.category, core_topic: input.coreTopic ?? undefined };
+    const saved =
+      catalogRow.source_type === "shopify_policy"
+        ? await resolveAndUpsertArticleFromShopifyPolicy({
+            shopId,
+            shopifyPolicyId: catalogRow.shopify_source_id,
+            existingDocumentId: articleId,
+            approvalStatus: "draft",
+            overrides,
+          })
+        : await resolveAndUpsertArticleFromShopifyPage({
+            shopId,
+            shopifyPageId: catalogRow.shopify_source_id,
+            existingDocumentId: articleId,
+            approvalStatus: "draft",
+            overrides,
+          });
+
+    const catalogIdByKey = new Map([[`${catalogRow.source_type}:${catalogRow.shopify_source_id}`, catalogRow.id]]);
+    return mapArticleRow(saved, catalogIdByKey);
+  }
 
   const title = input.title ?? existing.title;
   const contentHtml = input.content ?? existing.content_html ?? "";

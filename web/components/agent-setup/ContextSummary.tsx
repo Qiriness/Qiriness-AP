@@ -2,7 +2,7 @@ import { CheckCircleIcon } from "@/components/icons";
 import styles from "./ContextSummary.module.css";
 
 interface ContextSummaryProps {
-  brandVoiceTitle: string;
+  brandVoiceTitle: string | null;
   brandVoiceApproved: boolean;
   tone: string[];
 }
@@ -25,7 +25,9 @@ export function ContextSummary({
       <div className={styles.field}>
         <span className={styles.label}>Brand voice</span>
         <div className={styles.voiceRow}>
-          <span className={styles.voiceName}>{brandVoiceTitle}</span>
+          <span className={brandVoiceTitle ? styles.voiceName : styles.voiceUnset}>
+            {brandVoiceTitle ?? "Not set"}
+          </span>
           {brandVoiceApproved && (
             <span className={styles.approved}>
               <CheckCircleIcon size={13} />

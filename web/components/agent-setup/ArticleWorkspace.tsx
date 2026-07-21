@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import type { Article, SaveState, ShopifyPage } from "@/lib/types";
+import type { Article, SaveState, ShopifySource } from "@/lib/types";
 import type { KnowledgeCategory } from "@/lib/types";
 import { StatusChip } from "@/components/ui/StatusChip";
 import { RichTextEditor } from "./RichTextEditor";
@@ -19,33 +19,36 @@ import styles from "./ArticleWorkspace.module.css";
 
 interface ArticleWorkspaceProps {
   article: Article;
-  pages: ShopifyPage[];
+  sources: ShopifySource[];
   saveState: SaveState;
   optimizing: boolean;
+  deleting: boolean;
   wordCount: number;
   /** Bumped on programmatic content changes (import/optimize) to remount the editor. */
   editorVersion: number;
   /** Bumped when a new article is created, to move focus into the title field. */
   focusTitleNonce: number;
-  brandVoiceTitle: string;
+  brandVoiceTitle: string | null;
   brandVoiceApproved: boolean;
   tone: string[];
   onBack: () => void;
   onTitleChange: (title: string) => void;
   onContentChange: (html: string, wordCount: number) => void;
-  onSourceChange: (pageId: string | null) => void;
+  onSourceChange: (sourceId: string | null) => void;
   onCategoryChange: (category: KnowledgeCategory) => void;
   onResync: () => void;
   onSave: () => void;
   onOptimize: () => void;
   onApprove: () => void;
+  onDelete: () => void;
 }
 
 export function ArticleWorkspace({
   article,
-  pages,
+  sources,
   saveState,
   optimizing,
+  deleting,
   wordCount,
   editorVersion,
   focusTitleNonce,
@@ -61,8 +64,14 @@ export function ArticleWorkspace({
   onSave,
   onOptimize,
   onApprove,
+  onDelete,
 }: ArticleWorkspaceProps) {
   const syncing = article.syncState === "syncing";
+  // A source can only be attached once, to a genuinely fresh article — the
+  // backend has no "reassign source" or "detach" path, only import (once)
+  // and resync. Once a source is set, or the article has real content, the
+  // picker locks; Resync is the only way to refresh from Shopify afterward.
+  const sourceLocked = article.sourcePageId !== null || wordCount > 0;
   const titleRef = useRef<HTMLInputElement>(null);
 
   // Move focus into the title when a fresh article is created.
@@ -101,13 +110,13 @@ export function ArticleWorkspace({
           <div className={styles.sourceRow}>
             <div className={styles.sourceSelect}>
               <label className={styles.label} id="source-label">
-                Shopify source page
+                Shopify source
               </label>
               <div aria-labelledby="source-label">
                 <SourcePageSelect
-                  pages={pages}
+                  sources={sources}
                   value={article.sourcePageId}
-                  disabled={syncing}
+                  disabled={syncing || sourceLocked}
                   onChange={onSourceChange}
                 />
               </div>
@@ -159,10 +168,12 @@ export function ArticleWorkspace({
         <WorkspaceActions
           saveState={saveState}
           optimizing={optimizing}
+          deleting={deleting}
           status={article.status}
           onSave={onSave}
           onOptimize={onOptimize}
           onApprove={onApprove}
+          onDelete={onDelete}
         />
       </div>
     </div>

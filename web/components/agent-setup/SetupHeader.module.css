@@ -57,3 +57,62 @@
 .status[data-ready] .statusIcon {
   color: var(--success);
 }
+
+.statusRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+  flex-wrap: wrap;
+}
+
+.checklist {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
+.checkItem {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border-subtle);
+  transition: all var(--dur-fast) var(--ease-out);
+}
+
+.checkItem[data-filled] {
+  background: var(--success-bg);
+  border-color: var(--success-border);
+}
+
+.checkIcon {
+  display: flex;
+  color: var(--text-subtle);
+}
+
+.checkItem[data-filled] .checkIcon {
+  color: var(--success);
+}
+
+.emptyDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text-subtle);
+}
+
+.checkItem[data-filled] .emptyDot {
+  background: var(--success);
+}
+
+.checkLabel {
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+  color: var(--text-muted);
+}
+
+.checkItem[data-filled] .checkLabel {
+  color: var(--success-ink);
+}

@@ -10,3 +10,7 @@
   line-height: 1.45;
   color: var(--text-subtle);
 }
+
+.deleteButton {
+  margin-top: var(--space-3);
+}

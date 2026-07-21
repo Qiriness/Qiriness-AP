@@ -59,6 +59,13 @@
   color: var(--text-strong);
 }
 
+.voiceUnset {
+  font-size: var(--text-body);
+  font-weight: var(--weight-medium);
+  font-style: italic;
+  color: var(--text-subtle);
+}
+
 .approved {
   display: inline-flex;
   align-items: center;
