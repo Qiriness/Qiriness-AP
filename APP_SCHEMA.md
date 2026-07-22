@@ -36,17 +36,19 @@
 |   |   |   |-- Button.tsx    # shared button, all states (hover/focus/active/disabled/loading)
 |   |   |   `-- StatusChip.tsx # article status pill + error chip (semantic colors)
 |   |   `-- agent-setup/
-|   |       |-- AgentSetup.tsx     # stateful orchestrator (articles, selection, save/sync/optimize/approve/delete)
+|   |       |-- AgentSetup.tsx     # stateful orchestrator (articles, selection, save/sync/optimize/approve/unapprove/delete)
 |   |       |-- SetupHeader.tsx    # title + readiness line + agent preview action
-|   |       |-- ArticleLibrary.tsx # left pane: search, status filters, Core setup checklist, category-grouped articles, create, empty states
-|   |       |-- CollapsibleSection.tsx # generic collapsible group (Core setup checklist, per-category article groups)
-|   |       |-- CoreTopicPlaceholder.tsx # dashed "Not started" row for an empty core-topic slot; click creates a pre-filled draft
+|   |       |-- ArticleLibrary.tsx # left pane: search, status filters, Drafting agent setup (Brand voice slot), Core setup checklist, category-grouped articles, create, empty states
+|   |       |-- CollapsibleSection.tsx # generic collapsible group (Drafting agent setup, Core setup checklist, per-category article groups)
+|   |       |-- CoreTopicPlaceholder.tsx # dashed "Not started" row for an empty core-topic slot (incl. the Brand voice slot); click creates a pre-filled draft
 |   |       |-- ArticleListItem.tsx # one article row
-|   |       |-- ArticleWorkspace.tsx # right pane: title, source, sync state, editor, context, actions
+|   |       |-- ArticleWorkspace.tsx # right pane for ordinary articles: title, source, sync state, category, editor, actions
+|   |       |-- BrandVoiceWorkspace.tsx # right pane for the singleton Brand voice article (coreTopic === "brand"): brand identity, voice/tone/language/safety rules, email structure, formatting defaults, general context, actions — no source picker or category select
+|   |       |-- EditableChipList.tsx # reusable editable tag list (inline pill chips or vertical rows); optional `locked` read-only mode for the fixed safety-rules baseline
 |   |       |-- RichTextEditor.tsx # dependency-free contentEditable editor + Preview toggle
 |   |       |-- SourcePageSelect.tsx # accessible Shopify source-page listbox
-|   |       |-- ContextSummary.tsx # brand voice + tone summary panel (brand voice resolved via Article.coreTopic === "brand")
-|   |       |-- WorkspaceActions.tsx # Save draft / Optimize draft / Approve for agent / Delete article (two-step confirm)
+|   |       |-- CategorySelect.tsx # accessible knowledge-category listbox
+|   |       |-- WorkspaceActions.tsx # Save draft / Optimize draft / Approve for agent / Unapprove / Delete article (two-step confirm)
 |   |       |-- EmptyWorkspace.tsx # no-selection state
 |   |       |-- LoadError.tsx      # shown when the server-side initial fetch fails (missing config, shop not synced)
 |   |       `-- Toast.tsx          # transient feedback (aria-live)

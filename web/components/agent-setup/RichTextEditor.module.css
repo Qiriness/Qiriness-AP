@@ -94,18 +94,15 @@
   top: var(--space-4);
   inset-inline-start: var(--space-4);
   inset-inline-end: var(--space-4);
-  max-width: 74ch;
   color: var(--text-subtle);
   pointer-events: none;
   font-size: var(--text-md);
 }
 
 .content {
-  /*
-   * Card and toolbar fill the available pane so the workspace uses the
-   * screen; only the prose measure is capped for readability (65-75ch).
-   */
-  max-width: 74ch;
+  /* Fills the editor card's full width — no reading-measure cap, so the
+     typing area matches the visible box (and its scrollbar sits at the
+     card's edge instead of mid-page). */
   min-height: 220px;
   max-height: 46vh;
   overflow-y: auto;

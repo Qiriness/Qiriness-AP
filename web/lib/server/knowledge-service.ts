@@ -532,13 +532,17 @@ function mapArticleRow(row: any, catalogIdByKey: Map<string, string>): Knowledge
   };
 }
 
-/** Defends against a missing/partial voice_profile JSONB value (e.g. the column default `{}`, or fields added after a row already existed). */
-function normalizeVoiceProfile(raw: any): VoiceProfile {
+/**
+ * Defends against a missing/partial voice_profile JSONB value (e.g. the
+ * column default `{}`, or fields added to the shape after a row already
+ * existed). Deep-defaults every field so callers never see `undefined`.
+ * Exported so the PATCH route handler can reuse the same defaulting logic to
+ * sanitize incoming request bodies instead of duplicating it.
+ */
+export function normalizeVoiceProfile(raw: any): VoiceProfile {
   const v = raw || {};
   return {
-    tone: Array.isArray(v.tone) ? v.tone : [],
-    voice: typeof v.voice === "string" ? v.voice : "",
-    dos: Array.isArray(v.dos) ? v.dos : [],
-    donts: Array.isArray(v.donts) ? v.donts : [],
+    roleDescription: typeof v.roleDescription === "string" ? v.roleDescription : "",
+    toneAndVoice: typeof v.toneAndVoice === "string" ? v.toneAndVoice : "",
   };
 }

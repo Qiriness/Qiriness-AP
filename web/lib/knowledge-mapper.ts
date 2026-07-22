@@ -8,7 +8,7 @@
  */
 
 import type { Article, ArticleStatus, CoreTopic, KnowledgeCategory, ShopifySource, SyncState, VoiceProfile } from "./types";
-import { CORE_TOPICS, KNOWLEDGE_CATEGORIES } from "./types";
+import { ALL_CORE_TOPICS, KNOWLEDGE_CATEGORIES } from "./types";
 import { formatRelativeTime } from "./relative-time";
 
 interface RawArticle {
@@ -36,7 +36,7 @@ export function mapArticleResponse(raw: RawArticle): Article {
   const category = KNOWLEDGE_CATEGORIES.includes(raw.category as KnowledgeCategory)
     ? (raw.category as KnowledgeCategory)
     : "general";
-  const coreTopic = CORE_TOPICS.includes(raw.coreTopic as CoreTopic)
+  const coreTopic = ALL_CORE_TOPICS.includes(raw.coreTopic as CoreTopic)
     ? (raw.coreTopic as CoreTopic)
     : null;
 

@@ -112,6 +112,15 @@ export const CORE_TOPICS: CoreTopic[] = [
   "faqs",
 ];
 
+/**
+ * Every valid CoreTopic value, including "brand" — for validating a raw
+ * coreTopic string from the API. Deliberately distinct from CORE_TOPICS
+ * (the Core setup checklist subset): using CORE_TOPICS for this check would
+ * silently null out "brand" on every article, since it was removed from that
+ * list.
+ */
+export const ALL_CORE_TOPICS: CoreTopic[] = [...CORE_TOPICS, "brand"];
+
 /** A Shopify page or shop policy available to import, from the unified catalog. */
 export interface ShopifySource {
   id: string;
@@ -140,24 +149,45 @@ export interface Article {
 }
 
 /**
- * Structured, always-included context for the drafting agent: how the brand
- * sounds, regardless of what the email is about. Distinct from category
- * articles, which are retrieved selectively per email subject.
+ * Structured, always-included context for the drafting agent: how it should
+ * describe itself and sound, regardless of what the email is about. Distinct
+ * from category articles, which are retrieved selectively per email subject.
+ * Response Framework and Guidelines and Guardrails are intentionally not
+ * part of this shape yet — they render as fixed placeholder content (see
+ * RESPONSE_FRAMEWORK_PLACEHOLDER / GUIDELINES_AND_GUARDRAILS_PLACEHOLDER)
+ * until that part of the page is designed in more depth.
  */
 export interface VoiceProfile {
-  tone: string[];
-  voice: string;
-  dos: string[];
-  donts: string[];
+  roleDescription: string;
+  toneAndVoice: string;
 }
 
-export const EMPTY_VOICE_PROFILE: VoiceProfile = { tone: [], voice: "", dos: [], donts: [] };
+export const EMPTY_VOICE_PROFILE: VoiceProfile = {
+  roleDescription: "",
+  toneAndVoice: "",
+};
 
-/** Brand tone descriptors shown in the workspace context summary. */
-export interface AgentContext {
-  brandVoiceArticleId: string;
-  tone: string[];
-}
+/** Fixed placeholder content for the "Response Framework" section — not yet editable or stored. */
+export const RESPONSE_FRAMEWORK_PLACEHOLDER: string[] = [
+  "Appropriate greeting",
+  "Acknowledge the customer's message",
+  "Give the relevant answer or resolution",
+  "Explain the next step, where applicable",
+  "Close politely",
+  "Apply the approved signature",
+];
+
+/** Fixed placeholder content for the "Guidelines and Guardrails" section — not yet editable or stored. */
+export const GUIDELINES_AND_GUARDRAILS_PLACEHOLDER: string[] = [
+  "Never invent facts.",
+  "Never claim an action has been completed unless explicitly confirmed.",
+  "Never promise a refund, replacement, or delivery date unless approved in the brief.",
+  "Never make a medical diagnosis.",
+  "Never create product claims that are not supplied.",
+  "Never expose internal notes, confidence scores, or internal procedures.",
+  "Never request information already marked as available.",
+  "Never contradict the approved resolution.",
+];
 
 export const STATUS_LABELS: Record<ArticleStatus, string> = {
   draft: "Draft",

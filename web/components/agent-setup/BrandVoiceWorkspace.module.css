@@ -1,3 +1,21 @@
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding-top: var(--space-5);
+  border-top: 1px solid var(--border);
+}
+.section:first-of-type {
+  padding-top: 0;
+  border-top: none;
+}
+
+.sectionTitle {
+  font-size: var(--text-body);
+  font-weight: var(--weight-semibold);
+  color: var(--text-strong);
+}
+
 .voiceTextarea {
   width: 100%;
   resize: vertical;
@@ -19,18 +37,6 @@
   box-shadow: 0 0 0 3px rgba(0, 128, 128, 0.09);
 }
 
-.dosDontsRow {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: var(--space-4);
-}
-
-@media (max-width: 720px) {
-  .dosDontsRow {
-    grid-template-columns: 1fr;
-  }
-}
-
 .hint {
   margin: -4px 0 0;
   font-size: var(--text-caption);
@@ -39,10 +45,18 @@
 }
 
 .railHint {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
   padding: var(--space-4);
   background: var(--surface-sunken);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
+}
+.railHint svg {
+  flex: none;
+  color: var(--text-subtle);
+  margin-top: 1px;
 }
 .railHint p {
   margin: 0;

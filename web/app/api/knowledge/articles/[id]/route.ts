@@ -1,20 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { deleteArticle, getShopId, updateArticle } from "@/lib/server/knowledge-service";
+import { deleteArticle, getShopId, normalizeVoiceProfile, updateArticle } from "@/lib/server/knowledge-service";
 import { knowledgeErrorResponse } from "@/lib/server/knowledge-errors";
-import type { VoiceProfile } from "@/lib/types";
-
-function parseVoiceProfile(value: unknown): VoiceProfile | undefined {
-  if (!value || typeof value !== "object") return undefined;
-  const v = value as Record<string, unknown>;
-  const strings = (arr: unknown) => (Array.isArray(arr) ? arr.filter((x): x is string => typeof x === "string") : []);
-  return {
-    tone: strings(v.tone),
-    voice: typeof v.voice === "string" ? v.voice : "",
-    dos: strings(v.dos),
-    donts: strings(v.donts),
-  };
-}
 
 export const dynamic = "force-dynamic";
 
@@ -38,7 +25,10 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       coreTopic: body.coreTopic === null ? null : typeof body.coreTopic === "string" ? body.coreTopic : undefined,
       approvalStatus: typeof body.approvalStatus === "string" ? body.approvalStatus : undefined,
       sourceId: typeof body.sourceId === "string" ? body.sourceId : undefined,
-      voiceProfile: parseVoiceProfile(body.voiceProfile),
+      voiceProfile:
+        body.voiceProfile && typeof body.voiceProfile === "object"
+          ? normalizeVoiceProfile(body.voiceProfile)
+          : undefined,
     });
     return NextResponse.json({ article });
   } catch (error) {

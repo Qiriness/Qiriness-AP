@@ -95,8 +95,6 @@ export function AgentSetup({ initialArticles, initialSources, loadError }: Agent
     [articles],
   );
 
-  const brandVoice = articles.find((a) => a.coreTopic === "brand");
-
   // Recompute word count whenever the selected article changes.
   useEffect(() => {
     setWordCount(selected ? wordsIn(selected.content) : 0);
@@ -154,10 +152,9 @@ export function AgentSetup({ initialArticles, initialSources, loadError }: Agent
     applyEdit({ voiceProfile: { ...current, ...patch } });
   }
 
-  const handleToneChange = (tone: string[]) => handleVoiceProfileChange({ tone });
-  const handleVoiceChange = (voice: string) => handleVoiceProfileChange({ voice });
-  const handleDosChange = (dos: string[]) => handleVoiceProfileChange({ dos });
-  const handleDontsChange = (donts: string[]) => handleVoiceProfileChange({ donts });
+  const handleRoleDescriptionChange = (roleDescription: string) =>
+    handleVoiceProfileChange({ roleDescription });
+  const handleToneAndVoiceChange = (toneAndVoice: string) => handleVoiceProfileChange({ toneAndVoice });
 
   async function handleSourceChange(sourceId: string | null) {
     if (!selected || sourceId === null || sourceId === selected.sourcePageId) return;
@@ -367,10 +364,8 @@ export function AgentSetup({ initialArticles, initialSources, loadError }: Agent
                   focusTitleNonce={focusNonce}
                   onBack={() => setMobilePane("list")}
                   onTitleChange={handleTitleChange}
-                  onToneChange={handleToneChange}
-                  onVoiceChange={handleVoiceChange}
-                  onDosChange={handleDosChange}
-                  onDontsChange={handleDontsChange}
+                  onRoleDescriptionChange={handleRoleDescriptionChange}
+                  onToneAndVoiceChange={handleToneAndVoiceChange}
                   onGeneralContextChange={handleContentChange}
                   onSave={handleSave}
                   onOptimize={handleOptimize}
@@ -388,9 +383,6 @@ export function AgentSetup({ initialArticles, initialSources, loadError }: Agent
                   wordCount={wordCount}
                   editorVersion={editorVersion[selected.id] ?? 0}
                   focusTitleNonce={focusNonce}
-                  brandVoiceTitle={brandVoice?.title ?? null}
-                  brandVoiceApproved={brandVoice?.status === "approved"}
-                  tone={brandVoice?.voiceProfile?.tone ?? []}
                   onBack={() => setMobilePane("list")}
                   onTitleChange={handleTitleChange}
                   onContentChange={handleContentChange}

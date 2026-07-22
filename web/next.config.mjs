@@ -15,6 +15,16 @@ const nextConfig = {
     // machine. Single-worker mode avoids it; revisit if a Next.js upgrade
     // fixes the underlying worker-pool issue.
     cpus: 1,
+    // The client Router Cache otherwise keeps reusing a dynamic page's RSC
+    // payload across normal in-app navigations (not just prefetch), so
+    // Agent Setup could show data that was already deleted/changed server
+    // side until a hard reload. This page is already `dynamic =
+    // "force-dynamic"` and sends `Cache-Control: no-store`; disabling the
+    // client-side cache duration too makes every navigation here actually
+    // re-fetch.
+    staleTimes: {
+      dynamic: 0,
+    },
   },
 };
 

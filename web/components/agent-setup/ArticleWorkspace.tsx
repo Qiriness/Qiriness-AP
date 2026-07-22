@@ -7,7 +7,6 @@ import { StatusChip } from "@/components/ui/StatusChip";
 import { RichTextEditor } from "./RichTextEditor";
 import { SourcePageSelect } from "./SourcePageSelect";
 import { CategorySelect } from "./CategorySelect";
-import { ContextSummary } from "./ContextSummary";
 import { WorkspaceActions } from "./WorkspaceActions";
 import {
   AlertIcon,
@@ -28,9 +27,6 @@ interface ArticleWorkspaceProps {
   editorVersion: number;
   /** Bumped when a new article is created, to move focus into the title field. */
   focusTitleNonce: number;
-  brandVoiceTitle: string | null;
-  brandVoiceApproved: boolean;
-  tone: string[];
   onBack: () => void;
   onTitleChange: (title: string) => void;
   onContentChange: (html: string, wordCount: number) => void;
@@ -53,9 +49,6 @@ export function ArticleWorkspace({
   wordCount,
   editorVersion,
   focusTitleNonce,
-  brandVoiceTitle,
-  brandVoiceApproved,
-  tone,
   onBack,
   onTitleChange,
   onContentChange,
@@ -168,11 +161,6 @@ export function ArticleWorkspace({
       </div>
 
       <div className={styles.rail}>
-        <ContextSummary
-          brandVoiceTitle={brandVoiceTitle}
-          brandVoiceApproved={brandVoiceApproved}
-          tone={tone}
-        />
         <WorkspaceActions
           saveState={saveState}
           optimizing={optimizing}

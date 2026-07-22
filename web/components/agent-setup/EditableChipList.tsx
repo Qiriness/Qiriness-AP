@@ -7,10 +7,12 @@ import styles from "./EditableChipList.module.css";
 interface EditableChipListProps {
   label: string;
   items: string[];
-  onChange: (items: string[]) => void;
+  onChange?: (items: string[]) => void;
   placeholder?: string;
   /** "inline" renders wrapped pill chips (Tone); "list" renders vertical bulleted rows (Do's/Don'ts). */
   layout?: "inline" | "list";
+  /** Read-only baseline items — no remove control, no add-input row. `onChange` is unused when true. */
+  locked?: boolean;
 }
 
 /**
@@ -24,6 +26,7 @@ export function EditableChipList({
   onChange,
   placeholder,
   layout = "inline",
+  locked = false,
 }: EditableChipListProps) {
   const [draft, setDraft] = useState("");
 
@@ -33,12 +36,12 @@ export function EditableChipList({
       setDraft("");
       return;
     }
-    onChange([...items, trimmed]);
+    onChange?.([...items, trimmed]);
     setDraft("");
   }
 
   function remove(index: number) {
-    onChange(items.filter((_, i) => i !== index));
+    onChange?.(items.filter((_, i) => i !== index));
   }
 
   function onKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
@@ -57,26 +60,30 @@ export function EditableChipList({
         {items.map((item, i) => (
           <span key={`${item}-${i}`} className={layout === "inline" ? styles.chip : styles.row}>
             <span className={styles.text}>{item}</span>
-            <button
-              type="button"
-              className={styles.remove}
-              onClick={() => remove(i)}
-              aria-label={`Remove ${item}`}
-            >
-              <CloseIcon size={12} />
-            </button>
+            {!locked && (
+              <button
+                type="button"
+                className={styles.remove}
+                onClick={() => remove(i)}
+                aria-label={`Remove ${item}`}
+              >
+                <CloseIcon size={12} />
+              </button>
+            )}
           </span>
         ))}
-        <input
-          type="text"
-          className={styles.input}
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          onKeyDown={onKeyDown}
-          onBlur={() => commit(draft)}
-          placeholder={placeholder}
-          aria-label={label}
-        />
+        {!locked && (
+          <input
+            type="text"
+            className={styles.input}
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={onKeyDown}
+            onBlur={() => commit(draft)}
+            placeholder={placeholder}
+            aria-label={label}
+          />
+        )}
       </div>
     </div>
   );
