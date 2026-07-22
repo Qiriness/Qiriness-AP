@@ -38,10 +38,13 @@ export function RichTextEditor({
   const ref = useRef<HTMLDivElement>(null);
   const [preview, setPreview] = useState(false);
   const [empty, setEmpty] = useState(() => countWords(stripHtml(initialHtml)) === 0);
-  // Snapshot at mount: the DOM is uncontrolled from here on, so later prop
-  // updates (parent storing keystrokes) can never re-write innerHTML and jump
-  // the caret. Programmatic replacements remount the component via `key`.
-  const [mountHtml] = useState(initialHtml);
+  // Snapshot at mount, stored as the same object reference on every render.
+  // React's DOM diff compares dangerouslySetInnerHTML by object identity, not
+  // by the inner HTML string — a fresh `{ __html }` literal on every render
+  // would make React re-apply this stale snapshot after every keystroke and
+  // instantly erase it. Keeping one stable object avoids that. Programmatic
+  // replacements remount the component via `key`.
+  const [mountHtml] = useState(() => ({ __html: initialHtml }));
 
   function emit() {
     const el = ref.current;
@@ -122,7 +125,7 @@ export function RichTextEditor({
           aria-label="Article content"
           spellCheck
           onInput={emit}
-          dangerouslySetInnerHTML={{ __html: mountHtml }}
+          dangerouslySetInnerHTML={mountHtml}
         />
       </div>
     </div>
