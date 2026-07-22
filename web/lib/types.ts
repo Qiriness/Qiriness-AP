@@ -67,9 +67,12 @@ export const KNOWLEDGE_CATEGORIES: KnowledgeCategory[] = [
 ];
 
 /**
- * The 6 required-knowledge slots every agent needs covered. Mirrors the
+ * The required-knowledge slots every agent needs covered. Mirrors the
  * knowledge_documents_core_topic_check constraint in
- * supabase/migrations/003_knowledge_page_catalog.sql — keep in sync.
+ * supabase/migrations/003_knowledge_page_catalog.sql — keep in sync. Five of
+ * these ("order_policies" through "faqs") make up the Core setup checklist;
+ * "brand" is the Drafting agent setup slot instead (see CORE_TOPICS, which
+ * excludes it, and BrandVoiceWorkspace).
  */
 export type CoreTopic =
   | "order_policies"
@@ -98,9 +101,11 @@ export const CORE_TOPIC_DEFAULT_CATEGORY: Record<CoreTopic, KnowledgeCategory> =
   faqs: "faq",
 };
 
+// "brand" is intentionally excluded — Brand voice now lives in its own
+// "Drafting agent setup" section (see BrandVoiceWorkspace) instead of the
+// Core setup checklist, though it remains a valid CoreTopic value and DB slot.
 export const CORE_TOPICS: CoreTopic[] = [
   "order_policies",
-  "brand",
   "confidentiality",
   "delivery_returns",
   "locations",
@@ -122,7 +127,7 @@ export interface Article {
   /** Article body as HTML. Optimized/edited by the team, agent-facing. */
   content: string;
   category: KnowledgeCategory;
-  /** Required-knowledge slot this article fulfills, if any (see the 6 core topics). */
+  /** Required-knowledge slot this article fulfills, if any (see the core topics). */
   coreTopic: CoreTopic | null;
   /** Optional Shopify source (page or policy) this article was initialized from. */
   sourcePageId: string | null;
@@ -130,7 +135,23 @@ export interface Article {
   /** Human label, e.g. "2h ago", derived from the article's updatedAt. */
   updatedLabel: string;
   lastSyncedLabel?: string;
+  /** Structured brand-voice fields. Only meaningful when coreTopic === "brand". */
+  voiceProfile?: VoiceProfile | null;
 }
+
+/**
+ * Structured, always-included context for the drafting agent: how the brand
+ * sounds, regardless of what the email is about. Distinct from category
+ * articles, which are retrieved selectively per email subject.
+ */
+export interface VoiceProfile {
+  tone: string[];
+  voice: string;
+  dos: string[];
+  donts: string[];
+}
+
+export const EMPTY_VOICE_PROFILE: VoiceProfile = { tone: [], voice: "", dos: [], donts: [] };
 
 /** Brand tone descriptors shown in the workspace context summary. */
 export interface AgentContext {

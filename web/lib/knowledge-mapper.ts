@@ -7,7 +7,7 @@
  * (web/lib/api/knowledge.ts) without duplicating this logic.
  */
 
-import type { Article, ArticleStatus, CoreTopic, KnowledgeCategory, ShopifySource, SyncState } from "./types";
+import type { Article, ArticleStatus, CoreTopic, KnowledgeCategory, ShopifySource, SyncState, VoiceProfile } from "./types";
 import { CORE_TOPICS, KNOWLEDGE_CATEGORIES } from "./types";
 import { formatRelativeTime } from "./relative-time";
 
@@ -22,6 +22,7 @@ interface RawArticle {
   syncState: string;
   updatedAt: string;
   syncedAt: string | null;
+  voiceProfile: VoiceProfile | null;
 }
 
 interface RawSource {
@@ -50,6 +51,7 @@ export function mapArticleResponse(raw: RawArticle): Article {
     syncState: raw.syncState as SyncState,
     updatedLabel: formatRelativeTime(raw.updatedAt),
     lastSyncedLabel: raw.syncedAt ? formatRelativeTime(raw.syncedAt) : undefined,
+    voiceProfile: raw.voiceProfile ?? null,
   };
 }
 

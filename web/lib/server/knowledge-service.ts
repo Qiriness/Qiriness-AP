@@ -43,6 +43,7 @@ import {
   supabaseUpsert,
 } from "../../../scripts/lib/supabase-rest-client.mjs";
 import { KnowledgeImportError, KnowledgeNotFoundError, KnowledgeValidationError } from "./knowledge-errors";
+import type { VoiceProfile } from "../types";
 
 // The imported .mjs modules have no type declarations (allowJs, no JSDoc), so
 // their exports resolve to `any`. Local shapes below keep this file itself
@@ -72,6 +73,8 @@ export interface KnowledgeArticleResponse {
   syncState: "none" | "syncing" | "synced" | "error";
   updatedAt: string;
   syncedAt: string | null;
+  /** Structured brand-voice fields. Only non-null on the core_topic = 'brand' row. */
+  voiceProfile: VoiceProfile | null;
 }
 
 export interface CreateArticleInput {
@@ -98,6 +101,8 @@ export interface UpdateArticleInput {
    * duplicate row.
    */
   sourceId?: string;
+  /** Full replacement of the structured brand-voice fields (see UpdateArticleInput.content for the analogous convention). Only meaningful on the core_topic = 'brand' row. */
+  voiceProfile?: VoiceProfile;
 }
 
 let cachedConfig: any = null;
@@ -296,6 +301,7 @@ export async function updateArticle(
     content_text: contentText,
     sections,
     content_hash: hashJson({ title, contentText, sections }),
+    voice_profile: input.voiceProfile,
     // A save from the editor is the "I now own this content" signal. Once an
     // imported article is edited it becomes a manual article — shopify_source_id
     // and handle are kept for provenance, but nothing will resync it again.
@@ -303,7 +309,12 @@ export async function updateArticle(
   });
 
   const saved = await supabaseUpdateById(supabase, "knowledge_documents", articleId, patch);
-  await regenerateChunks(supabase, saved);
+  // The brand-voice row is always-included drafting-agent context, never
+  // retrieved via similarity search, so it has no business in knowledge_chunks
+  // (and chunking its tone/voice fields would only pollute retrieval).
+  if (saved.core_topic !== "brand") {
+    await regenerateChunks(supabase, saved);
+  }
 
   const catalogIdByKey = await buildCatalogIdMap(shopId);
   return mapArticleRow(saved, catalogIdByKey);
@@ -517,5 +528,17 @@ function mapArticleRow(row: any, catalogIdByKey: Map<string, string>): Knowledge
     syncState: isShopifySourced ? (sourceId ? "synced" : "error") : "none",
     updatedAt: row.updated_at,
     syncedAt: row.synced_at,
+    voiceProfile: row.core_topic === "brand" ? normalizeVoiceProfile(row.voice_profile) : null,
+  };
+}
+
+/** Defends against a missing/partial voice_profile JSONB value (e.g. the column default `{}`, or fields added after a row already existed). */
+function normalizeVoiceProfile(raw: any): VoiceProfile {
+  const v = raw || {};
+  return {
+    tone: Array.isArray(v.tone) ? v.tone : [],
+    voice: typeof v.voice === "string" ? v.voice : "",
+    dos: Array.isArray(v.dos) ? v.dos : [],
+    donts: Array.isArray(v.donts) ? v.donts : [],
   };
 }

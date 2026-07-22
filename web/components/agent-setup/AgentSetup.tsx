@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { Article, CoreTopic, KnowledgeCategory, SaveState, ShopifySource } from "@/lib/types";
-import { CORE_TOPIC_DEFAULT_CATEGORY, CORE_TOPIC_LABELS } from "@/lib/types";
+import type { Article, CoreTopic, KnowledgeCategory, SaveState, ShopifySource, VoiceProfile } from "@/lib/types";
+import { CORE_TOPIC_DEFAULT_CATEGORY, CORE_TOPIC_LABELS, EMPTY_VOICE_PROFILE } from "@/lib/types";
 import {
   createArticle,
   deleteArticle,
@@ -13,13 +13,12 @@ import {
 import { SetupHeader } from "./SetupHeader";
 import { ArticleLibrary, type StatusFilter } from "./ArticleLibrary";
 import { ArticleWorkspace } from "./ArticleWorkspace";
+import { BrandVoiceWorkspace } from "./BrandVoiceWorkspace";
 import { EmptyWorkspace } from "./EmptyWorkspace";
 import { LoadError } from "./LoadError";
 import { Toast, type ToastMessage, type ToastVariant } from "./Toast";
 import styles from "./AgentSetup.module.css";
 
-/** Brand tone isn't backed by any data model yet — no knowledge_documents column for it. */
-const STATIC_TONE = ["Warm", "Precise", "Helpful"];
 const OPTIMIZE_MS = 1300;
 
 interface AgentSetupProps {
@@ -149,6 +148,17 @@ export function AgentSetup({ initialArticles, initialSources, loadError }: Agent
     applyEdit({ category });
   }
 
+  function handleVoiceProfileChange(patch: Partial<VoiceProfile>) {
+    if (!selected) return;
+    const current = selected.voiceProfile ?? EMPTY_VOICE_PROFILE;
+    applyEdit({ voiceProfile: { ...current, ...patch } });
+  }
+
+  const handleToneChange = (tone: string[]) => handleVoiceProfileChange({ tone });
+  const handleVoiceChange = (voice: string) => handleVoiceProfileChange({ voice });
+  const handleDosChange = (dos: string[]) => handleVoiceProfileChange({ dos });
+  const handleDontsChange = (donts: string[]) => handleVoiceProfileChange({ donts });
+
   async function handleSourceChange(sourceId: string | null) {
     if (!selected || sourceId === null || sourceId === selected.sourcePageId) return;
     const id = selected.id;
@@ -186,10 +196,16 @@ export function AgentSetup({ initialArticles, initialSources, loadError }: Agent
   async function handleSave() {
     if (!selected || saveState !== "unsaved") return;
     const id = selected.id;
-    const { title, content, category, status } = selected;
+    const { title, content, category, status, voiceProfile } = selected;
     setSaveState("saving");
     try {
-      const updated = await updateArticle(id, { title, content, category, approvalStatus: status });
+      const updated = await updateArticle(id, {
+        title,
+        content,
+        category,
+        approvalStatus: status,
+        voiceProfile: selected.coreTopic === "brand" ? voiceProfile ?? EMPTY_VOICE_PROFILE : undefined,
+      });
       patchArticle(id, updated);
       setSaveState("saved");
       showToast("Draft saved.");
@@ -218,10 +234,16 @@ export function AgentSetup({ initialArticles, initialSources, loadError }: Agent
   async function handleApprove() {
     if (!selected || selected.status === "approved") return;
     const id = selected.id;
-    const { title, content, category } = selected;
+    const { title, content, category, voiceProfile } = selected;
     setSaveState("saving");
     try {
-      const updated = await updateArticle(id, { title, content, category, approvalStatus: "approved" });
+      const updated = await updateArticle(id, {
+        title,
+        content,
+        category,
+        approvalStatus: "approved",
+        voiceProfile: selected.coreTopic === "brand" ? voiceProfile ?? EMPTY_VOICE_PROFILE : undefined,
+      });
       patchArticle(id, updated);
       setSaveState("saved");
       showToast("Approved for the agent.");
@@ -234,10 +256,16 @@ export function AgentSetup({ initialArticles, initialSources, loadError }: Agent
   async function handleUnapprove() {
     if (!selected || selected.status !== "approved") return;
     const id = selected.id;
-    const { title, content, category } = selected;
+    const { title, content, category, voiceProfile } = selected;
     setSaveState("saving");
     try {
-      const updated = await updateArticle(id, { title, content, category, approvalStatus: "draft" });
+      const updated = await updateArticle(id, {
+        title,
+        content,
+        category,
+        approvalStatus: "draft",
+        voiceProfile: selected.coreTopic === "brand" ? voiceProfile ?? EMPTY_VOICE_PROFILE : undefined,
+      });
       patchArticle(id, updated);
       setSaveState("saved");
       showToast("Unapproved — moved back to draft.");
@@ -328,30 +356,54 @@ export function AgentSetup({ initialArticles, initialSources, loadError }: Agent
 
           <div className={styles.workPane}>
             {selected ? (
-              <ArticleWorkspace
-                article={selected}
-                sources={sources}
-                saveState={saveState}
-                optimizing={optimizing}
-                deleting={deleting}
-                wordCount={wordCount}
-                editorVersion={editorVersion[selected.id] ?? 0}
-                focusTitleNonce={focusNonce}
-                brandVoiceTitle={brandVoice?.title ?? null}
-                brandVoiceApproved={brandVoice?.status === "approved"}
-                tone={STATIC_TONE}
-                onBack={() => setMobilePane("list")}
-                onTitleChange={handleTitleChange}
-                onContentChange={handleContentChange}
-                onSourceChange={handleSourceChange}
-                onCategoryChange={handleCategoryChange}
-                onResync={handleResync}
-                onSave={handleSave}
-                onOptimize={handleOptimize}
-                onApprove={handleApprove}
-                onUnapprove={handleUnapprove}
-                onDelete={handleDelete}
-              />
+              selected.coreTopic === "brand" ? (
+                <BrandVoiceWorkspace
+                  article={selected}
+                  saveState={saveState}
+                  optimizing={optimizing}
+                  deleting={deleting}
+                  wordCount={wordCount}
+                  editorVersion={editorVersion[selected.id] ?? 0}
+                  focusTitleNonce={focusNonce}
+                  onBack={() => setMobilePane("list")}
+                  onTitleChange={handleTitleChange}
+                  onToneChange={handleToneChange}
+                  onVoiceChange={handleVoiceChange}
+                  onDosChange={handleDosChange}
+                  onDontsChange={handleDontsChange}
+                  onGeneralContextChange={handleContentChange}
+                  onSave={handleSave}
+                  onOptimize={handleOptimize}
+                  onApprove={handleApprove}
+                  onUnapprove={handleUnapprove}
+                  onDelete={handleDelete}
+                />
+              ) : (
+                <ArticleWorkspace
+                  article={selected}
+                  sources={sources}
+                  saveState={saveState}
+                  optimizing={optimizing}
+                  deleting={deleting}
+                  wordCount={wordCount}
+                  editorVersion={editorVersion[selected.id] ?? 0}
+                  focusTitleNonce={focusNonce}
+                  brandVoiceTitle={brandVoice?.title ?? null}
+                  brandVoiceApproved={brandVoice?.status === "approved"}
+                  tone={brandVoice?.voiceProfile?.tone ?? []}
+                  onBack={() => setMobilePane("list")}
+                  onTitleChange={handleTitleChange}
+                  onContentChange={handleContentChange}
+                  onSourceChange={handleSourceChange}
+                  onCategoryChange={handleCategoryChange}
+                  onResync={handleResync}
+                  onSave={handleSave}
+                  onOptimize={handleOptimize}
+                  onApprove={handleApprove}
+                  onUnapprove={handleUnapprove}
+                  onDelete={handleDelete}
+                />
+              )
             ) : (
               <EmptyWorkspace onCreate={() => handleCreate()} />
             )}

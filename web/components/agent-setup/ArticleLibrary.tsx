@@ -70,8 +70,12 @@ export function ArticleLibrary({
     return map;
   }, [articles, isFiltering]);
 
-  const coreFilledCount = coreArticleByTopic.size;
+  // coreArticleByTopic can also hold the "brand" entry (see the Drafting
+  // agent setup section below), which isn't part of CORE_TOPICS anymore — so
+  // count only the topics actually in the checklist, not every map key.
+  const coreFilledCount = CORE_TOPICS.filter((t) => coreArticleByTopic.has(t)).length;
   const coreComplete = coreFilledCount === CORE_TOPICS.length;
+  const brandVoiceArticle = coreArticleByTopic.get("brand");
 
   const groupableArticles = useMemo(() => {
     if (coreArticleByTopic.size === 0) return articles;
@@ -154,6 +158,24 @@ export function ArticleLibrary({
         </div>
       ) : (
         <div className={styles.list}>
+          {!isFiltering && (
+            <CollapsibleSection
+              title="Drafting agent setup"
+              meta={brandVoiceArticle ? "Configured" : "Not started"}
+              defaultCollapsed={Boolean(brandVoiceArticle)}
+            >
+              {brandVoiceArticle ? (
+                <ArticleListItem
+                  article={brandVoiceArticle}
+                  selected={brandVoiceArticle.id === selectedId}
+                  onSelect={onSelect}
+                />
+              ) : (
+                <CoreTopicPlaceholder topic="brand" onCreate={onCreateCoreTopic} />
+              )}
+            </CollapsibleSection>
+          )}
+
           {!isFiltering && (
             <CollapsibleSection
               title="Core setup"

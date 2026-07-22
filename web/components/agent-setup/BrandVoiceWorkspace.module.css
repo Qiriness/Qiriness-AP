@@ -1,0 +1,52 @@
+.voiceTextarea {
+  width: 100%;
+  resize: vertical;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  padding: var(--space-3);
+  font-size: var(--text-md);
+  line-height: 1.5;
+  color: var(--text-default);
+  font-family: inherit;
+}
+.voiceTextarea::placeholder {
+  color: var(--text-subtle);
+}
+.voiceTextarea:focus-visible {
+  outline: none;
+  border-color: var(--teal-100);
+  box-shadow: 0 0 0 3px rgba(0, 128, 128, 0.09);
+}
+
+.dosDontsRow {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-4);
+}
+
+@media (max-width: 720px) {
+  .dosDontsRow {
+    grid-template-columns: 1fr;
+  }
+}
+
+.hint {
+  margin: -4px 0 0;
+  font-size: var(--text-caption);
+  color: var(--text-subtle);
+  line-height: 1.4;
+}
+
+.railHint {
+  padding: var(--space-4);
+  background: var(--surface-sunken);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+.railHint p {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+  line-height: 1.5;
+}

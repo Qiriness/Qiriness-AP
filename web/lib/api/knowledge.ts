@@ -5,7 +5,7 @@
  * avoid a loading flash, using the same mapping in ./knowledge-mapper.
  */
 
-import type { Article, CoreTopic, KnowledgeCategory } from "@/lib/types";
+import type { Article, CoreTopic, KnowledgeCategory, VoiceProfile } from "@/lib/types";
 import { mapArticleResponse } from "@/lib/knowledge-mapper";
 
 export class KnowledgeApiError extends Error {
@@ -47,6 +47,7 @@ export interface UpdateArticlePayload {
   category?: KnowledgeCategory;
   approvalStatus?: Article["status"];
   sourceId?: string;
+  voiceProfile?: VoiceProfile;
 }
 
 export async function createArticle(payload: CreateArticlePayload): Promise<Article> {
