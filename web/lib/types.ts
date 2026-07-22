@@ -23,37 +23,46 @@ export type SyncState = "none" | "syncing" | "synced" | "error";
  * is the UI's controlled subset of that free-text field.
  */
 export type KnowledgeCategory =
-  | "support"
+  | "faq"
   | "shipping_delivery"
   | "returns_refunds"
   | "privacy"
-  | "product_advice"
+  | "product_information"
   | "brand_story"
   | "legal"
   | "payments"
+  | "promotions"
+  | "b2b_partnerships"
+  | "stock"
   | "general";
 
 export const CATEGORY_LABELS: Record<KnowledgeCategory, string> = {
-  support: "Support",
+  faq: "FAQ",
   shipping_delivery: "Shipping & delivery",
   returns_refunds: "Returns & refunds",
   privacy: "Privacy",
-  product_advice: "Product advice",
+  product_information: "Product information",
   brand_story: "Brand story",
   legal: "Legal",
   payments: "Payments",
+  promotions: "Promotions",
+  b2b_partnerships: "B2B & partnerships",
+  stock: "Stock",
   general: "General",
 };
 
 export const KNOWLEDGE_CATEGORIES: KnowledgeCategory[] = [
-  "support",
+  "faq",
   "shipping_delivery",
   "returns_refunds",
   "privacy",
-  "product_advice",
+  "product_information",
   "brand_story",
   "legal",
   "payments",
+  "promotions",
+  "b2b_partnerships",
+  "stock",
   "general",
 ];
 
@@ -86,7 +95,7 @@ export const CORE_TOPIC_DEFAULT_CATEGORY: Record<CoreTopic, KnowledgeCategory> =
   confidentiality: "privacy",
   delivery_returns: "shipping_delivery",
   locations: "general",
-  faqs: "support",
+  faqs: "faq",
 };
 
 export const CORE_TOPICS: CoreTopic[] = [

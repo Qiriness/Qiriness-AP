@@ -40,6 +40,7 @@ interface ArticleWorkspaceProps {
   onSave: () => void;
   onOptimize: () => void;
   onApprove: () => void;
+  onUnapprove: () => void;
   onDelete: () => void;
 }
 
@@ -64,6 +65,7 @@ export function ArticleWorkspace({
   onSave,
   onOptimize,
   onApprove,
+  onUnapprove,
   onDelete,
 }: ArticleWorkspaceProps) {
   const syncing = article.syncState === "syncing";
@@ -179,6 +181,7 @@ export function ArticleWorkspace({
           onSave={onSave}
           onOptimize={onOptimize}
           onApprove={onApprove}
+          onUnapprove={onUnapprove}
           onDelete={onDelete}
         />
       </div>

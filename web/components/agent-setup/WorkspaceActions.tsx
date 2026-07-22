@@ -12,6 +12,7 @@ interface WorkspaceActionsProps {
   onSave: () => void;
   onOptimize: () => void;
   onApprove: () => void;
+  onUnapprove: () => void;
   onDelete: () => void;
 }
 
@@ -25,6 +26,7 @@ export function WorkspaceActions({
   onSave,
   onOptimize,
   onApprove,
+  onUnapprove,
   onDelete,
 }: WorkspaceActionsProps) {
   const approved = status === "approved";
@@ -77,6 +79,12 @@ export function WorkspaceActions({
       >
         {approved ? "Approved for agent" : "Approve for agent"}
       </Button>
+
+      {approved && (
+        <Button variant="secondary" block onClick={onUnapprove} disabled={busy}>
+          Unapprove
+        </Button>
+      )}
 
       <p className={styles.hint}>
         Approved articles become trusted sources your agent can answer from.

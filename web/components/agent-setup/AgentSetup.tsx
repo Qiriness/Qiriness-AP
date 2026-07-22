@@ -122,23 +122,31 @@ export function AgentSetup({ initialArticles, initialSources, loadError }: Agent
     setMobilePane("workspace");
   }
 
-  function handleTitleChange(title: string) {
+  // Editing an approved article invalidates the approval it already went
+  // through, the same way resync flags a needs-optimization review — so any
+  // title/content/category edit demotes "approved" back to "draft" here, and
+  // handleSave below carries that status change to the server.
+  function applyEdit(patch: Partial<Article>) {
     if (!selected) return;
-    patchArticle(selected.id, { title });
+    const demoted = selected.status === "approved";
+    patchArticle(selected.id, demoted ? { ...patch, status: "draft" } : patch);
     setSaveState("unsaved");
+    if (demoted) {
+      showToast("Moved back to draft — approve again once you're happy with the changes.", "info");
+    }
+  }
+
+  function handleTitleChange(title: string) {
+    applyEdit({ title });
   }
 
   function handleContentChange(html: string, wc: number) {
-    if (!selected) return;
-    patchArticle(selected.id, { content: html });
+    applyEdit({ content: html });
     setWordCount(wc);
-    setSaveState("unsaved");
   }
 
   function handleCategoryChange(category: KnowledgeCategory) {
-    if (!selected) return;
-    patchArticle(selected.id, { category });
-    setSaveState("unsaved");
+    applyEdit({ category });
   }
 
   async function handleSourceChange(sourceId: string | null) {
@@ -178,10 +186,10 @@ export function AgentSetup({ initialArticles, initialSources, loadError }: Agent
   async function handleSave() {
     if (!selected || saveState !== "unsaved") return;
     const id = selected.id;
-    const { title, content, category } = selected;
+    const { title, content, category, status } = selected;
     setSaveState("saving");
     try {
-      const updated = await updateArticle(id, { title, content, category });
+      const updated = await updateArticle(id, { title, content, category, approvalStatus: status });
       patchArticle(id, updated);
       setSaveState("saved");
       showToast("Draft saved.");
@@ -217,6 +225,22 @@ export function AgentSetup({ initialArticles, initialSources, loadError }: Agent
       patchArticle(id, updated);
       setSaveState("saved");
       showToast("Approved for the agent.");
+    } catch (error) {
+      setSaveState("unsaved");
+      showToast(knowledgeErrorMessage(error), "error");
+    }
+  }
+
+  async function handleUnapprove() {
+    if (!selected || selected.status !== "approved") return;
+    const id = selected.id;
+    const { title, content, category } = selected;
+    setSaveState("saving");
+    try {
+      const updated = await updateArticle(id, { title, content, category, approvalStatus: "draft" });
+      patchArticle(id, updated);
+      setSaveState("saved");
+      showToast("Unapproved — moved back to draft.");
     } catch (error) {
       setSaveState("unsaved");
       showToast(knowledgeErrorMessage(error), "error");
@@ -325,6 +349,7 @@ export function AgentSetup({ initialArticles, initialSources, loadError }: Agent
                 onSave={handleSave}
                 onOptimize={handleOptimize}
                 onApprove={handleApprove}
+                onUnapprove={handleUnapprove}
                 onDelete={handleDelete}
               />
             ) : (

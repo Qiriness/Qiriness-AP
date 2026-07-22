@@ -1,17 +1,20 @@
 const CATEGORY_RULES = [
-  ['support', ['contact', 'aide', 'help', 'faq', 'assistance', 'service client', 'questions frequentes']],
+  ['faq', ['faq', 'questions frequentes', 'contact', 'aide', 'help', 'assistance', 'service client']],
   ['shipping_delivery', ['livraison', 'expedition', 'shipping', 'delivery', 'transport', 'colissimo', 'chronopost']],
   ['returns_refunds', ['retour', 'remboursement', 'refund', 'return', 'retractation', 'echange']],
   ['privacy', ['confidentialite', 'privacy', 'donnees', 'personnelles', 'cookies', 'rgpd', 'gdpr']],
-  ['product_advice', ['ingredient', 'composition', 'actif', 'actifs', 'conseil', 'utilisation', 'routine', 'peau']],
+  ['product_information', ['ingredient', 'composition', 'actif', 'actifs', 'conseil', 'utilisation', 'routine', 'peau']],
   ['brand_story', ['marque', 'histoire', 'heritage', 'hanbang', 'rituel qi']],
   ['legal', ['conditions generales', 'cgv', 'terms', 'legal', 'mentions legales', 'vente']],
-  ['payments', ['paiement', 'payment', 'facture', 'billing']]
+  ['payments', ['paiement', 'payment', 'facture', 'billing']],
+  ['promotions', ['promotion', 'promotions', 'soldes', 'remise', 'code promo', 'offre']],
+  ['b2b_partnerships', ['b2b', 'partenariat', 'partenaire', 'revendeur', 'wholesale', 'grossiste']],
+  ['stock', ['stock', 'rupture', 'disponibilite', 'reappro', 'inventory']]
 ];
 
 const PRIMARY_CATEGORY_RULES = [
-  ['support', ['contact', 'faq', 'questions frequentes']],
-  ['product_advice', ['ingredient', 'ingredients', 'composition', 'actif', 'actifs']],
+  ['faq', ['faq', 'questions frequentes', 'contact']],
+  ['product_information', ['ingredient', 'ingredients', 'composition', 'actif', 'actifs']],
   ['brand_story', ['marque', 'histoire', 'heritage', 'hanbang', 'rituel qi']]
 ];
 
