@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { Article, KnowledgeCategory, SaveState, ShopifySource } from "@/lib/types";
+import type { Article, CoreTopic, KnowledgeCategory, SaveState, ShopifySource } from "@/lib/types";
+import { CORE_TOPIC_DEFAULT_CATEGORY, CORE_TOPIC_LABELS } from "@/lib/types";
 import {
   createArticle,
   deleteArticle,
@@ -222,11 +223,11 @@ export function AgentSetup({ initialArticles, initialSources, loadError }: Agent
     }
   }
 
-  async function handleCreate() {
+  async function handleCreate(preset?: { title: string; category: KnowledgeCategory; coreTopic: CoreTopic }) {
     if (creating) return;
     setCreating(true);
     try {
-      const article = await createArticle({});
+      const article = await createArticle(preset ?? {});
       setArticles((prev) => [article, ...prev]);
       setSelectedId(article.id);
       setQuery("");
@@ -240,6 +241,14 @@ export function AgentSetup({ initialArticles, initialSources, loadError }: Agent
     } finally {
       setCreating(false);
     }
+  }
+
+  function handleCreateCoreTopic(topic: CoreTopic) {
+    return handleCreate({
+      title: CORE_TOPIC_LABELS[topic],
+      category: CORE_TOPIC_DEFAULT_CATEGORY[topic],
+      coreTopic: topic,
+    });
   }
 
   async function handleDelete() {
@@ -287,7 +296,8 @@ export function AgentSetup({ initialArticles, initialSources, loadError }: Agent
               onQueryChange={setQuery}
               onStatusFilterChange={setStatusFilter}
               onSelect={handleSelect}
-              onCreate={handleCreate}
+              onCreate={() => handleCreate()}
+              onCreateCoreTopic={handleCreateCoreTopic}
               onClearFilters={handleClearFilters}
             />
           </div>
@@ -318,7 +328,7 @@ export function AgentSetup({ initialArticles, initialSources, loadError }: Agent
                 onDelete={handleDelete}
               />
             ) : (
-              <EmptyWorkspace onCreate={handleCreate} />
+              <EmptyWorkspace onCreate={() => handleCreate()} />
             )}
           </div>
         </div>

@@ -143,6 +143,12 @@ export function ArticleWorkspace({
           <label className={styles.label} htmlFor="article-content-hint">
             Article content
           </label>
+          {article.sourcePageId && (
+            <p className={styles.syncWarning}>
+              <AlertIcon size={14} />
+              Editing this content will disconnect it from Shopify — it won&apos;t sync automatically after that.
+            </p>
+          )}
           <RichTextEditor
             key={`${article.id}:${editorVersion}`}
             articleId={article.id}

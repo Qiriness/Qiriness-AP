@@ -7,8 +7,8 @@
  * (web/lib/api/knowledge.ts) without duplicating this logic.
  */
 
-import type { Article, ArticleStatus, KnowledgeCategory, ShopifySource, SyncState } from "./types";
-import { KNOWLEDGE_CATEGORIES } from "./types";
+import type { Article, ArticleStatus, CoreTopic, KnowledgeCategory, ShopifySource, SyncState } from "./types";
+import { CORE_TOPICS, KNOWLEDGE_CATEGORIES } from "./types";
 import { formatRelativeTime } from "./relative-time";
 
 interface RawArticle {
@@ -35,6 +35,9 @@ export function mapArticleResponse(raw: RawArticle): Article {
   const category = KNOWLEDGE_CATEGORIES.includes(raw.category as KnowledgeCategory)
     ? (raw.category as KnowledgeCategory)
     : "general";
+  const coreTopic = CORE_TOPICS.includes(raw.coreTopic as CoreTopic)
+    ? (raw.coreTopic as CoreTopic)
+    : null;
 
   return {
     id: raw.id,
@@ -42,7 +45,7 @@ export function mapArticleResponse(raw: RawArticle): Article {
     status: raw.status as ArticleStatus,
     content: raw.content,
     category,
-    coreTopic: raw.coreTopic,
+    coreTopic,
     sourcePageId: raw.sourceId,
     syncState: raw.syncState as SyncState,
     updatedLabel: formatRelativeTime(raw.updatedAt),

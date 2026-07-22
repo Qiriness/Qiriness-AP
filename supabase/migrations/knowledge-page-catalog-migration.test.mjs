@@ -52,13 +52,12 @@ test('knowledge page catalog migration restricts approval_status to the four age
   );
 });
 
-test('knowledge page catalog migration restricts core_topic to the seven required slugs', () => {
+test('knowledge page catalog migration restricts core_topic to the six required slugs', () => {
   const coreTopics = [
     'order_policies',
     'brand',
     'confidentiality',
-    'delivery',
-    'returns_exchanges',
+    'delivery_returns',
     'locations',
     'faqs'
   ];

@@ -57,8 +57,7 @@ alter table public.knowledge_documents
       'order_policies',
       'brand',
       'confidentiality',
-      'delivery',
-      'returns_exchanges',
+      'delivery_returns',
       'locations',
       'faqs'
     )
@@ -75,7 +74,7 @@ comment on column public.knowledge_documents.approval_status is
   'Team review state for agent usage: draft, in_review, approved, or needs_optimization. Independent of status, which holds the Shopify publish state for Shopify-sourced articles.';
 
 comment on column public.knowledge_documents.core_topic is
-  'Optional required-knowledge slot this article fulfills (order_policies, brand, confidentiality, delivery, returns_exchanges, locations, faqs). At most one active article per shop per slot. Distinct from the free-form category column.';
+  'Optional required-knowledge slot this article fulfills (order_policies, brand, confidentiality, delivery_returns, locations, faqs). At most one active article per shop per slot. Distinct from the free-form category column.';
 
 comment on column public.knowledge_documents.source_type is
   'shopify_page, shopify_policy, or manual. Editing an imported article in the dashboard converts this to manual (shopify_source_id/handle are kept for provenance), which is what stops it from being resynced from Shopify going forward.';

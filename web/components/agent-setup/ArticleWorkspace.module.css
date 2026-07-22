@@ -77,6 +77,24 @@
   color: var(--text-muted);
 }
 
+.syncWarning {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 10px;
+  border: 1px solid var(--warning-100);
+  border-radius: var(--radius-sm);
+  background: var(--warning-050);
+  color: #b45c05;
+  font-size: var(--text-caption);
+  font-weight: var(--weight-medium);
+  line-height: 1.4;
+}
+.syncWarning svg {
+  flex: none;
+  color: var(--warning);
+}
+
 .sourceRow {
   display: flex;
   align-items: flex-end;

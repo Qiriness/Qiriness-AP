@@ -36,16 +36,19 @@
 |   |   |   |-- Button.tsx    # shared button, all states (hover/focus/active/disabled/loading)
 |   |   |   `-- StatusChip.tsx # article status pill + error chip (semantic colors)
 |   |   `-- agent-setup/
-|   |       |-- AgentSetup.tsx     # stateful orchestrator (articles, selection, save/sync/optimize/approve)
+|   |       |-- AgentSetup.tsx     # stateful orchestrator (articles, selection, save/sync/optimize/approve/delete)
 |   |       |-- SetupHeader.tsx    # title + readiness line + agent preview action
-|   |       |-- ArticleLibrary.tsx # left pane: search, status filters, list, create, empty states
+|   |       |-- ArticleLibrary.tsx # left pane: search, status filters, Core setup checklist, category-grouped articles, create, empty states
+|   |       |-- CollapsibleSection.tsx # generic collapsible group (Core setup checklist, per-category article groups)
+|   |       |-- CoreTopicPlaceholder.tsx # dashed "Not started" row for an empty core-topic slot; click creates a pre-filled draft
 |   |       |-- ArticleListItem.tsx # one article row
 |   |       |-- ArticleWorkspace.tsx # right pane: title, source, sync state, editor, context, actions
 |   |       |-- RichTextEditor.tsx # dependency-free contentEditable editor + Preview toggle
 |   |       |-- SourcePageSelect.tsx # accessible Shopify source-page listbox
-|   |       |-- ContextSummary.tsx # brand voice + tone summary panel
-|   |       |-- WorkspaceActions.tsx # Save draft / Optimize draft / Approve for agent
+|   |       |-- ContextSummary.tsx # brand voice + tone summary panel (brand voice resolved via Article.coreTopic === "brand")
+|   |       |-- WorkspaceActions.tsx # Save draft / Optimize draft / Approve for agent / Delete article (two-step confirm)
 |   |       |-- EmptyWorkspace.tsx # no-selection state
+|   |       |-- LoadError.tsx      # shown when the server-side initial fetch fails (missing config, shop not synced)
 |   |       `-- Toast.tsx          # transient feedback (aria-live)
 |   |-- app/api/knowledge/         # server-only Route Handlers backing Agent Setup (see Knowledge API below)
 |   |   |-- shopify-sources/route.ts     # GET: live Shopify page + policy catalog for the source dropdown
@@ -153,7 +156,7 @@
   - Synced by `scripts/sync-shopify-content-catalog.mjs`; a full non-limited sync deletes local rows no longer returned by Shopify. Nothing here ever writes to `knowledge_documents` — that table is populated only by explicit user action.
   - Loosely coupled to `knowledge_documents` via matching `source_type` + `shopify_source_id` values, not a foreign key.
 - `public.knowledge_documents` - Curated knowledge articles for AI support context and the Agent Setup dashboard. Nothing auto-syncs into this table; every row exists because a team member either imported a Shopify page/policy or wrote a manual article (see Knowledge API below), per PRODUCT.md's curated-library principle.
-  - Stores source identity, navigation area, loose category, French canonical text, and parsed sections, plus the dashboard-workflow columns added in `003_knowledge_page_catalog.sql`: `content_html` (rich-text source of truth for the editor; `content_text`/`sections` are regenerated from it on every save/import/resync), `approval_status` (draft/in_review/approved/needs_optimization, independent of the Shopify-publish `status` column), and `core_topic` (optional one-of-seven required-knowledge slot: order_policies, brand, confidentiality, delivery, returns_exchanges, locations, faqs — at most one active article per shop per slot).
+  - Stores source identity, navigation area, loose category, French canonical text, and parsed sections, plus the dashboard-workflow columns added in `003_knowledge_page_catalog.sql`: `content_html` (rich-text source of truth for the editor; `content_text`/`sections` are regenerated from it on every save/import/resync), `approval_status` (draft/in_review/approved/needs_optimization, independent of the Shopify-publish `status` column), and `core_topic` (optional one-of-six required-knowledge slot: order_policies, brand, confidentiality, delivery_returns, locations, faqs — at most one active article per shop per slot; delivery and returns/exchanges are intentionally one combined slot, not two).
   - `source_type` is `shopify_page`, `shopify_policy`, or `manual`. Editing an imported article in the dashboard converts `source_type` to `manual` (keeping `shopify_source_id`/`handle` for provenance) — that conversion **is** the mechanism that stops it from being resynced; there is no separate "locally modified" flag.
   - Page content is resolved in priority order: manual override, dedicated page metafield, Shopify `Page.body`, then theme template settings; policy content comes directly from Shopify's `shop.shopPolicies`, which has no per-item resolver chain.
 - `public.knowledge_chunks` - Lean retrieval chunks linked to knowledge documents.
@@ -193,7 +196,7 @@ The frontend (`web/lib/demo-data.ts`, `web/components/agent-setup/*`) is not wir
 - App code: Next.js + TypeScript dashboard scaffolded in `web/`; first surface is the `Agent Setup` tab, fully wired to real Shopify/Supabase data end-to-end and verified live in-browser
 - Routes: `/` (redirect) and `/agent-setup` (production-quality UI: article library, two-pane editor, source import/resync, save/optimize/approve/delete, responsive + a11y states)
 - Knowledge API: `web/app/api/knowledge/*` Route Handlers for listing the unified Shopify source catalog and creating/editing/resyncing/deleting knowledge articles — see Knowledge API above. **Verified end-to-end against the real dev Shopify store and Supabase through the actual browser UI**: page import, policy import, edit-converts-to-manual (Resync correctly disappears), and delete were all exercised live, not just via curl. `web/components/agent-setup/AgentSetup.tsx` calls this API directly for all mutations; the initial article/source lists are fetched server-side in `web/app/agent-setup/page.tsx` (same process, no HTTP round-trip).
-- Frontend data: `web/lib/demo-data.ts` is trimmed to just the sidebar's static branding (`TEAM_MEMBER`); all article/source data is real, from the Knowledge API. The "core setup" checklist for the 7 core topics has no UI yet (`Article.coreTopic` round-trips through the API already, just unused by any component).
+- Frontend data: `web/lib/demo-data.ts` is trimmed to just the sidebar's static branding (`TEAM_MEMBER`); all article/source data is real, from the Knowledge API. The Core setup checklist (6 topics) renders in `ArticleLibrary`, backed by `CoreTopic`/`CORE_TOPIC_LABELS`/`CORE_TOPIC_DEFAULT_CATEGORY`/`CORE_TOPICS` in `web/lib/types.ts`; unfilled slots are virtual placeholders (`CoreTopicPlaceholder`) computed client-side, never auto-created rows — clicking one calls `createArticle` with a pre-filled title/category/coreTopic. Non-core articles group by category (`CollapsibleSection` per category, only when ≥2 categories are present) below the checklist.
 - Migrations: consolidated `001_initial_schema.sql` defines core operational tables; `002_promotions.sql` adds Shopify promotion snapshots; `003_knowledge_page_catalog.sql` adds the unified `shopify_content_sources` catalog table and the Agent Setup workflow columns on `knowledge_documents`. Reconciled and confirmed applied correctly to the dev Supabase database (the table was originally created under a different, superseded name/shape — this has been fixed).
 - Known issue: the theme-template fallback resolver (`scripts/lib/knowledge/content-resolvers/theme-template-resolver.mjs`) leaked raw Shopify section-setting tokens into imported content for at least one real page during live testing — its content-vs-setting heuristic needs tightening. Only affects pages with no usable page metafield or `Page.body`, which fall through to this last-resort resolver.
 - Dev-environment note: Next.js dev mode's jest-worker pool was crashing on the Knowledge API routes (likely from the cross-package `.mjs` import graph); fixed with `experimental.cpus: 1` in `web/next.config.mjs`.

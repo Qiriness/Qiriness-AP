@@ -57,6 +57,47 @@ export const KNOWLEDGE_CATEGORIES: KnowledgeCategory[] = [
   "general",
 ];
 
+/**
+ * The 6 required-knowledge slots every agent needs covered. Mirrors the
+ * knowledge_documents_core_topic_check constraint in
+ * supabase/migrations/003_knowledge_page_catalog.sql — keep in sync.
+ */
+export type CoreTopic =
+  | "order_policies"
+  | "brand"
+  | "confidentiality"
+  | "delivery_returns"
+  | "locations"
+  | "faqs";
+
+export const CORE_TOPIC_LABELS: Record<CoreTopic, string> = {
+  order_policies: "Order policies",
+  brand: "Brand voice",
+  confidentiality: "Confidentiality & privacy",
+  delivery_returns: "Delivery & returns",
+  locations: "Store locations",
+  faqs: "FAQs",
+};
+
+/** Sensible default category to pre-fill when starting an article from a core-topic slot. */
+export const CORE_TOPIC_DEFAULT_CATEGORY: Record<CoreTopic, KnowledgeCategory> = {
+  order_policies: "legal",
+  brand: "brand_story",
+  confidentiality: "privacy",
+  delivery_returns: "shipping_delivery",
+  locations: "general",
+  faqs: "support",
+};
+
+export const CORE_TOPICS: CoreTopic[] = [
+  "order_policies",
+  "brand",
+  "confidentiality",
+  "delivery_returns",
+  "locations",
+  "faqs",
+];
+
 /** A Shopify page or shop policy available to import, from the unified catalog. */
 export interface ShopifySource {
   id: string;
@@ -72,8 +113,8 @@ export interface Article {
   /** Article body as HTML. Optimized/edited by the team, agent-facing. */
   content: string;
   category: KnowledgeCategory;
-  /** Required-knowledge slot this article fulfills, if any (see the 7 core topics). */
-  coreTopic: string | null;
+  /** Required-knowledge slot this article fulfills, if any (see the 6 core topics). */
+  coreTopic: CoreTopic | null;
   /** Optional Shopify source (page or policy) this article was initialized from. */
   sourcePageId: string | null;
   syncState: SyncState;
