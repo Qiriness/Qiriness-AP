@@ -161,7 +161,13 @@ export function ArticleLibrary({
           {!isFiltering && (
             <CollapsibleSection
               title="Drafting agent setup"
-              meta={brandVoiceArticle ? "Configured" : "Not started"}
+              meta={
+                brandVoiceArticle
+                  ? brandVoiceArticle.status === "approved"
+                    ? "Configured"
+                    : STATUS_LABELS[brandVoiceArticle.status]
+                  : "Not started"
+              }
               defaultCollapsed={Boolean(brandVoiceArticle)}
             >
               {brandVoiceArticle ? (

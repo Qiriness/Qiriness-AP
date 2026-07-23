@@ -140,7 +140,7 @@ Current status:
 - frontend stack chosen and scaffolded: **Next.js (App Router) + TypeScript + React 18** in `web/`, kept separate from the root Node sync scripts;
 - first dashboard surface built and **wired to real data**: the **Agent Setup** tab (`/agent-setup`) for configuring the future AI reply agent's knowledge, brand voice, and tone;
 - Agent Setup covers a calm two-pane article workflow: knowledge library (search, status filters, create, delete), a workspace editor with Shopify source import (pages and policies, grouped in one dropdown), and save / optimize / approve / delete flows, with full state coverage (empty, unsaved, saving, syncing, import error, optimizing, approved) and responsive + accessible behaviour. "Optimize" is still a local placeholder — no AI backend exists for it yet;
-- initial Supabase migration added for `shops`, `products`, shared Shopify metaobjects, and knowledge context tables; a follow-up migration (`003_knowledge_page_catalog.sql`) adds the unified `shopify_content_sources` catalog (pages + policies) and the Agent Setup workflow columns on `knowledge_documents` (HTML content, approval status, core topic — 6 slots, delivery and returns/exchanges combined);
+- initial Supabase migration added for `shops`, `products`, shared Shopify metaobjects, and knowledge context tables; a follow-up migration (`003_knowledge_page_catalog.sql`) adds the unified `shopify_content_sources` catalog (pages + policies) and the Agent Setup workflow columns on `knowledge_documents` (HTML content, approval status, core topic — 6 slots, delivery and returns/exchanges combined). `003`'s `core_topic` check constraint was edited after being applied and the live dev database drifted out of sync (still had the old 7-slot version with separate `delivery`/`returns_exchanges`) until `005_fix_core_topic_check_constraint.sql` re-applied it — confirmed live via direct query, no data was affected;
 - Agent Setup's article library now groups articles: a "Core setup" checklist (6 required-knowledge slots, unfilled ones shown as click-to-create placeholders, never auto-created rows) collapses to a summary once complete, and everything else groups by category once articles span 2+ categories — both via a shared `CollapsibleSection` component;
 - Shopify product/metaobject sync script added and refactored into focused script modules;
 - Shopify customer, order, and promotion sync scripts added for support operational snapshots;
@@ -154,10 +154,10 @@ Current status:
 
 Recommended next steps:
 
-1. Apply the pending `core_topic` constraint update (merging `delivery`/`returns_exchanges` into `delivery_returns`, 6 slots total) to the dev Supabase database — SQL is in the corresponding chat turn; not yet re-run against the live database as of this writing.
-2. The theme-template resolver fallback (`scripts/lib/knowledge/content-resolvers/theme-template-resolver.mjs`) leaked raw Shopify section-setting tokens (e.g. `accent-color`, `vertical-bottom horizontal-left`) into imported content for at least one real page during testing — its "is this a real text setting" heuristic needs tightening. Only affects pages that fall through to this last-resort resolver (no page-metafield or usable `Page.body`).
-3. Add dashboard authentication, role policies, and human personal-data access logging before exposing any customer data in the UI.
-5. Set up Supabase development and production projects.
-6. Add the remaining support database tables for messages and AI events, and validate the Shopify initial import against dummy development data.
-7. Add application runtime routes that call reusable webhook handlers.
-8. Expand tests, linting, and type checking (the `web/` app has `lint` and `typecheck` scripts; add tests for `web/lib/server/knowledge-service.ts` and component/interaction tests for Agent Setup).
+1. The theme-template resolver fallback (`scripts/lib/knowledge/content-resolvers/theme-template-resolver.mjs`) leaked raw Shopify section-setting tokens (e.g. `accent-color`, `vertical-bottom horizontal-left`) into imported content for at least one real page during testing — its "is this a real text setting" heuristic needs tightening. Only affects pages that fall through to this last-resort resolver (no page-metafield or usable `Page.body`).
+2. Add dashboard authentication, role policies, and human personal-data access logging before exposing any customer data in the UI.
+3. Set up Supabase development and production projects.
+4. Add the remaining support database tables for messages and AI events, and validate the Shopify initial import against dummy development data.
+5. Add application runtime routes that call reusable webhook handlers.
+6. Expand tests, linting, and type checking (the `web/` app has `lint` and `typecheck` scripts; add tests for `web/lib/server/knowledge-service.ts` and component/interaction tests for Agent Setup).
+7. After any future edit to an already-applied migration file, re-run it (or a corrective follow-up migration) against the dev database and verify live — don't just update the `.sql` file, per the `core_topic` drift found and fixed above.

@@ -291,6 +291,11 @@ export async function updateArticle(
   const bodyText = htmlToText(contentHtml);
   const sections = htmlToSections(contentHtml, title);
   const contentText = [title, bodyText].filter(Boolean).join("\n\n");
+  // Actually editing the title or content is the "I now own this content"
+  // signal that converts an imported article to manual — changing just the
+  // category, core-topic slot, or approval status leaves the text untouched,
+  // so it stays resyncable from Shopify.
+  const contentEdited = title !== existing.title || contentHtml !== (existing.content_html ?? "");
 
   const patch = stripUndefined({
     title: input.title,
@@ -302,10 +307,10 @@ export async function updateArticle(
     sections,
     content_hash: hashJson({ title, contentText, sections }),
     voice_profile: input.voiceProfile,
-    // A save from the editor is the "I now own this content" signal. Once an
-    // imported article is edited it becomes a manual article — shopify_source_id
-    // and handle are kept for provenance, but nothing will resync it again.
-    source_type: existing.source_type !== "manual" ? "manual" : undefined,
+    // Once an imported article's content is edited it becomes a manual
+    // article — shopify_source_id and handle are kept for provenance, but
+    // nothing will resync it again.
+    source_type: contentEdited && existing.source_type !== "manual" ? "manual" : undefined,
   });
 
   const saved = await supabaseUpdateById(supabase, "knowledge_documents", articleId, patch);
@@ -331,7 +336,11 @@ export async function resyncArticle(shopId: string, articleId: string): Promise<
   }
 
   // Content just changed underneath the team; flag it for another look
-  // rather than silently leaving whatever approval state it had.
+  // rather than silently leaving whatever approval state it had. Category and
+  // core-topic are a team decision independent of Shopify's content, so carry
+  // the current values through instead of letting them reset to whatever the
+  // page/policy would auto-infer.
+  const overrides = { category: existing.category, core_topic: existing.core_topic };
   const saved =
     existing.source_type === "shopify_policy"
       ? await resolveAndUpsertArticleFromShopifyPolicy({
@@ -339,12 +348,14 @@ export async function resyncArticle(shopId: string, articleId: string): Promise<
           shopifyPolicyId: existing.shopify_source_id,
           existingDocumentId: articleId,
           approvalStatus: "needs_optimization",
+          overrides,
         })
       : await resolveAndUpsertArticleFromShopifyPage({
           shopId,
           shopifyPageId: existing.shopify_source_id,
           existingDocumentId: articleId,
           approvalStatus: "needs_optimization",
+          overrides,
         });
 
   const catalogIdByKey = await buildCatalogIdMap(shopId);

@@ -130,6 +130,10 @@
         |-- 001_initial_schema.sql # consolidated Supabase schema for shops, customers, orders, products, knowledge, and compliance metadata
         |-- 002_promotions.sql # Shopify promotion and discount snapshot table
         |-- 003_knowledge_page_catalog.sql # shopify_content_sources catalog table (pages + policies) + knowledge_documents columns for the Agent Setup workflow
+        |-- 004_brand_voice_profile.sql # adds knowledge_documents.voice_profile jsonb (structured brand-voice fields for the singleton Brand Voice article)
+        |-- 004_brand_voice_profile.test.mjs # static migration coverage for the voice_profile column
+        |-- 005_fix_core_topic_check_constraint.sql # re-applies 003's core_topic check constraint (combined delivery_returns slot) against the live database, which had drifted after 003 was edited post-apply
+        |-- 005_fix_core_topic_check_constraint.test.mjs # static migration coverage asserting the re-added constraint has the combined slot, not the old split delivery/returns_exchanges
         |-- compliance-migrations.test.mjs # static migration coverage for compliance tables
         |-- orders-migration.test.mjs # static migration coverage for order table shape
         |-- promotions-migration.test.mjs # static migration coverage for promotion table shape
