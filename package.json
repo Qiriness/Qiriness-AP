@@ -18,6 +18,8 @@
     "sync:shopify:content-catalog:dry-run": "node scripts/sync-shopify-content-catalog.mjs --dry-run --limit=10 --page-size=10",
     "sync:shopify:nightly": "node scripts/sync-shopify-nightly.mjs",
     "sync:shopify:nightly:dry-run": "node scripts/sync-shopify-nightly.mjs --dry-run --limit=5 --page-size=5",
+    "embed:knowledge": "node scripts/embed-knowledge-chunks.mjs",
+    "embed:knowledge:dry-run": "node scripts/embed-knowledge-chunks.mjs --dry-run",
     "webhook:shopify:compliance": "node scripts/process-shopify-compliance-webhook.mjs"
   },
   "engines": {

@@ -102,6 +102,12 @@ export function loadConfig(env) {
     knowledgeManualOverridesPath: env.KNOWLEDGE_MANUAL_OVERRIDES_PATH,
     supabaseUrl: env.SUPABASE_URL.replace(/\/$/, ''),
     supabaseKey: env.SUPABASE_SECRET_KEY,
+    // Optional: only needed by the embedding pipeline. The embedding client
+    // throws a clear error if openaiApiKey is missing when actually invoked,
+    // so callers that never embed (all the Shopify sync scripts) are unaffected.
+    openaiApiKey: env.OPENAI_API_KEY,
+    embeddingModel: env.EMBEDDING_MODEL || 'text-embedding-3-small',
+    embeddingDimensions: Number(env.EMBEDDING_DIMENSIONS) || 1536,
     appEnv: env.APP_ENV || 'development',
     syncCron: env.SYNC_CRON || '0 2 * * *',
     syncTimezone: env.SYNC_TIMEZONE || 'Europe/London'

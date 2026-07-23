@@ -30,6 +30,8 @@ import {
   mapResolvedPageToKnowledgeDocument,
 } from "../../../scripts/lib/knowledge-document-mapper.mjs";
 import { buildKnowledgeChunks } from "../../../scripts/lib/knowledge-chunker.mjs";
+import { createEmbeddingsClient } from "../../../scripts/lib/embeddings/openai-embeddings-client.mjs";
+import { embedChunks, toVectorLiteral } from "../../../scripts/lib/embeddings/embed-chunks.mjs";
 import { htmlToText, htmlToSections, sectionsToHtml } from "../../../scripts/lib/html-to-text.mjs";
 import { hashJson } from "../../../scripts/lib/hash.mjs";
 import { stripUndefined } from "../../../scripts/lib/collections.mjs";
@@ -297,11 +299,22 @@ export async function updateArticle(
   // so it stays resyncable from Shopify.
   const contentEdited = title !== existing.title || contentHtml !== (existing.content_html ?? "");
 
+  // Editing the text of an approved article drops it out of 'approved' — it now
+  // needs another look before the agent uses it again. This keeps the embedding
+  // invariant clean (no "approved but unembedded/stale" state) and mirrors
+  // resync, which sets 'needs_optimization'. Manual edits go to 'in_review'
+  // instead: the content changed under human hands, not because the Shopify
+  // source drifted. An explicit approvalStatus in the request always wins.
+  const demotedStatus =
+    contentEdited && existing.approval_status === "approved" && input.approvalStatus === undefined
+      ? "in_review"
+      : undefined;
+
   const patch = stripUndefined({
     title: input.title,
     category: input.category,
     core_topic: input.coreTopic,
-    approval_status: input.approvalStatus,
+    approval_status: input.approvalStatus ?? demotedStatus,
     content_html: contentHtml,
     content_text: contentText,
     sections,
@@ -319,6 +332,7 @@ export async function updateArticle(
   // (and chunking its tone/voice fields would only pollute retrieval).
   if (saved.core_topic !== "brand") {
     await regenerateChunks(supabase, saved);
+    await embedDocumentChunks(supabase, saved);
   }
 
   const catalogIdByKey = await buildCatalogIdMap(shopId);
@@ -512,9 +526,102 @@ async function resolveAndUpsertArticleFromShopifyPolicy({
 
 async function regenerateChunks(supabase: any, documentRow: any): Promise<void> {
   const chunks = buildKnowledgeChunks(documentRow);
+
+  // Carry embeddings forward across regeneration — but only while the document
+  // is approved. Matching on content_hash (unchanged text) preserves the vector
+  // so re-saving an approved article never re-embeds unchanged chunks; the
+  // inline embed step below re-checks staleness against embedded_input_hash, so
+  // a title/category change still triggers a correct re-embed. When the document
+  // is NOT approved we deliberately do not carry vectors forward, which is how
+  // "delete on unapprove" happens: the freshly regenerated chunks are vectorless.
+  const preserveEmbeddings =
+    documentRow.approval_status === "approved" && documentRow.core_topic !== "brand";
+  const carried = preserveEmbeddings ? await loadEmbeddingsByContentHash(supabase, documentRow.id) : new Map();
+
+  const merged = chunks.map((chunk: any) => {
+    const prior = carried.get(chunk.content_hash);
+    return prior ? { ...chunk, ...prior } : chunk;
+  });
+
   await supabaseDeleteWhereIn(supabase, "knowledge_chunks", "knowledge_document_id", [documentRow.id]);
-  if (chunks.length > 0) {
-    await supabaseUpsert(supabase, "knowledge_chunks", chunks, "knowledge_document_id,chunk_index");
+  if (merged.length > 0) {
+    await supabaseUpsert(supabase, "knowledge_chunks", merged, "knowledge_document_id,chunk_index");
+  }
+}
+
+/** content_hash -> stored embedding columns, for chunks that already have a vector. */
+async function loadEmbeddingsByContentHash(supabase: any, documentId: string): Promise<Map<string, any>> {
+  const rows = await supabaseSelect(
+    supabase,
+    "knowledge_chunks",
+    { knowledge_document_id: documentId },
+    "content_hash,embedding,embedding_model,embedding_dimensions,embedded_input_hash,embedded_at"
+  );
+  const byHash = new Map<string, any>();
+  for (const row of rows) {
+    if (row.embedding != null && !byHash.has(row.content_hash)) {
+      byHash.set(row.content_hash, {
+        embedding: row.embedding,
+        embedding_model: row.embedding_model,
+        embedding_dimensions: row.embedding_dimensions,
+        embedded_input_hash: row.embedded_input_hash,
+        embedded_at: row.embedded_at,
+      });
+    }
+  }
+  return byHash;
+}
+
+/**
+ * Inline, best-effort embedding of an approved document's chunks. Only stale
+ * chunks (missing/changed vector) are sent to OpenAI; unchanged ones are skipped
+ * by the deterministic hash gate. Failures are logged, never thrown — approval
+ * must still succeed, and the reconciler script (scripts/embed-knowledge-chunks.mjs)
+ * backfills anything left unembedded.
+ *
+ * Assumes the caller has already gated on approval_status === 'approved' and a
+ * non-brand core_topic (only such documents ever hold vectors).
+ */
+async function embedDocumentChunks(supabase: any, documentRow: any): Promise<void> {
+  if (documentRow.approval_status !== "approved") {
+    return;
+  }
+
+  const config = getConfig();
+  if (!config.openaiApiKey) {
+    console.warn(
+      `[embeddings] OPENAI_API_KEY is not set; skipping inline embedding for document ${documentRow.id}. Run "npm run embed:knowledge" once configured.`
+    );
+    return;
+  }
+
+  try {
+    const chunkRows = await supabaseSelect(
+      supabase,
+      "knowledge_chunks",
+      { knowledge_document_id: documentRow.id },
+      "id,section_heading,category,chunk_text,embedding,embedding_model,embedding_dimensions,embedded_input_hash"
+    );
+    const chunks = chunkRows.map((row: any) => ({ ...row, title: documentRow.title }));
+
+    const client = createEmbeddingsClient({
+      apiKey: config.openaiApiKey,
+      model: config.embeddingModel,
+      dimensions: config.embeddingDimensions,
+    });
+    const { patches } = await embedChunks({ chunks, client });
+
+    for (const patch of patches as any[]) {
+      const { id, ...columns } = patch;
+      await supabaseUpdateById(supabase, "knowledge_chunks", id, {
+        ...columns,
+        embedding: toVectorLiteral(columns.embedding),
+      });
+    }
+  } catch (error: any) {
+    console.error(
+      `[embeddings] inline embedding failed for document ${documentRow.id}: ${error?.message ?? error}`
+    );
   }
 }
 
