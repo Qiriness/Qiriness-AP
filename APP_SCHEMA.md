@@ -42,9 +42,11 @@
 |   |       |-- CollapsibleSection.tsx # generic collapsible group (Drafting agent setup, Core setup checklist, per-category article groups)
 |   |       |-- CoreTopicPlaceholder.tsx # dashed "Not started" row for an empty core-topic slot (incl. the Brand voice slot); click creates a pre-filled draft
 |   |       |-- ArticleListItem.tsx # one article row
-|   |       |-- ArticleWorkspace.tsx # right pane for ordinary articles: title, source, sync state, category, editor, actions
-|   |       |-- BrandVoiceWorkspace.tsx # right pane for the singleton Brand voice article (coreTopic === "brand"): brand identity, voice/tone/language/safety rules, email structure, formatting defaults, general context, actions — no source picker or category select
-|   |       |-- EditableChipList.tsx # reusable editable tag list (inline pill chips or vertical rows); optional `locked` read-only mode for the fixed safety-rules baseline
+|   |       |-- WorkspaceHeader.tsx # shared back-button + title input + status chip, used by both workspaces below
+|   |       |-- EditorFooter.tsx   # shared word-count + save-state indicator shown under the rich-text editor, used by both workspaces below
+|   |       |-- ArticleWorkspace.tsx # right pane for ordinary articles: source, sync state, category, editor; composes WorkspaceHeader/EditorFooter
+|   |       |-- BrandVoiceWorkspace.tsx # right pane for the singleton Brand voice article (coreTopic === "brand"): role description, tone/voice, fixed response-framework/guardrails placeholders (ChipList), general context; composes WorkspaceHeader/EditorFooter — no source picker or category select
+|   |       |-- ChipList.tsx       # read-only tag list (inline pill chips or vertical rows) for the fixed Response framework / Guidelines placeholders
 |   |       |-- RichTextEditor.tsx # dependency-free contentEditable editor + Preview toggle
 |   |       |-- SourcePageSelect.tsx # accessible Shopify source-page listbox
 |   |       |-- CategorySelect.tsx # accessible knowledge-category listbox

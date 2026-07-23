@@ -212,6 +212,9 @@ export function AgentSetup({ initialArticles, initialSources, loadError }: Agent
     }
   }
 
+  // Wired identically to the real Save/Approve/Delete handlers below, but this one is
+  // a client-only stub (see tidyContent) — replace its body, not its wiring, once a real
+  // optimize endpoint exists.
   function handleOptimize() {
     if (!selected || optimizing) return;
     const id = selected.id;

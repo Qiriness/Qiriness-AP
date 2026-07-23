@@ -1,17 +1,17 @@
 "use client";
 
-import { useEffect, useRef } from "react";
 import type { Article, SaveState } from "@/lib/types";
 import {
   EMPTY_VOICE_PROFILE,
   GUIDELINES_AND_GUARDRAILS_PLACEHOLDER,
   RESPONSE_FRAMEWORK_PLACEHOLDER,
 } from "@/lib/types";
-import { StatusChip } from "@/components/ui/StatusChip";
 import { RichTextEditor } from "./RichTextEditor";
-import { EditableChipList } from "./EditableChipList";
+import { ChipList } from "./ChipList";
 import { WorkspaceActions } from "./WorkspaceActions";
-import { CheckCircleIcon, ChevronLeftIcon, LockIcon } from "@/components/icons";
+import { WorkspaceHeader } from "./WorkspaceHeader";
+import { EditorFooter } from "./EditorFooter";
+import { LockIcon } from "@/components/icons";
 import styles from "./ArticleWorkspace.module.css";
 import voiceStyles from "./BrandVoiceWorkspace.module.css";
 
@@ -63,39 +63,18 @@ export function BrandVoiceWorkspace({
   onUnapprove,
   onDelete,
 }: BrandVoiceWorkspaceProps) {
-  const titleRef = useRef<HTMLInputElement>(null);
   const voiceProfile = article.voiceProfile ?? EMPTY_VOICE_PROFILE;
-
-  useEffect(() => {
-    if (focusTitleNonce > 0) titleRef.current?.focus();
-  }, [focusTitleNonce]);
 
   return (
     <div className={styles.workspace}>
       <div className={styles.editorCol}>
-        <div className={styles.topRow}>
-          <button
-            type="button"
-            className={styles.back}
-            onClick={onBack}
-            aria-label="Back to article list"
-          >
-            <ChevronLeftIcon size={18} />
-          </button>
-          <label className={styles.titleField}>
-            <span className="sr-only">Article title</span>
-            <input
-              ref={titleRef}
-              type="text"
-              className={styles.titleInput}
-              value={article.title}
-              placeholder="Brand voice"
-              onChange={(e) => onTitleChange(e.target.value)}
-              maxLength={120}
-            />
-          </label>
-          <StatusChip status={article.status} size="md" />
-        </div>
+        <WorkspaceHeader
+          article={article}
+          placeholder="Brand voice"
+          focusTitleNonce={focusTitleNonce}
+          onBack={onBack}
+          onTitleChange={onTitleChange}
+        />
 
         <section className={voiceStyles.section}>
           <h3 className={voiceStyles.sectionTitle}>Agent role description</h3>
@@ -124,22 +103,20 @@ export function BrandVoiceWorkspace({
         <section className={voiceStyles.section}>
           <h3 className={voiceStyles.sectionTitle}>Response framework</h3>
           <p className={voiceStyles.hint}>Placeholder — not yet editable.</p>
-          <EditableChipList
+          <ChipList
             label="Response framework"
             items={RESPONSE_FRAMEWORK_PLACEHOLDER}
             layout="list"
-            locked
           />
         </section>
 
         <section className={voiceStyles.section}>
           <h3 className={voiceStyles.sectionTitle}>Guidelines and guardrails</h3>
           <p className={voiceStyles.hint}>Placeholder — not yet editable.</p>
-          <EditableChipList
+          <ChipList
             label="Guidelines and guardrails"
             items={GUIDELINES_AND_GUARDRAILS_PLACEHOLDER}
             layout="list"
-            locked
           />
         </section>
 
@@ -156,12 +133,12 @@ export function BrandVoiceWorkspace({
             placeholder="Any other context that should apply to every email, regardless of subject…"
             onChange={onGeneralContextChange}
           />
-          <div className={styles.editorFooter} id="brand-voice-content-hint">
-            <span className={styles.wordCount}>
-              {wordCount} {wordCount === 1 ? "word" : "words"}
-            </span>
-            <SaveIndicator saveState={saveState} updatedLabel={article.updatedLabel} />
-          </div>
+          <EditorFooter
+            id="brand-voice-content-hint"
+            wordCount={wordCount}
+            saveState={saveState}
+            updatedLabel={article.updatedLabel}
+          />
         </section>
       </div>
 
@@ -186,36 +163,5 @@ export function BrandVoiceWorkspace({
         />
       </div>
     </div>
-  );
-}
-
-function SaveIndicator({
-  saveState,
-  updatedLabel,
-}: {
-  saveState: SaveState;
-  updatedLabel: string;
-}) {
-  if (saveState === "saving") {
-    return (
-      <span className={styles.saveState}>
-        <span className={`${styles.saveDot} ${styles.saveDotBusy}`} aria-hidden="true" />
-        Saving…
-      </span>
-    );
-  }
-  if (saveState === "unsaved") {
-    return (
-      <span className={styles.saveState}>
-        <span className={styles.saveDot} aria-hidden="true" />
-        Unsaved changes
-      </span>
-    );
-  }
-  return (
-    <span className={`${styles.saveState} ${styles.saved}`}>
-      <CheckCircleIcon size={14} />
-      Saved {updatedLabel}
-    </span>
   );
 }

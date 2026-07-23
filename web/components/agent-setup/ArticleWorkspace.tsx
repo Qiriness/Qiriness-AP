@@ -1,19 +1,14 @@
 "use client";
 
-import { useEffect, useRef } from "react";
 import type { Article, SaveState, ShopifySource } from "@/lib/types";
 import type { KnowledgeCategory } from "@/lib/types";
-import { StatusChip } from "@/components/ui/StatusChip";
 import { RichTextEditor } from "./RichTextEditor";
 import { SourcePageSelect } from "./SourcePageSelect";
 import { CategorySelect } from "./CategorySelect";
 import { WorkspaceActions } from "./WorkspaceActions";
-import {
-  AlertIcon,
-  CheckCircleIcon,
-  ChevronLeftIcon,
-  RefreshIcon,
-} from "@/components/icons";
+import { WorkspaceHeader } from "./WorkspaceHeader";
+import { EditorFooter } from "./EditorFooter";
+import { AlertIcon, CheckCircleIcon, RefreshIcon } from "@/components/icons";
 import styles from "./ArticleWorkspace.module.css";
 
 interface ArticleWorkspaceProps {
@@ -67,39 +62,17 @@ export function ArticleWorkspace({
   // and resync. Once a source is set, or the article has real content, the
   // picker locks; Resync is the only way to refresh from Shopify afterward.
   const sourceLocked = article.sourcePageId !== null || wordCount > 0;
-  const titleRef = useRef<HTMLInputElement>(null);
-
-  // Move focus into the title when a fresh article is created.
-  useEffect(() => {
-    if (focusTitleNonce > 0) titleRef.current?.focus();
-  }, [focusTitleNonce]);
 
   return (
     <div className={styles.workspace}>
       <div className={styles.editorCol}>
-        <div className={styles.topRow}>
-          <button
-            type="button"
-            className={styles.back}
-            onClick={onBack}
-            aria-label="Back to article list"
-          >
-            <ChevronLeftIcon size={18} />
-          </button>
-          <label className={styles.titleField}>
-            <span className="sr-only">Article title</span>
-            <input
-              ref={titleRef}
-              type="text"
-              className={styles.titleInput}
-              value={article.title}
-              placeholder="Untitled article"
-              onChange={(e) => onTitleChange(e.target.value)}
-              maxLength={120}
-            />
-          </label>
-          <StatusChip status={article.status} size="md" />
-        </div>
+        <WorkspaceHeader
+          article={article}
+          placeholder="Untitled article"
+          focusTitleNonce={focusTitleNonce}
+          onBack={onBack}
+          onTitleChange={onTitleChange}
+        />
 
         <div className={styles.field}>
           <div className={styles.sourceRow}>
@@ -151,12 +124,12 @@ export function ArticleWorkspace({
             placeholder="Write the guidance your agent should follow, or import a Shopify page above to start from its content."
             onChange={onContentChange}
           />
-          <div className={styles.editorFooter} id="article-content-hint">
-            <span className={styles.wordCount}>
-              {wordCount} {wordCount === 1 ? "word" : "words"}
-            </span>
-            <SaveIndicator saveState={saveState} updatedLabel={article.updatedLabel} />
-          </div>
+          <EditorFooter
+            id="article-content-hint"
+            wordCount={wordCount}
+            saveState={saveState}
+            updatedLabel={article.updatedLabel}
+          />
         </div>
       </div>
 
@@ -222,37 +195,6 @@ function SyncIndicator({
         <RefreshIcon size={14} />
         Resync
       </button>
-    </span>
-  );
-}
-
-function SaveIndicator({
-  saveState,
-  updatedLabel,
-}: {
-  saveState: SaveState;
-  updatedLabel: string;
-}) {
-  if (saveState === "saving") {
-    return (
-      <span className={styles.saveState}>
-        <span className={`${styles.saveDot} ${styles.saveDotBusy}`} aria-hidden="true" />
-        Saving…
-      </span>
-    );
-  }
-  if (saveState === "unsaved") {
-    return (
-      <span className={styles.saveState}>
-        <span className={styles.saveDot} aria-hidden="true" />
-        Unsaved changes
-      </span>
-    );
-  }
-  return (
-    <span className={`${styles.saveState} ${styles.saved}`}>
-      <CheckCircleIcon size={14} />
-      Saved {updatedLabel}
     </span>
   );
 }

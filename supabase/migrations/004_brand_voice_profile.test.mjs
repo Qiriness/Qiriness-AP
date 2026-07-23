@@ -10,5 +10,5 @@ test('brand voice profile migration adds a jsonb voice_profile column with a saf
 
 test('brand voice profile migration documents the column shape and always-include intent', () => {
   assert.match(migration, /comment on column public\.knowledge_documents\.voice_profile is/i);
-  assert.match(migration, /tone: string\[\], voice: string, dos: string\[\], donts: string\[\]/i);
+  assert.match(migration, /roleDescription: string, toneAndVoice: string/i);
 });

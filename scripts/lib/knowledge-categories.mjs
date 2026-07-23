@@ -18,6 +18,12 @@ const PRIMARY_CATEGORY_RULES = [
   ['brand_story', ['marque', 'histoire', 'heritage', 'hanbang', 'rituel qi']]
 ];
 
+/** The full category vocabulary this module can infer, in the order the UI lists them. Kept in sync with `KNOWLEDGE_CATEGORIES` in web/lib/types.ts by knowledge-categories.test.mjs. */
+export const KNOWLEDGE_CATEGORIES = [
+  ...CATEGORY_RULES.map(([category]) => category),
+  'general',
+];
+
 export function inferKnowledgeCategory(...values) {
   const primary = normalize(values.slice(0, 2).filter(Boolean).join(' '));
   for (const [category, terms] of PRIMARY_CATEGORY_RULES) {

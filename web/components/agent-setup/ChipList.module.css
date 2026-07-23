@@ -56,37 +56,3 @@
   min-width: 0;
   overflow-wrap: anywhere;
 }
-
-.remove {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex: none;
-  width: 18px;
-  height: 18px;
-  border: none;
-  border-radius: 50%;
-  background: transparent;
-  color: var(--text-subtle);
-  cursor: pointer;
-}
-.remove:hover {
-  background: var(--mist);
-  color: var(--text-strong);
-}
-
-.input {
-  flex: 1;
-  min-width: 120px;
-  border: none;
-  background: transparent;
-  padding: 4px 2px;
-  font-size: var(--text-sm);
-  color: var(--text-default);
-}
-.input::placeholder {
-  color: var(--text-subtle);
-}
-.input:focus-visible {
-  outline: none;
-}
