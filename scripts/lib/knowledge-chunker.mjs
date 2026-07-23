@@ -2,6 +2,11 @@ import { hashJson } from './hash.mjs';
 
 const DEFAULT_MAX_TOKENS = 450;
 
+// Semantic units whose extractor already decided the retrieval boundary
+// (one FAQ answer, one feature block) bypass token-packing entirely, so a
+// long answer never gets split mid-question.
+const WHOLE_UNIT_TYPES = new Set(['faq_item', 'feature_item']);
+
 export function buildKnowledgeChunks(documentRow, options = {}) {
   const maxTokens = options.maxTokens || DEFAULT_MAX_TOKENS;
   const chunks = [];
@@ -11,7 +16,11 @@ export function buildKnowledgeChunks(documentRow, options = {}) {
 
   for (const section of sections) {
     const sectionText = section.text || '';
-    for (const chunkText of splitText(sectionText, maxTokens)) {
+    const chunkTexts = WHOLE_UNIT_TYPES.has(section.unit_type)
+      ? (sectionText ? [sectionText] : [])
+      : splitText(sectionText, maxTokens);
+
+    for (const chunkText of chunkTexts) {
       chunks.push({
         knowledge_document_id: documentRow.id,
         chunk_index: chunks.length,

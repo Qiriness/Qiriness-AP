@@ -108,11 +108,21 @@
 |       `-- knowledge/
 |           |-- source-discovery.mjs      # Shopify page identity/navigation source discovery (batch + single-page variants)
 |           |-- knowledge-source-resolver.mjs # ordered content resolver coordinator
-|           `-- content-resolvers/
-|               |-- manual-override-resolver.mjs # optional local canonical text override
-|               |-- page-metafield-resolver.mjs # dedicated AI/support page metafield content
-|               |-- page-body-resolver.mjs      # Shopify Page.body content
-|               `-- theme-template-resolver.mjs # Shopify theme template/section settings fallback
+|           |-- template-traversal.mjs     # generic Shopify JSON template walker (order/block_order, disabled-skip); type-agnostic, no content logic
+|           |-- content-resolvers/
+|           |   |-- manual-override-resolver.mjs # optional local canonical text override
+|           |   |-- page-metafield-resolver.mjs # dedicated AI/support page metafield content
+|           |   |-- page-body-resolver.mjs      # Shopify Page.body content
+|           |   `-- theme-template-resolver.mjs # Shopify theme template fallback; parses templates/page.*.json via template-extractors/
+|           `-- template-extractors/       # section-type-keyed adapters (raw section -> typed semantic units), not per-page functions
+|               |-- index.mjs              # registry: section type -> extractor, falls back to generic-fallback.mjs
+|               |-- faq.mjs                # rich-text blocks = category markers, question blocks = one faq_item unit each
+|               |-- rich-text.mjs          # heading/text blocks (or flat settings) -> one prose unit
+|               |-- media-text.mjs         # re-exports rich-text.mjs (same shape on this theme)
+|               |-- accordion.mjs          # one feature_item unit per block
+|               |-- generic-fallback.mjs   # shallow allowlisted-key scan, confidence: low, for unrecognized section types
+|               |-- text-utils.mjs         # shared HTML/Liquid-aware block text cleaning; flags liquid-type blocks for the trusted adapters to skip (fallback still extracts them at low confidence)
+|               `-- placeholder-strings.mjs # exact-match denylist of Shopify starter-theme default block content
 `-- supabase/
     `-- migrations/
         |-- 001_initial_schema.sql # consolidated Supabase schema for shops, customers, orders, products, knowledge, and compliance metadata
@@ -200,7 +210,7 @@ The frontend (`web/lib/demo-data.ts`, `web/components/agent-setup/*`) is not wir
 - Knowledge API: `web/app/api/knowledge/*` Route Handlers for listing the unified Shopify source catalog and creating/editing/resyncing/deleting knowledge articles — see Knowledge API above. **Verified end-to-end against the real dev Shopify store and Supabase through the actual browser UI**: page import, policy import, edit-converts-to-manual (Resync correctly disappears), and delete were all exercised live, not just via curl. `web/components/agent-setup/AgentSetup.tsx` calls this API directly for all mutations; the initial article/source lists are fetched server-side in `web/app/agent-setup/page.tsx` (same process, no HTTP round-trip).
 - Frontend data: `web/lib/demo-data.ts` is trimmed to just the sidebar's static branding (`TEAM_MEMBER`); all article/source data is real, from the Knowledge API. The Core setup checklist (6 topics) renders in `ArticleLibrary`, backed by `CoreTopic`/`CORE_TOPIC_LABELS`/`CORE_TOPIC_DEFAULT_CATEGORY`/`CORE_TOPICS` in `web/lib/types.ts`; unfilled slots are virtual placeholders (`CoreTopicPlaceholder`) computed client-side, never auto-created rows — clicking one calls `createArticle` with a pre-filled title/category/coreTopic. Non-core articles group by category (`CollapsibleSection` per category, only when ≥2 categories are present) below the checklist.
 - Migrations: consolidated `001_initial_schema.sql` defines core operational tables; `002_promotions.sql` adds Shopify promotion snapshots; `003_knowledge_page_catalog.sql` adds the unified `shopify_content_sources` catalog table and the Agent Setup workflow columns on `knowledge_documents`. Reconciled and confirmed applied correctly to the dev Supabase database (the table was originally created under a different, superseded name/shape — this has been fixed).
-- Known issue: the theme-template fallback resolver (`scripts/lib/knowledge/content-resolvers/theme-template-resolver.mjs`) leaked raw Shopify section-setting tokens into imported content for at least one real page during live testing — its content-vs-setting heuristic needs tightening. Only affects pages with no usable page metafield or `Page.body`, which fall through to this last-resort resolver.
+- Resolved: the theme-template fallback resolver used to flatten every string setting in a Shopify JSON template (including disabled placeholder sections and presentation values) into one noisy blob per section. It now uses a type-aware pipeline (`scripts/lib/knowledge/template-traversal.mjs` + `template-extractors/`) — see the file map above — that skips `disabled` sections/blocks, dispatches by section type (FAQ, rich-text, media-text, accordion, or a shallow low-confidence fallback for unrecognized types), and gives the chunker (`knowledge-chunker.mjs`) a `unit_type` so FAQ answers and feature blocks each become exactly one retrieval chunk instead of being token-split. Dedicated adapters (FAQ/rich-text/accordion) still skip `liquid`-type blocks outright, but the generic fallback extracts their `code` field through the same HTML-cleaning pipeline as everything else (which strips embedded `<img src="data:...">` tags along with any other markup) and surfaces the result at `confidence: 'low'` for human review in the editor, rather than dropping it — a section that's pure layout/CSS with no real prose still yields nothing. Existing theme_template-origin articles (e.g. FAQ, La Marque) need a manual "Resync" from the dashboard to pick this up — nothing backfills automatically.
 - Dev-environment note: Next.js dev mode's jest-worker pool was crashing on the Knowledge API routes (likely from the cross-package `.mjs` import graph); fixed with `experimental.cpus: 1` in `web/next.config.mjs`.
 - Scripts: Shopify product/metaobject sync, customer sync, order sync, promotion sync, unified content-catalog sync (pages + policies), nightly sync orchestration, and compliance webhook CLI harness added
 - Script modules: Shopify sync, compliance audit, compliance webhook, persistence, config, mapper, hashing, chunking, and text-cleaning modules added or split into focused units

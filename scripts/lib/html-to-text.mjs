@@ -2,13 +2,44 @@ import { cleanTextValue } from './text-cleaning.mjs';
 
 const BLOCK_TAG_PATTERN = /<\/?(address|article|aside|blockquote|br|dd|div|dl|dt|figcaption|figure|footer|h[1-6]|header|hr|li|main|nav|ol|p|pre|section|table|tbody|td|tfoot|th|thead|tr|ul)[^>]*>/gi;
 
+// Standard HTML4 entity references (markup + Latin-1 supplement + the common
+// "smart punctuation" set) - not a hand-picked list of whatever we happened
+// to see, the same "add a proper decode table" fix used for mojibake in
+// text-cleaning.mjs, applied to the separate problem of literal HTML named
+// entities (e.g. content pasted from a word processor or an old CMS export).
 const NAMED_ENTITIES = new Map([
   ['amp', '&'],
   ['apos', "'"],
   ['gt', '>'],
   ['lt', '<'],
   ['nbsp', ' '],
-  ['quot', '"']
+  ['quot', '"'],
+  // Latin-1 supplement (accented Latin characters, common in French content)
+  ['Agrave', 'À'], ['Aacute', 'Á'], ['Acirc', 'Â'], ['Atilde', 'Ã'], ['Auml', 'Ä'], ['Aring', 'Å'],
+  ['AElig', 'Æ'], ['Ccedil', 'Ç'],
+  ['Egrave', 'È'], ['Eacute', 'É'], ['Ecirc', 'Ê'], ['Euml', 'Ë'],
+  ['Igrave', 'Ì'], ['Iacute', 'Í'], ['Icirc', 'Î'], ['Iuml', 'Ï'],
+  ['Ntilde', 'Ñ'],
+  ['Ograve', 'Ò'], ['Oacute', 'Ó'], ['Ocirc', 'Ô'], ['Otilde', 'Õ'], ['Ouml', 'Ö'], ['Oslash', 'Ø'],
+  ['Ugrave', 'Ù'], ['Uacute', 'Ú'], ['Ucirc', 'Û'], ['Uuml', 'Ü'],
+  ['Yacute', 'Ý'],
+  ['agrave', 'à'], ['aacute', 'á'], ['acirc', 'â'], ['atilde', 'ã'], ['auml', 'ä'], ['aring', 'å'],
+  ['aelig', 'æ'], ['ccedil', 'ç'],
+  ['egrave', 'è'], ['eacute', 'é'], ['ecirc', 'ê'], ['euml', 'ë'],
+  ['igrave', 'ì'], ['iacute', 'í'], ['icirc', 'î'], ['iuml', 'ï'],
+  ['ntilde', 'ñ'],
+  ['ograve', 'ò'], ['oacute', 'ó'], ['ocirc', 'ô'], ['otilde', 'õ'], ['ouml', 'ö'], ['oslash', 'ø'],
+  ['ugrave', 'ù'], ['uacute', 'ú'], ['ucirc', 'û'], ['uuml', 'ü'],
+  ['yacute', 'ý'], ['yuml', 'ÿ'],
+  ['ordf', 'ª'], ['ordm', 'º'], ['szlig', 'ß'],
+  ['OElig', 'Œ'], ['oelig', 'œ'], ['Scaron', 'Š'], ['scaron', 'š'], ['Yuml', 'Ÿ'],
+  ['deg', '°'], ['sect', '§'], ['para', '¶'], ['middot', '·'], ['copy', '©'], ['reg', '®'], ['trade', '™'],
+  ['euro', '€'], ['cent', '¢'], ['pound', '£'], ['yen', '¥'],
+  // Common "smart punctuation" (word processors, rich-text pastes)
+  ['lsquo', '‘'], ['rsquo', '’'], ['sbquo', '‚'],
+  ['ldquo', '“'], ['rdquo', '”'], ['bdquo', '„'],
+  ['ndash', '–'], ['mdash', '—'],
+  ['hellip', '…'], ['bull', '•']
 ]);
 
 export function htmlToText(html) {
@@ -138,7 +169,7 @@ function decodeCodePoint(codePoint, fallback) {
   }
 }
 
-function slugify(value) {
+export function slugify(value) {
   const slug = cleanTextValue(String(value || ''))
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
