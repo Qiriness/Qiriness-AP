@@ -17,6 +17,8 @@
 |-- AGENTS.md          # agent rules
 |-- CLAUDE.md          # claude agent pointer
 |-- APP_SCHEMA.md      # repo map
+|-- AGENT_INTEGRATION_PLAN.md # phased plan for the agent email workflow (tickets, ingestion, categoriser, tools, routing)
+|-- Agent_Workflow.md  # raw brief the plan is derived from
 |-- MERCHANT_DATA_USE_DISCLOSURE.md # merchant-facing Shopify data-use disclosure draft
 |-- SHOPIFY_PERSONAL_DATA_PROTECTION.md # Shopify protected customer data checklist
 |-- package.json       # Node scripts for Shopify/Supabase sync (root; type: module)
@@ -110,7 +112,7 @@
 |       |-- shop-sync-service.mjs        # shared Shopify shop row upsert
 |       |-- supabase-rest-client.mjs     # Supabase REST upsert client
 |       |-- supabase-rest-client.test.mjs # Node regression tests for Supabase REST payload handling
-|       |-- sync-config.mjs              # CLI/env parsing for sync scripts
+|       |-- sync-config.mjs              # CLI/env parsing for sync scripts; loadEnv(cwd) accepts an optional base dir so the agent/ worker reads the repo-root .env.local
 |       |-- text-cleaning.mjs            # AI-facing French text normalization
 |       `-- knowledge/
 |           |-- source-discovery.mjs      # Shopify page identity/navigation source discovery (batch + single-page variants)
@@ -130,6 +132,23 @@
 |               |-- generic-fallback.mjs   # shallow allowlisted-key scan, confidence: low, for unrecognized section types
 |               |-- text-utils.mjs         # shared HTML/Liquid-aware block text cleaning; flags liquid-type blocks for the trusted adapters to skip (fallback still extracts them at low confidence)
 |               `-- placeholder-strings.mjs # exact-match denylist of Shopify starter-theme default block content
+|-- agent/               # support-agent worker service (own package.json; Node ESM; reuses scripts/lib/*). See AGENT_INTEGRATION_PLAN.md
+|   |-- package.json     # start / ingest:once / test scripts
+|   |-- README.md        # worker overview, setup, run
+|   |-- .env.example     # Microsoft Graph vars to add to the repo-root .env.local
+|   `-- src/
+|       |-- config.mjs        # agent env/tunables; reads repo-root .env.local via loadEnv(cwd); assertGraphConfig credential gate
+|       |-- index.mjs         # entrypoint: resolve shop, delta-poll on an interval (--once = single pass)
+|       |-- lib/
+|       |   `-- logger.mjs    # structured JSON logger (no secrets/PII)
+|       `-- ingestion/        # Phase 1 email ingestion
+|           |-- graph-client.mjs         # Microsoft Graph app-only auth + inbox message delta fetch (injectable fetch)
+|           |-- graph-message-mapper.mjs # pure: raw Graph message -> ticket/message row fields; hashes requester email like orders.customer_email_hash
+|           |-- graph-message-mapper.test.mjs
+|           |-- ticket-writer.mjs        # upsert ticket by conversation + idempotent message upsert; injectable store (createSupabaseTicketStore is the real impl)
+|           |-- ticket-writer.test.mjs
+|           |-- delta-poller.mjs         # follow delta pages to the deltaLink, persist the cursor in shops.sync_cursors.mail_ingest_delta_link
+|           `-- delta-poller.test.mjs
 `-- supabase/
     `-- migrations/
         |-- 001_initial_schema.sql # consolidated Supabase schema for shops, customers, orders, products, knowledge, and compliance metadata
@@ -141,6 +160,10 @@
         |-- 005_fix_core_topic_check_constraint.test.mjs # static migration coverage asserting the re-added constraint has the combined slot, not the old split delivery/returns_exchanges
         |-- 006_knowledge_chunk_embeddings.sql # sizes knowledge_chunks.embedding to vector(1536), adds embedding_model/embedding_dimensions/embedded_input_hash/embedded_at determinism metadata + HNSW cosine index
         |-- 006_knowledge_chunk_embeddings.test.mjs # static migration coverage for the vector(1536) sizing, metadata columns, and ANN index
+        |-- 007_tickets.sql # tickets + ticket_messages tables for the agent email workflow (conversation-threaded support; see AGENT_INTEGRATION_PLAN.md). Applied to dev.
+        |-- 007_tickets.test.mjs # static migration coverage for the tickets/ticket_messages shape (threading key, idempotency, level 1-4, team enum, PII minimisation)
+        |-- 008_tickets_agent_context.sql # adds resolved_context bundle + context_resolved_at, secondary_category, priority, retention lifecycle (resolved/closed/archived/retention_delete_after), and ticket_messages body embeddings (vector(1536) + HNSW). Split from 007 (applied after 007) to keep each migration equal to what ran. Applied to dev.
+        |-- 008_tickets_agent_context.test.mjs # static coverage for the 008 additions
         |-- compliance-migrations.test.mjs # static migration coverage for compliance tables
         |-- orders-migration.test.mjs # static migration coverage for order table shape
         |-- promotions-migration.test.mjs # static migration coverage for promotion table shape
@@ -195,6 +218,15 @@
   - Stores topic, shop/customer identifiers, hashed contact values, processing status, deletion counts, and sanitized metadata.
 - `public.data_access_events` - Service-level personal-data access audit trail.
   - Current sync paths write service events; future dashboard user views must write human access events here.
+- `public.tickets` - Conversation-level support tickets for the agent email workflow (Phase 1 of `AGENT_INTEGRATION_PLAN.md`). One ticket per Microsoft Graph `conversationId` (unique on `shop_id` + `graph_conversation_id`), so a thread is a single ticket — not per-email.
+  - The row the categorising agent fills: `category` + `secondary_category` (free-form until the taxonomy is final; the second slot captures emails spanning two topics), `level` (1-4 handling level), `responsible_team` (`finance`/`marketing`/`sales`/`logistics`/`contact`), `shopify_order_number` (the resolved source-of-truth lookup key), and optional `customer_id` link.
+  - `resolved_context` (jsonb) + `context_resolved_at`: the order/customer context bundle the Phase 4 order-context resolver assembles from the synced `orders`/`customers` rows once `shopify_order_number` is set (tracking, order name, order-customer name, RFM group, etc.), so the drafting agent gets a ready-made bundle instead of querying fields individually. A re-resolvable snapshot, **not** a source of truth and **not** duplicated first-class order columns; editable for human review; holds PII so it stays out of prompts unless required and is redaction-scoped. Distinct from `metadata` (system/operational flags). Billing/street address is never included — that is a gated live Shopify lookup only.
+  - `priority` (smallint 1 highest .. 5 lowest, default 3) for the queue, set later from RFM/level/age. Retention lifecycle mirrors `orders`: `resolved_at`/`closed_at` anchors, `archived_at` (drops from active queue while retained), `retention_delete_after` (hard-delete gate for a future cleanup job; durations TBD). `deleted_at` is the separate soft-delete/compliance-redaction flag.
+  - Personal-data minimisation: stores `requester_email_hash` (for matching against `orders.customer_email_hash` and sender dedup) + `requester_name` only; the raw reply address lives on `ticket_messages`. `status` drives the draft-only lifecycle (`open`/`awaiting_customer`/`awaiting_human`/`forwarded`/`resolved`/`closed`/`spam`).
+  - Tables applied to dev (migrations 007 + 008); no rows yet — written by the `agent/` worker once Phase 1 ingestion lands. Service-role access only (RLS on, no policies).
+- `public.ticket_messages` - Individual emails belonging to a ticket, one row per Graph message. Idempotent ingestion via unique `shop_id` + `graph_message_id`; `direction` is `inbound`/`outbound`.
+  - Holds the raw envelope needed to reply (`from_email`, `to_emails`, `cc_emails`), cleaned `body_text` for triage/categorisation/drafting, and a sanitised `raw_graph_payload`. Outbound rows are agent replies and team forwards.
+  - `embedding` (`vector(1536)`, text-embedding-3-small) + determinism metadata (`embedding_model`/`embedding_dimensions`/`embedded_input_hash`/`embedded_at`) with an HNSW cosine index, for similar-ticket retrieval and clustering; populated primarily for inbound bodies, following the `knowledge_chunks` pipeline. Cheap at support-email volume, so applied broadly.
 
 ## Knowledge API
 
@@ -208,6 +240,19 @@ Server-only Next.js Route Handlers under `web/app/api/knowledge/` that back the 
 - `DELETE /api/knowledge/articles/:id` - hard-deletes the article (chunks cascade via FK); the source stays in the catalog and can be re-imported later.
 
 The frontend (`web/lib/demo-data.ts`, `web/components/agent-setup/*`) is not wired to these routes yet — that's the next step once this API is exercised against real Shopify/Supabase credentials.
+
+## Agent Worker (email ingestion — Phase 1)
+
+`agent/` is the always-on support-agent worker, separate from `web/` and `scripts/` but reusing `scripts/lib/*` directly (Supabase REST client, `hashIdentifier`, `htmlToText`). Phase 1 is email ingestion only; triage, categorisation, tools, and drafting are later phases (see `AGENT_INTEGRATION_PLAN.md`). Provider is OpenAI (consistent with the knowledge embeddings); nothing AI-facing exists in the worker yet.
+
+Ingestion data flow (all idempotent, service-role only):
+
+1. `index.mjs` loads config (repo-root `.env.local`), asserts Microsoft Graph credentials, and resolves the `shops.id` for `SHOPIFY_STORE_DOMAIN`.
+2. `delta-poller.mjs` reads the delta cursor from `shops.sync_cursors.mail_ingest_delta_link`, then follows Graph `@odata.nextLink` pages to the terminating `@odata.deltaLink`. The delta query **is** the source of truth — a future change-notification subscription would only trigger this same engine, not replace it. The cursor is written back so restarts resume exactly where they left off.
+3. `graph-message-mapper.mjs` (pure, unit-tested) maps each raw Graph message to `ticket_messages` row fields + conversation hints, cleaning the body via `htmlToText` and hashing the requester email with `hashIdentifier` so it matches `orders.customer_email_hash`.
+4. `ticket-writer.mjs` threads by `conversationId`: one `tickets` row per `(shop_id, conversationId)`, and messages upserted on `(shop_id, graph_message_id)` — re-ingesting the same email is a no-op. The store interface is injected so the threading/idempotency logic is unit-tested without a database.
+
+Run with `npm run ingest:once` (single pass) or `npm start` (poll every `INGEST_POLL_INTERVAL_MS`) from `agent/`. **Not yet run against a live mailbox** — needs the `MS_GRAPH_*` + `SUPPORT_MAILBOX` credentials in `.env.local`.
 
 ## Read Order
 1. [AGENTS.md](/C:/Users/gnoua/Desktop_backup/APP_DEV/03_Qiriness_Email/Qirines_Email_Automation/AGENTS.md) - coding rules

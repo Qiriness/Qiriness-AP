@@ -1,4 +1,5 @@
 import { existsSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 
 export const DEFAULT_API_VERSION = '2026-07';
 export const DEFAULT_PAGE_SIZE = 10;
@@ -43,15 +44,16 @@ export function parseArgs(argv) {
   return args;
 }
 
-export function loadEnv() {
+export function loadEnv(cwd = process.cwd()) {
   const env = { ...process.env };
 
   for (const file of ['.env.local', '.env']) {
-    if (!existsSync(file)) {
+    const filePath = join(cwd, file);
+    if (!existsSync(filePath)) {
       continue;
     }
 
-    const text = readFileSync(file, 'utf8');
+    const text = readFileSync(filePath, 'utf8');
     for (const line of text.split(/\r?\n/)) {
       const trimmed = line.trim();
       if (!trimmed || trimmed.startsWith('#')) {

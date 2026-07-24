@@ -1,0 +1,12 @@
+{
+  "name": "qiriness-agent-worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Support-agent worker: Microsoft Graph email ingestion + AI ticket workflow. See ../AGENT_INTEGRATION_PLAN.md.",
+  "scripts": {
+    "start": "node src/index.mjs",
+    "ingest:once": "node src/index.mjs --once",
+    "test": "node --test \"src/**/*.test.mjs\""
+  }
+}
