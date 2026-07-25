@@ -108,3 +108,47 @@ test('counts removed tombstones without creating rows', async () => {
   assert.equal(counts.messagesIngested, 0);
   assert.equal(store.tickets.size, 0);
 });
+
+test('LLM triage drops a new-conversation spam before anything is stored', async () => {
+  const store = createFakeStore();
+  const triage = async () => ({ spam: true });
+  const counts = await writeIngestedMessages(
+    store,
+    'shop-1',
+    [mappedMessage({ id: 'm1', conversationId: 'c1', at: '2026-07-24T10:00:00Z' })],
+    { triage }
+  );
+
+  assert.equal(counts.llmSpamFiltered, 1);
+  assert.equal(counts.ticketsCreated, 0);
+  assert.equal(counts.messagesIngested, 0);
+  assert.equal(store.tickets.size, 0);
+  assert.equal(store.messages.size, 0);
+});
+
+test('LLM triage is skipped for replies into an existing ticket', async () => {
+  const store = createFakeStore();
+  // First message creates the ticket (triage keeps it).
+  await writeIngestedMessages(
+    store,
+    'shop-1',
+    [mappedMessage({ id: 'm1', conversationId: 'c1', at: '2026-07-24T10:00:00Z' })],
+    { triage: async () => ({ spam: false }) }
+  );
+
+  let triageCalls = 0;
+  const triage = async () => {
+    triageCalls += 1;
+    return { spam: true };
+  };
+  const counts = await writeIngestedMessages(
+    store,
+    'shop-1',
+    [mappedMessage({ id: 'm2', conversationId: 'c1', at: '2026-07-24T11:00:00Z' })],
+    { triage }
+  );
+
+  assert.equal(triageCalls, 0); // existing ticket -> reply is never triaged
+  assert.equal(counts.messagesIngested, 1);
+  assert.equal(store.messages.size, 2);
+});

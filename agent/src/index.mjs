@@ -1,21 +1,18 @@
-import { createSupabaseClient, supabaseSelect } from '../../scripts/lib/supabase-rest-client.mjs';
+import { createSupabaseClient } from '../../scripts/lib/supabase-rest-client.mjs';
 
 import { loadAgentConfig, assertGraphConfig } from './config.mjs';
 import { logger } from './lib/logger.mjs';
+import { resolveShopId } from './lib/shop.mjs';
 import { createGraphClient } from './ingestion/graph-client.mjs';
 import { createSupabaseTicketStore } from './ingestion/ticket-writer.mjs';
+import { createBlocklistStore } from './ingestion/blocklist-store.mjs';
 import { runDeltaPoll, createSupabaseCursorStore } from './ingestion/delta-poller.mjs';
-
-async function resolveShopId(supabase, shopDomain) {
-  const rows = await supabaseSelect(supabase, 'shops', { shop_domain: shopDomain }, 'id,shop_domain');
-  if (rows.length === 0) {
-    throw new Error(`No shops row for domain ${shopDomain}. Run the Shopify sync first.`);
-  }
-  return rows[0].id;
-}
+import { createOpenAIClient } from './llm/openai-client.mjs';
+import { createSpamClassifier } from './ingestion/spam-classifier.mjs';
 
 async function main() {
   const runOnce = process.argv.includes('--once');
+  const limit = parseLimit(process.argv);
   const config = loadAgentConfig();
   assertGraphConfig(config);
 
@@ -25,9 +22,32 @@ async function main() {
   const graphClient = createGraphClient(config);
   const store = createSupabaseTicketStore(supabase);
   const cursorStore = createSupabaseCursorStore(supabase);
+  const blocklistStore = createBlocklistStore(supabase);
+
+  // LLM spam second pass — enabled only when an OpenAI key is present. Without it,
+  // ingestion still runs and just relies on the blocklist.
+  let triage;
+  if (config.openaiApiKey) {
+    const openai = createOpenAIClient({ apiKey: config.openaiApiKey });
+    triage = createSpamClassifier(openai, { model: config.triageModel, logger }).triage;
+  } else {
+    logger.warn('ingest.llm_filter_disabled', { reason: 'OPENAI_API_KEY not set' });
+  }
 
   const poll = async () => {
-    const totals = await runDeltaPoll({ graphClient, store, cursorStore, shopId, logger });
+    // Load the blocklist each poll so newly added rules take effect immediately.
+    const { gate, rulesById } = await blocklistStore.loadGate(shopId);
+    const totals = await runDeltaPoll({
+      graphClient,
+      store,
+      cursorStore,
+      shopId,
+      logger,
+      spamGate: gate,
+      recordSpamHits: (hits) => blocklistStore.recordHits(rulesById, hits),
+      triage,
+      limit
+    });
     logger.info('ingest.poll', { shopId, ...totals });
   };
 
@@ -58,6 +78,19 @@ async function main() {
   }
 
   logger.info('ingest.stopped', {});
+}
+
+function parseLimit(argv) {
+  const eq = argv.find((arg) => arg.startsWith('--limit='));
+  if (eq) return toPositiveInt(eq.slice('--limit='.length));
+  const i = argv.indexOf('--limit');
+  if (i >= 0) return toPositiveInt(argv[i + 1]);
+  return undefined;
+}
+
+function toPositiveInt(value) {
+  const n = Number.parseInt(value, 10);
+  return Number.isInteger(n) && n > 0 ? n : undefined;
 }
 
 function sleep(ms, isCancelled) {

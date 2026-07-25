@@ -7,6 +7,8 @@
   "scripts": {
     "start": "node src/index.mjs",
     "ingest:once": "node src/index.mjs --once",
+    "ingest:reset": "node src/tools/reset-cursor.mjs",
+    "blocklist:add": "node src/tools/add-blocklist.mjs",
     "test": "node --test \"src/**/*.test.mjs\""
   }
 }

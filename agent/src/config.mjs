@@ -27,7 +27,11 @@ export function loadAgentConfig(env = loadEnv(REPO_ROOT)) {
     },
     pollIntervalMs: Number(env.INGEST_POLL_INTERVAL_MS) || 60000,
     // Draft-only unless explicitly disabled; nothing is auto-sent while true.
-    draftOnly: env.DRAFT_ONLY !== 'false'
+    draftOnly: env.DRAFT_ONLY !== 'false',
+    // OpenAI (LLM stages). The spam second pass is enabled only when a key is set;
+    // without it, ingestion still runs and just skips the LLM filter.
+    openaiApiKey: env.OPENAI_API_KEY,
+    triageModel: env.AGENT_TRIAGE_MODEL || 'gpt-4o-mini'
   };
 }
 

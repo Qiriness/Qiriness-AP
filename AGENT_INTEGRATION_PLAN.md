@@ -137,14 +137,27 @@ web/                            # Phase 6 lives here (dashboard ticket queue + a
 
 **Exit:** inbound mail reliably lands as threaded tickets; reprocessing is a no-op.
 
-### Phase 2 — Spam / triage gate (cheap)
-**Goal:** drop spam/irrelevant mail before any expensive agent runs.
+### Phase 2 — Spam / triage gate
+**Goal:** drop spam before it consumes storage or agent tokens. Spam is **never kept** —
+blocked mail is dropped at ingestion, and adding a rule purges any already-stored mail.
 
-- A single cheap-tier call (structured output: `keep | spam | irrelevant`) gated on new
-  tickets. Cheap, fast, logged.
-- Marks the ticket; spam never advances to categorisation.
+- **First pass — deterministic, no LLM (built):** a per-shop `email_blocklist` (exact
+  sender address or whole domain). Runs inside the delta poller *before* any write, so
+  blocked senders never reach `tickets` / `ticket_messages`. Managed with
+  `npm run blocklist:add -- <email|domain>` (which also purges existing mail from that
+  sender via `ticket_messages.from_email`). Per-rule `hit_count`/`last_hit_at` for
+  observability.
+- **Second pass — cheap LLM (built):** for spam a blocklist can't catch, a single
+  cheap-tier structured-output call (`keep | spam | irrelevant`; OpenAI, default
+  `gpt-4o-mini`) runs on **new-conversation** mail *before it is written*, so classified
+  spam is dropped and never stored. Replies into an existing ticket are never triaged (a
+  genuine follow-up can't be discarded), and the classifier **fails open** — any error, or
+  a missing OpenAI key, keeps the email. Header-based heuristics (`Precedence: bulk`,
+  `List-Unsubscribe`) remain a possible middle tier before the LLM.
 
-**Exit:** measurable spam-filter accuracy on a sample; token cost per ticket is bounded.
+**Exit:** blocklist drops known senders pre-storage (validated live); LLM second pass drops
+fuzzy spam pre-storage on new conversations, fail-open and cheap-tier (built + unit-tested;
+live run pending).
 
 ### Phase 3 — Categorising agent
 **Goal:** fill `category` + `level` and thus the routing decision.

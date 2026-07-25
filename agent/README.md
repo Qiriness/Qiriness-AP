@@ -43,10 +43,22 @@ From this directory:
 ```
 npm run ingest:once   # one delta poll, then exit (good for testing)
 npm start             # continuous: poll every INGEST_POLL_INTERVAL_MS
+npm run ingest:reset  # clear the delta cursor to force a full re-sync next run
 ```
 
 The delta cursor is stored per shop in `shops.sync_cursors.mail_ingest_delta_link`, so a
-restart resumes exactly where it left off — nothing is re-ingested.
+restart resumes exactly where it left off — nothing is re-ingested. Wiped the tickets and
+want to re-pull the whole inbox? Run `ingest:reset` first, then `ingest:once`.
+
+## Spam blocklist
+
+```
+npm run blocklist:add -- spammer@bad.com     # block one address
+npm run blocklist:add -- junk-domain.com      # block a whole domain
+```
+
+Blocked senders are dropped during ingestion (never stored), and adding a rule also purges
+any of that sender's already-stored mail.
 
 ## Test
 

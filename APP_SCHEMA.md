@@ -140,15 +140,27 @@
 |       |-- config.mjs        # agent env/tunables; reads repo-root .env.local via loadEnv(cwd); assertGraphConfig credential gate
 |       |-- index.mjs         # entrypoint: resolve shop, delta-poll on an interval (--once = single pass)
 |       |-- lib/
-|       |   `-- logger.mjs    # structured JSON logger (no secrets/PII)
-|       `-- ingestion/        # Phase 1 email ingestion
-|           |-- graph-client.mjs         # Microsoft Graph app-only auth + inbox message delta fetch (injectable fetch)
-|           |-- graph-message-mapper.mjs # pure: raw Graph message -> ticket/message row fields; hashes requester email like orders.customer_email_hash
-|           |-- graph-message-mapper.test.mjs
-|           |-- ticket-writer.mjs        # upsert ticket by conversation + idempotent message upsert; injectable store (createSupabaseTicketStore is the real impl)
-|           |-- ticket-writer.test.mjs
-|           |-- delta-poller.mjs         # follow delta pages to the deltaLink, persist the cursor in shops.sync_cursors.mail_ingest_delta_link
-|           `-- delta-poller.test.mjs
+|       |   |-- logger.mjs    # structured JSON logger (no secrets/PII)
+|       |   `-- shop.mjs      # resolveShopId(supabase, shopDomain), shared by the worker + CLIs
+|       |-- llm/              # OpenAI integration (spam classifier now; categoriser/drafting later)
+|       |   |-- openai-client.mjs        # dependency-free Chat Completions wrapper w/ Structured Outputs (json_schema); injectable fetch/sleep, retry
+|       |   `-- openai-client.test.mjs
+|       |-- ingestion/        # Phase 1 email ingestion + Phase 2 spam gate (blocklist + LLM)
+|       |   |-- graph-client.mjs         # Microsoft Graph app-only auth + inbox message delta fetch (injectable fetch)
+|       |   |-- graph-message-mapper.mjs # pure: raw Graph message -> ticket/message row fields; hashes requester email like orders.customer_email_hash
+|       |   |-- graph-message-mapper.test.mjs
+|       |   |-- ticket-writer.mjs        # upsert ticket by conversation + idempotent message upsert; injectable store; optional triage hook (new-conversation LLM spam)
+|       |   |-- ticket-writer.test.mjs
+|       |   |-- spam-gate.mjs            # pure deterministic blocklist classifier (email/domain match); allowAllGate default
+|       |   |-- spam-gate.test.mjs
+|       |   |-- blocklist-store.mjs      # DB-backed email_blocklist: load gate, record hits, addRule + purge already-stored mail
+|       |   |-- spam-classifier.mjs      # LLM spam second pass (keep|spam|irrelevant) on new-conversation mail; fails open (keeps on error)
+|       |   |-- spam-classifier.test.mjs
+|       |   |-- delta-poller.mjs         # follow delta pages to the deltaLink, persist cursor; runs the blocklist + LLM passes before any write
+|       |   `-- delta-poller.test.mjs
+|       `-- tools/
+|           |-- add-blocklist.mjs        # CLI (npm run blocklist:add -- <email|domain>): add a rule + purge that sender's stored mail
+|           `-- reset-cursor.mjs         # CLI (npm run ingest:reset): clear the mail delta cursor to force a full re-sync
 `-- supabase/
     `-- migrations/
         |-- 001_initial_schema.sql # consolidated Supabase schema for shops, customers, orders, products, knowledge, and compliance metadata
@@ -164,6 +176,8 @@
         |-- 007_tickets.test.mjs # static migration coverage for the tickets/ticket_messages shape (threading key, idempotency, level 1-4, team enum, PII minimisation)
         |-- 008_tickets_agent_context.sql # adds resolved_context bundle + context_resolved_at, secondary_category, priority, retention lifecycle (resolved/closed/archived/retention_delete_after), and ticket_messages body embeddings (vector(1536) + HNSW). Split from 007 (applied after 007) to keep each migration equal to what ran. Applied to dev.
         |-- 008_tickets_agent_context.test.mjs # static coverage for the 008 additions
+        |-- 009_email_blocklist.sql # deterministic no-LLM spam blocklist (per-shop sender email/domain) for the ingestion gate. Applied to dev.
+        |-- 009_email_blocklist.test.mjs # static coverage for the email_blocklist shape
         |-- compliance-migrations.test.mjs # static migration coverage for compliance tables
         |-- orders-migration.test.mjs # static migration coverage for order table shape
         |-- promotions-migration.test.mjs # static migration coverage for promotion table shape
@@ -227,6 +241,7 @@
 - `public.ticket_messages` - Individual emails belonging to a ticket, one row per Graph message. Idempotent ingestion via unique `shop_id` + `graph_message_id`; `direction` is `inbound`/`outbound`.
   - Holds the raw envelope needed to reply (`from_email`, `to_emails`, `cc_emails`), cleaned `body_text` for triage/categorisation/drafting, and a sanitised `raw_graph_payload`. Outbound rows are agent replies and team forwards.
   - `embedding` (`vector(1536)`, text-embedding-3-small) + determinism metadata (`embedding_model`/`embedding_dimensions`/`embedded_input_hash`/`embedded_at`) with an HNSW cosine index, for similar-ticket retrieval and clustering; populated primarily for inbound bodies, following the `knowledge_chunks` pipeline. Cheap at support-email volume, so applied broadly.
+- `public.email_blocklist` - Deterministic, no-LLM spam blocklist for the ingestion gate (Phase 2). Per-shop rules matching a sender by exact `pattern` (email) or `domain`; matched mail is dropped at ingestion **before** any ticket/message is written, so blocked spam never consumes storage. `hit_count`/`last_hit_at` track how often each rule fired. Managed via the worker's `npm run blocklist:add` (which also purges already-stored mail from that sender). Applied to dev; service-role only (RLS on, no policies).
 
 ## Knowledge API
 
@@ -250,7 +265,11 @@ Ingestion data flow (all idempotent, service-role only):
 1. `index.mjs` loads config (repo-root `.env.local`), asserts Microsoft Graph credentials, and resolves the `shops.id` for `SHOPIFY_STORE_DOMAIN`.
 2. `delta-poller.mjs` reads the delta cursor from `shops.sync_cursors.mail_ingest_delta_link`, then follows Graph `@odata.nextLink` pages to the terminating `@odata.deltaLink`. The delta query **is** the source of truth — a future change-notification subscription would only trigger this same engine, not replace it. The cursor is written back so restarts resume exactly where they left off.
 3. `graph-message-mapper.mjs` (pure, unit-tested) maps each raw Graph message to `ticket_messages` row fields + conversation hints, cleaning the body via `htmlToText` and hashing the requester email with `hashIdentifier` so it matches `orders.customer_email_hash`.
-4. `ticket-writer.mjs` threads by `conversationId`: one `tickets` row per `(shop_id, conversationId)`, and messages upserted on `(shop_id, graph_message_id)` — re-ingesting the same email is a no-op. The store interface is injected so the threading/idempotency logic is unit-tested without a database.
+4. **Spam gate, first pass (Phase 2)** — before writing, each mapped message is checked against the per-shop `email_blocklist` (`spam-gate.mjs`, a pure deterministic email/domain matcher loaded by `blocklist-store.mjs`). Blocked senders are **dropped here and never written**; per-rule hit counts are recorded. No LLM, no tokens.
+5. `ticket-writer.mjs` threads the surviving messages by `conversationId`: one `tickets` row per `(shop_id, conversationId)`, messages upserted on `(shop_id, graph_message_id)` — re-ingesting the same email is a no-op. The store interface is injected so the threading/idempotency logic is unit-tested without a database.
+6. **Spam gate, second pass (Phase 2, LLM)** — inside the writer, only when a message would create a **new** conversation, an optional `triage` runs the `spam-classifier.mjs` (OpenAI via `llm/openai-client.mjs`, Structured Outputs, default `gpt-4o-mini`). A `spam` verdict drops the message **before insert** — still never stored. Replies into existing tickets are never triaged (a real follow-up can't be discarded), and the classifier **fails open**: any error or a missing OpenAI key keeps the email. Enabled only when `OPENAI_API_KEY` is set.
+
+Manage the blocklist with `npm run blocklist:add -- <email|domain>` (`tools/add-blocklist.mjs`), which adds the rule **and** purges any already-stored mail from that sender (via `ticket_messages.from_email`) so blocked spam never lingers.
 
 Run with `npm run ingest:once` (single pass) or `npm start` (poll every `INGEST_POLL_INTERVAL_MS`) from `agent/`. **Not yet run against a live mailbox** — needs the `MS_GRAPH_*` + `SUPPORT_MAILBOX` credentials in `.env.local`.
 

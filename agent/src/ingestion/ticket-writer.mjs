@@ -12,8 +12,12 @@ import {
 // Threading: one ticket per (shop_id, conversationId). Idempotency: messages are
 // upserted on (shop_id, graph_message_id), so re-ingesting the same email is a no-op.
 
-export async function writeIngestedMessages(store, shopId, mapped) {
-  const counts = { ticketsCreated: 0, messagesIngested: 0, removed: 0 };
+// triage (optional): async (item) => { spam: boolean }. Runs only on the first
+// message of a *new* conversation (where spam arrives), before anything is
+// created — so classified spam is dropped and never stored. Replies into an
+// existing ticket are never triaged, so a genuine follow-up can't be discarded.
+export async function writeIngestedMessages(store, shopId, mapped, { triage } = {}) {
+  const counts = { ticketsCreated: 0, messagesIngested: 0, removed: 0, llmSpamFiltered: 0 };
 
   for (const item of mapped) {
     if (item.removed) {
@@ -21,19 +25,20 @@ export async function writeIngestedMessages(store, shopId, mapped) {
       continue;
     }
 
-    const ticket = await getOrCreateTicket(store, shopId, item.conversation);
-    if (ticket.created) {
-      counts.ticketsCreated += 1;
+    const ticketId = await resolveTicket(store, shopId, item, triage, counts);
+    if (ticketId === null) {
+      continue; // dropped by the LLM spam pass — never written
     }
 
-    await store.upsertMessage({ ...item.message, ticket_id: ticket.id, shop_id: shopId });
+    await store.upsertMessage({ ...item.message, ticket_id: ticketId, shop_id: shopId });
     counts.messagesIngested += 1;
   }
 
   return counts;
 }
 
-async function getOrCreateTicket(store, shopId, conversation) {
+async function resolveTicket(store, shopId, item, triage, counts) {
+  const conversation = item.conversation;
   const existing = await store.findTicketByConversation(shopId, conversation.graph_conversation_id);
 
   if (existing) {
@@ -49,7 +54,16 @@ async function getOrCreateTicket(store, shopId, conversation) {
     if (Object.keys(patch).length > 0) {
       await store.updateTicket(existing.id, patch);
     }
-    return { id: existing.id, created: false };
+    return existing.id;
+  }
+
+  // New conversation: run the LLM spam pass (if configured) before creating anything.
+  if (triage) {
+    const verdict = await triage(item);
+    if (verdict.spam) {
+      counts.llmSpamFiltered += 1;
+      return null;
+    }
   }
 
   const inserted = await store.insertTicket({
@@ -61,8 +75,8 @@ async function getOrCreateTicket(store, shopId, conversation) {
     first_message_at: conversation.message_at,
     last_message_at: conversation.message_at
   });
-
-  return { id: inserted.id, created: true };
+  counts.ticketsCreated += 1;
+  return inserted.id;
 }
 
 function isLater(candidate, current) {
