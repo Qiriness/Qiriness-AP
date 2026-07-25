@@ -155,9 +155,67 @@ blocked mail is dropped at ingestion, and adding a rule purges any already-store
   a missing OpenAI key, keeps the email. Header-based heuristics (`Precedence: bulk`,
   `List-Unsubscribe`) remain a possible middle tier before the LLM.
 
+- **Audit trail (built):** dropping mail before any write means a blocked email otherwise
+  leaves *no trace*, so a wrong drop is invisible. Every decision either pass makes writes
+  one `spam_audit` row: `outcome` (`kept`/`blocked`), `decided_by` (`blocklist`/`llm`), and
+  a one-line `reason`. A keep the classifier was not confident about is recorded as
+  literally `unsure`, and a keep caused by a classifier error sets `failed_open`, so the
+  fail-open path is never mistaken for a judged pass. Decisions buffer through a poll and
+  flush once; the write is best-effort (a failed audit write is logged, never fatal — a
+  retried poll must not re-drop mail). Untriaged replies produce no row, so absence means
+  "no decision made", not "kept".
+  - **Deliberate exception to "spam is never kept":** the row stores the sender address and
+    subject — never the body, and still no ticket/message row. That is the minimum needed
+    to review a decision and turn a repeat offender into a blocklist rule. Treat it as
+    decision metadata, like `integration_events`.
+
+- **`irrelevant` handling (agreed, NOT built) —** today `irrelevant` is dead information:
+  the classifier assigns it and the email is then kept exactly like `keep` (`dropLabels`
+  defaults to `['spam']` only), so a judgement we pay for is thrown away. Agreed design:
+  - **Store, don't categorise.** An `irrelevant` verdict still writes a ticket, but with
+    `status = 'irrelevant'` (a new value on `tickets_status_check`, alongside the already
+    unused `spam` slot), `archived_at = now()` so it never enters the active queue, and
+    `retention_delete_after = now() + 1 month`. The categoriser and every later AI stage
+    skip it entirely, so it costs no tokens.
+  - **No new table and no new UI section.** `tickets` already has `archived_at` ("drops
+    from active queue while retained") and `retention_delete_after`, so the mechanism
+    exists. Phase 6 already specs the queue as "filter by team / level / status", so this
+    is **one more filter value, default off**, plus a muted count (`12 irrelevant`) so it
+    stays discoverable without becoming something a human must remember to check. A whole
+    section would cost more attention than the filtering saves.
+  - **Promotion** = clear `archived_at` + `retention_delete_after`, set `status = 'open'`.
+    The categoriser then picks it up naturally, because it was never categorised.
+  - **Do not embed irrelevant messages.** This matters more than the deletion:
+    `ticket_messages.embedding` is `vector(1536)` (~6KB + index entries, far more than the
+    body text), and irrelevant mail in the vector index would pollute similar-ticket
+    retrieval with Teams/DMARC noise. Skipping the embedding is both the real cost saving
+    and a correctness fix.
+  - **Retention is deliberately anchored at the decision, not extended by new replies.**
+    A recurring noise thread should still expire on schedule; the alternative keeps
+    persistent noise alive forever and defeats the purpose. Cost: a reply arriving on day
+    25 of an irrelevant thread goes with it. Acceptable for irrelevant mail, and the count
+    badge plus a full month is the safety margin.
+  - **Blocked on the retention cleanup job**, which does not exist — `retention_delete_after`
+    is currently "the mechanism, not a fixed rule" with nothing sweeping it. The 1-month
+    deletion needs that job (one reconciler for `orders` + `tickets` + this, durations in
+    config, same shape as `embed-knowledge-chunks.mjs`). Without it nothing is deleted and
+    storage grows anyway.
+  - **Measure before building.** The 60–80% `irrelevant` rate seen in testing is an
+    artifact of testing against a work inbox full of internal mail, not a support address.
+    `spam_audit` already records every label, so one week of real-mailbox data gives the
+    true rate for free. At ~5% this is over-engineering — leave them as ordinary
+    low-priority tickets. At 30%+ build it as above.
+  - **Prefer blocklist rules for recurring automated senders.** Most measured `irrelevant`
+    volume was Teams notifications and internal threads, which a domain rule handles for
+    free, deterministically, pre-storage — demonstrated live when adding
+    `teams.mail.microsoft` moved two emails from `irrelevant` (stored, kept) to blocked.
+    This feature is for *one-off* ambiguous mail (a supplier, a job applicant, a
+    wrong-inbox human), which is a much smaller population.
+
 **Exit:** blocklist drops known senders pre-storage (validated live); LLM second pass drops
 fuzzy spam pre-storage on new conversations, fail-open and cheap-tier (built + unit-tested;
-live run pending).
+live run pending); every decision is recorded in `spam_audit` with a one-line reason.
+`irrelevant` handling is designed and agreed but not implemented.
 
 ### Phase 3 — Categorising agent
 **Goal:** fill `category` + `level` and thus the routing decision.
@@ -217,6 +275,10 @@ to auto-send later.
 
 - New dashboard route: ticket queue (filter by team / level / status), conversation
   view, approve/edit/send for L3, escalate for L4.
+- The status filter carries Phase 2's `irrelevant` handling: an `irrelevant` filter value
+  (default off) plus a muted count, and a promote action that clears `archived_at` +
+  `retention_delete_after` and sets `open`. Deliberately **not** a separate section — see
+  Phase 2. This is the UI half of that design; the data half lands in Phase 2.
 - Reads/writes the same Supabase tables the worker uses; every human view writes a
   `data_access_events` row (existing audit requirement).
 

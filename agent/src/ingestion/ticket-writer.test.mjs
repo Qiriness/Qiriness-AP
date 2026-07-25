@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { writeIngestedMessages } from './ticket-writer.mjs';
+import { createAuditCollector } from './spam-audit.mjs';
 
 // In-memory store standing in for Supabase, so the threading + idempotency logic
 // is exercised without a database.
@@ -40,9 +41,12 @@ function createFakeStore() {
 function mappedMessage({ id, conversationId, at, subject = 'Subject', direction = 'inbound' }) {
   return {
     removed: false,
+    graphMessageId: id,
     conversationId,
     message: {
       graph_message_id: id,
+      from_email: 'marie@example.com',
+      subject,
       graph_conversation_id: conversationId,
       direction,
       body_text: 'body',
@@ -151,4 +155,80 @@ test('LLM triage is skipped for replies into an existing ticket', async () => {
   assert.equal(triageCalls, 0); // existing ticket -> reply is never triaged
   assert.equal(counts.messagesIngested, 1);
   assert.equal(store.messages.size, 2);
+});
+
+test('audits a dropped email — the only trace it leaves', async () => {
+  const store = createFakeStore();
+  const audit = createAuditCollector();
+  const triage = async () => ({
+    spam: true,
+    label: 'spam',
+    reason: 'prospection SEO non sollicitée',
+    model: 'gpt-4o-mini'
+  });
+
+  await writeIngestedMessages(
+    store,
+    'shop-1',
+    [mappedMessage({ id: 'm1', conversationId: 'c1', at: '2026-07-24T10:00:00Z', subject: 'Offre SEO' })],
+    { triage, audit }
+  );
+
+  assert.equal(store.messages.size, 0); // nothing stored...
+  assert.equal(audit.size, 1); // ...but the decision is recorded
+  const [entry] = audit.entries();
+  assert.equal(entry.outcome, 'blocked');
+  assert.equal(entry.decidedBy, 'llm');
+  assert.equal(entry.graphMessageId, 'm1');
+  assert.equal(entry.reason, 'prospection SEO non sollicitée');
+  assert.equal(entry.subject, 'Offre SEO');
+  assert.equal(entry.failedOpen, false);
+});
+
+test('audits a kept email too, so a pass is reviewable', async () => {
+  const store = createFakeStore();
+  const audit = createAuditCollector();
+  const triage = async () => ({ spam: false, label: 'keep', reason: 'unsure', model: 'gpt-4o-mini' });
+
+  await writeIngestedMessages(
+    store,
+    'shop-1',
+    [mappedMessage({ id: 'm1', conversationId: 'c1', at: '2026-07-24T10:00:00Z' })],
+    { triage, audit }
+  );
+
+  assert.equal(store.messages.size, 1);
+  const [entry] = audit.entries();
+  assert.equal(entry.outcome, 'kept');
+  assert.equal(entry.reason, 'unsure');
+});
+
+test('an untriaged reply produces no audit row (no decision was made)', async () => {
+  const store = createFakeStore();
+  const audit = createAuditCollector();
+  const triage = async () => ({ spam: false, label: 'keep', reason: 'client légitime' });
+
+  const first = mappedMessage({ id: 'm1', conversationId: 'c1', at: '2026-07-24T10:00:00Z' });
+  await writeIngestedMessages(store, 'shop-1', [first], { triage, audit });
+  await writeIngestedMessages(
+    store,
+    'shop-1',
+    [mappedMessage({ id: 'm2', conversationId: 'c1', at: '2026-07-24T11:00:00Z' })],
+    { triage, audit }
+  );
+
+  // Only the new conversation was judged; the reply bypassed the gate entirely.
+  assert.equal(audit.size, 1);
+  assert.equal(audit.entries()[0].graphMessageId, 'm1');
+});
+
+test('writes without an audit collector still work (auditing is optional)', async () => {
+  const store = createFakeStore();
+  const counts = await writeIngestedMessages(
+    store,
+    'shop-1',
+    [mappedMessage({ id: 'm1', conversationId: 'c1', at: '2026-07-24T10:00:00Z' })],
+    { triage: async () => ({ spam: false }) }
+  );
+  assert.equal(counts.messagesIngested, 1);
 });

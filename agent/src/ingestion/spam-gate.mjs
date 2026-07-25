@@ -3,16 +3,16 @@
 // unit-tested without a database; blocklist-store loads the rules and records hits.
 
 export function buildSpamGate(rules = []) {
-  const emails = new Map(); // normalized email -> ruleId
-  const domains = new Map(); // normalized domain -> ruleId
+  const emails = new Map(); // normalized email -> rule
+  const domains = new Map(); // normalized domain -> rule
 
   for (const rule of rules) {
     if (rule.pattern_type === 'email') {
       const value = normalizeEmail(rule.pattern);
-      if (value) emails.set(value, rule.id);
+      if (value) emails.set(value, rule);
     } else if (rule.pattern_type === 'domain') {
       const value = normalizeDomain(rule.pattern);
-      if (value) domains.set(value, rule.id);
+      if (value) domains.set(value, rule);
     }
   }
 
@@ -27,18 +27,18 @@ export function buildSpamGate(rules = []) {
         return { spam: false };
       }
       if (emails.has(email)) {
-        return { spam: true, ruleId: emails.get(email), matched: 'email' };
+        return blocked(emails.get(email), 'email');
       }
       const domain = domainOf(email);
       if (domain) {
         if (domains.has(domain)) {
-          return { spam: true, ruleId: domains.get(domain), matched: 'domain' };
+          return blocked(domains.get(domain), 'domain');
         }
         // Suffix match: a rule for "linkedin.com" also blocks "e.linkedin.com"
         // and other subdomains those platforms actually send from.
-        for (const [ruleDomain, ruleId] of domains) {
+        for (const [ruleDomain, rule] of domains) {
           if (domain.endsWith('.' + ruleDomain)) {
-            return { spam: true, ruleId, matched: 'domain' };
+            return blocked(rule, 'domain');
           }
         }
       }
@@ -49,6 +49,18 @@ export function buildSpamGate(rules = []) {
 
 // A gate that lets everything through — the default when no blocklist is wired.
 export const allowAllGate = { check: () => ({ spam: false }) };
+
+// The verdict carries the matched pattern (not just the rule id) so the spam_audit
+// reason can name what actually blocked the email without a second lookup.
+function blocked(rule, matched) {
+  return {
+    spam: true,
+    ruleId: rule.id,
+    matched,
+    pattern: rule.pattern ?? null,
+    reason: `blocklist ${matched} rule${rule.pattern ? `: ${rule.pattern}` : ''}`
+  };
+}
 
 export function normalizeEmail(value) {
   if (!value || typeof value !== 'string') {

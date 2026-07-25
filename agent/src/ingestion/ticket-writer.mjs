@@ -12,11 +12,15 @@ import {
 // Threading: one ticket per (shop_id, conversationId). Idempotency: messages are
 // upserted on (shop_id, graph_message_id), so re-ingesting the same email is a no-op.
 
-// triage (optional): async (item) => { spam: boolean }. Runs only on the first
-// message of a *new* conversation (where spam arrives), before anything is
-// created — so classified spam is dropped and never stored. Replies into an
-// existing ticket are never triaged, so a genuine follow-up can't be discarded.
-export async function writeIngestedMessages(store, shopId, mapped, { triage } = {}) {
+// triage (optional): async (item) => { spam: boolean, label, reason, model, error }.
+// Runs only on the first message of a *new* conversation (where spam arrives),
+// before anything is created — so classified spam is dropped and never stored.
+// Replies into an existing ticket are never triaged, so a genuine follow-up can't
+// be discarded (and therefore produces no audit row: no decision was made).
+//
+// audit (optional): a spam-audit collector. Every triage verdict, keep or drop, is
+// recorded — for a dropped email the audit row is the only trace that survives.
+export async function writeIngestedMessages(store, shopId, mapped, { triage, audit } = {}) {
   const counts = { ticketsCreated: 0, messagesIngested: 0, removed: 0, llmSpamFiltered: 0 };
 
   for (const item of mapped) {
@@ -25,7 +29,7 @@ export async function writeIngestedMessages(store, shopId, mapped, { triage } = 
       continue;
     }
 
-    const ticketId = await resolveTicket(store, shopId, item, triage, counts);
+    const ticketId = await resolveTicket(store, shopId, item, triage, counts, audit);
     if (ticketId === null) {
       continue; // dropped by the LLM spam pass — never written
     }
@@ -37,7 +41,7 @@ export async function writeIngestedMessages(store, shopId, mapped, { triage } = 
   return counts;
 }
 
-async function resolveTicket(store, shopId, item, triage, counts) {
+async function resolveTicket(store, shopId, item, triage, counts, audit) {
   const conversation = item.conversation;
   const existing = await store.findTicketByConversation(shopId, conversation.graph_conversation_id);
 
@@ -60,6 +64,18 @@ async function resolveTicket(store, shopId, item, triage, counts) {
   // New conversation: run the LLM spam pass (if configured) before creating anything.
   if (triage) {
     const verdict = await triage(item);
+    audit?.record({
+      graphMessageId: item.graphMessageId ?? item.message?.graph_message_id,
+      conversationId: conversation.graph_conversation_id,
+      fromEmail: item.message?.from_email,
+      subject: item.message?.subject,
+      outcome: verdict.spam ? 'blocked' : 'kept',
+      decidedBy: 'llm',
+      reason: verdict.reason,
+      label: verdict.label,
+      model: verdict.model,
+      failedOpen: Boolean(verdict.error)
+    });
     if (verdict.spam) {
       counts.llmSpamFiltered += 1;
       return null;

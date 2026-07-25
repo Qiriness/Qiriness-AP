@@ -123,6 +123,85 @@ test('drops blocklisted senders before writing and records rule hits', async () 
   assert.equal(recorded.get('r-domain'), 1);
 });
 
+test('flushes one audit row per gate decision, from both passes', async () => {
+  const graphClient = fakeGraphClient([
+    {
+      messages: [
+        graphMessage('m1', 'c1', 'marie@example.com'),
+        graphMessage('m2', 'c2', 'spammer@bad.com')
+      ],
+      nextLink: null,
+      deltaLink: 'https://graph/delta-final'
+    }
+  ]);
+  const spamGate = buildSpamGate([
+    { id: 'r-email', pattern_type: 'email', pattern: 'spammer@bad.com' }
+  ]);
+
+  let flushed = null;
+  const totals = await runDeltaPoll({
+    graphClient,
+    store: fakeStore(),
+    cursorStore: fakeCursorStore(null),
+    shopId: 'shop-1',
+    spamGate,
+    auditStore: {
+      async flush(_shopId, entries) {
+        flushed = entries;
+        return entries.length;
+      }
+    },
+    // The LLM pass keeps marie@example.com; the blocklist already dropped the other.
+    triage: async () => ({ spam: false, label: 'keep', reason: 'unsure', model: 'gpt-4o-mini' })
+  });
+
+  assert.equal(totals.spamAudited, 2);
+  assert.equal(flushed.length, 2);
+
+  const blocked = flushed.find((entry) => entry.outcome === 'blocked');
+  assert.equal(blocked.decidedBy, 'blocklist');
+  assert.equal(blocked.graphMessageId, 'm2');
+  assert.equal(blocked.ruleId, 'r-email');
+  // The reason names the pattern that matched, not just "blocklist".
+  assert.match(blocked.reason, /spammer@bad\.com/);
+
+  const kept = flushed.find((entry) => entry.outcome === 'kept');
+  assert.equal(kept.decidedBy, 'llm');
+  assert.equal(kept.reason, 'unsure');
+});
+
+test('an audit-store failure is logged, not fatal — mail is never re-dropped', async () => {
+  const graphClient = fakeGraphClient([
+    {
+      messages: [graphMessage('m1', 'c1', 'spammer@bad.com')],
+      nextLink: null,
+      deltaLink: 'https://graph/delta-final'
+    }
+  ]);
+  const cursorStore = fakeCursorStore(null);
+  const warnings = [];
+
+  const totals = await runDeltaPoll({
+    graphClient,
+    store: fakeStore(),
+    cursorStore,
+    shopId: 'shop-1',
+    logger: { warn: (event) => warnings.push(event) },
+    spamGate: buildSpamGate([{ id: 'r1', pattern_type: 'email', pattern: 'spammer@bad.com' }]),
+    auditStore: {
+      async flush() {
+        throw new Error('supabase down');
+      }
+    }
+  });
+
+  assert.equal(totals.spamBlocked, 1);
+  assert.equal(totals.spamAudited, 0);
+  assert.ok(warnings.includes('ingest.spam_audit_failed'));
+  // The cursor still advanced, so the poll is not retried and mail is not re-processed.
+  assert.equal(cursorStore.saved(), 'https://graph/delta-final');
+});
+
 test('respects --limit and does not advance the cursor when truncating mid-inbox', async () => {
   const graphClient = fakeGraphClient([
     {

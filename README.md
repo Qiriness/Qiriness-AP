@@ -1,168 +1,75 @@
 # Qiriness Customer Support OS
 
-## Purpose
+A customer-support operating system for **Qiriness**, a French skincare and cosmetics brand: an agentic email reply workflow plus a dashboard, modelled on [letterbook.ai](https://www.letterbook.ai/). Shopify is the source of truth; Supabase/PostgreSQL is the operational database.
 
-This repository will host a customer-support operating system for **Qiriness**, a French skincare and cosmetics brand. This will include an automated and agentic reply workflow as well as a dashbaord. We are essentially copying https://www.letterbook.ai/ 
+Repository map and data model: `APP_SCHEMA.md`. Coding rules: `AGENTS.md`. Design direction: `PRODUCT.md`. Agent workflow phases: `AGENT_INTEGRATION_PLAN.md`.
 
-The first objective is to synchronise data from a Shopify development store containing dummy data into Supabase so that support workflows can later operate on a reliable operational dataset.
+## Scope
 
+Built or in progress: one-way Shopify -> Supabase sync, a curated knowledge library for AI context, retrieval embeddings, and email ingestion into conversation-threaded tickets.
 
-## Current Scope
+Planned: order tracking, delivery issues, returns/refunds, product and payment questions, product advice, complaints and cosmetovigilance escalation, AI categorisation and reply drafting.
 
-Confirmed current scope:
+## Architecture
 
-- define the project foundation and documentation;
-- prepare for one-way synchronisation from Shopify to Supabase;
-- keep development and production environments separate;
-- design for privacy-conscious handling of customer data.
+- **Shopify** owns products, variants, customers, orders, fulfilments, refunds, and discounts. Shopify IDs are the external identifiers.
+- **Supabase PostgreSQL** (+pgvector) is the operational store. Sync is Shopify -> Supabase only, combining an initial import, webhooks for near-real-time updates, and scheduled reconciliation to catch drift. Webhook signature validation and idempotent processing are required. Webhook routes are **not deployed yet**; sync runs as manual/nightly CLI scripts.
+- Important Shopify fields go in structured columns; raw payloads are retained only where useful and sanitised of unnecessary personal data.
+- French text destined for AI context is normalised for UTF-8/Windows-1252 mojibake before storage, with raw payloads kept for traceability.
+- Customer personal data is minimised, hashed where it is only a lookup key, and excluded from AI prompts unless strictly required. AI workflows retrieve context progressively rather than loading whole records.
+- Knowledge articles are a **curated library**: nothing auto-syncs into `knowledge_documents`. Shopify pages and policies are catalogued by name only, and become articles when a team member imports one. See `APP_SCHEMA.md`'s Invariants.
 
-Planned later scope:
+## Stack
 
-- order tracking support;
-- delivery issue handling;
-- returns and refunds workflows;
-- product and order issue handling;
-- product advice support;
-- payment and account question handling;
-- complaints and cosmetovigilance escalation;
-- AI-assisted email classification and reply drafting.
+Confirmed: Shopify · Supabase · PostgreSQL · Next.js (App Router) + TypeScript + React 18 in `web/` (CSS Modules and design tokens, no UI framework) · Node ESM scripts at the repo root · OpenAI for embeddings and classification · Microsoft Graph for the support mailbox.
 
-No application functionality is implemented yet in this repository.
-
-## High-Level Architecture
-
-Target architecture:
-
-- **Shopify** is the source of truth for products, variants, customers, orders, fulfilments, refunds, and discounts/promotions.
-- **Supabase PostgreSQL** will act as the operational database.
-- Initial synchronisation will be **Shopify -> Supabase only**.
-- Data flow should combine:
-  - an initial import for baseline data;
-  - Shopify webhooks for near-real-time updates;
-  - scheduled reconciliation to detect missed or failed events.
-- Important Shopify fields should be stored in structured database columns.
-- Product context fields currently stored as structured product columns include Usage Instructions, Short description, Conseils d'utilisation, Actifs & ingredients, ingredients popup, and Product Ingredients.
-- Predefined Shopify metaobjects, such as Product FAQ and Ingredients List entries, are stored once and referenced from products by Shopify metaobject ID.
-- Product status values include Shopify's `active`, `archived`, `draft`, and `unlisted` statuses.
-- Product stock is stored as one product-level `available_stock` summary, synced from Shopify variant inventory quantities when available.
-- Shopify text and rich-text JSON used for AI context is normalized before storage to repair common UTF-8/Windows-1252 mojibake in French content while keeping raw Shopify payloads for traceability.
-- Shopify synchronization is split into small script modules for CLI/env configuration, Shopify Admin API access, Supabase persistence, mapping, hashing, chunking, and AI-facing text cleanup.
-- Promotions are modeled as Shopify discount snapshots in `promotions`, including code-based and automatic discounts, status, summaries, usage counts, timing, combines-with flags, and `applies_once_per_customer` for manual filtering.
-- Promotion sync intentionally includes active, scheduled, expired, automatic, code-based, app-generated, and referral-style discounts returned by Shopify; a full sync only deletes rows no longer returned by Shopify.
-- Header/footer pages and policies are modeled as `knowledge_documents`, with section-level `knowledge_chunks` for retrieval. Shopify menus are used to infer whether source pages and policies are exposed in header or footer navigation when that API scope is available.
-- Shopify page content is resolved through ordered, replaceable resolvers: manual override, dedicated page metafield, Shopify `Page.body`, then Shopify theme template settings. The winning content origin and attempted resolver list are stored in `source_metadata`.
-- Knowledge document sync merges by Shopify source identity before regenerating chunks, so it can work against the current partial unique indexes in existing Supabase databases.
-- Knowledge categories are stored as unrestricted text for now and can be restricted once the support taxonomy is finalized.
-- Nothing auto-syncs into `knowledge_documents` — not Shopify pages, not shop policies. A lightweight, unified `shopify_content_sources` catalog (name/handle only, synced by `scripts/sync-shopify-content-catalog.mjs`) lists every live page and policy for the Agent Setup dashboard's single source dropdown; a source only becomes a `knowledge_documents` row when a team member explicitly imports it (or writes a manual article), matching PRODUCT.md's curated-library principle.
-- Editing an imported article in the dashboard converts its `knowledge_documents.source_type` from `shopify_page`/`shopify_policy` to `manual` (keeping `shopify_source_id`/`handle` for provenance). That type conversion is the entire manual-edit lock — there's no separate flag, and once an article is `manual`, resync is simply unavailable for it.
-- A fixed set of 6 "core topics" (order policies, brand, confidentiality, delivery & returns, locations, FAQs — delivery and returns/exchanges are intentionally one combined slot) can be assigned to at most one article each per shop. The Agent Setup dashboard renders these as a checklist: unfilled slots show as dashed placeholders (never auto-created database rows — clicking one creates a real, pre-filled draft) and the checklist collapses to a one-line summary once all 6 are covered.
-- Raw Shopify API payloads should be retained only where useful and should be sanitized to avoid unnecessary personal data.
-- Customer personal data should be minimised, protected, and excluded from AI prompts unless strictly required.
-- AI workflows should retrieve context progressively instead of loading complete records by default.
-
-## Main Technologies
-
-Confirmed:
-
-- Shopify
-- Supabase
-- PostgreSQL
-- Frontend: Next.js (App Router) + TypeScript + React 18 (in `web/`); styling via CSS Modules and design tokens, no UI framework
-- Sync/runtime for scripts: Node ESM (repo root)
-
-Pending repository-level decisions:
-
-- backend framework / API layer for the dashboard;
-- ORM or database client for app reads (scripts currently use `pg` + a Supabase REST client);
-- job scheduling mechanism;
-- webhook processing approach;
-- frontend test framework;
-- deployment tooling.
-
-## Repository Structure
-
-See `APP_SCHEMA.md`
+Pending: dashboard auth, ORM/DB client for app reads (scripts use `pg` + a Supabase REST client), job scheduling, webhook processing runtime, frontend test framework, deployment tooling.
 
 ## Getting started
 
-1. Run `npm install`.
-2. Copy `.env.example` to `.env.local` and add the Supabase settings.
-3. Apply `supabase/migrations/001_initial_schema.sql`, `supabase/migrations/002_promotions.sql`, and `supabase/migrations/003_knowledge_page_catalog.sql`, then seed development data.
-4. Run `npm run sync:shopify:products:dry-run` to verify Shopify product access.
-5. Run `npm run sync:shopify:products` to upsert Shopify shops, products, targeted Product FAQ/Ingredients List metaobjects, and linked product metaobjects into Supabase.
-6. Run `npm run sync:shopify:customers:dry-run` to verify Shopify customer access and RFM group retrieval.
-7. Run `npm run sync:shopify:customers` to upsert Shopify customer snapshots into Supabase.
-8. Run `npm run sync:shopify:orders:dry-run` to verify Shopify order access and retention mapping.
-9. Run `npm run sync:shopify:orders` to upsert Shopify order snapshots into Supabase and remove local orders past retention.
-10. Run `npm run sync:shopify:promotions:dry-run` to verify Shopify discount/promotion access.
-11. Run `npm run sync:shopify:promotions` to upsert Shopify promotion snapshots into Supabase.
-12. Run `npm run sync:shopify:content-catalog:dry-run` to verify Shopify page and policy access, then `npm run sync:shopify:content-catalog` to upsert the lightweight `shopify_content_sources` catalog used by the Agent Setup dropdown. This never writes to `knowledge_documents` — see the Knowledge API note below for how articles actually get created.
-13. Run `npm run sync:shopify:nightly:dry-run` to verify the full nightly sync order.
+1. `npm install` at the repo root.
+2. Copy `.env.example` to `.env.local` and fill it in. This one repo-root file is the single source of truth for secrets — `web/next.config.mjs` and `agent/src/config.mjs` both load it, so there is no separate `web/.env.local`. Needed: `SHOPIFY_STORE_DOMAIN`, `SHOPIFY_ADMIN_API_ACCESS_TOKEN` (or `SHOPIFY_CLIENT_ID` + `SHOPIFY_CLIENT_SECRET`), `SUPABASE_URL`, `SUPABASE_SECRET_KEY`, `SUPABASE_DB_URL`, `OPENAI_API_KEY`, and the `MS_GRAPH_*` + `SUPPORT_MAILBOX` vars for the agent worker. All server-only — never prefix with `NEXT_PUBLIC_`.
+3. Apply the migrations in `supabase/migrations/` in order with `npm run db:apply:migration`.
+4. Sync Shopify data. Every script has a `:dry-run` twin — run that first to verify API access and mapping:
+   `npm run sync:shopify:products` · `:customers` · `:orders` · `:promotions` · `:content-catalog`, or `npm run sync:shopify:nightly` for all of them in order.
+5. `npm run embed:knowledge` to embed approved knowledge chunks (`:dry-run` available).
+6. `npm test` runs the root test suite (`node --test`).
 
-### Dashboard app (`web/`)
+Shopify scopes: `read_discounts` for promotions; `read_content`/`read_online_store_pages` and `read_legal_policies` for the content catalog; `read_themes` for the theme-template content fallback. Missing optional scopes surface as a clear import error rather than silent failure. For Shopify Dev Dashboard apps, leave `SHOPIFY_ADMIN_API_ACCESS_TOKEN` blank and the scripts request a short-lived Admin token from the client ID/secret at runtime.
 
-The frontend is a separate Next.js + TypeScript app with its own dependencies. The UI components still run on static demo data (`web/lib/demo-data.ts`), but a real Knowledge API now exists under `web/app/api/knowledge/*` — see `APP_SCHEMA.md`'s Knowledge API section for the route list.
+### Dashboard (`web/`)
 
-1. `cd web`
-2. `npm install`
-3. Copy the repo root's Supabase and Shopify env vars into `web/.env.local` too (Next.js loads env from its own project root, not the repo root). At minimum: `SHOPIFY_STORE_DOMAIN`, `SHOPIFY_ADMIN_API_ACCESS_TOKEN` (or `SHOPIFY_CLIENT_ID`/`SHOPIFY_CLIENT_SECRET`), `SUPABASE_URL`, `SUPABASE_SECRET_KEY`. Keep these server-only — never prefix with `NEXT_PUBLIC_`, since they're the Supabase service-role key and a Shopify Admin token.
-4. Run the repo-root sync scripts (steps 1-12 above) at least once so a `shops` row and a populated `shopify_content_sources` catalog exist — the Knowledge API reads the shop by domain and 404s with a clear message if it isn't found yet.
-5. `npm run dev` and open `http://localhost:3000` (redirects to `/agent-setup`).
-6. `npm run build` for a production build; `npm run lint` and `npm run typecheck` for checks.
+`cd web && npm install`, then `npm run dev` and open `http://localhost:3000` (redirects to `/agent-setup`). `npm run build`, `npm run lint`, `npm run typecheck` for checks. Run the root sync scripts at least once first — the Knowledge API looks the shop up by domain and returns a clear 404 until a `shops` row and the `shopify_content_sources` catalog exist.
 
-For Shopify Dev Dashboard apps, `SHOPIFY_ADMIN_API_ACCESS_TOKEN` can stay blank. The sync script requests a short-lived Admin API token at runtime from `SHOPIFY_CLIENT_ID` and `SHOPIFY_CLIENT_SECRET`.
+### Agent worker (`agent/`)
 
-The content catalog sync and the Knowledge API's on-demand import/resync both require Shopify Admin API access to online store pages and legal policies. Required scopes are `read_content` or `read_online_store_pages` for pages and `read_legal_policies` for policies. Theme template fallback (used by the on-demand page import's resolver pipeline) requires theme read access (`read_themes` in the app scope approval flow). If optional scopes are not granted to the app, resolution for that source fails and the Knowledge API returns a clear import error.
-
-The promotion sync requires Shopify Admin API `read_discounts`. The current Shopify app config includes `read_discounts`.
-
-
-## Shopify Synchronisation and Webhooks
-
-Planned synchronisation behaviour:
-
-1. Perform an initial import from the Shopify development store into Supabase.
-2. Subscribe to Shopify webhooks for resource updates relevant to support operations.
-3. Validate webhook signatures before processing.
-4. Process webhook deliveries idempotently to avoid duplicate writes.
-5. Use Shopify IDs as external identifiers in Supabase records.
-6. Run scheduled reconciliation to detect missed webhook events or drift.
-7. Preserve raw payloads for debugging and replay support where appropriate.
-
-This behaviour is not implemented yet in the repository.
+`cd agent && npm install`, then `npm run ingest:once` for a single ingestion pass or `npm start` to poll. Also `npm run blocklist:add -- <email|domain>` and `npm run ingest:reset`.
 
 ## Development Status
 
-Current status:
+Working and verified live against the dev Shopify store and Supabase:
 
-- repository initialised;
-- project purpose and engineering constraints documented;
-- frontend stack chosen and scaffolded: **Next.js (App Router) + TypeScript + React 18** in `web/`, kept separate from the root Node sync scripts;
-- first dashboard surface built and **wired to real data**: the **Agent Setup** tab (`/agent-setup`) for configuring the future AI reply agent's knowledge, brand voice, and tone;
-- Agent Setup covers a calm two-pane article workflow: knowledge library (search, status filters, create, delete), a workspace editor with Shopify source import (pages and policies, grouped in one dropdown), and save / optimize / approve / delete flows, with full state coverage (empty, unsaved, saving, syncing, import error, optimizing, approved) and responsive + accessible behaviour. "Optimize" is still a local placeholder — no AI backend exists for it yet;
-- initial Supabase migration added for `shops`, `products`, shared Shopify metaobjects, and knowledge context tables; a follow-up migration (`003_knowledge_page_catalog.sql`) adds the unified `shopify_content_sources` catalog (pages + policies) and the Agent Setup workflow columns on `knowledge_documents` (HTML content, approval status, core topic — 6 slots, delivery and returns/exchanges combined). `003`'s `core_topic` check constraint was edited after being applied and the live dev database drifted out of sync (still had the old 7-slot version with separate `delivery`/`returns_exchanges`) until `005_fix_core_topic_check_constraint.sql` re-applied it — confirmed live via direct query, no data was affected;
-- Agent Setup's article library now groups articles: a "Core setup" checklist (6 required-knowledge slots, unfilled ones shown as click-to-create placeholders, never auto-created rows) collapses to a summary once complete, and everything else groups by category once articles span 2+ categories — both via a shared `CollapsibleSection` component;
-- Shopify product/metaobject sync script added and refactored into focused script modules;
-- Shopify customer, order, and promotion sync scripts added for support operational snapshots;
-- the old separate page-catalog and policy-auto-sync scripts were unified and then the auto-sync half removed entirely: `scripts/sync-shopify-content-catalog.mjs` now syncs a lightweight catalog of both pages and policies, and nothing writes to `knowledge_documents` automatically anymore — every article there was explicitly imported or hand-written through the dashboard;
-- the Knowledge API (`web/app/api/knowledge/*`) is live and **verified end-to-end against the real dev Shopify store and Supabase database**: import (page and policy), edit-converts-to-manual, resync-blocked-once-manual, and delete were all exercised through the actual browser UI, not just curl. `web/components/agent-setup/AgentSetup.tsx` now calls it directly — `web/lib/demo-data.ts` is trimmed to just the sidebar's static branding data;
-- editing an imported article converts its `source_type` to `manual`, which is what stops it from being resynced — no separate flag, no confirm-to-discard flow. Confirmed working live: editing and saving an imported article correctly flips its dropdown to "No source" and hides Resync;
-- found and fixed one real dev-environment issue while testing live: Next.js dev mode's jest-worker pool was crashing ("2 child process exceptions" + EPIPE) on the Knowledge API routes, most likely from the heavy cross-package `.mjs` import graph. Fixed with `experimental.cpus: 1` in `web/next.config.mjs`; worth revisiting on a future Next.js upgrade;
-- deterministic embedding pipeline added for retrieval chunks: `text-embedding-3-small` at 1536 dimensions, gated so **only approved (non-brand) knowledge chunks hold vectors**. `006_knowledge_chunk_embeddings.sql` sizes `knowledge_chunks.embedding` to `vector(1536)` and adds determinism metadata (`embedding_model`, `embedding_dimensions`, `embedded_input_hash`, `embedded_at`) plus an HNSW cosine index. A pure `scripts/lib/embeddings/*` module (input composition + hash, OpenAI client, staleness gate) is shared by two paths ("both"): inline best-effort embedding on approval inside `knowledge-service.ts`, and the `scripts/embed-knowledge-chunks.mjs` reconciler (`npm run embed:knowledge`) for backfill/retries/model changes. Re-runs are idempotent — unchanged chunks are skipped by the hash gate. Editing an approved article's text now demotes it out of `approved` (to `in_review`). **Not yet exercised against a live OpenAI key or the dev database** — the migration still needs applying and a first `embed:knowledge` run;
-- agent email workflow started (see `AGENT_INTEGRATION_PLAN.md`): `tickets` + `ticket_messages` schema added and **applied to the dev database** (`007_tickets.sql` + `008_tickets_agent_context.sql` — conversation-threaded tickets keyed on Microsoft Graph `conversationId`, categoriser fields incl. secondary category, `resolved_context` order/customer bundle for the drafting agent, priority, retention lifecycle, and `ticket_messages` body embeddings via `vector(1536)` + HNSW). A separate `agent/` worker service is scaffolded with the Phase 1 Microsoft Graph email-ingestion modules (delta poller → conversation threading → idempotent ticket writer), reusing `scripts/lib/*` and unit-tested (mapper, writer, poller). Provider is **OpenAI** (matching the knowledge embeddings). **Verified live** against the real `onouailhetas@lap-groupe.com` mailbox: a first ingest threaded 34 emails into 20 tickets, a second pass ingested nothing (cursor idempotency), and the delta cursor persists in `shops.sync_cursors`;
-- Phase 2 spam gate — **both passes built**. First pass: a per-shop `email_blocklist` (`009_email_blocklist.sql`, **applied to dev**) checked inside the ingestion poller so blocked senders (exact address or domain) are dropped **before any DB write** — spam is never stored; validated live (blocking a sender dropped their 5 messages and purged their stored mail). `agent/` has `spam-gate.mjs`, `blocklist-store.mjs`, and CLIs `npm run blocklist:add` / `npm run ingest:reset`. Second pass: an LLM classifier (`spam-classifier.mjs` + shared `llm/openai-client.mjs`, Structured Outputs, default `gpt-4o-mini`) runs on **new-conversation** mail before write, drops fuzzy spam, skips replies into existing tickets, and **fails open** (any error / missing key keeps the email). Built + unit-tested; live run pending;
-- no dashboard authentication or deployed webhook route committed yet; the `agent/` worker's remaining AI stages (categorisation, tools, drafting) are not built yet.
+- **Agent Setup dashboard** (`/agent-setup`) — the only surface built so far. Two-pane knowledge workflow: article library with search, status filters, a 6-slot core-topic checklist and category grouping; a workspace editor with Shopify page/policy import, resync, save/approve/delete, and a dedicated brand-voice workspace. Full state and a11y coverage. "Optimize" is still a local placeholder with no AI behind it.
+- **Knowledge API** (`web/app/api/knowledge/*`) — exercised end-to-end through the real browser UI, not just curl: page import, policy import, edit-converts-to-manual (Resync correctly disappears), and delete.
+- **Shopify sync scripts** — products/metaobjects, customers, orders, promotions, the unified page+policy content catalog, and nightly orchestration.
+- **Email ingestion (agent Phase 1)** — verified against the real `onouailhetas@lap-groupe.com` mailbox: a first pass threaded 34 emails into 20 tickets, a second ingested nothing (cursor idempotency), and the delta cursor persists in `shops.sync_cursors`.
+- **Spam gate pass 1** — the `email_blocklist` check inside the poller; blocking a sender live dropped their 5 messages and purged their stored mail.
+- **Spam audit trail** — every gate decision writes a `spam_audit` row (`kept`/`blocked`, which pass decided, and a one-line reason; `unsure` when the classifier had no confident reason, `failed_open` when a keep was only a fail-open). Needed because dropped mail is never stored, so this is its only trace. `010` is applied and the write path was exercised against the live table: idempotent re-flush, one-line reason collapsing, and the `unsure` default all confirmed, then the test rows removed.
+- **Migrations 001-005, 007-010** applied to dev. `005` exists because `003` was edited after being applied and the live database drifted; the fix was confirmed by direct query, with no data affected.
+
+Built and unit-tested but **not yet run against live services**:
+
+- **Knowledge embeddings** — `text-embedding-3-small` at 1536 dims, gated so only approved non-brand chunks hold vectors, with inline best-effort embedding on approval plus the `embed-knowledge-chunks.mjs` reconciler. Needs `006` applied and a first run with a real `OPENAI_API_KEY`.
+- **Spam gate pass 2** — the LLM classifier (`gpt-4o-mini`, Structured Outputs) on new-conversation mail, which fails open on any error. No real model verdict has been recorded yet, so the reason quality (and how often it answers `unsure`) is still unmeasured.
+
+Not built: dashboard authentication, deployed webhook routes, and the agent's categorisation, tool, and drafting stages. 175 tests pass from the repo root (50 of them the `agent/` worker's). Backend/deploy config is still pending.
 
 ## Next Steps
 
-Recommended next steps:
-
-1. The theme-template resolver fallback (`scripts/lib/knowledge/content-resolvers/theme-template-resolver.mjs`) leaked raw Shopify section-setting tokens (e.g. `accent-color`, `vertical-bottom horizontal-left`) into imported content for at least one real page during testing — its "is this a real text setting" heuristic needs tightening. Only affects pages that fall through to this last-resort resolver (no page-metafield or usable `Page.body`).
-2. Add dashboard authentication, role policies, and human personal-data access logging before exposing any customer data in the UI.
-3. Set up Supabase development and production projects.
-4. Add the remaining support database tables for messages and AI events, and validate the Shopify initial import against dummy development data.
-5. Add application runtime routes that call reusable webhook handlers.
-6. Expand tests, linting, and type checking (the `web/` app has `lint` and `typecheck` scripts; add tests for `web/lib/server/knowledge-service.ts` and component/interaction tests for Agent Setup).
-7. After any future edit to an already-applied migration file, re-run it (or a corrective follow-up migration) against the dev database and verify live — don't just update the `.sql` file, per the `core_topic` drift found and fixed above.
-8. Apply `006_knowledge_chunk_embeddings.sql` to the dev database (confirm the managed pgvector supports HNSW; fall back to `ivfflat` if not), set `OPENAI_API_KEY`, then approve an article and run `npm run embed:knowledge:dry-run` / `npm run embed:knowledge` to exercise the embedding pipeline end-to-end for the first time. Wire up the actual similarity-search retrieval that consumes these vectors (filtering to approved chunks).
-9. Agent worker (Phase 1 ingestion): add the Microsoft Graph app credentials (`MS_GRAPH_TENANT_ID`, `MS_GRAPH_CLIENT_ID`, `MS_GRAPH_CLIENT_SECRET`, `SUPPORT_MAILBOX`) to `.env.local`, then run `npm run ingest:once` inside `agent/` to exercise email ingestion against the live support mailbox (delta poll → threaded tickets in Supabase). Then build Phase 2 (cheap spam/triage gate) onward per `AGENT_INTEGRATION_PLAN.md`.
+1. Apply `006_knowledge_chunk_embeddings.sql` to dev (confirm the managed pgvector supports HNSW; fall back to `ivfflat`), then run `embed:knowledge:dry-run` and `embed:knowledge` on an approved article. Then wire up the similarity search that consumes these vectors, filtered to approved chunks.
+2. Run the LLM spam classifier against live mail, then read `spam_audit` to check its verdicts and reason quality before trusting it — in particular how often it answers `unsure`, and whether any `blocked` row looks like a genuine customer. Then build the agent's next phases per `AGENT_INTEGRATION_PLAN.md` (categorisation, order-context tools, drafting).
+3. Add dashboard authentication, role policies, and human personal-data access logging into `data_access_events` before any customer data is exposed in the UI.
+4. Tighten the theme-template resolver's "is this a real text setting" heuristic — it leaked raw Shopify section-setting tokens (e.g. `accent-color`, `vertical-bottom horizontal-left`) into one imported page during testing. Only affects pages with no page-metafield and no usable `Page.body`.
+5. Set up separate Supabase development and production projects.
+6. Add the remaining support tables for AI events, and deploy runtime webhook routes over reusable handlers.
+7. Expand tests: `web/lib/server/knowledge-service.ts` has none, and Agent Setup has no component or interaction tests.

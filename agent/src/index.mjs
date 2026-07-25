@@ -6,6 +6,7 @@ import { resolveShopId } from './lib/shop.mjs';
 import { createGraphClient } from './ingestion/graph-client.mjs';
 import { createSupabaseTicketStore } from './ingestion/ticket-writer.mjs';
 import { createBlocklistStore } from './ingestion/blocklist-store.mjs';
+import { createSupabaseSpamAuditStore } from './ingestion/spam-audit.mjs';
 import { runDeltaPoll, createSupabaseCursorStore } from './ingestion/delta-poller.mjs';
 import { createOpenAIClient } from './llm/openai-client.mjs';
 import { createSpamClassifier } from './ingestion/spam-classifier.mjs';
@@ -23,6 +24,9 @@ async function main() {
   const store = createSupabaseTicketStore(supabase);
   const cursorStore = createSupabaseCursorStore(supabase);
   const blocklistStore = createBlocklistStore(supabase);
+  // Records why each email passed or failed the gate. Dropped mail is never
+  // written anywhere else, so this is its only trace.
+  const auditStore = createSupabaseSpamAuditStore(supabase);
 
   // LLM spam second pass — enabled only when an OpenAI key is present. Without it,
   // ingestion still runs and just relies on the blocklist.
@@ -45,6 +49,7 @@ async function main() {
       logger,
       spamGate: gate,
       recordSpamHits: (hits) => blocklistStore.recordHits(rulesById, hits),
+      auditStore,
       triage,
       limit
     });

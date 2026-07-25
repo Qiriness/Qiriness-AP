@@ -23,7 +23,9 @@ const SYSTEM_PROMPT = [
   "- \"keep\" : tout message légitime que le support doit voir — questions ou problèmes concernant un produit, une commande ou Qiriness en général ; livraison et retours ; réclamations ; conseils produit ; e-mails B2B financiers ou logistiques (par ex. facture manquante, avis de problème de stock ou d'inventaire) ; propositions d'influenceurs ou de collaboration, y compris candidatures et offres d'emploi (« je suis influenceur/influenceuse dans ce domaine », CV joint, portfolio, etc.).",
   "Indice : un expéditeur au nom d'une personne réelle (prénom + nom) avec une adresse grand public (gmail.com, outlook.com, hotmail.fr, yahoo.fr, etc.) est en général un client — à garder.",
   "Expéditeurs de confiance connus : mailer@shopify.com (notifications Qiriness/Shopify) et les personnes physiques.",
-  "En cas de doute, choisis \"keep\". Ne classe jamais en \"spam\" un e-mail potentiellement authentique d'un client."
+  "En cas de doute, choisis \"keep\". Ne classe jamais en \"spam\" un e-mail potentiellement authentique d'un client.",
+  "Donne toujours un \"reason\" : une seule ligne très courte (12 mots maximum) justifiant l'étiquette.",
+  "Si tu choisis \"keep\" par précaution, sans être réellement certain que l'e-mail est légitime, écris exactement \"unsure\" comme reason."
 ].join('\n');
 
 export function createSpamClassifier(openai, { model, dropLabels = ['spam'], logger, maxBodyChars = 2000 } = {}) {
@@ -44,11 +46,20 @@ export function createSpamClassifier(openai, { model, dropLabels = ['spam'], log
         schemaName: 'spam_classification',
         maxTokens: 200
       });
-      return { spam: drop.has(result.label), label: result.label };
+      // reason and model are carried through for the spam_audit trail: a dropped
+      // email is never stored, so the audit row is the only record of why.
+      return { spam: drop.has(result.label), label: result.label, reason: result.reason, model };
     } catch (error) {
-      // Fail open — a classifier error must never discard a real email.
+      // Fail open — a classifier error must never discard a real email. The reason
+      // says so explicitly, so an audited keep is not mistaken for a judged one.
       logger?.warn?.('triage.error', { message: error.message });
-      return { spam: false, label: 'keep', error: true };
+      return {
+        spam: false,
+        label: 'keep',
+        reason: `classifier error, kept by fail-open: ${error.message}`,
+        model,
+        error: true
+      };
     }
   }
 

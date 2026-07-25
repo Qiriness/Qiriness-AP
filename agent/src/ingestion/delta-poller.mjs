@@ -3,6 +3,7 @@ import { supabaseSelect, supabaseUpdateById } from '../../../scripts/lib/supabas
 import { mapGraphMessage } from './graph-message-mapper.mjs';
 import { writeIngestedMessages } from './ticket-writer.mjs';
 import { allowAllGate } from './spam-gate.mjs';
+import { createAuditCollector } from './spam-audit.mjs';
 
 const MAX_PAGES_PER_RUN = 1000; // safety valve against a pathological pagination loop
 
@@ -13,6 +14,8 @@ const MAX_PAGES_PER_RUN = 1000; // safety valve against a pathological paginatio
 //
 // The deterministic spam gate runs *before* writing, so blocklisted senders are
 // dropped and never stored. recordSpamHits (optional) persists per-rule block counts.
+// auditStore (optional) persists one spam_audit row per gate decision — the only
+// record a dropped email leaves, since it never reaches tickets/ticket_messages.
 export async function runDeltaPoll({
   graphClient,
   store,
@@ -21,6 +24,7 @@ export async function runDeltaPoll({
   logger,
   spamGate = allowAllGate,
   recordSpamHits,
+  auditStore,
   triage,
   limit
 }) {
@@ -30,14 +34,27 @@ export async function runDeltaPoll({
     removed: 0,
     spamBlocked: 0,
     llmSpamFiltered: 0,
+    spamAudited: 0,
     pages: 0
   };
   const hitCounts = new Map();
+  // Decisions from both passes buffer here and are written once per poll; the
+  // ticket writer records the LLM verdicts into the same collector.
+  const audit = createAuditCollector();
   let processed = 0; // emails pulled from Graph and considered this run
 
-  async function flushHits() {
+  async function flush() {
     if (recordSpamHits && hitCounts.size > 0) {
       await recordSpamHits(hitCounts);
+    }
+    if (auditStore && audit.size > 0) {
+      try {
+        totals.spamAudited = await auditStore.flush(shopId, audit.entries());
+      } catch (error) {
+        // Best-effort: losing an audit row must never fail ingestion or, worse,
+        // make a poll retry and re-drop mail. Surfaced in the logs instead.
+        logger?.warn?.('ingest.spam_audit_failed', { shopId, message: error.message });
+      }
     }
   }
 
@@ -63,13 +80,23 @@ export async function runDeltaPoll({
           if (verdict.ruleId) {
             hitCounts.set(verdict.ruleId, (hitCounts.get(verdict.ruleId) || 0) + 1);
           }
+          audit.record({
+            graphMessageId: item.graphMessageId,
+            conversationId: item.conversationId,
+            fromEmail: item.message?.from_email,
+            subject: item.message?.subject,
+            outcome: 'blocked',
+            decidedBy: 'blocklist',
+            reason: verdict.reason,
+            ruleId: verdict.ruleId
+          });
           continue; // spam is dropped here — never written to the database
         }
       }
       kept.push(item);
     }
 
-    const counts = await writeIngestedMessages(store, shopId, kept, { triage });
+    const counts = await writeIngestedMessages(store, shopId, kept, { triage, audit });
     totals.ticketsCreated += counts.ticketsCreated;
     totals.messagesIngested += counts.messagesIngested;
     totals.removed += counts.removed;
@@ -79,19 +106,19 @@ export async function runDeltaPoll({
       // Hit the run budget mid-inbox: stop without advancing the cursor so this
       // stays a repeatable partial test rather than a committed sync position.
       totals.limitReached = true;
-      await flushHits();
+      await flush();
       return totals;
     }
 
     if (deltaLink) {
       await cursorStore.setDeltaLink(shopId, deltaLink);
-      await flushHits();
+      await flush();
       return totals;
     }
     if (!nextLink) {
       // No deltaLink and no nextLink: nothing more to page. Leave the cursor as-is.
       logger?.warn?.('ingest.delta_page_without_links', { shopId });
-      await flushHits();
+      await flush();
       return totals;
     }
     url = nextLink;
