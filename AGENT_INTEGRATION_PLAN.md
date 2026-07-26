@@ -218,14 +218,38 @@ live run pending); every decision is recorded in `spam_audit` with a one-line re
 `irrelevant` handling is designed and agreed but not implemented.
 
 ### Phase 3 — Categorising agent
-**Goal:** fill `category` + `level` and thus the routing decision.
+**Goal:** fill the subject/kind pair and thus the routing decision.
 
-- Category: order question / delivery issue / product question / B2B-invoice-marketing / etc.
-- Level: 1 (question only) · 2 (data lookup) · 3 (state-changing) · 4 (sensitive).
+**Taxonomy — pinned and constrained (`scripts/lib/support-taxonomy.mjs`, migrations 011/012).**
+Two axes stored separately, never composed into one value:
+
+- **Subject** (14, shared with knowledge categories): `order`, `delivery`, `return_exchange`,
+  `product` (incl. advice), `product_stock`, `payment`, `account`, `promotions`,
+  `cosmetovigilance`, `legal_privacy`, `b2b`, `partner_collaboration`, `careers`, `other`.
+  `faq` and `brand_story` are knowledge-only and are **not** valid ticket subjects.
+- **Request kind** (4): `question` · `problem` · `complaint` · `contact`.
+- `secondary_category` + `secondary_request_kind` carry a second subject *with its own kind*,
+  since one email can pair an order problem with a stock question.
+
+Why separate rather than 23 composed values like `order_problem`: the subject is what
+knowledge retrieval filters on (composed values would need stripping every time), and the
+model picks 1-of-14 plus 1-of-4 instead of 1-of-23, which is measurably easier for a
+cheap-tier model. `complaint` is a *kind*, so a delivery complaint is (delivery, complaint) —
+a standalone "complaints" subject would have overlapped every `problem` value.
+
+- **Level is derived, not guessed.** `defaultLevel(subject, kind)` gives the floor; the
+  categoriser may escalate above it but never below (`clampLevel`). Two model-assigned
+  fields on the same "needs action" axis would otherwise be able to contradict each other.
+  `cosmetovigilance` is always 4; a `legal_privacy` problem/complaint is 4; questions needing
+  a data lookup (order, delivery, payment, account, product_stock) are 2, others 1.
+- **Team routing** comes from `defaultTeam(subject)` (Phase 5 consumes it).
 - Restricted to classification only (least-privilege — the brief's "first blocker").
-- Structured output; writes back to the ticket row.
+- Structured output, with the enums built from the taxonomy module so the model cannot
+  return an off-list value; the database check constraints are the second line of defence.
 
-**Exit:** categoriser agrees with human labelling on a review set.
+**Exit:** categoriser agrees with human labelling on a review set. **Blocked on real data:**
+dev holds only internal work mail, so there is no meaningful review set until ingestion runs
+against the real support mailbox.
 
 ### Phase 4 — Tools layer (least-privilege, progressive retrieval)
 **Goal:** the reusable custom tools the agents call. Each queries narrow

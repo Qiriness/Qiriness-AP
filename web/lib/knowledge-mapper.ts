@@ -35,7 +35,7 @@ interface RawSource {
 export function mapArticleResponse(raw: RawArticle): Article {
   const category = KNOWLEDGE_CATEGORIES.includes(raw.category as KnowledgeCategory)
     ? (raw.category as KnowledgeCategory)
-    : "general";
+    : "other";
   const coreTopic = ALL_CORE_TOPICS.includes(raw.coreTopic as CoreTopic)
     ? (raw.coreTopic as CoreTopic)
     : null;

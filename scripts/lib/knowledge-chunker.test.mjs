@@ -27,7 +27,7 @@ test('feature_item sections also produce exactly one chunk', () => {
   const documentRow = {
     id: 'doc-2',
     title: 'Features',
-    category: 'product_information',
+    category: 'product',
     sections: [{ heading: 'Livraison offerte', text, order: 0, unit_type: 'feature_item' }]
   };
 

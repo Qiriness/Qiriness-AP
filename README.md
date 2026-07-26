@@ -55,14 +55,15 @@ Working and verified live against the dev Shopify store and Supabase:
 - **Email ingestion (agent Phase 1)** — verified against the real `onouailhetas@lap-groupe.com` mailbox: a first pass threaded 34 emails into 20 tickets, a second ingested nothing (cursor idempotency), and the delta cursor persists in `shops.sync_cursors`.
 - **Spam gate pass 1** — the `email_blocklist` check inside the poller; blocking a sender live dropped their 5 messages and purged their stored mail.
 - **Spam audit trail** — every gate decision writes a `spam_audit` row (`kept`/`blocked`, which pass decided, and a one-line reason; `unsure` when the classifier had no confident reason, `failed_open` when a keep was only a fail-open). Needed because dropped mail is never stored, so this is its only trace. `010` is applied and the write path was exercised against the live table: idempotent re-flush, one-line reason collapsing, and the `unsure` default all confirmed, then the test rows removed.
-- **Migrations 001-005, 007-010** applied to dev. `005` exists because `003` was edited after being applied and the live database drifted; the fix was confirmed by direct query, with no data affected.
+- **Support taxonomy pinned** — one shared vocabulary in `scripts/lib/support-taxonomy.mjs`: 14 subjects used by *both* knowledge categories and ticket categorisation (so a ticket's subject filters straight into matching knowledge chunks), plus `faq`/`brand_story` as knowledge-only, plus a tickets-only request kind (question/problem/complaint/contact) with a second subject+kind pair for emails spanning two topics. Level is derived from (subject, kind) and the categoriser can only escalate. `011` renamed the 9 existing articles and 54 chunks and constrained the column that had been free text "until the taxonomy is finalised"; `012` did the ticket side. Both applied and constraint enforcement verified live.
+- **Migrations 001-005, 007-012** applied to dev. `005` exists because `003` was edited after being applied and the live database drifted; the fix was confirmed by direct query, with no data affected.
 
 Built and unit-tested but **not yet run against live services**:
 
 - **Knowledge embeddings** — `text-embedding-3-small` at 1536 dims, gated so only approved non-brand chunks hold vectors, with inline best-effort embedding on approval plus the `embed-knowledge-chunks.mjs` reconciler. Needs `006` applied and a first run with a real `OPENAI_API_KEY`.
 - **Spam gate pass 2** — the LLM classifier (`gpt-4o-mini`, Structured Outputs) on new-conversation mail, which fails open on any error. No real model verdict has been recorded yet, so the reason quality (and how often it answers `unsure`) is still unmeasured.
 
-Not built: dashboard authentication, deployed webhook routes, and the agent's categorisation, tool, and drafting stages. 175 tests pass from the repo root (50 of them the `agent/` worker's). Backend/deploy config is still pending.
+Not built: dashboard authentication, deployed webhook routes, and the agent's categorisation, tool, and drafting stages. 201 tests pass from the repo root (50 of them the `agent/` worker's). Backend/deploy config is still pending.
 
 ## Next Steps
 

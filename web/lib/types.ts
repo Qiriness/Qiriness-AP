@@ -16,54 +16,71 @@ export type ArticleStatus =
 export type SyncState = "none" | "syncing" | "synced" | "error";
 
 /**
- * Knowledge category. Mirrors the taxonomy inferred by
- * `scripts/lib/knowledge-categories.mjs` for synced Shopify pages/policies, so
- * manually authored and Shopify-sourced articles share one vocabulary. Stored
- * as loose text on `knowledge_documents` (see APP_SCHEMA.md); this fixed list
- * is the UI's controlled subset of that free-text field.
+ * Knowledge category — the *subject* axis of the shared support taxonomy defined
+ * in `scripts/lib/support-taxonomy.mjs` (kept in sync by
+ * scripts/lib/knowledge-categories.test.mjs). The same 14 subjects are what the
+ * ticket categoriser assigns, so a ticket's subject filters straight into the
+ * matching knowledge chunks with no mapping in between.
+ *
+ * "faq" and "brand_story" are knowledge-only: nobody emails support "an FAQ", and
+ * brand story is drafting context rather than a request. Tickets carry a separate
+ * request_kind (question / problem / complaint / contact) — an article is reference
+ * material and has no kind, which is why that axis lives only on tickets.
  */
 export type KnowledgeCategory =
-  | "faq"
-  | "shipping_delivery"
-  | "returns_refunds"
-  | "privacy"
-  | "product_information"
-  | "brand_story"
-  | "legal"
-  | "payments"
+  | "order"
+  | "delivery"
+  | "return_exchange"
+  | "product"
+  | "product_stock"
+  | "payment"
+  | "account"
   | "promotions"
-  | "b2b_partnerships"
-  | "stock"
-  | "general";
+  | "cosmetovigilance"
+  | "legal_privacy"
+  | "b2b"
+  | "partner_collaboration"
+  | "careers"
+  | "other"
+  | "faq"
+  | "brand_story";
 
 export const CATEGORY_LABELS: Record<KnowledgeCategory, string> = {
-  faq: "FAQ",
-  shipping_delivery: "Shipping & delivery",
-  returns_refunds: "Returns & refunds",
-  privacy: "Privacy",
-  product_information: "Product information",
-  brand_story: "Brand story",
-  legal: "Legal",
-  payments: "Payments",
+  order: "Orders",
+  delivery: "Delivery",
+  return_exchange: "Returns & exchanges",
+  product: "Product information & advice",
+  product_stock: "Product stock",
+  payment: "Payments",
+  account: "Accounts",
   promotions: "Promotions",
-  b2b_partnerships: "B2B & partnerships",
-  stock: "Stock",
-  general: "General",
+  cosmetovigilance: "Cosmetovigilance",
+  legal_privacy: "Legal & privacy",
+  b2b: "B2B",
+  partner_collaboration: "Partnerships & collaborations",
+  careers: "Careers",
+  other: "Other",
+  faq: "FAQ",
+  brand_story: "Brand story",
 };
 
 export const KNOWLEDGE_CATEGORIES: KnowledgeCategory[] = [
-  "faq",
-  "shipping_delivery",
-  "returns_refunds",
-  "privacy",
-  "product_information",
-  "brand_story",
-  "legal",
-  "payments",
+  "order",
+  "delivery",
+  "return_exchange",
+  "product",
+  "product_stock",
+  "payment",
+  "account",
   "promotions",
-  "b2b_partnerships",
-  "stock",
-  "general",
+  "cosmetovigilance",
+  "legal_privacy",
+  "b2b",
+  "partner_collaboration",
+  "careers",
+  "other",
+  "faq",
+  "brand_story",
 ];
 
 /**
@@ -93,11 +110,12 @@ export const CORE_TOPIC_LABELS: Record<CoreTopic, string> = {
 
 /** Sensible default category to pre-fill when starting an article from a core-topic slot. */
 export const CORE_TOPIC_DEFAULT_CATEGORY: Record<CoreTopic, KnowledgeCategory> = {
-  order_policies: "legal",
+  order_policies: "order",
   brand: "brand_story",
-  confidentiality: "privacy",
-  delivery_returns: "shipping_delivery",
-  locations: "general",
+  confidentiality: "legal_privacy",
+  // The slot combines delivery and returns; "delivery" is the more common half.
+  delivery_returns: "delivery",
+  locations: "other",
   faqs: "faq",
 };
 
