@@ -224,7 +224,38 @@ test('a ticket with no inbound message is skipped, not guessed at', async () => 
     shopId: 'shop'
   });
   assert.equal(counts.skipped, 1);
-  assert.equal(store.updates.length, 0);
+  // No labels invented...
+  assert.ok(!('category' in store.updates[0].patch));
+});
+
+test('a skipped ticket leaves the pending queue instead of blocking it', async () => {
+  // It would otherwise sit at the front of an oldest-first batch on every pass,
+  // forever. Safe to clear because ingestion re-raises the flag as soon as a
+  // customer message joins the thread — the only event that makes it
+  // classifiable at all.
+  const store = fakeStore({ tickets: [ticket()], messages: {} });
+  await runCategorisation({ store, categorise: async () => assert.fail(), shopId: 'shop' });
+  assert.equal(store.updates.length, 1);
+  assert.equal(store.updates[0].patch.needs_categorisation, false);
+});
+
+test('a thread of only our own replies never reaches the model', async () => {
+  // findInboundMessages filters direction, so an outbound-only thread arrives
+  // here as an empty list. Spending a model call on text the team wrote would be
+  // both wasteful and wrong — happiness would read our tone, not the customer's.
+  const store = fakeStore({ tickets: [ticket()], messages: { t1: [] } });
+  let called = false;
+  const counts = await runCategorisation({
+    store,
+    categorise: async () => {
+      called = true;
+      return verdict();
+    },
+    shopId: 'shop'
+  });
+  assert.equal(called, false);
+  assert.equal(counts.skipped, 1);
+  assert.equal(counts.categorised, 0);
 });
 
 test('a failure leaves the ticket pending and counts the attempt', async () => {

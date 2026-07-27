@@ -50,8 +50,17 @@ export async function runCategorisation({
   for (const ticket of pending) {
     const messages = await store.findInboundMessages(ticket.id, MESSAGES_PER_TICKET);
     if (messages.length === 0) {
-      // Nothing from the customer yet (an outbound-only thread): there is
-      // nothing to classify, so leave it pending rather than guessing.
+      // Nothing from the customer (a thread where we hold only our own replies,
+      // because the customer's original fell outside the ingested window). There
+      // is nothing to classify, so the ticket is not guessed at — but the flag
+      // IS cleared, because leaving it pending parks it at the front of an
+      // oldest-first batch for good. Measured on a real inbox, 11 such tickets
+      // took 11 of every 25 slots on every pass, and they accumulate.
+      //
+      // Safe to clear precisely because it is not permanent: ingestion re-raises
+      // the flag the moment an inbound message joins the thread, which is the
+      // only event that makes this ticket classifiable.
+      await store.updateTicket(ticket.id, { needs_categorisation: false });
       counts.skipped += 1;
       continue;
     }
