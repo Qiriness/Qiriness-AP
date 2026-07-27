@@ -17,14 +17,14 @@
 // call leaves the ticket uncategorised so it is retried. Only the runner, after
 // repeated failures, falls back — and it falls back *towards a human*.
 //
-// It also reads three signals off the same email — confidence, reply language and
-// customer happiness — because it has already paid to read the text; see
+// It also reads two signals off the same email — the reply language and the
+// customer's happiness — because it has already paid to read the text; see
 // SIGNALS_PROMPT. They qualify the ticket rather than classify it.
 //
 // Stateless by design: re-categorising a thread that has grown calls exactly this
 // function again with the fuller thread, and it is never shown the labels it
 // produced last time. Anchoring the model on its own previous answer would make
-// it defend a first call that may well have been wrong (the same reason the human
+// it defend a first call that may well have been wrong (the same reason the
 // human review set is labelled blind). Stability is bought in the runner instead,
 // where the level ratchet stops a re-run walking a ticket backwards.
 
@@ -32,7 +32,6 @@ import {
   TICKET_SUBJECTS,
   REQUEST_KINDS,
   CONTACT_ONLY_SUBJECTS,
-  CONFIDENCE_LEVELS,
   REPLY_LANGUAGES,
   HAPPINESS_SCORES,
   defaultLevel,
@@ -55,10 +54,17 @@ const CATEGORISATION_SCHEMA = {
     secondary_request_kind: { type: ['string', 'null'], enum: [...REQUEST_KINDS, null] },
     // enum, not minimum/maximum — strict mode does not support numeric bounds.
     level: { type: 'integer', enum: [1, 2, 3, 4] },
-    // Three signals about the ticket rather than classifications of it. They ride
+    // Two signals about the ticket rather than classifications of it. They ride
     // along on this call because the model has already read the email: asking
-    // separately would triple the cost to re-read the same text.
-    confidence: { type: 'string', enum: [...CONFIDENCE_LEVELS] },
+    // separately would double the cost to re-read the same text.
+    //
+    // There is deliberately no `confidence` field. It was asked for and came back
+    // `high` on 171 of 171 real tickets and 40 of 40 review cases — Structured
+    // Outputs emits fields in order, so the model rated an answer it had already
+    // committed to, in the same forward pass, with nothing pushing it toward
+    // calibration. A field that is constant carries no information and invites
+    // exactly the wrong decision downstream. tickets.categorisation_confidence
+    // survives, but only the runner's failure paths write it (see there).
     language: { type: 'string', enum: [...REPLY_LANGUAGES] },
     happiness: { type: 'integer', enum: [...HAPPINESS_SCORES] },
     reason: { type: 'string' }
@@ -69,7 +75,6 @@ const CATEGORISATION_SCHEMA = {
     'secondary_category',
     'secondary_request_kind',
     'level',
-    'confidence',
     'language',
     'happiness',
     'reason'
@@ -116,7 +121,7 @@ const KIND_TIEBREAKER = [
   "- Un compliment ou un remerciement n'est jamais un complaint : utilise question."
 ].join('\n');
 
-// The three per-ticket signals. Kept as their own block because they answer
+// The per-ticket signals. Kept as their own block because they answer
 // "what else does the next stage need to know about this email", not "what is
 // this email about" — and because the happiness scale is the one place the model
 // is explicitly told NOT to let its judgement leak into the level.
@@ -131,13 +136,7 @@ const SIGNALS_PROMPT = [
   "- 3 : mécontentement exprimé — agacement, déception, impatience, reproche, « c'est décevant », « je suis déçue », relance polie mais sèche.",
   '- 4 : très mécontent — le client dit que la situation est inacceptable, menace de ne plus commander, parle de mauvaise expérience générale, exige une réponse, ou signale qu\'il a déjà écrit plusieurs fois sans réponse.',
   "Un client qui relance pour la deuxième ou troisième fois sans avoir eu de réponse est au minimum 3, et 4 s'il le reproche explicitement.",
-  "IMPORTANT : happiness et level sont indépendants. Un client furieux qui demande seulement où est son colis reste un level 2 : sa colère se met dans happiness, pas dans level. À l'inverse un client parfaitement aimable qui demande un remboursement est un level 3 avec un happiness 2.",
-  '',
-  "Confiance (confidence) : à quel point tu es sûr du couple (category, request_kind) que tu viens de choisir.",
-  "- high : l'e-mail est explicite, un humain classerait pareil sans hésiter.",
-  '- medium : le classement est raisonnable mais un autre sujet ou un autre type se défendrait.',
-  "- low : l'e-mail est ambigu, très court, incompréhensible, ou tu hésites réellement entre deux classements.",
-  "Sois honnête : un low est utile, il fait relire le ticket par un humain. Ne mets pas high par défaut."
+  "IMPORTANT : happiness et level sont indépendants. Un client furieux qui demande seulement où est son colis reste un level 2 : sa colère se met dans happiness, pas dans level. À l'inverse un client parfaitement aimable qui demande un remboursement est un level 3 avec un happiness 2."
 ].join('\n');
 
 const SYSTEM_PROMPT = [
@@ -189,7 +188,7 @@ const SYSTEM_PROMPT = [
 export function createCategoriser(openai, { model, maxBodyChars = 3000 } = {}) {
   /**
    * @param {{subject?: string, messages: Array<{subject?: string, body_text?: string, received_at?: string}>}} input
-   * @returns {Promise<{category, request_kind, secondary_category, secondary_request_kind, level, responsible_team, confidence, language, happiness, reason, model}>}
+   * @returns {Promise<{category, request_kind, secondary_category, secondary_request_kind, level, responsible_team, language, happiness, reason, model}>}
    */
   async function categorise(input) {
     const raw = await openai.completeJson({
@@ -236,12 +235,9 @@ export function normaliseCategorisation(raw = {}) {
     level: Math.max(primaryLevel, secondaryFloor),
     // Routing follows the primary subject; Phase 5 consumes this.
     responsible_team: defaultTeam(category),
-    // An unusable answer is recorded as `low`, never as a confident one — same
-    // direction as the requestKind fallback above: when in doubt, involve a human.
-    confidence: CONFIDENCE_LEVELS.includes(raw.confidence) ? raw.confidence : 'low',
-    // Null rather than a default for the other two: "we do not know what language
-    // this is" is a real state the drafting agent must handle, and defaulting to
-    // fr (or to a neutral 2) would hide it behind a value that looks measured.
+    // Null rather than a default: "we do not know what language this is" is a
+    // real state the drafting agent must handle, and defaulting to fr (or to a
+    // neutral 2) would hide it behind a value that looks measured.
     language: REPLY_LANGUAGES.includes(raw.language) ? raw.language : null,
     happiness: HAPPINESS_SCORES.includes(raw.happiness) ? raw.happiness : null,
     reason: typeof raw.reason === 'string' ? raw.reason : null

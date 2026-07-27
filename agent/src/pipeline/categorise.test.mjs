@@ -5,7 +5,6 @@ import { createCategoriser, normaliseCategorisation } from './categorise.mjs';
 import {
   TICKET_SUBJECTS,
   REQUEST_KINDS,
-  CONFIDENCE_LEVELS,
   REPLY_LANGUAGES,
   HAPPINESS_SCORES
 } from '../../../scripts/lib/support-taxonomy.mjs';
@@ -26,7 +25,6 @@ const answer = (overrides = {}) => ({
   secondary_category: null,
   secondary_request_kind: null,
   level: 1,
-  confidence: 'high',
   language: 'fr',
   happiness: 2,
   reason: 'demande de statut de commande',
@@ -47,7 +45,6 @@ test('the schema enums are built from the taxonomy, so the model cannot answer o
   assert.ok(captured.schema.properties.secondary_category.enum.includes(null));
   assert.deepEqual(captured.schema.required.sort(), [
     'category',
-    'confidence',
     'happiness',
     'language',
     'level',
@@ -61,27 +58,37 @@ test('the schema enums are built from the taxonomy, so the model cannot answer o
 test('the signal enums are built from the taxonomy too', async () => {
   const captured = {};
   await createCategoriser(fakeOpenAI(answer(), captured), { model: 'm' }).categorise(input());
-  assert.deepEqual(captured.schema.properties.confidence.enum, CONFIDENCE_LEVELS);
   assert.deepEqual(captured.schema.properties.language.enum, REPLY_LANGUAGES);
   assert.deepEqual(captured.schema.properties.happiness.enum, HAPPINESS_SCORES);
 });
 
-test('the three signals are carried through when the model answers well', async () => {
+test('the signals are carried through when the model answers well', async () => {
   const { categorise } = createCategoriser(
-    fakeOpenAI(answer({ confidence: 'medium', language: 'en', happiness: 4 })),
+    fakeOpenAI(answer({ language: 'en', happiness: 4 })),
     { model: 'm' }
   );
   const result = await categorise(input());
-  assert.equal(result.confidence, 'medium');
   assert.equal(result.language, 'en');
   assert.equal(result.happiness, 4);
 });
 
-test('an unusable confidence reads as low, never as high', () => {
-  // Same direction as the request_kind fallback: a answer we could not read must
-  // pull a human in, so it can never be recorded as a confident one.
-  assert.equal(normaliseCategorisation(answer({ confidence: 'très sûr' })).confidence, 'low');
-  assert.equal(normaliseCategorisation({}).confidence, 'low');
+test('the model is never asked how confident it is', async () => {
+  // It was, once, and answered `high` on 171 of 171 real tickets and 40 of 40
+  // review cases: Structured Outputs emits fields in order, so it rated an answer
+  // it had already committed to. A constant field carries no information, and a
+  // constant field called "confidence" invites exactly the wrong decision
+  // downstream. tickets.categorisation_confidence is now written only by the
+  // runner's failure paths.
+  const captured = {};
+  await createCategoriser(fakeOpenAI(answer(), captured), { model: 'm' }).categorise(input());
+  assert.equal(Object.hasOwn(captured.schema.properties, 'confidence'), false);
+  assert.equal(captured.schema.required.includes('confidence'), false);
+  assert.doesNotMatch(captured.system, /confiance|confidence/i);
+  // ... and a stray value from the model is not carried through either.
+  assert.equal(
+    Object.hasOwn(normaliseCategorisation(answer({ confidence: 'high' })), 'confidence'),
+    false
+  );
 });
 
 test('an unusable language or happiness is null, not a fabricated default', () => {

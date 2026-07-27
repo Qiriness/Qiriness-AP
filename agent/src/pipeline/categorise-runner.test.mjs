@@ -74,19 +74,22 @@ test('writes both axes, the level and the team back to the ticket', async () => 
   assert.equal(patch.metadata.categorisation.reason, 'colis non livré');
 });
 
-test('writes the three signals and takes the ticket out of the pending set', async () => {
+test('writes the signals and takes the ticket out of the pending set', async () => {
   const store = fakeStore({
     tickets: [ticket()],
     messages: { t1: [{ body_text: 'Where is my parcel?' }] }
   });
   await runCategorisation({
     store,
-    categorise: async () => verdict({ confidence: 'medium', language: 'en', happiness: 3 }),
+    categorise: async () => verdict({ language: 'en', happiness: 3 }),
     shopId: 'shop'
   });
 
   const { patch } = store.updates[0];
-  assert.equal(patch.categorisation_confidence, 'medium');
+  // Cleared on success: the column means "known untrustworthy", and a ticket that
+  // has just been read cleanly carries no such caveat. Clearing it also stops a
+  // `low` left by an earlier failure from following the ticket forever.
+  assert.equal(patch.categorisation_confidence, null);
   assert.equal(patch.language, 'en');
   assert.equal(patch.happiness, 3);
   assert.equal(patch.needs_categorisation, false);

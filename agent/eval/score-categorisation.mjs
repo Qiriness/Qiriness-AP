@@ -38,7 +38,6 @@ export function scoreCase(testCase, result) {
       secondary_category: result.secondary_category,
       secondary_request_kind: result.secondary_request_kind,
       level: result.level,
-      confidence: result.confidence,
       language: result.language,
       happiness: result.happiness,
       reason: result.reason
@@ -90,34 +89,8 @@ export function summarise(scores) {
       wrong: count((s) => s.secondary.status === 'wrong'),
       spurious: count((s) => s.secondary.status === 'spurious')
     },
-    expectedSecondaries: expectedSecondaries.length,
-    confidence: calibration(scores)
+    expectedSecondaries: expectedSecondaries.length
   };
-}
-
-/**
- * Accuracy WITHIN each confidence band — the only thing that says whether the
- * self-reported confidence carries information. The signal is useful if `high`
- * scores meaningfully better than `low`; if the bands are flat, the model is
- * just labelling everything high and Phase 5 must not gate drafting on it.
- *
- * Unscored on purpose: there is no "correct" confidence for a case, so this is a
- * diagnostic, never a pass/fail axis.
- */
-export function calibration(scores) {
-  const bands = new Map();
-  for (const score of scores) {
-    if (score.error) continue;
-    const band = score.actual.confidence || 'unknown';
-    const seen = bands.get(band) || { of: 0, exact: 0 };
-    seen.of += 1;
-    if (score.exact) seen.exact += 1;
-    bands.set(band, seen);
-  }
-  // Fixed order, so two runs are read side by side rather than re-sorted.
-  return ['high', 'medium', 'low', 'unknown']
-    .filter((band) => bands.has(band))
-    .map((band) => ({ band, ...bands.get(band) }));
 }
 
 /** Which confusions actually happened, most frequent first — what to fix next. */

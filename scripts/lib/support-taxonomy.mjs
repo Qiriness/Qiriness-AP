@@ -61,10 +61,23 @@ export const CONTACT_ONLY_SUBJECTS = ['b2b', 'partner_collaboration', 'careers']
 // per vocabulary is the whole point of this module.
 
 /**
- * How sure the categoriser is of the (subject, kind) pair it just produced.
- * Measured agreement with human labelling on real mail sits near 77% on the
- * subject, so a stored label is not self-evidently right and nothing else in the
- * row says which ones to distrust. Phase 5 gates auto-drafting on `high`.
+ * A marker that a ticket's labels are known to be untrustworthy — NOT a model
+ * self-assessment.
+ *
+ * It began as one: the categoriser was asked how sure it was. It answered `high`
+ * on 171 of 171 real tickets and 40 of 40 review cases, because Structured
+ * Outputs emits fields in order, so the model was rating an answer it had already
+ * committed to, in the same forward pass, with nothing pushing it toward
+ * calibration. A constant field carries no information, so the question was
+ * dropped.
+ *
+ * Only `low` is written today, and only by the runner's failure paths: a
+ * categorisation that exhausted its retries, or stale labels on a ticket whose
+ * re-categorisation errored. Those are cases where we genuinely know better. A
+ * successfully categorised ticket is null. `high` and `medium` remain permitted
+ * by the database constraint but nothing writes them; they are kept so a future
+ * calibrated signal (sampling for agreement, or token logprobs) can land here
+ * without a migration.
  */
 export const CONFIDENCE_LEVELS = ['high', 'medium', 'low'];
 

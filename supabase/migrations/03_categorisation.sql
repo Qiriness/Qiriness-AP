@@ -118,9 +118,10 @@ alter table public.tickets
   add constraint tickets_secondary_pair_check check (
     secondary_request_kind is null or secondary_category is not null
   ),
-  -- How sure the categoriser was of the pair it produced. Measured subject
-  -- agreement with human labelling is ~77%, so roughly one ticket in four is
-  -- mislabelled and nothing else in the row says which: this is that signal.
+  -- A marker that the labels are known to be untrustworthy, NOT a model
+  -- self-assessment: only `low` is written, and only when categorisation failed.
+  -- `high`/`medium` stay permitted so a future calibrated signal can land here
+  -- without a migration. See the column comment.
   add constraint tickets_categorisation_confidence_check check (
     categorisation_confidence is null
       or categorisation_confidence in ('high', 'medium', 'low')
@@ -169,7 +170,7 @@ comment on column public.tickets.categorised_at is
   'When the current labels were written. Distinct from updated_at, which any other write also moves, so this is what tells you how stale a label is relative to last_message_at.';
 
 comment on column public.tickets.categorisation_confidence is
-  'How sure the categoriser was of (category, request_kind): high, medium or low. Stored because measured subject agreement with human labelling on real mail is ~77% -- a label is not self-evidently right, and this is the only field that says which ones to distrust. Phase 5 gates auto-drafting on high. Low is also the fallback when the model returns an unusable value, so an unreadable answer is never recorded as a confident one.';
+  'Marker that this ticket''s labels are known to be untrustworthy. NOT a model self-assessment: the categoriser was originally asked how sure it was and answered "high" on 171 of 171 real tickets and 40 of 40 review cases, because Structured Outputs emits fields in order, so it was rating an answer it had already committed to in the same forward pass. A constant field carries no information, so the question was dropped. Today only "low" is written, and only by the categoriser''s failure paths: a categorisation that exhausted its retries, or stale labels on a ticket whose re-categorisation errored. A successfully categorised ticket is NULL. "high" and "medium" remain permitted by the constraint but nothing writes them -- they are kept so a future calibrated signal (sampling for agreement, or token logprobs) can land here without a migration.';
 
 comment on column public.tickets.language is
   'Language the reply should be written in (fr, en, es, de, it, nl, pt, other), read from the customer''s own message by the categoriser. The mailbox is mostly French but not exclusively, and the drafting agent needs this before it writes a word. ''other'' means the desk cannot answer natively -- route to a human rather than guessing.';

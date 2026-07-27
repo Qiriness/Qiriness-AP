@@ -87,7 +87,13 @@ export async function runCategorisation({
       secondary_request_kind: result.secondary_request_kind,
       level,
       responsible_team: result.responsible_team,
-      categorisation_confidence: result.confidence,
+      // Cleared, not set: the column now means "these labels are known to be
+      // untrustworthy", written only by the failure paths below. A successful
+      // categorisation has no such caveat, and leaving a stale `low` here would
+      // keep flagging a ticket that has since been read cleanly.
+      //
+      // The model is no longer asked how sure it is — see categorise.mjs.
+      categorisation_confidence: null,
       language: result.language,
       happiness: result.happiness,
       categorised_at: new Date().toISOString(),

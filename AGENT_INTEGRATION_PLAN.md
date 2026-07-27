@@ -336,13 +336,65 @@ columns/tables — never full scans (per `AGENTS.md`).
   never synced; fetch it live from Shopify only when a task requires it, gated.
 - **Order lookup** (by resolved order number → orders + linked customer/RFM).
 - **Customer/CRM lookup** (order count, RFM group, registered name).
-- **Tracking-number tool** (from `orders.fulfillments`).
+- **Tracking-number tool** (from `orders.fulfillments`). See the open question below —
+  whether this tool can report what the parcel is *doing*, or only what its number is,
+  depends on data we have not yet checked.
 - **Knowledge retrieval** (reuse existing embeddings for product questions — no order
   number needed).
 - Tools with side effects (any Level 3/4 action, sending mail) are **gated** — the Tool
   Runner returns a "needs approval" result instead of executing.
 
 **Exit:** each tool has typed inputs/outputs, error handling, and audit logging.
+
+#### Open question — live parcel status (raised 2026-07-27, not yet investigated)
+
+**Can the agent find out what a parcel is actually doing, not just what its tracking number
+is?** This is the single largest lever on the level 2/3 error class, and it is *not* a
+prompt problem — with parcel status the decision stops being a model judgement and becomes
+arithmetic over data, which is how `level` is meant to work.
+
+Measured evidence for why it matters: on the 30-email review set, 4 of the 7 level
+disagreements are the same shape — human `delivery/problem` L3, agent L2 — and the human
+notes each say some version of *"requires someone to intervene"*. The agent read "look up
+the tracking and reply"; the reviewer knew the parcel was stuck. Neither can be right
+without knowing the parcel's state.
+
+What the rule would be, given a status:
+
+| Customer says | Parcel status | Level |
+|---|---|---|
+| "where is my parcel?" | `IN_TRANSIT`, recently scanned | 2 — answer with tracking, no human |
+| "where is my parcel?" | `IN_TRANSIT`, no movement for ~10+ days | 3 — someone must chase the carrier |
+| "never arrived" | `DELIVERED` | 3 — investigation, possible resend |
+| "never arrived" | `ATTEMPTED_DELIVERY` / `NOT_DELIVERED` / `FAILURE` | 3 — needs intervention |
+
+The stale-in-transit case is pure arithmetic on `in_transit_at`; no model call involved.
+
+**What is already synced.** `shopify-order-mapper.mjs` maps each fulfillment into
+`orders.fulfillments` with `status`, `display_status`, `in_transit_at`, `delivered_at`,
+`estimated_delivery_at` and `tracking_info[] { number, company, url }`. Shopify's
+`displayStatus` enum already covers `IN_TRANSIT`, `OUT_FOR_DELIVERY`, `DELIVERED`,
+`ATTEMPTED_DELIVERY`, `NOT_DELIVERED`, `FAILURE`. If those are populated, the tool is a
+small read over data we already hold and costs nothing new.
+
+**The unknown.** Those fields are only filled when the carrier or shipping app pushes
+fulfillment events into Shopify. If it only writes a tracking number at dispatch,
+`display_status` stays `FULFILLED` and the timestamps stay null forever. The dev store
+cannot answer this — its orders are test data (`tracking_info.number` is literally
+`"TEST"`, all status timestamps null).
+
+**How to settle it:** open a recently shipped *production* order in Shopify admin. A live
+status ("In transit", "Delivered") means the data is already there. Just "Fulfilled" plus a
+tracking link means it is not, and status lives only at the carrier.
+
+**If Shopify does not have it**, roughly in order of preference:
+- **Carrier APIs directly** — La Poste/Colissimo, Chronopost, Mondial Relay, DHL all
+  publish tracking APIs. Free and accurate, but one integration per carrier; note
+  `deret.fr` appears in the support inbox, so a logistics partner may sit in the chain.
+- **An aggregator** (AfterShip, 17track, EasyPost) — one API across carriers, free tiers
+  around 100 shipments/month. This sends tracking numbers to a third-party processor, so it
+  needs documenting under `SHOPIFY_PERSONAL_DATA_PROTECTION.md` before use.
+- **Neither** — keep routing these to a human, which is today's behaviour.
 
 ### Phase 5 — Response generation + level-gated automation & team routing
 **Goal:** turn a categorised ticket into the right action.
