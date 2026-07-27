@@ -1,6 +1,29 @@
--- Consolidated Supabase schema for Qiriness Shopify support operations.
--- Shopify remains the source of truth; this database stores operational snapshots
--- for sync, dashboard, and AI context.
+-- ============================================================================
+-- 01 — CORE SCHEMA
+-- Everything the support platform needs before the spam filter exists: the
+-- Shopify operational snapshots, the knowledge library, the compliance/audit
+-- tables, and the email ticketing tables.
+--
+-- BASELINE, NOT A PATCH. These three files describe the schema as it should be,
+-- not the order it was historically built in. Run them in order against an empty
+-- database:
+--     01_core_schema.sql  ->  02_spam_filter.sql  ->  03_categorisation.sql
+-- The order is load-bearing: 03 constrains and extends tables created here, and
+-- 02's spam_audit references email_blocklist, which 02 itself creates.
+--
+-- They are NOT idempotent — re-running one against a database that already has
+-- these objects will error. That is deliberate: guarding every statement with
+-- `if not exists` would have obscured the schema this file exists to document.
+--
+-- Shopify stays the source of truth for products, variants, customers, orders,
+-- fulfilments and refunds. Everything here is an operational snapshot for sync,
+-- dashboard and AI context.
+--
+-- Two columns are deliberately left undocumented and unconstrained here because
+-- 03 owns them: knowledge_documents.category / knowledge_chunks.category (the
+-- shared support taxonomy) and tickets.category / .level / .secondary_category
+-- (the ticket axes). They are created here, given meaning there.
+-- ============================================================================
 
 create extension if not exists pgcrypto;
 create extension if not exists vector;
@@ -38,6 +61,10 @@ as $$
     )
   end;
 $$;
+
+-- ============================================================================
+-- Shopify operational snapshots
+-- ============================================================================
 
 create table public.shops (
   id uuid primary key default gen_random_uuid(),
@@ -349,6 +376,96 @@ create table public.shopify_metaobjects (
   )
 );
 
+-- Promotion metadata needed for support lookup and manual filtering. Customer
+-- targeting details, customer IDs, emails and phone numbers are never stored.
+create table public.promotions (
+  id uuid primary key default gen_random_uuid(),
+  shop_id uuid not null references public.shops(id) on delete cascade,
+  shopify_discount_node_id text not null,
+  shopify_redeem_code_id text,
+  promotion_key text not null,
+  title text not null,
+  code text,
+  method text not null,
+  discount_type text not null,
+  status text,
+  summary text,
+  short_summary text,
+  starts_at timestamptz,
+  ends_at timestamptz,
+  usage_limit integer,
+  discount_usage_count integer,
+  code_usage_count integer,
+  applies_once_per_customer boolean,
+  discount_classes text[] not null default '{}',
+  combines_with jsonb not null default '{}'::jsonb,
+  source_app_name text,
+  rule_snapshot jsonb not null default '{}'::jsonb,
+  source_metadata jsonb not null default '{}'::jsonb,
+  synced_at timestamptz not null default now(),
+  shopify_created_at timestamptz,
+  shopify_updated_at timestamptz,
+  raw_shopify_payload jsonb not null default '{}'::jsonb,
+  deleted_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+
+  constraint promotions_promotion_key_unique unique (shop_id, promotion_key),
+  constraint promotions_method_check check (
+    method in ('code', 'automatic')
+  ),
+  constraint promotions_usage_limit_check check (
+    usage_limit is null or usage_limit >= 0
+  ),
+  constraint promotions_discount_usage_count_check check (
+    discount_usage_count is null or discount_usage_count >= 0
+  ),
+  constraint promotions_code_usage_count_check check (
+    code_usage_count is null or code_usage_count >= 0
+  ),
+  constraint promotions_combines_with_object_check check (
+    jsonb_typeof(combines_with) = 'object'
+  ),
+  constraint promotions_rule_snapshot_object_check check (
+    jsonb_typeof(rule_snapshot) = 'object'
+  ),
+  constraint promotions_source_metadata_object_check check (
+    jsonb_typeof(source_metadata) = 'object'
+  ),
+  constraint promotions_raw_payload_object_check check (
+    jsonb_typeof(raw_shopify_payload) = 'object'
+  )
+);
+
+-- ============================================================================
+-- Knowledge library
+--
+-- Nothing auto-syncs into knowledge_documents: a row is only ever created by an
+-- explicit import or a manually written article. Editing an imported article
+-- converts source_type to 'manual', which is what stops it from resyncing --
+-- there is no separate "locally modified" flag.
+-- ============================================================================
+
+-- Identity-only index of live Shopify pages and policies, used to populate the
+-- Agent Setup source dropdown. Content is resolved on demand at import time.
+create table public.shopify_content_sources (
+  id uuid primary key default gen_random_uuid(),
+  shop_id uuid not null references public.shops(id) on delete cascade,
+  source_type text not null,
+  shopify_source_id text not null,
+  handle text not null,
+  title text not null,
+  status text not null default 'unpublished',
+  shopify_updated_at timestamptz,
+  synced_at timestamptz not null default now(),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+
+  constraint shopify_content_sources_shop_source_unique unique (shop_id, source_type, shopify_source_id),
+  constraint shopify_content_sources_source_type_check check (source_type in ('shopify_page', 'shopify_policy')),
+  constraint shopify_content_sources_status_check check (status in ('published', 'unpublished'))
+);
+
 create table public.knowledge_documents (
   id uuid primary key default gen_random_uuid(),
   shop_id uuid not null references public.shops(id) on delete cascade,
@@ -358,12 +475,17 @@ create table public.knowledge_documents (
   title text not null,
   url_path text,
   navigation_area text,
+  -- Constrained to the shared support taxonomy in 03.
   category text,
   locale text not null default 'fr',
   status text,
+  content_html text,
   content_text text not null,
   sections jsonb not null default '[]'::jsonb,
   content_hash text not null,
+  approval_status text not null default 'draft',
+  core_topic text,
+  voice_profile jsonb not null default '{}'::jsonb,
   synced_at timestamptz not null default now(),
   shopify_updated_at timestamptz,
   source_metadata jsonb not null default '{}'::jsonb,
@@ -379,20 +501,47 @@ create table public.knowledge_documents (
   ),
   constraint knowledge_documents_source_metadata_object_check check (
     jsonb_typeof(source_metadata) = 'object'
+  ),
+  constraint knowledge_documents_approval_status_check check (
+    approval_status in ('draft', 'in_review', 'approved', 'needs_optimization')
+  ),
+  -- Six slots, with delivery and returns combined into one. The app's CoreTopic
+  -- type is the other copy of this list; they must agree or saving an article
+  -- into a slot fails with a check violation.
+  constraint knowledge_documents_core_topic_check check (
+    core_topic is null or core_topic in (
+      'order_policies',
+      'brand',
+      'confidentiality',
+      'delivery_returns',
+      'locations',
+      'faqs'
+    )
   )
 );
 
+-- Retrieval chunks generated from knowledge_documents sections.
+--
+-- Determinism: a vector is stored with the exact composed-input hash, model and
+-- dimension count it was produced for, so re-running the embedder over unchanged
+-- content is a no-op. Only chunks whose parent document is approved and is not
+-- the brand-voice document ever hold a vector -- the pipeline gates on that.
 create table public.knowledge_chunks (
   id uuid primary key default gen_random_uuid(),
   knowledge_document_id uuid not null references public.knowledge_documents(id) on delete cascade,
   chunk_index integer not null,
   section_index integer,
   section_heading text,
+  -- Denormalised from the parent document; constrained with it in 03.
   category text,
   chunk_text text not null,
   token_count integer,
   content_hash text not null,
-  embedding vector,
+  embedding vector(1536),
+  embedding_model text,
+  embedding_dimensions integer,
+  embedded_input_hash text,
+  embedded_at timestamptz,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
 
@@ -403,8 +552,15 @@ create table public.knowledge_chunks (
   ),
   constraint knowledge_chunks_token_count_check check (
     token_count is null or token_count >= 0
+  ),
+  constraint knowledge_chunks_embedding_dimensions_check check (
+    embedding_dimensions is null or embedding_dimensions = 1536
   )
 );
+
+-- ============================================================================
+-- Integration, compliance and audit
+-- ============================================================================
 
 create table public.integration_events (
   id uuid primary key default gen_random_uuid(),
@@ -493,6 +649,137 @@ create table public.data_access_events (
   )
 );
 
+-- ============================================================================
+-- Support ticketing
+--
+-- A ticket is a CONVERSATION, not a single email: inbound mail is grouped by
+-- Microsoft Graph conversationId, so a back-and-forth thread is one ticket with
+-- many ticket_messages.
+--
+-- Personal-data minimisation: the ticket row stores only a hash of the requester
+-- email (for order matching and dedup) plus a display name. The raw addresses
+-- needed to actually send replies live on ticket_messages, where they are
+-- strictly required. Nothing here goes into an AI prompt unless the task needs it.
+-- ============================================================================
+
+create table public.tickets (
+  id uuid primary key default gen_random_uuid(),
+  shop_id uuid not null references public.shops(id) on delete cascade,
+
+  graph_conversation_id text not null,
+  subject text,
+  status text not null default 'open',
+
+  -- The categorisation axes. Vocabulary, constraints and meaning all land in 03.
+  category text,
+  secondary_category text,
+  level smallint,
+  responsible_team text,
+
+  -- Source-of-truth lookup key resolved by the order-number tool.
+  shopify_order_number text,
+  customer_id uuid references public.customers(id) on delete set null,
+
+  -- Hash of the requester email: lets us match against orders.customer_email_hash
+  -- and dedup by sender without duplicating the raw address on this row.
+  requester_email_hash text,
+  requester_name text,
+
+  priority smallint not null default 3,
+  resolved_context jsonb not null default '{}'::jsonb,
+  context_resolved_at timestamptz,
+
+  first_message_at timestamptz,
+  last_message_at timestamptz,
+
+  metadata jsonb not null default '{}'::jsonb,
+
+  -- Retention lifecycle. archived_at keeps the ticket but drops it out of the
+  -- active queue; deleted_at is the separate compliance soft-delete.
+  resolved_at timestamptz,
+  closed_at timestamptz,
+  archived_at timestamptz,
+  retention_delete_after timestamptz,
+  deleted_at timestamptz,
+
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+
+  constraint tickets_shop_conversation_unique unique (shop_id, graph_conversation_id),
+  constraint tickets_status_check check (
+    status in (
+      'open',
+      'awaiting_customer',
+      'awaiting_human',
+      'forwarded',
+      'resolved',
+      'closed',
+      'spam'
+    )
+  ),
+  constraint tickets_level_check check (level is null or level between 1 and 4),
+  constraint tickets_priority_check check (priority between 1 and 5),
+  constraint tickets_responsible_team_check check (
+    responsible_team is null
+      or responsible_team in ('finance', 'marketing', 'sales', 'logistics', 'contact')
+  ),
+  constraint tickets_metadata_object_check check (
+    jsonb_typeof(metadata) = 'object'
+  ),
+  constraint tickets_resolved_context_object_check check (
+    jsonb_typeof(resolved_context) = 'object'
+  )
+);
+
+create table public.ticket_messages (
+  id uuid primary key default gen_random_uuid(),
+  ticket_id uuid not null references public.tickets(id) on delete cascade,
+  shop_id uuid not null references public.shops(id) on delete cascade,
+
+  graph_message_id text not null,
+  graph_conversation_id text not null,
+  internet_message_id text,
+  in_reply_to text,
+
+  direction text not null,
+  from_email text,
+  from_name text,
+  to_emails text[] not null default '{}',
+  cc_emails text[] not null default '{}',
+  subject text,
+  body_text text,
+  body_preview text,
+  has_attachments boolean not null default false,
+
+  received_at timestamptz,
+  sent_at timestamptz,
+
+  -- Semantic vectors of the email body for similar-ticket retrieval, reusing the
+  -- knowledge_chunks determinism pattern. Cheap at support-email volume.
+  embedding vector(1536),
+  embedding_model text,
+  embedding_dimensions integer,
+  embedded_input_hash text,
+  embedded_at timestamptz,
+
+  raw_graph_payload jsonb not null default '{}'::jsonb,
+  deleted_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+
+  constraint ticket_messages_shop_message_unique unique (shop_id, graph_message_id),
+  constraint ticket_messages_direction_check check (
+    direction in ('inbound', 'outbound')
+  ),
+  constraint ticket_messages_raw_payload_object_check check (
+    jsonb_typeof(raw_graph_payload) = 'object'
+  )
+);
+
+-- ============================================================================
+-- Indexes
+-- ============================================================================
+
 create index shops_shopify_shop_id_idx on public.shops (shopify_shop_id);
 
 create index customers_shop_email_idx on public.customers (shop_id, email);
@@ -542,6 +829,20 @@ create index shopify_metaobjects_shop_handle_idx on public.shopify_metaobjects (
 create index shopify_metaobjects_shop_deleted_at_idx on public.shopify_metaobjects (shop_id, deleted_at);
 create index shopify_metaobjects_fields_gin_idx on public.shopify_metaobjects using gin (fields);
 
+create index promotions_shop_status_idx on public.promotions (shop_id, status);
+create index promotions_shop_code_idx on public.promotions (shop_id, code);
+create index promotions_shop_method_idx on public.promotions (shop_id, method);
+create index promotions_shop_discount_type_idx on public.promotions (shop_id, discount_type);
+create index promotions_shop_applies_once_idx on public.promotions (shop_id, applies_once_per_customer);
+create index promotions_shop_source_app_name_idx on public.promotions (shop_id, source_app_name);
+create index promotions_shop_synced_at_idx on public.promotions (shop_id, synced_at);
+create index promotions_shop_deleted_at_idx on public.promotions (shop_id, deleted_at);
+create index promotions_discount_classes_gin_idx on public.promotions using gin (discount_classes);
+create index promotions_combines_with_gin_idx on public.promotions using gin (combines_with);
+create index promotions_rule_snapshot_gin_idx on public.promotions using gin (rule_snapshot);
+
+create index shopify_content_sources_shop_type_idx on public.shopify_content_sources (shop_id, source_type);
+
 create unique index knowledge_documents_shop_source_id_unique
   on public.knowledge_documents (shop_id, source_type, shopify_source_id)
   where shopify_source_id is not null;
@@ -550,6 +851,11 @@ create unique index knowledge_documents_shop_source_handle_unique
   on public.knowledge_documents (shop_id, source_type, handle)
   where shopify_source_id is null and handle is not null;
 
+-- At most one active article per shop per core-topic slot.
+create unique index knowledge_documents_shop_core_topic_unique
+  on public.knowledge_documents (shop_id, core_topic)
+  where core_topic is not null;
+
 create index knowledge_documents_shop_category_idx on public.knowledge_documents (shop_id, category);
 create index knowledge_documents_shop_navigation_area_idx on public.knowledge_documents (shop_id, navigation_area);
 create index knowledge_documents_shop_deleted_at_idx on public.knowledge_documents (shop_id, deleted_at);
@@ -557,6 +863,13 @@ create index knowledge_documents_sections_gin_idx on public.knowledge_documents 
 
 create index knowledge_chunks_document_id_idx on public.knowledge_chunks (knowledge_document_id);
 create index knowledge_chunks_category_idx on public.knowledge_chunks (category);
+
+-- Approximate-nearest-neighbour index for cosine retrieval. HNSW needs pgvector
+-- >= 0.5.0 (Supabase's managed pgvector has it); on an older target, swap for
+-- ivfflat.
+create index knowledge_chunks_embedding_hnsw_idx
+  on public.knowledge_chunks
+  using hnsw (embedding vector_cosine_ops);
 
 create index integration_events_shop_status_idx on public.integration_events (shop_id, status);
 create index integration_events_source_type_idx on public.integration_events (source, event_type);
@@ -571,6 +884,30 @@ create index privacy_requests_received_at_idx on public.privacy_requests (receiv
 create index data_access_events_shop_action_idx on public.data_access_events (shop_id, action);
 create index data_access_events_resource_idx on public.data_access_events (resource_type, resource_id_hash);
 create index data_access_events_occurred_at_idx on public.data_access_events (occurred_at);
+
+create index tickets_shop_status_idx on public.tickets (shop_id, status);
+create index tickets_shop_category_idx on public.tickets (shop_id, category);
+create index tickets_shop_secondary_category_idx on public.tickets (shop_id, secondary_category);
+create index tickets_shop_level_idx on public.tickets (shop_id, level);
+create index tickets_shop_priority_idx on public.tickets (shop_id, priority);
+create index tickets_shop_responsible_team_idx on public.tickets (shop_id, responsible_team);
+create index tickets_shop_order_number_idx on public.tickets (shop_id, shopify_order_number);
+create index tickets_shop_requester_email_hash_idx on public.tickets (shop_id, requester_email_hash);
+create index tickets_customer_id_idx on public.tickets (customer_id);
+create index tickets_shop_last_message_at_idx on public.tickets (shop_id, last_message_at);
+create index tickets_shop_archived_at_idx on public.tickets (shop_id, archived_at);
+create index tickets_retention_delete_after_idx on public.tickets (shop_id, retention_delete_after);
+create index tickets_shop_deleted_at_idx on public.tickets (shop_id, deleted_at);
+
+create index ticket_messages_ticket_id_idx on public.ticket_messages (ticket_id);
+create index ticket_messages_shop_conversation_idx on public.ticket_messages (shop_id, graph_conversation_id);
+create index ticket_messages_shop_received_at_idx on public.ticket_messages (shop_id, received_at);
+create index ticket_messages_shop_deleted_at_idx on public.ticket_messages (shop_id, deleted_at);
+create index ticket_messages_embedding_hnsw_idx on public.ticket_messages using hnsw (embedding vector_cosine_ops);
+
+-- ============================================================================
+-- Triggers
+-- ============================================================================
 
 create trigger shops_set_updated_at
 before update on public.shops
@@ -597,6 +934,16 @@ before update on public.shopify_metaobjects
 for each row
 execute function public.set_updated_at();
 
+create trigger promotions_set_updated_at
+before update on public.promotions
+for each row
+execute function public.set_updated_at();
+
+create trigger shopify_content_sources_set_updated_at
+before update on public.shopify_content_sources
+for each row
+execute function public.set_updated_at();
+
 create trigger knowledge_documents_set_updated_at
 before update on public.knowledge_documents
 for each row
@@ -617,16 +964,41 @@ before update on public.privacy_requests
 for each row
 execute function public.set_updated_at();
 
+create trigger tickets_set_updated_at
+before update on public.tickets
+for each row
+execute function public.set_updated_at();
+
+create trigger ticket_messages_set_updated_at
+before update on public.ticket_messages
+for each row
+execute function public.set_updated_at();
+
+-- ============================================================================
+-- Row level security
+--
+-- Enabled with no policies: the service-role worker bypasses RLS, and every
+-- other role is denied by default until dashboard roles and policies exist.
+-- ============================================================================
+
 alter table public.shops enable row level security;
 alter table public.customers enable row level security;
 alter table public.orders enable row level security;
 alter table public.products enable row level security;
 alter table public.shopify_metaobjects enable row level security;
+alter table public.promotions enable row level security;
+alter table public.shopify_content_sources enable row level security;
 alter table public.knowledge_documents enable row level security;
 alter table public.knowledge_chunks enable row level security;
 alter table public.integration_events enable row level security;
 alter table public.privacy_requests enable row level security;
 alter table public.data_access_events enable row level security;
+alter table public.tickets enable row level security;
+alter table public.ticket_messages enable row level security;
+
+-- ============================================================================
+-- Comments
+-- ============================================================================
 
 comment on table public.shops is
   'Shopify shop records and app-level sync state. Shopify remains the source of truth.';
@@ -781,17 +1153,47 @@ comment on column public.shopify_metaobjects.fields is
 comment on column public.shopify_metaobjects.raw_shopify_payload is
   'Sanitized raw Shopify metaobject payload for traceability. Do not store image binaries or unnecessary personal data.';
 
+comment on table public.promotions is
+  'Shopify discount and promotion snapshots for support workflows. Shopify remains the source of truth.';
+
+comment on column public.promotions.promotion_key is
+  'Stable local unique key: redeem-code ID for code discounts, or discount node ID for automatic discounts.';
+
+comment on column public.promotions.code is
+  'Customer-entered promotion code when method = code. Automatic discounts store null.';
+
+comment on column public.promotions.applies_once_per_customer is
+  'Shopify appliesOncePerCustomer flag for manual filtering of customer-specific or one-use promotions.';
+
+comment on column public.promotions.rule_snapshot is
+  'Sanitized promotion rule metadata such as discount classes, combines-with flags, context type, and requirement types. Do not store customer targeting details.';
+
+comment on column public.promotions.source_metadata is
+  'Small source metadata snapshot such as code count and creator app name. Do not store customer IDs, emails, phone numbers, or customer selection payloads.';
+
+comment on column public.promotions.raw_shopify_payload is
+  'Sanitized raw Shopify discount payload for traceability. Exclude customer targeting details and personal data.';
+
+comment on table public.shopify_content_sources is
+  'Lightweight index of live Shopify Online Store pages and shop policies (refund, privacy, shipping, terms of service, etc.), used to populate the Agent Setup source dropdown. Holds identity only; content is resolved on demand at import/resync time and is not stored here.';
+
+comment on column public.shopify_content_sources.source_type is
+  'shopify_page or shopify_policy. Distinguishes which Shopify resource this row indexes, since pages and policies are fetched and resolved through different Shopify Admin API calls.';
+
+comment on column public.shopify_content_sources.status is
+  'Shopify publish state: published or unpublished. Policies are always published (Shopify has no draft state for a filled-in policy); pages derive this from publishedAt presence.';
+
 comment on table public.knowledge_documents is
   'Cleaned Shopify header/footer page and policy content used as source material for AI support context.';
 
 comment on column public.knowledge_documents.source_type is
-  'Source content type, such as shopify_page, shopify_policy, or shopify_menu_page.';
+  'shopify_page, shopify_policy, or manual. Editing an imported article in the dashboard converts this to manual (shopify_source_id/handle are kept for provenance), which is what stops it from being resynced from Shopify going forward.';
 
 comment on column public.knowledge_documents.navigation_area is
   'Where the page is exposed in the storefront navigation: header, footer, or manual.';
 
-comment on column public.knowledge_documents.category is
-  'Loose knowledge category for routing and retrieval. This is intentionally unrestricted until the support taxonomy is finalized.';
+comment on column public.knowledge_documents.content_html is
+  'Rich-text HTML as edited in the Agent Setup dashboard. Source of truth for the editor; content_text and sections are regenerated from this on every save, import, or resync.';
 
 comment on column public.knowledge_documents.content_text is
   'Cleaned canonical plain text used for AI context.';
@@ -799,20 +1201,38 @@ comment on column public.knowledge_documents.content_text is
 comment on column public.knowledge_documents.sections is
   'Ordered section objects parsed from the page content, usually containing heading, text, order, and anchor.';
 
+comment on column public.knowledge_documents.approval_status is
+  'Team review state for agent usage: draft, in_review, approved, or needs_optimization. Independent of status, which holds the Shopify publish state for Shopify-sourced articles.';
+
+comment on column public.knowledge_documents.core_topic is
+  'Optional required-knowledge slot this article fulfills (order_policies, brand, confidentiality, delivery_returns, locations, faqs). At most one active article per shop per slot. Distinct from the category column.';
+
+comment on column public.knowledge_documents.voice_profile is
+  'Structured brand-voice fields for the singleton Brand Voice article (core_topic = ''brand''): { roleDescription: string, toneAndVoice: string }. Empty ({}) on every other article. Always-included drafting-agent context, distinct from content_html (used on this row for freeform general-context guidance) and from ordinary knowledge_documents rows, which are selectively retrieved via knowledge_chunks.';
+
 comment on column public.knowledge_documents.source_metadata is
   'Small sanitized source metadata snapshot. Do not store full page HTML or unnecessary raw payloads here.';
 
 comment on table public.knowledge_chunks is
   'AI retrieval chunks generated from knowledge_documents sections.';
 
-comment on column public.knowledge_chunks.category is
-  'Chunk category copied from the source document for direct filtering during retrieval.';
-
 comment on column public.knowledge_chunks.token_count is
   'Approximate token count used to tune chunking and prompt budgets.';
 
 comment on column public.knowledge_chunks.embedding is
-  'Optional pgvector embedding for semantic retrieval. Stored without fixed dimensions until the embedding model is finalized.';
+  'pgvector embedding (text-embedding-3-small, 1536 dims) for cosine retrieval. Present only while the parent document is approved and the vector matches the current composed input; cleared when the document leaves approved.';
+
+comment on column public.knowledge_chunks.embedding_model is
+  'OpenAI model the embedding was produced with, e.g. text-embedding-3-small. Used to detect stale vectors after a model change.';
+
+comment on column public.knowledge_chunks.embedding_dimensions is
+  'Dimension count requested for the embedding (1536). Used alongside embedding_model to detect vectors that must be recomputed.';
+
+comment on column public.knowledge_chunks.embedded_input_hash is
+  'Hash of the exact composed input text sent to the embedding model (title + category + section heading + chunk text). Distinct from content_hash, which ignores title/category/heading; a category rename changes this hash and invalidates the vector.';
+
+comment on column public.knowledge_chunks.embedded_at is
+  'Timestamp the embedding was last computed.';
 
 comment on table public.integration_events is
   'Metadata-only log of Shopify sync, webhook, and reconciliation events. Do not store raw payloads or personal data here.';
@@ -825,3 +1245,78 @@ comment on table public.data_access_events is
 
 comment on column public.data_access_events.resource_id_hash is
   'Stable hash of the accessed resource identifier. Avoid storing direct customer email, phone, or address values.';
+
+comment on table public.tickets is
+  'Support conversations for the agent email workflow. One ticket per Microsoft Graph conversationId; the categorising agent fills category, request_kind, level, responsible_team, and the resolved Shopify order number. Access through the service-role worker only until dashboard roles and policies are implemented.';
+
+comment on column public.tickets.graph_conversation_id is
+  'Microsoft Graph conversationId. The threading key: all emails in one thread share this value and roll up to a single ticket, so tickets behave as conversations rather than individual emails.';
+
+comment on column public.tickets.status is
+  'Ticket lifecycle: open, awaiting_customer, awaiting_human, forwarded, resolved, closed, or spam. In draft-only mode nothing is auto-sent, so agent-drafted replies sit at awaiting_human until approved.';
+
+comment on column public.tickets.responsible_team is
+  'Team a forwarded ticket belongs to: finance, marketing, sales, logistics, or contact. The worker forwards B2B/invoice/marketing-type mail to the implicated person and tags the ticket here.';
+
+comment on column public.tickets.shopify_order_number is
+  'Shopify order number resolved for this ticket (the workflow''s source-of-truth lookup key). Stored as text to preserve the customer-facing #XXXX form; matched against orders.name / orders.order_number by the order-lookup tool.';
+
+comment on column public.tickets.customer_id is
+  'Optional link to the local customer snapshot once the requester is matched. Null for unresolved or guest requesters.';
+
+comment on column public.tickets.requester_email_hash is
+  'Hash of the requester email, for matching against orders.customer_email_hash and deduping by sender without storing the raw address on the ticket. The raw reply address lives on the latest inbound ticket_messages row.';
+
+comment on column public.tickets.requester_name is
+  'Display name of the requester for the dashboard queue. Do not include in AI prompts unless strictly required.';
+
+comment on column public.tickets.priority is
+  'Queue priority 1 (highest) to 5 (lowest), set by the prioritiser from RFM group, level, and age. Defaults to 3 (normal) so the queue sorts before prioritisation runs.';
+
+comment on column public.tickets.resolved_context is
+  'Order/customer context bundle the order-context resolver assembles from the synced orders/customers rows once shopify_order_number is set (tracking, order name, order-customer name, RFM group, etc.), handed to the drafting agent so it does not query fields individually. A re-resolvable snapshot, not a source of truth and not a duplicate of first-class order columns; may be edited for human-in-the-loop review. Holds personal data, so it must be scoped, kept out of prompts unless strictly required, and redacted on compliance requests. Excludes billing/street address (never synced; gated live Shopify lookup only).';
+
+comment on column public.tickets.context_resolved_at is
+  'When resolved_context was last assembled. Lets the worker re-resolve stale context rather than trusting the snapshot as source of truth.';
+
+comment on column public.tickets.resolved_at is
+  'When the ticket moved to resolved. Retention anchor for how long resolved tickets are kept.';
+
+comment on column public.tickets.closed_at is
+  'When the ticket was closed. Retention anchor for archival and eventual deletion.';
+
+comment on column public.tickets.archived_at is
+  'When the ticket was archived out of the active queue while still retained. Set by the archival job for old tickets; distinct from deleted_at.';
+
+comment on column public.tickets.retention_delete_after is
+  'Timestamp after which the ticket may be hard-deleted by the retention cleanup job. Durations are policy-driven and set later; the column is the mechanism, not a fixed rule.';
+
+comment on column public.tickets.deleted_at is
+  'Soft-delete / compliance-redaction flag. Distinct from archived_at (archival keeps the ticket; deletion removes it, e.g. on a customer redact request).';
+
+comment on table public.ticket_messages is
+  'Individual emails belonging to a ticket, one row per Microsoft Graph message. Inbound mail is ingested here idempotently (unique on shop_id + graph_message_id); outbound rows are the agent replies and team forwards.';
+
+comment on column public.ticket_messages.graph_message_id is
+  'Microsoft Graph message id. The idempotency key: re-ingesting the same email is a no-op via the shop_id + graph_message_id unique constraint.';
+
+comment on column public.ticket_messages.internet_message_id is
+  'RFC 5322 Message-ID header, stable across mail systems. Useful for threading and correlating replies independently of Graph ids.';
+
+comment on column public.ticket_messages.direction is
+  'inbound (from the customer/third party) or outbound (agent reply or team forward sent from the support mailbox).';
+
+comment on column public.ticket_messages.from_email is
+  'Raw sender email. Required to reply to the requester; do not include in AI prompts unless strictly required.';
+
+comment on column public.ticket_messages.body_text is
+  'Cleaned plain-text email body used for triage, categorisation, and drafting. Minimise personal data and keep it out of AI prompts unless strictly required for the task.';
+
+comment on column public.ticket_messages.embedding is
+  'pgvector(1536) embedding of the email body (text-embedding-3-small) for similar-ticket retrieval and clustering, populated primarily for inbound messages. Matches the knowledge_chunks embedding pipeline; a row holds a vector iff embedded_input_hash/model/dimensions match the current input and model.';
+
+comment on column public.ticket_messages.embedded_input_hash is
+  'Hash of the embedded input (body text + relevant metadata) so a reconciler can detect stale vectors and re-embed on model or content changes, mirroring knowledge_chunks determinism metadata.';
+
+comment on column public.ticket_messages.raw_graph_payload is
+  'Sanitised raw Microsoft Graph message payload for traceability. Exclude attachment binaries and unnecessary personal data.';

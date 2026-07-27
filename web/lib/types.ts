@@ -86,7 +86,7 @@ export const KNOWLEDGE_CATEGORIES: KnowledgeCategory[] = [
 /**
  * The required-knowledge slots every agent needs covered. Mirrors the
  * knowledge_documents_core_topic_check constraint in
- * supabase/migrations/003_knowledge_page_catalog.sql — keep in sync. Five of
+ * supabase/migrations/01_core_schema.sql — keep in sync. Five of
  * these ("order_policies" through "faqs") make up the Core setup checklist;
  * "brand" is the Drafting agent setup slot instead (see CORE_TOPICS, which
  * excludes it, and BrandVoiceWorkspace).

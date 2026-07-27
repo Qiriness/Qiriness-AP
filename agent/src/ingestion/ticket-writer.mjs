@@ -46,14 +46,49 @@ async function resolveTicket(store, shopId, item, triage, counts, audit) {
   const existing = await store.findTicketByConversation(shopId, conversation.graph_conversation_id);
 
   if (existing) {
-    // Advance last_message_at as the thread grows; backfill a subject only if the
-    // ticket never had one. first_message_at is left as the first message we saw.
+    // Keep the ticket's window around the whole thread: extend it in either
+    // direction, and backfill a subject only if the ticket never had one.
+    //
+    // first_message_at moves BACKWARDS as well as forwards because Graph's delta
+    // does not return messages in chronological order. On an initial enumeration
+    // of an existing mailbox a thread is routinely opened by one of its later
+    // replies, so "the first message we saw" is not the first message sent —
+    // measured on a real inbox it was late on 93 of 171 tickets, by 5 days on
+    // average and 24 at worst. The categoriser's queue is ordered on this column,
+    // so leaving it at whatever arrived first quietly mis-sorts the backlog.
     const patch = {};
     if (isLater(conversation.message_at, existing.last_message_at)) {
       patch.last_message_at = conversation.message_at;
     }
+    if (isEarlier(conversation.message_at, existing.first_message_at)) {
+      patch.first_message_at = conversation.message_at;
+    }
     if (!existing.subject && conversation.subject) {
       patch.subject = conversation.subject;
+    }
+    // A new message from the customer can change what the ticket is about, and
+    // above all what it now needs — an order question that becomes a lost parcel,
+    // a polite thread that turns into a threat to sue. Put the ticket back in the
+    // categoriser's queue so its labels describe the conversation as it stands
+    // rather than as it opened (03_categorisation.sql).
+    //
+    // Inbound only: our own replies advance last_message_at too, and
+    // re-categorising a thread because WE answered it would pay the model to
+    // re-read a conversation the customer has not added anything to.
+    if (item.message?.direction === 'inbound') {
+      patch.needs_categorisation = true;
+
+      // Backfill the requester if the ticket has none. Graph's delta is not
+      // chronological, so a thread can be opened by one of OUR replies — which
+      // carries no requester by design — and the customer's own message then
+      // arrives afterwards. Without this the ticket keeps a null requester and
+      // drops out of order matching entirely.
+      if (!existing.requester_email_hash && conversation.requester_email_hash) {
+        patch.requester_email_hash = conversation.requester_email_hash;
+      }
+      if (!existing.requester_name && conversation.requester_name) {
+        patch.requester_name = conversation.requester_name;
+      }
     }
     if (Object.keys(patch).length > 0) {
       await store.updateTicket(existing.id, patch);
@@ -61,8 +96,10 @@ async function resolveTicket(store, shopId, item, triage, counts, audit) {
     return existing.id;
   }
 
-  // New conversation: run the LLM spam pass (if configured) before creating anything.
-  if (triage) {
+  // New conversation: run the LLM spam pass (if configured) before creating
+  // anything. Inbound only — our own reply is not a candidate for spam, and
+  // triaging it would spend a model call to judge text the team wrote.
+  if (triage && item.message?.direction === 'inbound') {
     const verdict = await triage(item);
     audit?.record({
       graphMessageId: item.graphMessageId ?? item.message?.graph_message_id,
@@ -105,6 +142,16 @@ function isLater(candidate, current) {
   return new Date(candidate).getTime() > new Date(current).getTime();
 }
 
+function isEarlier(candidate, current) {
+  if (!candidate) {
+    return false;
+  }
+  if (!current) {
+    return true;
+  }
+  return new Date(candidate).getTime() < new Date(current).getTime();
+}
+
 export function createSupabaseTicketStore(supabase) {
   return {
     async findTicketByConversation(shopId, conversationId) {
@@ -112,7 +159,7 @@ export function createSupabaseTicketStore(supabase) {
         supabase,
         'tickets',
         { shop_id: shopId, graph_conversation_id: conversationId },
-        'id,subject,last_message_at'
+        'id,subject,first_message_at,last_message_at,requester_email_hash,requester_name'
       );
       return rows[0] || null;
     },

@@ -53,6 +53,7 @@ async function main() {
       cursorStore,
       shopId,
       logger,
+      mailbox: config.graph.mailbox,
       spamGate: gate,
       recordSpamHits: (hits) => blocklistStore.recordHits(rulesById, hits),
       auditStore,

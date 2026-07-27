@@ -2,7 +2,13 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { createCategoriser, normaliseCategorisation } from './categorise.mjs';
-import { TICKET_SUBJECTS, REQUEST_KINDS } from '../../../scripts/lib/support-taxonomy.mjs';
+import {
+  TICKET_SUBJECTS,
+  REQUEST_KINDS,
+  CONFIDENCE_LEVELS,
+  REPLY_LANGUAGES,
+  HAPPINESS_SCORES
+} from '../../../scripts/lib/support-taxonomy.mjs';
 
 function fakeOpenAI(result, captured = {}) {
   return {
@@ -20,6 +26,9 @@ const answer = (overrides = {}) => ({
   secondary_category: null,
   secondary_request_kind: null,
   level: 1,
+  confidence: 'high',
+  language: 'fr',
+  happiness: 2,
   reason: 'demande de statut de commande',
   ...overrides
 });
@@ -38,12 +47,89 @@ test('the schema enums are built from the taxonomy, so the model cannot answer o
   assert.ok(captured.schema.properties.secondary_category.enum.includes(null));
   assert.deepEqual(captured.schema.required.sort(), [
     'category',
+    'confidence',
+    'happiness',
+    'language',
     'level',
     'reason',
     'request_kind',
     'secondary_category',
     'secondary_request_kind'
   ]);
+});
+
+test('the signal enums are built from the taxonomy too', async () => {
+  const captured = {};
+  await createCategoriser(fakeOpenAI(answer(), captured), { model: 'm' }).categorise(input());
+  assert.deepEqual(captured.schema.properties.confidence.enum, CONFIDENCE_LEVELS);
+  assert.deepEqual(captured.schema.properties.language.enum, REPLY_LANGUAGES);
+  assert.deepEqual(captured.schema.properties.happiness.enum, HAPPINESS_SCORES);
+});
+
+test('the three signals are carried through when the model answers well', async () => {
+  const { categorise } = createCategoriser(
+    fakeOpenAI(answer({ confidence: 'medium', language: 'en', happiness: 4 })),
+    { model: 'm' }
+  );
+  const result = await categorise(input());
+  assert.equal(result.confidence, 'medium');
+  assert.equal(result.language, 'en');
+  assert.equal(result.happiness, 4);
+});
+
+test('an unusable confidence reads as low, never as high', () => {
+  // Same direction as the request_kind fallback: a answer we could not read must
+  // pull a human in, so it can never be recorded as a confident one.
+  assert.equal(normaliseCategorisation(answer({ confidence: 'très sûr' })).confidence, 'low');
+  assert.equal(normaliseCategorisation({}).confidence, 'low');
+});
+
+test('an unusable language or happiness is null, not a fabricated default', () => {
+  // "We do not know" is a real state the drafting agent has to handle. Defaulting
+  // to fr (the majority language) or to a neutral 2 would hide it behind a value
+  // that looks like a measurement.
+  const result = normaliseCategorisation(answer({ language: 'français', happiness: 7 }));
+  assert.equal(result.language, null);
+  assert.equal(result.happiness, null);
+});
+
+test('happiness does not touch the level', () => {
+  // An angry customer with a routine tracking question stays level 2: the anger
+  // belongs in happiness. Deriving level from mood is the mistake the level-4
+  // rule was rewritten to fix.
+  const furious = normaliseCategorisation(
+    answer({ category: 'order', request_kind: 'problem', level: 2, happiness: 4 })
+  );
+  assert.equal(furious.level, 2);
+  assert.equal(furious.happiness, 4);
+  // ... and a cheerful refund request stays level 3.
+  const cheerful = normaliseCategorisation(
+    answer({ category: 'return_exchange', request_kind: 'problem', level: 3, happiness: 1 })
+  );
+  assert.equal(cheerful.level, 3);
+  assert.equal(cheerful.happiness, 1);
+});
+
+test('the prompt defines the happiness scale and pins its independence from level', async () => {
+  const captured = {};
+  await createCategoriser(fakeOpenAI(answer(), captured), { model: 'm' }).categorise(input());
+  // The two ends of the scale the user actually cares about.
+  assert.match(captured.system, /inacceptable|ne plus commander/);
+  assert.match(captured.system, /plusieurs fois sans réponse/);
+  // ... and the instruction that keeps anger out of the level.
+  assert.match(captured.system, /happiness et level sont indépendants/);
+});
+
+test('the prompt asks for the reply language, restricted to what the desk writes', async () => {
+  const captured = {};
+  await createCategoriser(fakeOpenAI(answer(), captured), { model: 'm' }).categorise(input());
+  assert.match(captured.system, /Langue de réponse/);
+  // The list itself, not each code on its own: two-letter codes match inside
+  // ordinary French words ("de", "it", "es"), so a substring check per code would
+  // pass on a prompt that never listed them.
+  const offered = REPLY_LANGUAGES.filter((code) => code !== 'other').join(', ');
+  assert.ok(captured.system.includes(offered), `the prompt should offer ${offered}`);
+  assert.match(captured.system, /ou other/);
 });
 
 test('level is clamped up to the derived floor when the model under-rates it', async () => {

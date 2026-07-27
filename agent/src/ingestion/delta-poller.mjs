@@ -22,6 +22,9 @@ export async function runDeltaPoll({
   cursorStore,
   shopId,
   logger,
+  // The support address itself, so a message the mailbox sent is recorded as
+  // outbound rather than as customer mail (see graph-message-mapper).
+  mailbox,
   spamGate = allowAllGate,
   recordSpamHits,
   auditStore,
@@ -72,8 +75,10 @@ export async function runDeltaPoll({
 
     const kept = [];
     for (const message of pageMessages) {
-      const item = mapGraphMessage(message);
-      if (!item.removed) {
+      const item = mapGraphMessage(message, { mailbox });
+      // Our own replies skip the gate entirely: the blocklist matches on sender,
+      // and blocking the support address would drop every reply the team sent.
+      if (!item.removed && item.message?.direction === 'inbound') {
         const verdict = spamGate.check(item);
         if (verdict.spam) {
           totals.spamBlocked += 1;

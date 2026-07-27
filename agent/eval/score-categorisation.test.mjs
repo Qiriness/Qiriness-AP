@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { scoreCase, summarise, confusions } from './score-categorisation.mjs';
+import { scoreCase, summarise, confusions, calibration } from './score-categorisation.mjs';
 import { CASES } from './categorisation-cases.mjs';
 import { TICKET_SUBJECTS, REQUEST_KINDS, defaultLevel } from '../../scripts/lib/support-taxonomy.mjs';
 
@@ -19,6 +19,31 @@ const testCase = (overrides = {}) => ({
   id: 'c1',
   expect: { category: 'order', request_kind: 'question', level: 2 },
   ...overrides
+});
+
+test('confidence is reported as accuracy per band, in a fixed order', () => {
+  // The point of the band report: if `high` does not beat `low`, the model is
+  // saying "high" to everything and the signal is worthless to Phase 5.
+  const scores = [
+    scoreCase(testCase(), result({ confidence: 'high' })),
+    scoreCase(testCase(), result({ confidence: 'high' })),
+    scoreCase(testCase(), result({ confidence: 'low', category: 'payment' })),
+    scoreCase(testCase(), result({ confidence: 'medium' }))
+  ];
+  assert.deepEqual(calibration(scores), [
+    { band: 'high', of: 2, exact: 2 },
+    { band: 'medium', of: 1, exact: 1 },
+    { band: 'low', of: 1, exact: 0 }
+  ]);
+  // ... and it rides along on the summary the runner prints.
+  assert.deepEqual(summarise(scores).confidence, calibration(scores));
+});
+
+test('an API failure is left out of the confidence bands', () => {
+  // No answer means no self-assessment; counting it would drag a band down for a
+  // reason that has nothing to do with the model's judgement.
+  const failed = { id: 'c2', error: 'timeout', exact: false, actual: {} };
+  assert.deepEqual(calibration([failed]), []);
 });
 
 test('an exact match scores on all three axes', () => {

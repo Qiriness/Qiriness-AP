@@ -5,7 +5,13 @@
 // other secrets/PII as fields. Log ids, counts, and statuses.
 
 function emit(level, message, fields = {}) {
-  const line = { level, message, ts: new Date().toISOString(), ...fields };
+  // The three reserved keys are stripped from the caller's fields rather than
+  // spread over: a payload field named `level` (a ticket's handling level, say)
+  // would otherwise overwrite the log SEVERITY, which is what a log viewer
+  // filters on — and it fails silently, producing {"level":2} lines that no
+  // longer match a severity filter. Reserved keys win; callers rename.
+  const { level: _level, message: _message, ts: _ts, ...safe } = fields;
+  const line = { level, message, ts: new Date().toISOString(), ...safe };
   const text = JSON.stringify(line);
   if (level === 'error') {
     process.stderr.write(text + '\n');

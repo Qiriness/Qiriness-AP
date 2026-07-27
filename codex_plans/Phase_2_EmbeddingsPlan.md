@@ -66,7 +66,7 @@ Add to `loadConfig()` (all optional so existing scripts keep working):
 The embedding client throws a clear error if `openaiApiKey` is missing when
 actually invoked, rather than making `loadConfig` require it globally.
 
-### 2. Migration — `supabase/migrations/006_knowledge_chunk_embeddings.sql`
+### 2. Migration — folded into `supabase/migrations/01_core_schema.sql`
 - `alter column embedding type vector(1536)` (safe: column is bare `vector`,
   zero rows written).
 - Add `embedding_model text`, `embedding_dimensions integer`,

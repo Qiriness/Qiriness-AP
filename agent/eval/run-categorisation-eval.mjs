@@ -128,6 +128,15 @@ function report(cases, scores, args, elapsedMs, runNumber) {
   console.log(`secondary  found ${s.secondary.ok} · missed ${s.secondary.missed} · ` +
     `wrong ${s.secondary.wrong} · spurious ${s.secondary.spurious}`);
 
+  // Is the self-reported confidence worth anything? Only if accuracy falls as the
+  // band does. Flat bands mean the model says "high" to everything and Phase 5
+  // must not gate auto-drafting on it.
+  if (s.confidence.length > 0) {
+    console.log(`confidence ${s.confidence
+      .map((c) => `${c.band} ${c.exact}/${c.of} (${pct(c.exact, c.of)})`)
+      .join(' · ')}`);
+  }
+
   const confused = confusions(cases, scores);
   if (confused.length > 0) {
     console.log(`\nsubject confusions: ${confused.map(([k, n]) => `${k} (${n})`).join(', ')}`);

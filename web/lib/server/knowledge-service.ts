@@ -8,7 +8,7 @@
  *
  * Uses the Supabase SERVICE ROLE key (SUPABASE_SECRET_KEY) because every table
  * has row level security enabled with no policies defined (see
- * supabase/migrations/001_initial_schema.sql) — only the service role can read
+ * supabase/migrations/01_core_schema.sql) — only the service role can read
  * or write today. Never import this module from client components; it must
  * only run in Route Handlers (server-only, Node runtime).
  *

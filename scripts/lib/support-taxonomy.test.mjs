@@ -7,12 +7,19 @@ import {
   KNOWLEDGE_CATEGORIES,
   TICKET_SUBJECTS,
   REQUEST_KINDS,
+  CONFIDENCE_LEVELS,
+  REPLY_LANGUAGES,
+  HAPPINESS_SCORES,
   defaultLevel,
   clampLevel,
+  ratchetLevel,
   defaultTeam,
   isSubject,
   isKnowledgeCategory,
   isRequestKind,
+  isConfidence,
+  isReplyLanguage,
+  isHappiness,
   describeTicketCategory
 } from './support-taxonomy.mjs';
 
@@ -114,6 +121,56 @@ test('the categoriser can escalate but never de-escalate', () => {
   assert.equal(clampLevel('order', 'question', undefined), 2);
 });
 
+test('a level never falls across re-categorisations', () => {
+  // A thread is re-read whenever the customer replies, and the model does not see
+  // its own previous answer — so without the ratchet a polite follow-up could
+  // silently walk a level 3 back to 2 and drop the refund out of the human queue.
+  assert.equal(ratchetLevel(3, 2), 3);
+  assert.equal(ratchetLevel(3, 1), 3);
+  // Escalation is the whole point of re-reading, so upwards still moves.
+  assert.equal(ratchetLevel(2, 3), 3);
+  assert.equal(ratchetLevel(2, 4), 4);
+  // First pass: nothing to ratchet against.
+  assert.equal(ratchetLevel(null, 2), 2);
+  assert.equal(ratchetLevel(undefined, 1), 1);
+  // Unusable proposal keeps what the ticket already had, and 4 is still the cap.
+  assert.equal(ratchetLevel(3, undefined), 3);
+  assert.equal(ratchetLevel(4, 9), 4);
+});
+
+test('the per-ticket signals are the agreed vocabularies', () => {
+  assert.deepEqual(CONFIDENCE_LEVELS, ['high', 'medium', 'low']);
+  assert.deepEqual(HAPPINESS_SCORES, [1, 2, 3, 4]);
+  // French first — the mailbox is mostly French — and 'other' is the escape hatch
+  // meaning "the desk cannot answer natively", not "unknown language".
+  assert.equal(REPLY_LANGUAGES[0], 'fr');
+  assert.ok(REPLY_LANGUAGES.includes('other'));
+});
+
+test('happiness is independent of level, in both directions', () => {
+  // The level-4 lesson applied to a second axis: an angry customer asking a routine
+  // question is happiness 4 / level 2, and a cheerful refund request is
+  // happiness 1 / level 3. Neither field may be derived from the other, so
+  // nothing in this module maps between them — this test pins that absence.
+  assert.equal(defaultLevel('order', 'question'), 2);
+  assert.equal(defaultLevel('return_exchange', 'problem'), 3);
+  assert.equal(typeof defaultLevel('order', 'question'), 'number');
+  // clampLevel takes only (subject, kind, proposed): no happiness parameter to
+  // pass, by design.
+  assert.equal(clampLevel.length, 3);
+});
+
+test('signal validators reject unknown values', () => {
+  assert.equal(isConfidence('high'), true);
+  assert.equal(isConfidence('sure'), false);
+  assert.equal(isReplyLanguage('fr'), true);
+  assert.equal(isReplyLanguage('français'), false); // codes, not names
+  assert.equal(isHappiness(4), true);
+  assert.equal(isHappiness('4'), false); // smallint column, not text
+  assert.equal(isHappiness(0), false);
+  assert.equal(isHappiness(5), false);
+});
+
 test('every subject routes to a known team', () => {
   const teams = new Set(['finance', 'marketing', 'sales', 'logistics', 'contact']);
   for (const subject of SUBJECTS) {
@@ -131,7 +188,7 @@ test('validators reject unknown values', () => {
   assert.equal(isSubject('order_problem'), false); // composed values are not stored
   assert.equal(isRequestKind('problem'), true);
   assert.equal(isRequestKind('problems'), false);
-  assert.equal(isKnowledgeCategory('general'), false); // renamed to "other" in 011
+  assert.equal(isKnowledgeCategory('general'), false); // renamed to "other" when the taxonomy was pinned
   assert.equal(isKnowledgeCategory('shipping_delivery'), false); // renamed to "delivery"
 });
 

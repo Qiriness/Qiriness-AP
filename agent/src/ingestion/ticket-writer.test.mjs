@@ -103,6 +103,80 @@ test('advances last_message_at as the thread grows, keeps first_message_at', asy
   assert.equal(ticket.last_message_at, '2026-07-24T11:30:00Z');
 });
 
+test('first_message_at moves backwards when an older message arrives later', async () => {
+  // Graph's delta does not return messages in chronological order, so on an
+  // initial enumeration a thread is routinely opened by one of its later
+  // replies. Without this the column holds "the first message we saw", which
+  // mis-sorts the categoriser queue (ordered on first_message_at).
+  const store = createFakeStore();
+  await writeIngestedMessages(store, 'shop-1', [
+    mappedMessage({ id: 'm2', conversationId: 'c1', at: '2026-07-24T11:30:00Z' })
+  ]);
+  await writeIngestedMessages(store, 'shop-1', [
+    mappedMessage({ id: 'm1', conversationId: 'c1', at: '2026-07-24T10:00:00Z' })
+  ]);
+
+  const ticket = store.tickets.get('shop-1|c1');
+  assert.equal(ticket.first_message_at, '2026-07-24T10:00:00Z');
+  // ... and the later message still holds the top of the window.
+  assert.equal(ticket.last_message_at, '2026-07-24T11:30:00Z');
+});
+
+test('an out-of-order batch settles on the true window whatever the order', async () => {
+  const order = ['2026-07-24T12:00:00Z', '2026-07-24T09:00:00Z', '2026-07-24T15:00:00Z'];
+  const store = createFakeStore();
+  await writeIngestedMessages(
+    store,
+    'shop-1',
+    order.map((at, i) => mappedMessage({ id: `m${i}`, conversationId: 'c1', at }))
+  );
+
+  const ticket = store.tickets.get('shop-1|c1');
+  assert.equal(ticket.first_message_at, '2026-07-24T09:00:00Z');
+  assert.equal(ticket.last_message_at, '2026-07-24T15:00:00Z');
+});
+
+test('a new inbound message puts the ticket back in the categoriser queue', async () => {
+  // Without this the first label a ticket receives is permanent, and a thread
+  // that turns into a lost parcel (or a threat to sue) keeps the labels of the
+  // email that opened it.
+  const store = createFakeStore();
+  await writeIngestedMessages(store, 'shop-1', [
+    mappedMessage({ id: 'm1', conversationId: 'c1', at: '2026-07-24T10:00:00Z' })
+  ]);
+  // Simulate the categoriser having settled the ticket.
+  const ticket = store.tickets.get('shop-1|c1');
+  ticket.needs_categorisation = false;
+
+  await writeIngestedMessages(store, 'shop-1', [
+    mappedMessage({ id: 'm2', conversationId: 'c1', at: '2026-07-24T11:30:00Z' })
+  ]);
+  assert.equal(ticket.needs_categorisation, true);
+});
+
+test('our own outbound reply does not trigger a re-categorisation', async () => {
+  // last_message_at advances on outbound too, so gating on the message direction
+  // is what stops the agent paying to re-read a thread it just answered itself.
+  const store = createFakeStore();
+  await writeIngestedMessages(store, 'shop-1', [
+    mappedMessage({ id: 'm1', conversationId: 'c1', at: '2026-07-24T10:00:00Z' })
+  ]);
+  const ticket = store.tickets.get('shop-1|c1');
+  ticket.needs_categorisation = false;
+
+  await writeIngestedMessages(store, 'shop-1', [
+    mappedMessage({
+      id: 'm2',
+      conversationId: 'c1',
+      at: '2026-07-24T12:00:00Z',
+      direction: 'outbound'
+    })
+  ]);
+  assert.equal(ticket.needs_categorisation, false);
+  // ... the thread timestamp still moves, though.
+  assert.equal(ticket.last_message_at, '2026-07-24T12:00:00Z');
+});
+
 test('counts removed tombstones without creating rows', async () => {
   const store = createFakeStore();
   const counts = await writeIngestedMessages(store, 'shop-1', [

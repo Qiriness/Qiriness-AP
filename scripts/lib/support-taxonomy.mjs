@@ -53,6 +53,42 @@ export const REQUEST_KINDS = ['question', 'problem', 'complaint', 'contact'];
 /** `contact` only makes sense for the inbound-relationship subjects. */
 export const CONTACT_ONLY_SUBJECTS = ['b2b', 'partner_collaboration', 'careers'];
 
+// --- Per-ticket signals -----------------------------------------------------
+// Three more things the categoriser reads off the same email, in the same call.
+// They are NOT part of the subject/kind taxonomy — they qualify a ticket rather
+// than classify it — but they live here because they are enums shared by the
+// model schema, the database check constraints and the dashboard, and one list
+// per vocabulary is the whole point of this module.
+
+/**
+ * How sure the categoriser is of the (subject, kind) pair it just produced.
+ * Measured agreement with human labelling on real mail sits near 77% on the
+ * subject, so a stored label is not self-evidently right and nothing else in the
+ * row says which ones to distrust. Phase 5 gates auto-drafting on `high`.
+ */
+export const CONFIDENCE_LEVELS = ['high', 'medium', 'low'];
+
+/**
+ * The language to REPLY in, not a full language-detection vocabulary: the list
+ * is what the support desk can actually write back in. Anything else is `other`,
+ * which is a routing signal (a human picks it up) rather than a label — silently
+ * answering in French because the enum had no better value would be worse than
+ * saying "I could not place this one".
+ */
+export const REPLY_LANGUAGES = ['fr', 'en', 'es', 'de', 'it', 'nl', 'pt', 'other'];
+
+/**
+ * How the customer feels, 1 (happy) to 4 (really unhappy) — same direction as
+ * `level`, where 1 is benign and 4 is the one you want to see.
+ *
+ * Deliberately independent of `level`: level is what WORK the ticket needs, and
+ * The level-4 rule exists precisely because conflating "this topic sounds bad" with "this
+ * situation is serious" filled the manager queue with routine mail. An angry
+ * customer with a simple tracking question is happiness 4, level 2 — both true,
+ * neither derived from the other. Consumed by the drafting agent for tone.
+ */
+export const HAPPINESS_SCORES = [1, 2, 3, 4];
+
 // --- Level derivation -------------------------------------------------------
 // Level (1-4) is DERIVED from (subject, kind) rather than guessed independently.
 // Two LLM-assigned fields encoding the same "does this need action" axis could
@@ -126,6 +162,25 @@ export function clampLevel(subject, kind, proposedLevel) {
   return Math.min(4, Math.max(floor, proposed));
 }
 
+/**
+ * The same never-lower rule applied over a ticket's LIFE rather than within one
+ * call. A thread is re-categorised whenever the customer replies, and the new
+ * labels are produced blind — the model does not see the old ones — so without a
+ * ratchet a ticket that reached level 3 could silently drop back to 2 on a
+ * follow-up that reads calmer ("merci, du coup où en est le remboursement ?").
+ *
+ * That downgrade is the dangerous direction: the work the ticket earned at 3
+ * (a refund, a resend) does not stop being owed because the next email is
+ * polite. Levels therefore only ever climb, and a human closing the ticket is
+ * what ends it. Escalation still works normally — that is the point of
+ * re-categorising at all.
+ */
+export function ratchetLevel(previousLevel, nextLevel) {
+  const previous = Number.isInteger(previousLevel) ? previousLevel : 0;
+  const next = Number.isInteger(nextLevel) ? nextLevel : previous;
+  return Math.min(4, Math.max(previous, next));
+}
+
 // --- Team routing (Phase 5) -------------------------------------------------
 
 const TEAM_BY_SUBJECT = {
@@ -161,6 +216,18 @@ export function isKnowledgeCategory(value) {
 
 export function isRequestKind(value) {
   return REQUEST_KINDS.includes(value);
+}
+
+export function isConfidence(value) {
+  return CONFIDENCE_LEVELS.includes(value);
+}
+
+export function isReplyLanguage(value) {
+  return REPLY_LANGUAGES.includes(value);
+}
+
+export function isHappiness(value) {
+  return HAPPINESS_SCORES.includes(value);
 }
 
 /** Display label for a ticket's (subject, kind) pair, e.g. "Delivery — problem". */

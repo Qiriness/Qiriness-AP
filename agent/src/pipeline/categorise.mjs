@@ -11,16 +11,30 @@
 //   2. normaliseCategorisation() below, which re-checks every field and fixes
 //      the combinations a per-field enum cannot express (a `contact` kind on a
 //      non-relationship subject, a secondary that repeats the primary).
-//   3. The database check constraints from migration 012.
+//   3. The database check constraints in 03_categorisation.sql.
 //
 // Unlike the spam gate this does NOT fail open into a default label: a failed
 // call leaves the ticket uncategorised so it is retried. Only the runner, after
 // repeated failures, falls back — and it falls back *towards a human*.
+//
+// It also reads three signals off the same email — confidence, reply language and
+// customer happiness — because it has already paid to read the text; see
+// SIGNALS_PROMPT. They qualify the ticket rather than classify it.
+//
+// Stateless by design: re-categorising a thread that has grown calls exactly this
+// function again with the fuller thread, and it is never shown the labels it
+// produced last time. Anchoring the model on its own previous answer would make
+// it defend a first call that may well have been wrong (the same reason the human
+// human review set is labelled blind). Stability is bought in the runner instead,
+// where the level ratchet stops a re-run walking a ticket backwards.
 
 import {
   TICKET_SUBJECTS,
   REQUEST_KINDS,
   CONTACT_ONLY_SUBJECTS,
+  CONFIDENCE_LEVELS,
+  REPLY_LANGUAGES,
+  HAPPINESS_SCORES,
   defaultLevel,
   clampLevel,
   defaultTeam
@@ -41,6 +55,12 @@ const CATEGORISATION_SCHEMA = {
     secondary_request_kind: { type: ['string', 'null'], enum: [...REQUEST_KINDS, null] },
     // enum, not minimum/maximum — strict mode does not support numeric bounds.
     level: { type: 'integer', enum: [1, 2, 3, 4] },
+    // Three signals about the ticket rather than classifications of it. They ride
+    // along on this call because the model has already read the email: asking
+    // separately would triple the cost to re-read the same text.
+    confidence: { type: 'string', enum: [...CONFIDENCE_LEVELS] },
+    language: { type: 'string', enum: [...REPLY_LANGUAGES] },
+    happiness: { type: 'integer', enum: [...HAPPINESS_SCORES] },
     reason: { type: 'string' }
   },
   required: [
@@ -49,6 +69,9 @@ const CATEGORISATION_SCHEMA = {
     'secondary_category',
     'secondary_request_kind',
     'level',
+    'confidence',
+    'language',
+    'happiness',
     'reason'
   ]
 };
@@ -93,6 +116,30 @@ const KIND_TIEBREAKER = [
   "- Un compliment ou un remerciement n'est jamais un complaint : utilise question."
 ].join('\n');
 
+// The three per-ticket signals. Kept as their own block because they answer
+// "what else does the next stage need to know about this email", not "what is
+// this email about" — and because the happiness scale is the one place the model
+// is explicitly told NOT to let its judgement leak into the level.
+const SIGNALS_PROMPT = [
+  "Langue de réponse (language) : la langue dans laquelle le client a écrit, donc celle dans laquelle il faudra lui répondre.",
+  `Valeurs possibles : ${REPLY_LANGUAGES.filter((code) => code !== 'other').join(', ')}, ou other.`,
+  "Utilise other UNIQUEMENT si la langue n'est dans aucune de ces valeurs. Si le message mélange deux langues, choisis celle du corps du message, pas celle de la formule de politesse.",
+  '',
+  "Satisfaction du client (happiness), échelle 1 à 4 — ce que RESSENT le client, pas la gravité du dossier :",
+  '- 1 : client content — remerciements, compliment, ton chaleureux, ou simple satisfaction exprimée.',
+  "- 2 : neutre — demande factuelle, aucune émotion particulière. C'est le cas le plus fréquent.",
+  "- 3 : mécontentement exprimé — agacement, déception, impatience, reproche, « c'est décevant », « je suis déçue », relance polie mais sèche.",
+  '- 4 : très mécontent — le client dit que la situation est inacceptable, menace de ne plus commander, parle de mauvaise expérience générale, exige une réponse, ou signale qu\'il a déjà écrit plusieurs fois sans réponse.',
+  "Un client qui relance pour la deuxième ou troisième fois sans avoir eu de réponse est au minimum 3, et 4 s'il le reproche explicitement.",
+  "IMPORTANT : happiness et level sont indépendants. Un client furieux qui demande seulement où est son colis reste un level 2 : sa colère se met dans happiness, pas dans level. À l'inverse un client parfaitement aimable qui demande un remboursement est un level 3 avec un happiness 2.",
+  '',
+  "Confiance (confidence) : à quel point tu es sûr du couple (category, request_kind) que tu viens de choisir.",
+  "- high : l'e-mail est explicite, un humain classerait pareil sans hésiter.",
+  '- medium : le classement est raisonnable mais un autre sujet ou un autre type se défendrait.',
+  "- low : l'e-mail est ambigu, très court, incompréhensible, ou tu hésites réellement entre deux classements.",
+  "Sois honnête : un low est utile, il fait relire le ticket par un humain. Ne mets pas high par défaut."
+].join('\n');
+
 const SYSTEM_PROMPT = [
   "Tu es l'agent de catégorisation du service client de Qiriness, une marque de soin de la peau. La plupart des e-mails sont en français.",
   '',
@@ -133,6 +180,8 @@ const SYSTEM_PROMPT = [
   "  Si tu choisis 4, nomme explicitement le déclencheur dans reason (par ex. « menace de plainte » ou « hospitalisation »).",
   "Le niveau plancher est calculé automatiquement à partir de (sujet, type) et ne peut jamais être abaissé : ta valeur ne sert qu'à signaler une escalade quand l'e-mail est plus grave que sa catégorie ne le laisse penser.",
   '',
+  SIGNALS_PROMPT,
+  '',
   "reason : une seule ligne très courte (12 mots maximum) justifiant le classement.",
   "N'invente aucune information et ne réponds pas au client : tu ne fais que classer."
 ].join('\n');
@@ -140,7 +189,7 @@ const SYSTEM_PROMPT = [
 export function createCategoriser(openai, { model, maxBodyChars = 3000 } = {}) {
   /**
    * @param {{subject?: string, messages: Array<{subject?: string, body_text?: string, received_at?: string}>}} input
-   * @returns {Promise<{category, request_kind, secondary_category, secondary_request_kind, level, responsible_team, reason, model}>}
+   * @returns {Promise<{category, request_kind, secondary_category, secondary_request_kind, level, responsible_team, confidence, language, happiness, reason, model}>}
    */
   async function categorise(input) {
     const raw = await openai.completeJson({
@@ -187,6 +236,14 @@ export function normaliseCategorisation(raw = {}) {
     level: Math.max(primaryLevel, secondaryFloor),
     // Routing follows the primary subject; Phase 5 consumes this.
     responsible_team: defaultTeam(category),
+    // An unusable answer is recorded as `low`, never as a confident one — same
+    // direction as the requestKind fallback above: when in doubt, involve a human.
+    confidence: CONFIDENCE_LEVELS.includes(raw.confidence) ? raw.confidence : 'low',
+    // Null rather than a default for the other two: "we do not know what language
+    // this is" is a real state the drafting agent must handle, and defaulting to
+    // fr (or to a neutral 2) would hide it behind a value that looks measured.
+    language: REPLY_LANGUAGES.includes(raw.language) ? raw.language : null,
+    happiness: HAPPINESS_SCORES.includes(raw.happiness) ? raw.happiness : null,
     reason: typeof raw.reason === 'string' ? raw.reason : null
   };
 }
@@ -220,8 +277,12 @@ function normaliseSecondary(raw, primaryCategory) {
 /**
  * The first inbound message defines what the ticket is about; a later one can
  * change it (an order question that becomes a complaint), so the most recent is
- * appended when the thread has grown. Deliberately sends subject + body only —
- * no sender address or display name, which classification does not need.
+ * appended when the thread has grown. Both ends matter and the middle rarely
+ * does: the first says what was originally asked, the latest says where the
+ * customer stands now — which is what happiness and any escalation are read from.
+ *
+ * Deliberately sends subject + body only — no sender address or display name,
+ * which classification does not need.
  */
 function buildUserPrompt(input, maxBodyChars) {
   const messages = Array.isArray(input?.messages) ? input.messages : [];
