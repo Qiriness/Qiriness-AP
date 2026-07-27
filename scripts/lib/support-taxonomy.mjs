@@ -59,6 +59,13 @@ export const CONTACT_ONLY_SUBJECTS = ['b2b', 'partner_collaboration', 'careers']
 // contradict each other (`order` + `question` + level 3 is incoherent); deriving
 // it removes that failure mode and gives the categoriser less to get wrong.
 // The model may only escalate above the default — never below (see clampLevel).
+//
+// LEVEL 4 IS A SEVERITY JUDGEMENT, NOT A SUBJECT. No (subject, kind) pair derives
+// it: it is reserved for an explicit threat of legal action or public exposure,
+// hospitalisation, or grave injury/danger — so it can only arrive as a model
+// escalation, read from what the email actually says, and should be rare. A
+// subject-implied 4 would have made "level 4" mean "this topic" instead of "this
+// is serious", and drowned the manager queue in routine mail.
 
 const BASE_LEVEL_BY_KIND = {
   question: 1, // answerable from knowledge alone
@@ -67,26 +74,49 @@ const BASE_LEVEL_BY_KIND = {
   contact: 2 // forward to the responsible team
 };
 
-/** Questions about these need a data lookup before they can be answered → level 2. */
-const LOOKUP_SUBJECTS = new Set(['order', 'delivery', 'payment', 'account', 'product_stock']);
+/**
+ * Subjects whose answers live in the database rather than the knowledge base.
+ * Both questions AND problems about them floor at 2, not 3: measured against
+ * human labelling on real mail, most "problems" here ("where is my tracking
+ * number?", "my promo code was refused") are answered by looking something up
+ * and replying — nothing is changed. Flooring them at 3 made a third of the
+ * review set impossible for the categoriser to agree with, because clampLevel
+ * cannot go below the floor. The model escalates to 3 itself when the reply
+ * requires actually changing something (refund, resend, cancellation, address
+ * change), which is the distinction level 3 is defined by.
+ */
+const LOOKUP_SUBJECTS = new Set([
+  'order',
+  'delivery',
+  'payment',
+  'account',
+  'product_stock',
+  'promotions'
+]);
 
-/** Adverse-reaction reports are always level 4, whatever the kind. Non-negotiable. */
-const ALWAYS_SENSITIVE = new Set(['cosmetovigilance']);
+/**
+ * The only place a subject changes the floor the kind would give. Keep it small:
+ * every entry is a claim that this topic behaves differently from its kind.
+ */
+const LEVEL_OVERRIDES = {
+  // The formulations are natural, so a reported reaction is in practice a mild
+  // allergy or irritation — answerable with advice rather than a manager matter.
+  // A question is already 1 and a complaint 3 under the generic rules; only the
+  // "I reacted to this product" problem is pulled down, from 3 to 2. Genuine
+  // severity (hospitalisation, grave injury) reaches 4 through escalation, which
+  // is the judgement the email itself supports.
+  cosmetovigilance: { problem: 2 }
+};
 
 export function defaultLevel(subject, kind) {
-  if (ALWAYS_SENSITIVE.has(subject)) {
-    return 4;
+  const override = LEVEL_OVERRIDES[subject]?.[kind];
+  if (override) {
+    return override;
   }
-  // A privacy/legal *action* (erasure, data access) is sensitive; asking how the
-  // policy works is not.
-  if (subject === 'legal_privacy' && (kind === 'problem' || kind === 'complaint')) {
-    return 4;
-  }
-  const base = BASE_LEVEL_BY_KIND[kind] ?? 1;
-  if (kind === 'question' && LOOKUP_SUBJECTS.has(subject)) {
+  if (LOOKUP_SUBJECTS.has(subject) && (kind === 'question' || kind === 'problem')) {
     return 2;
   }
-  return base;
+  return BASE_LEVEL_BY_KIND[kind] ?? 1;
 }
 
 /** The categoriser may raise the derived level but never lower it. */

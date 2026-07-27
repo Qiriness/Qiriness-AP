@@ -57,9 +57,18 @@ export async function supabaseInsert(client, table, rows) {
   return payload;
 }
 
-export async function supabaseSelect(client, table, filters, select = '*') {
+// options: { order: 'column.asc' | 'column.desc', limit: number } — PostgREST
+// query modifiers for batch readers that need a deterministic slice rather than
+// the whole table.
+export async function supabaseSelect(client, table, filters, select = '*', options = {}) {
   const searchParams = new URLSearchParams({ select });
   applyFilters(searchParams, filters);
+  if (options.order) {
+    searchParams.set('order', options.order);
+  }
+  if (options.limit) {
+    searchParams.set('limit', String(options.limit));
+  }
 
   const response = await fetch(
     `${client.baseUrl}/${table}?${searchParams.toString()}`,

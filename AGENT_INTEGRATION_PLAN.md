@@ -240,16 +240,84 @@ a standalone "complaints" subject would have overlapped every `problem` value.
 - **Level is derived, not guessed.** `defaultLevel(subject, kind)` gives the floor; the
   categoriser may escalate above it but never below (`clampLevel`). Two model-assigned
   fields on the same "needs action" axis would otherwise be able to contradict each other.
-  `cosmetovigilance` is always 4; a `legal_privacy` problem/complaint is 4; questions needing
-  a data lookup (order, delivery, payment, account, product_stock) are 2, others 1.
+  Questions needing a data lookup (order, delivery, payment, account, product_stock) are 2,
+  other questions 1; problems and complaints are 3; `contact` is 2.
+- **Level 4 is a severity judgement, not a subject.** No `(subject, kind)` pair derives it.
+  It is reserved for an explicit threat of legal action or public exposure, hospitalisation,
+  or grave injury/danger, so it can only arrive as a model escalation read from the email
+  text, and should be rare — "there should basically never be a level 4 email unless
+  something really bad happens." The three triggers are pinned in the categoriser prompt and
+  the model must name which one fired in its `reason`, so every 4 is auditable.
+  - Consequence for `cosmetovigilance`: the formulations are natural, so a reported reaction
+    is in practice a mild allergy or irritation — a **level 2** problem answerable with
+    advice (its one entry in the override table), not an automatic manager escalation. A
+    genuine hospitalisation still reaches 4 through the severity route.
+  - Consequence for `legal_privacy`: an RGPD erasure/access request is routine human work
+    (**level 3**); a threat to sue over it is the part that is 4.
+  - Why it matters: a subject-implied 4 makes "level 4" mean *this topic* rather than *this
+    is serious*, which fills the manager queue with routine mail and hides the genuinely bad
+    emails inside it. Corrected in migration `013` (comments only — 012 shipped the old
+    wording and stays as the record of what ran).
 - **Team routing** comes from `defaultTeam(subject)` (Phase 5 consumes it).
 - Restricted to classification only (least-privilege — the brief's "first blocker").
 - Structured output, with the enums built from the taxonomy module so the model cannot
   return an off-list value; the database check constraints are the second line of defence.
 
-**Exit:** categoriser agrees with human labelling on a review set. **Blocked on real data:**
-dev holds only internal work mail, so there is no meaningful review set until ingestion runs
-against the real support mailbox.
+**Built (`agent/src/pipeline/`, cheap tier, default `gpt-4o-mini`):**
+- `categorise.mjs` — classification only: no tools, no database, no order lookup. The prompt
+  carries the ticket subject and the first + latest inbound bodies, and **not** the sender's
+  address or name (classification does not need them).
+- Three layers keep the answer inside the taxonomy: enums generated from
+  `support-taxonomy.mjs`, a `normaliseCategorisation()` pass for the pair rules a per-field
+  enum cannot express, and the 012 check constraints. The pair rules: `contact` on a
+  non-relationship subject is read as `question`; a secondary repeating the primary is
+  dropped; a secondary kind is never written without its subject.
+- **Level floor includes the secondary pair** — an order question that also reports a skin
+  reaction is level 4, not 2. An unusable answer falls back to a kind that *raises* the
+  floor (`problem`), never one that lowers it.
+- `categorise-runner.mjs` — a batch pass in the same poll, selecting on `category is null`
+  rather than on what the poll just ingested, so tickets missed by a crash or a key-less run
+  are caught up automatically. Deliberately **not** fail-open like the spam gate: a failure
+  leaves the ticket pending and counts the attempt in `metadata.categorisation`; after 3 it
+  is written as (other, problem) → level 3, team contact, flagged `failed`, so it reaches a
+  human instead of occupying a batch slot forever.
+
+**Review set (`agent/eval/`, `npm run eval:categorise`):** 40 labelled emails covering every
+subject, every kind, both level-4 triggers, the near-misses that must *not* reach 4,
+two-subject emails, English, and phonetic French. Runs the real categoriser (same prompt,
+same schema), writes nothing, scores subject / kind / level separately with per-case
+`accept` alternatives — support mail is genuinely ambiguous, and scoring against one
+arbitrary reading would measure conformity rather than correctness.
+
+Tuning was measurement-driven: baseline 37/40 → 40/40, and each prompt rule beyond the
+taxonomy exists to fix a specific measured failure (kind read from phrasing rather than the
+action required, in *both* directions; over-eager secondaries, 5 spurious → 0; RGPD read as
+level 4; a health report inverted into the secondary slot).
+
+**Validated on real mail (`categorisation_review`, migration 014).** 40 emails randomly
+sampled from `contact@qiriness.com` across Nov 2025 / Dec 2025 / Jan 2026 (40 of 1,027,
+read-only GETs, no ingestion), 30 of them hand-labelled blind — the agent's columns stay
+empty until after labelling, so its answer cannot anchor the reviewer.
+
+First contact with real mail took the score from 100% (synthetic) to **67% subject / 70%
+kind / 60% level**, and exposed four rules that were simply wrong:
+
+| what was wrong | evidence | fix |
+|---|---|---|
+| Every `problem` floored at level 3 | 8 of 30 human labels sat *below* the floor, so `clampLevel` made agreement impossible | lookup subjects (incl. `promotions`) floor at 2 for problems too; the model escalates to 3 |
+| `order` vs `delivery` undefined | 7 of 10 subject misses; the human labels split the same request two ways | **dispatch is the line** — before it `order`, after it `delivery` |
+| `complaint` fired on tone | 4 misses; an angry customer demanding a refund was labelled `problem` by the human | `complaint` only when *nothing actionable* is asked; anger goes to the level |
+| `contact` used for existing partners | 2 misses (a pharmacy asking for an account statement) | `contact` = first approach only |
+| Level 3 read as "customer asked for an action" | agent said 2 for lost parcels, missing items, address changes | the prompt now lists what *resolving* it requires, not what the customer wrote |
+
+After those: **subject 77% · kind 90% · level 73%.**
+
+**Exit:** ⚠️ partially met. Kind agreement is good; subject and level are not yet. The
+remaining error concentrates in two boundaries that are not settled: `order` vs `delivery`
+mid-thread (the text often does not reveal whether the parcel shipped — this may only be
+resolvable with order data in Phase 4, not by the model), and whether a pure status chase is
+level 2 or 3 (the human labels themselves disagree — the same subject line is labelled both).
+Ten sampled emails are still unlabelled.
 
 ### Phase 4 — Tools layer (least-privilege, progressive retrieval)
 **Goal:** the reusable custom tools the agents call. Each queries narrow

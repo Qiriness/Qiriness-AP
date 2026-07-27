@@ -10,6 +10,8 @@ import { createSupabaseSpamAuditStore } from './ingestion/spam-audit.mjs';
 import { runDeltaPoll, createSupabaseCursorStore } from './ingestion/delta-poller.mjs';
 import { createOpenAIClient } from './llm/openai-client.mjs';
 import { createSpamClassifier } from './ingestion/spam-classifier.mjs';
+import { createCategoriser } from './pipeline/categorise.mjs';
+import { runCategorisation, createSupabaseCategoriserStore } from './pipeline/categorise-runner.mjs';
 
 async function main() {
   const runOnce = process.argv.includes('--once');
@@ -28,12 +30,16 @@ async function main() {
   // written anywhere else, so this is its only trace.
   const auditStore = createSupabaseSpamAuditStore(supabase);
 
-  // LLM spam second pass — enabled only when an OpenAI key is present. Without it,
-  // ingestion still runs and just relies on the blocklist.
+  // LLM stages — enabled only when an OpenAI key is present. Without it,
+  // ingestion still runs and just relies on the blocklist; tickets then stay
+  // uncategorised until a key is configured, and the next poll catches them up.
   let triage;
+  let categorise;
+  const categoriserStore = createSupabaseCategoriserStore(supabase);
   if (config.openaiApiKey) {
     const openai = createOpenAIClient({ apiKey: config.openaiApiKey });
     triage = createSpamClassifier(openai, { model: config.triageModel, logger }).triage;
+    categorise = createCategoriser(openai, { model: config.categoriserModel }).categorise;
   } else {
     logger.warn('ingest.llm_filter_disabled', { reason: 'OPENAI_API_KEY not set' });
   }
@@ -54,6 +60,19 @@ async function main() {
       limit
     });
     logger.info('ingest.poll', { shopId, ...totals });
+
+    // Categorisation runs after ingestion but selects on "category is null"
+    // rather than on what this poll just wrote, so a ticket missed by a crashed
+    // or key-less earlier poll is caught up here.
+    if (categorise) {
+      const categorised = await runCategorisation({
+        store: categoriserStore,
+        categorise,
+        shopId,
+        logger
+      });
+      logger.info('categorise.pass', { shopId, ...categorised });
+    }
   };
 
   if (runOnce) {

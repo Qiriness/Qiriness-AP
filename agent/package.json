@@ -9,6 +9,9 @@
     "ingest:once": "node src/index.mjs --once",
     "ingest:reset": "node src/tools/reset-cursor.mjs",
     "blocklist:add": "node src/tools/add-blocklist.mjs",
-    "test": "node --test \"src/**/*.test.mjs\""
+    "eval:categorise": "node eval/run-categorisation-eval.mjs",
+    "review:sample": "node eval/sample-mailbox.mjs",
+    "review:compare": "node eval/compare-review-labels.mjs",
+    "test": "node --test \"src/**/*.test.mjs\" \"eval/**/*.test.mjs\""
   }
 }

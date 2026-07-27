@@ -31,7 +31,10 @@ export function loadAgentConfig(env = loadEnv(REPO_ROOT)) {
     // OpenAI (LLM stages). The spam second pass is enabled only when a key is set;
     // without it, ingestion still runs and just skips the LLM filter.
     openaiApiKey: env.OPENAI_API_KEY,
-    triageModel: env.AGENT_TRIAGE_MODEL || 'gpt-4o-mini'
+    triageModel: env.AGENT_TRIAGE_MODEL || 'gpt-4o-mini',
+    // Categoriser: same cheap tier as triage — it picks 1-of-14 plus 1-of-4 with
+    // the enums constrained by Structured Outputs, not free reasoning.
+    categoriserModel: env.AGENT_CATEGORISER_MODEL || 'gpt-4o-mini'
   };
 }
 
