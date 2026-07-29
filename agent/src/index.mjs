@@ -10,6 +10,8 @@ import { createSupabaseSpamAuditStore } from './ingestion/spam-audit.mjs';
 import { runDeltaPoll, createSupabaseCursorStore } from './ingestion/delta-poller.mjs';
 import { createOpenAIClient } from './llm/openai-client.mjs';
 import { createSpamClassifier } from './ingestion/spam-classifier.mjs';
+import { createEmbeddingsClient } from '../../scripts/lib/embeddings/openai-embeddings-client.mjs';
+import { createMessageEmbedder } from './ingestion/message-embedder.mjs';
 import { createCategoriser } from './pipeline/categorise.mjs';
 import { runCategorisation, createSupabaseCategoriserStore } from './pipeline/categorise-runner.mjs';
 
@@ -35,11 +37,22 @@ async function main() {
   // uncategorised until a key is configured, and the next poll catches them up.
   let triage;
   let categorise;
+  let embedMessage;
   const categoriserStore = createSupabaseCategoriserStore(supabase);
   if (config.openaiApiKey) {
     const openai = createOpenAIClient({ apiKey: config.openaiApiKey });
     triage = createSpamClassifier(openai, { model: config.triageModel, logger }).triage;
     categorise = createCategoriser(openai, { model: config.categoriserModel }).categorise;
+    // Embeds each stored message inline, best-effort. `npm run embed:tickets`
+    // is the reconciler behind it and the better path for any bulk backfill.
+    embedMessage = createMessageEmbedder(
+      createEmbeddingsClient({
+        apiKey: config.openaiApiKey,
+        model: config.embeddingModel,
+        dimensions: config.embeddingDimensions
+      }),
+      { logger }
+    );
   } else {
     logger.warn('ingest.llm_filter_disabled', { reason: 'OPENAI_API_KEY not set' });
   }
@@ -58,6 +71,7 @@ async function main() {
       recordSpamHits: (hits) => blocklistStore.recordHits(rulesById, hits),
       auditStore,
       triage,
+      embedMessage,
       limit
     });
     logger.info('ingest.poll', { shopId, ...totals });

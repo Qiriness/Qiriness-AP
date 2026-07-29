@@ -20,8 +20,24 @@ import {
 //
 // audit (optional): a spam-audit collector. Every triage verdict, keep or drop, is
 // recorded — for a dropped email the audit row is the only trace that survives.
-export async function writeIngestedMessages(store, shopId, mapped, { triage, audit } = {}) {
-  const counts = { ticketsCreated: 0, messagesIngested: 0, removed: 0, llmSpamFiltered: 0 };
+//
+// embedMessage (optional): async (message) => embedding columns | null. Runs
+// before the upsert so the row is written complete, and is best-effort by
+// contract — a null result simply stores the message without a vector, which the
+// reconciler fills in later.
+export async function writeIngestedMessages(
+  store,
+  shopId,
+  mapped,
+  { triage, audit, embedMessage, logger } = {}
+) {
+  const counts = {
+    ticketsCreated: 0,
+    messagesIngested: 0,
+    messagesEmbedded: 0,
+    removed: 0,
+    llmSpamFiltered: 0
+  };
 
   for (const item of mapped) {
     if (item.removed) {
@@ -34,8 +50,16 @@ export async function writeIngestedMessages(store, shopId, mapped, { triage, aud
       continue; // dropped by the LLM spam pass — never written
     }
 
-    await store.upsertMessage({ ...item.message, ticket_id: ticketId, shop_id: shopId });
+    const message = { ...item.message, ticket_id: ticketId, shop_id: shopId };
+    // Defence in depth: createMessageEmbedder already swallows its own failures,
+    // but the "an embedding never fails ingestion" guarantee belongs here, at the
+    // call site, so it holds for whatever embedder is injected.
+    const embedding = await tryEmbed(embedMessage, message, logger);
+    await store.upsertMessage(embedding ? { ...message, ...embedding } : message);
     counts.messagesIngested += 1;
+    if (embedding) {
+      counts.messagesEmbedded += 1;
+    }
   }
 
   return counts;
@@ -130,6 +154,25 @@ async function resolveTicket(store, shopId, item, triage, counts, audit) {
   });
   counts.ticketsCreated += 1;
   return inserted.id;
+}
+
+/**
+ * Runs the injected embedder, swallowing anything it throws. An embedding is an
+ * optimisation; an ingested email is the product. A missing vector degrades
+ * retrieval to the category filter and is repaired by the reconciler, whereas a
+ * failed ingestion loses the email outright.
+ */
+async function tryEmbed(embedMessage, message, logger) {
+  if (!embedMessage) {
+    return null;
+  }
+  try {
+    return await embedMessage(message);
+  } catch (error) {
+    // No PII: the body never reaches the log.
+    logger?.warn?.('ingest.embed_failed', { message: error.message });
+    return null;
+  }
 }
 
 function isLater(candidate, current) {

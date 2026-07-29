@@ -34,7 +34,11 @@ export function loadAgentConfig(env = loadEnv(REPO_ROOT)) {
     triageModel: env.AGENT_TRIAGE_MODEL || 'gpt-4o-mini',
     // Categoriser: same cheap tier as triage — it picks 1-of-14 plus 1-of-4 with
     // the enums constrained by Structured Outputs, not free reasoning.
-    categoriserModel: env.AGENT_CATEGORISER_MODEL || 'gpt-4o-mini'
+    categoriserModel: env.AGENT_CATEGORISER_MODEL || 'gpt-4o-mini',
+    // Must match what the knowledge chunks were embedded with, or cosine
+    // comparison between a message and a chunk is meaningless.
+    embeddingModel: env.EMBEDDING_MODEL || 'text-embedding-3-small',
+    embeddingDimensions: Number(env.EMBEDDING_DIMENSIONS) || 1536
   };
 }
 

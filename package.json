@@ -20,6 +20,8 @@
     "sync:shopify:nightly:dry-run": "node scripts/sync-shopify-nightly.mjs --dry-run --limit=5 --page-size=5",
     "embed:knowledge": "node scripts/embed-knowledge-chunks.mjs",
     "embed:knowledge:dry-run": "node scripts/embed-knowledge-chunks.mjs --dry-run",
+    "embed:tickets": "node scripts/embed-ticket-messages.mjs",
+    "embed:tickets:dry-run": "node scripts/embed-ticket-messages.mjs --dry-run",
     "webhook:shopify:compliance": "node scripts/process-shopify-compliance-webhook.mjs"
   },
   "engines": {

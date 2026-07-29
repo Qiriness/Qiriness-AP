@@ -49,7 +49,8 @@ Conventions: `*.test.mjs` sit next to their source (`npm test` = `node --test`);
 |   |-- sync-shopify-{products,customers,orders,promotions}.mjs
 |   |-- sync-shopify-content-catalog.mjs # page+policy names/handles -> shopify_content_sources
 |   |                                    # sync-shopify-nightly.mjs runs them all in order
-|   |-- embed-knowledge-chunks.mjs apply-supabase-migration.mjs # embedding reconciler · SQL runner
+|   |-- embed-knowledge-chunks.mjs embed-ticket-messages.mjs # the two embedding reconcilers
+|   |-- apply-supabase-migration.mjs     # SQL runner
 |   |-- process-shopify-compliance-webhook.mjs # compliance webhook CLI harness
 |   `-- lib/
 |       |-- shopify-admin-client.mjs shopify-knowledge-client.mjs shopify-theme-client.mjs
@@ -57,13 +58,15 @@ Conventions: `*.test.mjs` sit next to their source (`npm test` = `node --test`);
 |       |-- shopify-sync-mappers.mjs shop-sync-service.mjs # mapper barrel · shared shop upsert
 |       |-- supabase-rest-client.mjs sync-config.mjs      # REST upserts · CLI/env parsing
 |       |-- hash.mjs collections.mjs html-to-text.mjs text-cleaning.mjs # incl. French mojibake fix
+|       |-- quoted-reply.mjs           # strips reply chains (53% of the mail corpus)
 |       |-- compliance-audit.mjs shopify-compliance-webhooks.mjs # audit logs · HMAC + redaction
 |       |-- support-taxonomy.mjs         # THE shared vocabulary: 14 subjects (+faq/brand_story
 |       |                                # knowledge-only) · 4 request kinds · level + team derivation
 |       |-- knowledge-{chunker,categories,document-mapper,navigation}.mjs # chunking · category
 |       |                                # inference · page->row mapping · menus -> header/footer
 |       |-- embeddings/
-|       |   |-- embedding-input.mjs      # composed input (title+category+heading+text) + its hash
+|       |   |-- embedding-input.mjs      # composed input per corpus (chunk: title+heading+text;
+|       |   |                            # message: subject+stripped body) + its salted hash
 |       |   |-- openai-embeddings-client.mjs # text-embedding-3-small, 1536d, batching + retry
 |       |   `-- embed-chunks.mjs         # pure staleness gate; returns column patches, no DB
 |       `-- knowledge/
@@ -84,6 +87,7 @@ Conventions: `*.test.mjs` sit next to their source (`npm test` = `node --test`);
 |       |   |-- contact-form.mjs         # parses the Shopify contact-form wrapper -> real customer
 |       |   |-- delta-poller.mjs         # follows delta pages, persists cursor, runs both gates
 |       |   |-- ticket-writer.mjs        # thread by conversationId, idempotent message upsert
+|       |   |-- message-embedder.mjs     # inline best-effort vector, written with the row
 |       |   |-- spam-gate.mjs blocklist-store.mjs spam-classifier.mjs # pass 1 (rules) · pass 2 (LLM)
 |       |   `-- spam-audit.mjs           # pure reason/row building + buffer -> spam_audit store
 |       |-- pipeline/
@@ -150,7 +154,7 @@ Ingestion + categorisation (Phase 1-3; tools and drafting are not built yet). Ru
    - **Direction.** The poller reads the Inbox, but the Inbox is not only inbound — the team's replies land back in it. A message whose sender is the support mailbox is recorded `outbound`. Measured on real mail, 123 of 348 messages; before this they were stored as customer mail and sat at the end of 43% of threads, exactly where the categoriser looks for how the customer currently feels.
    - **Identity.** A Shopify contact-form notification is *about* a customer but *from* `mailer@shopify.com`. `contact-form.mjs` parses the labelled body fields (`Name`, `E-mail`, `Indicatif de pays`, `Phone`, `Corps`) and those replace the envelope; `body_text` becomes the customer's own text. Without it 95 tickets shared 2 requester hashes, so `requester_email_hash` — the join key to `orders.customer_email_hash` — was unusable for half the inbox. The parser returns null on an unrecognised template, so a reworded form degrades to the envelope rather than to a wrong customer. It already understands the planned `Catégorie` / `Numéro de commande` dropdown fields, which land in `raw_graph_payload.contactForm` until the Shopify form ships them.
 4. **Gate 1** (no LLM): `email_blocklist` email/domain match -> dropped before any write, hit counts recorded.
-5. `ticket-writer.mjs` threads survivors by conversation; store interface injected for tests.
+5. `ticket-writer.mjs` threads survivors by conversation; store interface injected for tests. It also embeds each message inline (best-effort) so the row is written complete in one upsert — an embedding failure never fails ingestion, and `npm run embed:tickets` is the reconciler that repairs any gap.
 6. **Gate 2** (LLM, new conversations only): `spam-classifier.mjs` (`gpt-4o-mini`, Structured Outputs) drops spam before insert. Replies into existing tickets are never triaged, and it **fails open** on any error or missing key.
 7. Every decision from either gate buffers in a `spam-audit.mjs` collector and flushes once per poll into `spam_audit`. The flush is best-effort — a failed audit write is logged, never fatal, since a retried poll must not re-drop mail.
 8. **Categorisation** (LLM) runs after ingestion in the same poll, as a separate batch pass: `categorise-runner.mjs` selects open tickets flagged `needs_categorisation` (oldest first, 25/poll) rather than what the poll just wrote, so anything missed by a crash or a key-less run is caught up automatically. `categorise.mjs` is classification-only (no tools, no DB) and sends subject + first/latest inbound body — never the sender's address or name. It returns the two taxonomy axes plus two signals about the ticket: the `language` to reply in and customer `happiness` (1-4). A failure leaves the ticket pending and counts the attempt in `metadata.categorisation`; after 3 it is written as (other, problem) -> level 3, team contact, flagged `failed`, so it lands in front of a human instead of retrying forever — unless the ticket already had labels, in which case those are kept and only marked low-confidence (see the invariant).
@@ -163,6 +167,8 @@ Ingestion + categorisation (Phase 1-3; tools and drafting are not built yet). Ru
 - A chunk holds a vector **iff** its parent document is currently `approved` and not brand-voice, and the vector matches the current input hash + model + dimensions. Unapproving regenerates chunks vectorless. Embedding runs both inline (on approval, best-effort) and via the reconciler. `embedded_input_hash` covers title + category too, so a rename invalidates the vector even though `content_hash` ignores it.
 - Spam is never stored -- both gates drop mail before the first insert. `spam_audit` is the only trace of a dropped email (decision + sender + subject, never the body), so it is what makes a wrong drop reviewable at all.
 - A ticket's `level` is never below `defaultLevel(category, request_kind)` — including the *secondary* pair's floor, so an order question that also asks for a return is level 3. The model can only escalate, and an unusable answer falls back to a kind that raises the floor (`problem`), never one that lowers it.
+- **Every stored message is embedded; only approved knowledge chunks are.** The corpora differ because their gates differ: a chunk holds a vector iff its parent is approved and not brand-voice, whereas a message is part of the corpus by virtue of existing. Both share one determinism quadruple (`embedding_model`, `embedding_dimensions`, `embedded_input_hash`, `embedded_at`), so a re-run over unchanged text is a no-op for either — verified on real data: 348 messages embedded, second run embedded 0. Message hashes are additionally salted with the quoted-reply stripper version, so changing how history is stripped correctly invalidates every message vector without the version ever reaching the model.
+- **The category is never embedded.** Retrieval always filters by category first, so embedding the category name into a chunk adds a near-constant to every candidate in the filtered set — no discriminative value, and it dilutes the content. `title` carries the topical anchoring instead.
 - Only **inbound** messages are classified, ever. The spam gate skips outbound (blocking the support address would drop every reply the team sent), and the categoriser reads `findInboundMessages` only — spending a model call on text Qiriness wrote would make `happiness` measure our own tone. A thread holding *only* our replies is therefore unclassifiable: it is skipped **and taken out of the pending queue**, because ingestion re-raises `needs_categorisation` the moment a customer message arrives. Leaving it pending instead parks it at the front of an oldest-first batch permanently — measured on real mail, 11 such tickets took 11 of every 25 slots on every pass.
 - `first_message_at` tracks the **true earliest** message, moving backwards as well as forwards. Graph's delta is not chronological, so on an initial enumeration a thread is routinely opened by one of its later replies; "the first message we saw" was late on 93 of 171 tickets, by 5 days on average and 24 at worst, and the categoriser queue is ordered on this column.
 - A ticket's `level` never falls **across** re-categorisations either (`ratchetLevel`). A thread is re-read blind whenever the customer replies, so without the ratchet a polite follow-up could silently drop a level 3 back to 2 and take a promised refund out of the human queue. Levels only climb; a human closing the ticket is what ends it. The model's un-ratcheted answer is kept in `metadata.categorisation.proposed_level` so the clamp stays visible.

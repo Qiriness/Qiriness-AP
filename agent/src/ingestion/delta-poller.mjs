@@ -29,11 +29,15 @@ export async function runDeltaPoll({
   recordSpamHits,
   auditStore,
   triage,
+  // Best-effort per-message embedding; a null result stores the message without
+  // a vector and the reconciler fills it in later.
+  embedMessage,
   limit
 }) {
   const totals = {
     ticketsCreated: 0,
     messagesIngested: 0,
+    messagesEmbedded: 0,
     removed: 0,
     spamBlocked: 0,
     llmSpamFiltered: 0,
@@ -101,9 +105,15 @@ export async function runDeltaPoll({
       kept.push(item);
     }
 
-    const counts = await writeIngestedMessages(store, shopId, kept, { triage, audit });
+    const counts = await writeIngestedMessages(store, shopId, kept, {
+      triage,
+      audit,
+      embedMessage,
+      logger
+    });
     totals.ticketsCreated += counts.ticketsCreated;
     totals.messagesIngested += counts.messagesIngested;
+    totals.messagesEmbedded += counts.messagesEmbedded;
     totals.removed += counts.removed;
     totals.llmSpamFiltered += counts.llmSpamFiltered;
 

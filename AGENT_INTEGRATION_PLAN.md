@@ -340,11 +340,335 @@ columns/tables — never full scans (per `AGENTS.md`).
   whether this tool can report what the parcel is *doing*, or only what its number is,
   depends on data we have not yet checked.
 - **Knowledge retrieval** (reuse existing embeddings for product questions — no order
-  number needed).
+  number needed). See the embedding section below for what is embedded, when, and why the
+  ticket text does *not* need storing to search with.
 - Tools with side effects (any Level 3/4 action, sending mail) are **gated** — the Tool
   Runner returns a "needs approval" result instead of executing.
 
 **Exit:** each tool has typed inputs/outputs, error handling, and audit logging.
+
+#### Embedding and retrieval — the plan
+
+**Sequencing (agreed 2026-07-28).** Incoming emails are embedded *first*; the knowledge
+library is filled in and approved afterwards. The chunk counts quoted below are therefore
+deliberately sparse and are **not** a measure of anything — they describe a library that has
+not been written yet. The order matters because the email side is where the mechanics live
+(composition, stripping, determinism, backfill), and it can be built and verified against
+348 real messages that already exist.
+
+##### 1. What embedding is for here
+
+The email *must* be embedded — that is the connection mechanism. The customer's text becomes
+a vector, and cosine distance against the stored `knowledge_chunks` vectors is what links
+"my parcel hasn't arrived" to the delivery article without the two sharing a single keyword.
+There is no retrieval without embedding the email.
+
+##### 2. What is stored, and why both sides are
+
+Strictly, a *query* vector could be computed and discarded — only the *corpus* being searched
+has to persist. We store the email vectors anyway:
+
+1. **Reproducibility.** OpenAI does not guarantee bit-identical floats across calls (this
+   repo's own embedding principle). If a retrieval returns odd chunks, re-embedding to
+   investigate would not search with the same vector. Storing makes a retrieval replayable,
+   the same way `embedded_input_hash` makes the knowledge side deterministic.
+2. **Re-use.** A ticket is categorised, re-categorised on reply, drafted, possibly
+   re-drafted after a human edit. Each step may retrieve. Embed once.
+3. **The Q→A corpus accumulates free** — ticket messages then *are* a corpus, so "find a
+   similar past question and how we answered it" needs no backfill of the archive.
+4. **Cost is not a factor.** All 348 existing messages come to roughly $0.0014.
+
+| What | Stage | Role |
+|---|---|---|
+| Knowledge chunks (approved, non-brand) | on approval — inline best-effort + `embed:knowledge` reconciler | **corpus** |
+| Inbound customer messages | at ingestion, inline best-effort + reconciler | **query** *and* corpus |
+| Outbound team replies | same pass — the "A" half of Q→A | corpus, once Q→A retrieval is built |
+| Brand voice (`core_topic = 'brand'`) | never | never retrieved — always included in full |
+
+##### 3. When: at ingestion, mirroring the knowledge side
+
+`ticket_messages` already carries the same determinism quadruple as `knowledge_chunks`
+(`embedding_model`, `embedding_dimensions`, `embedded_input_hash`, `embedded_at`), so the
+proven pattern drops straight in: an inline best-effort call when the row is written, plus an
+`embed-ticket-messages` reconciler for retries, backfills and model changes.
+
+**Inline failure must never fail ingestion.** A missing vector degrades retrieval to the
+category filter; a failed ingestion loses an email. Ingestion is the right stage rather than
+categorisation because the corpus is then complete whether or not categorisation ran, and
+there is exactly one place a message becomes a vector.
+
+##### 4. What text goes in
+
+**Chunk input drops the category (decided 2026-07-28).** Chunks were composed as
+`title → category → section_heading → chunk_text`; the category is now removed, leaving
+**`title → section_heading → chunk_text`**. Reason: retrieval always filters by category
+first, so embedding the category name into every chunk adds a near-constant to every
+candidate inside the filtered set — by the same argument that lets blended queries survive
+filtering, a constant contributes nothing to ranking while diluting the actual content.
+`title` already gives a bare chunk its topical anchoring ("Livraison et retours"), which is
+what stops a fragment like *"Comptez 3 à 5 jours ouvrés"* floating free.
+
+Done **now** deliberately: changing the composition changes `embedded_input_hash` and
+re-embeds everything. Today that is 54 chunks (11 embedded); after the library is written it
+is thousands. Minor caveat accepted: with `faq` chunks always eligible a candidate set can
+span two or three categories, so the token was not perfectly constant — but `title` covers
+that discrimination.
+
+An email's analogue is **`subject → cleaned, quote-stripped body`**. Support subject lines
+carry real signal ("Colis bloqué", "remboursement commande #5229"), so dropping them loses
+information. `embedded_input_hash` covers the whole composed string, so a subject
+correction, a body edit or a change to the stripper all correctly invalidate the vector.
+
+**Strip quoted history first.** Measured with the real stripper (an earlier SQL estimate of
+"9 of 348" was badly low): **104 of 348 messages carry quoted history, and it is 53% of the
+corpus by character count** — over half the stored text is duplicated conversation. Every cut
+comes from an unambiguous structural marker (`De:`+`Envoyé:` header block 88, `a écrit :` 10,
+`-----Message d'origine-----` 3, `From:`+`Sent:` 3); the loose `>`-line heuristic fires on
+none of them. Size is not the real cost: re-embedding
+a quoted original means the reply's vector is dominated by text already embedded on the
+earlier message, so a follow-up reading "merci, et le remboursement ?" produces a vector
+nearly identical to the question it quotes — the two become indistinguishable in the corpus
+and a similar-question search returns the same conversation twice. Strip the
+`Le … a écrit :` / `-----Message d'origine-----` / `De: … Envoyé:` block forms and
+`>`-prefixed lines. The same stripper fixes the categoriser, which currently reads a quoted
+original as the thread's *latest* message.
+
+**Size: measured, and not a problem.** Over 348 real messages (tokens ≈ chars/4):
+
+| direction | n | median | mean | p95 | max |
+|---|---|---|---|---|---|
+| inbound | 225 | 116 | 237 | 718 | **2 134** |
+| outbound | 123 | 130 | 222 | 727 | 1 920 |
+
+`text-embedding-3-small` accepts **8 191 tokens**; the longest email uses a quarter of that
+and exactly one message exceeds 2 000. Therefore:
+
+- **Do not chunk emails.** Chunking exists for long structured articles with headings.
+  Splitting a 116-token median message yields fragments too small to carry meaning.
+- **One message, one vector.** That is what `ticket_messages.embedding` is.
+- **Cap at ~6 000 tokens anyway**, head-preserving (a reply puts new text at the top, quoted
+  history below), and log when it fires. It should never fire; if it starts, that is a signal
+  about the mail, not a knob to tune.
+
+##### 5. How retrieval works
+
+1. Ticket is categorised → `category`, and possibly `secondary_category`.
+2. Take the **first and latest inbound** messages and their stored vectors (embed now if
+   missing; never fail).
+3. For each subject, cosine search `knowledge_chunks` where the chunk category matches
+   **and** `embedding is not null`.
+4. Merge, cap, and pass into the drafting prompt alongside the always-included brand voice
+   and the Phase 4 order-context bundle.
+
+**`faq` chunks are eligible for every subject.** `faq` is a knowledge-only category and is
+never a ticket subject, so a strict subject match would make those chunks permanently
+unreachable — and an FAQ article answers questions across topics by nature. The candidate set
+is therefore `chunk.category IN (ticket.category, ticket.secondary_category, 'faq')`.
+
+**Top-k, not a high similarity threshold** — see below; a high cut-off is exactly where
+two-topic emails fail silently.
+
+*Refinement from the first real run (2026-07-29).* A **low noise floor** is a different thing
+from a high threshold, and looks necessary. Measured against the 11 embedded chunks: a ticket
+whose answer exists scored **0.624** (an account login question matching the password-reset
+FAQ), while tickets with no corresponding article scored **0.375–0.484** — the top-k of
+nothing is still noise, and would reach the drafting prompt as if it were relevant. A floor
+around 0.4–0.5 excludes that without approaching the range where a blended two-topic query
+lives. Do not hard-code a number yet: n is 11 chunks and 5 samples. Calibrate once the
+library is real.
+
+##### 6. Two distinct topics — the mechanism, and where it breaks
+
+An email raising a delivery problem *and* a stock question produces **one blended vector**.
+Both per-subject searches use that same blended vector: filtering by category changes which
+chunks are *candidates*, not the query.
+
+**Why it still works.** Inside the `delivery` candidate set every chunk is about delivery, so
+the query's stock component is about equally irrelevant to all of them — it adds a
+near-constant offset to every score, and a constant offset does not change ordering. The
+delivery component does the ranking. Blending destroys *absolute* similarity but largely
+preserves *relative ranking within a filtered set*. That is the whole mechanism, and it is
+why the category filter does the heavy lifting rather than the vector.
+
+**Where it breaks — two consequences to design around:**
+
+- **A similarity threshold breaks it.** A blended query can score below a fixed cut-off for
+  *both* topics and return nothing, while its top-3 in each category are still the right
+  chunks. Hence top-k, never a threshold. If a threshold is ever added, two-topic emails go
+  silently empty.
+- **It degrades when one topic dominates the text.** A 300-word delivery complaint with a
+  one-line stock question yields a vector that is ~90% delivery; ranking within the stock
+  chunks is then close to arbitrary, because the component is too weak for the offset to stay
+  constant.
+
+**The upgrade, when it is needed.** Have the categoriser emit a one-line restatement *per
+topic* — it already reads the email and already produces `reason`. Embed those separately for
+two clean, undiluted query vectors. Two tiny embeddings per multi-topic ticket.
+
+**Trigger condition:** only worth building when a category holds enough chunks that ranking
+matters. With three chunks in a category you take all three and ranking is irrelevant — so
+the blending problem and the point where vector search earns its keep arrive together.
+Roughly: revisit when a high-volume subject passes ~100 chunks. On real mail 28% of tickets
+carry a secondary subject, so this is a real case rather than a hypothetical.
+
+##### 7. First + latest — two searches, not one concatenation
+
+**Decided: first + latest inbound**, matching what the categoriser reads.
+
+Implement as *two searches using the two stored per-message vectors*, not as one embedding of
+the concatenated text. Concatenating re-introduces the averaging problem above (an opening
+question plus a terse chase averaged into one vector) and needs somewhere to store a
+synthetic ticket-level vector belonging to no message.
+
+**Merge on raw cosine score, unweighted (decided 2026-07-28).** Both vectors are cosine
+against the same corpus, so the scores are directly comparable; pool the two result sets and
+take top-k. No tuned constant, and the richer message wins naturally — which the data says is
+usually the latest, inverting the assumption this started from:
+
+| across the 41 multi-message tickets | first | latest |
+|---|---|---|
+| average tokens | 186 | **324** |
+
+Only 3 of 41 have a latest under 30 tokens. Follow-ups *escalate* — they add the order
+number, the history, the specific ask. Interleaving was rejected for this reason: it would
+force the first message into the results even when stale, and re-categorisation already makes
+the category filter track the *latest* topic.
+
+**70% of tickets have a single inbound message** (119 of 171), so first and latest are the
+same row and this degenerates to one search automatically.
+
+| inbound messages per ticket | 1 | 2 | 3 | 4–5 |
+|---|---|---|---|---|
+| tickets | 119 | 27 | 8 | 6 |
+
+##### 8. Curated exemplar threads — how the agent learns the *form* of a reply
+**(decided 2026-07-28: curate, do not retrieve raw history)**
+
+Three libraries, cleanly separated by what they carry:
+
+| library | carries | reaches the prompt by |
+|---|---|---|
+| `knowledge_documents` / chunks | **facts** — what is true | retrieved, filtered by subject |
+| `voice_profile` (brand) | **identity** — who we sound like | always included in full |
+| **exemplar threads** (new) | **form** — how we answer this kind of thing | retrieved, filtered by (subject, kind) |
+
+**Why curated rather than retrieved from history.** Two reasons, the second decisive:
+
+1. Past replies are unvetted. Some are stale, off-brand, or written under time pressure. A
+   live reply in the corpus reads *"Le code de bienvenue est BIENVENUE20, il n'est pas
+   cumulable…"* — as a few-shot example for an unrelated promo question that invites the
+   model to hand a specific code to a customer it does not apply to. Few-shot examples leak
+   specifics, not just tone.
+2. **Personal data.** Retrieving a real past thread puts *customer A's email* into the prompt
+   that drafts a reply to *customer B*. Against `AGENTS.md` ("exclude personal customer data
+   from AI prompts unless strictly required") that is hard to justify when what is wanted is
+   the shape of a good reply, not that customer's details. Curated exemplars are scrubbed by
+   construction — making one timeless means removing the order number and the name anyway —
+   so the problem disappears rather than needing mitigation.
+
+This also mirrors the knowledge library's founding rule: nothing auto-syncs, every row is an
+explicit human decision.
+
+**Shape.** An exemplar is an anonymised (customer message → approved reply) pair, labelled
+with `category` + `request_kind` + **`happiness`**, so it is retrievable on the axes that
+actually determine what a good reply looks like.
+
+**Happiness is human-assigned (decided 2026-07-28)**, not copied from the categoriser. It is
+curation metadata — "this is how we answer an angry one" — in the same way
+`categorisation_review.human_category` is a human label rather than a model output. The
+person curating knows which register the reply demonstrates.
+
+**Retrieve on (subject, kind), then rank by tone proximity — do not filter on happiness.**
+14 subjects × 4 kinds × 4 happiness values is 224 combinations; filtering on all three would
+be empty almost everywhere. Instead filter on `(category, request_kind)` and order candidates
+by `abs(exemplar.happiness − ticket.happiness)`. That degrades gracefully: with one exemplar
+for the pair you get it regardless of tone match, and with several you get the closest
+register first.
+
+**Sourcing.** Seed from the real corpus — the mailbox already holds a large, representative
+question space. Workflow mirrors the knowledge library's import path: pick a real ticket →
+*promote to exemplar* → edit to strip specifics and generalise → approve. Which threads to
+promote is itself a use for the ticket embeddings: cluster the corpus and promote the
+representative thread from each cluster, so coverage is chosen by real demand rather than
+guesswork.
+
+**Do they need embedding?** Probably not at first. With 14 subjects × 4 kinds there are 56
+combinations; 2–3 exemplars each is ~50 rows, so an exact `(category, request_kind)` filter
+returns 2–3 and you take all of them. Same reasoning as the knowledge chunks: build the
+table, the curation path and the filter first; add vectors when a combination holds enough
+exemplars for ranking to matter.
+
+**Sequencing.** The table and retrieval belong with Phase 5 drafting. Curation does **not**
+need a UI to start — `categorisation_review` set the precedent of a table humans edit
+directly in the Supabase editor. A proper editing surface in the dashboard can follow.
+
+##### 9. Compliance
+
+An embedding of a customer's message is a **derived representation of their personal data**,
+and embeddings are partially invertible. A redact request must clear
+`ticket_messages.embedding` and its determinism metadata, not only `body_text`. One line at
+build time; an audit finding if retrofitted.
+
+Exemplar rows are exempt by construction — they hold no personal data, because curation
+removes it. That is a property to *enforce* at approval, not merely to hope for.
+
+##### 10. Work items, in order
+
+1. **Quote stripper** — pure module, shared by the embedder and the categoriser. Unit-tested
+   against the French/Outlook forms above. Fixes a live categoriser bug on its own.
+2. **Embedding input composition + hash** — `subject → stripped body` for emails;
+   **drop `category`** from the chunk composition at the same time, while it is only 54
+   chunks. Both feed `embedded_input_hash`; the stripper version is part of the hashed input.
+3. **Inline best-effort embed at ingestion** — write the vector when the message row is
+   written; never fail ingestion on an embedding error.
+4. **`embed-ticket-messages` reconciler** — mirrors `embed-knowledge-chunks.mjs`: gates on
+   the determinism quadruple, so a re-run over unchanged text is a no-op.
+5. **Backfill** — re-embed the 54 chunks under the new composition, and embed the 348
+   existing messages (~$0.0014 all in). Also the first real test of the pipeline.
+6. **Retrieval tool** (Phase 4) — per-subject searches including `faq`, top-k, raw-score
+   merge across first + latest, typed in/out, audit logging.
+7. **Redaction clears vectors** — extend the compliance path.
+8. **Exemplar threads** (Phase 5) — table with a human-assigned `happiness`, promote-from-
+   ticket path, `(category, request_kind)` retrieval ranked by tone proximity. Curated in the
+   Supabase editor first; dashboard UI later.
+9. **Clustering script** (optional, any time after step 5) — prints clusters with a
+   representative message per subject, to drive both what to write and what to promote.
+
+##### 11. Deferred and parked (reviewed 2026-07-28)
+
+- **Residual query/corpus asymmetry — parked, deliberately.** Chunk vectors still carry
+  `title` and `section_heading` scaffolding while an email query is subject + prose.
+  Dropping the category narrowed the gap; the rest is not worth engineering until retrieval
+  quality is *demonstrably* bad against a library worth measuring. Revisit only on evidence,
+  not on principle.
+- **Personal-data enforcement on exemplars — deferred.** No approval-time check for now. The
+  convention stands (curation strips names, order numbers and codes — which making an
+  exemplar timeless requires anyway), it is simply not machine-enforced. Worth recording
+  that the design's compliance advantage over retrieved history depends on the scrubbing
+  actually happening, so this returns before anything is exposed beyond dev. Work item 7
+  (redaction clears vectors) stays where it is — it is one line and belongs with the
+  embedding write path.
+- **Clustering — to explore.** See below; not on the critical path, and free once the corpus
+  is embedded.
+
+##### 12. Clustering the ticket corpus (agreed to explore)
+
+Two questions the embedded corpus can answer that nothing else can, both feeding work you
+are about to do anyway:
+
+- **What should the knowledge library cover first?** Grouping by `(category, request_kind)`
+  already ranks demand — `order` alone is 36 tickets against 0 chunks. Clustering adds the
+  resolution that matters: *within* `order`, is the demand "cannot complete checkout",
+  "wrong address entered", or "add an item before dispatch"? Those are three different
+  articles, and the label alone cannot separate them.
+- **Which threads to promote to exemplars.** Promote the representative of each cluster, so
+  exemplar coverage follows real demand instead of intuition.
+
+Practical shape: cluster the ~225 inbound message vectors, expect roughly 15–25 meaningful
+groups — small enough to review by hand. Cluster *within* a subject rather than globally, so
+the output is directly actionable per article. Nothing here needs to be automated or
+productised; a script that prints clusters with a representative message per cluster is
+enough to drive both decisions.
 
 #### Open question — live parcel status (raised 2026-07-27, not yet investigated)
 

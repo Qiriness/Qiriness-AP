@@ -306,3 +306,89 @@ test('writes without an audit collector still work (auditing is optional)', asyn
   );
   assert.equal(counts.messagesIngested, 1);
 });
+
+// --- inline embedding --------------------------------------------------------
+
+test('the message is stored complete, with its vector, in one write', async () => {
+  const store = createFakeStore();
+  await writeIngestedMessages(
+    store,
+    'shop-1',
+    [mappedMessage({ id: 'm1', conversationId: 'c1', at: '2026-07-24T10:00:00Z' })],
+    { embedMessage: async () => ({ embedding: '[0.1,0.2]', embedding_model: 'text-embedding-3-small' }) }
+  );
+
+  const stored = store.messages.get('shop-1|m1');
+  assert.equal(stored.embedding, '[0.1,0.2]');
+  assert.equal(stored.embedding_model, 'text-embedding-3-small');
+  // The body is still there — embedding augments the row, it does not replace it.
+  assert.equal(stored.body_text, 'body');
+});
+
+test('an embedding failure never fails ingestion', async () => {
+  // The contract the whole design rests on: a missing vector degrades retrieval
+  // to the category filter, a failed ingestion loses an email.
+  const store = createFakeStore();
+  const counts = await writeIngestedMessages(
+    store,
+    'shop-1',
+    [mappedMessage({ id: 'm1', conversationId: 'c1', at: '2026-07-24T10:00:00Z' })],
+    {
+      embedMessage: async () => {
+        throw new Error('embeddings API down');
+      }
+    }
+  );
+  assert.equal(counts.messagesIngested, 1);
+  assert.equal(counts.messagesEmbedded, 0);
+  assert.ok(store.messages.get('shop-1|m1'));
+});
+
+test('a null embedding stores the message unchanged for the reconciler', async () => {
+  const store = createFakeStore();
+  const counts = await writeIngestedMessages(
+    store,
+    'shop-1',
+    [mappedMessage({ id: 'm1', conversationId: 'c1', at: '2026-07-24T10:00:00Z' })],
+    { embedMessage: async () => null }
+  );
+  const stored = store.messages.get('shop-1|m1');
+  assert.equal(counts.messagesEmbedded, 0);
+  assert.equal('embedding' in stored, false);
+  assert.equal(stored.body_text, 'body');
+});
+
+test('without an embedder, ingestion is exactly as before', async () => {
+  const store = createFakeStore();
+  const counts = await writeIngestedMessages(store, 'shop-1', [
+    mappedMessage({ id: 'm1', conversationId: 'c1', at: '2026-07-24T10:00:00Z' })
+  ]);
+  assert.equal(counts.messagesIngested, 1);
+  assert.equal(counts.messagesEmbedded, 0);
+  assert.equal('embedding' in store.messages.get('shop-1|m1'), false);
+});
+
+test('outbound replies are embedded too — they are the A half of Q->A', async () => {
+  const store = createFakeStore();
+  const seen = [];
+  await writeIngestedMessages(
+    store,
+    'shop-1',
+    [
+      mappedMessage({ id: 'm1', conversationId: 'c1', at: '2026-07-24T10:00:00Z' }),
+      mappedMessage({
+        id: 'm2',
+        conversationId: 'c1',
+        at: '2026-07-24T11:00:00Z',
+        direction: 'outbound'
+      })
+    ],
+    {
+      embedMessage: async (message) => {
+        seen.push(message.direction);
+        return { embedding: '[0]' };
+      }
+    }
+  );
+  assert.deepEqual(seen, ['inbound', 'outbound']);
+});

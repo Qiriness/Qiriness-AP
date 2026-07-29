@@ -1,19 +1,44 @@
-import { buildEmbeddingInput, hashEmbeddingInput } from './embedding-input.mjs';
+import {
+  buildEmbeddingInput,
+  buildMessageEmbeddingInput,
+  hashEmbeddingInput,
+  MESSAGE_HASH_SALT
+} from './embedding-input.mjs';
 
-// Orchestrates embedding for a set of chunk rows without touching Supabase, so
-// both the web service (inline, on approve) and the reconciler script can reuse
-// it. Callers pass chunk rows that carry the fields needed to compose the input
-// (title, category, section_heading, chunk_text) plus the currently stored
-// embedding metadata; this module decides which are stale, embeds only those,
-// and returns column patches to persist.
+// Orchestrates embedding for a set of rows without touching Supabase, so every
+// caller can reuse it: the web service (inline, on approve), the knowledge
+// reconciler, ingestion (inline, per message) and the message reconciler.
+//
+// Callers pass rows carrying the fields needed to compose the input plus the
+// currently stored embedding metadata; this module decides which are stale,
+// embeds only those, and returns column patches to persist. The composer is
+// injectable because knowledge chunks and email messages compose differently —
+// everything downstream of that is identical, including the staleness gate that
+// makes a re-run a no-op.
+
+/** How each corpus composes and hashes its embedding input. */
+export const KNOWLEDGE_CHUNK_INPUT = {
+  build: buildEmbeddingInput,
+  salt: ''
+};
+
+export const TICKET_MESSAGE_INPUT = {
+  build: buildMessageEmbeddingInput,
+  // Mixing the stripper version into the hash means changing how quoted history
+  // is removed invalidates every stored message vector.
+  salt: MESSAGE_HASH_SALT
+};
 
 /**
- * Decides whether one chunk needs (re)embedding against a target model +
+ * Decides whether one row needs (re)embedding against a target model +
  * dimensions, and returns the composed input and its hash either way.
  */
-export function evaluateChunkEmbedding(chunk, { model, dimensions }) {
-  const input = buildEmbeddingInput(chunk);
-  const hash = hashEmbeddingInput(input);
+export function evaluateChunkEmbedding(
+  chunk,
+  { model, dimensions, inputSpec = KNOWLEDGE_CHUNK_INPUT }
+) {
+  const input = inputSpec.build(chunk);
+  const hash = hashEmbeddingInput(input, { salt: inputSpec.salt });
   const needsEmbedding =
     chunk.embedding == null ||
     chunk.embedded_input_hash !== hash ||
@@ -33,13 +58,19 @@ export function evaluateChunkEmbedding(chunk, { model, dimensions }) {
  *   Unchanged chunks are skipped (no API call, no patch) — this is what makes a
  *   re-run idempotent.
  */
-export async function embedChunks({ chunks, client }) {
+export async function embedChunks({ chunks, client, inputSpec = KNOWLEDGE_CHUNK_INPUT }) {
   const { model, dimensions } = client;
   const stale = [];
 
   for (const chunk of chunks) {
-    const { needsEmbedding, input, hash } = evaluateChunkEmbedding(chunk, { model, dimensions });
-    if (needsEmbedding) {
+    const { needsEmbedding, input, hash } = evaluateChunkEmbedding(chunk, {
+      model,
+      dimensions,
+      inputSpec
+    });
+    // An input that composes to nothing (a message with no subject and an empty
+    // body) has no meaning to embed and would waste a call on whitespace.
+    if (needsEmbedding && input.length > 0) {
       stale.push({ id: chunk.id, input, hash });
     }
   }
