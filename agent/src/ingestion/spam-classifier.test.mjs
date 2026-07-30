@@ -3,9 +3,10 @@ import test from 'node:test';
 
 import { createSpamClassifier } from './spam-classifier.mjs';
 
-function fakeOpenAI(result) {
+function fakeOpenAI(result, captured = {}) {
   return {
-    async completeJson() {
+    async completeJson(args) {
+      Object.assign(captured, args);
       if (result instanceof Error) throw result;
       return result;
     }
@@ -24,11 +25,40 @@ test('flags a spam label as spam', async () => {
   assert.equal(verdict.label, 'spam');
 });
 
-test('keeps keep and irrelevant by default (only spam is dropped)', async () => {
+test('drops spam and irrelevant by default, keeps keep', async () => {
+  // `irrelevant` used to be labelled and then kept anyway, which made the label
+  // decorative — automated notices, FYI forwards and test messages all became
+  // tickets someone had to close by hand.
   const keep = await createSpamClassifier(fakeOpenAI({ label: 'keep', reason: 'r' }), { model: 'm' }).triage(item());
+  const spam = await createSpamClassifier(fakeOpenAI({ label: 'spam', reason: 'r' }), { model: 'm' }).triage(item());
   const irrelevant = await createSpamClassifier(fakeOpenAI({ label: 'irrelevant', reason: 'r' }), { model: 'm' }).triage(item());
   assert.equal(keep.spam, false);
-  assert.equal(irrelevant.spam, false);
+  assert.equal(spam.spam, true);
+  assert.equal(irrelevant.spam, true);
+  // The label survives on the verdict, so the audit row records WHY it went —
+  // "irrelevant" and "spam" are different decisions to review.
+  assert.equal(irrelevant.label, 'irrelevant');
+});
+
+test('dropLabels stays configurable, so a caller can keep irrelevant', async () => {
+  const { triage } = createSpamClassifier(fakeOpenAI({ label: 'irrelevant', reason: 'r' }), {
+    model: 'm',
+    dropLabels: ['spam']
+  });
+  assert.equal((await triage(item())).spam, false);
+});
+
+test('the prompt protects internal mail that is about a customer', async () => {
+  // Measured on the real mailbox: 17 of 20 purely internal threads were customer
+  // work forwarded between colleagues — relances, tracking numbers, refund
+  // decisions. Dropping those as "internal" would have destroyed live level-3
+  // cases, so the rule is explicit in the prompt.
+  const captured = {};
+  await createSpamClassifier(fakeOpenAI({ label: 'keep', reason: 'r' }, captured), {
+    model: 'm'
+  }).triage(item());
+  assert.match(captured.system, /interne[\s\S]*concerne un CLIENT|n'est PAS irrelevant/);
+  assert.match(captured.system, /e-mails de test/);
 });
 
 test('fails OPEN on a classifier error — never drops a real email', async () => {

@@ -22,6 +22,7 @@
     "embed:knowledge:dry-run": "node scripts/embed-knowledge-chunks.mjs --dry-run",
     "embed:tickets": "node scripts/embed-ticket-messages.mjs",
     "embed:tickets:dry-run": "node scripts/embed-ticket-messages.mjs --dry-run",
+    "cluster:tickets": "node scripts/cluster-ticket-messages.mjs",
     "webhook:shopify:compliance": "node scripts/process-shopify-compliance-webhook.mjs"
   },
   "engines": {
