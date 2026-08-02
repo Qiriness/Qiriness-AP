@@ -89,6 +89,86 @@ export async function supabaseSelect(client, table, filters, select = '*', optio
   return payload;
 }
 
+/**
+ * Every row matching the filters, paged — for readers that must see the whole
+ * table rather than a slice.
+ *
+ * WHY THIS EXISTS. PostgREST caps a single response at the server's
+ * `db-max-rows` (1000 on Supabase) and does it SILENTLY: `limit=5000` comes back
+ * as 1000 rows with a 206 and no error, so a caller that simply passed a large
+ * limit has been reading a truncated table without knowing. That is exactly what
+ * the clustering report was doing — 1111 embedded messages, 1000 read.
+ *
+ * Advances by the number of rows actually returned and stops on an empty page,
+ * rather than assuming the server honours the requested page size. That way the
+ * paging stays correct whatever `db-max-rows` is set to, now or later.
+ *
+ * A stable sort is required, not optional: without an ORDER BY, Postgres may
+ * return rows in a different order per request, which makes offset paging drop
+ * some rows and repeat others. Defaults to `id.asc`.
+ */
+export async function supabaseSelectAll(client, table, filters, select = '*', options = {}) {
+  const order = options.order || 'id.asc';
+  const max = options.limit ?? Infinity;
+  const pageSize = options.pageSize || 1000;
+  const rows = [];
+
+  for (let from = 0; rows.length < max; ) {
+    const searchParams = new URLSearchParams({ select, order });
+    applyFilters(searchParams, filters);
+
+    const response = await fetch(`${client.baseUrl}/${table}?${searchParams.toString()}`, {
+      method: 'GET',
+      headers: {
+        apikey: client.key,
+        Authorization: `Bearer ${client.key}`,
+        'Range-Unit': 'items',
+        Range: `${from}-${from + pageSize - 1}`
+      }
+    });
+
+    const payload = await response.json().catch(() => null);
+    if (!response.ok) {
+      const detail = payload?.message || payload?.details || `HTTP ${response.status}`;
+      throw new Error(`Supabase select from ${table} failed: ${detail}`);
+    }
+    if (!Array.isArray(payload) || payload.length === 0) {
+      break;
+    }
+
+    rows.push(...payload);
+    from += payload.length;
+  }
+
+  return rows.length > max ? rows.slice(0, max) : rows;
+}
+
+/**
+ * Calls a Postgres function through PostgREST's /rpc endpoint.
+ *
+ * Exists for work SQL can do and a REST filter cannot — vector search being the
+ * first case: `<=>` has no PostgREST equivalent, so without this the only way to
+ * rank by embedding is to pull every row and its 1536 floats to the client.
+ */
+export async function supabaseRpc(client, functionName, args = {}) {
+  const response = await fetch(`${client.baseUrl}/rpc/${functionName}`, {
+    method: 'POST',
+    headers: {
+      apikey: client.key,
+      Authorization: `Bearer ${client.key}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(args)
+  });
+
+  const payload = await response.json().catch(() => null);
+  if (!response.ok) {
+    const detail = payload?.message || payload?.details || `HTTP ${response.status}`;
+    throw new Error(`Supabase rpc ${functionName} failed: ${detail}`);
+  }
+  return payload;
+}
+
 export async function supabaseUpdate(client, table, filters, row) {
   const searchParams = new URLSearchParams();
   applyFilters(searchParams, filters);

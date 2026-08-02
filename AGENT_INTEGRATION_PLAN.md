@@ -323,6 +323,47 @@ Ten sampled emails are still unlabelled.
 **Goal:** the reusable custom tools the agents call. Each queries narrow
 columns/tables — never full scans (per `AGENTS.md`).
 
+#### What each tool is worth (measured 2026-07-30)
+
+**The objective, stated in the taxonomy's own terms:** auto-resolve **level 1**
+(answerable from knowledge alone) and **level 2** (answerable by looking
+something up — nothing changes), and for **level 3** (needs a state-changing
+action) assemble everything a human needs to act, without acting. Level 4 goes
+straight to a person untouched.
+
+Across 330 customer-facing categorised tickets, that target is most of the
+inbox:
+
+| Level | Tickets | Share | Agent's job |
+|---|---|---|---|
+| L1 | 42 | 13% | answer from the knowledge library |
+| L2 | 156 | 47% | look up, answer, change nothing |
+| L3 | 131 | 40% | assemble context, hand to a human |
+| L4 | 1 | 0% | escalate untouched |
+
+Tools ranked by tickets unblocked — **build in this order**, because it is
+roughly the reverse of the order the list below was originally written in:
+
+| # | Tool | Unblocks | Why here |
+|---|---|---|---|
+| 1 | **Team routing** (no data access) | 25 (`careers` 11, `partner_collaboration` 14 — all L2 `contact`) | Needs no order data, no retrieval, no Shopify. Pure category → team → acknowledge. The cheapest 8% in the corpus. |
+| 2 | **Knowledge retrieval** | ~45 (`product` L1 29, `account` L2 9, `other` 7) | Embeddings and the retrieval path already exist. `account` is already answered by the approved FAQ at 0.62. Gated on writing the ~46 messages' worth of product content (Next Step 3). |
+| 3 | **Order-number resolver** | prerequisite for 172 (`delivery` 71, `order` 63, `payment` 21, `return_exchange` 17) | 52% of the corpus is unreachable until a ticket knows which order it is about. Currently `shopify_order_number` is set on **0 of 330** and `customer_id` on **0**. An order reference appears in the first message text of only **82** — the other 248 must resolve by sender identity or ask. |
+| 4 | **Order-context bundle** | same 172 | The single payload that serves both goals: it *is* the L2 answer, and it *is* the L3 human handoff. Build it once, and level only decides whether the agent replies or routes. |
+| 5 | **Tracking** | 71 `delivery` (29 L2 auto, 42 L3 handoff) | Largest single category. See the open question below — whether it reports what the parcel is *doing* or only its number decides whether those 29 L2s can actually close. |
+| 6 | **Promotion/discount lookup** | 34 `promotions` (29 L2) | The `promotions` table is already synced. The biggest single topic here is the newsletter welcome code not applying (20 messages). |
+
+Two consequences worth stating plainly:
+
+- **Nothing in rows 3–5 can be built or validated yet.** Supabase holds the dev
+  store — 12 orders, `#1001`–`#1012`, 15 customers — while the mail is from the
+  live `contact@qiriness.com` inbox and references `#4854`, `#6216`, `#4613`,
+  `Q00 26200111`. There is zero overlap. Syncing real order data is a hard
+  prerequisite, not a later cleanup.
+- **Rows 1 and 2 are not blocked by that** and cover ~70 tickets (21%) on data
+  that already exists. They are the sensible place to start while the order data
+  is sorted out.
+
 - **Order-number resolver** — the brief's core flow: (1) parse `#XXXX` from email
   content → (2) match by sender email → (3) if still unknown, draft a reply asking for
   the order number (or, if never issued, name + billing address for a human to verify).

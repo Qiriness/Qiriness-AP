@@ -110,6 +110,14 @@ export function loadConfig(env) {
     openaiApiKey: env.OPENAI_API_KEY,
     embeddingModel: env.EMBEDDING_MODEL || 'text-embedding-3-small',
     embeddingDimensions: Number(env.EMBEDDING_DIMENSIONS) || 1536,
+    // Optional: the support mailbox address. Scripts do not poll Graph (the
+    // agent does), but its domain is what identifies our own people in the
+    // corpus, so reporting over ticket mail needs it. Absent, every sender is
+    // treated as external.
+    supportMailbox: env.SUPPORT_MAILBOX,
+    // Domains that are ours or operational but that the mailbox address cannot
+    // imply — a second corporate domain, or a logistics provider.
+    internalEmailDomains: splitCsv(env.INTERNAL_EMAIL_DOMAINS),
     appEnv: env.APP_ENV || 'development',
     syncCron: env.SYNC_CRON || '0 2 * * *',
     syncTimezone: env.SYNC_TIMEZONE || 'Europe/London'

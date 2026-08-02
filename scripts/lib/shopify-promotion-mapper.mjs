@@ -79,6 +79,14 @@ function buildRuleSnapshot(discount) {
     customer_buys_type: discount.customerBuys?.__typename,
     minimum_requirement_type: discount.minimumRequirement?.__typename,
     destination_selection_type: discount.destinationSelection?.__typename,
+    // The VALUES behind those type names. Without them the snapshot could say a
+    // discount had a minimum requirement but never what it was — which made the
+    // most common question about a rejected code ("is my basket big enough?")
+    // unanswerable. Read by agent/src/retrieval/promotion-rules.mjs.
+    minimum_requirement: buildMinimumRequirement(discount.minimumRequirement),
+    customer_gets: buildCustomerGets(discount.customerGets),
+    customer_buys: buildCustomerBuys(discount.customerBuys),
+    customer_selection: buildCustomerSelection(discount.customerSelection),
     maximum_shipping_price: discount.maximumShippingPrice || null,
     app_discount_type: discount.appDiscountType
       ? {
@@ -90,6 +98,109 @@ function buildRuleSnapshot(discount) {
         }
       : null
   }));
+}
+
+/**
+ * The threshold a basket has to clear. Normalised to one shape across both
+ * Shopify variants (a quantity or a subtotal) so a consumer does not have to
+ * branch on `__typename` to answer "how much more do they need to spend?".
+ */
+function buildMinimumRequirement(requirement) {
+  if (!requirement || !requirement.__typename) {
+    return null;
+  }
+  if (requirement.greaterThanOrEqualToQuantity !== undefined && requirement.greaterThanOrEqualToQuantity !== null) {
+    return { type: 'quantity', quantity: integerValue(requirement.greaterThanOrEqualToQuantity) };
+  }
+  const subtotal = requirement.greaterThanOrEqualToSubtotal;
+  if (subtotal) {
+    return { type: 'subtotal', amount: subtotal.amount ?? null, currency: subtotal.currencyCode ?? null };
+  }
+  // A requirement whose shape we do not recognise is recorded as present but
+  // unmeasured, so a caller reports "there is a minimum" rather than "there is
+  // none".
+  return { type: 'unknown' };
+}
+
+/** What the customer receives, and which items it applies to. */
+function buildCustomerGets(customerGets) {
+  if (!customerGets) {
+    return null;
+  }
+  const value = customerGets.value || {};
+  return stripUndefined({
+    percentage: value.percentage ?? undefined,
+    amount: value.amount?.amount ?? undefined,
+    currency: value.amount?.currencyCode ?? undefined,
+    applies_on_each_item: value.appliesOnEachItem ?? undefined,
+    items: buildDiscountItems(customerGets.items)
+  });
+}
+
+/** What the customer must buy first, for a buy-X-get-Y discount. */
+function buildCustomerBuys(customerBuys) {
+  if (!customerBuys) {
+    return null;
+  }
+  const value = customerBuys.value || {};
+  return stripUndefined({
+    quantity: value.quantity ?? undefined,
+    amount: value.amount ?? undefined,
+    items: buildDiscountItems(customerBuys.items)
+  });
+}
+
+/**
+ * Which products or collections a discount is restricted to. Titles are kept
+ * alongside ids: a support reply needs to name the product, and re-resolving an
+ * id to a title later would be a second query for something already in hand.
+ */
+function buildDiscountItems(items) {
+  if (!items || !items.__typename) {
+    return undefined;
+  }
+  if (items.allItems) {
+    return { scope: 'all' };
+  }
+  if (Array.isArray(items.products?.nodes)) {
+    return {
+      scope: 'products',
+      products: items.products.nodes.map((node) => ({ id: node.id, title: node.title }))
+    };
+  }
+  if (Array.isArray(items.collections?.nodes)) {
+    return {
+      scope: 'collections',
+      collections: items.collections.nodes.map((node) => ({ id: node.id, title: node.title }))
+    };
+  }
+  return { scope: 'unknown' };
+}
+
+/**
+ * Who the code is for. `segments` is the one that matters for support: a code
+ * restricted to a segment is why a perfectly valid code is rejected for someone
+ * outside it, and previously nothing about that was stored at all.
+ */
+function buildCustomerSelection(selection) {
+  if (!selection || !selection.__typename) {
+    return null;
+  }
+  if (selection.allCustomers) {
+    return { scope: 'all' };
+  }
+  if (Array.isArray(selection.segments)) {
+    return {
+      scope: 'segments',
+      segments: selection.segments.map((segment) => ({ id: segment.id, name: segment.name }))
+    };
+  }
+  if (Array.isArray(selection.customers)) {
+    // Ids only, never emails or names: this is a promotion rule snapshot, not a
+    // customer record.
+    return { scope: 'customers', customer_count: selection.customers.length };
+  }
+  return { scope: 'unknown' };
 }
 
 function buildSourceMetadata(discount, redeemCode) {

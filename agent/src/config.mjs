@@ -25,6 +25,11 @@ export function loadAgentConfig(env = loadEnv(REPO_ROOT)) {
       clientSecret: env.MS_GRAPH_CLIENT_SECRET,
       mailbox: env.SUPPORT_MAILBOX
     },
+    // Domains that are ours or operational rather than customers. The support
+    // mailbox domain is treated as internal automatically; this covers what it
+    // cannot imply (a second corporate domain, a logistics provider). Used by
+    // the forwarding pass to avoid handing a colleague their own mail back.
+    internalEmailDomains: splitCsv(env.INTERNAL_EMAIL_DOMAINS),
     pollIntervalMs: Number(env.INGEST_POLL_INTERVAL_MS) || 60000,
     // Draft-only unless explicitly disabled; nothing is auto-sent while true.
     draftOnly: env.DRAFT_ONLY !== 'false',
@@ -61,4 +66,14 @@ export function assertGraphConfig(config) {
       `Microsoft Graph is not configured. Add to .env.local: ${missing.join(', ')}`
     );
   }
+}
+
+function splitCsv(value) {
+  if (!value) {
+    return [];
+  }
+  return value
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean);
 }

@@ -3,7 +3,7 @@ import { pathToFileURL } from 'node:url';
 import { parseArgs, loadConfig, loadEnv } from './lib/sync-config.mjs';
 import {
   createSupabaseClient,
-  supabaseSelect,
+  supabaseSelectAll,
   supabaseUpdateById
 } from './lib/supabase-rest-client.mjs';
 import { createEmbeddingsClient } from './lib/embeddings/openai-embeddings-client.mjs';
@@ -38,8 +38,11 @@ import {
 //   npm run embed:tickets:dry-run
 //   npm run embed:tickets -- --limit=50
 
-// Ample for a mailbox reconcile; the embeddings client batches at 256 per request.
-const SELECT_LIMIT = 2000;
+// Both reads below page through the whole table rather than passing a large
+// `limit`. PostgREST silently caps a single response at `db-max-rows` (1000), so
+// the previous `limit: 2000` returned 1000 rows of the 1383 stored and gave the
+// caller no way to tell — the reconciler simply could not see the newest
+// messages, and the redaction sweep could not clear vectors past row 1000.
 
 if (isDirectRun()) {
   main().catch((error) => {
@@ -63,7 +66,7 @@ export async function runMessageEmbeddingReconcile({ args, config, supabase }) {
     inputSpec: TICKET_MESSAGE_INPUT
   };
 
-  const rows = await supabaseSelect(
+  const rows = await supabaseSelectAll(
     supabase,
     'ticket_messages',
     {
@@ -72,7 +75,7 @@ export async function runMessageEmbeddingReconcile({ args, config, supabase }) {
     },
     'id,subject,body_text,embedding,embedding_model,embedding_dimensions,embedded_input_hash',
     // Oldest first so a --limit run is a stable prefix rather than a random slice.
-    { order: 'received_at.asc', limit: SELECT_LIMIT }
+    { order: 'received_at.asc' }
   );
 
   const candidates = args.limit ? rows.slice(0, args.limit) : rows;
@@ -130,12 +133,11 @@ export async function runMessageEmbeddingReconcile({ args, config, supabase }) {
  * would otherwise leave derived personal data in the database indefinitely.
  */
 async function clearRedactedEmbeddings({ args, supabase }) {
-  const embedded = await supabaseSelect(
+  const embedded = await supabaseSelectAll(
     supabase,
     'ticket_messages',
     { embedding: { operator: 'not.is', value: 'null' } },
-    'id,body_text,deleted_at',
-    { limit: SELECT_LIMIT }
+    'id,body_text,deleted_at'
   );
 
   const orphans = embedded.filter((row) => !row.body_text || row.deleted_at);

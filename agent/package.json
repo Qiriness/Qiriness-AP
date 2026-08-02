@@ -12,6 +12,12 @@
     "eval:categorise": "node eval/run-categorisation-eval.mjs",
     "review:sample": "node eval/sample-mailbox.mjs",
     "review:compare": "node eval/compare-review-labels.mjs",
-    "test": "node --test \"src/**/*.test.mjs\" \"eval/**/*.test.mjs\""
+    "test": "node --test \"src/**/*.test.mjs\" \"eval/**/*.test.mjs\"",
+    "forward:once": "node src/tools/run-forwarding.mjs",
+    "forward:dry-run": "node src/tools/run-forwarding.mjs --dry-run",
+    "orders:resolve": "node src/tools/run-order-resolution.mjs",
+    "orders:resolve:dry-run": "node src/tools/run-order-resolution.mjs --dry-run",
+    "context:build": "node src/tools/run-order-context.mjs",
+    "context:build:dry-run": "node src/tools/run-order-context.mjs --dry-run"
   }
 }

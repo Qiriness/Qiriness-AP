@@ -29,7 +29,7 @@ const NAV: NavItem[] = [
   { label: "Insights", href: "#", icon: InsightsIcon, available: false },
   { label: "Knowledge", href: "#", icon: KnowledgeIcon, available: false },
   { label: "Agent Setup", href: "/agent-setup", icon: AgentIcon, available: true },
-  { label: "Settings", href: "#", icon: SettingsIcon, available: false },
+  { label: "Settings", href: "/settings", icon: SettingsIcon, available: true },
 ];
 
 interface SidebarProps {

@@ -83,5 +83,53 @@ export function createGraphClient(config, { fetchImpl = fetch } = {}) {
     };
   }
 
-  return { getToken, getDeltaPage };
+  /**
+   * Forwards a message the mailbox already holds, with a covering note on top.
+   *
+   * Graph's own `/forward` action rather than composing a new message: it keeps
+   * the original headers, body and attachments intact, so the recipient gets the
+   * real email rather than the agent's rendering of it. A candidate's CV arrives
+   * as a CV. Nothing has to be reconstructed from `ticket_messages`, which
+   * stores stripped plain text and no attachments at all.
+   *
+   * THE ONLY WRITE THIS WORKER MAKES to Graph, and the only call needing the
+   * `Mail.Send` application permission — everything else is Mail.Read. If that
+   * permission has not been granted the send fails with ErrorAccessDenied,
+   * which the caller records as a failed forward rather than retrying blindly.
+   *
+   * Returns nothing: Graph answers 202 Accepted with an empty body.
+   */
+  async function forwardMessage(graphMessageId, { comment, toRecipients }) {
+    if (!graphMessageId) {
+      throw new Error('forwardMessage requires a Graph message id.');
+    }
+    const recipients = (Array.isArray(toRecipients) ? toRecipients : [toRecipients])
+      .map((address) => String(address || '').trim())
+      .filter(Boolean);
+    if (recipients.length === 0) {
+      throw new Error('forwardMessage requires at least one recipient.');
+    }
+
+    const token = await getToken();
+    const response = await fetchImpl(
+      `${GRAPH_BASE}/users/${encodeURIComponent(mailbox)}/messages/${encodeURIComponent(graphMessageId)}/forward`,
+      {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          comment: comment || '',
+          toRecipients: recipients.map((address) => ({ emailAddress: { address } }))
+        })
+      }
+    );
+
+    if (!response.ok) {
+      const payload = await response.json().catch(() => null);
+      throw new Error(
+        `Graph forward failed: ${payload?.error?.code || `HTTP ${response.status}`}`
+      );
+    }
+  }
+
+  return { getToken, getDeltaPage, forwardMessage };
 }

@@ -8,6 +8,7 @@ Conventions: `*.test.mjs` sit next to their source (`npm test` = `node --test`);
 
 ```text
 |-- *.md             # AGENTS (rules) · PRODUCT (design direction) · README (context + status)
+|                    # VALIDATION_LOG (built but unproven against real data)
 |                    # AGENT_INTEGRATION_PLAN + Agent_Workflow (agent phases) · compliance pair:
 |                    # SHOPIFY_PERSONAL_DATA_PROTECTION, MERCHANT_DATA_USE_DISCLOSURE
 |-- package.json     # root scripts: sync:shopify:*, embed:knowledge, db:apply:migration, test
@@ -51,16 +52,20 @@ Conventions: `*.test.mjs` sit next to their source (`npm test` = `node --test`);
 |   |                                    # sync-shopify-nightly.mjs runs them all in order
 |   |-- embed-knowledge-chunks.mjs embed-ticket-messages.mjs # the two embedding reconcilers
 |   |-- cluster-ticket-messages.mjs      # cluster:tickets -- recurring topics per subject
+|   |                                    # customer mail only; --internal / --all-senders to widen
 |   |-- apply-supabase-migration.mjs     # SQL runner
 |   |-- process-shopify-compliance-webhook.mjs # compliance webhook CLI harness
 |   `-- lib/
 |       |-- shopify-admin-client.mjs shopify-knowledge-client.mjs shopify-theme-client.mjs
 |       |-- shopify-*-mapper.mjs         # shop/product/metaobject/customer/order/promotion row mappers
 |       |-- shopify-sync-mappers.mjs shop-sync-service.mjs # mapper barrel · shared shop upsert
-|       |-- supabase-rest-client.mjs sync-config.mjs      # REST upserts · CLI/env parsing
+|       |-- supabase-rest-client.mjs sync-config.mjs      # REST upserts · rpc · CLI/env parsing
+|       |                                # supabaseSelectAll pages past PostgREST's silent 1000-row cap
 |       |-- hash.mjs collections.mjs html-to-text.mjs text-cleaning.mjs # incl. French mojibake fix
 |       |-- quoted-reply.mjs           # strips reply chains (53% of the mail corpus)
+|       |-- shopify-rich-text.mjs     # metaobject rich-text JSON -> readable plain text
 |       |-- cluster-messages.mjs       # pure average-link clustering + near-dupe collapse
+|       |-- message-audience.mjs       # our own senders vs customers (30% of inbound was ours)
 |       |-- compliance-audit.mjs shopify-compliance-webhooks.mjs # audit logs · HMAC + redaction
 |       |-- support-taxonomy.mjs         # THE shared vocabulary: 14 subjects (+faq/brand_story
 |       |                                # knowledge-only) · 4 request kinds · level + team derivation
@@ -96,7 +101,41 @@ Conventions: `*.test.mjs` sit next to their source (`npm test` = `node --test`);
 |       |   |-- categorise.mjs           # classify-only: enums from support-taxonomy, level clamp
 |       |   |                            # + confidence / language / happiness signals
 |       |   `-- categorise-runner.mjs    # batch pass over needs_categorisation + level ratchet
+|       |-- retrieval/
+|       |   |-- retrieval-rules.mjs      # pure: categories to search · answerable/weak/none bands
+|       |   |                            # · the query text · best-match (not crowd) verdict
+|       |   |-- knowledge-retrieval.mjs  # embed once + one indexed RPC; no scan, no PII
+|       |   |-- product-matching.mjs     # pure: TITLE-only name match, IDF-weighted,
+|       |   |                            # accent/apostrophe folding, ambiguity as an outcome
+|       |   |-- product-context.mjs      # row -> named sections (description/usage/
+|       |   |                            # ingredients/FAQ) + prompt rendering
+|       |   |-- promotion-rules.mjs      # pure: code match + typo suggest · pass/fail/UNKNOWN
+|       |   |                            # eligibility checks, three-valued verdict
+|       |   |-- promotion-lookup.mjs     # code extraction from text · detail · listActive
+|       |   |-- abandoned-checkout.mjs   # live Shopify lookup: the only view of a basket
+|       |   |                            # (date window + client-side email match; UNVALIDATED)
+|       |   `-- product-lookup.mjs       # the two tools: full context · stock only; active
+|       |                                # products only; ambiguity returns ALL candidates
+|       |-- resolution/
+|       |   |-- order-number-parser.mjs   # pure: #NNNN / "commande n° NNNN" only; classifies
+|       |   |                             # the Q00 ERP refs (911 in corpus) as NOT Shopify
+|       |   |-- order-verification.mjs    # pure: email-hash proof · name_match (corroboration,
+|       |   |                             # never written) · mismatch · suggests asking for the
+|       |   |                             # purchase email when unresolved
+|       |   |-- order-resolution-runner.mjs # batched lookup; writes only a confirmed match
+|       |   |-- order-context.mjs         # pure: order+customer -> the drafting bundle;
+|       |   |                             # derives delivery state and signals, no street/phone
+|       |   `-- order-context-runner.mjs  # fills tickets.resolved_context + links customer_id
+|       |-- routing/
+|       |   |-- forward-rules.mjs        # pure: who qualifies (contact-kind + configured address
+|       |   |                            # + external sender) · French covering note ·
+|       |   |                            # transient-vs-permanent Graph error split
+|       |   |-- forwarding-store.mjs     # address book read · pending select · attempt ledger
+|       |   `-- forward-runner.mjs       # the pass; one failure never stops the rest
 |       `-- tools/               # add-blocklist.mjs (blocklist:add) · reset-cursor.mjs (ingest:reset)
+|                                # run-forwarding.mjs (forward:once / forward:dry-run)
+|                                # run-order-resolution.mjs (orders:resolve[:dry-run])
+|                                # run-order-context.mjs (context:build[:dry-run] · --refresh)
 |   `-- eval/                    # categorisation-cases.mjs (40 labelled dummy emails) ·
 |                                # score-categorisation.mjs (pure, 3 axes) · run-... (eval:categorise)
 |                                # sample-mailbox.mjs (review:sample -- GET-only mailbox pull, no
@@ -109,6 +148,15 @@ Conventions: `*.test.mjs` sit next to their source (`npm test` = `node --test`);
                                  # 03_categorisation.sql  taxonomy constraints · ticket subject/kind
                                  #                      axes · re-categorisation flag + confidence /
                                  #                      language / happiness · categorisation_review
+                                 # 04_forwarding.sql   category_forwarding (per-category address
+                                 #                      book) · ticket_forwards (attempt ledger,
+                                 #                      unique(ticket_message_id) = idempotency)
+                                 # 05_forwarding_retry.sql  attempts counter: `sent` is final,
+                                 #                      `failed` retries to a cap (transient Graph
+                                 #                      errors do not consume an attempt)
+                                 # 06_knowledge_retrieval.sql  match_knowledge_chunks() RPC:
+                                 #                      HNSW vector search returning SIMILARITY,
+                                 #                      caller-supplied category list
                                  # Each has a .test.mjs asserting the SQL against
                                  # scripts/lib/support-taxonomy.mjs (see the invariant below).
 ```
@@ -120,7 +168,7 @@ Conventions: `*.test.mjs` sit next to their source (`npm test` = `node --test`);
 - `customers` - lean support snapshots: contact lookup, marketing state, coarse location, lifetime totals, last order, Shopify `rfm_group` (`CHAMPIONS`/`LOYAL`/...). No addresses or notes.
 - `orders` - identity, order/customer links, channel (`source_name` raw vs `sales_channel` label), derived `order_status`, totals, line items, fulfillments, returns, refunds. Contact fields are hashes (`customer_email_hash`, `customer_phone_hash`); `shipping_destination` is coarse only (no street/postcode). Retention: delivered or completed return/refund +3mo, undelivered or unresolved +6mo -> `retention_delete_after`, deleted by the order sync.
 - `products` - snapshots + first-class metafields (Usage Instructions, Short description, Conseils d'utilisation, Actifs & ingredients, ingredients popup, Product Ingredients), `variants` jsonb, product-level `available_stock`.
-- `promotions` - discount snapshots, one row per redeem code (`code = null` for automatic), `applies_once_per_customer` first-class. Full sync deletes rows Shopify no longer returns.
+- `promotions` - discount snapshots, one row per redeem code (`code = null` for automatic), `applies_once_per_customer` first-class. Full sync deletes rows Shopify no longer returns. `rule_snapshot` carries the **values**, not just the type names: `minimum_requirement` (subtotal or quantity, with the threshold), `customer_gets`/`customer_buys` (percentage or amount, plus the products/collections it is restricted to, with titles), and `customer_selection` (all / segments / named customers). Those fields were `__typename`-only until 2026-08-01, which made the commonest promotions question unanswerable.
 - `shopify_metaobjects` - shared metaobjects (FAQ, ingredient lists) referenced by products.
 - `shopify_content_sources` - content-free catalog of every live page **and** policy, keyed `source_type` (`shopify_page`|`shopify_policy`) + `shopify_source_id`. Feeds the Agent Setup dropdown only; loosely coupled to `knowledge_documents` (no FK).
 
@@ -131,9 +179,11 @@ Conventions: `*.test.mjs` sit next to their source (`npm test` = `node --test`);
 - `knowledge_chunks` - retrieval chunks (category, tokens, text, `content_hash`, `embedding vector(1536)` + HNSW cosine). Determinism metadata: `embedding_model`, `embedding_dimensions`, `embedded_input_hash`, `embedded_at`.
 
 **Agent email workflow** -- see `AGENT_INTEGRATION_PLAN.md`.
-- `tickets` - one per Graph `conversationId` (unique `shop_id` + `graph_conversation_id`), not per email. Categoriser fills `category` + `request_kind` (and the optional `secondary_category` + `secondary_request_kind` pair, for an email raising two subjects of different kinds — a secondary kind without a secondary subject is rejected), `level` 1-4, `responsible_team` (finance/marketing/sales/logistics/contact), `shopify_order_number`, `customer_id`. **`level` is derived** from (subject, kind) by `defaultLevel()`, and the categoriser may only escalate above that floor, never below. Deriving it stops two model-assigned fields contradicting each other on the same "needs action" axis. Level 4 is the exception: no subject derives it (see the invariant below); 03 carries the corrected wording (an earlier migration had shipped a subject-implied rule). 03 also adds the re-categorisation loop and three per-ticket signals: `needs_categorisation` (the pending flag — a boolean rather than a `categorised_at < last_message_at` comparison, because PostgREST cannot compare two columns and our own outbound replies also move `last_message_at`), `categorised_at`, `categorisation_confidence` (a *known-untrustworthy* marker, not a model self-assessment — see the invariant), `language` (the language to reply in, restricted to what the desk writes; `other` routes to a human), and `happiness` 1-4 (1 happy .. 4 really unhappy). **`happiness` is not wired to `level` in either direction** — see the invariant. `resolved_context` jsonb + `context_resolved_at` is a re-resolvable order/customer bundle for the drafting agent (holds PII, never billing/street address). `priority` 1-5. Retention mirrors `orders` (`resolved_at`/`closed_at`/`archived_at`/`retention_delete_after`); `deleted_at` is the separate compliance soft-delete. Stores only `requester_email_hash` + `requester_name`.
+- `tickets` - `shopify_order_number` is written **only** by a confirmed order-number resolution (the order's `customer_email_hash` equals the ticket's `requester_email_hash`); a name-only agreement or an order belonging to someone else is recorded in `metadata.order_resolution` and left off the column. One per Graph `conversationId` (unique `shop_id` + `graph_conversation_id`), not per email. Categoriser fills `category` + `request_kind` (and the optional `secondary_category` + `secondary_request_kind` pair, for an email raising two subjects of different kinds — a secondary kind without a secondary subject is rejected), `level` 1-4, `responsible_team` (finance/marketing/sales/logistics/contact), `shopify_order_number`, `customer_id`. **`level` is derived** from (subject, kind) by `defaultLevel()`, and the categoriser may only escalate above that floor, never below. Deriving it stops two model-assigned fields contradicting each other on the same "needs action" axis. Level 4 is the exception: no subject derives it (see the invariant below); 03 carries the corrected wording (an earlier migration had shipped a subject-implied rule). 03 also adds the re-categorisation loop and three per-ticket signals: `needs_categorisation` (the pending flag — a boolean rather than a `categorised_at < last_message_at` comparison, because PostgREST cannot compare two columns and our own outbound replies also move `last_message_at`), `categorised_at`, `categorisation_confidence` (a *known-untrustworthy* marker, not a model self-assessment — see the invariant), `language` (the language to reply in, restricted to what the desk writes; `other` routes to a human), and `happiness` 1-4 (1 happy .. 4 really unhappy). **`happiness` is not wired to `level` in either direction** — see the invariant. `resolved_context` jsonb + `context_resolved_at` is a re-resolvable order/customer bundle for the drafting agent (holds PII, never billing/street address). `priority` 1-5. Retention mirrors `orders` (`resolved_at`/`closed_at`/`archived_at`/`retention_delete_after`); `deleted_at` is the separate compliance soft-delete. Stores only `requester_email_hash` + `requester_name`.
 - `ticket_messages` - one row per Graph message, idempotent on `shop_id` + `graph_message_id`. Reply envelope (`from_email`, `to_emails`, `cc_emails`), cleaned `body_text`, sanitised payload, and body `embedding vector(1536)` + HNSW for similar-ticket retrieval.
 - `email_blocklist` - per-shop sender email/domain rules with `hit_count`/`last_hit_at`; matched mail is dropped before any write.
+- `category_forwarding` - per-category forwarding address book (unique `shop_id` + `category`), read by the agent's forwarding pass and written by Settings. **A null/absent address is the off switch** — there is deliberately no separate `enabled` flag, because two ways to express the same state can disagree. Keyed by category rather than `responsible_team`: the team mapping sends `careers` to `contact`, the generic bucket the mail just came from.
+- `ticket_forwards` - one row per email forwarded to a colleague, `sent` or `failed`, and the idempotency ledger: **`unique(ticket_message_id)`** is what makes the pass safe to re-run. Per message, not per ticket, so a candidate's follow-up still reaches the recipient exactly once. Snapshots the category + address used, so re-routing tomorrow does not rewrite where mail went yesterday. Failures are rows, not silence — a Graph rejection stays visible and retryable.
 - `categorisation_review` - **testing artefact, not runtime**: a random sample of real support mail (`npm run review:sample`, read-only GETs, no ingestion) that a human labels in the Supabase table editor, then scored against the agent (`npm run review:compare`). Blind by design -- `agent_*` stays empty until the comparison runs, because an agent answer beside an empty box anchors the reviewer. Human columns carry the same check constraints as `tickets`, so a typo is rejected rather than counted as a disagreement. Sender reduced to `from_domain`; 3-month default retention.
 - `spam_audit` - one row per spam-gate decision, idempotent on `shop_id` + `graph_message_id`: `outcome` (`kept`/`blocked`), `decided_by` (`blocklist`/`llm`), a one-line `reason`, plus `label`, `model`, `blocklist_rule_id`, and `failed_open` (kept only because the classifier errored). Exists because both passes drop mail before any write, so a blocked email would otherwise leave no trace. Keeps `from_email` + `subject` — the deliberate narrow exception to not storing blocked mail, needed to review a decision and build a rule from it — but **never the body**. Untriaged replies produce no row.
 
@@ -147,9 +197,13 @@ Server-only Route Handlers under `web/app/api/knowledge/`, all using the Supabas
 - `PATCH articles/:id` - title/content/category/core-topic/status. Converts `source_type` to `manual`; demotes an `approved` article to `in_review` when its text changes; re-embeds approved non-brand chunks inline (best-effort).
 - `POST articles/:id/resync` - re-pull from the linked source; 400 once `manual`. `DELETE articles/:id` - hard delete (chunks cascade); the source stays re-importable.
 
+## Forwarding API
+
+`web/app/api/forwarding/` over `web/lib/server/forwarding-service.ts`, same service-role pattern. `GET` returns all 14 ticket categories with their address (`null` where unset) so the form never has to reconstruct missing rows; `PUT` upserts one category. Saving an empty address clears it, which is how a category is switched off. Surfaced at `/settings` (`web/components/settings/ForwardingSettings.tsx`), which saves per row on blur rather than behind one Save button.
+
 ## Agent Worker
 
-Ingestion + categorisation (Phase 1-3; tools and drafting are not built yet). Run `npm run ingest:once` or `npm start` from `agent/`; one poll does both passes.
+Ingestion, categorisation and forwarding (Phase 1-3 plus the first Phase 4 tool; order tools and drafting are not built yet). Run `npm run ingest:once` or `npm start` from `agent/`; one poll does all three passes.
 1. `index.mjs` loads config, asserts Graph credentials, resolves `shops.id` for `SHOPIFY_STORE_DOMAIN`.
 2. `delta-poller.mjs` reads `shops.sync_cursors.mail_ingest_delta_link` and follows Graph pages to the `@odata.deltaLink`, writing the cursor back so restarts resume. The delta query is the source of truth -- a future change-notification subscription would only trigger this engine.
 3. `graph-message-mapper.mjs` maps each message to row fields, cleans the body via `htmlToText`, hashes the sender with `hashIdentifier` so it matches `orders.customer_email_hash`. It also performs two normalisations, because the Graph envelope does not say what the rest of the pipeline needs:
@@ -162,6 +216,7 @@ Ingestion + categorisation (Phase 1-3; tools and drafting are not built yet). Ru
 8. **Categorisation** (LLM) runs after ingestion in the same poll, as a separate batch pass: `categorise-runner.mjs` selects open tickets flagged `needs_categorisation` (oldest first, 25/poll) rather than what the poll just wrote, so anything missed by a crash or a key-less run is caught up automatically. `categorise.mjs` is classification-only (no tools, no DB) and sends subject + first/latest inbound body — never the sender's address or name. It returns the two taxonomy axes plus two signals about the ticket: the `language` to reply in and customer `happiness` (1-4). A failure leaves the ticket pending and counts the attempt in `metadata.categorisation`; after 3 it is written as (other, problem) -> level 3, team contact, flagged `failed`, so it lands in front of a human instead of retrying forever — unless the ticket already had labels, in which case those are kept and only marked low-confidence (see the invariant).
 8b. **Re-categorisation.** A ticket's labels describe the conversation so far, not the email that opened it, so ingestion re-raises `needs_categorisation` whenever a new **inbound** message joins a thread (never on our own outbound replies, which also move `last_message_at`) and the same pass re-reads it. The re-run is **blind** — the model is never shown its previous answer, which would only make it defend a first call that may have been wrong. Stability comes from the ratchet instead: `ratchetLevel` lets a level rise but never fall, so an escalation is picked up while a calmer follow-up cannot walk back work the ticket has already earned. Superseded labels are kept in `metadata.categorisation.history` (newest first, capped at 5) so a ticket shows its trajectory, and `proposed_level` records what the model actually said before the ratchet.
 9. **Measured, not assumed** — two review sets. Synthetic (`agent/eval/categorisation-cases.mjs`, `npm run eval:categorise`): 40 dummy emails, ~38-39/40 on all three axes. **Real** (`categorisation_review`, `npm run review:sample` + `review:compare`): 30 hand-labelled emails from the live mailbox -- subject 77%, kind 90%, level 73%. The real set is what drives the rules: the boundary definitions in the prompt (dispatch splits order/delivery; `complaint` only without an actionable request; `contact` only for a first approach; L3 = something must change) and the level floors all come from measured disagreements with human labelling, not from intuition. The synthetic set only guards against regressions. That band report is what retired the self-reported confidence field: it showed `high` on 40 of 40 cases, matching 171 of 171 on live mail, so the signal was measured to be worthless before anything was built on it.
+10. **Forwarding** runs last, after categorisation, because it reads the category and kind that step assigns. `forward-rules.mjs` is the whole decision: `request_kind = 'contact'` **and** the category has an address in `category_forwarding`. Both halves are load-bearing — routing on category alone would divert genuine `b2b` reorder problems as FYIs, and the taxonomy already restricts `contact` to b2b, partner_collaboration and careers (38 of 330 customer-facing tickets on the measured corpus). The covering note is in French (internal mail, French company), and sidesteps both tu/vous and gender agreement by never addressing the reader and referring to `le message` rather than a pronoun agreeing with the category phrase. Sends via Graph's own `/forward` action, so the recipient gets the original mail with attachments intact (a CV arrives as a CV) rather than a re-composition of the stripped `body_text` we store. Selects on ticket state rather than on what the poll just wrote, so mail that became forwardable only because an address was configured today is caught up with no backfill. **Needs the `Mail.Send` Graph application permission** — the only write this worker makes to Graph; without it every attempt lands as a `failed` row rather than silently doing nothing.
 
 ## Invariants
 

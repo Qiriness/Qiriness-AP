@@ -1,13 +1,14 @@
 import { pathToFileURL } from 'node:url';
 
 import { loadConfig, loadEnv } from './lib/sync-config.mjs';
-import { createSupabaseClient, supabaseSelect } from './lib/supabase-rest-client.mjs';
+import { createSupabaseClient, supabaseSelectAll } from './lib/supabase-rest-client.mjs';
 import {
   clusterByAverageLink,
   dedupeNearIdentical,
   parseVector,
   cosine
 } from './lib/cluster-messages.mjs';
+import { partitionByAudience, resolveInternalDomains } from './lib/message-audience.mjs';
 
 // Turns the embedded support inbox into a ranked list of recurring topics, per
 // subject — a decision aid for "what should the knowledge library cover first?"
@@ -22,10 +23,17 @@ import {
 // dispatch delays and free-gift problems, which are three different articles
 // that no label distinguishes.
 //
+// AUDIENCE. Reports on customer mail only. `direction` records which way a
+// message crossed the mailbox, not who wrote it, so a colleague writing to the
+// support address counts as `inbound` — and 30% of the corpus is exactly that.
+// Mail from our own domain is excluded by default; `--internal` reports on it
+// instead, and `--all-senders` restores the old undifferentiated behaviour.
+//
 //   npm run cluster:tickets
 //   npm run cluster:tickets -- --subject=order
 //   npm run cluster:tickets -- --threshold=0.74     # tighter, more groups
 //   npm run cluster:tickets -- --min-size=3 --show=4
+//   npm run cluster:tickets -- --internal           # our own recurring threads
 //
 // THRESHOLD. 0.68 by default, tuned by eye on this corpus. French support mail
 // shares so much boilerplate ("Bonjour ... Cordialement") that two unrelated
@@ -58,16 +66,33 @@ async function main() {
     minSize: numberArg(args['min-size'], DEFAULTS.minSize),
     dedupe: numberArg(args.dedupe, DEFAULTS.dedupe),
     show: numberArg(args.show, DEFAULTS.show),
-    subject: args.subject || null
+    subject: args.subject || null,
+    audience: args['all-senders'] ? 'all' : args.internal ? 'internal' : 'customer'
   };
 
   const config = loadConfig(loadEnv());
   const supabase = createSupabaseClient(config);
-  await report({ supabase, options });
+  const internalDomains = resolveInternalDomains({
+    supportMailbox: config.supportMailbox,
+    extra: config.internalEmailDomains
+  });
+
+  if (internalDomains.length === 0 && options.audience !== 'all') {
+    console.log(
+      'Warning: no internal domains resolved (SUPPORT_MAILBOX unset), so our own\n' +
+        'mail cannot be told from customer mail. Reporting on every sender.\n'
+    );
+  }
+
+  await report({ supabase, options, internalDomains });
 }
 
-export async function report({ supabase, options }) {
-  const messages = await loadInboundMessages(supabase, options.subject);
+export async function report({ supabase, options, internalDomains = [] }) {
+  const loaded = await loadInboundMessages(supabase, options.subject);
+  const { customer, internal } = partitionByAudience(loaded, internalDomains);
+  const messages =
+    options.audience === 'all' ? loaded : options.audience === 'internal' ? internal : customer;
+
   if (messages.length === 0) {
     console.log(
       options.subject
@@ -90,9 +115,17 @@ export async function report({ supabase, options }) {
     bySubject.get(message.subject_category).push(message);
   }
 
+  const audienceLabel =
+    options.audience === 'internal'
+      ? 'from our own domain — internal threads, not customer demand'
+      : options.audience === 'all'
+        ? 'from every sender, ours included'
+        : `from customers · ${internal.length} internal message(s) excluded`;
+
   console.log(
-    `\n${messages.length} embedded inbound message(s) across ${bySubject.size} subject(s) · ` +
-      `threshold ${options.threshold} · ${chunks.length} embedded knowledge chunk(s)\n`
+    `\n${messages.length} embedded inbound message(s) ${audienceLabel}\n` +
+      `across ${bySubject.size} subject(s) · threshold ${options.threshold} · ` +
+      `${chunks.length} embedded knowledge chunk(s)\n`
   );
 
   const summaries = [];
@@ -188,8 +221,14 @@ function bestChunk(message, chunks) {
   return best;
 }
 
+/**
+ * Paged, not a single large `limit`. PostgREST silently caps a response at
+ * `db-max-rows` (1000), so the previous `limit: 5000` was reading 1000 of 1111
+ * embedded messages and reporting on the remainder as if it were the corpus.
+ * See `supabaseSelectAll`.
+ */
 async function loadInboundMessages(supabase, subject) {
-  const tickets = await supabaseSelect(
+  const tickets = await supabaseSelectAll(
     supabase,
     'tickets',
     subject
@@ -198,12 +237,11 @@ async function loadInboundMessages(supabase, subject) {
           category: { operator: 'not.is', value: 'null' },
           deleted_at: { operator: 'is', value: 'null' }
         },
-    'id,category',
-    { limit: 5000 }
+    'id,category'
   );
   const categoryByTicket = new Map(tickets.map((t) => [t.id, t.category]));
 
-  const rows = await supabaseSelect(
+  const rows = await supabaseSelectAll(
     supabase,
     'ticket_messages',
     {
@@ -211,14 +249,14 @@ async function loadInboundMessages(supabase, subject) {
       embedding: { operator: 'not.is', value: 'null' },
       deleted_at: { operator: 'is', value: 'null' }
     },
-    'id,ticket_id,body_text,embedding',
-    { limit: 5000 }
+    'id,ticket_id,from_email,body_text,embedding'
   );
 
   return rows
     .filter((row) => categoryByTicket.has(row.ticket_id))
     .map((row) => ({
       id: row.id,
+      from_email: row.from_email,
       body_text: row.body_text,
       subject_category: categoryByTicket.get(row.ticket_id),
       vector: parseVector(row.embedding)
@@ -226,12 +264,11 @@ async function loadInboundMessages(supabase, subject) {
 }
 
 async function loadEmbeddedChunks(supabase) {
-  const rows = await supabaseSelect(
+  const rows = await supabaseSelectAll(
     supabase,
     'knowledge_chunks',
     { embedding: { operator: 'not.is', value: 'null' } },
-    'id,category,embedding',
-    { limit: 5000 }
+    'id,category,embedding'
   );
   return rows.map((row) => ({ category: row.category, vector: parseVector(row.embedding) }));
 }

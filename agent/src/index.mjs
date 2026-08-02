@@ -14,6 +14,11 @@ import { createEmbeddingsClient } from '../../scripts/lib/embeddings/openai-embe
 import { createMessageEmbedder } from './ingestion/message-embedder.mjs';
 import { createCategoriser } from './pipeline/categorise.mjs';
 import { runCategorisation, createSupabaseCategoriserStore } from './pipeline/categorise-runner.mjs';
+import { createOrderResolutionStore, runOrderResolution } from './resolution/order-resolution-runner.mjs';
+import { createOrderContextStore, runOrderContext } from './resolution/order-context-runner.mjs';
+import { createForwardingStore } from './routing/forwarding-store.mjs';
+import { runForwarding } from './routing/forward-runner.mjs';
+import { resolveInternalDomains } from '../../scripts/lib/message-audience.mjs';
 
 async function main() {
   const runOnce = process.argv.includes('--once');
@@ -39,6 +44,9 @@ async function main() {
   let categorise;
   let embedMessage;
   const categoriserStore = createSupabaseCategoriserStore(supabase);
+  const forwardingStore = createForwardingStore(supabase);
+  const orderResolutionStore = createOrderResolutionStore(supabase);
+  const orderContextStore = createOrderContextStore(supabase);
   if (config.openaiApiKey) {
     const openai = createOpenAIClient({ apiKey: config.openaiApiKey });
     triage = createSpamClassifier(openai, { model: config.triageModel, logger }).triage;
@@ -87,6 +95,50 @@ async function main() {
         logger
       });
       logger.info('categorise.pass', { shopId, ...categorised });
+    }
+
+    // Order-number resolution runs after categorisation and before forwarding:
+    // it needs nothing from the categoriser, but every order tool downstream
+    // needs its output, and it must not delay the forwarding pass behind a
+    // Shopify-shaped failure.
+    const resolved = await runOrderResolution({
+      store: orderResolutionStore,
+      shopId,
+      logger
+    });
+    if (resolved.considered > 0) {
+      logger.info('order.resolution.pass', { shopId, ...resolved });
+    }
+
+    // Context assembly consumes the resolver's output in the same poll: a
+    // ticket whose order number was just confirmed gets its bundle immediately,
+    // so a drafting step never has to wait a cycle for context.
+    const contexts = await runOrderContext({
+      store: orderContextStore,
+      shopId,
+      logger
+    });
+    if (contexts.considered > 0) {
+      logger.info('order.context.pass', { shopId, ...contexts });
+    }
+
+    // Forwarding runs last: it reads the category and request_kind the step
+    // above assigns. Like categorisation it selects on ticket state rather than
+    // on what this poll wrote, so mail that became forwardable only because an
+    // address was configured today is picked up without a backfill. A no-op
+    // until the address book has at least one entry.
+    const forwarded = await runForwarding({
+      store: forwardingStore,
+      graphClient,
+      shopId,
+      logger,
+      internalDomains: resolveInternalDomains({
+        supportMailbox: config.graph.mailbox,
+        extra: config.internalEmailDomains
+      })
+    });
+    if (forwarded.considered > 0) {
+      logger.info('forward.pass', { shopId, ...forwarded });
     }
   };
 

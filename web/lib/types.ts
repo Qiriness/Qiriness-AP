@@ -84,6 +84,23 @@ export const KNOWLEDGE_CATEGORIES: KnowledgeCategory[] = [
 ];
 
 /**
+ * The subjects a *ticket* can carry — the 14 the categoriser assigns, without
+ * the two knowledge-only shapes. `faq` and `brand_story` describe reference
+ * material, not something anyone emails support about, so they can never be a
+ * forwarding target. Mirrors the check constraint in
+ * supabase/migrations/04_forwarding.sql.
+ */
+export const TICKET_CATEGORIES: KnowledgeCategory[] = KNOWLEDGE_CATEGORIES.filter(
+  (category) => category !== "faq" && category !== "brand_story"
+);
+
+/** category -> the colleague who receives mail of that subject. */
+export interface CategoryForwarding {
+  category: KnowledgeCategory;
+  forwardEmail: string | null;
+}
+
+/**
  * The required-knowledge slots every agent needs covered. Mirrors the
  * knowledge_documents_core_topic_check constraint in
  * supabase/migrations/01_core_schema.sql — keep in sync. Five of

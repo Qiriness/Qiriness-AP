@@ -414,6 +414,106 @@ const ORDERS_WITHOUT_RETURN_LINKS_QUERY = ORDERS_WITHOUT_RETURNS_QUERY
             id
           }`, '');
 
+// Discount rule fragments.
+//
+// These selections used to be `{ __typename }` only, which stored THAT a
+// discount had a minimum requirement but never what the minimum was. Support
+// could therefore say "cette promotion a un montant minimum" and nothing more —
+// the single most common unanswerable question about a rejected code. The
+// values are what make the eligibility checks in agent/src/retrieval real.
+const DISCOUNT_ITEMS_FIELDS = `#graphql
+              __typename
+              ... on AllDiscountItems {
+                allItems
+              }
+              ... on DiscountProducts {
+                products(first: 20) {
+                  nodes {
+                    id
+                    title
+                  }
+                }
+              }
+              ... on DiscountCollections {
+                collections(first: 20) {
+                  nodes {
+                    id
+                    title
+                  }
+                }
+              }
+`;
+
+const MINIMUM_REQUIREMENT_FIELDS = `#graphql
+              __typename
+              ... on DiscountMinimumQuantity {
+                greaterThanOrEqualToQuantity
+              }
+              ... on DiscountMinimumSubtotal {
+                greaterThanOrEqualToSubtotal {
+                  amount
+                  currencyCode
+                }
+              }
+`;
+
+const CUSTOMER_GETS_FIELDS = `#graphql
+              __typename
+              appliesOnOneTimePurchase
+              value {
+                __typename
+                ... on DiscountPercentage {
+                  percentage
+                }
+                ... on DiscountAmount {
+                  amount {
+                    amount
+                    currencyCode
+                  }
+                  appliesOnEachItem
+                }
+              }
+              items {
+                ${DISCOUNT_ITEMS_FIELDS}
+              }
+`;
+
+const CUSTOMER_BUYS_FIELDS = `#graphql
+              __typename
+              value {
+                __typename
+                ... on DiscountQuantity {
+                  quantity
+                }
+                ... on DiscountPurchaseAmount {
+                  amount
+                }
+              }
+              items {
+                ${DISCOUNT_ITEMS_FIELDS}
+              }
+`;
+
+// Only code discounts carry a customer selection; automatic discounts apply to
+// everyone by definition.
+const CUSTOMER_SELECTION_FIELDS = `#graphql
+              __typename
+              ... on DiscountCustomerAll {
+                allCustomers
+              }
+              ... on DiscountCustomerSegments {
+                segments {
+                  id
+                  name
+                }
+              }
+              ... on DiscountCustomers {
+                customers {
+                  id
+                }
+              }
+`;
+
 const DISCOUNTS_QUERY = `#graphql
   query DiscountSyncPage($first: Int!, $after: String, $codeFirst: Int!) {
     discountNodes(first: $first, after: $after) {
@@ -461,10 +561,13 @@ const DISCOUNTS_QUERY = `#graphql
               count
             }
             customerGets {
-              __typename
+              ${CUSTOMER_GETS_FIELDS}
             }
             minimumRequirement {
-              __typename
+              ${MINIMUM_REQUIREMENT_FIELDS}
+            }
+            customerSelection {
+              ${CUSTOMER_SELECTION_FIELDS}
             }
           }
           ... on DiscountCodeBxgy {
@@ -501,11 +604,14 @@ const DISCOUNTS_QUERY = `#graphql
             codesCount {
               count
             }
+            customerSelection {
+              ${CUSTOMER_SELECTION_FIELDS}
+            }
             customerBuys {
-              __typename
+              ${CUSTOMER_BUYS_FIELDS}
             }
             customerGets {
-              __typename
+              ${CUSTOMER_GETS_FIELDS}
             }
           }
           ... on DiscountCodeFreeShipping {
@@ -547,7 +653,10 @@ const DISCOUNTS_QUERY = `#graphql
               __typename
             }
             minimumRequirement {
-              __typename
+              ${MINIMUM_REQUIREMENT_FIELDS}
+            }
+            customerSelection {
+              ${CUSTOMER_SELECTION_FIELDS}
             }
             maximumShippingPrice {
               amount
@@ -615,10 +724,10 @@ const DISCOUNTS_QUERY = `#graphql
               shippingDiscounts
             }
             customerGets {
-              __typename
+              ${CUSTOMER_GETS_FIELDS}
             }
             minimumRequirement {
-              __typename
+              ${MINIMUM_REQUIREMENT_FIELDS}
             }
           }
           ... on DiscountAutomaticBxgy {
@@ -637,10 +746,10 @@ const DISCOUNTS_QUERY = `#graphql
               shippingDiscounts
             }
             customerBuys {
-              __typename
+              ${CUSTOMER_BUYS_FIELDS}
             }
             customerGets {
-              __typename
+              ${CUSTOMER_GETS_FIELDS}
             }
           }
           ... on DiscountAutomaticFreeShipping {
@@ -663,7 +772,7 @@ const DISCOUNTS_QUERY = `#graphql
               __typename
             }
             minimumRequirement {
-              __typename
+              ${MINIMUM_REQUIREMENT_FIELDS}
             }
             maximumShippingPrice {
               amount

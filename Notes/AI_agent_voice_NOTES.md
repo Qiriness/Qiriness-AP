@@ -15,3 +15,5 @@ TEST agent
 
 Chat feature that allows user to test the agents and correct its responses to help it learn.
 When its gcarrying out the task it clearly displays which part of the workflow its at so that debugging is easoier (which subagents are called upone etc)
+
+Tickets analsis (runs weekly and updates the user on current trands in tickets, may need to store tickets for longer than 6 months, like a year)
