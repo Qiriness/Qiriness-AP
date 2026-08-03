@@ -1,0 +1,58 @@
+.chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  padding: 3px 9px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-pill);
+  font-size: var(--text-caption);
+  font-weight: var(--weight-semibold);
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+/* The gloss carries the meaning; the number carries the scan. */
+.meaning {
+  font-weight: var(--weight-regular);
+  opacity: 0.85;
+}
+
+.level1 {
+  background: var(--surface-sunken);
+  border-color: var(--border-strong);
+  color: var(--text-muted);
+}
+
+.level2 {
+  background: var(--info-050);
+  border-color: var(--info-100);
+  color: #1d4ed8;
+}
+
+.level3 {
+  background: var(--warning-050);
+  border-color: var(--warning-100);
+  color: #b45c05;
+}
+
+.level4 {
+  background: var(--error-050);
+  border-color: var(--error-100);
+  color: var(--error);
+}
+
+.none {
+  background: transparent;
+  border-color: var(--border);
+  border-style: dashed;
+  color: var(--text-subtle);
+  font-weight: var(--weight-regular);
+}
+
+/* At narrow widths the number alone still reads; the gloss is the first thing
+   to go rather than letting the row wrap. */
+@media (max-width: 1100px) {
+  .meaning {
+    display: none;
+  }
+}

@@ -102,6 +102,21 @@ async function resolveTicket(store, shopId, item, triage, counts, audit) {
     if (item.message?.direction === 'inbound') {
       patch.needs_categorisation = true;
 
+      // A customer writing back reopens the ticket. Auto-close (see
+      // lifecycle/auto-close.mjs) retires a thread after three weeks of
+      // silence; without this, the reply would land on a closed ticket and
+      // nobody would see it — the queue would be tidy and wrong.
+      //
+      // Inbound only, and deliberately: a ticket does not reopen because WE
+      // sent something. The lifecycle timestamps are cleared with the status,
+      // or a reopened ticket still reads as finished to anything looking at
+      // closed_at rather than at status.
+      if (existing.status === 'closed' || existing.status === 'resolved') {
+        patch.status = 'open';
+        patch.closed_at = null;
+        patch.resolved_at = null;
+      }
+
       // Backfill the requester if the ticket has none. Graph's delta is not
       // chronological, so a thread can be opened by one of OUR replies — which
       // carries no requester by design — and the customer's own message then
@@ -202,7 +217,8 @@ export function createSupabaseTicketStore(supabase) {
         supabase,
         'tickets',
         { shop_id: shopId, graph_conversation_id: conversationId },
-        'id,subject,first_message_at,last_message_at,requester_email_hash,requester_name'
+        // `status` is read so a reply can reopen a ticket auto-close retired.
+        'id,status,subject,first_message_at,last_message_at,requester_email_hash,requester_name'
       );
       return rows[0] || null;
     },

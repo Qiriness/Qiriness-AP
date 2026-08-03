@@ -18,6 +18,9 @@
     "orders:resolve": "node src/tools/run-order-resolution.mjs",
     "orders:resolve:dry-run": "node src/tools/run-order-resolution.mjs --dry-run",
     "context:build": "node src/tools/run-order-context.mjs",
-    "context:build:dry-run": "node src/tools/run-order-context.mjs --dry-run"
+    "context:build:dry-run": "node src/tools/run-order-context.mjs --dry-run",
+    "customer:lookup": "node src/tools/run-customer-lookup.mjs",
+    "tickets:autoclose": "node src/tools/run-auto-close.mjs",
+    "tickets:autoclose:dry-run": "node src/tools/run-auto-close.mjs --dry-run"
   }
 }

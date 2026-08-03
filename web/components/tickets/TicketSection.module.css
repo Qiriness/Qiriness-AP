@@ -1,0 +1,85 @@
+.section {
+  margin-bottom: var(--space-4);
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.header:hover {
+  background: var(--surface-sunken);
+}
+
+.header:focus-visible {
+  outline: 2px solid var(--teal);
+  outline-offset: 1px;
+}
+
+/* Square off the join when the body is open, so header and table read as one
+   object rather than two stacked cards. */
+.header[aria-expanded="true"] {
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+  border-bottom-color: transparent;
+}
+
+.chevron {
+  flex: none;
+  color: var(--text-subtle);
+  transition: transform 120ms ease;
+}
+
+.chevronCollapsed {
+  transform: rotate(-90deg);
+}
+
+.title {
+  font-size: var(--text-md);
+  font-weight: var(--weight-semibold);
+  color: var(--text-strong);
+  white-space: nowrap;
+}
+
+.count {
+  padding: 2px 9px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--surface-sunken);
+  font-size: var(--text-caption);
+  font-weight: var(--weight-semibold);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+}
+
+.description {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--text-body);
+  color: var(--text-subtle);
+}
+
+.body {
+  border: 1px solid var(--border);
+  border-top: none;
+  border-bottom-left-radius: var(--radius-md);
+  border-bottom-right-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+@media (max-width: 760px) {
+  .description {
+    display: none;
+  }
+}

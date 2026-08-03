@@ -1022,6 +1022,8 @@ export async function fetchDiscountRedeemCodePage(shopify, discountNodeId, curso
 async function requestShopifyAccessToken(config) {
   const response = await fetch(`https://${config.shopDomain}/admin/oauth/access_token`, {
     method: 'POST',
+    // Never let a token response be replayed from Next's Data Cache.
+    cache: 'no-store',
     headers: {
       'Content-Type': 'application/x-www-form-urlencoded',
       Accept: 'application/json'
@@ -1046,8 +1048,12 @@ async function requestShopifyAccessToken(config) {
 }
 
 export async function shopifyGraphql(client, query, variables = {}) {
+  // cache: 'no-store' for the reason spelled out in supabase-rest-client.mjs —
+  // the dashboard's Route Handlers call this during import/resync, and Next's
+  // Data Cache would otherwise replay the first Shopify response forever.
   const response = await fetch(client.endpoint, {
     method: 'POST',
+    cache: 'no-store',
     headers: {
       'Content-Type': 'application/json',
       'X-Shopify-Access-Token': client.token

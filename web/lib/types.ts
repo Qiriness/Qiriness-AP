@@ -233,3 +233,113 @@ export const STATUS_LABELS: Record<ArticleStatus, string> = {
 
 /** Save lifecycle for the active article editor. */
 export type SaveState = "saved" | "unsaved" | "saving";
+
+/* ---------------------------------------------------------------- tickets */
+
+/** Mirrors tickets_status_check in supabase/migrations/01_core_schema.sql. */
+export type TicketStatus =
+  | "open"
+  | "awaiting_customer"
+  | "awaiting_human"
+  | "forwarded"
+  | "resolved"
+  | "closed"
+  | "spam";
+
+export const TICKET_STATUS_LABELS: Record<TicketStatus, string> = {
+  open: "Open",
+  awaiting_customer: "Awaiting customer",
+  awaiting_human: "Awaiting human",
+  forwarded: "Forwarded",
+  resolved: "Resolved",
+  closed: "Closed",
+  spam: "Spam",
+};
+
+/**
+ * Severity, 1-4, derived from (subject, kind) with the categoriser allowed to
+ * escalate but never to lower. Level 4 is severity, not a subject: an explicit
+ * threat of legal action or public exposure, hospitalisation, or grave danger.
+ * It can only arrive as an escalation read from the email itself.
+ */
+export type TicketLevel = 1 | 2 | 3 | 4;
+
+export const TICKET_LEVEL_LABELS: Record<TicketLevel, string> = {
+  1: "Level 1",
+  2: "Level 2",
+  3: "Level 3",
+  4: "Level 4",
+};
+
+/** The one-line gloss under each level, so the number is not the only cue. */
+export const TICKET_LEVEL_MEANINGS: Record<TicketLevel, string> = {
+  1: "Routine",
+  2: "Standard",
+  3: "Needs a human",
+  4: "Severe",
+};
+
+/** Mirrors tickets_responsible_team_check in 01_core_schema.sql. */
+export type ResponsibleTeam = "finance" | "marketing" | "sales" | "logistics" | "contact";
+
+export const RESPONSIBLE_TEAM_LABELS: Record<ResponsibleTeam, string> = {
+  finance: "Finance",
+  marketing: "Marketing",
+  sales: "Sales",
+  logistics: "Logistics",
+  contact: "Contact",
+};
+
+/** One row of the ticket list. */
+export interface TicketListItem {
+  id: string;
+  subject: string | null;
+  status: TicketStatus;
+  category: KnowledgeCategory | null;
+  secondaryCategory: KnowledgeCategory | null;
+  level: TicketLevel | null;
+  responsibleTeam: ResponsibleTeam | null;
+  requesterName: string | null;
+  orderNumber: string | null;
+  messageCount: number;
+  firstMessageAt: string | null;
+  lastMessageAt: string | null;
+}
+
+/**
+ * One spam-gate decision that dropped an email.
+ *
+ * NOT a ticket: dropped mail never reaches the `tickets` table, so this is a
+ * `spam_audit` row. There is no body — only what the gate recorded.
+ */
+export interface DroppedMail {
+  id: string;
+  graphMessageId: string;
+  /** null when the deterministic blocklist decided, which writes no label. */
+  label: "keep" | "spam" | "irrelevant" | null;
+  decidedBy: "blocklist" | "llm";
+  reason: string;
+  fromEmail: string | null;
+  subject: string | null;
+  failedOpen: boolean;
+  decidedAt: string | null;
+}
+
+/**
+ * The header cards.
+ *
+ * `highPriority` is level 3 + 4 rather than the `priority` column: nothing in
+ * the pipeline writes `priority` today, so every ticket sits at its default 3
+ * and a card reading it would show zero for ever. Level is what the categoriser
+ * actually assigns. Swap the source here when priority starts being written.
+ */
+export interface TicketStats {
+  total: number;
+  open: number;
+  highPriority: number;
+  levelThree: number;
+  uncategorised: number;
+  /** Rolling windows, not calendar periods — see summariseTickets. */
+  last24h: number;
+  last30d: number;
+}

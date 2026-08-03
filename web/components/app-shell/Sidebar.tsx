@@ -12,6 +12,7 @@ import {
   KnowledgeIcon,
   SettingsIcon,
   StoreIcon,
+  TicketIcon,
 } from "@/components/icons";
 import { TEAM_MEMBER } from "@/lib/demo-data";
 import styles from "./Sidebar.module.css";
@@ -26,6 +27,7 @@ interface NavItem {
 const NAV: NavItem[] = [
   { label: "Home", href: "#", icon: HomeIcon, available: false },
   { label: "Conversations", href: "#", icon: ChatIcon, available: false },
+  { label: "Tickets", href: "/tickets", icon: TicketIcon, available: true },
   { label: "Insights", href: "#", icon: InsightsIcon, available: false },
   { label: "Knowledge", href: "#", icon: KnowledgeIcon, available: false },
   { label: "Agent Setup", href: "/agent-setup", icon: AgentIcon, available: true },

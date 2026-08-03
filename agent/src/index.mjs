@@ -1,4 +1,8 @@
-import { createSupabaseClient } from '../../scripts/lib/supabase-rest-client.mjs';
+import {
+  createSupabaseClient,
+  supabaseSelectAll,
+  supabaseUpdateById
+} from '../../scripts/lib/supabase-rest-client.mjs';
 
 import { loadAgentConfig, assertGraphConfig } from './config.mjs';
 import { logger } from './lib/logger.mjs';
@@ -18,6 +22,7 @@ import { createOrderResolutionStore, runOrderResolution } from './resolution/ord
 import { createOrderContextStore, runOrderContext } from './resolution/order-context-runner.mjs';
 import { createForwardingStore } from './routing/forwarding-store.mjs';
 import { runForwarding } from './routing/forward-runner.mjs';
+import { createAutoCloseStore, runAutoClose } from './lifecycle/auto-close.mjs';
 import { resolveInternalDomains } from '../../scripts/lib/message-audience.mjs';
 
 async function main() {
@@ -47,6 +52,7 @@ async function main() {
   const forwardingStore = createForwardingStore(supabase);
   const orderResolutionStore = createOrderResolutionStore(supabase);
   const orderContextStore = createOrderContextStore(supabase);
+  const autoCloseStore = createAutoCloseStore(supabase, { supabaseSelectAll, supabaseUpdateById });
   if (config.openaiApiKey) {
     const openai = createOpenAIClient({ apiKey: config.openaiApiKey });
     triage = createSpamClassifier(openai, { model: config.triageModel, logger }).triage;
@@ -139,6 +145,14 @@ async function main() {
     });
     if (forwarded.considered > 0) {
       logger.info('forward.pass', { shopId, ...forwarded });
+    }
+
+    // Auto-close runs after everything else, and last on purpose: it must see
+    // the timestamps this poll just advanced, so a thread that received a reply
+    // seconds ago is never retired by the same pass that ingested it.
+    const autoClosed = await runAutoClose({ store: autoCloseStore, shopId, logger });
+    if (autoClosed.closed > 0 || autoClosed.failed > 0) {
+      logger.info('lifecycle.auto_close.pass', { shopId, ...autoClosed });
     }
   };
 

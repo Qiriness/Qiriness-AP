@@ -5,9 +5,28 @@ export function createSupabaseClient(config) {
   };
 }
 
+/**
+ * Every request in this module goes through here, so `cache: 'no-store'` cannot
+ * be forgotten on a call site added later.
+ *
+ * IT IS LOAD-BEARING FOR THE DASHBOARD. Next.js patches global fetch inside
+ * Server Components and Route Handlers, and left alone it stores these
+ * responses in its Data Cache with a one-year revalidate — keyed on the URL, so
+ * every request afterwards replays the first body it ever saw. That is not
+ * theoretical: the dashboard served an empty forwarding table and articles
+ * still marked `draft` for as long as the cache lived, while Supabase held the
+ * saved values. `export const dynamic = "force-dynamic"` on the page does NOT
+ * prevent it; only an explicit no-store on the fetch does.
+ *
+ * Outside Next — the sync scripts and the agent worker — the option is inert.
+ */
+function supabaseFetch(url, init) {
+  return fetch(url, { ...init, cache: 'no-store' });
+}
+
 export async function supabaseUpsert(client, table, rows, onConflict) {
   const normalizedRows = normalizeBulkRows(rows);
-  const response = await fetch(
+  const response = await supabaseFetch(
     `${client.baseUrl}/${table}?on_conflict=${encodeURIComponent(onConflict)}`,
     {
       method: 'POST',
@@ -35,7 +54,7 @@ export async function supabaseInsert(client, table, rows) {
   }
 
   const normalizedRows = normalizeBulkRows(rows);
-  const response = await fetch(
+  const response = await supabaseFetch(
     `${client.baseUrl}/${table}`,
     {
       method: 'POST',
@@ -70,7 +89,7 @@ export async function supabaseSelect(client, table, filters, select = '*', optio
     searchParams.set('limit', String(options.limit));
   }
 
-  const response = await fetch(
+  const response = await supabaseFetch(
     `${client.baseUrl}/${table}?${searchParams.toString()}`,
     {
       method: 'GET',
@@ -117,7 +136,7 @@ export async function supabaseSelectAll(client, table, filters, select = '*', op
     const searchParams = new URLSearchParams({ select, order });
     applyFilters(searchParams, filters);
 
-    const response = await fetch(`${client.baseUrl}/${table}?${searchParams.toString()}`, {
+    const response = await supabaseFetch(`${client.baseUrl}/${table}?${searchParams.toString()}`, {
       method: 'GET',
       headers: {
         apikey: client.key,
@@ -151,7 +170,7 @@ export async function supabaseSelectAll(client, table, filters, select = '*', op
  * rank by embedding is to pull every row and its 1536 floats to the client.
  */
 export async function supabaseRpc(client, functionName, args = {}) {
-  const response = await fetch(`${client.baseUrl}/rpc/${functionName}`, {
+  const response = await supabaseFetch(`${client.baseUrl}/rpc/${functionName}`, {
     method: 'POST',
     headers: {
       apikey: client.key,
@@ -173,7 +192,7 @@ export async function supabaseUpdate(client, table, filters, row) {
   const searchParams = new URLSearchParams();
   applyFilters(searchParams, filters);
 
-  const response = await fetch(
+  const response = await supabaseFetch(
     `${client.baseUrl}/${table}?${searchParams.toString()}`,
     {
       method: 'PATCH',
@@ -197,7 +216,7 @@ export async function supabaseUpdate(client, table, filters, row) {
 
 export async function supabaseUpdateById(client, table, id, row) {
   const searchParams = new URLSearchParams({ id: `eq.${id}` });
-  const response = await fetch(
+  const response = await supabaseFetch(
     `${client.baseUrl}/${table}?${searchParams.toString()}`,
     {
       method: 'PATCH',
@@ -225,7 +244,7 @@ export async function supabaseDeleteWhereIn(client, table, column, values) {
   }
 
   const filter = `in.(${values.join(',')})`;
-  const response = await fetch(
+  const response = await supabaseFetch(
     `${client.baseUrl}/${table}?${encodeURIComponent(column)}=${encodeURIComponent(filter)}`,
     {
       method: 'DELETE',
@@ -248,7 +267,7 @@ export async function supabaseDelete(client, table, filters) {
   const searchParams = new URLSearchParams();
   applyFilters(searchParams, filters);
 
-  const response = await fetch(
+  const response = await supabaseFetch(
     `${client.baseUrl}/${table}?${searchParams.toString()}`,
     {
       method: 'DELETE',

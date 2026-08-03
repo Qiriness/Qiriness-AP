@@ -1,3 +1,5 @@
+import { buildCustomerContext } from '../retrieval/customer-context.mjs';
+
 // Assembles the order/customer bundle a drafting agent (or the next tool) reads
 // instead of querying fields one at a time.
 //
@@ -49,7 +51,8 @@ export function buildOrderContext(order, customer = null, { now = new Date() } =
       refunds: buildRefunds(order),
       returns: buildReturns(order)
     },
-    customer: buildCustomer(customer),
+    // Shared with the standalone customer lookup, so both return one shape.
+    customer: buildCustomerContext(customer),
     // Derived answers to the questions the corpus actually asks, so a drafting
     // step reads a fact rather than inferring one. See the cluster report: "not
     // received", "missing item", "marked delivered but absent" are the top
@@ -166,39 +169,6 @@ function buildReturns(order) {
     status: order.return_status || null,
     openedAt: order.return_refund_opened_at || null,
     completedAt: order.return_refund_completed_at || null
-  };
-}
-
-/**
- * Customer facts that change how a reply is written, and nothing else.
- *
- * No phone, no street address, no order history beyond the aggregate — a first
- * order and a fortieth are answered differently, but the list of the other
- * thirty-nine is not needed to answer this one.
- */
-function buildCustomer(customer) {
-  if (!customer) {
-    return null;
-  }
-  return {
-    name: customer.display_name || [customer.first_name, customer.last_name].filter(Boolean).join(' ') || null,
-    email: customer.email || null,
-    locale: customer.locale || null,
-    ordersCount: customer.number_of_orders ?? null,
-    amountSpent: num(customer.amount_spent),
-    amountSpentCurrency: customer.amount_spent_currency || null,
-    rfmGroup: customer.rfm_group || null,
-    subscribedToNewsletter: customer.on_email_marketing_list ?? null,
-    location: {
-      city: customer.default_address_city || null,
-      country: customer.default_address_country || null
-    },
-    lastOrder: {
-      name: customer.last_order_name || null,
-      at: customer.last_order_at || null,
-      total: num(customer.last_order_total)
-    },
-    tags: Array.isArray(customer.tags) ? customer.tags : []
   };
 }
 

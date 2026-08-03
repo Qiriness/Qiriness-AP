@@ -177,6 +177,65 @@ test('our own outbound reply does not trigger a re-categorisation', async () => 
   assert.equal(ticket.last_message_at, '2026-07-24T12:00:00Z');
 });
 
+test('a customer reply reopens a ticket that auto-close had retired', async () => {
+  // The other half of lifecycle/auto-close.mjs: without this, a reply lands on a
+  // closed ticket and nobody sees it — the queue is tidy and wrong.
+  const store = createFakeStore();
+  await writeIngestedMessages(store, 'shop-1', [
+    mappedMessage({ id: 'm1', conversationId: 'c1', at: '2026-06-01T10:00:00Z' })
+  ]);
+  const ticket = store.tickets.get('shop-1|c1');
+  Object.assign(ticket, {
+    status: 'closed',
+    closed_at: '2026-06-22T10:00:00Z',
+    resolved_at: '2026-06-22T10:00:00Z'
+  });
+
+  await writeIngestedMessages(store, 'shop-1', [
+    mappedMessage({ id: 'm2', conversationId: 'c1', at: '2026-07-24T11:30:00Z' })
+  ]);
+
+  assert.equal(ticket.status, 'open');
+  // Cleared together with the status, or the ticket still reads as finished to
+  // anything looking at the timestamps rather than at the status.
+  assert.equal(ticket.closed_at, null);
+  assert.equal(ticket.resolved_at, null);
+});
+
+test('our own reply into a closed ticket does not reopen it', async () => {
+  const store = createFakeStore();
+  await writeIngestedMessages(store, 'shop-1', [
+    mappedMessage({ id: 'm1', conversationId: 'c1', at: '2026-06-01T10:00:00Z' })
+  ]);
+  const ticket = store.tickets.get('shop-1|c1');
+  ticket.status = 'closed';
+
+  await writeIngestedMessages(store, 'shop-1', [
+    mappedMessage({
+      id: 'm2',
+      conversationId: 'c1',
+      at: '2026-07-24T12:00:00Z',
+      direction: 'outbound'
+    })
+  ]);
+  assert.equal(ticket.status, 'closed');
+});
+
+test('an inbound reply into an already-open ticket leaves the status alone', async () => {
+  const store = createFakeStore();
+  await writeIngestedMessages(store, 'shop-1', [
+    mappedMessage({ id: 'm1', conversationId: 'c1', at: '2026-07-24T10:00:00Z' })
+  ]);
+  const ticket = store.tickets.get('shop-1|c1');
+  ticket.status = 'awaiting_customer';
+
+  await writeIngestedMessages(store, 'shop-1', [
+    mappedMessage({ id: 'm2', conversationId: 'c1', at: '2026-07-24T11:30:00Z' })
+  ]);
+  // Only a terminal status is rewritten — the worker's other states are its own.
+  assert.equal(ticket.status, 'awaiting_customer');
+});
+
 test('counts removed tombstones without creating rows', async () => {
   const store = createFakeStore();
   const counts = await writeIngestedMessages(store, 'shop-1', [

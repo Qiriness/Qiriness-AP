@@ -18,6 +18,9 @@ Conventions: `*.test.mjs` sit next to their source (`npm test` = `node --test`);
 |   |   |-- layout.tsx globals.css   # root layout · design tokens (teal palette, scale, radii)
 |   |   |-- page.tsx                 # / -> /agent-setup redirect
 |   |   |-- agent-setup/page.tsx     # Server Component: initial article+source fetch (no HTTP hop)
+|   |   |-- tickets/page.tsx         # Server Component: the agent's queue, read-only -- see below
+|   |   |-- settings/page.tsx        # Server Component: forwarding address book -- see below
+|   |   |-- api/forwarding/route.ts  # GET all 14 categories · PUT upsert one
 |   |   `-- api/knowledge/           # server-only Route Handlers -- see Knowledge API below
 |   |       |-- shopify-sources/route.ts
 |   |       |-- articles/route.ts               # GET list · POST create/import
@@ -27,6 +30,10 @@ Conventions: `*.test.mjs` sit next to their source (`npm test` = `node --test`);
 |   |   |-- icons.tsx                # inline SVG icon set
 |   |   |-- app-shell/               # AppShell (top bar + mobile drawer) · Sidebar (nav, store footer)
 |   |   |-- ui/                      # Button (all states) · StatusChip (status + error pills)
+|   |   |-- settings/                # ForwardingSettings (address book, saves per row on blur)
+|   |   |-- tickets/                 # TicketsView (orchestrator: 3 sections, filters, mutations) ·
+|   |   |                            # TicketSection (collapsible) · TicketStatCards (4 figures) ·
+|   |   |                            # TicketTable · DroppedMailTable · LevelChip (severity pill)
 |   |   `-- agent-setup/
 |   |       |-- AgentSetup.tsx SetupHeader.tsx # orchestrator (all mutations) · readiness header
 |   |       |-- ArticleLibrary.tsx   # left pane: search, filters, core checklist, category groups
@@ -40,11 +47,15 @@ Conventions: `*.test.mjs` sit next to their source (`npm test` = `node --test`);
 |   |-- lib/
 |   |   |-- types.ts             # Article/status/sync UI types, CoreTopic + CORE_TOPIC_* tables
 |   |   |-- knowledge-mapper.ts  # isomorphic API JSON -> UI types (shared by both fetch paths)
+|   |   |-- ticket-stats.ts      # isomorphic summariseTickets + isClosed (server and client)
 |   |   |-- api/knowledge.ts     # client-side fetch wrapper for mutations
 |   |   |-- relative-time.ts demo-data.ts # "2h ago" labels · static sidebar branding only
 |   |   `-- server/              # knowledge-service.ts (all business logic; imports scripts/lib/*) ·
+|   |                            # forwarding-service.ts (address book read/upsert) ·
+|   |                            # tickets-service.ts (queue read + summariseTickets) ·
 |   |                            # knowledge-errors.ts (typed errors -> HTTP status)
-|   |-- next.config.mjs          # loads root .env.local; outputFileTracingRoot; cpus:1; staleTimes 0
+|   |-- next.config.mjs          # hydrates process.env from root .env.local via scripts/lib
+|   |                            # loadEnv(); outputFileTracingRoot; cpus:1; staleTimes 0
 |   `-- tsconfig.json            # allowJs, so knowledge-service.ts can import scripts/lib/*.mjs
 |-- scripts/                     # sync orchestrators (one per Shopify resource)
 |   |-- sync-shopify-{products,customers,orders,promotions}.mjs
@@ -60,6 +71,8 @@ Conventions: `*.test.mjs` sit next to their source (`npm test` = `node --test`);
 |       |-- shopify-*-mapper.mjs         # shop/product/metaobject/customer/order/promotion row mappers
 |       |-- shopify-sync-mappers.mjs shop-sync-service.mjs # mapper barrel · shared shop upsert
 |       |-- supabase-rest-client.mjs sync-config.mjs      # REST upserts · rpc · CLI/env parsing
+|       |                            # every request sends cache:'no-store' — Next's Data Cache
+|       |                            # otherwise pins the first response for a year (see module doc)
 |       |                                # supabaseSelectAll pages past PostgREST's silent 1000-row cap
 |       |-- hash.mjs collections.mjs html-to-text.mjs text-cleaning.mjs # incl. French mojibake fix
 |       |-- quoted-reply.mjs           # strips reply chains (53% of the mail corpus)
@@ -114,8 +127,13 @@ Conventions: `*.test.mjs` sit next to their source (`npm test` = `node --test`);
 |       |   |-- promotion-lookup.mjs     # code extraction from text · detail · listActive
 |       |   |-- abandoned-checkout.mjs   # live Shopify lookup: the only view of a basket
 |       |   |                            # (date window + client-side email match; UNVALIDATED)
-|       |   `-- product-lookup.mjs       # the two tools: full context · stock only; active
-|       |                                # products only; ambiguity returns ALL candidates
+|       |   |-- product-lookup.mjs       # the two tools: full context · stock only; active
+|       |   |                            # products only; ambiguity returns ALL candidates
+|       |   |-- customer-context.mjs     # pure: customers row -> the CRM bundle SHARED with
+|       |   |                            # order-context · account state · prompt text that
+|       |   |                            # withholds the email unless asked
+|       |   `-- customer-lookup.mjs      # the CRM tool: by raw email OR by ticket email-hash;
+|       |                                # needs no order number; writes data_access_events
 |       |-- resolution/
 |       |   |-- order-number-parser.mjs   # pure: #NNNN / "commande n° NNNN" only; classifies
 |       |   |                             # the Q00 ERP refs (911 in corpus) as NOT Shopify
@@ -123,8 +141,9 @@ Conventions: `*.test.mjs` sit next to their source (`npm test` = `node --test`);
 |       |   |                             # never written) · mismatch · suggests asking for the
 |       |   |                             # purchase email when unresolved
 |       |   |-- order-resolution-runner.mjs # batched lookup; writes only a confirmed match
-|       |   |-- order-context.mjs         # pure: order+customer -> the drafting bundle;
-|       |   |                             # derives delivery state and signals, no street/phone
+|       |   |-- order-context.mjs         # pure: order+customer -> the drafting bundle; derives
+|       |   |                             # delivery state and signals, no street/phone; the
+|       |   |                             # customer half comes from retrieval/customer-context
 |       |   `-- order-context-runner.mjs  # fills tickets.resolved_context + links customer_id
 |       |-- routing/
 |       |   |-- forward-rules.mjs        # pure: who qualifies (contact-kind + configured address
@@ -132,10 +151,16 @@ Conventions: `*.test.mjs` sit next to their source (`npm test` = `node --test`);
 |       |   |                            # transient-vs-permanent Graph error split
 |       |   |-- forwarding-store.mjs     # address book read · pending select · attempt ledger
 |       |   `-- forward-runner.mjs       # the pass; one failure never stops the rest
+|       |-- lifecycle/
+|       |   `-- auto-close.mjs           # pure shouldAutoClose (21d idle, level 4 exempt) + the
+|       |                                # pass; runs last so it sees this poll's timestamps
 |       `-- tools/               # add-blocklist.mjs (blocklist:add) · reset-cursor.mjs (ingest:reset)
 |                                # run-forwarding.mjs (forward:once / forward:dry-run)
+|                                # run-auto-close.mjs (tickets:autoclose[:dry-run])
 |                                # run-order-resolution.mjs (orders:resolve[:dry-run])
 |                                # run-order-context.mjs (context:build[:dry-run] · --refresh)
+|                                # run-customer-lookup.mjs (customer:lookup -- <email> [--json]
+|                                # [--with-email]) — no ticket, no order number needed
 |   `-- eval/                    # categorisation-cases.mjs (40 labelled dummy emails) ·
 |                                # score-categorisation.mjs (pure, 3 axes) · run-... (eval:categorise)
 |                                # sample-mailbox.mjs (review:sample -- GET-only mailbox pull, no
@@ -188,7 +213,7 @@ Conventions: `*.test.mjs` sit next to their source (`npm test` = `node --test`);
 - `spam_audit` - one row per spam-gate decision, idempotent on `shop_id` + `graph_message_id`: `outcome` (`kept`/`blocked`), `decided_by` (`blocklist`/`llm`), a one-line `reason`, plus `label`, `model`, `blocklist_rule_id`, and `failed_open` (kept only because the classifier errored). Exists because both passes drop mail before any write, so a blocked email would otherwise leave no trace. Keeps `from_email` + `subject` — the deliberate narrow exception to not storing blocked mail, needed to review a decision and build a rule from it — but **never the body**. Untriaged replies produce no row.
 
 - `integration_events` - metadata-only sync/webhook log, idempotent on `event_key`. `privacy_requests` - Shopify compliance webhook lifecycle (hashed contacts, deletion counts).
-- `data_access_events` - personal-data access audit trail. Sync paths write service events; **future dashboard user views must write human access events here.**
+- `data_access_events` - personal-data access audit trail. Sync paths write service events, and so does the agent's customer lookup (`action: customer_lookup`, the customer id hashed) — reading a customer to answer a ticket is access, whether a human or the worker did it. The write **fails open**: the data has already been read by then, so an audit outage must not also cost the answer. **Future dashboard user views must write human access events here.**
 
 ## Knowledge API
 
@@ -196,6 +221,29 @@ Server-only Route Handlers under `web/app/api/knowledge/`, all using the Supabas
 - `GET shopify-sources` - the catalog (pages + policies), flagging what is already imported. `GET articles` / `POST articles` - list; create empty, or resolve a `sourceId`'s live Shopify content and fill it in.
 - `PATCH articles/:id` - title/content/category/core-topic/status. Converts `source_type` to `manual`; demotes an `approved` article to `in_review` when its text changes; re-embeds approved non-brand chunks inline (best-effort).
 - `POST articles/:id/resync` - re-pull from the linked source; 400 once `manual`. `DELETE articles/:id` - hard delete (chunks cascade); the source stays re-importable.
+
+## Tickets
+
+`/tickets` (`web/app/tickets/page.tsx` -> `web/components/tickets/`) over `web/lib/server/tickets-service.ts` and `dropped-mail-service.ts`. Three stacked collapsible sections, each a table that scrolls inside a fixed 26rem height so the sections below stay reachable:
+
+| Section | Source | Row action |
+| --- | --- | --- |
+| **Queue** | `tickets`, status not resolved/closed | Close ticket |
+| **Irrelevant** | `spam_audit`, `outcome = 'blocked'` | Add as ticket *(disabled)* |
+| **Closed** | `tickets`, status resolved/closed | Reopen ticket |
+
+- **The middle section is not tickets.** Dropped mail never reaches the `tickets` table — the gate runs before the ticket write (`agent/src/ingestion/delta-poller.mjs`: "spam is dropped here — never written to the database"), so the only trace is a `spam_audit` row holding sender, subject and a one-line reason. **There is no body**, which is why "Add as ticket" is disabled rather than absent: promoting one back means the agent re-fetching it from Graph, and hiding the button would hide that it is recoverable at all.
+- Filtered on `outcome = 'blocked'`, not `label = 'irrelevant'`: the blocklist pass writes no label, and every row currently carrying `irrelevant` was in fact *kept* (the label predates the change that made it drop). Blocked is the only field that reliably means "never became a ticket".
+- **Tickets close themselves after 21 days of silence** (`agent/src/lifecycle/auto-close.mjs`, last pass of every poll so it sees the timestamps that poll just advanced). Without it `status` carried no information at all — every one of the 565 tickets read `open`, including threads last touched seven months ago. **Level 4 is exempt and that is the whole safety margin**: it means legal threat, hospitalisation or grave danger, and there silence is the opposite of resolved. Level 3 closes with everything else. Inactivity is `last_message_at`, which advances on our own replies too, so a thread the team is working stays open while the customer is quiet. Auto-closed rows are stamped `metadata.closed_reason = 'inactivity'` so they stay distinguishable from a hand close.
+- **The level exemption is applied in JS, not SQL.** PostgREST's `not.eq` on a nullable column drops the NULL rows as well, which would have silently spared every uncategorised ticket — the largest group in the table. There is a regression test for exactly that.
+- **A ticket still flagged `needs_categorisation` is never auto-closed.** The categoriser selects on `status = 'open'` (`categorise-runner.mjs`), so closing one that is still queued drops it out of that queue for good and freezes it as uncategorised — only a customer reply could ever label it afterwards. The categoriser drains 25 per poll, so this defers a close by a few polls; getting it wrong is unrecoverable. The flag clears itself either way, including on a thread holding no customer message at all, so nothing is exempt permanently.
+- **A customer reply reopens a closed ticket** (`ticket-writer.mjs`, in the branch that already special-cases inbound for re-categorisation), clearing `closed_at`/`resolved_at` with the status. Inbound only: a ticket does not reopen because *we* sent something. Without this half, auto-close would make the queue tidy and wrong.
+- **Mutations.** `PATCH web/app/api/tickets/[id]` accepts only `open`, `resolved`, `closed`. The rest (`awaiting_customer`, `forwarded`, `spam`…) are the worker's to set from what it observed — an operator asserting them by hand would put the UI and the pipeline in disagreement. `closed_at`/`resolved_at` are maintained alongside the status and cleared on reopen, since retention reads them.
+- **The four header cards.** Open tickets · High priority · Level 3 · New tickets (24h and 30d in one card). `summariseTickets()` lives in `web/lib/ticket-stats.ts` — isomorphic and pure, like `knowledge-mapper.ts` — so the server reduces it on first paint and the client re-reduces it after a status change from the same array the tables render. A card can never disagree with the rows under it.
+- **"High priority" is level 3 + 4, not the `priority` column.** Nothing in the pipeline writes `priority`, so all 565 rows sit at its default of 3 and a card reading it would show zero for ever. Level is what the categoriser actually assigns. Swap the source in `summariseTickets` when priority starts being written.
+- **Volume windows are rolling (now -24h / -30d), not calendar day and month.** Ingestion runs in bursts; on any day without a poll the calendar figures both read zero and the card looks broken rather than idle. Counted on `first_message_at`, so reviving an old thread does not inflate today's intake.
+- **Level, not status, is the primary filter.** Every ticket is `open` today because nothing closes them, so status tabs would be one tab holding everything. Filtering, search and sort all run client-side over the full set — 565 rows is far too few to justify a round trip per keystroke.
+- Soft-deleted rows are excluded in the query, not the mapper, so a compliance delete cannot reach the UI via a caller that forgot to filter.
 
 ## Forwarding API
 

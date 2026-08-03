@@ -1,0 +1,198 @@
+.section {
+  padding: var(--space-6) var(--space-5);
+  /* Same cap as Agent Setup rather than a bespoke one — a wide table wants the
+     room, and the intro paragraph caps its own measure separately below. */
+  max-width: var(--container-max);
+}
+
+.header {
+  margin-bottom: var(--space-5);
+}
+
+.title {
+  margin: 0 0 var(--space-2);
+  font-size: var(--text-xl);
+  font-weight: var(--weight-semibold);
+  color: var(--text-strong);
+}
+
+.intro {
+  margin: 0;
+  max-width: 78ch;
+  font-size: var(--text-body);
+  line-height: 1.55;
+  color: var(--text-muted);
+}
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+
+/* --- level tabs --- */
+
+.tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  padding: 3px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-sunken);
+}
+
+.tab {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 6px var(--space-3);
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  background: transparent;
+  font-family: inherit;
+  font-size: var(--text-body);
+  color: var(--text-muted);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.tab:hover {
+  color: var(--text-strong);
+}
+
+.tab:focus-visible {
+  outline: 2px solid var(--teal);
+  outline-offset: 1px;
+}
+
+.tabActive {
+  border-color: var(--border);
+  background: var(--surface);
+  font-weight: var(--weight-semibold);
+  color: var(--text-strong);
+  box-shadow: var(--shadow-xs);
+}
+
+.tabCount {
+  font-size: var(--text-caption);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-subtle);
+}
+
+.tabActive .tabCount {
+  color: var(--teal-ink);
+}
+
+/* --- search and selects --- */
+
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.searchWrap {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text-subtle);
+}
+
+.searchWrap:focus-within {
+  border-color: var(--teal);
+  box-shadow: 0 0 0 3px var(--teal-050);
+}
+
+.search {
+  width: 260px;
+  max-width: 100%;
+  padding: 8px 0;
+  border: none;
+  background: transparent;
+  font-family: inherit;
+  font-size: var(--text-body);
+  color: var(--text-strong);
+}
+
+.search:focus {
+  outline: none;
+}
+
+.selectLabel {
+  display: inline-flex;
+}
+
+.select {
+  padding: 8px var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  font-family: inherit;
+  font-size: var(--text-body);
+  color: var(--text-strong);
+  cursor: pointer;
+}
+
+.select:focus-visible {
+  outline: 2px solid var(--teal);
+  outline-offset: 1px;
+}
+
+/* --- load failure --- */
+
+.error {
+  padding: var(--space-4);
+  border: 1px solid var(--error-100);
+  border-radius: var(--radius-md);
+  background: var(--error-050);
+}
+
+.errorTitle {
+  margin: 0 0 var(--space-1);
+  font-size: var(--text-md);
+  font-weight: var(--weight-semibold);
+  color: var(--error);
+}
+
+.errorBody {
+  margin: 0;
+  font-size: var(--text-body);
+  line-height: 1.55;
+  color: var(--text-default);
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+@media (max-width: 900px) {
+  .toolbar {
+    align-items: stretch;
+  }
+  .controls {
+    width: 100%;
+  }
+  .search {
+    width: 100%;
+  }
+  .searchWrap {
+    flex: 1 1 220px;
+  }
+}

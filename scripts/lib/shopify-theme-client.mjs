@@ -48,6 +48,9 @@ export async function fetchThemeAsset(themeClient, key) {
 
 async function shopifyRest(themeClient, path) {
   const response = await fetch(`${themeClient.baseUrl}${path}`, {
+    // See supabase-rest-client.mjs: a plain GET here is exactly what Next's
+    // Data Cache pins for a year inside the dashboard's Route Handlers.
+    cache: 'no-store',
     headers: {
       'X-Shopify-Access-Token': themeClient.token,
       Accept: 'application/json'
