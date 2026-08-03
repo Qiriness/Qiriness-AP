@@ -38,6 +38,16 @@
   border: 0;
 }
 
+/* The mood face leads the row, so the column shrinks to the disc and drops its
+   right padding — a full cell of it would push the subject off to the middle.
+   Qualified by element so it outranks the shared cell padding above. */
+.table th.moodCol,
+.table td.moodCol {
+  width: 1%;
+  padding-right: 0;
+  text-align: center;
+}
+
 .actionCol {
   width: 1%;
   text-align: right;

@@ -21,6 +21,7 @@ import { KnowledgeNotFoundError } from "./knowledge-errors";
 import type {
   KnowledgeCategory,
   ResponsibleTeam,
+  TicketHappiness,
   TicketLevel,
   TicketListItem,
   TicketStatus,
@@ -49,7 +50,7 @@ export async function listTickets(shopId: string): Promise<TicketListItem[]> {
       supabase,
       "tickets",
       { shop_id: shopId, deleted_at: { operator: "is", value: null } },
-      "id,subject,status,category,secondary_category,level,responsible_team,requester_name,shopify_order_number,first_message_at,last_message_at"
+      "id,subject,status,category,secondary_category,level,happiness,responsible_team,requester_name,shopify_order_number,first_message_at,last_message_at"
     ),
     supabaseSelectAll(
       supabase,
@@ -129,6 +130,12 @@ function mapTicketRow(row: any, messageCount: number): TicketListItem {
     secondaryCategory: (row.secondary_category as KnowledgeCategory) ?? null,
     // level is a smallint and nullable until the categoriser has run.
     level: row.level === null || row.level === undefined ? null : (Number(row.level) as TicketLevel),
+    // Same shape as level: a smallint that stays null until the categoriser has
+    // read the mail. Null is "not scored yet", not "neutral".
+    happiness:
+      row.happiness === null || row.happiness === undefined
+        ? null
+        : (Number(row.happiness) as TicketHappiness),
     responsibleTeam: (row.responsible_team as ResponsibleTeam) ?? null,
     requesterName: row.requester_name,
     orderNumber: row.shopify_order_number,

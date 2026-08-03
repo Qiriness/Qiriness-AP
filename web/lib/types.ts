@@ -279,6 +279,22 @@ export const TICKET_LEVEL_MEANINGS: Record<TicketLevel, string> = {
   4: "Severe",
 };
 
+/**
+ * How the customer FEELS, 1-4 — mirrors tickets_happiness_check in
+ * 03_categorisation.sql. Deliberately independent of `level`: level is the work
+ * a ticket needs, happiness is the mood it arrived in. An angry customer with a
+ * routine tracking question is happiness 4, level 2 — both true.
+ */
+export type TicketHappiness = 1 | 2 | 3 | 4;
+
+/** The gloss behind each score, used as the face's tooltip. */
+export const TICKET_HAPPINESS_MEANINGS: Record<TicketHappiness, string> = {
+  1: "Happy",
+  2: "Neutral",
+  3: "Discontent",
+  4: "Really unhappy",
+};
+
 /** Mirrors tickets_responsible_team_check in 01_core_schema.sql. */
 export type ResponsibleTeam = "finance" | "marketing" | "sales" | "logistics" | "contact";
 
@@ -298,6 +314,7 @@ export interface TicketListItem {
   category: KnowledgeCategory | null;
   secondaryCategory: KnowledgeCategory | null;
   level: TicketLevel | null;
+  happiness: TicketHappiness | null;
   responsibleTeam: ResponsibleTeam | null;
   requesterName: string | null;
   orderNumber: string | null;

@@ -33,7 +33,8 @@ Conventions: `*.test.mjs` sit next to their source (`npm test` = `node --test`);
 |   |   |-- settings/                # ForwardingSettings (address book, saves per row on blur)
 |   |   |-- tickets/                 # TicketsView (orchestrator: 3 sections, filters, mutations) ·
 |   |   |                            # TicketSection (collapsible) · TicketStatCards (4 figures) ·
-|   |   |                            # TicketTable · DroppedMailTable · LevelChip (severity pill)
+|   |   |                            # TicketTable · DroppedMailTable · LevelChip (severity pill) ·
+|   |   |                            # HappinessFace (leading mood light: 1-2 green, 3 amber, 4 red)
 |   |   `-- agent-setup/
 |   |       |-- AgentSetup.tsx SetupHeader.tsx # orchestrator (all mutations) · readiness header
 |   |       |-- ArticleLibrary.tsx   # left pane: search, filters, core checklist, category groups

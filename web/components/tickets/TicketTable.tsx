@@ -8,6 +8,7 @@ import {
   TICKET_STATUS_LABELS,
 } from "@/lib/types";
 import { formatRelativeTime } from "@/lib/relative-time";
+import { HappinessFace } from "./HappinessFace";
 import { LevelChip } from "./LevelChip";
 import styles from "./TicketTable.module.css";
 
@@ -58,6 +59,9 @@ export function TicketTable({
         </caption>
         <thead>
           <tr>
+            <th scope="col" className={styles.moodCol}>
+              <span className={styles.srOnly}>Customer mood</span>
+            </th>
             <th scope="col" className={styles.subjectCol}>Subject</th>
             <th scope="col">Requester</th>
             <th scope="col">Category</th>
@@ -73,6 +77,10 @@ export function TicketTable({
         <tbody>
           {tickets.map((ticket) => (
             <tr key={ticket.id}>
+              <td className={styles.moodCol}>
+                <HappinessFace happiness={ticket.happiness} />
+              </td>
+
               <th scope="row" className={styles.subjectCell}>
                 <span className={styles.subject} title={ticket.subject ?? undefined}>
                   {ticket.subject?.trim() || "(no subject)"}

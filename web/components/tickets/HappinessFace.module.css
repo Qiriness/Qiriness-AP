@@ -1,0 +1,49 @@
+/* A tinted disc rather than a bare glyph: at 20px a stroke alone is too thin to
+   carry colour across a dense table, and the soft background gives the column
+   the same pill language as LevelChip next to it. */
+.face {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-pill);
+}
+
+.happy {
+  background: var(--success-050);
+  border-color: var(--success-100);
+  color: var(--success);
+}
+
+.medium {
+  background: var(--warning-050);
+  border-color: var(--warning-100);
+  color: #b45c05; /* Matches LevelChip's amber text — the token is too light on white. */
+}
+
+.sad {
+  background: var(--error-050);
+  border-color: var(--error-100);
+  color: var(--error);
+}
+
+.none {
+  background: transparent;
+  border-color: var(--border);
+  border-style: dashed;
+  color: var(--text-subtle);
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
