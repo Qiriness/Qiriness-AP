@@ -18,6 +18,13 @@ import { createEmbeddingsClient } from '../../scripts/lib/embeddings/openai-embe
 import { createMessageEmbedder } from './ingestion/message-embedder.mjs';
 import { createCategoriser } from './pipeline/categorise.mjs';
 import { runCategorisation, createSupabaseCategoriserStore } from './pipeline/categorise-runner.mjs';
+import { createCustomerLookup } from './retrieval/customer-lookup.mjs';
+import {
+  createCustomerResolutionStore,
+  runCustomerResolution
+} from './resolution/customer-resolution-runner.mjs';
+import { createInvestigationStack } from './investigation/create-investigation.mjs';
+import { runInvestigation } from './investigation/investigation-runner.mjs';
 import { createOrderResolutionStore, runOrderResolution } from './resolution/order-resolution-runner.mjs';
 import { createOrderContextStore, runOrderContext } from './resolution/order-context-runner.mjs';
 import { createForwardingStore } from './routing/forwarding-store.mjs';
@@ -48,8 +55,13 @@ async function main() {
   let triage;
   let categorise;
   let embedMessage;
+  let investigation;
   const categoriserStore = createSupabaseCategoriserStore(supabase);
   const forwardingStore = createForwardingStore(supabase);
+  const customerResolutionStore = createCustomerResolutionStore(supabase);
+  // One instance for the whole process: it caches a shop-wide email-hash index,
+  // which the resolution pass drops itself whenever it has work to do.
+  const customerLookup = createCustomerLookup({ supabase, shopId, logger });
   const orderResolutionStore = createOrderResolutionStore(supabase);
   const orderContextStore = createOrderContextStore(supabase);
   const autoCloseStore = createAutoCloseStore(supabase, { supabaseSelectAll, supabaseUpdateById });
@@ -67,6 +79,9 @@ async function main() {
       }),
       { logger }
     );
+    // Shares the customer lookup with the resolution pass rather than building a
+    // second one: it holds a shop-wide hash index that only needs loading once.
+    investigation = createInvestigationStack({ supabase, shopId, config, logger, customerLookup });
   } else {
     logger.warn('ingest.llm_filter_disabled', { reason: 'OPENAI_API_KEY not set' });
   }
@@ -90,6 +105,23 @@ async function main() {
     });
     logger.info('ingest.poll', { shopId, ...totals });
 
+    // Customer resolution runs as soon as the mail is stored, and before the
+    // LLM passes: identity is something a ticket has from its first message —
+    // the address it was opened with — so it does not wait on a category, an
+    // order number, or an OpenAI key. Everything after it can then read
+    // `customer_id` instead of resolving the sender again.
+    const customers = await runCustomerResolution({
+      store: customerResolutionStore,
+      lookup: customerLookup,
+      shopId,
+      logger,
+      // The support mailbox is not a customer, whatever the customers table says.
+      excludedEmails: [config.graph.mailbox].filter(Boolean)
+    });
+    if (customers.considered > 0) {
+      logger.info('customer.resolution.pass', { shopId, ...customers });
+    }
+
     // Categorisation runs after ingestion but selects on "category is null"
     // rather than on what this poll just wrote, so a ticket missed by a crashed
     // or key-less earlier poll is caught up here.
@@ -101,6 +133,23 @@ async function main() {
         logger
       });
       logger.info('categorise.pass', { shopId, ...categorised });
+    }
+
+    // Investigation runs immediately after categorisation and consumes its
+    // output in the same poll: the categoriser raises `needs_investigation` as
+    // it clears its own flag, so a ticket labelled seconds ago gets its case
+    // file now rather than a poll later. It is also the only pass that chooses
+    // what to do, which is why its budget lives in config rather than in code.
+    if (investigation) {
+      const investigated = await runInvestigation({
+        store: investigation.store,
+        investigate: investigation.investigate,
+        shopId,
+        logger
+      });
+      if (investigated.considered > 0) {
+        logger.info('investigate.pass', { shopId, ...investigated });
+      }
     }
 
     // Order-number resolution runs after categorisation and before forwarding:

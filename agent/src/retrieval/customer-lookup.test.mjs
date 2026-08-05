@@ -162,6 +162,19 @@ test('lookupCustomer resolves from a ticket hash alone', async (t) => {
   assert.ok(result.promptText.includes('Marie Martin'));
 });
 
+test('lookupCustomer returns the row id beside the bundle, never inside it', async (t) => {
+  const sb = buildSupabase();
+  t.after(sb.restore);
+
+  // The resolution pass writes this onto tickets.customer_id. It stays out of
+  // the bundle because that shape is stored in tickets.resolved_context.customer.
+  const lookup = createCustomerLookup({ supabase: sb.client, shopId: 's1', audit: false });
+  const result = await lookup.lookupCustomer({ email: 'marie.martin@example.test' });
+
+  assert.equal(result.customerId, 'c1');
+  assert.equal(result.customer.id, undefined);
+});
+
 test('lookupCustomer surfaces an account that was never activated', async (t) => {
   const sb = buildSupabase();
   t.after(sb.restore);

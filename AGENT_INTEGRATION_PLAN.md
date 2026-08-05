@@ -28,7 +28,7 @@ team forwarding. This is largely greenfield on a solid base — hence phasing.
 | Area | Decision |
 |---|---|
 | Email source | **Microsoft 365 / Graph API** — mailbox `onouailhetas@lap-groupe.com` (permissions already granted). |
-| LLM provider | **OpenAI** — consistent with the existing knowledge embeddings (`text-embedding-3-small`), so one provider + one set of credentials across the stack. |
+| LLM provider | **OpenAI** — consistent with the existing knowledge clclaudedings (`text-embedding-3-small`), so one provider + one set of credentials across the stack. |
 | Agent runtime | **Separate Node worker service** using **OpenAI function/tool calling** (Responses API, or the OpenAI Agents SDK) with custom tools; self-hosted so all DB/Shopify access + credentials stay in our infra. Not in `web/`. |
 | Human channel | **Extend the existing Next.js dashboard** — ticket queue, approvals, escalations. |
 

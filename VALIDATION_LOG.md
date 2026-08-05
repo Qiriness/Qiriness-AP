@@ -13,7 +13,7 @@ about data that does not exist here yet.
 item is only removed once someone has actually run the check and seen the
 result. Expect this list to grow as more is built against the dev store.
 
-Last updated: 2026-08-01 (item 2 validated and closed).
+Last updated: 2026-08-05 (item 9 added: the investigation agent).
 
 ---
 
@@ -203,3 +203,80 @@ what a parcel is *doing* or only what its number is.
 - **The live basket.** Not fixable: there are no cart tables and the Admin API
   does not expose an in-progress cart. The abandoned-checkout lookup is the
   partial substitute, and only for customers who reached checkout.
+
+## 8. Automatic customer resolution has never run over the live ticket table
+
+**Status:** built and unit-tested (`agent/src/resolution/customer-resolution-runner.mjs`),
+never executed against the 565 real tickets.
+
+The dev store holds 15 customers while the corpus is live support mail, so the
+match rate here says nothing: almost every real requester is an address the dev
+`customers` table has never seen. What the dry run *can* establish is the shape
+of the answer, and three things are worth reading off it.
+
+**To validate:** `cd agent && npm run customers:resolve:dry-run`.
+
+1. **How many tickets are refused as `not_a_customer_address`.** These are the
+   contact-form messages whose body did not parse, leaving Shopify's mailer as
+   the requester. The count is a direct measure of the parser's blind spots on
+   live mail — the ingestion fix took the worst hash collision from 73 tickets
+   to 8, and this number should be in that neighbourhood. If it is large, the
+   fix is in `contact-form.mjs`, not here.
+2. **That `no_match` dominates and that this is expected.** A form-entered
+   address is frequently not the address the Shopify account was created with,
+   which is unresolvable by design — the tool can only match what the customer
+   typed. Worth measuring before anyone treats an unlinked ticket as a fault.
+3. **That the daily retry does not thrash.** After a real (non-dry) run, a
+   second pass minutes later must report every ticket as `deferred` and write
+   nothing. That gate is what keeps a 60-second poll from rewriting a metadata
+   row per unmatched ticket per minute.
+
+**Then check against production-like data:** once real customers are synced, the
+same dry run should link a substantial share of the 565, and any ticket linked
+to a customer whose address does not match the requester is a bug worth chasing
+immediately — it would mean a hash collision or a denylist gap.
+
+## 9. The investigation agent has run, and what it produced is not yet judged
+
+**Status:** run for real on **40 of the 65 in-scope tickets** — 9 `answerable`,
+6 `needs_customer_input`, 25 `needs_human`, 0 failures. Its guardrails were
+checked against what was actually written: **0 unsourced claims stored, 0 claims
+dropped, 0 internal handoffs reaching a drafting projection, and a maximum of 3
+tool calls in any run against a ceiling of 6.** Those are mechanical properties,
+and they hold.
+
+**What has not been checked is whether the case files are any good.** Nobody has
+read a set of them against the emails that produced them and said "yes, a writer
+could reply from this". That is a human judgement and it is the only one that
+matters here — every mechanical check above can pass while the content is thin.
+
+**To validate:** `cd agent && npm run investigate -- --dry-run --limit 10 --show`
+and read the ten dossiers next to the original emails. Three questions:
+
+1. **Is anything in `## Établi` actually false?** This is the one failure that is
+   worse than no case file at all, because the drafting agent will treat it as
+   ground truth. The ledger check proves a tool *ran*; it cannot prove the model
+   read the tool's answer correctly.
+2. **Is `needs_human` being used as a shrug?** 25 of 40 is high, and the expected
+   cause is the knowledge library — retrieval reports `weak` or `none` on most
+   product questions today, so there is genuinely nothing to answer from. If it
+   stays this high *after* the ~46 messages' worth of product content is written,
+   the cause is the agent, not the library, and the prompt needs the work.
+3. **Do the `## Non vérifié` entries belong there?** The line between "the
+   customer asserted this" and "a tool established this" is the agent's core
+   discipline, and a model putting real tool output under *non vérifié* is
+   throwing away evidence as surely as the reverse is inventing it.
+
+**Also unvalidated:** the whole order family. `order`, `delivery`, `payment` and
+`return_exchange` have complete tool policies, opening moves and escalation
+rules — including the ten-day stale-parcel trigger that four of the seven level
+disagreements in the review set point at — and every one of them is dormant,
+because `ENABLED_SUBJECTS` excludes them until real orders are synced (item 6).
+Turning them on is one array edit **plus** `npm run investigate -- --backfill`:
+their existing tickets were skipped and their flag cleared, so nothing re-queues
+them on its own.
+
+**And the cost is not yet measured.** 40 runs on `gpt-4o` at 1-3 tool calls each
+is cheap; 565 tickets re-investigated on every customer reply is a different
+number, and nobody has looked at it. Check the OpenAI usage for these runs before
+the worker is left running unattended.

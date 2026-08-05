@@ -40,6 +40,14 @@ export function loadAgentConfig(env = loadEnv(REPO_ROOT)) {
     // Categoriser: same cheap tier as triage — it picks 1-of-14 plus 1-of-4 with
     // the enums constrained by Structured Outputs, not free reasoning.
     categoriserModel: env.AGENT_CATEGORISER_MODEL || 'gpt-4o-mini',
+    // Investigation is the first stage that CHOOSES what to do, so it is the
+    // first that needs reliable tool calling rather than a single constrained
+    // answer — a mid tier, per the plan's model tiers. The budget below is what
+    // keeps that affordable: most tickets resolve in one turn because the
+    // deterministic evidence is fetched before the model is asked anything.
+    investigatorModel: env.AGENT_INVESTIGATOR_MODEL || 'gpt-4o',
+    investigationMaxToolCalls: Number(env.AGENT_INVESTIGATION_MAX_TOOL_CALLS) || 6,
+    investigationMaxTurns: Number(env.AGENT_INVESTIGATION_MAX_TURNS) || 4,
     // Must match what the knowledge chunks were embedded with, or cosine
     // comparison between a message and a chunk is meaningless.
     embeddingModel: env.EMBEDDING_MODEL || 'text-embedding-3-small',

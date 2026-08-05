@@ -100,6 +100,12 @@ export async function runCategorisation({
       // Cleared last: until this is false the ticket stays in the pending set, so
       // a crash anywhere above leaves it to be retried rather than half-labelled.
       needs_categorisation: false,
+      // And raised in the same patch: the ticket now has a subject, which is
+      // what the investigation pass chooses its tools from. This is the ONLY
+      // writer of the flag — ingestion deliberately does not set it, so a thread
+      // is never investigated against labels describing an older conversation
+      // (07_investigation.sql).
+      needs_investigation: true,
       metadata: mergeMetadata(ticket.metadata, {
         model: result.model,
         reason: result.reason,
@@ -173,6 +179,10 @@ async function handleFailure(store, ticket, error, counts, logger) {
   // Out of retries. Clear the flag either way — otherwise a permanently failing
   // ticket occupies a batch slot on every poll forever — but what gets written
   // depends on whether the ticket has usable labels already.
+  // Note what this patch does NOT do: raise needs_investigation. These labels
+  // are either stale or a fallback, and investigating a guess would spend tool
+  // and model calls building a case file on a subject nobody chose. Both
+  // branches below already land the ticket in front of a human.
   const patch = {
     // The labels no longer reflect the newest message, whichever branch we take.
     categorisation_confidence: 'low',

@@ -20,6 +20,10 @@
     "context:build": "node src/tools/run-order-context.mjs",
     "context:build:dry-run": "node src/tools/run-order-context.mjs --dry-run",
     "customer:lookup": "node src/tools/run-customer-lookup.mjs",
+    "investigate": "node src/tools/run-investigation.mjs",
+    "investigate:dry-run": "node src/tools/run-investigation.mjs --dry-run",
+    "customers:resolve": "node src/tools/run-customer-resolution.mjs",
+    "customers:resolve:dry-run": "node src/tools/run-customer-resolution.mjs --dry-run",
     "tickets:autoclose": "node src/tools/run-auto-close.mjs",
     "tickets:autoclose:dry-run": "node src/tools/run-auto-close.mjs --dry-run"
   }

@@ -180,6 +180,7 @@ export function createCustomerLookup({ supabase, shopId, logger, audit = true })
           found: false,
           reason: 'no_identifier',
           matchedBy: null,
+          customerId: null,
           customer: null,
           account: null,
           promptText: 'Aucune adresse e-mail exploitable sur ce ticket.'
@@ -192,6 +193,7 @@ export function createCustomerLookup({ supabase, shopId, logger, audit = true })
           found: false,
           reason: 'no_match',
           matchedBy: null,
+          customerId: null,
           customer: null,
           account: null,
           promptText:
@@ -217,6 +219,12 @@ export function createCustomerLookup({ supabase, shopId, logger, audit = true })
       return {
         found: true,
         matchedBy,
+        // The row id, returned BESIDE the bundle and never inside it. A caller
+        // that wants to persist the link (`tickets.customer_id`) needs it, but
+        // `buildCustomerContext` is the exact shape stored in
+        // `tickets.resolved_context.customer` — adding a field there would
+        // rewrite every bundle written so far.
+        customerId: customer.id,
         customer: context,
         account,
         promptText: toPromptText(context, account, { includeEmail })
