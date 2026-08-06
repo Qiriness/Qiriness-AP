@@ -1,0 +1,127 @@
+/* The panel sits inside a full-width cell under its row, so it draws its own
+   inset rather than inheriting the cell padding — the left rule is what ties it
+   back to the row it belongs to. */
+.panel {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  gap: var(--space-4) var(--space-6);
+  padding: var(--space-4) var(--space-5);
+  border-left: 3px solid var(--teal);
+  background: var(--surface-sunken);
+}
+
+/* Results is the reason the row was opened, so it takes the left column and
+   both rows of it; Order and Action stack down the right. */
+.block:first-child {
+  grid-row: span 2;
+}
+
+.heading {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0 0 var(--space-2);
+  font-size: var(--text-caption);
+  font-weight: var(--weight-semibold);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-subtle);
+}
+
+.verdict {
+  padding: 2px 8px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-pill);
+  font-size: var(--text-caption);
+  font-weight: var(--weight-semibold);
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.verdictAnswerable {
+  background: var(--success-050);
+  border-color: var(--success-100);
+  color: #15803d;
+}
+
+.verdictAsk {
+  background: var(--info-050);
+  border-color: var(--info-100);
+  color: #1d4ed8;
+}
+
+.verdictHuman {
+  background: var(--warning-050);
+  border-color: var(--warning-100);
+  color: #b45c05;
+}
+
+.summary {
+  margin: 0;
+  font-size: var(--text-md);
+  color: var(--text-strong);
+}
+
+.stamp {
+  margin: var(--space-1) 0 0;
+  font-size: var(--text-caption);
+  color: var(--text-subtle);
+}
+
+.findings {
+  margin: var(--space-3) 0 0;
+  padding-left: var(--space-4);
+  display: grid;
+  gap: var(--space-2);
+  font-size: var(--text-body);
+  color: var(--text-default);
+}
+
+.findings li::marker {
+  color: var(--teal);
+}
+
+.order {
+  margin: 0;
+  font-size: var(--text-md);
+  font-weight: var(--weight-semibold);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-strong);
+}
+
+.action {
+  margin: 0;
+  font-size: var(--text-body);
+  color: var(--text-strong);
+}
+
+/* The handoff's motive, one step quieter than the instruction above it. */
+.reason {
+  margin: var(--space-1) 0 0;
+  font-size: var(--text-caption);
+  color: var(--text-muted);
+}
+
+.muted {
+  margin: 0;
+  font-size: var(--text-body);
+  color: var(--text-subtle);
+}
+
+.error {
+  margin: 0;
+  font-size: var(--text-body);
+  color: var(--error);
+}
+
+/* One column below the queue's own min-width, where the two-column split would
+   leave the findings a few words wide. */
+@media (max-width: 1000px) {
+  .panel {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .block:first-child {
+    grid-row: auto;
+  }
+}

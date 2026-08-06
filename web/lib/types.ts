@@ -323,6 +323,68 @@ export interface TicketListItem {
   lastMessageAt: string | null;
 }
 
+/* ------------------------------------------------------- ticket detail */
+
+/** Mirrors ticket_investigations_verdict_check in 07_investigation.sql. */
+export type InvestigationVerdict = "answerable" | "needs_customer_input" | "needs_human";
+
+/**
+ * The facts only a customer can supply — the keys of MISSING_FIELDS in
+ * `agent/src/investigation/case-file.mjs`.
+ *
+ * The agent stores the key and owns the French sentence that asks the customer
+ * for it; these are the English fragments the dashboard shows an operator, so
+ * the two renderings can never drift into contradicting each other.
+ */
+export type MissingField =
+  | "shopify_order_number"
+  | "purchase_email"
+  | "product_name"
+  | "promotion_code"
+  | "order_date_or_amount"
+  | "photo";
+
+/** Reads after "Ask the customer for …", so each label is a noun phrase. */
+export const MISSING_FIELD_LABELS: Record<MissingField, string> = {
+  shopify_order_number: "the order number",
+  purchase_email: "the email address the order was placed with",
+  product_name: "which product this is about",
+  promotion_code: "the promotion code",
+  order_date_or_amount: "the order date or amount",
+  photo: "a photo of the product",
+};
+
+/**
+ * The agent's reading of one ticket, as the expanded row shows it.
+ *
+ * A projection of the latest `ticket_investigations` row, not the row itself:
+ * the case file's four evidence lists exist for the drafting stage, and dropping
+ * them all into a queue panel would bury the two things an operator opens a
+ * ticket to learn — what came of it, and what to do next.
+ */
+export interface TicketResults {
+  verdict: InvestigationVerdict;
+  /** One line placing the verdict, so the badge is not the only cue. */
+  headline: string;
+  /** The established facts. Each rests on a tool call that actually ran. */
+  findings: string[];
+  /** One short sentence: what needs to happen next. */
+  action: string;
+  /** Why a human was asked for. Internal — never customer-facing. */
+  actionReason: string | null;
+  investigatedAt: string | null;
+}
+
+/** What `GET /api/tickets/:id` returns for the expanded row. */
+export interface TicketDetail {
+  ticketId: string;
+  /**
+   * null when no case file exists: the ticket is uncategorised, its subject is
+   * outside `ENABLED_SUBJECTS`, or the investigation pass has not reached it.
+   */
+  results: TicketResults | null;
+}
+
 /**
  * One spam-gate decision that dropped an email.
  *

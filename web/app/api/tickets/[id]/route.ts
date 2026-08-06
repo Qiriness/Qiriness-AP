@@ -1,13 +1,29 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { getShopId } from "@/lib/server/knowledge-service";
-import { setTicketStatus } from "@/lib/server/tickets-service";
+import { getTicketDetail, setTicketStatus } from "@/lib/server/tickets-service";
 import { knowledgeErrorResponse, KnowledgeValidationError } from "@/lib/server/knowledge-errors";
 
 export const dynamic = "force-dynamic";
 
 interface RouteParams {
   params: { id: string };
+}
+
+/**
+ * The agent's reading of one ticket, for the expanded row.
+ *
+ * Per ticket rather than folded into the list read: an operator opens one row at
+ * a time, so the case files are fetched when a row is opened and not before.
+ */
+export async function GET(_request: NextRequest, { params }: RouteParams) {
+  try {
+    const shopId = await getShopId();
+    const detail = await getTicketDetail(shopId, params.id);
+    return NextResponse.json({ detail });
+  } catch (error) {
+    return knowledgeErrorResponse(error);
+  }
 }
 
 /**

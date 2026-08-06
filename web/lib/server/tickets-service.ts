@@ -14,13 +14,17 @@
 import { loadConfig } from "../../../scripts/lib/sync-config.mjs";
 import {
   createSupabaseClient,
+  supabaseSelect,
   supabaseSelectAll,
   supabaseUpdate,
 } from "../../../scripts/lib/supabase-rest-client.mjs";
 import { KnowledgeNotFoundError } from "./knowledge-errors";
+import { summariseInvestigation } from "../ticket-detail";
 import type {
+  InvestigationVerdict,
   KnowledgeCategory,
   ResponsibleTeam,
+  TicketDetail,
   TicketHappiness,
   TicketLevel,
   TicketListItem,
@@ -68,6 +72,65 @@ export async function listTickets(shopId: string): Promise<TicketListItem[]> {
   return (ticketRows as any[])
     .map((row) => mapTicketRow(row, messageCounts.get(row.id) ?? 0))
     .sort(byLastActivityDesc);
+}
+
+/**
+ * What the agent made of one ticket — the expanded row under it.
+ *
+ * Read lazily, per ticket, rather than joined into `listTickets`: the queue is
+ * 565 rows and an operator opens one at a time, so shipping every case file with
+ * the list would be paying for 564 nobody looked at.
+ *
+ * THE LATEST RUN ONLY. A ticket is investigated once per inbound message, so a
+ * thread holds a row per reading; the panel answers "where does this stand
+ * now", which is the newest. The earlier rows stay on the table — the trajectory
+ * is why they are rows — and are simply not what this view asks for.
+ *
+ * The ticket is read alongside it so an id that is not this shop's is a 404
+ * rather than an indistinguishable "nothing investigated yet".
+ */
+export async function getTicketDetail(shopId: string, ticketId: string): Promise<TicketDetail> {
+  const supabase = getSupabaseClient();
+
+  const [ticketRows, investigationRows] = await Promise.all([
+    supabaseSelect(
+      supabase,
+      "tickets",
+      { id: ticketId, shop_id: shopId, deleted_at: { operator: "is", value: null } },
+      "id",
+      { limit: 1 }
+    ),
+    supabaseSelect(
+      supabase,
+      "ticket_investigations",
+      { ticket_id: ticketId, shop_id: shopId },
+      "verdict,established,missing,handoff,investigated_at",
+      { order: "investigated_at.desc", limit: 1 }
+    ),
+  ]);
+
+  if (!Array.isArray(ticketRows) || ticketRows.length === 0) {
+    throw new KnowledgeNotFoundError(`Ticket not found: ${ticketId}`);
+  }
+
+  const row = Array.isArray(investigationRows) ? investigationRows[0] : null;
+  if (!row) {
+    return { ticketId, results: null };
+  }
+
+  return {
+    ticketId,
+    results: summariseInvestigation({
+      verdict: row.verdict as InvestigationVerdict,
+      // The jsonb columns are `not null default '[]'`, so these are arrays in
+      // practice; coerced anyway because a mapper that trusts the schema breaks
+      // loudly in the UI when the schema is the thing that changed.
+      established: Array.isArray(row.established) ? row.established : [],
+      missing: Array.isArray(row.missing) ? row.missing : [],
+      handoff: row.handoff ?? null,
+      investigatedAt: row.investigated_at ?? null,
+    }),
+  };
 }
 
 /**

@@ -20,6 +20,7 @@ Conventions: `*.test.mjs` sit next to their source (`npm test` = `node --test`);
 |   |   |-- agent-setup/page.tsx     # Server Component: initial article+source fetch (no HTTP hop)
 |   |   |-- tickets/page.tsx         # Server Component: the agent's queue, read-only -- see below
 |   |   |-- settings/page.tsx        # Server Component: forwarding address book -- see below
+|   |   |-- api/tickets/[id]/route.ts # GET the case-file projection · PATCH status
 |   |   |-- api/forwarding/route.ts  # GET all 14 categories · PUT upsert one
 |   |   `-- api/knowledge/           # server-only Route Handlers -- see Knowledge API below
 |   |       |-- shopify-sources/route.ts
@@ -33,7 +34,9 @@ Conventions: `*.test.mjs` sit next to their source (`npm test` = `node --test`);
 |   |   |-- settings/                # ForwardingSettings (address book, saves per row on blur)
 |   |   |-- tickets/                 # TicketsView (orchestrator: 3 sections, filters, mutations) ·
 |   |   |                            # TicketSection (collapsible) · TicketStatCards (4 figures) ·
-|   |   |                            # TicketTable · DroppedMailTable · LevelChip (severity pill) ·
+|   |   |                            # TicketTable (rows expand) · TicketDetailPanel (results ·
+|   |   |                            # order · action; fetches on expand) · DroppedMailTable ·
+|   |   |                            # LevelChip (severity pill) ·
 |   |   |                            # HappinessFace (leading mood light: 1-2 green, 3 amber, 4 red)
 |   |   `-- agent-setup/
 |   |       |-- AgentSetup.tsx SetupHeader.tsx # orchestrator (all mutations) · readiness header
@@ -49,11 +52,13 @@ Conventions: `*.test.mjs` sit next to their source (`npm test` = `node --test`);
 |   |   |-- types.ts             # Article/status/sync UI types, CoreTopic + CORE_TOPIC_* tables
 |   |   |-- knowledge-mapper.ts  # isomorphic API JSON -> UI types (shared by both fetch paths)
 |   |   |-- ticket-stats.ts      # isomorphic summariseTickets + isClosed (server and client)
+|   |   |-- ticket-detail.ts     # pure: case-file row -> the expanded row's 3 blocks
 |   |   |-- api/knowledge.ts     # client-side fetch wrapper for mutations
 |   |   |-- relative-time.ts demo-data.ts # "2h ago" labels · static sidebar branding only
 |   |   `-- server/              # knowledge-service.ts (all business logic; imports scripts/lib/*) ·
 |   |                            # forwarding-service.ts (address book read/upsert) ·
-|   |                            # tickets-service.ts (queue read + summariseTickets) ·
+|   |                            # tickets-service.ts (queue read + summariseTickets +
+|   |                            # getTicketDetail, the latest case file per ticket) ·
 |   |                            # knowledge-errors.ts (typed errors -> HTTP status)
 |   |-- next.config.mjs          # hydrates process.env from root .env.local via scripts/lib
 |   |                            # loadEnv(); outputFileTracingRoot; cpus:1; staleTimes 0
@@ -263,6 +268,12 @@ Server-only Route Handlers under `web/app/api/knowledge/`, all using the Supabas
 - **The level exemption is applied in JS, not SQL.** PostgREST's `not.eq` on a nullable column drops the NULL rows as well, which would have silently spared every uncategorised ticket — the largest group in the table. There is a regression test for exactly that.
 - **A ticket still flagged `needs_categorisation` is never auto-closed.** The categoriser selects on `status = 'open'` (`categorise-runner.mjs`), so closing one that is still queued drops it out of that queue for good and freezes it as uncategorised — only a customer reply could ever label it afterwards. The categoriser drains 25 per poll, so this defers a close by a few polls; getting it wrong is unrecoverable. The flag clears itself either way, including on a thread holding no customer message at all, so nothing is exempt permanently.
 - **A customer reply reopens a closed ticket** (`ticket-writer.mjs`, in the branch that already special-cases inbound for re-categorisation), clearing `closed_at`/`resolved_at` with the status. Inbound only: a ticket does not reopen because *we* sent something. Without this half, auto-close would make the queue tidy and wrong.
+- **A queue row expands into what the agent made of it** (`TicketDetailPanel`, `GET web/app/api/tickets/[id]`). Three blocks and no more: **Results** (a headline read off the verdict, plus the `established` claims), **Order** (`tickets.shopify_order_number`, already on the list row), **Action** (one sentence). The case file's other lists — `unverified`, `do_not_claim`, the tool ledger — are written for the drafting stage; pouring them in here would bury the three lines somebody opened the row to read.
+  - **The summary is derived, not stored, and there is deliberately no summary column.** A model asked for prose *beside* the evidence lists writes a fourth account of the ticket that can disagree with all three — the failure `do_not_claim` and the derived `replyIntent` already exist to prevent. What the agent established **is** the result.
+  - **The action sentence is looked up from the verdict** (`web/lib/ticket-detail.ts`), the same rule that makes `case-file.mjs` own the wording of a question to a customer. `needs_customer_input` names the missing fields in English (`MISSING_FIELD_LABELS`, the English half of the agent's French `MISSING_FIELDS`); `answerable` says to reply from the results. Only `needs_human` shows model prose — `handoff.action`, which is that verdict's whole output and internal by construction.
+  - **The latest run only.** A ticket is investigated once per inbound message, so a thread holds a row per reading; the panel answers "where does this stand now". The earlier rows are why they are rows and are simply not what this view asks for.
+  - Fetched per ticket on expand, not joined into the list: 565 rows, one open at a time. Collapsing unmounts the panel, so re-opening asks again rather than showing what was true the first time. **No case file is a normal state** — uncategorised, out of `ENABLED_SUBJECTS`, or not yet reached — and reads as "not investigated", never as an empty result.
+  - The row is clickable, but a `tr` cannot be tabbed to or given `aria-expanded`; the subject is a disclosure `<button>` that carries both, and the action cell stops the click so closing a ticket is not also "tell me more". One row open at a time — the panel is several lines tall inside a 26rem scroller.
 - **Mutations.** `PATCH web/app/api/tickets/[id]` accepts only `open`, `resolved`, `closed`. The rest (`awaiting_customer`, `forwarded`, `spam`…) are the worker's to set from what it observed — an operator asserting them by hand would put the UI and the pipeline in disagreement. `closed_at`/`resolved_at` are maintained alongside the status and cleared on reopen, since retention reads them.
 - **The four header cards.** Open tickets · High priority · Level 3 · New tickets (24h and 30d in one card). `summariseTickets()` lives in `web/lib/ticket-stats.ts` — isomorphic and pure, like `knowledge-mapper.ts` — so the server reduces it on first paint and the client re-reduces it after a status change from the same array the tables render. A card can never disagree with the rows under it.
 - **"High priority" is level 3 + 4, not the `priority` column.** Nothing in the pipeline writes `priority`, so all 565 rows sit at its default of 3 and a card reading it would show zero for ever. Level is what the categoriser actually assigns. Swap the source in `summariseTickets` when priority starts being written.

@@ -89,12 +89,71 @@
   background: var(--teal-050);
 }
 
+/* The whole row opens the panel, so it says so on hover. Marked per row rather
+   than on every `tr`: DroppedMailTable shares this stylesheet and its rows
+   expand into nothing — there is no body to reveal. */
+.rowClickable {
+  cursor: pointer;
+}
+
+/* The detail row is not clickable and keeps the panel's own background. */
+.table tbody tr.detailRow:hover {
+  background: var(--surface);
+}
+
+/* The open row stays tinted while its panel is showing, so the pair reads as
+   one block rather than two unrelated rows. */
+.table tbody tr.rowExpanded {
+  background: var(--teal-050);
+}
+
+.table tbody tr.rowExpanded td,
+.table tbody tr.rowExpanded th {
+  border-bottom-color: transparent;
+}
+
+/* The panel draws its own padding — a cell of it would inset the left rule. */
+.table tbody td.detailCell {
+  padding: 0;
+}
+
 .subjectCol {
   width: 38%;
 }
 
 .subjectCell {
   min-width: 260px;
+}
+
+/* A button, but it has to look like the subject it replaces: the chevron is the
+   only affordance, and the row's cursor carries the rest. */
+.disclosure {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.disclosure:focus-visible {
+  outline: 2px solid var(--teal);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+.chevron {
+  display: inline-flex;
+  flex: none;
+  color: var(--text-subtle);
+}
+
+.disclosure:hover .chevron {
+  color: var(--teal);
 }
 
 .subject {
@@ -106,6 +165,12 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   max-width: 42ch;
+}
+
+/* The chevron sits where the text used to start, so the second line lines up
+   under the subject rather than under the arrow. */
+.subjectCell .subMeta {
+  padding-left: calc(14px + var(--space-2));
 }
 
 .subMeta {
