@@ -45,9 +45,13 @@ async function main() {
   const store = createSupabaseTicketStore(supabase);
   const cursorStore = createSupabaseCursorStore(supabase);
   const blocklistStore = createBlocklistStore(supabase);
-  // Records why each email passed or failed the gate. Dropped mail is never
-  // written anywhere else, so this is its only trace.
-  const auditStore = createSupabaseSpamAuditStore(supabase);
+  // Records why each email passed or failed the gate, and on a drop the body
+  // too. Dropped mail is never written anywhere else, so this is its only trace
+  // — and a subject line alone cannot tell a reviewer whether the drop was
+  // right. The body expires on its own clock; the decision row does not.
+  const auditStore = createSupabaseSpamAuditStore(supabase, {
+    retentionDays: config.spamAuditBodyRetentionDays
+  });
 
   // LLM stages — enabled only when an OpenAI key is present. Without it,
   // ingestion still runs and just relies on the blocklist; tickets then stay
@@ -202,6 +206,19 @@ async function main() {
     const autoClosed = await runAutoClose({ store: autoCloseStore, shopId, logger });
     if (autoClosed.closed > 0 || autoClosed.failed > 0) {
       logger.info('lifecycle.auto_close.pass', { shopId, ...autoClosed });
+    }
+
+    // Retention for the one piece of personal data this worker keeps outside
+    // tickets: the body of a dropped email. Nulled past its expiry, decision row
+    // untouched. Best-effort and last — a purge failure must not fail a poll
+    // that has already ingested mail, and the next poll simply retries it.
+    try {
+      const purged = await auditStore.purgeExpiredBodies(shopId);
+      if (purged > 0) {
+        logger.info('ingest.spam_audit_bodies_purged', { shopId, purged });
+      }
+    } catch (error) {
+      logger.warn('ingest.spam_audit_purge_failed', { shopId, message: error.message });
     }
   };
 

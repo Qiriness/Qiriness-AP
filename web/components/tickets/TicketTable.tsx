@@ -13,6 +13,7 @@ import { formatRelativeTime } from "@/lib/relative-time";
 import { HappinessFace } from "./HappinessFace";
 import { LevelChip } from "./LevelChip";
 import { TicketDetailPanel } from "./TicketDetailPanel";
+import { TicketThreadDialog } from "./TicketThreadDialog";
 import styles from "./TicketTable.module.css";
 
 /** Columns in the row above, so the detail cell spans the whole table. */
@@ -42,6 +43,13 @@ interface TicketTableProps {
  * Clicking a row reveals what the agent made of it underneath. ONE ROW AT A
  * TIME: the panel is several lines tall inside a 26rem scroller, so two open at
  * once would leave neither readable without scrolling.
+ *
+ * THE SUBJECT AND THE CHEVRON DO DIFFERENT THINGS, deliberately. The chevron
+ * expands the row into the agent's reading; the subject opens the conversation
+ * itself. They were one control while there was only one thing to reveal — now
+ * that there are two, the subject takes the heavier of them, because "read the
+ * email" is what somebody clicking a subject line is asking for. Both remain
+ * real buttons, so the keyboard reaches either without the row.
  */
 export function TicketTable({
   tickets,
@@ -53,6 +61,7 @@ export function TicketTable({
   height = "default",
 }: TicketTableProps) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [threadTicket, setThreadTicket] = useState<TicketListItem | null>(null);
 
   function toggle(id: string) {
     setExpandedId((current) => (current === id ? null : id));
@@ -68,6 +77,7 @@ export function TicketTable({
   }
 
   return (
+    <>
     <div className={`${styles.scroll} ${height === "tall" ? styles.tall : ""}`}>
       <table className={styles.table}>
         <caption className={styles.srOnly}>
@@ -106,28 +116,45 @@ export function TicketTable({
                   </td>
 
                   <th scope="row" className={styles.subjectCell}>
-                    {/* The row is clickable, but a `tr` cannot be tabbed to or
-                        activated by keyboard — this button is that path, and it
-                        carries the aria-expanded state the row cannot. */}
-                    <button
-                      type="button"
-                      className={styles.disclosure}
-                      aria-expanded={expanded}
-                      aria-controls={panelId}
-                      onClick={(event) => {
-                        // Otherwise the click reaches the row handler too and the
-                        // panel opens and closes in the same gesture.
-                        event.stopPropagation();
-                        toggle(ticket.id);
-                      }}
-                    >
-                      <span className={styles.chevron} aria-hidden="true">
-                        {expanded ? <ChevronDownIcon size={14} /> : <ChevronRightIcon size={14} />}
-                      </span>
-                      <span className={styles.subject} title={ticket.subject ?? undefined}>
-                        {ticket.subject?.trim() || "(no subject)"}
-                      </span>
-                    </button>
+                    <span className={styles.subjectRow}>
+                      {/* The row is clickable, but a `tr` cannot be tabbed to or
+                          activated by keyboard — this button is that path, and it
+                          carries the aria-expanded state the row cannot. */}
+                      <button
+                        type="button"
+                        className={styles.disclosure}
+                        aria-expanded={expanded}
+                        aria-controls={panelId}
+                        aria-label={expanded ? "Hide the agent's reading" : "Show the agent's reading"}
+                        onClick={(event) => {
+                          // Otherwise the click reaches the row handler too and the
+                          // panel opens and closes in the same gesture.
+                          event.stopPropagation();
+                          toggle(ticket.id);
+                        }}
+                      >
+                        <span className={styles.chevron} aria-hidden="true">
+                          {expanded ? <ChevronDownIcon size={14} /> : <ChevronRightIcon size={14} />}
+                        </span>
+                      </button>
+
+                      {/* Opening the conversation is not "tell me more about
+                          this row": it takes over the screen, so it swallows the
+                          click rather than doing both. */}
+                      <button
+                        type="button"
+                        className={styles.subjectButton}
+                        title={ticket.subject ?? undefined}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          setThreadTicket(ticket);
+                        }}
+                      >
+                        <span className={styles.subject}>
+                          {ticket.subject?.trim() || "(no subject)"}
+                        </span>
+                      </button>
+                    </span>
                     <span className={styles.subMeta}>
                       {TICKET_STATUS_LABELS[ticket.status]}
                       {ticket.orderNumber ? ` · Order ${ticket.orderNumber}` : ""}
@@ -198,5 +225,13 @@ export function TicketTable({
         </tbody>
       </table>
     </div>
+
+    {/* Outside the scroller and outside the table: an overlay is not tabular
+        data, and a fixed-position child of an `overflow` ancestor is one CSS
+        transform away from being clipped by it. */}
+    {threadTicket && (
+      <TicketThreadDialog ticket={threadTicket} onClose={() => setThreadTicket(null)} />
+    )}
+    </>
   );
 }

@@ -1,0 +1,117 @@
+/* The overlay, header and scroller live in components/ui/Dialog.module.css —
+   this file styles only what goes inside the body. */
+
+.section {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.heading {
+  margin: 0;
+  font-size: var(--text-caption);
+  font-weight: var(--weight-semibold);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-subtle);
+}
+
+.draft {
+  margin: 0;
+  padding: var(--space-4);
+  border: 1px solid var(--border-teal);
+  border-left: 3px solid var(--teal);
+  border-radius: var(--radius);
+  background: var(--teal-050);
+  font-family: inherit;
+  font-size: var(--text-body);
+  line-height: 1.6;
+  color: var(--text-strong);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.stamp {
+  margin: 0;
+  font-size: var(--text-caption);
+  color: var(--text-subtle);
+}
+
+.placeholder {
+  margin: 0;
+  padding: var(--space-4);
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--surface);
+  font-size: var(--text-body);
+  color: var(--text-subtle);
+}
+
+.error {
+  margin: 0;
+  font-size: var(--text-body);
+  color: var(--error);
+}
+
+.messages {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: var(--space-3);
+}
+
+.message {
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+/* Direction is carried by the left rule rather than by alignment: these are
+   full-width emails, not chat bubbles, and half of them are ours. */
+.inbound {
+  border-left: 3px solid var(--border-strong);
+}
+
+.outbound {
+  border-left: 3px solid var(--teal);
+  background: var(--surface-sunken);
+}
+
+.messageHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-2);
+  margin-bottom: var(--space-2);
+}
+
+.sender {
+  font-size: var(--text-body);
+  font-weight: var(--weight-semibold);
+  color: var(--text-strong);
+  overflow-wrap: anywhere;
+}
+
+.direction,
+.when,
+.attachment {
+  font-size: var(--text-caption);
+  color: var(--text-subtle);
+}
+
+.attachment {
+  padding: 1px 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+}
+
+.messageBody {
+  margin: 0;
+  font-family: inherit;
+  font-size: var(--text-body);
+  line-height: 1.6;
+  color: var(--text-default);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

@@ -1,0 +1,54 @@
+/* The overlay, header and scroller live in components/ui/Dialog.module.css —
+   this file styles only what goes inside the body, which here is the dropped
+   email and nothing else. The decision itself stays in the table row. */
+
+.body {
+  margin: 0;
+  padding: var(--space-4);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--surface);
+  font-family: inherit;
+  font-size: var(--text-body);
+  line-height: 1.6;
+  color: var(--text-default);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.stamp {
+  margin: 0;
+  font-size: var(--text-caption);
+  color: var(--text-subtle);
+}
+
+.placeholder {
+  margin: 0;
+  padding: var(--space-4);
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--surface);
+  font-size: var(--text-body);
+  line-height: 1.6;
+  color: var(--text-subtle);
+}
+
+.placeholder code {
+  padding: 1px 4px;
+  border-radius: var(--radius-sm);
+  background: var(--linen);
+  font-size: 0.95em;
+  color: var(--text-default);
+}
+
+.warning {
+  margin: 0;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--warning-100);
+  border-radius: var(--radius);
+  background: var(--warning-050);
+  font-size: var(--text-body);
+  line-height: 1.5;
+  color: var(--text-strong);
+}

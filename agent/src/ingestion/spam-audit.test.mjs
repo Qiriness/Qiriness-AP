@@ -5,7 +5,9 @@ import {
   createAuditCollector,
   buildAuditRow,
   buildAuditRows,
+  buildBodyPatch,
   normalizeReason,
+  DEFAULT_BODY_RETENTION_DAYS,
   UNSURE_REASON
 } from './spam-audit.mjs';
 
@@ -113,4 +115,104 @@ test('a decided_at is always set even when the caller omits it', () => {
   const row = buildAuditRow('shop-1', { graphMessageId: 'm1', outcome: 'kept', decidedBy: 'llm' });
   assert.ok(!Number.isNaN(Date.parse(row.decided_at)));
   assert.equal(row.reason, UNSURE_REASON);
+});
+
+// --- the body (08_spam_audit_body.sql) --------------------------------------
+
+test('a blocked decision stores the body with its own expiry', () => {
+  const row = buildAuditRow(
+    'shop-1',
+    {
+      graphMessageId: 'm1',
+      outcome: 'blocked',
+      decidedBy: 'llm',
+      reason: 'newsletter',
+      bodyText: 'Bonjour, découvrez nos offres.',
+      decidedAt: '2026-01-01T00:00:00.000Z'
+    },
+    { retentionDays: 90 }
+  );
+
+  assert.equal(row.body_text, 'Bonjour, découvrez nos offres.');
+  assert.equal(row.body_captured_at, '2026-01-01T00:00:00.000Z');
+  assert.equal(row.body_expires_at, '2026-04-01T00:00:00.000Z');
+});
+
+test('a KEPT decision never stores the body', () => {
+  // It is about to be written to ticket_messages in full; copying it here would
+  // duplicate personal data into a second table with a second retention clock.
+  const row = buildAuditRow('shop-1', {
+    graphMessageId: 'm1',
+    outcome: 'kept',
+    decidedBy: 'llm',
+    reason: 'genuine customer',
+    bodyText: 'Bonjour, où est ma commande ?'
+  });
+
+  assert.equal(row.body_text, undefined);
+  assert.equal(row.body_captured_at, undefined);
+  assert.equal(row.body_expires_at, undefined);
+});
+
+test('a blocked decision with no body leaves the capture columns unset', () => {
+  // Never captured and captured-but-empty are the same thing to a reviewer.
+  for (const bodyText of [undefined, null, '', '   \n  ']) {
+    const row = buildAuditRow('shop-1', {
+      graphMessageId: 'm1',
+      outcome: 'blocked',
+      decidedBy: 'blocklist',
+      reason: 'blocklisted',
+      bodyText
+    });
+    assert.equal(row.body_text, undefined, String(bodyText));
+    assert.equal(row.body_captured_at, undefined, String(bodyText));
+  }
+});
+
+test('the body is capped, and the cap marks the truncation', () => {
+  const row = buildAuditRow('shop-1', {
+    graphMessageId: 'm1',
+    outcome: 'blocked',
+    decidedBy: 'llm',
+    reason: 'spam',
+    bodyText: 'x'.repeat(20000)
+  });
+
+  assert.equal(row.body_text.length, 8000);
+  assert.ok(row.body_text.endsWith('…'));
+});
+
+test('buildBodyPatch is the single owner of the cap and the clock', () => {
+  // Two writers use it — live ingestion and the Graph backfill — so a
+  // backfilled body must expire on exactly the same rule as an ingested one.
+  const ingested = buildAuditRow(
+    'shop-1',
+    {
+      graphMessageId: 'm1',
+      outcome: 'blocked',
+      decidedBy: 'llm',
+      reason: 'spam',
+      bodyText: 'same text',
+      decidedAt: '2026-01-01T00:00:00.000Z'
+    },
+    { retentionDays: 30 }
+  );
+  const backfilled = buildBodyPatch('same text', {
+    capturedAt: '2026-01-01T00:00:00.000Z',
+    retentionDays: 30
+  });
+
+  assert.equal(ingested.body_text, backfilled.body_text);
+  assert.equal(ingested.body_captured_at, backfilled.body_captured_at);
+  assert.equal(ingested.body_expires_at, backfilled.body_expires_at);
+});
+
+test('the retention window is configurable and defaults to 90 days', () => {
+  const at = '2026-01-01T00:00:00.000Z';
+  assert.equal(buildBodyPatch('t', { capturedAt: at }).body_expires_at, '2026-04-01T00:00:00.000Z');
+  assert.equal(
+    buildBodyPatch('t', { capturedAt: at, retentionDays: 7 }).body_expires_at,
+    '2026-01-08T00:00:00.000Z'
+  );
+  assert.equal(DEFAULT_BODY_RETENTION_DAYS, 90);
 });

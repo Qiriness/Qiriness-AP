@@ -1,0 +1,103 @@
+/* Above the sticky top bar and any dropdown, below toasts — an error raised
+   while the dialog is open must still be readable over it. */
+.backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 300;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-5);
+  background: rgba(15, 20, 27, 0.45);
+}
+
+.dialog {
+  display: flex;
+  flex-direction: column;
+  width: min(56rem, 100%);
+  /* Capped rather than sized to content: a 40-message thread must not push the
+     header off screen, and the body below scrolls instead. */
+  max-height: min(46rem, 100%);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+  overflow: hidden;
+}
+
+.header {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-4);
+  padding: var(--space-4) var(--space-5);
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.headerText {
+  flex: 1;
+  min-width: 0;
+}
+
+.title {
+  margin: 0;
+  font-size: var(--text-lg);
+  font-weight: var(--weight-semibold);
+  color: var(--text-strong);
+  overflow-wrap: anywhere;
+}
+
+.meta {
+  margin: var(--space-1) 0 0;
+  font-size: var(--text-caption);
+  color: var(--text-subtle);
+}
+
+.close {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.close:hover {
+  background: var(--linen);
+  color: var(--text-strong);
+}
+
+.close:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus);
+}
+
+/* The one scroller in the dialog — the page behind is frozen while it is open. */
+.body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--space-5);
+  display: grid;
+  gap: var(--space-5);
+  background: var(--surface-sunken);
+}
+
+@media (max-width: 640px) {
+  .backdrop {
+    padding: 0;
+  }
+
+  .dialog {
+    max-height: 100%;
+    height: 100%;
+    border-radius: 0;
+    border: none;
+  }
+}

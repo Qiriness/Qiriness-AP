@@ -81,12 +81,63 @@
   color: var(--teal);
 }
 
-.order {
+/* A label/value list, not a mini-table: the lines are read one after another,
+   and each is dropped whole when the bundle does not carry it — so nothing here
+   may depend on aligning with the row above or below it. */
+.facts {
   margin: 0;
+  display: grid;
+  gap: var(--space-2);
+}
+
+.fact {
+  display: grid;
+  gap: 2px;
+}
+
+.fact dt {
+  font-size: var(--text-caption);
+  color: var(--text-subtle);
+}
+
+.fact dd {
+  margin: 0;
+  font-size: var(--text-body);
+  color: var(--text-strong);
+}
+
+.order {
   font-size: var(--text-md);
   font-weight: var(--weight-semibold);
   font-variant-numeric: tabular-nums;
-  color: var(--text-strong);
+}
+
+/* An order can ship in more than one parcel; each gets its own line. */
+.parcel {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+}
+
+.tracking,
+.trackingLink {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em;
+}
+
+.trackingLink {
+  color: var(--teal);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.trackingLink:hover {
+  color: var(--teal-strong, var(--teal));
+}
+
+.carrier {
+  font-size: var(--text-caption);
+  color: var(--text-subtle);
 }
 
 .action {

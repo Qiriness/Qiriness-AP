@@ -1,8 +1,10 @@
 "use client";
 
+import { useState } from "react";
 import { Button } from "@/components/ui/Button";
 import type { DroppedMail } from "@/lib/types";
 import { formatRelativeTime } from "@/lib/relative-time";
+import { DroppedMailDialog } from "./DroppedMailDialog";
 import styles from "./TicketTable.module.css";
 
 interface DroppedMailTableProps {
@@ -24,8 +26,16 @@ const LABELS: Record<string, string> = {
  * back means re-fetching it from Graph, which is the agent worker's job, and
  * hiding the button would hide the fact that this is recoverable at all. Reuses
  * TicketTable's stylesheet so the two tables cannot drift apart visually.
+ *
+ * The subject opens the decision record, the same gesture as a ticket's subject
+ * — but what opens is the gate's reasoning, not a conversation, because there
+ * is no stored email to show. Worth a dialog anyway: the subject, the sender
+ * and especially the reason are the three longest fields here and all three are
+ * truncated in a row.
  */
 export function DroppedMailTable({ mail }: DroppedMailTableProps) {
+  const [openMail, setOpenMail] = useState<DroppedMail | null>(null);
+
   if (mail.length === 0) {
     return (
       <div className={styles.empty}>
@@ -38,6 +48,7 @@ export function DroppedMailTable({ mail }: DroppedMailTableProps) {
   }
 
   return (
+    <>
     <div className={styles.scroll}>
       <table className={styles.table}>
         <caption className={styles.srOnly}>
@@ -60,9 +71,16 @@ export function DroppedMailTable({ mail }: DroppedMailTableProps) {
           {mail.map((item) => (
             <tr key={item.id}>
               <th scope="row" className={styles.subjectCell}>
-                <span className={styles.subject} title={item.subject ?? undefined}>
-                  {item.subject?.trim() || "(no subject)"}
-                </span>
+                <button
+                  type="button"
+                  className={styles.subjectButton}
+                  title={item.subject ?? undefined}
+                  onClick={() => setOpenMail(item)}
+                >
+                  <span className={styles.subject}>
+                    {item.subject?.trim() || "(no subject)"}
+                  </span>
+                </button>
               </th>
 
               <td className={styles.requester} title={item.fromEmail ?? undefined}>
@@ -102,5 +120,10 @@ export function DroppedMailTable({ mail }: DroppedMailTableProps) {
         </tbody>
       </table>
     </div>
+
+    {/* Outside the scroller and outside the table, for the same reason as the
+        ticket thread: an overlay is not tabular data. */}
+    {openMail && <DroppedMailDialog mail={openMail} onClose={() => setOpenMail(null)} />}
+    </>
   );
 }

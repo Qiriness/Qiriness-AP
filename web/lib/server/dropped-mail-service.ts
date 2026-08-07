@@ -5,10 +5,15 @@
  * `tickets` — the gate runs before the ticket write (see
  * agent/src/ingestion/delta-poller.mjs: "spam is dropped here — never written
  * to the database"), so the only trace is one `spam_audit` row per decision.
- * That row carries the sender, subject and a one-line reason. It does NOT carry
- * the body: nothing here can reconstruct the email, which is why promoting one
- * back into the queue needs the agent to re-fetch it from Graph rather than a
- * write from this module.
+ * That row carries the sender, subject, a one-line reason and — since
+ * 08_spam_audit_body.sql — the cleaned body, because the one question a reviewer
+ * has is "should this have become a ticket?" and a subject line does not answer
+ * it. The body has a bounded life (the worker nulls it past `body_expires_at`)
+ * while the decision row is kept, so an older row legitimately has none.
+ *
+ * Still not a ticket reader, and promoting one back into the queue still needs
+ * the agent to re-fetch from Graph rather than a write from this module: a body
+ * is not a `ticket_messages` row.
  *
  * Service-role key, same reason as the sibling services. Never import from a
  * client component.
@@ -37,7 +42,8 @@ export async function listDroppedMail(shopId: string): Promise<DroppedMail[]> {
     supabase,
     "spam_audit",
     { shop_id: shopId, outcome: { operator: "eq", value: "blocked" } },
-    "id,graph_message_id,label,decided_by,reason,from_email,subject,failed_open,decided_at"
+    "id,graph_message_id,label,decided_by,reason,from_email,subject," +
+      "body_text,body_captured_at,body_expires_at,failed_open,decided_at"
   );
 
   return (rows as any[])
@@ -49,6 +55,9 @@ export async function listDroppedMail(shopId: string): Promise<DroppedMail[]> {
       reason: row.reason,
       fromEmail: row.from_email,
       subject: row.subject,
+      body: row.body_text ?? null,
+      bodyCapturedAt: row.body_captured_at ?? null,
+      bodyExpiresAt: row.body_expires_at ?? null,
       failedOpen: Boolean(row.failed_open),
       decidedAt: row.decided_at,
     }))

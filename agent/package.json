@@ -25,6 +25,8 @@
     "customers:resolve": "node src/tools/run-customer-resolution.mjs",
     "customers:resolve:dry-run": "node src/tools/run-customer-resolution.mjs --dry-run",
     "tickets:autoclose": "node src/tools/run-auto-close.mjs",
-    "tickets:autoclose:dry-run": "node src/tools/run-auto-close.mjs --dry-run"
+    "tickets:autoclose:dry-run": "node src/tools/run-auto-close.mjs --dry-run",
+    "spam:backfill": "node src/tools/run-spam-body-backfill.mjs",
+    "spam:backfill:dry-run": "node src/tools/run-spam-body-backfill.mjs --dry-run"
   }
 }

@@ -33,6 +33,13 @@ const VERDICT_CLASSES: Record<InvestigationVerdict, string> = {
  * prohibitions, the tool ledger — is written for the drafting stage, and pouring
  * it in here would bury the three lines somebody opened the row to read.
  *
+ * THE ORDER BLOCK IS A TEXT LIST, NOT A ROW. Order status, tracking number and
+ * tracking status are labelled lines that appear only when the resolved context
+ * actually carries them, so an unfulfilled order shows two lines and a delivered
+ * one shows four. Reserving a slot per field — the shape a table would force —
+ * would fill the block with dashes, and a dash beside "Tracking number" reads as
+ * "there is no tracking" rather than "nothing has been resolved yet".
+ *
  * Fetches on mount, and it only mounts when a row is expanded: the queue is 565
  * rows and one is open at a time. Unmounting on collapse means re-opening asks
  * again, which is what you want from a table the worker rewrites underneath you.
@@ -63,6 +70,13 @@ export function TicketDetailPanel({ ticket }: TicketDetailPanelProps) {
   }, [ticket.id]);
 
   const results = detail?.results ?? null;
+  const order = detail?.order ?? null;
+  // The list row already carries the confirmed order number, so the heading
+  // stops being "loading" while the bundle is still in flight. The bundle's own
+  // `name` wins where both exist — they agree by construction (the context is
+  // built from the order that number resolved to), but one of them is the row
+  // that was rendered a minute ago.
+  const orderNumber = order?.orderName ?? ticket.orderNumber;
 
   return (
     <div className={styles.panel}>
@@ -117,12 +131,69 @@ export function TicketDetailPanel({ ticket }: TicketDetailPanelProps) {
 
       <section className={styles.block}>
         <h3 className={styles.heading}>Order</h3>
-        {ticket.orderNumber ? (
-          <p className={styles.order}>{ticket.orderNumber}</p>
+        {orderNumber ? (
+          <dl className={styles.facts}>
+            <div className={styles.fact}>
+              <dt>Order</dt>
+              <dd className={styles.order}>{orderNumber}</dd>
+            </div>
+
+            {/* The three lines below are Shopify's answer, not the agent's, and
+                each one is omitted entirely when the bundle does not carry it.
+                A row of dashes reads as "we looked and there is nothing", which
+                is a different and usually wrong claim. */}
+            {order?.orderStatus && (
+              <div className={styles.fact}>
+                <dt>Order status</dt>
+                <dd>{order.orderStatus}</dd>
+              </div>
+            )}
+
+            {order && order.tracking.length > 0 && (
+              <div className={styles.fact}>
+                <dt>Tracking number</dt>
+                <dd>
+                  {order.tracking.map((parcel) => (
+                    <span key={parcel.number} className={styles.parcel}>
+                      {parcel.url ? (
+                        <a
+                          className={styles.trackingLink}
+                          href={parcel.url}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          {parcel.number}
+                        </a>
+                      ) : (
+                        <span className={styles.tracking}>{parcel.number}</span>
+                      )}
+                      {parcel.carrier && <span className={styles.carrier}>{parcel.carrier}</span>}
+                    </span>
+                  ))}
+                </dd>
+              </div>
+            )}
+
+            {order?.trackingStatus && (
+              <div className={styles.fact}>
+                <dt>Tracking status</dt>
+                <dd>{order.trackingStatus}</dd>
+              </div>
+            )}
+          </dl>
         ) : (
           /* Absent is not the same as "no order": the column is written only on a
              confirmed match between the order's email hash and the requester's. */
           <p className={styles.muted}>No order number confirmed for this ticket.</p>
+        )}
+
+        {/* A bundle assembled weeks ago describes the order as it was then.
+            Outside the list, because a `p` is not a valid child of a `dl`. */}
+        {orderNumber && order?.resolvedAt && (
+          <p className={styles.stamp}>
+            Shopify data read{" "}
+            <time dateTime={order.resolvedAt}>{formatRelativeTime(order.resolvedAt)}</time>
+          </p>
         )}
       </section>
 

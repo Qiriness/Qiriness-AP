@@ -94,6 +94,11 @@ export async function runDeltaPoll({
             conversationId: item.conversationId,
             fromEmail: item.message?.from_email,
             subject: item.message?.subject,
+            // The cleaned body, kept because a subject line cannot tell a
+            // newsletter from a customer whose parcel is lost — and this row is
+            // the only thing a reviewer will ever have. Bounded life: see
+            // spam-audit.mjs and 08_spam_audit_body.sql.
+            bodyText: item.message?.body_text,
             outcome: 'blocked',
             decidedBy: 'blocklist',
             reason: verdict.reason,

@@ -355,6 +355,83 @@ export const MISSING_FIELD_LABELS: Record<MissingField, string> = {
 };
 
 /**
+ * Shopify's own status for the order, as `deriveOrderStatus` in
+ * `scripts/lib/shopify-order-mapper.mjs` writes it to `orders.order_status`.
+ * Mirrored here so the panel labels the stored value rather than re-deriving it.
+ */
+export type OrderStatus =
+  | "cancelled"
+  | "return_refund_in_progress"
+  | "return_refund_completed"
+  | "delivered"
+  | "in_transit"
+  | "partially_fulfilled"
+  | "fulfilled"
+  | "unfulfilled"
+  | "closed"
+  | "open";
+
+export const ORDER_STATUS_LABELS: Record<OrderStatus, string> = {
+  cancelled: "Cancelled",
+  return_refund_in_progress: "Return or refund in progress",
+  return_refund_completed: "Return or refund completed",
+  delivered: "Delivered",
+  in_transit: "In transit",
+  partially_fulfilled: "Partially fulfilled",
+  fulfilled: "Fulfilled",
+  unfulfilled: "Unfulfilled",
+  closed: "Closed",
+  open: "Open",
+};
+
+/**
+ * Where the parcel is, as `buildDelivery` in
+ * `agent/src/resolution/order-context.mjs` derives it.
+ *
+ * Deliberately not the same axis as OrderStatus: Shopify's status says whether
+ * the warehouse dispatched, the delivery state says whether the carrier has
+ * moved it. "Fulfilled" with no carrier scan is both, and they are different
+ * answers to "where is my parcel?".
+ */
+export type DeliveryState = "delivered" | "in_transit" | "dispatched" | "not_dispatched";
+
+export const DELIVERY_STATE_LABELS: Record<DeliveryState, string> = {
+  delivered: "Delivered",
+  in_transit: "In transit",
+  // The largest delivery cluster in the corpus: dispatched, and the carrier has
+  // not scanned it yet. Saying only "dispatched" hides the half that matters.
+  dispatched: "Dispatched, no carrier scan yet",
+  not_dispatched: "Not dispatched",
+};
+
+/** One parcel on the order. */
+export interface TicketTracking {
+  number: string;
+  carrier: string | null;
+  url: string | null;
+}
+
+/**
+ * The order facts an operator reads off the expanded row, projected from
+ * `tickets.resolved_context` (built by `buildOrderContext`).
+ *
+ * Every field is nullable and every one is omitted from the panel when empty:
+ * an unresolved ticket should show no order lines at all rather than a column
+ * of dashes.
+ */
+export interface TicketOrderFacts {
+  /** Shopify order name, e.g. "#1234". */
+  orderName: string | null;
+  /** Already labelled — the panel renders it as-is. */
+  orderStatus: string | null;
+  /** Already labelled. Null when the bundle carries no delivery block. */
+  trackingStatus: string | null;
+  tracking: TicketTracking[];
+  /** When the bundle was assembled; a stale one describes an older order state. */
+  resolvedAt: string | null;
+}
+
+/**
  * The agent's reading of one ticket, as the expanded row shows it.
  *
  * A projection of the latest `ticket_investigations` row, not the row itself:
@@ -383,6 +460,51 @@ export interface TicketDetail {
    * outside `ENABLED_SUBJECTS`, or the investigation pass has not reached it.
    */
   results: TicketResults | null;
+  /**
+   * null when `tickets.resolved_context` is still empty — no order number was
+   * confirmed, or the context pass has not run. Separate from `results`: the
+   * order facts come from Shopify via the resolution pass, the results come
+   * from the investigation, and either can exist without the other.
+   */
+  order: TicketOrderFacts | null;
+}
+
+/* ------------------------------------------------------- ticket thread */
+
+/** One email in a ticket's conversation, as the thread dialog shows it. */
+export interface TicketMessage {
+  id: string;
+  /** "outbound" is the desk's own reply — the Inbox holds both. */
+  direction: "inbound" | "outbound";
+  fromName: string | null;
+  fromEmail: string | null;
+  subject: string | null;
+  /** The cleaned plain-text body (`ticket_messages.body_text`). */
+  body: string | null;
+  hasAttachments: boolean;
+  at: string | null;
+}
+
+/**
+ * A ticket's conversation, plus the reply that would be sent for it.
+ *
+ * `draft` is ALWAYS null today and that is not a bug: the drafting agent is
+ * Phase 5 and nothing writes a draft yet (there is no column and no table for
+ * one). The field exists so the dialog renders the section it belongs in and
+ * the wiring point is a single named thing rather than a redesign later.
+ */
+export interface TicketThread {
+  ticketId: string;
+  subject: string | null;
+  draft: TicketDraft | null;
+  messages: TicketMessage[];
+}
+
+/** What the agent would send, once drafting exists. */
+export interface TicketDraft {
+  body: string;
+  /** ISO timestamp of when it was written. */
+  draftedAt: string | null;
 }
 
 /**
@@ -400,6 +522,21 @@ export interface DroppedMail {
   reason: string;
   fromEmail: string | null;
   subject: string | null;
+  /**
+   * The dropped email's text (08_spam_audit_body.sql) — what makes the decision
+   * reviewable at all, since a subject line cannot tell a newsletter from a
+   * customer whose parcel is lost.
+   *
+   * Null in three distinguishable states, which is why `bodyExpiresAt` is here
+   * too: never captured (the row predates 08 and the backfill has not reached
+   * it, or the message had left the mailbox), captured and since expired, or a
+   * genuinely empty email.
+   */
+  body: string | null;
+  /** When the body was stored. Null means it never was. */
+  bodyCapturedAt: string | null;
+  /** When the worker's purge clears the body. Past = already purged. */
+  bodyExpiresAt: string | null;
   failedOpen: boolean;
   decidedAt: string | null;
 }

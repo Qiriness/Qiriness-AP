@@ -145,6 +145,11 @@ async function resolveTicket(store, shopId, item, triage, counts, audit) {
       conversationId: conversation.graph_conversation_id,
       fromEmail: item.message?.from_email,
       subject: item.message?.subject,
+      // Written only when this verdict drops the mail (buildAuditRow enforces
+      // that): a kept email is stored in full on ticket_messages a moment later,
+      // and copying it here too would duplicate personal data into a second
+      // table with a second retention clock.
+      bodyText: item.message?.body_text,
       outcome: verdict.spam ? 'blocked' : 'kept',
       decidedBy: 'llm',
       reason: verdict.reason,

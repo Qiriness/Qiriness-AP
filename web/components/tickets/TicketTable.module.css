@@ -125,13 +125,21 @@
   min-width: 260px;
 }
 
-/* A button, but it has to look like the subject it replaces: the chevron is the
-   only affordance, and the row's cursor carries the rest. */
-.disclosure {
+/* Two controls on one line: the chevron expands the row, the subject opens the
+   conversation. Separate buttons because they now do separate things. */
+.subjectRow {
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  width: 100%;
+  min-width: 0;
+}
+
+/* Buttons, but they have to look like the text they replace: the chevron is the
+   only affordance, and the row's cursor carries the rest. */
+.disclosure,
+.subjectButton {
+  display: flex;
+  align-items: center;
   padding: 0;
   border: none;
   background: none;
@@ -140,7 +148,16 @@
   cursor: pointer;
 }
 
-.disclosure:focus-visible {
+.disclosure {
+  flex: none;
+}
+
+.subjectButton {
+  min-width: 0;
+}
+
+.disclosure:focus-visible,
+.subjectButton:focus-visible {
   outline: 2px solid var(--teal);
   outline-offset: 2px;
   border-radius: var(--radius-sm);
@@ -165,6 +182,14 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   max-width: 42ch;
+}
+
+/* The underline is what says the subject leads somewhere, without giving the
+   queue a column of blue links at rest. */
+.subjectButton:hover .subject {
+  color: var(--teal-ink);
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }
 
 /* The chevron sits where the text used to start, so the second line lines up

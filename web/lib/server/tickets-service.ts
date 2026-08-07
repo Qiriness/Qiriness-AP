@@ -19,7 +19,7 @@ import {
   supabaseUpdate,
 } from "../../../scripts/lib/supabase-rest-client.mjs";
 import { KnowledgeNotFoundError } from "./knowledge-errors";
-import { summariseInvestigation } from "../ticket-detail";
+import { summariseInvestigation, summariseOrderContext } from "../ticket-detail";
 import type {
   InvestigationVerdict,
   KnowledgeCategory,
@@ -28,7 +28,9 @@ import type {
   TicketHappiness,
   TicketLevel,
   TicketListItem,
+  TicketMessage,
   TicketStatus,
+  TicketThread,
 } from "../types";
 
 function getSupabaseClient() {
@@ -86,8 +88,11 @@ export async function listTickets(shopId: string): Promise<TicketListItem[]> {
  * now", which is the newest. The earlier rows stay on the table — the trajectory
  * is why they are rows — and are simply not what this view asks for.
  *
- * The ticket is read alongside it so an id that is not this shop's is a 404
- * rather than an indistinguishable "nothing investigated yet".
+ * The ticket is read alongside it — not only so an id that is not this shop's is
+ * a 404 rather than an indistinguishable "nothing investigated yet", but because
+ * `resolved_context` is the other half of the panel. The order and tracking
+ * lines exist for tickets the agent never investigated, and the case file exists
+ * for tickets with no order at all, so neither read can stand in for the other.
  */
 export async function getTicketDetail(shopId: string, ticketId: string): Promise<TicketDetail> {
   const supabase = getSupabaseClient();
@@ -97,7 +102,7 @@ export async function getTicketDetail(shopId: string, ticketId: string): Promise
       supabase,
       "tickets",
       { id: ticketId, shop_id: shopId, deleted_at: { operator: "is", value: null } },
-      "id",
+      "id,resolved_context",
       { limit: 1 }
     ),
     supabaseSelect(
@@ -113,13 +118,18 @@ export async function getTicketDetail(shopId: string, ticketId: string): Promise
     throw new KnowledgeNotFoundError(`Ticket not found: ${ticketId}`);
   }
 
+  // `{}` on every ticket without a confirmed order number, which the projection
+  // reads as "no order facts" rather than as a bundle full of nulls.
+  const order = summariseOrderContext(ticketRows[0]?.resolved_context);
+
   const row = Array.isArray(investigationRows) ? investigationRows[0] : null;
   if (!row) {
-    return { ticketId, results: null };
+    return { ticketId, results: null, order };
   }
 
   return {
     ticketId,
+    order,
     results: summariseInvestigation({
       verdict: row.verdict as InvestigationVerdict,
       // The jsonb columns are `not null default '[]'`, so these are arrays in
@@ -130,6 +140,76 @@ export async function getTicketDetail(shopId: string, ticketId: string): Promise
       handoff: row.handoff ?? null,
       investigatedAt: row.investigated_at ?? null,
     }),
+  };
+}
+
+/**
+ * The whole conversation on one ticket, oldest first — what the thread dialog
+ * shows so an operator can read a case without opening Outlook.
+ *
+ * SEPARATE FROM `getTicketDetail`, and not folded into it: the bodies are the
+ * largest thing this table holds and the panel under a row never shows them.
+ * A dialog is opened deliberately, on one ticket, so the bodies are fetched
+ * then and not on every row expansion.
+ *
+ * BOTH DIRECTIONS. The Inbox holds the desk's own replies too (measured: 123 of
+ * 348 messages), and a thread showing only what the customer wrote is exactly
+ * the half that makes flicking to Outlook necessary.
+ *
+ * Soft-deleted messages are excluded at the query, like the ticket list: a
+ * compliance delete must not reach the UI through a caller that forgot.
+ */
+export async function getTicketThread(shopId: string, ticketId: string): Promise<TicketThread> {
+  const supabase = getSupabaseClient();
+
+  const [ticketRows, messageRows] = await Promise.all([
+    supabaseSelect(
+      supabase,
+      "tickets",
+      { id: ticketId, shop_id: shopId, deleted_at: { operator: "is", value: null } },
+      "id,subject",
+      { limit: 1 }
+    ),
+    supabaseSelectAll(
+      supabase,
+      "ticket_messages",
+      { ticket_id: ticketId, shop_id: shopId, deleted_at: { operator: "is", value: null } },
+      "id,direction,from_name,from_email,subject,body_text,has_attachments,received_at,sent_at"
+    ),
+  ]);
+
+  if (!Array.isArray(ticketRows) || ticketRows.length === 0) {
+    throw new KnowledgeNotFoundError(`Ticket not found: ${ticketId}`);
+  }
+
+  const messages = (messageRows as any[]).map(mapMessageRow).sort(byTimeAsc);
+
+  return {
+    ticketId,
+    subject: ticketRows[0]?.subject ?? null,
+    // Phase 5. Nothing writes a draft yet — see the type's note.
+    draft: null,
+    messages,
+  };
+}
+
+/** Oldest first: a conversation reads downwards, unlike the queue. */
+function byTimeAsc(a: TicketMessage, b: TicketMessage): number {
+  return (Date.parse(a.at ?? "") || 0) - (Date.parse(b.at ?? "") || 0);
+}
+
+function mapMessageRow(row: any): TicketMessage {
+  return {
+    id: row.id,
+    direction: row.direction === "outbound" ? "outbound" : "inbound",
+    fromName: row.from_name ?? null,
+    fromEmail: row.from_email ?? null,
+    subject: row.subject ?? null,
+    body: row.body_text ?? null,
+    hasAttachments: Boolean(row.has_attachments),
+    // Our own replies carry `sent_at` and nothing else; inbound carries
+    // `received_at`. One column would leave half the thread undated.
+    at: row.received_at ?? row.sent_at ?? null,
   };
 }
 

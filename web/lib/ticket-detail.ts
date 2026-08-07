@@ -15,14 +15,27 @@
  * `MISSING_FIELDS` owns the question put to a customer. Only one branch shows
  * model prose — `handoff.action`, which is the model's whole job on a
  * `needs_human` verdict and is internal by construction.
+ *
+ * `summariseOrderContext` is the second projection here, over
+ * `tickets.resolved_context` rather than the case file. Two sources, two
+ * functions, one panel: the order facts come from Shopify via the resolution
+ * pass and exist for tickets the agent never investigated.
  */
 
 import type {
+  DeliveryState,
   InvestigationVerdict,
   MissingField,
+  OrderStatus,
+  TicketOrderFacts,
   TicketResults,
+  TicketTracking,
 } from "./types";
-import { MISSING_FIELD_LABELS } from "./types";
+import {
+  DELIVERY_STATE_LABELS,
+  MISSING_FIELD_LABELS,
+  ORDER_STATUS_LABELS,
+} from "./types";
 
 /** The slice of a `ticket_investigations` row this projection needs. */
 export interface InvestigationRecord {
@@ -91,6 +104,70 @@ function deriveAction(verdict: InvestigationVerdict, record: InvestigationRecord
   }
 
   return DEFAULT_ACTIONS[verdict] ?? DEFAULT_ACTIONS.needs_human;
+}
+
+/**
+ * `tickets.resolved_context` -> the order lines the panel shows.
+ *
+ * READS THE BUNDLE, DERIVES NOTHING. `buildOrderContext` already turned four
+ * Shopify status columns and a fulfillments array into one status and one
+ * delivery state; re-deriving either here would give the dashboard a second
+ * opinion about the same order, and the two would disagree the first time one
+ * of them changed. This function labels what is stored and stops.
+ *
+ * Returns null when the bundle is empty — `resolved_context` defaults to `{}`
+ * and stays that way until an order number is confirmed and the context pass
+ * runs, so "no order facts" is the normal state for most tickets.
+ */
+export function summariseOrderContext(context: unknown): TicketOrderFacts | null {
+  const order = (context as any)?.order;
+  if (!order || typeof order !== "object") {
+    return null;
+  }
+
+  const delivery = order.delivery ?? {};
+  const facts: TicketOrderFacts = {
+    orderName: nonEmpty(order.name),
+    orderStatus: labelOrderStatus(order.status?.overall),
+    trackingStatus: labelDeliveryState(delivery.state),
+    tracking: readTracking(delivery.tracking),
+    resolvedAt: nonEmpty((context as any)?.resolvedAt),
+  };
+
+  // A bundle that carries none of the three lines is the same as no bundle: the
+  // panel would render an empty block with a heading over it.
+  if (!facts.orderName && !facts.orderStatus && !facts.trackingStatus && facts.tracking.length === 0) {
+    return null;
+  }
+  return facts;
+}
+
+function labelOrderStatus(value: unknown): string | null {
+  const key = nonEmpty(value as string);
+  if (!key) return null;
+  // An unrecognised status is shown raw rather than dropped: the mapper can grow
+  // a value before this table does, and hiding it would look like "no status".
+  return ORDER_STATUS_LABELS[key as OrderStatus] ?? key;
+}
+
+function labelDeliveryState(value: unknown): string | null {
+  const key = nonEmpty(value as string);
+  if (!key) return null;
+  return DELIVERY_STATE_LABELS[key as DeliveryState] ?? key;
+}
+
+/** One entry per parcel that actually has a number — the rest carry nothing. */
+function readTracking(tracking: unknown): TicketTracking[] {
+  if (!Array.isArray(tracking)) {
+    return [];
+  }
+  return tracking
+    .map((entry) => ({
+      number: nonEmpty(entry?.number) ?? "",
+      carrier: nonEmpty(entry?.carrier),
+      url: nonEmpty(entry?.url),
+    }))
+    .filter((entry) => entry.number.length > 0);
 }
 
 /** "a", "a and b", "a, b and c" — no Oxford comma; the dashboard is British. */
