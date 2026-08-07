@@ -3,7 +3,7 @@ import { supabaseSelect, supabaseUpdateById } from '../../../scripts/lib/supabas
 import { mapGraphMessage } from './graph-message-mapper.mjs';
 import { buildBodyPatch, DEFAULT_BODY_RETENTION_DAYS } from './spam-audit.mjs';
 
-// Fills in the bodies of spam_audit rows written before 08_spam_audit_body.sql.
+// Fills in the bodies of spam_audit rows written before the body columns existed.
 //
 // Ingestion stores the body from now on; these are the rows that already exist,
 // and their only handle back to the email is `graph_message_id`. The worker

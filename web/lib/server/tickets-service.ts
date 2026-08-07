@@ -12,6 +12,7 @@
  */
 
 import { loadConfig } from "../../../scripts/lib/sync-config.mjs";
+import { formatRfmGroup, isVipRfmGroup } from "../../../scripts/lib/customer-segments.mjs";
 import {
   createSupabaseClient,
   supabaseSelect,
@@ -38,6 +39,19 @@ function getSupabaseClient() {
 }
 
 /**
+ * One projection for the list read and the status write.
+ *
+ * Shared so the two cannot drift: the row a mutation returns replaces a row the
+ * list rendered, and a narrower shape would blank whatever the list had shown.
+ */
+const TICKET_LIST_SELECT =
+  "id,subject,status,category,secondary_category,level,happiness,responsible_team," +
+  "requester_name,shopify_order_number,first_message_at,last_message_at," +
+  // Resolved over tickets.customer_id by PostgREST in the same request; null on
+  // any ticket the customer-resolution pass has not linked.
+  "customers(display_name,first_name,last_name,rfm_group)";
+
+/**
  * Every live ticket, newest activity first, with its message count.
  *
  * Soft-deleted rows are excluded at the query rather than in the mapper: a
@@ -47,6 +61,13 @@ function getSupabaseClient() {
  *
  * Message counts come from one bulk read of `ticket_messages` rather than a
  * per-ticket count query, which would be 565 round trips on the current corpus.
+ *
+ * THE CUSTOMER COMES BACK EMBEDDED, not as a second read. PostgREST resolves
+ * `customers(...)` over the `tickets.customer_id` foreign key in the same
+ * request, so linking a ticket to who wrote it costs nothing extra — whereas
+ * fetching the customer table separately would pull every customer in the shop
+ * to satisfy the handful actually referenced. `customers` is null on any ticket
+ * the resolution pass has not linked, which is most of them until it runs.
  */
 export async function listTickets(shopId: string): Promise<TicketListItem[]> {
   const supabase = getSupabaseClient();
@@ -56,7 +77,7 @@ export async function listTickets(shopId: string): Promise<TicketListItem[]> {
       supabase,
       "tickets",
       { shop_id: shopId, deleted_at: { operator: "is", value: null } },
-      "id,subject,status,category,secondary_category,level,happiness,responsible_team,requester_name,shopify_order_number,first_message_at,last_message_at"
+      TICKET_LIST_SELECT
     ),
     supabaseSelectAll(
       supabase,
@@ -246,7 +267,18 @@ export async function setTicketStatus(
 
   // Scoped by shop as well as id: an id alone would let one shop's request
   // touch another's row.
-  const updated = await supabaseUpdate(supabase, "tickets", { id: ticketId, shop_id: shopId }, patch);
+  //
+  // Asks for the SAME shape the list read returns, embed included. A status flip
+  // cannot change who the customer is, but the row this returns replaces the one
+  // on screen — without the embed, closing a ticket would silently strip the VIP
+  // badge off it.
+  const updated = await supabaseUpdate(
+    supabase,
+    "tickets",
+    { id: ticketId, shop_id: shopId },
+    patch,
+    { select: TICKET_LIST_SELECT }
+  );
   const row = Array.isArray(updated) ? updated[0] : updated;
   if (!row) {
     throw new KnowledgeNotFoundError(`Ticket not found: ${ticketId}`);
@@ -262,6 +294,33 @@ function byLastActivityDesc(a: TicketListItem, b: TicketListItem): number {
   const at = Date.parse(a.lastMessageAt ?? a.firstMessageAt ?? "") || 0;
   const bt = Date.parse(b.lastMessageAt ?? b.firstMessageAt ?? "") || 0;
   return bt - at;
+}
+
+/**
+ * The embedded `customers` row -> the three fields a ticket row shows.
+ *
+ * Absent on every unlinked ticket, and `setTicketStatus` does not ask for the
+ * embed at all, so this has to answer for "no customer" rather than assume one.
+ * VIP is computed here from the live segment instead of being read from a
+ * column: nothing stores it, deliberately (see customer-segments.mjs).
+ *
+ * `display_name` is Shopify's own composition and wins where it exists; the
+ * first/last fallback covers rows synced before it was populated.
+ */
+function mapCustomer(customer: any) {
+  if (!customer) {
+    return { customerName: null, rfmGroup: null, isVip: false };
+  }
+  const name =
+    customer.display_name ||
+    [customer.first_name, customer.last_name].filter(Boolean).join(" ") ||
+    null;
+
+  return {
+    customerName: name,
+    rfmGroup: formatRfmGroup(customer.rfm_group),
+    isVip: isVipRfmGroup(customer.rfm_group),
+  };
 }
 
 function mapTicketRow(row: any, messageCount: number): TicketListItem {
@@ -281,6 +340,7 @@ function mapTicketRow(row: any, messageCount: number): TicketListItem {
         : (Number(row.happiness) as TicketHappiness),
     responsibleTeam: (row.responsible_team as ResponsibleTeam) ?? null,
     requesterName: row.requester_name,
+    ...mapCustomer(row.customers),
     orderNumber: row.shopify_order_number,
     messageCount,
     firstMessageAt: row.first_message_at,

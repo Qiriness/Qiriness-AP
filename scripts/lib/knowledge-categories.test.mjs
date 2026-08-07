@@ -53,7 +53,7 @@ test('core-topic default categories are all valid categories', () => {
 });
 
 // These two write/read the category against a database that now has a check
-// constraint (03_categorisation.sql), so an out-of-vocabulary literal here is a
+// constraint (04_support.sql), so an out-of-vocabulary literal here is a
 // runtime failure.
 test('server-side and client-side category fallbacks are valid categories', () => {
   const serverFallback = serviceSource.match(/category: input\.category \|\| "([a-z_]+)"/)?.[1];

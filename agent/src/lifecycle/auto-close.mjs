@@ -8,7 +8,7 @@
 //
 // LEVEL 4 IS EXEMPT AND THAT IS THE WHOLE SAFETY MARGIN. Level 4 is severity,
 // not subject — an explicit threat of legal action or public exposure,
-// hospitalisation, or grave danger (see 03_categorisation.sql). Closing one
+// hospitalisation, or grave danger (see 04_support.sql). Closing one
 // because nobody replied for three weeks is exactly the case where silence means
 // the opposite of "resolved". Every other level closes, including level 3.
 //

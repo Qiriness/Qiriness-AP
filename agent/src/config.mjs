@@ -32,8 +32,8 @@ export function loadAgentConfig(env = loadEnv(REPO_ROOT)) {
     internalEmailDomains: splitCsv(env.INTERNAL_EMAIL_DOMAINS),
     pollIntervalMs: Number(env.INGEST_POLL_INTERVAL_MS) || 60000,
     // How long a dropped email's body stays readable in spam_audit before the
-    // purge nulls it (08_spam_audit_body.sql). The decision row is kept for
-    // ever; only the text expires. Lower this to shorten the review window,
+    // purge nulls it (04_support.sql). The decision row is kept for ever;
+    // only the text expires. Lower this to shorten the review window,
     // never to zero — a body that never lands cannot be reviewed at all.
     spamAuditBodyRetentionDays: Number(env.SPAM_AUDIT_BODY_RETENTION_DAYS) || 90,
     // Draft-only unless explicitly disabled; nothing is auto-sent while true.

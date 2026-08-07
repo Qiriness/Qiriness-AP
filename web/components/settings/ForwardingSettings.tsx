@@ -24,7 +24,7 @@ import styles from "./ForwardingSettings.module.css";
 
 /**
  * The three categories the taxonomy actually allows a `contact` kind for
- * (see scripts/lib/support-taxonomy.mjs and 03_categorisation.sql). Every
+ * (see scripts/lib/support-taxonomy.mjs and 04_support.sql). Every
  * category is editable — a taxonomy change should not need a UI change — but
  * these are the ones that will really receive anything today, and saying so
  * stops the other eleven boxes looking broken when nothing arrives.

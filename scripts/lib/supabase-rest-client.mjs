@@ -188,9 +188,16 @@ export async function supabaseRpc(client, functionName, args = {}) {
   return payload;
 }
 
-export async function supabaseUpdate(client, table, filters, row) {
+// `select` shapes the returned representation, exactly as it does on a read —
+// including embedded resources. Without it PostgREST returns the patched row's
+// own columns only, so a caller that reads a ticket WITH its customer and then
+// updates it gets back a narrower object than it started with.
+export async function supabaseUpdate(client, table, filters, row, { select } = {}) {
   const searchParams = new URLSearchParams();
   applyFilters(searchParams, filters);
+  if (select) {
+    searchParams.set('select', select);
+  }
 
   const response = await supabaseFetch(
     `${client.baseUrl}/${table}?${searchParams.toString()}`,

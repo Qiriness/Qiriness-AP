@@ -20,7 +20,7 @@ interface DroppedMailDialogProps {
  * and past the subject line only the email answers that.
  *
  * THE BODY IS NULL IN THREE DIFFERENT WAYS and they are not interchangeable:
- * never captured (the row predates 08_spam_audit_body.sql and the backfill has
+ * never captured (the row predates the body columns and the backfill has
  * not reached it, or the message had already left the mailbox), captured and
  * since expired (the worker's retention purge), or a genuinely empty email. Each
  * gets its own sentence, because "no body" alone reads as a bug in all three

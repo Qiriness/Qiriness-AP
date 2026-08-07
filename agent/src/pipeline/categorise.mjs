@@ -11,7 +11,7 @@
 //   2. normaliseCategorisation() below, which re-checks every field and fixes
 //      the combinations a per-field enum cannot express (a `contact` kind on a
 //      non-relationship subject, a secondary that repeats the primary).
-//   3. The database check constraints in 03_categorisation.sql.
+//   3. The database check constraints in 04_support.sql.
 //
 // Unlike the spam gate this does NOT fail open into a default label: a failed
 // call leaves the ticket uncategorised so it is retried. Only the runner, after

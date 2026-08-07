@@ -207,9 +207,31 @@
 
 .requester {
   max-width: 20ch;
+}
+
+/* The name truncates; the badge beside it must not, or the one thing worth
+   spotting at a glance is the first thing to disappear on a long name. */
+.requesterName {
+  display: block;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* Teal, not red or gold: this is the app's one accent, and a VIP is a fact
+   about the customer rather than a warning about the ticket — level and mood
+   already own "this needs attention". */
+.vip {
+  display: inline-block;
+  margin-top: 2px;
+  padding: 1px 6px;
+  border: 1px solid var(--teal-100);
+  border-radius: var(--radius-pill);
+  background: var(--teal-050);
+  font-size: var(--text-caption);
+  font-weight: var(--weight-semibold);
+  letter-spacing: 0.04em;
+  color: var(--teal-ink);
 }
 
 .category {

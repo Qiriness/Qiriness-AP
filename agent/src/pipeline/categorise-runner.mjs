@@ -104,7 +104,7 @@ export async function runCategorisation({
       // what the investigation pass chooses its tools from. This is the ONLY
       // writer of the flag — ingestion deliberately does not set it, so a thread
       // is never investigated against labels describing an older conversation
-      // (07_investigation.sql).
+      // (04_support.sql).
       needs_investigation: true,
       metadata: mergeMetadata(ticket.metadata, {
         model: result.model,
@@ -279,7 +279,7 @@ export function createSupabaseCategoriserStore(supabase) {
           // The flag, not "category is null": that older predicate could only
           // ever match a ticket once, which is what froze a label at the state
           // of a thread's first email. Set on insert and re-set by ingestion
-          // when a new inbound message lands (03_categorisation.sql).
+          // when a new inbound message lands (04_support.sql).
           needs_categorisation: { operator: 'is', value: 'true' },
           deleted_at: { operator: 'is', value: 'null' },
           archived_at: { operator: 'is', value: 'null' }

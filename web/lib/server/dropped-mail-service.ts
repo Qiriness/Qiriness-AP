@@ -6,7 +6,7 @@
  * agent/src/ingestion/delta-poller.mjs: "spam is dropped here — never written
  * to the database"), so the only trace is one `spam_audit` row per decision.
  * That row carries the sender, subject, a one-line reason and — since
- * 08_spam_audit_body.sql — the cleaned body, because the one question a reviewer
+ * 04_support.sql — the cleaned body, because the one question a reviewer
  * has is "should this have become a ticket?" and a subject line does not answer
  * it. The body has a bounded life (the worker nulls it past `body_expires_at`)
  * while the decision row is kept, so an older row legitimately has none.

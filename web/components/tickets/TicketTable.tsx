@@ -162,7 +162,20 @@ export function TicketTable({
                   </th>
 
                   <td className={styles.requester}>
-                    {ticket.requesterName?.trim() || <span className={styles.muted}>Unknown</span>}
+                    {/* The matched Shopify customer where there is one, the name
+                        off the email where there is not — a stranger writing in
+                        has no account, and that is a normal ticket rather than a
+                        gap. The two agree often enough that showing both would
+                        just be noise. */}
+                    <span className={styles.requesterName}>
+                      {ticket.customerName?.trim() ||
+                        ticket.requesterName?.trim() || <span className={styles.muted}>Unknown</span>}
+                    </span>
+                    {ticket.isVip && (
+                      <span className={styles.vip} title={`RFM segment: ${ticket.rfmGroup}`}>
+                        VIP
+                      </span>
+                    )}
                   </td>
 
                   <td>

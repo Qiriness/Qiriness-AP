@@ -8,7 +8,7 @@ import { supabaseUpdate, supabaseUpsert } from '../../../scripts/lib/supabase-re
 // the store at the bottom. Decisions buffer through a poll and flush once at the
 // end, mirroring how blocklist hit counts are recorded.
 //
-// THE BODY IS PART OF THE RECORD (08_spam_audit_body.sql). It was not, and the
+// THE BODY IS PART OF THE RECORD (04_support.sql). It was not, and the
 // trail was reviewable in principle and not in practice: the one question a
 // reviewer has is "should this have become a ticket?", and a subject line does
 // not answer it. It is stored under its own clock — `bodyExpiresAt` is set here,

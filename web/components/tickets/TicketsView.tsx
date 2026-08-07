@@ -75,7 +75,15 @@ export function TicketsView({ initialTickets, droppedMail, loadError }: TicketsV
       if (category !== "all" && ticket.category !== category) return false;
 
       if (needle) {
-        const haystack = [ticket.subject, ticket.requesterName, ticket.orderNumber]
+        // Both names, because the row shows whichever it has: searching for the
+        // Shopify account name must find a ticket whose email was signed
+        // differently, and vice versa.
+        const haystack = [
+          ticket.subject,
+          ticket.requesterName,
+          ticket.customerName,
+          ticket.orderNumber,
+        ]
           .filter(Boolean)
           .join(" ")
           .toLowerCase();

@@ -1,6 +1,18 @@
 # AGENTS Instructions
 
-Read `APP_SCHEMA.md` first for the current app structure and content map. Update `APP_SCHEMA.md` whenever a feature, route, shared component, or data flow changes.
+Read `APP_SCHEMA.md` first for the current app structure and content map. Update it whenever a feature, route, shared component, or data flow changes.
+
+**The docs are split by read frequency — keep them that way.**
+
+| File | Holds | Update when |
+| --- | --- | --- |
+| `APP_SCHEMA.md` | **where things are**: map, data model, pass order. Kept lean; read every session | structure changes |
+| `DECISIONS.md` | **why they are that way**: the measurement or failure behind each rule. Read on demand, per section | a rule changes, or you learn why one exists |
+| `CHANGELOG.md` | what was built and how far it is proven. Append-only | you ship something |
+| `VALIDATION_LOG.md` | what is built but unproven, with the check to run. Items close only when the check has been run | you build against dev-store data, or run a check |
+| `README.md` | what the project is, how to run it, what is next | setup or priorities change |
+
+Do not put rationale in `APP_SCHEMA.md` or a build log in `README.md` — that is what made them expensive to read.
 
 ## Context
 
@@ -11,11 +23,11 @@ This project is a customer-support operating system for **Qiriness**. Read [READ
 - Following rules apply to the whole `Qirines_email_automation` directory
 - Use `APP_SCHEMA.md` as the primary source of architectural context before opening code files.
 - Do not scan the full codebase by default.
-- If `APP_SCHEMA.md` is not detailed enough, open only the directly relevant files, then update `APP_SCHEMA.md` if the documented structure has drifted.
-- Read the README and required code (referenced in `APP_SCHEMA.md`) before making changes.
+- Before changing any behaviour, read the matching section of `DECISIONS.md`. Most entries record a measurement against real mail or a bug that was hit and fixed, so re-deriving them from the code alone tends to reproduce the bug.
+- If `APP_SCHEMA.md` is not detailed enough, open only the directly relevant files, then update it if the documented structure has drifted.
 - Do not invent business requirements, database fields, API contracts, or external integrations.
 - Prefer small, modular, reviewable changes.
-- Update the '## Development Status' and '## Next Steps' in `README.md` when architecture, setup, or behaviour changes.
+- Record what you shipped in `CHANGELOG.md`, and update `## Next Steps` in `README.md` when priorities change. `README.md` has no status log — that is `CHANGELOG.md`.
 - State assumptions and unresolved questions in the implementation summary.
 - Run the relevant tests, linting, and type checks before completing a task. If they do not exist yet, say so explicitly.
 - Local agent skills are lcoated in `.agents

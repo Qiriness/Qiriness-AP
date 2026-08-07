@@ -88,7 +88,7 @@ export const KNOWLEDGE_CATEGORIES: KnowledgeCategory[] = [
  * the two knowledge-only shapes. `faq` and `brand_story` describe reference
  * material, not something anyone emails support about, so they can never be a
  * forwarding target. Mirrors the check constraint in
- * supabase/migrations/04_forwarding.sql.
+ * supabase/migrations/04_support.sql.
  */
 export const TICKET_CATEGORIES: KnowledgeCategory[] = KNOWLEDGE_CATEGORIES.filter(
   (category) => category !== "faq" && category !== "brand_story"
@@ -103,7 +103,7 @@ export interface CategoryForwarding {
 /**
  * The required-knowledge slots every agent needs covered. Mirrors the
  * knowledge_documents_core_topic_check constraint in
- * supabase/migrations/01_core_schema.sql — keep in sync. Five of
+ * supabase/migrations/03_knowledge.sql — keep in sync. Five of
  * these ("order_policies" through "faqs") make up the Core setup checklist;
  * "brand" is the Drafting agent setup slot instead (see CORE_TOPICS, which
  * excludes it, and BrandVoiceWorkspace).
@@ -236,7 +236,7 @@ export type SaveState = "saved" | "unsaved" | "saving";
 
 /* ---------------------------------------------------------------- tickets */
 
-/** Mirrors tickets_status_check in supabase/migrations/01_core_schema.sql. */
+/** Mirrors tickets_status_check in supabase/migrations/04_support.sql. */
 export type TicketStatus =
   | "open"
   | "awaiting_customer"
@@ -281,7 +281,7 @@ export const TICKET_LEVEL_MEANINGS: Record<TicketLevel, string> = {
 
 /**
  * How the customer FEELS, 1-4 — mirrors tickets_happiness_check in
- * 03_categorisation.sql. Deliberately independent of `level`: level is the work
+ * 04_support.sql. Deliberately independent of `level`: level is the work
  * a ticket needs, happiness is the mood it arrived in. An angry customer with a
  * routine tracking question is happiness 4, level 2 — both true.
  */
@@ -295,7 +295,7 @@ export const TICKET_HAPPINESS_MEANINGS: Record<TicketHappiness, string> = {
   4: "Really unhappy",
 };
 
-/** Mirrors tickets_responsible_team_check in 01_core_schema.sql. */
+/** Mirrors tickets_responsible_team_check in 04_support.sql. */
 export type ResponsibleTeam = "finance" | "marketing" | "sales" | "logistics" | "contact";
 
 export const RESPONSIBLE_TEAM_LABELS: Record<ResponsibleTeam, string> = {
@@ -316,7 +316,25 @@ export interface TicketListItem {
   level: TicketLevel | null;
   happiness: TicketHappiness | null;
   responsibleTeam: ResponsibleTeam | null;
+  /** The name on the email itself — what the sender typed, not who they are. */
   requesterName: string | null;
+  /**
+   * The matched Shopify customer's name, from `tickets.customer_id`.
+   *
+   * Null whenever the customer-resolution pass has not linked the ticket: the
+   * sender has no Shopify account, the pass has not run, or the address never
+   * matched. That is the normal state for a stranger writing in, and it is why
+   * `requesterName` stays the fallback rather than being replaced.
+   */
+  customerName: string | null;
+  /** Raw Shopify RFM segment, already labelled for display. */
+  rfmGroup: string | null;
+  /**
+   * Derived from the RFM group at read time, never stored — Shopify recomputes
+   * the segment as a customer buys, so a flag copied onto the ticket would go
+   * stale on any open thread. See scripts/lib/customer-segments.mjs.
+   */
+  isVip: boolean;
   orderNumber: string | null;
   messageCount: number;
   firstMessageAt: string | null;
@@ -325,7 +343,7 @@ export interface TicketListItem {
 
 /* ------------------------------------------------------- ticket detail */
 
-/** Mirrors ticket_investigations_verdict_check in 07_investigation.sql. */
+/** Mirrors ticket_investigations_verdict_check in 04_support.sql. */
 export type InvestigationVerdict = "answerable" | "needs_customer_input" | "needs_human";
 
 /**
@@ -523,14 +541,14 @@ export interface DroppedMail {
   fromEmail: string | null;
   subject: string | null;
   /**
-   * The dropped email's text (08_spam_audit_body.sql) — what makes the decision
+   * The dropped email's text (04_support.sql) — what makes the decision
    * reviewable at all, since a subject line cannot tell a newsletter from a
    * customer whose parcel is lost.
    *
    * Null in three distinguishable states, which is why `bodyExpiresAt` is here
-   * too: never captured (the row predates 08 and the backfill has not reached
-   * it, or the message had left the mailbox), captured and since expired, or a
-   * genuinely empty email.
+   * too: never captured (the row predates the body columns and the backfill
+   * has not reached it, or the message had left the mailbox), captured and
+   * since expired, or a genuinely empty email.
    */
   body: string | null;
   /** When the body was stored. Null means it never was. */

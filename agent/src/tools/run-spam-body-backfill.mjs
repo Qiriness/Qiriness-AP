@@ -9,8 +9,8 @@ import {
   runSpamBodyBackfill
 } from '../ingestion/spam-body-backfill.mjs';
 
-// Re-reads dropped emails from Graph to fill in spam_audit bodies written before
-// 08_spam_audit_body.sql.
+// Re-reads dropped emails from Graph to fill in spam_audit bodies for rows that
+// predate the body columns.
 //
 //   npm run spam:backfill:dry-run              # fetch and show, write nothing
 //   npm run spam:backfill                      # write, 5 rows

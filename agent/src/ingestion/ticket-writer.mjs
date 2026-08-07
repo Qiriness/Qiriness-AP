@@ -94,7 +94,7 @@ async function resolveTicket(store, shopId, item, triage, counts, audit) {
     // above all what it now needs — an order question that becomes a lost parcel,
     // a polite thread that turns into a threat to sue. Put the ticket back in the
     // categoriser's queue so its labels describe the conversation as it stands
-    // rather than as it opened (03_categorisation.sql).
+    // rather than as it opened (04_support.sql).
     //
     // Inbound only: our own replies advance last_message_at too, and
     // re-categorising a thread because WE answered it would pay the model to

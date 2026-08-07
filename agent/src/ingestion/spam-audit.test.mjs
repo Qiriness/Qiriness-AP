@@ -117,7 +117,7 @@ test('a decided_at is always set even when the caller omits it', () => {
   assert.equal(row.reason, UNSURE_REASON);
 });
 
-// --- the body (08_spam_audit_body.sql) --------------------------------------
+// --- the body (04_support.sql) --------------------------------------
 
 test('a blocked decision stores the body with its own expiry', () => {
   const row = buildAuditRow(

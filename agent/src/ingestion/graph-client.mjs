@@ -86,8 +86,8 @@ export function createGraphClient(config, { fetchImpl = fetch } = {}) {
   /**
    * One message by id, or null if the mailbox no longer holds it.
    *
-   * Exists for the spam-audit body backfill: rows written before
-   * 08_spam_audit_body.sql recorded the decision and not the text, and the id is
+   * Exists for the spam-audit body backfill: rows written before the body
+   * columns existed recorded the decision and not the text, and the id is
    * the only handle back to the email. Selects exactly the delta fields, so a
    * message fetched here maps through `mapGraphMessage` to the same row
    * ingestion would have written.
