@@ -650,6 +650,9 @@ create table public.ticket_investigations (
   -- that keeps producing them is a prompt problem worth seeing.
   dropped_claims jsonb not null default '[]'::jsonb,
 
+  -- What answering this ticket REQUIRED, against what the run actually got.
+  evidence_gaps jsonb not null default '[]'::jsonb,
+
   -- Why the level moved, in words. Computed from the evidence by
   -- investigation-rules, never judged by the model.
   escalation_reasons jsonb not null default '[]'::jsonb,
@@ -678,6 +681,9 @@ create table public.ticket_investigations (
   ),
   constraint ticket_investigations_tool_calls_array_check check (
     jsonb_typeof(tool_calls) = 'array'
+  ),
+  constraint ticket_investigations_evidence_gaps_array_check check (
+    jsonb_typeof(evidence_gaps) = 'array'
   ),
   constraint ticket_investigations_context_ref_object_check check (
     jsonb_typeof(context_ref) = 'object'
@@ -711,6 +717,9 @@ comment on column public.ticket_investigations.do_not_claim is
 
 comment on column public.ticket_investigations.handoff is
   'Internal instruction for a human when the verdict is needs_human. Excluded from every customer-facing rendering of this row.';
+
+comment on column public.ticket_investigations.evidence_gaps is
+  'One entry per fact answering this ticket required, each satisfied / attempted / unavailable / not_attempted. DIAGNOSTIC: it does not move the verdict. The requirements are declared per ticket from a closed vocabulary (agent evidence-rules.mjs) and scored in code against tool_calls, so "there was nothing to find" can be told from "the agent never looked" -- not_attempted is the latter. other_fact is the escape hatch for a requirement the vocabulary cannot name and can never be satisfied.';
 
 comment on column public.ticket_investigations.context_ref is
   'Pointer to tickets.resolved_context (order name, customer id, whether a bundle exists) rather than a copy of it -- so personal data is not duplicated per investigation, and a rebuilt bundle is not shadowed by a stale copy.';

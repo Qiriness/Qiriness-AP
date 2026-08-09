@@ -4,6 +4,7 @@ import { loadAgentConfig } from '../config.mjs';
 import { logger } from '../lib/logger.mjs';
 import { resolveShopId } from '../lib/shop.mjs';
 import { toDraftingPrompt, toHumanBrief } from '../investigation/case-file.mjs';
+import { summariseNeeds } from '../investigation/evidence-rules.mjs';
 import { createInvestigationStack } from '../investigation/create-investigation.mjs';
 import { runInvestigation } from '../investigation/investigation-runner.mjs';
 
@@ -63,6 +64,18 @@ async function main() {
       ` · découpage : ${config.decomposerModel || 'désactivé'}\n`
   );
 
+  // The evidence report, summed across the batch. This is the number the whole
+  // step exists to produce: how much of what these tickets required was actually
+  // obtained, and how often nothing even looked.
+  const totalNeeds = {
+    declared: 0,
+    satisfied: 0,
+    attempted: 0,
+    unavailable: 0,
+    not_attempted: 0,
+    complete: 0
+  };
+
   const totals = await runInvestigation({
     store: investigation.store,
     investigate: investigation.investigate,
@@ -71,9 +84,19 @@ async function main() {
     dryRun,
     limit,
     onResult: ({ ticket, caseFile, level }) => {
+      const needs = summariseNeeds(caseFile.evidenceGaps);
+      totalNeeds.declared += needs.declared;
+      totalNeeds.satisfied += needs.satisfied;
+      totalNeeds.attempted += needs.attempted;
+      totalNeeds.unavailable += needs.unavailable;
+      totalNeeds.not_attempted += needs.not_attempted;
+      totalNeeds.complete += needs.complete ? 1 : 0;
+
       console.log(
         `  ${ticket.id} · ${ticket.category}/${ticket.request_kind} → ${caseFile.verdict}` +
           ` (${caseFile.established.length} établi, ${caseFile.toolCalls.length} outils` +
+          `, preuves ${needs.satisfied}/${needs.declared}` +
+          `${needs.not_attempted > 0 ? ` ⚠ ${needs.not_attempted} non cherchés` : ''}` +
           `${caseFile.droppedClaims.length > 0 ? `, ${caseFile.droppedClaims.length} écartés` : ''}` +
           `${level !== ticket.level ? `, niveau ${ticket.level} → ${level}` : ''})`
       );
@@ -84,6 +107,7 @@ async function main() {
   });
 
   console.log('\n' + JSON.stringify(totals, null, 1));
+  console.log('\nPreuves attendues vs obtenues :\n' + JSON.stringify(totalNeeds, null, 1));
 }
 
 function indent(text) {

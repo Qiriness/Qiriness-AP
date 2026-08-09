@@ -14,7 +14,8 @@ item is only removed once someone has actually run the check and seen the
 result. Expect this list to grow as more is built against the dev store.
 
 Last updated: 2026-08-09 (item 4 re-derived against the labelled retrieval set;
-item 4b added: task decomposition).
+items 4b/4c/4d added: task decomposition, evidence needs step 2, and the
+vocabulary review).
 
 ---
 
@@ -124,6 +125,70 @@ affordable — today it costs a real answer. The bands are named constants in
 than the pipeline is: the eval measures the raw code regex rather than the real
 `extractCodes` (which filters against the live store list), so precision reads
 11%; and product-entity matching returns 0/0, which has not been diagnosed.
+
+## 4c. Evidence needs: step 1 is built, STEP 2 IS NOT
+
+**Status:** the report exists and is stored (`ticket_investigations.evidence_gaps`).
+Nothing acts on it. This is deliberate, and it is not finished work.
+
+**What step 2 is**, once the numbers below say the vocabulary can be trusted:
+
+1. **Enforce.** An `answerable` verdict that left a declared need open gets
+   downgraded, the same mechanism that already forces `needs_human` on an empty
+   `established`. Any open `other_fact` forces it outright.
+2. **Steer.** The prompt says *"you still do not have X"* instead of restating
+   the whole per-subject checklist every turn.
+3. **Exit early.** When every need is satisfied after the opening moves, skip the
+   exploration turn entirely — one `gpt-4o` call saved on the common case.
+
+**Do not start step 2 on unvalidated numbers.** A vocabulary that over-declares
+would downgrade good case files for reasons about the list rather than the
+ticket, and an early exit on an under-declared list would stop an investigation
+that should have continued. Step 1 cannot make the agent behave worse; step 2
+can.
+
+**To validate, then decide:** run `npm run investigate:dry-run` over a real batch
+and read the `Preuves attendues vs obtenues` summary. Four questions:
+
+1. **Is `not_attempted` ever non-zero?** This is the number the whole thing was
+   built for — a tool was allowed, the budget was there, nothing called it. If it
+   is always 0, the loop is already doing its job and step 2's steering is not
+   worth building. If it is high, that is the agent, not the library.
+2. **Is the model over-declaring?** Needs it names "just in case" inflate the
+   denominator and would make step 2's enforcement punitive. Read a sample
+   against the emails.
+3. **How often is `other_fact` declared, and on what?** That log is the evidence
+   for growing the vocabulary. See item 4d.
+4. **How often is `checkout_state` needed?** It always resolves `unavailable`
+   because the abandoned-checkout tool is not in the registry. A high count is
+   the argument for wiring it; a low one settles that it was right to leave out.
+
+## 4d. The 19-fact vocabulary is a first guess and needs revisiting
+
+Written 2026-08-09 from reasoning about the corpus, not from measurement. It will
+be wrong somewhere — one gap (`checkout_state`) was spotted while writing the
+list itself.
+
+**Revisit once a few hundred tickets have run.** The `other_fact` log says what
+could not be named; the per-need satisfaction rates say which needs are declared
+constantly and never met (either a missing tool or a need drawn too broadly).
+
+**Costs are not symmetrical, so treat them differently:**
+
+- **Adding a need type is cheap.** Old rows never declared it; old measurements
+  stay valid for what they measured.
+- **Changing what *satisfies* a need is cheap.** The ledger is stored in
+  `tool_calls`, so re-run the predicate over historical rows — no model calls.
+- **Changing what a need *means* is medium.** Historical rows carry the old label
+  under the old meaning, but the emails are stored, so re-running the decomposer
+  re-declares them at one `gpt-4o-mini` call per ticket.
+- **The expensive one is trust.** Once an operational decision has been made on a
+  number derived from these, redefining the type means that decision rested on a
+  different basis than its label implies. That cannot be re-run away.
+
+**And a churning vocabulary means no baseline** — every redefinition resets the
+"before". So: let it move freely until the first few hundred tickets have run,
+then freeze it before drawing any conclusion from the numbers.
 
 ## 4b. Task decomposition has never seen a real email
 

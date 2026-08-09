@@ -11,8 +11,7 @@ import {
   planEvidence,
   planMoves,
   planTasks,
-  planToolNames,
-  shouldDecompose
+  planToolNames
 } from './decompose-rules.mjs';
 import { TOOL_NAMES, allowedTools, openingMoves } from './investigation-rules.mjs';
 
@@ -119,26 +118,11 @@ test('an absurdly long "entity" is rejected', () => {
   assert.deepEqual(e.order_numbers, []);
 });
 
-// --- when to spend a model call ----------------------------------------------
-
-test('a second subject from the categoriser always triggers decomposition', () => {
-  // The database already says this email carries two requests.
-  assert.equal(shouldDecompose({ secondary_category: 'delivery', text: 'court' }), true);
-});
-
-test('a short single question does not pay for a model call', () => {
-  assert.equal(shouldDecompose({ text: 'Où est ma commande ?' }), false);
-});
-
-test('length or several questions are enough to justify a look', () => {
-  assert.equal(shouldDecompose({ text: 'a'.repeat(400) }), true);
-  assert.equal(shouldDecompose({ text: 'Le masque ? Et ma commande ?' }), true);
-});
-
-test('a missing ticket never throws', () => {
-  assert.equal(shouldDecompose(), false);
-  assert.equal(shouldDecompose({}), false);
-});
+// The gate that used to sit here is gone. It skipped the model call on short
+// tickets, which was right while this only split emails — but the same call now
+// declares the ticket's evidence needs, and those must exist for every
+// investigated ticket or the completeness report has a hole exactly where the
+// short, ordinary tickets are. See the note in decompose-rules.mjs.
 
 // --- planning: what the run actually gets ------------------------------------
 

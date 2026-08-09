@@ -96,7 +96,8 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |   |   |                        # promotion-{rules,lookup} · abandoned-checkout ·
 |   |   |                        # customer-{context,lookup}
 |   |   |-- investigation/       # case-file (THE output contract) · investigation-rules ·
-|   |   |                        # decompose{,-rules} (split an email into tasks) ·
+|   |   |                        # decompose{,-rules} (tasks + needs, one call) ·
+|   |   |                        # evidence-rules (19 needs, scored vs the ledger) ·
 |   |   |                        # tool-registry · investigate (bounded loop) ·
 |   |   |                        # investigation-runner · create-investigation
 |   |   |-- resolution/          # customer-resolution-runner · order-number-parser ·
@@ -144,7 +145,7 @@ Never auto-synced — every row is an explicit import or a hand-written article.
 | --- | --- |
 | `tickets` | one per Graph `conversationId`. Taxonomy axes, `level`, `responsible_team`, `customer_id`, `shopify_order_number`, signals (`language`, `happiness`, `categorisation_confidence`), `resolved_context` jsonb, lifecycle + retention timestamps |
 | `ticket_messages` | one per Graph message. Envelope, cleaned `body_text`, sanitised payload, `embedding vector(1536)` |
-| `ticket_investigations` | **the case file**: `established` / `unverified` / `missing` / `do_not_claim` (four separate columns), `handoff`, `context_ref`, `dropped_claims`. `unique(shop_id, trigger_message_id)` |
+| `ticket_investigations` | **the case file**: `established` / `unverified` / `missing` / `do_not_claim` (four separate columns), `handoff`, `context_ref`, `dropped_claims`, `evidence_gaps` (what the ticket required vs what was obtained — diagnostic, does not move the verdict). `unique(shop_id, trigger_message_id)` |
 | `email_blocklist` | per-shop sender email/domain rules + hit counts |
 | `spam_audit` | one row per gate decision. `outcome`, `decided_by`, `reason`, `label`, `model`, `failed_open`, sender, subject, and on a block `body_text` + `body_captured_at` + `body_expires_at` |
 | `category_forwarding` | per-category address book. A null address is the off switch |

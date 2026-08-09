@@ -292,7 +292,12 @@ function buildDecomposer(result) {
     seen,
     async decompose(ticket) {
       seen.push(ticket);
-      return { entities: { order_numbers: [], products: [], codes: [] }, decomposed: true, ...result };
+      return {
+        entities: { order_numbers: [], products: [], codes: [] },
+        needs: [],
+        read: true,
+        ...result
+      };
     }
   };
 }
@@ -403,6 +408,80 @@ test('a single-task decomposition is investigated exactly as before', async () =
 
   assert.deepEqual(withDecomposer.calls, plain.calls);
   assert.equal(a.sent[0].messages[0].content, b.sent[0].messages[0].content);
+});
+
+// --- the evidence report -----------------------------------------------------
+
+test('what the ticket needed is scored against what actually ran', async () => {
+  const registry = buildPlanningRegistry({
+    [TOOL_NAMES.LOOKUP_PRODUCT]: async () => OK_RESULT,
+    [TOOL_NAMES.SEARCH_KNOWLEDGE]: async () => ({ ...OK_RESULT, outcome: 'none' })
+  });
+  const decomposer = buildDecomposer({
+    tasks: [{ question: 'Le masque convient-il ?', category: 'product', request_kind: 'question' }],
+    // Declared: one the run gets, one it looks for and misses, one nothing here
+    // can ever supply.
+    needs: ['product_identity', 'policy_answer', 'checkout_state']
+  });
+  const openai = buildOpenAI([{ content: caseFileAnswer() }]);
+  const { investigate } = createInvestigator(openai, registry, { model: 'm', decomposer });
+
+  const caseFile = await investigate(PRODUCT_TICKET);
+  const byNeed = Object.fromEntries(caseFile.evidenceGaps.map((g) => [g.need, g.state]));
+
+  assert.equal(byNeed.product_identity, 'satisfied');
+  assert.equal(byNeed.policy_answer, 'attempted', 'searched, found nothing');
+  assert.equal(byNeed.checkout_state, 'unavailable', 'no tool is wired for it');
+});
+
+test('a fact nobody looked for is distinguishable from one nothing could find', async () => {
+  // The whole point: today both produce a case file that reads as complete.
+  const registry = buildPlanningRegistry({
+    [TOOL_NAMES.LOOKUP_PRODUCT]: async () => OK_RESULT,
+    [TOOL_NAMES.SEARCH_KNOWLEDGE]: async () => OK_RESULT,
+    [TOOL_NAMES.LOOKUP_STOCK]: async () => OK_RESULT
+  });
+  const decomposer = buildDecomposer({
+    tasks: [{ question: 'x', category: 'product', request_kind: 'question' }],
+    needs: ['product_availability']
+  });
+  const openai = buildOpenAI([{ content: caseFileAnswer() }]);
+  const { investigate } = createInvestigator(openai, registry, { model: 'm', decomposer });
+
+  const caseFile = await investigate(PRODUCT_TICKET);
+
+  // lookupStock was allowed and had budget; nothing called it.
+  assert.equal(caseFile.evidenceGaps[0].state, 'not_attempted');
+});
+
+test('the report does not move the verdict — that is deliberately the next step', async () => {
+  const registry = buildPlanningRegistry({
+    [TOOL_NAMES.LOOKUP_PRODUCT]: async () => OK_RESULT,
+    [TOOL_NAMES.SEARCH_KNOWLEDGE]: async () => OK_RESULT
+  });
+  const decomposer = buildDecomposer({
+    tasks: [{ question: 'x', category: 'product', request_kind: 'question' }],
+    needs: ['other_fact']
+  });
+  const openai = buildOpenAI([{ content: caseFileAnswer() }]);
+  const { investigate } = createInvestigator(openai, registry, { model: 'm', decomposer });
+
+  const caseFile = await investigate(PRODUCT_TICKET);
+
+  assert.equal(caseFile.evidenceGaps[0].state, 'unavailable');
+  assert.equal(caseFile.verdict, 'answerable', 'measurement first; enforcement once the vocabulary is trusted');
+});
+
+test('no decomposer means no declared needs rather than invented ones', async () => {
+  const registry = buildRegistry({
+    [TOOL_NAMES.LOOKUP_PRODUCT]: async () => OK_RESULT,
+    [TOOL_NAMES.SEARCH_KNOWLEDGE]: async () => OK_RESULT
+  });
+  const openai = buildOpenAI([{ content: caseFileAnswer() }]);
+  const { investigate } = createInvestigator(openai, registry, { model: 'm' });
+
+  const caseFile = await investigate(PRODUCT_TICKET);
+  assert.deepEqual(caseFile.evidenceGaps, []);
 });
 
 test('caveats from every tool that ran reach the prohibitions', async () => {

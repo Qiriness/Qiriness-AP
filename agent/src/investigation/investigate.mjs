@@ -6,6 +6,7 @@ import {
   planMoves,
   planTasks
 } from './decompose-rules.mjs';
+import { resolveNeeds } from './evidence-rules.mjs';
 import { TOOL_NAMES, escalationTriggers } from './investigation-rules.mjs';
 
 // The investigation agent: a categorised ticket in, a case file out.
@@ -115,7 +116,7 @@ export function createInvestigator(
       });
     }
 
-    const { definitions, handlers } = registry.toolsFor(ticket, { tasks: plan.tasks });
+    const { names, definitions, handlers } = registry.toolsFor(ticket, { tasks: plan.tasks });
     const run = createRun({
       ticket,
       handlers,
@@ -189,6 +190,13 @@ export function createInvestigator(
       contextRef: buildContextRef(ticket),
       proposedLevel: escalation.level,
       escalationReasons: escalation.reasons,
+      // What answering this ticket required, against what the run actually got.
+      // REPORTED, NOT ENFORCED: the verdict is untouched by it. Acting on the
+      // gaps — downgrading an `answerable` that left a need open, and letting a
+      // complete set end the loop early — is deliberately the next step, because
+      // both depend on this vocabulary being trustworthy and nothing has yet
+      // measured whether it is.
+      evidenceGaps: resolveNeeds(decomposition.needs, run.ledger, names),
       model
     });
   }

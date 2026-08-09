@@ -115,16 +115,19 @@ export function normaliseEntities(raw = {}) {
  *   - the text is long enough to hold more than one question;
  *   - or it contains several question marks.
  */
-export function shouldDecompose(ticket = {}, { minChars = 320 } = {}) {
-  if (ticket.secondary_category) {
-    return true;
-  }
-  const text = String(ticket.text ?? '');
-  if (text.length >= minChars) {
-    return true;
-  }
-  return (text.match(/\?/g) || []).length >= 2;
-}
+// THERE IS NO LONGER A GATE ON THIS CALL, and the reason is worth recording.
+//
+// It used to run only on tickets that looked split (a second subject from the
+// categoriser, ≥320 chars, or ≥2 question marks), because paying a model call to
+// be told one question is one task is waste. That reasoning was sound for
+// splitting alone. It stopped being sound when the same call started declaring
+// the ticket's EVIDENCE NEEDS: those have to exist for every investigated
+// ticket, or the completeness report has a hole exactly where the short,
+// ordinary tickets are — which is most of them.
+//
+// The cost is one `gpt-4o-mini` call per investigated ticket, against the two
+// `gpt-4o` calls the investigation already makes. Investigation runs only on
+// ENABLED_SUBJECTS, so it is not paid on forwarded mail, level 4 or `contact`.
 
 // --- from tasks to a run -----------------------------------------------------
 //

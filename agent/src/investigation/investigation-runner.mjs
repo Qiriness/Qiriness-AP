@@ -6,6 +6,7 @@ import {
   supabaseUpsert
 } from '../../../scripts/lib/supabase-rest-client.mjs';
 
+import { summariseNeeds } from './evidence-rules.mjs';
 import { ENABLED_SUBJECTS, isInvestigable } from './investigation-rules.mjs';
 
 // The batch pass that investigates categorised tickets, mirroring
@@ -97,6 +98,8 @@ export async function runInvestigation({
       });
     }
 
+    const needs = summariseNeeds(caseFile.evidenceGaps);
+
     // No PII: ids, verdicts and counts only. The claims themselves stay in the
     // row, which is access-controlled; a log line is not.
     logger?.info?.('investigate.ticket', {
@@ -107,6 +110,12 @@ export async function runInvestigation({
       missing: caseFile.missing.length,
       dropped: caseFile.droppedClaims.length,
       toolCalls: caseFile.toolCalls.length,
+      // The evidence report. `needsNotAttempted` is the one to watch: a tool was
+      // allowed, the budget was there, and nothing called it.
+      needsDeclared: needs.declared,
+      needsSatisfied: needs.satisfied,
+      needsNotAttempted: needs.not_attempted,
+      needsComplete: needs.complete,
       ...(level !== ticket.level ? { handlingLevel: level, previousHandlingLevel: ticket.level } : {})
     });
   }
@@ -276,6 +285,7 @@ export function createInvestigationStore(supabase) {
             context_ref: caseFile.contextRef || {},
             handoff: caseFile.handoff,
             tool_calls: caseFile.toolCalls,
+            evidence_gaps: caseFile.evidenceGaps,
             dropped_claims: caseFile.droppedClaims,
             escalation_reasons: caseFile.escalationReasons,
             proposed_level: caseFile.proposedLevel,

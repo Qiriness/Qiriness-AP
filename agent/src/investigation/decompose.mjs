@@ -1,19 +1,22 @@
 import { REQUEST_KINDS, TICKET_SUBJECTS } from '../../../scripts/lib/support-taxonomy.mjs';
 
-import { MAX_TASKS, normaliseDecomposition, shouldDecompose } from './decompose-rules.mjs';
+import { MAX_TASKS, normaliseDecomposition } from './decompose-rules.mjs';
+import { NEED_KEYS, needLabel, normaliseNeeds } from './evidence-rules.mjs';
 
-// Splits one email into the separate requests it contains, and pulls out the
-// entities that let the router act on them. The model half; the judgement is in
-// decompose-rules.mjs.
+// Reads one email and answers two questions before any tool runs: WHAT IS BEING
+// ASKED (the tasks) and WHAT ANSWERING IT WILL REQUIRE (the needs). The model
+// half; the judgement is in decompose-rules.mjs and evidence-rules.mjs.
+//
+// ONE CALL FOR BOTH, because they are the same act of reading. Splitting them
+// would pay twice to have a model read the same three paragraphs, and the second
+// reader would have to be told what the first concluded anyway.
 //
 // WHERE THIS RUNS, AND WHY NOT IN THE CATEGORISER. The obvious home is the
 // categorisation call — it already reads the email and emits structured output,
-// so sub-questions would be nearly free in the same forward pass. It belongs
-// here instead because the categoriser runs on EVERY ticket while investigation
-// runs only on the in-scope ones: decomposing at categorisation means paying for
-// forwarded mail, level 4 and `contact` kind, none of which is ever
-// investigated. `shouldDecompose()` narrows it further, so an ordinary
-// one-question ticket costs nothing at all.
+// so this would be nearly free in the same forward pass. It belongs here instead
+// because the categoriser runs on EVERY ticket while investigation runs only on
+// the in-scope ones: doing it at categorisation means paying for forwarded mail,
+// level 4 and `contact` kind, none of which is ever investigated.
 //
 // NO PERSONAL DATA. Subject and body only — the same text the categoriser
 // already reads. The sender's name and address are never part of the prompt.
@@ -21,8 +24,14 @@ import { MAX_TASKS, normaliseDecomposition, shouldDecompose } from './decompose-
 const DECOMPOSITION_SCHEMA = {
   type: 'object',
   additionalProperties: false,
-  required: ['tasks', 'entities'],
+  required: ['tasks', 'entities', 'needs'],
   properties: {
+    // The facts a correct reply would have to rest on. A closed enum, because
+    // code — not a second model call — decides whether the ledger satisfied each.
+    needs: {
+      type: 'array',
+      items: { type: 'string', enum: [...NEED_KEYS] }
+    },
     tasks: {
       type: 'array',
       maxItems: MAX_TASKS,
@@ -74,21 +83,21 @@ const SYSTEM_PROMPT = [
   '- products : les noms de produits cités, tels quels.',
   '- codes : les codes promotionnels cités, tels quels.',
   '',
-  "N'invente rien et ne réponds pas au client : tu ne fais que découper."
+  'needs : ce qu’une bonne réponse devra pouvoir AFFIRMER pour traiter ce message.',
+  "Choisis uniquement dans cette liste, et uniquement ce qui est vraiment nécessaire — pas tout ce qui pourrait servir :",
+  NEED_KEYS.map((key) => `- ${key} : ${needLabel(key)}`).join('\n'),
+  '',
+  "Si ce message exige un élément que cette liste ne sait pas nommer, ajoute other_fact. Ne force jamais un besoin approchant à la place : other_fact est là pour ça.",
+  '',
+  "N'invente rien et ne réponds pas au client : tu ne fais que analyser la demande."
 ].join('\n');
 
 export function createDecomposer(openai, { model, maxBodyChars = 3000 } = {}) {
   /**
    * @param ticket { text, category, request_kind, secondary_category }
-   * @returns { tasks[], entities, decomposed }
+   * @returns { tasks[], entities, needs[], read }
    */
   async function decompose(ticket = {}) {
-    // Not worth a model call: a short single question is one task by
-    // construction. Returns the same shape so callers never branch.
-    if (!shouldDecompose(ticket)) {
-      return { ...normaliseDecomposition(null, ticket), decomposed: false };
-    }
-
     try {
       const raw = await openai.completeJson({
         model,
@@ -96,14 +105,18 @@ export function createDecomposer(openai, { model, maxBodyChars = 3000 } = {}) {
         user: String(ticket.text ?? '').slice(0, maxBodyChars),
         schema: DECOMPOSITION_SCHEMA,
         schemaName: 'ticket_decomposition',
-        maxTokens: 400
+        maxTokens: 500
       });
-      return { ...normaliseDecomposition(raw, ticket), decomposed: true };
+      return { ...normaliseDecomposition(raw, ticket), needs: normaliseNeeds(raw?.needs), read: true };
     } catch {
-      // A failed decomposition must never fail the investigation. Falling back
-      // to one task is exactly the behaviour before this existed, so the worst
-      // case is the old cost, not a lost ticket.
-      return { ...normaliseDecomposition(null, ticket), decomposed: false };
+      // A failed read must never fail the investigation. One task with the
+      // ticket's own labels is exactly the behaviour before this existed, so the
+      // worst case is the old cost, not a lost ticket.
+      //
+      // NO NEEDS ARE INVENTED ON FAILURE. An empty list reports as "nobody said
+      // what this required", which is true; guessing from the category would put
+      // fabricated requirements into the very numbers this exists to measure.
+      return { ...normaliseDecomposition(null, ticket), needs: [], read: false };
     }
   }
 

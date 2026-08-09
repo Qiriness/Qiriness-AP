@@ -173,7 +173,32 @@ Scope is `ENABLED_SUBJECTS` (product, product_stock, promotions, account, other)
 
 ### Guardrails are code; only guidelines are prose
 
-What a ticket's agent may call is `allowedTools(category, request_kind, level)` — a table, tested across all 14 subjects × 4 kinds, that the model never sees the outside of. Level 4 and the `contact` kind get an empty registry and no model call at all. What a *good* investigation contains (`requiredEvidence`) is stated in the prompt **and** checked afterwards; neither is trusted alone. The distinction matters because this agent never contacts a customer: its rules are operational (what it may read, what it may spend), not editorial.
+What a ticket's agent may call is `allowedTools(category, request_kind, level)` — a table, tested across all 14 subjects × 4 kinds, that the model never sees the outside of. Level 4 and the `contact` kind get an empty registry and no model call at all. The distinction matters because this agent never contacts a customer: its rules are operational (what it may read, what it may spend), not editorial.
+
+**`requiredEvidence` is a guideline only, and this file used to claim otherwise.** That per-subject checklist is rendered into the prompt (`planEvidence`) and never referenced again. It is also *static* — keyed on the category, so two `product` tickets asking completely different things get the same list, and the `other` entry is *"the knowledge base was consulted"*, which is satisfied by having searched, whatever came back. It cannot fail. Read it as prompt text.
+
+### Per-ticket evidence needs, scored against the ledger
+
+The mechanism that does close that gap, and it is separate. `evidence-rules.mjs` holds a **closed vocabulary of 19 facts** — `product_identity`, `delivery_state`, `promotion_eligibility`, `policy_answer` and so on. The model declares which ones *this* ticket requires (in the same call that splits it — one act of reading, not two), and code scores each against the tool ledger into one of four states:
+
+| State | Meaning |
+|---|---|
+| `satisfied` | a tool established it, with the ledger ids |
+| `attempted` | a tool ran and could not settle it |
+| `unavailable` | no tool this ticket was allowed could ever settle it |
+| `not_attempted` | **a tool was allowed, the budget was there, and nothing called it** |
+
+That last row is the whole point: today "there was nothing to find" and "the agent never looked" produce identical case files, and no number in the system separates them.
+
+**Why a closed enum rather than free text.** Free-text needs would take a second model call to check against the ledger — a judge marking its own homework, and no trustworthy number at the end. So the model picks *which*, code owns *what satisfies*. The same split as `MISSING_FIELDS`, where the model picks the key and this codebase owns the sentence.
+
+**`other_fact` is the escape hatch, and it can never be satisfied.** A closed vocabulary's real danger is a false green: a ticket whose actual requirement is unnameable declares two easy needs, satisfies both, and reads as *more* complete than it would with no checking at all. `other_fact` lets the model say "there is something else here", nothing can close it, and it is logged so the vocabulary grows from real tickets rather than from guesses.
+
+**Two deliberate never-satisfiable entries.** `checkout_state` has no tool wired — `abandoned-checkout.mjs` exists and is validated but is not in the investigation registry — so it always resolves `unavailable`. Counting how often it is *needed* is the argument for wiring it, or for not bothering.
+
+**Reported, not enforced — on purpose.** The verdict is untouched by any of this. Downgrading an `answerable` that left a need open, and letting a complete set end the loop early, both depend on the vocabulary being trustworthy, and nothing has yet measured whether it is. Measure first, act second; a list that over-declares would otherwise downgrade good case files for reasons about the list rather than the ticket.
+
+**This is why the decomposition call lost its gate.** It used to skip short tickets. Needs have to exist for *every* investigated ticket or the report has a hole exactly where the ordinary tickets are, so it now runs on all of them: one `gpt-4o-mini` call against the two `gpt-4o` calls the investigation already makes.
 
 ### Weak knowledge chunks are withheld, not flagged
 

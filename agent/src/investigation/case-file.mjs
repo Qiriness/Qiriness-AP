@@ -272,6 +272,7 @@ export function buildCaseFile({
   contextRef = null,
   proposedLevel = null,
   escalationReasons = [],
+  evidenceGaps = [],
   model = null,
   now = new Date()
 } = {}) {
@@ -305,6 +306,12 @@ export function buildCaseFile({
     contextRef,
     handoff: normaliseHandoff(answer.handoff),
     toolCalls: ledger.map(({ id, tool, argsHash, outcome }) => ({ id, tool, argsHash, outcome })),
+    // What answering this ticket required, and what the run actually got: one
+    // entry per declared need, each `satisfied` / `attempted` / `unavailable` /
+    // `not_attempted`. DIAGNOSTIC, NOT A VERDICT INPUT — it is read by people and
+    // counted in reports, and deliberately does not move the verdict yet. See
+    // `evidence-rules.mjs` for why acting on it is a separate step.
+    evidenceGaps: Array.isArray(evidenceGaps) ? evidenceGaps : [],
     proposedLevel,
     // Why the level moved, in the human's words rather than a number changing on
     // its own. Computed by investigation-rules, never by the model.
@@ -390,6 +397,16 @@ export function toHumanBrief(caseFile) {
         caseFile.droppedClaims.map((claim) => `- ${claim}`).join('\n')
     );
   }
+  // Only the OPEN needs. A satisfied one is already visible as an established
+  // fact, and listing it again would bury the two lines a reviewer needs.
+  const open = (caseFile.evidenceGaps || []).filter((gap) => gap.state !== 'satisfied');
+  if (open.length > 0) {
+    parts.push(
+      '## Éléments attendus et non obtenus (interne)\n' +
+        open.map((gap) => `- ${gap.label} — ${GAP_STATES[gap.state] || gap.state}`).join('\n')
+    );
+  }
+
   if (caseFile.toolCalls.length > 0) {
     parts.push(
       '## Outils appelés (interne)\n' +
@@ -399,6 +416,19 @@ export function toHumanBrief(caseFile) {
 
   return parts.join('\n\n');
 }
+
+/**
+ * Why a need is still open, in a reviewer's terms.
+ *
+ * `not_attempted` reads as an accusation on purpose: the other three are the
+ * world being uncooperative, and that one is the agent having had the tool, the
+ * budget and the permission, and not using them.
+ */
+const GAP_STATES = {
+  attempted: 'cherché, rien trouvé',
+  unavailable: 'aucun outil ne peut le fournir ici',
+  not_attempted: 'AUCUNE RECHERCHE FAITE alors qu’un outil était disponible'
+};
 
 function describeVerdict(verdict) {
   switch (verdict) {
