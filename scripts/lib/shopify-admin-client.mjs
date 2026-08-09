@@ -1,5 +1,14 @@
 export const PRODUCT_VARIANT_PAGE_SIZE = 25;
-export const PRODUCT_METAFIELD_PAGE_SIZE = 25;
+// Products on a real merchandised store carry FAR more metafields than a dev
+// fixture. Measured on Qiriness: 49-50 per product, with every field the support
+// tools need sitting at positions 29-50 — usage_instructions at 33, faq_list at
+// 49, product_ingredients at 50. At the previous cap of 25 all of them were
+// silently truncated away, so 112 of 116 products looked like they had no usage
+// instructions and no FAQ when in fact the data was there all along.
+//
+// 100 is double the observed maximum. `metafieldsTruncated` below is what stops
+// this ever being silent again if a store goes past it.
+export const PRODUCT_METAFIELD_PAGE_SIZE = 100;
 export const METAFIELD_REFERENCE_PAGE_SIZE = 10;
 export const ORDER_LINE_ITEM_PAGE_SIZE = 50;
 export const ORDER_FULFILLMENT_PAGE_SIZE = 10;
@@ -111,6 +120,12 @@ const PRODUCTS_QUERY = `#graphql
           }
         }
         metafields(first: $metafieldFirst) {
+          # Truncation here cost 112 of 116 products their usage instructions and
+          # FAQs, and nothing reported it because the connection returned no page
+          # info. Requested so the sync can say so out loud.
+          pageInfo {
+            hasNextPage
+          }
           nodes {
             id
             namespace
@@ -223,15 +238,31 @@ const CUSTOMERS_QUERY = `#graphql
   }
 `;
 
+// `$query` bounds the pull to orders we will actually keep.
+//
+// WHY THIS EXISTS. Retention deletes an order 3 months after delivery, or 6
+// months if it is unresolved, and deleteExpiredOrders runs in the same pass that
+// imports. Unbounded, a real store means fetching years of orders — 5,768 on
+// Qiriness, back to May 2024 — and deleting ~80% of them seconds later. That is
+// the slowest possible sync, the largest throttle exposure, and it pulls two
+// years of customer personal data out of Shopify purely to bin it, which is the
+// opposite of what SHOPIFY_PERSONAL_DATA_PROTECTION.md item 1 asks for.
+//
+// FILTERED ON updated_at, NOT created_at, and that is load-bearing: an order
+// placed two years ago whose return opened last month is retained SIX MONTHS
+// FROM THE RETURN, so a created_at window would silently miss exactly the
+// unresolved cases support gets emails about. `sortKey: UPDATED_AT` already
+// paginates on the same axis.
 const ORDERS_QUERY = `#graphql
   query OrderSyncPage(
     $first: Int!,
     $after: String,
+    $query: String,
     $lineItemFirst: Int!,
     $fulfillmentFirst: Int!,
     $returnFirst: Int!
   ) {
-    orders(first: $first, after: $after, sortKey: UPDATED_AT) {
+    orders(first: $first, after: $after, query: $query, sortKey: UPDATED_AT) {
       pageInfo {
         hasNextPage
         endCursor
@@ -965,11 +996,42 @@ export async function fetchCustomerPage(shopify, args, cursor) {
   });
 }
 
+/**
+ * How far back to pull orders, as a Shopify search filter.
+ *
+ * Defaults to the longest retention window (6 months) plus a month of margin,
+ * so nothing is skipped that retention would have kept. `null` months means no
+ * filter at all — the old unbounded behaviour, kept for a deliberate full
+ * backfill rather than as the default.
+ */
+export function orderSyncQuery(months = ORDER_SYNC_DEFAULT_MONTHS, now = new Date()) {
+  if (months === null || months === undefined) {
+    return undefined;
+  }
+  const since = new Date(now);
+  // UTC throughout. setMonth/getMonth work in LOCAL time while toISOString
+  // emits UTC, so the mixed pair moved the window by a day depending on the
+  // timezone of whatever ran the sync — the same window must come out on a
+  // laptop in Paris and a scheduler in UTC.
+  since.setUTCMonth(since.getUTCMonth() - months);
+  // Month arithmetic can clamp (31 Sep -> 1 Oct), costing at most a couple of
+  // days. The margin baked into ORDER_SYNC_DEFAULT_MONTHS absorbs it.
+  return `updated_at:>=${since.toISOString().slice(0, 10)}`;
+}
+
+// 6 months is the longest anything is retained; the extra month absorbs clock
+// skew and a sync that has not run for a few weeks.
+export const ORDER_SYNC_DEFAULT_MONTHS = 7;
+
 export async function fetchOrderPage(shopify, args, cursor) {
   const includeReturns = !shopify.orderReturnsAccessDenied;
   const variables = {
     first: args.pageSize,
     after: cursor,
+    // args.orderSinceMonths === null means "everything", for a full backfill.
+    query: orderSyncQuery(
+      args.orderSinceMonths === undefined ? ORDER_SYNC_DEFAULT_MONTHS : args.orderSinceMonths
+    ),
     lineItemFirst: ORDER_LINE_ITEM_PAGE_SIZE,
     fulfillmentFirst: ORDER_FULFILLMENT_PAGE_SIZE
   };
@@ -1019,21 +1081,41 @@ export async function fetchDiscountRedeemCodePage(shopify, discountNodeId, curso
   };
 }
 
-async function requestShopifyAccessToken(config) {
-  const response = await fetch(`https://${config.shopDomain}/admin/oauth/access_token`, {
-    method: 'POST',
-    // Never let a token response be replayed from Next's Data Cache.
-    cache: 'no-store',
-    headers: {
-      'Content-Type': 'application/x-www-form-urlencoded',
-      Accept: 'application/json'
-    },
-    body: new URLSearchParams({
-      grant_type: 'client_credentials',
-      client_id: config.shopifyClientId,
-      client_secret: config.shopifyClientSecret
-    })
-  });
+async function requestShopifyAccessToken(config, attempt = 1) {
+  // Retried like every other call. This is the FIRST network request a sync
+  // makes, so a blip here kills the run before a single row is read — and
+  // because it sat outside the retried path it reported a bare `fetch failed`
+  // with nothing to say which of the three services had refused.
+  let response;
+  try {
+    response = await fetch(`https://${config.shopDomain}/admin/oauth/access_token`, {
+      method: 'POST',
+      // Never let a token response be replayed from Next's Data Cache.
+      cache: 'no-store',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        Accept: 'application/json'
+      },
+      body: new URLSearchParams({
+        grant_type: 'client_credentials',
+        client_id: config.shopifyClientId,
+        client_secret: config.shopifyClientSecret
+      })
+    });
+  } catch (error) {
+    if (attempt >= SHOPIFY_RETRY_ATTEMPTS) {
+      throw new Error(
+        `Shopify token request to ${config.shopDomain} failed after ${attempt} attempts: ${error.message}`
+      );
+    }
+    await sleepMs(SHOPIFY_RETRY_BASE_MS * 2 ** (attempt - 1));
+    return requestShopifyAccessToken(config, attempt + 1);
+  }
+
+  if ((response.status === 429 || response.status >= 500) && attempt < SHOPIFY_RETRY_ATTEMPTS) {
+    await sleepMs(SHOPIFY_RETRY_BASE_MS * 2 ** (attempt - 1));
+    return requestShopifyAccessToken(config, attempt + 1);
+  }
 
   const payload = await response.json().catch(() => null);
   if (!response.ok) {
@@ -1047,24 +1129,81 @@ async function requestShopifyAccessToken(config) {
   return payload.access_token;
 }
 
-export async function shopifyGraphql(client, query, variables = {}) {
+// Shopify's GraphQL limit is a leaky bucket (2,000 points, refilling at 100/s
+// on this shop), and an orders page with 50 line items, 10 fulfillments and 10
+// returns nested per order is expensive. Unretried, the first THROTTLED reply
+// ends the sync partway with no resume — which at 2,869 orders means starting
+// over.
+//
+// Waits for the bucket to refill rather than guessing: the throttle status comes
+// back in the response, so the client knows exactly how long it needs.
+const SHOPIFY_RETRY_ATTEMPTS = 5;
+const SHOPIFY_RETRY_BASE_MS = 1000;
+
+const sleepMs = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+function throttleWaitMs(payload, attempt) {
+  const cost = payload?.extensions?.cost;
+  const status = cost?.throttleStatus;
+  if (status && cost?.requestedQueryCost) {
+    const deficit = cost.requestedQueryCost - status.currentlyAvailable;
+    if (deficit > 0 && status.restoreRate > 0) {
+      // A second of headroom, capped so a pathological cost cannot hang a sync.
+      return Math.min(Math.ceil((deficit / status.restoreRate) * 1000) + 1000, 20000);
+    }
+  }
+  return SHOPIFY_RETRY_BASE_MS * 2 ** (attempt - 1);
+}
+
+const isThrottled = (payload) =>
+  (payload?.errors || []).some(
+    (error) => error?.extensions?.code === 'THROTTLED' || /throttled/i.test(error?.message || '')
+  );
+
+export async function shopifyGraphql(client, query, variables = {}, attempt = 1) {
   // cache: 'no-store' for the reason spelled out in supabase-rest-client.mjs —
   // the dashboard's Route Handlers call this during import/resync, and Next's
   // Data Cache would otherwise replay the first Shopify response forever.
-  const response = await fetch(client.endpoint, {
-    method: 'POST',
-    cache: 'no-store',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-Shopify-Access-Token': client.token
-    },
-    body: JSON.stringify({ query, variables })
-  });
+  let response;
+  try {
+    response = await fetch(client.endpoint, {
+      method: 'POST',
+      cache: 'no-store',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Shopify-Access-Token': client.token
+      },
+      body: JSON.stringify({ query, variables })
+    });
+  } catch (error) {
+    // No response at all — a dropped connection, not a rejected request.
+    if (attempt >= SHOPIFY_RETRY_ATTEMPTS) {
+      throw new Error(`Shopify request failed after ${attempt} attempts: ${error.message}`);
+    }
+    await sleepMs(SHOPIFY_RETRY_BASE_MS * 2 ** (attempt - 1));
+    return shopifyGraphql(client, query, variables, attempt + 1);
+  }
 
   const payload = await response.json().catch(() => null);
+
+  // 429 and 5xx are the server asking for a pause; 4xx means the request itself
+  // is wrong and retrying only fails slower.
+  if ((response.status === 429 || response.status >= 500) && attempt < SHOPIFY_RETRY_ATTEMPTS) {
+    await sleepMs(throttleWaitMs(payload, attempt));
+    return shopifyGraphql(client, query, variables, attempt + 1);
+  }
+
   if (!response.ok) {
     throw new Error(`Shopify request failed with HTTP ${response.status}.`);
   }
+
+  // Shopify reports throttling as a 200 with an error body, so this cannot be
+  // caught by status alone.
+  if (isThrottled(payload) && attempt < SHOPIFY_RETRY_ATTEMPTS) {
+    await sleepMs(throttleWaitMs(payload, attempt));
+    return shopifyGraphql(client, query, variables, attempt + 1);
+  }
+
   if (payload?.errors?.length) {
     throw new Error(`Shopify GraphQL error: ${payload.errors.map((error) => error.message).join('; ')}`);
   }

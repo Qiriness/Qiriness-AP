@@ -38,10 +38,24 @@ async function main() {
  * explicitly imports one (see web/app/api/knowledge/articles).
  */
 export async function runShopifyContentCatalogSync({ args, shopify, supabase, shopRow, syncedAt }) {
+  // BOTH halves degrade, and that symmetry is the point. Pages used to be
+  // unwrapped, so a missing pages scope aborted the whole sync with exit code 1
+  // — discarding the policies it had already fetched successfully. One missing
+  // optional scope cost the entire catalog rather than the half it covers.
   const [pages, policies] = await Promise.all([
-    fetchKnowledgePages(shopify, args),
+    fetchOptional('pages', () => fetchKnowledgePages(shopify, args), []),
     fetchOptional('shop policies', () => fetchShopPolicies(shopify), [])
   ]);
+
+  // ...but silence is not an option either: an empty catalog and a
+  // permission-denied catalog look identical in the Agent Setup dropdown.
+  if (pages.length === 0 && policies.length === 0) {
+    console.warn(
+      'Content catalog is EMPTY. If the warnings above mention access, the app is missing ' +
+        'read_content / read_online_store_pages, read_legal_policies or read_themes — ' +
+        'see shopify.app.toml for the full scope list this project expects.'
+    );
+  }
 
   const rows = [
     ...pages.map((page) => mapPageToCatalogRow(page, shopRow.id, syncedAt)),

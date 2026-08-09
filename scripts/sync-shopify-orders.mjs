@@ -2,9 +2,11 @@ import { pathToFileURL } from 'node:url';
 
 import { parseArgs, loadConfig, loadEnv } from './lib/sync-config.mjs';
 import {
+  ORDER_SYNC_DEFAULT_MONTHS,
   createShopifyClient,
   fetchOrderPage,
-  fetchShop
+  fetchShop,
+  orderSyncQuery
 } from './lib/shopify-admin-client.mjs';
 import {
   createSupabaseClient,
@@ -51,6 +53,18 @@ export async function runShopifyOrdersSync({ args, shopify, supabase, shopRow, s
   const customerIdByShopifyId = args.dryRun
     ? new Map()
     : await loadCustomerIdMap({ supabase, shopId: shopRow.id });
+
+  // State what window this run covers. Unbounded is a real choice with a real
+  // cost, so it should never be something you discover afterwards from the
+  // order count.
+  const months =
+    args.orderSinceMonths === undefined ? ORDER_SYNC_DEFAULT_MONTHS : args.orderSinceMonths;
+  const filter = orderSyncQuery(months);
+  console.log(
+    filter
+      ? `Fetching orders updated in the last ${months} months (${filter}). Use --all-orders for the full history.`
+      : 'Fetching the FULL order history (--all-orders). Retention still deletes anything past its window.'
+  );
 
   do {
     const page = await fetchOrderPage(shopify, args, cursor);

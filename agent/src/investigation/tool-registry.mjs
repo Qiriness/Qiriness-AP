@@ -1,3 +1,4 @@
+import { planToolNames } from './decompose-rules.mjs';
 import { TOOL_NAMES, allowedTools } from './investigation-rules.mjs';
 
 // Binds the Phase 4 retrieval tools into something the model can call, and
@@ -260,9 +261,18 @@ export function createToolRegistry({
     /**
      * The tools this ticket's agent gets — definitions for the model, handlers
      * for the runner, and nothing outside the policy.
+     *
+     * `tasks` is the decomposition, when there is one: the tools are then the
+     * UNION of what each task is allowed. The union is computed here rather than
+     * taken from the caller so that the guardrail stays a property of this
+     * module — a task list can only ever name (category, kind) pairs, never a
+     * tool, so no caller can widen the set by asking.
      */
-    toolsFor(ticket = {}) {
-      const names = allowedTools(ticket.category, ticket.request_kind, ticket.level ?? 1);
+    toolsFor(ticket = {}, { tasks = null } = {}) {
+      const names =
+        Array.isArray(tasks) && tasks.length > 0
+          ? planToolNames(ticket, tasks)
+          : allowedTools(ticket.category, ticket.request_kind, ticket.level ?? 1);
       const bound = handlersFor(ticket);
       const handlers = new Map();
       const definitions = [];

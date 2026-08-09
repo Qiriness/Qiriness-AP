@@ -8,45 +8,41 @@ const CODE_DISCOUNT_TYPES = new Set([
   'DiscountCodeApp'
 ]);
 
+/**
+ * ONE ROW PER DISCOUNT, with the redeem codes carried inside it.
+ *
+ * This used to return one row per CODE, which on a real store meant the same
+ * discount duplicated up to 600 times — 324 discounts became 7,512 rows and a
+ * 22 MB table, 4.4 MB of it the identical rule_snapshot copied over and over.
+ *
+ * The per-code usage count is the one thing that genuinely varies, so it travels
+ * inside the codes array rather than being dropped: most of this store's codes
+ * are single-use, and "you have already used this code" is the promotion tool's
+ * most actionable answer.
+ */
 export function mapPromotionRows(discountNode, shopId, syncedAt) {
   const discount = discountNode.discount || {};
   const method = CODE_DISCOUNT_TYPES.has(discount.__typename) ? 'code' : 'automatic';
+  const redeemCodes = method === 'code' ? discount.codes?.nodes || [] : [];
 
-  if (method === 'code') {
-    const codes = discount.codes?.nodes || [];
-    return codes.map((redeemCode) => mapPromotionRow({
-      discountNode,
-      discount,
-      redeemCode,
-      method,
-      shopId,
-      syncedAt
-    }));
-  }
-
-  return [mapPromotionRow({
-    discountNode,
-    discount,
-    redeemCode: null,
-    method,
-    shopId,
-    syncedAt
-  })];
+  // Still an array: the sync upserts pages of rows, and returning one keeps that
+  // contract unchanged now that the fan-out has gone.
+  return [mapPromotionRow({ discountNode, discount, redeemCodes, method, shopId, syncedAt })];
 }
 
-function mapPromotionRow({ discountNode, discount, redeemCode, method, shopId, syncedAt }) {
+function mapPromotionRow({ discountNode, discount, redeemCodes, method, shopId, syncedAt }) {
   const sourceAppName = cleanTextValue(
-    redeemCode?.createdBy?.title || discount.appDiscountType?.app?.title || null
+    redeemCodes[0]?.createdBy?.title || discount.appDiscountType?.app?.title || null
   );
-  const promotionKey = redeemCode?.id || discountNode.id;
+  // The discount node, always — there is no longer a row per redeem code.
+  const promotionKey = discountNode.id;
 
   return stripUndefined({
     shop_id: shopId,
     shopify_discount_node_id: discountNode.id,
-    shopify_redeem_code_id: redeemCode?.id || null,
     promotion_key: promotionKey,
     title: cleanTextValue(discount.title) || promotionKey,
-    code: cleanTextValue(redeemCode?.code) || null,
+    codes: mapRedeemCodes(redeemCodes),
     method,
     discount_type: discount.__typename,
     status: discount.status,
@@ -56,18 +52,36 @@ function mapPromotionRow({ discountNode, discount, redeemCode, method, shopId, s
     ends_at: discount.endsAt,
     usage_limit: integerValue(discount.usageLimit),
     discount_usage_count: integerValue(discount.asyncUsageCount),
-    code_usage_count: integerValue(redeemCode?.asyncUsageCount),
     applies_once_per_customer: booleanOrNull(discount.appliesOncePerCustomer),
     discount_classes: cleanJsonValue(discount.discountClasses || []),
     combines_with: cleanJsonValue(combinesWithObject(discount.combinesWith)),
     source_app_name: sourceAppName,
     rule_snapshot: buildRuleSnapshot(discount),
-    source_metadata: buildSourceMetadata(discount, redeemCode),
+    source_metadata: buildSourceMetadata(discount, redeemCodes[0] || null),
     synced_at: syncedAt,
     shopify_created_at: discount.createdAt,
     shopify_updated_at: discount.updatedAt,
-    raw_shopify_payload: buildRawPayload(discountNode, discount, redeemCode)
+    raw_shopify_payload: buildRawPayload(discountNode, discount, redeemCodes)
   });
+}
+
+/**
+ * The redeem codes, as stored.
+ *
+ * Deliberately three fields and no more. Everything else Shopify returns per
+ * code is either the discount's (and would be duplicated again) or noise, and
+ * this array is repeated once per code — 600 times on the largest discount here.
+ */
+function mapRedeemCodes(redeemCodes) {
+  return cleanJsonValue(
+    redeemCodes
+      .map((redeemCode) => stripUndefined({
+        code: cleanTextValue(redeemCode?.code) || null,
+        usage_count: integerValue(redeemCode?.asyncUsageCount),
+        redeem_code_id: redeemCode?.id || null
+      }))
+      .filter((entry) => entry.code)
+  );
 }
 
 function buildRuleSnapshot(discount) {
@@ -213,7 +227,10 @@ function buildSourceMetadata(discount, redeemCode) {
   }));
 }
 
-function buildRawPayload(discountNode, discount, redeemCode) {
+// A sample only — see the note below.
+const RAW_PAYLOAD_CODE_SAMPLE = 5;
+
+function buildRawPayload(discountNode, discount, redeemCodes) {
   return cleanJsonValue(stripUndefined({
     id: discountNode.id,
     discount: stripUndefined({
@@ -244,14 +261,17 @@ function buildRawPayload(discountNode, discount, redeemCode) {
           }
         : null
     }),
-    redeemCode: redeemCode
-      ? {
-          id: redeemCode.id,
-          code: redeemCode.code,
-          asyncUsageCount: redeemCode.asyncUsageCount,
-          createdBy: redeemCode.createdBy ? { title: redeemCode.createdBy.title } : null
-        }
-      : null
+    // Capped deliberately. This is a traceability payload, and a bulk discount
+    // carries up to 600 codes whose full detail is already in the `codes`
+    // column — mirroring all of them here would put the duplication straight
+    // back, in the largest jsonb on the row.
+    redeemCodes: (redeemCodes || []).slice(0, RAW_PAYLOAD_CODE_SAMPLE).map((redeemCode) => ({
+      id: redeemCode.id,
+      code: redeemCode.code,
+      asyncUsageCount: redeemCode.asyncUsageCount,
+      createdBy: redeemCode.createdBy ? { title: redeemCode.createdBy.title } : null
+    })),
+    redeemCodeCount: (redeemCodes || []).length
   }));
 }
 

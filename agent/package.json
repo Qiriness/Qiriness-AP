@@ -27,6 +27,8 @@
     "tickets:autoclose": "node src/tools/run-auto-close.mjs",
     "tickets:autoclose:dry-run": "node src/tools/run-auto-close.mjs --dry-run",
     "spam:backfill": "node src/tools/run-spam-body-backfill.mjs",
-    "spam:backfill:dry-run": "node src/tools/run-spam-body-backfill.mjs --dry-run"
+    "spam:backfill:dry-run": "node src/tools/run-spam-body-backfill.mjs --dry-run",
+    "eval:retrieval": "node eval/run-retrieval-eval.mjs",
+    "eval:diagnose": "node eval/diagnose-retrieval.mjs"
   }
 }

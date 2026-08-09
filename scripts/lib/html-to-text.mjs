@@ -39,8 +39,22 @@ const NAMED_ENTITIES = new Map([
   ['lsquo', '‘'], ['rsquo', '’'], ['sbquo', '‚'],
   ['ldquo', '“'], ['rdquo', '”'], ['bdquo', '„'],
   ['ndash', '–'], ['mdash', '—'],
-  ['hellip', '…'], ['bull', '•']
+  ['hellip', '…'], ['bull', '•'],
+  // French guillemets. Found on the live catalogue, where the copy is French and
+  // « … » is the normal quotation mark: `un effet &laquo; sleeping mask &raquo;`
+  // was reaching the drafting model as literal entity text.
+  ['laquo', '«'], ['raquo', '»'],
+  ['lsaquo', '‹'], ['rsaquo', '›'],
+  ['times', '×'], ['divide', '÷'], ['plusmn', '±'], ['frac12', '½'], ['frac14', '¼'],
+  ['micro', 'µ'], ['sup2', '²'], ['sup3', '³'], ['dagger', '†'], ['permil', '‰']
 ]);
+
+// A soft hyphen is a RENDERING HINT, not content: it marks where a word may be
+// broken across lines and is invisible when it is not. Decoding it to U+00AD
+// would leave an invisible character inside a word — `CENTELLA ASIA­TICA`
+// on the live catalogue — which silently breaks name matching, embedding and
+// anything a human tries to search for. It is removed rather than decoded.
+const DISCARDED_ENTITIES = new Set(['shy']);
 
 export function htmlToText(html) {
   if (!html) {
@@ -153,6 +167,9 @@ function decodeHtmlEntities(value) {
     }
     if (normalized.startsWith('#')) {
       return decodeCodePoint(Number.parseInt(normalized.slice(1), 10), match);
+    }
+    if (DISCARDED_ENTITIES.has(normalized)) {
+      return '';
     }
     return NAMED_ENTITIES.get(normalized) ?? match;
   });

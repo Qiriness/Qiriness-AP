@@ -2,6 +2,8 @@ import { dedupeRows, stripUndefined } from './collections.mjs';
 import { hashJson } from './hash.mjs';
 import { mapMetaobject, metaobjectFieldsObject } from './shopify-metaobject-mapper.mjs';
 import { cleanJsonValue, cleanTextValue } from './text-cleaning.mjs';
+import { htmlToText } from './html-to-text.mjs';
+import { flattenRichText } from './shopify-rich-text.mjs';
 
 const FIELD_TARGETS = {
   short_description: [
@@ -22,7 +24,16 @@ const FIELD_TARGETS = {
   active_ingredients: [
     'actifs & ingredients',
     'actifs ingredients',
-    'actifs_ingredients'
+    'actifs_ingredients',
+    // The live store names this definition "Actif et ingrédients" — singular,
+    // and joined with "et" rather than "&". Normalisation strips the accent but
+    // not the wording, so none of the three aliases above ever matched it and
+    // the column stayed null on every product that had the field.
+    'actif et ingredients',
+    'actifs et ingredients',
+    'actif ingredients',
+    'active_ingredients',
+    'active ingredients'
   ],
   ingredients_popup: [
     'ingredients popup',
@@ -42,6 +53,19 @@ const FIELD_TARGETS = {
   ]
 };
 
+/**
+ * Did Shopify have more metafields than we asked for?
+ *
+ * Exported so the sync can report it. The support tools read usage
+ * instructions, ingredients and FAQs out of metafields, and when the connection
+ * truncates, those columns come back null — indistinguishable from a product
+ * that genuinely has no merchandising. That is precisely how 112 of 116
+ * products looked empty while the data sat in Shopify the whole time.
+ */
+export function metafieldsTruncated(product) {
+  return Boolean(product?.metafields?.pageInfo?.hasNextPage);
+}
+
 export function mapProduct(product, shopId, syncedAt) {
   const metafields = product.metafields?.nodes || [];
   const extracted = extractProductMetafields(metafields);
@@ -55,7 +79,12 @@ export function mapProduct(product, shopId, syncedAt) {
     vendor: cleanTextValue(product.vendor),
     product_type: cleanTextValue(product.productType),
     tags: cleanJsonValue(product.tags || []),
-    description: cleanTextValue(product.description || product.descriptionHtml || null),
+    // `description` is Shopify's own plain-text rendering, so it needs no work.
+    // The `descriptionHtml` FALLBACK does: it is markup, and storing it raw put
+    // a literal `<p><br></p>` in the column for every product whose description
+    // is visually empty — which then reads as content to anything downstream.
+    description:
+      cleanTextValue(product.description || htmlToText(product.descriptionHtml) || null) || null,
     short_description: extracted.short_description,
     usage_instructions: extracted.usage_instructions,
     usage_advice: extracted.usage_advice,
@@ -125,8 +154,9 @@ function extractProductMetafields(metafields) {
     metaobjects: []
   };
 
+  // PASS 1 — the real definitions. Everything is archived into
+  // structuredMetafields here, recognised or not, so nothing is ever lost.
   for (const metafield of metafields) {
-    const target = identifyMetafieldTarget(metafield);
     const references = extractMetaobjectReferences(metafield);
 
     result.structuredMetafields[`${metafield.namespace}.${metafield.key}`] = stripUndefined({
@@ -141,33 +171,97 @@ function extractProductMetafields(metafields) {
       reference_ids: references.map((item) => item.id)
     });
 
-    if (!target) {
-      continue;
-    }
+    applyMetafield(result, metafield, identifyMetafieldTarget(metafield), references);
+  }
 
-    if (target === 'product_ingredients') {
-      result.product_ingredients = references.length > 0
-        ? references.map(metaobjectToSnapshot)
-        : arrayValue(metafield);
-      result.product_ingredient_metaobject_ids = references.map((item) => item.id);
-      result.metaobjects.push(...references);
-      continue;
+  // PASS 2 — the legacy Accentuate fields, and ONLY where pass 1 found nothing.
+  //
+  // A separate pass rather than another alias list, because precedence has to be
+  // deterministic: a product carrying both the modern definition and the legacy
+  // key would otherwise be decided by whichever happened to come later in
+  // Shopify's array. The definition-backed value always wins; the legacy one
+  // fills a hole and never overwrites.
+  for (const metafield of metafields) {
+    const target = identifyLegacyTarget(metafield);
+    if (target && isEmptyTarget(result[target])) {
+      applyMetafield(result, metafield, target, extractMetaobjectReferences(metafield));
     }
-
-    if (target === 'product_faqs') {
-      result.product_faqs = references.length > 0
-        ? references.map(metaobjectToFaqSnapshot)
-        : productFaqValue(metafield);
-      result.product_faq_metaobject_ids = references.map((item) => item.id);
-      result.metaobjects.push(...references);
-      continue;
-    }
-
-    result[target] = scalarValue(metafield);
   }
 
   result.metaobjects = dedupeRows(result.metaobjects, (row) => row.id);
   return result;
+}
+
+function isEmptyTarget(value) {
+  return value === null || value === undefined || (Array.isArray(value) && value.length === 0);
+}
+
+function applyMetafield(result, metafield, target, references) {
+  if (!target) {
+    return;
+  }
+
+  if (target === 'product_ingredients') {
+    result.product_ingredients = references.length > 0
+      ? references.map(metaobjectToSnapshot)
+      : arrayValue(metafield);
+    result.product_ingredient_metaobject_ids = references.map((item) => item.id);
+    result.metaobjects.push(...references);
+    return;
+  }
+
+  if (target === 'product_faqs') {
+    result.product_faqs = references.length > 0
+      ? references.map(metaobjectToFaqSnapshot)
+      : productFaqValue(metafield);
+    result.product_faq_metaobject_ids = references.map((item) => item.id);
+    result.metaobjects.push(...references);
+    return;
+  }
+
+  result[target] = scalarValue(metafield);
+}
+
+/**
+ * Legacy fields from the Accentuate Custom Fields app, matched on the FULL
+ * `namespace.key` so nothing in another namespace is caught by accident.
+ *
+ * These predate Shopify-native metafield definitions and are still the only
+ * source on a large part of the catalogue: measured on the live store,
+ * `accentuate.ingredients` is on 92 products and `accentuate.how_to_tuse` on 94,
+ * and roughly 40 ACTIVE products have no other source for either. Without these
+ * their ingredients and usage instructions sat unreachable in structured_facts
+ * and the product tool answered "no information" for a third of the catalogue.
+ *
+ * Both carry rich-text PROSE, so they map to the text columns — never to
+ * product_ingredients, which holds metaobject snapshots and would be corrupted
+ * by a string.
+ */
+const LEGACY_FIELD_TARGETS = {
+  usage_instructions: [
+    // "tuse" is a real typo in the store's data, not a mistake here. The
+    // corrected spelling is listed too, so fixing it in Shopify changes nothing.
+    'accentuate.how_to_tuse',
+    'accentuate.how_to_use'
+  ],
+  active_ingredients: ['accentuate.ingredients'],
+  short_description: [
+    // Already matched via the bare `short_description` key, which is why that
+    // column read 107 rather than the 53 the definition covers. Listed
+    // explicitly so it is intentional rather than a coincidence that could
+    // disappear if the key ever changed.
+    'accentuate.short_description'
+  ]
+};
+
+function identifyLegacyTarget(metafield) {
+  const qualified = normalizeLabel(`${metafield.namespace}.${metafield.key}`);
+  for (const [target, aliases] of Object.entries(LEGACY_FIELD_TARGETS)) {
+    if (aliases.some((alias) => normalizeLabel(alias) === qualified)) {
+      return target;
+    }
+  }
+  return null;
 }
 
 function identifyMetafieldTarget(metafield) {
@@ -211,14 +305,36 @@ function extractMetaobjectReferences(metafield) {
   return dedupeRows(references, (row) => row.id);
 }
 
+/**
+ * One column, one format: readable plain text.
+ *
+ * Shopify hands the same logical field over in three shapes, and this column was
+ * storing all three. Measured on the live catalogue, of 101 products with usage
+ * instructions, 50 held a raw rich-text JSON document, 51 held HTML with
+ * undecoded entities (`apr&egrave;s`, `d&rsquo;actifs`) and none held text a
+ * human or a model could read:
+ *
+ *   1. rich-text JSON  (a native `rich_text_field` — object, or a JSON string)
+ *   2. HTML            (the legacy Accentuate fields)
+ *   3. plain text
+ *
+ * Downstream only `flattenRichText` was applied, which parses shape 1 and
+ * returns shapes 2 and 3 untouched — so the drafting model received raw `<p>`
+ * tags and `&eacute;` for half the catalogue. Normalising here rather than at
+ * every read means the column is trustworthy for whoever comes next, and leaves
+ * the reader's own flatten as a harmless no-op.
+ */
 function scalarValue(metafield) {
-  if (typeof metafield.jsonValue === 'string') {
-    return cleanTextValue(metafield.jsonValue);
+  const source = metafield.jsonValue ?? metafield.value ?? null;
+  if (source === null) {
+    return null;
   }
-  if (metafield.jsonValue !== null && metafield.jsonValue !== undefined) {
-    return JSON.stringify(cleanJsonValue(metafield.jsonValue));
-  }
-  return cleanTextValue(metafield.value || null);
+
+  // Renders rich-text JSON (object or string) to text; any other string is
+  // returned unchanged, which is what lets the HTML case fall through.
+  const flattened = flattenRichText(source);
+  const text = /<[a-z][\s\S]*>/i.test(flattened) ? htmlToText(flattened) : flattened;
+  return cleanTextValue(text || null);
 }
 
 function arrayValue(metafield) {

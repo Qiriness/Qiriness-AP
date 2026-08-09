@@ -157,6 +157,22 @@ comment on column public.knowledge_documents.category is
 -- dimension count it was produced for, so re-running the embedder over unchanged
 -- content is a no-op. Only chunks whose parent document is approved and is not
 -- the brand-voice document ever hold a vector -- the pipeline gates on that.
+-- Accent-insensitive French text search.
+--
+-- The stock `french` config stems but keeps accents, so `retractation` finds
+-- nothing while `rétractation` does — and customers routinely type without
+-- accents. Chaining `unaccent` ahead of the stemmer fixes both directions at
+-- index and query time, as long as BOTH use this configuration.
+--
+-- Created in the public schema so a generated column can name it: the column's
+-- expression must resolve the config the same way for ever, and an unqualified
+-- name would depend on search_path.
+create text search configuration public.french_unaccent (copy = french);
+
+alter text search configuration public.french_unaccent
+  alter mapping for hword, hword_part, word
+  with unaccent, french_stem;
+
 create table public.knowledge_chunks (
   id uuid primary key default gen_random_uuid(),
   knowledge_document_id uuid not null references public.knowledge_documents(id) on delete cascade,
@@ -169,6 +185,23 @@ create table public.knowledge_chunks (
   token_count integer,
   content_hash text not null,
   embedding vector(1536),
+  -- THE LEXICAL HALF of hybrid retrieval, generated so it can never drift from
+  -- the text it indexes.
+  --
+  -- Dense embedding alone discriminates poorly on this corpus: measured over the
+  -- retrieval eval, correct answers scored 0.47-0.59 and incorrect ones
+  -- 0.46-0.50 — French support prose shares so much boilerplate that cosine has
+  -- a high floor and a narrow spread. It is worst at exactly what customers
+  -- type: a code (UKLED20), an order number, a product name.
+  --
+  -- THE SECTION HEADING IS INDEXED WITH THE TEXT, and weighted above it. The
+  -- eval showed the best-scoring chunks are those whose heading IS the customer's
+  -- question ("Je ne me souviens plus de mon mot de passe, que faire ?"), so the
+  -- heading carries more signal per word than the body.
+  search_vector tsvector generated always as (
+    setweight(to_tsvector('public.french_unaccent', coalesce(section_heading, '')), 'A') ||
+    setweight(to_tsvector('public.french_unaccent', coalesce(chunk_text, '')), 'B')
+  ) stored,
   embedding_model text,
   embedding_dimensions integer,
   embedded_input_hash text,
@@ -304,3 +337,87 @@ $$;
 
 comment on function public.match_knowledge_chunks is
   'Vector search over approved knowledge chunks for the retrieval tool. Returns cosine SIMILARITY (higher is better), not the raw <=> distance. `match_categories` is a caller-supplied list rather than the ticket subject, because which categories are worth searching is policy that changes as the library fills -- see agent/src/retrieval/retrieval-rules.mjs. A chunk holds a vector only if its parent document is approved and not brand voice, so the null check is also the approval gate.';
+
+-- ---------------------------------------------------------------- lexical search
+
+-- The lexical half of hybrid retrieval, deliberately a SEPARATE function from
+-- match_knowledge_chunks rather than a fused one.
+--
+-- Two retrievers, one fusion, and the fusion is NOT here. Reciprocal Rank Fusion
+-- is a judgement about how much to trust each retriever, and this project keeps
+-- judgement in tested JavaScript and vector maths in Postgres (see
+-- retrieval-rules.mjs). Fusing in SQL would bury a tunable weighting inside a
+-- migration where it cannot be unit-tested or argued with.
+--
+-- Returns ts_rank_cd rather than ts_rank: the cover-density variant accounts for
+-- how close the matched terms are to each other, which is what separates a chunk
+-- that actually discusses "délai de rétractation" from one that happens to
+-- mention both words paragraphs apart.
+create or replace function public.search_knowledge_chunks_text(
+  query_text text,
+  match_shop_id uuid,
+  match_categories text[] default null,
+  match_count integer default 5
+)
+returns table (
+  chunk_id uuid,
+  document_id uuid,
+  document_title text,
+  section_heading text,
+  category text,
+  chunk_text text,
+  rank double precision
+)
+language sql
+stable
+set search_path = public
+as $$
+  -- THE QUERY IS OR-ED, NOT AND-ED, and that is the whole difficulty here.
+  --
+  -- The natural choice, websearch_to_tsquery, joins every term with AND. That
+  -- is right for a search box where someone types three words, and completely
+  -- wrong for a retrieval query built from a whole customer email: a 14-word
+  -- question becomes `del & retourn & articl & bonjour & recu & ...`, which no
+  -- chunk on earth satisfies. Measured before this fix: 4 results for the single
+  -- word "rétractation", 0 for any real ticket.
+  --
+  -- So the query text is passed through the SAME configuration that built the
+  -- index, and its lexemes are OR-ed. Recall comes from the OR; precision comes
+  -- from ts_rank_cd, which rewards chunks covering more of the query with the
+  -- terms closer together — and from the A/B weighting, which puts a section
+  -- heading above body text.
+  with q as (
+    select nullif(
+      (select string_agg(lexeme, ' | ') from unnest(to_tsvector('public.french_unaccent', coalesce(query_text, '')))),
+      ''
+    )::tsquery as tsq
+  )
+  select
+    c.id,
+    d.id,
+    d.title,
+    c.section_heading,
+    c.category,
+    c.chunk_text,
+    ts_rank_cd(c.search_vector, q.tsq)::double precision
+  from public.knowledge_chunks c
+  join public.knowledge_documents d on d.id = c.knowledge_document_id
+  cross join q
+  where q.tsq is not null
+    and d.shop_id = match_shop_id
+    and d.deleted_at is null
+    -- Same approval gate as the dense side. A draft article must not become
+    -- reachable just because it is lexically searchable.
+    and d.approval_status = 'approved'
+    and (match_categories is null or c.category = any (match_categories))
+    and c.search_vector @@ q.tsq
+  order by ts_rank_cd(c.search_vector, q.tsq) desc
+  limit greatest(coalesce(match_count, 5), 1);
+$$;
+
+comment on function public.search_knowledge_chunks_text is
+  'Lexical (full-text) half of hybrid knowledge retrieval. Accent-insensitive French via the french_unaccent configuration, section headings weighted above body text, and the same approval + category gates as match_knowledge_chunks. Ranking is ts_rank_cd; fusion with the dense results happens in the agent, not here.';
+
+create index knowledge_chunks_search_vector_gin_idx
+  on public.knowledge_chunks
+  using gin (search_vector);

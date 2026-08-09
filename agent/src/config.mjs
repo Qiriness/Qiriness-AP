@@ -53,6 +53,13 @@ export function loadAgentConfig(env = loadEnv(REPO_ROOT)) {
     investigatorModel: env.AGENT_INVESTIGATOR_MODEL || 'gpt-4o',
     investigationMaxToolCalls: Number(env.AGENT_INVESTIGATION_MAX_TOOL_CALLS) || 6,
     investigationMaxTurns: Number(env.AGENT_INVESTIGATION_MAX_TURNS) || 4,
+    // Splitting an email into its separate requests is the cheap tier's kind of
+    // job — a constrained extraction with the subjects and kinds fixed by the
+    // schema, not reasoning about what to do next. Set to an empty string to
+    // turn decomposition off: the investigation then treats every ticket as one
+    // request, which is what it did before this existed.
+    decomposerModel:
+      env.AGENT_DECOMPOSER_MODEL === undefined ? 'gpt-4o-mini' : env.AGENT_DECOMPOSER_MODEL,
     // Must match what the knowledge chunks were embedded with, or cosine
     // comparison between a message and a chunk is meaningless.
     embeddingModel: env.EMBEDDING_MODEL || 'text-embedding-3-small',

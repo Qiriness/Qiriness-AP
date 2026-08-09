@@ -9,7 +9,10 @@ export function parseArgs(argv) {
     dryRun: false,
     limit: null,
     pageSize: DEFAULT_PAGE_SIZE,
-    bodyFile: null
+    bodyFile: null,
+    // Orders only. `undefined` takes the client's default retention window;
+    // `--all-orders` sets null, meaning no date bound at all.
+    orderSinceMonths: undefined
   };
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -31,6 +34,15 @@ export function parseArgs(argv) {
     } else if (arg === '--body-file') {
       args.bodyFile = argv[index + 1];
       index += 1;
+    } else if (arg.startsWith('--since-months=')) {
+      args.orderSinceMonths = Number.parseInt(arg.slice('--since-months='.length), 10);
+    } else if (arg === '--since-months') {
+      args.orderSinceMonths = Number.parseInt(argv[index + 1], 10);
+      index += 1;
+    } else if (arg === '--all-orders') {
+      // Deliberate full backfill. Note that retention still deletes anything
+      // past its window in the same pass, so this mostly costs API calls.
+      args.orderSinceMonths = null;
     }
   }
 
@@ -39,6 +51,13 @@ export function parseArgs(argv) {
   }
   if (args.limit !== null && (!Number.isInteger(args.limit) || args.limit < 1)) {
     throw new Error('--limit must be a positive integer.');
+  }
+  if (
+    args.orderSinceMonths !== undefined &&
+    args.orderSinceMonths !== null &&
+    (!Number.isInteger(args.orderSinceMonths) || args.orderSinceMonths < 1)
+  ) {
+    throw new Error('--since-months must be a positive integer (or use --all-orders).');
   }
 
   return args;

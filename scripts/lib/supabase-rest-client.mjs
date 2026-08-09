@@ -20,8 +20,39 @@ export function createSupabaseClient(config) {
  *
  * Outside Next — the sync scripts and the agent worker — the option is inert.
  */
-function supabaseFetch(url, init) {
-  return fetch(url, { ...init, cache: 'no-store' });
+// Transient failures are not exceptional at sync scale. A customers sync is
+// ~1,000 sequential requests, and this project has already lost a products sync
+// at row 30 to `fetch failed` (an IPv6 timeout to Supabase) and a verification
+// query to the same thing. Without a retry a single blip means starting over,
+// and there is no resume.
+//
+// Retried: network errors (no response at all) and 5xx/429, which are the
+// server saying "not now". NOT retried: 4xx, which is the server saying the
+// request is wrong — repeating it just fails slower.
+const RETRY_ATTEMPTS = 4;
+const RETRY_BASE_MS = 400;
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+async function supabaseFetch(url, init, attempt = 1) {
+  let response;
+  try {
+    response = await fetch(url, { ...init, cache: 'no-store' });
+  } catch (error) {
+    if (attempt >= RETRY_ATTEMPTS) {
+      throw new Error(`Supabase request failed after ${attempt} attempts: ${error.message}`);
+    }
+    // Exponential, so a brief blip costs 400ms and a longer outage backs off.
+    await sleep(RETRY_BASE_MS * 2 ** (attempt - 1));
+    return supabaseFetch(url, init, attempt + 1);
+  }
+
+  if ((response.status >= 500 || response.status === 429) && attempt < RETRY_ATTEMPTS) {
+    await sleep(RETRY_BASE_MS * 2 ** (attempt - 1));
+    return supabaseFetch(url, init, attempt + 1);
+  }
+
+  return response;
 }
 
 export async function supabaseUpsert(client, table, rows, onConflict) {

@@ -272,6 +272,139 @@ test('a case file that will not parse throws, so the runner can retry', async ()
   await assert.rejects(() => investigate({ ...PRODUCT_TICKET, category: 'other' }));
 });
 
+// --- decomposition -----------------------------------------------------------
+
+/** A registry that scopes tools by the plan, the way the real one does. */
+function buildPlanningRegistry(handlerMap) {
+  const registry = buildRegistry(handlerMap);
+  const base = registry.toolsFor;
+  registry.toolsFor = (ticket, { tasks = null } = {}) => {
+    const result = base();
+    registry.boundFor = tasks;
+    return result;
+  };
+  return registry;
+}
+
+function buildDecomposer(result) {
+  const seen = [];
+  return {
+    seen,
+    async decompose(ticket) {
+      seen.push(ticket);
+      return { entities: { order_numbers: [], products: [], codes: [] }, decomposed: true, ...result };
+    }
+  };
+}
+
+test('an out-of-scope ticket is not decomposed either', async () => {
+  // The scope check runs on the ticket first, so level 4 costs nothing at all —
+  // not an investigation, and not a decomposition call on the way to skipping one.
+  const decomposer = buildDecomposer({ tasks: [] });
+  const registry = { toolsFor: () => ({ names: [], definitions: [], handlers: new Map() }) };
+  const openai = buildOpenAI([{ content: caseFileAnswer() }]);
+  const { investigate } = createInvestigator(openai, registry, { model: 'm', decomposer });
+
+  await investigate({ ...PRODUCT_TICKET, level: 4 });
+
+  assert.equal(decomposer.seen.length, 0);
+});
+
+test('a split email runs the opening moves of BOTH its subjects', async () => {
+  // The failure decomposition exists to fix: today only the primary subject's
+  // tools are bound, so the promotion half of this email is never looked at.
+  const registry = buildPlanningRegistry({
+    [TOOL_NAMES.LOOKUP_PRODUCT]: async () => OK_RESULT,
+    [TOOL_NAMES.SEARCH_KNOWLEDGE]: async () => OK_RESULT,
+    [TOOL_NAMES.EXTRACT_PROMOTION_CODES]: async () => OK_RESULT,
+    [TOOL_NAMES.LOOKUP_CUSTOMER]: async () => OK_RESULT
+  });
+  const decomposer = buildDecomposer({
+    tasks: [
+      { question: 'Le masque convient-il aux peaux sensibles ?', category: 'product', request_kind: 'question' },
+      { question: 'Mon code est refusé', category: 'promotions', request_kind: 'problem' }
+    ]
+  });
+  const openai = buildOpenAI([{ content: caseFileAnswer() }]);
+  const { investigate } = createInvestigator(openai, registry, { model: 'm', decomposer });
+
+  await investigate(PRODUCT_TICKET);
+
+  const tools = registry.calls.map((c) => c.name);
+  assert.ok(tools.includes(TOOL_NAMES.LOOKUP_PRODUCT));
+  assert.ok(tools.includes(TOOL_NAMES.EXTRACT_PROMOTION_CODES));
+  // The registry was asked to scope by the plan, not by the ticket alone.
+  assert.equal(registry.boundFor.length, 2);
+});
+
+test('the model is told to answer every request the email contains', async () => {
+  const registry = buildPlanningRegistry({
+    [TOOL_NAMES.LOOKUP_PRODUCT]: async () => OK_RESULT,
+    [TOOL_NAMES.SEARCH_KNOWLEDGE]: async () => OK_RESULT,
+    [TOOL_NAMES.EXTRACT_PROMOTION_CODES]: async () => OK_RESULT,
+    [TOOL_NAMES.LOOKUP_CUSTOMER]: async () => OK_RESULT
+  });
+  const decomposer = buildDecomposer({
+    tasks: [
+      { question: 'Le masque convient-il ?', category: 'product', request_kind: 'question' },
+      { question: 'Mon code BIENVENUE10 est refusé', category: 'promotions', request_kind: 'problem' }
+    ]
+  });
+  const openai = buildOpenAI([{ content: caseFileAnswer() }]);
+  const { investigate } = createInvestigator(openai, registry, { model: 'm', decomposer });
+
+  await investigate(PRODUCT_TICKET);
+
+  const prompt = openai.sent[0].messages[0].content;
+  assert.match(prompt, /plusieurs demandes distinctes/);
+  assert.match(prompt, /BIENVENUE10/);
+});
+
+test('a request the agent cannot investigate is declared, not dropped', async () => {
+  // `delivery` is out of scope. The case file must say so rather than answer the
+  // product half and leave the customer's parcel question unanswered in silence.
+  const registry = buildPlanningRegistry({
+    [TOOL_NAMES.LOOKUP_PRODUCT]: async () => OK_RESULT,
+    [TOOL_NAMES.SEARCH_KNOWLEDGE]: async () => OK_RESULT
+  });
+  const decomposer = buildDecomposer({
+    tasks: [
+      { question: 'Le masque convient-il ?', category: 'product', request_kind: 'question' },
+      { question: 'Où est mon colis ?', category: 'delivery', request_kind: 'problem' }
+    ]
+  });
+  const openai = buildOpenAI([{ content: caseFileAnswer() }]);
+  const { investigate } = createInvestigator(openai, registry, { model: 'm', decomposer });
+
+  await investigate(PRODUCT_TICKET);
+
+  const prompt = openai.sent[0].messages[0].content;
+  assert.match(prompt, /Où est mon colis \?/);
+  assert.match(prompt, /needs_human/);
+});
+
+test('a single-task decomposition is investigated exactly as before', async () => {
+  // The no-regression property, end to end: same moves, same prompt shape.
+  const handlers = {
+    [TOOL_NAMES.LOOKUP_PRODUCT]: async () => OK_RESULT,
+    [TOOL_NAMES.SEARCH_KNOWLEDGE]: async () => OK_RESULT
+  };
+  const decomposer = buildDecomposer({
+    tasks: [{ question: PRODUCT_TICKET.text, category: 'product', request_kind: 'question' }]
+  });
+
+  const withDecomposer = buildPlanningRegistry(handlers);
+  const plain = buildRegistry(handlers);
+  const a = buildOpenAI([{ content: caseFileAnswer() }]);
+  const b = buildOpenAI([{ content: caseFileAnswer() }]);
+
+  await createInvestigator(a, withDecomposer, { model: 'm', decomposer }).investigate(PRODUCT_TICKET);
+  await createInvestigator(b, plain, { model: 'm' }).investigate(PRODUCT_TICKET);
+
+  assert.deepEqual(withDecomposer.calls, plain.calls);
+  assert.equal(a.sent[0].messages[0].content, b.sent[0].messages[0].content);
+});
+
 test('caveats from every tool that ran reach the prohibitions', async () => {
   const registry = buildRegistry({
     [TOOL_NAMES.EXTRACT_PROMOTION_CODES]: async () => ({ ...OK_RESULT, caveats: [] }),

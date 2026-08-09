@@ -58,7 +58,10 @@ async function main() {
     );
   }
 
-  console.log(`\n${dryRun ? 'DRY RUN — nothing written.' : 'Investigating.'} Model: ${config.investigatorModel}\n`);
+  console.log(
+    `\n${dryRun ? 'DRY RUN — nothing written.' : 'Investigating.'} Model: ${config.investigatorModel}` +
+      ` · découpage : ${config.decomposerModel || 'désactivé'}\n`
+  );
 
   const totals = await runInvestigation({
     store: investigation.store,

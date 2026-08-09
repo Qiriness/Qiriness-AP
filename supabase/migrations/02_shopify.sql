@@ -596,10 +596,25 @@ create table public.promotions (
   id uuid primary key default gen_random_uuid(),
   shop_id uuid not null references public.shops(id) on delete cascade,
   shopify_discount_node_id text not null,
-  shopify_redeem_code_id text,
   promotion_key text not null,
   title text not null,
-  code text,
+  -- ONE ROW PER DISCOUNT; the redeem codes live in here.
+  --
+  -- This was one row per CODE, which on a real store meant the same discount
+  -- duplicated up to 600 times: 324 discounts became 7,512 rows and a 22 MB
+  -- table, of which 4.4 MB was the identical rule_snapshot copied over and over.
+  --
+  -- jsonb rather than a delimited string because per-code USAGE has to survive.
+  -- 7,206 of the store's codes are single-use and 69 are already spent, and
+  -- "you have already used this code" is the promotion tool's most actionable
+  -- answer — a list of bare codes cannot carry it. A delimited string is also
+  -- unindexable for the lookup that matters (leading-wildcard LIKE) and matches
+  -- substrings: real collisions exist on this store, where "BIENVENUE" appears
+  -- inside "BIENVENUEQIRINESS" and "WRAP" inside "WRAP-V".
+  --
+  -- Shape: [{ code, usage_count, redeem_code_id }]. Empty for automatic
+  -- discounts, which have no code at all.
+  codes jsonb not null default '[]'::jsonb,
   method text not null,
   discount_type text not null,
   status text,
@@ -609,7 +624,6 @@ create table public.promotions (
   ends_at timestamptz,
   usage_limit integer,
   discount_usage_count integer,
-  code_usage_count integer,
   applies_once_per_customer boolean,
   discount_classes text[] not null default '{}',
   combines_with jsonb not null default '{}'::jsonb,
@@ -634,8 +648,8 @@ create table public.promotions (
   constraint promotions_discount_usage_count_check check (
     discount_usage_count is null or discount_usage_count >= 0
   ),
-  constraint promotions_code_usage_count_check check (
-    code_usage_count is null or code_usage_count >= 0
+  constraint promotions_codes_array_check check (
+    jsonb_typeof(codes) = 'array'
   ),
   constraint promotions_combines_with_object_check check (
     jsonb_typeof(combines_with) = 'object'
@@ -653,7 +667,13 @@ create table public.promotions (
 
 create index promotions_shop_status_idx on public.promotions (shop_id, status);
 
-create index promotions_shop_code_idx on public.promotions (shop_id, code);
+-- GIN over the codes array: "which discount owns the code the customer typed?"
+-- is the promotion tool's entry point, and a btree cannot answer it once the
+-- codes live inside a jsonb array. Containment (`codes @> '[{"code":"X"}]'`)
+-- matches the WHOLE value, so it cannot return "BIENVENUEQIRINESS" for a
+-- customer who typed "BIENVENUE" — which a substring search over a delimited
+-- string would have done on this very store.
+create index promotions_shop_codes_gin_idx on public.promotions using gin (codes jsonb_path_ops);
 
 create index promotions_shop_method_idx on public.promotions (shop_id, method);
 
@@ -684,10 +704,10 @@ comment on table public.promotions is
   'Shopify discount and promotion snapshots for support workflows. Shopify remains the source of truth.';
 
 comment on column public.promotions.promotion_key is
-  'Stable local unique key: redeem-code ID for code discounts, or discount node ID for automatic discounts.';
+  'Stable local unique key. One row per DISCOUNT, so this is the discount node ID.';
 
-comment on column public.promotions.code is
-  'Customer-entered promotion code when method = code. Automatic discounts store null.';
+comment on column public.promotions.codes is
+  'Redeem codes for this discount: [{ code, usage_count, redeem_code_id }]. Empty for automatic discounts. One row per discount rather than per code — a bulk-generated discount carries up to 600 codes, and duplicating the whole snapshot per code cost 7,512 rows and 22 MB where 324 rows do. usage_count is per CODE and is load-bearing: most codes here are single-use, so "this code has already been used" is the answer to the commonest promotions question, and a bare list of codes could not carry it.';
 
 comment on column public.promotions.applies_once_per_customer is
   'Shopify appliesOncePerCustomer flag for manual filtering of customer-specific or one-use promotions.';

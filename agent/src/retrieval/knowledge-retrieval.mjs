@@ -4,6 +4,7 @@ import { toVectorLiteral } from '../../../scripts/lib/embeddings/embed-chunks.mj
 import {
   buildRetrievalQuery,
   categoriesToSearch,
+  fuseByRank,
   summariseMatches
 } from './retrieval-rules.mjs';
 
@@ -22,6 +23,11 @@ import {
 // and body the categoriser already reads; the sender's address and name are
 // never part of the query.
 
+// Candidates pulled from EACH retriever before fusion. Wide enough that a
+// lexical hit is very likely to carry a cosine score too; small enough that the
+// round trip stays cheap on a library of dozens.
+const FUSION_POOL = 20;
+
 export function createKnowledgeRetrieval({ supabase, embeddingsClient, logger }) {
   /**
    * @param ticket  { subject, body, category }
@@ -36,34 +42,60 @@ export function createKnowledgeRetrieval({ supabase, embeddingsClient, logger })
     const [vector] = await embeddingsClient.embed([query]);
     const categories = categoriesToSearch(ticket.category);
 
-    const rows = await supabaseRpc(supabase, 'match_knowledge_chunks', {
-      query_embedding: toVectorLiteral(vector),
-      match_shop_id: shopId,
-      match_categories: categories,
-      // Over-fetch a little: the bands below decide what is worth showing, and
-      // asking for exactly `limit` would let one weak chunk crowd out a better
-      // one that sorted just behind it.
-      match_count: Math.max(limit * 2, 5),
-      min_similarity: minSimilarity
+    // HYBRID: two retrievers over the same corpus, run in parallel.
+    //
+    // The dense pool is deliberately much wider than `limit` and its floor is
+    // dropped to zero. Fusion needs candidates, not answers — and more
+    // practically, a chunk the lexical side finds must also carry a cosine score
+    // or it cannot be banded, so the dense list has to be generous enough to
+    // cover it. The bands still do the cutting afterwards.
+    const [denseRows, lexicalRows] = await Promise.all([
+      supabaseRpc(supabase, 'match_knowledge_chunks', {
+        query_embedding: toVectorLiteral(vector),
+        match_shop_id: shopId,
+        match_categories: categories,
+        match_count: FUSION_POOL,
+        min_similarity: 0
+      }),
+      supabaseRpc(supabase, 'search_knowledge_chunks_text', {
+        query_text: query,
+        match_shop_id: shopId,
+        match_categories: categories,
+        match_count: FUSION_POOL
+      })
+    ]);
+
+    const shape = (row, similarity) => ({
+      chunkId: row.chunk_id,
+      documentId: row.document_id,
+      title: row.document_title,
+      heading: row.section_heading,
+      category: row.category,
+      text: row.chunk_text,
+      similarity
     });
 
+    const fused = fuseByRank([
+      denseRows.map((row) => shape(row, row.similarity)),
+      // No cosine score of its own — fusion carries one over when the dense side
+      // found the same chunk, and leaves it null when it did not.
+      lexicalRows.map((row) => shape(row, null))
+    ]);
+
+    // The floor is applied here rather than in the dense query, so it still
+    // governs what a model may see while fusion gets the candidates it needs.
     const result = summariseMatches(
-      rows.map((row) => ({
-        chunkId: row.chunk_id,
-        documentId: row.document_id,
-        title: row.document_title,
-        heading: row.section_heading,
-        category: row.category,
-        text: row.chunk_text,
-        similarity: row.similarity
-      })),
+      fused.filter((c) => c.similarity === null || c.similarity >= minSimilarity),
       { limit }
     );
 
     logger?.info?.('knowledge.retrieve', {
       category: ticket.category,
       searched: categories,
-      candidates: rows.length,
+      dense: denseRows.length,
+      lexical: lexicalRows.length,
+      // How often the two retrievers agreed — the signal fusion exists to use.
+      agreed: fused.filter((c) => c.foundBy > 1).length,
       verdict: result.verdict,
       best: result.bestSimilarity === null ? null : Number(result.bestSimilarity.toFixed(3))
     });

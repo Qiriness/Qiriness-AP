@@ -2,6 +2,7 @@ import { dedupeRows } from './lib/collections.mjs';
 import { pathToFileURL } from 'node:url';
 import { parseArgs, loadConfig, loadEnv } from './lib/sync-config.mjs';
 import {
+  PRODUCT_METAFIELD_PAGE_SIZE,
   createShopifyClient,
   fetchMetaobjectsByType,
   fetchProductPage,
@@ -11,6 +12,7 @@ import {
 import { createSupabaseClient, supabaseUpsert } from './lib/supabase-rest-client.mjs';
 import { syncShop } from './lib/shop-sync-service.mjs';
 import { mapMetaobject, mapProduct } from './lib/shopify-sync-mappers.mjs';
+import { metafieldsTruncated } from './lib/shopify-product-mapper.mjs';
 
 if (isDirectRun()) {
   main().catch((error) => {
@@ -102,6 +104,20 @@ export async function syncProducts({ args, shopify, supabase, shopId, syncedAt }
   do {
     const page = await fetchProductPage(shopify, args, cursor);
     const products = page.products.nodes;
+
+    // Never let a truncated metafield list pass as "this product has no
+    // merchandising". The support tools cannot tell the two apart, and a silent
+    // truncation once emptied usage instructions and FAQs on 112 of 116
+    // products without a single line of output.
+    const truncated = products.filter(metafieldsTruncated);
+    if (truncated.length > 0) {
+      console.warn(
+        `WARNING: ${truncated.length} product(s) have more than ${PRODUCT_METAFIELD_PAGE_SIZE} metafields, ` +
+          'so some were not read. Raise PRODUCT_METAFIELD_PAGE_SIZE. Affected: ' +
+          truncated.map((p) => p.title).slice(0, 5).join(', ')
+      );
+    }
+
     const mapped = products.map((product) => mapProduct(product, shopId, syncedAt));
     const productRows = mapped.map((item) => item.productRow);
     const metaobjectRows = dedupeRows(

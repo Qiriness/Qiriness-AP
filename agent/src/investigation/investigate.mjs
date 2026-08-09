@@ -1,10 +1,12 @@
 import { CASE_FILE_SCHEMA, MISSING_FIELDS, buildCaseFile } from './case-file.mjs';
 import {
-  TOOL_NAMES,
-  escalationTriggers,
-  openingMoves,
-  requiredEvidence
-} from './investigation-rules.mjs';
+  normaliseDecomposition,
+  planBudget,
+  planEvidence,
+  planMoves,
+  planTasks
+} from './decompose-rules.mjs';
+import { TOOL_NAMES, escalationTriggers } from './investigation-rules.mjs';
 
 // The investigation agent: a categorised ticket in, a case file out.
 //
@@ -67,6 +69,7 @@ export function createInvestigator(
     maxToolCalls = DEFAULT_MAX_TOOL_CALLS,
     maxTurns = DEFAULT_MAX_TURNS,
     maxBodyChars = 3000,
+    decomposer = null,
     logger
   } = {}
 ) {
@@ -76,11 +79,11 @@ export function createInvestigator(
    * @returns the case file (see case-file.mjs)
    */
   async function investigate(ticket) {
-    const { definitions, handlers } = registry.toolsFor(ticket);
-
-    // Out of scope: no tools means no investigation, and no model call either.
-    // Level 4, `contact`, cosmetovigilance and legal_privacy all land here.
-    if (definitions.length === 0) {
+    // The scope check runs on the TICKET, before any decomposition, so an email
+    // that is out of scope costs nothing — not a decomposition call, not a
+    // registry binding. Decomposing first would spend a model call on level 4
+    // and on `contact`, the two things this branch exists to keep cheap.
+    if (registry.toolsFor(ticket).definitions.length === 0) {
       return buildCaseFile({
         answer: {
           verdict: 'needs_human',
@@ -97,15 +100,36 @@ export function createInvestigator(
       });
     }
 
-    const run = createRun({ ticket, handlers, maxToolCalls, logger });
+    // What this email is actually asking — one task normally, more when it
+    // carries separate requests whose answers live in different tools.
+    const decomposition = decomposer
+      ? await decomposer.decompose(ticket)
+      : normaliseDecomposition(null, ticket);
+    const plan = planTasks(ticket, decomposition.tasks);
+
+    if (plan.tasks.length > 1 || plan.skipped.length > 0) {
+      logger?.info?.('investigation.decomposed', {
+        ticketId: ticket.id,
+        tasks: plan.tasks.map((t) => `${t.category}/${t.request_kind}`),
+        skipped: plan.skipped.map((t) => t.category)
+      });
+    }
+
+    const { definitions, handlers } = registry.toolsFor(ticket, { tasks: plan.tasks });
+    const run = createRun({
+      ticket,
+      handlers,
+      maxToolCalls: planBudget(maxToolCalls, plan.tasks.length),
+      logger
+    });
 
     // Deterministic evidence first: the model starts from what is always needed
-    // for this subject rather than spending a turn asking for it.
-    for (const move of openingMoves(ticket)) {
+    // for these subjects rather than spending a turn asking for it.
+    for (const move of planMoves(ticket, plan.tasks, decomposition.entities)) {
       await run.call(move.tool, move.args);
     }
 
-    const messages = [{ role: 'user', content: buildUserPrompt(ticket, run, maxBodyChars) }];
+    const messages = [{ role: 'user', content: buildUserPrompt(ticket, plan, run, maxBodyChars) }];
 
     // Turns before the last are the model's chance to ask for more. The final
     // turn is reserved: `tool_choice: 'none'` plus the schema, so a run always
@@ -266,8 +290,8 @@ function createRun({ ticket, handlers, maxToolCalls, logger }) {
   };
 }
 
-function buildUserPrompt(ticket, run, maxBodyChars) {
-  const checklist = requiredEvidence(ticket.category)
+function buildUserPrompt(ticket, plan, run, maxBodyChars) {
+  const checklist = planEvidence(plan.tasks)
     .map((item) => `- ${item.label}`)
     .join('\n');
   const gathered = run.render();
@@ -279,6 +303,27 @@ function buildUserPrompt(ticket, run, maxBodyChars) {
     'Message du client :',
     String(ticket.text || '').slice(0, maxBodyChars) || '(vide)'
   ];
+
+  // Stated only when the email really was split. On an ordinary one-question
+  // ticket the list would just restate the message the model has above it.
+  if (plan.tasks.length > 1) {
+    lines.push(
+      '',
+      'Ce message contient plusieurs demandes distinctes. Traite-les TOUTES :',
+      plan.tasks.map((task, i) => `${i + 1}. ${task.question} (${task.category})`).join('\n')
+    );
+  }
+
+  if (plan.skipped.length > 0) {
+    // Not silently dropped: a case file that omits half an email without saying
+    // so is worse than one that never split it.
+    lines.push(
+      '',
+      "Une partie de la demande ne peut pas être traitée ici, faute d'outils : " +
+        plan.skipped.map((task) => task.question).join(' / ') +
+        ". Signale-le dans unverified et conclus needs_human pour cette partie."
+    );
+  }
 
   if (checklist) {
     lines.push('', 'Ce qu’un dossier complet établit pour ce type de demande :', checklist);

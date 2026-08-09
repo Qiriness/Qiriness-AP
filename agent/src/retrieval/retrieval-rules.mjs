@@ -20,15 +20,31 @@
  * unfinished library, not of the design, and it will stop being true as content
  * is written — which is exactly why the policy is here and not in the migration.
  *
- * `brand_story` is never searched: it is drafting voice, not an answer to
- * anything, and the embedding pipeline does not vectorise it at all.
+ * `brand_story` IS searched, and the rule that excluded it was wrong twice over.
+ *
+ * It claimed the embedding pipeline never vectorised those chunks. It does — the
+ * gate is `core_topic !== 'brand'`, not `category !== 'brand_story'` — so the
+ * exclusion left real vectors permanently unreachable rather than never written.
+ *
+ * And it conflated two different things. The concern was always the drafting
+ * VOICE: the singleton `core_topic = 'brand'` row, which is always-included
+ * context for how the agent should sound and is correctly never chunked or
+ * embedded. The `brand_story` CATEGORY is ordinary knowledge — "La Marque",
+ * "Inspiration Hanbang", "Le Rituel Qi" — and a customer asking what Hanbang is,
+ * or what makes the brand different, is asking a question those articles answer.
+ * Brand voice now has its own mechanism (voice_profile + the brand workspace),
+ * so the category no longer has to stand in for it.
+ *
+ * Searched for every subject, like `faq`, because a brand question arrives under
+ * whatever subject the categoriser gave the surrounding email.
  */
 export function categoriesToSearch(subject) {
   const category = String(subject || '').trim();
-  if (!category || category === 'faq') {
-    return ['faq'];
+  const always = ['faq', 'brand_story'];
+  if (!category || always.includes(category)) {
+    return always;
   }
-  return [category, 'faq'];
+  return [category, ...always];
 }
 
 /**
@@ -46,8 +62,35 @@ export function categoriesToSearch(subject) {
  * they are here — one place, named — so raising them later is a one-line change
  * rather than a hunt through the code.
  */
+// RE-DERIVED 2026-08-09 against the labelled retrieval set (npm run eval:diagnose),
+// on a 61-chunk library, replacing numbers calibrated on 11 chunks of a single
+// document. Measured distribution of what retrieval actually returned:
+//
+//              min    p25    median   p75    max
+//   RELEVANT   0.298  0.409  0.517    0.601  0.662
+//   IRRELEVANT 0.171  0.382  0.424    0.458  0.578
+//
+// ANSWERABLE 0.60 SURVIVED UNCHANGED and is well placed: no irrelevant chunk in
+// the whole run reached it. Anything clearing 0.60 has been correct so far, so
+// the bar is precise — just conservative, which is the intended direction.
+//
+// WEAK MOVED 0.45 -> 0.50, because 0.45 sat below the irrelevant p75: a quarter
+// of the noise cleared the floor and reached a model. Swept against the set:
+//
+//   0.45  recall 100%  restraint 30%  band 44%
+//   0.50  recall 100%  restraint 70%  band 69%   <- chosen
+//   0.55  recall  83%  restraint 90%  band 81%
+//
+// 0.55 scores better on restraint but loses a real answer, and the library is
+// still general — mostly policies and brand pages, with no delivery or
+// promotions article yet. Relevant scores should RISE as specific content is
+// written, so 0.55 is worth revisiting then; giving up recall today would be
+// paying for a problem that content is about to fix.
+//
+// SIXTEEN CASES IS A SMALL SET. These are the best numbers the evidence
+// supports, not a settled answer — re-run the sweep whenever the library grows.
 export const ANSWERABLE = 0.6;
-export const WEAK = 0.45;
+export const WEAK = 0.5;
 
 export function classifyMatch(similarity) {
   if (!Number.isFinite(similarity) || similarity < WEAK) {
@@ -80,6 +123,59 @@ export function summariseMatches(matches, { limit = 3 } = {}) {
     // noise, and passing it as context invites the model to answer from it.
     chunks: ranked.filter((m) => classifyMatch(m.similarity) !== 'none').slice(0, limit)
   };
+}
+
+/**
+ * Reciprocal Rank Fusion of the dense and lexical result lists.
+ *
+ * RANK-BASED, NOT SCORE-BASED, and that is the whole reason to use it. Cosine
+ * similarity lands in 0.45-0.60 on this corpus while ts_rank_cd runs from 0.1 to
+ * 4.6 — two scales with no common meaning, and normalising them would invent a
+ * relationship that does not exist. RRF only asks "how near the top of its own
+ * list did each retriever put this?", which is comparable by construction.
+ *
+ * `k` damps the advantage of rank 1 over rank 2. The conventional 60 is a very
+ * flat curve; 20 is used here because the lists are short (a handful of chunks
+ * from a library of dozens, not thousands) and being first should count for more
+ * than it would over a web-scale index.
+ *
+ * A chunk found by BOTH retrievers accumulates both contributions, which is the
+ * property that matters: agreement between two different notions of relevance is
+ * the strongest signal either can give.
+ */
+export const RRF_K = 20;
+
+export function fuseByRank(lists, { k = RRF_K, limit = 10 } = {}) {
+  const byId = new Map();
+
+  for (const list of lists) {
+    (list || []).forEach((item, index) => {
+      const id = item?.chunkId;
+      if (!id) return;
+      const existing = byId.get(id);
+      const contribution = 1 / (k + index + 1);
+      if (existing) {
+        existing.fusedScore += contribution;
+        existing.foundBy += 1;
+        // Keep whichever copy carries a similarity: the bands are still read off
+        // the dense score, and the lexical row has none.
+        if (existing.similarity === null && Number.isFinite(item.similarity)) {
+          existing.similarity = item.similarity;
+        }
+      } else {
+        byId.set(id, {
+          ...item,
+          similarity: Number.isFinite(item.similarity) ? item.similarity : null,
+          fusedScore: contribution,
+          foundBy: 1
+        });
+      }
+    });
+  }
+
+  return [...byId.values()]
+    .sort((a, b) => b.fusedScore - a.fusedScore || (b.similarity ?? 0) - (a.similarity ?? 0))
+    .slice(0, limit);
 }
 
 /**

@@ -27,6 +27,9 @@ create extension if not exists pgcrypto;
 
 create extension if not exists vector;
 
+-- Lexical search over French support content (see 03_knowledge.sql).
+create extension if not exists unaccent;
+
 create or replace function public.set_updated_at()
 returns trigger
 language plpgsql

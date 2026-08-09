@@ -16,11 +16,40 @@ import { evaluateEligibility, findPromotionByCode, normaliseCode } from './promo
 // promotions was meant.
 
 const COLUMNS = [
-  'id', 'code', 'title', 'method', 'discount_type', 'status',
+  'id', 'codes', 'title', 'method', 'discount_type', 'status',
   'summary', 'short_summary', 'starts_at', 'ends_at',
-  'usage_limit', 'discount_usage_count', 'code_usage_count',
+  'usage_limit', 'discount_usage_count',
   'applies_once_per_customer', 'discount_classes', 'combines_with', 'rule_snapshot'
 ].join(',');
+
+/**
+ * A stored discount row -> one candidate per redeem code.
+ *
+ * THE SEAM. `promotions` holds one row per DISCOUNT with its codes in a jsonb
+ * array, because a bulk discount carries up to 600 of them and duplicating the
+ * whole snapshot per code cost 7,512 rows and 22 MB where 324 rows do. But
+ * `promotion-rules.mjs` is pure, well covered, and reasons about ONE code at a
+ * time — `p.code`, `p.code_usage_count`.
+ *
+ * Flattening here rather than teaching every rule about the array keeps the
+ * storage decision out of the logic entirely: the rules see exactly the shape
+ * they always saw, and only this function knows the difference. An automatic
+ * discount has no codes, so it yields itself once with a null code.
+ */
+function flattenPromotion(row) {
+  const codes = Array.isArray(row.codes) ? row.codes : [];
+  if (codes.length === 0) {
+    return [{ ...row, code: null, code_usage_count: null }];
+  }
+  return codes.map((entry) => ({
+    ...row,
+    code: entry?.code ?? null,
+    // Per code, and load-bearing: most of this store's codes are single-use, so
+    // this is what makes "you have already used this code" answerable.
+    code_usage_count: entry?.usage_count ?? null,
+    shopify_redeem_code_id: entry?.redeem_code_id ?? null
+  }));
+}
 
 /** Codes as customers write them: uppercase runs of letters/digits, 4+ long. */
 const CODE_PATTERN = /\b[A-Z][A-Z0-9]{3,}\b/g;
@@ -35,7 +64,7 @@ export function createPromotionLookup({ supabase, shopId, logger }) {
         'promotions',
         { shop_id: shopId, deleted_at: { operator: 'is', value: 'null' } },
         COLUMNS
-      );
+      ).then((rows) => rows.flatMap(flattenPromotion));
     }
     return promotionsPromise;
   }

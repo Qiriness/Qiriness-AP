@@ -13,7 +13,8 @@ about data that does not exist here yet.
 item is only removed once someone has actually run the check and seen the
 result. Expect this list to grow as more is built against the dev store.
 
-Last updated: 2026-08-05 (item 9 added: the investigation agent).
+Last updated: 2026-08-09 (item 4 re-derived against the labelled retrieval set;
+item 4b added: task decomposition).
 
 ---
 
@@ -102,17 +103,55 @@ requirement and confirm `rule_snapshot.minimum_requirement` populates as
 `{ scope: 'all' }`. The `segments` and `customers` branches are untested against
 real data.
 
-## 4. Knowledge retrieval bands are calibrated on 11 chunks
+## 4. Knowledge retrieval bands are calibrated on a small, general library
 
-`ANSWERABLE = 0.60` / `WEAK = 0.45` come from measurements against a library
-that is one approved document — 11 `faq` chunks. Measured on 12 real
-product/account tickets: 1 answerable, 8 weak, 3 nothing, with most weak matches
-landing on a single generic "conseils sur les produits" chunk.
+**Re-derived 2026-08-09** against the labelled retrieval set on 61 chunks:
+`ANSWERABLE = 0.60` unchanged (no irrelevant chunk in the run reached it),
+`WEAK` moved 0.45 → 0.50 because 0.45 sat below the irrelevant p75 of 0.458.
+That is a real improvement on real measurement — restraint 30% → 70%, band
+accuracy 44% → 69%, at no recall cost — but it rests on **16 labelled cases**,
+and the library is still general: mostly policies and brand pages, with no
+delivery or promotions article yet.
 
-**To validate:** after real product content is written and approved, re-run the
-same 12 tickets and check that (a) the bands still separate correct from
-incorrect matches, and (b) the generic FAQ chunk stops dominating. The bands are
-provisional and named constants precisely so they can be moved.
+**To validate:** after specific content is written and approved, re-run
+`npm run eval:retrieval` and `npm run eval:diagnose` and re-do the threshold
+sweep. The expectation to test is that *relevant* scores rise as content gets
+specific, which would make `WEAK = 0.55` (restraint 90%, band accuracy 81%)
+affordable — today it costs a real answer. The bands are named constants in
+`retrieval-rules.mjs` precisely so they can be moved.
+
+**Two known gaps in the harness itself**, both making entity accuracy read worse
+than the pipeline is: the eval measures the raw code regex rather than the real
+`extractCodes` (which filters against the live store list), so precision reads
+11%; and product-entity matching returns 0/0, which has not been diagnosed.
+
+## 4b. Task decomposition has never seen a real email
+
+Built and unit-tested 2026-08-09; **not run against live mail.** 35 tests cover
+the pure rules, the model call and the wiring, including a no-regression check
+that a single-task ticket produces identical opening moves and an identical
+prompt to the pre-decomposition path. But no real ticket has been split yet.
+
+**To validate:** `cd agent && npm run investigate:dry-run -- --show` over tickets
+that are known to contain two requests, and check three things:
+
+1. **Is it splitting mail that should not be split?** The prompt says one request
+   is the normal case, and the gate (`≥320 chars`, `≥2 ?`, or a second subject
+   from the categoriser) fires on plenty of ordinary long emails. Count how often
+   a decomposition returns 2+ tasks and read a sample. Over-splitting spends
+   model calls and dilutes the case file; it is the failure to watch for.
+2. **Are the sub-questions faithful?** A paraphrase that drops the product name
+   is handed to the IDF-weighted matcher and matches worse than the raw text
+   would have. The verbatim `entities.products` are prepended to defend against
+   exactly this — check they are actually being extracted.
+3. **Does the skipped-task declaration reach the case file?** A `delivery` half
+   of a `product` email must appear under `## Non vérifié` or force
+   `needs_human`, not vanish. This is prose in the prompt, not a code guarantee,
+   so it is the part most likely to be ignored by the model.
+
+**And the cost has not been measured.** Decomposition adds one `gpt-4o-mini`
+call to every long ticket. Check OpenAI usage before the worker runs unattended,
+alongside item 9's unmeasured investigation cost.
 
 ## 5. Product tools run against a thin catalogue
 

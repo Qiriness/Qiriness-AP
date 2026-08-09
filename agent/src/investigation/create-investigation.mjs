@@ -5,6 +5,7 @@ import { createKnowledgeRetrieval } from '../retrieval/knowledge-retrieval.mjs';
 import { createProductLookup } from '../retrieval/product-lookup.mjs';
 import { createPromotionLookup } from '../retrieval/promotion-lookup.mjs';
 
+import { createDecomposer } from './decompose.mjs';
 import { createInvestigator } from './investigate.mjs';
 import { createInvestigationStore } from './investigation-runner.mjs';
 import { createToolRegistry } from './tool-registry.mjs';
@@ -54,6 +55,11 @@ export function createInvestigationStack({
     model: config.investigatorModel,
     maxToolCalls: config.investigationMaxToolCalls,
     maxTurns: config.investigationMaxTurns,
+    // Absent when the model is unset: the investigation then treats every ticket
+    // as a single request, exactly as it did before decomposition existed.
+    decomposer: config.decomposerModel
+      ? createDecomposer(openai, { model: config.decomposerModel })
+      : null,
     logger
   });
 

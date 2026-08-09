@@ -82,12 +82,25 @@ export function cleanTextValue(value) {
     return value;
   }
 
-  const normalized = value.replace(/\u00A0/g, ' ').normalize('NFC');
+  // Invisible formatting characters are stripped alongside the non-breaking
+  // space, because they are hints to a renderer and noise to everything else.
+  // The soft hyphen (U+00AD) is the one that actually bites: it sits INSIDE a
+  // word to mark where it may break across lines, so `CENTELLA ASIA<shy>TICA`
+  // looks correct to a human and matches nothing. Product matching is
+  // TITLE-only, so one of these in a product name silently defeats the lookup.
+  // Zero-width characters ride along for the same reason.
+  const normalized = value
+    .replace(/\u00A0/g, ' ')
+    .replace(/[\u00AD\u200B\u200C\u200D\uFEFF]/g, '')
+    .normalize('NFC');
   if (!MOJIBAKE_MARKER_PATTERN.test(normalized)) {
     return normalized;
   }
 
-  return repairUtf8DecodedAsWindows1252(normalized).replace(/\u00A0/g, ' ').normalize('NFC');
+  return repairUtf8DecodedAsWindows1252(normalized)
+    .replace(/\u00A0/g, ' ')
+    .replace(/[\u00AD\u200B\u200C\u200D\uFEFF]/g, '')
+    .normalize('NFC');
 }
 
 function repairUtf8DecodedAsWindows1252(value) {

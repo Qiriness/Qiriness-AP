@@ -1,3 +1,9 @@
 .env.local
+# Any variant — .env.local.dev, .env.local.prod, backups while switching
+# projects. The bare name above does not cover a suffixed copy, and a
+# credentials file one character away from being committed is not worth the
+# risk.
+.env.local*
+.env*.local
 node_modules/
 npm-debug.log*

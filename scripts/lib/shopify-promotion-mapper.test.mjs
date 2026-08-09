@@ -12,10 +12,11 @@ test('mapPromotionRows maps code discounts with appliesOncePerCustomer true', ()
   }), 'shop-id', '2026-07-20T00:00:00Z');
 
   assert.equal(row.method, 'code');
-  assert.equal(row.code, 'WELCOME10');
+  assert.deepEqual(row.codes.map((c) => c.code), ['WELCOME10']);
   assert.equal(row.status, 'ACTIVE');
   assert.equal(row.applies_once_per_customer, true);
-  assert.equal(row.code_usage_count, 2);
+  // usage is PER CODE now, and lives inside the array.
+  assert.equal(row.codes[0].usage_count, 2);
 });
 
 test('mapPromotionRows maps code discounts with appliesOncePerCustomer false', () => {
@@ -37,7 +38,7 @@ test('mapPromotionRows keeps expired promotions', () => {
   }), 'shop-id', '2026-07-20T00:00:00Z');
 
   assert.equal(row.status, 'EXPIRED');
-  assert.equal(row.code, 'OLD10');
+  assert.deepEqual(row.codes.map((c) => c.code), ['OLD10']);
 });
 
 test('mapPromotionRows maps automatic discounts with null code', () => {
@@ -64,7 +65,8 @@ test('mapPromotionRows maps automatic discounts with null code', () => {
   }, 'shop-id', '2026-07-20T00:00:00Z');
 
   assert.equal(row.method, 'automatic');
-  assert.equal(row.code, null);
+  // An automatic discount has no code at all — an empty array, never null.
+  assert.deepEqual(row.codes, []);
   assert.equal(row.applies_once_per_customer, null);
   assert.equal(row.promotion_key, 'gid://shopify/DiscountNode/2');
 });
@@ -79,7 +81,7 @@ test('mapPromotionRows maps app/referral-style codes without filtering', () => {
   }), 'shop-id', '2026-07-20T00:00:00Z');
 
   assert.equal(row.title, 'Judge.me Referrals (Order #2330) Friend Discount');
-  assert.equal(row.code, 'JM-GQ0XYOY');
+  assert.deepEqual(row.codes.map((c) => c.code), ['JM-GQ0XYOY']);
   assert.equal(row.source_app_name, 'Judge.me');
   assert.equal(row.status, 'EXPIRED');
 });
@@ -129,3 +131,41 @@ function codeDiscountNode({
     }
   };
 }
+
+test('a bulk discount is ONE row carrying all its codes', () => {
+  // The change this table exists to make: 600 codes used to mean 600 rows, each
+  // repeating the same title, dates and rule_snapshot.
+  const node = codeDiscountNode({ appliesOncePerCustomer: true, status: 'ACTIVE', code: 'X' });
+  node.discount.codes.nodes = Array.from({ length: 600 }, (_, i) => ({
+    id: `gid://shopify/DiscountRedeemCode/${i}`,
+    code: `BULK${i}`,
+    asyncUsageCount: i === 7 ? 1 : 0,
+    createdBy: { title: 'Shopify' }
+  }));
+
+  const rows = mapPromotionRows(node, 'shop-id', '2026-07-20T00:00:00Z');
+
+  assert.equal(rows.length, 1, 'one row per discount, not per code');
+  assert.equal(rows[0].codes.length, 600);
+  // The one thing that genuinely varies per code survives.
+  assert.equal(rows[0].codes.find((c) => c.code === 'BULK7').usage_count, 1);
+  assert.equal(rows[0].codes.find((c) => c.code === 'BULK8').usage_count, 0);
+});
+
+test('the raw payload samples codes rather than mirroring all 600', () => {
+  // Otherwise the duplication just moves into the largest jsonb on the row.
+  const node = codeDiscountNode({ appliesOncePerCustomer: true, status: 'ACTIVE', code: 'X' });
+  node.discount.codes.nodes = Array.from({ length: 600 }, (_, i) => ({
+    id: `gid://shopify/DiscountRedeemCode/${i}`, code: `BULK${i}`, asyncUsageCount: 0, createdBy: null
+  }));
+
+  const [row] = mapPromotionRows(node, 'shop-id', '2026-07-20T00:00:00Z');
+  assert.ok(row.raw_shopify_payload.redeemCodes.length <= 5);
+  assert.equal(row.raw_shopify_payload.redeemCodeCount, 600, 'but the true count is still recorded');
+});
+
+test('promotion_key is the discount, so a re-sync updates rather than duplicates', () => {
+  const node = codeDiscountNode({ appliesOncePerCustomer: true, status: 'ACTIVE', code: 'A' });
+  const [row] = mapPromotionRows(node, 'shop-id', '2026-07-20T00:00:00Z');
+  assert.equal(row.promotion_key, 'gid://shopify/DiscountNode/1');
+});

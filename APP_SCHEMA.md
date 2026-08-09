@@ -96,6 +96,7 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |   |   |                        # promotion-{rules,lookup} · abandoned-checkout ·
 |   |   |                        # customer-{context,lookup}
 |   |   |-- investigation/       # case-file (THE output contract) · investigation-rules ·
+|   |   |                        # decompose{,-rules} (split an email into tasks) ·
 |   |   |                        # tool-registry · investigate (bounded loop) ·
 |   |   |                        # investigation-runner · create-investigation
 |   |   |-- resolution/          # customer-resolution-runner · order-number-parser ·
@@ -215,7 +216,7 @@ Run `npm run ingest:once` or `npm start` from `agent/`. One poll runs every pass
 | 7 | flush gate decisions (with body on a block) to `spam_audit` | `ingestion/spam-audit.mjs` |
 | 8 | **Customer resolution** — needs no category, order number or LLM key | `resolution/customer-resolution-runner.mjs` |
 | 9 | **Categorisation** (LLM) — 25/poll, oldest first, selects on the pending flag | `pipeline/categorise-runner.mjs` |
-| 10 | **Investigation** (LLM + tools) — 6 tool calls, 4 turns, `ENABLED_SUBJECTS` only | `investigation/investigation-runner.mjs` |
+| 10 | **Investigation** (LLM + tools) — decompose (only if long / 2 subjects / 2 `?`), then 6 tool calls +2 per extra task, 4 turns, `ENABLED_SUBJECTS` only | `investigation/investigation-runner.mjs` |
 | 11 | **Order resolution** then **order context** | `resolution/order-*-runner.mjs` |
 | 12 | **Forwarding** — `contact` kind + a configured address; needs `Mail.Send` | `routing/forward-runner.mjs` |
 | 13 | **Auto-close** — 21d idle, level 4 exempt; last so it sees this poll's timestamps | `lifecycle/auto-close.mjs` |
