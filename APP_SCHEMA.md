@@ -71,6 +71,8 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |       |-- hash.mjs collections.mjs html-to-text.mjs text-cleaning.mjs
 |       |-- quoted-reply.mjs             # strips reply chains
 |       |-- shopify-rich-text.mjs cluster-messages.mjs message-audience.mjs
+|       |-- sender-patterns.mjs           # email/domain matching, shared by the
+|       |                                 # blocklist and the sender directory
 |       |-- compliance-audit.mjs shopify-compliance-webhooks.mjs
 |       |-- support-taxonomy.mjs         # THE vocabulary: 14 subjects · 4 kinds ·
 |       |                                # level + team derivation · signal enums
@@ -88,6 +90,8 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |   |   |-- ingestion/           # graph-client · graph-message-mapper · contact-form ·
 |   |   |                        # delta-poller · ticket-writer · message-embedder ·
 |   |   |                        # spam-gate + blocklist-store + spam-classifier ·
+|   |   |                        # sender-directory (who a sender is: context for
+|   |   |                        # the case file, filter for the demand report) ·
 |   |   |                        # spam-audit (rows, body cap/clock, retention purge) ·
 |   |   |                        # spam-body-backfill
 |   |   |-- pipeline/            # categorise (classify-only) · categorise-runner
@@ -147,6 +151,7 @@ Never auto-synced — every row is an explicit import or a hand-written article.
 | `ticket_messages` | one per Graph message. Envelope, cleaned `body_text`, sanitised payload, `embedding vector(1536)` |
 | `ticket_investigations` | **the case file**: `established` / `unverified` / `missing` / `do_not_claim` (four separate columns), `handoff`, `context_ref`, `dropped_claims`, `evidence_gaps` (what the ticket required vs what was obtained — diagnostic, does not move the verdict). `unique(shop_id, trigger_message_id)` |
 | `email_blocklist` | per-shop sender email/domain rules + hit counts |
+| `sender_directory` | per-shop sender email/domain → `label` (internal, contractor, logistics, courier, retailer, distributor, supplier, partner, other) + free-text `note`. Read into the case file as context and by `cluster:tickets` to tell customer demand from our own mail. Replaces `INTERNAL_EMAIL_DOMAINS`. Rows are exceptions; an unlisted sender is a consumer |
 | `spam_audit` | one row per gate decision. `outcome`, `decided_by`, `reason`, `label`, `model`, `failed_open`, sender, subject, and on a block `body_text` + `body_captured_at` + `body_expires_at` |
 | `category_forwarding` | per-category address book. A null address is the off switch |
 | `ticket_forwards` | attempt ledger, `unique(ticket_message_id)`, `sent`/`failed` + attempt counter |
@@ -169,7 +174,7 @@ Never auto-synced — every row is an explicit import or a hand-written article.
 | `01_foundation.sql` | extensions, `set_updated_at()`, `shops`, `integration_events`, `privacy_requests`, `data_access_events` | — |
 | `02_shopify.sql` | `is_valid_product_faqs()`, `customers`, `orders`, `products`, `shopify_metaobjects`, `promotions`, `shopify_content_sources` | 01 |
 | `03_knowledge.sql` | `knowledge_documents`, `knowledge_chunks`, `match_knowledge_chunks()` | 01 |
-| `04_support.sql` | `tickets`, `ticket_messages`, `email_blocklist`, `spam_audit`, `ticket_investigations`, `category_forwarding`, `ticket_forwards`, `categorisation_review` | 01, 02 |
+| `04_support.sql` | `tickets`, `ticket_messages`, `email_blocklist`, `sender_directory`, `spam_audit`, `ticket_investigations`, `category_forwarding`, `ticket_forwards`, `categorisation_review` | 01, 02 |
 
 `_shared.test.mjs` holds the cross-file invariants (no data statements, RLS on every table, every table documented, nothing referenced before it is created); each file has a sibling test for its own contents. 110 tests.
 
@@ -231,7 +236,7 @@ From `agent/`. Every pass has a standalone runner, most with `:dry-run`.
 
 | Command | Does |
 | --- | --- |
-| `ingest:once` / `start` | one poll / the loop |
+| `ingest:once` / `start` | one poll / the loop. Supports `--limit=N`; with `--stop-after=categorise`, that limit applies to both Graph ingestion and the categorisation batch |
 | `ingest:reset` | clear the delta cursor |
 | `blocklist:add` | add a blocklist rule |
 | `spam:backfill[:dry-run] -- --limit=N` | re-read dropped mail from Graph to fill `spam_audit` bodies |

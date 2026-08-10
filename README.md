@@ -55,7 +55,7 @@ Pending: dashboard auth, ORM/DB client for app reads (scripts use `pg` + a Supab
 
 ### Agent worker (`agent/`)
 
-`cd agent && npm install`, then `npm run ingest:once` for a single pass or `npm start` to poll. Every pipeline stage also has a standalone CLI, most with a `:dry-run` twin — see `APP_SCHEMA.md` § Agent CLIs.
+`cd agent && npm install`, then `npm run ingest:once` for a single pass or `npm start` to poll. For a backlog review pass that stores and categorises mail without investigation or forwarding, run `npm run ingest:once -- --limit=500 --stop-after=categorise`. Every pipeline stage also has a standalone CLI, most with a `:dry-run` twin — see `APP_SCHEMA.md` § Agent CLIs.
 
 ## Current state
 

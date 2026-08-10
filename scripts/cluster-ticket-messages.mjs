@@ -8,7 +8,12 @@ import {
   parseVector,
   cosine
 } from './lib/cluster-messages.mjs';
-import { partitionByAudience, resolveInternalDomains } from './lib/message-audience.mjs';
+import { partitionBy } from './lib/message-audience.mjs';
+import {
+  createSenderDirectoryStore,
+  emptySenderDirectory
+} from '../agent/src/ingestion/sender-directory.mjs';
+import { resolveShopId } from '../agent/src/lib/shop.mjs';
 
 // Turns the embedded support inbox into a ranked list of recurring topics, per
 // subject — a decision aid for "what should the knowledge library cover first?"
@@ -72,24 +77,32 @@ async function main() {
 
   const config = loadConfig(loadEnv());
   const supabase = createSupabaseClient(config);
-  const internalDomains = resolveInternalDomains({
-    supportMailbox: config.supportMailbox,
-    extra: config.internalEmailDomains
+  const shopId = await resolveShopId(supabase, config.shopDomain);
+
+  // WHO COUNTS AS A CUSTOMER comes from sender_directory, not from
+  // INTERNAL_EMAIL_DOMAINS. The env var could not express the distinction this
+  // report needs — Deret is operational noise, Nocibé is a customer who happens
+  // to be a shop — and, having lived in a file rather than the database, it did
+  // not survive a project move: 43 internal messages were ranked as customer
+  // demand until somebody noticed. See 04_support.sql.
+  const senderDirectory = await createSenderDirectoryStore(supabase).load(shopId, {
+    supportMailbox: config.supportMailbox
   });
 
-  if (internalDomains.length === 0 && options.audience !== 'all') {
+  if (senderDirectory.size === 0 && options.audience !== 'all') {
     console.log(
-      'Warning: no internal domains resolved (SUPPORT_MAILBOX unset), so our own\n' +
-        'mail cannot be told from customer mail. Reporting on every sender.\n'
+      'Warning: sender_directory is empty and SUPPORT_MAILBOX is unset, so our own\n' +
+        'mail cannot be told from customer mail. Reporting on every sender — the\n' +
+        'writing order below will rank internal threads as customer demand.\n'
     );
   }
 
-  await report({ supabase, options, internalDomains });
+  await report({ supabase, options, senderDirectory });
 }
 
-export async function report({ supabase, options, internalDomains = [] }) {
+export async function report({ supabase, options, senderDirectory = emptySenderDirectory }) {
   const loaded = await loadInboundMessages(supabase, options.subject);
-  const { customer, internal } = partitionByAudience(loaded, internalDomains);
+  const { customer, internal } = partitionBy(loaded, (from) => senderDirectory.isNonDemand(from));
   const messages =
     options.audience === 'all' ? loaded : options.audience === 'internal' ? internal : customer;
 

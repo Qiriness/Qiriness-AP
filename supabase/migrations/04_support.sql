@@ -6,7 +6,8 @@
 -- ORDER WITHIN THIS FILE IS A DEPENDENCY CHAIN: tickets -> ticket_messages ->
 -- (email_blocklist -> spam_audit) -> ticket_investigations -> category_forwarding
 -- -> ticket_forwards. Nothing here may be reordered without checking the foreign
--- keys.
+-- keys. `sender_directory` sits outside that chain (it references only shops) and
+-- is filed beside email_blocklist because it shares its matching.
 --
 -- SPAM NEVER BECOMES A TICKET. Both gates drop mail before the first insert, so
 -- `spam_audit` is the only trace a blocked email leaves and is what makes a
@@ -463,6 +464,91 @@ comment on column public.email_blocklist.pattern is
 
 comment on column public.email_blocklist.hit_count is
   'Number of inbound messages this rule has blocked. Bumped by the ingestion worker; last_hit_at records the most recent block.';
+
+-- ---------------------------------------------------------------- sender_directory
+
+-- ============================================================================
+-- WHO IS WRITING TO US — the sender reference table
+--
+-- Same shape as email_blocklist above (per-shop email-or-domain patterns matched
+-- against the inbound sender), and deliberately so: that matching is already
+-- built, already tested, and already handles subdomains. This table asks the
+-- other question. The blocklist decides whether mail is stored at all; this one
+-- says what the sender IS, for mail that passed.
+--
+-- WHY IT IS A TABLE AND NOT CONFIG. It replaces INTERNAL_EMAIL_DOMAINS, an env
+-- var, and the reason is a measured failure rather than a preference. Moving to
+-- a new Supabase project carried the data across and left the env behind, so 43
+-- inbound messages from our own second domain were counted as customer demand —
+-- the clustering report that decides which knowledge article to write next
+-- ranked an internal reorder thread sixth. A domain list is a business fact
+-- about who we work with; it belongs with the business data, and it travels.
+--
+-- LABELS ARE CONTEXT, NOT BEHAVIOUR. They exist so an agent in doubt can ask
+-- "who is this?" and get an answer — read into the case file deterministically
+-- before the model is asked anything, never as a tool call, because a sender is
+-- something we always know and a tool call is a round trip to learn it.
+--
+-- Exactly one pass branches on them, and it is a report rather than a customer
+-- outcome: the clustering script drops non-demand labels so the writing order
+-- reflects customers. Nothing here should ever gate a reply — a `retailer` is a
+-- real correspondent asking real questions, just not consumer ones.
+--
+-- ROWS ARE EXCEPTIONS. Absence means an ordinary consumer, so this stays a
+-- dozen rows a person maintains, never a directory of every gmail address.
+create table public.sender_directory (
+  id uuid primary key default gen_random_uuid(),
+  shop_id uuid not null references public.shops(id) on delete cascade,
+
+  pattern_type text not null,
+  pattern text not null,
+
+  -- Constrained rather than free text, because code compares against these
+  -- values: an unconstrained column would let "Internal" and "internal" mean
+  -- the same thing to a person and different things to the clustering filter.
+  -- Adding a label is a deliberate migration, which is the right cost when a
+  -- pass reads it.
+  label text not null,
+
+  -- Free text for whoever reads the ticket, human or model: "3PL warehouse --
+  -- parcel disputes are settled here, not with the courier". Optional, and NOT
+  -- a second taxonomy: nothing branches on it, it is carried into the case file
+  -- verbatim as the context a colleague would have given out loud.
+  note text,
+
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+
+  constraint sender_directory_shop_pattern_unique unique (shop_id, pattern_type, pattern),
+  constraint sender_directory_pattern_type_check check (pattern_type in ('email', 'domain')),
+  constraint sender_directory_label_check check (
+    label in (
+      'internal', 'contractor', 'logistics', 'courier',
+      'retailer', 'distributor', 'supplier', 'partner', 'other'
+    )
+  )
+);
+
+create index sender_directory_shop_pattern_idx on public.sender_directory (shop_id, pattern_type, pattern);
+
+create trigger sender_directory_set_updated_at
+before update on public.sender_directory
+for each row
+execute function public.set_updated_at();
+
+alter table public.sender_directory enable row level security;
+
+comment on table public.sender_directory is
+  'Who a sender is to us, by email address or domain. Read as context (into the investigation case file) and by the clustering report to tell customer demand from our own mail. Replaces the INTERNAL_EMAIL_DOMAINS env var, which did not survive a project move. Rows are exceptions -- an unlisted sender is an ordinary consumer.';
+
+comment on column public.sender_directory.pattern_type is
+  'email (exact sender address) or domain (sender domain). Matched exactly like email_blocklist, subdomains included: a domain rule for deret.fr also matches mail.deret.fr.';
+
+comment on column public.sender_directory.label is
+  'What this sender is to us. internal and contractor are us; logistics and courier are operational counterparties; retailer, distributor, supplier and partner are commercial ones whose mail is real demand, just not consumer demand.';
+
+comment on column public.sender_directory.note is
+  'Optional free text carried verbatim into the case file, for the context a colleague would give out loud. Nothing branches on it.';
 
 -- ---------------------------------------------------------------- spam_audit
 

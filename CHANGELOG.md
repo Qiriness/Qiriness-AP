@@ -10,6 +10,11 @@ Three sibling files carry the other halves, and this one deliberately does not d
 
 ---
 
+## Agent worker staged ingestion (2026-08-09)
+
+- **Backlog ingestion can now stop after categorisation.** `npm run ingest:once -- --limit=500 --stop-after=categorise` runs ingestion, customer resolution and categorisation, then deliberately skips investigation, order resolution, context assembly, forwarding and auto-close. Retention still runs. The same `--limit` now caps the categorisation batch too, so the intended 500-message review run does not stop after the normal 25-ticket daemon batch. A bad stage name fails closed and logs the reason; the worker error paths on this route now use the logger-safe `error` field instead of the reserved `message` field.
+- **The staged backlog run has now been executed against the real mailbox.** Command: `node .\src\index.mjs --once --limit=500 --stop-after=categorise` from `agent/`, completed 2026-08-09. Result: 451 messages ingested, 214 tickets created, 451 message embeddings written, 25 blocklisted spam drops, 24 LLM spam/irrelevant drops, 175 spam audit decisions flushed, and the Graph limit was reached. Customer resolution ran before categorisation. Categorisation labelled 203 tickets, skipped 11 outbound-only/unclassifiable tickets, and had 0 failures / 0 fallbacks. The staged stop held: no investigation, order resolution, context assembly, forwarding, or auto-close pass ran.
+
 ## Dashboard
 
 - **Agent Setup** (`/agent-setup`) — two-pane knowledge workflow: article library with search, status filters, a 6-slot core-topic checklist and category grouping; a workspace editor with Shopify page/policy import, resync, save/approve/delete, and a dedicated brand-voice workspace. Full state and a11y coverage. "Optimize" is still a local placeholder with no AI behind it.

@@ -20,17 +20,43 @@ const clauseFor = (name) => {
   return clause;
 };
 
-test('creates exactly the eight tables it documents', () => {
+test('creates exactly the nine tables it documents', () => {
   assert.deepEqual(tablesIn(sql).sort(), [
     'categorisation_review',
     'category_forwarding',
     'email_blocklist',
+    'sender_directory',
     'spam_audit',
     'ticket_forwards',
     'ticket_investigations',
     'ticket_messages',
     'tickets'
   ]);
+});
+
+test('sender_directory matches the blocklist pattern shape and constrains its labels', () => {
+  // Same two pattern types as email_blocklist, because the same matcher reads both.
+  assert.deepEqual(literalsIn(clauseFor('sender_directory_pattern_type_check')).sort(), [
+    'domain',
+    'email'
+  ]);
+  // Constrained on purpose: the clustering filter compares against these strings,
+  // so a free-text column would let a typo silently stop excluding a domain.
+  assert.deepEqual(literalsIn(clauseFor('sender_directory_label_check')).sort(), [
+    'contractor',
+    'courier',
+    'distributor',
+    'internal',
+    'logistics',
+    'other',
+    'partner',
+    'retailer',
+    'supplier'
+  ]);
+  // One row per (shop, type, pattern): re-seeding must update, never duplicate.
+  assert.match(sql, /constraint sender_directory_shop_pattern_unique unique \(shop_id, pattern_type, pattern\)/);
+  // `note` is context, not classification — it must stay nullable and unconstrained.
+  assert.ok(!columnCheck(sql, 'sender_directory', 'note'));
 });
 
 test('the internal dependency chain is in creation order', () => {

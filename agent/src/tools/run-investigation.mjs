@@ -7,6 +7,7 @@ import { toDraftingPrompt, toHumanBrief } from '../investigation/case-file.mjs';
 import { summariseNeeds } from '../investigation/evidence-rules.mjs';
 import { createInvestigationStack } from '../investigation/create-investigation.mjs';
 import { runInvestigation } from '../investigation/investigation-runner.mjs';
+import { createSenderDirectoryStore } from '../ingestion/sender-directory.mjs';
 
 // Runs the investigation pass on its own.
 //
@@ -51,6 +52,7 @@ async function main() {
   const supabase = createSupabaseClient(config);
   const shopId = await resolveShopId(supabase, config.shopDomain);
   const investigation = createInvestigationStack({ supabase, shopId, config, logger });
+  const senderDirectoryStore = createSenderDirectoryStore(supabase);
 
   if (backfill) {
     const queued = await investigation.store.raiseForCategorised(shopId, { dryRun });
@@ -83,6 +85,11 @@ async function main() {
     logger,
     dryRun,
     limit,
+    // The same directory the worker loads, so a dry run reproduces what the
+    // worker would have shown the model rather than a context-free version of it.
+    senderDirectory: await senderDirectoryStore.load(shopId, {
+      supportMailbox: config.graph.mailbox
+    }),
     onResult: ({ ticket, caseFile, level }) => {
       const needs = summariseNeeds(caseFile.evidenceGaps);
       totalNeeds.declared += needs.declared;

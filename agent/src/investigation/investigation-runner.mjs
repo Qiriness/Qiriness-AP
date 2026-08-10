@@ -6,6 +6,8 @@ import {
   supabaseUpsert
 } from '../../../scripts/lib/supabase-rest-client.mjs';
 
+import { emptySenderDirectory } from '../ingestion/sender-directory.mjs';
+
 import { summariseNeeds } from './evidence-rules.mjs';
 import { ENABLED_SUBJECTS, isInvestigable } from './investigation-rules.mjs';
 
@@ -39,7 +41,10 @@ export async function runInvestigation({
   logger,
   limit = DEFAULT_BATCH_LIMIT,
   dryRun = false,
-  onResult
+  onResult,
+  // Loaded once per poll by the caller and shared across tickets: it is a small
+  // map, and rebuilding it per ticket would turn a lookup back into a query.
+  senderDirectory = emptySenderDirectory
 } = {}) {
   const counts = {
     considered: 0,
@@ -75,7 +80,7 @@ export async function runInvestigation({
 
     let caseFile;
     try {
-      caseFile = await investigate(buildInput(ticket, messages));
+      caseFile = await investigate(buildInput(ticket, messages, senderDirectory));
     } catch (error) {
       await handleFailure({ store, ticket, error, counts, logger, dryRun });
       continue;
@@ -175,7 +180,16 @@ async function handleFailure({ store, ticket, error, counts, logger, dryRun }) {
  * written), the latest says where the customer stands now. The middle of a long
  * thread rarely changes either.
  */
-function buildInput(ticket, messages) {
+/**
+ * @param senderDirectory  optional; `emptySenderDirectory` behaviour when absent.
+ *
+ * WHY THE LOOKUP HAPPENS HERE and not as a tool the model can call: the sender is
+ * already in hand on every ticket, and one indexed map lookup cannot fail. A tool
+ * call would spend a round trip — and a slot of the six-call budget — asking a
+ * question that was already answered, and the model would only ask when it
+ * thought to.
+ */
+function buildInput(ticket, messages, senderDirectory) {
   const first = messages[0];
   const latest = messages.length > 1 ? messages[messages.length - 1] : null;
   const text = [first?.body_text, latest?.body_text]
@@ -193,6 +207,10 @@ function buildInput(ticket, messages) {
     customer_id: ticket.customer_id,
     requester_email_hash: ticket.requester_email_hash,
     shopify_order_number: ticket.shopify_order_number,
+    // What this sender is to us, or null for an ordinary consumer. THE ADDRESS
+    // IS NOT CARRIED — only the label, the note and the pattern that matched,
+    // which is a company domain rather than personal data.
+    sender: senderDirectory?.lookup(first?.from_email) ?? null,
     // The bundle the order-context pass already assembled and stored. Read, not
     // re-derived: a second derivation of the same order would be a second,
     // divergent account of it.
@@ -252,7 +270,10 @@ export function createInvestigationStore(supabase) {
           direction: 'inbound',
           deleted_at: { operator: 'is', value: 'null' }
         },
-        'id,subject,body_text,received_at',
+        // `from_email` is read for the sender-directory lookup only. It is never
+        // put in a prompt or a case file — the label it resolves to is (see
+        // buildInput).
+        'id,subject,body_text,received_at,from_email',
         { order: 'received_at.asc', limit }
       );
     },

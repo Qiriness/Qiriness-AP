@@ -15,7 +15,7 @@ result. Expect this list to grow as more is built against the dev store.
 
 Last updated: 2026-08-09 (item 4 re-derived against the labelled retrieval set;
 items 4b/4c/4d added: task decomposition, evidence needs step 2, and the
-vocabulary review).
+vocabulary review. Staged backlog ingestion item closed after the real run.)
 
 ---
 

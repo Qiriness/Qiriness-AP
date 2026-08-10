@@ -73,10 +73,22 @@ export function isInternalSender(fromEmail, internalDomains) {
  * -library one.
  */
 export function partitionByAudience(messages, internalDomains, key = 'from_email') {
+  return partitionBy(messages, (from) => isInternalSender(from, internalDomains), key);
+}
+
+/**
+ * The same split, driven by a predicate rather than a domain list.
+ *
+ * Exists because `sender_directory` answers this question better than a domain
+ * list can: it knows that Deret is operational and Nocibé is a customer, which
+ * one flat list of "ours" cannot express. The domain-list form above is kept for
+ * the forwarding pass, whose question really is just "is this us?".
+ */
+export function partitionBy(messages, isInternal, key = 'from_email') {
   const customer = [];
   const internal = [];
   for (const message of messages) {
-    (isInternalSender(message[key], internalDomains) ? internal : customer).push(message);
+    (isInternal(message[key]) ? internal : customer).push(message);
   }
   return { customer, internal };
 }

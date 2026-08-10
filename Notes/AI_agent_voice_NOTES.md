@@ -24,3 +24,5 @@ Need to do some tests on agents, embedding efficieny and retreival etc. Checj ho
 Optimising the agent, scope tools and control state with langraph
 
 Draft modification, memory, so that it can remeber and improve over time. 
+
+Check the evidence-rules.mjs:30

@@ -509,3 +509,56 @@ test('caveats from every tool that ran reach the prohibitions', async () => {
   assert.equal(caseFile.doNotClaim.length, 3);
   assert.ok(caseFile.doNotClaim.some((l) => l.includes('panier actuel')));
 });
+
+/** The user prompt of the first turn — what the model was actually shown. */
+const firstPrompt = (openai) => openai.sent[0].messages.find((m) => m.role === 'user').content;
+
+test('a listed sender is described to the model, without its address', async () => {
+  const openai = buildOpenAI([{ content: caseFileAnswer() }]);
+  const registry = buildRegistry({ [TOOL_NAMES.knowledge]: async () => OK_RESULT });
+  const { investigate } = createInvestigator(openai, registry, { model: 'm' });
+
+  await investigate({
+    ...PRODUCT_TICKET,
+    sender: {
+      label: 'retailer',
+      note: 'Retail partner. Reorders arrive as attachments.',
+      pattern: 'nocibe.fr',
+      matched: 'domain'
+    }
+  });
+
+  const prompt = firstPrompt(openai);
+  assert.match(prompt, /Expéditeur : un revendeur/);
+  // The domain is business context and belongs here; the note comes with it.
+  assert.match(prompt, /nocibe\.fr/);
+  assert.match(prompt, /Reorders arrive as attachments/);
+});
+
+test('an exact-address match names the label but never the address', async () => {
+  const openai = buildOpenAI([{ content: caseFileAnswer() }]);
+  const registry = buildRegistry({ [TOOL_NAMES.knowledge]: async () => OK_RESULT });
+  const { investigate } = createInvestigator(openai, registry, { model: 'm' });
+
+  await investigate({
+    ...PRODUCT_TICKET,
+    sender: { label: 'contractor', note: null, pattern: 'patrick@dopweb.com', matched: 'email' }
+  });
+
+  const prompt = firstPrompt(openai);
+  assert.match(prompt, /Expéditeur : un prestataire/);
+  // An exact match means the pattern IS a person's address — it must not be echoed.
+  assert.ok(!prompt.includes('patrick@dopweb.com'), 'the sender address must never reach the prompt');
+});
+
+test('an ordinary consumer gets no sender line at all', async () => {
+  const openai = buildOpenAI([{ content: caseFileAnswer() }]);
+  const registry = buildRegistry({ [TOOL_NAMES.knowledge]: async () => OK_RESULT });
+  const { investigate } = createInvestigator(openai, registry, { model: 'm' });
+
+  await investigate({ ...PRODUCT_TICKET, sender: null });
+
+  // Restating "ordinary customer" on every ticket would train the reader to skip
+  // the line on the ticket where it matters.
+  assert.ok(!firstPrompt(openai).includes('Expéditeur'));
+});

@@ -306,11 +306,22 @@ function buildUserPrompt(ticket, plan, run, maxBodyChars) {
 
   const lines = [
     `Sujet : ${ticket.subject || '(aucun)'}`,
-    `Catégorie : ${ticket.category} / ${ticket.request_kind} — niveau ${ticket.level ?? '?'}`,
+    `Catégorie : ${ticket.category} / ${ticket.request_kind} — niveau ${ticket.level ?? '?'}`
+  ];
+
+  // Stated only when the sender is somebody in particular. On the ordinary
+  // consumer ticket there is no line at all, rather than a line saying "client
+  // ordinaire" — a fact restated on every ticket stops being read.
+  const sender = describeSender(ticket.sender);
+  if (sender) {
+    lines.push(`Expéditeur : ${sender}`);
+  }
+
+  lines.push(
     '',
     'Message du client :',
     String(ticket.text || '').slice(0, maxBodyChars) || '(vide)'
-  ];
+  );
 
   // Stated only when the email really was split. On an ordinary one-question
   // ticket the list would just restate the message the model has above it.
@@ -350,6 +361,35 @@ function buildUserPrompt(ticket, plan, run, maxBodyChars) {
   );
 
   return lines.join('\n');
+}
+
+/**
+ * Who the sender is, in the prompt's own language.
+ *
+ * The domain is named because it is the useful half — "revendeur (nocibe.fr)"
+ * tells the model this is a retail partner's reorder desk, not a shopper. The
+ * ADDRESS never appears: a company domain is a business fact, the person at it
+ * is not, and the case file this feeds is stored and re-read.
+ */
+const SENDER_LABELS = {
+  internal: 'un collègue, pas un client',
+  contractor: 'un prestataire qui travaille pour nous, pas un client',
+  logistics: 'notre logisticien — courrier opérationnel',
+  courier: 'un transporteur — courrier opérationnel',
+  retailer: 'un revendeur (client professionnel, pas un consommateur)',
+  distributor: 'un distributeur (client professionnel, pas un consommateur)',
+  supplier: 'un fournisseur',
+  partner: 'un partenaire commercial',
+  other: 'un correspondant connu, ni consommateur ni collègue'
+};
+
+function describeSender(sender) {
+  const description = SENDER_LABELS[sender?.label];
+  if (!description) {
+    return null;
+  }
+  const domain = sender.matched === 'domain' ? ` (${sender.pattern})` : '';
+  return sender.note ? `${description}${domain} — ${sender.note}` : `${description}${domain}`;
 }
 
 /**

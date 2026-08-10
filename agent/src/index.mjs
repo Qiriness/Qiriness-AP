@@ -10,6 +10,7 @@ import { resolveShopId } from './lib/shop.mjs';
 import { createGraphClient } from './ingestion/graph-client.mjs';
 import { createSupabaseTicketStore } from './ingestion/ticket-writer.mjs';
 import { createBlocklistStore } from './ingestion/blocklist-store.mjs';
+import { createSenderDirectoryStore } from './ingestion/sender-directory.mjs';
 import { createSupabaseSpamAuditStore } from './ingestion/spam-audit.mjs';
 import { runDeltaPoll, createSupabaseCursorStore } from './ingestion/delta-poller.mjs';
 import { createOpenAIClient } from './llm/openai-client.mjs';
@@ -32,9 +33,45 @@ import { runForwarding } from './routing/forward-runner.mjs';
 import { createAutoCloseStore, runAutoClose } from './lifecycle/auto-close.mjs';
 import { resolveInternalDomains } from '../../scripts/lib/message-audience.mjs';
 
+// The passes a poll runs, in the order it runs them. `--stop-after=<stage>` ends
+// the poll once that stage has run.
+//
+// SAFE TO STOP ANYWHERE, and that is a property of the pipeline rather than of
+// this flag: no pass acts on "what the poll just wrote", each drains a queue
+// defined by ticket state — `needs_categorisation`, `needs_investigation`, a null
+// order number, an unsent forward. A stage skipped today simply finds more work
+// waiting the next time it runs, with no backfill to remember and nothing to
+// re-ingest.
+//
+// WHY IT EXISTS. Ingesting a backlog and reading it are one job; spending the
+// mid tier on evidence gathering — and, at the far end, actually forwarding mail
+// to colleagues — is another. Building the knowledge library wants the first
+// without the second, over hundreds of old emails that nobody is waiting on:
+//
+//   npm run ingest:once -- --limit=500 --stop-after=categorise
+//
+// In that staged shape, `--limit` is shared by ingestion and categorisation:
+// otherwise a "500" run would ingest 500 messages but label only the normal
+// 25-ticket daemon batch, leaving the review corpus half-built.
+const PIPELINE_STAGES = [
+  'ingest',
+  'customers',
+  'categorise',
+  'investigate',
+  'orders',
+  'context',
+  'forward',
+  'close'
+];
+
 async function main() {
   const runOnce = process.argv.includes('--once');
   const limit = parseLimit(process.argv);
+  const stopAfter = parseStopAfter(process.argv);
+  // Ordered membership, not a set: stopping AFTER a stage runs every stage up to
+  // and including it.
+  const runsThrough = (stage) =>
+    stopAfter === null || PIPELINE_STAGES.indexOf(stage) <= PIPELINE_STAGES.indexOf(stopAfter);
   const config = loadAgentConfig();
   assertGraphConfig(config);
 
@@ -45,6 +82,7 @@ async function main() {
   const store = createSupabaseTicketStore(supabase);
   const cursorStore = createSupabaseCursorStore(supabase);
   const blocklistStore = createBlocklistStore(supabase);
+  const senderDirectoryStore = createSenderDirectoryStore(supabase);
   // Records why each email passed or failed the gate, and on a drop the body
   // too. Dropped mail is never written anywhere else, so this is its only trace
   // — and a subject line alone cannot tell a reviewer whether the drop was
@@ -90,6 +128,15 @@ async function main() {
     logger.warn('ingest.llm_filter_disabled', { reason: 'OPENAI_API_KEY not set' });
   }
 
+  if (stopAfter) {
+    // Stated up front, not inferred from which passes are missing from the log:
+    // a staged run leaves work deliberately undone, and that has to be visible.
+    logger.info('ingest.staged_run', {
+      stopAfter,
+      skipping: PIPELINE_STAGES.slice(PIPELINE_STAGES.indexOf(stopAfter) + 1)
+    });
+  }
+
   const poll = async () => {
     // Load the blocklist each poll so newly added rules take effect immediately.
     const { gate, rulesById } = await blocklistStore.loadGate(shopId);
@@ -114,27 +161,30 @@ async function main() {
     // the address it was opened with — so it does not wait on a category, an
     // order number, or an OpenAI key. Everything after it can then read
     // `customer_id` instead of resolving the sender again.
-    const customers = await runCustomerResolution({
-      store: customerResolutionStore,
-      lookup: customerLookup,
-      shopId,
-      logger,
-      // The support mailbox is not a customer, whatever the customers table says.
-      excludedEmails: [config.graph.mailbox].filter(Boolean)
-    });
-    if (customers.considered > 0) {
-      logger.info('customer.resolution.pass', { shopId, ...customers });
+    if (runsThrough('customers')) {
+      const customers = await runCustomerResolution({
+        store: customerResolutionStore,
+        lookup: customerLookup,
+        shopId,
+        logger,
+        // The support mailbox is not a customer, whatever the customers table says.
+        excludedEmails: [config.graph.mailbox].filter(Boolean)
+      });
+      if (customers.considered > 0) {
+        logger.info('customer.resolution.pass', { shopId, ...customers });
+      }
     }
 
-    // Categorisation runs after ingestion but selects on "category is null"
-    // rather than on what this poll just wrote, so a ticket missed by a crashed
-    // or key-less earlier poll is caught up here.
-    if (categorise) {
+    // Categorisation runs after ingestion but selects on the pending flag rather
+    // than on what this poll just wrote, so a ticket missed by a crashed or
+    // key-less earlier poll is caught up here.
+    if (categorise && runsThrough('categorise')) {
       const categorised = await runCategorisation({
         store: categoriserStore,
         categorise,
         shopId,
-        logger
+        logger,
+        limit
       });
       logger.info('categorise.pass', { shopId, ...categorised });
     }
@@ -144,12 +194,17 @@ async function main() {
     // it clears its own flag, so a ticket labelled seconds ago gets its case
     // file now rather than a poll later. It is also the only pass that chooses
     // what to do, which is why its budget lives in config rather than in code.
-    if (investigation) {
+    if (investigation && runsThrough('investigate')) {
       const investigated = await runInvestigation({
         store: investigation.store,
         investigate: investigation.investigate,
         shopId,
-        logger
+        logger,
+        // Reloaded each poll, like the blocklist, so a sender labelled in the
+        // table a minute ago is context on this poll rather than the next.
+        senderDirectory: await senderDirectoryStore.load(shopId, {
+          supportMailbox: config.graph.mailbox
+        })
       });
       if (investigated.considered > 0) {
         logger.info('investigate.pass', { shopId, ...investigated });
@@ -160,25 +215,29 @@ async function main() {
     // it needs nothing from the categoriser, but every order tool downstream
     // needs its output, and it must not delay the forwarding pass behind a
     // Shopify-shaped failure.
-    const resolved = await runOrderResolution({
-      store: orderResolutionStore,
-      shopId,
-      logger
-    });
-    if (resolved.considered > 0) {
-      logger.info('order.resolution.pass', { shopId, ...resolved });
+    if (runsThrough('orders')) {
+      const resolved = await runOrderResolution({
+        store: orderResolutionStore,
+        shopId,
+        logger
+      });
+      if (resolved.considered > 0) {
+        logger.info('order.resolution.pass', { shopId, ...resolved });
+      }
     }
 
     // Context assembly consumes the resolver's output in the same poll: a
     // ticket whose order number was just confirmed gets its bundle immediately,
     // so a drafting step never has to wait a cycle for context.
-    const contexts = await runOrderContext({
-      store: orderContextStore,
-      shopId,
-      logger
-    });
-    if (contexts.considered > 0) {
-      logger.info('order.context.pass', { shopId, ...contexts });
+    if (runsThrough('context')) {
+      const contexts = await runOrderContext({
+        store: orderContextStore,
+        shopId,
+        logger
+      });
+      if (contexts.considered > 0) {
+        logger.info('order.context.pass', { shopId, ...contexts });
+      }
     }
 
     // Forwarding runs last: it reads the category and request_kind the step
@@ -186,28 +245,36 @@ async function main() {
     // on what this poll wrote, so mail that became forwardable only because an
     // address was configured today is picked up without a backfill. A no-op
     // until the address book has at least one entry.
-    const forwarded = await runForwarding({
-      store: forwardingStore,
-      graphClient,
-      shopId,
-      logger,
-      internalDomains: resolveInternalDomains({
-        supportMailbox: config.graph.mailbox,
-        extra: config.internalEmailDomains
-      })
-    });
-    if (forwarded.considered > 0) {
-      logger.info('forward.pass', { shopId, ...forwarded });
+    if (runsThrough('forward')) {
+      const forwarded = await runForwarding({
+        store: forwardingStore,
+        graphClient,
+        shopId,
+        logger,
+        internalDomains: resolveInternalDomains({
+          supportMailbox: config.graph.mailbox,
+          extra: config.internalEmailDomains
+        })
+      });
+      if (forwarded.considered > 0) {
+        logger.info('forward.pass', { shopId, ...forwarded });
+      }
     }
 
     // Auto-close runs after everything else, and last on purpose: it must see
     // the timestamps this poll just advanced, so a thread that received a reply
     // seconds ago is never retired by the same pass that ingested it.
-    const autoClosed = await runAutoClose({ store: autoCloseStore, shopId, logger });
-    if (autoClosed.closed > 0 || autoClosed.failed > 0) {
-      logger.info('lifecycle.auto_close.pass', { shopId, ...autoClosed });
+    if (runsThrough('close')) {
+      const autoClosed = await runAutoClose({ store: autoCloseStore, shopId, logger });
+      if (autoClosed.closed > 0 || autoClosed.failed > 0) {
+        logger.info('lifecycle.auto_close.pass', { shopId, ...autoClosed });
+      }
     }
 
+    // Retention runs whatever `--stop-after` says. Deleting personal data on
+    // time is an obligation, not a pipeline stage, and a partial run is no
+    // reason to leave a body past its expiry.
+    //
     // Retention for the one piece of personal data this worker keeps outside
     // tickets: the body of a dropped email. Nulled past its expiry, decision row
     // untouched. Best-effort and last — a purge failure must not fail a poll
@@ -218,7 +285,7 @@ async function main() {
         logger.info('ingest.spam_audit_bodies_purged', { shopId, purged });
       }
     } catch (error) {
-      logger.warn('ingest.spam_audit_purge_failed', { shopId, message: error.message });
+      logger.warn('ingest.spam_audit_purge_failed', { shopId, error: error.message });
     }
   };
 
@@ -243,12 +310,43 @@ async function main() {
       await poll();
     } catch (error) {
       // Keep the loop alive across transient Graph/Supabase errors.
-      logger.error('ingest.poll_failed', { message: error.message });
+      // `error`, not `message`: the logger reserves `message` for the event name
+      // and strips it from caller fields, so this detail was never reaching the
+      // log at all (see lib/logger.mjs).
+      logger.error('ingest.poll_failed', { error: error.message });
     }
     await sleep(config.pollIntervalMs, () => stopping);
   }
 
   logger.info('ingest.stopped', {});
+}
+
+/**
+ * `--stop-after=<stage>` / `--stop-after <stage>`, or null for the whole pipeline.
+ *
+ * An unknown stage THROWS rather than defaulting to "run everything". A typo
+ * (`--stop-after=categorize`) would otherwise silently run the very passes the
+ * flag was reached for, which on a backlog means a model bill and, worse,
+ * forwarded mail — the two things the flag exists to prevent.
+ */
+function parseStopAfter(argv) {
+  const eq = argv.find((arg) => arg.startsWith('--stop-after='));
+  const value = eq
+    ? eq.slice('--stop-after='.length)
+    : argv.indexOf('--stop-after') >= 0
+      ? argv[argv.indexOf('--stop-after') + 1]
+      : null;
+
+  if (value === null || value === undefined) {
+    return null;
+  }
+  const stage = String(value).trim().toLowerCase();
+  if (!PIPELINE_STAGES.includes(stage)) {
+    throw new Error(
+      `Unknown --stop-after stage "${value}". Expected one of: ${PIPELINE_STAGES.join(', ')}.`
+    );
+  }
+  return stage;
 }
 
 function parseLimit(argv) {
@@ -279,6 +377,6 @@ function sleep(ms, isCancelled) {
 }
 
 main().catch((error) => {
-  logger.error('ingest.fatal', { message: error.message });
+  logger.error('ingest.fatal', { error: error.message });
   process.exitCode = 1;
 });
