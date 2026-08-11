@@ -355,11 +355,12 @@ roughly the reverse of the order the list below was originally written in:
 
 Two consequences worth stating plainly:
 
-- **Nothing in rows 3–5 can be built or validated yet.** Supabase holds the dev
-  store — 12 orders, `#1001`–`#1012`, 15 customers — while the mail is from the
-  live `contact@qiriness.com` inbox and references `#4854`, `#6216`, `#4613`,
-  `Q00 26200111`. There is zero overlap. Syncing real order data is a hard
-  prerequisite, not a later cleanup.
+- **Rows 3–5 were blocked by the dev-store fixture, and no longer are.** Supabase
+  held 12 orders, `#1001`–`#1012`, and 15 customers while the mail is from the live
+  `contact@qiriness.com` inbox and references `#4854`, `#6216`, `#4613`,
+  `Q00 26200111` — zero overlap. Since the switch to the live store the table
+  holds 2052 orders spanning `#4716`–`#6770`, which contains all of those. The
+  remaining prerequisite is running `orders:resolve` to link them to tickets.
 - **Rows 1 and 2 are not blocked by that** and cover ~70 tickets (21%) on data
   that already exists. They are the sensible place to start while the order data
   is sorted out.
@@ -744,9 +745,10 @@ small read over data we already hold and costs nothing new.
 
 **The unknown.** Those fields are only filled when the carrier or shipping app pushes
 fulfillment events into Shopify. If it only writes a tracking number at dispatch,
-`display_status` stays `FULFILLED` and the timestamps stay null forever. The dev store
-cannot answer this — its orders are test data (`tracking_info.number` is literally
-`"TEST"`, all status timestamps null).
+`display_status` stays `FULFILLED` and the timestamps stay null forever. The dev-store
+fixture could not answer this — its orders were test data (`tracking_info.number` was
+literally `"TEST"`, all status timestamps null). The live store now synced can answer
+it, and this is worth re-checking against a recently shipped real order.
 
 **How to settle it:** open a recently shipped *production* order in Shopify admin. A live
 status ("In transit", "Delivered") means the data is already there. Just "Fulfilled" plus a

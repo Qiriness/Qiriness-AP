@@ -1,5 +1,6 @@
 import {
   buildEmbeddingInput,
+  buildExemplarEmbeddingInput,
   buildMessageEmbeddingInput,
   hashEmbeddingInput,
   MESSAGE_HASH_SALT
@@ -27,6 +28,11 @@ export const TICKET_MESSAGE_INPUT = {
   // Mixing the stripper version into the hash means changing how quoted history
   // is removed invalidates every stored message vector.
   salt: MESSAGE_HASH_SALT
+};
+
+export const EXEMPLAR_PHRASING_INPUT = {
+  build: buildExemplarEmbeddingInput,
+  salt: ''
 };
 
 /**

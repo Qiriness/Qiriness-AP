@@ -11,11 +11,17 @@ import test from 'node:test';
  * after it is referenced" is precisely a cross-file claim.
  */
 
-export const FILES = ['01_foundation', '02_shopify', '03_knowledge', '04_support'];
+export const FILES = [
+  '01_foundation',
+  '02_shopify',
+  '03_knowledge',
+  '04_support',
+  '05_exemplars'
+];
 
 export const read = (name) => readFileSync(new URL(`./${name}.sql`, import.meta.url), 'utf8');
 
-/** All four files concatenated, in apply order. */
+/** All five files concatenated, in apply order. */
 export const ALL = FILES.map(read).join('\n');
 
 /** Strip -- comments so an assertion cannot be satisfied by prose. */
@@ -165,8 +171,14 @@ test('nothing references a table before it is created', () => {
   }
 });
 
-test('the four files are the whole baseline, in this order', () => {
-  // README and APP_SCHEMA both name these; a fifth file appearing without those
-  // being updated is the drift this catches.
-  assert.deepEqual(FILES, ['01_foundation', '02_shopify', '03_knowledge', '04_support']);
+test('the five files are the whole baseline, in this order', () => {
+  // README and APP_SCHEMA both name these; a file appearing without those being
+  // updated is the drift this catches.
+  assert.deepEqual(FILES, [
+    '01_foundation',
+    '02_shopify',
+    '03_knowledge',
+    '04_support',
+    '05_exemplars'
+  ]);
 });

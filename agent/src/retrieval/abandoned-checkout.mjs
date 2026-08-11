@@ -71,9 +71,9 @@ const QUERY = `#graphql
  * `status` and `updated_at`. There is no documented email key. Filtering by a
  * date range and matching the email client-side is therefore the only
  * *deterministic* approach; free-text search on an address might work and might
- * silently match nothing, and with zero rows in the dev store that could not be
- * told apart. If the free-text path is confirmed later it becomes an
- * optimisation, not a correctness fix.
+ * silently match nothing, and with zero rows in the store synced at the time
+ * that could not be told apart. If the free-text path is confirmed later it
+ * becomes an optimisation, not a correctness fix.
  */
 export function buildCheckoutQuery({ since, until } = {}) {
   const terms = [];

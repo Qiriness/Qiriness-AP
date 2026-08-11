@@ -221,7 +221,21 @@ export function createToolRegistry({
           // promotion answer carries that prohibition, whatever the verdict.
           caveats: ['basket_unseeable', ...(verdict === 'eligible' ? [] : ['eligibility_undetermined'])],
           promptText: result.promptText,
-          data: { found: result.found, verdict, code: result.code }
+          // `checks` travels as {id, status, reason} ONLY — never the `detail`
+          // sentences. `evidence-rules.mjs` derives promotion_validity from the
+          // window and status reasons, and giving it the prose instead would mean
+          // deriving a machine value by matching French. The details stay in
+          // `promptText`, which is the half the model reads.
+          data: {
+            found: result.found,
+            verdict,
+            code: result.code,
+            checks: (result.eligibility?.checks || []).map((c) => ({
+              id: c.id,
+              status: c.status,
+              reason: c.reason ?? null
+            }))
+          }
         };
       },
 

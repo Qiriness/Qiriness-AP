@@ -266,7 +266,7 @@ const SYNC_LAG_FLOOR = 500;
  * The bounds are used for what they can support and no more. A live test caught
  * an earlier version asserting that anything outside the synced span was "likely
  * not an order number at all", which it said about `#4009` — a real order absent
- * only because the dev store holds twelve rows. `not_found` was the right
+ * only because the store synced at the time held twelve rows. `not_found` was the right
  * status; the explanation was a claim the data could not back.
  *
  * Retention below the low end is not treated as a worry: orders older than about

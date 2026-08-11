@@ -172,6 +172,245 @@ export function needLabel(key) {
   return NEEDS[key]?.label || null;
 }
 
+// --- findings: not whether we established it, but WHAT IT TURNED OUT TO BE ----
+//
+// `satisfiedBy` answers "did a tool settle this?". That is enough to report a
+// gap and not enough to choose an answer: « ton code a expiré » and « ton code
+// est réservé aux nouveaux clients » are both `promotion_validity` satisfied.
+// A finding is the value the need took.
+//
+// THE SAME SPLIT, ONE NOTCH FURTHER. The model picks WHICH needs a ticket has;
+// code owns WHAT SATISFIES them; and code owns WHAT VALUE THEY TOOK. A finding
+// is never model-authored, so nothing downstream branches on a model's wording.
+//
+// DERIVED FROM STRUCTURE, NEVER FROM PROSE. Each deriver reads a ledger entry's
+// `data` — outcomes, verdicts, check reasons. It never matches on `promptText`,
+// which is French written for a human and free to be reworded.
+//
+// `unknown` is a member of EVERY enum and is the answer whenever the evidence
+// does not pin a value — including when the need is `satisfied` but by a tool
+// too coarse to name it (listing active promotions establishes that a code
+// exists without settling which state a specific code is in). That makes every
+// finding total: there is no world in which a condition has nothing to compare
+// against.
+//
+// ONLY THE NEEDS THAT ARE BRANCHED ON GET ONE. Inventing an enum for all 19
+// would be guessing at distinctions no answer depends on. A need with no entry
+// here resolves `finding: null`, which reads as "nobody needed to know".
+
+/** The last entry for a tool — later calls supersede earlier ones. */
+function lastByTool(entries, tool) {
+  let found = null;
+  for (const entry of entries) {
+    if (entry?.tool === tool) found = entry;
+  }
+  return found;
+}
+
+/** Knowledge retrieval reports the same three bands wherever it is used. */
+const KNOWLEDGE_FINDINGS = ['answered', 'weak', 'none', 'unknown'];
+
+function deriveKnowledge(entries) {
+  const entry = lastByTool(entries, TOOL_NAMES.SEARCH_KNOWLEDGE);
+  if (!entry) return 'unknown';
+  if (entry.outcome === 'answerable') return 'answered';
+  if (entry.outcome === 'weak') return 'weak';
+  if (entry.outcome === 'none') return 'none';
+  return 'unknown';
+}
+
+const FINDINGS = {
+  product_identity: {
+    values: ['resolved', 'ambiguous', 'none', 'unknown'],
+    // `ambiguous` is a value in its own right, not a failure: a tie between two
+    // products is the case where the reply must ask, and an answer variant
+    // wants to branch on exactly that.
+    derive(entries) {
+      const entry = lastByTool(entries, TOOL_NAMES.LOOKUP_PRODUCT);
+      if (!entry) return 'unknown';
+      if (entry.outcome === 'found') return 'resolved';
+      if (entry.outcome === 'ambiguous') return 'ambiguous';
+      if (entry.outcome === 'no_match') return 'none';
+      return 'unknown';
+    }
+  },
+
+  product_property: { values: KNOWLEDGE_FINDINGS, derive: deriveKnowledge },
+  policy_answer: { values: KNOWLEDGE_FINDINGS, derive: deriveKnowledge },
+  brand_answer: { values: KNOWLEDGE_FINDINGS, derive: deriveKnowledge },
+
+  promotion_identity: {
+    values: ['resolved', 'none', 'unknown'],
+    derive(entries) {
+      const entry = lastByTool(entries, TOOL_NAMES.EXTRACT_PROMOTION_CODES);
+      if (!entry) return 'unknown';
+      if (entry.outcome === 'found') return 'resolved';
+      if (entry.outcome === 'none') return 'none';
+      return 'unknown';
+    }
+  },
+
+  promotion_validity: {
+    values: ['active', 'expired', 'not_yet_started', 'inactive', 'not_found', 'unknown'],
+    // Reads the check REASONS added in promotion-rules.mjs. Expiry and a future
+    // start date are both FAIL on the same check, so the status alone cannot
+    // tell them apart — and they are precisely the two branches an answer needs.
+    derive(entries) {
+      const entry = lastByTool(entries, TOOL_NAMES.LOOKUP_PROMOTION);
+      if (!entry) return 'unknown';
+      if (entry.outcome === 'not_found' || entry.data?.found === false) return 'not_found';
+
+      const checks = entry.data?.checks || [];
+      const window = checks.find((c) => c.id === 'window')?.reason ?? null;
+      const status = checks.find((c) => c.id === 'status')?.reason ?? null;
+
+      if (window === 'expired') return 'expired';
+      if (window === 'not_yet_started') return 'not_yet_started';
+      if (status === 'inactive') return 'inactive';
+      if (window === 'open' && status === 'active') return 'active';
+      return 'unknown';
+    }
+  },
+
+  promotion_eligibility: {
+    values: ['eligible', 'blocked', 'undetermined', 'not_found', 'unknown'],
+    derive(entries) {
+      const entry = lastByTool(entries, TOOL_NAMES.LOOKUP_PROMOTION);
+      if (!entry) return 'unknown';
+      const verdict = entry.data?.verdict ?? null;
+      return FINDINGS.promotion_eligibility.values.includes(verdict) ? verdict : 'unknown';
+    }
+  },
+
+  customer_identity: {
+    values: ['resolved', 'none', 'unknown'],
+    derive(entries) {
+      const entry = lastByTool(entries, TOOL_NAMES.LOOKUP_CUSTOMER);
+      if (!entry) return 'unknown';
+      return entry.outcome === 'found' ? 'resolved' : 'none';
+    }
+  },
+
+  customer_account_state: {
+    values: ['resolved', 'none', 'unknown'],
+    derive(entries) {
+      const entry = lastByTool(entries, TOOL_NAMES.LOOKUP_CUSTOMER);
+      if (!entry) return 'unknown';
+      return entry.outcome === 'found' ? 'resolved' : 'none';
+    }
+  },
+
+  product_availability: {
+    values: ['in_stock', 'out_of_stock', 'unknown'],
+    derive(entries) {
+      const entry = lastByTool(entries, TOOL_NAMES.LOOKUP_STOCK);
+      if (!entry || entry.outcome !== 'found') return 'unknown';
+      const products = entry.data?.products || [];
+      if (products.length === 0) return 'unknown';
+      return products.some((p) => p.purchasable) ? 'in_stock' : 'out_of_stock';
+    }
+  },
+
+  // No tool, by design — so this can only ever be `unknown`, and listing it says
+  // so explicitly rather than leaving a reader to infer it from an empty
+  // `satisfiedBy`. Same argument as the need itself.
+  checkout_state: {
+    values: ['unknown'],
+    derive: () => 'unknown'
+  }
+};
+
+export const FINDING_KEYS = Object.keys(FINDINGS);
+
+/** The values a need can take, for the condition builder and its validation. */
+export function findingValues(need) {
+  return FINDINGS[need] ? [...FINDINGS[need].values] : null;
+}
+
+// --- dependencies: which facts have to be established before which -----------
+//
+// UNIVERSAL, NOT PER-SITUATION. Eligibility requires identity for every ticket
+// on earth, so it belongs here beside `satisfiedBy` rather than being restated
+// in every exemplar that happens to need both. An exemplar names the SET of
+// needs; this derives the order.
+//
+// `moot` is the half that saves calls: a prerequisite finding that makes the
+// dependent need pointless. There is nothing to be eligible FOR once a code has
+// expired, so collecting eligibility after that is spending a tool call to
+// learn nothing.
+//
+// Only genuine universals are listed. `product_property` deliberately has no
+// prerequisite: « vos produits sont-ils vegan » is answerable from the library
+// without identifying any single product, and asserting a dependency there
+// would force a lookup that the question does not need.
+
+const DEPENDENCIES = {
+  promotion_validity: { requires: ['promotion_identity'] },
+  promotion_eligibility: {
+    requires: ['promotion_validity'],
+    moot: { promotion_validity: ['expired', 'not_yet_started', 'inactive', 'not_found'] }
+  },
+
+  customer_account_state: { requires: ['customer_identity'] },
+  customer_history: { requires: ['customer_identity'] },
+
+  // Dormant with the order family, and correct for when it wakes up.
+  order_state: { requires: ['order_identity'] },
+  delivery_state: { requires: ['order_identity'] },
+  payment_state: { requires: ['order_identity'] },
+  refund_state: { requires: ['order_identity'] },
+  return_eligibility: { requires: ['order_identity'] }
+};
+
+export function needRequires(key) {
+  return [...(DEPENDENCIES[key]?.requires || [])];
+}
+
+/**
+ * Is this need pointless given what earlier needs turned out to be?
+ *
+ * @param key       the need being considered
+ * @param findings  { needKey: finding } established so far
+ */
+export function isMoot(key, findings = {}) {
+  const moot = DEPENDENCIES[key]?.moot;
+  if (!moot) return false;
+  return Object.entries(moot).some(([prerequisite, values]) =>
+    values.includes(findings[prerequisite])
+  );
+}
+
+/**
+ * The declared needs in dependency order — prerequisites first.
+ *
+ * A stable topological sort: ties keep vocabulary order, so the same set always
+ * produces the same sequence and a test can assert it. A need whose prerequisite
+ * was not declared is not blocked by it — the exemplar is allowed to want
+ * eligibility without wanting identity, and the sort simply has nothing to
+ * order it against.
+ */
+export function orderNeeds(needs = []) {
+  const declared = normaliseNeeds(needs);
+  const remaining = new Set(declared);
+  const ordered = [];
+
+  while (remaining.size > 0) {
+    const ready = [...remaining].filter((key) =>
+      needRequires(key).every((prerequisite) => !remaining.has(prerequisite))
+    );
+    // A cycle would empty this. There is none today and a test asserts it, but
+    // falling back to declaration order keeps a future bad edge from hanging the
+    // investigation rather than merely mis-ordering it.
+    const batch = ready.length > 0 ? ready : [...remaining];
+    for (const key of batch) {
+      ordered.push(key);
+      remaining.delete(key);
+    }
+  }
+
+  return ordered;
+}
+
 /**
  * Resolution states, in the order of how much they should worry you.
  *
@@ -217,11 +456,26 @@ export function resolveNeeds(needs = [], ledger = [], toolNames = []) {
       need: key,
       label: need.label,
       state: resolveState({ need, allowed, attempted, satisfied: evidenceIds.length > 0 }),
+      // WHAT it turned out to be, where anything branches on it. `null` means
+      // no answer depends on the value — not that the value is unknown, which
+      // is `'unknown'` and a different statement.
+      finding: FINDINGS[key] ? FINDINGS[key].derive(entries) : null,
       evidenceIds,
       // What to ask the customer if this stays open — a key, never a sentence.
       asksCustomer: need.asksCustomer
     };
   });
+}
+
+/** The resolved needs as a `{ need: finding }` map — what conditions read. */
+export function findingsOf(resolved = []) {
+  const findings = {};
+  for (const item of resolved) {
+    if (item?.finding != null) {
+      findings[item.need] = item.finding;
+    }
+  }
+  return findings;
 }
 
 function resolveState({ need, allowed, attempted, satisfied }) {

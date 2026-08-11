@@ -77,11 +77,11 @@ export function evaluateEligibility({ promotion, customer = null, basket = null,
   // --- things we can settle outright --------------------------------------
   const status = String(promotion.status || '').toUpperCase();
   if (status === 'ACTIVE') {
-    checks.push(check('status', PASS, 'La promotion est active.'));
+    checks.push(check('status', PASS, 'La promotion est active.', 'active'));
   } else if (status) {
-    checks.push(check('status', FAIL, `La promotion n'est pas active (statut : ${status}).`));
+    checks.push(check('status', FAIL, `La promotion n'est pas active (statut : ${status}).`, 'inactive'));
   } else {
-    checks.push(check('status', UNKNOWN, 'Statut de la promotion inconnu.'));
+    checks.push(check('status', UNKNOWN, 'Statut de la promotion inconnu.', 'unknown'));
   }
 
   checks.push(evaluateWindow(promotion, now));
@@ -138,15 +138,16 @@ function evaluateWindow(promotion, now) {
   const ends = promotion.ends_at ? new Date(promotion.ends_at) : null;
 
   if (starts && now < starts) {
-    return check('window', FAIL, `La promotion ne commence que le ${formatDate(starts)}.`);
+    return check('window', FAIL, `La promotion ne commence que le ${formatDate(starts)}.`, 'not_yet_started');
   }
   if (ends && now > ends) {
-    return check('window', FAIL, `La promotion a expiré le ${formatDate(ends)}.`);
+    return check('window', FAIL, `La promotion a expiré le ${formatDate(ends)}.`, 'expired');
   }
   return check(
     'window',
     PASS,
-    ends ? `Valable jusqu'au ${formatDate(ends)}.` : "Pas de date d'expiration."
+    ends ? `Valable jusqu'au ${formatDate(ends)}.` : "Pas de date d'expiration.",
+    'open'
   );
 }
 
@@ -331,8 +332,21 @@ function describeScope(items) {
   return '';
 }
 
-function check(id, status, detail) {
-  return { id, status, detail };
+/**
+ * `reason` is the MACHINE-READABLE half of a check, added only where the status
+ * alone is ambiguous.
+ *
+ * `window` is the case that forced it: a code that has expired and a code that
+ * has not started yet are both `FAIL`, and the only thing separating them is
+ * French prose meant for a human. Anything downstream that needs to branch on
+ * which one it is — `evidence-rules.mjs` derives `promotion_validity` from
+ * exactly this — would otherwise have to pattern-match the sentence.
+ *
+ * Omitted entirely when absent, so every check that had no reason keeps the
+ * exact shape it had before.
+ */
+function check(id, status, detail, reason = null) {
+  return reason === null ? { id, status, detail } : { id, status, detail, reason };
 }
 
 function formatDate(date) {

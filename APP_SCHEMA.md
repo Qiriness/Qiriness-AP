@@ -58,7 +58,9 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |-- scripts/                     # one sync orchestrator per Shopify resource
 |   |-- sync-shopify-{products,customers,orders,promotions,content-catalog}.mjs
 |   |-- sync-shopify-nightly.mjs         # runs them all in order
-|   |-- embed-{knowledge-chunks,ticket-messages}.mjs   # the two embedding reconcilers
+|   |-- embed-{knowledge-chunks,ticket-messages,exemplars}.mjs  # embedding reconcilers
+|   |-- import-exemplars.mjs             # Email-Example-Queries.md -> exemplar rows
+|   |                                    # (drafts only; lib/exemplar-import.mjs parses)
 |   |-- cluster-ticket-messages.mjs      # cluster:tickets -- recurring topics per subject
 |   |-- apply-supabase-migration.mjs     # SQL runner
 |   |-- process-shopify-compliance-webhook.mjs
@@ -96,12 +98,17 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |   |   |                        # spam-body-backfill
 |   |   |-- pipeline/            # categorise (classify-only) · categorise-runner
 |   |   |-- retrieval/           # retrieval-rules · knowledge-retrieval ·
+|   |   |                        # exemplar-{rules,retrieval} (which situation is this) ·
 |   |   |                        # product-{matching,context,lookup} ·
 |   |   |                        # promotion-{rules,lookup} · abandoned-checkout ·
 |   |   |                        # customer-{context,lookup}
 |   |   |-- investigation/       # case-file (THE output contract) · investigation-rules ·
 |   |   |                        # decompose{,-rules} (tasks + needs, one call) ·
-|   |   |                        # evidence-rules (19 needs, scored vs the ledger) ·
+|   |   |                        # answer-selection (which answer the findings
+|   |   |                        #   select, and the next need to collect) ·
+|   |   |                        # evidence-rules (19 needs, scored vs the ledger;
+|   |   |                        #   + findings = the value each took, + a
+|   |   |                        #   requires/moot DAG and orderNeeds) ·
 |   |   |                        # tool-registry · investigate (bounded loop) ·
 |   |   |                        # investigation-runner · create-investigation
 |   |   |-- resolution/          # customer-resolution-runner · order-number-parser ·
@@ -143,6 +150,16 @@ Never auto-synced — every row is an explicit import or a hand-written article.
 | `knowledge_documents` | `content_html` is the editor's truth; `approval_status` independent of Shopify publish `status`; `core_topic` = 1 of 6 slots, max one per shop; `voice_profile` jsonb |
 | `knowledge_chunks` | retrieval chunks + `embedding vector(1536)` HNSW cosine, plus the determinism quadruple |
 
+### Support exemplars
+
+The recurring situations, not the answers to them. Same document/chunk mechanics as knowledge, in their own tables so retrieval can never reach a *question* while looking for policy.
+
+| Table | Holds |
+| --- | --- |
+| `support_exemplars` | canonical question, `exemplar_key` (`P-16`), subject + kind, `requirement_needs text[]` constrained to the `evidence-rules.mjs` vocabulary, `approval_status` (gates the vector), `demand_message_count` |
+| `support_exemplar_phrasings` | one row per canonical + real phrasing, each with its own `embedding vector(1536)` and the determinism quadruple. `match_support_exemplars()` returns one row per **exemplar**, scored by its best phrasing |
+| `support_answers` | answer skeletons keyed by **evidence position**, shared across exemplars rather than nested. `when_conditions jsonb` = `{need: [findings]}`; one `is_fallback` per `answer_set`. Selected by `answer-selection.mjs`, which also derives the next need to collect |
+
 ### Agent email workflow
 
 | Table | Holds |
@@ -167,7 +184,7 @@ Never auto-synced — every row is an explicit import or a hand-written article.
 
 ### Migration files
 
-**Four files, by domain, run in order against an empty database.** The order is a plain dependency chain, and every table is created *complete* — there is no `alter table … add column` anywhere in the baseline, and a test asserts that.
+**Five files, by domain, run in order against an empty database.** The order is a plain dependency chain, and every table is created *complete* — there is no `alter table … add column` anywhere in the baseline, and a test asserts that.
 
 | File | Creates | Depends on |
 | --- | --- | --- |
@@ -175,8 +192,9 @@ Never auto-synced — every row is an explicit import or a hand-written article.
 | `02_shopify.sql` | `is_valid_product_faqs()`, `customers`, `orders`, `products`, `shopify_metaobjects`, `promotions`, `shopify_content_sources` | 01 |
 | `03_knowledge.sql` | `knowledge_documents`, `knowledge_chunks`, `match_knowledge_chunks()` | 01 |
 | `04_support.sql` | `tickets`, `ticket_messages`, `email_blocklist`, `sender_directory`, `spam_audit`, `ticket_investigations`, `category_forwarding`, `ticket_forwards`, `categorisation_review` | 01, 02 |
+| `05_exemplars.sql` | `support_exemplars`, `support_exemplar_phrasings`, `match_support_exemplars()` | 01, 03 (`french_unaccent`) |
 
-`_shared.test.mjs` holds the cross-file invariants (no data statements, RLS on every table, every table documented, nothing referenced before it is created); each file has a sibling test for its own contents. 110 tests.
+`_shared.test.mjs` holds the cross-file invariants (no data statements, RLS on every table, every table documented, nothing referenced before it is created); each file has a sibling test for its own contents.
 
 ## Surfaces
 

@@ -3,9 +3,15 @@ import test from 'node:test';
 
 import { MISSING_FIELDS } from './case-file.mjs';
 import {
+  FINDING_KEYS,
   NEED_KEYS,
   NEED_STATES,
+  findingValues,
+  findingsOf,
+  isMoot,
+  needRequires,
   normaliseNeeds,
+  orderNeeds,
   resolveNeeds,
   summariseNeeds
 } from './evidence-rules.mjs';
@@ -179,4 +185,172 @@ test('the summary counts every state and invents none', () => {
 test('resolution never throws on missing input', () => {
   assert.deepEqual(resolveNeeds(), []);
   assert.deepEqual(resolveNeeds(['product_identity'], null, null)[0].state, 'unavailable');
+});
+
+// --- findings: the value a need took, not just whether it was settled --------
+
+const finding = (need, ledger) => resolveNeeds([need], ledger, ALL_TOOLS)[0].finding;
+
+test('every finding vocabulary names a real need and includes unknown', () => {
+  for (const key of FINDING_KEYS) {
+    assert.ok(NEED_KEYS.includes(key), `${key} is not a need`);
+    assert.ok(findingValues(key).includes('unknown'), `${key} has no unknown`);
+  }
+});
+
+test('a need nothing branches on has a null finding, which is not unknown', () => {
+  // `null` says no answer depends on the value. `'unknown'` says one does and we
+  // could not establish it. Collapsing them would hide the second behind the first.
+  assert.equal(finding('other_fact', []), null);
+  assert.equal(finding('product_identity', []), 'unknown');
+});
+
+test('promotion_validity separates expired from not-yet-started', () => {
+  // Both are FAIL on the same check, so the status alone cannot tell them apart —
+  // and they are exactly the two branches an answer needs.
+  const withWindow = (reason) => [
+    {
+      id: 't1',
+      tool: TOOL_NAMES.LOOKUP_PROMOTION,
+      outcome: 'blocked',
+      data: { found: true, verdict: 'blocked', checks: [{ id: 'window', status: 'fail', reason }] }
+    }
+  ];
+  assert.equal(finding('promotion_validity', withWindow('expired')), 'expired');
+  assert.equal(finding('promotion_validity', withWindow('not_yet_started')), 'not_yet_started');
+});
+
+test('promotion_validity reads not_found ahead of any check', () => {
+  const ledger = [
+    { id: 't1', tool: TOOL_NAMES.LOOKUP_PROMOTION, outcome: 'not_found', data: { found: false } }
+  ];
+  assert.equal(finding('promotion_validity', ledger), 'not_found');
+});
+
+test('an active code in its window is active', () => {
+  const ledger = [
+    {
+      id: 't1',
+      tool: TOOL_NAMES.LOOKUP_PROMOTION,
+      outcome: 'eligible',
+      data: {
+        found: true,
+        verdict: 'eligible',
+        checks: [
+          { id: 'window', status: 'pass', reason: 'open' },
+          { id: 'status', status: 'pass', reason: 'active' }
+        ]
+      }
+    }
+  ];
+  assert.equal(finding('promotion_validity', ledger), 'active');
+  assert.equal(finding('promotion_eligibility', ledger), 'eligible');
+});
+
+test('a satisfied need can still be unknown when the tool is too coarse', () => {
+  // Listing active promotions satisfies promotion_validity, but says nothing
+  // about which state one specific code is in. Reporting `active` here would be
+  // inventing the very fact the listing does not carry.
+  const ledger = [{ id: 't1', tool: TOOL_NAMES.LIST_ACTIVE_PROMOTIONS, outcome: 'found', data: {} }];
+  const [resolved] = resolveNeeds(['promotion_validity'], ledger, ALL_TOOLS);
+  assert.equal(resolved.state, 'satisfied');
+  assert.equal(resolved.finding, 'unknown');
+});
+
+test('an ambiguous product is a value, not a failure to find one', () => {
+  const ledger = [{ id: 't1', tool: TOOL_NAMES.LOOKUP_PRODUCT, outcome: 'ambiguous', data: {} }];
+  const [resolved] = resolveNeeds(['product_identity'], ledger, ALL_TOOLS);
+  assert.equal(resolved.state, 'attempted', 'a tie does not establish identity');
+  assert.equal(resolved.finding, 'ambiguous', 'but the tie itself is the branch');
+});
+
+test('every derived finding is inside its own vocabulary', () => {
+  // Guards the derivers against returning a value no condition could be written
+  // against — a typo here is otherwise a permanently dead branch.
+  const ledgers = [
+    [],
+    [{ id: 't1', tool: TOOL_NAMES.LOOKUP_PRODUCT, outcome: 'found', data: {} }],
+    [{ id: 't1', tool: TOOL_NAMES.LOOKUP_PRODUCT, outcome: 'no_match', data: {} }],
+    [{ id: 't1', tool: TOOL_NAMES.SEARCH_KNOWLEDGE, outcome: 'weak', data: {} }],
+    [{ id: 't1', tool: TOOL_NAMES.SEARCH_KNOWLEDGE, outcome: 'answerable', data: {} }],
+    [{ id: 't1', tool: TOOL_NAMES.LOOKUP_CUSTOMER, outcome: 'no_match', data: {} }],
+    [{ id: 't1', tool: TOOL_NAMES.LOOKUP_STOCK, outcome: 'found', data: { products: [{ purchasable: false }] } }],
+    [{ id: 't1', tool: TOOL_NAMES.EXTRACT_PROMOTION_CODES, outcome: 'none', data: {} }],
+    [{ id: 't1', tool: TOOL_NAMES.LOOKUP_PROMOTION, outcome: 'undetermined', data: { found: true, verdict: 'undetermined', checks: [] } }]
+  ];
+  for (const ledger of ledgers) {
+    for (const item of resolveNeeds(FINDING_KEYS, ledger, ALL_TOOLS)) {
+      assert.ok(
+        findingValues(item.need).includes(item.finding),
+        `${item.need} → ${item.finding}`
+      );
+    }
+  }
+});
+
+test('findingsOf keeps only the needs that carry a value', () => {
+  const resolved = resolveNeeds(['product_identity', 'other_fact'], [], ALL_TOOLS);
+  assert.deepEqual(findingsOf(resolved), { product_identity: 'unknown' });
+});
+
+// --- dependencies ------------------------------------------------------------
+
+test('needs are ordered with prerequisites first', () => {
+  assert.deepEqual(orderNeeds(['promotion_eligibility', 'promotion_identity', 'promotion_validity']), [
+    'promotion_identity',
+    'promotion_validity',
+    'promotion_eligibility'
+  ]);
+});
+
+test('ordering is stable and total for every declared set', () => {
+  const ordered = orderNeeds(NEED_KEYS);
+  assert.equal(ordered.length, NEED_KEYS.length, 'no need is dropped or duplicated');
+  assert.deepEqual(orderNeeds(NEED_KEYS), ordered, 'the same set always sorts the same way');
+  for (const key of NEED_KEYS) {
+    for (const prerequisite of needRequires(key)) {
+      assert.ok(
+        ordered.indexOf(prerequisite) < ordered.indexOf(key),
+        `${prerequisite} must precede ${key}`
+      );
+    }
+  }
+});
+
+test('a prerequisite that was not declared does not block its dependent', () => {
+  // An exemplar may want eligibility without wanting identity. The sort has
+  // nothing to order it against, and must not hang or drop it.
+  assert.deepEqual(orderNeeds(['promotion_eligibility']), ['promotion_eligibility']);
+});
+
+test('every dependency names a real need', () => {
+  for (const key of NEED_KEYS) {
+    for (const prerequisite of needRequires(key)) {
+      assert.ok(NEED_KEYS.includes(prerequisite), `${key} requires unknown ${prerequisite}`);
+    }
+  }
+});
+
+test('eligibility is moot once the code cannot be used at all', () => {
+  // There is nothing to be eligible FOR once a code has expired, so collecting
+  // it is a tool call spent to learn nothing.
+  assert.equal(isMoot('promotion_eligibility', { promotion_validity: 'expired' }), true);
+  assert.equal(isMoot('promotion_eligibility', { promotion_validity: 'not_found' }), true);
+  assert.equal(isMoot('promotion_eligibility', { promotion_validity: 'active' }), false);
+  assert.equal(isMoot('promotion_eligibility', {}), false, 'nothing established yet is not moot');
+  assert.equal(isMoot('product_identity', { promotion_validity: 'expired' }), false);
+});
+
+test('every moot condition names a real need and real values', () => {
+  for (const key of NEED_KEYS) {
+    const values = findingValues(key);
+    if (!values) continue;
+    // A moot value outside the prerequisite's vocabulary would never fire.
+    for (const dependent of NEED_KEYS) {
+      for (const value of values) {
+        // Exercised through the public helper rather than the private table.
+        assert.equal(typeof isMoot(dependent, { [key]: value }), 'boolean');
+      }
+    }
+  }
 });

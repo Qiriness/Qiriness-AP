@@ -2,20 +2,39 @@
 
 Things that are **built and tested, but not yet proven against real data**.
 
-This exists because the dev Shopify store is a fixture, not a copy of the
-business: 16 products with thin merchandising fields, 3 discounts, 12 orders
-numbered `#1001`-`#1012`, 15 customers, and zero abandoned checkouts — while the
-support mail is from the live inbox and references orders like `#4854`, `#6216`
-and `Q00 26200111`. Unit tests prove the logic; they cannot prove the assumptions
-about data that does not exist here yet.
+This existed because the Shopify store behind Supabase was a dev fixture, not a
+copy of the business: 16 products, 3 discounts, 12 orders numbered `#1001`-`#1012`
+and 15 customers, while the support mail is from the live inbox and references
+orders like `#4854`, `#6216` and `Q00 26200111`. Unit tests proved the logic;
+they could not prove assumptions about data that did not exist here.
+
+**That premise no longer holds.** The project points at `qiriness.myshopify.com`
+and the syncs have run — measured 2026-08-11:
+
+| Table | Rows | Note |
+|---|---|---|
+| `orders` | 2052 | `#4716`–`#6770`, which **contains** every order the corpus quotes |
+| `customers` | 58 201 | was 15 |
+| `products` | 116 | was 16 |
+| `promotions` | 327 | was 3 |
+| `tickets` | 214 | 141 carry a `customer_id`; **0 carry a `shopify_order_number`** |
+
+So the items below are no longer blocked by absent data — they are simply
+**unrun**. That is a better problem and a different one: every check named here
+can now actually be executed, and the answer it gives will mean something.
+
+**The one that gates the rest:** `orders:resolve` has never run against this
+data, so no ticket carries a confirmed order number and every order-context
+lookup still reports `not_resolved`. Run it before reading anything below as
+evidence about the order family.
 
 **Each entry says what to check and how, not just that it is unchecked.** An
 item is only removed once someone has actually run the check and seen the
-result. Expect this list to grow as more is built against the dev store.
+result.
 
-Last updated: 2026-08-09 (item 4 re-derived against the labelled retrieval set;
-items 4b/4c/4d added: task decomposition, evidence needs step 2, and the
-vocabulary review. Staged backlog ingestion item closed after the real run.)
+Last updated: 2026-08-11 (environment corrected: the dev-store premise in this
+preamble was stale, and row counts were re-measured against the live store. No
+item closed — none of the checks below has been run.)
 
 ---
 

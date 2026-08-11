@@ -40,7 +40,7 @@ Pending: dashboard auth, ORM/DB client for app reads (scripts use `pg` + a Supab
 
 1. `npm install` at the repo root.
 2. Copy `.env.example` to `.env.local` and fill it in. This one repo-root file is the single source of truth for secrets — `web/next.config.mjs` and `agent/src/config.mjs` both load it, so there is no separate `web/.env.local`. Needed: `SHOPIFY_STORE_DOMAIN`, `SHOPIFY_ADMIN_API_ACCESS_TOKEN` (or `SHOPIFY_CLIENT_ID` + `SHOPIFY_CLIENT_SECRET`), `SUPABASE_URL`, `SUPABASE_SECRET_KEY`, `SUPABASE_DB_URL`, `OPENAI_API_KEY`, and the `MS_GRAPH_*` + `SUPPORT_MAILBOX` vars for the agent worker. All server-only — never prefix with `NEXT_PUBLIC_`.
-3. Apply the four files in `supabase/migrations/` **in order** with `npm run db:apply:migration supabase/migrations/<file>`: `01_foundation.sql` → `02_shopify.sql` → `03_knowledge.sql` → `04_support.sql`. They are a baseline for an empty database, not idempotent patches, and the order is a dependency chain (everything references `shops`; tickets reference customers).
+3. Apply the five files in `supabase/migrations/` **in order** with `npm run db:apply:migration supabase/migrations/<file>`: `01_foundation.sql` → `02_shopify.sql` → `03_knowledge.sql` → `04_support.sql` → `05_exemplars.sql`. They are a baseline for an empty database, not idempotent patches, and the order is a dependency chain (everything references `shops`; tickets reference customers; exemplars reuse the `french_unaccent` config from 03).
 4. Sync Shopify data. Every script has a `:dry-run` twin — run that first to verify API access and mapping: `npm run sync:shopify:products` · `:customers` · `:orders` · `:promotions` · `:content-catalog`, or `npm run sync:shopify:nightly` for all of them in order.
 5. `npm run embed:knowledge` to embed approved knowledge chunks (`:dry-run` available).
 6. `npm test` runs the root test suite (`node --test`).
@@ -59,13 +59,15 @@ Pending: dashboard auth, ORM/DB client for app reads (scripts use `pg` + a Supab
 
 ## Current state
 
-Working end to end against the dev Shopify store and the dev Supabase project: the Agent Setup and Tickets dashboards, the Shopify syncs, email ingestion, both spam gates, embeddings and retrieval, categorisation, the Phase 4 retrieval tools, and the investigation agent. **Drafting is not built.**
+Working end to end against the live Shopify store (`qiriness.myshopify.com`) and the Supabase project: the Agent Setup and Tickets dashboards, the Shopify syncs, email ingestion, both spam gates, embeddings and retrieval, categorisation, the Phase 4 retrieval tools, and the investigation agent. **Drafting is not built.**
 
 The full record of what was built and how far each piece is proven is in `CHANGELOG.md`; what remains unproven, with the check to run, is in `VALIDATION_LOG.md`.
 
-**The one thing gating most of the rest:** Supabase holds the *dev* store (12 orders, 15 customers) while the mail corpus is from the live inbox. Zero overlap, so `shopify_order_number` is set on 0 of 330 tickets and `customer_id` on 0 — which in turn means the order tools, the order-context bundle and the VIP badge are all correct code with no data to run against. See step 1 below.
+**The data prerequisite is met.** Measured 2026-08-11: 2052 orders spanning `#4716`–`#6770` — a range that contains every order number the mail corpus quotes — plus 58 201 customers, 116 products and 327 promotions. Customer resolution has run and links **141 of 214** tickets.
 
-**Tests:** 723 from the repo root, 456 in `agent/`.
+**The one thing gating most of the rest is now a pass, not the data.** `shopify_order_number` is null on all 214 tickets because `orders:resolve` has never been run against them, so every order-context lookup still returns `not_resolved` and the order family stays out of `ENABLED_SUBJECTS`. See step 1 below.
+
+**Tests:** 873 from the repo root, 569 in `agent/`.
 
 ## Next Steps
 
@@ -73,7 +75,7 @@ Reordered 2026-07-30 after measuring the clustered corpus against the level taxo
 
 The previous ordering put the knowledge library first, on the reasoning that only one of nine documents is `approved`. That was measured and is wrong: embedding the 19 unapproved draft chunks in memory and scoring them against the top 12 customer topics closed **0** of them. Approval was never the constraint. Roughly 127 messages of top demand need live order data and 46 need an article, so the tools layer is worth about three times the library.
 
-1. **Sync real Shopify order data — the hard prerequisite for everything below.** Supabase holds the dev store: 12 orders, `#1001`–`#1012`, 15 customers. The mail references `#4854`, `#6216`, `#4613`, `Q00 26200111` — **zero overlap**. Re-measured 2026-08-07 with `customers:resolve:dry-run`: 500 considered, 500 `no_match`, 0 linked. This also gates the **VIP badge**, which reads the RFM segment through `customer_id`. No order tool can be validated against this, so it lands before Phase 4, not after (and it forces the dev/prod split at step 9).
+1. **Run `orders:resolve`, then `context:build`, then enable the order family.** ~~Sync real Shopify order data~~ — **done**: 2052 orders, `#4716`–`#6770`, which contains `#4854`, `#6216`, `#6669` and the rest of what the mail quotes. Customer resolution has also run (141 of 214 tickets linked), which unblocks the **VIP badge**. What has *not* run is order resolution: `shopify_order_number` is null on every ticket, so `getOrderContext` reports `not_resolved` and `delivery`/`order`/`payment`/`return_exchange` remain outside `ENABLED_SUBJECTS`. The sequence is `npm run orders:resolve` → `npm run context:build` → edit `ENABLED_SUBJECTS` → `npm run investigate -- --backfill` (those tickets were skipped *and* had their flag cleared, so nothing re-queues them on its own). This is 52% of the corpus and 20 of the 32 questions in `Email-Example-Queries.md`.
 2. **Decide which mailbox and which store this environment is for.** The stored corpus was ingested from `contact@qiriness.com`; `SUPPORT_MAILBOX` now points at `onouailhetas@lap-groupe.com`. Exchange item ids are mailbox-scoped, so every `graph_message_id` in the database is unusable against the configured mailbox — proven by `spam:backfill:dry-run`, which Graph rejects with `ErrorInvalidMailboxItemId` on kept and blocked messages alike. Nothing that addresses a message by id can work until these agree: not the spam-body backfill, not `/forward`, not a future "Add as ticket" re-fetch. This is one decision with step 1 and step 9.
 3. **Phase 4 — the Tool Runner.** The individual tools are built, **but nothing exposes them to a model** beyond the investigation agent's own registry: there are no typed tool schemas for a general runner, no dispatch, and no approval gate. Wiring them up, with side-effecting tools returning "needs approval" instead of executing, is what turns a library of lookups into an agent.
 4. **Fill the knowledge library — only the part clustering shows is genuinely answerable by an article.** The product questions: a product-quality problem (15) and pre-purchase questions on the LED mask, the coffret and ingredients (14+9+8) ≈ 46 messages. Leave the CGV and delivery drafts unapproved — they add retrieval noise without answering anything.

@@ -80,6 +80,32 @@ export function buildMessageEmbeddingInput({ subject, body_text } = {}) {
 }
 
 /**
+ * Exemplar phrasing: the phrasing, and nothing else.
+ *
+ * THE ODD ONE OUT, DELIBERATELY. A knowledge chunk is prefixed with its title
+ * and heading because a bare fragment ("Comptez 3 à 5 jours ouvrés") floats free
+ * without them. A phrasing has the opposite problem: it is ALREADY a complete
+ * question, and the thing it will be compared against is a bare customer email.
+ * Prefixing it with the canonical question would pull every variant of one
+ * exemplar toward a common centre — which sounds like a feature and is not: it
+ * shrinks the distance between variants of DIFFERENT exemplars too, because the
+ * added text is the tidiest and least discriminating part of the row.
+ *
+ * Symmetry with the query is the rule being followed here, the same one that
+ * makes message embeddings compose subject + body on both sides.
+ *
+ * @param {object} input
+ * @param {string} [input.phrasing_text]
+ * @returns {string} deterministic composed input string
+ */
+export function buildExemplarEmbeddingInput({ phrasing_text } = {}) {
+  // Collapsed, not merely trimmed: these are typed by hand into a dashboard
+  // field, so a stray double space must not produce a different hash from the
+  // same question entered twice.
+  return normalizeField(phrasing_text);
+}
+
+/**
  * Stable sha256 of the composed input string.
  *
  * `salt` is mixed into the hash but never into the embedded text. Message inputs

@@ -42,11 +42,24 @@ const T = TOOL_NAMES;
  * Subjects the agent actually investigates today.
  *
  * The order family is deliberately absent, and not because it does not matter —
- * it is 52% of the corpus. Supabase holds the dev store (12 orders, #1001-#1012)
- * while the mail quotes #4854 and #6216, so an investigation of a delivery
- * ticket could only ever conclude "no such order". Its rules and its tools are
- * defined below and tested; enabling them is one edit to this array once real
- * orders are synced.
+ * it is 52% of the corpus.
+ *
+ * THE ORIGINAL REASON HAS EXPIRED. This gate was environmental: Supabase held a
+ * dev-store fixture (12 orders, #1001-#1012) while the mail quotes #4854 and
+ * #6216, so an investigation could only ever conclude "no such order". The
+ * project now points at the live store and the overlap is real — 2052 orders
+ * spanning #4716-#6770, which contains every order number the corpus quotes.
+ *
+ * WHAT STILL BLOCKS IT IS A PASS THAT HAS NOT RUN. `getOrderContext` reports
+ * `not_resolved` unless the ticket carries a confirmed `shopify_order_number`,
+ * and that column is null on all 214 tickets because `orders:resolve` has never
+ * run against this data. Enabling these subjects today would return "aucune
+ * commande confirmée" on every one of them — the same empty answer as before,
+ * for a new reason.
+ *
+ * The order is therefore: `npm run orders:resolve`, then `npm run context:build`,
+ * then this array, then `npm run investigate -- --backfill` (existing tickets
+ * were skipped AND had their flag cleared, so nothing re-queues them on its own).
  */
 export const ENABLED_SUBJECTS = ['product', 'product_stock', 'promotions', 'account', 'other'];
 
