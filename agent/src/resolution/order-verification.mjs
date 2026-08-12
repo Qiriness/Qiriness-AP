@@ -14,6 +14,17 @@
 export const CONFIRMED = 'confirmed';
 /** Name agrees, but the email is absent or different — corroboration, not proof. */
 export const NAME_MATCH = 'name_match';
+/** How a confirmed match was reached. Recorded on the ticket, not just logged. */
+export const BY_SENDER_EMAIL = 'email';
+/**
+ * The order's registered address appears in the customer's own message. Named
+ * for what is checked, not for the forwarded confirmation that usually causes
+ * it — measured over the mailbox, only 3 of the 6 tickets this path resolves
+ * carry a recognisable confirmation, and the other 3 are threads that quote the
+ * address for some other reason. `confirmation_markers` on the ticket says which
+ * kind it was; this constant must not claim to know.
+ */
+export const BY_MESSAGE_EMAIL = 'message_email';
 export const MISMATCH = 'mismatch';
 export const NOT_FOUND = 'not_found';
 export const NO_CANDIDATE = 'no_candidate';
@@ -25,8 +36,11 @@ export const ASK_PURCHASE_EMAIL = 'ask_purchase_email';
  * @param order   the `orders` row for the quoted number, or null
  * @param ticket  { requester_email_hash, requester_name }
  * @param customer the `customers` row the order points at, or null
+ * @param messageEmailHashes hashes of every address in the customer's own text,
+ *   from confirmation-evidence.mjs. Empty when the caller does not supply them,
+ *   which leaves the older behaviour exactly as it was.
  */
-export function verifyOrder({ order, ticket, customer = null } = {}) {
+export function verifyOrder({ order, ticket, customer = null, messageEmailHashes = [] } = {}) {
   if (!order) {
     return { status: NOT_FOUND, verifiedBy: null, detail: 'No order with that number in this shop.' };
   }
@@ -40,7 +54,37 @@ export function verifyOrder({ order, ticket, customer = null } = {}) {
   const namesAgree = compareNames(ticket, customer);
 
   if (orderHash && ticketHash && orderHash === ticketHash) {
-    return { status: CONFIRMED, verifiedBy: 'email', detail: 'Order matches the sender’s email.' };
+    return { status: CONFIRMED, verifiedBy: BY_SENDER_EMAIL, detail: 'Order matches the sender’s email.' };
+  }
+
+  // THE ADDRESS IS IN THE MESSAGE. The sender did not write from the account
+  // that placed the order, but the address that account IS registered to appears
+  // somewhere in what they sent us. Overwhelmingly that is a forwarded or pasted
+  // order confirmation; it is also sometimes a thread quoting an earlier reply.
+  //
+  // Quoting the number is weak evidence and always was: a number can be a typo,
+  // an invoice reference, or somebody else's. Quoting the number TOGETHER WITH
+  // the address it is registered to is a different thing, because the pairing is
+  // not something a stranger produces by guessing — and whichever way the two
+  // arrived together, they agree on which order the ticket is about, which is
+  // the only question this column answers.
+  //
+  // Ranked above the name check and treated as CONFIRMED, so the number is
+  // written: gifts, an order placed by a partner or a parent, and a second
+  // mailbox are all normal here, and the desk's position is that answering the
+  // person holding the order details is the correct outcome rather than a risk
+  // to guard against. `verifiedBy` records which path got there, so the weaker
+  // provenance stays visible on the ticket instead of being flattened into the
+  // sender-matched case.
+  if (orderHash && messageEmailHashes.includes(orderHash)) {
+    return {
+      status: CONFIRMED,
+      verifiedBy: BY_MESSAGE_EMAIL,
+      emailStatus: ticketHash ? 'differs' : 'absent',
+      detail:
+        'The order is registered to a different address, but that address appears in the ' +
+        'customer’s own message. Treated as confirmed.'
+    };
   }
 
   // THE NAME IS PART OF THE CHECK, NOT A LAST RESORT. Most people order and

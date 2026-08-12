@@ -43,7 +43,7 @@ missing. Write the phrases now; leave the reply empty until the tool exists.
 ## 2. `commande_non_expediee` — not shipped yet
 `category: order` · `status: ready`
 
-**serves** D-01, D-06, O-09, O-10, O-11, O-12, O-13, O-14
+**serves** D-01, D-06, O-09, O-11, O-12, O-13, O-14 _(O-10 merged into O-09)_
 
 **Phrases client** _(embedded)_
 - « Je constate que ma commande #6686 du 28 juillet 2026 n'est toujours pas traitée »
@@ -94,7 +94,7 @@ missing. Write the phrases now; leave the reply empty until the tool exists.
 ## 5. `commande_livree_contestee` — carrier says delivered, customer says no
 `category: delivery` · `status: blocked` 🔒 carrier API
 
-**serves** D-03, D-04
+**serves** D-03 _(D-04 merged into D-03)_
 
 **Phrases client** _(embedded)_
 - « Je viens de voir que mon colis a été livré dans ma boîte aux lettres mais il n'y a rien »
@@ -166,7 +166,7 @@ missing. Write the phrases now; leave the reply empty until the tool exists.
 ## 9. `promo_code_valide_non_eligible` — code is real, customer doesn't qualify
 `category: promotions` · `status: ready`
 
-**serves** P-16, P-18
+**serves** P-18 _(the "code will not apply" situation; P-15 is now only the code never arriving)_
 
 **Phrases client** _(embedded)_
 - « J'essaie de passer ma PREMIÈRE commande mais les 20 % promis ne s'appliquent pas »
@@ -183,7 +183,7 @@ missing. Write the phrases now; leave the reply empty until the tool exists.
 ## 10. `promo_code_inexistant_ou_expire`
 `category: promotions` · `status: ready`
 
-**serves** P-16, P-19
+**serves** P-18, P-19
 
 **Phrases client** _(embedded)_
 - « Il semble avoir un code promo pour la première commande mais il ne fonctionne pas »

@@ -78,6 +78,7 @@ async function main() {
   reportMargins(results);
   reportLanguages(results);
   reportCoverage(results, exemplars);
+  reportRivals(results, exemplars);
   reportUnmatched(results);
 }
 
@@ -101,6 +102,10 @@ function score(ticket, exemplars) {
   const [top, second] = ranked;
   return {
     ticket,
+    // The WHOLE ranking is kept, not just the winner. `reportRivals` needs to ask
+    // where a losing exemplar placed and who beat it, and that question cannot be
+    // answered from the top row alone. 29 exemplars x ~190 tickets is small.
+    ranked,
     top,
     margin: second ? top.similarity - second.similarity : null,
     // The proxy: did the winner land on the subject the categoriser assigned?
@@ -238,9 +243,106 @@ function reportCoverage(results, exemplars) {
       `\n  ${never.length} exemplar(s) never win a ticket above ${NEAR}: ` +
         never.map((e) => e.exemplarKey).join(', ')
     );
-    console.log('  Either the situation is rare in this corpus, or its phrasings are too tidy.');
+    console.log('  Why each one loses is the next section.');
   }
   console.log();
+}
+
+/**
+ * WHY a silent exemplar is silent — which the win counts cannot say.
+ *
+ * "Never wins" has at least three causes and they want opposite fixes:
+ *
+ * - **Collision.** It is runner-up again and again, losing to the same rival by
+ *   a hair. Two exemplars are competing to describe one situation, and the fix
+ *   is a MERGE — not more phrasings, which would only sharpen the tie.
+ * - **Absence.** It is never even close on any ticket. Nobody writes in about
+ *   this, and the fix is to accept that and leave it, or to cut it.
+ * - **Register or language.** Its best tickets are all non-French, or all
+ *   mid-thread. The exemplar is fine; the corpus it is being scored against
+ *   cannot show it off. R-22 is the worked example: its only real phrasing comes
+ *   from the fourth message of a thread, and this eval scores first messages
+ *   only, so it was structurally unable to win anything.
+ *
+ * The verdicts below are SIGNALS, not a classifier — all three can be true at
+ * once, so all three are printed rather than collapsed into one label.
+ */
+function reportRivals(results, exemplars) {
+  const winners = new Set(
+    results.filter((r) => r.top.similarity >= NEAR).map((r) => r.top.exemplar.exemplarKey)
+  );
+  const silent = exemplars.filter((e) => !winners.has(e.exemplarKey));
+  if (silent.length === 0 || results.length === 0) return;
+
+  console.log('='.repeat(72));
+  console.log('WHY THE SILENT ONES LOSE — collision, absence, or wrong corpus\n');
+
+  for (const exemplar of silent) {
+    // Where this exemplar placed on every ticket, best placement first.
+    const placings = results
+      .map((r) => {
+        const rank = r.ranked.findIndex((x) => x.exemplar.exemplarKey === exemplar.exemplarKey);
+        return { result: r, rank, similarity: r.ranked[rank].similarity };
+      })
+      .sort((a, b) => b.similarity - a.similarity);
+
+    const best = placings[0];
+    const runnerUp = placings.filter((p) => p.rank === 1);
+
+    // Who beats it when it comes second, and by how much.
+    const rivals = new Map();
+    for (const p of runnerUp) {
+      const key = p.result.top.exemplar.exemplarKey;
+      if (!rivals.has(key)) rivals.set(key, []);
+      rivals.get(key).push(p.result.top.similarity - p.similarity);
+    }
+    const [topRival] = [...rivals.entries()].sort((a, b) => b[1].length - a[1].length);
+
+    // The language of the tickets it comes closest to winning.
+    const languages = [...new Set(placings.slice(0, 5).map((p) => p.result.ticket.language || '?'))];
+
+    console.log(
+      `  ${exemplar.exemplarKey.padEnd(6)} [${exemplar.category}]  ${exemplar.phrasings.length} phrasing(s)  ` +
+        `best ${f(best.similarity)}  runner-up on ${runnerUp.length} ticket(s)`
+    );
+
+    if (best.similarity < NEAR) {
+      console.log(
+        `         ABSENT — never comes within ${NEAR} of any ticket. Rare here, not mis-worded.`
+      );
+    }
+    if (topRival) {
+      const gaps = [...topRival[1]].sort((a, b) => a - b);
+      const median = q(gaps, 0.5);
+      // A gap of zero is not a close call, it is the same text scored twice —
+      // the signature of a merge whose retired row is still in the table.
+      const verdict =
+        median === 0
+          ? 'DUPLICATE — identical phrasing, almost certainly a retired key still in the table'
+          : median < 0.05
+            ? 'COLLISION — merge candidate'
+            : 'loses clearly, not a tie';
+      console.log(
+        `         beaten ${topRival[1].length}x by ${topRival[0]}, median gap ${f(median)} — ${verdict}`
+      );
+    }
+    // Never wins, never even second, yet scores respectably: no single rival to
+    // merge with. The situation is being described well enough by the field as a
+    // whole that this row adds nothing.
+    if (!topRival && best.similarity >= NEAR) {
+      console.log(
+        '         MID-PACK — never in the top two on any ticket, yet not far off. ' +
+          'No one rival to merge with; the field covers it.'
+      );
+    }
+    if (!languages.includes('fr')) {
+      console.log(
+        `         its closest tickets are ${languages.join('/')} — language, not phrasing.`
+      );
+    }
+    console.log(`         closest ticket: "${excerpt(best.result.ticket.text)}"`);
+    console.log();
+  }
 }
 
 function reportUnmatched(results) {

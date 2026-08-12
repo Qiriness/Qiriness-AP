@@ -3,8 +3,10 @@ import {
   supabaseUpdateById
 } from '../../../scripts/lib/supabase-rest-client.mjs';
 
+import { countConfirmationMarkers, messageEmailHashes } from './confirmation-evidence.mjs';
 import { shopifyOrderCandidates, parseOrderCandidates, toOrderName } from './order-number-parser.mjs';
 import {
+  BY_MESSAGE_EMAIL,
   CONFIRMED,
   MISMATCH,
   NAME_MATCH,
@@ -156,6 +158,7 @@ export function createOrderResolutionStore(supabase) {
             // typically asking which address the purchase was made with.
             suggested_action: resolution.suggestedAction || null,
             email_status: resolution.emailStatus || null,
+            confirmation_markers: resolution.confirmationMarkers ?? null,
             detail: resolution.detail,
             candidates: resolution.candidates,
             resolved_at: new Date().toISOString()
@@ -214,10 +217,13 @@ export async function runOrderResolution({ store, shopId, logger, dryRun = false
         orderName: null
       };
     } else {
+      // Hashed once per ticket rather than per candidate: the addresses in the
+      // message do not change between the numbers quoted in it.
+      const emailHashes = messageEmailHashes(text);
       const results = candidates.map((candidate) => {
         const order = byNumber.get(candidate.orderNumber) || null;
         const customer = order?.customer_id ? customersById.get(order.customer_id) : null;
-        const verdict = verifyOrder({ order, ticket, customer });
+        const verdict = verifyOrder({ order, ticket, customer, messageEmailHashes: emailHashes });
         return {
           ...verdict,
           detail: describeAgainstRange(verdict, candidate.orderNumber, order, range),
@@ -226,6 +232,15 @@ export async function runOrderResolution({ store, shopId, logger, dryRun = false
         };
       });
       resolution = { ...chooseResolution(results), candidates: candidates.map((c) => c.raw) };
+
+      // Recorded only on the path that needs explaining. The count does not gate
+      // anything (see confirmation-evidence.mjs) — it is the discriminator a
+      // human needs when reviewing a number written against a sender who does
+      // not own the order: a high count is a forwarded confirmation, a zero is a
+      // thread that quotes the address for some other reason.
+      if (resolution.verifiedBy === BY_MESSAGE_EMAIL) {
+        resolution.confirmationMarkers = countConfirmationMarkers(text);
+      }
     }
 
     totals[resolution.status] += 1;

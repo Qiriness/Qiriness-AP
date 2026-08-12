@@ -155,9 +155,23 @@ The customer-resolution pass links it from the requester's own address on any ti
 
 ## Order resolution
 
-`shopify_order_number` is written **only** by a confirmed resolution — the order's `customer_email_hash` equals the ticket's `requester_email_hash`. A name-only agreement, or an order belonging to someone else, is recorded in `metadata.order_resolution` and left off the column.
+`shopify_order_number` is written **only** by a confirmed resolution, and there are two ways to reach one: the order's `customer_email_hash` equals the ticket's `requester_email_hash` (`verified_by: email`), or it appears among the addresses in the customer's own message (`verified_by: message_email`, below). A name-only agreement, or an order belonging to someone else, is recorded in `metadata.order_resolution` and left off the column.
 
 The parser recognises `#NNNN` / "commande n° NNNN" only, and classifies the `Q00` ERP references (911 in the corpus) as **not** Shopify order numbers.
+
+### An address quoted in the message counts, and it is checked by hash not by layout
+
+Customers routinely forward their order confirmation, and the desk's position is that **an email mismatch is not a security concern here** — ordering for a partner, a parent or as a gift is ordinary, and answering the person holding the order details is the correct outcome. So when the order's registered address appears anywhere in the customer's text, the number is written.
+
+This closes 6 of the 15 mismatches that `VALIDATION_LOG` item 6 flagged for review: the number parsed, the order existed, the address it is registered to was sitting in the message, and the old rule refused it because the *envelope* did not match.
+
+**Nothing parses the confirmation's layout**, which is the load-bearing part. The obvious build is a parser for the template — find "N° de commande", find the "Client" block, read the address under it. That reads a document we never receive. What arrives is the template after the customer's mail client re-rendered it as a forward, after `htmlToText` flattened it, and possibly after a merchant reworded it in Shopify's notification settings; each step moves the labels. There is nothing stable to anchor on either: the notification templates do carry fixed Liquid variables (`{{ order.name }}`, `{{ email }}`, `{{ order.order_status_url }}`), but Liquid renders on Shopify's side, so the received mail holds their values and never the tags.
+
+Instead `confirmation-evidence.mjs` hashes **every** address in the text and asks whether any equals `orders.customer_email_hash`. It reads no structure, so it survives a reworded label, a translated template and a paste with the layout gone. Only hashes leave the module, so third-party addresses never reach a caller, a log line or a metadata column.
+
+It also catches more than it was built for, and that decided the naming. Of the 6 tickets it rescues, **only 3 carry a recognisable confirmation**; the other 3 quote the address some other way. A layout parser would have found 3 and called the rest mismatches. `verified_by` is therefore `message_email`, not `confirmation_email`, and `metadata.order_resolution.confirmation_markers` records how many template markers were present — diagnostic only, never a gate, so a human reviewing a number written against a non-matching sender can tell the two cases apart.
+
+**The order-status URL is the one strong identifier we still throw away.** `{{ order.order_status_url }}` renders to a per-order token whose shape is a platform invariant rather than a template choice — but `htmlToText` drops every `href`, and the raw body is not retained, so the token survives in **0 of 296** stored messages. Using it would need the href kept at map time *and* a token column on `orders`; neither exists, and the hash check does not need them.
 
 ### The order bundle is assembled, not handed over raw
 
@@ -387,13 +401,59 @@ Collection halts when one answer remains, or when nothing available separates th
 
 `minMargin` started at 0.03 on intuition. Measured, the median margin between winner and runner-up is **0.037**, so 0.03 would have called **45% of all matches ambiguous** — rejecting good matches wholesale. It is now **0.01**, which catches genuine coin-flips and little else (19%).
 
-That remaining 19% is a **corpus** problem, not a threshold one: 32 situations inside one narrow domain sit close together, and `Email-Example-Queries.md` already names O-09/O-10 and P-15/P-16 as merge candidates. Merging should raise the margins rather than needing this number moved again.
+That remaining 19% was a **corpus** problem, not a threshold one, and merging confirmed it: **O-09/O-10, D-03/D-04 and P-15/P-16 collapsed on 2026-08-12**, 32 exemplars → 29, and the median margin rose to **0.040** with ambiguity at **17%**. The number did not need moving.
 
-The measurement is also pessimistic by construction: it scores unfiltered across all 32, because filtering by subject would make the agreement proxy trivially 100%. Production filters first, so the real candidate pool is a handful of same-subject exemplars.
+The measurement is also pessimistic by construction: it scores unfiltered across all of them, because filtering by subject would make the agreement proxy trivially 100%. Production filters first, so the real candidate pool is a handful of same-subject exemplars.
+
+### A merge is judged on the ANSWER, not on how similar the questions look
+
+Two of the three merges were obvious: O-09/O-10 and D-03/D-04 each resolved to a single shared answer, so the split was simply wrong — and D-04's phrasing (« le livreur GLS a livré mon colis ailleurs ») shares almost no vocabulary with D-03's (« livré dans ma boîte aux lettres mais il n'y a rien »), which is the spread that belongs *inside* one exemplar rather than split across two competing for it.
+
+**P-15/P-16 spans three answers and was merged anyway**, on a stronger claim: which of the three applies is a **finding, not a question**. The customer writing in cannot tell "the code never arrived" from "the code was refused" either — they know only that they were promised 20% and do not have it. Retrieval identifies the situation; `answer-selection.mjs` reads the evidence. Merging exemplars does not merge answers, because answers are keyed by evidence position.
+
+The cost is real and was accepted knowingly: the merged exemplar declares four needs, so an investigation starting there collects more before it narrows (bounded — `nextNeed()` halts as soon as one answer stands), and P-15 is now the rival that beats two unrelated exemplars in the eval. **What to watch is whether it becomes an attractor**, not whether the merge was allowed.
+
+### "Never wins" has three causes and they want opposite fixes
+
+Win counts alone say an exemplar is silent, never why, and the fixes contradict each other — so `diagnose-exemplars.mjs` reports the rival that beat it, the median gap, and the language of its closest tickets. A **collision** (small gap, one dominant rival) wants a merge, and adding phrasings would only sharpen the tie. **Absence** wants leaving alone. **Mid-pack** — never in the top two, never far off — means the field already covers it.
+
+A gap of exactly **0.000** is a fourth thing and not a close call at all: the same text scored twice, which is what a merge leaves behind, since the importer upserts and never deletes an exemplar that has left the document. Those retired rows are not inert — three of them dragged the median margin from 0.040 down to 0.032 and inflated ambiguity to 23% before they were deleted, making the merges look actively harmful.
+
+### An eval built on trigger messages cannot see follow-up questions
+
+`diagnose-exemplars.mjs` scores the **first inbound message** of each ticket, because later messages are replies to us and would pull our own vocabulary into the query corpus. That is right, and it has a blind spot: some questions only ever arrive mid-thread. R-22 (« il y aura t il un remboursement des frais d'envoi ? ») is the fourth message of a broken-LED-mask thread, so its only real phrasing is never a query, and its silence in the eval was never evidence about R-22.
+
+Read silence about a follow-up-register exemplar as missing data, not as a verdict. The exemplar entry carries the marker; scoring later messages would fix the coverage and break the corpus.
 
 ### The variants thesis, measured
 
-Six exemplars never win a ticket above the floor. **Two of them are D-07 and P-18 — precisely the two with no real phrasing, only the tidy canonical question.** That is the clearest evidence available that phrasings carry the retrieval and the canonical question does not, and it was predicted by the importer before the eval ran.
+Exemplars that never win a ticket above the floor are **D-07 and P-18 — precisely the two with no real phrasing, only the tidy canonical question.** That is the clearest evidence available that phrasings carry the retrieval and the canonical question does not, and it was predicted by the importer before the eval ran. Post-merge both lose *clearly* rather than narrowly (0.130 and 0.162 behind), so neither is a merge candidate: they are simply under-phrased.
+
+### Translate the library, not the query — and only once the phrasings are final
+
+The library is French and the query is whatever the customer wrote. Measured 2026-08-12: French tickets match at median **0.637**, English at **0.476** — a gap wider than the whole distance between `NEAR` (0.55) and `MATCHED` (0.65). Language costs more than a band.
+
+**The earlier recommendation was to translate the query, and it is superseded.** Translating the query does help — 0.448 → 0.519 against the knowledge library, 11/11 cases — but it cannot close the gap, because it trades one mismatch for another: machine translation of a messy English email produces *tidy* French, and tidy-versus-messy is exactly the register gap the phrasings exist to close. It is also a model call in the hot path of every non-French ticket, on text nobody ever reviews.
+
+Library-side translation is done once, offline, at import; it is deterministic, the existing staleness quadruple manages re-embedding, and a human sees the output at approval time because the approval gate already exists.
+
+**Better still where the material exists: real non-French phrasings.** The corpus already holds them — R-21 is English, D-08 and R-23 Spanish — so the "keep the library French so the comparison stays French↔French" premise was already false when it was written. Real foreign mail is messy in the right way. Suggestive rather than proven: Spanish tickets score median **0.814**, the highest of any language, on n=2, and D-08 carries a real Spanish phrasing.
+
+So: lift real phrasings where the corpus has them, translate to fill the rest. **And translate last** — after every question has its full set of verbatim phrasings — because each new authored phrasing is another thing to translate, and doing it earlier means paying for the same work twice.
+
+The whole of it is worth 14 tickets, about 7%. It is a real win and a small one, and it sits behind the review surface and the answer skeletons deliberately.
+
+### Two index spaces in one column, because the pruner deletes by position
+
+`import-exemplars.mjs` deletes any phrasing at or past the end of the authored list — the only way it can know that an exemplar which used to have five phrasings now has three. Translations are generated rather than parsed out of the document, so by that test every one of them looks stale and would be destroyed on the next import.
+
+Translations therefore live at `phrasing_index >= 100`, out of the pruner's reach, and `05_exemplars.sql` enforces the boundary with a check constraint rather than trusting two scripts to keep agreeing about it. `TRANSLATION_INDEX_BASE` is exported from `exemplar-import.mjs` and the migration test asserts the constraint against it, so moving the base moves both or fails.
+
+`language` is reported by `match_support_exemplars()` and **never filtered on**: an English email matching a French phrasing weakly is better than not matching it at all, and the column exists to measure that, not to prevent it.
+
+**Every phrasing is embedded alone and separately**, translations included — `buildExemplarEmbeddingInput` takes the text and nothing else, no language tag, so an English email meets the English row directly and the exemplar takes its best phrasing rather than an average. Translations can therefore only raise an exemplar's score, never lower it.
+
+**Which is exactly what breaks the over-fetch.** `match_support_exemplars()` fetches `match_count * 8` phrasings because the inner limit counts phrasings while the caller counts exemplars, and 8 works only while no exemplar has more than about that many. Five phrasings in four languages is twenty rows for one situation, enough to fill a three-exemplar request on its own and return one result — silently, looking like a retrieval quality problem. **The multiplier must be raised in the same change that generates translations**, not afterwards.
 
 ### Subject filter only — the opposite of the knowledge policy
 

@@ -143,6 +143,23 @@ create table public.support_exemplar_phrasings (
   phrasing_index integer not null,
   phrasing_kind text not null default 'variant',
   phrasing_text text not null,
+  -- The language THIS PHRASING IS WRITTEN IN -- not the language to answer in,
+  -- which is `tickets.language`. The vocabulary is shared with it anyway, because
+  -- two lists of languages in one system is one list too many.
+  --
+  -- WHY IT EXISTS BEFORE ANYTHING WRITES ANYTHING BUT 'fr'. The corpus is French
+  -- and so is the library, and an English email pays for that: measured
+  -- 2026-08-12, French tickets match at median 0.637 and English at 0.476 -- a
+  -- gap wider than the whole distance between the NEAR and MATCHED bands. The
+  -- fix is non-French phrasings, real ones where the corpus has them and
+  -- translations elsewhere, and none of that is reportable or regenerable
+  -- without knowing what language each row is in.
+  language text not null default 'fr',
+  -- Which phrasing this was translated FROM, by index within the same exemplar.
+  -- Null unless `phrasing_kind` is 'translated'. Carried so a translation can be
+  -- regenerated when its source text is edited, and so a reviewer can see the
+  -- original beside the machine output.
+  translated_from_index integer,
   content_hash text not null,
   embedding vector(1536),
   -- The lexical half of hybrid retrieval, defined now and unused for the moment:
@@ -164,7 +181,31 @@ create table public.support_exemplar_phrasings (
     unique (support_exemplar_id, phrasing_index),
   constraint support_exemplar_phrasings_index_check check (phrasing_index >= 0),
   constraint support_exemplar_phrasings_kind_check check (
-    phrasing_kind in ('canonical', 'variant')
+    phrasing_kind in ('canonical', 'variant', 'translated')
+  ),
+  -- The same list as `tickets.language`, mirrored from
+  -- `scripts/lib/support-taxonomy.mjs` and held in step by the migration test.
+  constraint support_exemplar_phrasings_language_check check (
+    language in ('fr', 'en', 'es', 'de', 'it', 'nl', 'pt', 'other')
+  ),
+  -- TWO INDEX SPACES IN ONE COLUMN, and the split is load-bearing rather than
+  -- tidy. `import-exemplars.mjs` prunes by position: anything at or past the end
+  -- of the authored list is text nobody wrote any more, and gets deleted. A
+  -- translation appended after the authored phrasings would land squarely in
+  -- that range and be destroyed on the next import — so translations live at
+  -- 100 and above, out of reach of the pruner, and the database enforces it
+  -- rather than trusting the two scripts to agree.
+  --
+  -- A translation must also name its source, and cannot be its own source.
+  constraint support_exemplar_phrasings_translation_shape_check check (
+    (phrasing_kind = 'translated'
+       and translated_from_index is not null
+       and translated_from_index <> phrasing_index
+       and phrasing_index >= 100)
+    or
+    (phrasing_kind <> 'translated'
+       and translated_from_index is null
+       and phrasing_index < 100)
   ),
   constraint support_exemplar_phrasings_embedding_dimensions_check check (
     embedding_dimensions is null or embedding_dimensions = 1536
@@ -193,7 +234,13 @@ comment on table public.support_exemplar_phrasings is
   'Retrieval rows for support_exemplars: the canonical question plus every real phrasing of it. One vector each; the exemplar is scored by its best-matching phrasing.';
 
 comment on column public.support_exemplar_phrasings.phrasing_kind is
-  'canonical for the tidy question, variant for a real customer phrasing. Both are embedded and searched identically; the distinction is for the editor and for reporting which register actually matches.';
+  'canonical for the tidy question, variant for a real customer phrasing, translated for machine output derived from one of the other two. All three are embedded and searched identically; the distinction is for the editor and for reporting which register actually matches.';
+
+comment on column public.support_exemplar_phrasings.language is
+  'The language this phrasing is written in, from the same vocabulary as tickets.language. Defaults to fr because the authored corpus is French. Retrieval does NOT filter on it -- an English email is free to match a French phrasing, just poorly, which is the problem this column exists to let us measure.';
+
+comment on column public.support_exemplar_phrasings.translated_from_index is
+  'The phrasing_index this was translated from, within the same exemplar. Null unless phrasing_kind is translated. Translations occupy phrasing_index 100 and above so that import-exemplars.mjs, which prunes anything past the end of the authored list, cannot delete them.';
 
 comment on column public.support_exemplar_phrasings.embedding is
   'pgvector embedding (text-embedding-3-small, 1536 dims). Present only while the parent exemplar is approved and the vector matches the current composed input; cleared when it leaves approved.';
@@ -330,6 +377,11 @@ returns table (
   requirement_needs text[],
   matched_phrasing text,
   matched_phrasing_kind text,
+  -- Reported, never filtered on. Which language won tells you whether the
+  -- non-French phrasings are earning their place; filtering by it would stop an
+  -- English email matching a French phrasing, which is worse than matching it
+  -- weakly.
+  matched_phrasing_language text,
   similarity double precision
 )
 language sql
@@ -342,12 +394,21 @@ as $$
     -- The index lookup. Over-fetched because the limit applies to PHRASINGS
     -- while the caller counts EXEMPLARS: without headroom, one situation whose
     -- five variants all rank highly would return a single result for a request
-    -- of three. Eight per requested exemplar is comfortably above the largest
-    -- phrasing count the authoring format produces.
+    -- of three.
+    --
+    -- THE INVARIANT: the multiplier must stay above the largest number of
+    -- phrasings any one exemplar has. It is 8; the largest authored count is 5.
+    --
+    -- **Translation breaks this and must raise it in the same change.** Five
+    -- phrasings translated into three languages is twenty rows for one exemplar,
+    -- which would fill all 24 slots of a three-exemplar request by itself and
+    -- return one result. The failure is silent and reads as a retrieval quality
+    -- problem rather than as arithmetic.
     select
       p.support_exemplar_id,
       p.phrasing_text,
       p.phrasing_kind,
+      p.language,
       1 - (p.embedding <=> query_embedding) as similarity
     from public.support_exemplar_phrasings p
     join public.support_exemplars e on e.id = p.support_exemplar_id
@@ -372,6 +433,7 @@ as $$
     e.requirement_needs,
     b.phrasing_text,
     b.phrasing_kind,
+    b.language,
     b.similarity
   from best b
   join public.support_exemplars e on e.id = b.support_exemplar_id

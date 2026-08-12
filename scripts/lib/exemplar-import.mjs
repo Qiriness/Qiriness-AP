@@ -20,6 +20,21 @@ import { REQUEST_KINDS, TICKET_SUBJECTS } from './support-taxonomy.mjs';
 // not a wrong answer to a customer. It is also where the personal data in real
 // phrasings gets looked at — several quote order numbers.
 
+/**
+ * Where translated phrasings start, and why authored ones must stay below it.
+ *
+ * `import-exemplars.mjs` prunes by POSITION: a phrasing at or past the end of
+ * the authored list is text nobody wrote any more, so it is deleted. That rule
+ * is correct for authored phrasings and lethal for translations, which are
+ * generated separately and would otherwise be wiped on the next import. So the
+ * two live in separate index ranges, and `05_exemplars.sql` enforces the split
+ * with a check constraint rather than leaving two scripts to agree by habit.
+ *
+ * 100 is far above anything the document produces — the largest entry has five
+ * phrasings — so there is no arithmetic to get wrong at the boundary.
+ */
+export const TRANSLATION_INDEX_BASE = 100;
+
 /** `### D-01 · Où en est ma commande ?` */
 const HEADING = /^###\s+([A-Z]{1,3}-\d{2})\s+·\s+(.+?)\s*$/;
 

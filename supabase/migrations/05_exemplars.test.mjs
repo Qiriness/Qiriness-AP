@@ -2,7 +2,12 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { NEED_KEYS } from '../../agent/src/investigation/evidence-rules.mjs';
-import { REQUEST_KINDS, TICKET_SUBJECTS } from '../../scripts/lib/support-taxonomy.mjs';
+import {
+  REPLY_LANGUAGES,
+  REQUEST_KINDS,
+  TICKET_SUBJECTS
+} from '../../scripts/lib/support-taxonomy.mjs';
+import { TRANSLATION_INDEX_BASE } from '../../scripts/lib/exemplar-import.mjs';
 
 import { checkClause, codeOnly, literalsIn, read, tablesIn } from './_shared.test.mjs';
 
@@ -89,7 +94,62 @@ test('approval_status matches the knowledge library states', () => {
   assert.deepEqual(literalsIn(clause), ['approved', 'draft', 'in_review', 'needs_optimization']);
 });
 
+// --- language, and the two index spaces it needs -----------------------------
+
+test('a phrasing language comes from the same vocabulary as a ticket language', () => {
+  // Two lists of languages in one system is one list too many. The meanings
+  // differ -- what this row is written in, versus what to reply in -- but the
+  // values must not.
+  const clause = checkClause(SQL, 'support_exemplar_phrasings_language_check');
+  assert.ok(clause, 'the constraint is missing');
+  assert.deepEqual(literalsIn(clause), [...REPLY_LANGUAGES].sort());
+});
+
+test('a phrasing defaults to French, because the authored corpus is', () => {
+  assert.match(SQL, /^\s*language text not null default 'fr',/m);
+});
+
+test('translated is a phrasing kind alongside the two authored ones', () => {
+  const clause = checkClause(SQL, 'support_exemplar_phrasings_kind_check');
+  assert.deepEqual(literalsIn(clause), ['canonical', 'translated', 'variant']);
+});
+
+test('translations sit above the index range the importer prunes', () => {
+  // THE ONE THAT PROTECTS REAL WORK. `import-exemplars.mjs` deletes any phrasing
+  // at or past the end of the authored list, which is every translation if they
+  // share an index space. The constraint is what stops the two scripts drifting
+  // into disagreeing about that boundary.
+  const clause = checkClause(SQL, 'support_exemplar_phrasings_translation_shape_check');
+  assert.ok(clause, 'the constraint is missing');
+  assert.match(clause, /phrasing_kind = 'translated'[\s\S]*?phrasing_index >= 100/);
+  assert.match(clause, /phrasing_kind <> 'translated'[\s\S]*?phrasing_index < 100/);
+});
+
+test('the boundary the constraint enforces is the one the importer uses', () => {
+  // Asserted against the module rather than the number, so moving the base moves
+  // both or fails here.
+  assert.equal(TRANSLATION_INDEX_BASE, 100);
+  const clause = checkClause(SQL, 'support_exemplar_phrasings_translation_shape_check');
+  assert.match(clause, new RegExp(`phrasing_index >= ${TRANSLATION_INDEX_BASE}`));
+});
+
+test('a translation names its source, and an authored phrasing has none', () => {
+  const clause = checkClause(SQL, 'support_exemplar_phrasings_translation_shape_check');
+  assert.match(clause, /translated_from_index is not null/);
+  assert.match(clause, /translated_from_index <> phrasing_index/);
+  assert.match(clause, /translated_from_index is null/);
+});
+
 // --- retrieval ---------------------------------------------------------------
+
+test('the search function reports which language matched', () => {
+  // Reported, never filtered on: an English email matching a French phrasing
+  // weakly is better than not matching it at all. This is how we find out
+  // whether the non-French phrasings are earning their place.
+  assert.match(SQL, /matched_phrasing_language text/);
+  assert.match(SQL, /^\s*p\.language,/m);
+});
+
 
 test('the search function returns similarity, never raw distance', () => {
   // `<=>` is cosine DISTANCE: 0 is perfect and the numbers run the wrong way for

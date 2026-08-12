@@ -125,23 +125,26 @@ Referenced by the entries below so each state is written once.
 
 **Variantes réelles**
 - « Je viens de voir que mon colis a été livré dans ma boîte aux lettres mais il n'y a rien »
-
-**needs** `order_identity`, `delivery_state`
-**exemplaires** → jeu `commande`, état `livree_contestee`
-
-**Contenu stable** _(à rédiger)_
->
-
----
-
-### D-04 · Le livreur a déposé mon colis chez un voisin ou à une adresse qui n'est pas la mienne.
-`delivery` · `problem` · _(within D-03's cluster)_ · 🔒 carrier API
-
-**Variantes réelles**
 - « Le livreur GLS a livré mon colis ailleurs que chez moi malgré mes précisions »
+- « Le livreur a déposé mon colis chez un voisin ou à une adresse qui n'est pas la mienne » _(authored — was D-04's canonical question)_
 
 **needs** `order_identity`, `delivery_state`
 **exemplaires** → jeu `commande`, état `livree_contestee`
+
+> **D-04 merged in, 2026-08-12.** It was never a different situation, only a more
+> specific one: *the carrier says delivered, the customer does not have it* —
+> "left at a neighbour's" is a reason, not a second question. Identical `needs`,
+> identical state, and `Email-Example-Responses.md` sent both to the one answer
+> `commande_livree_contestee`.
+>
+> **Its phrasing is the reason to merge rather than to delete.** « Le livreur GLS
+> a livré mon colis ailleurs que chez moi » shares almost no vocabulary with
+> « livré dans ma boîte aux lettres mais il n'y a rien » — same situation, very
+> different words. That is exactly the spread the phrasing rows exist to hold,
+> and as two exemplars they were splitting it and competing on the margin.
+>
+> Count stays **10** — D-04 was measured inside this cluster.
+> **`D-04` is now a retired key** and its draft row survives in the database.
 
 **Contenu stable** _(à rédiger)_
 >
@@ -176,13 +179,26 @@ Referenced by the entries below so each state is written once.
 
 ---
 
-### D-07 · Quels sont vos délais de livraison, et vers quels pays livrez-vous ?
+### D-07 · Quels sont vos délais de préparation et de livraison ?
 `delivery` · `question` · _no cluster — see note_ · 🟢
+
+**Variantes réelles**
+- « J'ai passé une commande, le 29 courant, sur votre site pour la 1ère fois et j'aimerais savoir quel est votre délai moyen pour préparation et expédition ? »
 
 > **Added deliberately.** No cluster of its own, but it is the implied background
 > to D-01, O-09 and O-11: none of those can be answered well without stating the
 > normal delivery window somewhere. Cut it only if that window lives in another
 > article already.
+>
+> **First real phrasing added 2026-08-12**, from the review folder. The eval had
+> already independently named this message as D-07's closest ticket (0.559, its
+> best score anywhere) while it still had nothing but the canonical question.
+>
+> **The heading was asking two questions and now asks one.** It used to run
+> *"…et vers quels pays livrez-vous ?"*, which put a timing question and a
+> destination question behind a single vector. The destination half is now
+> **D-33**, which has real mail of its own; this entry keeps the timing half,
+> which is the one every order-status question quietly depends on.
 
 **needs** `policy_answer`
 **exemplaires** → jeu `produit`, état `reponse_dans_la_base`
@@ -206,7 +222,43 @@ Referenced by the entries below so each state is written once.
 
 ---
 
-# Commande — 6 questions · 65 messages
+### D-33 · Livrez-vous dans mon pays ? Votre site n'accepte pas mon adresse à l'étranger.
+`delivery` · `question` · _no cluster — from the review folder, 2026-08-12_ · 🟢
+
+**Variantes réelles**
+- « Malheureusement, votre boutique en ligne ne fonctionne pas avec mon adresse allemande. Quelles autres options pouvez-vous me proposer pour obtenir des produits Qiriness ? »
+- « en raison des difficultés économiques de votre partenaire de distribution, les produits ne sont plus disponibles dans mon pays »
+
+> **Split out of D-07, which was asking two questions at once.** That entry's
+> heading ran *"quels sont vos délais de livraison, et vers quels pays
+> livrez-vous ?"* — a timing question and a destination question sharing one
+> vector. They have different answers and different askers: the timing question
+> comes from someone who has already ordered, this one from someone who cannot.
+>
+> **It has real mail behind it and D-07 never did.** A German customer whose
+> distributor collapsed, and an English enquiry about duties on a US shipment,
+> neither of which matched anything in the corpus.
+>
+> **One phrasing is still missing and cannot be added yet:** « hello. is there
+> additional duties or taxes for shipments to USA? » is English, and a phrasing
+> has no way to declare its language in this document. It is the clearest single
+> case for finishing that parser change.
+>
+> **Scope, deliberately narrow.** This is the pre-purchase question *can I order
+> from here*. It is **not** the post-purchase billing dispute (« j'ai reçu une
+> facture des douanes suisse… je crois que je ne dois pas payer la TVA
+> française ») — that is a tax argument, not a delivery question, and it is left
+> out as too rare to author against.
+
+**needs** `policy_answer`
+**exemplaires** → jeu `produit`, état `reponse_dans_la_base`
+
+**Contenu stable** _(à rédiger)_
+>
+
+---
+
+# Commande — 5 questions · 65 messages
 
 ### O-09 · Ma commande n'est toujours pas expédiée. Quel est le délai entre la commande et l'expédition ?
 `order` · `problem` · **18 msgs** · 🟢
@@ -214,26 +266,26 @@ Referenced by the entries below so each state is written once.
 **Variantes réelles**
 - « Je constate que ma commande #6686 du 28 juillet 2026 n'est toujours pas traitée »
 - « Pouvez-vous m'indiquer le délai entre une commande et son traitement ? »
-
-**needs** `order_identity`, `order_state`, `policy_answer`
-**exemplaires** → jeu `commande`, état `non_expediee`
-
-**Contenu stable** _(à rédiger)_
->
-
----
-
-### O-10 · Ma carte a été débitée mais ma commande est toujours indiquée « en attente ».
-`order` · `problem` · _(within O-09's cluster)_ · 🟢
-
-**Variantes réelles**
 - « Ma carte bleue est bien débitée mais la commande est toujours indiquée… »
+- « Ma carte a été débitée mais ma commande est toujours indiquée en attente » _(authored — was O-10's canonical question)_
 
-**needs** `order_identity`, `payment_state`
+**needs** `order_identity`, `order_state`, `payment_state`, `policy_answer`
 **exemplaires** → jeu `commande`, état `non_expediee`
 
-> **Merge candidate with O-09.** Split because the answers differ — dispatch
-> time vs. how card authorisation works. Collapse if they turn out the same.
+> **O-10 merged in, 2026-08-12.** It was split from this on the theory that the
+> answers differ — dispatch time vs. how card authorisation works. They do not:
+> `Email-Example-Responses.md` sends both to `commande_non_expediee`, and that
+> answer's own client phrases already include the card-debited line. The eval
+> agreed from the other side — O-10 never won a single ticket, because it sat
+> inside this cluster and lost the margin every time.
+>
+> The count stays **18**: O-10 was measured *within* this cluster, so its
+> messages were always counted here.
+>
+> **`O-10` is now a retired key.** The importer upserts and never deletes an
+> exemplar that leaves this document, so its draft row survives in
+> `support_exemplars` until someone removes it. Harmless — a draft holds no
+> vector and is unreachable — but it is still there.
 
 **Contenu stable** _(à rédiger)_
 >
@@ -260,6 +312,7 @@ Referenced by the entries below so each state is written once.
 **Variantes réelles**
 - « je viens de passer une commande je vous remercie de l'envoyer au 12 allée Jacques Bainvi… »
 - « je viens de passer une commande (6501). Toutefois l'adresse indiquée n'est pas… »
+- « nouvelle adresse pour recevoir mon coli car ma commande est l'ancienne adresse » _(objet du message — le corps est notre réponse)_
 
 **needs** `order_identity`, `order_state`
 **exemplaires** → jeu `commande` — the answer hinges on `non_expediee` vs already dispatched
@@ -297,37 +350,44 @@ Referenced by the entries below so each state is written once.
 
 ---
 
-# Promotions — 6 questions · 21 messages
+# Promotions — 5 questions · 21 messages
 
 > The crispest, highest-volume group and entirely within your control — worth
 > writing first even though delivery ranks above it.
 
 ### P-15 · Je me suis inscrit(e) à la newsletter pour la remise de 20 % mais je n'ai jamais reçu le code.
-`promotions` · `problem` · **16 msgs** — biggest single-issue cluster · 🟢
+`promotions` · `problem` · **14 msgs** — biggest single-issue cluster in the corpus · 🟢
 
 **Variantes réelles**
-- « je suis inscrite à newsletter pour bénéficier de la remise de 20 %. Mais je ne reçois pas… »
-- « Je me suis inscrite à votre newsletter avec cette adresse e-mail afin de bénéficier de… »
+- « je suis inscrite à newsletter pour bénéficier de la remise de 20 %. Mais je ne reçois pas de code de réduction, comment avoir la remise de ma 1ère commande lors de paiement ? »
+- « Je me suis inscrite à votre newsletter avec cette adresse e-mail afin de bénéficier de l'offre de bienvenue de -20 %. J'ai bien confirmé mon inscription, vérifié mes spams… »
+- « 2 fois que je m'inscris à la newsletter afin d'obtenir les 20% su ma première commande, mais je ne reçois aucun mail »
+- « je me suis inscrit à la newlecteurs je ne reçois pas le coupon de 20%, pouvez-vous m'aider ? »
+- « Je n'arrive pas à avoir les 20% avec la newletter je me suis inscrite mais je n'ai jamais rien reçu comme remise. Que faire j'ai besoin de commander svp ?? »
 
 **needs** `customer_account_state`, `promotion_validity`
-**exemplaires** → jeu `promo`
+**exemplaires** → jeu `promo`, état `code_non_recu`
 
-**Contenu stable** _(à rédiger)_
+> **Narrowed to the code never arriving, 2026-08-12** — and this partly reverses
+> the P-16 merge made earlier the same day.
 >
-
----
-
-### P-16 · Le code de 20 % première commande ne s'applique pas à mon panier.
-`promotions` · `problem` · _(within P-15's cluster)_ · 🟢 / 🔒 for `panier_invisible`
-
-**Variantes réelles**
-- « J'essaie de passer ma PREMIÈRE commande sur votre site mais les 20 % "promis" ne s'appliquent pas »
-
-**needs** `promotion_identity`, `promotion_validity`, `promotion_eligibility`
-**exemplaires** → jeu `promo`
-
-> **Merge candidate with P-15.** Split because one is email deliverability and
-> the other is eligibility conditions — different answers, I think.
+> **The merge axis was wrong, and the corpus says so plainly.** It was made on
+> the claim that the customer cannot tell the causes apart. They can: *"I signed
+> up and no code came"* and *"I have the code and it will not apply"* are
+> different observations from where the customer sits, not different diagnoses of
+> one observation. Reading all 21 promotions tickets end to end, **14 are the
+> first and 3 are the second** — the split is the strongest signal in the
+> promotions data, and folding it away lost it.
+>
+> **What stays merged.** The eligibility half of P-16 did not come back here; it
+> went to **P-18**, which is now the "my code does not work" situation. So this
+> entry is one situation with one answer again — `promo_code_non_recu` — rather
+> than one exemplar spanning three.
+>
+> **Register note.** Four of the five phrasings misspell *newsletter*
+> (« newlecteurs », « newletters », « news letters »). That is not noise to tidy
+> up; it is the single most distinctive token this situation has, and correcting
+> it would make these match worse.
 
 **Contenu stable** _(à rédiger)_
 >
@@ -349,14 +409,41 @@ Referenced by the entries below so each state is written once.
 
 ---
 
-### P-18 · Puis-je cumuler plusieurs offres ou codes promotionnels ?
-`promotions` · `question` · **3 msgs** · 🟢
+### P-18 · Mon code promotionnel ne fonctionne pas : la remise ne s'applique pas à ma commande.
+`promotions` · `problem` · **5 msgs** · 🟢 / 🔒 for `panier_invisible`
 
 **Variantes réelles**
-- « Les offres ne sont effectivement pas cumulables… » _(our own reply — the customer-side phrasing needs writing)_
+- « je souhaite passer une commande mais la promo de 20% pour la première commande ne s'applique pas ? et je n arrive pas à vous joindre par téléphone…. »
+- « J'essaie de passer ma PREMIÈRE commande sur votre site mais les 20 % "promis" ne s'appliquent pas… »
+- « La réduction ne se calcule pas avant le paiement » _(objet du message — le corps est notre réponse)_
+- « j'essaie de faire une première commande, je me doute que je ne peux pas bénéficier des 20% de 1er commande sur des articles soldés ? »
+- « Je voudrais savoir pourquoi je n ai pas reçu de code pour les -20% pour la 1ere commande alors que je me suis inscrite. Et puis-je l'utiliser sur les soldes ? »
 
-**needs** `policy_answer`, `promotion_eligibility`
+**needs** `promotion_identity`, `promotion_validity`, `promotion_eligibility`
 **exemplaires** → jeu `promo`
+
+> **Rewritten 2026-08-12. It used to ask « puis-je cumuler plusieurs offres ? »
+> and that was never a real question.** Its only quoted phrasing was *our own
+> reply*, which the importer refused to embed, so it went to the eval with
+> nothing but a canonical question and never won a ticket.
+>
+> **The question had been reverse-engineered from our answers.** Every sentence
+> in the corpus about offers being cumulable is one we wrote — the NEWYEAR26
+> explanation, the wrap-vitaminé reply, the soldes note. Searched across 296
+> stored messages and the review folder: **no customer has ever asked whether
+> codes stack.** They report the symptom instead — the code will not apply.
+>
+> **Eligibility questions live here now, phrased as customers actually ask them.**
+> « puis-je bénéficier des 20 % sur des articles soldés ? » is the question the
+> old heading was groping toward, and it belongs with "my code does not work"
+> rather than in its own entry: both resolve through the same findings, and both
+> land on `promo_code_valide_non_eligible` when the code is real but the basket
+> does not qualify.
+>
+> **The boundary with P-15 is what the customer can observe**, not what turns out
+> to be true: no code ever arrived → P-15; a code exists and will not apply →
+> here. **Not P-19**, which is a displayed promotional *price* differing at
+> checkout with no code involved.
 
 **Contenu stable** _(à rédiger)_
 >
@@ -409,12 +496,37 @@ Referenced by the entries below so each state is written once.
 ---
 
 ### R-22 · Les frais de retour sont-ils à ma charge ou remboursés ?
-`return_exchange` · `question` · **3 msgs** · 🟢
+`return_exchange` · `question` · **3 msgs** · 🟢 · **follow-up register**
 
 **Variantes réelles**
-- « il y aura t il un remboursement des frais d'envoi ? Pourquoi je ne peux pas le déposer à… »
+- « il y aura t il un remboursement des frais d'envoi ? Pourquoi je ne peux pas le déposer au magasin ? Car je ne suis pas responsable si le produit a un problème »
 
-**needs** `policy_answer`
+> **Neither rare nor phrased wrong — measured somewhere it cannot appear.**
+> 2026-08-12: the source message was pulled back out of the corpus, and the
+> truncated quote was hiding two things.
+>
+> **It is a mid-thread reply, not an opening message.** Subject *"RE: RE:
+> PROBLEME MASQUE LED"* — the customer is four messages into a broken-LED-mask
+> conversation. `diagnose-exemplars.mjs` scores only the **first inbound message**
+> of each ticket, deliberately, so this phrasing's own message is never a query in
+> the eval. R-22 winning nothing was never evidence about R-22.
+>
+> **Nobody opens with this question**, and that is the general point: return
+> costs, refund timing and "any news?" are *follow-up* questions by nature. An
+> eval built on trigger messages is structurally blind to them, and the fix is to
+> say so rather than to keep tuning phrasings against a corpus that excludes them.
+>
+> **The reason is load-bearing and was cut off by the "…".** « je ne suis pas
+> responsable si le produit a un problème » — this is a **defective-goods**
+> return, where who pays is not a matter of goodwill. A change-of-mind return is
+> a different answer to the same sentence, which is why this stays its own
+> question rather than merging into R-21.
+>
+> **Not fixed here:** `retour_possible` currently serves R-21, R-22, D-08 *and*
+> PR-26 without distinguishing faulty from unwanted. That is an answer-side
+> condition on `return_eligibility`, and it is the open question below.
+
+**needs** `policy_answer`, `return_eligibility`
 **exemplaires** → jeu `retour`
 
 **Contenu stable** _(à rédiger)_
@@ -436,7 +548,10 @@ Referenced by the entries below so each state is written once.
 
 ---
 
-# Produits — 5 questions · 22 messages
+# Produits et disponibilité — 6 questions · 22 messages
+
+> Five are subject `product`; **S-34 is `product_stock`**, a different subject in
+> the taxonomy and the only entry that carries it.
 
 ### PR-24 · Vos produits sont-ils vegan et non testés sur les animaux ?
 `product` · `question` · **5 msgs** · 🟢 — crispest question in the whole set
@@ -507,6 +622,40 @@ Referenced by the entries below so each state is written once.
 
 **needs** `product_property`
 **exemplaires** → jeu `produit`
+
+**Contenu stable** _(à rédiger)_
+>
+
+---
+
+### S-34 · Le produit ou le cadeau est en rupture de stock — dois-je attendre, ou sera-t-il envoyé plus tard ?
+`product_stock` · `question` · _no cluster — from the review folder, 2026-08-12_ · 🟢
+
+**Variantes réelles**
+- « je souhaite commander 2 produits qui sont actuellement dans mon panier, or, le cadeau pour ces deux produits de la même gamme est en rupture de stock. Dois-je attendre qu'il soit à nouveau en stock pour passer ma commande, où sera-t-il envoyé ultérieurement ? »
+
+> **The first exemplar for `product_stock`, a subject that has been switched on
+> the whole time.** `ENABLED_SUBJECTS` already contains it, so tickets have been
+> routed there and found nothing to match against.
+>
+> **Fully reachable today, unusually.** `LOOKUP_STOCK` exists and
+> `product_availability` resolves to `in_stock` / `out_of_stock` / `unknown` —
+> so unlike most of this set, the branch this question turns on is one the tools
+> can actually decide. It is the cheapest answer in the document to write.
+>
+> **Two questions in one sentence, and the second is the hard half.** *Is it in
+> stock* is a lookup; *will you send it on afterwards* is a fulfilment promise,
+> and nothing in the system knows it. That is a merchant policy decision before
+> it is an answer.
+>
+> **Not P-17.** That is the gift refusing to go into the basket — a checkout
+> bug, blocked on `checkout_state`. Here the basket works fine and the gift is
+> simply not there to give.
+
+**needs** `product_identity`, `product_availability`, `promotion_eligibility`
+**exemplaires** → jeu `produit` — needs a new state, `rupture_de_stock`; the
+existing three (`reponse_dans_la_base`, `produit_ambigu`, `aucune_source`) are
+about whether we *know* the answer, not about what the stock actually is
 
 **Contenu stable** _(à rédiger)_
 >
@@ -598,12 +747,56 @@ Measured on real tickets: as written they score a median **0.448** — below the
 Translated to French before embedding: **0.519**, and translation helped in
 **11/11 cases**. French control median is 0.559.
 
-Recommendation: translate the **query**, never the library — that keeps the
-comparison French↔French so the 0.60/0.50 thresholds stay valid. One
-`gpt-4o-mini` call, only when `tickets.language` isn't `fr`. Not yet wired.
+~~Recommendation: translate the **query**, never the library.~~ **Reversed
+2026-08-12.** Two things were wrong with it.
 
-**2. Merge candidates.** O-09/O-10 and P-15/P-16 may collapse once written.
-Merging later is cheap; the eval will show it.
+**The premise was already false.** "Keep the library French so the comparison
+stays French↔French" — but R-21 is English and D-08 and R-23 are Spanish. The
+library has been mixed-language since the day it was written.
+
+**Query translation trades one mismatch for another.** It does help (0.448 →
+0.519, 11/11) but it cannot close the gap, because machine-translating a messy
+English email produces *tidy* French — and tidy-against-messy is exactly the
+register gap the variants exist to close. It is also a model call in the hot
+path of every non-French ticket, on text nobody reviews.
+
+**Now:** phrasings carry a `language`, and the fix is library-side — real
+non-French phrasings where the corpus has them, machine translation to fill the
+rest. Done once, offline, reviewed at approval like everything else.
+
+Measured 2026-08-12 on exemplars: `fr` median **0.637**, `en` **0.476**,
+`es` **0.814** (n=2 — and D-08 is the one with a real Spanish phrasing).
+
+**Sequencing, and it matters:** translate **last**, once every question has its
+full set of verbatim phrasings. Each authored phrasing added afterwards is
+another thing to translate, so translating early means paying twice. The schema
+is ready (`language`, `translated`, index space at 100+); nothing generates
+translations yet, by choice.
+
+**2. Merge candidates — all three resolved 2026-08-12.** O-09/O-10, D-03/D-04
+and P-15/P-16 are merged. 32 exemplars → 29.
+
+The three had three different justifications, and the difference is worth
+keeping: **O-09/O-10** and **D-03/D-04** shared a single answer, so the split was
+simply wrong. **P-15/P-16** did *not* — it spans three answers, and was merged on
+the stronger claim that which of the three applies is a **finding rather than a
+question**, since the customer writing in cannot tell them apart either.
+
+Retired keys, whose draft rows survive in `support_exemplars` because the
+importer upserts and never deletes: **O-10, D-04, P-16**.
+
+**2b. Faulty vs change-of-mind returns — who pays.** `retour_possible` serves
+R-21, R-22, D-08 and PR-26 as one answer, but R-22's real message asks about
+return costs *because the mask is broken*, and D-08 is a wrong item sent. Those
+are not goodwill decisions. This wants a condition on `return_eligibility`
+splitting the answer, not another exemplar — **your call on the policy, then one
+answer row.**
+
+**2c. Follow-up questions are invisible to the eval.** R-22 arrives four
+messages into a thread, and `diagnose-exemplars.mjs` scores only first inbound
+messages. R-23 ("any news on my refund?") is the same shape. Neither can be
+assessed as things stand; scoring later messages would work, but it also pulls
+our own vocabulary into the corpus, which is why the eval excludes them.
 
 **3. Re-measure after writing.** The French control median of 0.559 says the
 library — not language — is the binding constraint today. Re-run

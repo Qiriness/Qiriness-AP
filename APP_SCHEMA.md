@@ -112,6 +112,8 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |   |   |                        # tool-registry · investigate (bounded loop) ·
 |   |   |                        # investigation-runner · create-investigation
 |   |   |-- resolution/          # customer-resolution-runner · order-number-parser ·
+|   |   |                        # confirmation-evidence (every address in the
+|   |   |                        #   message, as hashes; no template parsing) ·
 |   |   |                        # order-verification · order-resolution-runner ·
 |   |   |                        # order-context + order-context-runner
 |   |   |-- routing/             # forward-rules · forwarding-store · forward-runner
@@ -157,7 +159,7 @@ The recurring situations, not the answers to them. Same document/chunk mechanics
 | Table | Holds |
 | --- | --- |
 | `support_exemplars` | canonical question, `exemplar_key` (`P-16`), subject + kind, `requirement_needs text[]` constrained to the `evidence-rules.mjs` vocabulary, `approval_status` (gates the vector), `demand_message_count` |
-| `support_exemplar_phrasings` | one row per canonical + real phrasing, each with its own `embedding vector(1536)` and the determinism quadruple. `match_support_exemplars()` returns one row per **exemplar**, scored by its best phrasing |
+| `support_exemplar_phrasings` | one row per canonical + real phrasing, each with its own `embedding vector(1536)` and the determinism quadruple. `language` + `translated_from_index` carry non-French rows; translations live at `phrasing_index >= 100`, out of reach of the importer's positional pruner. `match_support_exemplars()` returns one row per **exemplar**, scored by its best phrasing, and reports which language matched |
 | `support_answers` | answer skeletons keyed by **evidence position**, shared across exemplars rather than nested. `when_conditions jsonb` = `{need: [findings]}`; one `is_fallback` per `answer_set`. Selected by `answer-selection.mjs`, which also derives the next need to collect |
 
 ### Agent email workflow
@@ -265,7 +267,7 @@ From `agent/`. Every pass has a standalone runner, most with `:dry-run`.
 | `investigate[:dry-run] [--show/--brief] [--backfill]` | run + render case files |
 | `forward:once` / `forward:dry-run` | the forwarding pass |
 | `tickets:autoclose[:dry-run]` | the lifecycle pass |
-| `eval:categorise` · `review:sample` · `review:compare` | the two measurement sets |
+| `eval:categorise` · `eval:retrieval` · `eval:diagnose` · `eval:exemplars` · `review:sample` · `review:compare` | every measurement — indexed in **`agent/eval/README.md`**, which says what each is judged against (three labelled sets, two proxies) |
 
 ## Read Order
 

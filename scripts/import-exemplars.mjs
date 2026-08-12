@@ -9,7 +9,11 @@ import {
   supabaseUpsert
 } from './lib/supabase-rest-client.mjs';
 import { hashEmbeddingInput } from './lib/embeddings/embedding-input.mjs';
-import { parseExemplarDocument, validateExemplar } from './lib/exemplar-import.mjs';
+import {
+  TRANSLATION_INDEX_BASE,
+  parseExemplarDocument,
+  validateExemplar
+} from './lib/exemplar-import.mjs';
 import { resolveShopId } from '../agent/src/lib/shop.mjs';
 
 // Loads Email-Example-Queries.md into support_exemplars + phrasings.
@@ -134,6 +138,12 @@ async function write({ supabase, shopId, usable }) {
  * The upsert overwrites indexes 0..n-1 but cannot know that an exemplar which
  * used to have five phrasings now has three — indexes 3 and 4 would survive as
  * text nobody wrote, still embedded and still retrievable.
+ *
+ * TRANSLATIONS ARE NOT AUTHORED HERE and must survive this. They are generated
+ * from the phrasings rather than parsed out of the document, so by the only test
+ * this function has — "is it past the end of the authored list?" — every one of
+ * them looks stale. They live at `TRANSLATION_INDEX_BASE` and above precisely so
+ * that the question can be asked of authored rows only.
  */
 async function removeStalePhrasings({ supabase, usable, idByKey }) {
   let removed = 0;
@@ -148,7 +158,11 @@ async function removeStalePhrasings({ supabase, usable, idByKey }) {
       { support_exemplar_id: exemplarId },
       'id,phrasing_index'
     );
-    const stale = existing.filter((row) => row.phrasing_index >= exemplar.phrasings.length);
+    const stale = existing.filter(
+      (row) =>
+        row.phrasing_index < TRANSLATION_INDEX_BASE &&
+        row.phrasing_index >= exemplar.phrasings.length
+    );
     if (stale.length === 0) continue;
 
     await supabaseDeleteWhereIn(

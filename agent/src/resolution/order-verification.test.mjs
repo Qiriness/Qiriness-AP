@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
+  BY_MESSAGE_EMAIL,
+  BY_SENDER_EMAIL,
   CONFIRMED,
   MISMATCH,
   NAME_MATCH,
@@ -13,6 +15,7 @@ import {
 
 const HASH_A = 'a'.repeat(64);
 const HASH_B = 'b'.repeat(64);
+const HASH_C = 'c'.repeat(64);
 
 test('a matching email hash is proof, and is the only safe path', () => {
   // Both sides are sha256 of the trimmed lowercased address (hashIdentifier),
@@ -22,8 +25,77 @@ test('a matching email hash is proof, and is the only safe path', () => {
     ticket: { requester_email_hash: HASH_A }
   });
   assert.equal(r.status, CONFIRMED);
-  assert.equal(r.verifiedBy, 'email');
+  assert.equal(r.verifiedBy, BY_SENDER_EMAIL);
   assert.equal(isSafeToWrite(r.status), true);
+});
+
+test('the order’s own address in the message confirms it even though the sender differs', () => {
+  // The measured case: 6 tickets whose order number parsed fine were refused as
+  // `mismatch` while the order's registered address sat in the message — 3 of
+  // them in a forwarded confirmation, 3 quoted some other way.
+  const r = verifyOrder({
+    order: { customer_email_hash: HASH_A, customer_id: 'c1' },
+    ticket: { requester_email_hash: HASH_B, requester_name: 'Paul Durand' },
+    customer: { display_name: 'Marie Martin' },
+    messageEmailHashes: [HASH_C, HASH_A]
+  });
+  assert.equal(r.status, CONFIRMED);
+  assert.equal(r.verifiedBy, BY_MESSAGE_EMAIL, 'the weaker provenance stays visible');
+  assert.equal(r.emailStatus, 'differs');
+  assert.equal(isSafeToWrite(r.status), true);
+});
+
+test('the sender’s own address still ranks first when both paths would confirm', () => {
+  const r = verifyOrder({
+    order: { customer_email_hash: HASH_A },
+    ticket: { requester_email_hash: HASH_A },
+    messageEmailHashes: [HASH_A]
+  });
+  assert.equal(r.verifiedBy, BY_SENDER_EMAIL);
+});
+
+test('the message-address path outranks a name agreement', () => {
+  // Holding the address the order is registered to is stronger evidence than
+  // two names looking alike.
+  const r = verifyOrder({
+    order: { customer_email_hash: HASH_A, customer_id: 'c1' },
+    ticket: { requester_email_hash: HASH_B, requester_name: 'Marie Martin' },
+    customer: { display_name: 'Marie Martin' },
+    messageEmailHashes: [HASH_A]
+  });
+  assert.equal(r.verifiedBy, BY_MESSAGE_EMAIL);
+});
+
+test('unrelated addresses in the message confirm nothing', () => {
+  // A signature, a colleague on cc and a forwarded newsletter all put addresses
+  // in the text. Only the order's own hash counts.
+  const r = verifyOrder({
+    order: { customer_email_hash: HASH_A, customer_id: 'c1' },
+    ticket: { requester_email_hash: HASH_B, requester_name: 'Paul Durand' },
+    customer: { display_name: 'Marie Martin' },
+    messageEmailHashes: [HASH_B, HASH_C]
+  });
+  assert.equal(r.status, MISMATCH);
+});
+
+test('an order with no email hash is never confirmed by the message', () => {
+  // Otherwise a null on both sides would compare equal and confirm everything.
+  const r = verifyOrder({
+    order: { customer_email_hash: null, customer_id: 'c1' },
+    ticket: { requester_email_hash: HASH_B, requester_name: 'Paul Durand' },
+    customer: { display_name: 'Marie Martin' },
+    messageEmailHashes: [null, HASH_C]
+  });
+  assert.notEqual(r.status, CONFIRMED);
+});
+
+test('callers that pass no hashes get exactly the old behaviour', () => {
+  const r = verifyOrder({
+    order: { customer_email_hash: HASH_A, customer_id: 'c1' },
+    ticket: { requester_email_hash: HASH_B, requester_name: 'Paul Durand' },
+    customer: { display_name: 'Marie Martin' }
+  });
+  assert.equal(r.status, MISMATCH);
 });
 
 test('same person, second address: names agree so it is corroborated, not rejected', () => {

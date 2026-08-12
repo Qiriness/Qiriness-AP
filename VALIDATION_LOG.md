@@ -307,6 +307,19 @@ check does not call genuine orders out of range while the orders table is still
 partially synced — a half-synced catalogue reports a narrower range than the
 shop has really issued, which would mislabel real numbers.
 
+**Check (b) answered, 2026-08-12, and it was a false alarm 6 times out of 15.**
+Each of the six quoted the order's *registered* address somewhere in the message
+while writing from another one — three by forwarding the Shopify order
+confirmation, three quoting it another way. Those now resolve as `confirmed` via
+`verified_by: message_email` (see `DECISIONS.md` → Order resolution), taking
+coverage to 50 of 214 tickets. **The remaining 9 are still unreviewed** and are
+the real question: a `mismatch` now means the number is real, the sender does not
+own it, and nothing in the message ties them to it.
+
+**Still open on this item:** the six writes are validated only by the dry run and
+the unit tests. Nobody has yet read the six tickets to confirm the order written
+is the order the customer is actually asking about.
+
 **The order-context bundle is now built** and verified by assembling the real
 `#1006` order — correct delivery state, tracking number and carrier, refund
 totals, RFM group, no street address or phone. What it has never done is run over
