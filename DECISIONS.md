@@ -405,19 +405,63 @@ That remaining 19% was a **corpus** problem, not a threshold one, and merging co
 
 The measurement is also pessimistic by construction: it scores unfiltered across all of them, because filtering by subject would make the agreement proxy trivially 100%. Production filters first, so the real candidate pool is a handful of same-subject exemplars.
 
+### Split on what the customer can OBSERVE, not on what the evidence turns out to be
+
+This supersedes the P-15/P-16 half of the rule below, which was wrong and was reversed the same day.
+
+That merge was made on the claim that the customer cannot tell the causes apart, so the cause is a finding rather than a question. **The claim was false here.** *"I signed up and no code came"* and *"I have a code and it will not apply"* are different **observations**, not two diagnoses of one observation. The customer knows perfectly well which of the two they are living.
+
+**The corpus states it flatly.** Reading all 21 `promotions` tickets end to end: **14 are the code never arriving, 3 are the code refusing to apply.** That ratio is the strongest signal in the promotions data, and merging folded it away.
+
+The test that survives both cases: **merge when the customer's own account of events is the same and only the diagnosis differs** (O-09/O-10 — "my order has not shipped", whether the cause is dispatch time or card authorisation; D-03/D-04 — "the carrier says delivered and I do not have it", whether or not a neighbour is involved). **Split when the accounts differ**, even if the same investigation resolves both.
+
+Measured after re-splitting: P-15 sharpened from 21 tickets at median 0.696 to **14 at 0.773**, and P-18 went from never winning anything to **7 tickets at 0.740**. Both sides rose, which is the tell that an axis is right — a bad split lowers medians on both sides of it.
+
+### A question invented from its own answer never wins
+
+P-18 asked « puis-je cumuler plusieurs offres ? » and its only phrasing was **our own reply**, which the importer refuses to embed. It reached the eval with nothing but a canonical question and never won a ticket.
+
+Searched across 296 stored messages and a curated review folder: **no customer has ever asked whether codes stack.** Every "cumulable" sentence in the corpus is one the desk wrote — it appears in our replies because we volunteer the rule, never because it was asked. Customers report the symptom: the code will not apply.
+
+The general form: **an exemplar whose phrasings can only be found in outbound mail is a description of our answer, not of a question.** The importer's "skipped a phrasing annotated as our own reply" warning is the detector, and it fired on this entry from the first import — for three weeks it read as a missing quote rather than as evidence the question was wrong.
+
 ### A merge is judged on the ANSWER, not on how similar the questions look
 
 Two of the three merges were obvious: O-09/O-10 and D-03/D-04 each resolved to a single shared answer, so the split was simply wrong — and D-04's phrasing (« le livreur GLS a livré mon colis ailleurs ») shares almost no vocabulary with D-03's (« livré dans ma boîte aux lettres mais il n'y a rien »), which is the spread that belongs *inside* one exemplar rather than split across two competing for it.
 
-**P-15/P-16 spans three answers and was merged anyway**, on a stronger claim: which of the three applies is a **finding, not a question**. The customer writing in cannot tell "the code never arrived" from "the code was refused" either — they know only that they were promised 20% and do not have it. Retrieval identifies the situation; `answer-selection.mjs` reads the evidence. Merging exemplars does not merge answers, because answers are keyed by evidence position.
+~~**P-15/P-16 spans three answers and was merged anyway**, on the claim that which of the three applies is a finding rather than a question.~~ **Reversed the same day** — see the section above. The customer *can* tell "no code arrived" from "the code was refused", and the corpus splits 14/3 along exactly that line. P-15 is now the code never arriving; P-18 is the code refusing to apply.
 
-The cost is real and was accepted knowingly: the merged exemplar declares four needs, so an investigation starting there collects more before it narrows (bounded — `nextNeed()` halts as soon as one answer stands), and P-15 is now the rival that beats two unrelated exemplars in the eval. **What to watch is whether it becomes an attractor**, not whether the merge was allowed.
+What the reversal did not undo: answers stay keyed by evidence position and shared across exemplars, so re-splitting the questions cost nothing on the answer side. `promo_code_non_recu` follows P-15, `promo_code_valide_non_eligible` and `promo_code_inexistant_ou_expire` follow P-18, and no answer text moved.
 
 ### "Never wins" has three causes and they want opposite fixes
 
 Win counts alone say an exemplar is silent, never why, and the fixes contradict each other — so `diagnose-exemplars.mjs` reports the rival that beat it, the median gap, and the language of its closest tickets. A **collision** (small gap, one dominant rival) wants a merge, and adding phrasings would only sharpen the tie. **Absence** wants leaving alone. **Mid-pack** — never in the top two, never far off — means the field already covers it.
 
 A gap of exactly **0.000** is a fourth thing and not a close call at all: the same text scored twice, which is what a merge leaves behind, since the importer upserts and never deletes an exemplar that has left the document. Those retired rows are not inert — three of them dragged the median margin from 0.040 down to 0.032 and inflated ambiguity to 23% before they were deleted, making the merges look actively harmful.
+
+### Order numbers stay in the phrasings — measured, and it makes no difference
+
+The intuition is that `#6686` is high-entropy noise no query will ever match, and that `[numéro de commande]` would embed better. **Measured 2026-08-12** by embedding all 92 phrasings three ways and scoring each set against the same unchanged ticket vectors:
+
+| variant | median | ≥0.65 | affected-exemplar median |
+|---|---|---|---|
+| as-is | 0.633 | 88 | 0.501 |
+| stripped | 0.635 | 87 | 0.489 |
+| placeholder | 0.634 | 92 | 0.505 |
+
+Differences of 0.001–0.004 on n=203. **The effect is diluted three times over:** a number is one token in a ~20-token phrasing, that phrasing is one of several on its exemplar, and the exemplar is scored by its *best* phrasing. Only 11 of 92 phrasings carry an identifier at all.
+
+Kept as-is on the tie-break: a placeholder is a token **no real customer email contains**, so it moves the library away from the query side — against the whole reason variants exist. Literal text also keeps the corpus an honest record of what was written. (The "stripped" row is the weakest partly because the stripper left dangling nouns — « ma commande numéro qui devait être livrée » — so read it as *removal is not obviously better*, not as *removal is worse*.)
+
+**Promo codes never arise on this side.** No phrasing contains one; codes appear only in answers, and `support_answers` has no embedding column. Parameterising `BIENVENUEQIRINESS` matters for staleness, not for retrieval.
+
+### An answer is written from a sent reply where one exists, and tagged where it does not
+
+The first three answers were authored from the desk's own outbound mail (`promo_code_non_recu`, `promo_code_valide_non_eligible`) or written from scratch and **marked 🟨 SYNTHÉTIQUE** (`promo_code_inexistant_ou_expire`). The tag is not bookkeeping: a synthetic answer has never been read by a customer, and the reviewer approving it is doing a different and harder job than confirming one we already send.
+
+**A real reply settles questions authoring cannot.** The newsletter answer was sent twice in near-identical words, and it shows that the desk's response to "no code arrived" is **to send the code** — nobody investigates why the automation failed. No amount of reasoning about `customer_account_state` would have produced that.
+
+**Two rules came out of writing them.** Live promotion facts (`BIENVENUEQIRINESS`, `-20 %`) must be parameterised before a reply becomes an `answer_skeleton`, or a code change means editing an answer instead of a promotion. And a commercial gesture — a refund, a discount on the next order — is a **merchant decision the drafting model must never invent**; either it is given a bounded gesture it may offer, or the situation routes to a person.
 
 ### An eval built on trigger messages cannot see follow-up questions
 

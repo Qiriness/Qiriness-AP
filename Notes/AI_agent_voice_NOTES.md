@@ -26,3 +26,6 @@ Optimising the agent, scope tools and control state with langraph
 Draft modification, memory, so that it can remeber and improve over time. 
 
 Check the evidence-rules.mjs:30
+
+Make sure that the variants have a french, english, spanish and italian version of all the questions.
+Make sure that the answers have been writtne yh 

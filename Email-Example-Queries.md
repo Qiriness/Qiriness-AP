@@ -364,6 +364,7 @@ Referenced by the entries below so each state is written once.
 - « 2 fois que je m'inscris à la newsletter afin d'obtenir les 20% su ma première commande, mais je ne reçois aucun mail »
 - « je me suis inscrit à la newlecteurs je ne reçois pas le coupon de 20%, pouvez-vous m'aider ? »
 - « Je n'arrive pas à avoir les 20% avec la newletter je me suis inscrite mais je n'ai jamais rien reçu comme remise. Que faire j'ai besoin de commander svp ?? »
+- « Je voudrais savoir pourquoi je n ai pas reçu de code pour les -20% pour la 1ere commande alors que je me suis inscrite » _(extrait — la question « puis-je l'utiliser sur les soldes ? » qui suit est sur P-18)_
 
 **needs** `customer_account_state`, `promotion_validity`
 **exemplaires** → jeu `promo`, état `code_non_recu`
@@ -417,7 +418,7 @@ Referenced by the entries below so each state is written once.
 - « J'essaie de passer ma PREMIÈRE commande sur votre site mais les 20 % "promis" ne s'appliquent pas… »
 - « La réduction ne se calcule pas avant le paiement » _(objet du message — le corps est notre réponse)_
 - « j'essaie de faire une première commande, je me doute que je ne peux pas bénéficier des 20% de 1er commande sur des articles soldés ? »
-- « Je voudrais savoir pourquoi je n ai pas reçu de code pour les -20% pour la 1ere commande alors que je me suis inscrite. Et puis-je l'utiliser sur les soldes ? »
+- « puis-je l'utiliser sur les soldes ? » _(extrait — la première moitié du message est sur P-15)_
 
 **needs** `promotion_identity`, `promotion_validity`, `promotion_eligibility`
 **exemplaires** → jeu `promo`
@@ -486,6 +487,7 @@ Referenced by the entries below so each state is written once.
 
 **Variantes réelles**
 - « Hi, accidently ordered the wrong products. How can I return? I do not see a return address on the… »
+- « Pourquoi je ne peux pas le déposer au magasin ? » _(extrait — la question sur les frais de retour qui l'accompagne est sur R-22)_
 
 **needs** `return_eligibility`, `policy_answer`
 **exemplaires** → jeu `retour`
@@ -499,7 +501,7 @@ Referenced by the entries below so each state is written once.
 `return_exchange` · `question` · **3 msgs** · 🟢 · **follow-up register**
 
 **Variantes réelles**
-- « il y aura t il un remboursement des frais d'envoi ? Pourquoi je ne peux pas le déposer au magasin ? Car je ne suis pas responsable si le produit a un problème »
+- « il y aura t il un remboursement des frais d'envoi ? Car je ne suis pas responsable si le produit a un problème » _(extrait — « pourquoi je ne peux pas le déposer au magasin ? » est sur R-21)_
 
 > **Neither rare nor phrased wrong — measured somewhere it cannot appear.**
 > 2026-08-12: the source message was pulled back out of the corpus, and the
@@ -618,7 +620,7 @@ Referenced by the entries below so each state is written once.
 
 **Variantes réelles**
 - « Je m'intéresse de près à votre Masque LED visage et je souhaiterais quelques précisions »
-- « Avant de me décider, je… »
+- « Avant de me décider, je souhaiterais connaître quelques caractéristiques techniques qui ne figurent pas sur la fiche produit : l'irradiance (ou densité de puissance), exprimée en mW/cm² ; la fluence, délivrée au cours d'une séance de 10 minutes »
 
 **needs** `product_property`
 **exemplaires** → jeu `produit`

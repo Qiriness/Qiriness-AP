@@ -158,8 +158,41 @@ missing. Write the phrases now; leave the reply empty until the tool exists.
 **établi** état de l'inscription newsletter · existence du code
 **ne pas affirmer** que le code a été envoyé si rien ne le montre
 
-**Réponse**
+**when** `promotion_validity: [active]` · `customer_account_state: [resolved, none]`
+**priority** 0
+
+**Réponse** — 🟩 **RÉEL**, envoyé les 2026-06-05 et 2026-06-26, quasi mot pour mot
+> Bonjour {prénom},
 >
+> Merci pour votre inscription à notre newsletter.
+>
+> Pour bénéficier de votre offre de bienvenue, vous pouvez utiliser le code
+> suivant lors de votre prochaine commande : **BIENVENUEQIRINESS**
+>
+> Ce code vous permet de bénéficier de -20 % sur votre première commande. Il est
+> à usage unique et n'est pas cumulable avec les offres promotionnelles en cours.
+>
+> Nous vous souhaitons une très belle découverte de nos soins et restons à votre
+> disposition pour toute question.
+>
+> Belle journée à vous,
+> Le Service Client Qiriness
+
+> **Why this one is worth having exactly.** It is the desk's own answer to the
+> biggest cluster in the corpus (14 tickets), it was sent twice in near-identical
+> words, and it settles a question no amount of authoring would have: **the reply
+> is to send the code, not to investigate why it did not arrive.** Nobody
+> diagnoses the newsletter automation; they give the customer the code.
+>
+> **Two things the drafting agent must not freeze.** `BIENVENUEQIRINESS` and the
+> `-20 %` are live promotion facts — they belong to `lookupPromotion`, not to
+> this row, or a code change means editing an answer. The skeleton should name
+> the need and let the tool supply the value. Kept verbatim here because this is
+> the staging file and the evidence matters; **it must be parameterised before it
+> becomes an `answer_skeleton`.**
+>
+> **The cumulability sentence is ours, and it is where old P-18 came from.** It
+> appears in our reply because we volunteer it, never because a customer asked.
 
 ---
 
@@ -175,8 +208,40 @@ missing. Write the phrases now; leave the reply empty until the tool exists.
 **établi** le code existe et est actif · la condition non remplie
 **ne pas affirmer** ce que contient le panier — la boutique ne l'expose pas
 
-**Réponse**
+**when** `promotion_validity: [active]` · `promotion_eligibility: [blocked]`
+**priority** 10 _(more specific than #10, which does not require a live code)_
+
+**Réponse** — 🟩 **RÉEL**, envoyé le 2026-06-26 (offre trousse pendant les soldes)
+> Bonjour {prénom},
 >
+> Merci pour votre message, et veuillez nous excuser pour la gêne occasionnée.
+>
+> Actuellement, notre site est en période de soldes. Dans ce cadre, l'offre
+> {nom de l'offre} n'est malheureusement pas cumulable avec les promotions en
+> cours, comme indiqué dans nos conditions d'offres. C'est la raison pour
+> laquelle {ce qui s'est produit dans le panier}.
+>
+> Pour vous remercier de votre fidélité et nous excuser pour ce désagrément,
+> {geste commercial}.
+>
+> Bien cordialement,
+> Le Service Client Qiriness
+
+> **The shape is the point, and it is three moves.** Name the rule that fired,
+> say what it caused, then offer something. The desk's own reply does all three
+> and the third is not optional in practice — a customer told only *"the terms
+> forbid it"* has been answered and not helped.
+>
+> **`{geste commercial}` is a merchant decision, not a drafting one.** The real
+> replies vary: a refund on the charged gift, −10 % on the next order outside
+> sale periods. **This is the one open question on this answer** — either the
+> agent is given a bounded gesture it may offer, or the situation routes to a
+> person the moment a gesture is warranted. Do not let the drafting model invent
+> one.
+>
+> **A second real example exists** for the same position (2026-01-06, code
+> NEWYEAR26 against already-discounted items): same three moves, different rule.
+> Two independent instances is the reason to trust the shape.
 
 ---
 
@@ -192,8 +257,37 @@ missing. Write the phrases now; leave the reply empty until the tool exists.
 **établi** le code n'existe pas / est expiré
 **ne pas affirmer** qu'il a été refusé à tort
 
-**Réponse**
+**when** `promotion_validity: [expired, not_found, not_yet_started, inactive]`
+**priority** 0 _(less specific than #9; #9 wins when the code is live and merely blocked)_
+
+**Réponse** — 🟨 **SYNTHÉTIQUE**, aucun exemple réel dans le corpus _(à valider avant emploi)_
+> Bonjour {prénom},
 >
+> Merci pour votre message.
+>
+> Après vérification, le code {code} {n'est plus valable depuis le {date} /
+> n'apparaît pas dans nos offres en cours}. Il n'est donc pas applicable à votre
+> commande, et ce n'est pas une erreur de votre part.
+>
+> {Offre actuellement disponible, le cas échéant.}
+>
+> Nous restons à votre disposition,
+> Le Service Client Qiriness
+
+> **Tagged synthetic because it is.** No reply in the 155 outbound messages tells
+> a customer their code has expired — the situation exists in the questions and
+> not in the answers, so this is written rather than observed. **Validate before
+> use.**
+>
+> **The one deliberate choice in it:** *"ce n'est pas une erreur de votre part"*.
+> A customer whose code was refused assumes they mistyped it, and the two real
+> replies for the neighbouring position both open by removing blame before
+> explaining. That is the pattern being carried over — not invented.
+>
+> **Why `not_yet_started` and `inactive` sit in the same row as `expired`:** to
+> the customer they are one situation — *the code cannot be used* — and the
+> branch text differs by a clause, not by a reply. Splitting them would be three
+> rows differing in one sentence each.
 
 ---
 
