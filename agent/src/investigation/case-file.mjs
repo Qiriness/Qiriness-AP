@@ -273,6 +273,10 @@ export function buildCaseFile({
   proposedLevel = null,
   escalationReasons = [],
   evidenceGaps = [],
+  // Who declared the needs behind `evidenceGaps`: `model` when the decomposer
+  // read the ticket, `exemplar` when it failed and a matched situation's
+  // declared needs stood in, `none` when neither produced anything.
+  needsSource = 'none',
   model = null,
   now = new Date()
 } = {}) {
@@ -312,6 +316,11 @@ export function buildCaseFile({
     // counted in reports, and deliberately does not move the verdict yet. See
     // `evidence-rules.mjs` for why acting on it is a separate step.
     evidenceGaps: Array.isArray(evidenceGaps) ? evidenceGaps : [],
+    // WHICH SOURCE DECLARED THEM, and it has to be recorded rather than inferred:
+    // the whole value of comparing an exemplar's declared needs against the run's
+    // own is that the two are independent, and a row where the exemplar supplied
+    // them is not evidence of agreement. Reports must exclude `exemplar` rows.
+    needsSource,
     proposedLevel,
     // Why the level moved, in the human's words rather than a number changing on
     // its own. Computed by investigation-rules, never by the model.

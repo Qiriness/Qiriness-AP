@@ -44,7 +44,16 @@ export async function runInvestigation({
   onResult,
   // Loaded once per poll by the caller and shared across tickets: it is a small
   // map, and rebuilding it per ticket would turn a lookup back into a query.
-  senderDirectory = emptySenderDirectory
+  senderDirectory = emptySenderDirectory,
+  // Which recurring situation this ticket is. OPTIONAL, and absent by default so
+  // that a caller which has not wired it runs exactly as it did before.
+  //
+  // REPORTED, NOT ENFORCED. Its result reaches the stored row and nothing else:
+  // it is not passed to `investigate`, so no tool choice, need or verdict can
+  // depend on it. That is the whole point — the exemplar's declared
+  // `requirement_needs` is only worth comparing against the run's own
+  // `evidence_gaps` while the two are arrived at independently.
+  retrieveExemplar = null
 } = {}) {
   const counts = {
     considered: 0,
@@ -78,9 +87,19 @@ export async function runInvestigation({
       continue;
     }
 
+    const triggerMessage = messages[messages.length - 1];
+
+    // Before the investigation, so it cannot be influenced by it — and awaited
+    // rather than raced, because the stored row must describe one message.
+    const exemplarMatch = await matchExemplar({
+      retrieveExemplar, ticket, message: triggerMessage, shopId, logger
+    });
+
     let caseFile;
     try {
-      caseFile = await investigate(buildInput(ticket, messages, senderDirectory));
+      caseFile = await investigate(
+        buildInput(ticket, messages, senderDirectory, exemplarMatch.requirement_needs)
+      );
     } catch (error) {
       await handleFailure({ store, ticket, error, counts, logger, dryRun });
       continue;
@@ -98,8 +117,15 @@ export async function runInvestigation({
         ticket,
         caseFile,
         shopId,
-        triggerMessageId: messages[messages.length - 1].id,
-        level
+        triggerMessageId: triggerMessage.id,
+        level,
+        // Stamped with whether this row's needs came from the exemplar. A report
+        // comparing the two declarations MUST exclude these, or it measures the
+        // exemplar against a copy of itself.
+        exemplarMatch: {
+          ...exemplarMatch,
+          ...(caseFile.needsSource === 'exemplar' ? { supplied_needs: true } : {})
+        }
       });
     }
 
@@ -121,6 +147,12 @@ export async function runInvestigation({
       needsSatisfied: needs.satisfied,
       needsNotAttempted: needs.not_attempted,
       needsComplete: needs.complete,
+      // The situation this ticket looks like, decided independently of the run
+      // above. Keys only — a phrasing is customer prose and does not go in a log.
+      exemplarVerdict: exemplarMatch.verdict ?? null,
+      // The closest rather than the committed one: on a near miss the committed
+      // key is null, and which situation nearly won is the point of the line.
+      exemplarKey: exemplarMatch.closest ?? null,
       ...(level !== ticket.level ? { handlingLevel: level, previousHandlingLevel: ticket.level } : {})
     });
   }
@@ -189,7 +221,7 @@ async function handleFailure({ store, ticket, error, counts, logger, dryRun }) {
  * question that was already answered, and the model would only ask when it
  * thought to.
  */
-function buildInput(ticket, messages, senderDirectory) {
+function buildInput(ticket, messages, senderDirectory, exemplarNeeds = []) {
   const first = messages[0];
   const latest = messages.length > 1 ? messages[messages.length - 1] : null;
   const text = [first?.body_text, latest?.body_text]
@@ -211,6 +243,11 @@ function buildInput(ticket, messages, senderDirectory) {
     // IS NOT CARRIED — only the label, the note and the pattern that matched,
     // which is a company domain rather than personal data.
     sender: senderDirectory?.lookup(first?.from_email) ?? null,
+    // STANDBY ONLY, and never shown to the model. `investigate` reads it solely
+    // when the decomposer failed to produce needs of its own; while the
+    // decomposer has spoken this is ignored, so the two declarations stay
+    // independent and remain worth comparing.
+    exemplarNeeds,
     // The bundle the order-context pass already assembled and stored. Read, not
     // re-derived: a second derivation of the same order would be a second,
     // divergent account of it.
@@ -230,6 +267,69 @@ function attemptsSoFar(metadata) {
 function mergeMetadata(metadata, investigation) {
   const base = metadata && typeof metadata === 'object' ? metadata : {};
   return { ...base, investigation: { ...base.investigation, ...investigation } };
+}
+
+/**
+ * Which recurring situation this ticket is, compressed for storage.
+ *
+ * NEVER FAILS A RUN. Exemplar matching is a diagnostic riding along beside the
+ * investigation; a failing RPC, a missing vector or an unreachable embeddings
+ * API must cost the case file nothing. Every failure resolves to `{}`, which
+ * reads the same as "no exemplar came close" — deliberately, because both mean
+ * the same thing to anyone querying this column: no situation was identified.
+ * The log line is what distinguishes them.
+ *
+ * The stored shape is a summary, not the candidate list, and it keeps THREE
+ * keys rather than one:
+ *
+ * - `exemplar_key` is the committed match, null unless the verdict is `matched`.
+ * - `closest` is the nearest situation whatever the verdict. On a near miss that
+ *   is the entire diagnostic — "the corpus almost covers this ticket, and here
+ *   is what it almost is" — and storing only the committed match would throw it
+ *   away on exactly the rows worth reading.
+ * - `runner_up` because a persistent near-tie between the same two situations is
+ *   the corpus asking to be merged, which is only visible across many rows.
+ */
+async function matchExemplar({ retrieveExemplar, ticket, message, shopId, logger }) {
+  if (!retrieveExemplar) return {};
+
+  try {
+    const result = await retrieveExemplar(
+      {
+        subject: message.subject,
+        body: message.body_text,
+        category: ticket.category,
+        // The vector ingestion already wrote, when it is there. Composed the same
+        // way this query would be, so reusing it costs an API call rather than
+        // accuracy; `resolveVector` embeds on demand when it is absent, because
+        // that ingestion write is best-effort.
+        embedding: message.embedding
+      },
+      { shopId }
+    );
+
+    return {
+      verdict: result.verdict,
+      exemplar_key: result.exemplar?.exemplarKey ?? null,
+      closest: result.candidates?.[0]?.exemplarKey ?? null,
+      similarity: round3(result.bestSimilarity),
+      margin: round3(result.margin),
+      runner_up: result.candidates?.[1]?.exemplarKey ?? null,
+      // The claim being tested: that this situation's declared needs are the
+      // ones the run turns out to require.
+      requirement_needs: result.exemplar?.requirementNeeds ?? []
+    };
+  } catch (error) {
+    logger?.warn?.('investigate.exemplar_failed', {
+      ticketId: ticket.id,
+      error: error.message
+    });
+    return {};
+  }
+}
+
+function round3(value) {
+  return Number.isFinite(value) ? Math.round(value * 1000) / 1000 : null;
 }
 
 export function createInvestigationStore(supabase) {
@@ -273,7 +373,12 @@ export function createInvestigationStore(supabase) {
         // `from_email` is read for the sender-directory lookup only. It is never
         // put in a prompt or a case file — the label it resolves to is (see
         // buildInput).
-        'id,subject,body_text,received_at,from_email',
+        //
+        // `embedding` is read so exemplar matching can reuse the vector
+        // ingestion already wrote instead of paying for one per ticket. It is
+        // never put in a prompt either — only the trigger message's is used, and
+        // only as a query.
+        'id,subject,body_text,received_at,from_email,embedding',
         { order: 'received_at.asc', limit }
       );
     },
@@ -287,7 +392,7 @@ export function createInvestigationStore(supabase) {
      * second — and it leaves the ticket's trajectory as rows, so a thread that
      * escalated shows both readings.
      */
-    async saveInvestigation({ ticket, caseFile, shopId, triggerMessageId, level }) {
+    async saveInvestigation({ ticket, caseFile, shopId, triggerMessageId, level, exemplarMatch }) {
       await supabaseUpsert(
         supabase,
         'ticket_investigations',
@@ -307,6 +412,8 @@ export function createInvestigationStore(supabase) {
             handoff: caseFile.handoff,
             tool_calls: caseFile.toolCalls,
             evidence_gaps: caseFile.evidenceGaps,
+            // Diagnostic, arrived at independently of everything above it.
+            exemplar_match: exemplarMatch || {},
             dropped_claims: caseFile.droppedClaims,
             escalation_reasons: caseFile.escalationReasons,
             proposed_level: caseFile.proposedLevel,

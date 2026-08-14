@@ -204,7 +204,8 @@ async function main() {
         // table a minute ago is context on this poll rather than the next.
         senderDirectory: await senderDirectoryStore.load(shopId, {
           supportMailbox: config.graph.mailbox
-        })
+        }),
+        retrieveExemplar: investigation.retrieveExemplar
       });
       if (investigated.considered > 0) {
         logger.info('investigate.pass', { shopId, ...investigated });

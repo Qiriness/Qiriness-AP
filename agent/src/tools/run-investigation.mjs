@@ -90,6 +90,9 @@ async function main() {
     senderDirectory: await senderDirectoryStore.load(shopId, {
       supportMailbox: config.graph.mailbox
     }),
+    // Runs in a dry run too. It writes nothing itself, and leaving it out would
+    // make the dry run stop reproducing the worker — the one thing it is for.
+    retrieveExemplar: investigation.retrieveExemplar,
     onResult: ({ ticket, caseFile, level }) => {
       const needs = summariseNeeds(caseFile.evidenceGaps);
       totalNeeds.declared += needs.declared;

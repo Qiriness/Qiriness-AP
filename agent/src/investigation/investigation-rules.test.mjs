@@ -83,14 +83,31 @@ test('the whole 14 x 4 matrix is decidable and never throws', () => {
   }
 });
 
-test('isInvestigable follows ENABLED_SUBJECTS, not just the tool table', () => {
-  // delivery has a full tool policy and is still out of scope today.
-  assert.equal(isInvestigable({ category: 'delivery', request_kind: 'problem', level: 2 }), false);
-  assert.ok(!ENABLED_SUBJECTS.includes('delivery'));
+test('the enabled set and the tool table now say exactly the same thing', () => {
+  // UNTIL 2026-08-13 THEY DID NOT, and the gap was the point: `delivery` carried
+  // a full tool policy while being held out of ENABLED_SUBJECTS, because the
+  // order data behind it was not there yet. That gap is closed, so the invariant
+  // to protect is the agreement itself — a subject given tools but never enabled
+  // is dormant code nobody notices, and one enabled with no tools is a ticket
+  // routed nowhere.
+  for (const subject of TICKET_SUBJECTS) {
+    const hasTools = allowedTools(subject, 'problem', 2).length > 0;
+    assert.equal(
+      ENABLED_SUBJECTS.includes(subject),
+      hasTools,
+      `${subject}: enabled=${ENABLED_SUBJECTS.includes(subject)} but hasTools=${hasTools}`
+    );
+  }
+});
 
+test('isInvestigable refuses an empty tool set and level 4, whatever the subject', () => {
   assert.equal(isInvestigable({ category: 'promotions', request_kind: 'problem', level: 2 }), true);
+  assert.equal(isInvestigable({ category: 'delivery', request_kind: 'problem', level: 2 }), true);
+  // Level 4 strips every tool: a threat or an injury is not investigated.
   assert.equal(isInvestigable({ category: 'promotions', request_kind: 'problem', level: 4 }), false);
+  // Deliberately empty tool sets, whatever the level.
   assert.equal(isInvestigable({ category: 'careers', request_kind: 'contact', level: 2 }), false);
+  assert.equal(isInvestigable({ category: 'cosmetovigilance', request_kind: 'problem', level: 2 }), false);
 });
 
 test('opening moves gather the deterministic evidence before any model turn', () => {

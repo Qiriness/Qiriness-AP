@@ -366,8 +366,9 @@ test('the model is told to answer every request the email contains', async () =>
 });
 
 test('a request the agent cannot investigate is declared, not dropped', async () => {
-  // `delivery` is out of scope. The case file must say so rather than answer the
-  // product half and leave the customer's parcel question unanswered in silence.
+  // `cosmetovigilance` is out of scope by policy, not by data. The case file must
+  // say so rather than answer the product half and leave the reported reaction
+  // unanswered in silence.
   const registry = buildPlanningRegistry({
     [TOOL_NAMES.LOOKUP_PRODUCT]: async () => OK_RESULT,
     [TOOL_NAMES.SEARCH_KNOWLEDGE]: async () => OK_RESULT
@@ -375,7 +376,7 @@ test('a request the agent cannot investigate is declared, not dropped', async ()
   const decomposer = buildDecomposer({
     tasks: [
       { question: 'Le masque convient-il ?', category: 'product', request_kind: 'question' },
-      { question: 'Où est mon colis ?', category: 'delivery', request_kind: 'problem' }
+      { question: 'une réaction cutanée après application', category: 'cosmetovigilance', request_kind: 'problem' }
     ]
   });
   const openai = buildOpenAI([{ content: caseFileAnswer() }]);
@@ -384,7 +385,7 @@ test('a request the agent cannot investigate is declared, not dropped', async ()
   await investigate(PRODUCT_TICKET);
 
   const prompt = openai.sent[0].messages[0].content;
-  assert.match(prompt, /Où est mon colis \?/);
+  assert.match(prompt, /réaction cutanée après application/);
   assert.match(prompt, /needs_human/);
 });
 
@@ -561,4 +562,63 @@ test('an ordinary consumer gets no sender line at all', async () => {
   // Restating "ordinary customer" on every ticket would train the reader to skip
   // the line on the ticket where it matters.
   assert.ok(!firstPrompt(openai).includes('Expéditeur'));
+});
+
+// --- the decomposition-failure fallback ---------------------------------------
+
+const NEEDS_TOOLS = buildRegistry({ [TOOL_NAMES.SEARCH_KNOWLEDGE]: async () => OK_RESULT });
+const ANSWER_TURNS = [{ content: caseFileAnswer() }];
+
+test('a matched exemplar stands in only when decomposition produced nothing', async () => {
+  // `decompose.mjs` deliberately invents no needs on failure, so the run would
+  // otherwise report "nobody said what this required". A human-authored list for
+  // a situation this ticket matched is not the guess that rule forbids.
+  const { investigate } = createInvestigator(buildOpenAI(ANSWER_TURNS), NEEDS_TOOLS, {
+    model: 'm',
+    decomposer: { decompose: async () => ({ tasks: [], entities: {}, needs: [], read: false }) }
+  });
+
+  const caseFile = await investigate({
+    ...PRODUCT_TICKET,
+    exemplarNeeds: ['product_property', 'policy_answer']
+  });
+
+  assert.equal(caseFile.needsSource, 'exemplar');
+  assert.deepEqual(
+    caseFile.evidenceGaps.map((g) => g.need).sort(),
+    ['policy_answer', 'product_property']
+  );
+});
+
+test('while the decomposer has spoken the exemplar is ignored entirely', async () => {
+  // The independence IS the measurement: if the exemplar could top up a
+  // successful decomposition, comparing the two would compare a list to itself.
+  const { investigate } = createInvestigator(buildOpenAI(ANSWER_TURNS), NEEDS_TOOLS, {
+    model: 'm',
+    decomposer: {
+      decompose: async () => ({
+        tasks: [], entities: {}, needs: ['product_identity'], read: true
+      })
+    }
+  });
+
+  const caseFile = await investigate({
+    ...PRODUCT_TICKET,
+    exemplarNeeds: ['policy_answer', 'brand_answer']
+  });
+
+  assert.equal(caseFile.needsSource, 'model');
+  assert.deepEqual(caseFile.evidenceGaps.map((g) => g.need), ['product_identity']);
+});
+
+test('a failed decomposition with no exemplar still declares nothing', async () => {
+  const { investigate } = createInvestigator(buildOpenAI(ANSWER_TURNS), NEEDS_TOOLS, {
+    model: 'm',
+    decomposer: { decompose: async () => ({ tasks: [], entities: {}, needs: [], read: false }) }
+  });
+
+  const caseFile = await investigate({ ...PRODUCT_TICKET, exemplarNeeds: [] });
+
+  assert.equal(caseFile.needsSource, 'none');
+  assert.deepEqual(caseFile.evidenceGaps, []);
 });

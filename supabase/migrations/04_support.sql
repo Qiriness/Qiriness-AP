@@ -739,6 +739,21 @@ create table public.ticket_investigations (
   -- What answering this ticket REQUIRED, against what the run actually got.
   evidence_gaps jsonb not null default '[]'::jsonb,
 
+  -- WHICH RECURRING SITUATION THIS TICKET IS, from support_exemplars.
+  --
+  -- RECORDED, NOT ACTED ON. The investigation does not read it: no tool choice,
+  -- no need, no verdict depends on it, and the model is never told. It is here
+  -- to be compared against what the run decided by itself — the exemplar's
+  -- `requirement_needs` beside the model's own `evidence_gaps` is the only
+  -- honest measure of whether the corpus describes real tickets, and it cannot
+  -- be taken while the exemplar is also steering the run that produces it.
+  --
+  -- The bands behind `verdict` were calibrated on each ticket's FIRST inbound
+  -- message; this is matched on the message that triggered the run, which for a
+  -- thread is a later one. Expect the two to disagree, and read a follow-up's
+  -- match accordingly.
+  exemplar_match jsonb not null default '{}'::jsonb,
+
   -- Why the level moved, in words. Computed from the evidence by
   -- investigation-rules, never judged by the model.
   escalation_reasons jsonb not null default '[]'::jsonb,
@@ -806,6 +821,9 @@ comment on column public.ticket_investigations.handoff is
 
 comment on column public.ticket_investigations.evidence_gaps is
   'One entry per fact answering this ticket required, each satisfied / attempted / unavailable / not_attempted. DIAGNOSTIC: it does not move the verdict. The requirements are declared per ticket from a closed vocabulary (agent evidence-rules.mjs) and scored in code against tool_calls, so "there was nothing to find" can be told from "the agent never looked" -- not_attempted is the latter. other_fact is the escape hatch for a requirement the vocabulary cannot name and can never be satisfied.';
+
+comment on column public.ticket_investigations.exemplar_match is
+  'Which support_exemplars situation this ticket matched: { verdict, exemplar_key, closest, similarity, margin, runner_up, requirement_needs }. REPORTED, NEVER ACTED ON -- nothing in the investigation reads it and the model is never told, so requirement_needs can be compared against the run''s own evidence_gaps as an independent measure. exemplar_key is the committed match and is null unless the verdict is matched; closest is the nearest situation whatever the verdict, which on a near miss is the diagnostic worth having. verdict is matched / near / weak / none / ambiguous, where ambiguous means two situations were closer together than the margin can separate. Empty when retrieval found nothing or failed -- it is best-effort and never fails a run.';
 
 comment on column public.ticket_investigations.context_ref is
   'Pointer to tickets.resolved_context (order name, customer id, whether a bundle exists) rather than a copy of it -- so personal data is not duplicated per investigation, and a rebuilt bundle is not shadowed by a stale copy.';

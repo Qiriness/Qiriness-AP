@@ -30,6 +30,8 @@
     "spam:backfill:dry-run": "node src/tools/run-spam-body-backfill.mjs --dry-run",
     "eval:retrieval": "node eval/run-retrieval-eval.mjs",
     "eval:diagnose": "node eval/diagnose-retrieval.mjs",
-    "eval:exemplars": "node eval/diagnose-exemplars.mjs"
+    "eval:exemplars": "node eval/diagnose-exemplars.mjs",
+    "eval:exemplar-needs": "node eval/compare-exemplar-needs.mjs",
+    "eval:audit-phrasings": "node eval/audit-phrasings.mjs"
   }
 }

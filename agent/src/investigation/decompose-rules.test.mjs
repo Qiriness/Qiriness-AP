@@ -142,20 +142,20 @@ test('decomposition is not a second categoriser: one task keeps the ticket label
 });
 
 test('a task in a disabled subject is dropped, not quietly enabled', () => {
-  // `delivery` has tools defined and tested but is absent from ENABLED_SUBJECTS.
-  // A model naming it must not switch the order family on.
+  // `cosmetovigilance` carries an EMPTY tool set on purpose — a reported adverse
+  // reaction goes to a person untouched. A model naming it must not route it.
   const { tasks, skipped } = planTasks(TICKET, [
     SPLIT[0],
-    { question: 'Où est mon colis ?', category: 'delivery', request_kind: 'problem' }
+    { question: 'une réaction cutanée après application', category: 'cosmetovigilance', request_kind: 'problem' }
   ]);
   assert.deepEqual(tasks.map((t) => t.category), ['product']);
-  assert.deepEqual(skipped.map((t) => t.category), ['delivery']);
+  assert.deepEqual(skipped.map((t) => t.category), ['cosmetovigilance']);
 });
 
 test('skipped tasks are reported rather than discarded', () => {
   // Half an email silently ignored is worse than an email never split.
   const { tasks, skipped } = planTasks(TICKET, [
-    { question: 'a', category: 'delivery', request_kind: 'problem' },
+    { question: 'a', category: 'cosmetovigilance', request_kind: 'problem' },
     { question: 'b', category: 'legal_privacy', request_kind: 'question' }
   ]);
   assert.equal(skipped.length, 2);

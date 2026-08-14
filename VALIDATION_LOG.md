@@ -248,6 +248,43 @@ products when there are hundreds rather than sixteen (the `creme`-vs-`led`
 weighting is a function of catalogue size), and that `ambiguityMargin = 0.12`
 still reports genuine ambiguity without flagging every near-name.
 
+## 6b. The order family was enabled with 15 mismatches unexamined — OPEN AUDIT
+
+**Opened 2026-08-13, by decision rather than oversight.** `ENABLED_SUBJECTS` now
+contains `order`, `delivery`, `payment` and `return_exchange`. The 15 `mismatch`
+tickets from `orders:resolve` had **not** been reviewed when that happened.
+
+**Why it was judged safe.** A mismatch is an order number that parsed correctly
+against a real order and was refused because the requester's email hash does not
+own it. `isSafeToWrite()` gates the column, so a refused resolution leaves
+`tickets.shopify_order_number` **null**. The agent cannot answer about the wrong
+order because it never learns which order that was. The failure mode is not a
+wrong answer.
+
+**What it does cost.** On those 15, `getOrderContext` reports `not_resolved`, the
+`order_identity` need goes unsatisfied, and the agent asks the customer for an
+order number they already sent. Annoying, and visible to the customer.
+
+**The working hypothesis is that the check is too strict** — a gift, a partner
+ordering for someone else, a customer writing from a second address. Subjects
+like *"RE: remboursement commande #5229"* point that way. If that is right, the
+fix is in the resolver's identity rule, not in the data.
+
+**To close this item:**
+
+1. Read the 15. For each, decide whether the requester genuinely owns the order.
+   `metadata.order_resolution` holds `status`, `candidates`, `email_status` and
+   `suggested_action` per ticket.
+2. If most are second-address customers, loosen the rule — `message_email`
+   already rescued 6 of the original 15 by hashing every address in the body, so
+   the remaining ones are those where no address in the text matches either.
+3. Count how many tickets asked a customer for an order number they had already
+   supplied. That number is the real cost of having enabled early, and it is the
+   one to quote when deciding whether the trade was worth it.
+
+**Do not close this by observing that nothing broke.** Nothing breaking is the
+predicted outcome; the open question is how often the agent looked foolish.
+
 ## 6. Order-number resolver: logic validated end to end, live matching blocked
 
 **Validated 2026-08-01 with a real-data fixture.** Real dev orders and customers,

@@ -106,6 +106,26 @@ export function createInvestigator(
     const decomposition = decomposer
       ? await decomposer.decompose(ticket)
       : normaliseDecomposition(null, ticket);
+    // WHO SAID WHAT THIS TICKET REQUIRES.
+    //
+    // Normally the decomposer, per ticket. When that call FAILS it deliberately
+    // returns no needs at all — `decompose.mjs` refuses to guess them from the
+    // category, because fabricated requirements would corrupt the very numbers
+    // the field exists to measure.
+    //
+    // A matched exemplar is not that guess. It is a requirement list a person
+    // wrote for a situation this ticket resolved to at or above the MATCHED
+    // band, so standing it in beats reporting "nobody said what this required"
+    // — but ONLY when the model produced nothing. While the decomposer has
+    // spoken, the two stay independent, which is the only condition under which
+    // comparing them means anything.
+    const needsSource = decomposition.read
+      ? 'model'
+      : ticket.exemplarNeeds?.length
+        ? 'exemplar'
+        : 'none';
+    const declaredNeeds = needsSource === 'exemplar' ? ticket.exemplarNeeds : decomposition.needs;
+
     const plan = planTasks(ticket, decomposition.tasks);
 
     if (plan.tasks.length > 1 || plan.skipped.length > 0) {
@@ -196,7 +216,8 @@ export function createInvestigator(
       // complete set end the loop early — is deliberately the next step, because
       // both depend on this vocabulary being trustworthy and nothing has yet
       // measured whether it is.
-      evidenceGaps: resolveNeeds(decomposition.needs, run.ledger, names),
+      evidenceGaps: resolveNeeds(declaredNeeds, run.ledger, names),
+      needsSource,
       model
     });
   }

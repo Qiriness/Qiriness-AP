@@ -41,27 +41,48 @@ const T = TOOL_NAMES;
 /**
  * Subjects the agent actually investigates today.
  *
- * The order family is deliberately absent, and not because it does not matter —
- * it is 52% of the corpus.
+ * THE ORDER FAMILY WAS ENABLED 2026-08-13, and both reasons it was held back are
+ * now spent. The gate began as environmental — Supabase held a dev-store fixture
+ * (12 orders, #1001-#1012) while the mail quotes #4854 and #6216, so an
+ * investigation could only ever conclude "no such order". The project points at
+ * the live store now: 2052 orders spanning #4716-#6770, which contains every
+ * order number the corpus quotes. Then it was a pass that had not run;
+ * `orders:resolve` and `context:build` have since run, and 50 of 214 tickets
+ * carry a confirmed number.
  *
- * THE ORIGINAL REASON HAS EXPIRED. This gate was environmental: Supabase held a
- * dev-store fixture (12 orders, #1001-#1012) while the mail quotes #4854 and
- * #6216, so an investigation could only ever conclude "no such order". The
- * project now points at the live store and the overlap is real — 2052 orders
- * spanning #4716-#6770, which contains every order number the corpus quotes.
+ * IT WAS ENABLED WITH 15 KNOWN MISMATCHES OUTSTANDING, deliberately, and that is
+ * safe for a reason worth stating rather than trusting. A mismatch is an order
+ * number that parsed correctly against a real order and was refused because the
+ * requester's email hash does not own it. `isSafeToWrite()` gates the column, so
+ * a refused resolution leaves `shopify_order_number` NULL — the agent cannot
+ * answer about the wrong order, because it never learns which order that was.
  *
- * WHAT STILL BLOCKS IT IS A PASS THAT HAS NOT RUN. `getOrderContext` reports
- * `not_resolved` unless the ticket carries a confirmed `shopify_order_number`,
- * and that column is null on all 214 tickets because `orders:resolve` has never
- * run against this data. Enabling these subjects today would return "aucune
- * commande confirmée" on every one of them — the same empty answer as before,
- * for a new reason.
+ * What it costs instead is a worse experience on those tickets: `getOrderContext`
+ * reports `not_resolved`, the `order_identity` need goes unsatisfied, and the
+ * agent asks for an order number the customer already gave us. Annoying, never
+ * wrong. The merchant call is that the check is probably too strict — a gift, a
+ * partner, a second mailbox — and that this is the cheaper error while it is
+ * measured. Tracked in `VALIDATION_LOG.md` item 6.
  *
- * The order is therefore: `npm run orders:resolve`, then `npm run context:build`,
- * then this array, then `npm run investigate -- --backfill` (existing tickets
- * were skipped AND had their flag cleared, so nothing re-queues them on its own).
+ * The five still absent are absent on their own merits, not for want of data:
+ * `cosmetovigilance`, `legal_privacy`, `b2b`, `partner_collaboration` and
+ * `careers` all have deliberately empty tool sets, so `isInvestigable` would
+ * refuse them anyway. Listing them here would state an intention the tool table
+ * contradicts.
  */
-export const ENABLED_SUBJECTS = ['product', 'product_stock', 'promotions', 'account', 'other'];
+export const ENABLED_SUBJECTS = [
+  'product',
+  'product_stock',
+  'promotions',
+  'account',
+  'other',
+  // The order family: tools written and tested long before this, dormant until
+  // there was real order data behind them.
+  'order',
+  'delivery',
+  'payment',
+  'return_exchange'
+];
 
 /**
  * Which tools each subject may use.

@@ -189,9 +189,19 @@ This is the first stage that *chooses* what to do, and the first with a budget: 
 
 **What keeps the loop short is that most of the evidence is deterministic** — a product question always needs the product matched against the question text, a promotions ticket always needs its codes extracted — so `openingMoves()` fetches those *before* the model's first turn. Measured over 40 real tickets, the whole run took 1–3 tool calls against a ceiling of 6.
 
-Scope is `ENABLED_SUBJECTS` (product, product_stock, promotions, account, other): `cosmetovigilance` and `legal_privacy` are deliberately toolless (a confident-looking case file about a reported skin reaction is worse than none), and the forwarded subjects have nothing to investigate. Out-of-scope tickets are skipped *and their flag cleared*, so **enabling a subject later means re-raising the flag** (`npm run investigate -- --backfill`), not only editing the array.
+Scope is `ENABLED_SUBJECTS`, which since **2026-08-13** is every subject that has tools: product, product_stock, promotions, account, other, **order, delivery, payment, return_exchange**. The five absent ones — `cosmetovigilance`, `legal_privacy`, `b2b`, `partner_collaboration`, `careers` — are absent because their tool sets are deliberately empty (a confident-looking case file about a reported skin reaction is worse than none), so `isInvestigable` would refuse them anyway. Out-of-scope tickets are skipped *and their flag cleared*, so **enabling a subject means re-raising the flag** (`npm run investigate -- --backfill`), not only editing the array.
 
-**The order family is excluded for an operational reason, not a design one — and the reason has changed.** It used to be that Supabase held a dev-store fixture whose twelve orders could not match mail quoting `#4854`; that is over, and the live store's 2052 orders (`#4716`–`#6770`) cover the corpus. What blocks it now is that `orders:resolve` has never run, so no ticket carries a confirmed `shopify_order_number` and `getOrderContext` answers `not_resolved` regardless. Enabling before that pass runs reproduces the old empty answer for a new reason. This distinction is worth keeping: the gate protects against *confidently wrong case files built on absent evidence*, and it is satisfied by evidence existing **and being linked**, not by the store being correct.
+A test now asserts that the enabled set and the tool table say exactly the same thing. Until this date they deliberately did not, and the gap was the mechanism; with the gap closed, the invariant worth protecting is the agreement — a subject given tools but never enabled is dormant code nobody notices, and one enabled without tools is a ticket routed nowhere.
+
+### The order family was enabled before the mismatches were read, and that is a trade rather than an oversight
+
+Two reasons held it back and both are spent: the dev-store fixture (over — 2052 live orders spanning `#4716`–`#6770` cover the corpus), then a pass that had not run (`orders:resolve` and `context:build` have since run; 50 of 214 tickets carry a confirmed number).
+
+It was switched on with **15 `mismatch` tickets still unexamined**, knowingly. What makes that safe is a property rather than an assumption: `isSafeToWrite()` gates the column, so a refused resolution leaves `shopify_order_number` null. **The agent cannot answer about the wrong order because it never learns which order that was.** The failure mode of enabling early is not a wrong answer; it is asking a customer for an order number they already sent.
+
+The merchant call is that the identity check is probably too strict — a gift, a partner ordering, a second mailbox — and that an occasional redundant question is cheaper than leaving 21 of 31 exemplars and 116 of 158 messages of measured demand unreachable. **The cost is being counted rather than assumed**: `VALIDATION_LOG.md` item 6b is open, and closing it requires reading the 15 and counting how often the agent asked for something it had.
+
+The distinction the old gate protected is still the right one and still holds: it guards against *confidently wrong case files built on absent evidence*, and is satisfied by evidence existing **and being linked**. An unlinked order produces `not_resolved` and a question, which is exactly what it should produce.
 
 ### An investigated fact must cite a tool call that actually ran
 
@@ -277,6 +287,24 @@ The standard retrieval upgrade is to paraphrase a question into variants and uni
 **Which text each tool gets is the subtle part.** The semantic matchers (`lookupProduct`, `lookupStock`) get the sub-question plus any verbatim product names, because asking the IDF-weighted matcher about an email half-concerned with a parcel means competing with the parcel's vocabulary. `extractPromotionCodes` always gets the **raw** email: a paraphrase is exactly where a literal code stops being present.
 
 **The tool budget grows (+2 per extra task) and the turn budget does not.** Tool calls here are cached database reads; the expensive bound is how many times the model speaks. Holding tool calls fixed would mean the second half of an email is investigated with whatever the first half left over. Opening moves are capped at 4 so a three-way split cannot consume the budget before the model has spoken.
+
+### The matched situation is recorded and acted on by nothing
+
+Exemplar retrieval runs beside the investigation, on the message that triggered the run, and its result reaches `ticket_investigations.exemplar_match` and nowhere else. `investigate()` is never told; a test asserts the key never appears in its input.
+
+**The independence is the measurement, not caution.** Two declarations of what a ticket requires now exist — the exemplar's authored `requirement_needs` and the run's own `evidence_gaps` — and comparing them answers whether the corpus describes real tickets. Feed one into the other and the comparison becomes circular, answered once and permanently lost. `npm run eval:exemplar-needs` is the report, and it excludes by name any row where the exemplar supplied the needs.
+
+Three supporting reasons: a wrong match would inject a wrong situation's needs, and restraint at 0.65 is 85% on the subject proxy; enforcing it would make the *second* source load-bearing while the first still is not; and on current bands it would fire on a minority of tickets anyway.
+
+**It cannot break a run.** Every failure path returns `{}` and logs. It costs no extra API call either — `findInboundMessages` selects `embedding`, so the match reuses the vector ingestion already wrote.
+
+**One asymmetry to remember when reading the numbers:** the bands were calibrated on each ticket's *first* inbound message, and the match is taken on the *trigger* message, which for a thread is a later one. Expect the two to disagree on follow-ups.
+
+### The exemplar stands in only when the decomposer produced nothing
+
+`decompose.mjs` deliberately invents no needs when its call fails — guessing from the category would put fabricated requirements into the very numbers the field exists to measure. A matched exemplar is not that guess: it is a list a person wrote for a situation that cleared the MATCHED band, so it stands in rather than reporting "nobody said what this required".
+
+**Only there.** While the decomposer has spoken the exemplar is ignored entirely, because the moment it can top up a *successful* decomposition the two stop being independent. `caseFile.needsSource` records which source spoke (`model` / `exemplar` / `none`) and the row is stamped `supplied_needs`, so the comparison never measures a list against a copy of itself.
 
 ### One investigation per inbound message
 

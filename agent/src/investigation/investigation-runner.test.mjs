@@ -96,9 +96,10 @@ test('the agent is given the first and the latest inbound message', async () => 
 });
 
 test('an out-of-scope subject is skipped and its flag cleared', async () => {
-  // delivery has a full tool policy and no synced order data behind it. Leaving
-  // the flag set would park it at the front of an oldest-first batch for good.
-  const store = buildStore({ tickets: [{ ...TICKET, category: 'delivery', request_kind: 'problem', level: 2 }] });
+  // `cosmetovigilance` is left to a person by policy: its tool set is empty, so
+  // `isInvestigable` refuses it. Leaving the flag set would park it at the front
+  // of an oldest-first batch for good.
+  const store = buildStore({ tickets: [{ ...TICKET, category: 'cosmetovigilance', request_kind: 'problem', level: 2 }] });
   const counts = await runInvestigation({ store, investigate: async () => caseFile(), shopId: 's1' });
 
   assert.equal(counts.skipped, 1);
@@ -222,4 +223,154 @@ test('the log line carries no claim text', async () => {
   const serialised = JSON.stringify(logged);
   assert.ok(!serialised.includes('peaux sensibles'));
   assert.equal(logged[0].fields.established, 1);
+});
+
+// --- exemplar matching, which rides along and must never steer ----------------
+
+const EXEMPLAR_RESULT = {
+  matched: true,
+  verdict: 'matched',
+  exemplar: { exemplarKey: 'PR-24', requirementNeeds: ['product_property'] },
+  bestSimilarity: 0.8244,
+  margin: 0.1312,
+  candidates: [{ exemplarKey: 'PR-24' }, { exemplarKey: 'PR-27' }]
+};
+
+test('the matched situation is stored beside the case file', async () => {
+  const store = buildStore();
+  await runInvestigation({
+    store,
+    investigate: async () => caseFile(),
+    shopId: 's1',
+    retrieveExemplar: async () => EXEMPLAR_RESULT
+  });
+
+  assert.deepEqual(store.saved[0].exemplarMatch, {
+    verdict: 'matched',
+    exemplar_key: 'PR-24',
+    closest: 'PR-24',
+    // Rounded to three places: the fourth is noise at the precision cosine
+    // similarity actually carries.
+    similarity: 0.824,
+    margin: 0.131,
+    runner_up: 'PR-27',
+    requirement_needs: ['product_property']
+  });
+});
+
+test('it is matched on the message that triggered the run, and reuses its vector', async () => {
+  // The bands were calibrated on each ticket's FIRST message; the run is
+  // triggered by the LATEST. Which one is matched has to be unambiguous.
+  const seen = [];
+  const store = buildStore({
+    messages: [
+      { id: 'm1', body_text: 'first', received_at: '2026-08-01T09:00:00Z', embedding: '[0.1]' },
+      { id: 'm2', body_text: 'latest', received_at: '2026-08-03T09:00:00Z', embedding: '[0.2]' }
+    ]
+  });
+
+  await runInvestigation({
+    store,
+    investigate: async () => caseFile(),
+    shopId: 's1',
+    retrieveExemplar: async (query) => {
+      seen.push(query);
+      return EXEMPLAR_RESULT;
+    }
+  });
+
+  assert.equal(seen[0].body, 'latest');
+  assert.equal(seen[0].embedding, '[0.2]', 'the stored vector is reused rather than re-embedded');
+  assert.equal(store.saved[0].triggerMessageId, 'm2');
+});
+
+test('the investigation never sees the exemplar', async () => {
+  // Reported-not-enforced is the whole claim: the exemplar's declared needs are
+  // only worth comparing against the run's own evidence gaps while the two are
+  // reached independently.
+  let investigateInput = null;
+  await runInvestigation({
+    store: buildStore(),
+    investigate: async (input) => {
+      investigateInput = input;
+      return caseFile();
+    },
+    shopId: 's1',
+    retrieveExemplar: async () => EXEMPLAR_RESULT
+  });
+
+  assert.ok(!JSON.stringify(investigateInput).includes('PR-24'));
+});
+
+test('a failing exemplar lookup costs the case file nothing', async () => {
+  const warned = [];
+  const store = buildStore();
+  const counts = await runInvestigation({
+    store,
+    investigate: async () => caseFile(),
+    shopId: 's1',
+    logger: { info: () => {}, warn: (event, fields) => warned.push({ event, fields }) },
+    retrieveExemplar: async () => {
+      throw new Error('rpc unavailable');
+    }
+  });
+
+  assert.equal(counts.answerable, 1, 'the investigation still succeeded');
+  assert.deepEqual(store.saved[0].exemplarMatch, {});
+  assert.equal(warned[0].event, 'investigate.exemplar_failed');
+});
+
+test('a caller that has not wired exemplar matching behaves exactly as before', async () => {
+  const store = buildStore();
+  const counts = await runInvestigation({
+    store,
+    investigate: async () => caseFile(),
+    shopId: 's1'
+  });
+
+  assert.equal(counts.answerable, 1);
+  assert.deepEqual(store.saved[0].exemplarMatch, {});
+});
+
+test('the log names the situation but never a phrasing', async () => {
+  const logged = [];
+  await runInvestigation({
+    store: buildStore(),
+    investigate: async () => caseFile(),
+    shopId: 's1',
+    logger: { info: (event, fields) => logged.push({ event, fields }) },
+    retrieveExemplar: async () => ({
+      ...EXEMPLAR_RESULT,
+      exemplar: { ...EXEMPLAR_RESULT.exemplar, matchedPhrasing: 'je suis inscrite à newsletter' }
+    })
+  });
+
+  assert.equal(logged[0].fields.exemplarKey, 'PR-24');
+  assert.equal(logged[0].fields.exemplarVerdict, 'matched');
+  assert.ok(!JSON.stringify(logged).includes('newsletter'));
+});
+
+test('a near miss still records which situation nearly won', async () => {
+  // The committed key is null below the band, and the closest one is exactly
+  // the diagnostic worth keeping: the corpus almost covers this ticket.
+  const store = buildStore();
+  await runInvestigation({
+    store,
+    investigate: async () => caseFile(),
+    shopId: 's1',
+    retrieveExemplar: async () => ({
+      matched: false,
+      verdict: 'near',
+      exemplar: null,
+      bestSimilarity: 0.636,
+      margin: 0.112,
+      candidates: [{ exemplarKey: 'PR-28' }, { exemplarKey: 'PR-24' }]
+    })
+  });
+
+  const stored = store.saved[0].exemplarMatch;
+  assert.equal(stored.verdict, 'near');
+  assert.equal(stored.exemplar_key, null, 'nothing was committed');
+  assert.equal(stored.closest, 'PR-28', 'but what it nearly was is kept');
+  assert.equal(stored.requirement_needs.length, 0);
 });

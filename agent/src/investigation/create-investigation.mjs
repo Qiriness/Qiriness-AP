@@ -1,6 +1,7 @@
 import { createEmbeddingsClient } from '../../../scripts/lib/embeddings/openai-embeddings-client.mjs';
 import { createOpenAIClient } from '../llm/openai-client.mjs';
 import { createCustomerLookup } from '../retrieval/customer-lookup.mjs';
+import { createExemplarRetrieval } from '../retrieval/exemplar-retrieval.mjs';
 import { createKnowledgeRetrieval } from '../retrieval/knowledge-retrieval.mjs';
 import { createProductLookup } from '../retrieval/product-lookup.mjs';
 import { createPromotionLookup } from '../retrieval/promotion-lookup.mjs';
@@ -63,5 +64,15 @@ export function createInvestigationStack({
     logger
   });
 
-  return { investigate, store: createInvestigationStore(supabase), registry };
+  // NOT in the registry, and that is the design. The registry holds tools the
+  // MODEL may call; this one is never offered to it. It runs beside the
+  // investigation so its answer stays independent of the run it is measuring.
+  const retrieveExemplar = createExemplarRetrieval({ supabase, embeddingsClient, logger });
+
+  return {
+    investigate,
+    store: createInvestigationStore(supabase),
+    registry,
+    retrieveExemplar
+  };
 }

@@ -70,9 +70,45 @@ async function main() {
   const written = await write({ supabase, shopId, usable: usable.map((u) => u.exemplar) });
   console.log(
     `\nImported ${written.exemplars} exemplar(s) and ${written.phrasings} phrasing(s); ` +
-      `removed ${written.removed} stale phrasing(s). All are drafts — run the dashboard ` +
-      'review, then `npm run embed:exemplars`.'
+      `removed ${written.removed} stale phrasing(s).`
   );
+
+  // READ BACK RATHER THAN ASSUMED. This line used to say "All are drafts" every
+  // time, which stopped being true the moment anything was approved — and it is
+  // the line a reader trusts to know whether a re-import silently un-approved
+  // the corpus. It does not: the upsert never writes approval_status. Saying so
+  // from the table is the only version of this sentence that stays true.
+  //
+  // AND IT IS A REPORT, SO IT MUST NOT BE ABLE TO FAIL THE IMPORT. The rows are
+  // already written by this point; a transient read here would otherwise turn a
+  // successful import into a non-zero exit and invite someone to re-run it.
+  // Caught the first time this ran, on exactly that failure.
+  try {
+    const states = await supabaseSelect(
+      supabase,
+      'support_exemplars',
+      { shop_id: shopId },
+      'approval_status'
+    );
+    const byState = states.reduce((acc, row) => {
+      acc[row.approval_status] = (acc[row.approval_status] || 0) + 1;
+      return acc;
+    }, {});
+    const summary = Object.entries(byState)
+      .sort((a, b) => b[1] - a[1])
+      .map(([state, n]) => `${n} ${state}`)
+      .join(', ');
+
+    console.log(`Approval state, unchanged by this import: ${summary}.`);
+    console.log(
+      byState.approved
+        ? 'Run `npm run embed:exemplars` to vectorise anything new or edited.'
+        : 'Nothing is approved, so nothing is retrievable yet — approve, then `npm run embed:exemplars`.'
+    );
+  } catch (error) {
+    console.log(`(could not read approval state back: ${error.message})`);
+    console.log('The import itself succeeded. Run `npm run embed:exemplars` when ready.');
+  }
 }
 
 async function write({ supabase, shopId, usable }) {
