@@ -1,3 +1,5 @@
+import { namedSample } from '../../../scripts/lib/collections.mjs';
+
 // Why a discount code is not working — and, where the data allows it, whether a
 // given customer is eligible for it.
 //
@@ -276,12 +278,18 @@ function describeItemRestriction(customerGets) {
   if (!scope || scope.scope === 'all') {
     return null;
   }
+  // NAMED, NOT ENUMERATED. A discount can cover the whole catalogue, and this
+  // string goes into a model prompt: the exhaustive form is the same shape as
+  // the bug that made `listActivePromotions` emit 259,874 characters. It is also
+  // the worse answer — "94 produits" helps a customer, ninety-four titles does
+  // not. Dormant on today's data (no promotion carries an item scope), which is
+  // exactly why it is capped now rather than when it starts firing.
   if (scope.scope === 'products' && scope.products?.length) {
-    const names = scope.products.map((p) => `« ${p.title} »`).join(', ');
+    const names = namedSample(scope.products, { render: (p) => `« ${p.title} »` });
     return `Ce code ne s'applique qu'à : ${names}. Il est sans effet sur les autres articles.`;
   }
   if (scope.scope === 'collections' && scope.collections?.length) {
-    const names = scope.collections.map((c) => `« ${c.title} »`).join(', ');
+    const names = namedSample(scope.collections, { render: (c) => `« ${c.title} »` });
     return `Ce code ne s'applique qu'aux produits de : ${names}.`;
   }
   return null;

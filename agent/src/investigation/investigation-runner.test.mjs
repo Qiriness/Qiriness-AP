@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { buildCaseFile } from './case-file.mjs';
+import { TICKET_STATUS_BY_VERDICT, buildCaseFile } from './case-file.mjs';
 import { runInvestigation } from './investigation-runner.mjs';
 
 const TICKET = {
@@ -373,4 +373,37 @@ test('a near miss still records which situation nearly won', async () => {
   assert.equal(stored.exemplar_key, null, 'nothing was committed');
   assert.equal(stored.closest, 'PR-28', 'but what it nearly was is kept');
   assert.equal(stored.requirement_needs.length, 0);
+});
+
+// --- where the verdict leaves the ticket in the queue -------------------------
+
+test('needs_customer_input parks the ticket awaiting the customer', async () => {
+  const store = buildStore();
+  await runInvestigation({
+    store,
+    investigate: async () =>
+      caseFile({ verdict: 'needs_customer_input', missing: [{ field: 'shopify_order_number' }] }),
+    shopId: 's1'
+  });
+
+  assert.equal(store.saved[0].caseFile.verdict, 'needs_customer_input');
+  assert.equal(
+    TICKET_STATUS_BY_VERDICT[store.saved[0].caseFile.verdict],
+    'awaiting_customer',
+    'and that verdict is what parks it'
+  );
+});
+
+test('answerable leaves the ticket open, because nothing has been sent', async () => {
+  // The verdict says a reply COULD be written. Drafting is Phase 5; moving it out
+  // of the queue now would mark work as handled that no customer has received.
+  const store = buildStore();
+  await runInvestigation({
+    store,
+    investigate: async () => caseFile(),
+    shopId: 's1'
+  });
+
+  const patch = store.updates.find((u) => u.patch?.status);
+  assert.equal(patch, undefined, 'no status was written');
 });

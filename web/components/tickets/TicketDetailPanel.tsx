@@ -71,6 +71,7 @@ export function TicketDetailPanel({ ticket }: TicketDetailPanelProps) {
 
   const results = detail?.results ?? null;
   const order = detail?.order ?? null;
+  const facts = detail?.facts ?? [];
   // The list row already carries the confirmed order number, so the heading
   // stops being "loading" while the bundle is still in flight. The bundle's own
   // `name` wins where both exist — they agree by construction (the context is
@@ -124,6 +125,47 @@ export function TicketDetailPanel({ ticket }: TicketDetailPanelProps) {
               </ul>
             ) : (
               <p className={styles.muted}>Nothing could be established from the tools available.</p>
+            )}
+
+            {/* THE FACTS UNDER THE FINDINGS. The lines above are the model's
+                sentences; these are what they rest on — which product, which
+                code, why it was refused — so a promotions or product ticket can
+                be judged without opening Shopify, the way an order one already
+                could. Absent entirely when the tools established nothing
+                specific, which is the normal state for most tickets. */}
+            {/* What could NOT be settled, and why. Shown because an unanswered
+                question is a decision a person may need to make differently —
+                and because a recurring entry here is usually a knowledge
+                article nobody has written yet rather than a missing tool. */}
+            {results.unresolved.length > 0 && (
+              <ul className={styles.unresolved}>
+                {results.unresolved.map((entry, index) => (
+                  <li key={index}>
+                    {entry.claim}
+                    {entry.why && <span className={styles.why}> — {entry.why}</span>}
+                  </li>
+                ))}
+              </ul>
+            )}
+
+            {facts.length > 0 && (
+              <dl className={styles.facts}>
+                {facts.map((fact) => (
+                  <div className={styles.fact} key={fact.need}>
+                    <dt>
+                      {fact.label}
+                      {fact.outcome && <span className={styles.outcome}> · {fact.outcome}</span>}
+                    </dt>
+                    <dd>
+                      {fact.lines.map((line, index) => (
+                        <span className={styles.factLine} key={index}>
+                          {line}
+                        </span>
+                      ))}
+                    </dd>
+                  </div>
+                ))}
+              </dl>
             )}
           </>
         )}

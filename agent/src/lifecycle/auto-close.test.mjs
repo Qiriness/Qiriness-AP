@@ -109,7 +109,7 @@ test('runAutoClose closes the stale ones and counts the exempt', async () => {
   const totals = await runAutoClose({ store, shopId: 's1', now: NOW });
 
   assert.deepEqual(closed, ['stale-1', 'stale-2']);
-  assert.deepEqual(totals, { considered: 3, closed: 2, exempt: 1, failed: 0 });
+  assert.deepEqual(totals, { considered: 3, closed: 2, exempt: 1, awaitingHuman: 0, failed: 0 });
 });
 
 test('dry run decides everything and writes nothing', async () => {
@@ -161,4 +161,44 @@ test('the cutoff handed to the store matches the window', async () => {
   await runAutoClose({ store, shopId: 's1', now: NOW, afterDays: 21 });
 
   assert.equal(seen.toISOString(), '2026-07-13T12:00:00.000Z');
+});
+
+
+// --- work handed to a person, which nobody did --------------------------------
+
+test('a ticket awaiting a human is never auto-closed', () => {
+  // Silence here does not mean the conversation resolved itself — it means the
+  // work was not done. Closing it files a service failure as a finished ticket.
+  assert.equal(
+    shouldAutoClose(ticket({ status: 'awaiting_human', level: 3, last_message_at: ago(99) }), { now: NOW }),
+    false
+  );
+});
+
+test('a ticket awaiting the CUSTOMER still closes', () => {
+  // The opposite case: we asked, they did not answer for three weeks. That is
+  // what the inactivity rule is for.
+  assert.equal(
+    shouldAutoClose(ticket({ status: 'awaiting_customer', level: 2, last_message_at: ago(40) }), { now: NOW }),
+    true
+  );
+});
+
+test('the unactioned backlog is counted apart from the exempt', async () => {
+  // Folded into `exempt` it would sit beside the level-4 rule working as
+  // intended, and nobody would ever look at it.
+  const store = {
+    findInactive: async () => [
+      ticket({ id: 'stale', last_message_at: ago(40) }),
+      ticket({ id: 'severe', level: 4, last_message_at: ago(99) }),
+      ticket({ id: 'nobody-did-it', status: 'awaiting_human', level: 3, last_message_at: ago(99) })
+    ],
+    closeTicket: async () => {}
+  };
+
+  const totals = await runAutoClose({ store, shopId: 's1', now: NOW });
+
+  assert.equal(totals.closed, 1);
+  assert.equal(totals.exempt, 2, 'both are spared');
+  assert.equal(totals.awaitingHuman, 1, 'but only one of them is a backlog');
 });

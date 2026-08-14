@@ -221,7 +221,16 @@ test('our own reply into a closed ticket does not reopen it', async () => {
   assert.equal(ticket.status, 'closed');
 });
 
-test('an inbound reply into an already-open ticket leaves the status alone', async () => {
+test('a reply pulls a ticket back out of awaiting_customer', async () => {
+  // REVERSED 2026-08-14, and the earlier rule was right for its time: only the
+  // terminal statuses were rewritten, because "the worker's other states are its
+  // own". Nothing set them, so nothing could go wrong.
+  //
+  // The investigation now sets `awaiting_customer` from a `needs_customer_input`
+  // verdict, and BOTH the categoriser and the investigation runner select on
+  // `status = 'open'`. Left parked, a ticket whose customer answered the question
+  // we asked would never be read again — the reply lands, the pipeline ignores
+  // it, and the queue looks clean because the work vanished.
   const store = createFakeStore();
   await writeIngestedMessages(store, 'shop-1', [
     mappedMessage({ id: 'm1', conversationId: 'c1', at: '2026-07-24T10:00:00Z' })
@@ -232,8 +241,24 @@ test('an inbound reply into an already-open ticket leaves the status alone', asy
   await writeIngestedMessages(store, 'shop-1', [
     mappedMessage({ id: 'm2', conversationId: 'c1', at: '2026-07-24T11:30:00Z' })
   ]);
-  // Only a terminal status is rewritten — the worker's other states are its own.
-  assert.equal(ticket.status, 'awaiting_customer');
+  assert.equal(ticket.status, 'open');
+});
+
+test('an inbound reply into an already-open ticket rewrites nothing', async () => {
+  const store = createFakeStore();
+  await writeIngestedMessages(store, 'shop-1', [
+    mappedMessage({ id: 'm1', conversationId: 'c1', at: '2026-07-24T10:00:00Z' })
+  ]);
+  const ticket = store.tickets.get('shop-1|c1');
+  // The column defaults to 'open' in the database; the fake store does not.
+  ticket.status = 'open';
+  ticket.closed_at = null;
+
+  await writeIngestedMessages(store, 'shop-1', [
+    mappedMessage({ id: 'm2', conversationId: 'c1', at: '2026-07-24T11:30:00Z' })
+  ]);
+  assert.equal(ticket.status, 'open');
+  assert.equal(ticket.closed_at, null, 'nothing was rewritten');
 });
 
 test('counts removed tombstones without creating rows', async () => {

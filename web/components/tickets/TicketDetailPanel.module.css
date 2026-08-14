@@ -176,3 +176,33 @@
     grid-row: auto;
   }
 }
+
+/* The machine value beside the label — "expired", "out of stock". Quieter than
+   the label, because the label is what an operator scans for. */
+.outcome {
+  color: var(--text-subtle);
+  font-weight: var(--weight-regular);
+}
+
+/* One line per specific. Block rather than inline so several products or
+   several blocked checks stack instead of running together. */
+.factLine {
+  display: block;
+}
+
+/* What the agent could not settle. Muted against .findings, which are the facts:
+   the difference between "we know" and "we could not find out" has to survive a
+   glance, or an operator reads a gap as an answer. */
+.unresolved {
+  margin: 0;
+  padding-left: var(--space-4);
+  display: grid;
+  gap: 4px;
+  color: var(--text-subtle);
+  font-size: var(--text-body);
+}
+
+.why {
+  color: var(--text-subtle);
+  font-style: italic;
+}

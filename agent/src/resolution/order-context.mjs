@@ -45,6 +45,11 @@ export function buildOrderContext(order, customer = null, { now = new Date() } =
       cancelReason: order.cancel_reason || null,
       channel: order.sales_channel || order.source_name || null,
       totals: buildTotals(order),
+      // FOR THE PANEL, NOT THE MODEL. `toOrderContextText` omits it: the agent
+      // never needs to know which address placed the order, and the tool layer
+      // is where that is withheld. A person reviewing an ownership mismatch does
+      // need it, and this is the only readable form of it that exists.
+      contactEmailMasked: order.customer_email_masked || null,
       items: buildItems(order.line_items),
       shipTo: buildShipTo(order.shipping_destination),
       delivery: buildDelivery(order, now),
@@ -222,4 +227,149 @@ function num(value) {
   }
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+// ---------------------------------------------------------------- projections
+
+/**
+ * THE BUNDLE IS ONE SOURCE WITH THREE AUDIENCES, and each gets a rendering
+ * somebody chose. This is the same split `case-file.mjs` makes between
+ * `toDraftingPrompt` and `toHumanBrief`, one layer down:
+ *
+ *   the DASHBOARD  reads the structured bundle directly (`ticket-detail.ts`),
+ *                  because the panel must show order facts for tickets the agent
+ *                  never investigated — a case-file-only path would blank them.
+ *   the CASE FILE  stores a POINTER (`contextRef`), never a copy.
+ *   the MODEL      reads this function.
+ *
+ * Until now the model had no rendering, so `getOrderContext` fell back to
+ * `JSON.stringify(bundle)` — and measured on live data, that fallback was the
+ * only path that had ever run: 0 of 44 stored contexts carried a `promptText`.
+ * The dump was not a size problem (line items top out at 14 across all 2052
+ * orders) and not a leak (the bundle holds no street, name or email). It was the
+ * absence of a decision: whatever `context:build` happened to write reached the
+ * model, and the next field added would have reached it too.
+ *
+ * DERIVED, NOT STORED, for the reason `contextRef` is a pointer: a rendered copy
+ * in the row freezes a snapshot of a snapshot and goes stale the moment this
+ * function changes.
+ *
+ * WHAT IT WITHHOLDS is as deliberate as what it says. Money is named only when
+ * a reply turns on it (a refund, an unpaid balance): quoting a total back at
+ * someone who asked where their parcel is invites the drafting model to discuss
+ * a number nobody asked about. `productId` and `sku` never appear — they are
+ * join keys, not facts a customer recognises.
+ */
+export function toOrderContextText(context) {
+  const order = context?.order;
+  if (!order) {
+    return null;
+  }
+  const signals = context.signals || {};
+  const lines = [];
+
+  const placed = order.placedAt ? order.placedAt.slice(0, 10) : 'date inconnue';
+  lines.push(
+    `Commande ${order.name || ''} passée le ${placed}` +
+      (order.ageDays !== null && order.ageDays !== undefined ? ` (il y a ${order.ageDays} jours)` : '') +
+      '.'
+  );
+
+  // Cancellation first: everything below reads differently once it is true.
+  if (signals.isCancelled) {
+    lines.push(
+      `ANNULÉE${order.cancelReason ? ` — motif : ${order.cancelReason}` : ''}.`
+    );
+  }
+
+  lines.push(`Paiement : ${signals.isPaid ? 'réglée' : describePayment(order.status?.payment)}.`);
+  lines.push(describeDeliveryLine(order.delivery, signals));
+
+  const tracking = order.delivery?.tracking || [];
+  if (tracking.length > 0) {
+    lines.push(
+      `Suivi : ${tracking
+        .map((t) => `${t.number}${t.carrier ? ` (${t.carrier})` : ''}`)
+        .join(', ')}.`
+    );
+  }
+
+  if (order.shipTo?.country) {
+    lines.push(
+      `Destination : ${[order.shipTo.city, order.shipTo.country].filter(Boolean).join(', ')}.`
+    );
+  }
+
+  const items = Array.isArray(order.items) ? order.items : [];
+  if (items.length > 0) {
+    lines.push(
+      `Articles (${items.length}) : ${items
+        .map((i) => `${i.quantity ?? '?'} × ${i.title || 'article sans titre'}`)
+        .join(' · ')}.`
+    );
+  }
+
+  // Money only where a reply turns on it.
+  if (signals.isRefunded) {
+    lines.push(
+      `Remboursement : ${signals.isFullyRefunded ? 'total' : 'partiel'} de ` +
+        `${money(order.refunds?.total, order.totals?.currency)}` +
+        `${order.refunds?.lastAt ? ` le ${order.refunds.lastAt.slice(0, 10)}` : ''}.`
+    );
+  }
+  if (order.totals?.outstanding) {
+    lines.push(`Reste à payer : ${money(order.totals.outstanding, order.totals.currency)}.`);
+  }
+  if (signals.hasOpenReturn) {
+    lines.push('Un retour est ouvert sur cette commande.');
+  }
+
+  return lines.filter(Boolean).join('\n');
+}
+
+/** The one state the corpus asks about, said in words rather than an enum. */
+function describeDeliveryLine(delivery, signals) {
+  const state = delivery?.state || 'unknown';
+  if (state === 'delivered') {
+    const on = delivery.deliveredAt ? ` le ${delivery.deliveredAt.slice(0, 10)}` : '';
+    return `Livraison : le transporteur déclare le colis livré${on}.`;
+  }
+  if (state === 'in_transit') {
+    const since = delivery.daysSinceDispatch;
+    return (
+      'Livraison : en transit' +
+      (Number.isFinite(since) ? `, expédiée il y a ${since} jours` : '') +
+      '.'
+    );
+  }
+  if (state === 'dispatched') {
+    // The largest delivery cluster in the corpus: dispatched, no carrier scan.
+    return signals.awaitingCarrierScan
+      ? 'Livraison : expédiée, mais aucun scan transporteur pour le moment.'
+      : 'Livraison : expédiée.';
+  }
+  if (state === 'not_dispatched') {
+    return "Livraison : pas encore expédiée.";
+  }
+  return 'Livraison : état inconnu.';
+}
+
+function describePayment(status) {
+  const map = {
+    PENDING: 'en attente',
+    AUTHORIZED: 'autorisée, non capturée',
+    PARTIALLY_PAID: 'partiellement réglée',
+    REFUNDED: 'remboursée',
+    PARTIALLY_REFUNDED: 'partiellement remboursée',
+    VOIDED: 'annulée'
+  };
+  const key = String(status || '').toUpperCase();
+  return map[key] || (status ? String(status) : 'état inconnu');
+}
+
+function money(value, currency) {
+  if (value === null || value === undefined) {
+    return 'montant inconnu';
+  }
+  return `${value}${currency ? ` ${currency}` : ''}`;
 }

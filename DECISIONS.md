@@ -22,7 +22,16 @@ The module also holds the per-ticket **signal** vocabularies (`CONFIDENCE_LEVELS
 
 ### Level 4 is a severity judgement, not a subject
 
-No `(subject, kind)` pair derives it. It means an explicit threat of legal action or public exposure, hospitalisation, or grave injury/danger, so it arrives only as a categoriser escalation read from the email text and should be rare. The three triggers live in the categoriser prompt and the model must name the one that fired in its `reason`. A subject-implied 4 would make the level mean *this topic* rather than *this is serious*, filling the manager queue with routine mail.
+No `(subject, kind)` pair derives it. It arrives only as a categoriser escalation read from the email text, and should be very rare. **Two triggers, narrowed 2026-08-14:**
+
+- an explicit **legal** threat — court action, a complaint, a lawyer, a formal notice;
+- **grave harm to the person** — hospitalisation, or a life-threatening condition.
+
+**A threat to go to the press or post on social media is no longer one of them.** It was, and it does not fit either half of what level 4 is for: it is neither a legal exposure nor an injury, it is a very unhappy customer — which `happiness` already measures on its own axis. Conflating the two would put reputational annoyance in the same queue as hospitalisation, and the queue exists to separate them.
+
+The model must name the trigger that fired in its `reason`. A subject-implied 4 would make the level mean *this topic* rather than *this is serious*, filling the manager queue with routine mail.
+
+The narrowing costs nothing retroactively — **no ticket in the corpus has ever been labelled level 4** — but it is not cosmetic going forward: level 4 strips every tool, and is the one status auto-close will never touch.
 
 ### Level never falls
 
@@ -203,6 +212,35 @@ The merchant call is that the identity check is probably too strict — a gift, 
 
 The distinction the old gate protected is still the right one and still holds: it guards against *confidently wrong case files built on absent evidence*, and is satisfied by evidence existing **and being linked**. An unlinked order produces `not_resolved` and a question, which is exactly what it should produce.
 
+### A structure that has several audiences owns a projection for each
+
+One source of truth, one module, and a named function per reader. Nobody reads another module's raw structure across a boundary, and nobody serialises one into a prompt.
+
+It is already how the case file works — `toDraftingPrompt` for the drafting agent, `toHumanBrief` for the person, the second being the first plus the internal `handoff`. **The order context now works the same way**, and the three audiences are genuinely different readers rather than three formats of one thing:
+
+| audience | reads | why not one of the others |
+|---|---|---|
+| the dashboard | the structured bundle directly, via `ticket-detail.ts` | the panel must show order facts for tickets **the agent never investigated** — a case-file-only path blanks them |
+| the case file | `contextRef`, a **pointer** | copying duplicates personal data into every investigation row and freezes a snapshot of a snapshot |
+| the model | `toOrderContextText()` | the tool layer is this agent's PII boundary; a rendering is where withholding happens |
+
+**The projection is derived, never stored**, for the same reason `contextRef` is a pointer: a rendered copy in the row goes stale the moment the renderer changes.
+
+### `JSON.stringify` into a prompt is the absence of a decision, not a format
+
+`getOrderContext` returned `context.promptText || JSON.stringify(context.order)`, and measured on live data **0 of 44 stored contexts carried a `promptText`** — the fallback was the only path that had ever run.
+
+Structured JSON is not worse than prose for a model; it is often better. The objection is narrower and it is not about format:
+
+- **Nobody chose it.** Whatever `context:build` last wrote reached the prompt, and so would the next field added to the bundle. Every other tool has a person standing between the row and the model.
+- **Raw values have known misreadings.** `buildStock` already refuses to report `available_stock: -1` — one real row is at -1, Shopify allows overselling, and "-1 in stock" is a true value and a wrong answer. An order bundle carries the same hazards: `fulfillment_status` on a cancelled order, totals on a refunded one.
+
+What it was **not**: a size problem (line items top out at 14 across all 2052 orders) or a leak (the bundle holds no street, name or email — `context:build` had already minimised it). Overstating either would have hidden the real fault, which is that the decision was never made.
+
+The rendering that replaced it withholds on purpose: `sku` and `productId` never appear — they are join keys, not facts a customer recognises — and money is named only when a reply turns on it, because quoting a total at someone asking where their parcel is invites the drafting model to discuss a number nobody raised. Measured: 515 characters median against 1693 for the dump.
+
+A test asserts the general property across every tool at once — no `promptText` may begin with `{` or `[` — so the next tool cannot reintroduce it.
+
 ### An investigated fact must cite a tool call that actually ran
 
 `verifyFindings()` drops any `established` entry whose `evidence_ids` are not in that run's own ledger, and if that empties the list the verdict is forced to `needs_human`. A model that has read *"j'ai bien été livré"* will otherwise restate it as an established fact — and unlike a wrong reply, **a wrong case file becomes the drafting agent's ground truth**, with every downstream check applied to prose written from it. Dropped claims are kept in `dropped_claims` rather than discarded, because a run that keeps producing them is a prompt problem worth seeing. Measured over 40 real tickets: 0 unsourced claims stored, 0 dropped.
@@ -243,6 +281,20 @@ That last row is the whole point: today "there was nothing to find" and "the age
 **Reported, not enforced — on purpose.** The verdict is untouched by any of this. Downgrading an `answerable` that left a need open, and letting a complete set end the loop early, both depend on the vocabulary being trustworthy, and nothing has yet measured whether it is. Measure first, act second; a list that over-declares would otherwise downgrade good case files for reasons about the list rather than the ticket.
 
 **This is why the decomposition call lost its gate.** It used to skip short tickets. Needs have to exist for *every* investigated ticket or the report has a hole exactly where the ordinary tickets are, so it now runs on all of them: one `gpt-4o-mini` call against the two `gpt-4o` calls the investigation already makes.
+
+### Details say WHICH thing the finding is about
+
+A finding states a value; it never states what the value is *of*. `promotion_validity: expired` does not name the code, and `product_identity: ambiguous` does not name the products it could not choose between. Those specifics sat in each tool's `data`, were read once to derive the finding, and were discarded — so the dashboard could show order facts, which a separate pass persists, and nothing else. A person answering a promotions ticket still had to open Shopify.
+
+**It extends `evidence_gaps` rather than adding a column.** The entries already carry the need, a French label, the finding and the evidence ids; a parallel `facts` column would duplicate that linkage and immediately raise which is authoritative. No migration was needed.
+
+**Declared per need in `evidence-rules.mjs`**, beside the finding derivers, because that module already owns the vocabulary and already reads the ledger. Naming the fields *is* the decision — passing `data` through would repeat the `JSON.stringify` mistake one layer up.
+
+**For the person, not the model, and the asymmetry is the point.** `data` never reaches the model — `fromModel` sends `promptText` alone — so a detail may carry an identifier a reply must never quote. That mirrors the split already in place: the drafting prompt is narrower than the human brief.
+
+**Absent beats empty beats null-filled.** A real run stored `{name: null, isVip: null, ordersCount: null}` — it passed every existence check and told a reader nothing while looking like an answer. `nonEmpty` now drops all-null objects, so the panel never renders a heading over nothing.
+
+**No order needs are declared here.** Order facts are ambient: the resolution pass writes them to `resolved_context` and the panel reads them directly, so they exist for tickets the agent never investigated. Declaring them here too would put the order name in two places with two lifecycles.
 
 ### A finding is what the need turned out to be
 
@@ -338,13 +390,37 @@ Per message, not per ticket, so a candidate's follow-up still reaches the recipi
 
 Last pass of every poll, so it sees the timestamps that poll just advanced. Without it `status` carried no information at all — every one of the 565 tickets read `open`, including threads last touched seven months ago.
 
-**Level 4 is exempt and that is the whole safety margin**: it means legal threat, hospitalisation or grave danger, and there silence is the opposite of resolved. Level 3 closes with everything else. Inactivity is `last_message_at`, which advances on our own replies too, so a thread the team is working stays open while the customer is quiet. Auto-closed rows are stamped `metadata.closed_reason = 'inactivity'` so they stay distinguishable from a hand close.
+**Level 4 is exempt and that is the whole safety margin**: it means an explicit legal threat, hospitalisation or a life-threatening condition, and there silence is the opposite of resolved. Level 3 closes with everything else. Inactivity is `last_message_at`, which advances on our own replies too, so a thread the team is working stays open while the customer is quiet. Auto-closed rows are stamped `metadata.closed_reason = 'inactivity'` so they stay distinguishable from a hand close.
 
 **The level exemption is applied in JS, not SQL.** PostgREST's `not.eq` on a nullable column drops the NULL rows as well, which would have silently spared every uncategorised ticket — the largest group in the table. There is a regression test for exactly that.
 
 **A ticket still flagged `needs_categorisation` is never auto-closed.** The categoriser selects on `status = 'open'`, so closing one that is still queued drops it out of that queue for good and freezes it as uncategorised — only a customer reply could ever label it afterwards. The categoriser drains 25 per poll, so this defers a close by a few polls; getting it wrong is unrecoverable.
 
 **A customer reply reopens a closed ticket**, clearing `closed_at`/`resolved_at` with the status. Inbound only: a ticket does not reopen because *we* sent something. Without this half, auto-close would make the queue tidy and wrong.
+
+### The verdict decides where the ticket waits
+
+`needs_customer_input` → `awaiting_customer`, `needs_human` → `awaiting_human`, and **`answerable` stays `open`**. The map lives beside `REPLY_INTENTS` in `case-file.mjs`, which already owns the verdict vocabulary.
+
+Until 2026-08-14 the verdict reached `metadata.verdict` and the investigation row but never the column the queue is built on — measured, all 214 tickets read `open`, so a ticket waiting on a customer was indistinguishable from one nobody had opened.
+
+`answerable` does not move, and that is the hook drafting will need: it means a reply *could* be written, not that one was sent. Advancing it now would mark work as handled that no customer has received. **The sent reply is what should close it**, which is the second closing path and cannot exist before Phase 5.
+
+Safe to set unconditionally because the selection query already requires `status = 'open'`; a ticket a human closed is never picked up, so this can only move a ticket out of open, never overrule a person.
+
+### Any non-open status returns to open on an inbound reply — not just the terminal two
+
+This reverses the earlier rule that only `closed`/`resolved` were rewritten, on the grounds that the worker's other states were its own. That was right while nothing ever set them, and became a trap the moment the verdict did.
+
+**Both the categoriser and the investigation runner select on `status = 'open'`.** A ticket parked `awaiting_customer` would never be re-read once the customer answered the question we asked: the reply lands, the pipeline ignores it, and the queue looks clean because the work disappeared. Stranded silently, for ever.
+
+### Work handed to a person is never auto-closed
+
+`awaiting_human` is exempt whatever the level. Silence there does not mean the conversation resolved itself; it means nobody did the work, and closing it after three weeks files a service failure as a completed ticket — the queue then looks healthy precisely because the backlog was deleted.
+
+This distinction could not be drawn when auto-close was written: the investigation set no status, so `level` was the only signal and level 3 was made closable on queue-hygiene grounds. Measured before the change, **67 level-3 tickets** would have closed that way.
+
+The cost is counted rather than hidden: `runAutoClose` reports `awaitingHuman` separately from `exempt`, because level-4s being spared is the rule working while unactioned work piling up is the thing to look at. Emptying `AUTO_CLOSE_EXEMPT_STATUSES` restores the old behaviour in one line.
 
 ---
 
@@ -620,6 +696,19 @@ Soft-deleted rows are excluded in the query, not the mapper, so a compliance del
 - `categorisation_review` reduces the sender to `from_domain`.
 - `spam_audit` keeps sender, subject and (on a block) the body under its own expiry.
 - The customer bundle's `toPromptText` **withholds the email by default** — the drafting step is replying *to* that address, so restating it in the prompt adds a personal identifier for no gain.
+- `orders.customer_email_masked` holds `j***l@orange.fr` beside the hash — see below.
+
+### A masked address, because a hash cannot be looked at
+
+`orders` deliberately holds no raw contact address. But a hash answers exactly one question — *is it the same address?* — and the desk's actual question is the one `orders:resolve` keeps failing: **15 tickets quote a real order number from an address that does not own it**, and a person must decide whether that is a gift, a partner, or the same customer's second mailbox.
+
+So the mask is derived **beside `hashIdentifier`, from the same input, on adjacent lines in the mapper** — the two can never describe different addresses. The local part is destroyed at map time and never stored, so it cannot be reversed or used to reach anyone.
+
+**The domain is kept whole**, deliberately: *"same person, second address at the same provider"* is the mismatch question and the domain is what answers it. A provider domain is not personal data, which is the line this codebase already draws — `sender_directory` stores company domains as context for the same reason. Local parts of two characters or fewer collapse to `**` rather than being half-masked, since `b***o@x.fr` is longer than `bo@x.fr` and hides nothing.
+
+**Never sent to a model.** It reaches `resolved_context.order.contactEmailMasked` for the panel, and `toOrderContextText` omits it: the agent never needs to know which address placed the order. A test asserts both halves.
+
+It repaid itself immediately. All 15 mismatches became reviewable, and several point at `@example.com` — placeholder addresses on orders the desk or a retailer created, which no requester could ever match. That is a different cause from the one assumed, and it argues the check is not too strict for those: the data simply cannot satisfy it.
 
 ### `data_access_events` fails open
 

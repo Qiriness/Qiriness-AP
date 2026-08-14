@@ -201,6 +201,17 @@ create table public.orders (
   total_weight_grams integer,
   tags text[] not null default '{}',
   customer_email_hash text,
+  -- The same address as the hash above, reduced to what a person can RECOGNISE:
+  -- `j***l@orange.fr`. Not a second copy of the identifier — the local part is
+  -- destroyed at map time and never stored, so this cannot be reversed or used
+  -- to contact anyone.
+  --
+  -- It exists for one question the hash cannot answer. `orders:resolve` refuses
+  -- an order whose requester hash does not match, and 15 tickets sit in that
+  -- state; deciding whether each is a gift, a partner or the same customer's
+  -- second mailbox needs a human to LOOK at the address. A hash cannot be looked
+  -- at. The domain is kept whole because it is the discriminating half.
+  customer_email_masked text,
   customer_phone_hash text,
   shipping_destination jsonb not null default '{}'::jsonb,
   line_items jsonb not null default '[]'::jsonb,
@@ -358,6 +369,9 @@ comment on column public.orders.sales_channel_handle is
 
 comment on column public.orders.order_status is
   'Dashboard-facing order lifecycle stage derived from cancellation, return/refund, delivery, and fulfillment state.';
+
+comment on column public.orders.customer_email_masked is
+  'The order contact address reduced to a recognisable form (j***l@orange.fr), derived beside customer_email_hash from the same input so the two can never describe different addresses. NOT a raw address: the local part is destroyed at map time. It answers the question a hash cannot -- which address is this? -- for a human reviewing an ownership mismatch. Never sent to a model: the tool layer withholds it, and only the dashboard renders it.';
 
 comment on column public.orders.customer_email_hash is
   'Hash of the order contact email for support lookup without duplicating raw email on the order row.';

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { buildOrderContext } from './order-context.mjs';
+import { buildOrderContext, toOrderContextText } from './order-context.mjs';
 
 const NOW = new Date('2026-08-02T12:00:00Z');
 
@@ -123,4 +123,77 @@ test('money is numeric, so nothing downstream compares strings', () => {
   const c = buildOrderContext(ORDER, CUSTOMER, { now: NOW });
   assert.equal(c.order.totals.total, 74.95);
   assert.equal(c.customer.amountSpent, 210.5);
+});
+
+
+// --- the model's projection ---------------------------------------------------
+//
+// The bundle has three audiences: the dashboard reads it structured, the case
+// file stores a pointer to it, and the model reads this. Before it existed the
+// model got `JSON.stringify(bundle)` — not a chosen format, just whatever the
+// builder happened to write.
+
+test('it names the order, the payment and the delivery state in words', () => {
+  const text = toOrderContextText(buildOrderContext(ORDER, null, { now: NOW }));
+
+  assert.match(text, /Commande #1006/);
+  assert.match(text, /Paiement : réglée/);
+  // The enum `FULFILLED` is not a sentence a drafting model should echo.
+  assert.ok(!text.includes('FULFILLED'), 'no raw Shopify enum reaches the model');
+});
+
+test('join keys never reach the model', () => {
+  // `sku` and `productId` exist to join rows, not to be told to anyone. The
+  // dashboard may want them; the drafting agent has no use for either.
+  const text = toOrderContextText(buildOrderContext(ORDER, null, { now: NOW }));
+
+  assert.ok(!text.includes('E024N'), 'sku withheld');
+  assert.ok(!text.includes('gid://shopify'), 'product id withheld');
+  assert.match(text, /Crème Nuit Anti-Âge/, 'but the title a customer recognises is kept');
+});
+
+test('money appears only when a reply turns on it', () => {
+  // Quoting a total at someone asking where their parcel is invites the drafting
+  // model to discuss a number nobody raised.
+  const plain = toOrderContextText(buildOrderContext(ORDER, null, { now: NOW }));
+  assert.ok(!plain.includes('74.95'), 'no total on an ordinary order');
+
+  const refunded = toOrderContextText(
+    buildOrderContext({ ...ORDER, total_refunded: '20.00' }, null, { now: NOW })
+  );
+  assert.match(refunded, /Remboursement/, 'but a refund is stated');
+});
+
+test('a cancelled order says so before anything else about it', () => {
+  const text = toOrderContextText(
+    buildOrderContext(
+      { ...ORDER, cancelled_at: '2026-07-20T09:00:00Z', cancel_reason: 'CUSTOMER' },
+      null,
+      { now: NOW }
+    )
+  );
+  const lines = text.split('\n');
+  assert.ok(lines[1].includes('ANNULÉE'), 'the cancellation is the second line, before payment');
+  assert.match(text, /CUSTOMER/);
+});
+
+test('a bundle with no order renders nothing rather than an empty shell', () => {
+  assert.equal(toOrderContextText(null), null);
+  assert.equal(toOrderContextText({}), null);
+});
+
+test('the masked contact address reaches the bundle but never the model', () => {
+  // The asymmetry is the point: a person reviewing an ownership mismatch needs
+  // to see which address placed the order; the drafting agent never does.
+  const context = buildOrderContext(
+    { ...ORDER, customer_email_masked: 'j***l@bluewin.ch' },
+    null,
+    { now: NOW }
+  );
+
+  assert.equal(context.order.contactEmailMasked, 'j***l@bluewin.ch');
+  assert.ok(
+    !toOrderContextText(context).includes('bluewin'),
+    'the model projection withholds it'
+  );
 });

@@ -3,6 +3,7 @@ import test from 'node:test';
 
 import { MISSING_FIELDS } from './case-file.mjs';
 import {
+  DETAIL_KEYS,
   FINDING_KEYS,
   NEED_KEYS,
   NEED_STATES,
@@ -353,4 +354,173 @@ test('every moot condition names a real need and real values', () => {
       }
     }
   }
+});
+
+// --- details: WHICH thing the finding is about --------------------------------
+//
+// The finding says a state; the details say what it is a state OF. Read by
+// people, never by the drafting model — `fromModel` sends `promptText` alone.
+
+const T = TOOL_NAMES;
+
+test('an ambiguous product match names the products it could not choose between', () => {
+  // "It could be one of these three" is only useful with the three named, and
+  // that is the entire content of an `ambiguous` outcome.
+  const [gap] = resolveNeeds(
+    ['product_identity'],
+    [{ id: 't1', tool: T.LOOKUP_PRODUCT, outcome: 'ambiguous',
+       data: { found: true, ambiguous: true, titles: ['Masque LED', 'Masque Wrap'] } }],
+    [T.LOOKUP_PRODUCT]
+  );
+
+  assert.equal(gap.finding, 'ambiguous');
+  assert.deepEqual(gap.details.products, ['Masque LED', 'Masque Wrap']);
+  assert.equal(gap.details.ambiguous, true);
+});
+
+test('a failed product match still names the near misses', () => {
+  // Which tells a reviewer whether the catalogue lacks the product or the
+  // matcher simply missed it — different problems, different fixes.
+  const [gap] = resolveNeeds(
+    ['product_identity'],
+    [{ id: 't1', tool: T.LOOKUP_PRODUCT, outcome: 'no_match',
+       data: { found: false, ambiguous: false, titles: [], candidates: ['Sérum Élixir'] } }],
+    [T.LOOKUP_PRODUCT]
+  );
+
+  assert.equal(gap.finding, 'none');
+  assert.deepEqual(gap.details.products, ['Sérum Élixir']);
+  assert.equal(gap.details.matched, false);
+});
+
+test('stock details carry the boolean, never the raw count', () => {
+  // One real row sits at -1 because Shopify allows overselling. "-1 en stock" is
+  // a true value and a wrong answer.
+  const [gap] = resolveNeeds(
+    ['product_availability'],
+    [{ id: 't1', tool: T.LOOKUP_STOCK, outcome: 'found',
+       data: { products: [{ title: 'Masque LED', purchasable: false, available: -1 }] } }],
+    [T.LOOKUP_STOCK]
+  );
+
+  assert.deepEqual(gap.details.products, [{ title: 'Masque LED', inStock: false }]);
+  assert.ok(!JSON.stringify(gap.details).includes('-1'));
+});
+
+test('a refused code names itself and why it was refused', () => {
+  const [gap] = resolveNeeds(
+    ['promotion_eligibility'],
+    [{ id: 't1', tool: T.LOOKUP_PROMOTION, outcome: 'blocked',
+       data: { found: true, verdict: 'blocked', code: 'QIRINESS20',
+               checks: [{ id: 'minimum', status: 'FAIL', reason: 'below_minimum' },
+                        { id: 'window', status: 'PASS', reason: 'open' }] } }],
+    [T.LOOKUP_PROMOTION]
+  );
+
+  assert.equal(gap.details.code, 'QIRINESS20');
+  assert.deepEqual(gap.details.failedChecks, [{ check: 'minimum', reason: 'below_minimum' }]);
+});
+
+test('VIP is derived through the same rule the badge uses', () => {
+  // `rfm_group` is the only source and VIP is a read-time question about it —
+  // never stored, never reimplemented here.
+  const [gap] = resolveNeeds(
+    ['customer_account_state'],
+    [{ id: 't1', tool: T.LOOKUP_CUSTOMER, outcome: 'found',
+       data: { profile: { name: 'Élodie Bonnet', rfmGroup: 'CHAMPIONS', ordersCount: 7 } } }],
+    [T.LOOKUP_CUSTOMER]
+  );
+
+  assert.equal(gap.details.name, 'Élodie Bonnet');
+  assert.equal(gap.details.isVip, true);
+  assert.equal(gap.details.ordersCount, 7);
+});
+
+test('details are ABSENT rather than empty when there is nothing to say', () => {
+  // `{}` would make the panel render a heading over nothing.
+  const [gap] = resolveNeeds(
+    ['product_identity'],
+    [{ id: 't1', tool: T.LOOKUP_PRODUCT, outcome: 'no_match', data: { found: false } }],
+    [T.LOOKUP_PRODUCT]
+  );
+
+  assert.ok(!('details' in gap), 'the key is not present at all');
+});
+
+test('a need with no tool call carries no details', () => {
+  const [gap] = resolveNeeds(['promotion_validity'], [], [T.LOOKUP_PROMOTION]);
+  assert.equal(gap.state, 'not_attempted');
+  assert.ok(!('details' in gap));
+});
+
+test('every need that declares details also declares a finding', () => {
+  // A detail without a finding would be a specific with no state to qualify —
+  // "the code is QIRINESS20" and nothing about whether it works.
+  for (const key of DETAIL_KEYS) {
+    assert.ok(FINDING_KEYS.includes(key), `${key} declares details but no finding`);
+  }
+});
+
+test('an all-null details object is dropped, not stored as an answer', () => {
+  // A real run stored `{name: null, isVip: null, ordersCount: null}`: it passed
+  // every existence check and told a reader nothing, while looking like a fact.
+  const [gap] = resolveNeeds(
+    ['customer_account_state'],
+    [{ id: 't1', tool: TOOL_NAMES.LOOKUP_CUSTOMER, outcome: 'found',
+       data: { profile: { name: null, rfmGroup: null, ordersCount: null } } }],
+    [TOOL_NAMES.LOOKUP_CUSTOMER]
+  );
+
+  assert.equal(gap.finding, 'resolved');
+  assert.ok(!('details' in gap), 'nothing worth showing means no field');
+});
+
+test('customer details read the profile, not the account state', () => {
+  // Two different things sit side by side on the tool result: `account` is the
+  // STATE, `profile` is who it belongs to. Reading the wrong one is silent.
+  const [gap] = resolveNeeds(
+    ['customer_identity'],
+    [{ id: 't1', tool: TOOL_NAMES.LOOKUP_CUSTOMER, outcome: 'found',
+       data: { account: { state: 'active' },
+               profile: { name: 'Sabrina Gani', rfmGroup: 'LOYAL', ordersCount: 2 } } }],
+    [TOOL_NAMES.LOOKUP_CUSTOMER]
+  );
+
+  assert.equal(gap.details.name, 'Sabrina Gani');
+  assert.equal(gap.details.isVip, true);
+});
+
+test('a library that could not answer says so, and how close it came', () => {
+  // The one detail that is a TO-DO rather than a fact: no approved article
+  // covers this, so the agent will keep failing the same question until one
+  // does. `weak` and `none` call for different work — retitle versus write.
+  const [weak] = resolveNeeds(
+    ['product_property'],
+    [{ id: 't1', tool: TOOL_NAMES.SEARCH_KNOWLEDGE, outcome: 'weak',
+       data: { verdict: 'weak', bestSimilarity: 0.4912, chunks: [] } }],
+    [TOOL_NAMES.SEARCH_KNOWLEDGE]
+  );
+  assert.equal(weak.details.libraryAnswered, false);
+  assert.equal(weak.details.closest, 0.49, 'rounded, because two decimals is all it means');
+
+  const [none] = resolveNeeds(
+    ['policy_answer'],
+    [{ id: 't1', tool: TOOL_NAMES.SEARCH_KNOWLEDGE, outcome: 'none',
+       data: { verdict: 'none', bestSimilarity: null, chunks: [] } }],
+    [TOOL_NAMES.SEARCH_KNOWLEDGE]
+  );
+  assert.equal(none.details.closest, null, 'nothing to be close to');
+});
+
+test('a library that DID answer adds no detail', () => {
+  // The article is already in `established` as a claim; repeating it here would
+  // say the same thing twice. The gap is the part nobody can see.
+  const [gap] = resolveNeeds(
+    ['product_property'],
+    [{ id: 't1', tool: TOOL_NAMES.SEARCH_KNOWLEDGE, outcome: 'answerable',
+       data: { verdict: 'answerable', bestSimilarity: 0.81, chunks: [{ title: 'FAQ' }] } }],
+    [TOOL_NAMES.SEARCH_KNOWLEDGE]
+  );
+  assert.equal(gap.finding, 'answered');
+  assert.ok(!('details' in gap));
 });

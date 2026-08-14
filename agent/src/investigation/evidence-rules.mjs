@@ -1,3 +1,5 @@
+import { isVipRfmGroup } from '../../../scripts/lib/customer-segments.mjs';
+
 import { TOOL_NAMES } from './investigation-rules.mjs';
 
 // What answering a ticket REQUIRES, and whether the investigation got it.
@@ -322,6 +324,174 @@ const FINDINGS = {
 
 export const FINDING_KEYS = Object.keys(FINDINGS);
 
+// --- details: WHICH thing the finding is about -------------------------------
+//
+// A finding says what state a need resolved to; it never says what it resolved
+// to it ABOUT. `promotion_validity: expired` does not name the code, and
+// `product_identity: ambiguous` does not name the products it could not choose
+// between. Those specifics sit in each tool's `data`, get read once to derive
+// the finding, and were then discarded — so the dashboard could show order facts
+// (which a separate pass persists) and nothing else. A person answering a
+// promotions ticket still had to open Shopify.
+//
+// FOR THE PERSON, NOT THE MODEL, and that asymmetry is the point. The drafting
+// prompt is deliberately narrower than the human brief — it already omits the
+// handoff — so a detail may carry an identifier a reply must never quote. Which
+// is exactly why each is declared here by name rather than passing `data`
+// through: naming the fields is the decision that `JSON.stringify` skipped.
+//
+// EVERY EXTRACTOR RETURNS null WHEN IT HAS NOTHING, never an empty shell. The
+// panel drops absent fields, and `{}` would render a heading over nothing.
+const DETAILS = {
+  product_identity: (entries) => {
+    const entry = lastByTool(entries, TOOL_NAMES.LOOKUP_PRODUCT);
+    if (!entry) return null;
+    const titles = entry.data?.titles || [];
+    const candidates = entry.data?.candidates || [];
+    // Named even when the match failed: "these were close" is what tells a
+    // reviewer the catalogue is thin rather than the matcher broken.
+    if (titles.length === 0 && candidates.length === 0) return null;
+    return {
+      products: titles.length > 0 ? titles : candidates,
+      matched: titles.length > 0,
+      ambiguous: Boolean(entry.data?.ambiguous)
+    };
+  },
+
+  product_availability: (entries) => {
+    const entry = lastByTool(entries, TOOL_NAMES.LOOKUP_STOCK);
+    const products = entry?.data?.products || [];
+    if (products.length === 0) return null;
+    // `purchasable`, never the raw count. One real row sits at -1 because
+    // Shopify allows overselling, and "-1 en stock" is a true value and a wrong
+    // answer — the same rule `buildStock` already applies.
+    return {
+      products: products.map((p) => ({ title: p.title, inStock: Boolean(p.purchasable) }))
+    };
+  },
+
+  // The library's own answer, and the ONE detail that is a to-do rather than a
+  // fact. A knowledge need resolving `weak` or `none` means no approved article
+  // covers this question — which is only actionable if somebody sees it, and
+  // until now it lived in a stored column nothing rendered. A merchant who has
+  // the answer on file and simply has not uploaded it is the common case; the
+  // agent will keep failing the same question until they do.
+  //
+  // `weak` and `none` are kept apart because they call for different work:
+  // `weak` means an article exists and did not match well enough (rewrite or
+  // retitle it), `none` means the library holds nothing on the subject at all.
+  product_property: (entries) => detailsFromKnowledge(entries),
+  policy_answer: (entries) => detailsFromKnowledge(entries),
+  brand_answer: (entries) => detailsFromKnowledge(entries),
+
+  promotion_identity: (entries) => {
+    const entry = lastByTool(entries, TOOL_NAMES.EXTRACT_PROMOTION_CODES);
+    const codes = entry?.data?.codes || [];
+    return codes.length > 0 ? { codes } : null;
+  },
+
+  promotion_validity: (entries) => detailsFromPromotion(entries),
+  promotion_eligibility: (entries) => detailsFromPromotion(entries),
+
+  customer_identity: (entries) => detailsFromCustomer(entries),
+  customer_account_state: (entries) => detailsFromCustomer(entries)
+
+  // NO ORDER NEEDS HERE, deliberately. Order facts are AMBIENT: the resolution
+  // pass writes them to `tickets.resolved_context` and the panel reads them
+  // directly, so they exist for tickets the agent never investigated. Declaring
+  // them here too would put the order name in two places with two lifecycles —
+  // one that survives without an investigation and one that does not — and the
+  // first question anyone asked would be which is authoritative.
+};
+
+/**
+ * Whether the library answered, and how close it came when it did not.
+ *
+ * Only reported when it FAILED: an article that answered is already in
+ * `established` as a claim, and repeating it as a detail would say the same
+ * thing twice. The gap is the part nobody can see.
+ *
+ * `bestSimilarity` is what separates "we nearly have this" from "we have
+ * nothing on it" — 0.49 against a 0.55 floor is a retitle, 0.20 is a missing
+ * article — so it travels rounded rather than being reduced to a verdict.
+ */
+function detailsFromKnowledge(entries) {
+  const entry = lastByTool(entries, TOOL_NAMES.SEARCH_KNOWLEDGE);
+  if (!entry) return null;
+  const verdict = entry.data?.verdict ?? entry.outcome ?? null;
+  if (verdict !== 'weak' && verdict !== 'none') {
+    return null;
+  }
+  const best = entry.data?.bestSimilarity;
+  return {
+    libraryAnswered: false,
+    closest: Number.isFinite(best) ? Math.round(best * 100) / 100 : null
+  };
+}
+
+/**
+ * The code and why it was refused, shared by validity and eligibility.
+ *
+ * `checks` already travels as `{id, status, reason}` triples rather than the
+ * French `detail` sentences — the reasons are machine values, which is what
+ * makes "minimum non atteint" renderable by the panel in its own words rather
+ * than by quoting the model.
+ */
+function detailsFromPromotion(entries) {
+  const entry = lastByTool(entries, TOOL_NAMES.LOOKUP_PROMOTION);
+  if (!entry) return null;
+  const failed = (entry.data?.checks || [])
+    .filter((c) => c.status === 'FAIL')
+    .map((c) => ({ check: c.id, reason: c.reason ?? null }));
+  const code = entry.data?.code ?? null;
+  if (!code && failed.length === 0) return null;
+  return { code, found: Boolean(entry.data?.found), failedChecks: failed };
+}
+
+/**
+ * Who the customer is, if the sender matched one.
+ *
+ * CROSS-FAMILY BY NATURE: this hangs off the ticket's customer link rather than
+ * off the subject, so it renders on a promotions ticket exactly as on an order
+ * one. VIP is derived at read time from `rfm_group` and never stored, so it is
+ * carried here as the account reports it rather than recomputed.
+ */
+function detailsFromCustomer(entries) {
+  const entry = lastByTool(entries, TOOL_NAMES.LOOKUP_CUSTOMER);
+  // `account` is the account STATE; the identity lives beside it in `profile`.
+  // Reading the wrong one produced `{name: null, isVip: null, ordersCount: null}`
+  // on a real run — an object that passes an existence check and says nothing.
+  const account = entry?.data?.profile;
+  if (!account) return null;
+  return {
+    name: account.name ?? null,
+    // Derived through the SAME rule the dashboard badge uses, not stored and not
+    // reimplemented — `rfm_group` is the only source and VIP is a read-time
+    // question about it.
+    isVip: account.rfmGroup ? isVipRfmGroup(account.rfmGroup) : null,
+    ordersCount: account.ordersCount ?? null
+  };
+}
+
+/** Exported for the tests that assert every declared need can be rendered. */
+export const DETAIL_KEYS = Object.keys(DETAILS);
+
+/**
+ * `{ details }` when there is something, `{}` when there is not.
+ *
+ * An object whose every value is null counts as nothing. A real run stored
+ * `{name: null, isVip: null, ordersCount: null}` — it satisfied every existence
+ * check on the way through and told a reader precisely as much as an absent
+ * field, while looking like an answer. Absent beats empty beats null-filled.
+ */
+function nonEmpty(key, value) {
+  if (!value || typeof value !== 'object') return {};
+  const entries = Object.entries(value);
+  if (entries.length === 0) return {};
+  if (entries.every(([, v]) => v === null || v === undefined)) return {};
+  return { [key]: value };
+}
+
 /** The values a need can take, for the condition builder and its validation. */
 export function findingValues(need) {
   return FINDINGS[need] ? [...FINDINGS[need].values] : null;
@@ -460,6 +630,10 @@ export function resolveNeeds(needs = [], ledger = [], toolNames = []) {
       // no answer depends on the value — not that the value is unknown, which
       // is `'unknown'` and a different statement.
       finding: FINDINGS[key] ? FINDINGS[key].derive(entries) : null,
+      // WHICH thing the finding is about. Absent rather than empty when there is
+      // nothing to say, so the panel can drop the field instead of rendering a
+      // heading over nothing. Read by people, never by the drafting model.
+      ...(DETAILS[key] ? nonEmpty('details', DETAILS[key](entries)) : {}),
       evidenceIds,
       // What to ask the customer if this stays open — a key, never a sentence.
       asksCustomer: need.asksCustomer

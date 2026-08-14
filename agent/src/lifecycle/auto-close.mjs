@@ -25,14 +25,44 @@ const TERMINAL_STATUSES = new Set(['resolved', 'closed']);
 export const AUTO_CLOSE_EXEMPT_LEVELS = new Set([4]);
 
 /**
+ * Statuses that never auto-close, whatever the level.
+ *
+ * `awaiting_human` means the agent examined the ticket and concluded a PERSON
+ * must act. Silence on one of those does not mean the conversation resolved
+ * itself; it means nobody did the work. Closing it after three weeks files a
+ * service failure as a completed ticket, and the queue then looks healthy
+ * precisely because the backlog was deleted.
+ *
+ * This distinction could not be drawn when this pass was written — the
+ * investigation did not set a status then, so `level` was the only signal
+ * available and level 3 was made closable on queue-hygiene grounds. It now has a
+ * better one.
+ *
+ * The cost is visible rather than silent: unactioned tickets accumulate under
+ * one status and `runAutoClose` counts them separately, which is the report a
+ * merchant should be looking at. Emptying this set restores the old behaviour in
+ * one line if that trade is ever judged wrong.
+ */
+export const AUTO_CLOSE_EXEMPT_STATUSES = new Set(['awaiting_human']);
+
+/**
  * Pure decision, exported so the policy can be tested without a database.
  * `now` is injected rather than read from the clock so a test can pin it.
  */
 export function shouldAutoClose(
   ticket,
-  { now = new Date(), afterDays = AUTO_CLOSE_AFTER_DAYS, exemptLevels = AUTO_CLOSE_EXEMPT_LEVELS } = {}
+  {
+    now = new Date(),
+    afterDays = AUTO_CLOSE_AFTER_DAYS,
+    exemptLevels = AUTO_CLOSE_EXEMPT_LEVELS,
+    exemptStatuses = AUTO_CLOSE_EXEMPT_STATUSES
+  } = {}
 ) {
   if (!ticket || TERMINAL_STATUSES.has(ticket.status)) {
+    return false;
+  }
+  // Work the agent handed to a person, which nobody did. See the constant.
+  if (exemptStatuses.has(ticket.status)) {
     return false;
   }
   // A compliance soft-delete is not ours to touch.
@@ -90,10 +120,23 @@ export async function runAutoClose({
   const cutoff = new Date(now.getTime() - afterDays * 24 * 60 * 60 * 1000);
   const candidates = await store.findInactive(shopId, cutoff);
 
-  const totals = { considered: candidates.length, closed: 0, exempt: 0, failed: 0 };
+  // `awaitingHuman` is counted apart from `exempt` because it is the only figure
+  // here that is a BACKLOG rather than a policy. Level 4s being spared is the
+  // rule working; unactioned human work piling up is the thing to look at, and
+  // folded into one number nobody would ever see it.
+  const totals = {
+    considered: candidates.length,
+    closed: 0,
+    exempt: 0,
+    awaitingHuman: 0,
+    failed: 0
+  };
 
   for (const ticket of candidates) {
     if (!shouldAutoClose(ticket, { now, afterDays })) {
+      if (AUTO_CLOSE_EXEMPT_STATUSES.has(ticket?.status)) {
+        totals.awaitingHuman += 1;
+      }
       totals.exempt += 1;
       continue;
     }

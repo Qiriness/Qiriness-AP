@@ -25,6 +25,9 @@ const ORDER_COLUMNS = [
   'currency_code', 'subtotal_price', 'total_discounts', 'total_shipping_price',
   'total_tax', 'total_price', 'total_refunded', 'total_outstanding',
   'line_items', 'fulfillments', 'refunds', 'returns', 'shipping_destination',
+  // Read for the dashboard's benefit, not the agent's — `toOrderContextText`
+  // leaves it out of what the model is shown.
+  'customer_email_masked',
   'delivered_at', 'return_refund_opened_at', 'return_refund_completed_at',
   'processed_at', 'shopify_created_at', 'shopify_updated_at'
 ].join(',');

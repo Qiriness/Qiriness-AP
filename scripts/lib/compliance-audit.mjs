@@ -12,6 +12,47 @@ export function hashIdentifier(value) {
     .digest('hex');
 }
 
+/**
+ * An address reduced to what a human needs to RECOGNISE it, and no more.
+ *
+ *   `jocelyne.wastiel@bluewin.ch` -> `j***l@bluewin.ch`
+ *
+ * WHY THIS EXISTS BESIDE THE HASH. `orders` deliberately stores only
+ * `customer_email_hash` — the row must not duplicate a raw address. But a hash
+ * answers exactly one question, "is it the same address?", and the question the
+ * desk actually has is the one `orders:resolve` keeps failing: 15 tickets quote
+ * a real order number from an address that does not own it, and a person must
+ * decide whether that is a gift, a partner, or a second mailbox. A hash cannot
+ * be looked at; `j***l@orange.fr` beside the requester's address settles it in a
+ * second.
+ *
+ * THE DOMAIN IS KEPT WHOLE, deliberately: it is the discriminating half ("same
+ * person, second address at the same provider") and a provider domain is not
+ * personal data. This codebase already draws that line the same way — the sender
+ * directory stores company domains as context precisely because they are not.
+ *
+ * SHORT LOCAL PARTS REVEAL THEMSELVES, so they are not half-masked: `bo@x.fr`
+ * masked as `b***o@x.fr` would be longer than the original and hide nothing.
+ * Two characters or fewer collapse to `**`.
+ */
+export function maskEmail(value) {
+  if (value === null || value === undefined || value === '') {
+    return null;
+  }
+  const address = String(value).trim().toLowerCase();
+  const at = address.lastIndexOf('@');
+  if (at <= 0 || at === address.length - 1) {
+    // Not an address shape. Returning null rather than a masked non-address
+    // keeps "we have no readable identifier" distinguishable from "we have one".
+    return null;
+  }
+
+  const local = address.slice(0, at);
+  const domain = address.slice(at + 1);
+  const masked = local.length <= 2 ? '**' : `${local[0]}***${local[local.length - 1]}`;
+  return `${masked}@${domain}`;
+}
+
 export function sanitizeError(error) {
   const message = error?.message || String(error);
   return message

@@ -463,11 +463,40 @@ export interface TicketResults {
   headline: string;
   /** The established facts. Each rests on a tool call that actually ran. */
   findings: string[];
+  /**
+   * What could NOT be established, and why — the customer's assertions and the
+   * questions no tool could settle. Shown because an empty answer is a decision
+   * a person may need to make differently, and because a recurring entry here is
+   * usually a missing knowledge article rather than a missing tool.
+   */
+  unresolved: { claim: string; why: string }[];
   /** One short sentence: what needs to happen next. */
   action: string;
   /** Why a human was asked for. Internal — never customer-facing. */
   actionReason: string | null;
   investigatedAt: string | null;
+}
+
+/**
+ * One thing the investigation established, structured rather than in prose.
+ *
+ * The findings on `TicketResults` are the model's sentences; these are the facts
+ * underneath them, so a person can see WHICH product, WHICH code and why it was
+ * refused without opening Shopify. Everything here is derived in the agent from
+ * a tool call that actually ran — the dashboard labels and never re-derives.
+ */
+export interface TicketFact {
+  /** The need this answers, e.g. "promotion_validity". Stable, from a closed list. */
+  need: string;
+  /** The French label the agent already wrote for it. */
+  label: string;
+  /** What it turned out to be, already labelled. Null when nothing branches on it. */
+  outcome: string | null;
+  /**
+   * The specifics, as short lines the panel renders in order. Never empty — a
+   * fact with nothing to say is dropped rather than shown as a bare heading.
+   */
+  lines: string[];
 }
 
 /** What `GET /api/tickets/:id` returns for the expanded row. */
@@ -485,6 +514,16 @@ export interface TicketDetail {
    * from the investigation, and either can exist without the other.
    */
   order: TicketOrderFacts | null;
+  /**
+   * The structured facts behind the findings, for every family — empty when the
+   * investigation established nothing specific, which is the normal state for a
+   * ticket whose tools all came back empty-handed.
+   *
+   * Separate from `order` on purpose: order facts are ambient (the resolution
+   * pass writes them, and they exist for tickets the agent never investigated),
+   * while these exist only because an investigation ran.
+   */
+  facts: TicketFact[];
 }
 
 /* ------------------------------------------------------- ticket thread */

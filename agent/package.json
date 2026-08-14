@@ -32,6 +32,7 @@
     "eval:diagnose": "node eval/diagnose-retrieval.mjs",
     "eval:exemplars": "node eval/diagnose-exemplars.mjs",
     "eval:exemplar-needs": "node eval/compare-exemplar-needs.mjs",
-    "eval:audit-phrasings": "node eval/audit-phrasings.mjs"
+    "eval:audit-phrasings": "node eval/audit-phrasings.mjs",
+    "eval:knowledge-gaps": "node eval/knowledge-gaps.mjs"
   }
 }

@@ -1,3 +1,5 @@
+import { toOrderContextText } from '../resolution/order-context.mjs';
+
 import { planToolNames } from './decompose-rules.mjs';
 import { TOOL_NAMES, allowedTools } from './investigation-rules.mjs';
 
@@ -160,7 +162,20 @@ export function createToolRegistry({
           outcome: result.found ? 'found' : result.reason || 'no_match',
           caveats: result.found ? [] : ['customer_unknown'],
           promptText: result.promptText,
-          data: { customerId: result.customerId ?? null, account: result.account ?? null }
+          data: {
+            customerId: result.customerId ?? null,
+            account: result.account ?? null,
+            // NAMED FIELDS, not the whole context. `result.customer` also holds
+            // the email, the city and the last order — this feeds a stored
+            // diagnostic a person reads, and withholding is this layer's job.
+            profile: result.customer
+              ? {
+                  name: result.customer.name ?? null,
+                  rfmGroup: result.customer.rfmGroup ?? null,
+                  ordersCount: result.customer.ordersCount ?? null
+                }
+              : null
+          }
         };
       },
 
@@ -171,7 +186,19 @@ export function createToolRegistry({
           outcome: !result.found ? 'no_match' : result.ambiguous ? 'ambiguous' : 'found',
           caveats: result.ambiguous ? ['product_ambiguous'] : [],
           promptText: result.found ? result.promptText : 'Aucun produit du catalogue ne correspond au message.',
-          data: { found: result.found, ambiguous: Boolean(result.ambiguous) }
+          // TITLES TRAVEL IN `data`, WHICH THE MODEL NEVER SEES — `fromModel`
+          // sends `promptText` and nothing else. They are here so a person can be
+          // shown WHICH products the agent matched, which is the whole content of
+          // an `ambiguous` outcome: "it could be one of these three" is only
+          // useful with the three named.
+          data: {
+            found: result.found,
+            ambiguous: Boolean(result.ambiguous),
+            titles: (result.products || []).map((p) => p?.title).filter(Boolean),
+            // Near-misses on a no-match, which is what tells a reviewer whether
+            // the catalogue lacks the product or the matcher simply missed it.
+            candidates: result.candidates || []
+          }
         };
       },
 
@@ -210,9 +237,48 @@ export function createToolRegistry({
       },
 
       async [TOOL_NAMES.LOOKUP_PROMOTION](args = {}) {
-        const result = await promotionLookup.lookupPromotion(String(args.code || ''), {
+        // THE CODE MUST BE THE CUSTOMER'S, not the model's.
+        //
+        // Measured: on a product ticket the model called this with
+        // `MASQUELEDVISAGE` — « votre Masque LED visage » from the customer's own
+        // sentence, uppercased and joined. The message contains no all-caps run
+        // at all, so `extractPromotionCodes` correctly found nothing; the
+        // argument was composed. The tool then reported `not_found`, which
+        // `evidence-rules` recorded as promotion_validity SATISFIED: a settled
+        // finding about a code nobody ever quoted, and a branch an answer set
+        // could select on ("your code does not exist") for someone who never
+        // mentioned one.
+        //
+        // This module already says a missing code should make the tool "say so
+        // rather than guess which of three active promotions was meant". That
+        // held on the tool's side of the boundary and not on the model's.
+        // Refusing the argument closes it for every future tool call at once,
+        // where tightening the extraction pattern would have fixed nothing —
+        // the pattern never matched this string.
+        //
+        // `listActivePromotions` stays the honest path for "is there another
+        // offer I could give this customer", which is a real support move.
+        const code = String(args.code || '');
+        const result = await promotionLookup.lookupPromotion(code, {
           customer: ticket.customer || null
         });
+
+        // ONLY THE `not_found` CASE IS REINTERPRETED, which is what makes the
+        // rule safe. A code the shop really has resolves regardless of how the
+        // customer punctuated it, and a genuine typo the customer typed still
+        // reports `not_found` with suggestions — the useful answer. What is
+        // refused is a string that exists in neither the shop NOR the message,
+        // which is the only shape a fabricated argument can take.
+        if (!result.found && code && !appearsAsToken(code, ticket.text)) {
+          return {
+            outcome: 'no_code_in_message',
+            caveats: ['basket_unseeable'],
+            promptText:
+              `Le code « ${code} » n'existe pas et n'apparaît pas dans le message du client. ` +
+              'Demande-lui le code exact, ou consulte les promotions actives.',
+            data: { found: false, verdict: 'undetermined', code: null, checks: [], rejected: code }
+          };
+        }
         const verdict = result.eligibility?.verdict || 'undetermined';
         return {
           outcome: result.found ? verdict : 'not_found',
@@ -240,15 +306,25 @@ export function createToolRegistry({
       },
 
       async [TOOL_NAMES.LIST_ACTIVE_PROMOTIONS]() {
-        const promotions = await promotionLookup.listActive();
+        const { promotions, total, truncated } = await promotionLookup.listActive();
+        // A discount with many codes has no single code to name — each belongs
+        // to one customer. Say how many exist instead, which is the fact that
+        // actually answers "why can't you just give me one?".
+        const line = (p) =>
+          p.code
+            ? `- ${p.code} : ${p.summary || p.title}`
+            : `- ${p.title} : ${p.summary || p.title}` +
+              (p.codeCount > 1 ? ` (code personnel, ${p.codeCount} générés)` : '');
+
         return {
           outcome: promotions.length > 0 ? 'found' : 'none',
           caveats: ['basket_unseeable'],
           promptText:
             promotions.length > 0
-              ? promotions.map((p) => `- ${p.code || p.title} : ${p.summary || p.title}`).join('\n')
+              ? promotions.map(line).join('\n') +
+                (truncated ? `\n(…${total - promotions.length} autres offres actives non listées)` : '')
               : 'Aucune promotion active actuellement.',
-          data: { count: promotions.length }
+          data: { count: promotions.length, total }
         };
       },
 
@@ -259,11 +335,16 @@ export function createToolRegistry({
         // divergent version of the same facts.
         const context = ticket.resolvedContext || null;
         const confirmed = Boolean(ticket.shopify_order_number) && Boolean(context?.order);
+        // `toOrderContextText` is the model's projection of the bundle, owned by
+        // the module that builds it. It used to be `JSON.stringify(context.order)`,
+        // which meant nobody had decided what the agent is told about an order —
+        // whatever the builder last wrote reached the prompt, and so would the
+        // next field added to it.
         return {
           outcome: confirmed ? 'found' : 'not_resolved',
           caveats: confirmed ? [] : ['order_unconfirmed'],
           promptText: confirmed
-            ? context.promptText || JSON.stringify(context.order)
+            ? toOrderContextText(context)
             : 'Aucune commande confirmée n’est rattachée à ce ticket.',
           data: { confirmed, orderName: ticket.shopify_order_number || null }
         };
@@ -312,3 +393,33 @@ export function createToolRegistry({
 
 /** Exported for the registry's own tests and for the wiring check in index.mjs. */
 export const TOOL_DEFINITIONS = DEFINITIONS;
+
+/**
+ * Does this code appear as ONE WORD the customer actually typed?
+ *
+ * PER TOKEN, NOT ACROSS THE WHOLE TEXT, and the difference is the entire guard.
+ * The first version flattened both sides and asked whether the message contained
+ * the code — which passes `MASQUELEDVISAGE` against « votre Masque LED visage »,
+ * because with the spaces removed that IS the string. Any multi-word product
+ * name collapses into exactly the sort of code a model would invent from it.
+ *
+ * Comparing token by token keeps the leniency that matters — `qiriness-20` and
+ * `Qiriness20` are one word each and still match `QIRINESS20`, so a customer's
+ * punctuation is never held against them — while a three-word product name is
+ * three tokens and matches nothing.
+ *
+ * An empty ticket text refuses nothing: with no message to check against, the
+ * guard has no opinion.
+ */
+function appearsAsToken(code, text) {
+  const haystack = String(text || '');
+  if (!haystack.trim()) {
+    return true;
+  }
+  const flatten = (value) => String(value).toUpperCase().replace(/[^A-Z0-9]/g, '');
+  const needle = flatten(code);
+  if (needle.length === 0) {
+    return false;
+  }
+  return haystack.split(/\s+/).some((token) => flatten(token) === needle);
+}

@@ -1,5 +1,5 @@
 import { stripUndefined } from './collections.mjs';
-import { hashIdentifier } from './compliance-audit.mjs';
+import { hashIdentifier, maskEmail } from './compliance-audit.mjs';
 import { cleanJsonValue, cleanTextValue } from './text-cleaning.mjs';
 
 const ACTIVE_RETURN_STATUSES = new Set(['OPEN', 'REQUESTED']);
@@ -42,6 +42,10 @@ export function mapOrder(order, shopId, syncedAt, customerIdByShopifyId = new Ma
     total_weight_grams: integerValue(order.totalWeight),
     tags: cleanJsonValue(order.tags || []),
     customer_email_hash: hashIdentifier(order.email),
+    // Beside the hash and from the same input, so the two can never describe
+    // different addresses. The hash answers "is it the same one?"; this answers
+    // "which one is it?" for the person reviewing an ownership mismatch.
+    customer_email_masked: maskEmail(order.email),
     customer_phone_hash: hashIdentifier(order.phone),
     shipping_destination: shippingDestination(order.shippingAddress),
     line_items: cleanJsonValue(lineItems.map(mapLineItem)),

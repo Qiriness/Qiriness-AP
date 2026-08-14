@@ -111,7 +111,13 @@ async function resolveTicket(store, shopId, item, triage, counts, audit) {
       // sent something. The lifecycle timestamps are cleared with the status,
       // or a reopened ticket still reads as finished to anything looking at
       // closed_at rather than at status.
-      if (existing.status === 'closed' || existing.status === 'resolved') {
+      // ANY non-open status, not just the terminal two. `awaiting_customer` is
+      // the case that makes this load-bearing rather than tidy: both the
+      // categoriser and the investigation runner select on `status = 'open'`, so
+      // a ticket parked awaiting a reply would never be re-read once that reply
+      // arrived — the customer answers the question we asked and the pipeline
+      // never looks again. Stranded, silently, forever.
+      if (existing.status && existing.status !== 'open') {
         patch.status = 'open';
         patch.closed_at = null;
         patch.resolved_at = null;

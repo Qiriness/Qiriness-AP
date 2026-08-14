@@ -46,8 +46,9 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |   |   |-- types.ts             # UI types + label tables (categories, levels, VIP, RFM)
 |   |   |-- knowledge-mapper.ts  # isomorphic: API JSON -> UI types
 |   |   |-- ticket-stats.ts      # isomorphic: summariseTickets + isClosed
-|   |   |-- ticket-detail.ts     # pure, 2 projections: case file -> 3 blocks ·
-|   |   |                        # resolved_context -> order status / tracking lines
+|   |   |-- ticket-detail.ts     # pure, 3 projections: case file -> 3 blocks ·
+|   |   |                        # resolved_context -> order status / tracking lines ·
+|   |   |                        # evidence_gaps -> the facts behind the findings
 |   |   |-- api/                 # client-side fetch wrappers (knowledge, tickets, forwarding)
 |   |   |-- relative-time.ts demo-data.ts
 |   |   `-- server/              # knowledge-service · forwarding-service ·
@@ -137,7 +138,7 @@ Every table has RLS on with no policies: **service-role access only**. Shopify s
 | --- | --- |
 | `shops` | shop records, environment, app settings, `sync_cursors` (incl. mail delta link) |
 | `customers` | lean support snapshot: contact, marketing state, coarse location, lifetime totals, last order, `rfm_group`. No addresses or notes |
-| `orders` | identity, links, channel, derived `order_status`, totals, line items, fulfillments, returns, refunds. Contacts hashed; destination coarse; `retention_delete_after` |
+| `orders` | identity, links, channel, derived `order_status`, totals, line items, fulfillments, returns, refunds. Contacts hashed, plus `customer_email_masked` (`j***l@orange.fr`) for the one question a hash cannot answer; destination coarse; `retention_delete_after` |
 | `products` | snapshots + first-class metafields, `variants` jsonb, `available_stock` |
 | `promotions` | one row per redeem code (`code = null` for automatic); `rule_snapshot` carries values, not just type names |
 | `shopify_metaobjects` | shared metaobjects (FAQ, ingredient lists) referenced by products |
@@ -168,7 +169,7 @@ The recurring situations, not the answers to them. Same document/chunk mechanics
 | --- | --- |
 | `tickets` | one per Graph `conversationId`. Taxonomy axes, `level`, `responsible_team`, `customer_id`, `shopify_order_number`, signals (`language`, `happiness`, `categorisation_confidence`), `resolved_context` jsonb, lifecycle + retention timestamps |
 | `ticket_messages` | one per Graph message. Envelope, cleaned `body_text`, sanitised payload, `embedding vector(1536)` |
-| `ticket_investigations` | **the case file**: `established` / `unverified` / `missing` / `do_not_claim` (four separate columns), `handoff`, `context_ref`, `dropped_claims`, `evidence_gaps` (what the ticket required vs what was obtained — diagnostic, does not move the verdict). `unique(shop_id, trigger_message_id)` |
+| `ticket_investigations` | **the case file**: `established` / `unverified` / `missing` / `do_not_claim` (four separate columns), `handoff`, `context_ref`, `dropped_claims`, `evidence_gaps` (what the ticket required vs what was obtained, each entry carrying the `finding` and the `details` naming WHICH product or code it is about — diagnostic, does not move the verdict), `exemplar_match` (which recurring situation this is; recorded, never acted on). `unique(shop_id, trigger_message_id)` |
 | `email_blocklist` | per-shop sender email/domain rules + hit counts |
 | `sender_directory` | per-shop sender email/domain → `label` (internal, contractor, logistics, courier, retailer, distributor, supplier, partner, other) + free-text `note`. Read into the case file as context and by `cluster:tickets` to tell customer demand from our own mail. Replaces `INTERNAL_EMAIL_DOMAINS`. Rows are exceptions; an unlisted sender is a consumer |
 | `spam_audit` | one row per gate decision. `outcome`, `decided_by`, `reason`, `label`, `model`, `failed_open`, sender, subject, and on a block `body_text` + `body_captured_at` + `body_expires_at` |

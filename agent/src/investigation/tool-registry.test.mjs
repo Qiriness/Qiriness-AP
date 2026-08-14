@@ -35,7 +35,13 @@ function buildRegistry(overrides = {}) {
         };
       },
       async listActive() {
-        return [{ code: 'BIENVENUE10', title: 'Bienvenue' }];
+        // Shape changed when listActive stopped answering per redeem code:
+        // { promotions, total, truncated } rather than a bare array.
+        return {
+          promotions: [{ code: 'BIENVENUE10', title: 'Bienvenue', codeCount: 1 }],
+          total: 1,
+          truncated: false
+        };
       }
     },
     async retrieveKnowledge() {
@@ -125,7 +131,7 @@ test('an eligible promotion drops the eligibility caveat but keeps the basket on
         return { found: true, code: 'X', eligibility: { verdict: 'eligible', blocking: [], unknowns: [] }, promptText: 'x' };
       },
       async listActive() {
-        return [];
+        return { promotions: [], total: 0, truncated: false };
       }
     }
   });
@@ -222,4 +228,124 @@ test('the model is shown the tool rendering, never a raw row', async () => {
   // The row id lives in `data` for the runner, and is not part of what the model reads.
   assert.equal(result.data.customerId, 'c1');
   assert.ok(!result.promptText.includes('c1'));
+});
+
+test('no tool hands the model a serialised structure', async () => {
+  // THE GENERAL FORM OF A REAL BUG. `getOrderContext` returned
+  // `JSON.stringify(context.order)` because the rendering it asks for was never
+  // written — so nobody had decided what the agent is told about an order, and
+  // every field later added to the bundle would have reached the prompt too.
+  //
+  // `promptText` is the withhold boundary: it is prose somebody chose, and a
+  // serialised object is the absence of that choice. This asserts the property
+  // for every tool at once, so the next one cannot reintroduce it.
+  const registry = buildRegistry();
+  const seen = [];
+  const collect = async (ticket, args = {}) => {
+    const { handlers } = registry.toolsFor(ticket);
+    for (const [name, handler] of handlers) {
+      const { promptText } = await handler(args);
+      seen.push([name, promptText]);
+    }
+  };
+
+  await collect({ category: 'promotions', request_kind: 'problem', level: 2, text: 'x' }, { code: 'X' });
+  await collect({ category: 'product', request_kind: 'question', level: 2, text: 'x' }, { question: 'x' });
+  await collect({ category: 'delivery', request_kind: 'problem', level: 2, text: 'x' });
+  await collect({ category: 'account', request_kind: 'problem', level: 2, text: 'x' });
+
+  for (const [name, promptText] of seen) {
+    assert.equal(typeof promptText, 'string', `${name} returned no promptText`);
+    const head = promptText.trimStart()[0];
+    assert.ok(head !== '{' && head !== '[', `${name} handed the model serialised JSON`);
+  }
+});
+
+// --- a tool argument that quotes the customer must be the customer's words ----
+
+test('a code the customer never wrote is refused, not looked up', async () => {
+  // MEASURED. On a product ticket the model called lookupPromotion with
+  // `MASQUELEDVISAGE` — « votre Masque LED visage » run together. The message
+  // held no all-caps run at all, so extraction had correctly found nothing; the
+  // argument was composed. The lookup then reported `not_found`, which
+  // evidence-rules recorded as promotion_validity SATISFIED: a settled finding
+  // about a code nobody quoted.
+  const registry = buildRegistry({
+    promotionLookup: {
+      async lookupPromotion() {
+        // The shop has no such code — which is the only case the guard rewrites.
+        return { found: false, code: null, promptText: 'x' };
+      },
+      async extractCodes() {
+        return [];
+      },
+      async listActive() {
+        return { promotions: [], total: 0, truncated: false };
+      }
+    }
+  });
+  const { handlers } = registry.toolsFor({
+    category: 'promotions',
+    request_kind: 'problem',
+    level: 2,
+    text: 'Je m’intéresse à votre Masque LED visage'
+  });
+
+  const result = await handlers.get(TOOL_NAMES.LOOKUP_PROMOTION)({ code: 'MASQUELEDVISAGE' });
+
+  assert.equal(result.outcome, 'no_code_in_message');
+  assert.equal(result.data.code, null, 'nothing for a finding to settle on');
+  assert.equal(result.data.rejected, 'MASQUELEDVISAGE', 'but what was refused is recorded');
+});
+
+test('a typo the customer typed still gets the ordinary not-found answer', async () => {
+  // The guard must not swallow a real mistake: `QIRINES20` is in the message, so
+  // the customer wants to know why it fails — suggestions and all.
+  const registry = buildRegistry({
+    promotionLookup: {
+      async lookupPromotion() {
+        return { found: false, code: null, promptText: 'Le code n’existe pas. Voulez-vous dire QIRINESS20 ?' };
+      },
+      async extractCodes() { return []; },
+      async listActive() { return { promotions: [], total: 0, truncated: false }; }
+    }
+  });
+  const { handlers } = registry.toolsFor({
+    category: 'promotions', request_kind: 'problem', level: 2,
+    text: 'mon code QIRINES20 est refusé'
+  });
+
+  const result = await handlers.get(TOOL_NAMES.LOOKUP_PROMOTION)({ code: 'QIRINES20' });
+  assert.equal(result.outcome, 'not_found', 'not swallowed by the guard');
+});
+
+test('a code the customer DID write is looked up, punctuation and case aside', async () => {
+  // A customer writes `qiriness-20` for QIRINESS20. Refusing that would send the
+  // agent asking for a code it had already been given.
+  const seen = [];
+  const registry = buildRegistry({
+    promotionLookup: {
+      async lookupPromotion(code) {
+        seen.push(code);
+        return { found: true, code, eligibility: { verdict: 'eligible', checks: [] }, promptText: 'ok' };
+      },
+      async extractCodes() {
+        return [];
+      },
+      async listActive() {
+        return { promotions: [], total: 0, truncated: false };
+      }
+    }
+  });
+  const { handlers } = registry.toolsFor({
+    category: 'promotions',
+    request_kind: 'problem',
+    level: 2,
+    text: 'mon code qiriness-20 ne marche pas'
+  });
+
+  const result = await handlers.get(TOOL_NAMES.LOOKUP_PROMOTION)({ code: 'QIRINESS20' });
+
+  assert.deepEqual(seen, ['QIRINESS20']);
+  assert.equal(result.outcome, 'eligible');
 });

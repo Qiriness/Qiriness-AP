@@ -23,6 +23,7 @@
  */
 
 import type {
+  TicketFact,
   DeliveryState,
   InvestigationVerdict,
   MissingField,
@@ -41,6 +42,8 @@ import {
 export interface InvestigationRecord {
   verdict: InvestigationVerdict;
   established: { claim?: string | null }[];
+  /** What no tool could settle, each with the reason it could not. */
+  unverified: { claim?: string | null; why?: string | null }[];
   missing: { field?: string | null }[];
   handoff: { action?: string | null; why?: string | null } | null;
   investigatedAt: string | null;
@@ -73,6 +76,15 @@ export function summariseInvestigation(record: InvestigationRecord): TicketResul
     verdict,
     headline: HEADLINES[verdict] ?? HEADLINES.needs_human,
     findings,
+    // What could NOT be settled. A recurring entry here is usually a missing
+    // knowledge article rather than a missing tool, which is only actionable if
+    // somebody sees it — it was stored and rendered nowhere.
+    unresolved: (record.unverified ?? [])
+      .map((entry) => ({
+        claim: String(entry?.claim ?? "").trim(),
+        why: String(entry?.why ?? "").trim(),
+      }))
+      .filter((entry) => entry.claim.length > 0),
     action: deriveAction(verdict, record),
     // The reason belongs to the handoff, so it is shown only where the handoff
     // is: pairing it with "reply to the customer" would read as an instruction.
@@ -181,4 +193,174 @@ function joinList(items: string[]): string {
 function nonEmpty(value: string | null | undefined): string | null {
   const trimmed = String(value ?? "").trim();
   return trimmed.length > 0 ? trimmed : null;
+}
+
+/**
+ * `ticket_investigations.evidence_gaps` -> the facts the panel lists.
+ *
+ * THE THIRD PROJECTION IN THIS FILE, and the reason it exists is the goal the
+ * other two only half meet: a person should not have to open Shopify. They
+ * already do not for orders, because `summariseOrderContext` reads a bundle the
+ * resolution pass persists. For every other family the specifics were derived
+ * during the investigation, read once to settle a finding, and discarded — so a
+ * promotions ticket showed the model's prose and nothing underneath it.
+ *
+ * LABELS, DERIVES NOTHING, exactly like `summariseOrderContext`. The agent
+ * already decided which product matched and why a code was refused; deciding it
+ * again here would give the dashboard a second opinion, and the two would
+ * disagree the first time either changed.
+ *
+ * A GAP WITH NO `details` IS NOT A FACT. Most needs carry none — the tool came
+ * back empty-handed, or nothing branches on the value — and a heading over an
+ * empty list is worse than an absent row.
+ */
+export function summariseFacts(gaps: unknown): TicketFact[] {
+  if (!Array.isArray(gaps)) {
+    return [];
+  }
+
+  return gaps
+    .map((gap) => {
+      const details = (gap as any)?.details;
+      if (!details || typeof details !== "object") {
+        return null;
+      }
+      const lines = describeDetails((gap as any)?.need, details);
+      if (lines.length === 0) {
+        return null;
+      }
+      return {
+        need: String((gap as any).need ?? ""),
+        label: nonEmpty((gap as any).label) ?? String((gap as any).need ?? ""),
+        outcome: labelFinding((gap as any).finding),
+        lines,
+      } satisfies TicketFact;
+    })
+    .filter((fact): fact is TicketFact => fact !== null);
+}
+
+/**
+ * One need's details as display lines.
+ *
+ * Per-need rather than a generic object walker: the agent named these fields
+ * deliberately, and a walker would render whichever ones happened to be there —
+ * the same mistake `JSON.stringify` made on the order bundle.
+ */
+function describeDetails(need: unknown, details: any): string[] {
+  const lines: string[] = [];
+
+  switch (need) {
+    case "product_identity": {
+      const products: string[] = Array.isArray(details.products) ? details.products : [];
+      if (products.length === 0) break;
+      // "Could be one of these" is the whole content of an ambiguous match, so
+      // the wording has to say which it is.
+      lines.push(
+        details.matched === false
+          ? `Closest in the catalogue: ${products.join(", ")}`
+          : products.length > 1
+            ? `Could be: ${products.join(", ")}`
+            : products[0]
+      );
+      break;
+    }
+
+    case "product_availability": {
+      const products: any[] = Array.isArray(details.products) ? details.products : [];
+      for (const product of products) {
+        const title = nonEmpty(product?.title);
+        if (!title) continue;
+        lines.push(`${title} — ${product?.inStock ? "in stock" : "out of stock"}`);
+      }
+      break;
+    }
+
+    case "product_property":
+    case "policy_answer":
+    case "brand_answer": {
+      // THE ONE LINE HERE THAT IS A TO-DO. The library could not answer this, so
+      // the agent will keep failing the same question until an article covers
+      // it — which only happens if somebody is told.
+      if (details.libraryAnswered !== false) break;
+      lines.push(
+        typeof details.closest === "number"
+          ? `No approved article answered this — closest match ${details.closest}`
+          : "No approved article covers this"
+      );
+      break;
+    }
+
+    case "promotion_identity": {
+      const codes: string[] = Array.isArray(details.codes) ? details.codes : [];
+      if (codes.length > 0) lines.push(codes.join(", "));
+      break;
+    }
+
+    case "promotion_validity":
+    case "promotion_eligibility": {
+      const code = nonEmpty(details.code);
+      if (code) {
+        lines.push(details.found === false ? `${code} — no such code` : code);
+      }
+      for (const failed of Array.isArray(details.failedChecks) ? details.failedChecks : []) {
+        const label = PROMOTION_CHECK_LABELS[String(failed?.check)] ?? nonEmpty(failed?.check);
+        if (label) lines.push(`Blocked: ${label}`);
+      }
+      break;
+    }
+
+    case "customer_identity":
+    case "customer_account_state": {
+      const name = nonEmpty(details.name);
+      if (name) lines.push(details.isVip ? `${name} (VIP)` : name);
+      if (typeof details.ordersCount === "number") {
+        lines.push(`${details.ordersCount} order${details.ordersCount === 1 ? "" : "s"}`);
+      }
+      break;
+    }
+
+    default:
+      break;
+  }
+
+  return lines;
+}
+
+/** Why a code was refused, in the panel's words rather than the agent's key. */
+const PROMOTION_CHECK_LABELS: Record<string, string> = {
+  minimum: "basket below the minimum",
+  window: "outside the offer dates",
+  status: "the offer is not active",
+  usage_limit: "usage limit reached",
+  once_per_customer: "already used by this customer",
+  items: "does not apply to these items",
+};
+
+/**
+ * A finding is a machine value (`expired`, `out_of_stock`). Unrecognised ones
+ * are shown raw rather than dropped, for the reason `labelOrderStatus` gives:
+ * the agent's vocabulary can grow before this table does, and hiding a value
+ * would read as "nothing was established".
+ */
+const FINDING_LABELS: Record<string, string> = {
+  active: "active",
+  expired: "expired",
+  not_yet_started: "not started yet",
+  inactive: "inactive",
+  not_found: "not found",
+  eligible: "eligible",
+  blocked: "blocked",
+  undetermined: "undetermined",
+  in_stock: "in stock",
+  out_of_stock: "out of stock",
+  resolved: "resolved",
+  ambiguous: "ambiguous",
+  none: "none",
+  unknown: "unknown",
+};
+
+function labelFinding(value: unknown): string | null {
+  const key = nonEmpty(value as string);
+  if (!key) return null;
+  return FINDING_LABELS[key] ?? key;
 }

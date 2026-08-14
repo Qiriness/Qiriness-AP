@@ -20,7 +20,7 @@ import {
   supabaseUpdate,
 } from "../../../scripts/lib/supabase-rest-client.mjs";
 import { KnowledgeNotFoundError } from "./knowledge-errors";
-import { summariseInvestigation, summariseOrderContext } from "../ticket-detail";
+import { summariseFacts, summariseInvestigation, summariseOrderContext } from "../ticket-detail";
 import type {
   InvestigationVerdict,
   KnowledgeCategory,
@@ -130,7 +130,7 @@ export async function getTicketDetail(shopId: string, ticketId: string): Promise
       supabase,
       "ticket_investigations",
       { ticket_id: ticketId, shop_id: shopId },
-      "verdict,established,missing,handoff,investigated_at",
+      "verdict,established,unverified,missing,handoff,investigated_at,evidence_gaps",
       { order: "investigated_at.desc", limit: 1 }
     ),
   ]);
@@ -145,18 +145,22 @@ export async function getTicketDetail(shopId: string, ticketId: string): Promise
 
   const row = Array.isArray(investigationRows) ? investigationRows[0] : null;
   if (!row) {
-    return { ticketId, results: null, order };
+    // No case file: the order facts may still exist, because the resolution pass
+    // writes them for tickets the agent never investigated. Facts cannot.
+    return { ticketId, results: null, order, facts: [] };
   }
 
   return {
     ticketId,
     order,
+    facts: summariseFacts(row.evidence_gaps),
     results: summariseInvestigation({
       verdict: row.verdict as InvestigationVerdict,
       // The jsonb columns are `not null default '[]'`, so these are arrays in
       // practice; coerced anyway because a mapper that trusts the schema breaks
       // loudly in the UI when the schema is the thing that changed.
       established: Array.isArray(row.established) ? row.established : [],
+      unverified: Array.isArray(row.unverified) ? row.unverified : [],
       missing: Array.isArray(row.missing) ? row.missing : [],
       handoff: row.handoff ?? null,
       investigatedAt: row.investigated_at ?? null,

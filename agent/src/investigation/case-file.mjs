@@ -46,6 +46,25 @@ const REPLY_INTENTS = {
 };
 
 /**
+ * Where the verdict leaves the ticket in the queue.
+ *
+ * Until now the verdict lived only in `metadata.verdict` and the investigation
+ * row, so `status` could not tell a ticket waiting on a customer from one nobody
+ * had opened — measured, all 214 tickets read `open`. The queue was built on a
+ * column carrying no information.
+ *
+ * `answerable` STAYS OPEN, deliberately. It means a reply could be written, not
+ * that one was sent, and nothing sends yet: drafting is Phase 5. Moving it out of
+ * the queue now would mark work as handled that no customer has received. When
+ * drafting lands, the sent reply is what advances it — not this verdict.
+ */
+export const TICKET_STATUS_BY_VERDICT = {
+  answerable: null,
+  needs_customer_input: 'awaiting_customer',
+  needs_human: 'awaiting_human'
+};
+
+/**
  * The facts a customer can be asked for, and the sentence that asks.
  *
  * The model chooses the key; this table writes the question. A model composing

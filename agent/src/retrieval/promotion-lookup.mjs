@@ -51,20 +51,40 @@ function flattenPromotion(row) {
   }));
 }
 
+/**
+ * A backstop on how many offers one tool result may name.
+ *
+ * The dedup above is what actually fixes the size — this shop has ~25 distinct
+ * active offers behind 3619 codes. The cap exists so that a shop with hundreds
+ * of genuinely distinct promotions cannot reproduce the same failure by a
+ * different route: a tool result should be bounded by construction, not by the
+ * catalogue happening to be small.
+ */
+const MAX_ACTIVE_LISTED = 40;
+
 /** Codes as customers write them: uppercase runs of letters/digits, 4+ long. */
 const CODE_PATTERN = /\b[A-Z][A-Z0-9]{3,}\b/g;
 
 export function createPromotionLookup({ supabase, shopId, logger }) {
   let promotionsPromise = null;
+  let rowsPromise = null;
 
-  function loadPromotions() {
-    if (!promotionsPromise) {
-      promotionsPromise = supabaseSelectAll(
+  function loadRows() {
+    if (!rowsPromise) {
+      rowsPromise = supabaseSelectAll(
         supabase,
         'promotions',
         { shop_id: shopId, deleted_at: { operator: 'is', value: 'null' } },
         COLUMNS
-      ).then((rows) => rows.flatMap(flattenPromotion));
+      );
+    }
+    return rowsPromise;
+  }
+
+  /** One candidate per redeem code — what the per-code rules expect. */
+  function loadPromotions() {
+    if (!promotionsPromise) {
+      promotionsPromise = loadRows().then((rows) => rows.flatMap(flattenPromotion));
     }
     return promotionsPromise;
   }
@@ -72,6 +92,8 @@ export function createPromotionLookup({ supabase, shopId, logger }) {
   return {
     refresh() {
       promotionsPromise = null;
+      // Both caches, or the flattened list rebuilds from stale rows.
+      rowsPromise = null;
     },
 
     /**
@@ -128,17 +150,57 @@ export function createPromotionLookup({ supabase, shopId, logger }) {
       };
     },
 
-    /** Every active promotion — for "quelles promos avez-vous en ce moment ?". */
-    async listActive({ now = new Date() } = {}) {
-      const promotions = await loadPromotions();
-      return promotions
-        .filter((p) => {
-          if (String(p.status || '').toUpperCase() !== 'ACTIVE') return false;
-          if (p.starts_at && now < new Date(p.starts_at)) return false;
-          if (p.ends_at && now > new Date(p.ends_at)) return false;
-          return true;
-        })
-        .map(summarise);
+    /**
+     * Every active promotion — for "quelles promos avez-vous en ce moment ?".
+     *
+     * WORKS FROM THE UNFLATTENED ROWS, and that is the whole point of this
+     * function existing separately. Asked over the per-code list it answers with
+     * one entry per REDEEM CODE: measured on this shop, 3619 entries and 259,874
+     * characters, which is a single tool result seven times larger than the
+     * model's entire per-minute token budget. The investigation failed outright
+     * on a 284-character ticket because of it.
+     *
+     * Two things were wrong with that, and only one was cost:
+     *
+     * - A customer asking what offers are running wants the ~25 OFFERS, not
+     *   3614 machine-generated single-use codes.
+     * - Those codes are other customers' property. Putting every unredeemed
+     *   single-use code in the shop into a model prompt — one turn away from a
+     *   drafted reply — is a leak, and the size of it was hiding the shape.
+     *
+     * A code is named ONLY when the discount has exactly one, which is what a
+     * shared, advertised code looks like (`QIRINESS20`). A bulk discount's codes
+     * each belong to one customer and none of them is "the" code.
+     *
+     * THE RESIDUAL, STATED RATHER THAN GUESSED AT. On this shop 14 of 25 active
+     * offers have a single code; 13 are plainly advertised (`QIRINESS20`,
+     * `UKLED20`, `CRE30`) and one, `GVKRW65ZF68K`, is machine-generated — a
+     * one-off comp for a single customer. Nothing in the row separates them:
+     * `title` equals the code for all 14, and both are "one use per customer".
+     * Telling them apart would mean guessing from the SHAPE of the string, which
+     * is the kind of heuristic that works until a merchant names a campaign
+     * `WRAP-V`. If one-off codes need withholding, they need marking at creation
+     * — a naming convention or a Shopify tag — and that is a merchant decision,
+     * not something this function can infer.
+     */
+    async listActive({ now = new Date(), limit = MAX_ACTIVE_LISTED } = {}) {
+      const rows = await loadRows();
+      const active = rows.filter((row) => {
+        if (String(row.status || '').toUpperCase() !== 'ACTIVE') return false;
+        if (row.starts_at && now < new Date(row.starts_at)) return false;
+        if (row.ends_at && now > new Date(row.ends_at)) return false;
+        return true;
+      });
+
+      const listed = active.slice(0, limit).map((row) => {
+        const codes = Array.isArray(row.codes) ? row.codes : [];
+        return {
+          ...summarise({ ...row, code: codes.length === 1 ? codes[0]?.code ?? null : null }),
+          codeCount: codes.length
+        };
+      });
+
+      return { promotions: listed, total: active.length, truncated: active.length > listed.length };
     }
   };
 }

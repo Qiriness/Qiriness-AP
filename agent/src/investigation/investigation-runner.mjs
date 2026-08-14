@@ -8,6 +8,7 @@ import {
 
 import { emptySenderDirectory } from '../ingestion/sender-directory.mjs';
 
+import { TICKET_STATUS_BY_VERDICT } from './case-file.mjs';
 import { summariseNeeds } from './evidence-rules.mjs';
 import { ENABLED_SUBJECTS, isInvestigable } from './investigation-rules.mjs';
 
@@ -424,9 +425,19 @@ export function createInvestigationStore(supabase) {
         'shop_id,trigger_message_id'
       );
 
+      // WHERE THE VERDICT LEAVES THE TICKET IN THE QUEUE. `answerable` maps to
+      // null and stays `open`: it means a reply could be written, not that one
+      // was sent, and nothing sends yet.
+      //
+      // Safe to set unconditionally because the selection query above already
+      // requires `status = 'open'` — a ticket a human closed is never picked up,
+      // so this can only ever move a ticket out of open, never overrule a person.
+      const nextStatus = TICKET_STATUS_BY_VERDICT[caseFile.verdict] ?? null;
+
       await supabaseUpdateById(supabase, 'tickets', ticket.id, {
         level,
         investigated_at: caseFile.investigatedAt,
+        ...(nextStatus ? { status: nextStatus } : {}),
         // Cleared last, so a crash above leaves the ticket to be retried rather
         // than marked done with no case file behind it.
         needs_investigation: false,

@@ -237,17 +237,27 @@ test('the responsible team is derived from the primary subject', () => {
   assert.equal(normaliseCategorisation(answer({ category: 'delivery' })).responsible_team, 'logistics');
 });
 
-test('the prompt pins the three level-4 triggers and rules topic out', async () => {
-  // Level 4 is now defined only in the prompt (no subject derives it), so the
+test('the prompt pins the two level-4 triggers and rules topic out', async () => {
+  // Level 4 is defined only in the prompt (no subject derives it), so the
   // definition is pinned here: escalation must be severity, named in the reason.
   const captured = {};
   await createCategoriser(fakeOpenAI(answer(), captured), { model: 'm' }).categorise(input());
-  assert.match(captured.system, /justice|plainte|avocat/);
+  assert.match(captured.system, /justice|plainte|avocat|mise en demeure/);
   assert.match(captured.system, /hospitalisation/);
-  assert.match(captured.system, /blessure grave|danger grave/);
+  assert.match(captured.system, /pronostic vital/);
   assert.match(captured.system, /GRAVITÉ/);
   // ... and explicitly excludes the cases that used to derive a 4.
   assert.match(captured.system, /réaction cutanée[^.]*ne sont PAS|ne sont PAS des niveaux 4/);
+});
+
+test('a threat to go to the press is NOT level 4', async () => {
+  // NARROWED 2026-08-14. It used to qualify, and it fits neither half of what
+  // level 4 is for: not a legal exposure, not an injury — a very unhappy
+  // customer, which `happiness` already measures on its own axis. Conflating
+  // them would put reputational annoyance in the same queue as hospitalisation.
+  const captured = {};
+  await createCategoriser(fakeOpenAI(answer(), captured), { model: 'm' }).categorise(input());
+  assert.match(captured.system, /presse[^.]*n'est PAS un niveau 4|réseaux sociaux[^.]*n'est PAS/);
 });
 
 test('the prompt carries subject and body but no sender identity', async () => {

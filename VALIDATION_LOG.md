@@ -368,6 +368,75 @@ values.
 open question in `AGENT_INTEGRATION_PLAN.md` about whether that tool can report
 what a parcel is *doing* or only what its number is.
 
+## 6c. A product name is being looked up as a discount code — KNOWN BUG
+
+**Found 2026-08-14**, on the third ticket after evidence `details` were switched
+on. A `product` ticket produced:
+
+```
+promotion_validity   satisfied   not_found   { code: "MASQUELEDVISAGE", found: false }
+```
+
+**FIRST DIAGNOSIS WAS WRONG, corrected 2026-08-14 by reading the email.** It
+blamed `CODE_PATTERN` (`\b[A-Z][A-Z0-9]{3,}\b`) for matching a capitalised
+product name. The source message contains **no all-caps run of four characters
+anywhere** — the customer wrote « votre Masque LED visage » in ordinary case, and
+`extractPromotionCodes` correctly found nothing, which is why
+`promotion_identity` reads `none`.
+
+**The model invented the argument.** With no code extracted, it called
+`lookupPromotion({ code: 'MASQUELEDVISAGE' })` — a code-shaped string it composed
+from the product name in the text — and the tool dutifully reported `not_found`,
+which `evidence-rules` recorded as `promotion_validity: satisfied`.
+
+So the regex is innocent and tightening it would fix nothing. The fault is a tool
+argument that quotes the customer without being the customer's words.
+
+**It found itself.** The finding alone reads as unremarkable; only the detail
+shows the subject is nonsense. That is the argument for details generally, and
+it is why this is filed rather than forgotten.
+
+**Harm today is small and not zero.** The verdict was `answerable` either way, so
+nothing wrong reached a customer. But a satisfied need is a need the loop stops
+collecting, and `promotion_validity: not_found` is a branch answers key on — an
+answer set could select "your code does not exist" for someone who never quoted
+a code.
+
+**THE FIX, and it generalises past promotions:** a tool argument that purports to
+quote the customer must actually appear in the customer's message.
+`lookupPromotion` now refuses a code absent from the ticket text and reports
+`no_code_in_message` rather than looking it up, so a fabricated argument produces
+no finding at all instead of a false one.
+
+That rule is already the codebase's instinct elsewhere — the decomposition's
+`entities` are "the one part the model was told to copy rather than rewrite", and
+`promotion-lookup.mjs` says outright that when no code is named the tool "says so
+rather than guessing which of three active promotions was meant". Guessing was
+still reachable, just from the model's side of the boundary rather than the
+tool's.
+
+**What it deliberately does not do:** block the model from asking what offers
+exist. `listActivePromotions` is the honest path for "is there something else I
+could give this customer", which is a real support move and stays available.
+
+**A second wrong guess, corrected by reading the whole email 2026-08-14.** This
+entry previously called the routing suspect — "the decomposer split a *product*
+ticket into a `promotions` task at all". It did not mis-split. The customer's
+last paragraph asks outright: « avez-vous une offre ou une remise en cours sur ce
+masque, ou un code promotionnel dont je pourrais bénéficier ? » Binding the
+promotion tools was correct.
+
+**And the agent answered that question well.** `listActivePromotions` found
+`UKLED20` — 20 % off this exact mask — and the case file established it. That is
+the propose-an-alternative-code case working on real mail.
+
+**So the fault is one spurious call, not a misrouted ticket.** Having already
+answered the promotion question, the model made an extra `lookupPromotion` with a
+code name invented from the product. It cost a tool call and left a junk
+`promotion_validity` finding; nothing a customer would see changed. The guardrail
+above removes the finding. Whether the extra call is worth chasing further is a
+budget question, not a correctness one.
+
 ## 7. Two sync gaps that would each close a real check
 
 - **Order-level discount codes.** `orders` stores `total_discounts` (an amount),
