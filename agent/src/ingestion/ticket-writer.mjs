@@ -1,14 +1,14 @@
-import {
-  supabaseSelect,
-  supabaseInsert,
-  supabaseUpsert,
-  supabaseUpdateById
-} from '../../../scripts/lib/supabase-rest-client.mjs';
+import { supabaseUpsert } from '../../../scripts/lib/supabase-rest-client.mjs';
+import { T } from '../../../scripts/lib/tables.mjs';
 
 // Persists mapped Graph messages into tickets / ticket_messages.
 //
-// The store interface is injected so the threading + idempotency logic can be
-// unit-tested without a database; createSupabaseTicketStore is the real impl.
+// TWO COLLABORATORS, both injected so the threading + idempotency logic can be
+// unit-tested without a database: the MESSAGE store below, which owns
+// `ticket_messages` and is the only writer of it anywhere, and the shared TICKET
+// record (scripts/lib/ticket-record.mjs), which owns the row this file threads
+// messages onto.
+//
 // Threading: one ticket per (shop_id, conversationId). Idempotency: messages are
 // upserted on (shop_id, graph_message_id), so re-ingesting the same email is a no-op.
 
@@ -26,7 +26,11 @@ import {
 // contract — a null result simply stores the message without a vector, which the
 // reconciler fills in later.
 export async function writeIngestedMessages(
+  // The message store owns `ticket_messages` — the upsert below is the ONLY
+  // writer of that table. Everything the thread's ticket row needs goes through
+  // the shared ticket record.
   store,
+  record,
   shopId,
   mapped,
   { triage, audit, embedMessage, logger } = {}
@@ -45,7 +49,7 @@ export async function writeIngestedMessages(
       continue;
     }
 
-    const ticketId = await resolveTicket(store, shopId, item, triage, counts, audit);
+    const ticketId = await resolveTicket(record, shopId, item, triage, counts, audit);
     if (ticketId === null) {
       continue; // dropped by the LLM spam pass — never written
     }
@@ -65,9 +69,9 @@ export async function writeIngestedMessages(
   return counts;
 }
 
-async function resolveTicket(store, shopId, item, triage, counts, audit) {
+async function resolveTicket(record, shopId, item, triage, counts, audit) {
   const conversation = item.conversation;
-  const existing = await store.findTicketByConversation(shopId, conversation.graph_conversation_id);
+  const existing = await record.findByConversation(conversation.graph_conversation_id);
 
   if (existing) {
     // Keep the ticket's window around the whole thread: extend it in either
@@ -135,9 +139,10 @@ async function resolveTicket(store, shopId, item, triage, counts, audit) {
         patch.requester_name = conversation.requester_name;
       }
     }
-    if (Object.keys(patch).length > 0) {
-      await store.updateTicket(existing.id, patch);
-    }
+    // `recordMessageArrival` sends nothing when the patch is empty — the
+    // emptiness check that used to be here is the record's now, because every
+    // caller of it wanted the same thing.
+    await record.recordMessageArrival(existing.id, patch);
     return existing.id;
   }
 
@@ -169,8 +174,7 @@ async function resolveTicket(store, shopId, item, triage, counts, audit) {
     }
   }
 
-  const inserted = await store.insertTicket({
-    shop_id: shopId,
+  const inserted = await record.create({
     graph_conversation_id: conversation.graph_conversation_id,
     subject: conversation.subject,
     requester_email_hash: conversation.requester_email_hash,
@@ -221,30 +225,21 @@ function isEarlier(candidate, current) {
   return new Date(candidate).getTime() < new Date(current).getTime();
 }
 
-export function createSupabaseTicketStore(supabase) {
+/**
+ * The message store: `ticket_messages`, and nothing else.
+ *
+ * The three ticket methods that used to sit beside this one —
+ * `findTicketByConversation`, `insertTicket`, `updateTicket` — are the shared
+ * ticket record's (`findByConversation`, `create`, `recordMessageArrival`).
+ * What stayed is the upsert, which is the only write to this table anywhere in
+ * the codebase and the reason the ticket record reads it but never writes it.
+ */
+export function createSupabaseMessageStore(supabase) {
   return {
-    async findTicketByConversation(shopId, conversationId) {
-      const rows = await supabaseSelect(
-        supabase,
-        'tickets',
-        { shop_id: shopId, graph_conversation_id: conversationId },
-        // `status` is read so a reply can reopen a ticket auto-close retired.
-        'id,status,subject,first_message_at,last_message_at,requester_email_hash,requester_name'
-      );
-      return rows[0] || null;
-    },
-
-    async insertTicket(row) {
-      const rows = await supabaseInsert(supabase, 'tickets', [row]);
-      return rows[0];
-    },
-
-    async updateTicket(ticketId, patch) {
-      await supabaseUpdateById(supabase, 'tickets', ticketId, patch);
-    },
-
     async upsertMessage(row) {
-      await supabaseUpsert(supabase, 'ticket_messages', [row], 'shop_id,graph_message_id');
+      // `(shop_id, graph_message_id)` is the idempotency key: re-ingesting a
+      // delta page rewrites the row rather than adding a second.
+      await supabaseUpsert(supabase, T.TICKET_MESSAGES, [row], 'shop_id,graph_message_id');
     }
   };
 }

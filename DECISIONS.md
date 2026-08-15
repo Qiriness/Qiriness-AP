@@ -436,6 +436,14 @@ Message hashes are additionally salted with the quoted-reply stripper version, s
 
 Unapproving regenerates chunks vectorless. Embedding runs both inline (on approval, best-effort) and via the reconciler.
 
+### One reconciler, three descriptors
+
+The three embedded tables each had their own ~160-line script around the same five steps: find the rows that may hold a vector, read them, hash-gate, write what changed, clear vectors off rows that must not keep one. The pure part — the staleness gate in `embed-chunks.mjs` — was extracted and tested; the loop around it was copied three times and tested nowhere, which is where the interesting failures live, because the gate cannot be wrong about a row nobody read.
+
+`lib/embeddings/reconcile.mjs` is that loop, once. A descriptor answers one question per table — **which rows should hold a vector** — as a parent (optional: `ticket_messages` has none, since every stored message is part of the corpus), a child, and the same question backwards for the orphan sweep. `--limit` caps parents where there are parents and rows where there are not. The three `embed:*` commands and their three reports are unchanged; what they no longer each own is the loop.
+
+Collapsing them closed a live hole: the knowledge and exemplar orphan sweeps used a plain `supabaseSelect`, which PostgREST caps at `db-max-rows` (1000) with a 206 and no error — so past a thousand embedded rows they simply stopped seeing orphans. The message reconciler had already been fixed for this; now all three page.
+
 ### The category is never embedded
 
 Retrieval always filters by category first, so embedding the category name into a chunk adds a near-constant to every candidate in the filtered set — no discriminative value, and it dilutes the content. `title` carries the topical anchoring instead.
@@ -726,6 +734,26 @@ Every request sends `cache: 'no-store'` — Next's Data Cache otherwise pins the
 
 `supabaseSelectAll` pages past PostgREST's silent 1000-row cap.
 
+### The schema is named once, in `scripts/lib/tables.mjs`
+
+It was quoted as string literals in 65 files across all three packages — 217 table names, plus a column list at almost every call site. Nothing checked them: PostgREST answers a request for a column that does not exist with a runtime error, on the one code path that asked, whenever that path next runs. A rename was a codebase-wide sweep with no compiler and no test behind it.
+
+`tables.mjs` holds two things and no more: every table, view and RPC the baseline creates, and the projections that are asked for in **more than one place**. A projection used once stays at its call site next to the comment explaining it — this is not an index of every select in the codebase, it is the set of names that would otherwise drift.
+
+`_shared.test.mjs` asserts both halves against the `.sql` files, in both directions: every name in the module is created by the baseline, every relation the baseline creates is named by the module, and every column in a projection exists on the relation it projects.
+
+### `tickets` has exactly one writer
+
+Eight modules held a private store over the same row — ingestion, categorisation, investigation, three resolution passes, auto-close, and the dashboard — each naming its own columns and building its own patch, and the investigation's backfill wrote past its own store with a raw `supabaseUpdate`. `scripts/lib/ticket-record.mjs` is now the only writer. It lives in `scripts/lib` because `web/` cannot import from `agent/src`, and the dashboard's status write touches the same three lifecycle columns auto-close does; leaving it out would have kept two owners of exactly the columns the module exists to own.
+
+It owns the `needs_*` flags, the `deleted_at`/`archived_at` filters, the lifecycle timestamps, the `metadata.<pass>` trail, and the shop scope — bound once at construction rather than remembered at 60 call sites. It does **not** own `ticket_messages` writes (ingestion's upsert), `ticket_investigations` (the case file's own contract), or policy: `shouldAutoClose`, the level ratchet and the verdict mapping stay where they are and hand it columns.
+
+### The two flagged passes share one protocol, and the descriptors are the difference
+
+Categorisation and investigation run the identical cycle — claim a batch, then complete / skip / retry / abandon each ticket — so it is written once and parameterised by a descriptor naming the flag, the flag it raises, the stamp, the metadata trail, the projection and the extra selection.
+
+This is what put the crash-safety rule in one place instead of five comments: **`complete` clears this pass's flag and raises the next one in the same patch as the result**, so a failure anywhere before it leaves the ticket in the queue rather than marked done with nothing behind it. `skip` clears the flag and writes nothing else. `retry` touches no flag. `abandon` clears the flag and never raises the next — investigating a guess would spend tool and model calls on a subject nobody chose. `attemptsSoFar` and the trail merge existed twice, character for character, before this.
+
 ---
 
 ## Migrations
@@ -734,11 +762,33 @@ The migrations are a **baseline, not a history**: files describing the schema as
 
 Editing one therefore means editing the definition — re-apply against a fresh database rather than patching an existing one in place.
 
+**That has been departed from exactly once, deliberately, and the dev database is still equivalent to a from-empty apply.** On 2026-08-15 the refactor added three views, `order_number_range()` and a check constraint; re-applying would have cost the 214 ingested tickets every measurement in this file was taken against. The additions were applied forward instead, in one transaction, with the SQL **extracted from the baseline files rather than retyped** — so what is in the database is the definition, not a second version of it. The constraint is the one statement that could not be extracted (the baseline declares it inline in `create table`) and it was applied as an `alter table … add constraint` with the same name and clause, asserted against the baseline before running. No column was added, so the column-order caveat from the 8→5 split does not arise. The script was discarded rather than checked in: a forward step living beside the baseline is precisely how a baseline turns back into a history.
+
+The general rule stands. If this becomes a second time, it is no longer an exception and wants the two-axis arrangement — baseline plus additive steps, reconciled by a test — rather than another one-off.
+
+### Views carry joins and aggregates, never judgement
+
+The dashboard counted messages by reading every message id in the shop; order resolution read every inbound body to keep one per ticket; the order-number range was an asc/desc pair of round trips. All three are set operations the database can answer, and PostgREST being the only interface is why they were not.
+
+The line is the one `search_knowledge_chunks_text` already draws: vector maths and set operations in Postgres, judgement in tested JavaScript. `shouldAutoClose`, the level ratchet and the evidence rules did not move, and `ticket_queue` deliberately omits VIP — that is derived at read time from `rfm_group` and nothing stores it, so putting it in a view would make a business rule into a schema object.
+
+### Every view is `security_invoker`
+
+A view created without it executes as its **owner** and reads straight past the RLS on the tables beneath. Every table in this baseline has RLS enabled with no policies precisely so that only the service role can read, which makes an owner-rights view over `tickets` the one way an anon key could read the whole support mailbox. The views also `revoke all … from anon, authenticated`, saying it a second way, and `_shared.test.mjs` asserts both on every view the baseline creates.
+
+Each view names its output columns with an explicit `as`. Not style: an unaliased expression gets whatever name Postgres invents for it, and a caller asking PostgREST for the name it expected gets a 400.
+
+### The baseline is now applied by a test, not only read by one
+
+Every other assertion in `supabase/migrations/` is a regex over the `.sql` files as text. That is enough for "does this constraint list the same 14 subjects as the taxonomy module" and worth nothing for "does this view return the row we think it does" — a join can be wrong in every way and still contain the words a text assertion looks for.
+
+`_live.test.mjs` applies the whole baseline into a throwaway schema, seeds the smallest population that can tell each projection right from wrong, asserts the output, and drops the schema in a `finally`. It makes permanent the check that proved the 8→4 split, which was run once from a terminal. **Skipped without `SUPABASE_DB_URL`**, deliberately: `npm test` has never needed a database and this must not be what changes that.
+
 ### Split by domain, not by the order things were built
 
 The baseline was eight files that had accreted as a changelog: 05 patched 04, 07 mirrored a flag 03 created, 08 rewrote a comment 02 had written, and `tickets` was created in 01 then altered twice more. Reading it meant reconstructing each table from up to four places.
 
-It is now four files along the dependency chain — foundation → Shopify snapshots → knowledge → support — and **every table is created complete**. There is no `alter table … add column` in the baseline at all, and `_shared.test.mjs` asserts that, because a single one is the file drifting back into being a history.
+It is now **five** files along the dependency chain — foundation → Shopify snapshots → knowledge → support → exemplars — and **every table is created complete**. There is no `alter table … add column` in the baseline at all, and `_shared.test.mjs` asserts that, because a single one is the file drifting back into being a history.
 
 **The reorganisation was proved, not reviewed.** Both sets were applied into throwaway schemas on the dev Postgres and the resulting catalogue diffed: 425 columns, 172 constraints, 152 indexes, 17 triggers, 3 functions, 20 tables with RLS, 20 table comments and 139 column comments — identical on both sides. Column *order* differs where a folded `alter` had appended a column; nothing reads columns positionally (every query names them), so that is the one intentional difference.
 

@@ -8,11 +8,14 @@ import { createPromotionLookup } from '../retrieval/promotion-lookup.mjs';
 
 import { createDecomposer } from './decompose.mjs';
 import { createInvestigator } from './investigate.mjs';
-import { createInvestigationStore } from './investigation-runner.mjs';
+import { createCaseFileStore } from './investigation-runner.mjs';
 import { createToolRegistry } from './tool-registry.mjs';
 
 // Assembles the investigation stack: six retrieval tools, the registry that
-// scopes them per ticket, the agent, and its store.
+// scopes them per ticket, the agent, and its case-file store.
+//
+// The TICKET record is not built here: it is one per shop, shared by every pass,
+// and the caller already holds it.
 //
 // It exists because the worker and the CLI must build the SAME agent. Wired
 // twice by hand, they would drift — a tool present in one and missing in the
@@ -71,7 +74,7 @@ export function createInvestigationStack({
 
   return {
     investigate,
-    store: createInvestigationStore(supabase),
+    store: createCaseFileStore(supabase),
     registry,
     retrieveExemplar
   };

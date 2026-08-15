@@ -109,7 +109,7 @@ export function shouldAutoClose(
  * able to read that list first is worth the flag.
  */
 export async function runAutoClose({
-  store,
+  record,
   shopId,
   logger,
   now = new Date(),
@@ -118,7 +118,7 @@ export async function runAutoClose({
   onPreview
 } = {}) {
   const cutoff = new Date(now.getTime() - afterDays * 24 * 60 * 60 * 1000);
-  const candidates = await store.findInactive(shopId, cutoff);
+  const candidates = await record.findInactive(cutoff);
 
   // `awaitingHuman` is counted apart from `exempt` because it is the only figure
   // here that is a BACKLOG rather than a policy. Level 4s being spared is the
@@ -148,7 +148,7 @@ export async function runAutoClose({
     }
 
     try {
-      await store.closeTicket(ticket, now);
+      await record.close(ticket, now);
       totals.closed += 1;
     } catch (error) {
       totals.failed += 1;
@@ -163,43 +163,8 @@ export async function runAutoClose({
   return totals;
 }
 
-/**
- * Supabase-backed store.
- *
- * The status/date narrowing happens in the query and the level exemption in
- * `shouldAutoClose`: PostgREST's `not.eq` on a nullable column drops the NULL
- * rows too, which would silently spare every uncategorised ticket — the largest
- * group of all. Filtering level in JS keeps that policy in one readable place.
- */
-export function createAutoCloseStore(supabase, { supabaseSelectAll, supabaseUpdateById }) {
-  return {
-    async findInactive(shopId, cutoff) {
-      return supabaseSelectAll(
-        supabase,
-        'tickets',
-        {
-          shop_id: shopId,
-          deleted_at: { operator: 'is', value: null },
-          status: { operator: 'not.in', value: '(resolved,closed)' },
-          last_message_at: { operator: 'lt', value: cutoff.toISOString() }
-        },
-        // needs_categorisation is read so a ticket still queued for the
-        // categoriser is not closed out of that queue — see shouldAutoClose.
-        'id,status,level,last_message_at,subject,deleted_at,metadata,needs_categorisation'
-      );
-    },
-
-    async closeTicket(ticket, now) {
-      const iso = now.toISOString();
-      return supabaseUpdateById(supabase, 'tickets', ticket.id, {
-        status: 'closed',
-        closed_at: iso,
-        updated_at: iso,
-        // Stamped so an auto-close is distinguishable from one an operator made
-        // by hand — otherwise the queue's history cannot explain itself. Merged
-        // rather than replaced: metadata belongs to whoever else writes it.
-        metadata: { ...(ticket.metadata || {}), closed_reason: 'inactivity' }
-      });
-    }
-  };
-}
+// The store this file used to define now lives in scripts/lib/ticket-record.mjs
+// with the other seven that wrote the same table: `findInactive` and `close` are
+// methods on the ticket record. The one thing that stayed here is the thing that
+// was never a query — `shouldAutoClose`, above, which is policy and is tested
+// without a database.

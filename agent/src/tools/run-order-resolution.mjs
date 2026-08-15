@@ -1,4 +1,5 @@
 import { createSupabaseClient } from '../../../scripts/lib/supabase-rest-client.mjs';
+import { createTicketRecord } from '../../../scripts/lib/ticket-record.mjs';
 
 import { loadAgentConfig } from '../config.mjs';
 import { logger } from '../lib/logger.mjs';
@@ -27,12 +28,14 @@ async function main() {
   const supabase = createSupabaseClient(config);
   const shopId = await resolveShopId(supabase, config.shopDomain);
   const store = createOrderResolutionStore(supabase);
+  const record = createTicketRecord(supabase, { shopId });
 
   console.log(`\n${dryRun ? 'DRY RUN — nothing will be written.' : 'Writing resolutions.'}\n`);
 
   let shown = 0;
   const totals = await runOrderResolution({
     store,
+    record,
     shopId,
     logger,
     dryRun,

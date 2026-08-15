@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
+import { createTicketRecord } from '../../../scripts/lib/ticket-record.mjs';
+
 import { TICKET_STATUS_BY_VERDICT, buildCaseFile } from './case-file.mjs';
 import { runInvestigation } from './investigation-runner.mjs';
 
@@ -36,31 +38,56 @@ function caseFile(overrides = {}) {
   });
 }
 
+/**
+ * The case-file store and the ticket record, as one fake.
+ *
+ * They are two objects in the real wiring — `ticket_investigations` and
+ * `tickets` have different owners now — but a test wants one place to look, so
+ * this satisfies both interfaces. `saved` is what reached the case-file table;
+ * `updates` is every patch the ticket record built, and it is the REAL record
+ * building them, over a fake transport.
+ */
 function buildStore({ tickets = [TICKET], messages = MESSAGES } = {}) {
   const saved = [];
   const updates = [];
-  return {
+  const record = createTicketRecord({}, {
+    shopId: 's1',
+    transport: {
+      async select(_client, table) {
+        return table === 'tickets' ? tickets : messages;
+      },
+      async selectAll() {
+        return [];
+      },
+      async insert(_client, _table, rows) {
+        return rows;
+      },
+      async update() {
+        return [];
+      },
+      async updateById(_client, _table, ticketId, patch) {
+        updates.push({ ticketId, patch });
+        return { id: ticketId };
+      }
+    }
+  });
+
+  return Object.assign(record, {
     saved,
     updates,
-    async findTicketsNeedingInvestigation() {
-      return tickets;
-    },
-    async findInboundMessages() {
-      return messages;
-    },
-    async saveInvestigation(payload) {
+    async saveCaseFile(payload) {
       saved.push(payload);
-    },
-    async updateTicket(ticketId, patch) {
-      updates.push({ ticketId, patch });
     }
-  };
+  });
 }
+
+/** The two roles the fake plays, spread into a runInvestigation call. */
+const wire = (fake = buildStore()) => ({ store: fake, record: fake });
 
 test('an investigable ticket is investigated and its case file stored', async () => {
   const store = buildStore();
   const counts = await runInvestigation({
-    store,
+    ...wire(store),
     investigate: async () => caseFile(),
     shopId: 's1'
   });
@@ -74,7 +101,7 @@ test('the investigation is keyed on the latest inbound message', async () => {
   // One case file per message that triggered it — the idempotency key, and the
   // reason a thread that escalated keeps both readings.
   const store = buildStore();
-  await runInvestigation({ store, investigate: async () => caseFile(), shopId: 's1' });
+  await runInvestigation({ ...wire(store), investigate: async () => caseFile(), shopId: 's1' });
   assert.equal(store.saved[0].triggerMessageId, 'm2');
 });
 
@@ -82,7 +109,7 @@ test('the agent is given the first and the latest inbound message', async () => 
   let seen;
   const store = buildStore();
   await runInvestigation({
-    store,
+    ...wire(store),
     investigate: async (input) => {
       seen = input;
       return caseFile();
@@ -100,7 +127,7 @@ test('an out-of-scope subject is skipped and its flag cleared', async () => {
   // `isInvestigable` refuses it. Leaving the flag set would park it at the front
   // of an oldest-first batch for good.
   const store = buildStore({ tickets: [{ ...TICKET, category: 'cosmetovigilance', request_kind: 'problem', level: 2 }] });
-  const counts = await runInvestigation({ store, investigate: async () => caseFile(), shopId: 's1' });
+  const counts = await runInvestigation({ ...wire(store), investigate: async () => caseFile(), shopId: 's1' });
 
   assert.equal(counts.skipped, 1);
   assert.equal(store.saved.length, 0);
@@ -109,7 +136,7 @@ test('an out-of-scope subject is skipped and its flag cleared', async () => {
 
 test('a thread holding no customer message is skipped, not guessed at', async () => {
   const store = buildStore({ messages: [] });
-  const counts = await runInvestigation({ store, investigate: async () => caseFile(), shopId: 's1' });
+  const counts = await runInvestigation({ ...wire(store), investigate: async () => caseFile(), shopId: 's1' });
 
   assert.equal(counts.skipped, 1);
   assert.deepEqual(store.updates[0].patch, { needs_investigation: false });
@@ -118,25 +145,25 @@ test('a thread holding no customer message is skipped, not guessed at', async ()
 test('an escalation raises the level, and nothing lowers it', async () => {
   const store = buildStore({ tickets: [{ ...TICKET, level: 2 }] });
   await runInvestigation({
-    store,
+    ...wire(store),
     investigate: async () => caseFile({ proposedLevel: 3 }),
     shopId: 's1'
   });
-  assert.equal(store.saved[0].level, 3);
+  assert.equal(store.updates[0].patch.level, 3);
 
   const lower = buildStore({ tickets: [{ ...TICKET, level: 3 }] });
   await runInvestigation({
-    store: lower,
+    ...wire(lower),
     investigate: async () => caseFile({ proposedLevel: 1 }),
     shopId: 's1'
   });
-  assert.equal(lower.saved[0].level, 3, 'the ratchet holds');
+  assert.equal(lower.updates[0].patch.level, 3, 'the ratchet holds');
 });
 
 test('a failure is retried before anything is written', async () => {
   const store = buildStore();
   const counts = await runInvestigation({
-    store,
+    ...wire(store),
     investigate: async () => {
       throw new Error('openai down');
     },
@@ -158,7 +185,7 @@ test('after three attempts the ticket is released towards a human', async () => 
     tickets: [{ ...TICKET, metadata: { investigation: { attempts: 2 } } }]
   });
   await runInvestigation({
-    store,
+    ...wire(store),
     investigate: async () => {
       throw new Error('openai down');
     },
@@ -174,7 +201,7 @@ test('after three attempts the ticket is released towards a human', async () => 
 test('a dry run investigates but writes nothing', async () => {
   const store = buildStore();
   const counts = await runInvestigation({
-    store,
+    ...wire(store),
     investigate: async () => caseFile(),
     shopId: 's1',
     dryRun: true
@@ -193,7 +220,7 @@ test('each verdict is counted under its own name', async () => {
   let index = 0;
 
   const counts = await runInvestigation({
-    store,
+    ...wire(store),
     investigate: async () => {
       const verdict = verdicts[index++];
       return caseFile({
@@ -214,7 +241,7 @@ test('the log line carries no claim text', async () => {
   const logged = [];
   const store = buildStore();
   await runInvestigation({
-    store,
+    ...wire(store),
     investigate: async () => caseFile(),
     shopId: 's1',
     logger: { info: (event, fields) => logged.push({ event, fields }) }
@@ -239,7 +266,7 @@ const EXEMPLAR_RESULT = {
 test('the matched situation is stored beside the case file', async () => {
   const store = buildStore();
   await runInvestigation({
-    store,
+    ...wire(store),
     investigate: async () => caseFile(),
     shopId: 's1',
     retrieveExemplar: async () => EXEMPLAR_RESULT
@@ -270,7 +297,7 @@ test('it is matched on the message that triggered the run, and reuses its vector
   });
 
   await runInvestigation({
-    store,
+    ...wire(store),
     investigate: async () => caseFile(),
     shopId: 's1',
     retrieveExemplar: async (query) => {
@@ -290,7 +317,7 @@ test('the investigation never sees the exemplar', async () => {
   // reached independently.
   let investigateInput = null;
   await runInvestigation({
-    store: buildStore(),
+    ...wire(),
     investigate: async (input) => {
       investigateInput = input;
       return caseFile();
@@ -306,7 +333,7 @@ test('a failing exemplar lookup costs the case file nothing', async () => {
   const warned = [];
   const store = buildStore();
   const counts = await runInvestigation({
-    store,
+    ...wire(store),
     investigate: async () => caseFile(),
     shopId: 's1',
     logger: { info: () => {}, warn: (event, fields) => warned.push({ event, fields }) },
@@ -323,7 +350,7 @@ test('a failing exemplar lookup costs the case file nothing', async () => {
 test('a caller that has not wired exemplar matching behaves exactly as before', async () => {
   const store = buildStore();
   const counts = await runInvestigation({
-    store,
+    ...wire(store),
     investigate: async () => caseFile(),
     shopId: 's1'
   });
@@ -335,7 +362,7 @@ test('a caller that has not wired exemplar matching behaves exactly as before', 
 test('the log names the situation but never a phrasing', async () => {
   const logged = [];
   await runInvestigation({
-    store: buildStore(),
+    ...wire(),
     investigate: async () => caseFile(),
     shopId: 's1',
     logger: { info: (event, fields) => logged.push({ event, fields }) },
@@ -355,7 +382,7 @@ test('a near miss still records which situation nearly won', async () => {
   // the diagnostic worth keeping: the corpus almost covers this ticket.
   const store = buildStore();
   await runInvestigation({
-    store,
+    ...wire(store),
     investigate: async () => caseFile(),
     shopId: 's1',
     retrieveExemplar: async () => ({
@@ -380,7 +407,7 @@ test('a near miss still records which situation nearly won', async () => {
 test('needs_customer_input parks the ticket awaiting the customer', async () => {
   const store = buildStore();
   await runInvestigation({
-    store,
+    ...wire(store),
     investigate: async () =>
       caseFile({ verdict: 'needs_customer_input', missing: [{ field: 'shopify_order_number' }] }),
     shopId: 's1'
@@ -399,7 +426,7 @@ test('answerable leaves the ticket open, because nothing has been sent', async (
   // of the queue now would mark work as handled that no customer has received.
   const store = buildStore();
   await runInvestigation({
-    store,
+    ...wire(store),
     investigate: async () => caseFile(),
     shopId: 's1'
   });

@@ -1,14 +1,11 @@
-import {
-  createSupabaseClient,
-  supabaseSelectAll,
-  supabaseUpdateById
-} from '../../scripts/lib/supabase-rest-client.mjs';
+import { createSupabaseClient } from '../../scripts/lib/supabase-rest-client.mjs';
+import { createTicketRecord } from '../../scripts/lib/ticket-record.mjs';
 
 import { loadAgentConfig, assertGraphConfig } from './config.mjs';
 import { logger } from './lib/logger.mjs';
 import { resolveShopId } from './lib/shop.mjs';
 import { createGraphClient } from './ingestion/graph-client.mjs';
-import { createSupabaseTicketStore } from './ingestion/ticket-writer.mjs';
+import { createSupabaseMessageStore } from './ingestion/ticket-writer.mjs';
 import { createBlocklistStore } from './ingestion/blocklist-store.mjs';
 import { createSenderDirectoryStore } from './ingestion/sender-directory.mjs';
 import { createSupabaseSpamAuditStore } from './ingestion/spam-audit.mjs';
@@ -18,10 +15,9 @@ import { createSpamClassifier } from './ingestion/spam-classifier.mjs';
 import { createEmbeddingsClient } from '../../scripts/lib/embeddings/openai-embeddings-client.mjs';
 import { createMessageEmbedder } from './ingestion/message-embedder.mjs';
 import { createCategoriser } from './pipeline/categorise.mjs';
-import { runCategorisation, createSupabaseCategoriserStore } from './pipeline/categorise-runner.mjs';
+import { runCategorisation } from './pipeline/categorise-runner.mjs';
 import { createCustomerLookup } from './retrieval/customer-lookup.mjs';
 import {
-  createCustomerResolutionStore,
   runCustomerResolution
 } from './resolution/customer-resolution-runner.mjs';
 import { createInvestigationStack } from './investigation/create-investigation.mjs';
@@ -30,7 +26,7 @@ import { createOrderResolutionStore, runOrderResolution } from './resolution/ord
 import { createOrderContextStore, runOrderContext } from './resolution/order-context-runner.mjs';
 import { createForwardingStore } from './routing/forwarding-store.mjs';
 import { runForwarding } from './routing/forward-runner.mjs';
-import { createAutoCloseStore, runAutoClose } from './lifecycle/auto-close.mjs';
+import { runAutoClose } from './lifecycle/auto-close.mjs';
 import { resolveInternalDomains } from '../../scripts/lib/message-audience.mjs';
 
 // The passes a poll runs, in the order it runs them. `--stop-after=<stage>` ends
@@ -79,7 +75,12 @@ async function main() {
   const shopId = await resolveShopId(supabase, config.shopDomain);
 
   const graphClient = createGraphClient(config);
-  const store = createSupabaseTicketStore(supabase);
+  // ONE ticket record for the whole poll, shared by every pass below. It is the
+  // only writer of `tickets` in the codebase; each pass hands it columns and it
+  // owns the flags, the filters, the lifecycle timestamps and the metadata
+  // trail. See scripts/lib/ticket-record.mjs.
+  const record = createTicketRecord(supabase, { shopId });
+  const store = createSupabaseMessageStore(supabase);
   const cursorStore = createSupabaseCursorStore(supabase);
   const blocklistStore = createBlocklistStore(supabase);
   const senderDirectoryStore = createSenderDirectoryStore(supabase);
@@ -98,15 +99,12 @@ async function main() {
   let categorise;
   let embedMessage;
   let investigation;
-  const categoriserStore = createSupabaseCategoriserStore(supabase);
   const forwardingStore = createForwardingStore(supabase);
-  const customerResolutionStore = createCustomerResolutionStore(supabase);
   // One instance for the whole process: it caches a shop-wide email-hash index,
   // which the resolution pass drops itself whenever it has work to do.
   const customerLookup = createCustomerLookup({ supabase, shopId, logger });
   const orderResolutionStore = createOrderResolutionStore(supabase);
   const orderContextStore = createOrderContextStore(supabase);
-  const autoCloseStore = createAutoCloseStore(supabase, { supabaseSelectAll, supabaseUpdateById });
   if (config.openaiApiKey) {
     const openai = createOpenAIClient({ apiKey: config.openaiApiKey });
     triage = createSpamClassifier(openai, { model: config.triageModel, logger }).triage;
@@ -143,6 +141,7 @@ async function main() {
     const totals = await runDeltaPoll({
       graphClient,
       store,
+      record,
       cursorStore,
       shopId,
       logger,
@@ -163,7 +162,7 @@ async function main() {
     // `customer_id` instead of resolving the sender again.
     if (runsThrough('customers')) {
       const customers = await runCustomerResolution({
-        store: customerResolutionStore,
+        record,
         lookup: customerLookup,
         shopId,
         logger,
@@ -180,9 +179,8 @@ async function main() {
     // key-less earlier poll is caught up here.
     if (categorise && runsThrough('categorise')) {
       const categorised = await runCategorisation({
-        store: categoriserStore,
+        record,
         categorise,
-        shopId,
         logger,
         limit
       });
@@ -197,6 +195,7 @@ async function main() {
     if (investigation && runsThrough('investigate')) {
       const investigated = await runInvestigation({
         store: investigation.store,
+        record,
         investigate: investigation.investigate,
         shopId,
         logger,
@@ -219,6 +218,7 @@ async function main() {
     if (runsThrough('orders')) {
       const resolved = await runOrderResolution({
         store: orderResolutionStore,
+        record,
         shopId,
         logger
       });
@@ -233,6 +233,7 @@ async function main() {
     if (runsThrough('context')) {
       const contexts = await runOrderContext({
         store: orderContextStore,
+        record,
         shopId,
         logger
       });
@@ -266,7 +267,7 @@ async function main() {
     // the timestamps this poll just advanced, so a thread that received a reply
     // seconds ago is never retired by the same pass that ingested it.
     if (runsThrough('close')) {
-      const autoClosed = await runAutoClose({ store: autoCloseStore, shopId, logger });
+      const autoClosed = await runAutoClose({ record, shopId, logger });
       if (autoClosed.closed > 0 || autoClosed.failed > 0) {
         logger.info('lifecycle.auto_close.pass', { shopId, ...autoClosed });
       }

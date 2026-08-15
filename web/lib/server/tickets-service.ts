@@ -1,10 +1,19 @@
 /**
- * Server-only ticket reader for the Tickets dashboard.
+ * Server-only ticket reader for the Tickets dashboard, plus the one write an
+ * operator can make.
  *
- * Read-only by design. Tickets are written by the agent worker (ingestion,
- * categorisation, forwarding); this module exists so an operator can see the
- * queue those passes produced. Nothing here mutates a ticket — when triage
- * actions arrive they belong behind a Route Handler, not in the list read.
+ * Almost everything about a ticket is written by the agent worker (ingestion,
+ * categorisation, investigation, forwarding); this module exists so an operator
+ * can see the queue those passes produced, and move a ticket between the queue
+ * and the closed section. That write is deliberately narrow — see
+ * `setTicketStatus`.
+ *
+ * IT DOES NOT SPEAK TO `tickets` ITSELF. Every read and the write go through
+ * `scripts/lib/ticket-record.mjs`, the module that owns the row, so the
+ * dashboard and the worker cannot disagree about what a closed ticket looks
+ * like. The list reads the `ticket_queue` view, which joins the customer and the
+ * message count in Postgres — this file used to read every message id in the
+ * shop to count them.
  *
  * Uses the Supabase SERVICE ROLE key for the same reason knowledge-service and
  * forwarding-service do: every table has RLS enabled with no policies, so only
@@ -16,9 +25,9 @@ import { formatRfmGroup, isVipRfmGroup } from "../../../scripts/lib/customer-seg
 import {
   createSupabaseClient,
   supabaseSelect,
-  supabaseSelectAll,
-  supabaseUpdate,
 } from "../../../scripts/lib/supabase-rest-client.mjs";
+import { COLUMNS, T } from "../../../scripts/lib/tables.mjs";
+import { createTicketRecord } from "../../../scripts/lib/ticket-record.mjs";
 import { KnowledgeNotFoundError } from "./knowledge-errors";
 import { summariseFacts, summariseInvestigation, summariseOrderContext } from "../ticket-detail";
 import type {
@@ -39,17 +48,21 @@ function getSupabaseClient() {
 }
 
 /**
- * One projection for the list read and the status write.
+ * The shared ticket record, scoped to this shop.
  *
- * Shared so the two cannot drift: the row a mutation returns replaces a row the
- * list rendered, and a narrower shape would blank whatever the list had shown.
+ * The dashboard is the ninth writer of `tickets` and the only one outside the
+ * worker; it goes through the same module for the same reason the passes do —
+ * `setTicketStatus` moves `status`, `closed_at` and `resolved_at`, which is
+ * exactly what auto-close writes. Two implementations of that were two chances
+ * to disagree about what a closed ticket looks like.
  */
-const TICKET_LIST_SELECT =
-  "id,subject,status,category,secondary_category,level,happiness,responsible_team," +
-  "requester_name,shopify_order_number,first_message_at,last_message_at," +
-  // Resolved over tickets.customer_id by PostgREST in the same request; null on
-  // any ticket the customer-resolution pass has not linked.
-  "customers(display_name,first_name,last_name,rfm_group)";
+function getRecord(shopId: string) {
+  return createTicketRecord(getSupabaseClient(), { shopId });
+}
+
+// The list projection lives in the schema contract now (COLUMNS.ticketQueue),
+// beside the `ticket_queue` view it reads, so a column added to one is checked
+// against the other by the migration tests.
 
 /**
  * Every live ticket, newest activity first, with its message count.
@@ -70,31 +83,8 @@ const TICKET_LIST_SELECT =
  * the resolution pass has not linked, which is most of them until it runs.
  */
 export async function listTickets(shopId: string): Promise<TicketListItem[]> {
-  const supabase = getSupabaseClient();
-
-  const [ticketRows, messageRows] = await Promise.all([
-    supabaseSelectAll(
-      supabase,
-      "tickets",
-      { shop_id: shopId, deleted_at: { operator: "is", value: null } },
-      TICKET_LIST_SELECT
-    ),
-    supabaseSelectAll(
-      supabase,
-      "ticket_messages",
-      { shop_id: shopId },
-      "id,ticket_id"
-    ),
-  ]);
-
-  const messageCounts = new Map<string, number>();
-  for (const row of messageRows as { ticket_id: string }[]) {
-    messageCounts.set(row.ticket_id, (messageCounts.get(row.ticket_id) ?? 0) + 1);
-  }
-
-  return (ticketRows as any[])
-    .map((row) => mapTicketRow(row, messageCounts.get(row.id) ?? 0))
-    .sort(byLastActivityDesc);
+  const rows = await getRecord(shopId).queue();
+  return (rows as any[]).map(mapTicketRow).sort(byLastActivityDesc);
 }
 
 /**
@@ -118,30 +108,27 @@ export async function listTickets(shopId: string): Promise<TicketListItem[]> {
 export async function getTicketDetail(shopId: string, ticketId: string): Promise<TicketDetail> {
   const supabase = getSupabaseClient();
 
-  const [ticketRows, investigationRows] = await Promise.all([
+  // The ticket through the record; the case file directly, because
+  // `ticket_investigations` is the investigation's contract and not the ticket
+  // record's to own (see agent/src/investigation/case-file.mjs).
+  const [ticketRow, investigationRows] = await Promise.all([
+    getRecord(shopId).findForDetail(ticketId),
     supabaseSelect(
       supabase,
-      "tickets",
-      { id: ticketId, shop_id: shopId, deleted_at: { operator: "is", value: null } },
-      "id,resolved_context",
-      { limit: 1 }
-    ),
-    supabaseSelect(
-      supabase,
-      "ticket_investigations",
+      T.TICKET_INVESTIGATIONS,
       { ticket_id: ticketId, shop_id: shopId },
-      "verdict,established,unverified,missing,handoff,investigated_at,evidence_gaps",
+      COLUMNS.investigationForDetail,
       { order: "investigated_at.desc", limit: 1 }
     ),
   ]);
 
-  if (!Array.isArray(ticketRows) || ticketRows.length === 0) {
+  if (!ticketRow) {
     throw new KnowledgeNotFoundError(`Ticket not found: ${ticketId}`);
   }
 
   // `{}` on every ticket without a confirmed order number, which the projection
   // reads as "no order facts" rather than as a bundle full of nulls.
-  const order = summariseOrderContext(ticketRows[0]?.resolved_context);
+  const order = summariseOrderContext(ticketRow.resolved_context);
 
   const row = Array.isArray(investigationRows) ? investigationRows[0] : null;
   if (!row) {
@@ -185,25 +172,14 @@ export async function getTicketDetail(shopId: string, ticketId: string): Promise
  * compliance delete must not reach the UI through a caller that forgot.
  */
 export async function getTicketThread(shopId: string, ticketId: string): Promise<TicketThread> {
-  const supabase = getSupabaseClient();
+  const record = getRecord(shopId);
 
-  const [ticketRows, messageRows] = await Promise.all([
-    supabaseSelect(
-      supabase,
-      "tickets",
-      { id: ticketId, shop_id: shopId, deleted_at: { operator: "is", value: null } },
-      "id,subject",
-      { limit: 1 }
-    ),
-    supabaseSelectAll(
-      supabase,
-      "ticket_messages",
-      { ticket_id: ticketId, shop_id: shopId, deleted_at: { operator: "is", value: null } },
-      "id,direction,from_name,from_email,subject,body_text,has_attachments,received_at,sent_at"
-    ),
+  const [ticketRow, messageRows] = await Promise.all([
+    record.findSubject(ticketId),
+    record.thread(ticketId),
   ]);
 
-  if (!Array.isArray(ticketRows) || ticketRows.length === 0) {
+  if (!ticketRow) {
     throw new KnowledgeNotFoundError(`Ticket not found: ${ticketId}`);
   }
 
@@ -211,7 +187,7 @@ export async function getTicketThread(shopId: string, ticketId: string): Promise
 
   return {
     ticketId,
-    subject: ticketRows[0]?.subject ?? null,
+    subject: ticketRow.subject ?? null,
     // Phase 5. Nothing writes a draft yet — see the type's note.
     draft: null,
     messages,
@@ -254,43 +230,16 @@ export async function setTicketStatus(
   ticketId: string,
   status: "open" | "resolved" | "closed"
 ): Promise<TicketListItem> {
-  const supabase = getSupabaseClient();
-  const now = new Date().toISOString();
-
-  const patch: Record<string, unknown> = { status, updated_at: now };
-  if (status === "closed") {
-    patch.closed_at = now;
-  } else if (status === "resolved") {
-    patch.resolved_at = now;
-  } else {
-    // Reopening clears both, or a reopened ticket would still look finished to
-    // anything reading the timestamps rather than the status.
-    patch.closed_at = null;
-    patch.resolved_at = null;
-  }
-
-  // Scoped by shop as well as id: an id alone would let one shop's request
-  // touch another's row.
-  //
-  // Asks for the SAME shape the list read returns, embed included. A status flip
-  // cannot change who the customer is, but the row this returns replaces the one
-  // on screen — without the embed, closing a ticket would silently strip the VIP
-  // badge off it.
-  const updated = await supabaseUpdate(
-    supabase,
-    "tickets",
-    { id: ticketId, shop_id: shopId },
-    patch,
-    { select: TICKET_LIST_SELECT }
-  );
-  const row = Array.isArray(updated) ? updated[0] : updated;
+  // The record owns which columns a status change touches, and reads the row
+  // back from `ticket_queue` — the SAME projection the list rendered. That is
+  // what stops a close from silently stripping the VIP badge or the message
+  // count off the row it replaces on screen.
+  const row = await getRecord(shopId).setStatus(ticketId, status);
   if (!row) {
     throw new KnowledgeNotFoundError(`Ticket not found: ${ticketId}`);
   }
 
-  // Message count is not re-read: the caller already has it, and a status flip
-  // cannot change it.
-  return mapTicketRow(row, 0);
+  return mapTicketRow(row);
 }
 
 /** Newest activity first, falling back to arrival for a ticket with neither. */
@@ -301,33 +250,30 @@ function byLastActivityDesc(a: TicketListItem, b: TicketListItem): number {
 }
 
 /**
- * The embedded `customers` row -> the three fields a ticket row shows.
+ * The joined customer columns -> the three fields a ticket row shows.
  *
- * Absent on every unlinked ticket, and `setTicketStatus` does not ask for the
- * embed at all, so this has to answer for "no customer" rather than assume one.
- * VIP is computed here from the live segment instead of being read from a
+ * `ticket_queue` LEFT JOINs `customers`, so every one of these is null on an
+ * unlinked ticket — which is most of them until the customer-resolution pass
+ * runs. VIP is computed here from the live segment instead of being read from a
  * column: nothing stores it, deliberately (see customer-segments.mjs).
  *
  * `display_name` is Shopify's own composition and wins where it exists; the
  * first/last fallback covers rows synced before it was populated.
  */
-function mapCustomer(customer: any) {
-  if (!customer) {
-    return { customerName: null, rfmGroup: null, isVip: false };
-  }
+function mapCustomer(row: any) {
   const name =
-    customer.display_name ||
-    [customer.first_name, customer.last_name].filter(Boolean).join(" ") ||
+    row.customer_display_name ||
+    [row.customer_first_name, row.customer_last_name].filter(Boolean).join(" ") ||
     null;
 
   return {
     customerName: name,
-    rfmGroup: formatRfmGroup(customer.rfm_group),
-    isVip: isVipRfmGroup(customer.rfm_group),
+    rfmGroup: formatRfmGroup(row.customer_rfm_group),
+    isVip: isVipRfmGroup(row.customer_rfm_group),
   };
 }
 
-function mapTicketRow(row: any, messageCount: number): TicketListItem {
+function mapTicketRow(row: any): TicketListItem {
   return {
     id: row.id,
     subject: row.subject,
@@ -344,9 +290,12 @@ function mapTicketRow(row: any, messageCount: number): TicketListItem {
         : (Number(row.happiness) as TicketHappiness),
     responsibleTeam: (row.responsible_team as ResponsibleTeam) ?? null,
     requesterName: row.requester_name,
-    ...mapCustomer(row.customers),
+    ...mapCustomer(row),
     orderNumber: row.shopify_order_number,
-    messageCount,
+    // Counted by the `ticket_message_counts` view the queue joins, and
+    // `coalesce`d to 0 there — a ticket with no stored message is a row with a
+    // zero, not a row that dropped out of the join.
+    messageCount: Number(row.message_count ?? 0),
     firstMessageAt: row.first_message_at,
     lastMessageAt: row.last_message_at,
   };

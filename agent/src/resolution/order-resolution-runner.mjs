@@ -1,7 +1,8 @@
 import {
-  supabaseSelectAll,
-  supabaseUpdateById
+  supabaseRpc,
+  supabaseSelectAll
 } from '../../../scripts/lib/supabase-rest-client.mjs';
+import { RPC, T } from '../../../scripts/lib/tables.mjs';
 
 import { countConfirmationMarkers, messageEmailHashes } from './confirmation-evidence.mjs';
 import { shopifyOrderCandidates, parseOrderCandidates, toOrderName } from './order-number-parser.mjs';
@@ -31,50 +32,12 @@ import {
 
 export function createOrderResolutionStore(supabase) {
   return {
-    /**
-     * Tickets with no order number yet.
-     *
-     * Bounded per pass rather than unbounded: like the categoriser, this selects
-     * on ticket state instead of on what the current poll wrote, so anything
-     * missed is caught up next time and a single pass never has to be complete.
-     */
-    async findUnresolved(shopId, { limit = 500 } = {}) {
-      const tickets = await supabaseSelectAll(
-        supabase,
-        'tickets',
-        {
-          shop_id: shopId,
-          shopify_order_number: { operator: 'is', value: 'null' },
-          deleted_at: { operator: 'is', value: 'null' }
-        },
-        'id,subject,category,request_kind,requester_email_hash,requester_name,metadata',
-        { limit }
-      );
-      if (tickets.length === 0) {
-        return [];
-      }
+    // `findUnresolved` left this store: the tickets are now
+    // `record.findAwaitingOrderNumber()` and the customer's opening words are
+    // `record.firstInboundByTicket()`, which reads the `ticket_first_inbound`
+    // view instead of every inbound body in the shop. What this store keeps is
+    // the orders, and the customers behind them.
 
-      // First inbound message per ticket: the customer's own words, already
-      // stripped of quoted reply chains upstream. Quoted history is exactly
-      // where stale order numbers from previous threads live.
-      const messages = await supabaseSelectAll(
-        supabase,
-        'ticket_messages',
-        { shop_id: shopId, direction: 'inbound', deleted_at: { operator: 'is', value: 'null' } },
-        'ticket_id,subject,body_text,received_at',
-        { order: 'received_at.asc' }
-      );
-      const textByTicket = new Map();
-      for (const message of messages) {
-        if (!textByTicket.has(message.ticket_id)) {
-          textByTicket.set(message.ticket_id, `${message.subject || ''}\n${message.body_text || ''}`);
-        }
-      }
-
-      return tickets
-        .filter((ticket) => textByTicket.has(ticket.id))
-        .map((ticket) => ({ ticket, text: textByTicket.get(ticket.id) }));
-    },
 
     /**
      * The store's actual order-number range.
@@ -88,24 +51,14 @@ export function createOrderResolutionStore(supabase) {
      * invoice reference.
      */
     async loadOrderNumberRange(shopId) {
-      const [lowest] = await supabaseSelectAll(
-        supabase,
-        'orders',
-        { shop_id: shopId, order_number: { operator: 'not.is', value: 'null' } },
-        'order_number',
-        { order: 'order_number.asc', limit: 1 }
-      );
-      const [highest] = await supabaseSelectAll(
-        supabase,
-        'orders',
-        { shop_id: shopId, order_number: { operator: 'not.is', value: 'null' } },
-        'order_number',
-        { order: 'order_number.desc', limit: 1 }
-      );
-      if (!lowest || !highest) {
+      // One call, not the asc/desc pair this used to be: `order_number_range`
+      // answers both from orders_shop_order_number_idx without reading the
+      // table, and it excludes soft-deleted orders, which the two reads did not.
+      const [range] = await supabaseRpc(supabase, RPC.ORDER_NUMBER_RANGE, { match_shop_id: shopId });
+      if (!range || range.min_order_number === null || range.max_order_number === null) {
         return null;
       }
-      return { min: lowest.order_number, max: highest.order_number };
+      return { min: range.min_order_number, max: range.max_order_number };
     },
 
     /** Orders for a set of numbers, plus the customers they belong to. */
@@ -115,7 +68,7 @@ export function createOrderResolutionStore(supabase) {
       }
       const orders = await supabaseSelectAll(
         supabase,
-        'orders',
+        T.ORDERS,
         {
           shop_id: shopId,
           order_number: { operator: 'in', value: `(${orderNumbers.join(',')})` },
@@ -128,7 +81,7 @@ export function createOrderResolutionStore(supabase) {
       const customers = customerIds.length
         ? await supabaseSelectAll(
             supabase,
-            'customers',
+            T.CUSTOMERS,
             { id: { operator: 'in', value: `(${customerIds.join(',')})` } },
             'id,display_name,first_name,last_name'
           )
@@ -147,8 +100,8 @@ export function createOrderResolutionStore(supabase) {
      * goes in `metadata.order_resolution`, so a null column is explained rather
      * than merely empty and a re-run can see what was already tried.
      */
-    async recordResolution(ticket, resolution) {
-      const patch = {
+    buildResolutionColumns(ticket, resolution) {
+      const columns = {
         metadata: {
           ...(ticket.metadata || {}),
           order_resolution: {
@@ -166,15 +119,26 @@ export function createOrderResolutionStore(supabase) {
         }
       };
       if (isSafeToWrite(resolution.status) && resolution.orderName) {
-        patch.shopify_order_number = resolution.orderName;
+        columns.shopify_order_number = resolution.orderName;
       }
-      await supabaseUpdateById(supabase, 'tickets', ticket.id, patch);
+      return columns;
     }
   };
 }
 
-export async function runOrderResolution({ store, shopId, logger, dryRun = false, onResult } = {}) {
-  const pending = await store.findUnresolved(shopId);
+export async function runOrderResolution({ store, record, shopId, logger, dryRun = false, onResult } = {}) {
+  // The tickets and the customer's opening words come from the ticket record
+  // (the words through `ticket_first_inbound`, which picks one message per
+  // ticket in Postgres — this used to read every inbound body in the shop and
+  // throw all but one per ticket away). `store` keeps what it genuinely owns:
+  // the orders and the customers behind them.
+  const [tickets, textByTicket] = await Promise.all([
+    record.findAwaitingOrderNumber(),
+    record.firstInboundByTicket()
+  ]);
+  const pending = tickets
+    .filter((ticket) => textByTicket.has(ticket.id))
+    .map((ticket) => ({ ticket, text: textByTicket.get(ticket.id) }));
   const totals = {
     considered: pending.length,
     [CONFIRMED]: 0,
@@ -247,7 +211,7 @@ export async function runOrderResolution({ store, shopId, logger, dryRun = false
     onResult?.({ ticket, resolution });
 
     if (!dryRun) {
-      await store.recordResolution(ticket, resolution);
+      await record.linkOrder(ticket.id, store.buildResolutionColumns(ticket, resolution));
       if (isSafeToWrite(resolution.status)) {
         totals.written += 1;
       }

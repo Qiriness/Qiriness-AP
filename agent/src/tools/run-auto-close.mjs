@@ -1,13 +1,10 @@
-import {
-  createSupabaseClient,
-  supabaseSelectAll,
-  supabaseUpdateById
-} from '../../../scripts/lib/supabase-rest-client.mjs';
+import { createSupabaseClient } from '../../../scripts/lib/supabase-rest-client.mjs';
+import { createTicketRecord } from '../../../scripts/lib/ticket-record.mjs';
 
 import { loadAgentConfig } from '../config.mjs';
 import { logger } from '../lib/logger.mjs';
 import { resolveShopId } from '../lib/shop.mjs';
-import { AUTO_CLOSE_AFTER_DAYS, createAutoCloseStore, runAutoClose } from '../lifecycle/auto-close.mjs';
+import { AUTO_CLOSE_AFTER_DAYS, runAutoClose } from '../lifecycle/auto-close.mjs';
 
 // Runs the auto-close pass on its own, without a mailbox poll or any LLM call.
 //
@@ -32,7 +29,7 @@ async function main() {
   const config = loadAgentConfig();
   const supabase = createSupabaseClient(config);
   const shopId = await resolveShopId(supabase, config.shopDomain);
-  const store = createAutoCloseStore(supabase, { supabaseSelectAll, supabaseUpdateById });
+  const record = createTicketRecord(supabase, { shopId });
 
   console.log(
     `\n${dryRun ? 'DRY RUN — nothing will be written.' : 'Closing for real.'}\n` +
@@ -42,7 +39,7 @@ async function main() {
 
   let shown = 0;
   const totals = await runAutoClose({
-    store,
+    record,
     shopId,
     logger,
     dryRun,

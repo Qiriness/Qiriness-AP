@@ -35,16 +35,18 @@ function fakeStore() {
   return {
     tickets,
     messages,
-    async findTicketByConversation(shopId, conversationId) {
-      return tickets.get(`${shopId}|${conversationId}`) || null;
+    // The ticket record's half of the interface. It is a separate object in the
+    // real wiring; the poll takes both and this fake plays both.
+    async findByConversation(conversationId) {
+      return tickets.get(`shop-1|${conversationId}`) || null;
     },
-    async insertTicket(row) {
+    async create(row) {
       seq += 1;
-      const stored = { id: `t${seq}`, ...row };
-      tickets.set(`${row.shop_id}|${row.graph_conversation_id}`, stored);
+      const stored = { id: `t${seq}`, shop_id: 'shop-1', ...row };
+      tickets.set(`shop-1|${row.graph_conversation_id}`, stored);
       return stored;
     },
-    async updateTicket() {},
+    async recordMessageArrival() {},
     async upsertMessage(row) {
       messages.set(`${row.shop_id}|${row.graph_message_id}`, row);
     }
@@ -72,7 +74,7 @@ test('follows nextLink pages to the deltaLink and persists the cursor', async ()
   const store = fakeStore();
   const cursorStore = fakeCursorStore(null);
 
-  const totals = await runDeltaPoll({ graphClient, store, cursorStore, shopId: 'shop-1' });
+  const totals = await runDeltaPoll({ graphClient, store, record: store, cursorStore, shopId: 'shop-1' });
 
   assert.equal(totals.pages, 2);
   assert.equal(totals.messagesIngested, 3);
@@ -105,6 +107,7 @@ test('drops blocklisted senders before writing and records rule hits', async () 
   const totals = await runDeltaPoll({
     graphClient,
     store,
+    record: store,
     cursorStore,
     shopId: 'shop-1',
     spamGate,
@@ -141,7 +144,7 @@ test('flushes one audit row per gate decision, from both passes', async () => {
   let flushed = null;
   const totals = await runDeltaPoll({
     graphClient,
-    store: fakeStore(),
+    ...(() => { const s = fakeStore(); return { store: s, record: s }; })(),
     cursorStore: fakeCursorStore(null),
     shopId: 'shop-1',
     spamGate,
@@ -183,7 +186,7 @@ test('an audit-store failure is logged, not fatal — mail is never re-dropped',
 
   const totals = await runDeltaPoll({
     graphClient,
-    store: fakeStore(),
+    ...(() => { const s = fakeStore(); return { store: s, record: s }; })(),
     cursorStore,
     shopId: 'shop-1',
     logger: { warn: (event) => warnings.push(event) },
@@ -213,7 +216,7 @@ test('respects --limit and does not advance the cursor when truncating mid-inbox
   const store = fakeStore();
   const cursorStore = fakeCursorStore(null);
 
-  const totals = await runDeltaPoll({ graphClient, store, cursorStore, shopId: 'shop-1', limit: 2 });
+  const totals = await runDeltaPoll({ graphClient, store, record: store, cursorStore, shopId: 'shop-1', limit: 2 });
 
   assert.equal(totals.messagesIngested, 2);
   assert.equal(totals.limitReached, true);
@@ -228,7 +231,7 @@ test('resumes from the stored deltaLink on the next run', async () => {
   const store = fakeStore();
   const cursorStore = fakeCursorStore('https://graph/delta-saved');
 
-  await runDeltaPoll({ graphClient, store, cursorStore, shopId: 'shop-1' });
+  await runDeltaPoll({ graphClient, store, record: store, cursorStore, shopId: 'shop-1' });
 
   assert.equal(graphClient.requestedUrls[0], 'https://graph/delta-saved');
   assert.equal(cursorStore.saved(), 'https://graph/delta-next');

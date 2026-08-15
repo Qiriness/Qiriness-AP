@@ -6,11 +6,20 @@ import { runOrderResolution } from './order-resolution-runner.mjs';
 const HASH_A = 'a'.repeat(64);
 const HASH_B = 'b'.repeat(64);
 
+/**
+ * Both halves of the pass's wiring, as one fake.
+ *
+ * The orders store and the ticket record are separate objects in the real
+ * runner: the store owns `orders` and `customers`, the record owns `tickets` and
+ * reads the customer's opening words from the `ticket_first_inbound` view.
+ * `written` captures the resolution the runner decided on, which is what every
+ * assertion below is about.
+ */
 function buildStore({ pending = [], orders = [], range = { min: 1001, max: 6300 }, customers = [] } = {}) {
   const written = [];
   return {
     written,
-    async findUnresolved() { return pending; },
+    // --- the orders store ---
     async loadOrderNumberRange() { return range; },
     async loadOrders() {
       return {
@@ -18,7 +27,14 @@ function buildStore({ pending = [], orders = [], range = { min: 1001, max: 6300 
         customersById: new Map(customers.map((c) => [c.id, c]))
       };
     },
-    async recordResolution(ticket, resolution) { written.push({ ticket, resolution }); }
+    buildResolutionColumns(ticket, resolution) {
+      written.push({ ticket, resolution });
+      return {};
+    },
+    // --- the ticket record ---
+    async findAwaitingOrderNumber() { return pending.map((p) => p.ticket); },
+    async firstInboundByTicket() { return new Map(pending.map((p) => [p.ticket.id, p.text])); },
+    async linkOrder() {}
   };
 }
 
@@ -30,7 +46,7 @@ test('a confirmed match is written with the order name from the database', async
     orders: [{ order_number: 4854, name: '#4854', customer_email_hash: HASH_A }]
   });
 
-  const totals = await runOrderResolution({ store, shopId: 's1' });
+  const totals = await runOrderResolution({ store, record: store, shopId: 's1' });
 
   assert.equal(totals.confirmed, 1);
   assert.equal(totals.written, 1);
@@ -46,7 +62,7 @@ test('a number far above the newest order is called out as a likely typo', async
     range: { min: 1001, max: 6300 }
   });
 
-  await runOrderResolution({ store, shopId: 's1' });
+  await runOrderResolution({ store, record: store, shopId: 's1' });
 
   assert.match(store.written[0].resolution.detail, /most likely a typo/);
 });
@@ -61,7 +77,7 @@ test('a number just above the newest order blames the sync, not the customer', a
     range: { min: 1001, max: 6300 }
   });
 
-  await runOrderResolution({ store, shopId: 's1' });
+  await runOrderResolution({ store, record: store, shopId: 's1' });
 
   const detail = store.written[0].resolution.detail;
   assert.match(detail, /too recent to have synced/);
@@ -77,7 +93,7 @@ test('the sync-lag margin has an absolute floor for small catalogues', async () 
     range: { min: 1001, max: 1012 }
   });
 
-  await runOrderResolution({ store, shopId: 's1' });
+  await runOrderResolution({ store, record: store, shopId: 's1' });
 
   assert.match(store.written[0].resolution.detail, /too recent to have synced/);
 });
@@ -91,7 +107,7 @@ test('a number below the oldest held order points at the retention window', asyn
     range: { min: 1001, max: 6300 }
   });
 
-  await runOrderResolution({ store, shopId: 's1' });
+  await runOrderResolution({ store, record: store, shopId: 's1' });
 
   const detail = store.written[0].resolution.detail;
   assert.match(detail, /older than the ~6 months of orders we keep/);
@@ -105,7 +121,7 @@ test('a number inside the held range is reported as simply absent', async () => 
     range: { min: 1001, max: 6300 }
   });
 
-  await runOrderResolution({ store, shopId: 's1' });
+  await runOrderResolution({ store, record: store, shopId: 's1' });
 
   assert.match(store.written[0].resolution.detail, /within the orders we hold/);
 });
@@ -118,7 +134,7 @@ test('an empty catalogue never calls anything out of range', async () => {
     range: null
   });
 
-  await runOrderResolution({ store, shopId: 's1' });
+  await runOrderResolution({ store, record: store, shopId: 's1' });
 
   assert.doesNotMatch(store.written[0].resolution.detail, /predate|too recent|we hold/);
 });
@@ -130,7 +146,7 @@ test('a long order number resolves normally, as stores grow into them', async ()
     range: { min: 1001, max: 2000000 }
   });
 
-  const totals = await runOrderResolution({ store, shopId: 's1' });
+  const totals = await runOrderResolution({ store, record: store, shopId: 's1' });
 
   assert.equal(totals.confirmed, 1);
   assert.equal(store.written[0].resolution.orderName, '#1234567');
@@ -142,7 +158,7 @@ test('an order belonging to someone else is never written', async () => {
     orders: [{ order_number: 4854, name: '#4854', customer_email_hash: HASH_B }]
   });
 
-  const totals = await runOrderResolution({ store, shopId: 's1' });
+  const totals = await runOrderResolution({ store, record: store, shopId: 's1' });
 
   assert.equal(totals.mismatch, 1);
   assert.equal(totals.written, 0);
@@ -155,7 +171,7 @@ test('an internal Q00 reference is named in the reason', async () => {
     orders: []
   });
 
-  await runOrderResolution({ store, shopId: 's1' });
+  await runOrderResolution({ store, record: store, shopId: 's1' });
 
   assert.equal(store.written[0].resolution.status, 'no_candidate');
   assert.match(store.written[0].resolution.detail, /internal_erp/);
@@ -167,7 +183,7 @@ test('a dry run writes nothing but still counts', async () => {
     orders: [{ order_number: 4854, name: '#4854', customer_email_hash: HASH_A }]
   });
 
-  const totals = await runOrderResolution({ store, shopId: 's1', dryRun: true });
+  const totals = await runOrderResolution({ store, record: store, shopId: 's1', dryRun: true });
 
   assert.equal(totals.written, 1, 'reports what it would do');
   assert.equal(store.written.length, 0, 'but wrote nothing');
@@ -179,7 +195,7 @@ test('every outcome is recorded, so a null column is explained', async () => {
     orders: []
   });
 
-  await runOrderResolution({ store, shopId: 's1' });
+  await runOrderResolution({ store, record: store, shopId: 's1' });
 
   assert.equal(store.written.length, 1);
   assert.equal(store.written[0].resolution.status, 'no_candidate');

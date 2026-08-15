@@ -70,6 +70,14 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |       |-- shopify-*-mapper.mjs         # shop/product/metaobject/customer/order/promotion
 |       |-- shopify-sync-mappers.mjs shop-sync-service.mjs
 |       |-- supabase-rest-client.mjs     # REST select/upsert/update/delete/rpc
+|       |-- tables.mjs                   # THE SCHEMA CONTRACT: 24 tables, 3 views,
+|       |                                # 4 rpcs, and the recurring projections.
+|       |                                # Asserted against the DDL by _shared.test
+|       |-- ticket-record.mjs            # THE ONLY WRITER OF `tickets`: pass protocol
+|       |                                # (claim/complete/skip/retry/abandon +
+|       |                                # descriptors), the needs_* flags, the
+|       |                                # lifecycle timestamps, the metadata trail,
+|       |                                # the queue + thread reads. Shop-scoped
 |       |-- sync-config.mjs              # CLI + env parsing, loadEnv
 |       |-- hash.mjs collections.mjs html-to-text.mjs text-cleaning.mjs
 |       |-- quoted-reply.mjs             # strips reply chains
@@ -82,7 +90,10 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |       |-- customer-segments.mjs        # THE VIP rule: rfm_group -> isVipRfmGroup
 |       |-- knowledge-{chunker,categories,document-mapper,navigation}.mjs
 |       |-- embeddings/                  # embedding-input · openai-embeddings-client ·
-|       |                                # embed-chunks (pure staleness gate)
+|       |                                # embed-chunks (pure staleness gate) ·
+|       |                                # reconcile (THE loop, one descriptor per
+|       |                                # embedded table; the 3 embed:* scripts are
+|       |                                # a descriptor + a report each)
 |       `-- knowledge/                   # source-discovery · knowledge-source-resolver ·
 |                                        # content-resolvers/ · template-traversal ·
 |                                        # template-extractors/
@@ -122,10 +133,13 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |   |   `-- tools/               # one CLI per pass -- see Agent CLIs below
 |   `-- eval/                    # categorisation-cases (40 dummy) · score-categorisation ·
 |                                # sample-mailbox (review:sample) · compare-review-labels
-`-- supabase/migrations/         # BASELINE, 4 files by domain, run in order against
+`-- supabase/migrations/         # BASELINE, 5 files by domain, run in order against
                                  # an EMPTY database -- see Database Map.
                                  # _shared.test.mjs holds the cross-file invariants;
-                                 # each file has its own sibling .test.mjs
+                                 # each file has its own sibling .test.mjs.
+                                 # _live.test.mjs APPLIES the baseline into a
+                                 # throwaway schema and asserts the views behave --
+                                 # skipped unless SUPABASE_DB_URL is set
 ```
 
 ## Database Map
@@ -177,6 +191,20 @@ The recurring situations, not the answers to them. Same document/chunk mechanics
 | `ticket_forwards` | attempt ledger, `unique(ticket_message_id)`, `sent`/`failed` + attempt counter |
 | `categorisation_review` | **testing artefact, not runtime**: hand-labelled sample scored against the agent |
 
+### Projections
+
+Views and functions for shapes that were being assembled client-side by reading
+rows and discarding most of them. Joins and aggregates only — judgement stays in
+tested JavaScript. Every view is `security_invoker`, or it would read past the
+RLS on the tables under it.
+
+| Object | Answers | Replaces |
+| --- | --- | --- |
+| `ticket_message_counts` | messages per ticket, soft-deleted excluded | a full read of `ticket_messages` to count in a Map |
+| `ticket_first_inbound` | one row per ticket: its earliest inbound message | a read of every inbound body in the shop, keeping one per ticket |
+| `ticket_queue` | the dashboard row: ticket + customer + count, soft-deleted excluded | `TICKET_LIST_SELECT` + the count join, in `tickets-service.ts` |
+| `order_number_range(shop)` | lowest and highest `order_number`, live orders only | an asc/desc pair of `limit 1` reads |
+
 ### Compliance and audit
 
 | Table | Holds |
@@ -192,12 +220,14 @@ The recurring situations, not the answers to them. Same document/chunk mechanics
 | File | Creates | Depends on |
 | --- | --- | --- |
 | `01_foundation.sql` | extensions, `set_updated_at()`, `shops`, `integration_events`, `privacy_requests`, `data_access_events` | — |
-| `02_shopify.sql` | `is_valid_product_faqs()`, `customers`, `orders`, `products`, `shopify_metaobjects`, `promotions`, `shopify_content_sources` | 01 |
-| `03_knowledge.sql` | `knowledge_documents`, `knowledge_chunks`, `match_knowledge_chunks()` | 01 |
-| `04_support.sql` | `tickets`, `ticket_messages`, `email_blocklist`, `sender_directory`, `spam_audit`, `ticket_investigations`, `category_forwarding`, `ticket_forwards`, `categorisation_review` | 01, 02 |
-| `05_exemplars.sql` | `support_exemplars`, `support_exemplar_phrasings`, `match_support_exemplars()` | 01, 03 (`french_unaccent`) |
+| `02_shopify.sql` | `is_valid_product_faqs()`, `customers`, `orders`, `products`, `shopify_metaobjects`, `promotions`, `shopify_content_sources`, `order_number_range()` | 01 |
+| `03_knowledge.sql` | `knowledge_documents`, `knowledge_chunks`, `match_knowledge_chunks()`, `search_knowledge_chunks_text()` | 01 |
+| `04_support.sql` | `tickets`, `ticket_messages`, `email_blocklist`, `sender_directory`, `spam_audit`, `ticket_investigations`, `category_forwarding`, `ticket_forwards`, `categorisation_review`, the three views | 01, 02 |
+| `05_exemplars.sql` | `support_exemplars`, `support_exemplar_phrasings`, `support_answers`, `match_support_exemplars()` | 01, 03 (`french_unaccent`) |
 
-`_shared.test.mjs` holds the cross-file invariants (no data statements, RLS on every table, every table documented, nothing referenced before it is created); each file has a sibling test for its own contents.
+`_shared.test.mjs` holds the cross-file invariants (no data statements, RLS on every table, every table and view documented, nothing referenced before it is created, every view `security_invoker` and revoked from the anon roles, every embedded table carrying the whole determinism quadruple, and `scripts/lib/tables.mjs` naming exactly what the baseline creates). Each file has a sibling test for its own contents.
+
+`_live.test.mjs` is the only test that **runs** the SQL: it applies the baseline into a throwaway schema, seeds a handful of rows, asserts each projection returns what it claims, and drops the schema. Skipped unless `SUPABASE_DB_URL` is set, so `npm test` still passes without a database.
 
 ## Surfaces
 
@@ -214,7 +244,7 @@ All Route Handlers are server-only and use the Supabase service-role key.
 
 ### `/tickets` — the queue
 
-`web/app/tickets/` → `web/components/tickets/`, over `tickets-service.ts` + `dropped-mail-service.ts`. Three stacked collapsible sections, each scrolling inside a fixed height:
+`web/app/tickets/` → `web/components/tickets/`, over `tickets-service.ts` + `dropped-mail-service.ts`. `tickets-service.ts` does not touch `tickets` itself: every read and the one write go through `scripts/lib/ticket-record.mjs`, and the list reads the `ticket_queue` view. Three stacked collapsible sections, each scrolling inside a fixed height:
 
 | Section | Source | Row action |
 | --- | --- | --- |

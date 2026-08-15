@@ -32,9 +32,41 @@ evidence about the order family.
 item is only removed once someone has actually run the check and seen the
 result.
 
-Last updated: 2026-08-11 (environment corrected: the dev-store premise in this
-preamble was stale, and row counts were re-measured against the live store. No
-item closed — none of the checks below has been run.)
+Last updated: 2026-08-15 (item 10 added and closed the same day: the database
+refactor's schema changes are applied to the dev database, forward, with the
+ingested corpus left in place.)
+
+---
+
+## 10. ~~The new schema objects have never been applied~~ — APPLIED 2026-08-15
+
+**Closed.** The three views, `order_number_range()` and the `ticket_messages`
+dimension check are live on the dev database, applied **forward** rather than by
+rebuilding from empty — so the 214 ingested tickets, 451 messages, 2014 orders
+and 58 201 customers are untouched. Verified after the fact:
+
+| Check | Result |
+|---|---|
+| all four objects present | yes |
+| `security_invoker=true` on all three views | yes |
+| `anon` / `authenticated` privileges on the views | none |
+| `ticket_messages_embedding_dimensions_check` present | yes, 0 rows violated it |
+| row counts before vs after | 214 / 451 / 2014 / 58 201, unchanged |
+| `ticket_message_counts` sums to live messages | 451 = 451 |
+| `ticket_first_inbound` rows vs tickets with inbound mail | 203 = 203 |
+| `ticket_queue` rows / with a customer | 214 / 141 — matches the documented link rate |
+| read through **PostgREST**, not just SQL | 214 rows; schema cache reloaded |
+| `orders:resolve:dry-run` end to end | 159 considered, 6 confirmed, 9 mismatch |
+
+**How, and why it is not in the repo.** The forward statements were extracted
+from the baseline files themselves (not retyped), applied in one transaction
+from a scratchpad script, and the script was discarded. Checking a forward step
+in beside the baseline is how a baseline turns back into a history — the thing
+the 8→5 split was done to stop. The baseline remains the definition; this was a
+one-off to avoid paying for it with the corpus.
+
+**What is still deferred:** nothing about the schema. The remaining reason to
+rebuild from empty is unrelated to this refactor.
 
 ---
 

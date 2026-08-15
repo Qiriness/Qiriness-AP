@@ -1,23 +1,13 @@
 import { pathToFileURL } from 'node:url';
 
 import { parseArgs, loadConfig, loadEnv } from './lib/sync-config.mjs';
-import {
-  createSupabaseClient,
-  supabaseSelectAll,
-  supabaseUpdateById
-} from './lib/supabase-rest-client.mjs';
-import { createEmbeddingsClient } from './lib/embeddings/openai-embeddings-client.mjs';
-import {
-  embedChunks,
-  evaluateChunkEmbedding,
-  toVectorLiteral,
-  buildClearEmbeddingPatch,
-  TICKET_MESSAGE_INPUT
-} from './lib/embeddings/embed-chunks.mjs';
+import { createSupabaseClient } from './lib/supabase-rest-client.mjs';
+import { COLUMNS, T } from './lib/tables.mjs';
+import { TICKET_MESSAGE_INPUT } from './lib/embeddings/embed-chunks.mjs';
+import { reconcileEmbeddings } from './lib/embeddings/reconcile.mjs';
 
-// Reconciler for ticket-message embeddings — the mirror of
-// embed-knowledge-chunks.mjs, and the safety net behind ingestion's inline
-// best-effort embed.
+// Reconciler for ticket-message embeddings — the safety net behind ingestion's
+// inline best-effort embed.
 //
 // It:
 //   1. embeds messages whose vector is missing or stale (after an inline
@@ -30,19 +20,46 @@ import {
 // Deterministic and idempotent: unchanged messages are skipped by the hash gate,
 // so a second run with no intervening edits does nothing and costs nothing.
 //
-// Unlike the knowledge side there is no approval gate — every stored message is
-// part of the corpus. Ingestion decides what is stored; this only decides what
-// is embedded.
+// NO APPROVAL GATE, unlike the other two reconcilers: every stored message is
+// part of the corpus (DECISIONS.md § Embeddings). Ingestion decides what is
+// stored; this only decides what is embedded. That is the whole of what makes
+// this descriptor different — there is no parent, so `--limit` caps rows.
 //
 //   npm run embed:tickets
 //   npm run embed:tickets:dry-run
 //   npm run embed:tickets -- --limit=50
 
-// Both reads below page through the whole table rather than passing a large
-// `limit`. PostgREST silently caps a single response at `db-max-rows` (1000), so
-// the previous `limit: 2000` returned 1000 rows of the 1383 stored and gave the
-// caller no way to tell — the reconciler simply could not see the newest
-// messages, and the redaction sweep could not clear vectors past row 1000.
+/**
+ * Which message rows may hold a vector.
+ *
+ * BOTH READS PAGE through the whole table rather than passing a large `limit`.
+ * PostgREST silently caps a single response at `db-max-rows` (1000), so a
+ * `limit: 2000` returned 1000 rows of the 1383 stored and gave the caller no way
+ * to tell — the reconciler could not see the newest messages, and the redaction
+ * sweep could not clear vectors past row 1000.
+ */
+export const TICKET_MESSAGES = {
+  parent: null,
+  child: {
+    table: T.TICKET_MESSAGES,
+    columns: COLUMNS.messageForEmbedding,
+    filters: {
+      body_text: { operator: 'not.is', value: 'null' },
+      deleted_at: { operator: 'is', value: 'null' }
+    },
+    // Oldest first so a --limit run is a stable prefix rather than a random slice.
+    order: 'received_at.asc'
+  },
+  inputSpec: TICKET_MESSAGE_INPUT,
+  orphan: {
+    columns: 'id,body_text,deleted_at',
+    // No parent to consult: a message loses its right to a vector by losing its
+    // body, which is what a redaction and a soft delete both do.
+    isOrphan: (row) => !row.body_text || Boolean(row.deleted_at),
+    clearBy: 'row'
+  },
+  limitApplies: 'children'
+};
 
 if (isDirectRun()) {
   main().catch((error) => {
@@ -60,96 +77,32 @@ async function main() {
 }
 
 export async function runMessageEmbeddingReconcile({ args, config, supabase }) {
-  const target = {
-    model: config.embeddingModel,
-    dimensions: config.embeddingDimensions,
-    inputSpec: TICKET_MESSAGE_INPUT
-  };
+  const result = await reconcileEmbeddings({
+    descriptor: TICKET_MESSAGES,
+    args,
+    config,
+    supabase
+  });
 
-  const rows = await supabaseSelectAll(
-    supabase,
-    'ticket_messages',
-    {
-      body_text: { operator: 'not.is', value: 'null' },
-      deleted_at: { operator: 'is', value: 'null' }
-    },
-    'id,subject,body_text,embedding,embedding_model,embedding_dimensions,embedded_input_hash',
-    // Oldest first so a --limit run is a stable prefix rather than a random slice.
-    { order: 'received_at.asc' }
-  );
-
-  const candidates = args.limit ? rows.slice(0, args.limit) : rows;
-  const cleared = await clearRedactedEmbeddings({ args, supabase });
-
-  if (args.dryRun || !config.openaiApiKey) {
-    const stale = candidates.filter(
-      (row) => evaluateChunkEmbedding(row, target).needsEmbedding
-    ).length;
+  if (result.reportOnly) {
     const reason = args.dryRun ? 'Dry run' : 'OPENAI_API_KEY is not set; skipped embedding';
     console.log(
-      `${reason}: ${candidates.length} message(s) considered; ${stale} would be embedded; ` +
-        `${cleared} redacted vector(s) ${args.dryRun ? 'would be' : ''} cleared.`
+      `${reason}: ${result.considered} message(s) considered; ${result.staleFound} would be embedded; ` +
+        `${result.cleared} redacted vector(s) ${args.dryRun ? 'would be' : ''} cleared.`
     );
-    return { considered: candidates.length, embedded: 0, staleFound: stale, cleared };
+  } else {
+    console.log(
+      `Message embedding reconcile complete: embedded ${result.embedded} of ${result.considered} ` +
+        `message(s); cleared ${result.cleared} redacted vector(s).`
+    );
   }
-
-  const client = createEmbeddingsClient({
-    apiKey: config.openaiApiKey,
-    model: config.embeddingModel,
-    dimensions: config.embeddingDimensions
-  });
-
-  const { patches, skippedCount } = await embedChunks({
-    chunks: candidates,
-    client,
-    inputSpec: TICKET_MESSAGE_INPUT
-  });
-
-  for (const patch of patches) {
-    const { id, ...columns } = patch;
-    await supabaseUpdateById(supabase, 'ticket_messages', id, {
-      ...columns,
-      embedding: toVectorLiteral(columns.embedding)
-    });
-  }
-
-  console.log(
-    `Message embedding reconcile complete: embedded ${patches.length} of ${candidates.length} ` +
-      `message(s) (${skippedCount} already current); cleared ${cleared} redacted vector(s).`
-  );
 
   return {
-    considered: candidates.length,
-    embedded: patches.length,
-    staleFound: patches.length,
-    cleared
+    considered: result.considered,
+    embedded: result.embedded,
+    staleFound: result.staleFound,
+    cleared: result.cleared
   };
-}
-
-/**
- * A message whose body has been redacted or soft-deleted must not keep its
- * vector. Enforced here as well as at the redaction site, for the same reason
- * the knowledge reconciler re-checks orphaned chunks: a missed inline clear
- * would otherwise leave derived personal data in the database indefinitely.
- */
-async function clearRedactedEmbeddings({ args, supabase }) {
-  const embedded = await supabaseSelectAll(
-    supabase,
-    'ticket_messages',
-    { embedding: { operator: 'not.is', value: 'null' } },
-    'id,body_text,deleted_at'
-  );
-
-  const orphans = embedded.filter((row) => !row.body_text || row.deleted_at);
-  if (args.dryRun) {
-    return orphans.length;
-  }
-
-  for (const row of orphans) {
-    const { id, ...columns } = buildClearEmbeddingPatch(row.id);
-    await supabaseUpdateById(supabase, 'ticket_messages', id, columns);
-  }
-  return orphans.length;
 }
 
 function isDirectRun() {

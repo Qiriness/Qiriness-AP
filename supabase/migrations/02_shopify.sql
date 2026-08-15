@@ -783,3 +783,48 @@ comment on column public.shopify_content_sources.source_type is
 
 comment on column public.shopify_content_sources.status is
   'Shopify publish state: published or unpublished. Policies are always published (Shopify has no draft state for a filled-in policy); pages derive this from publishedAt presence.';
+
+
+-- ============================================================================
+-- Projections
+-- ============================================================================
+
+-- The store's actual order-number range, in one round trip.
+--
+-- WHY A FUNCTION AND NOT TWO READS. Order resolution needs the lowest and the
+-- highest order number this store has ever issued, to tell "that is not one of
+-- our order numbers" apart from "we have no record of that order" -- different
+-- replies, and the first is far more useful to a customer who mistyped or quoted
+-- an invoice reference. Asking PostgREST for it meant `order by order_number asc
+-- limit 1` and then the same query descending: two requests, two round trips,
+-- for two scalars an index scan already has.
+--
+-- min()/max() over an indexed column, not a sort: Postgres answers both from
+-- orders_shop_order_number_idx without reading the table.
+--
+-- Deleted rows are excluded. A soft-deleted order is one a compliance request
+-- erased, and letting it set the boundary would keep answering questions about
+-- an order the customer asked us to forget.
+create or replace function public.order_number_range(match_shop_id uuid)
+-- `integer`, matching orders.order_number: min()/max() over an integer column
+-- return integer, and declaring bigint here makes the function fail at call time
+-- with a result-type mismatch rather than at apply time.
+returns table (
+  min_order_number integer,
+  max_order_number integer
+)
+language sql
+stable
+-- Explicit search_path: this runs under the service role, so it must not be
+-- resolvable against a caller-controlled schema.
+set search_path = public
+as $$
+  select min(o.order_number), max(o.order_number)
+  from public.orders o
+  where o.shop_id = match_shop_id
+    and o.order_number is not null
+    and o.deleted_at is null;
+$$;
+
+comment on function public.order_number_range is
+  'Lowest and highest order_number this shop has issued, as one row. Replaces a pair of asc/desc limit-1 reads from agent/src/resolution/order-resolution-runner.mjs. Both values are null on a shop with no synced orders, which the caller reads as "we cannot judge whether a quoted number is ours" rather than as a range of zero.';

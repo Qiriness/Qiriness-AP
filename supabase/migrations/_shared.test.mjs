@@ -2,6 +2,8 @@ import { readFileSync } from 'node:fs';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
+import { COLUMNS, PROJECTION_SOURCE, RPC, T, V, VECTOR_COLUMNS } from '../../scripts/lib/tables.mjs';
+
 /**
  * Invariants that hold across the whole baseline.
  *
@@ -33,6 +35,94 @@ export const codeOnly = (sql) =>
 
 export function tablesIn(sql) {
   return [...sql.matchAll(/create table public\.(\w+)/g)].map((m) => m[1]);
+}
+
+export function viewsIn(sql) {
+  return [...sql.matchAll(/create view public\.(\w+)/g)].map((m) => m[1]);
+}
+
+export function functionsIn(sql) {
+  return [...sql.matchAll(/create (?:or replace )?function public\.(\w+)/g)].map((m) => m[1]);
+}
+
+/**
+ * The body of one `create table` or `create view`, without its comments.
+ *
+ * Cut at the first `;`, which terminates the statement in both cases: a column
+ * list contains none, and neither does any view in the baseline. Comments are
+ * stripped first so a semicolon written in prose cannot end the definition
+ * early.
+ */
+export function definitionOf(sql, name) {
+  const start = sql.search(new RegExp(`create (?:table|view) public\\.${name}\\b`));
+  if (start < 0) return undefined;
+  return codeOnly(sql.slice(start)).split(';')[0];
+}
+
+/**
+ * The column names a `create table` declares.
+ *
+ * Table-level constraints sit at the same indent as columns, so they are
+ * filtered by keyword rather than by layout — a `constraint` line would
+ * otherwise read as a column called "constraint" and quietly satisfy any
+ * projection assertion that mentioned one.
+ */
+const NOT_A_COLUMN = /^(constraint|primary|unique|check|foreign|exclude)$/i;
+
+export function columnsIn(sql, relation) {
+  const body = definitionOf(sql, relation);
+  if (body === undefined) return [];
+  return /^create view/i.test(body.trim()) ? viewColumns(body) : tableColumns(body);
+}
+
+function tableColumns(body) {
+  return body
+    .split('\n')
+    .slice(1)
+    .map((line) => line.match(/^\s{2}(\w+)\s+\S/))
+    .filter(Boolean)
+    .map((m) => m[1])
+    .filter((name) => !NOT_A_COLUMN.test(name));
+}
+
+/**
+ * The output column names of a view.
+ *
+ * Reads the select list — between `select` and the `from` that ends it — rather
+ * than the source columns, because that is what a caller can actually ask
+ * PostgREST for. Every projected column in the baseline's views carries an
+ * explicit `as`, which is a house rule this parser depends on and the test below
+ * enforces: an unaliased expression would have a name Postgres invents.
+ */
+function viewColumns(body) {
+  const afterSelect = body.slice(body.search(/\bselect\b/i)).replace(/^select\s+/i, '');
+  const withoutDistinct = afterSelect.replace(/^distinct on \([^)]*\)/i, '');
+  const end = withoutDistinct.search(/^\s*from\s/im);
+  const list = end < 0 ? withoutDistinct : withoutDistinct.slice(0, end);
+
+  return splitTopLevel(list)
+    .map((item) => item.match(/\bas\s+(\w+)\s*$/i))
+    .filter(Boolean)
+    .map((m) => m[1]);
+}
+
+/** Split a select list on commas that are not inside parentheses. */
+function splitTopLevel(list) {
+  const items = [];
+  let depth = 0;
+  let current = '';
+  for (const char of list) {
+    if (char === '(') depth += 1;
+    else if (char === ')') depth -= 1;
+    if (char === ',' && depth === 0) {
+      items.push(current.trim());
+      current = '';
+      continue;
+    }
+    current += char;
+  }
+  if (current.trim()) items.push(current.trim());
+  return items;
 }
 
 /**
@@ -168,6 +258,145 @@ test('nothing references a table before it is created', () => {
       );
     }
     if (create) created.add(create[1]);
+  }
+});
+
+test('every name in the schema contract is created by the baseline', () => {
+  // `scripts/lib/tables.mjs` is what the three packages import instead of
+  // quoting table names. This is the assertion that makes it a contract rather
+  // than a second place to be wrong: a table renamed in the DDL and not in the
+  // module (or the reverse) fails here, at `npm test`, instead of failing in
+  // PostgREST on whichever code path happened to ask first.
+  const tables = new Set(tablesIn(ALL));
+  for (const [key, name] of Object.entries(T)) {
+    assert.ok(tables.has(name), `T.${key} names ${name}, which the baseline does not create`);
+  }
+  assert.equal(
+    Object.keys(T).length,
+    tables.size,
+    'the baseline creates a table the contract does not name'
+  );
+
+  const views = new Set(viewsIn(ALL));
+  for (const [key, name] of Object.entries(V)) {
+    assert.ok(views.has(name), `V.${key} names ${name}, which the baseline does not create`);
+  }
+  assert.equal(Object.keys(V).length, views.size, 'the baseline creates a view the contract does not name');
+
+  const functions = new Set(functionsIn(ALL));
+  for (const [key, name] of Object.entries(RPC)) {
+    assert.ok(functions.has(name), `RPC.${key} names ${name}, which the baseline does not create`);
+  }
+});
+
+test('every column in the schema contract exists on the relation it projects', () => {
+  // The other half of the drift. A projection is a comma-separated select list,
+  // so a column dropped from the DDL leaves a string that PostgREST rejects at
+  // runtime — on one reader, whenever that reader next runs.
+  for (const [name, projection] of Object.entries(COLUMNS)) {
+    const source = PROJECTION_SOURCE[name];
+    assert.ok(source, `COLUMNS.${name} has no entry in PROJECTION_SOURCE`);
+
+    // PostgREST embeds are written `customers(a,b)` and resolve over a foreign
+    // key rather than naming a column on this relation; strip them before
+    // splitting, and assert the embedded columns against the embedded table.
+    const embeds = [...projection.matchAll(/(\w+)\(([^)]*)\)/g)];
+    const own = projection.replace(/\w+\([^)]*\)/g, '').split(',').filter(Boolean);
+
+    const available = new Set(columnsIn(ALL, source));
+    assert.ok(available.size > 0, `${source} has no readable column list`);
+    for (const column of own) {
+      assert.ok(available.has(column), `COLUMNS.${name} reads ${source}.${column}, which does not exist`);
+    }
+
+    for (const [, table, columns] of embeds) {
+      const embedded = new Set(columnsIn(ALL, table));
+      for (const column of columns.split(',').filter(Boolean)) {
+        assert.ok(embedded.has(column), `COLUMNS.${name} embeds ${table}.${column}, which does not exist`);
+      }
+    }
+  }
+});
+
+test('every view reads with the caller\'s row-level security, not its owner\'s', () => {
+  // THE ONE THING A VIEW CAN GET CATASTROPHICALLY WRONG HERE. A view without
+  // `security_invoker` executes as its owner and reads straight past the RLS on
+  // the tables underneath. Every table in this baseline has RLS enabled with no
+  // policies so that only the service role can read it, which makes an
+  // owner-rights view over `tickets` the single way an anon key could read the
+  // whole support mailbox.
+  for (const view of viewsIn(ALL)) {
+    const definition = definitionOf(ALL, view);
+    assert.match(
+      definition,
+      /with \(security_invoker = true\)/i,
+      `${view} does not set security_invoker`
+    );
+    assert.match(
+      ALL,
+      new RegExp(`revoke all on public\\.${view} from anon, authenticated`, 'i'),
+      `${view} is not revoked from the anon roles`
+    );
+  }
+});
+
+test('every view names its output columns explicitly', () => {
+  // Not style. An unaliased expression -- `coalesce(n.message_count, 0)` -- gets
+  // whatever name Postgres invents for it, and a caller asking PostgREST for it
+  // by the name it expected gets a 400. Aliasing every item makes the view's
+  // interface the thing written in the file.
+  for (const view of viewsIn(ALL)) {
+    const definition = definitionOf(ALL, view);
+    const afterSelect = definition.slice(definition.search(/\bselect\b/i)).replace(/^select\s+/i, '');
+    const withoutDistinct = afterSelect.replace(/^distinct on \([^)]*\)/i, '');
+    const end = withoutDistinct.search(/^\s*from\s/im);
+    const list = end < 0 ? withoutDistinct : withoutDistinct.slice(0, end);
+
+    for (const item of splitTopLevel(list)) {
+      assert.match(item, /\bas\s+\w+\s*$/i, `${view} projects ${item.trim()} without an alias`);
+    }
+  }
+});
+
+test('every view it creates is documented', () => {
+  for (const view of viewsIn(ALL)) {
+    assert.match(ALL, new RegExp(`comment on view public\\.${view} is`, 'i'), `${view} has no comment`);
+  }
+});
+
+test('every table holding a vector carries the whole determinism quadruple', () => {
+  // knowledge_chunks, ticket_messages and support_exemplar_phrasings each hold
+  // an embedding, and each decides staleness the same way: the stored model,
+  // dimensions and input hash against the current ones. The pattern was copied
+  // by hand three times — this is what stops a fourth table copying three of the
+  // four columns and silently never going stale.
+  for (const table of tablesIn(ALL)) {
+    const columns = columnsIn(ALL, table);
+    if (!columns.includes('embedding')) continue;
+    for (const column of VECTOR_COLUMNS) {
+      assert.ok(columns.includes(column), `${table} holds an embedding but no ${column}`);
+    }
+  }
+});
+
+test('every table holding a vector constrains its dimensions the same way', () => {
+  // The half of the pattern that DID drift: ticket_messages copied the four
+  // columns from knowledge_chunks and not the check, so it would have accepted a
+  // 3072-dimension vector written by a model change nobody finished — a row that
+  // then never goes stale, because the stored dimensions match what was stored.
+  //
+  // Asserted on the clause rather than on the constraint's presence, so a table
+  // cannot satisfy this with a check that permits something else.
+  for (const table of tablesIn(ALL)) {
+    if (!columnsIn(ALL, table).includes('embedding')) continue;
+
+    const clause = checkClause(ALL, `${table}_embedding_dimensions_check`);
+    assert.ok(clause, `${table} holds an embedding but does not constrain embedding_dimensions`);
+    assert.equal(
+      clause.replace(/\s+/g, ' ').trim(),
+      'embedding_dimensions is null or embedding_dimensions = 1536',
+      `${table} constrains embedding_dimensions differently from the other embedded tables`
+    );
   }
 });
 

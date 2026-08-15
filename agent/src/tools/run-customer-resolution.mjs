@@ -1,11 +1,11 @@
 import { createSupabaseClient } from '../../../scripts/lib/supabase-rest-client.mjs';
+import { createTicketRecord } from '../../../scripts/lib/ticket-record.mjs';
 
 import { loadAgentConfig } from '../config.mjs';
 import { logger } from '../lib/logger.mjs';
 import { resolveShopId } from '../lib/shop.mjs';
 import { createCustomerLookup } from '../retrieval/customer-lookup.mjs';
 import {
-  createCustomerResolutionStore,
   runCustomerResolution
 } from '../resolution/customer-resolution-runner.mjs';
 
@@ -34,13 +34,13 @@ async function main() {
   const config = loadAgentConfig();
   const supabase = createSupabaseClient(config);
   const shopId = await resolveShopId(supabase, config.shopDomain);
-  const store = createCustomerResolutionStore(supabase);
+  const record = createTicketRecord(supabase, { shopId });
   const lookup = createCustomerLookup({ supabase, shopId, logger });
 
   console.log(`\n${dryRun ? 'DRY RUN — nothing written.' : 'Resolving customers.'}\n`);
 
   const totals = await runCustomerResolution({
-    store,
+    record,
     lookup,
     shopId,
     logger,

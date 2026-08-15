@@ -1,7 +1,5 @@
-import {
-  supabaseSelectAll,
-  supabaseUpdateById
-} from '../../../scripts/lib/supabase-rest-client.mjs';
+import { supabaseSelectAll } from '../../../scripts/lib/supabase-rest-client.mjs';
+import { T } from '../../../scripts/lib/tables.mjs';
 
 import { buildOrderContext } from './order-context.mjs';
 
@@ -41,29 +39,10 @@ const CUSTOMER_COLUMNS = [
 
 export function createOrderContextStore(supabase) {
   return {
-    /**
-     * Tickets that have a confirmed order number but no bundle yet.
-     *
-     * `refresh` widens it to every ticket with an order number, for rebuilding
-     * after a sync moved the orders underneath.
-     */
-    async findPending(shopId, { refresh = false, limit = 500 } = {}) {
-      const filters = {
-        shop_id: shopId,
-        shopify_order_number: { operator: 'not.is', value: 'null' },
-        deleted_at: { operator: 'is', value: 'null' }
-      };
-      if (!refresh) {
-        filters.context_resolved_at = { operator: 'is', value: 'null' };
-      }
-      return supabaseSelectAll(
-        supabase,
-        'tickets',
-        filters,
-        'id,subject,shopify_order_number,customer_id,context_resolved_at',
-        { limit }
-      );
-    },
+    // `findPending` left this store: it is `record.findAwaitingContext({ refresh })`
+    // now, with the same `refresh` widening. What this store keeps is the orders
+    // and the customers behind them.
+
 
     /** Orders by display name (`#1006`), plus the customers they belong to. */
     async loadOrders(shopId, orderNames) {
@@ -72,7 +51,7 @@ export function createOrderContextStore(supabase) {
       }
       const orders = await supabaseSelectAll(
         supabase,
-        'orders',
+        T.ORDERS,
         {
           shop_id: shopId,
           name: { operator: 'in', value: `(${orderNames.map(quote).join(',')})` },
@@ -85,7 +64,7 @@ export function createOrderContextStore(supabase) {
       const customers = customerIds.length
         ? await supabaseSelectAll(
             supabase,
-            'customers',
+            T.CUSTOMERS,
             { id: { operator: 'in', value: `(${customerIds.join(',')})` } },
             CUSTOMER_COLUMNS
           )
@@ -97,28 +76,15 @@ export function createOrderContextStore(supabase) {
       };
     },
 
-    /**
-     * Writes the bundle and stamps when it was built.
-     *
-     * `customer_id` is linked at the same time: the ticket knew a hash before,
-     * and now it knows which customer row that was — which is what lets every
-     * later tool skip the resolution step entirely.
-     */
-    async saveContext(ticket, context, customerId) {
-      const patch = {
-        resolved_context: context,
-        context_resolved_at: new Date().toISOString()
-      };
-      if (customerId && !ticket.customer_id) {
-        patch.customer_id = customerId;
-      }
-      await supabaseUpdateById(supabase, 'tickets', ticket.id, patch);
-    }
+    // `saveContext` left this store too: `record.setResolvedContext(ticket,
+    // context, customerId)` writes the bundle, stamps `context_resolved_at` and
+    // backfills `customer_id` where the ticket had none.
   };
 }
 
 export async function runOrderContext({
   store,
+  record,
   shopId,
   logger,
   refresh = false,
@@ -126,7 +92,7 @@ export async function runOrderContext({
   now = new Date(),
   onResult
 } = {}) {
-  const tickets = await store.findPending(shopId, { refresh });
+  const tickets = await record.findAwaitingContext({ refresh });
   const totals = { considered: tickets.length, resolved: 0, order_missing: 0 };
 
   // One batched order+customer load for the whole pass.
@@ -150,7 +116,7 @@ export async function runOrderContext({
     onResult?.({ ticket, context });
 
     if (!dryRun) {
-      await store.saveContext(ticket, context, order.customer_id);
+      await record.setResolvedContext(ticket, context, order.customer_id);
     }
   }
 

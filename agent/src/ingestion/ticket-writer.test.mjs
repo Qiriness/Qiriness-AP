@@ -4,8 +4,13 @@ import test from 'node:test';
 import { writeIngestedMessages } from './ticket-writer.mjs';
 import { createAuditCollector } from './spam-audit.mjs';
 
-// In-memory store standing in for Supabase, so the threading + idempotency logic
-// is exercised without a database.
+// In-memory stand-in for Supabase, so the threading + idempotency logic is
+// exercised without a database.
+//
+// Plays both roles the writer now takes: the MESSAGE store (`upsertMessage`,
+// which owns ticket_messages) and the TICKET record (`findByConversation`,
+// `create`, `recordMessageArrival`). They are separate objects in the real
+// wiring; a test wants one place to look.
 function createFakeStore() {
   const tickets = new Map(); // key: shopId|conversationId -> row
   const messages = new Map(); // key: shopId|graphMessageId -> row
@@ -14,28 +19,27 @@ function createFakeStore() {
   return {
     tickets,
     messages,
-    async findTicketByConversation(shopId, conversationId) {
-      return tickets.get(`${shopId}|${conversationId}`) || null;
+    async findByConversation(conversationId) {
+      return tickets.get(`shop-1|${conversationId}`) || null;
     },
-    async insertTicket(row) {
+    async create(row) {
       ticketSeq += 1;
-      const stored = { id: `ticket-${ticketSeq}`, ...row };
-      tickets.set(`${shopId(row)}|${row.graph_conversation_id}`, stored);
+      // The record stamps shop_id from the shop it was built for.
+      const stored = { id: `ticket-${ticketSeq}`, shop_id: 'shop-1', ...row };
+      tickets.set(`shop-1|${row.graph_conversation_id}`, stored);
       return stored;
     },
-    async updateTicket(ticketId, patch) {
+    async recordMessageArrival(ticketId, patch) {
+      if (!patch || Object.keys(patch).length === 0) return null;
       for (const row of tickets.values()) {
         if (row.id === ticketId) Object.assign(row, patch);
       }
+      return null;
     },
     async upsertMessage(row) {
       messages.set(`${row.shop_id}|${row.graph_message_id}`, row);
     }
   };
-
-  function shopId(row) {
-    return row.shop_id;
-  }
 }
 
 function mappedMessage({ id, conversationId, at, subject = 'Subject', direction = 'inbound' }) {
@@ -64,7 +68,7 @@ function mappedMessage({ id, conversationId, at, subject = 'Subject', direction 
 
 test('creates one ticket per conversation and ingests each message', async () => {
   const store = createFakeStore();
-  const counts = await writeIngestedMessages(store, 'shop-1', [
+  const counts = await writeIngestedMessages(store, store, 'shop-1', [
     mappedMessage({ id: 'm1', conversationId: 'c1', at: '2026-07-24T10:00:00Z' }),
     mappedMessage({ id: 'm2', conversationId: 'c1', at: '2026-07-24T11:00:00Z' }),
     mappedMessage({ id: 'm3', conversationId: 'c2', at: '2026-07-24T12:00:00Z' })
@@ -83,8 +87,8 @@ test('re-ingesting the same messages is idempotent (no dup tickets or messages)'
     mappedMessage({ id: 'm2', conversationId: 'c1', at: '2026-07-24T11:00:00Z' })
   ];
 
-  await writeIngestedMessages(store, 'shop-1', batch);
-  const second = await writeIngestedMessages(store, 'shop-1', batch);
+  await writeIngestedMessages(store, store, 'shop-1', batch);
+  const second = await writeIngestedMessages(store, store, 'shop-1', batch);
 
   assert.equal(second.ticketsCreated, 0);
   assert.equal(store.tickets.size, 1);
@@ -93,7 +97,7 @@ test('re-ingesting the same messages is idempotent (no dup tickets or messages)'
 
 test('advances last_message_at as the thread grows, keeps first_message_at', async () => {
   const store = createFakeStore();
-  await writeIngestedMessages(store, 'shop-1', [
+  await writeIngestedMessages(store, store, 'shop-1', [
     mappedMessage({ id: 'm1', conversationId: 'c1', at: '2026-07-24T10:00:00Z' }),
     mappedMessage({ id: 'm2', conversationId: 'c1', at: '2026-07-24T11:30:00Z' })
   ]);
@@ -109,10 +113,10 @@ test('first_message_at moves backwards when an older message arrives later', asy
   // replies. Without this the column holds "the first message we saw", which
   // mis-sorts the categoriser queue (ordered on first_message_at).
   const store = createFakeStore();
-  await writeIngestedMessages(store, 'shop-1', [
+  await writeIngestedMessages(store, store, 'shop-1', [
     mappedMessage({ id: 'm2', conversationId: 'c1', at: '2026-07-24T11:30:00Z' })
   ]);
-  await writeIngestedMessages(store, 'shop-1', [
+  await writeIngestedMessages(store, store, 'shop-1', [
     mappedMessage({ id: 'm1', conversationId: 'c1', at: '2026-07-24T10:00:00Z' })
   ]);
 
@@ -126,6 +130,7 @@ test('an out-of-order batch settles on the true window whatever the order', asyn
   const order = ['2026-07-24T12:00:00Z', '2026-07-24T09:00:00Z', '2026-07-24T15:00:00Z'];
   const store = createFakeStore();
   await writeIngestedMessages(
+    store,
     store,
     'shop-1',
     order.map((at, i) => mappedMessage({ id: `m${i}`, conversationId: 'c1', at }))
@@ -141,14 +146,14 @@ test('a new inbound message puts the ticket back in the categoriser queue', asyn
   // that turns into a lost parcel (or a threat to sue) keeps the labels of the
   // email that opened it.
   const store = createFakeStore();
-  await writeIngestedMessages(store, 'shop-1', [
+  await writeIngestedMessages(store, store, 'shop-1', [
     mappedMessage({ id: 'm1', conversationId: 'c1', at: '2026-07-24T10:00:00Z' })
   ]);
   // Simulate the categoriser having settled the ticket.
   const ticket = store.tickets.get('shop-1|c1');
   ticket.needs_categorisation = false;
 
-  await writeIngestedMessages(store, 'shop-1', [
+  await writeIngestedMessages(store, store, 'shop-1', [
     mappedMessage({ id: 'm2', conversationId: 'c1', at: '2026-07-24T11:30:00Z' })
   ]);
   assert.equal(ticket.needs_categorisation, true);
@@ -158,13 +163,13 @@ test('our own outbound reply does not trigger a re-categorisation', async () => 
   // last_message_at advances on outbound too, so gating on the message direction
   // is what stops the agent paying to re-read a thread it just answered itself.
   const store = createFakeStore();
-  await writeIngestedMessages(store, 'shop-1', [
+  await writeIngestedMessages(store, store, 'shop-1', [
     mappedMessage({ id: 'm1', conversationId: 'c1', at: '2026-07-24T10:00:00Z' })
   ]);
   const ticket = store.tickets.get('shop-1|c1');
   ticket.needs_categorisation = false;
 
-  await writeIngestedMessages(store, 'shop-1', [
+  await writeIngestedMessages(store, store, 'shop-1', [
     mappedMessage({
       id: 'm2',
       conversationId: 'c1',
@@ -181,7 +186,7 @@ test('a customer reply reopens a ticket that auto-close had retired', async () =
   // The other half of lifecycle/auto-close.mjs: without this, a reply lands on a
   // closed ticket and nobody sees it — the queue is tidy and wrong.
   const store = createFakeStore();
-  await writeIngestedMessages(store, 'shop-1', [
+  await writeIngestedMessages(store, store, 'shop-1', [
     mappedMessage({ id: 'm1', conversationId: 'c1', at: '2026-06-01T10:00:00Z' })
   ]);
   const ticket = store.tickets.get('shop-1|c1');
@@ -191,7 +196,7 @@ test('a customer reply reopens a ticket that auto-close had retired', async () =
     resolved_at: '2026-06-22T10:00:00Z'
   });
 
-  await writeIngestedMessages(store, 'shop-1', [
+  await writeIngestedMessages(store, store, 'shop-1', [
     mappedMessage({ id: 'm2', conversationId: 'c1', at: '2026-07-24T11:30:00Z' })
   ]);
 
@@ -204,13 +209,13 @@ test('a customer reply reopens a ticket that auto-close had retired', async () =
 
 test('our own reply into a closed ticket does not reopen it', async () => {
   const store = createFakeStore();
-  await writeIngestedMessages(store, 'shop-1', [
+  await writeIngestedMessages(store, store, 'shop-1', [
     mappedMessage({ id: 'm1', conversationId: 'c1', at: '2026-06-01T10:00:00Z' })
   ]);
   const ticket = store.tickets.get('shop-1|c1');
   ticket.status = 'closed';
 
-  await writeIngestedMessages(store, 'shop-1', [
+  await writeIngestedMessages(store, store, 'shop-1', [
     mappedMessage({
       id: 'm2',
       conversationId: 'c1',
@@ -232,13 +237,13 @@ test('a reply pulls a ticket back out of awaiting_customer', async () => {
   // we asked would never be read again — the reply lands, the pipeline ignores
   // it, and the queue looks clean because the work vanished.
   const store = createFakeStore();
-  await writeIngestedMessages(store, 'shop-1', [
+  await writeIngestedMessages(store, store, 'shop-1', [
     mappedMessage({ id: 'm1', conversationId: 'c1', at: '2026-07-24T10:00:00Z' })
   ]);
   const ticket = store.tickets.get('shop-1|c1');
   ticket.status = 'awaiting_customer';
 
-  await writeIngestedMessages(store, 'shop-1', [
+  await writeIngestedMessages(store, store, 'shop-1', [
     mappedMessage({ id: 'm2', conversationId: 'c1', at: '2026-07-24T11:30:00Z' })
   ]);
   assert.equal(ticket.status, 'open');
@@ -246,7 +251,7 @@ test('a reply pulls a ticket back out of awaiting_customer', async () => {
 
 test('an inbound reply into an already-open ticket rewrites nothing', async () => {
   const store = createFakeStore();
-  await writeIngestedMessages(store, 'shop-1', [
+  await writeIngestedMessages(store, store, 'shop-1', [
     mappedMessage({ id: 'm1', conversationId: 'c1', at: '2026-07-24T10:00:00Z' })
   ]);
   const ticket = store.tickets.get('shop-1|c1');
@@ -254,7 +259,7 @@ test('an inbound reply into an already-open ticket rewrites nothing', async () =
   ticket.status = 'open';
   ticket.closed_at = null;
 
-  await writeIngestedMessages(store, 'shop-1', [
+  await writeIngestedMessages(store, store, 'shop-1', [
     mappedMessage({ id: 'm2', conversationId: 'c1', at: '2026-07-24T11:30:00Z' })
   ]);
   assert.equal(ticket.status, 'open');
@@ -263,7 +268,7 @@ test('an inbound reply into an already-open ticket rewrites nothing', async () =
 
 test('counts removed tombstones without creating rows', async () => {
   const store = createFakeStore();
-  const counts = await writeIngestedMessages(store, 'shop-1', [
+  const counts = await writeIngestedMessages(store, store, 'shop-1', [
     { removed: true, graphMessageId: 'm9', conversationId: 'c9' }
   ]);
   assert.equal(counts.removed, 1);
@@ -275,6 +280,7 @@ test('LLM triage drops a new-conversation spam before anything is stored', async
   const store = createFakeStore();
   const triage = async () => ({ spam: true });
   const counts = await writeIngestedMessages(
+    store,
     store,
     'shop-1',
     [mappedMessage({ id: 'm1', conversationId: 'c1', at: '2026-07-24T10:00:00Z' })],
@@ -293,6 +299,7 @@ test('LLM triage is skipped for replies into an existing ticket', async () => {
   // First message creates the ticket (triage keeps it).
   await writeIngestedMessages(
     store,
+    store,
     'shop-1',
     [mappedMessage({ id: 'm1', conversationId: 'c1', at: '2026-07-24T10:00:00Z' })],
     { triage: async () => ({ spam: false }) }
@@ -304,6 +311,7 @@ test('LLM triage is skipped for replies into an existing ticket', async () => {
     return { spam: true };
   };
   const counts = await writeIngestedMessages(
+    store,
     store,
     'shop-1',
     [mappedMessage({ id: 'm2', conversationId: 'c1', at: '2026-07-24T11:00:00Z' })],
@@ -326,6 +334,7 @@ test('audits a dropped email — the only trace it leaves', async () => {
   });
 
   await writeIngestedMessages(
+    store,
     store,
     'shop-1',
     [mappedMessage({ id: 'm1', conversationId: 'c1', at: '2026-07-24T10:00:00Z', subject: 'Offre SEO' })],
@@ -350,6 +359,7 @@ test('audits a kept email too, so a pass is reviewable', async () => {
 
   await writeIngestedMessages(
     store,
+    store,
     'shop-1',
     [mappedMessage({ id: 'm1', conversationId: 'c1', at: '2026-07-24T10:00:00Z' })],
     { triage, audit }
@@ -367,8 +377,9 @@ test('an untriaged reply produces no audit row (no decision was made)', async ()
   const triage = async () => ({ spam: false, label: 'keep', reason: 'client légitime' });
 
   const first = mappedMessage({ id: 'm1', conversationId: 'c1', at: '2026-07-24T10:00:00Z' });
-  await writeIngestedMessages(store, 'shop-1', [first], { triage, audit });
+  await writeIngestedMessages(store, store, 'shop-1', [first], { triage, audit });
   await writeIngestedMessages(
+    store,
     store,
     'shop-1',
     [mappedMessage({ id: 'm2', conversationId: 'c1', at: '2026-07-24T11:00:00Z' })],
@@ -384,6 +395,7 @@ test('writes without an audit collector still work (auditing is optional)', asyn
   const store = createFakeStore();
   const counts = await writeIngestedMessages(
     store,
+    store,
     'shop-1',
     [mappedMessage({ id: 'm1', conversationId: 'c1', at: '2026-07-24T10:00:00Z' })],
     { triage: async () => ({ spam: false }) }
@@ -396,6 +408,7 @@ test('writes without an audit collector still work (auditing is optional)', asyn
 test('the message is stored complete, with its vector, in one write', async () => {
   const store = createFakeStore();
   await writeIngestedMessages(
+    store,
     store,
     'shop-1',
     [mappedMessage({ id: 'm1', conversationId: 'c1', at: '2026-07-24T10:00:00Z' })],
@@ -415,6 +428,7 @@ test('an embedding failure never fails ingestion', async () => {
   const store = createFakeStore();
   const counts = await writeIngestedMessages(
     store,
+    store,
     'shop-1',
     [mappedMessage({ id: 'm1', conversationId: 'c1', at: '2026-07-24T10:00:00Z' })],
     {
@@ -432,6 +446,7 @@ test('a null embedding stores the message unchanged for the reconciler', async (
   const store = createFakeStore();
   const counts = await writeIngestedMessages(
     store,
+    store,
     'shop-1',
     [mappedMessage({ id: 'm1', conversationId: 'c1', at: '2026-07-24T10:00:00Z' })],
     { embedMessage: async () => null }
@@ -444,7 +459,7 @@ test('a null embedding stores the message unchanged for the reconciler', async (
 
 test('without an embedder, ingestion is exactly as before', async () => {
   const store = createFakeStore();
-  const counts = await writeIngestedMessages(store, 'shop-1', [
+  const counts = await writeIngestedMessages(store, store, 'shop-1', [
     mappedMessage({ id: 'm1', conversationId: 'c1', at: '2026-07-24T10:00:00Z' })
   ]);
   assert.equal(counts.messagesIngested, 1);
@@ -456,6 +471,7 @@ test('outbound replies are embedded too — they are the A half of Q->A', async 
   const store = createFakeStore();
   const seen = [];
   await writeIngestedMessages(
+    store,
     store,
     'shop-1',
     [

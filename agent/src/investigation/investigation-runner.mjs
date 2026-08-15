@@ -1,10 +1,7 @@
 import { ratchetLevel } from '../../../scripts/lib/support-taxonomy.mjs';
-import {
-  supabaseSelect,
-  supabaseUpdate,
-  supabaseUpdateById,
-  supabaseUpsert
-} from '../../../scripts/lib/supabase-rest-client.mjs';
+import { supabaseUpsert } from '../../../scripts/lib/supabase-rest-client.mjs';
+import { COLUMNS, T } from '../../../scripts/lib/tables.mjs';
+import { attemptsSoFar } from '../../../scripts/lib/ticket-record.mjs';
 
 import { emptySenderDirectory } from '../ingestion/sender-directory.mjs';
 
@@ -36,7 +33,12 @@ const MESSAGES_PER_TICKET = 10;
 const MAX_TEXT_CHARS = 4000;
 
 export async function runInvestigation({
+  // The case-file store owns `ticket_investigations` and nothing else; the
+  // ticket record owns the row this pass moves through the queue. They were one
+  // object before, which is how a ticket patch ended up being written here, in
+  // the categoriser, and in six other places.
   store,
+  record,
   investigate,
   shopId,
   logger,
@@ -65,7 +67,7 @@ export async function runInvestigation({
     failed: 0
   };
 
-  const pending = await store.findTicketsNeedingInvestigation(shopId, limit);
+  const pending = await record.claim('investigation', { limit });
   counts.considered = pending.length;
 
   for (const ticket of pending) {
@@ -73,16 +75,19 @@ export async function runInvestigation({
       // Not a failure: the order family has no synced data to investigate yet,
       // and cosmetovigilance / legal_privacy are deliberately left to a person.
       if (!dryRun) {
-        await store.updateTicket(ticket.id, { needs_investigation: false });
+        await record.skip('investigation', ticket.id);
       }
       counts.skipped += 1;
       continue;
     }
 
-    const messages = await store.findInboundMessages(ticket.id, MESSAGES_PER_TICKET);
+    const messages = await record.inboundMessages(ticket.id, {
+      limit: MESSAGES_PER_TICKET,
+      columns: COLUMNS.messageForInvestigation
+    });
     if (messages.length === 0) {
       if (!dryRun) {
-        await store.updateTicket(ticket.id, { needs_investigation: false });
+        await record.skip('investigation', ticket.id);
       }
       counts.skipped += 1;
       continue;
@@ -102,7 +107,7 @@ export async function runInvestigation({
         buildInput(ticket, messages, senderDirectory, exemplarMatch.requirement_needs)
       );
     } catch (error) {
-      await handleFailure({ store, ticket, error, counts, logger, dryRun });
+      await handleFailure({ record, ticket, error, counts, logger, dryRun });
       continue;
     }
 
@@ -114,12 +119,16 @@ export async function runInvestigation({
     onResult?.({ ticket, caseFile, level });
 
     if (!dryRun) {
-      await store.saveInvestigation({
+      // THE CASE FILE FIRST, THE TICKET SECOND, and the order matters: the
+      // ticket's flag is what says this ticket has been investigated, so
+      // clearing it before the row exists would mark the work done with nothing
+      // behind it. A crash between the two leaves a case file that will be
+      // rewritten by the retry — the upsert key makes that harmless.
+      await store.saveCaseFile({
         ticket,
         caseFile,
         shopId,
         triggerMessageId: triggerMessage.id,
-        level,
         // Stamped with whether this row's needs came from the exemplar. A report
         // comparing the two declarations MUST exclude these, or it measures the
         // exemplar against a copy of itself.
@@ -127,6 +136,21 @@ export async function runInvestigation({
           ...exemplarMatch,
           ...(caseFile.needsSource === 'exemplar' ? { supplied_needs: true } : {})
         }
+      });
+
+      // WHERE THE VERDICT LEAVES THE TICKET IN THE QUEUE. `answerable` maps to
+      // null and the ticket stays `open`: it means a reply could be written, not
+      // that one was sent, and nothing sends yet.
+      //
+      // Safe to set unconditionally because `claim` already required
+      // `status = 'open'` — a ticket a human closed is never picked up, so this
+      // can only move a ticket out of open, never overrule a person.
+      const nextStatus = TICKET_STATUS_BY_VERDICT[caseFile.verdict] ?? null;
+
+      await record.complete('investigation', ticket, {
+        columns: { level, ...(nextStatus ? { status: nextStatus } : {}) },
+        trail: { verdict: caseFile.verdict },
+        at: caseFile.investigatedAt
       });
     }
 
@@ -170,8 +194,8 @@ export async function runInvestigation({
  * silent. There is no partial case file to keep, so the fallback is simply
  * "a person should look at this, and here is why".
  */
-async function handleFailure({ store, ticket, error, counts, logger, dryRun }) {
-  const attempts = attemptsSoFar(ticket.metadata) + 1;
+async function handleFailure({ record, ticket, error, counts, logger, dryRun }) {
+  const attempts = attemptsSoFar(ticket.metadata, 'investigation') + 1;
   counts.failed += 1;
   logger?.warn?.('investigate.error', { ticketId: ticket.id, attempts, message: error.message });
 
@@ -180,27 +204,17 @@ async function handleFailure({ store, ticket, error, counts, logger, dryRun }) {
   }
 
   if (attempts < MAX_ATTEMPTS) {
-    await store.updateTicket(ticket.id, {
-      metadata: mergeMetadata(ticket.metadata, {
-        attempts,
-        last_error: error.message,
-        at: new Date().toISOString()
-      })
-    });
+    await record.retry('investigation', ticket, { attempts, error });
     return;
   }
 
-  await store.updateTicket(ticket.id, {
-    needs_investigation: false,
-    investigated_at: new Date().toISOString(),
-    metadata: mergeMetadata(ticket.metadata, {
-      attempts,
-      failed: true,
-      last_error: error.message,
+  await record.abandon('investigation', ticket, {
+    trail: {
       verdict: 'needs_human',
-      reason: 'investigation failed, routed to a human',
-      at: new Date().toISOString()
-    })
+      reason: 'investigation failed, routed to a human'
+    },
+    attempts,
+    error
   });
   logger?.error?.('investigate.fallback', { ticketId: ticket.id, attempts });
 }
@@ -258,17 +272,9 @@ function buildInput(ticket, messages, senderDirectory, exemplarNeeds = []) {
   };
 }
 
-function attemptsSoFar(metadata) {
-  const attempts = metadata?.investigation?.attempts;
-  return Number.isInteger(attempts) ? attempts : 0;
-}
-
-// One jsonb column shared with the categoriser and the customer resolver, so
-// patch this key rather than replacing the object.
-function mergeMetadata(metadata, investigation) {
-  const base = metadata && typeof metadata === 'object' ? metadata : {};
-  return { ...base, investigation: { ...base.investigation, ...investigation } };
-}
+// `attemptsSoFar` and the metadata merge that used to sit here are the ticket
+// record's — both existed twice, here and in the categoriser, character for
+// character. The trail key comes from the pass descriptor now.
 
 /**
  * Which recurring situation this ticket is, compressed for storage.
@@ -333,70 +339,36 @@ function round3(value) {
   return Number.isFinite(value) ? Math.round(value * 1000) / 1000 : null;
 }
 
-export function createInvestigationStore(supabase) {
+/**
+ * The case-file store: `ticket_investigations`, and nothing else.
+ *
+ * WHAT LEFT. This used to be the investigation's private view of the whole
+ * ticket world — the queue query, the inbound-message reader, a generic
+ * `updateTicket` escape hatch and a backfill that wrote `tickets` with a raw
+ * `supabaseUpdate`, going around this very object. All four were the ticket row
+ * rather than the case file, and they are now the shared record in
+ * scripts/lib/ticket-record.mjs. What remains is the one table this pass
+ * genuinely owns.
+ */
+export function createCaseFileStore(supabase) {
   return {
     /**
-     * The queue.
-     *
-     * `needs_categorisation` must be false as well: a ticket whose labels are
-     * still pending would be investigated with a tool set chosen from the
-     * previous conversation's subject. Within a poll the categoriser runs first
-     * and this cannot happen; the filter covers the cases it does not own — no
-     * OpenAI key, a batch that did not drain, a flag set by hand.
-     */
-    async findTicketsNeedingInvestigation(shopId, limit) {
-      return supabaseSelect(
-        supabase,
-        'tickets',
-        {
-          shop_id: shopId,
-          status: 'open',
-          needs_investigation: { operator: 'is', value: 'true' },
-          needs_categorisation: { operator: 'is', value: 'false' },
-          deleted_at: { operator: 'is', value: 'null' },
-          archived_at: { operator: 'is', value: 'null' }
-        },
-        'id,subject,category,request_kind,level,customer_id,requester_email_hash,' +
-          'shopify_order_number,resolved_context,metadata',
-        { order: 'first_message_at.asc', limit }
-      );
-    },
-
-    async findInboundMessages(ticketId, limit) {
-      return supabaseSelect(
-        supabase,
-        'ticket_messages',
-        {
-          ticket_id: ticketId,
-          direction: 'inbound',
-          deleted_at: { operator: 'is', value: 'null' }
-        },
-        // `from_email` is read for the sender-directory lookup only. It is never
-        // put in a prompt or a case file — the label it resolves to is (see
-        // buildInput).
-        //
-        // `embedding` is read so exemplar matching can reuse the vector
-        // ingestion already wrote instead of paying for one per ticket. It is
-        // never put in a prompt either — only the trigger message's is used, and
-        // only as a query.
-        'id,subject,body_text,received_at,from_email,embedding',
-        { order: 'received_at.asc', limit }
-      );
-    },
-
-    /**
-     * Writes the case file and closes the ticket's investigation.
+     * Writes the case file.
      *
      * The row is upserted on `(shop_id, trigger_message_id)`: one investigation
-     * per inbound message that caused it. That is the idempotency key — a
-     * re-run over the same thread rewrites its own row rather than adding a
-     * second — and it leaves the ticket's trajectory as rows, so a thread that
-     * escalated shows both readings.
+     * per inbound message that caused it. That is the idempotency key — a re-run
+     * over the same thread rewrites its own row rather than adding a second —
+     * and it leaves the ticket's trajectory as rows, so a thread that escalated
+     * shows both readings.
+     *
+     * The TICKET is not touched here. `runInvestigation` calls
+     * `record.complete('investigation', ...)` immediately afterwards, which is
+     * what clears the flag and moves the status.
      */
-    async saveInvestigation({ ticket, caseFile, shopId, triggerMessageId, level, exemplarMatch }) {
+    async saveCaseFile({ ticket, caseFile, shopId, triggerMessageId, exemplarMatch }) {
       await supabaseUpsert(
         supabase,
-        'ticket_investigations',
+        T.TICKET_INVESTIGATIONS,
         [
           {
             shop_id: shopId,
@@ -424,65 +396,24 @@ export function createInvestigationStore(supabase) {
         ],
         'shop_id,trigger_message_id'
       );
-
-      // WHERE THE VERDICT LEAVES THE TICKET IN THE QUEUE. `answerable` maps to
-      // null and stays `open`: it means a reply could be written, not that one
-      // was sent, and nothing sends yet.
-      //
-      // Safe to set unconditionally because the selection query above already
-      // requires `status = 'open'` — a ticket a human closed is never picked up,
-      // so this can only ever move a ticket out of open, never overrule a person.
-      const nextStatus = TICKET_STATUS_BY_VERDICT[caseFile.verdict] ?? null;
-
-      await supabaseUpdateById(supabase, 'tickets', ticket.id, {
-        level,
-        investigated_at: caseFile.investigatedAt,
-        ...(nextStatus ? { status: nextStatus } : {}),
-        // Cleared last, so a crash above leaves the ticket to be retried rather
-        // than marked done with no case file behind it.
-        needs_investigation: false,
-        metadata: mergeMetadata(ticket.metadata, {
-          verdict: caseFile.verdict,
-          attempts: 0,
-          last_error: null,
-          failed: null,
-          at: caseFile.investigatedAt
-        })
-      });
-    },
-
-    async updateTicket(ticketId, patch) {
-      await supabaseUpdateById(supabase, 'tickets', ticketId, patch);
-    },
-
-    /**
-     * Raises the flag for tickets that are already categorised.
-     *
-     * Needed exactly twice in a system's life, and both times for the same
-     * reason: the flag is only ever raised by the categoriser finishing, so a
-     * ticket labelled BEFORE this pass existed will never enter the queue on its
-     * own. That is true at rollout (565 tickets already categorised) and again
-     * whenever a subject is added to ENABLED_SUBJECTS — its existing tickets
-     * were skipped and their flag cleared.
-     *
-     * Deliberately not automatic: a pass that re-raises its own queue on startup
-     * would re-investigate the whole backlog on every deploy.
-     */
-    async raiseForCategorised(shopId, { subjects = ENABLED_SUBJECTS, dryRun = false } = {}) {
-      const filters = {
-        shop_id: shopId,
-        status: 'open',
-        needs_categorisation: { operator: 'is', value: 'false' },
-        needs_investigation: { operator: 'is', value: 'false' },
-        category: { operator: 'in', value: `(${subjects.join(',')})` },
-        deleted_at: { operator: 'is', value: 'null' },
-        archived_at: { operator: 'is', value: 'null' }
-      };
-      const pending = await supabaseSelect(supabase, 'tickets', filters, 'id', { limit: 1000 });
-      if (pending.length > 0 && !dryRun) {
-        await supabaseUpdate(supabase, 'tickets', filters, { needs_investigation: true });
-      }
-      return pending.length;
     }
   };
+}
+
+/**
+ * Puts already-categorised tickets into this pass's queue.
+ *
+ * Needed exactly twice in a system's life: at rollout, and whenever a subject
+ * joins ENABLED_SUBJECTS — those tickets were skipped AND had their flag
+ * cleared, so nothing re-queues them on its own.
+ *
+ * A thin wrapper over `record.raiseFor` rather than a query, because which
+ * subjects are in scope is this module's business and the predicate that makes
+ * re-raising safe is the ticket record's.
+ */
+export async function raiseForCategorised(record, { subjects = ENABLED_SUBJECTS, dryRun = false } = {}) {
+  return record.raiseFor('investigation', {
+    where: { category: { operator: 'in', value: `(${subjects.join(',')})` } },
+    dryRun
+  });
 }

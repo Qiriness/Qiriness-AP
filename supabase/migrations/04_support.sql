@@ -359,6 +359,14 @@ create table public.ticket_messages (
   ),
   constraint ticket_messages_raw_payload_object_check check (
     jsonb_typeof(raw_graph_payload) = 'object'
+  ),
+  -- The same guard knowledge_chunks and support_exemplar_phrasings carry. This
+  -- table copied the determinism quadruple from knowledge_chunks and did not
+  -- copy the constraint, which is the drift that made the whole pattern worth
+  -- asserting across files rather than trusting three tables to keep agreeing.
+  -- Null until the row is embedded; 1536 once it is, and nothing else.
+  constraint ticket_messages_embedding_dimensions_check check (
+    embedding_dimensions is null or embedding_dimensions = 1536
   )
 );
 
@@ -1137,3 +1145,134 @@ comment on column public.categorisation_review.blocklist_would_drop is
 
 comment on column public.categorisation_review.retention_delete_after is
   'Default 3 months -- shorter than tickets, since a review set has no operational value once scored. Deleted by the retention cleanup job (not yet built).';
+
+
+-- ============================================================================
+-- Projections
+-- ============================================================================
+--
+-- Shapes that were being assembled on the client by reading rows and throwing
+-- most of them away. They are joins and aggregates, not judgement: this project
+-- keeps judgement in tested JavaScript and set operations in Postgres (the same
+-- split search_knowledge_chunks_text is written to, in 03_knowledge.sql).
+-- shouldAutoClose, the level ratchet and the evidence rules stay where they are.
+--
+-- EVERY VIEW HERE IS security_invoker. A view created without it runs as its
+-- OWNER, which means it reads straight past the row-level security on the tables
+-- underneath -- and every table in this baseline has RLS enabled with no
+-- policies precisely so that only the service role can read it. Without this
+-- setting these three views would be the one way an anon key could read the
+-- whole ticket table. The revokes below say the same thing a second way.
+
+-- ------------------------------------------------------- ticket_message_counts
+
+-- How many messages a ticket holds.
+--
+-- Replaces a full read of ticket_messages in web/lib/server/tickets-service.ts,
+-- which pulled every id in the shop to count them in a Map -- the alternative
+-- there being one count query per ticket, which is 565 round trips on the
+-- measured mailbox. Neither is necessary: this is one grouped scan.
+--
+-- Soft-deleted messages do not count. A compliance delete must not keep
+-- inflating the number beside a subject line.
+create view public.ticket_message_counts
+with (security_invoker = true) as
+  select
+    m.shop_id as shop_id,
+    m.ticket_id as ticket_id,
+    count(*) as message_count
+  from public.ticket_messages m
+  where m.deleted_at is null
+  group by m.shop_id, m.ticket_id;
+
+revoke all on public.ticket_message_counts from anon, authenticated;
+
+comment on view public.ticket_message_counts is
+  'Message count per ticket, excluding soft-deleted messages. Read by the dashboard queue instead of counting rows client-side.';
+
+-- -------------------------------------------------------- ticket_first_inbound
+
+-- The customer's opening words on a ticket.
+--
+-- WHY THIS EXISTS. Order resolution needs the FIRST inbound message per ticket,
+-- because quoted history is exactly where stale order numbers from previous
+-- threads live. Getting it through PostgREST meant reading every inbound message
+-- in the shop -- bodies included, 1000 rows per request -- and keeping the first
+-- per ticket in a Map. The bodies are the largest thing this database holds and
+-- all but one per ticket were discarded on arrival.
+--
+-- `distinct on (ticket_id)` with a matching leading ORDER BY is the Postgres
+-- idiom for "one row per group, the earliest": the sort decides which row
+-- survives, so the two clauses have to agree and are written together.
+--
+-- Nulls sort last under plain ASC, so a message with no received_at is only ever
+-- picked when it is the ticket's only inbound message -- which is the right
+-- answer rather than an accident.
+create view public.ticket_first_inbound
+with (security_invoker = true) as
+  select distinct on (m.ticket_id)
+    m.ticket_id as ticket_id,
+    m.shop_id as shop_id,
+    m.id as message_id,
+    m.subject as subject,
+    m.body_text as body_text,
+    m.received_at as received_at
+  from public.ticket_messages m
+  where m.direction = 'inbound'
+    and m.deleted_at is null
+  order by m.ticket_id, m.received_at asc;
+
+revoke all on public.ticket_first_inbound from anon, authenticated;
+
+comment on view public.ticket_first_inbound is
+  'One row per ticket: its earliest inbound message, already stripped of quoted reply chains by ingestion. Read by order resolution, which needs the customer''s own words rather than the thread.';
+
+-- -------------------------------------------------------------- ticket_queue
+
+-- The dashboard queue, as one row per ticket.
+--
+-- Folds together what the list read was doing in three parts: the ticket
+-- columns, the customer resolved over tickets.customer_id, and the message
+-- count. The customer join was already free (PostgREST resolved it as an embed
+-- in the same request); the count was not.
+--
+-- SOFT-DELETED TICKETS ARE EXCLUDED IN THE VIEW, not by the caller. A compliance
+-- delete must not reach the UI even if a later reader forgets to filter, and
+-- that guarantee is worth more here than the flexibility of leaving it out.
+-- ARCHIVED TICKETS ARE KEPT: archiving drops a ticket out of the active queue,
+-- and the list offers that as a filter rather than hiding it.
+--
+-- VIP is deliberately not here. It is derived at read time from rfm_group by
+-- customer-segments.mjs and nothing stores it -- putting it in the view would
+-- make a rule that changes with the business into a schema object.
+create view public.ticket_queue
+with (security_invoker = true) as
+  select
+    t.id as id,
+    t.shop_id as shop_id,
+    t.subject as subject,
+    t.status as status,
+    t.category as category,
+    t.secondary_category as secondary_category,
+    t.level as level,
+    t.happiness as happiness,
+    t.responsible_team as responsible_team,
+    t.requester_name as requester_name,
+    t.shopify_order_number as shopify_order_number,
+    t.first_message_at as first_message_at,
+    t.last_message_at as last_message_at,
+    t.archived_at as archived_at,
+    c.display_name as customer_display_name,
+    c.first_name as customer_first_name,
+    c.last_name as customer_last_name,
+    c.rfm_group as customer_rfm_group,
+    coalesce(n.message_count, 0) as message_count
+  from public.tickets t
+  left join public.customers c on c.id = t.customer_id
+  left join public.ticket_message_counts n on n.ticket_id = t.id
+  where t.deleted_at is null;
+
+revoke all on public.ticket_queue from anon, authenticated;
+
+comment on view public.ticket_queue is
+  'One row per live ticket with its customer and message count already joined -- the projection the dashboard list renders and the status write returns. Soft-deleted tickets are excluded here rather than by the caller; archived ones are kept and filtered in the UI. LEFT JOIN on customers: most tickets are unlinked until the customer-resolution pass runs.';

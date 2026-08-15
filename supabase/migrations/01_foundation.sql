@@ -3,11 +3,12 @@
 -- The shop record every other table hangs off, the shared trigger function, and
 -- the compliance/audit trail.
 --
--- BASELINE, NOT A HISTORY. Four files describe the schema as it SHOULD BE, not
+-- BASELINE, NOT A HISTORY. Five files describe the schema as it SHOULD BE, not
 -- the order it was historically built in. Run them in order against an empty
 -- database:
 --
 --     01_foundation.sql -> 02_shopify.sql -> 03_knowledge.sql -> 04_support.sql
+--     -> 05_exemplars.sql
 --
 -- The order is load-bearing and is a plain dependency chain: everything
 -- references shops (01); tickets reference customers (02); ticket_investigations

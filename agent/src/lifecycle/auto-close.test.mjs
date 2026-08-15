@@ -95,18 +95,18 @@ test('a ticket with no activity timestamp is left alone, not treated as ancient'
 
 test('runAutoClose closes the stale ones and counts the exempt', async () => {
   const closed = [];
-  const store = {
+  const record = {
     findInactive: async () => [
       ticket({ id: 'stale-1', last_message_at: ago(40) }),
       ticket({ id: 'stale-2', level: 3, last_message_at: ago(25) }),
       ticket({ id: 'severe', level: 4, last_message_at: ago(99) })
     ],
-    closeTicket: async (t) => {
+    close: async (t) => {
       closed.push(t.id);
     }
   };
 
-  const totals = await runAutoClose({ store, shopId: 's1', now: NOW });
+  const totals = await runAutoClose({ record, shopId: 's1', now: NOW });
 
   assert.deepEqual(closed, ['stale-1', 'stale-2']);
   assert.deepEqual(totals, { considered: 3, closed: 2, exempt: 1, awaitingHuman: 0, failed: 0 });
@@ -114,14 +114,14 @@ test('runAutoClose closes the stale ones and counts the exempt', async () => {
 
 test('dry run decides everything and writes nothing', async () => {
   let writes = 0;
-  const store = {
+  const record = {
     findInactive: async () => [ticket({ last_message_at: ago(40) })],
-    closeTicket: async () => {
+    close: async () => {
       writes += 1;
     }
   };
 
-  const totals = await runAutoClose({ store, shopId: 's1', now: NOW, dryRun: true });
+  const totals = await runAutoClose({ record, shopId: 's1', now: NOW, dryRun: true });
 
   assert.equal(writes, 0);
   assert.equal(totals.closed, 1, 'still reports what it would have closed');
@@ -129,36 +129,36 @@ test('dry run decides everything and writes nothing', async () => {
 
 test('one failing row does not stop the pass', async () => {
   const closed = [];
-  const store = {
+  const record = {
     findInactive: async () => [
       ticket({ id: 'a', last_message_at: ago(40) }),
       ticket({ id: 'boom', last_message_at: ago(40) }),
       ticket({ id: 'c', last_message_at: ago(40) })
     ],
-    closeTicket: async (t) => {
+    close: async (t) => {
       if (t.id === 'boom') throw new Error('conflict');
       closed.push(t.id);
     }
   };
 
-  const totals = await runAutoClose({ store, shopId: 's1', now: NOW, logger: { warn() {} } });
+  const totals = await runAutoClose({ record, shopId: 's1', now: NOW, logger: { warn() {} } });
 
   assert.deepEqual(closed, ['a', 'c']);
   assert.equal(totals.failed, 1);
   assert.equal(totals.closed, 2);
 });
 
-test('the cutoff handed to the store matches the window', async () => {
+test('the cutoff handed to the record matches the window', async () => {
   let seen = null;
-  const store = {
-    findInactive: async (_shopId, cutoff) => {
+  const record = {
+    findInactive: async (cutoff) => {
       seen = cutoff;
       return [];
     },
-    closeTicket: async () => {}
+    close: async () => {}
   };
 
-  await runAutoClose({ store, shopId: 's1', now: NOW, afterDays: 21 });
+  await runAutoClose({ record, shopId: 's1', now: NOW, afterDays: 21 });
 
   assert.equal(seen.toISOString(), '2026-07-13T12:00:00.000Z');
 });
@@ -187,16 +187,16 @@ test('a ticket awaiting the CUSTOMER still closes', () => {
 test('the unactioned backlog is counted apart from the exempt', async () => {
   // Folded into `exempt` it would sit beside the level-4 rule working as
   // intended, and nobody would ever look at it.
-  const store = {
+  const record = {
     findInactive: async () => [
       ticket({ id: 'stale', last_message_at: ago(40) }),
       ticket({ id: 'severe', level: 4, last_message_at: ago(99) }),
       ticket({ id: 'nobody-did-it', status: 'awaiting_human', level: 3, last_message_at: ago(99) })
     ],
-    closeTicket: async () => {}
+    close: async () => {}
   };
 
-  const totals = await runAutoClose({ store, shopId: 's1', now: NOW });
+  const totals = await runAutoClose({ record, shopId: 's1', now: NOW });
 
   assert.equal(totals.closed, 1);
   assert.equal(totals.exempt, 2, 'both are spared');

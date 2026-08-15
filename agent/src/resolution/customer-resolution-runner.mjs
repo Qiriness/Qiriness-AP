@@ -1,8 +1,4 @@
 import { hashIdentifier } from '../../../scripts/lib/compliance-audit.mjs';
-import {
-  supabaseSelectAll,
-  supabaseUpdateById
-} from '../../../scripts/lib/supabase-rest-client.mjs';
 
 // Fills `tickets.customer_id` from the address the ticket was opened with.
 //
@@ -63,64 +59,14 @@ const LINKED = 'linked';
 const NO_MATCH = 'no_match';
 const NOT_A_CUSTOMER_ADDRESS = 'not_a_customer_address';
 
-export function createCustomerResolutionStore(supabase) {
-  return {
-    /**
-     * Tickets that know an address but not which customer it is.
-     *
-     * `requester_email_hash` is only ever written from an inbound message, so a
-     * non-null hash also means the thread holds customer mail — a ticket opened
-     * by one of our own replies carries no requester and is correctly skipped
-     * until the customer's own message backfills it (ticket-writer.mjs).
-     */
-    async findUnlinked(shopId, { limit = 500 } = {}) {
-      return supabaseSelectAll(
-        supabase,
-        'tickets',
-        {
-          shop_id: shopId,
-          customer_id: { operator: 'is', value: 'null' },
-          requester_email_hash: { operator: 'not.is', value: 'null' },
-          deleted_at: { operator: 'is', value: 'null' }
-        },
-        'id,customer_id,requester_email_hash,metadata',
-        { limit }
-      );
-    },
-
-    /**
-     * Writes the link, and always the reasoning.
-     *
-     * `customer_id` moves only on a match; `metadata.customer_resolution` is
-     * written either way, so an unlinked ticket is explained rather than merely
-     * empty and the next pass can see what was already tried against which
-     * address.
-     */
-    async recordResolution(ticket, resolution) {
-      const patch = {
-        metadata: {
-          ...(ticket.metadata || {}),
-          customer_resolution: {
-            status: resolution.status,
-            matched_by: resolution.matchedBy,
-            // The hash the attempt was made against. A ticket's requester can be
-            // backfilled after the fact, and an attempt against the old identity
-            // says nothing about the new one.
-            email_hash: resolution.emailHash,
-            attempted_at: resolution.attemptedAt
-          }
-        }
-      };
-      if (resolution.customerId) {
-        patch.customer_id = resolution.customerId;
-      }
-      await supabaseUpdateById(supabase, 'tickets', ticket.id, patch);
-    }
-  };
-}
+// The store this file used to define is now the shared ticket record:
+// `findUnlinked` is `record.findUnlinkedCustomers` and `recordResolution` is
+// `record.linkCustomer`, which still writes the reasoning whether or not the
+// address matched. What stayed here is `shouldAttempt` below — the back-off
+// policy, which was never a query.
 
 export async function runCustomerResolution({
-  store,
+  record,
   lookup,
   shopId,
   logger,
@@ -129,7 +75,7 @@ export async function runCustomerResolution({
   dryRun = false,
   onResult
 } = {}) {
-  const tickets = await store.findUnlinked(shopId);
+  const tickets = await record.findUnlinkedCustomers();
   const totals = {
     considered: tickets.length,
     [LINKED]: 0,
@@ -179,7 +125,7 @@ export async function runCustomerResolution({
     onResult?.({ ticket, resolution });
 
     if (!dryRun) {
-      await store.recordResolution(ticket, resolution);
+      await record.linkCustomer(ticket, resolution);
     }
   }
 

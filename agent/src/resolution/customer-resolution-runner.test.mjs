@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
+import { createTicketRecord } from '../../../scripts/lib/ticket-record.mjs';
+
 import { hashIdentifier } from '../../../scripts/lib/compliance-audit.mjs';
 import {
   NOTIFICATION_SENDERS,
@@ -28,59 +30,75 @@ function buildLookup({ known = { [MARIE_HASH]: 'c1' } } = {}) {
   };
 }
 
+/**
+ * The real ticket record over a fake transport, so `saved` holds what
+ * `linkCustomer` was actually asked to record rather than a stub's echo.
+ */
 function buildStore(tickets) {
   const saved = [];
-  return {
+  const record = createTicketRecord({}, {
+    shopId: 's1',
+    transport: {
+      async select() { return []; },
+      async selectAll() { return tickets; },
+      async insert(_c, _t, rows) { return rows; },
+      async update() { return []; },
+      async updateById() { return {}; }
+    }
+  });
+  const linkCustomer = record.linkCustomer.bind(record);
+  return Object.assign(record, {
     saved,
-    async findUnlinked() { return tickets; },
-    async recordResolution(ticket, resolution) { saved.push({ ticket, resolution }); }
-  };
+    async linkCustomer(ticket, resolution) {
+      saved.push({ ticket, resolution });
+      return linkCustomer(ticket, resolution);
+    }
+  });
 }
 
 const TICKET = { id: 't1', customer_id: null, requester_email_hash: MARIE_HASH, metadata: {} };
 
 test('a ticket whose sender is a known customer is linked', async () => {
-  const store = buildStore([TICKET]);
+  const record = buildStore([TICKET]);
   const lookup = buildLookup();
-  const totals = await runCustomerResolution({ store, lookup, shopId: 's1', now: NOW });
+  const totals = await runCustomerResolution({ record, lookup, now: NOW });
 
   assert.equal(totals.linked, 1);
-  assert.equal(store.saved[0].resolution.customerId, 'c1');
-  assert.equal(store.saved[0].resolution.matchedBy, 'email_hash');
+  assert.equal(record.saved[0].resolution.customerId, 'c1');
+  assert.equal(record.saved[0].resolution.matchedBy, 'email_hash');
 });
 
 test('no match is recorded, not treated as a failure', async () => {
   // Writing in from an address that never ordered is the ordinary pre-sales case.
-  const store = buildStore([{ ...TICKET, requester_email_hash: STRANGER_HASH }]);
-  const totals = await runCustomerResolution({ store, lookup: buildLookup(), shopId: 's1', now: NOW });
+  const record = buildStore([{ ...TICKET, requester_email_hash: STRANGER_HASH }]);
+  const totals = await runCustomerResolution({ record, lookup: buildLookup(), now: NOW });
 
   assert.equal(totals.no_match, 1);
-  assert.equal(store.saved[0].resolution.customerId, null);
-  assert.equal(store.saved[0].resolution.status, 'no_match');
-  assert.equal(store.saved[0].resolution.emailHash, STRANGER_HASH);
+  assert.equal(record.saved[0].resolution.customerId, null);
+  assert.equal(record.saved[0].resolution.status, 'no_match');
+  assert.equal(record.saved[0].resolution.emailHash, STRANGER_HASH);
 });
 
 test('a Shopify notification address is never resolved to a customer', async () => {
   // A contact-form body that fails to parse leaves mailer@shopify.com as the
   // requester; linking those would give every one of them the same customer.
   const hash = hashIdentifier(NOTIFICATION_SENDERS[0]);
-  const store = buildStore([{ ...TICKET, requester_email_hash: hash }]);
+  const record = buildStore([{ ...TICKET, requester_email_hash: hash }]);
   const lookup = buildLookup({ known: { [hash]: 'c9' } });
-  const totals = await runCustomerResolution({ store, lookup, shopId: 's1', now: NOW });
+  const totals = await runCustomerResolution({ record, lookup, now: NOW });
 
   assert.equal(totals.not_a_customer_address, 1);
   assert.equal(lookup.calls.length, 0, 'the lookup must not even be asked');
-  assert.equal(store.saved[0].resolution.customerId, null);
+  assert.equal(record.saved[0].resolution.customerId, null);
 });
 
 test('the support mailbox is excluded by the caller', async () => {
   const hash = hashIdentifier('support@qiriness.test');
-  const store = buildStore([{ ...TICKET, requester_email_hash: hash }]);
+  const record = buildStore([{ ...TICKET, requester_email_hash: hash }]);
   const lookup = buildLookup({ known: { [hash]: 'c9' } });
   const totals = await runCustomerResolution({
-    store,
+    record,
     lookup,
-    shopId: 's1',
     now: NOW,
     excludedEmails: ['support@qiriness.test']
   });
@@ -90,7 +108,7 @@ test('the support mailbox is excluded by the caller', async () => {
 });
 
 test('a fresh no_match is not asked again on the next poll', async () => {
-  const store = buildStore([
+  const record = buildStore([
     {
       ...TICKET,
       requester_email_hash: STRANGER_HASH,
@@ -104,16 +122,16 @@ test('a fresh no_match is not asked again on the next poll', async () => {
     }
   ]);
   const lookup = buildLookup();
-  const totals = await runCustomerResolution({ store, lookup, shopId: 's1', now: NOW });
+  const totals = await runCustomerResolution({ record, lookup, now: NOW });
 
   assert.equal(totals.deferred, 1);
   assert.equal(lookup.calls.length, 0);
-  assert.equal(store.saved.length, 0, 'a deferred ticket must not be rewritten every poll');
+  assert.equal(record.saved.length, 0, 'a deferred ticket must not be rewritten every poll');
   assert.equal(lookup.refreshes, 0, 'nothing to do means no index rebuild');
 });
 
 test('a stale no_match is asked again — the customer may have synced since', async () => {
-  const store = buildStore([
+  const record = buildStore([
     {
       ...TICKET,
       metadata: {
@@ -125,16 +143,16 @@ test('a stale no_match is asked again — the customer may have synced since', a
       }
     }
   ]);
-  const totals = await runCustomerResolution({ store, lookup: buildLookup(), shopId: 's1', now: NOW });
+  const totals = await runCustomerResolution({ record, lookup: buildLookup(), now: NOW });
 
   assert.equal(totals.linked, 1);
-  assert.equal(store.saved[0].resolution.customerId, 'c1');
+  assert.equal(record.saved[0].resolution.customerId, 'c1');
 });
 
 test('a backfilled requester is asked again immediately', async () => {
   // ticket-writer backfills requester_email_hash when a thread was opened by one
   // of our own replies. A decision about the old identity says nothing about this one.
-  const store = buildStore([
+  const record = buildStore([
     {
       ...TICKET,
       metadata: {
@@ -146,7 +164,7 @@ test('a backfilled requester is asked again immediately', async () => {
       }
     }
   ]);
-  const totals = await runCustomerResolution({ store, lookup: buildLookup(), shopId: 's1', now: NOW });
+  const totals = await runCustomerResolution({ record, lookup: buildLookup(), now: NOW });
 
   assert.equal(totals.deferred, 0);
   assert.equal(totals.linked, 1);
@@ -154,7 +172,7 @@ test('a backfilled requester is asked again immediately', async () => {
 
 test('a refused address is never retried, however old', async () => {
   const hash = hashIdentifier(NOTIFICATION_SENDERS[0]);
-  const store = buildStore([
+  const record = buildStore([
     {
       ...TICKET,
       requester_email_hash: hash,
@@ -167,36 +185,35 @@ test('a refused address is never retried, however old', async () => {
       }
     }
   ]);
-  const totals = await runCustomerResolution({ store, lookup: buildLookup(), shopId: 's1', now: NOW });
+  const totals = await runCustomerResolution({ record, lookup: buildLookup(), now: NOW });
 
   assert.equal(totals.deferred, 1);
-  assert.equal(store.saved.length, 0);
+  assert.equal(record.saved.length, 0);
 });
 
 test('the cached hash index is rebuilt once per working pass', async () => {
-  const store = buildStore([TICKET, { ...TICKET, id: 't2' }]);
+  const record = buildStore([TICKET, { ...TICKET, id: 't2' }]);
   const lookup = buildLookup();
-  await runCustomerResolution({ store, lookup, shopId: 's1', now: NOW });
+  await runCustomerResolution({ record, lookup, now: NOW });
 
   assert.equal(lookup.refreshes, 1);
   assert.equal(lookup.calls.length, 2);
 });
 
 test('a dry run resolves but writes nothing', async () => {
-  const store = buildStore([TICKET]);
-  const totals = await runCustomerResolution({ store, lookup: buildLookup(), shopId: 's1', now: NOW, dryRun: true });
+  const record = buildStore([TICKET]);
+  const totals = await runCustomerResolution({ record, lookup: buildLookup(), now: NOW, dryRun: true });
 
   assert.equal(totals.linked, 1);
-  assert.equal(store.saved.length, 0);
+  assert.equal(record.saved.length, 0);
 });
 
 test('the log line carries counts only', async () => {
   const logged = [];
-  const store = buildStore([TICKET]);
+  const record = buildStore([TICKET]);
   await runCustomerResolution({
-    store,
+    record,
     lookup: buildLookup(),
-    shopId: 's1',
     now: NOW,
     logger: { info: (event, fields) => logged.push({ event, fields }) }
   });

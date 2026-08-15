@@ -1,8 +1,5 @@
 import { ratchetLevel } from '../../../scripts/lib/support-taxonomy.mjs';
-import {
-  supabaseSelect,
-  supabaseUpdateById
-} from '../../../scripts/lib/supabase-rest-client.mjs';
+import { attemptsSoFar } from '../../../scripts/lib/ticket-record.mjs';
 
 import { normaliseCategorisation } from './categorise.mjs';
 
@@ -21,9 +18,11 @@ import { normaliseCategorisation } from './categorise.mjs';
 // code path serves both. A ticket's labels are a reading of the conversation so
 // far, not a stamp applied once to its first email.
 //
-// The store interface is injected so the batching, retry and fallback logic can
-// be unit-tested without a database; createSupabaseCategoriserStore is the real
-// impl.
+// The ticket record is injected so the batching, retry and fallback logic can be
+// unit-tested without a database. It is the shared one —
+// scripts/lib/ticket-record.mjs — and this pass is one of two that run off a
+// flag, so the claim/complete/skip/retry/abandon cycle below is that module's
+// protocol rather than anything specific to categorisation.
 
 const DEFAULT_BATCH_LIMIT = 25;
 // Failures leave the ticket pending so the next poll retries it. After this many
@@ -38,17 +37,16 @@ const MESSAGES_PER_TICKET = 10;
 const HISTORY_LIMIT = 5;
 
 export async function runCategorisation({
-  store,
+  record,
   categorise,
-  shopId,
   logger,
   limit = DEFAULT_BATCH_LIMIT
 }) {
   const counts = { categorised: 0, recategorised: 0, skipped: 0, failed: 0, fallbacks: 0 };
-  const pending = await store.findTicketsNeedingCategorisation(shopId, limit);
+  const pending = await record.claim('categorisation', { limit });
 
   for (const ticket of pending) {
-    const messages = await store.findInboundMessages(ticket.id, MESSAGES_PER_TICKET);
+    const messages = await record.inboundMessages(ticket.id, { limit: MESSAGES_PER_TICKET });
     if (messages.length === 0) {
       // Nothing from the customer (a thread where we hold only our own replies,
       // because the customer's original fell outside the ingested window). There
@@ -60,7 +58,7 @@ export async function runCategorisation({
       // Safe to clear precisely because it is not permanent: ingestion re-raises
       // the flag the moment an inbound message joins the thread, which is the
       // only event that makes this ticket classifiable.
-      await store.updateTicket(ticket.id, { needs_categorisation: false });
+      await record.skip('categorisation', ticket.id);
       counts.skipped += 1;
       continue;
     }
@@ -70,7 +68,7 @@ export async function runCategorisation({
       // Blind: the ticket's existing labels are deliberately not passed in.
       result = await categorise({ subject: ticket.subject, messages });
     } catch (error) {
-      await handleFailure(store, ticket, error, counts, logger);
+      await handleFailure(record, ticket, error, counts, logger);
       continue;
     }
 
@@ -80,44 +78,36 @@ export async function runCategorisation({
     // calmer follow-up cannot walk back work the ticket has already earned.
     const level = ratchetLevel(ticket.level, result.level);
 
-    await store.updateTicket(ticket.id, {
-      category: result.category,
-      request_kind: result.request_kind,
-      secondary_category: result.secondary_category,
-      secondary_request_kind: result.secondary_request_kind,
-      level,
-      responsible_team: result.responsible_team,
-      // Cleared, not set: the column now means "these labels are known to be
-      // untrustworthy", written only by the failure paths below. A successful
-      // categorisation has no such caveat, and leaving a stale `low` here would
-      // keep flagging a ticket that has since been read cleanly.
-      //
-      // The model is no longer asked how sure it is — see categorise.mjs.
-      categorisation_confidence: null,
-      language: result.language,
-      happiness: result.happiness,
-      categorised_at: new Date().toISOString(),
-      // Cleared last: until this is false the ticket stays in the pending set, so
-      // a crash anywhere above leaves it to be retried rather than half-labelled.
-      needs_categorisation: false,
-      // And raised in the same patch: the ticket now has a subject, which is
-      // what the investigation pass chooses its tools from. This is the ONLY
-      // writer of the flag — ingestion deliberately does not set it, so a thread
-      // is never investigated against labels describing an older conversation
-      // (04_support.sql).
-      needs_investigation: true,
-      metadata: mergeMetadata(ticket.metadata, {
+    // `complete` writes the labels, stamps `categorised_at`, clears
+    // `needs_categorisation` LAST and raises `needs_investigation` in the same
+    // patch — the crash-safety rule and the hand-off between the two passes both
+    // live in ticket-record.mjs now, because both were being restated here and
+    // in the investigation runner.
+    //
+    // It also resets attempts / last_error / failed: a success starts the next
+    // pending cycle clean, so a ticket that stumbled twice months ago gets its
+    // full three attempts again when a reply puts it back in the queue.
+    await record.complete('categorisation', ticket, {
+      columns: {
+        category: result.category,
+        request_kind: result.request_kind,
+        secondary_category: result.secondary_category,
+        secondary_request_kind: result.secondary_request_kind,
+        level,
+        responsible_team: result.responsible_team,
+        // Cleared, not set: the column now means "these labels are known to be
+        // untrustworthy", written only by the failure paths below. A successful
+        // categorisation has no such caveat, and leaving a stale `low` here would
+        // keep flagging a ticket that has since been read cleanly.
+        //
+        // The model is no longer asked how sure it is — see categorise.mjs.
+        categorisation_confidence: null,
+        language: result.language,
+        happiness: result.happiness
+      },
+      trail: {
         model: result.model,
         reason: result.reason,
-        at: new Date().toISOString(),
-        // Consecutive failures in the CURRENT pending cycle, so it resets here:
-        // a ticket that stumbled twice months ago must get its full three
-        // attempts again when a new reply puts it back in the queue.
-        attempts: 0,
-        // Errors belong to the attempt that failed; a success clears them so a
-        // long-lived ticket does not carry a stale error next to good labels.
-        last_error: null,
-        failed: null,
         runs: runsSoFar(ticket.metadata) + 1,
         // What the model actually said, before the ratchet — otherwise a
         // ticket pinned at 3 by an earlier message looks like the model keeps
@@ -126,7 +116,7 @@ export async function runCategorisation({
         history: isRecategorisation
           ? appendHistory(ticket.metadata, ticket)
           : historySoFar(ticket.metadata)
-      })
+      }
     });
 
     if (isRecategorisation) {
@@ -158,20 +148,14 @@ export async function runCategorisation({
   return counts;
 }
 
-async function handleFailure(store, ticket, error, counts, logger) {
-  const attempts = attemptsSoFar(ticket.metadata) + 1;
+async function handleFailure(record, ticket, error, counts, logger) {
+  const attempts = attemptsSoFar(ticket.metadata, 'categorisation') + 1;
   logger?.warn?.('categorise.error', { ticketId: ticket.id, attempts, message: error.message });
 
   if (attempts < MAX_ATTEMPTS) {
-    // Still retryable: record the attempt but leave category null so the next
-    // poll picks it up again.
-    await store.updateTicket(ticket.id, {
-      metadata: mergeMetadata(ticket.metadata, {
-        attempts,
-        last_error: error.message,
-        at: new Date().toISOString()
-      })
-    });
+    // Still retryable: `retry` records the attempt and touches no flag, so the
+    // ticket stays in the pending set and the next poll picks it up again.
+    await record.retry('categorisation', ticket, { attempts, error });
     counts.failed += 1;
     return;
   }
@@ -183,18 +167,9 @@ async function handleFailure(store, ticket, error, counts, logger) {
   // are either stale or a fallback, and investigating a guess would spend tool
   // and model calls building a case file on a subject nobody chose. Both
   // branches below already land the ticket in front of a human.
-  const patch = {
+  const columns = {
     // The labels no longer reflect the newest message, whichever branch we take.
-    categorisation_confidence: 'low',
-    categorised_at: new Date().toISOString(),
-    needs_categorisation: false,
-    metadata: mergeMetadata(ticket.metadata, {
-      attempts,
-      failed: true,
-      last_error: error.message,
-      reason: 'categorisation failed, routed to a human',
-      at: new Date().toISOString()
-    })
+    categorisation_confidence: 'low'
   };
 
   if (ticket.category) {
@@ -212,7 +187,7 @@ async function handleFailure(store, ticket, error, counts, logger) {
     // The metadata says it was not actually judged, so a fallback is never read
     // as a verdict.
     const fallback = normaliseCategorisation({});
-    Object.assign(patch, {
+    Object.assign(columns, {
       category: fallback.category,
       request_kind: fallback.request_kind,
       secondary_category: null,
@@ -223,14 +198,16 @@ async function handleFailure(store, ticket, error, counts, logger) {
     logger?.error?.('categorise.fallback', { ticketId: ticket.id, attempts });
   }
 
-  await store.updateTicket(ticket.id, patch);
+  // `abandon` clears the flag and stamps `categorised_at`, and deliberately does
+  // NOT raise needs_investigation — see the note above and ticket-record.mjs.
+  await record.abandon('categorisation', ticket, {
+    columns,
+    trail: { reason: 'categorisation failed, routed to a human' },
+    attempts,
+    error
+  });
   counts.failed += 1;
   counts.fallbacks += 1;
-}
-
-function attemptsSoFar(metadata) {
-  const attempts = metadata?.categorisation?.attempts;
-  return Number.isInteger(attempts) ? attempts : 0;
 }
 
 function runsSoFar(metadata) {
@@ -260,55 +237,8 @@ function appendHistory(metadata, ticket) {
   return [superseded, ...historySoFar(metadata)].slice(0, HISTORY_LIMIT);
 }
 
-// metadata is a single jsonb column shared with anything else that annotates a
-// ticket, so patch the `categorisation` key rather than replacing the object.
-function mergeMetadata(metadata, categorisation) {
-  const base = metadata && typeof metadata === 'object' ? metadata : {};
-  return { ...base, categorisation: { ...base.categorisation, ...categorisation } };
-}
-
-export function createSupabaseCategoriserStore(supabase) {
-  return {
-    async findTicketsNeedingCategorisation(shopId, limit) {
-      return supabaseSelect(
-        supabase,
-        'tickets',
-        {
-          shop_id: shopId,
-          status: 'open',
-          // The flag, not "category is null": that older predicate could only
-          // ever match a ticket once, which is what froze a label at the state
-          // of a thread's first email. Set on insert and re-set by ingestion
-          // when a new inbound message lands (04_support.sql).
-          needs_categorisation: { operator: 'is', value: 'true' },
-          deleted_at: { operator: 'is', value: 'null' },
-          archived_at: { operator: 'is', value: 'null' }
-        },
-        // category / request_kind / level / happiness come back because a re-run
-        // needs the previous reading: the level to ratchet against, the rest to
-        // put into the history trail before they are replaced.
-        'id,subject,metadata,category,request_kind,level,happiness',
-        // Oldest first: a support queue is served in arrival order.
-        { order: 'first_message_at.asc', limit }
-      );
-    },
-
-    async findInboundMessages(ticketId, limit) {
-      return supabaseSelect(
-        supabase,
-        'ticket_messages',
-        {
-          ticket_id: ticketId,
-          direction: 'inbound',
-          deleted_at: { operator: 'is', value: 'null' }
-        },
-        'subject,body_text,received_at',
-        { order: 'received_at.asc', limit }
-      );
-    },
-
-    async updateTicket(ticketId, patch) {
-      await supabaseUpdateById(supabase, 'tickets', ticketId, patch);
-    }
-  };
-}
+// The store this file used to define is now the shared ticket record: the queue
+// predicate is the `categorisation` descriptor in scripts/lib/ticket-record.mjs,
+// the inbound-message reader is `record.inboundMessages` (it was written
+// identically here and in the investigation runner), and `mergeMetadata` is that
+// module's trail merge — it existed twice, character for character.

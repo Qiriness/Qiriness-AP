@@ -19,6 +19,7 @@ const MAX_PAGES_PER_RUN = 1000; // safety valve against a pathological paginatio
 export async function runDeltaPoll({
   graphClient,
   store,
+  record,
   cursorStore,
   shopId,
   logger,
@@ -110,7 +111,7 @@ export async function runDeltaPoll({
       kept.push(item);
     }
 
-    const counts = await writeIngestedMessages(store, shopId, kept, {
+    const counts = await writeIngestedMessages(store, record, shopId, kept, {
       triage,
       audit,
       embedMessage,
