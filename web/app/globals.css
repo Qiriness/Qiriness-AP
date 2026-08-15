@@ -34,6 +34,16 @@
   --error-050: #fef2f2;
   --error-100: #f6d5d5;
 
+  /* Gold — VIP, and nothing else in the app.
+     Deliberately NOT --warning: that ramp is orange and owns "something is
+     wrong". Gold is metallic and cooler, so a VIP row reads as a status the
+     customer holds rather than an alarm on the ticket.
+     Two steps only, unlike the ramps above: a VIP is a BORDER, not a fill, so
+     there is no wash and no text sitting on one. Add the tint back if that
+     ever changes rather than keeping a step nothing paints with. */
+  --gold-strong: #a5821c; /* the crown, and the row's left rule */
+  --gold-100: #efe3bb; /* the hairline rules */
+
   /* Text roles */
   --text-strong: var(--ink);
   --text-default: #23303b;

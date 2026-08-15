@@ -1,7 +1,7 @@
 "use client";
 
 import { Fragment, useState } from "react";
-import { ChevronDownIcon, ChevronRightIcon } from "@/components/icons";
+import { ChevronDownIcon, ChevronRightIcon, CrownIcon } from "@/components/icons";
 import { Button } from "@/components/ui/Button";
 import type { TicketListItem } from "@/lib/types";
 import {
@@ -108,7 +108,16 @@ export function TicketTable({
             return (
               <Fragment key={ticket.id}>
                 <tr
-                  className={`${styles.rowClickable} ${expanded ? styles.rowExpanded : ""}`}
+                  className={[
+                    styles.rowClickable,
+                    expanded ? styles.rowExpanded : "",
+                    // A VIP's whole row is gold-ruled, not just a chip under
+                    // the name. The class goes on the row so the rules can be
+                    // drawn on its edge cells — see the stylesheet.
+                    ticket.isVip ? styles.rowVip : "",
+                  ]
+                    .filter(Boolean)
+                    .join(" ")}
                   onClick={() => toggle(ticket.id)}
                 >
                   <td className={styles.moodCol}>
@@ -167,15 +176,29 @@ export function TicketTable({
                         has no account, and that is a normal ticket rather than a
                         gap. The two agree often enough that showing both would
                         just be noise. */}
-                    <span className={styles.requesterName}>
-                      {ticket.customerName?.trim() ||
-                        ticket.requesterName?.trim() || <span className={styles.muted}>Unknown</span>}
-                    </span>
-                    {ticket.isVip && (
-                      <span className={styles.vip} title={`RFM segment: ${ticket.rfmGroup}`}>
-                        VIP
+                    <span className={styles.requesterLine}>
+                      <span className={styles.requesterName}>
+                        {ticket.customerName?.trim() ||
+                          ticket.requesterName?.trim() || <span className={styles.muted}>Unknown</span>}
                       </span>
-                    )}
+                      {/* The crown follows the name, and the flex row is what
+                          keeps it: the NAME truncates, the crown never does —
+                          the one thing worth spotting at a glance must not be
+                          the first thing a long name pushes out.
+
+                          aria-hidden icon plus visually-hidden text, because a
+                          crown announces nothing on its own and this replaced a
+                          chip that literally read "VIP". */}
+                      {ticket.isVip && (
+                        <span
+                          className={styles.vipMark}
+                          title={`VIP — RFM segment: ${ticket.rfmGroup}`}
+                        >
+                          <CrownIcon size={14} />
+                          <span className={styles.srOnly}>VIP customer</span>
+                        </span>
+                      )}
+                    </span>
                   </td>
 
                   <td>

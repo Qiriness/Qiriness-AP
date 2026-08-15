@@ -209,29 +209,128 @@
   max-width: 20ch;
 }
 
-/* The name truncates; the badge beside it must not, or the one thing worth
-   spotting at a glance is the first thing to disappear on a long name. */
+/* The name truncates; the mark beside it must not, or the one thing worth
+   spotting at a glance is the first thing to disappear on a long name. That is
+   what the flex row buys: the name is the only item allowed to shrink. */
+.requesterLine {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
 .requesterName {
-  display: block;
+  /* `0 1 auto`, not `1 1 auto`: the name may SHRINK (so it ellipsises) but must
+     not GROW, or it fills the cell and shoves the crown out to the far right
+     where it reads as its own column rather than as part of the name.
+     min-width: 0 is what lets a flex item ellipsis at all — without it the item
+     refuses to shrink below its content and the cell widens instead. */
+  flex: 0 1 auto;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-/* Teal, not red or gold: this is the app's one accent, and a VIP is a fact
-   about the customer rather than a warning about the ticket — level and mood
-   already own "this needs attention". */
-.vip {
-  display: inline-block;
-  margin-top: 2px;
-  padding: 1px 6px;
-  border: 1px solid var(--teal-100);
-  border-radius: var(--radius-pill);
-  background: var(--teal-050);
-  font-size: var(--text-caption);
-  font-weight: var(--weight-semibold);
-  letter-spacing: 0.04em;
-  color: var(--teal-ink);
+/* ── VIP ──────────────────────────────────────────────────────────────────
+   A VIP used to be a teal chip under the requester's name, on the reasoning
+   that teal is the app's one accent and a VIP is a fact about the CUSTOMER
+   rather than a warning about the TICKET. That reasoning was sound and the
+   call was reversed deliberately: at 8 rows visible a chip in the fourth
+   column is missed, and knowing you are about to open a champion's ticket is
+   worth seeing from the row rather than from a word inside it.
+
+   A GOLD BORDER, NOT A GOLD ROW. The first attempt filled the row as well, and
+   75 of 214 tickets are VIP — a third of the queue washed gold is more of the
+   screen than the fact deserves, and it starts competing with level and mood,
+   which own urgency. The border says the same thing and stays out of the way.
+   The crown sits beside the name rather than in the row's corner, where it
+   reads as belonging to the person rather than to the ticket.
+
+   If this ever starts pulling attention off a level 4, it is too strong: turn
+   the tokens down before turning the feature off. */
+
+/* The row, ruled on all four edges and NOT filled. The border is the whole
+   signal — a wash across a third of the queue was too much of the screen.
+
+   THE RULES ARE INSET SHADOWS, NOT BORDERS, AND THAT IS THE WHOLE TRICK. An
+   ordinary row carries only a bottom border, so giving a VIP row a top and two
+   sides made it 1px taller than its neighbours and pushed the mood face 2px
+   right — measured, 68px against 67px, a visible limp down a column of 214
+   rows. An inset shadow paints in the same place and takes no space.
+
+   The BOTTOM is the exception and stays a real border: every row already has
+   one, so recolouring it costs no height, and a border sits above an inset
+   shadow — a grey hairline would otherwise show through the gold. */
+.table tbody tr.rowVip > * {
+  --vip-edges: inset 0 1px 0 var(--gold-100);
+  box-shadow: var(--vip-edges);
+  border-bottom-color: var(--gold-100);
+}
+
+.table tbody tr.rowVip > *:first-child {
+  box-shadow: var(--vip-edges), inset 2px 0 0 var(--gold-strong);
+}
+
+.table tbody tr.rowVip > *:last-child {
+  box-shadow: var(--vip-edges), inset -1px 0 0 var(--gold-100);
+}
+
+/* The last row drops its bottom border (see above), so a VIP sitting there
+   would be the one open-bottomed box in the table. Given back as a shadow,
+   which is what the other three edges already are. */
+.table tbody tr.rowVip:last-child > * {
+  box-shadow: var(--vip-edges), inset 0 -1px 0 var(--gold-100);
+}
+
+.table tbody tr.rowVip:last-child > *:first-child {
+  box-shadow: var(--vip-edges), inset 0 -1px 0 var(--gold-100),
+    inset 2px 0 0 var(--gold-strong);
+}
+
+.table tbody tr.rowVip:last-child > *:last-child {
+  box-shadow: var(--vip-edges), inset 0 -1px 0 var(--gold-100),
+    inset -1px 0 0 var(--gold-100);
+}
+
+/* No hover override: an unfilled VIP row is the same white as every other row,
+   so it takes the table's ordinary teal hover. Overriding it to gold would make
+   a VIP the one row that highlights differently for no reason the user can act
+   on — the border already says what there is to say. */
+
+/* Expanded, the row and its panel are one block: the seam between them is
+   dropped and the panel picks the rules up below. */
+.table tbody tr.rowVip.rowExpanded > * {
+  border-bottom-color: transparent;
+}
+
+/* The detail row immediately follows its ticket row, so it can be selected from
+   it — this is what carries the gold around the panel instead of stopping it
+   halfway down an open ticket. No top rule: the seam is exactly what is being
+   hidden, and no background: the panel keeps its own. */
+.table tbody tr.rowVip + .detailRow > * {
+  border-bottom-color: var(--gold-100);
+  box-shadow: inset 2px 0 0 var(--gold-strong), inset -1px 0 0 var(--gold-100);
+}
+
+/* The panel inside that cell draws its own teal left rule, which lands on top
+   of the gold one and stops the border halfway down an open ticket. Reaching
+   past the cell to the panel root is deliberate and is the narrowest thing that
+   works: CSS Modules scope class names per file, so this cannot name
+   TicketDetailPanel's own class, and the alternative is plumbing a `vip` prop
+   through the table for a purely decorative edge. Only the colour of that one
+   rule is touched — the panel's background and internals stay its own. */
+.table tbody tr.rowVip + .detailRow .detailCell > * {
+  border-left-color: var(--gold-strong);
+}
+
+/* The mark, inline after the requester's name. `flex: none` so it is never the
+   thing that gives way when the name is long. */
+.vipMark {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  color: var(--gold-strong);
 }
 
 .category {

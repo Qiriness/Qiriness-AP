@@ -672,6 +672,18 @@ Shopify recomputes `rfm_group` as a customer buys, so a flag copied onto a ticke
 
 `TICKET_LIST_SELECT` is shared by the list read **and** `setTicketStatus`, which passes it to PostgREST as the PATCH's `select`. The row a mutation returns replaces a row the list rendered, so without the embed closing a ticket would silently strip the VIP badge off it.
 
+### A VIP is a gold row, not a chip — reversing an earlier call
+
+The badge was a teal chip under the requester's name, on the reasoning that teal is the app's one accent and a VIP is a fact about the **customer** rather than a warning about the **ticket**, with level and mood already owning "this needs attention". That reasoning was sound and was overruled deliberately: eight rows are visible at a time and a chip in the fourth column is missed, whereas knowing you are about to open a champion's ticket is worth seeing from the row itself. The row now carries a **gold border**, and a crown sits **beside the requester's name**.
+
+**A border, not a filled row.** The first version washed the whole row gold as well. **75 of 214 tickets are VIP (35%)**, and a third of the queue tinted is more of the screen than the fact deserves — exactly the competition with level and mood that the old rule warned about. The border says the same thing and stays out of the way. The crown moved off the row's corner for the same kind of reason: next to the name it reads as belonging to the person, in the corner it read as a property of the ticket.
+
+That 35% is the number to watch. If this ever pulls attention off a level 4, it is too strong — turn the tokens down rather than turning the feature off.
+
+**The rules are inset box-shadows, not borders.** An ordinary row carries only a bottom border, so giving a VIP row a top and two sides made it 1px taller than its neighbours and pushed the mood face 2px right — measured at 68px against 67px, a visible limp down a column of 214 rows. The bottom edge stays a real border, because every row already has one and a border paints over an inset shadow.
+
+Gold is its own token pair, not `--warning`: that ramp is orange and owns "something is wrong". Two steps only — a rule colour and a hairline — because a border needs no wash and no text sitting on one.
+
 ### Stats and filters
 
 **The four header cards** recompute from the same array the tables render (`summariseTickets`, isomorphic and pure), so a card can never disagree with the rows under it.

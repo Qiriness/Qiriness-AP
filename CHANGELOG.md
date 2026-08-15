@@ -10,6 +10,19 @@ Three sibling files carry the other halves, and this one deliberately does not d
 
 ---
 
+## VIP is a gold ticket (2026-08-15)
+
+- **The whole row, not a chip.** A VIP was a teal pill under the requester's name; it is now a gold rule on all four edges of the row, with a crown beside the name. Eight rows are visible at a time and a chip in the fourth column is missed — knowing you are about to open a champion's ticket is worth seeing from the row.
+- **This reverses a recorded call, and the reasoning it reversed was sound**: teal is the app's one accent, and a VIP is a fact about the customer rather than a warning about the ticket.
+- **Filled first, then pulled back to a border.** The first version washed the row gold as well and put the crown in its top-right corner. **75 of 214 tickets are VIP (35%)** — a third of the queue tinted is more of the screen than the fact deserves, and it is exactly the competition with level and mood the old rule warned about. The border carries it; the crown reads as the person's rather than the ticket's next to the name.
+- **The rules are inset box-shadows, not borders, and that is load-bearing.** Drawn as borders, a VIP row measured 68px against its neighbours' 67 and its mood face sat 2px right — a visible limp down a column of 214 rows. Shadows paint in the same place and take no space. The bottom edge stays a real border, since every row already has one and a border paints over an inset shadow.
+- **Gold is its own token pair** (`--gold-strong`, `--gold-100`), not `--warning` — that ramp is orange and owns "something is wrong". Two steps, not the usual three: dropping the fill orphaned the wash and the text-on-tint colour, and they went with it rather than sitting unused.
+- **The crown is the set's only filled icon.** At the 14px it renders, a 1.6px outline turns to mush; it has to read as a crown at a glance or it is a gold smudge. The requester cell is a flex row so the NAME truncates and the crown never does — the one thing worth spotting must not be what a long name pushes out — and the name is `flex: 0 1 auto`, since letting it grow shoves the crown to the far side of the cell where it reads as its own column.
+- **The pictogram announces nothing on its own**, so it is `aria-hidden` with visually-hidden "VIP customer" beside it — it replaced a chip that literally read "VIP", and the RFM segment is still on the `title`.
+- **Verified in the browser, not just typechecked:** collapsed and expanded, with the gold carried around the detail panel (which paints its own background and teal rule over the cell, so the panel root is overridden); row heights and the mood-face position confirmed identical to ordinary rows.
+
+---
+
 ## The database layer gets owners (2026-08-15)
 
 Four refactors, chosen from an architecture review of everything that touches Supabase. No behaviour was intended to change; the tests that encode the behaviour were kept and extended.

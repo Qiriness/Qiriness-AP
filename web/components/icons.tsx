@@ -254,3 +254,27 @@ export const CollapseIcon = (p: IconProps) => (
     <path d="M18 6v12" />
   </Base>
 );
+
+/**
+ * VIP. The only crown in the set, and the only place gold is used.
+ *
+ * Drawn on the same 24×24 grid as everything else, but this one is FILLED
+ * rather than stroked: at the 13px it renders on a ticket row a five-point
+ * outline turns to mush, and the shape has to be readable as a crown at a
+ * glance or it is just a gold smudge.
+ */
+export const CrownIcon = ({ size = 20, ...props }: IconProps) => (
+  <svg
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="currentColor"
+    stroke="none"
+    aria-hidden="true"
+    focusable="false"
+    {...props}
+  >
+    <path d="M4 18.2h16a.8.8 0 0 1 0 1.6H4a.8.8 0 0 1 0-1.6Z" />
+    <path d="M3.4 7.1a1.4 1.4 0 1 1 1.32 1.86l1.2 5.2a1 1 0 0 0 .98.78h10.2a1 1 0 0 0 .98-.78l1.2-5.2a1.4 1.4 0 1 1 1.32-1.86 1.4 1.4 0 0 1-2.06 1.24l-2.9 2.3a1 1 0 0 1-1.5-.3L12 6.9l-2.14 3.44a1 1 0 0 1-1.5.3l-2.9-2.3A1.4 1.4 0 0 1 3.4 7.1Z" />
+  </svg>
+);
