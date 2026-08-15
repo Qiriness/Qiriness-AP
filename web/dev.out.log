@@ -7,3 +7,9 @@
 
  ✓ Starting...
  ✓ Ready in 3.1s
+ ○ Compiling /tickets ...
+ ✓ Compiled /tickets in 6.5s (788 modules)
+ GET /tickets 200 in 8628ms
+ GET /tickets 200 in 1245ms
+ GET /tickets 200 in 958ms
+ GET /tickets 200 in 791ms
