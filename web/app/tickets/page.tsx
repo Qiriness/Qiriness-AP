@@ -12,9 +12,9 @@ export const dynamic = "force-dynamic";
 export const metadata = { title: "Tickets · Qiriness Support OS" };
 
 /**
- * Tickets. Three sections over two tables: the live queue and everything closed
- * both come from `tickets`, while the middle "irrelevant" section comes from
- * `spam_audit` — mail the gate dropped is never written to `tickets` at all.
+ * Tickets. Four sections over two tables: Queue, Backlog and Closed all come
+ * from `tickets`, while "Irrelevant" comes from `spam_audit` — mail the gate
+ * dropped is never written to `tickets` at all.
  *
  * Loads server-side for the same reason Agent Setup and Settings do: the list
  * renders with real rows on first paint instead of flashing empty. Filtering,

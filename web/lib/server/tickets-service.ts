@@ -22,6 +22,7 @@
 
 import { loadConfig } from "../../../scripts/lib/sync-config.mjs";
 import { formatRfmGroup, isVipRfmGroup } from "../../../scripts/lib/customer-segments.mjs";
+import { priorityBand, scorePriority } from "../../../scripts/lib/ticket-priority.mjs";
 import {
   createSupabaseClient,
   supabaseSelect,
@@ -38,6 +39,7 @@ import type {
   TicketHappiness,
   TicketLevel,
   TicketListItem,
+  TicketPriorityBand,
   TicketMessage,
   TicketStatus,
   TicketThread,
@@ -65,7 +67,7 @@ function getRecord(shopId: string) {
 // against the other by the migration tests.
 
 /**
- * Every live ticket, newest activity first, with its message count.
+ * Every live ticket, priority first, with its message count.
  *
  * Soft-deleted rows are excluded at the query rather than in the mapper: a
  * compliance delete must not reach the UI even if a later caller forgets to
@@ -84,7 +86,7 @@ function getRecord(shopId: string) {
  */
 export async function listTickets(shopId: string): Promise<TicketListItem[]> {
   const rows = await getRecord(shopId).queue();
-  return (rows as any[]).map(mapTicketRow).sort(byLastActivityDesc);
+  return (rows as any[]).map(mapTicketRow).sort(byPriorityThenLastActivityDesc);
 }
 
 /**
@@ -242,8 +244,11 @@ export async function setTicketStatus(
   return mapTicketRow(row);
 }
 
-/** Newest activity first, falling back to arrival for a ticket with neither. */
-function byLastActivityDesc(a: TicketListItem, b: TicketListItem): number {
+/** Highest priority first, newest activity breaking ties. */
+function byPriorityThenLastActivityDesc(a: TicketListItem, b: TicketListItem): number {
+  if (a.priorityScore !== b.priorityScore) {
+    return b.priorityScore - a.priorityScore;
+  }
   const at = Date.parse(a.lastMessageAt ?? a.firstMessageAt ?? "") || 0;
   const bt = Date.parse(b.lastMessageAt ?? b.firstMessageAt ?? "") || 0;
   return bt - at;
@@ -274,6 +279,16 @@ function mapCustomer(row: any) {
 }
 
 function mapTicketRow(row: any): TicketListItem {
+  const customer = mapCustomer(row);
+  const level = row.level === null || row.level === undefined ? null : (Number(row.level) as TicketLevel);
+  const priorityScore = scorePriority({
+    level,
+    waitingSince: row.waiting_since ?? null,
+    inboundCount: Number(row.inbound_count ?? 0),
+    status: row.status,
+    isVip: customer.isVip,
+  });
+
   return {
     id: row.id,
     subject: row.subject,
@@ -281,7 +296,7 @@ function mapTicketRow(row: any): TicketListItem {
     category: (row.category as KnowledgeCategory) ?? null,
     secondaryCategory: (row.secondary_category as KnowledgeCategory) ?? null,
     // level is a smallint and nullable until the categoriser has run.
-    level: row.level === null || row.level === undefined ? null : (Number(row.level) as TicketLevel),
+    level,
     // Same shape as level: a smallint that stays null until the categoriser has
     // read the mail. Null is "not scored yet", not "neutral".
     happiness:
@@ -290,12 +305,15 @@ function mapTicketRow(row: any): TicketListItem {
         : (Number(row.happiness) as TicketHappiness),
     responsibleTeam: (row.responsible_team as ResponsibleTeam) ?? null,
     requesterName: row.requester_name,
-    ...mapCustomer(row),
+    ...customer,
+    priorityScore,
+    priorityBand: priorityBand(priorityScore) as TicketPriorityBand,
     orderNumber: row.shopify_order_number,
     // Counted by the `ticket_message_counts` view the queue joins, and
     // `coalesce`d to 0 there — a ticket with no stored message is a row with a
     // zero, not a row that dropped out of the join.
     messageCount: Number(row.message_count ?? 0),
+    waitingSince: row.waiting_since ?? null,
     firstMessageAt: row.first_message_at,
     lastMessageAt: row.last_message_at,
   };

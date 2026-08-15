@@ -17,7 +17,11 @@ import { TicketThreadDialog } from "./TicketThreadDialog";
 import styles from "./TicketTable.module.css";
 
 /** Columns in the row above, so the detail cell spans the whole table. */
-const COLUMN_COUNT = 9;
+const COLUMN_COUNT = 10;
+
+function formatPriorityScore(score: number): string {
+  return Number.isInteger(score) ? String(score) : score.toFixed(1);
+}
 
 interface TicketTableProps {
   tickets: TicketListItem[];
@@ -81,10 +85,11 @@ export function TicketTable({
     <div className={`${styles.scroll} ${height === "tall" ? styles.tall : ""}`}>
       <table className={styles.table}>
         <caption className={styles.srOnly}>
-          {tickets.length.toLocaleString()} tickets, most recent activity first
+          {tickets.length.toLocaleString()} tickets
         </caption>
         <thead>
           <tr>
+            <th scope="col" className={styles.priorityCol}>Priority</th>
             <th scope="col" className={styles.moodCol}>
               <span className={styles.srOnly}>Customer mood</span>
             </th>
@@ -111,15 +116,21 @@ export function TicketTable({
                   className={[
                     styles.rowClickable,
                     expanded ? styles.rowExpanded : "",
-                    // A VIP's whole row is gold-ruled, not just a chip under
-                    // the name. The class goes on the row so the rules can be
-                    // drawn on its edge cells — see the stylesheet.
-                    ticket.isVip ? styles.rowVip : "",
+                    styles[`priority${ticket.priorityBand[0].toUpperCase()}${ticket.priorityBand.slice(1)}`],
                   ]
                     .filter(Boolean)
                     .join(" ")}
                   onClick={() => toggle(ticket.id)}
                 >
+                  <td className={styles.priorityCol}>
+                    <span
+                      className={styles.priorityScore}
+                      title={`Priority score: ${formatPriorityScore(ticket.priorityScore)}`}
+                    >
+                      {formatPriorityScore(ticket.priorityScore)}
+                    </span>
+                  </td>
+
                   <td className={styles.moodCol}>
                     <HappinessFace happiness={ticket.happiness} />
                   </td>

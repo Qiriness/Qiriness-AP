@@ -1,4 +1,4 @@
-// Auto-close: a ticket nobody has touched for three weeks stops sitting in the
+// Auto-close: a ticket nobody has touched for four weeks stops sitting in the
 // queue pretending to be live work.
 //
 // WHY THIS EXISTS. Nothing closed a ticket before this pass, so `status` carried
@@ -9,14 +9,14 @@
 // LEVEL 4 IS EXEMPT AND THAT IS THE WHOLE SAFETY MARGIN. Level 4 is severity,
 // not subject — an explicit threat of legal action or public exposure,
 // hospitalisation, or grave danger (see 04_support.sql). Closing one
-// because nobody replied for three weeks is exactly the case where silence means
+// because nobody replied for four weeks is exactly the case where silence means
 // the opposite of "resolved". Every other level closes, including level 3.
 //
 // Inactivity is measured on `last_message_at`, which ingestion advances for our
 // own replies as well as the customer's — so a thread the team is working stays
 // open even while the customer is quiet.
 
-export const AUTO_CLOSE_AFTER_DAYS = 21;
+export const AUTO_CLOSE_AFTER_DAYS = 28;
 
 /** Already finished: closing these again would rewrite closed_at for nothing. */
 const TERMINAL_STATUSES = new Set(['resolved', 'closed']);
@@ -29,7 +29,7 @@ export const AUTO_CLOSE_EXEMPT_LEVELS = new Set([4]);
  *
  * `awaiting_human` means the agent examined the ticket and concluded a PERSON
  * must act. Silence on one of those does not mean the conversation resolved
- * itself; it means nobody did the work. Closing it after three weeks files a
+ * itself; it means nobody did the work. Closing it after four weeks files a
  * service failure as a completed ticket, and the queue then looks healthy
  * precisely because the backlog was deleted.
  *

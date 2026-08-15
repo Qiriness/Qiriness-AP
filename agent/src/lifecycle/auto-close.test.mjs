@@ -24,16 +24,16 @@ function ticket(overrides = {}) {
 }
 
 test('closes a ticket idle for longer than the window', () => {
-  assert.equal(shouldAutoClose(ticket({ last_message_at: ago(22) }), { now: NOW }), true);
+  assert.equal(shouldAutoClose(ticket({ last_message_at: ago(29) }), { now: NOW }), true);
 });
 
 test('leaves a ticket that is still inside the window', () => {
-  assert.equal(shouldAutoClose(ticket({ last_message_at: ago(20) }), { now: NOW }), false);
+  assert.equal(shouldAutoClose(ticket({ last_message_at: ago(27) }), { now: NOW }), false);
 });
 
-test('the boundary itself closes, so "3 weeks" means 21 days not 22', () => {
-  assert.equal(AUTO_CLOSE_AFTER_DAYS, 21);
-  assert.equal(shouldAutoClose(ticket({ last_message_at: ago(21) }), { now: NOW }), true);
+test('the boundary itself closes, so "4 weeks" means 28 days not 29', () => {
+  assert.equal(AUTO_CLOSE_AFTER_DAYS, 28);
+  assert.equal(shouldAutoClose(ticket({ last_message_at: ago(28) }), { now: NOW }), true);
 });
 
 test('level 4 never auto-closes, however stale', () => {
@@ -98,7 +98,7 @@ test('runAutoClose closes the stale ones and counts the exempt', async () => {
   const record = {
     findInactive: async () => [
       ticket({ id: 'stale-1', last_message_at: ago(40) }),
-      ticket({ id: 'stale-2', level: 3, last_message_at: ago(25) }),
+      ticket({ id: 'stale-2', level: 3, last_message_at: ago(30) }),
       ticket({ id: 'severe', level: 4, last_message_at: ago(99) })
     ],
     close: async (t) => {
@@ -158,9 +158,9 @@ test('the cutoff handed to the record matches the window', async () => {
     close: async () => {}
   };
 
-  await runAutoClose({ record, shopId: 's1', now: NOW, afterDays: 21 });
+  await runAutoClose({ record, shopId: 's1', now: NOW, afterDays: 28 });
 
-  assert.equal(seen.toISOString(), '2026-07-13T12:00:00.000Z');
+  assert.equal(seen.toISOString(), '2026-07-06T12:00:00.000Z');
 });
 
 
@@ -176,7 +176,7 @@ test('a ticket awaiting a human is never auto-closed', () => {
 });
 
 test('a ticket awaiting the CUSTOMER still closes', () => {
-  // The opposite case: we asked, they did not answer for three weeks. That is
+  // The opposite case: we asked, they did not answer for four weeks. That is
   // what the inactivity rule is for.
   assert.equal(
     shouldAutoClose(ticket({ status: 'awaiting_customer', level: 2, last_message_at: ago(40) }), { now: NOW }),

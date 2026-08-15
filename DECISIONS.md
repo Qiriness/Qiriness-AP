@@ -386,11 +386,13 @@ Per message, not per ticket, so a candidate's follow-up still reaches the recipi
 
 ## Lifecycle
 
-### Tickets close themselves after 21 days of silence
+### Tickets close themselves after 28 days of silence
 
 Last pass of every poll, so it sees the timestamps that poll just advanced. Without it `status` carried no information at all — every one of the 565 tickets read `open`, including threads last touched seven months ago.
 
 **Level 4 is exempt and that is the whole safety margin**: it means an explicit legal threat, hospitalisation or a life-threatening condition, and there silence is the opposite of resolved. Level 3 closes with everything else. Inactivity is `last_message_at`, which advances on our own replies too, so a thread the team is working stays open while the customer is quiet. Auto-closed rows are stamped `metadata.closed_reason = 'inactivity'` so they stay distinguishable from a hand close.
+
+The 28-day window gives a ticket at least two weeks in the dashboard Backlog before it is retired, while still using `last_message_at` so any new customer or desk activity restarts the clock.
 
 **The level exemption is applied in JS, not SQL.** PostgREST's `not.eq` on a nullable column drops the NULL rows as well, which would have silently spared every uncategorised ticket — the largest group in the table. There is a regression test for exactly that.
 
@@ -416,7 +418,7 @@ This reverses the earlier rule that only `closed`/`resolved` were rewritten, on 
 
 ### Work handed to a person is never auto-closed
 
-`awaiting_human` is exempt whatever the level. Silence there does not mean the conversation resolved itself; it means nobody did the work, and closing it after three weeks files a service failure as a completed ticket — the queue then looks healthy precisely because the backlog was deleted.
+`awaiting_human` is exempt whatever the level. Silence there does not mean the conversation resolved itself; it means nobody did the work, and closing it after four weeks files a service failure as a completed ticket — the queue then looks healthy precisely because the backlog was deleted.
 
 This distinction could not be drawn when auto-close was written: the investigation set no status, so `level` was the only signal and level 3 was made closable on queue-hygiene grounds. Measured before the change, **67 level-3 tickets** would have closed that way.
 
@@ -684,6 +686,16 @@ That 35% is the number to watch. If this ever pulls attention off a level 4, it 
 
 Gold is its own token pair, not `--warning`: that ramp is orange and owns "something is wrong". Two steps only — a rule colour and a hairline — because a border needs no wash and no text sitting on one.
 
+### Queue priority should be derived at read time
+
+The scorer lives in `scripts/lib/ticket-priority.mjs`, not in a column and not in the `ticket_queue` view. The view supplies facts (`inbound_count`, `waiting_since`); the weights are judgement and need unit tests and cheap tuning, not a migration.
+
+Level 4 is still a hard band at 1000: legal threats and grave personal harm cannot be overtaken by ordinary urgency. Levels 1-3 are normal weights (`10 / 18 / 25`), so the queue is not strict tiering below the emergency band.
+
+Customer wait is the largest ordinary factor (`35`, logarithmic, capped at 14 days). That is deliberate: once the customer is waiting, age should move a ticket harder than one severity step, while still avoiding a linear age score where very old backlog dominates forever. Contacts (`0 / 7 / 11 / 14`), `awaiting_human` (`6`) and VIP (`2`) remain smaller nudges.
+
+This supersedes the VIP row-border treatment above: VIP remains a crown beside the requester name, while row edge colour now belongs to priority. Two border systems on one row would make VIP compete with the operational signal the queue is built around.
+
 ### Stats and filters
 
 **The four header cards** recompute from the same array the tables render (`summariseTickets`, isomorphic and pure), so a card can never disagree with the rows under it.
@@ -693,6 +705,8 @@ Gold is its own token pair, not `--warning`: that ramp is orange and owns "somet
 **Volume windows are rolling (now −24h / −30d), not calendar day and month.** Ingestion runs in bursts; on any day without a poll the calendar figures both read zero and the card looks broken rather than idle. Counted on `first_message_at`, so reviving an old thread does not inflate today's intake.
 
 **Level, not status, is the primary filter.** Every ticket is `open` today because nothing closes them, so status tabs would be one tab holding everything. Filtering, search and sort all run client-side — 565 rows is far too few to justify a round trip per keystroke.
+
+**Backlog is a section split, not a status.** Tickets waiting 14 days or more move below Irrelevant visually, but the row remains an open ticket with the same close action and table format. Storing this as a status would fight the worker-owned statuses (`awaiting_customer`, `awaiting_human`, `forwarded`), and putting it in SQL would duplicate the read-time wait judgement that priority scoring already keeps in JavaScript. It uses `waiting_since` where the view can supply it, then `first_message_at` as the fallback for rows without an inbound wait anchor.
 
 Soft-deleted rows are excluded in the query, not the mapper, so a compliance delete cannot reach the UI via a caller that forgot to filter.
 

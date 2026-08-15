@@ -107,7 +107,7 @@ async function resolveTicket(record, shopId, item, triage, counts, audit) {
       patch.needs_categorisation = true;
 
       // A customer writing back reopens the ticket. Auto-close (see
-      // lifecycle/auto-close.mjs) retires a thread after three weeks of
+      // lifecycle/auto-close.mjs) retires a thread after four weeks of
       // silence; without this, the reply would land on a closed ticket and
       // nobody would see it — the queue would be tidy and wrong.
       //

@@ -41,8 +41,8 @@
      Two steps only, unlike the ramps above: a VIP is a BORDER, not a fill, so
      there is no wash and no text sitting on one. Add the tint back if that
      ever changes rather than keeping a step nothing paints with. */
-  --gold-strong: #a5821c; /* the crown, and the row's left rule */
-  --gold-100: #efe3bb; /* the hairline rules */
+  --gold-strong: #a5821c;
+  --gold-100: #efe3bb;
 
   /* Text roles */
   --text-strong: var(--ink);

@@ -43,7 +43,7 @@ src/
     categorise.mjs           # pure: email text -> (subject, kind) + level + team
     categorise-runner.mjs    # batch pass over uncategorised tickets + Supabase store
   lifecycle/
-    auto-close.mjs           # close after 21 days idle (level 4 exempt); reopen lives in
+    auto-close.mjs           # close after 28 days idle (level 4 exempt); reopen lives in
                              # ticket-writer.mjs, where a reply is already handled
   tools/                     # add-blocklist.mjs, reset-cursor.mjs (the CLIs below)
 eval/

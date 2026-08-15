@@ -287,6 +287,9 @@ export const TICKET_LEVEL_MEANINGS: Record<TicketLevel, string> = {
  */
 export type TicketHappiness = 1 | 2 | 3 | 4;
 
+/** Visual priority tier for the ticket row border. */
+export type TicketPriorityBand = "high" | "medium" | "low";
+
 /** The gloss behind each score, used as the face's tooltip. */
 export const TICKET_HAPPINESS_MEANINGS: Record<TicketHappiness, string> = {
   1: "Happy",
@@ -335,8 +338,23 @@ export interface TicketListItem {
    * stale on any open thread. See scripts/lib/customer-segments.mjs.
    */
   isVip: boolean;
+  /**
+   * Read-time queue score from `scripts/lib/ticket-priority.mjs`.
+   *
+   * Not stored: wait time changes continuously and the weights are business
+   * judgement, so the dashboard receives the current derived value with each
+   * list read.
+   */
+  priorityScore: number;
+  priorityBand: TicketPriorityBand;
   orderNumber: string | null;
   messageCount: number;
+  /**
+   * When the customer has been waiting since, supplied by the `ticket_queue`
+   * view. Falls back to the first message timestamp only where the view cannot
+   * establish an inbound wait.
+   */
+  waitingSince: string | null;
   firstMessageAt: string | null;
   lastMessageAt: string | null;
 }

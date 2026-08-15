@@ -133,6 +133,12 @@ test('the baseline applies, and its projections return what they claim', { skip 
     await message(live.id, 'm-gone', 'inbound', '2026-01-01T10:00:00Z', 'effacé', new Date().toISOString());
 
     await client.query(
+      `update ${schema}.ticket_messages
+       set sent_at = received_at
+       where direction = 'outbound'`
+    );
+
+    await client.query(
       `insert into ${schema}.orders (shop_id, shopify_order_id, name, order_number) values
          ($1, 'gid://o/1', '#4716', 4716),
          ($1, 'gid://o/2', '#6770', 6770),
@@ -149,7 +155,8 @@ test('the baseline applies, and its projections return what they claim', { skip 
 
     await t.test('ticket_message_counts counts live messages only', async () => {
       const { rows } = await client.query(
-        `select ticket_id, message_count from ${schema}.ticket_message_counts where shop_id = $1`,
+        `select ticket_id, message_count, inbound_count, latest_inbound_at, latest_outbound_at
+         from ${schema}.ticket_message_counts where shop_id = $1`,
         [shop.id]
       );
       assert.equal(rows.length, 1, 'only the ticket with messages should appear');
@@ -157,6 +164,9 @@ test('the baseline applies, and its projections return what they claim', { skip 
       // 4 written, 1 soft-deleted. Both directions count: the dashboard shows
       // the size of the conversation, not the size of the customer's half.
       assert.equal(Number(rows[0].message_count), 3);
+      assert.equal(Number(rows[0].inbound_count), 2);
+      assert.ok(rows[0].latest_inbound_at, 'latest inbound timestamp should be present');
+      assert.ok(rows[0].latest_outbound_at, 'latest outbound timestamp should be present');
     });
 
     await t.test('ticket_first_inbound picks the earliest inbound, ignoring ours and the erased', async () => {
@@ -172,7 +182,8 @@ test('the baseline applies, and its projections return what they claim', { skip 
 
     await t.test('ticket_queue joins the customer and the count, and hides erased tickets', async () => {
       const { rows } = await client.query(
-        `select id, subject, customer_display_name, customer_rfm_group, message_count, archived_at
+        `select id, subject, customer_display_name, customer_rfm_group, message_count,
+                inbound_count, waiting_since, archived_at
          from ${schema}.ticket_queue where shop_id = $1 order by subject`,
         [shop.id]
       );
@@ -185,12 +196,16 @@ test('the baseline applies, and its projections return what they claim', { skip 
       assert.equal(linked.customer_display_name, 'Ada Lovelace');
       assert.equal(linked.customer_rfm_group, 'CHAMPIONS');
       assert.equal(Number(linked.message_count), 3);
+      assert.equal(Number(linked.inbound_count), 2);
+      assert.ok(linked.waiting_since, 'the latest inbound is unanswered');
 
       // An unlinked ticket with no messages: the join must yield nulls and a
       // zero, not drop the row.
       const unlinked = rows.find((r) => r.id === archived.id);
       assert.equal(unlinked.customer_display_name, null);
       assert.equal(Number(unlinked.message_count), 0);
+      assert.equal(Number(unlinked.inbound_count), 0);
+      assert.equal(unlinked.waiting_since, null);
     });
 
     await t.test('order_number_range reports the live extremes, in one row', async () => {

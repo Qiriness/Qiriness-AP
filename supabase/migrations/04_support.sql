@@ -1166,7 +1166,8 @@ comment on column public.categorisation_review.retention_delete_after is
 
 -- ------------------------------------------------------- ticket_message_counts
 
--- How many messages a ticket holds.
+-- How many messages a ticket holds, and the inbound/outbound activity facts
+-- the read-time priority scorer needs.
 --
 -- Replaces a full read of ticket_messages in web/lib/server/tickets-service.ts,
 -- which pulled every id in the shop to count them in a Map -- the alternative
@@ -1180,7 +1181,10 @@ with (security_invoker = true) as
   select
     m.shop_id as shop_id,
     m.ticket_id as ticket_id,
-    count(*) as message_count
+    count(*) as message_count,
+    count(*) filter (where m.direction = 'inbound') as inbound_count,
+    max(m.received_at) filter (where m.direction = 'inbound') as latest_inbound_at,
+    max(m.sent_at) filter (where m.direction = 'outbound') as latest_outbound_at
   from public.ticket_messages m
   where m.deleted_at is null
   group by m.shop_id, m.ticket_id;
@@ -1188,7 +1192,7 @@ with (security_invoker = true) as
 revoke all on public.ticket_message_counts from anon, authenticated;
 
 comment on view public.ticket_message_counts is
-  'Message count per ticket, excluding soft-deleted messages. Read by the dashboard queue instead of counting rows client-side.';
+  'Message count and inbound/outbound activity per ticket, excluding soft-deleted messages. Read by the dashboard queue instead of counting rows client-side.';
 
 -- -------------------------------------------------------- ticket_first_inbound
 
@@ -1233,7 +1237,7 @@ comment on view public.ticket_first_inbound is
 --
 -- Folds together what the list read was doing in three parts: the ticket
 -- columns, the customer resolved over tickets.customer_id, and the message
--- count. The customer join was already free (PostgREST resolved it as an embed
+-- count plus the priority scorer's activity facts. The customer join was already free (PostgREST resolved it as an embed
 -- in the same request); the count was not.
 --
 -- SOFT-DELETED TICKETS ARE EXCLUDED IN THE VIEW, not by the caller. A compliance
@@ -1266,7 +1270,14 @@ with (security_invoker = true) as
     c.first_name as customer_first_name,
     c.last_name as customer_last_name,
     c.rfm_group as customer_rfm_group,
-    coalesce(n.message_count, 0) as message_count
+    coalesce(n.message_count, 0) as message_count,
+    coalesce(n.inbound_count, 0) as inbound_count,
+    case
+      when n.latest_inbound_at is not null
+        and (n.latest_outbound_at is null or n.latest_inbound_at > n.latest_outbound_at)
+      then n.latest_inbound_at
+      else null
+    end as waiting_since
   from public.tickets t
   left join public.customers c on c.id = t.customer_id
   left join public.ticket_message_counts n on n.ticket_id = t.id
@@ -1275,4 +1286,4 @@ with (security_invoker = true) as
 revoke all on public.ticket_queue from anon, authenticated;
 
 comment on view public.ticket_queue is
-  'One row per live ticket with its customer and message count already joined -- the projection the dashboard list renders and the status write returns. Soft-deleted tickets are excluded here rather than by the caller; archived ones are kept and filtered in the UI. LEFT JOIN on customers: most tickets are unlinked until the customer-resolution pass runs.';
+  'One row per live ticket with its customer, message count and priority activity facts already joined -- the projection the dashboard list renders and the status write returns. Soft-deleted tickets are excluded here rather than by the caller; archived ones are kept and filtered in the UI. LEFT JOIN on customers: most tickets are unlinked until the customer-resolution pass runs.';

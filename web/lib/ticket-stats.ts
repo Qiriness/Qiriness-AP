@@ -12,8 +12,26 @@ import type { TicketListItem, TicketStats } from "./types";
 /** Statuses that mean "done" and belong in the closed section, not the queue. */
 export const CLOSED_STATUSES = ["resolved", "closed"] as const;
 
+export const BACKLOG_AGE_DAYS = 14;
+export const BACKLOG_AGE_MS = BACKLOG_AGE_DAYS * 24 * 60 * 60 * 1000;
+
 export function isClosed(ticket: TicketListItem): boolean {
   return (CLOSED_STATUSES as readonly string[]).includes(ticket.status);
+}
+
+/**
+ * Backlog is a dashboard section, not a stored status. It uses the same wait
+ * anchor as priority scoring when available, then falls back to first receipt
+ * for old rows where `waiting_since` cannot be established.
+ */
+export function isBacklogTicket(ticket: TicketListItem, now: Date = new Date()): boolean {
+  const anchor = ticket.waitingSince ?? ticket.firstMessageAt;
+  if (!anchor) return false;
+
+  const since = Date.parse(anchor);
+  if (Number.isNaN(since)) return false;
+
+  return now.getTime() - since >= BACKLOG_AGE_MS;
 }
 
 /**

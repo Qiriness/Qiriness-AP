@@ -78,6 +78,9 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |       |                                # descriptors), the needs_* flags, the
 |       |                                # lifecycle timestamps, the metadata trail,
 |       |                                # the queue + thread reads. Shop-scoped
+|       |-- ticket-priority.mjs          # pure read-time queue score + band:
+|       |                                # level, customer wait, inbound contacts,
+|       |                                # awaiting_human, VIP
 |       |-- sync-config.mjs              # CLI + env parsing, loadEnv
 |       |-- hash.mjs collections.mjs html-to-text.mjs text-cleaning.mjs
 |       |-- quoted-reply.mjs             # strips reply chains
@@ -129,7 +132,7 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |   |   |                        # order-verification · order-resolution-runner ·
 |   |   |                        # order-context + order-context-runner
 |   |   |-- routing/             # forward-rules · forwarding-store · forward-runner
-|   |   |-- lifecycle/           # auto-close (21d idle, level 4 exempt)
+|   |   |-- lifecycle/           # auto-close (28d idle, level 4 exempt)
 |   |   `-- tools/               # one CLI per pass -- see Agent CLIs below
 |   `-- eval/                    # categorisation-cases (40 dummy) · score-categorisation ·
 |                                # sample-mailbox (review:sample) · compare-review-labels
@@ -200,7 +203,7 @@ RLS on the tables under it.
 
 | Object | Answers | Replaces |
 | --- | --- | --- |
-| `ticket_message_counts` | messages per ticket, soft-deleted excluded | a full read of `ticket_messages` to count in a Map |
+| `ticket_message_counts` | messages per ticket + inbound/outbound activity facts, soft-deleted excluded | a full read of `ticket_messages` to count in a Map |
 | `ticket_first_inbound` | one row per ticket: its earliest inbound message | a read of every inbound body in the shop, keeping one per ticket |
 | `ticket_queue` | the dashboard row: ticket + customer + count, soft-deleted excluded | `TICKET_LIST_SELECT` + the count join, in `tickets-service.ts` |
 | `order_number_range(shop)` | lowest and highest `order_number`, live orders only | an asc/desc pair of `limit 1` reads |
@@ -244,15 +247,16 @@ All Route Handlers are server-only and use the Supabase service-role key.
 
 ### `/tickets` — the queue
 
-`web/app/tickets/` → `web/components/tickets/`, over `tickets-service.ts` + `dropped-mail-service.ts`. `tickets-service.ts` does not touch `tickets` itself: every read and the one write go through `scripts/lib/ticket-record.mjs`, and the list reads the `ticket_queue` view. Three stacked collapsible sections, each scrolling inside a fixed height:
+`web/app/tickets/` → `web/components/tickets/`, over `tickets-service.ts` + `dropped-mail-service.ts`. `tickets-service.ts` does not touch `tickets` itself: every read and the one write go through `scripts/lib/ticket-record.mjs`, and the list reads the `ticket_queue` view. Queue priority is computed in `scripts/lib/ticket-priority.mjs`; the view supplies facts (`inbound_count`, `waiting_since`), JavaScript owns the tunable judgement. Four stacked collapsible sections, each scrolling inside a fixed height:
 
 | Section | Source | Row action |
 | --- | --- | --- |
-| **Queue** | `tickets`, status not resolved/closed | Close ticket |
+| **Queue** | `tickets`, status not resolved/closed, waiting less than 14 days | Close ticket |
 | **Irrelevant** | `spam_audit`, `outcome = 'blocked'` | Add as ticket *(disabled)* |
+| **Backlog** | `tickets`, status not resolved/closed, waiting 14+ days | Close ticket |
 | **Closed** | `tickets`, status resolved/closed | Reopen ticket |
 
-Row interactions: chevron expands the agent's reading (`TicketDetailPanel`: Results · Order · Action); subject opens the conversation (`TicketThreadDialog`: draft + email chain). In the Irrelevant table the subject opens the dropped email (`DroppedMailDialog`). Four header cards, level tabs, search, category filter and sort — all client-side over the full set.
+Row interactions: chevron expands the agent's reading (`TicketDetailPanel`: Results · Order · Action); subject opens the conversation (`TicketThreadDialog`: draft + email chain). In the Irrelevant table the subject opens the dropped email (`DroppedMailDialog`). Four header cards, level tabs, search, category filter and sort — all client-side over the open-ticket set, then split into Queue and Backlog.
 
 ### `/settings` — forwarding address book
 
@@ -276,7 +280,7 @@ Run `npm run ingest:once` or `npm start` from `agent/`. One poll runs every pass
 | 10 | **Investigation** (LLM + tools) — decompose (only if long / 2 subjects / 2 `?`), then 6 tool calls +2 per extra task, 4 turns, `ENABLED_SUBJECTS` only | `investigation/investigation-runner.mjs` |
 | 11 | **Order resolution** then **order context** | `resolution/order-*-runner.mjs` |
 | 12 | **Forwarding** — `contact` kind + a configured address; needs `Mail.Send` | `routing/forward-runner.mjs` |
-| 13 | **Auto-close** — 21d idle, level 4 exempt; last so it sees this poll's timestamps | `lifecycle/auto-close.mjs` |
+| 13 | **Auto-close** — 28d idle, level 4 exempt; last so it sees this poll's timestamps | `lifecycle/auto-close.mjs` |
 | 14 | **Retention purge** — nulls expired `spam_audit` bodies; best-effort | `ingestion/spam-audit.mjs` |
 
 Built through Phase 4 (retrieval tools + the agent that uses them). **Drafting is Phase 5 and is not built.**

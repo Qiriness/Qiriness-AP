@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { SearchIcon } from "@/components/icons";
 import { setTicketStatus } from "@/lib/api/tickets";
 import { knowledgeErrorMessage } from "@/lib/api/knowledge";
-import { isClosed, summariseTickets } from "@/lib/ticket-stats";
+import { isBacklogTicket, isClosed, summariseTickets } from "@/lib/ticket-stats";
 import type { DroppedMail, KnowledgeCategory, TicketListItem } from "@/lib/types";
 import { CATEGORY_LABELS, TICKET_CATEGORIES } from "@/lib/types";
 import { DroppedMailTable } from "./DroppedMailTable";
@@ -21,55 +21,57 @@ interface TicketsViewProps {
 
 /** `null` level = the categoriser has not reached the ticket yet. */
 type LevelFilter = "all" | "4" | "3" | "2" | "1" | "uncategorised";
-type SortOrder = "recent" | "oldest" | "severity";
+type SortOrder = "priority" | "recent" | "oldest" | "severity";
 
 const SORT_LABELS: Record<SortOrder, string> = {
+  priority: "Highest priority",
   recent: "Most recent activity",
   oldest: "Oldest activity",
   severity: "Highest level first",
 };
 
 /**
- * Tickets, in three stacked sections: the live queue, the mail the spam gate
- * dropped, and everything closed.
+ * Tickets, in four stacked sections: the live queue, older open backlog, the
+ * mail the spam gate dropped, and everything closed.
  *
  * Tickets are held in state rather than read straight from the prop, because
  * closing or reopening one moves it between sections immediately — waiting on a
  * server round trip to see a row move would make the button feel broken. The
  * cards recompute from the same state, so they never disagree with the rows.
  *
- * The toolbar filters the QUEUE only. Applying a level filter to closed tickets
- * and to dropped mail (which has no level at all) would mean three different
- * meanings for one control.
+ * The toolbar filters open tickets only. Queue and Backlog are the same ticket
+ * set split by age, while closed tickets and dropped mail have different
+ * meanings and stay outside the filter.
  */
 export function TicketsView({ initialTickets, droppedMail, loadError }: TicketsViewProps) {
   const [tickets, setTickets] = useState(initialTickets);
   const [level, setLevel] = useState<LevelFilter>("all");
   const [category, setCategory] = useState<KnowledgeCategory | "all">("all");
   const [query, setQuery] = useState("");
-  const [sort, setSort] = useState<SortOrder>("recent");
+  const [sort, setSort] = useState<SortOrder>("priority");
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
 
   const stats = useMemo(() => summariseTickets(tickets), [tickets]);
-  const queue = useMemo(() => tickets.filter((ticket) => !isClosed(ticket)), [tickets]);
+  const openTickets = useMemo(() => tickets.filter((ticket) => !isClosed(ticket)), [tickets]);
   const closed = useMemo(() => tickets.filter(isClosed), [tickets]);
 
-  // Tab counts come from the unfiltered queue, so a tab always says how many it
-  // would show — a count that moved with the search would be useless.
+  // Tab counts come from the unfiltered open set, so a tab always says how many
+  // it would show across Queue + Backlog. A count that moved with the search
+  // would be useless.
   const levelCounts = useMemo(() => {
-    const counts = { all: queue.length, "4": 0, "3": 0, "2": 0, "1": 0, uncategorised: 0 };
-    for (const ticket of queue) {
+    const counts = { all: openTickets.length, "4": 0, "3": 0, "2": 0, "1": 0, uncategorised: 0 };
+    for (const ticket of openTickets) {
       if (ticket.level === null) counts.uncategorised += 1;
       else counts[String(ticket.level) as "1" | "2" | "3" | "4"] += 1;
     }
     return counts;
-  }, [queue]);
+  }, [openTickets]);
 
-  const visible = useMemo(() => {
+  const visibleOpenTickets = useMemo(() => {
     const needle = query.trim().toLowerCase();
 
-    const filtered = queue.filter((ticket) => {
+    const filtered = openTickets.filter((ticket) => {
       if (level === "uncategorised" && ticket.level !== null) return false;
       if (level !== "all" && level !== "uncategorised" && String(ticket.level) !== level) return false;
       if (category !== "all" && ticket.category !== category) return false;
@@ -94,6 +96,9 @@ export function TicketsView({ initialTickets, droppedMail, loadError }: TicketsV
 
     // Sorting a copy: the source array is what every other filter derives from.
     return [...filtered].sort((a, b) => {
+      if (sort === "priority") {
+        if (a.priorityScore !== b.priorityScore) return b.priorityScore - a.priorityScore;
+      }
       if (sort === "severity") {
         // Nulls last — an uncategorised ticket is unknown severity, not low.
         const al = a.level ?? -1;
@@ -104,18 +109,27 @@ export function TicketsView({ initialTickets, droppedMail, loadError }: TicketsV
       const bt = Date.parse(b.lastMessageAt ?? b.firstMessageAt ?? "") || 0;
       return sort === "oldest" ? at - bt : bt - at;
     });
-  }, [queue, level, category, query, sort]);
+  }, [openTickets, level, category, query, sort]);
+
+  const queue = useMemo(
+    () => visibleOpenTickets.filter((ticket) => !isBacklogTicket(ticket)),
+    [visibleOpenTickets]
+  );
+  const backlog = useMemo(
+    () => visibleOpenTickets.filter((ticket) => isBacklogTicket(ticket)),
+    [visibleOpenTickets]
+  );
 
   async function changeStatus(ticket: TicketListItem, status: "open" | "closed") {
     setPendingId(ticket.id);
     setActionError(null);
     try {
       const saved = await setTicketStatus(ticket.id, status);
-      // The response drops message_count (a status flip cannot change it), so
-      // the local count is kept rather than being overwritten with zero.
+      // The API returns the same queue projection as the list, including the
+      // recomputed score after a status change.
       setTickets((current) =>
         current.map((row) =>
-          row.id === ticket.id ? { ...saved, messageCount: row.messageCount } : row
+          row.id === ticket.id ? saved : row
         )
       );
     } catch (error) {
@@ -230,16 +244,16 @@ export function TicketsView({ initialTickets, droppedMail, loadError }: TicketsV
       {/* Announced politely so a filter change reports its result to a screen
           reader without interrupting typing in the search box. */}
       <p className={styles.srOnly} role="status" aria-live="polite">
-        {visible.length} of {queue.length} queued tickets shown
+        {visibleOpenTickets.length} of {openTickets.length} open tickets shown
       </p>
 
       <TicketSection
         title="Queue"
-        count={visible.length}
-        description="Live tickets waiting on support"
+        count={queue.length}
+        description="Open tickets waiting less than two weeks"
       >
         <TicketTable
-          tickets={visible}
+          tickets={queue}
           actionLabel="Close ticket"
           onAction={(ticket) => changeStatus(ticket, "closed")}
           pendingId={pendingId}
@@ -256,6 +270,22 @@ export function TicketsView({ initialTickets, droppedMail, loadError }: TicketsV
         defaultCollapsed
       >
         <DroppedMailTable mail={droppedMail} />
+      </TicketSection>
+
+      <TicketSection
+        title="Backlog"
+        count={backlog.length}
+        description="Open tickets waiting two weeks or more"
+        defaultCollapsed
+      >
+        <TicketTable
+          tickets={backlog}
+          actionLabel="Close ticket"
+          onAction={(ticket) => changeStatus(ticket, "closed")}
+          pendingId={pendingId}
+          emptyTitle="No backlog tickets match these filters"
+          emptyBody="Older open tickets will collect here once they pass two weeks."
+        />
       </TicketSection>
 
       <TicketSection

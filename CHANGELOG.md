@@ -10,6 +10,33 @@ Three sibling files carry the other halves, and this one deliberately does not d
 
 ---
 
+## Backlog auto-close window (2026-08-15)
+
+- **Auto-close now waits 28 idle days instead of 21.** That gives tickets at least two weeks in the Backlog before automatic closure, while still using `last_message_at` so a new customer reply or desk reply keeps the thread open.
+- **Updated lifecycle docs and tests** for the 4-week boundary.
+- **Validated:** `node --test .\agent\src\lifecycle\auto-close.test.mjs` and root `npm.cmd test`.
+
+---
+
+## Tickets backlog section (2026-08-15)
+
+- **Added a Backlog section** between Irrelevant and Closed. It uses the same `TicketTable` format and close action as Queue, and derives membership client-side from open tickets waiting 14 days or more (`waiting_since`, falling back to `first_message_at`).
+- **Open-ticket filters now cover Queue + Backlog together.** Level tabs, search, category and sort apply once to open tickets, then the result is split into the two sections.
+- **Validated:** `npm.cmd run typecheck` and `npm run build` in `web/`.
+
+---
+
+## Queue priority scorer module (2026-08-15)
+
+- **Priority scoring is now a tested pure function**, not a stored column: `scripts/lib/ticket-priority.mjs` scores level, customer wait, inbound contacts, `awaiting_human`, and VIP at read time.
+- **Wired into the Tickets UI:** `ticket_queue` now supplies `inbound_count` and `waiting_since`, the server maps `priorityScore` and `priorityBand`, and the table shows a Priority column before mood/subject.
+- **Priority owns row borders:** high/medium/low rows get restrained red/orange/green outlines. The VIP gold row border is gone; VIP remains a crown beside the requester name.
+- **Weights tuned:** level 1/2/3 are `10 / 18 / 25`, level 4 stays a hard `1000` band, and customer wait is the strongest ordinary factor at `35`, logarithmic and capped at 14 days.
+- **Applied to the dev database forward** with the same `CREATE OR REPLACE VIEW` definitions now in the baseline; verified `ticket_queue` exposes `inbound_count` and `waiting_since`.
+- **Tests:** 22 focused root tests cover the hard level-4 band, the new wait-over-level behavior, the wait curve, priority bands, uncategorised fallback, explanation parts, and stable sorting.
+
+---
+
 ## VIP is a gold ticket (2026-08-15)
 
 - **The whole row, not a chip.** A VIP was a teal pill under the requester's name; it is now a gold rule on all four edges of the row, with a crown beside the name. Eight rows are visible at a time and a chip in the fourth column is missed — knowing you are about to open a champion's ticket is worth seeing from the row.

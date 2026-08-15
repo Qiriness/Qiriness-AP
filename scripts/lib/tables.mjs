@@ -104,7 +104,7 @@ export const COLUMNS = {
     'id,subject,status,category,secondary_category,level,happiness,responsible_team,' +
     'requester_name,shopify_order_number,first_message_at,last_message_at,' +
     'customer_display_name,customer_first_name,customer_last_name,customer_rfm_group,' +
-    'message_count',
+    'message_count,inbound_count,waiting_since',
 
   /** What the categoriser needs: the previous reading, to ratchet against. */
   ticketForCategorisation: 'id,subject,metadata,category,request_kind,level,happiness',
