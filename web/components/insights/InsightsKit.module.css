@@ -214,13 +214,13 @@
   gap: var(--space-1);
   padding: var(--space-3) var(--space-4);
   margin: 0 0 var(--space-4);
-  border-left: 3px solid var(--teal);
-  border-radius: 0 var(--radius-md) var(--radius-md) 0;
+  border: 1px solid var(--border-teal);
+  border-radius: var(--radius-md);
   background: var(--teal-050);
 }
 
 .noteWarn {
-  border-left-color: var(--error);
+  border-color: var(--error-100);
   background: var(--error-050);
 }
 

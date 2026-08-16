@@ -48,13 +48,12 @@
   gap: var(--space-1);
   padding: var(--space-3) var(--space-4);
   border: 1px solid var(--border);
-  border-left: 3px solid var(--teal);
   border-radius: var(--radius-md);
   background: var(--surface-sunken);
 }
 
 .bannerStale {
-  border-left-color: var(--warning);
+  border-color: var(--warning-100);
 }
 
 .bannerMain {
@@ -197,6 +196,17 @@
   text-overflow: ellipsis;
 }
 
+.tileMeta {
+  margin-top: var(--space-1);
+  font-size: var(--text-caption);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.35;
+  opacity: 0.85;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .subs {
   margin: var(--space-1) 0 0;
   padding: 0;
@@ -328,7 +338,7 @@
 
 .table {
   width: 100%;
-  min-width: 40rem;
+  min-width: 54rem;
   border-collapse: collapse;
   font-size: var(--text-body);
 }
@@ -508,13 +518,14 @@
 
 @media (max-width: 720px) {
   /* Taller, because the same shares over a narrower box make every tile thin;
-     and the sub-topic lines go, because at this width they wrap to one word a
-     line and push the subject name out of view. */
+     and the supporting metadata goes, because at this width it wraps to one
+     word a line and pushes the cluster name out of view. */
   .map {
     height: clamp(26rem, 70vh, 38rem);
   }
 
-  .subs {
+  .subs,
+  .tileMeta {
     display: none;
   }
 

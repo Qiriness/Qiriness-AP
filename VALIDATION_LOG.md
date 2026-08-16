@@ -32,9 +32,50 @@ evidence about the order family.
 item is only removed once someone has actually run the check and seen the
 result.
 
-Last updated: 2026-08-15 (item 10 added and closed the same day: the database
-refactor's schema changes are applied to the dev database, forward, with the
-ingested corpus left in place.)
+Last updated: 2026-08-16 (item 11 added and closed: the recurring Supabase
+dashboard failure was the combination of restricted local network access and an
+obsolete REST Authorization header for new `sb_secret_*` keys.)
+
+---
+
+## 11. ~~Local dashboard validation is blocked by recurring Supabase fetch failures~~ -- FIXED 2026-08-16
+
+**Closed.** Two separate things looked like one recurring Supabase issue:
+
+- A dev server started inside the restricted Codex environment could not reach
+  Supabase at all, so server-side reads ended as `fetch failed`.
+- With network access allowed, the configured key reached Supabase but old client
+  headers sent `Authorization: Bearer sb_secret_...`, which new Supabase secret
+  keys reject because they are not JWTs.
+
+The user-visible symptom was the app shell rendering while server-side Insights
+reads fell into the panel error state with:
+
+```text
+Supabase request failed after 4 attempts: fetch failed
+```
+
+The tight repro captured before the fix:
+
+```powershell
+Invoke-WebRequest -UseBasicParsing http://localhost:3001/insights/support
+```
+
+Result before the fix: HTTP 200, `Support` shell present, and the rendered payload contains
+`Supabase request failed after 4 attempts: fetch failed`.
+
+**Fix:** `scripts/lib/supabase-rest-client.mjs` now builds headers through
+`supabaseHeaders()`: new `sb_*` keys are sent as `apikey` only, while legacy
+JWT-shaped keys still get `Authorization: Bearer ...`. The direct
+`countCorpusMessages()` HEAD request in the Support panel uses the same helper.
+
+**Verified after the fix:** a fresh dev server with network access on port 3002
+rendered `/insights/support` with no Supabase panel error. Browser check found
+`Message volume by cluster`, one cluster table caption, and 46 topic-map tiles.
+
+**Tests:** `node --test .\scripts\lib\supabase-rest-client.test.mjs`,
+`npm.cmd run typecheck`, `npm.cmd run lint`, and `npm.cmd run build` in `web/`,
+and root `npm.cmd test` (**1271 pass**).
 
 ---
 

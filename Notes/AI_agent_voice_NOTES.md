@@ -35,8 +35,9 @@ Make sure that the answers have been writtne yh
 
 ## NOTES ON INSIGHTS DAHSBOARD:
 
-Monthly average for parcel to be delivered.
+Monthly average for parcel to be delivered.i
 NUmber of ORders that are not fulffiled after 3 days - also an email reminding DERET in parallel to this
 Number of Parcels that take longer than 5 days to be delivered
 
 
+cod

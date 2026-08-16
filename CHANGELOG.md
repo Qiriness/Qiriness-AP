@@ -10,6 +10,35 @@ Three sibling files carry the other halves, and this one deliberately does not d
 
 ---
 
+## Supabase new-key REST auth fix (2026-08-16)
+
+- **Fixed server-side Supabase REST requests for `sb_secret_*` keys.** The shared
+  REST client now sends new Supabase API keys as `apikey` only, and keeps
+  `Authorization: Bearer ...` only for legacy JWT-shaped keys.
+- **Updated the Support topic-map corpus count** to use the same header helper,
+  so the direct `HEAD` request cannot drift from the rest of the client.
+- **Validated:** direct Supabase REST probe with server user-agent returned 200;
+  fresh network-enabled dev server on port 3002 rendered `/insights/support`
+  without the Supabase panel error; browser check found `Message volume by
+  cluster`, one cluster table, and 46 topic-map tiles; focused REST-client test
+  passed; `web` typecheck, lint and build passed; root `npm.cmd test` passed
+  (**1271 pass**).
+
+---
+
+## Topic map cluster tiles (2026-08-16)
+
+- **The Support heatmap now renders actual clusters, not category buckets.** Each
+  tile is one persisted `ticket_clusters` row; category remains visible only as
+  context and as the source of the existing subject-level happiness colour.
+- **Cluster labels are less query-shaped.** `clusterLabel()` now strips common
+  greeting/query frames and order-number fragments from the representative
+  excerpt before truncating, so tiles start closer to the recurring issue.
+- **Validated:** `npm.cmd run typecheck`, `npm.cmd run lint`, and
+  `npm.cmd run build` in `web/`; root `npm.cmd test` (**1269 pass**).
+
+---
+
 ## Insights dashboards, token accounting and a persisted topic map (2026-08-16)
 
 Four analytics panels behind `/insights`, plus the two things that had to start being recorded before they could be read. Rationale in `DECISIONS.md § Insights`.
@@ -48,6 +77,14 @@ Three tables and **fifteen views**, all `security_invoker` and revoked from the 
 - All 15 schema invariants in `_shared.test.mjs` pass with the sixth baseline file.
 - Every column the two new stores write confirmed to exist against the live schema.
 - `cluster:tickets:save` run once for real: 248 messages, 13 subjects, 46 topics persisted.
+
+### Support route completion
+
+- **`/insights/support` is now routed.** The support service and view existed, but the App Router page was missing, so the Support tab could link to a 404 and the substantial `SupportView`/`TopicMap` code was outside the compiled route graph.
+- **Added the missing CSS module** for the support panel's figures and wide tables, matching the restrained Insights table/figure vocabulary and keeping horizontal overflow inside the panel.
+- **Finished the panel polish pass:** the Insights tab order now matches the `/insights` landing route, unmeasured fulfilment months render as missing rather than zero, uncategorised mail cannot become the "sore subject" callout, and a saved zero-topic map gets an explicit measured-empty state.
+- **Removed side-stripe note/banner styling** from the Insights kit and topic-map provenance banner; state is now carried by full borders, tint and text colour instead.
+- **Validated:** `npm.cmd run typecheck`, `npm.cmd run lint`, `npm run build` in `web/`, the local design detector over Insights, HTTP 200 checks for all four panel routes, and root `npm test` (**1269 pass**).
 
 ---
 
@@ -320,3 +357,7 @@ Four refactors, chosen from an architecture review of everything that touches Su
 ## Not built
 
 Dashboard authentication, deployed webhook routes, and the agent's drafting stage (Phase 5). Backend/deploy config is still pending.
+
+## Dashboard fixes (2026-08-16)
+
+- **Insights dev page no longer depends on Google Fonts.** The root layout stopped using `next/font/google` because the local dev environment blocks the font fetch with `EACCES`, which can leave the dev page behind a blank/error overlay. The app now uses the existing system/Satoshi fallback stack from CSS with no network font request.

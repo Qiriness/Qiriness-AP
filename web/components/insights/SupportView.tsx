@@ -37,7 +37,7 @@ export function SupportView({ panel }: { panel: SupportPanel }) {
     // Five tickets is the floor for calling a subject the worst: below that one
     // furious customer sets the mean and the headline is describing an
     // individual, not a subject.
-    if (row.meanHappiness === null || row.tickets < 5) return acc;
+    if (!row.category || row.meanHappiness === null || row.tickets < 5) return acc;
     if (!acc || row.meanHappiness > (acc.meanHappiness ?? 0)) return row;
     return acc;
   }, null);

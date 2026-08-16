@@ -1,0 +1,62 @@
+
+> qiriness-dashboard@0.1.0 dev
+> next dev
+
+  ▲ Next.js 14.2.35
+  - Local:        http://localhost:3000
+  - Experiments (use with caution):
+    · cpus
+    · staleTimes
+    · outputFileTracingRoot
+
+ ✓ Starting...
+ ✓ Ready in 2.7s
+ ○ Compiling /insights/support ...
+ ✓ Compiled /insights/support in 13s (630 modules)
+ GET /insights/support 200 in 15719ms
+ GET /insights/fulfilment 200 in 15882ms
+ GET /insights/fulfilment 200 in 1071ms
+ ○ Compiling /insights/customers ...
+ ✓ Compiled /insights/customers in 2.4s (636 modules)
+ ○ Compiling /insights/agent ...
+ ✓ Compiled /insights/agent in 1680ms (646 modules)
+ ○ Compiling /tickets ...
+ ✓ Compiled /tickets in 3.6s (813 modules)
+ ○ Compiling /api/tickets/[id]/thread ...
+ ✓ Compiled /api/tickets/[id]/thread in 1561ms (399 modules)
+ GET /api/tickets/43f781f3-cd65-433c-8b0b-63718ff00b67/thread 200 in 7034ms
+ GET /api/tickets/43f781f3-cd65-433c-8b0b-63718ff00b67/thread 200 in 7178ms
+ ○ Compiling /insights ...
+ ✓ Compiled /insights in 1757ms (722 modules)
+ ✓ Compiled in 2.2s (714 modules)
+ GET /insights/support 500 in 4046ms
+ ✓ Compiled in 957ms (714 modules)
+ GET /insights/support 500 in 2705ms
+ ✓ Compiled in 694ms (714 modules)
+ GET /insights/support 500 in 1256ms
+ ✓ Compiled in 657ms (714 modules)
+ GET /insights/support 200 in 1588ms
+ ✓ Compiled in 766ms (714 modules)
+ ✓ Compiled in 1004ms (724 modules)
+ ✓ Compiled in 590ms (714 modules)
+ ✓ Compiled in 675ms (714 modules)
+ ✓ Compiled in 880ms (714 modules)
+ ✓ Compiled in 634ms (714 modules)
+ ✓ Compiled in 707ms (724 modules)
+ ✓ Compiled in 1129ms (714 modules)
+ GET /insights/support 200 in 1122ms
+ GET /insights/support 200 in 1152ms
+ ○ Compiling /settings ...
+ ✓ Compiled /settings in 606ms (403 modules)
+ ✓ Compiled in 3.8s (541 modules)
+ ○ Compiling /_error ...
+ ✓ Compiled /_error in 5.4s (1058 modules)
+ GET /insights/support 500 in 74ms
+ GET /insights/support 500 in 74ms
+ GET /insights/support 500 in 126ms
+ GET /insights/support 500 in 104ms
+ ✓ Compiled in 1266ms (436 modules)
+ GET /insights/support 200 in 4011ms
+ ✓ Compiled in 1011ms (436 modules)
+
+C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web>

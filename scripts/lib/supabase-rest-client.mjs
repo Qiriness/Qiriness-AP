@@ -5,6 +5,23 @@ export function createSupabaseClient(config) {
   };
 }
 
+export function supabaseHeaders(client, extra = {}) {
+  const headers = {
+    apikey: client.key,
+    ...extra
+  };
+
+  // Legacy anon/service_role keys are JWTs and PostgREST expects them as the
+  // bearer token. New Supabase publishable/secret keys (`sb_*`) are API Gateway
+  // keys, not JWTs; sending `Authorization: Bearer sb_secret_...` makes the
+  // request 401 even though the same key is valid in `apikey`.
+  if (!client.key.startsWith('sb_')) {
+    headers.Authorization = `Bearer ${client.key}`;
+  }
+
+  return headers;
+}
+
 /**
  * Every request in this module goes through here, so `cache: 'no-store'` cannot
  * be forgotten on a call site added later.
@@ -61,12 +78,10 @@ export async function supabaseUpsert(client, table, rows, onConflict) {
     `${client.baseUrl}/${table}?on_conflict=${encodeURIComponent(onConflict)}`,
     {
       method: 'POST',
-      headers: {
-        apikey: client.key,
-        Authorization: `Bearer ${client.key}`,
+      headers: supabaseHeaders(client, {
         'Content-Type': 'application/json',
         Prefer: 'resolution=merge-duplicates,return=representation'
-      },
+      }),
       body: JSON.stringify(normalizedRows)
     }
   );
@@ -89,12 +104,10 @@ export async function supabaseInsert(client, table, rows) {
     `${client.baseUrl}/${table}`,
     {
       method: 'POST',
-      headers: {
-        apikey: client.key,
-        Authorization: `Bearer ${client.key}`,
+      headers: supabaseHeaders(client, {
         'Content-Type': 'application/json',
         Prefer: 'return=representation'
-      },
+      }),
       body: JSON.stringify(normalizedRows)
     }
   );
@@ -124,10 +137,7 @@ export async function supabaseSelect(client, table, filters, select = '*', optio
     `${client.baseUrl}/${table}?${searchParams.toString()}`,
     {
       method: 'GET',
-      headers: {
-        apikey: client.key,
-        Authorization: `Bearer ${client.key}`
-      }
+      headers: supabaseHeaders(client)
     }
   );
 
@@ -169,12 +179,10 @@ export async function supabaseSelectAll(client, table, filters, select = '*', op
 
     const response = await supabaseFetch(`${client.baseUrl}/${table}?${searchParams.toString()}`, {
       method: 'GET',
-      headers: {
-        apikey: client.key,
-        Authorization: `Bearer ${client.key}`,
+      headers: supabaseHeaders(client, {
         'Range-Unit': 'items',
         Range: `${from}-${from + pageSize - 1}`
-      }
+      })
     });
 
     const payload = await response.json().catch(() => null);
@@ -203,11 +211,9 @@ export async function supabaseSelectAll(client, table, filters, select = '*', op
 export async function supabaseRpc(client, functionName, args = {}) {
   const response = await supabaseFetch(`${client.baseUrl}/rpc/${functionName}`, {
     method: 'POST',
-    headers: {
-      apikey: client.key,
-      Authorization: `Bearer ${client.key}`,
+    headers: supabaseHeaders(client, {
       'Content-Type': 'application/json'
-    },
+    }),
     body: JSON.stringify(args)
   });
 
@@ -234,12 +240,10 @@ export async function supabaseUpdate(client, table, filters, row, { select } = {
     `${client.baseUrl}/${table}?${searchParams.toString()}`,
     {
       method: 'PATCH',
-      headers: {
-        apikey: client.key,
-        Authorization: `Bearer ${client.key}`,
+      headers: supabaseHeaders(client, {
         'Content-Type': 'application/json',
         Prefer: 'return=representation'
-      },
+      }),
       body: JSON.stringify(row)
     }
   );
@@ -258,12 +262,10 @@ export async function supabaseUpdateById(client, table, id, row) {
     `${client.baseUrl}/${table}?${searchParams.toString()}`,
     {
       method: 'PATCH',
-      headers: {
-        apikey: client.key,
-        Authorization: `Bearer ${client.key}`,
+      headers: supabaseHeaders(client, {
         'Content-Type': 'application/json',
         Prefer: 'return=representation'
-      },
+      }),
       body: JSON.stringify(row)
     }
   );
@@ -286,11 +288,9 @@ export async function supabaseDeleteWhereIn(client, table, column, values) {
     `${client.baseUrl}/${table}?${encodeURIComponent(column)}=${encodeURIComponent(filter)}`,
     {
       method: 'DELETE',
-      headers: {
-        apikey: client.key,
-        Authorization: `Bearer ${client.key}`,
+      headers: supabaseHeaders(client, {
         Prefer: 'return=minimal'
-      }
+      })
     }
   );
 
@@ -309,11 +309,9 @@ export async function supabaseDelete(client, table, filters) {
     `${client.baseUrl}/${table}?${searchParams.toString()}`,
     {
       method: 'DELETE',
-      headers: {
-        apikey: client.key,
-        Authorization: `Bearer ${client.key}`,
+      headers: supabaseHeaders(client, {
         Prefer: 'return=representation'
-      }
+      })
     }
   );
 

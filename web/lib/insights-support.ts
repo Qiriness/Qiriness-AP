@@ -242,19 +242,46 @@ export function sliceAndDice<T extends TreemapInput>(items: T[], rowCount?: numb
 
 /**
  * Every French support email opens the same way, so the stored excerpt starts
- * with a greeting on essentially every cluster. Left in, the sub-topic list
- * inside a tile reads "Bonjour…", "Bonjour…", "Bonjour…" — three labels that
- * distinguish nothing. Stripped, the first clause is the complaint.
+ * with a greeting on essentially every cluster. Left in, the map reads
+ * "Bonjour…", "Bonjour…", "Bonjour…" — three labels that distinguish nothing.
+ * Stripped, the first useful clause is usually the complaint.
  */
 const GREETING =
   /^[\s"'«]*(bonjour|bonsoir|madame|monsieur|mesdames|messieurs|hello|hi|dear)\b[\s,;:!.’'-]*/i;
 
+const TOPIC_OPENERS = [
+  /^[\s,;:!.]*(je\s+(?:voudrais|souhaiterais|souhaite|veux|aimerais)\s+(?:savoir|connaitre|connaître|avoir|obtenir)\s*)/i,
+  /^[\s,;:!.]*(pouvez[-\s]vous\s+(?:me\s+|nous\s+)?(?:dire|indiquer|confirmer|renseigner|expliquer)\s*)/i,
+  /^[\s,;:!.]*(j(?:e|')\s*(?:ai|avais)\s+une\s+question\s+(?:sur|concernant|au\s+sujet\s+de)\s*)/i,
+  /^[\s,;:!.]*(je\s+(?:vous\s+)?contacte\s+(?:car|pour|au\s+sujet\s+de|concernant)?\s*)/i,
+  /^[\s,;:!.]*(je\s+me\s+permets\s+de\s+vous\s+contacter\s+(?:car|pour|au\s+sujet\s+de|concernant)?\s*)/i,
+  /^[\s,;:!.]*(concernant|au\s+sujet\s+de|suite\s+a|suite\s+à)\s*/i,
+];
+
+const TOPIC_NOISE = [
+  /\bcommande\s*(?:n[°o]\s*)?#?\s*[0-9][a-z0-9-]*\b/gi,
+  /\bcommande\s+n[°o]?\s*[a-z0-9-]+\b/gi,
+  /\bn[°o]\s*#?\s*[a-z0-9-]+\b/gi,
+  /\b#[0-9]{3,}\b/g,
+];
+
 export function clusterLabel(excerpt: string | null, clusterIndex: number, maxChars = 52): string {
   let text = (excerpt ?? "").replace(/\s+/g, " ").trim();
-  // Up to three passes so "Bonjour Madame, Je viens..." loses both words.
-  for (let pass = 0; pass < 3 && GREETING.test(text); pass += 1) {
+  // Up to five passes so "Bonjour Madame, je voudrais savoir..." loses the
+  // greeting and the generic query frame before we choose the visible label.
+  for (let pass = 0; pass < 5; pass += 1) {
+    const before = text;
     text = text.replace(GREETING, "").trim();
+    for (const opener of TOPIC_OPENERS) {
+      text = text.replace(opener, "").trim();
+    }
+    if (text === before) break;
   }
+
+  for (const noise of TOPIC_NOISE) {
+    text = text.replace(noise, "").trim();
+  }
+  text = text.replace(/^[\s,;:!.?'-]+/, "").replace(/\s{2,}/g, " ").trim();
 
   // A number, not a blank: an unnamed topic still has to be referable to when
   // someone asks which tile a message landed in.

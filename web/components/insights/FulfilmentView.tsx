@@ -106,6 +106,7 @@ export function FulfilmentView({ panel }: { panel: FulfilmentPanel }) {
                   key: m.month,
                   label: `${formatMonth(m.month)}${m.partial ? "*" : ""}`,
                   value: rate,
+                  missing: m.measured === 0,
                   display: m.measured ? `${rate.toFixed(1)}%` : "—",
                   emphasis: rate >= 20,
                   title: `${formatMonth(m.month)}: ${m.over72h} of ${m.measured} orders past 72h, p90 ${hours(

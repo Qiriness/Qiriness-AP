@@ -325,6 +325,12 @@ from an aggregate view.
 | **Customers** | who to call, and what spend is exposed | the two customer views + `customer-segments.mjs` |
 | **Agent** | how far tickets get, what blocks them, what it costs | the five agent views + `llm-rates.mjs` |
 
+The Support topic map reads the latest `cluster_runs` row and renders each
+`ticket_clusters` row as its own treemap tile. The tile label is derived from
+the stored `representative_excerpt` by `clusterLabel()` in
+`web/lib/insights-support.ts`; the cluster's `subject` is only contextual
+metadata for the category label and the subject-level happiness colour.
+
 Shared pieces live in `components/insights/InsightsKit.tsx` (`PanelSection`,
 `TileGrid`, `StatTile`, `BlockedTile`, `BarList`, `Note`, formatters) and
 `lib/insights-format.ts` (isomorphic month and age labels).

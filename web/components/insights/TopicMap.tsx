@@ -14,7 +14,7 @@ import {
   unhappinessStep,
   type TreemapInput,
 } from "@/lib/insights-support";
-import { Note, percent } from "./InsightsKit";
+import { EmptyState, Note, percent } from "./InsightsKit";
 import styles from "./TopicMap.module.css";
 
 /**
@@ -44,22 +44,37 @@ import styles from "./TopicMap.module.css";
  */
 const RESYNC_COMMAND = "npm run cluster:tickets:save";
 
-interface SubjectNode extends TreemapInput {
+interface ClusterNode extends TreemapInput {
   label: string;
-  clusters: TopicCluster[];
+  subject: string;
+  subjectLabel: string;
+  clusterIndex: number;
   meanHappiness: number | null;
-  tickets: number;
+  cohesion: number | null;
 }
 
-type SortKey = "label" | "size" | "topics" | "meanHappiness" | "tickets";
+type SortKey = "label" | "subject" | "size" | "cohesion" | "meanHappiness";
 
 export function TopicMap({ map, categories }: { map: TopicMapData; categories: SupportCategoryRow[] }) {
-  const subjects = useMemo(() => buildSubjects(map.clusters, categories), [map.clusters, categories]);
-  const clustered = subjects.reduce((sum, s) => sum + s.size, 0);
-  const rows = useMemo(() => sliceAndDice(subjects), [subjects]);
+  const clusters = useMemo(() => buildClusterTiles(map.clusters, categories), [map.clusters, categories]);
+  const clustered = clusters.reduce((sum, cluster) => sum + cluster.size, 0);
+  const rows = useMemo(() => sliceAndDice(clusters), [clusters]);
 
   const baseline = corpusBaseline(map.messageCount, map.internalExcluded);
   const drift = corpusDrift(map.liveMessageCount, baseline);
+
+  if (clusters.length === 0) {
+    return (
+      <div className={styles.wrap}>
+        <StalenessBanner map={map} drift={drift} baseline={baseline} />
+        <EmptyState>
+          This saved run did not find any repeated customer topics of at least {map.minSize} messages at
+          threshold {map.threshold}. That is a measured empty map, not a missing rebuild.
+        </EmptyState>
+        <Resync />
+      </div>
+    );
+  }
 
   return (
     <div className={styles.wrap}>
@@ -76,11 +91,11 @@ export function TopicMap({ map, categories }: { map: TopicMapData; categories: S
 
       <figure className={styles.figure}>
         <figcaption className={styles.caption}>
-          <span className={styles.capTitle}>Message volume by subject</span>
+          <span className={styles.capTitle}>Message volume by cluster</span>
           <span className={styles.capSub}>
-            Tile area is exactly proportional to messages. Colour is the subject&apos;s mean happiness
-            score, which is a property of its tickets, not of its topics — every tile also carries its
-            name and count, and the table below has the same numbers in text.
+            Each tile is one saved cluster from the latest run. Area is exactly proportional to the
+            messages in that cluster. Colour still uses the parent subject&apos;s mean happiness, because
+            the cluster row is a bag of messages and has no ticket mood of its own.
           </span>
         </figcaption>
 
@@ -90,11 +105,11 @@ export function TopicMap({ map, categories }: { map: TopicMapData; categories: S
               <ul className={styles.rowInner}>
                 {row.tiles.map(({ item, widthPct, areaPct }) => {
                   const step = unhappinessStep(item.meanHappiness);
-                  // Sub-topics only where they will actually be readable.
+                  // Extra cluster metadata only where it will actually be readable.
                   // Measured against the live run: below roughly a fifth of the
                   // width or a fifth of the height the text wraps to one word
-                  // per line and stops being a label. The table carries them
-                  // for every subject regardless.
+                  // per line and stops being a label. The table carries the
+                  // same facts for every cluster regardless.
                   const roomForDetail = widthPct >= 25 && row.heightPct >= 20;
                   return (
                     <li
@@ -102,9 +117,9 @@ export function TopicMap({ map, categories }: { map: TopicMapData; categories: S
                       className={styles.tile}
                       data-step={step ?? "none"}
                       style={{ flex: `${widthPct} 1 0%` }}
-                      title={`${item.label}: ${item.size} message(s) in ${item.clusters.length} topic(s), ${areaPct.toFixed(
+                      title={`${item.label}: ${item.size} message(s), ${areaPct.toFixed(
                         1
-                      )}% of the map${
+                      )}% of the map, subject ${item.subjectLabel}${
                         item.meanHappiness === null
                           ? " — no happiness score"
                           : `, mean happiness ${item.meanHappiness.toFixed(2)}`
@@ -112,17 +127,13 @@ export function TopicMap({ map, categories }: { map: TopicMapData; categories: S
                     >
                       <span className={styles.tileName}>{item.label}</span>
                       <span className={styles.tileCount}>
-                        {item.size} msg · {item.clusters.length} topics
+                        {item.size} msg · {item.subjectLabel}
                       </span>
                       {roomForDetail ? (
-                        <ul className={styles.subs}>
-                          {item.clusters.slice(0, 3).map((cluster) => (
-                            <li key={cluster.id} className={styles.sub}>
-                              <span className={styles.subSize}>{cluster.size}</span>
-                              {clusterLabel(cluster.excerpt, cluster.clusterIndex)}
-                            </li>
-                          ))}
-                        </ul>
+                        <span className={styles.tileMeta}>
+                          Topic {item.clusterIndex + 1}
+                          {item.cohesion === null ? "" : ` · cohesion ${item.cohesion.toFixed(2)}`}
+                        </span>
                       ) : null}
                     </li>
                   );
@@ -144,7 +155,7 @@ export function TopicMap({ map, categories }: { map: TopicMapData; categories: S
         never entered the run.
       </p>
 
-      <SubjectTable subjects={subjects} clustered={clustered} />
+      <ClusterTable clusters={clusters} clustered={clustered} />
       <Resync />
     </div>
   );
@@ -225,28 +236,28 @@ function Legend() {
  * The treemap's data as a sortable table.
  *
  * Not a fallback and not an accessibility afterthought — it is the readable
- * form. A treemap answers "what is big" at a glance and answers "is delivery
- * ahead of order, and by how much" badly, and that second question is the one
- * that gets asked in a meeting.
+ * form. A treemap answers "what is big" at a glance and answers exact ranking
+ * badly, and that second question is the one that gets asked in a meeting.
  */
-function SubjectTable({ subjects, clustered }: { subjects: SubjectNode[]; clustered: number }) {
+function ClusterTable({ clusters, clustered }: { clusters: ClusterNode[]; clustered: number }) {
   const [sortKey, setSortKey] = useState<SortKey>("size");
   const [ascending, setAscending] = useState(false);
 
   const sorted = useMemo(() => {
     const direction = ascending ? 1 : -1;
-    return [...subjects].sort((a, b) => {
+    return [...clusters].sort((a, b) => {
       if (sortKey === "label") return a.label.localeCompare(b.label) * direction;
+      if (sortKey === "subject") return a.subjectLabel.localeCompare(b.subjectLabel) * direction;
       const av = sortValue(a, sortKey);
       const bv = sortValue(b, sortKey);
-      // Unscored subjects sink to the bottom either way: a null is not a small
+      // Unscored clusters sink to the bottom either way: a null is not a small
       // number, and sorting it as one puts "no data" at the top of "happiest".
       if (av === null && bv === null) return 0;
       if (av === null) return 1;
       if (bv === null) return -1;
       return (av - bv) * direction || a.label.localeCompare(b.label);
     });
-  }, [subjects, sortKey, ascending]);
+  }, [clusters, sortKey, ascending]);
 
   const toggle = (key: SortKey) => {
     if (key === sortKey) {
@@ -258,10 +269,10 @@ function SubjectTable({ subjects, clustered }: { subjects: SubjectNode[]; cluste
   };
 
   const columns: { key: SortKey; label: string; numeric: boolean }[] = [
-    { key: "label", label: "Subject", numeric: false },
+    { key: "label", label: "Cluster", numeric: false },
+    { key: "subject", label: "Category", numeric: false },
     { key: "size", label: "Messages", numeric: true },
-    { key: "topics", label: "Topics", numeric: true },
-    { key: "tickets", label: "Tickets", numeric: true },
+    { key: "cohesion", label: "Cohesion", numeric: true },
     { key: "meanHappiness", label: "Mean happiness", numeric: true },
   ];
 
@@ -269,7 +280,7 @@ function SubjectTable({ subjects, clustered }: { subjects: SubjectNode[]; cluste
     <div className={styles.tableWrap}>
       <table className={styles.table}>
         <caption className={styles.tableCaption}>
-          Every subject on the map, in text. Click a heading to sort.
+          Every cluster on the map, in text. Click a heading to sort.
         </caption>
         <thead>
           <tr>
@@ -294,25 +305,27 @@ function SubjectTable({ subjects, clustered }: { subjects: SubjectNode[]; cluste
           </tr>
         </thead>
         <tbody>
-          {sorted.map((subject) => (
-            <tr key={subject.key}>
+          {sorted.map((cluster) => (
+            <tr key={cluster.key}>
               <th scope="row">
-                <span className={styles.swatch} data-step={unhappinessStep(subject.meanHappiness) ?? "none"} aria-hidden="true" />
-                {subject.label}
+                <span className={styles.swatch} data-step={unhappinessStep(cluster.meanHappiness) ?? "none"} aria-hidden="true" />
+                {cluster.label}
               </th>
-              <td className={styles.n}>{subject.size.toLocaleString()}</td>
-              <td className={styles.n}>{subject.clusters.length}</td>
-              <td className={styles.n}>{subject.tickets.toLocaleString()}</td>
+              <td>{cluster.subjectLabel}</td>
+              <td className={styles.n}>{cluster.size.toLocaleString()}</td>
               <td className={styles.n}>
-                {subject.meanHappiness === null ? (
-                  <span className={styles.muted} title="No ticket under this subject carries a happiness score">
+                {cluster.cohesion === null ? <span className={styles.muted}>—</span> : cluster.cohesion.toFixed(2)}
+              </td>
+              <td className={styles.n}>
+                {cluster.meanHappiness === null ? (
+                  <span className={styles.muted} title="No ticket under this cluster's subject carries a happiness score">
                     —
                   </span>
                 ) : (
-                  subject.meanHappiness.toFixed(2)
+                  cluster.meanHappiness.toFixed(2)
                 )}
               </td>
-              <td className={styles.n}>{percent(subject.size, clustered)}</td>
+              <td className={styles.n}>{percent(cluster.size, clustered)}</td>
             </tr>
           ))}
         </tbody>
@@ -321,16 +334,14 @@ function SubjectTable({ subjects, clustered }: { subjects: SubjectNode[]; cluste
   );
 }
 
-function sortValue(subject: SubjectNode, key: SortKey): number | null {
+function sortValue(cluster: ClusterNode, key: SortKey): number | null {
   switch (key) {
     case "size":
-      return subject.size;
-    case "topics":
-      return subject.clusters.length;
-    case "tickets":
-      return subject.tickets;
+      return cluster.size;
+    case "cohesion":
+      return cluster.cohesion;
     case "meanHappiness":
-      return subject.meanHappiness;
+      return cluster.meanHappiness;
     default:
       return null;
   }
@@ -382,39 +393,26 @@ function Resync() {
 // --- shaping ----------------------------------------------------------------
 
 /**
- * Clusters are per (subject, topic); the map's top level is the subject.
- *
- * NESTING WAS TRIED AND DROPPED. Drawing subjects and their sub-topics as one
- * two-level treemap at 248 messages gives most sub-tiles a few square
- * millimetres — too small for a name, which leaves colour as their only content
- * and turns the map into a texture. Subjects tile legibly, and the largest of
- * them have room to list their biggest topics as text.
+ * Clusters are the tiles. The subject remains only contextual metadata because
+ * the persisted run stores one row per actual cluster; grouping those rows by
+ * subject hides the thing the clustering job discovered.
  *
  * Mean happiness comes from the ticket rows rather than from the clusters,
  * because a cluster is a bag of messages and has no mood of its own. That makes
- * the colour a statement about the subject's tickets, which the caption says.
+ * the colour a statement about the parent subject's tickets, which the caption
+ * says.
  */
-function buildSubjects(clusters: TopicCluster[], categories: SupportCategoryRow[]): SubjectNode[] {
+function buildClusterTiles(clusters: TopicCluster[], categories: SupportCategoryRow[]): ClusterNode[] {
   const mood = new Map(categories.map((row) => [row.category ?? "", row]));
-  const bySubject = new Map<string, SubjectNode>();
 
-  for (const cluster of clusters) {
-    const node = bySubject.get(cluster.subject) ?? {
-      key: cluster.subject,
-      size: 0,
-      label: CATEGORY_LABELS[cluster.subject as keyof typeof CATEGORY_LABELS] ?? cluster.subject,
-      clusters: [],
-      meanHappiness: mood.get(cluster.subject)?.meanHappiness ?? null,
-      tickets: mood.get(cluster.subject)?.tickets ?? 0,
-    };
-    node.size += cluster.size;
-    node.clusters.push(cluster);
-    bySubject.set(cluster.subject, node);
-  }
-
-  for (const node of bySubject.values()) {
-    node.clusters.sort((a, b) => b.size - a.size);
-  }
-
-  return [...bySubject.values()];
+  return clusters.map((cluster) => ({
+    key: cluster.id,
+    size: cluster.size,
+    label: clusterLabel(cluster.excerpt, cluster.clusterIndex),
+    subject: cluster.subject,
+    subjectLabel: CATEGORY_LABELS[cluster.subject as keyof typeof CATEGORY_LABELS] ?? cluster.subject,
+    clusterIndex: cluster.clusterIndex,
+    meanHappiness: mood.get(cluster.subject)?.meanHappiness ?? null,
+    cohesion: cluster.cohesion,
+  }));
 }

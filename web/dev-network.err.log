@@ -1,0 +1,750 @@
+ ⚠ Fast Refresh had to perform a full reload due to a runtime error.
+ ⨯ components\insights\TopicMap.tsx (59:34) @ buildClusterTiles
+ ⨯ ReferenceError: buildClusterTiles is not defined
+    at eval (./components/insights/TopicMap.tsx:46:73)
+    at TopicMap (./components/insights/TopicMap.tsx:46:68)
+digest: "875518525"
+[0m [90m 57 |[39m[0m
+[0m [90m 58 |[39m [36mexport[39m [36mfunction[39m [33mTopicMap[39m({ map[33m,[39m categories }[33m:[39m { map[33m:[39m [33mTopicMapData[39m[33m;[39m categories[33m:[39m [33mSupportCategoryRow[39m[] }) {[0m
+[0m[31m[1m>[22m[39m[90m 59 |[39m   [36mconst[39m clusters [33m=[39m useMemo(() [33m=>[39m buildClusterTiles(map[33m.[39mclusters[33m,[39m categories)[33m,[39m [map[33m.[39mclusters[33m,[39m categories])[33m;[39m[0m
+[0m [90m    |[39m                                  [31m[1m^[22m[39m[0m
+[0m [90m 60 |[39m   [36mconst[39m clustered [33m=[39m clusters[33m.[39mreduce((sum[33m,[39m cluster) [33m=>[39m sum [33m+[39m cluster[33m.[39msize[33m,[39m [35m0[39m)[33m;[39m[0m
+[0m [90m 61 |[39m   [36mconst[39m rows [33m=[39m useMemo(() [33m=>[39m sliceAndDice(clusters)[33m,[39m [clusters])[33m;[39m[0m
+[0m [90m 62 |[39m[0m
+ ⚠ Fast Refresh had to perform a full reload due to a runtime error.
+ ⨯ components\insights\TopicMap.tsx (59:34) @ buildClusterTiles
+ ⨯ ReferenceError: buildClusterTiles is not defined
+    at eval (./components/insights/TopicMap.tsx:46:73)
+    at TopicMap (./components/insights/TopicMap.tsx:46:68)
+digest: "875518525"
+[0m [90m 57 |[39m[0m
+[0m [90m 58 |[39m [36mexport[39m [36mfunction[39m [33mTopicMap[39m({ map[33m,[39m categories }[33m:[39m { map[33m:[39m [33mTopicMapData[39m[33m;[39m categories[33m:[39m [33mSupportCategoryRow[39m[] }) {[0m
+[0m[31m[1m>[22m[39m[90m 59 |[39m   [36mconst[39m clusters [33m=[39m useMemo(() [33m=>[39m buildClusterTiles(map[33m.[39mclusters[33m,[39m categories)[33m,[39m [map[33m.[39mclusters[33m,[39m categories])[33m;[39m[0m
+[0m [90m    |[39m                                  [31m[1m^[22m[39m[0m
+[0m [90m 60 |[39m   [36mconst[39m clustered [33m=[39m clusters[33m.[39mreduce((sum[33m,[39m cluster) [33m=>[39m sum [33m+[39m cluster[33m.[39msize[33m,[39m [35m0[39m)[33m;[39m[0m
+[0m [90m 61 |[39m   [36mconst[39m rows [33m=[39m useMemo(() [33m=>[39m sliceAndDice(clusters)[33m,[39m [clusters])[33m;[39m[0m
+[0m [90m 62 |[39m[0m
+ ⚠ Fast Refresh had to perform a full reload due to a runtime error.
+ ⨯ components\insights\TopicMap.tsx (59:34) @ buildClusterTiles
+ ⨯ ReferenceError: buildClusterTiles is not defined
+    at eval (./components/insights/TopicMap.tsx:46:73)
+    at TopicMap (./components/insights/TopicMap.tsx:46:68)
+digest: "875518525"
+[0m [90m 57 |[39m[0m
+[0m [90m 58 |[39m [36mexport[39m [36mfunction[39m [33mTopicMap[39m({ map[33m,[39m categories }[33m:[39m { map[33m:[39m [33mTopicMapData[39m[33m;[39m categories[33m:[39m [33mSupportCategoryRow[39m[] }) {[0m
+[0m[31m[1m>[22m[39m[90m 59 |[39m   [36mconst[39m clusters [33m=[39m useMemo(() [33m=>[39m buildClusterTiles(map[33m.[39mclusters[33m,[39m categories)[33m,[39m [map[33m.[39mclusters[33m,[39m categories])[33m;[39m[0m
+[0m [90m    |[39m                                  [31m[1m^[22m[39m[0m
+[0m [90m 60 |[39m   [36mconst[39m clustered [33m=[39m clusters[33m.[39mreduce((sum[33m,[39m cluster) [33m=>[39m sum [33m+[39m cluster[33m.[39msize[33m,[39m [35m0[39m)[33m;[39m[0m
+[0m [90m 61 |[39m   [36mconst[39m rows [33m=[39m useMemo(() [33m=>[39m sliceAndDice(clusters)[33m,[39m [clusters])[33m;[39m[0m
+[0m [90m 62 |[39m[0m
+ ⚠ Fast Refresh had to perform a full reload due to a runtime error.
+ ⨯ Error: Cannot find module './276.js'
+Require stack:
+- C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\.next\server\webpack-runtime.js
+- C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\.next\server\app\tickets\page.js
+- C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\require.js
+- C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\load-components.js
+- C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\build\utils.js
+- C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\dev\hot-middleware.js
+- C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\dev\hot-reloader-webpack.js
+- C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\lib\router-utils\setup-dev-bundler.js
+- C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\lib\router-server.js
+- C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\lib\start-server.js
+    at Function.<anonymous> (node:internal/modules/cjs/loader:1383:15)
+    at C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\require-hook.js:55:36
+    at defaultResolveImpl (node:internal/modules/cjs/loader:1025:19)
+    at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1030:22)
+    at Function._load (node:internal/modules/cjs/loader:1192:37)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:237:24)
+    at Module.<anonymous> (node:internal/modules/cjs/loader:1463:12)
+    at mod.require (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\require-hook.js:65:28)
+    at require (node:internal/modules/helpers:147:16)
+    at __webpack_require__.f.require (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\.next\server\webpack-runtime.js:203:28)
+    at C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\.next\server\webpack-runtime.js:116:40
+    at Array.reduce (<anonymous>)
+    at __webpack_require__.e (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\.next\server\webpack-runtime.js:115:67)
+    at Array.map (<anonymous>)
+    at __webpack_require__.X (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\.next\server\webpack-runtime.js:167:22)
+    at C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\.next\server\app\tickets\page.js:1:37721
+    at Object.<anonymous> (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\.next\server\app\tickets\page.js:1:37785)
+    at Module._compile (node:internal/modules/cjs/loader:1706:14)
+    at Object..js (node:internal/modules/cjs/loader:1839:10)
+    at Module.load (node:internal/modules/cjs/loader:1441:32)
+    at Function._load (node:internal/modules/cjs/loader:1263:12)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:237:24)
+    at Module.<anonymous> (node:internal/modules/cjs/loader:1463:12)
+    at mod.require (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\require-hook.js:65:28)
+    at require (node:internal/modules/helpers:147:16)
+    at requirePage (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\require.js:109:84)
+    at C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\load-components.js:103:84
+    at async loadComponentsImpl (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\load-components.js:103:26)
+    at async DevServer.findPageComponentsImpl (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\next-server.js:714:36)
+    at async DevServer.findPageComponents (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\dev\next-dev-server.js:577:20)
+    at async DevServer.renderPageComponent (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\base-server.js:1910:24)
+    at async DevServer.renderToResponseImpl (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\base-server.js:1962:32)
+    at async DevServer.pipeImpl (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\base-server.js:922:25)
+    at async NextNodeServer.handleCatchallRenderRequest (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\next-server.js:272:17)
+    at async DevServer.handleRequestImpl (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\base-server.js:818:17)
+    at async C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\dev\next-dev-server.js:339:20
+    at async Span.traceAsyncFn (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\trace\trace.js:154:20)
+    at async DevServer.handleRequest (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\dev\next-dev-server.js:336:24)
+    at async invokeRender (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\lib\router-server.js:179:21)
+    at async handleRequest (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\lib\router-server.js:359:24)
+    at async requestHandlerImpl (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\lib\router-server.js:383:13)
+    at async Server.requestListener (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\lib\start-server.js:141:13) {
+  code: 'MODULE_NOT_FOUND',
+  requireStack: [
+    'C:\\Users\\gnoua\\Desktop_backup\\APP_DEV\\03_Qiriness_Email\\Qirines_Email_Automation\\web\\.next\\server\\webpack-runtime.js',
+    'C:\\Users\\gnoua\\Desktop_backup\\APP_DEV\\03_Qiriness_Email\\Qirines_Email_Automation\\web\\.next\\server\\app\\tickets\\page.js',
+    'C:\\Users\\gnoua\\Desktop_backup\\APP_DEV\\03_Qiriness_Email\\Qirines_Email_Automation\\web\\node_modules\\next\\dist\\server\\require.js',
+    'C:\\Users\\gnoua\\Desktop_backup\\APP_DEV\\03_Qiriness_Email\\Qirines_Email_Automation\\web\\node_modules\\next\\dist\\server\\load-components.js',
+    'C:\\Users\\gnoua\\Desktop_backup\\APP_DEV\\03_Qiriness_Email\\Qirines_Email_Automation\\web\\node_modules\\next\\dist\\build\\utils.js',
+    'C:\\Users\\gnoua\\Desktop_backup\\APP_DEV\\03_Qiriness_Email\\Qirines_Email_Automation\\web\\node_modules\\next\\dist\\server\\dev\\hot-middleware.js',
+    'C:\\Users\\gnoua\\Desktop_backup\\APP_DEV\\03_Qiriness_Email\\Qirines_Email_Automation\\web\\node_modules\\next\\dist\\server\\dev\\hot-reloader-webpack.js',
+    'C:\\Users\\gnoua\\Desktop_backup\\APP_DEV\\03_Qiriness_Email\\Qirines_Email_Automation\\web\\node_modules\\next\\dist\\server\\lib\\router-utils\\setup-dev-bundler.js',
+    'C:\\Users\\gnoua\\Desktop_backup\\APP_DEV\\03_Qiriness_Email\\Qirines_Email_Automation\\web\\node_modules\\next\\dist\\server\\lib\\router-server.js',
+    'C:\\Users\\gnoua\\Desktop_backup\\APP_DEV\\03_Qiriness_Email\\Qirines_Email_Automation\\web\\node_modules\\next\\dist\\server\\lib\\start-server.js'
+  ],
+  page: '/tickets'
+}
+ ⨯ Error: Cannot find module './276.js'
+Require stack:
+- C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\.next\server\webpack-runtime.js
+- C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\.next\server\app\tickets\page.js
+- C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\require.js
+- C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\load-components.js
+- C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\build\utils.js
+- C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\dev\hot-middleware.js
+- C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\dev\hot-reloader-webpack.js
+- C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\lib\router-utils\setup-dev-bundler.js
+- C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\lib\router-server.js
+- C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\lib\start-server.js
+    at Function.<anonymous> (node:internal/modules/cjs/loader:1383:15)
+    at C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\require-hook.js:55:36
+    at defaultResolveImpl (node:internal/modules/cjs/loader:1025:19)
+    at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1030:22)
+    at Function._load (node:internal/modules/cjs/loader:1192:37)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:237:24)
+    at Module.<anonymous> (node:internal/modules/cjs/loader:1463:12)
+    at mod.require (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\require-hook.js:65:28)
+    at require (node:internal/modules/helpers:147:16)
+    at __webpack_require__.f.require (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\.next\server\webpack-runtime.js:203:28)
+    at C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\.next\server\webpack-runtime.js:116:40
+    at Array.reduce (<anonymous>)
+    at __webpack_require__.e (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\.next\server\webpack-runtime.js:115:67)
+    at Array.map (<anonymous>)
+    at __webpack_require__.X (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\.next\server\webpack-runtime.js:167:22)
+    at C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\.next\server\app\insights\fulfilment\page.js:1:10366
+    at Object.<anonymous> (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\.next\server\app\insights\fulfilment\page.js:1:10430)
+    at Module._compile (node:internal/modules/cjs/loader:1706:14)
+    at Object..js (node:internal/modules/cjs/loader:1839:10)
+    at Module.load (node:internal/modules/cjs/loader:1441:32)
+    at Function._load (node:internal/modules/cjs/loader:1263:12)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:237:24)
+    at Module.<anonymous> (node:internal/modules/cjs/loader:1463:12)
+    at mod.require (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\require-hook.js:65:28)
+    at require (node:internal/modules/helpers:147:16)
+    at requirePage (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\require.js:109:84)
+    at C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\load-components.js:103:84
+    at async loadComponentsImpl (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\load-components.js:103:26)
+    at async DevServer.findPageComponentsImpl (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\next-server.js:714:36)
+    at async DevServer.findPageComponents (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\dev\next-dev-server.js:577:20)
+    at async DevServer.renderPageComponent (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\base-server.js:1910:24)
+    at async DevServer.renderToResponseImpl (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\base-server.js:1962:32)
+    at async DevServer.pipeImpl (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\base-server.js:922:25)
+    at async NextNodeServer.handleCatchallRenderRequest (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\next-server.js:272:17)
+    at async DevServer.handleRequestImpl (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\base-server.js:818:17)
+    at async C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\dev\next-dev-server.js:339:20
+    at async Span.traceAsyncFn (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\trace\trace.js:154:20)
+    at async DevServer.handleRequest (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\dev\next-dev-server.js:336:24)
+    at async invokeRender (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\lib\router-server.js:179:21)
+    at async handleRequest (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\lib\router-server.js:359:24)
+    at async requestHandlerImpl (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\lib\router-server.js:383:13)
+    at async Server.requestListener (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\lib\start-server.js:141:13) {
+  code: 'MODULE_NOT_FOUND',
+  requireStack: [
+    'C:\\Users\\gnoua\\Desktop_backup\\APP_DEV\\03_Qiriness_Email\\Qirines_Email_Automation\\web\\.next\\server\\webpack-runtime.js',
+    'C:\\Users\\gnoua\\Desktop_backup\\APP_DEV\\03_Qiriness_Email\\Qirines_Email_Automation\\web\\.next\\server\\app\\tickets\\page.js',
+    'C:\\Users\\gnoua\\Desktop_backup\\APP_DEV\\03_Qiriness_Email\\Qirines_Email_Automation\\web\\node_modules\\next\\dist\\server\\require.js',
+    'C:\\Users\\gnoua\\Desktop_backup\\APP_DEV\\03_Qiriness_Email\\Qirines_Email_Automation\\web\\node_modules\\next\\dist\\server\\load-components.js',
+    'C:\\Users\\gnoua\\Desktop_backup\\APP_DEV\\03_Qiriness_Email\\Qirines_Email_Automation\\web\\node_modules\\next\\dist\\build\\utils.js',
+    'C:\\Users\\gnoua\\Desktop_backup\\APP_DEV\\03_Qiriness_Email\\Qirines_Email_Automation\\web\\node_modules\\next\\dist\\server\\dev\\hot-middleware.js',
+    'C:\\Users\\gnoua\\Desktop_backup\\APP_DEV\\03_Qiriness_Email\\Qirines_Email_Automation\\web\\node_modules\\next\\dist\\server\\dev\\hot-reloader-webpack.js',
+    'C:\\Users\\gnoua\\Desktop_backup\\APP_DEV\\03_Qiriness_Email\\Qirines_Email_Automation\\web\\node_modules\\next\\dist\\server\\lib\\router-utils\\setup-dev-bundler.js',
+    'C:\\Users\\gnoua\\Desktop_backup\\APP_DEV\\03_Qiriness_Email\\Qirines_Email_Automation\\web\\node_modules\\next\\dist\\server\\lib\\router-server.js',
+    'C:\\Users\\gnoua\\Desktop_backup\\APP_DEV\\03_Qiriness_Email\\Qirines_Email_Automation\\web\\node_modules\\next\\dist\\server\\lib\\start-server.js'
+  ],
+  page: '/insights/fulfilment'
+}
+ ⨯ Error: Cannot find module './276.js'
+Require stack:
+- C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\.next\server\webpack-runtime.js
+- C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\.next\server\app\tickets\page.js
+- C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\require.js
+- C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\load-components.js
+- C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\build\utils.js
+- C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\dev\hot-middleware.js
+- C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\dev\hot-reloader-webpack.js
+- C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\lib\router-utils\setup-dev-bundler.js
+- C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\lib\router-server.js
+- C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\lib\start-server.js
+    at Function.<anonymous> (node:internal/modules/cjs/loader:1383:15)
+    at C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\require-hook.js:55:36
+    at defaultResolveImpl (node:internal/modules/cjs/loader:1025:19)
+    at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1030:22)
+    at Function._load (node:internal/modules/cjs/loader:1192:37)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:237:24)
+    at Module.<anonymous> (node:internal/modules/cjs/loader:1463:12)
+    at mod.require (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\require-hook.js:65:28)
+    at require (node:internal/modules/helpers:147:16)
+    at __webpack_require__.f.require (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\.next\server\webpack-runtime.js:203:28)
+    at C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\.next\server\webpack-runtime.js:116:40
+    at Array.reduce (<anonymous>)
+    at __webpack_require__.e (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\.next\server\webpack-runtime.js:115:67)
+    at Array.map (<anonymous>)
+    at __webpack_require__.X (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\.next\server\webpack-runtime.js:167:22)
+    at C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\.next\server\app\insights\customers\page.js:1:23484
+    at Object.<anonymous> (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\.next\server\app\insights\customers\page.js:1:23548)
+    at Module._compile (node:internal/modules/cjs/loader:1706:14)
+    at Object..js (node:internal/modules/cjs/loader:1839:10)
+    at Module.load (node:internal/modules/cjs/loader:1441:32)
+    at Function._load (node:internal/modules/cjs/loader:1263:12)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:237:24)
+    at Module.<anonymous> (node:internal/modules/cjs/loader:1463:12)
+    at mod.require (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\require-hook.js:65:28)
+    at require (node:internal/modules/helpers:147:16)
+    at requirePage (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\require.js:109:84)
+    at C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\load-components.js:103:84
+    at async loadComponentsImpl (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\load-components.js:103:26)
+    at async DevServer.findPageComponentsImpl (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\next-server.js:714:36)
+    at async DevServer.findPageComponents (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\dev\next-dev-server.js:577:20)
+    at async DevServer.renderPageComponent (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\base-server.js:1910:24)
+    at async DevServer.renderToResponseImpl (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\base-server.js:1962:32)
+    at async DevServer.pipeImpl (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\base-server.js:922:25)
+    at async NextNodeServer.handleCatchallRenderRequest (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\next-server.js:272:17)
+    at async DevServer.handleRequestImpl (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\base-server.js:818:17)
+    at async C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\dev\next-dev-server.js:339:20
+    at async Span.traceAsyncFn (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\trace\trace.js:154:20)
+    at async DevServer.handleRequest (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\dev\next-dev-server.js:336:24)
+    at async invokeRender (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\lib\router-server.js:179:21)
+    at async handleRequest (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\lib\router-server.js:359:24)
+    at async requestHandlerImpl (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\lib\router-server.js:383:13)
+    at async Server.requestListener (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\lib\start-server.js:141:13) {
+  code: 'MODULE_NOT_FOUND',
+  requireStack: [
+    'C:\\Users\\gnoua\\Desktop_backup\\APP_DEV\\03_Qiriness_Email\\Qirines_Email_Automation\\web\\.next\\server\\webpack-runtime.js',
+    'C:\\Users\\gnoua\\Desktop_backup\\APP_DEV\\03_Qiriness_Email\\Qirines_Email_Automation\\web\\.next\\server\\app\\tickets\\page.js',
+    'C:\\Users\\gnoua\\Desktop_backup\\APP_DEV\\03_Qiriness_Email\\Qirines_Email_Automation\\web\\node_modules\\next\\dist\\server\\require.js',
+    'C:\\Users\\gnoua\\Desktop_backup\\APP_DEV\\03_Qiriness_Email\\Qirines_Email_Automation\\web\\node_modules\\next\\dist\\server\\load-components.js',
+    'C:\\Users\\gnoua\\Desktop_backup\\APP_DEV\\03_Qiriness_Email\\Qirines_Email_Automation\\web\\node_modules\\next\\dist\\build\\utils.js',
+    'C:\\Users\\gnoua\\Desktop_backup\\APP_DEV\\03_Qiriness_Email\\Qirines_Email_Automation\\web\\node_modules\\next\\dist\\server\\dev\\hot-middleware.js',
+    'C:\\Users\\gnoua\\Desktop_backup\\APP_DEV\\03_Qiriness_Email\\Qirines_Email_Automation\\web\\node_modules\\next\\dist\\server\\dev\\hot-reloader-webpack.js',
+    'C:\\Users\\gnoua\\Desktop_backup\\APP_DEV\\03_Qiriness_Email\\Qirines_Email_Automation\\web\\node_modules\\next\\dist\\server\\lib\\router-utils\\setup-dev-bundler.js',
+    'C:\\Users\\gnoua\\Desktop_backup\\APP_DEV\\03_Qiriness_Email\\Qirines_Email_Automation\\web\\node_modules\\next\\dist\\server\\lib\\router-server.js',
+    'C:\\Users\\gnoua\\Desktop_backup\\APP_DEV\\03_Qiriness_Email\\Qirines_Email_Automation\\web\\node_modules\\next\\dist\\server\\lib\\start-server.js'
+  ],
+  page: '/insights/customers'
+}
+ ⨯ Error: Cannot find module './276.js'
+Require stack:
+- C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\.next\server\webpack-runtime.js
+- C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\.next\server\app\tickets\page.js
+- C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\require.js
+- C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\load-components.js
+- C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\build\utils.js
+- C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\dev\hot-middleware.js
+- C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\dev\hot-reloader-webpack.js
+- C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\lib\router-utils\setup-dev-bundler.js
+- C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\lib\router-server.js
+- C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\lib\start-server.js
+    at Function.<anonymous> (node:internal/modules/cjs/loader:1383:15)
+    at C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\require-hook.js:55:36
+    at defaultResolveImpl (node:internal/modules/cjs/loader:1025:19)
+    at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1030:22)
+    at Function._load (node:internal/modules/cjs/loader:1192:37)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:237:24)
+    at Module.<anonymous> (node:internal/modules/cjs/loader:1463:12)
+    at mod.require (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\require-hook.js:65:28)
+    at require (node:internal/modules/helpers:147:16)
+    at __webpack_require__.f.require (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\.next\server\webpack-runtime.js:203:28)
+    at C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\.next\server\webpack-runtime.js:116:40
+    at Array.reduce (<anonymous>)
+    at __webpack_require__.e (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\.next\server\webpack-runtime.js:115:67)
+    at Array.map (<anonymous>)
+    at __webpack_require__.X (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\.next\server\webpack-runtime.js:167:22)
+    at C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\.next\server\app\insights\agent\page.js:1:14546
+    at Object.<anonymous> (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\.next\server\app\insights\agent\page.js:1:14609)
+    at Module._compile (node:internal/modules/cjs/loader:1706:14)
+    at Object..js (node:internal/modules/cjs/loader:1839:10)
+    at Module.load (node:internal/modules/cjs/loader:1441:32)
+    at Function._load (node:internal/modules/cjs/loader:1263:12)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:237:24)
+    at Module.<anonymous> (node:internal/modules/cjs/loader:1463:12)
+    at mod.require (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\require-hook.js:65:28)
+    at require (node:internal/modules/helpers:147:16)
+    at requirePage (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\require.js:109:84)
+    at C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\load-components.js:103:84
+    at async loadComponentsImpl (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\load-components.js:103:26)
+    at async DevServer.findPageComponentsImpl (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\next-server.js:714:36)
+    at async DevServer.findPageComponents (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\dev\next-dev-server.js:577:20)
+    at async DevServer.renderPageComponent (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\base-server.js:1910:24)
+    at async DevServer.renderToResponseImpl (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\base-server.js:1962:32)
+    at async DevServer.pipeImpl (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\base-server.js:922:25)
+    at async NextNodeServer.handleCatchallRenderRequest (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\next-server.js:272:17)
+    at async DevServer.handleRequestImpl (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\base-server.js:818:17)
+    at async C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\dev\next-dev-server.js:339:20
+    at async Span.traceAsyncFn (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\trace\trace.js:154:20)
+    at async DevServer.handleRequest (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\dev\next-dev-server.js:336:24)
+    at async invokeRender (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\lib\router-server.js:179:21)
+    at async handleRequest (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\lib\router-server.js:359:24)
+    at async requestHandlerImpl (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\lib\router-server.js:383:13)
+    at async Server.requestListener (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\lib\start-server.js:141:13) {
+  code: 'MODULE_NOT_FOUND',
+  requireStack: [
+    'C:\\Users\\gnoua\\Desktop_backup\\APP_DEV\\03_Qiriness_Email\\Qirines_Email_Automation\\web\\.next\\server\\webpack-runtime.js',
+    'C:\\Users\\gnoua\\Desktop_backup\\APP_DEV\\03_Qiriness_Email\\Qirines_Email_Automation\\web\\.next\\server\\app\\tickets\\page.js',
+    'C:\\Users\\gnoua\\Desktop_backup\\APP_DEV\\03_Qiriness_Email\\Qirines_Email_Automation\\web\\node_modules\\next\\dist\\server\\require.js',
+    'C:\\Users\\gnoua\\Desktop_backup\\APP_DEV\\03_Qiriness_Email\\Qirines_Email_Automation\\web\\node_modules\\next\\dist\\server\\load-components.js',
+    'C:\\Users\\gnoua\\Desktop_backup\\APP_DEV\\03_Qiriness_Email\\Qirines_Email_Automation\\web\\node_modules\\next\\dist\\build\\utils.js',
+    'C:\\Users\\gnoua\\Desktop_backup\\APP_DEV\\03_Qiriness_Email\\Qirines_Email_Automation\\web\\node_modules\\next\\dist\\server\\dev\\hot-middleware.js',
+    'C:\\Users\\gnoua\\Desktop_backup\\APP_DEV\\03_Qiriness_Email\\Qirines_Email_Automation\\web\\node_modules\\next\\dist\\server\\dev\\hot-reloader-webpack.js',
+    'C:\\Users\\gnoua\\Desktop_backup\\APP_DEV\\03_Qiriness_Email\\Qirines_Email_Automation\\web\\node_modules\\next\\dist\\server\\lib\\router-utils\\setup-dev-bundler.js',
+    'C:\\Users\\gnoua\\Desktop_backup\\APP_DEV\\03_Qiriness_Email\\Qirines_Email_Automation\\web\\node_modules\\next\\dist\\server\\lib\\router-server.js',
+    'C:\\Users\\gnoua\\Desktop_backup\\APP_DEV\\03_Qiriness_Email\\Qirines_Email_Automation\\web\\node_modules\\next\\dist\\server\\lib\\start-server.js'
+  ],
+  page: '/insights/agent'
+}
+ ⨯ Error: Cannot find module './276.js'
+Require stack:
+- C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\.next\server\webpack-runtime.js
+- C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\.next\server\pages\_document.js
+- C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\require.js
+- C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\load-components.js
+- C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\build\utils.js
+- C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\dev\hot-middleware.js
+- C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\dev\hot-reloader-webpack.js
+- C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\lib\router-utils\setup-dev-bundler.js
+- C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\lib\router-server.js
+- C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\lib\start-server.js
+    at Function.<anonymous> (node:internal/modules/cjs/loader:1383:15)
+    at C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\require-hook.js:55:36
+    at defaultResolveImpl (node:internal/modules/cjs/loader:1025:19)
+    at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1030:22)
+    at Function._load (node:internal/modules/cjs/loader:1192:37)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:237:24)
+    at Module.<anonymous> (node:internal/modules/cjs/loader:1463:12)
+    at mod.require (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\require-hook.js:65:28)
+    at require (node:internal/modules/helpers:147:16)
+    at __webpack_require__.f.require (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\.next\server\webpack-runtime.js:203:28)
+    at C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\.next\server\webpack-runtime.js:116:40
+    at Array.reduce (<anonymous>)
+    at __webpack_require__.e (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\.next\server\webpack-runtime.js:115:67)
+    at Array.map (<anonymous>)
+    at __webpack_require__.X (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\.next\server\webpack-runtime.js:167:22)
+    at C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\.next\server\app\insights\support\page.js:1:32289
+    at Object.<anonymous> (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\.next\server\app\insights\support\page.js:1:32352)
+    at Module._compile (node:internal/modules/cjs/loader:1706:14)
+    at Object..js (node:internal/modules/cjs/loader:1839:10)
+    at Module.load (node:internal/modules/cjs/loader:1441:32)
+    at Function._load (node:internal/modules/cjs/loader:1263:12)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:237:24)
+    at Module.<anonymous> (node:internal/modules/cjs/loader:1463:12)
+    at mod.require (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\require-hook.js:65:28)
+    at require (node:internal/modules/helpers:147:16)
+    at requirePage (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\require.js:109:84)
+    at C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\load-components.js:103:84
+    at async loadComponentsImpl (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\load-components.js:103:26)
+    at async DevServer.findPageComponentsImpl (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\next-server.js:714:36)
+    at async DevServer.findPageComponents (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\dev\next-dev-server.js:577:20)
+    at async DevServer.renderPageComponent (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\base-server.js:1910:24)
+    at async DevServer.renderToResponseImpl (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\base-server.js:1962:32)
+    at async DevServer.pipeImpl (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\base-server.js:922:25)
+    at async NextNodeServer.handleCatchallRenderRequest (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\next-server.js:272:17)
+    at async DevServer.handleRequestImpl (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\base-server.js:818:17)
+    at async C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\dev\next-dev-server.js:339:20
+    at async Span.traceAsyncFn (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\trace\trace.js:154:20)
+    at async DevServer.handleRequest (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\dev\next-dev-server.js:336:24)
+    at async invokeRender (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\lib\router-server.js:179:21)
+    at async handleRequest (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\lib\router-server.js:359:24)
+    at async requestHandlerImpl (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\lib\router-server.js:383:13)
+    at async Server.requestListener (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\lib\start-server.js:141:13) {
+  code: 'MODULE_NOT_FOUND',
+  requireStack: [
+    'C:\\Users\\gnoua\\Desktop_backup\\APP_DEV\\03_Qiriness_Email\\Qirines_Email_Automation\\web\\.next\\server\\webpack-runtime.js',
+    'C:\\Users\\gnoua\\Desktop_backup\\APP_DEV\\03_Qiriness_Email\\Qirines_Email_Automation\\web\\.next\\server\\pages\\_document.js',
+    'C:\\Users\\gnoua\\Desktop_backup\\APP_DEV\\03_Qiriness_Email\\Qirines_Email_Automation\\web\\node_modules\\next\\dist\\server\\require.js',
+    'C:\\Users\\gnoua\\Desktop_backup\\APP_DEV\\03_Qiriness_Email\\Qirines_Email_Automation\\web\\node_modules\\next\\dist\\server\\load-components.js',
+    'C:\\Users\\gnoua\\Desktop_backup\\APP_DEV\\03_Qiriness_Email\\Qirines_Email_Automation\\web\\node_modules\\next\\dist\\build\\utils.js',
+    'C:\\Users\\gnoua\\Desktop_backup\\APP_DEV\\03_Qiriness_Email\\Qirines_Email_Automation\\web\\node_modules\\next\\dist\\server\\dev\\hot-middleware.js',
+    'C:\\Users\\gnoua\\Desktop_backup\\APP_DEV\\03_Qiriness_Email\\Qirines_Email_Automation\\web\\node_modules\\next\\dist\\server\\dev\\hot-reloader-webpack.js',
+    'C:\\Users\\gnoua\\Desktop_backup\\APP_DEV\\03_Qiriness_Email\\Qirines_Email_Automation\\web\\node_modules\\next\\dist\\server\\lib\\router-utils\\setup-dev-bundler.js',
+    'C:\\Users\\gnoua\\Desktop_backup\\APP_DEV\\03_Qiriness_Email\\Qirines_Email_Automation\\web\\node_modules\\next\\dist\\server\\lib\\router-server.js',
+    'C:\\Users\\gnoua\\Desktop_backup\\APP_DEV\\03_Qiriness_Email\\Qirines_Email_Automation\\web\\node_modules\\next\\dist\\server\\lib\\start-server.js'
+  ],
+  page: '/insights/support'
+}
+ ⨯ Error: Cannot find module './276.js'
+Require stack:
+- C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\.next\server\webpack-runtime.js
+- C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\.next\server\pages\_document.js
+- C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\require.js
+- C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\load-components.js
+- C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\build\utils.js
+- C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\dev\hot-middleware.js
+- C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\dev\hot-reloader-webpack.js
+- C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\lib\router-utils\setup-dev-bundler.js
+- C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\lib\router-server.js
+- C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\lib\start-server.js
+    at Function.<anonymous> (node:internal/modules/cjs/loader:1383:15)
+    at C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\require-hook.js:55:36
+    at defaultResolveImpl (node:internal/modules/cjs/loader:1025:19)
+    at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1030:22)
+    at Function._load (node:internal/modules/cjs/loader:1192:37)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:237:24)
+    at Module.<anonymous> (node:internal/modules/cjs/loader:1463:12)
+    at mod.require (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\require-hook.js:65:28)
+    at require (node:internal/modules/helpers:147:16)
+    at __webpack_require__.f.require (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\.next\server\webpack-runtime.js:203:28)
+    at C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\.next\server\webpack-runtime.js:116:40
+    at Array.reduce (<anonymous>)
+    at __webpack_require__.e (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\.next\server\webpack-runtime.js:115:67)
+    at Array.map (<anonymous>)
+    at __webpack_require__.X (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\.next\server\webpack-runtime.js:167:22)
+    at C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\.next\server\app\insights\support\page.js:1:32289
+    at Object.<anonymous> (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\.next\server\app\insights\support\page.js:1:32352)
+    at Module._compile (node:internal/modules/cjs/loader:1706:14)
+    at Object..js (node:internal/modules/cjs/loader:1839:10)
+    at Module.load (node:internal/modules/cjs/loader:1441:32)
+    at Function._load (node:internal/modules/cjs/loader:1263:12)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:237:24)
+    at Module.<anonymous> (node:internal/modules/cjs/loader:1463:12)
+    at mod.require (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\require-hook.js:65:28)
+    at require (node:internal/modules/helpers:147:16)
+    at requirePage (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\require.js:109:84)
+    at C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\load-components.js:103:84
+    at async loadComponentsImpl (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\load-components.js:103:26)
+    at async DevServer.findPageComponentsImpl (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\next-server.js:714:36)
+    at async DevServer.findPageComponents (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\dev\next-dev-server.js:577:20)
+    at async DevServer.renderPageComponent (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\base-server.js:1910:24)
+    at async DevServer.renderToResponseImpl (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\base-server.js:1962:32)
+    at async DevServer.pipeImpl (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\base-server.js:922:25)
+    at async NextNodeServer.handleCatchallRenderRequest (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\next-server.js:272:17)
+    at async DevServer.handleRequestImpl (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\base-server.js:818:17)
+    at async C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\dev\next-dev-server.js:339:20
+    at async Span.traceAsyncFn (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\trace\trace.js:154:20)
+    at async DevServer.handleRequest (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\dev\next-dev-server.js:336:24)
+    at async invokeRender (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\lib\router-server.js:179:21)
+    at async handleRequest (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\lib\router-server.js:359:24)
+    at async requestHandlerImpl (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\lib\router-server.js:383:13)
+    at async Server.requestListener (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\lib\start-server.js:141:13) {
+  code: 'MODULE_NOT_FOUND',
+  requireStack: [
+    'C:\\Users\\gnoua\\Desktop_backup\\APP_DEV\\03_Qiriness_Email\\Qirines_Email_Automation\\web\\.next\\server\\webpack-runtime.js',
+    'C:\\Users\\gnoua\\Desktop_backup\\APP_DEV\\03_Qiriness_Email\\Qirines_Email_Automation\\web\\.next\\server\\pages\\_document.js',
+    'C:\\Users\\gnoua\\Desktop_backup\\APP_DEV\\03_Qiriness_Email\\Qirines_Email_Automation\\web\\node_modules\\next\\dist\\server\\require.js',
+    'C:\\Users\\gnoua\\Desktop_backup\\APP_DEV\\03_Qiriness_Email\\Qirines_Email_Automation\\web\\node_modules\\next\\dist\\server\\load-components.js',
+    'C:\\Users\\gnoua\\Desktop_backup\\APP_DEV\\03_Qiriness_Email\\Qirines_Email_Automation\\web\\node_modules\\next\\dist\\build\\utils.js',
+    'C:\\Users\\gnoua\\Desktop_backup\\APP_DEV\\03_Qiriness_Email\\Qirines_Email_Automation\\web\\node_modules\\next\\dist\\server\\dev\\hot-middleware.js',
+    'C:\\Users\\gnoua\\Desktop_backup\\APP_DEV\\03_Qiriness_Email\\Qirines_Email_Automation\\web\\node_modules\\next\\dist\\server\\dev\\hot-reloader-webpack.js',
+    'C:\\Users\\gnoua\\Desktop_backup\\APP_DEV\\03_Qiriness_Email\\Qirines_Email_Automation\\web\\node_modules\\next\\dist\\server\\lib\\router-utils\\setup-dev-bundler.js',
+    'C:\\Users\\gnoua\\Desktop_backup\\APP_DEV\\03_Qiriness_Email\\Qirines_Email_Automation\\web\\node_modules\\next\\dist\\server\\lib\\router-server.js',
+    'C:\\Users\\gnoua\\Desktop_backup\\APP_DEV\\03_Qiriness_Email\\Qirines_Email_Automation\\web\\node_modules\\next\\dist\\server\\lib\\start-server.js'
+  ],
+  page: '/insights/support'
+}
+ ⨯ Error: Cannot find module './276.js'
+Require stack:
+- C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\.next\server\webpack-runtime.js
+- C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\.next\server\pages\_document.js
+- C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\require.js
+- C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\load-components.js
+- C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\build\utils.js
+- C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\dev\hot-middleware.js
+- C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\dev\hot-reloader-webpack.js
+- C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\lib\router-utils\setup-dev-bundler.js
+- C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\lib\router-server.js
+- C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\lib\start-server.js
+    at Function.<anonymous> (node:internal/modules/cjs/loader:1383:15)
+    at C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\require-hook.js:55:36
+    at defaultResolveImpl (node:internal/modules/cjs/loader:1025:19)
+    at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1030:22)
+    at Function._load (node:internal/modules/cjs/loader:1192:37)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:237:24)
+    at Module.<anonymous> (node:internal/modules/cjs/loader:1463:12)
+    at mod.require (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\require-hook.js:65:28)
+    at require (node:internal/modules/helpers:147:16)
+    at __webpack_require__.f.require (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\.next\server\webpack-runtime.js:203:28)
+    at C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\.next\server\webpack-runtime.js:116:40
+    at Array.reduce (<anonymous>)
+    at __webpack_require__.e (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\.next\server\webpack-runtime.js:115:67)
+    at Array.map (<anonymous>)
+    at __webpack_require__.X (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\.next\server\webpack-runtime.js:167:22)
+    at C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\.next\server\app\insights\support\page.js:1:32289
+    at Object.<anonymous> (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\.next\server\app\insights\support\page.js:1:32352)
+    at Module._compile (node:internal/modules/cjs/loader:1706:14)
+    at Object..js (node:internal/modules/cjs/loader:1839:10)
+    at Module.load (node:internal/modules/cjs/loader:1441:32)
+    at Function._load (node:internal/modules/cjs/loader:1263:12)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:237:24)
+    at Module.<anonymous> (node:internal/modules/cjs/loader:1463:12)
+    at mod.require (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\require-hook.js:65:28)
+    at require (node:internal/modules/helpers:147:16)
+    at requirePage (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\require.js:109:84)
+    at C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\load-components.js:103:84
+    at async loadComponentsImpl (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\load-components.js:103:26)
+    at async DevServer.findPageComponentsImpl (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\next-server.js:714:36)
+    at async DevServer.findPageComponents (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\dev\next-dev-server.js:577:20)
+    at async DevServer.renderPageComponent (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\base-server.js:1910:24)
+    at async DevServer.renderToResponseImpl (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\base-server.js:1962:32)
+    at async DevServer.pipeImpl (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\base-server.js:922:25)
+    at async NextNodeServer.handleCatchallRenderRequest (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\next-server.js:272:17)
+    at async DevServer.handleRequestImpl (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\base-server.js:818:17)
+    at async C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\dev\next-dev-server.js:339:20
+    at async Span.traceAsyncFn (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\trace\trace.js:154:20)
+    at async DevServer.handleRequest (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\dev\next-dev-server.js:336:24)
+    at async invokeRender (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\lib\router-server.js:179:21)
+    at async handleRequest (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\lib\router-server.js:359:24)
+    at async requestHandlerImpl (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\lib\router-server.js:383:13)
+    at async Server.requestListener (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\lib\start-server.js:141:13) {
+  code: 'MODULE_NOT_FOUND',
+  requireStack: [
+    'C:\\Users\\gnoua\\Desktop_backup\\APP_DEV\\03_Qiriness_Email\\Qirines_Email_Automation\\web\\.next\\server\\webpack-runtime.js',
+    'C:\\Users\\gnoua\\Desktop_backup\\APP_DEV\\03_Qiriness_Email\\Qirines_Email_Automation\\web\\.next\\server\\pages\\_document.js',
+    'C:\\Users\\gnoua\\Desktop_backup\\APP_DEV\\03_Qiriness_Email\\Qirines_Email_Automation\\web\\node_modules\\next\\dist\\server\\require.js',
+    'C:\\Users\\gnoua\\Desktop_backup\\APP_DEV\\03_Qiriness_Email\\Qirines_Email_Automation\\web\\node_modules\\next\\dist\\server\\load-components.js',
+    'C:\\Users\\gnoua\\Desktop_backup\\APP_DEV\\03_Qiriness_Email\\Qirines_Email_Automation\\web\\node_modules\\next\\dist\\build\\utils.js',
+    'C:\\Users\\gnoua\\Desktop_backup\\APP_DEV\\03_Qiriness_Email\\Qirines_Email_Automation\\web\\node_modules\\next\\dist\\server\\dev\\hot-middleware.js',
+    'C:\\Users\\gnoua\\Desktop_backup\\APP_DEV\\03_Qiriness_Email\\Qirines_Email_Automation\\web\\node_modules\\next\\dist\\server\\dev\\hot-reloader-webpack.js',
+    'C:\\Users\\gnoua\\Desktop_backup\\APP_DEV\\03_Qiriness_Email\\Qirines_Email_Automation\\web\\node_modules\\next\\dist\\server\\lib\\router-utils\\setup-dev-bundler.js',
+    'C:\\Users\\gnoua\\Desktop_backup\\APP_DEV\\03_Qiriness_Email\\Qirines_Email_Automation\\web\\node_modules\\next\\dist\\server\\lib\\router-server.js',
+    'C:\\Users\\gnoua\\Desktop_backup\\APP_DEV\\03_Qiriness_Email\\Qirines_Email_Automation\\web\\node_modules\\next\\dist\\server\\lib\\start-server.js'
+  ],
+  page: '/insights/support'
+}
+ ⨯ Error: Cannot find module './276.js'
+Require stack:
+- C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\.next\server\webpack-runtime.js
+- C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\.next\server\pages\_document.js
+- C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\require.js
+- C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\load-components.js
+- C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\build\utils.js
+- C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\dev\hot-middleware.js
+- C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\dev\hot-reloader-webpack.js
+- C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\lib\router-utils\setup-dev-bundler.js
+- C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\lib\router-server.js
+- C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\lib\start-server.js
+    at Function.<anonymous> (node:internal/modules/cjs/loader:1383:15)
+    at C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\require-hook.js:55:36
+    at defaultResolveImpl (node:internal/modules/cjs/loader:1025:19)
+    at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1030:22)
+    at Function._load (node:internal/modules/cjs/loader:1192:37)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:237:24)
+    at Module.<anonymous> (node:internal/modules/cjs/loader:1463:12)
+    at mod.require (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\require-hook.js:65:28)
+    at require (node:internal/modules/helpers:147:16)
+    at __webpack_require__.f.require (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\.next\server\webpack-runtime.js:203:28)
+    at C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\.next\server\webpack-runtime.js:116:40
+    at Array.reduce (<anonymous>)
+    at __webpack_require__.e (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\.next\server\webpack-runtime.js:115:67)
+    at Array.map (<anonymous>)
+    at __webpack_require__.X (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\.next\server\webpack-runtime.js:167:22)
+    at C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\.next\server\app\insights\support\page.js:1:32289
+    at Object.<anonymous> (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\.next\server\app\insights\support\page.js:1:32352)
+    at Module._compile (node:internal/modules/cjs/loader:1706:14)
+    at Object..js (node:internal/modules/cjs/loader:1839:10)
+    at Module.load (node:internal/modules/cjs/loader:1441:32)
+    at Function._load (node:internal/modules/cjs/loader:1263:12)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:237:24)
+    at Module.<anonymous> (node:internal/modules/cjs/loader:1463:12)
+    at mod.require (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\require-hook.js:65:28)
+    at require (node:internal/modules/helpers:147:16)
+    at requirePage (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\require.js:109:84)
+    at C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\load-components.js:103:84
+    at async loadComponentsImpl (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\load-components.js:103:26)
+    at async DevServer.findPageComponentsImpl (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\next-server.js:714:36)
+    at async DevServer.findPageComponents (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\dev\next-dev-server.js:577:20)
+    at async DevServer.renderPageComponent (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\base-server.js:1910:24)
+    at async DevServer.renderToResponseImpl (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\base-server.js:1962:32)
+    at async DevServer.pipeImpl (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\base-server.js:922:25)
+    at async NextNodeServer.handleCatchallRenderRequest (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\next-server.js:272:17)
+    at async DevServer.handleRequestImpl (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\base-server.js:818:17)
+    at async C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\dev\next-dev-server.js:339:20
+    at async Span.traceAsyncFn (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\trace\trace.js:154:20)
+    at async DevServer.handleRequest (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\dev\next-dev-server.js:336:24)
+    at async invokeRender (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\lib\router-server.js:179:21)
+    at async handleRequest (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\lib\router-server.js:359:24)
+    at async requestHandlerImpl (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\lib\router-server.js:383:13)
+    at async Server.requestListener (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\lib\start-server.js:141:13) {
+  code: 'MODULE_NOT_FOUND',
+  requireStack: [
+    'C:\\Users\\gnoua\\Desktop_backup\\APP_DEV\\03_Qiriness_Email\\Qirines_Email_Automation\\web\\.next\\server\\webpack-runtime.js',
+    'C:\\Users\\gnoua\\Desktop_backup\\APP_DEV\\03_Qiriness_Email\\Qirines_Email_Automation\\web\\.next\\server\\pages\\_document.js',
+    'C:\\Users\\gnoua\\Desktop_backup\\APP_DEV\\03_Qiriness_Email\\Qirines_Email_Automation\\web\\node_modules\\next\\dist\\server\\require.js',
+    'C:\\Users\\gnoua\\Desktop_backup\\APP_DEV\\03_Qiriness_Email\\Qirines_Email_Automation\\web\\node_modules\\next\\dist\\server\\load-components.js',
+    'C:\\Users\\gnoua\\Desktop_backup\\APP_DEV\\03_Qiriness_Email\\Qirines_Email_Automation\\web\\node_modules\\next\\dist\\build\\utils.js',
+    'C:\\Users\\gnoua\\Desktop_backup\\APP_DEV\\03_Qiriness_Email\\Qirines_Email_Automation\\web\\node_modules\\next\\dist\\server\\dev\\hot-middleware.js',
+    'C:\\Users\\gnoua\\Desktop_backup\\APP_DEV\\03_Qiriness_Email\\Qirines_Email_Automation\\web\\node_modules\\next\\dist\\server\\dev\\hot-reloader-webpack.js',
+    'C:\\Users\\gnoua\\Desktop_backup\\APP_DEV\\03_Qiriness_Email\\Qirines_Email_Automation\\web\\node_modules\\next\\dist\\server\\lib\\router-utils\\setup-dev-bundler.js',
+    'C:\\Users\\gnoua\\Desktop_backup\\APP_DEV\\03_Qiriness_Email\\Qirines_Email_Automation\\web\\node_modules\\next\\dist\\server\\lib\\router-server.js',
+    'C:\\Users\\gnoua\\Desktop_backup\\APP_DEV\\03_Qiriness_Email\\Qirines_Email_Automation\\web\\node_modules\\next\\dist\\server\\lib\\start-server.js'
+  ],
+  page: '/insights/support'
+}
+ ⨯ Error: Cannot find module './276.js'
+Require stack:
+- C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\.next\server\webpack-runtime.js
+- C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\.next\server\pages\_document.js
+- C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\require.js
+- C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\load-components.js
+- C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\build\utils.js
+- C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\dev\hot-middleware.js
+- C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\dev\hot-reloader-webpack.js
+- C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\lib\router-utils\setup-dev-bundler.js
+- C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\lib\router-server.js
+- C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\lib\start-server.js
+    at Function.<anonymous> (node:internal/modules/cjs/loader:1383:15)
+    at C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\require-hook.js:55:36
+    at defaultResolveImpl (node:internal/modules/cjs/loader:1025:19)
+    at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1030:22)
+    at Function._load (node:internal/modules/cjs/loader:1192:37)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:237:24)
+    at Module.<anonymous> (node:internal/modules/cjs/loader:1463:12)
+    at mod.require (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\require-hook.js:65:28)
+    at require (node:internal/modules/helpers:147:16)
+    at __webpack_require__.f.require (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\.next\server\webpack-runtime.js:203:28)
+    at C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\.next\server\webpack-runtime.js:116:40
+    at Array.reduce (<anonymous>)
+    at __webpack_require__.e (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\.next\server\webpack-runtime.js:115:67)
+    at Array.map (<anonymous>)
+    at __webpack_require__.X (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\.next\server\webpack-runtime.js:167:22)
+    at C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\.next\server\app\insights\support\page.js:1:32289
+    at Object.<anonymous> (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\.next\server\app\insights\support\page.js:1:32352)
+    at Module._compile (node:internal/modules/cjs/loader:1706:14)
+    at Object..js (node:internal/modules/cjs/loader:1839:10)
+    at Module.load (node:internal/modules/cjs/loader:1441:32)
+    at Function._load (node:internal/modules/cjs/loader:1263:12)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:237:24)
+    at Module.<anonymous> (node:internal/modules/cjs/loader:1463:12)
+    at mod.require (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\require-hook.js:65:28)
+    at require (node:internal/modules/helpers:147:16)
+    at requirePage (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\require.js:109:84)
+    at C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\load-components.js:103:84
+    at async loadComponentsImpl (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\load-components.js:103:26)
+    at async DevServer.findPageComponentsImpl (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\next-server.js:714:36)
+    at async DevServer.findPageComponents (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\dev\next-dev-server.js:577:20)
+    at async DevServer.renderPageComponent (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\base-server.js:1910:24)
+    at async DevServer.renderToResponseImpl (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\base-server.js:1962:32)
+    at async DevServer.pipeImpl (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\base-server.js:922:25)
+    at async NextNodeServer.handleCatchallRenderRequest (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\next-server.js:272:17)
+    at async DevServer.handleRequestImpl (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\base-server.js:818:17)
+    at async C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\dev\next-dev-server.js:339:20
+    at async Span.traceAsyncFn (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\trace\trace.js:154:20)
+    at async DevServer.handleRequest (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\dev\next-dev-server.js:336:24)
+    at async invokeRender (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\lib\router-server.js:179:21)
+    at async handleRequest (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\lib\router-server.js:359:24)
+    at async requestHandlerImpl (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\lib\router-server.js:383:13)
+    at async Server.requestListener (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\lib\start-server.js:141:13) {
+  code: 'MODULE_NOT_FOUND',
+  requireStack: [
+    'C:\\Users\\gnoua\\Desktop_backup\\APP_DEV\\03_Qiriness_Email\\Qirines_Email_Automation\\web\\.next\\server\\webpack-runtime.js',
+    'C:\\Users\\gnoua\\Desktop_backup\\APP_DEV\\03_Qiriness_Email\\Qirines_Email_Automation\\web\\.next\\server\\pages\\_document.js',
+    'C:\\Users\\gnoua\\Desktop_backup\\APP_DEV\\03_Qiriness_Email\\Qirines_Email_Automation\\web\\node_modules\\next\\dist\\server\\require.js',
+    'C:\\Users\\gnoua\\Desktop_backup\\APP_DEV\\03_Qiriness_Email\\Qirines_Email_Automation\\web\\node_modules\\next\\dist\\server\\load-components.js',
+    'C:\\Users\\gnoua\\Desktop_backup\\APP_DEV\\03_Qiriness_Email\\Qirines_Email_Automation\\web\\node_modules\\next\\dist\\build\\utils.js',
+    'C:\\Users\\gnoua\\Desktop_backup\\APP_DEV\\03_Qiriness_Email\\Qirines_Email_Automation\\web\\node_modules\\next\\dist\\server\\dev\\hot-middleware.js',
+    'C:\\Users\\gnoua\\Desktop_backup\\APP_DEV\\03_Qiriness_Email\\Qirines_Email_Automation\\web\\node_modules\\next\\dist\\server\\dev\\hot-reloader-webpack.js',
+    'C:\\Users\\gnoua\\Desktop_backup\\APP_DEV\\03_Qiriness_Email\\Qirines_Email_Automation\\web\\node_modules\\next\\dist\\server\\lib\\router-utils\\setup-dev-bundler.js',
+    'C:\\Users\\gnoua\\Desktop_backup\\APP_DEV\\03_Qiriness_Email\\Qirines_Email_Automation\\web\\node_modules\\next\\dist\\server\\lib\\router-server.js',
+    'C:\\Users\\gnoua\\Desktop_backup\\APP_DEV\\03_Qiriness_Email\\Qirines_Email_Automation\\web\\node_modules\\next\\dist\\server\\lib\\start-server.js'
+  ],
+  page: '/insights/support'
+}
+ ⨯ Error: Cannot find module './276.js'
+Require stack:
+- C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\.next\server\webpack-runtime.js
+- C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\.next\server\pages\_document.js
+- C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\require.js
+- C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\load-components.js
+- C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\build\utils.js
+- C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\dev\hot-middleware.js
+- C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\dev\hot-reloader-webpack.js
+- C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\lib\router-utils\setup-dev-bundler.js
+- C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\lib\router-server.js
+- C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\lib\start-server.js
+    at Function.<anonymous> (node:internal/modules/cjs/loader:1383:15)
+    at C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\require-hook.js:55:36
+    at defaultResolveImpl (node:internal/modules/cjs/loader:1025:19)
+    at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1030:22)
+    at Function._load (node:internal/modules/cjs/loader:1192:37)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:237:24)
+    at Module.<anonymous> (node:internal/modules/cjs/loader:1463:12)
+    at mod.require (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\require-hook.js:65:28)
+    at require (node:internal/modules/helpers:147:16)
+    at __webpack_require__.f.require (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\.next\server\webpack-runtime.js:203:28)
+    at C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\.next\server\webpack-runtime.js:116:40
+    at Array.reduce (<anonymous>)
+    at __webpack_require__.e (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\.next\server\webpack-runtime.js:115:67)
+    at Array.map (<anonymous>)
+    at __webpack_require__.X (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\.next\server\webpack-runtime.js:167:22)
+    at C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\.next\server\app\insights\support\page.js:1:32289
+    at Object.<anonymous> (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\.next\server\app\insights\support\page.js:1:32352)
+    at Module._compile (node:internal/modules/cjs/loader:1706:14)
+    at Object..js (node:internal/modules/cjs/loader:1839:10)
+    at Module.load (node:internal/modules/cjs/loader:1441:32)
+    at Function._load (node:internal/modules/cjs/loader:1263:12)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:237:24)
+    at Module.<anonymous> (node:internal/modules/cjs/loader:1463:12)
+    at mod.require (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\require-hook.js:65:28)
+    at require (node:internal/modules/helpers:147:16)
+    at requirePage (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\require.js:109:84)
+    at C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\load-components.js:103:84
+    at async loadComponentsImpl (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\load-components.js:103:26)
+    at async DevServer.findPageComponentsImpl (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\next-server.js:714:36)
+    at async DevServer.findPageComponents (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\dev\next-dev-server.js:577:20)
+    at async DevServer.renderPageComponent (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\base-server.js:1910:24)
+    at async DevServer.renderToResponseImpl (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\base-server.js:1962:32)
+    at async DevServer.pipeImpl (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\base-server.js:922:25)
+    at async NextNodeServer.handleCatchallRenderRequest (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\next-server.js:272:17)
+    at async DevServer.handleRequestImpl (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\base-server.js:818:17)
+    at async C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\dev\next-dev-server.js:339:20
+    at async Span.traceAsyncFn (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\trace\trace.js:154:20)
+    at async DevServer.handleRequest (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\dev\next-dev-server.js:336:24)
+    at async invokeRender (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\lib\router-server.js:179:21)
+    at async handleRequest (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\lib\router-server.js:359:24)
+    at async requestHandlerImpl (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\lib\router-server.js:383:13)
+    at async Server.requestListener (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\lib\start-server.js:141:13) {
+  code: 'MODULE_NOT_FOUND',
+  requireStack: [
+    'C:\\Users\\gnoua\\Desktop_backup\\APP_DEV\\03_Qiriness_Email\\Qirines_Email_Automation\\web\\.next\\server\\webpack-runtime.js',
+    'C:\\Users\\gnoua\\Desktop_backup\\APP_DEV\\03_Qiriness_Email\\Qirines_Email_Automation\\web\\.next\\server\\pages\\_document.js',
+    'C:\\Users\\gnoua\\Desktop_backup\\APP_DEV\\03_Qiriness_Email\\Qirines_Email_Automation\\web\\node_modules\\next\\dist\\server\\require.js',
+    'C:\\Users\\gnoua\\Desktop_backup\\APP_DEV\\03_Qiriness_Email\\Qirines_Email_Automation\\web\\node_modules\\next\\dist\\server\\load-components.js',
+    'C:\\Users\\gnoua\\Desktop_backup\\APP_DEV\\03_Qiriness_Email\\Qirines_Email_Automation\\web\\node_modules\\next\\dist\\build\\utils.js',
+    'C:\\Users\\gnoua\\Desktop_backup\\APP_DEV\\03_Qiriness_Email\\Qirines_Email_Automation\\web\\node_modules\\next\\dist\\server\\dev\\hot-middleware.js',
+    'C:\\Users\\gnoua\\Desktop_backup\\APP_DEV\\03_Qiriness_Email\\Qirines_Email_Automation\\web\\node_modules\\next\\dist\\server\\dev\\hot-reloader-webpack.js',
+    'C:\\Users\\gnoua\\Desktop_backup\\APP_DEV\\03_Qiriness_Email\\Qirines_Email_Automation\\web\\node_modules\\next\\dist\\server\\lib\\router-utils\\setup-dev-bundler.js',
+    'C:\\Users\\gnoua\\Desktop_backup\\APP_DEV\\03_Qiriness_Email\\Qirines_Email_Automation\\web\\node_modules\\next\\dist\\server\\lib\\router-server.js',
+    'C:\\Users\\gnoua\\Desktop_backup\\APP_DEV\\03_Qiriness_Email\\Qirines_Email_Automation\\web\\node_modules\\next\\dist\\server\\lib\\start-server.js'
+  ],
+  page: '/insights/support'
+}

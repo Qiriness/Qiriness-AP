@@ -1,9 +1,29 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { supabaseInsert, supabaseSelectAll, supabaseUpsert } from './supabase-rest-client.mjs';
+import {
+  supabaseHeaders,
+  supabaseInsert,
+  supabaseSelectAll,
+  supabaseUpsert
+} from './supabase-rest-client.mjs';
 
 const CLIENT = { baseUrl: 'https://example.supabase.co/rest/v1', key: 'test-key' };
+
+test('new Supabase API keys are sent as apikey only, not as bearer JWTs', () => {
+  const headers = supabaseHeaders({ baseUrl: CLIENT.baseUrl, key: 'sb_secret_example' });
+
+  assert.equal(headers.apikey, 'sb_secret_example');
+  assert.equal(Object.hasOwn(headers, 'Authorization'), false);
+});
+
+test('legacy Supabase JWT keys still get the bearer Authorization header', () => {
+  const legacyKey = 'eyJhbGciOiJIUzI1NiJ9.payload.signature';
+  const headers = supabaseHeaders({ baseUrl: CLIENT.baseUrl, key: legacyKey });
+
+  assert.equal(headers.apikey, legacyKey);
+  assert.equal(headers.Authorization, `Bearer ${legacyKey}`);
+});
 
 /**
  * A PostgREST that caps every response at `maxRows` however large a Range is

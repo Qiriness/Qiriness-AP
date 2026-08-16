@@ -666,8 +666,8 @@ export interface TicketStats {
 export type InsightsPanel = "support" | "fulfilment" | "customers" | "agent";
 
 export const INSIGHTS_PANELS: { id: InsightsPanel; label: string; href: string }[] = [
-  { id: "support", label: "Support", href: "/insights/support" },
   { id: "fulfilment", label: "Fulfilment", href: "/insights/fulfilment" },
+  { id: "support", label: "Support", href: "/insights/support" },
   { id: "customers", label: "Customers", href: "/insights/customers" },
   { id: "agent", label: "Agent", href: "/insights/agent" },
 ];

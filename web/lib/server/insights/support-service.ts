@@ -17,6 +17,7 @@
  */
 
 import { T, V } from "../../../../scripts/lib/tables.mjs";
+import { supabaseHeaders } from "../../../../scripts/lib/supabase-rest-client.mjs";
 import type {
   KnowledgeCategory,
   SupportCategoryRow,
@@ -241,11 +242,9 @@ async function countCorpusMessages(shopId: string): Promise<number | null> {
       // without this the drift check would answer with whatever it saw the
       // first time the page was ever rendered and never notice a rebuild.
       cache: "no-store",
-      headers: {
-        apikey: client.key,
-        Authorization: `Bearer ${client.key}`,
+      headers: supabaseHeaders(client, {
         Prefer: "count=exact",
-      },
+      }),
     });
 
     if (!response.ok) return null;

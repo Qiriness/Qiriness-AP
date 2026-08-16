@@ -819,6 +819,12 @@ Sync paths write service events, and so does the agent's customer lookup — rea
 
 Every request sends `cache: 'no-store'` — Next's Data Cache otherwise pins the first response for a year, which made saved changes appear to vanish on reload. `export const dynamic = "force-dynamic"` does not prevent this; only the explicit fetch option does. The option is inert outside Next, so the sync scripts and agent worker are unaffected.
 
+New Supabase API keys (`sb_publishable_*` / `sb_secret_*`) are sent as `apikey`
+only, not as `Authorization: Bearer ...`. They are not JWTs; the hosted API
+Gateway verifies the `apikey` and mints the database token itself. Sending
+`Bearer sb_secret_*` returns 401 even though the same key is valid, which is why
+`supabaseHeaders()` adds the Bearer header only for legacy JWT-shaped keys.
+
 `supabaseSelectAll` pages past PostgREST's silent 1000-row cap.
 
 ### The schema is named once, in `scripts/lib/tables.mjs`

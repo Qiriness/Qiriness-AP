@@ -1,0 +1,28 @@
+
+> qiriness-dashboard@0.1.0 dev
+> next dev
+
+  ▲ Next.js 14.2.35
+  - Local:        http://localhost:3000
+  - Experiments (use with caution):
+    · cpus
+    · staleTimes
+    · outputFileTracingRoot
+
+ ✓ Starting...
+ ✓ Ready in 2.1s
+ ○ Compiling /insights/fulfilment ...
+ ✓ Compiled /insights/fulfilment in 11s (646 modules)
+ GET /insights/fulfilment 200 in 13237ms
+ ○ Compiling / ...
+ ✓ Compiled / in 5.6s (596 modules)
+ GET / 307 in 7543ms
+ ○ Compiling /agent-setup ...
+ ✓ Compiled /agent-setup in 2.4s (867 modules)
+ GET /agent-setup 200 in 5662ms
+ ○ Compiling /insights ...
+ ✓ Compiled /insights in 695ms (706 modules)
+ GET /insights/fulfilment 200 in 2966ms
+[?25h
+
+C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web>
