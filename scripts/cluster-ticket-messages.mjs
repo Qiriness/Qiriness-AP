@@ -9,6 +9,7 @@ import {
   cosine
 } from './lib/cluster-messages.mjs';
 import { partitionBy } from './lib/message-audience.mjs';
+import { createClusterStore } from './lib/cluster-store.mjs';
 import {
   createSenderDirectoryStore,
   emptySenderDirectory
@@ -19,8 +20,13 @@ import { resolveShopId } from '../agent/src/lib/shop.mjs';
 // subject — a decision aid for "what should the knowledge library cover first?"
 // and "which threads should become exemplars?".
 //
-// READ-ONLY. Selects vectors that ingestion already stored and prints a report;
-// nothing is written, no model is called, and it costs nothing to re-run.
+// READ-ONLY BY DEFAULT. Selects vectors that ingestion already stored and prints
+// a report; nothing is written, no model is called, and it costs nothing to
+// re-run. `--save` additionally persists the run to cluster_runs +
+// ticket_clusters for the dashboard to read — opt-in precisely because the
+// no-side-effects promise above is what makes this safe to run while tuning the
+// threshold, and a flag that defaulted to on would quietly spend a rebuild of
+// the stored map on every experiment.
 //
 // Clusters WITHIN a subject, not globally: clustering globally would mostly
 // rediscover the categories the taxonomy already assigns. The value is the
@@ -39,6 +45,7 @@ import { resolveShopId } from '../agent/src/lib/shop.mjs';
 //   npm run cluster:tickets -- --threshold=0.74     # tighter, more groups
 //   npm run cluster:tickets -- --min-size=3 --show=4
 //   npm run cluster:tickets -- --internal           # our own recurring threads
+//   npm run cluster:tickets:save                    # same report, and store it
 //
 // THRESHOLD. 0.68 by default, tuned by eye on this corpus. French support mail
 // shares so much boilerplate ("Bonjour ... Cordialement") that two unrelated
@@ -72,7 +79,8 @@ async function main() {
     dedupe: numberArg(args.dedupe, DEFAULTS.dedupe),
     show: numberArg(args.show, DEFAULTS.show),
     subject: args.subject || null,
-    audience: args['all-senders'] ? 'all' : args.internal ? 'internal' : 'customer'
+    audience: args['all-senders'] ? 'all' : args.internal ? 'internal' : 'customer',
+    save: Boolean(args.save)
   };
 
   const config = loadConfig(loadEnv());
@@ -97,9 +105,32 @@ async function main() {
     );
   }
 
-  await report({ supabase, options, senderDirectory });
+  const result = await report({ supabase, options, senderDirectory });
+
+  // Saving is deliberately downstream of the report and never changes it: the
+  // terminal output is identical with and without the flag, so nobody has to
+  // choose between seeing the answer and storing it.
+  if (options.save && result) {
+    const saved = await createClusterStore(supabase).saveRun(
+      { shopId, ...result.facts },
+      result.clusters
+    );
+    console.log(
+      `Saved run ${saved.runId} — ${saved.clusterCount} topic(s)` +
+        (saved.prunedRuns > 0 ? `, ${saved.prunedRuns} older run(s) pruned` : '') +
+        '\n'
+    );
+  }
 }
 
+/**
+ * Prints the report and returns what `--save` needs to store it, or null when
+ * there was nothing to report on.
+ *
+ * The return value is a by-product of printing rather than a second pass over
+ * the data: a stored map that disagreed with the terminal it was printed
+ * alongside would be worse than no stored map at all.
+ */
 export async function report({ supabase, options, senderDirectory = emptySenderDirectory }) {
   const loaded = await loadInboundMessages(supabase, options.subject);
   const { customer, internal } = partitionBy(loaded, (from) => senderDirectory.isNonDemand(from));
@@ -112,7 +143,7 @@ export async function report({ supabase, options, senderDirectory = emptySenderD
         ? `No embedded inbound messages for subject "${options.subject}".`
         : 'No embedded inbound messages. Run `npm run embed:tickets` first.'
     );
-    return [];
+    return null;
   }
 
   // Knowledge coverage is reported alongside each topic: a cluster whose
@@ -159,7 +190,45 @@ export async function report({ supabase, options, senderDirectory = emptySenderD
     console.log(`  ${String(g.size).padStart(3)} msgs  [${g.subject}]  ${g.excerpt}`);
   }
   console.log();
-  return summaries;
+
+  return {
+    summaries,
+    facts: {
+      threshold: options.threshold,
+      minSize: options.minSize,
+      dedupe: options.dedupe,
+      messageCount: messages.length,
+      // What the sender directory kept OUT of this report. Zero on the other
+      // two audiences by definition: `--internal` reports on our own mail and
+      // `--all-senders` excludes nobody, so neither skipped anything for being
+      // ours, and recording the other side of the split there would make the
+      // column mean two different things depending on the flag.
+      internalExcluded: options.audience === 'customer' ? internal.length : 0,
+      subjectCount: bySubject.size,
+      topicCount: summaries.reduce((n, s) => n + s.groups.length, 0)
+    },
+    clusters: toClusterRecords(summaries)
+  };
+}
+
+/**
+ * The per-subject summaries, flattened into one row per topic.
+ *
+ * `clusterIndex` is the topic's position within ITS subject, not within the
+ * flat list: (run_id, subject, cluster_index) is the unique key, and the groups
+ * arrive already ranked by size, so the position is the rank.
+ */
+export function toClusterRecords(summaries) {
+  return summaries.flatMap((summary) =>
+    summary.groups.map((group, clusterIndex) => ({
+      subject: summary.subject,
+      clusterIndex,
+      size: group.size,
+      cohesion: group.cohesion,
+      representativeExcerpt: group.representativeExcerpt,
+      memberMessageIds: group.memberMessageIds
+    }))
+  );
 }
 
 function reportSubject({ subject, items, chunks, options }) {
@@ -196,7 +265,12 @@ function reportSubject({ subject, items, chunks, options }) {
     reported.push({
       size: group.size,
       covered: coverage === 'covered',
-      excerpt: excerpt(group.medoid.body_text, 58)
+      excerpt: excerpt(group.medoid.body_text, 58),
+      // The rest is for `--save` only, and is taken from the same values the
+      // lines above printed rather than recomputed.
+      cohesion: group.weight,
+      representativeExcerpt: condense(group.medoid.body_text),
+      memberMessageIds: memberMessageIds(group)
     });
   }
 
@@ -286,8 +360,33 @@ async function loadEmbeddedChunks(supabase) {
   return rows.map((row) => ({ category: row.category, vector: parseVector(row.embedding) }));
 }
 
+/**
+ * Every message the topic stands for, near-duplicates included.
+ *
+ * `dedupeNearIdentical` collapses a resent email into one survivor carrying the
+ * ids it absorbed, and `size` counts them — so leaving them out here would give
+ * a stored cluster fewer members than its own size claims, and "which cluster
+ * is this message in?" (the GIN index on the column) would answer nothing for
+ * every duplicate.
+ */
+function memberMessageIds(group) {
+  return group.members.flatMap((member) => [member.id, ...(member.duplicateIds || [])]);
+}
+
+/** The printed form: the condensed text, quoted. */
 function excerpt(text, length = EXCERPT) {
-  return `"${String(text || '').replace(/\s+/g, ' ').trim().slice(0, length)}"`;
+  return `"${condense(text, length)}"`;
+}
+
+/**
+ * Whitespace collapsed, cut to `length`.
+ *
+ * Split out of `excerpt` so a saved run stores exactly what the report printed
+ * minus the display quotes. One truncation rule, so the stored map and the
+ * terminal cannot disagree about what a topic is about.
+ */
+function condense(text, length = EXCERPT) {
+  return String(text || '').replace(/\s+/g, ' ').trim().slice(0, length);
 }
 
 /** `--key=value` flags into an object; unknown keys are simply carried through. */

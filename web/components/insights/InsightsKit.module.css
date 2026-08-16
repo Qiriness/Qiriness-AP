@@ -1,0 +1,262 @@
+/* --- section --- */
+
+.section {
+  margin: 0 0 var(--space-6);
+}
+
+.sectionHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+  margin: 0 0 var(--space-3);
+}
+
+.sectionTitles {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.sectionTitle {
+  margin: 0;
+  font-size: var(--text-lg);
+  font-weight: var(--weight-semibold);
+  color: var(--text-strong);
+}
+
+.sectionSub {
+  margin: 0;
+  font-size: var(--text-body);
+  color: var(--text-muted);
+  max-width: 62ch;
+}
+
+.sectionActions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+/* --- tiles --- */
+
+.tileGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+  gap: var(--space-3);
+  margin: 0 0 var(--space-5);
+  padding: 0;
+  list-style: none;
+}
+
+.tile {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-4);
+  padding-top: calc(var(--space-4) - 1px);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  box-shadow: var(--shadow-xs);
+  overflow: hidden;
+}
+
+/* One accent bar per tile — the only colour on an otherwise neutral card, so
+   state reads before any number is parsed. */
+.tile::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  height: 3px;
+  background: var(--teal);
+}
+
+.good::before {
+  background: var(--success);
+}
+.warn::before {
+  background: var(--warning);
+}
+.bad::before {
+  background: var(--priority-high);
+}
+/* Grey, not red: a metric that cannot be computed is not a failing metric, and
+   painting it red would put it in competition with the ones that are. */
+.blocked::before {
+  background: var(--border-strong);
+}
+
+.tileLabel {
+  font-size: var(--text-caption);
+  font-weight: var(--weight-semibold);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-subtle);
+}
+
+.tileFigure {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  font-size: var(--text-2xl);
+  font-weight: var(--weight-semibold);
+  line-height: 1.15;
+  color: var(--text-strong);
+  font-variant-numeric: tabular-nums;
+}
+
+.tileOf {
+  font-size: var(--text-body);
+  font-weight: var(--weight-regular);
+  color: var(--text-subtle);
+}
+
+.tileFoot {
+  font-size: var(--text-caption);
+  color: var(--text-muted);
+  line-height: 1.45;
+}
+
+.dash {
+  color: var(--text-subtle);
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* --- bars --- */
+
+.bars {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.barRow {
+  display: grid;
+  grid-template-columns: minmax(5rem, 9rem) 1fr minmax(3.5rem, auto);
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.barKey {
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+  text-align: right;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.barTrack {
+  position: relative;
+  height: 1.15rem;
+  background: var(--surface-sunken);
+  border: 1px solid var(--mist-050);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.barFill {
+  display: block;
+  height: 100%;
+  background: var(--teal);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+}
+
+.barEmphasis {
+  background: var(--priority-high);
+}
+
+/* Hatched, not empty: "never measured" must not look like "measured at zero". */
+.barMissing {
+  background: repeating-linear-gradient(
+    45deg,
+    var(--mist) 0 4px,
+    transparent 4px 8px
+  );
+}
+
+.barValue {
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-strong);
+  text-align: right;
+  white-space: nowrap;
+}
+
+.barValueDim {
+  color: var(--text-subtle);
+}
+
+/* --- notes --- */
+
+.note {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-3) var(--space-4);
+  margin: 0 0 var(--space-4);
+  border-left: 3px solid var(--teal);
+  border-radius: 0 var(--radius-md) var(--radius-md) 0;
+  background: var(--teal-050);
+}
+
+.noteWarn {
+  border-left-color: var(--error);
+  background: var(--error-050);
+}
+
+.noteTitle {
+  font-size: var(--text-caption);
+  font-weight: var(--weight-semibold);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--teal-ink);
+}
+
+.noteWarn .noteTitle {
+  color: var(--error);
+}
+
+.noteBody {
+  margin: 0;
+  font-size: var(--text-body);
+  color: var(--text-default);
+  max-width: 74ch;
+}
+
+.empty {
+  margin: 0;
+  padding: var(--space-5);
+  text-align: center;
+  font-size: var(--text-body);
+  color: var(--text-subtle);
+  background: var(--surface-sunken);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-md);
+}
+
+@media (max-width: 620px) {
+  .barRow {
+    grid-template-columns: minmax(4rem, 6rem) 1fr auto;
+    gap: var(--space-2);
+  }
+}

@@ -188,16 +188,26 @@ const SYSTEM_PROMPT = [
 export function createCategoriser(openai, { model, maxBodyChars = 3000 } = {}) {
   /**
    * @param {{subject?: string, messages: Array<{subject?: string, body_text?: string, received_at?: string}>}} input
+   * @param {{ticketId?: string|null}} [context]
    * @returns {Promise<{category, request_kind, secondary_category, secondary_request_kind, level, responsible_team, language, happiness, reason, model}>}
+   *
+   * THE TICKET ID IS A SECOND ARGUMENT, not a field on `input`, and that is
+   * deliberate: `input` is exactly what the model is shown, and the runner's
+   * blindness test asserts on its keys. Cost bookkeeping does not belong in the
+   * same object as the prompt material — and putting it there would have made
+   * "the categoriser is never shown the labels it produced last time" a weaker
+   * assertion than it is today.
    */
-  async function categorise(input) {
+  async function categorise(input, { ticketId = null } = {}) {
     const raw = await openai.completeJson({
       model,
       system: SYSTEM_PROMPT,
       user: buildUserPrompt(input, maxBodyChars),
       schema: CATEGORISATION_SCHEMA,
       schemaName: 'ticket_categorisation',
-      maxTokens: 300
+      maxTokens: 300,
+      pass: 'categorise',
+      ticketId
     });
     return { ...normaliseCategorisation(raw), model };
   }

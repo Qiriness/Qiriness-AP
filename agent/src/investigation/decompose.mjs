@@ -105,7 +105,9 @@ export function createDecomposer(openai, { model, maxBodyChars = 3000 } = {}) {
         user: String(ticket.text ?? '').slice(0, maxBodyChars),
         schema: DECOMPOSITION_SCHEMA,
         schemaName: 'ticket_decomposition',
-        maxTokens: 500
+        maxTokens: 500,
+        pass: 'decompose',
+        ticketId: ticket.id ?? null
       });
       return { ...normaliseDecomposition(raw, ticket), needs: normaliseNeeds(raw?.needs), read: true };
     } catch {

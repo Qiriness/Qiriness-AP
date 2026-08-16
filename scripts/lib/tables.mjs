@@ -62,7 +62,12 @@ export const T = {
   // 05_exemplars
   SUPPORT_EXEMPLARS: 'support_exemplars',
   SUPPORT_EXEMPLAR_PHRASINGS: 'support_exemplar_phrasings',
-  SUPPORT_ANSWERS: 'support_answers'
+  SUPPORT_ANSWERS: 'support_answers',
+
+  // 06_analytics
+  LLM_USAGE: 'llm_usage',
+  CLUSTER_RUNS: 'cluster_runs',
+  TICKET_CLUSTERS: 'ticket_clusters'
 };
 
 /**
@@ -71,9 +76,29 @@ export const T = {
  * database will reject, and naming them separately makes that visible here.
  */
 export const V = {
+  // 04_support
   TICKET_MESSAGE_COUNTS: 'ticket_message_counts',
   TICKET_FIRST_INBOUND: 'ticket_first_inbound',
-  TICKET_QUEUE: 'ticket_queue'
+  TICKET_QUEUE: 'ticket_queue',
+
+  // 06_analytics — every Insights panel figure comes from one of these, because
+  // a dashboard that pages rows and reduces them in JavaScript is wrong twice
+  // over (PostgREST's 1,000-row cap, and unordered pages that overlap).
+  ORDER_FULFILMENT_TIMING: 'order_fulfilment_timing',
+  FULFILMENT_SUMMARY: 'fulfilment_summary',
+  FULFILMENT_BY_MONTH: 'fulfilment_by_month',
+  FULFILMENT_BY_CARRIER: 'fulfilment_by_carrier',
+  FULFILMENT_BY_BUCKET: 'fulfilment_by_bucket',
+  TICKET_REPLY_TIMES: 'ticket_reply_times',
+  SUPPORT_BY_MONTH: 'support_by_month',
+  SUPPORT_BY_CATEGORY: 'support_by_category',
+  CUSTOMER_TICKET_FACTS: 'customer_ticket_facts',
+  CUSTOMER_SEGMENT_TOTALS: 'customer_segment_totals',
+  INVESTIGATION_EVIDENCE_GAPS: 'investigation_evidence_gaps',
+  AGENT_PIPELINE_FUNNEL: 'agent_pipeline_funnel',
+  INVESTIGATION_VERDICTS: 'investigation_verdicts',
+  LLM_USAGE_BY_MONTH: 'llm_usage_by_month',
+  LLM_USAGE_SUMMARY: 'llm_usage_summary'
 };
 
 /** Postgres functions reached through PostgREST's /rpc endpoint. */

@@ -5,6 +5,7 @@ import { createSupabaseClient } from './lib/supabase-rest-client.mjs';
 import { COLUMNS, T } from './lib/tables.mjs';
 import { KNOWLEDGE_CHUNK_INPUT } from './lib/embeddings/embed-chunks.mjs';
 import { reconcileEmbeddings } from './lib/embeddings/reconcile.mjs';
+import { createUsageRecording } from '../agent/src/llm/usage-store.mjs';
 
 // Reconciler for knowledge-chunk embeddings. The web service embeds inline on
 // approval, but that is best-effort; this script is the safety net that:
@@ -70,12 +71,19 @@ async function main() {
 }
 
 export async function runEmbeddingReconcile({ args, config, supabase }) {
+  // One flush for the whole run, not one per batch: this is a ledger of what the
+  // reconcile cost, and a write per embedding request would put a database round
+  // trip between every batch and the next.
+  const usage = createUsageRecording({ supabase, shopDomain: config.shopDomain });
+
   const result = await reconcileEmbeddings({
     descriptor: KNOWLEDGE_CHUNKS,
     args,
     config,
-    supabase
+    supabase,
+    usageSink: usage.sink
   });
+  await usage.flush();
 
   if (args.dryRun) {
     console.log(

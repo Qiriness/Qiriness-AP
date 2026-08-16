@@ -60,7 +60,11 @@ export function createSpamClassifier(
         user: buildUserPrompt(message, maxBodyChars),
         schema: CLASSIFICATION_SCHEMA,
         schemaName: 'spam_classification',
-        maxTokens: 200
+        maxTokens: 200,
+        // No ticket id, and there never will be one: the gate runs before the
+        // mail is written, and a blocked email never becomes a ticket at all.
+        // The spend is still the shop's, so the row is written without one.
+        pass: 'spam'
       });
       // reason and model are carried through for the spam_audit trail: a dropped
       // email is never stored, so the audit row is the only record of why.

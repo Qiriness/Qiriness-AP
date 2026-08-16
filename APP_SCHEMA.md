@@ -21,6 +21,9 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |   |   |-- page.tsx                      # / -> /agent-setup redirect
 |   |   |-- agent-setup/page.tsx          # Server Component: article + source fetch
 |   |   |-- tickets/page.tsx              # Server Component: the agent's queue
+|   |   |-- insights/                     # -> /insights/fulfilment, then one route
+|   |   |                                 # per panel: fulfilment · support ·
+|   |   |                                 # customers · agent
 |   |   |-- settings/page.tsx             # Server Component: forwarding address book
 |   |   `-- api/
 |   |       |-- tickets/[id]/route.ts         # GET case file + order facts · PATCH status
@@ -33,6 +36,11 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |   |   |-- app-shell/               # AppShell (top bar + drawer) · Sidebar
 |   |   |-- ui/                      # Button · StatusChip · Dialog (modal shell)
 |   |   |-- settings/                # ForwardingSettings (saves per row on blur)
+|   |   |-- insights/                # InsightsNav (the panel bar) · InsightsKit
+|   |   |                            # (PanelSection StatTile BlockedTile BarList
+|   |   |                            # Note + formatters) · FulfilmentView ·
+|   |   |                            # SupportView + TopicMap · CustomersView ·
+|   |   |                            # AgentView
 |   |   |-- tickets/                 # TicketsView (orchestrator) · TicketSection ·
 |   |   |                            # TicketStatCards · TicketTable · TicketDetailPanel ·
 |   |   |                            # TicketThreadDialog · DroppedMailTable +
@@ -50,10 +58,14 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |   |   |                        # resolved_context -> order owner / status / tracking lines ·
 |   |   |                        # evidence_gaps -> the facts behind the findings
 |   |   |-- api/                 # client-side fetch wrappers (knowledge, tickets, forwarding)
+|   |   |-- insights-format.ts   # isomorphic: month + age labels for the panels
 |   |   |-- relative-time.ts demo-data.ts
 |   |   `-- server/              # knowledge-service · forwarding-service ·
-|   |                            # tickets-service (list + detail + thread + status) ·
-|   |                            # dropped-mail-service · knowledge-errors
+|   |       |                    # tickets-service (list + detail + thread + status) ·
+|   |       |                    # dropped-mail-service · knowledge-errors
+|   |       `-- insights/         # shared (readView -- NO paging, by design) +
+|   |                             # one service per panel: fulfilment · support ·
+|   |                             # customers · agent
 |   |-- next.config.mjs          # loadEnv() from root .env.local; staleTimes 0
 |   `-- tsconfig.json            # allowJs, so services can import scripts/lib/*.mjs
 |-- scripts/                     # one sync orchestrator per Shopify resource
@@ -62,7 +74,9 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |   |-- embed-{knowledge-chunks,ticket-messages,exemplars}.mjs  # embedding reconcilers
 |   |-- import-exemplars.mjs             # Email-Example-Queries.md -> exemplar rows
 |   |                                    # (drafts only; lib/exemplar-import.mjs parses)
-|   |-- cluster-ticket-messages.mjs      # cluster:tickets -- recurring topics per subject
+|   |-- cluster-ticket-messages.mjs      # cluster:tickets -- recurring topics per
+|   |                                    # subject. Print-only by default;
+|   |                                    # cluster:tickets:save persists a run
 |   |-- apply-supabase-migration.mjs     # SQL runner
 |   |-- process-shopify-compliance-webhook.mjs
 |   `-- lib/
@@ -91,6 +105,10 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |       |-- support-taxonomy.mjs         # THE vocabulary: 14 subjects · 4 kinds ·
 |       |                                # level + team derivation · signal enums
 |       |-- customer-segments.mjs        # THE VIP rule: rfm_group -> isVipRfmGroup
+|       |-- llm-rates.mjs                # per-model $/1M + estimateCost. Read-time
+|       |                                # pricing; NOT authoritative, override with
+|       |                                # LLM_RATES
+|       |-- cluster-store.mjs            # persists a cluster run + its topics
 |       |-- knowledge-{chunker,categories,document-mapper,navigation}.mjs
 |       |-- embeddings/                  # embedding-input · openai-embeddings-client ·
 |       |                                # embed-chunks (pure staleness gate) ·
@@ -104,6 +122,8 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |   |-- src/
 |   |   |-- index.mjs config.mjs # entrypoint (--once) · env/tunables + Graph gate
 |   |   |-- lib/ llm/            # logger (JSON, no PII) · shop · openai-client
+|   |   |                        # (records every call's tokens into) usage-sink
+|   |   |                        # -> usage-store (best-effort; never fails a pass)
 |   |   |-- ingestion/           # graph-client · graph-message-mapper · contact-form ·
 |   |   |                        # delta-poller · ticket-writer · message-embedder ·
 |   |   |                        # spam-gate + blocklist-store + spam-classifier ·
@@ -210,6 +230,21 @@ RLS on the tables under it.
 | `ticket_queue` | the dashboard row: ticket + customer + count, soft-deleted excluded | `TICKET_LIST_SELECT` + the count join, in `tickets-service.ts` |
 | `order_number_range(shop)` | lowest and highest `order_number`, live orders only | an asc/desc pair of `limit 1` reads |
 
+**The 15 Insights views (`06_analytics.sql`).** Every figure on every panel comes
+from one of these. Nothing is aggregated in the browser or the server, because
+PostgREST caps a response at 1,000 rows and pages an unordered query in
+overlapping slices — see `DECISIONS.md § Insights`.
+
+| Group | Views |
+| --- | --- |
+| Fulfilment | `order_fulfilment_timing` (base, per order) · `fulfilment_summary` · `fulfilment_by_month` · `fulfilment_by_carrier` · `fulfilment_by_bucket` |
+| Support | `ticket_reply_times` (base, per ticket) · `support_by_month` · `support_by_category` |
+| Customers | `customer_ticket_facts` · `customer_segment_totals` |
+| Agent | `agent_pipeline_funnel` · `investigation_evidence_gaps` · `investigation_verdicts` · `llm_usage_by_month` · `llm_usage_summary` |
+
+They expose `rfm_group` and never `is_vip`: who counts as a VIP is a business
+rule owned by `customer-segments.mjs` and applied at read time.
+
 ### Compliance and audit
 
 | Table | Holds |
@@ -218,9 +253,19 @@ RLS on the tables under it.
 | `privacy_requests` | Shopify compliance webhook lifecycle (hashed contacts, deletion counts) |
 | `data_access_events` | personal-data access audit trail. Sync paths and the agent's customer lookup write here |
 
+### Analytics
+
+Written by the worker and the CLIs, read only by the Insights panels.
+
+| Table | Holds |
+| --- | --- |
+| `llm_usage` | one row per model call: `pass`, `model`, token counts, `ticket_id`, `succeeded`. Append-only, written through one sink in the OpenAI transport. **Tokens are stored; money is computed at read time** from `scripts/lib/llm-rates.mjs` |
+| `cluster_runs` | one row per manual rebuild of the topic map: `built_at`, `threshold`, `min_size`, corpus counts. What the panel reads to state the map's age |
+| `ticket_clusters` | one row per topic in a run: subject, size, cohesion, excerpt, `member_message_ids uuid[]` (GIN) |
+
 ### Migration files
 
-**Five files, by domain, run in order against an empty database.** The order is a plain dependency chain, and every table is created *complete* — there is no `alter table … add column` anywhere in the baseline, and a test asserts that.
+**Six files, by domain, run in order against an empty database.** The order is a plain dependency chain, and every table is created *complete* — there is no `alter table … add column` anywhere in the baseline, and a test asserts that.
 
 | File | Creates | Depends on |
 | --- | --- | --- |
@@ -229,6 +274,7 @@ RLS on the tables under it.
 | `03_knowledge.sql` | `knowledge_documents`, `knowledge_chunks`, `match_knowledge_chunks()`, `search_knowledge_chunks_text()` | 01 |
 | `04_support.sql` | `tickets`, `ticket_messages`, `email_blocklist`, `sender_directory`, `spam_audit`, `ticket_investigations`, `category_forwarding`, `ticket_forwards`, `categorisation_review`, the three views | 01, 02 |
 | `05_exemplars.sql` | `support_exemplars`, `support_exemplar_phrasings`, `support_answers`, `match_support_exemplars()` | 01, 03 (`french_unaccent`) |
+| `06_analytics.sql` | `normalise_carrier()`, `llm_usage`, `cluster_runs`, `ticket_clusters`, and the **15 Insights views** | 01, 02, 04 |
 
 `_shared.test.mjs` holds the cross-file invariants (no data statements, RLS on every table, every table and view documented, nothing referenced before it is created, every view `security_invoker` and revoked from the anon roles, every embedded table carrying the whole determinism quadruple, and `scripts/lib/tables.mjs` naming exactly what the baseline creates). Each file has a sibling test for its own contents.
 
@@ -259,6 +305,34 @@ All Route Handlers are server-only and use the Supabase service-role key.
 | **Closed** | `tickets`, status resolved/closed | Reopen ticket |
 
 Row interactions: chevron expands the agent's reading (`TicketDetailPanel`: Results · Order · Action — the Order block leads with the name on the order and the masked order contact address, so ownership can be checked against the requester by eye); subject opens the conversation (`TicketThreadDialog`: draft + email chain). In the Irrelevant table the subject opens the dropped email (`DroppedMailDialog`). Four header cards, plus level tabs, category filter and sort — all client-side over the open-ticket set, then split into Queue and Backlog. Search is **per section**, in each `TicketSection` header (shown only while the section is open), so each of the four tables filters itself.
+
+### `/insights` — the four analytics panels
+
+`web/app/insights/{fulfilment,support,customers,agent}/page.tsx` →
+`web/components/insights/`, over `web/lib/server/insights/*-service.ts`.
+`/insights` itself redirects to `/insights/fulfilment`.
+
+Four **real routes**, not tab state, so a panel can be linked to and bookmarked;
+`InsightsNav` is the bar across the top and the sidebar keeps owning the app.
+Every page is a Server Component that reads one service and renders one view —
+there is nothing to filter client-side, because each figure is already a row
+from an aggregate view.
+
+| Panel | Answers | Reads |
+| --- | --- | --- |
+| **Fulfilment** | how long orders take to leave, and where delivery data would go | the five fulfilment views |
+| **Support** | volume, mood, reply time, and the topic map | the three support views + `ticket_clusters` |
+| **Customers** | who to call, and what spend is exposed | the two customer views + `customer-segments.mjs` |
+| **Agent** | how far tickets get, what blocks them, what it costs | the five agent views + `llm-rates.mjs` |
+
+Shared pieces live in `components/insights/InsightsKit.tsx` (`PanelSection`,
+`TileGrid`, `StatTile`, `BlockedTile`, `BarList`, `Note`, formatters) and
+`lib/insights-format.ts` (isomorphic month and age labels).
+
+**Two rules the kit enforces.** A metric that cannot be computed renders as a
+`BlockedTile` with a required reason, never as `0` — on a dashboard a zero is a
+claim. And a missing series renders hatched rather than at zero, so "no data"
+and "measured zero" cannot look identical.
 
 ### `/settings` — forwarding address book
 

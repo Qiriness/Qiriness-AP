@@ -648,3 +648,267 @@ export interface TicketStats {
   last24h: number;
   last30d: number;
 }
+
+// ---------------------------------------------------------------- Insights
+//
+// The four analytics panels. Every shape here is the mapped form of one view in
+// `supabase/migrations/06_analytics.sql` — the panels never aggregate rows in
+// the browser or the server, because PostgREST caps a response at 1,000 rows
+// and pages an unordered query in overlapping slices. The one thing that IS
+// derived in TypeScript is who counts as a VIP, which is a business rule owned
+// by `scripts/lib/customer-segments.mjs`.
+//
+// `null` means "not measurable", never zero. A month with no ingested mail and
+// a month with no tickets look identical on a chart unless that difference
+// survives all the way to the component.
+
+/** Which panel is on screen. Real routes, so a panel can be linked to. */
+export type InsightsPanel = "support" | "fulfilment" | "customers" | "agent";
+
+export const INSIGHTS_PANELS: { id: InsightsPanel; label: string; href: string }[] = [
+  { id: "support", label: "Support", href: "/insights/support" },
+  { id: "fulfilment", label: "Fulfilment", href: "/insights/fulfilment" },
+  { id: "customers", label: "Customers", href: "/insights/customers" },
+  { id: "agent", label: "Agent", href: "/insights/agent" },
+];
+
+// --- Fulfilment ------------------------------------------------------------
+
+export interface FulfilmentSummary {
+  orders: number;
+  measured: number;
+  p50Hours: number | null;
+  p90Hours: number | null;
+  meanHours: number | null;
+  over48h: number;
+  over72h: number;
+  shippedWithoutTracking: number;
+  /** Coverage check on delivery data: 1 of 2,006 today. */
+  withDeliveryEvent: number;
+  firstOrderAt: string | null;
+  lastOrderAt: string | null;
+}
+
+export interface FulfilmentMonth {
+  month: string;
+  orders: number;
+  p50Hours: number | null;
+  p90Hours: number | null;
+  over72h: number;
+  measured: number;
+  /** The month being read: half a month of data, and labelled as such. */
+  partial: boolean;
+}
+
+export interface FulfilmentCarrier {
+  carrier: string;
+  shipments: number;
+  p50Hours: number | null;
+  over72h: number;
+  withoutTracking: number;
+}
+
+export interface FulfilmentBucket {
+  bucket: string;
+  order: number;
+  orders: number;
+  /** Past the three-day line: the two buckets the business argues about. */
+  late: boolean;
+}
+
+export interface FulfilmentPanel {
+  summary: FulfilmentSummary | null;
+  byMonth: FulfilmentMonth[];
+  byCarrier: FulfilmentCarrier[];
+  byBucket: FulfilmentBucket[];
+  /**
+   * False while no carrier feeds scan events back to Shopify, which is the
+   * state today. The delivery tiles then render as explicitly blocked rather
+   * than as zeros — a zero would read as "nothing is late".
+   */
+  hasDeliveryData: boolean;
+}
+
+// --- Support ---------------------------------------------------------------
+
+export interface SupportMonth {
+  month: string;
+  tickets: number;
+  unhappy: number;
+  veryUnhappy: number;
+  levelThree: number;
+  stillOpen: number;
+  meanHappiness: number | null;
+  p50ReplyHours: number | null;
+  repliedWithin24h: number;
+  repliesMeasured: number;
+}
+
+export interface SupportCategoryRow {
+  category: KnowledgeCategory | null;
+  tickets: number;
+  stillOpen: number;
+  unhappy: number;
+  levelThree: number;
+  meanHappiness: number | null;
+}
+
+export interface SupportReplyStats {
+  /** Tickets the desk answered from the synced mailbox — the honest denominator. */
+  measured: number;
+  total: number;
+  p50Hours: number | null;
+  p90Hours: number | null;
+  within24h: number;
+}
+
+export interface TopicCluster {
+  id: string;
+  subject: string;
+  clusterIndex: number;
+  size: number;
+  cohesion: number | null;
+  excerpt: string | null;
+}
+
+/**
+ * The topic map's provenance. It is rebuilt by hand on purpose — clustering is
+ * an all-pairs comparison whose threshold is hand-tuned — so the panel has to
+ * say how old the map is and whether the corpus has moved on since.
+ */
+export interface TopicMap {
+  runId: string;
+  builtAt: string;
+  threshold: number;
+  minSize: number;
+  messageCount: number;
+  internalExcluded: number;
+  subjectCount: number;
+  topicCount: number;
+  clusters: TopicCluster[];
+  /** Live embedded customer messages now, against `messageCount` when built. */
+  liveMessageCount: number | null;
+  /** True once the corpus has drifted far enough that the map describes a different inbox. */
+  stale: boolean;
+}
+
+export interface SupportPanel {
+  byMonth: SupportMonth[];
+  byCategory: SupportCategoryRow[];
+  replies: SupportReplyStats | null;
+  topicMap: TopicMap | null;
+  totals: { tickets: number; open: number; unhappy: number; veryUnhappy: number } | null;
+}
+
+// --- Customers -------------------------------------------------------------
+
+export interface SegmentTotal {
+  rfmGroup: string | null;
+  label: string | null;
+  isVip: boolean;
+  customers: number;
+  buyers: number;
+  repeatBuyers: number;
+  marketingOptedIn: number;
+  totalSpent: number;
+}
+
+export interface CustomerAtRisk {
+  ticketId: string;
+  customerName: string | null;
+  rfmGroup: string | null;
+  label: string | null;
+  category: KnowledgeCategory | null;
+  level: TicketLevel | null;
+  happiness: TicketHappiness | null;
+  status: TicketStatus;
+  amountSpent: number;
+  numberOfOrders: number;
+  firstMessageAt: string | null;
+}
+
+export interface CustomerPanel {
+  segments: SegmentTotal[];
+  /**
+   * Both denominators, always. 53,942 of 58,201 customers have never ordered,
+   * so a percentage quoted against the wrong one is meaningless.
+   */
+  base: { customers: number; buyers: number; repeatBuyers: number; marketingOptedIn: number } | null;
+  vip: { customers: number; ticketsLinked: number; vipTickets: number; contactRate: number | null } | null;
+  vipByCategory: { category: KnowledgeCategory | null; tickets: number }[];
+  atRisk: CustomerAtRisk[];
+  spendExposed: number;
+}
+
+// --- Agent -----------------------------------------------------------------
+
+export interface PipelineFunnel {
+  tickets: number;
+  categorised: number;
+  customerLinked: number;
+  orderLinked: number;
+  contextBuilt: number;
+  investigated: number;
+  lowConfidence: number;
+  awaitingCategorisation: number;
+  awaitingInvestigation: number;
+}
+
+export interface EvidenceGapRow {
+  need: string;
+  label: string;
+  state: string | null;
+  finding: string | null;
+  occurrences: number;
+  tickets: number;
+}
+
+export interface VerdictRow {
+  verdict: InvestigationVerdict;
+  investigations: number;
+  tickets: number;
+  withHandoff: number;
+}
+
+export interface UsageMonth {
+  month: string;
+  model: string;
+  pass: string;
+  calls: number;
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+  failedCalls: number;
+  /** Null when the model has no configured rate — never silently 0. */
+  costUsd: number | null;
+}
+
+export interface UsageSummary {
+  totalTokens: number;
+  inputTokens: number;
+  outputTokens: number;
+  calls: number;
+  ticketsTouched: number;
+  meanTokensPerTicket: number | null;
+  maxTokensOnATicket: number | null;
+  firstRecordedAt: string | null;
+  lastRecordedAt: string | null;
+  /** Summed per model, so an unpriced model does not quietly read as free. */
+  costUsd: number | null;
+  /** True when at least one model in the window has no configured rate. */
+  hasUnpricedModels: boolean;
+  monthToDateUsd: number | null;
+  monthToDateTokens: number;
+}
+
+export interface AgentPanel {
+  funnel: PipelineFunnel | null;
+  /** Unsatisfied needs only, ranked — a satisfied need is not a blocker. */
+  blockers: EvidenceGapRow[];
+  verdicts: VerdictRow[];
+  automationCeiling: number | null;
+  usage: UsageSummary | null;
+  usageByMonth: UsageMonth[];
+  /** False until the worker has run since token capture was wired. */
+  hasUsageData: boolean;
+}

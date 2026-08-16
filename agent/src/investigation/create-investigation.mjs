@@ -33,17 +33,23 @@ export function createInvestigationStack({
   shopId,
   config,
   logger,
-  customerLookup = null
+  customerLookup = null,
+  // Threaded in rather than created here, because it must be the SAME buffer the
+  // rest of the poll writes into — the stack builds its own OpenAI and
+  // embeddings clients, and a sink of its own would be a second buffer nobody
+  // drains. Left undefined, both clients fall back to their own no-op defaults.
+  usageSink
 } = {}) {
   if (!config?.openaiApiKey) {
     return null;
   }
 
-  const openai = createOpenAIClient({ apiKey: config.openaiApiKey });
+  const openai = createOpenAIClient({ apiKey: config.openaiApiKey, usageSink });
   const embeddingsClient = createEmbeddingsClient({
     apiKey: config.openaiApiKey,
     model: config.embeddingModel,
-    dimensions: config.embeddingDimensions
+    dimensions: config.embeddingDimensions,
+    usageSink
   });
 
   const registry = createToolRegistry({

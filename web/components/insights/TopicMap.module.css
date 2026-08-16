@@ -1,0 +1,529 @@
+/*
+ * THE UNHAPPINESS RAMP.
+ *
+ * Sequential, single hue, five steps, monotonic in lightness — pale is calm,
+ * deep is angry, and nothing about the order depends on hue perception, so it
+ * survives every form of colour blindness and a monochrome print.
+ *
+ * The hue is the app's teal rather than a red or amber ramp on purpose:
+ * --priority-high / --priority-medium already mean "this ticket is urgent"
+ * everywhere else in this product, and a red treemap tile would read as an
+ * alert about the subject rather than as a position on a scale.
+ *
+ * The app's own teal tokens were tried first and are the wrong shape for a
+ * ramp: --teal-050 and --teal-100 sit at L* 97 and 92, then --teal drops
+ * straight to 47, so steps 2 and 3 are indistinguishable and 3-5 crowd the dark
+ * end. These five are spaced by lightness instead (L* ~95, 81, 66, 49, 36) and
+ * anchored at the pale end on --teal-050's hue, so they read as the same family
+ * as the rest of the UI.
+ *
+ * Ink is paired per step and switches once, at step 4, where the fill first
+ * gets dark enough for white to beat black. Every pairing clears 4.5:1 against
+ * its own fill:
+ *   1  #eaf4f4 on #0a3b3a  11.0:1     4  #23807e on #ffffff  4.7:1
+ *   2  #a8d4d3 on #0a3b3a   7.6:1     5  #0d5f5e on #ffffff  7.6:1
+ *   3  #68adab on #0a3b3a   4.8:1
+ * That is why the ramp stops at five: a sixth step would either repeat a
+ * lightness or land in the band where neither ink passes.
+ */
+.wrap {
+  --ramp-1: #eaf4f4;
+  --ramp-2: #a8d4d3;
+  --ramp-3: #68adab;
+  --ramp-4: #23807e;
+  --ramp-5: #0d5f5e;
+  --ramp-ink-light: #0a3b3a;
+  --ramp-ink-dark: #ffffff;
+
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+/* --- provenance banner --- */
+
+.banner {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--teal);
+  border-radius: var(--radius-md);
+  background: var(--surface-sunken);
+}
+
+.bannerStale {
+  border-left-color: var(--warning);
+}
+
+.bannerMain {
+  font-size: var(--text-body);
+  font-weight: var(--weight-semibold);
+  color: var(--text-strong);
+}
+
+.bannerSub {
+  font-size: var(--text-caption);
+  color: var(--text-muted);
+}
+
+.bannerUnknown {
+  font-style: italic;
+  color: var(--text-subtle);
+}
+
+/* --- the map --- */
+
+.figure {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+}
+
+.caption {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.capTitle {
+  font-size: var(--text-md);
+  font-weight: var(--weight-semibold);
+  color: var(--text-strong);
+}
+
+.capSub {
+  font-size: var(--text-caption);
+  color: var(--text-subtle);
+  max-width: 78ch;
+}
+
+/*
+ * A definite height is what makes the rows proportional: `flex-grow` divides
+ * the container, and a container sized by its content would divide whatever the
+ * text happened to need instead of the shares the layout computed.
+ */
+.map {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  height: clamp(22rem, 46vh, 30rem);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.row {
+  display: flex;
+  min-height: 0;
+}
+
+.rowInner {
+  display: flex;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* `min-width: 0` and the overflow are load-bearing: without them a long subject
+   name sets the tile's minimum width and the row stops being proportional. */
+.tile {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  background: var(--ramp-1);
+  color: var(--ramp-ink-light);
+}
+
+.tile[data-step="1"] {
+  background: var(--ramp-1);
+  color: var(--ramp-ink-light);
+}
+.tile[data-step="2"] {
+  background: var(--ramp-2);
+  color: var(--ramp-ink-light);
+}
+.tile[data-step="3"] {
+  background: var(--ramp-3);
+  color: var(--ramp-ink-light);
+}
+.tile[data-step="4"] {
+  background: var(--ramp-4);
+  color: var(--ramp-ink-dark);
+}
+.tile[data-step="5"] {
+  background: var(--ramp-5);
+  color: var(--ramp-ink-dark);
+}
+
+/* Hatched rather than palest: an unscored subject is not the happiest one, and
+   giving it step 1 would put it at the calm end of a scale it is not on. */
+.tile[data-step="none"] {
+  color: var(--text-muted);
+  background: repeating-linear-gradient(45deg, var(--mist) 0 5px, var(--surface-sunken) 5px 10px);
+  box-shadow: inset 0 0 0 1px var(--border);
+}
+
+.tileName {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tileCount {
+  font-size: var(--text-caption);
+  font-variant-numeric: tabular-nums;
+  opacity: 0.85;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.subs {
+  margin: var(--space-1) 0 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.sub {
+  display: flex;
+  gap: var(--space-2);
+  font-size: var(--text-caption);
+  line-height: 1.35;
+  opacity: 0.9;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.subSize {
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--weight-semibold);
+  min-width: 1.5rem;
+  text-align: right;
+  flex: none;
+}
+
+/* --- legend --- */
+
+.legend {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-3);
+}
+
+.legendLabel,
+.legendFoot {
+  font-size: var(--text-caption);
+  color: var(--text-subtle);
+}
+
+.legendLabel {
+  font-weight: var(--weight-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.legendScale {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.legendItem {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.legendSwatch,
+.swatch {
+  display: inline-block;
+  width: 0.85rem;
+  height: 0.85rem;
+  border-radius: 3px;
+  background: var(--ramp-1);
+  box-shadow: inset 0 0 0 1px rgba(15, 20, 27, 0.12);
+}
+
+.swatch {
+  margin-right: var(--space-2);
+  vertical-align: -1px;
+}
+
+.legendSwatch[data-step="1"],
+.swatch[data-step="1"] {
+  background: var(--ramp-1);
+}
+.legendSwatch[data-step="2"],
+.swatch[data-step="2"] {
+  background: var(--ramp-2);
+}
+.legendSwatch[data-step="3"],
+.swatch[data-step="3"] {
+  background: var(--ramp-3);
+}
+.legendSwatch[data-step="4"],
+.swatch[data-step="4"] {
+  background: var(--ramp-4);
+}
+.legendSwatch[data-step="5"],
+.swatch[data-step="5"] {
+  background: var(--ramp-5);
+}
+.legendSwatch[data-step="none"],
+.swatch[data-step="none"] {
+  background: repeating-linear-gradient(45deg, var(--mist) 0 3px, var(--surface-sunken) 3px 6px);
+}
+
+.legendText {
+  font-size: var(--text-caption);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+}
+
+.coverage {
+  margin: 0;
+  font-size: var(--text-caption);
+  color: var(--text-muted);
+  max-width: 88ch;
+  line-height: 1.5;
+}
+
+/* --- table --- */
+
+.tableWrap {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+}
+
+.table {
+  width: 100%;
+  min-width: 40rem;
+  border-collapse: collapse;
+  font-size: var(--text-body);
+}
+
+.tableCaption {
+  caption-side: top;
+  text-align: left;
+  padding: var(--space-3) var(--space-4) 0;
+  font-size: var(--text-caption);
+  color: var(--text-subtle);
+}
+
+.table thead th {
+  text-align: left;
+  padding: 0;
+  background: var(--surface-sunken);
+  border-bottom: 1px solid var(--border-strong);
+  white-space: nowrap;
+}
+
+.table thead th.n {
+  text-align: right;
+}
+
+.sortButton {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  width: 100%;
+  padding: var(--space-3) var(--space-4);
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: var(--text-caption);
+  font-weight: var(--weight-semibold);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-subtle);
+  cursor: pointer;
+}
+
+.table thead th.n .sortButton {
+  justify-content: flex-end;
+}
+
+.sortButton:hover {
+  color: var(--teal-ink);
+}
+
+.sortButton:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus);
+  border-radius: var(--radius-sm);
+}
+
+.sortMark {
+  font-size: 0.65rem;
+  opacity: 0.7;
+}
+
+.table tbody th,
+.table tbody td {
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--mist-050);
+  color: var(--text-default);
+  text-align: left;
+  font-weight: var(--weight-regular);
+}
+
+.table tbody th {
+  font-weight: var(--weight-medium);
+  color: var(--text-strong);
+  white-space: nowrap;
+}
+
+.table tbody tr:last-child th,
+.table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.n {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.table tbody td.n {
+  text-align: right;
+}
+
+.muted {
+  color: var(--text-subtle);
+}
+
+/* --- resync --- */
+
+.resync {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-md);
+  background: var(--surface-sunken);
+}
+
+.resyncText {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 16rem;
+  flex: 1 1 22rem;
+}
+
+.resyncTitle {
+  font-size: var(--text-caption);
+  font-weight: var(--weight-semibold);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-subtle);
+}
+
+.resyncBody {
+  margin: 0;
+  font-size: var(--text-caption);
+  color: var(--text-muted);
+  max-width: 62ch;
+  line-height: 1.5;
+}
+
+.resyncControl {
+  display: flex;
+  align-items: stretch;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+/* Selectable text, always — the copy button can be refused by the browser and
+   the command still has to be gettable by hand. */
+.command {
+  display: inline-flex;
+  align-items: center;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: var(--text-sm);
+  color: var(--text-strong);
+  user-select: all;
+  white-space: nowrap;
+}
+
+.copyButton {
+  padding: var(--space-2) var(--space-4);
+  border: 1px solid var(--teal);
+  border-radius: var(--radius);
+  background: var(--teal);
+  color: var(--text-on-teal);
+  font: inherit;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease-out);
+}
+
+.copyButton:hover {
+  background: var(--teal-strong);
+  border-color: var(--teal-strong);
+}
+
+.copyButton:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus);
+}
+
+@media (max-width: 720px) {
+  /* Taller, because the same shares over a narrower box make every tile thin;
+     and the sub-topic lines go, because at this width they wrap to one word a
+     line and push the subject name out of view. */
+  .map {
+    height: clamp(26rem, 70vh, 38rem);
+  }
+
+  .subs {
+    display: none;
+  }
+
+  .resyncControl {
+    width: 100%;
+  }
+
+  .command {
+    flex: 1 1 auto;
+    overflow-x: auto;
+  }
+}

@@ -65,8 +65,10 @@ export async function runCategorisation({
 
     let result;
     try {
-      // Blind: the ticket's existing labels are deliberately not passed in.
-      result = await categorise({ subject: ticket.subject, messages });
+      // Blind: the ticket's existing labels are deliberately not passed in. The
+      // ticket id rides in the second argument, which is bookkeeping (whose cost
+      // this call was) and never reaches the prompt.
+      result = await categorise({ subject: ticket.subject, messages }, { ticketId: ticket.id });
     } catch (error) {
       await handleFailure(record, ticket, error, counts, logger);
       continue;

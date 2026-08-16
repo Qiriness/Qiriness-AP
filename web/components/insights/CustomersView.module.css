@@ -1,0 +1,218 @@
+/* Wide content scrolls inside its own container so the page body never does —
+   the same rule the Fulfilment panel follows. The call list is six columns wide
+   and the segment table is six wide with long labels; both will overflow a
+   half-width window long before the app frame does. */
+.tableWrap {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+}
+
+.table {
+  width: 100%;
+  min-width: 44rem;
+  border-collapse: collapse;
+  font-size: var(--text-body);
+}
+
+.table thead th {
+  text-align: left;
+  padding: var(--space-3) var(--space-4);
+  font-size: var(--text-caption);
+  font-weight: var(--weight-semibold);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-subtle);
+  background: var(--surface-sunken);
+  border-bottom: 1px solid var(--border-strong);
+  white-space: nowrap;
+}
+
+.table tbody th,
+.table tbody td,
+.table tfoot th,
+.table tfoot td {
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--mist-050);
+  color: var(--text-default);
+  text-align: left;
+  font-weight: var(--weight-regular);
+  vertical-align: top;
+}
+
+.table tbody th,
+.table tfoot th {
+  font-weight: var(--weight-medium);
+  color: var(--text-strong);
+}
+
+.table tbody tr:last-child th,
+.table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+/* The totals row is a summary, not another segment — heavier rule above it and a
+   sunken ground, so nobody reads "All segments" as an eleventh RFM group. */
+.table tfoot th,
+.table tfoot td {
+  border-top: 1px solid var(--border-strong);
+  border-bottom: none;
+  background: var(--surface-sunken);
+  font-weight: var(--weight-semibold);
+  color: var(--text-strong);
+}
+
+.n {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.muted {
+  color: var(--text-subtle);
+  font-weight: var(--weight-regular);
+}
+
+/* The second line in a cell — order count, mood, status. Small and grey because
+   it is context for the value above it, never a value of its own. */
+.sub {
+  display: block;
+  margin-top: 2px;
+  font-size: var(--text-caption);
+  font-weight: var(--weight-regular);
+  color: var(--text-subtle);
+  white-space: nowrap;
+}
+
+/* --- VIP marking ---------------------------------------------------------- */
+
+/*
+ * Gold is the app's VIP colour and nothing else's — see globals.css. Reused here
+ * rather than re-picked so a VIP row on this panel and a VIP badge on a ticket
+ * row are visibly the same status.
+ *
+ * THE BADGE IS THE MARKING; THE BORDER ONLY REINFORCES IT. A gold left edge on
+ * its own is colour carrying the whole message, which is invisible to anyone
+ * reading this in monochrome or with a red-green deficiency, and gold against
+ * this grey is a low-contrast pair even for those who can see it. The word "VIP"
+ * survives both.
+ */
+.vipBadge {
+  display: inline-block;
+  margin-left: var(--space-2);
+  padding: 1px var(--space-2);
+  border: 1px solid var(--gold-100);
+  border-radius: var(--radius-pill);
+  background: var(--surface);
+  font-size: var(--text-caption);
+  font-weight: var(--weight-semibold);
+  letter-spacing: 0.06em;
+  color: var(--gold-strong);
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+.vipRow th:first-child {
+  box-shadow: inset 3px 0 0 var(--gold-strong);
+}
+
+/* Every row of the call list is a VIP by construction, so the edge marks the
+   whole table rather than distinguishing rows within it. */
+.callTable tbody th:first-child {
+  box-shadow: inset 3px 0 0 var(--gold-strong);
+}
+
+/* --- sort control --------------------------------------------------------- */
+
+.sortGroup {
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-sunken);
+}
+
+.sortButton {
+  appearance: none;
+  border: 0;
+  border-radius: var(--radius-sm);
+  padding: var(--space-1) var(--space-3);
+  background: transparent;
+  font: inherit;
+  font-size: var(--text-caption);
+  font-weight: var(--weight-medium);
+  color: var(--text-muted);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+}
+
+.sortButton:hover {
+  color: var(--text-strong);
+}
+
+.sortButton:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus);
+}
+
+.sortActive {
+  background: var(--surface);
+  color: var(--teal-ink);
+  box-shadow: var(--shadow-xs);
+}
+
+/* --- figure --------------------------------------------------------------- */
+
+.figure {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+}
+
+.figcaption {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.figTitle {
+  font-size: var(--text-md);
+  font-weight: var(--weight-semibold);
+  color: var(--text-strong);
+}
+
+.figSub {
+  font-size: var(--text-caption);
+  color: var(--text-subtle);
+  max-width: 74ch;
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+@media (max-width: 620px) {
+  .sortGroup {
+    width: 100%;
+    justify-content: stretch;
+  }
+
+  .sortButton {
+    flex: 1;
+  }
+}

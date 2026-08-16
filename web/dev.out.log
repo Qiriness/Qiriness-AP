@@ -318,3 +318,78 @@
  ✓ Compiled in 365ms (713 modules)
  ○ Compiling /agent-setup ...
  ✓ Compiled /agent-setup in 916ms (395 modules)
+ ○ Compiling /api/tickets/[id] ...
+ ✓ Compiled /api/tickets/[id] in 655ms (399 modules)
+ GET /api/tickets/0dd5cfda-276c-4895-b142-0fa9e0c7b0f4 200 in 3266ms
+ GET /api/tickets/0dd5cfda-276c-4895-b142-0fa9e0c7b0f4 200 in 384ms
+ GET /tickets 200 in 817ms
+ GET /api/tickets/0dd5cfda-276c-4895-b142-0fa9e0c7b0f4 200 in 487ms
+ GET /api/tickets/0dd5cfda-276c-4895-b142-0fa9e0c7b0f4 200 in 496ms
+ GET /tickets 200 in 1328ms
+ ✓ Compiled /api/tickets/[id]/thread in 399ms (399 modules)
+ GET /api/tickets/0dd5cfda-276c-4895-b142-0fa9e0c7b0f4/thread 200 in 1769ms
+ GET /api/tickets/0dd5cfda-276c-4895-b142-0fa9e0c7b0f4/thread 200 in 1772ms
+ ✓ Compiled /api/tickets/[id] in 150ms (401 modules)
+ GET /api/tickets/0dd5cfda-276c-4895-b142-0fa9e0c7b0f4 200 in 659ms
+ GET /api/tickets/0dd5cfda-276c-4895-b142-0fa9e0c7b0f4 200 in 663ms
+ GET /api/tickets/0dd5cfda-276c-4895-b142-0fa9e0c7b0f4/thread 200 in 692ms
+ GET /api/tickets/0dd5cfda-276c-4895-b142-0fa9e0c7b0f4/thread 200 in 700ms
+ ✓ Compiled / in 436ms (403 modules)
+ GET / 307 in 2165ms
+ GET /agent-setup 200 in 1217ms
+ ✓ Compiled /api/knowledge/articles in 391ms (399 modules)
+ POST /api/knowledge/articles 201 in 3144ms
+ ✓ Compiled /api/knowledge/articles/[id] in 500ms (399 modules)
+ PATCH /api/knowledge/articles/3e39b475-2e5a-4865-8ab1-53d756017e11 200 in 2759ms
+ PATCH /api/knowledge/articles/3e39b475-2e5a-4865-8ab1-53d756017e11 200 in 3734ms
+ DELETE /api/knowledge/articles/3e39b475-2e5a-4865-8ab1-53d756017e11 204 in 439ms
+ ✓ Compiled /api/tickets/[id]/thread in 302ms (399 modules)
+ GET /api/tickets/b0246791-5442-401e-8964-2a1335cf8661/thread 200 in 1174ms
+ GET /api/tickets/b0246791-5442-401e-8964-2a1335cf8661/thread 200 in 1187ms
+ GET /api/tickets/b2e837c4-d6b4-442e-b193-3bb02a1bd637/thread 200 in 629ms
+ GET /api/tickets/b2e837c4-d6b4-442e-b193-3bb02a1bd637/thread 200 in 644ms
+ GET /api/tickets/b0246791-5442-401e-8964-2a1335cf8661/thread 200 in 761ms
+ GET /api/tickets/b0246791-5442-401e-8964-2a1335cf8661/thread 200 in 767ms
+ ✓ Compiled /api/tickets/[id] in 407ms (401 modules)
+ GET /api/tickets/b0246791-5442-401e-8964-2a1335cf8661 200 in 1089ms
+ GET /api/tickets/b0246791-5442-401e-8964-2a1335cf8661 200 in 1270ms
+ GET /api/tickets/4f4b49e4-f1bf-4ccc-b985-89262b08f3fd 200 in 323ms
+ GET /api/tickets/4f4b49e4-f1bf-4ccc-b985-89262b08f3fd 200 in 338ms
+ GET /api/tickets/b2e837c4-d6b4-442e-b193-3bb02a1bd637 200 in 343ms
+ GET /api/tickets/b2e837c4-d6b4-442e-b193-3bb02a1bd637 200 in 347ms
+ GET /api/tickets/0dd5cfda-276c-4895-b142-0fa9e0c7b0f4 200 in 345ms
+ GET /api/tickets/0dd5cfda-276c-4895-b142-0fa9e0c7b0f4 200 in 367ms
+ GET /api/tickets/0dd5cfda-276c-4895-b142-0fa9e0c7b0f4/thread 200 in 711ms
+ GET /api/tickets/0dd5cfda-276c-4895-b142-0fa9e0c7b0f4/thread 200 in 727ms
+ GET /api/tickets/0dd5cfda-276c-4895-b142-0fa9e0c7b0f4/thread 200 in 796ms
+ GET /api/tickets/0dd5cfda-276c-4895-b142-0fa9e0c7b0f4/thread 200 in 808ms
+ GET /api/tickets/6216afc3-d4de-42e9-b6cf-87039242d70b 200 in 1631ms
+ GET /api/tickets/6216afc3-d4de-42e9-b6cf-87039242d70b 200 in 1631ms
+ GET /api/tickets/b0246791-5442-401e-8964-2a1335cf8661/thread 200 in 731ms
+ GET /api/tickets/b0246791-5442-401e-8964-2a1335cf8661/thread 200 in 737ms
+ GET /api/tickets/dec1cc2c-34a2-4ba6-acae-06c7ee074a49/thread 200 in 807ms
+ GET /api/tickets/dec1cc2c-34a2-4ba6-acae-06c7ee074a49/thread 200 in 813ms
+ GET /api/tickets/6fb9529e-f89d-4750-9fc9-b53512089357/thread 200 in 667ms
+ GET /api/tickets/6fb9529e-f89d-4750-9fc9-b53512089357/thread 200 in 687ms
+ GET /api/tickets/6fb9529e-f89d-4750-9fc9-b53512089357 200 in 606ms
+ GET /api/tickets/6fb9529e-f89d-4750-9fc9-b53512089357 200 in 635ms
+ GET /api/tickets/6fb9529e-f89d-4750-9fc9-b53512089357/thread 200 in 607ms
+ GET /api/tickets/6fb9529e-f89d-4750-9fc9-b53512089357/thread 200 in 660ms
+ GET /api/tickets/0dd5cfda-276c-4895-b142-0fa9e0c7b0f4 200 in 1211ms
+ GET /api/tickets/0dd5cfda-276c-4895-b142-0fa9e0c7b0f4 200 in 1220ms
+ ✓ Compiled in 1780ms (395 modules)
+ ✓ Compiled in 435ms (395 modules)
+ ✓ Compiled in 1169ms (395 modules)
+ ✓ Compiled in 434ms (395 modules)
+ ✓ Compiled in 418ms (395 modules)
+ ✓ Compiled in 1903ms (745 modules)
+ ✓ Compiled in 4s (745 modules)
+ GET /tickets 200 in 3302ms
+ ○ Compiling /insights ...
+ ✓ Compiled /insights in 1513ms (753 modules)
+ ○ Compiling /_not-found ...
+ ✓ Compiled /_not-found in 1255ms (756 modules)
+ GET /insights/fulfilment 404 in 389ms
+ ○ Compiling /insights/fulfilment ...
+ ✓ Compiled /insights/fulfilment in 3.9s (805 modules)
+ ✓ Compiled in 2.7s (766 modules)

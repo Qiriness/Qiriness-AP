@@ -164,7 +164,12 @@ export function createInvestigator(
         model,
         system: SYSTEM_PROMPT,
         messages,
-        tools: definitions
+        tools: definitions,
+        // Every turn of the loop is its own row. Investigation is the only pass
+        // that can spend more than one model call on a ticket, so a per-call row
+        // is what makes "the worst single ticket" answerable at all.
+        pass: 'investigate',
+        ticketId: ticket.id ?? null
       });
 
       if (response.toolCalls.length === 0) {
@@ -189,7 +194,9 @@ export function createInvestigator(
       toolChoice: 'none',
       schema: CASE_FILE_SCHEMA,
       schemaName: 'case_file',
-      maxTokens: 900
+      maxTokens: 900,
+      pass: 'investigate',
+      ticketId: ticket.id ?? null
     });
 
     if (!final.content) {

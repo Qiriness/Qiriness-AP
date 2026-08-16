@@ -71,6 +71,24 @@ The full record of what was built and how far each piece is proven is in `CHANGE
 
 ## Next Steps
 
+**Updated 2026-08-16, after shipping the Insights panels.** Three items below are
+now partly or wholly answered, and one has become more urgent:
+
+- **Fulfilment timing is now measured and visible** at `/insights/fulfilment`.
+  It shows July 2026 at 30.7% of orders shipping later than three days against a
+  steady 4–14% — worth establishing whether that was a known staffing gap or
+  news, because it decides whether this needs an alert.
+- **Step 5 (re-tune the clustering threshold) is now cheap to act on.** The topic
+  map persists (`npm run cluster:tickets:save`) and records the threshold it used,
+  so two thresholds can be compared instead of argued about.
+- **Step 8 (dashboard auth) is now the blocking item, not a tidy-up.**
+  `/insights/customers` names individual customers and their lifetime spend. The
+  panel says so at the top, but a warning is not an access control.
+- **New:** token cost is recorded from this point forward and cannot be
+  backfilled, so the cost tiles fill in only as the worker runs. Verify the
+  default prices in `scripts/lib/llm-rates.mjs` against current OpenAI pricing
+  before quoting any figure from them.
+
 Reordered 2026-07-30 after measuring the clustered corpus against the level taxonomy. The target is explicit: **auto-resolve level 1 and 2, and for level 3 assemble everything a human needs to act.** Across 330 customer-facing categorised tickets that splits **L1 42 (13%) · L2 156 (47%) · L3 131 (40%) · L4 1**, so 60% is in scope for automation and 40% for context assembly. What each tool is worth is in `AGENT_INTEGRATION_PLAN.md` Phase 4.
 
 The previous ordering put the knowledge library first, on the reasoning that only one of nine documents is `approved`. That was measured and is wrong: embedding the 19 unapproved draft chunks in memory and scoring them against the top 12 customer topics closed **0** of them. Approval was never the constraint. Roughly 127 messages of top demand need live order data and 46 need an article, so the tools layer is worth about three times the library.

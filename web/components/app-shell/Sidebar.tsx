@@ -28,7 +28,10 @@ const NAV: NavItem[] = [
   { label: "Home", href: "#", icon: HomeIcon, available: false },
   { label: "Conversations", href: "#", icon: ChatIcon, available: false },
   { label: "Tickets", href: "/tickets", icon: TicketIcon, available: true },
-  { label: "Insights", href: "#", icon: InsightsIcon, available: false },
+  // Points at the section, not at a panel. `isActive` is an exact match, so
+  // every page under /insights passes "/insights" as its activeHref and the
+  // panel tabs inside handle the rest.
+  { label: "Insights", href: "/insights", icon: InsightsIcon, available: true },
   { label: "Knowledge", href: "#", icon: KnowledgeIcon, available: false },
   { label: "Agent Setup", href: "/agent-setup", icon: AgentIcon, available: true },
   { label: "Settings", href: "/settings", icon: SettingsIcon, available: true },

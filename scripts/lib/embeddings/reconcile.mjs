@@ -63,7 +63,11 @@ export async function reconcileEmbeddings({
   args,
   config,
   supabase,
-  transport = REST_TRANSPORT
+  transport = REST_TRANSPORT,
+  // Where the token counts go, if the caller wants them. A bulk backfill is the
+  // one embedding path where the bill is large enough to be worth a row, and it
+  // is also the only one whose cost is not attributable to a ticket.
+  usageSink = null
 }) {
   const target = {
     model: config.embeddingModel,
@@ -79,7 +83,8 @@ export async function reconcileEmbeddings({
       ? transport.createEmbeddingsClient({
           apiKey: config.openaiApiKey,
           model: config.embeddingModel,
-          dimensions: config.embeddingDimensions
+          dimensions: config.embeddingDimensions,
+          usageSink
         })
       : null;
 

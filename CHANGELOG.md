@@ -10,6 +10,47 @@ Three sibling files carry the other halves, and this one deliberately does not d
 
 ---
 
+## Insights dashboards, token accounting and a persisted topic map (2026-08-16)
+
+Four analytics panels behind `/insights`, plus the two things that had to start being recorded before they could be read. Rationale in `DECISIONS.md § Insights`.
+
+### The measurement that shaped it
+
+Read from the live database before any code was written. **Fulfilment timing was already fully computable and had never been looked at**: `processed_at` → first `fulfillments[].created_at` is populated on 1,993 of 2,006 orders, giving a median of 23.8h, a p90 of 78h, and 276 orders (13.8%) past three days. Broken down by month it shows **July 2026 at 30.7% past three days with a p90 of 149h**, against 4–14% and ~70h in every other month — the worst fulfilment month on record, and also the heaviest support month (85 new threads). Nobody had seen it.
+
+Delivery timing, by contrast, is genuinely unavailable: `delivered_at` is set on **1 order in 2,006** and `in_transit_at` on none, because no carrier feeds scan events back to Shopify here. Treating those two durations as one blocked lump is what had kept the measurable half unbuilt.
+
+### `06_analytics.sql`
+
+Three tables and **fifteen views**, all `security_invoker` and revoked from the anon roles like the rest.
+
+- **`llm_usage`** — one row per model call. Nothing recorded what the agent spent; OpenAI returns `usage` on every response and `completeWithTools` already handed it to a caller that ignored it, while `completeJson` discarded it before the caller could see it.
+- **`cluster_runs`** + **`ticket_clusters`** — the topic map, which previously printed to a terminal and persisted nothing.
+- **`normalise_carrier()`** — the live table holds `COLISSIMO`, `Colissimo` and `LA POSTE COLISSIMO`; a raw breakdown reports three carriers.
+- Applied forward to the dev database and **each view checked against an independent JavaScript computation of the same figure** over the same rows. All fifteen agree.
+
+### Token accounting
+
+- Captured at the **transport** — one `usageSink.record` in `request()` covers every call from every pass. The sink defaults to a frozen no-op, so every existing caller is unchanged.
+- **Retries within one call are not separate rows** (a retried 429 was never billed) but a call that exhausts its retries **is** one, because the last attempt may have been served and charged.
+- The store is best-effort and swallows its own failure: a poll that categorised twenty tickets and then failed to write cost rows has still categorised twenty tickets.
+- **Tokens are stored; money is applied at read time** from `scripts/lib/llm-rates.mjs`, overridable with `LLM_RATES`. `estimateCost` returns `rated: false` rather than 0 for an unpriced model. **The default prices are list prices recorded so the panel has a number, and are explicitly not authoritative.**
+- Wired into the spam gate, categoriser, decomposer, investigation and all three `embed:*` reconcilers.
+- **Nothing can be backfilled** — usage exists only on the response — which is why this shipped before the panel that reads it.
+
+### Topic map persistence
+
+`cluster:tickets` stays print-only; **`cluster:tickets:save`** persists a run. A rebuild is a deliberate act — the 0.68 threshold is hand-tuned and corpus-specific — so the map records its own age rather than refreshing behind the reader. Runs are pruned to the last 10, an orphaned run row is deleted if its clusters fail to insert, and a zero-topic run is still written because "nothing repeated above the threshold" is a real result.
+
+### Verified
+
+- Root `npm test`: **1269 pass**. `agent/` `npm test`: **732 pass**. Includes 37 new tests over the sink, the store and the rate table, and 26 over the cluster store.
+- All 15 schema invariants in `_shared.test.mjs` pass with the sixth baseline file.
+- Every column the two new stores write confirmed to exist against the live schema.
+- `cluster:tickets:save` run once for real: 248 messages, 13 subjects, 46 topics persisted.
+
+---
+
 ## Backlog auto-close window (2026-08-15)
 
 - **Auto-close now waits 28 idle days instead of 21.** That gives tickets at least two weeks in the Backlog before automatic closure, while still using `last_message_at` so a new customer reply or desk reply keeps the thread open.

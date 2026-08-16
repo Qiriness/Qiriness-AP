@@ -16,13 +16,22 @@ const MAX_RETRIES = 3;
  * @param {number} [options.dimensions]      defaults to 1536.
  * @param {typeof fetch} [options.fetchImpl] injectable for tests.
  * @param {(ms:number)=>Promise<void>} [options.sleepImpl] injectable for tests.
+ * @param {{record: Function}} [options.usageSink]  collects token counts; see
+ *   agent/src/llm/usage-sink.mjs. Embeddings are cheap per call and numerous, so
+ *   the reconcilers are where the bill actually shows up.
+ *
+ * THE SINK IS DUCK-TYPED AND OPTIONAL — no import, no default instance. This
+ * module is imported by `web/`, and `web/` cannot import from `agent/src`
+ * (DECISIONS.md § `tickets` has exactly one writer); an absent sink therefore
+ * has to mean "record nothing" rather than "reach for the shared no-op".
  */
 export function createEmbeddingsClient({
   apiKey,
   model = 'text-embedding-3-small',
   dimensions = 1536,
   fetchImpl = fetch,
-  sleepImpl = defaultSleep
+  sleepImpl = defaultSleep,
+  usageSink = null
 } = {}) {
   if (!apiKey) {
     throw new Error(
@@ -50,7 +59,38 @@ export function createEmbeddingsClient({
     return vectors;
   }
 
+  /**
+   * One batch, and the cost of it.
+   *
+   * The record sits around `send` rather than inside its retry loop for the same
+   * reason as the chat transport: a retried 429 was never billed. Embedding
+   * responses carry `usage.prompt_tokens` and `usage.total_tokens` and have no
+   * completion half at all, so the output count is legitimately zero.
+   */
   async function embedBatch(batch) {
+    let payload;
+    try {
+      payload = await send(batch);
+    } catch (error) {
+      usageSink?.record?.({
+        pass: 'embed',
+        model,
+        usage: null,
+        succeeded: false,
+        errorKind: error.errorKind ?? 'unknown'
+      });
+      throw error;
+    }
+
+    usageSink?.record?.({ pass: 'embed', model, usage: payload.usage ?? null });
+
+    return payload.data
+      .slice()
+      .sort((a, b) => a.index - b.index)
+      .map((item) => item.embedding);
+  }
+
+  async function send(batch) {
     let attempt = 0;
     for (;;) {
       attempt += 1;
@@ -69,15 +109,14 @@ export function createEmbeddingsClient({
           await sleepImpl(backoffMs(attempt));
           continue;
         }
-        throw new Error(`OpenAI embeddings request failed: ${error.message}`);
+        throw kinded(
+          new Error(`OpenAI embeddings request failed: ${error.message}`),
+          'transport'
+        );
       }
 
       if (response.ok) {
-        const payload = await response.json();
-        return payload.data
-          .slice()
-          .sort((a, b) => a.index - b.index)
-          .map((item) => item.embedding);
+        return response.json();
       }
 
       // Retry on rate limiting and transient server errors only.
@@ -87,11 +126,24 @@ export function createEmbeddingsClient({
       }
 
       const detail = await response.text().catch(() => `HTTP ${response.status}`);
-      throw new Error(`OpenAI embeddings request failed (${response.status}): ${detail}`);
+      throw kinded(
+        new Error(`OpenAI embeddings request failed (${response.status}): ${detail}`),
+        `http_${response.status}`
+      );
     }
   }
 
   return { embed, model, dimensions };
+}
+
+/**
+ * Stamps an error with the class of failure, for the usage row. A separate field
+ * rather than parsing the message, because the message carries the response body
+ * and `error_kind` is stored. The message itself is unchanged.
+ */
+function kinded(error, errorKind) {
+  error.errorKind = errorKind;
+  return error;
 }
 
 function backoffMs(attempt) {

@@ -5,6 +5,7 @@ import { createSupabaseClient } from './lib/supabase-rest-client.mjs';
 import { COLUMNS, T } from './lib/tables.mjs';
 import { TICKET_MESSAGE_INPUT } from './lib/embeddings/embed-chunks.mjs';
 import { reconcileEmbeddings } from './lib/embeddings/reconcile.mjs';
+import { createUsageRecording } from '../agent/src/llm/usage-store.mjs';
 
 // Reconciler for ticket-message embeddings — the safety net behind ingestion's
 // inline best-effort embed.
@@ -77,12 +78,19 @@ async function main() {
 }
 
 export async function runMessageEmbeddingReconcile({ args, config, supabase }) {
+  // One flush for the whole run, not one per batch: this is a ledger of what the
+  // backfill cost, and a write per 256-input request would put a database round
+  // trip between every batch and the next.
+  const usage = createUsageRecording({ supabase, shopDomain: config.shopDomain });
+
   const result = await reconcileEmbeddings({
     descriptor: TICKET_MESSAGES,
     args,
     config,
-    supabase
+    supabase,
+    usageSink: usage.sink
   });
+  await usage.flush();
 
   if (result.reportOnly) {
     const reason = args.dryRun ? 'Dry run' : 'OPENAI_API_KEY is not set; skipped embedding';

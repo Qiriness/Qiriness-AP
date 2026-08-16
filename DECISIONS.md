@@ -886,3 +886,54 @@ Guarding every statement would obscure the schema these files exist to document,
 ### Tests
 
 `_shared.test.mjs` holds what is only checkable across the whole set: no data statements, RLS on every table, a comment on every table, an `updated_at` trigger wherever that column exists, and **nothing referenced before it is created** — which is what makes the apply order safe. Each file then has a sibling asserting its own contents, with the taxonomy lists compared element-wise against `scripts/lib/support-taxonomy.mjs` and the verdicts against `case-file.mjs`, so a check constraint and the module it mirrors cannot drift apart.
+
+
+## Insights
+
+### Every figure comes from a view, because paging rows is silently wrong
+
+PostgREST caps a response at 1,000 rows and pages an *unordered* query in whatever order the planner returns, so consecutive pages overlap and drop rows. This is not theoretical: while designing these panels, an unordered paged tally of the 58,201 customers returned `CHAMPIONS` as **438, then 554, then 472 on three consecutive runs** against unchanged data. Only the third was right, and nothing about the first two looked wrong.
+
+So `06_analytics.sql` carries fifteen views and `readView` takes a hard limit with **no pagination at all**. A view that could return more rows than that limit is the wrong shape and belongs back in SQL as a further aggregate. The two exceptions — `customer_ticket_facts` and `ticket_reply_times` — are bounded by ticket count rather than by customer or message count, and each says so at its call site.
+
+### Judgement stays in JavaScript, so the views expose `rfm_group` and never `is_vip`
+
+Same rule as the queue: joins and aggregates in SQL, business rules in tested JS. Who counts as a VIP changes with the business and is owned by `customer-segments.mjs`; writing it into a view would freeze it into a schema object and create a second definition to disagree with the first.
+
+### A metric that cannot be computed renders as a dash, never as zero
+
+On a dashboard a zero is a claim — "nothing was late", "nobody complained", "it cost nothing". `BlockedTile` takes a **required** reason, so a blocked metric cannot ship without saying what is missing, and a missing series in `BarList` draws hatched at full width rather than empty. The delivery tiles are the case this exists for: `delivered_at` is set on 1 order in 2,006, and a delivery panel full of zeros would read as a fleet with no late parcels.
+
+`hasUsableDeliveryData` therefore needs a tenth of orders covered, not one. A single hand-closed fulfilment must not switch on a section whose medians would then describe three rows.
+
+### Fulfilment and delivery are two durations, and conflating them is what kept the measurable one unbuilt
+
+Fulfilment is `processed_at` -> first `fulfillments[].created_at`, populated on 1,993 of 2,006 orders and computable today. Delivery needs carrier scan events that never arrive. Treating "delivery metrics" as one blocked lump is why nobody had looked at dispatch timing — which turned out to show **July 2026 at 30.7% of orders past three days and a p90 of 149h**, against a steady 4-14% and ~70h in every other month.
+
+### Carrier names are normalised in SQL, once
+
+The live table holds `COLISSIMO`, `Colissimo` and `LA POSTE COLISSIMO` — one carrier, three strings, from a free-text 3PL feed. A breakdown over the raw value reports three carriers and makes GLS look larger than it is. `normalise_carrier()` is a function rather than a `case` inside one view so the panel and any future SLA report cannot disagree about how many carriers exist.
+
+### Tokens are stored; money is computed at read time
+
+`llm_usage` holds counts. Rates live in `scripts/lib/llm-rates.mjs`, are overridable with `LLM_RATES`, and are applied when a figure is rendered. A euro figure written into a row is wrong the day the rate card moves, with no way to restate the history behind it — and models get swapped here by environment variable, so that day is not hypothetical.
+
+`estimateCost` returns `rated: false` rather than 0 for an unpriced model, and the panel surfaces that. A new model reporting $0.00 because nobody added its rate is worse than a panel admitting it does not know.
+
+### Usage is captured at the transport, and failures are rows
+
+Every model call passes through one `request()` in `openai-client.mjs`, so one `usageSink.record` covers all of them; capturing per call site would have been four edits, and `completeJson` — which returns only the parsed content — could not have reported anything at all. The sink defaults to a frozen no-op, so every existing caller behaves exactly as before.
+
+Retries inside one call are **not** separate rows: a retried 429 was never billed, and counting it would invent spend. A call that exhausts its retries **is** a row, because the last attempt may well have been served and charged, and a ledger that records only successes under-reports exactly when things are going wrong.
+
+The store is best-effort and swallows its own failure. This table is a ledger of what the work cost, not part of the work; a poll that categorised twenty tickets and then failed to write its cost rows has still categorised twenty tickets. The accountant may not abort the job.
+
+**None of it can be backfilled.** OpenAI reports usage on the response and nowhere else, so the history starts at the first call after wiring — which is why this shipped before any panel that reads it.
+
+### The topic map is rebuilt by hand, and says how old it is
+
+Clustering is an all-pairs cosine comparison over the whole embedded corpus, and its 0.68 threshold was tuned by eye and is corpus-specific. That makes a rebuild a deliberate act with a judgement in it, not something that should re-run overnight and change the map under whoever is reading it. `cluster_runs` records when, at what threshold, and over how much mail, so the panel can state the map's age and warn once the live corpus has drifted away from it.
+
+`cluster:tickets` therefore stays **print-only by default** and `cluster:tickets:save` persists — the script's header has always promised it is read-only and free to re-run, and people rely on that.
+
+Resync is a documented command rather than a button: the job is an all-pairs comparison over the corpus and this app has no job queue, so running it inside a web request would block a worker for its duration.

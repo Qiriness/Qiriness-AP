@@ -5,6 +5,7 @@ import { createSupabaseClient } from './lib/supabase-rest-client.mjs';
 import { COLUMNS, T } from './lib/tables.mjs';
 import { EXEMPLAR_PHRASING_INPUT } from './lib/embeddings/embed-chunks.mjs';
 import { reconcileEmbeddings } from './lib/embeddings/reconcile.mjs';
+import { createUsageRecording } from '../agent/src/llm/usage-store.mjs';
 
 // Reconciler for exemplar-phrasing embeddings — the same mechanics as
 // embed-knowledge-chunks.mjs, over the recurring SITUATIONS rather than the
@@ -68,12 +69,18 @@ async function main() {
 }
 
 export async function runExemplarEmbeddingReconcile({ args, config, supabase }) {
+  // One flush for the whole run — see embed-ticket-messages.mjs for why the
+  // ledger is written once rather than per batch.
+  const usage = createUsageRecording({ supabase, shopDomain: config.shopDomain });
+
   const result = await reconcileEmbeddings({
     descriptor: EXEMPLAR_PHRASINGS,
     args,
     config,
-    supabase
+    supabase,
+    usageSink: usage.sink
   });
+  await usage.flush();
 
   if (args.dryRun) {
     console.log(
