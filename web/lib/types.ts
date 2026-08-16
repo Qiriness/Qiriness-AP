@@ -631,17 +631,19 @@ export interface DroppedMail {
 /**
  * The header cards.
  *
- * `highPriority` is level 3 + 4 rather than the `priority` column: nothing in
- * the pipeline writes `priority` today, so every ticket sits at its default 3
- * and a card reading it would show zero for ever. Level is what the categoriser
- * actually assigns. Swap the source here when priority starts being written.
+ * `open`, `highPriority` and `levelThree` all count the LIVE set — everything
+ * not resolved or closed, which is the rows Queue and Backlog render between
+ * them. See summariseTickets for what each one used to count instead and how
+ * far the cards drifted from the tables as a result.
  */
 export interface TicketStats {
   total: number;
+  /** Not `status === "open"`: anything not resolved or closed, including `awaiting_human`. */
   open: number;
+  /** The red band — `priorityBand === "high"` — among live tickets. */
   highPriority: number;
+  /** Level 3 among live tickets. */
   levelThree: number;
-  uncategorised: number;
   /** Rolling windows, not calendar periods — see summariseTickets. */
   last24h: number;
   last30d: number;

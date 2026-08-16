@@ -2,15 +2,43 @@
   margin-bottom: var(--space-4);
 }
 
+/* The card. It used to BE the button; it is now the frame around one, so that a
+   search input can sit in the same row without nesting inside it. The border,
+   background and padding live here for that reason. */
 .header {
   display: flex;
   align-items: center;
   gap: var(--space-3);
   width: 100%;
-  padding: var(--space-3) var(--space-4);
+  padding: var(--space-2) var(--space-3) var(--space-2) var(--space-4);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   background: var(--surface);
+}
+
+/* The open card is taller: it carries the search box, and a 34px control in a
+   row sized for text would sit tight against both edges. */
+.headerOpen {
+  padding-top: var(--space-3);
+  padding-bottom: var(--space-3);
+  /* Square off the join with the table below, so header and table read as one
+     object rather than two stacked cards. */
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+  border-bottom-color: transparent;
+}
+
+/* The disclosure fills the row so the whole card except the search still
+   toggles — the target barely changed. */
+.headerButton {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex: 1;
+  min-width: 0;
+  padding: var(--space-1) 0;
+  border: none;
+  background: none;
   font-family: inherit;
   text-align: left;
   cursor: pointer;
@@ -20,17 +48,16 @@
   background: var(--surface-sunken);
 }
 
-.header:focus-visible {
-  outline: 2px solid var(--teal);
-  outline-offset: 1px;
+/* The card tints on hover, but not while the pointer is in the search box:
+   the box is not a toggle and should not look like part of one. */
+.header:has(.searchWrap:hover) {
+  background: var(--surface);
 }
 
-/* Square off the join when the body is open, so header and table read as one
-   object rather than two stacked cards. */
-.header[aria-expanded="true"] {
-  border-bottom-left-radius: 0;
-  border-bottom-right-radius: 0;
-  border-bottom-color: transparent;
+.headerButton:focus-visible {
+  outline: 2px solid var(--teal);
+  outline-offset: 1px;
+  border-radius: var(--radius);
 }
 
 .chevron {
@@ -70,6 +97,49 @@
   color: var(--text-subtle);
 }
 
+/* --- per-table search --- */
+
+.searchWrap {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text-subtle);
+}
+
+/* ONE focus ring, on the wrapper. The input inside also matches the global
+   `:focus-visible` rule in globals.css, which paints `--shadow-focus` — so
+   before this the box drew a ring around the border AND a second one just
+   inside it on every click. `outline: none` alone did not stop it: the global
+   rule uses a box-shadow, not an outline.
+   The ring stays on the wrapper rather than the input because the wrapper is
+   what looks like the control — the icon sits inside its border. */
+.searchWrap:focus-within {
+  border-color: var(--teal);
+  box-shadow: 0 0 0 3px var(--teal-050);
+}
+
+.searchInput {
+  width: 240px;
+  max-width: 100%;
+  padding: 7px 0;
+  border: none;
+  background: transparent;
+  font-family: inherit;
+  font-size: var(--text-body);
+  color: var(--text-strong);
+}
+
+.searchInput:focus,
+.searchInput:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+
 .body {
   border: 1px solid var(--border);
   border-top: none;
@@ -81,5 +151,23 @@
 @media (max-width: 760px) {
   .description {
     display: none;
+  }
+
+  /* The search drops to its own line rather than squeezing the title: at this
+     width the two together leave neither usable. */
+  .header {
+    flex-wrap: wrap;
+  }
+
+  .headerButton {
+    flex: 1 1 100%;
+  }
+
+  .searchWrap {
+    flex: 1 1 100%;
+  }
+
+  .searchInput {
+    width: 100%;
   }
 }

@@ -34,6 +34,21 @@
   --error-050: #fef2f2;
   --error-100: #f6d5d5;
 
+  /* Queue priority bands. Their own ramp, not `--error`/`--warning`/`--success`:
+     those are tuned for chips and washes, and these three are tuned against
+     EACH OTHER for a 3px bar read at a glance — saturated, and separated on
+     lightness as well as hue so red and orange cannot be confused.
+     Tokens rather than two private copies because the table's edge bars and the
+     header card that counts them must be the same red; when they were separate
+     values the card said "high priority" in one red and the rows it counted
+     were another. `-ink` is the darker step for text on white. */
+  --priority-high: #e81010;
+  --priority-high-ink: #d61111;
+  --priority-medium: #ff8c00;
+  --priority-medium-ink: #b85a00;
+  --priority-low: #00a651;
+  --priority-low-ink: #0b7a39;
+
   /* Gold — VIP, and nothing else in the app.
      Deliberately NOT --warning: that ramp is orange and owns "something is
      wrong". Gold is metallic and cooler, so a VIP row reads as a status the
@@ -121,10 +136,29 @@
   box-sizing: border-box;
 }
 
+/*
+ * THE DOCUMENT ITSELF NEVER SCROLLS. The app is a fixed frame — a sidebar and a
+ * topbar that stay put, with `AppShell`'s `.content` as the one scroller for the
+ * page under them. `.shell` pins itself to 100dvh and hides its own overflow,
+ * but that only stops the shell from spilling; it does not stop the DOCUMENT
+ * from acquiring a scrollbar of its own, and when it does, the whole frame moves
+ * — sidebar included — which is exactly what the fixed frame exists to prevent.
+ *
+ * A third scrollbar is the visible symptom: one for the table, one for the page,
+ * and one dragging the navigation off the top of the window. Pinning html/body
+ * here makes that third one impossible rather than merely unlikely.
+ *
+ * Anything that needs to scroll must therefore declare its own scroller. Every
+ * page in the app is inside `AppShell`, so every page already has one.
+ */
 html,
 body {
   padding: 0;
   margin: 0;
+  /* `dvh`, matching `.shell`, so the two cannot disagree by the height of a
+     mobile browser's chrome and clip the bottom of the frame. */
+  height: 100dvh;
+  overflow: hidden;
 }
 
 html {

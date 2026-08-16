@@ -9,14 +9,14 @@ interface TicketStatCardsProps {
  * The four header figures, each with the denominator it should be read
  * against — a bare "172" says nothing without "of 565".
  *
- * "High priority" is level 3 + 4, not the `priority` column: nothing writes
- * priority today, so every ticket sits at its default and the card would read
- * zero for ever. This is a deliberate stand-in until priority is populated —
- * see TicketStats.
+ * THE FIRST THREE READ AGAINST THE LIVE SET, and say so: "of N open" rather
+ * than the old "of N categorised". Categorised was the honest denominator while
+ * "high priority" meant level 3 + 4 and an uncategorised ticket had no level to
+ * be counted by. The red band is scored for every ticket, uncategorised ones
+ * included (they carry their own weight for being unread), so the set it should
+ * be read against is simply everything still open.
  */
 export function TicketStatCards({ stats }: TicketStatCardsProps) {
-  const categorised = stats.total - stats.uncategorised;
-
   return (
     <ul className={styles.grid}>
       <li className={`${styles.card} ${styles.open}`}>
@@ -25,23 +25,26 @@ export function TicketStatCards({ stats }: TicketStatCardsProps) {
           {stats.open.toLocaleString()}
           <span className={styles.of}>of {stats.total.toLocaleString()}</span>
         </span>
-        <span className={styles.foot}>Awaiting a first resolution</span>
+        <span className={styles.foot}>Not yet resolved or closed</span>
       </li>
 
       <li className={`${styles.card} ${styles.high}`}>
         <span className={styles.label}>High priority</span>
         <span className={styles.figure}>
           {stats.highPriority.toLocaleString()}
-          <span className={styles.of}>of {categorised.toLocaleString()} categorised</span>
+          <span className={styles.of}>of {stats.open.toLocaleString()} open</span>
         </span>
-        <span className={styles.foot}>Level 3 and 4</span>
+        {/* Names the threshold rather than the colour: the bar is the cue in the
+            table, and a card that says "the red ones" is useless to anyone who
+            cannot separate the two warm bands. */}
+        <span className={styles.foot}>Priority score 70 and above</span>
       </li>
 
       <li className={`${styles.card} ${styles.level3}`}>
         <span className={styles.label}>Level 3</span>
         <span className={styles.figure}>
           {stats.levelThree.toLocaleString()}
-          <span className={styles.of}>of {categorised.toLocaleString()} categorised</span>
+          <span className={styles.of}>of {stats.open.toLocaleString()} open</span>
         </span>
         <span className={styles.foot}>Needs a human</span>
       </li>

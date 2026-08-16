@@ -1,7 +1,6 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { SearchIcon } from "@/components/icons";
 import { setTicketStatus } from "@/lib/api/tickets";
 import { knowledgeErrorMessage } from "@/lib/api/knowledge";
 import { isBacklogTicket, isClosed, summariseTickets } from "@/lib/ticket-stats";
@@ -30,6 +29,34 @@ const SORT_LABELS: Record<SortOrder, string> = {
   severity: "Highest level first",
 };
 
+/** Case-insensitive substring over the fields a row actually shows. */
+function matches(query: string, fields: (string | null | undefined)[]): boolean {
+  const needle = query.trim().toLowerCase();
+  if (!needle) {
+    return true;
+  }
+  return fields.filter(Boolean).join(" ").toLowerCase().includes(needle);
+}
+
+/**
+ * BOTH NAMES, because the row shows whichever it has: searching for the Shopify
+ * account name must find a ticket whose email was signed differently, and vice
+ * versa. See the naming note in DECISIONS — nothing normalises either one.
+ */
+function matchesTicket(ticket: TicketListItem, query: string): boolean {
+  return matches(query, [
+    ticket.subject,
+    ticket.requesterName,
+    ticket.customerName,
+    ticket.orderNumber,
+  ]);
+}
+
+/** Dropped mail has no customer and no order — subject, sender and the gate's reason are all there is. */
+function matchesDroppedMail(mail: DroppedMail, query: string): boolean {
+  return matches(query, [mail.subject, mail.fromEmail, mail.reason]);
+}
+
 /**
  * Tickets, in four stacked sections: the live queue, older open backlog, the
  * mail the spam gate dropped, and everything closed.
@@ -47,14 +74,30 @@ export function TicketsView({ initialTickets, droppedMail, loadError }: TicketsV
   const [tickets, setTickets] = useState(initialTickets);
   const [level, setLevel] = useState<LevelFilter>("all");
   const [category, setCategory] = useState<KnowledgeCategory | "all">("all");
-  const [query, setQuery] = useState("");
+  // One query per table, not one for the page: see TicketSection. Level,
+  // category and sort stay in the toolbar — those genuinely describe the whole
+  // open set, and Queue and Backlog are one set split by age.
+  const [queueQuery, setQueueQuery] = useState("");
+  const [backlogQuery, setBacklogQuery] = useState("");
+  const [closedQuery, setClosedQuery] = useState("");
+  const [droppedQuery, setDroppedQuery] = useState("");
   const [sort, setSort] = useState<SortOrder>("priority");
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
 
   const stats = useMemo(() => summariseTickets(tickets), [tickets]);
   const openTickets = useMemo(() => tickets.filter((ticket) => !isClosed(ticket)), [tickets]);
-  const closed = useMemo(() => tickets.filter(isClosed), [tickets]);
+  // Closed and dropped mail stay outside the toolbar's filters — they mean
+  // different things from the open queue — but each now searches itself, which
+  // is the first time either was searchable at all.
+  const closed = useMemo(
+    () => tickets.filter(isClosed).filter((ticket) => matchesTicket(ticket, closedQuery)),
+    [tickets, closedQuery]
+  );
+  const visibleDroppedMail = useMemo(
+    () => droppedMail.filter((mail) => matchesDroppedMail(mail, droppedQuery)),
+    [droppedMail, droppedQuery]
+  );
 
   // Tab counts come from the unfiltered open set, so a tab always says how many
   // it would show across Queue + Backlog. A count that moved with the search
@@ -69,28 +112,10 @@ export function TicketsView({ initialTickets, droppedMail, loadError }: TicketsV
   }, [openTickets]);
 
   const visibleOpenTickets = useMemo(() => {
-    const needle = query.trim().toLowerCase();
-
     const filtered = openTickets.filter((ticket) => {
       if (level === "uncategorised" && ticket.level !== null) return false;
       if (level !== "all" && level !== "uncategorised" && String(ticket.level) !== level) return false;
       if (category !== "all" && ticket.category !== category) return false;
-
-      if (needle) {
-        // Both names, because the row shows whichever it has: searching for the
-        // Shopify account name must find a ticket whose email was signed
-        // differently, and vice versa.
-        const haystack = [
-          ticket.subject,
-          ticket.requesterName,
-          ticket.customerName,
-          ticket.orderNumber,
-        ]
-          .filter(Boolean)
-          .join(" ")
-          .toLowerCase();
-        if (!haystack.includes(needle)) return false;
-      }
       return true;
     });
 
@@ -109,15 +134,23 @@ export function TicketsView({ initialTickets, droppedMail, loadError }: TicketsV
       const bt = Date.parse(b.lastMessageAt ?? b.firstMessageAt ?? "") || 0;
       return sort === "oldest" ? at - bt : bt - at;
     });
-  }, [openTickets, level, category, query, sort]);
+  }, [openTickets, level, category, sort]);
 
   const queue = useMemo(
-    () => visibleOpenTickets.filter((ticket) => !isBacklogTicket(ticket)),
-    [visibleOpenTickets]
+    () =>
+      visibleOpenTickets
+        .filter((ticket) => !isBacklogTicket(ticket))
+        .filter((ticket) => matchesTicket(ticket, queueQuery)),
+    [visibleOpenTickets, queueQuery]
   );
   const backlog = useMemo(
-    () => visibleOpenTickets.filter((ticket) => isBacklogTicket(ticket)),
-    [visibleOpenTickets]
+    () =>
+      visibleOpenTickets
+        // Not a bare `.filter(isBacklogTicket)`: it takes an optional `now`, and
+        // `filter` would pass the row index into it as a Date.
+        .filter((ticket) => isBacklogTicket(ticket))
+        .filter((ticket) => matchesTicket(ticket, backlogQuery)),
+    [visibleOpenTickets, backlogQuery]
   );
 
   async function changeStatus(ticket: TicketListItem, status: "open" | "closed") {
@@ -196,18 +229,6 @@ export function TicketsView({ initialTickets, droppedMail, loadError }: TicketsV
         </div>
 
         <div className={styles.controls}>
-          <div className={styles.searchWrap}>
-            <SearchIcon size={15} />
-            <input
-              type="search"
-              className={styles.search}
-              placeholder="Search subject, requester or order…"
-              aria-label="Search the ticket queue"
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-            />
-          </div>
-
           <label className={styles.selectLabel}>
             <span className={styles.srOnly}>Filter by category</span>
             <select
@@ -251,6 +272,12 @@ export function TicketsView({ initialTickets, droppedMail, loadError }: TicketsV
         title="Queue"
         count={queue.length}
         description="Open tickets waiting less than two weeks"
+        search={{
+          value: queueQuery,
+          onChange: setQueueQuery,
+          placeholder: "Search subject, requester or order…",
+          label: "Search the queue",
+        }}
       >
         <TicketTable
           tickets={queue}
@@ -259,17 +286,22 @@ export function TicketsView({ initialTickets, droppedMail, loadError }: TicketsV
           pendingId={pendingId}
           emptyTitle="No tickets match these filters"
           emptyBody="Clear the search or pick a different level to widen the queue."
-          height="tall"
         />
       </TicketSection>
 
       <TicketSection
         title="Irrelevant"
-        count={droppedMail.length}
+        count={visibleDroppedMail.length}
         description="Mail the spam gate dropped — never stored as tickets"
         defaultCollapsed
+        search={{
+          value: droppedQuery,
+          onChange: setDroppedQuery,
+          placeholder: "Search subject, sender or reason…",
+          label: "Search dropped mail",
+        }}
       >
-        <DroppedMailTable mail={droppedMail} />
+        <DroppedMailTable mail={visibleDroppedMail} />
       </TicketSection>
 
       <TicketSection
@@ -277,6 +309,12 @@ export function TicketsView({ initialTickets, droppedMail, loadError }: TicketsV
         count={backlog.length}
         description="Open tickets waiting two weeks or more"
         defaultCollapsed
+        search={{
+          value: backlogQuery,
+          onChange: setBacklogQuery,
+          placeholder: "Search subject, requester or order…",
+          label: "Search the backlog",
+        }}
       >
         <TicketTable
           tickets={backlog}
@@ -293,6 +331,12 @@ export function TicketsView({ initialTickets, droppedMail, loadError }: TicketsV
         count={closed.length}
         description="Resolved and closed tickets"
         defaultCollapsed
+        search={{
+          value: closedQuery,
+          onChange: setClosedQuery,
+          placeholder: "Search subject, requester or order…",
+          label: "Search closed tickets",
+        }}
       >
         <TicketTable
           tickets={closed}

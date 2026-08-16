@@ -36,7 +36,7 @@ const VERDICT_CLASSES: Record<InvestigationVerdict, string> = {
  * THE ORDER BLOCK IS A TEXT LIST, NOT A ROW. Who the order belongs to, order
  * status, tracking number and tracking status are labelled lines that appear
  * only when the resolved context actually carries them, so an unfulfilled order
- * shows two lines and a delivered one shows six. Reserving a slot per field —
+ * shows two lines and a delivered one shows five. Reserving a slot per field —
  * the shape a table would force — would fill the block with dashes, and a dash
  * beside "Tracking number" reads as "there is no tracking" rather than "nothing
  * has been resolved yet".
@@ -181,46 +181,30 @@ export function TicketDetailPanel({ ticket }: TicketDetailPanelProps) {
               <dd className={styles.order}>{orderNumber}</dd>
             </div>
 
-            {/* THE OWNERSHIP PAIR, and the reason it is two lines rather than
-                one. A confirmed order means the requester's address hashes to
-                the order's — it does NOT mean the names agree, and a mismatch is
-                the shape of both an innocent case (a gift, a partner's account,
-                a married name) and a suspicious one.
+            {/* WHO THE ORDER BELONGS TO. A confirmed order means the requester's
+                address hashes to the order's — it does NOT mean the names agree,
+                and a disagreement is the shape of both an innocent case (a gift,
+                a partner's account, a married name) and one worth investigating.
+                Read against the requester in the row above.
 
-                It cannot be checked against the queue row above: that column
-                shows the LINKED SHOPIFY name where a ticket has one, which is
-                the same source as the line below it — comparing them would
-                compare Shopify with itself. So the envelope name is restated
-                here, and the two sit one above the other to be read together.
-
-                The panel states them and judges neither. The agent already has
-                a name comparison (`compareNames`, accent- and case-insensitive)
+                The panel states it and judges nothing. The agent already has a
+                name comparison (`compareNames`, accent- and case-insensitive)
                 and it is deliberately not repeated here: a second opinion in the
                 dashboard would disagree with the first the day either changed. */}
             {order?.customerName && (
-              <>
-                <div className={styles.fact}>
-                  <dt>Name on the order</dt>
-                  <dd>
-                    {order.customerName}
-                    {/* Masked at map time — the local part was destroyed on the
-                        way in and cannot be recovered. Enough to recognise the
-                        address, never enough to reuse it. */}
-                    {order.contactEmail && (
-                      <span className={styles.contactEmail}>{order.contactEmail}</span>
-                    )}
-                  </dd>
-                </div>
-
-                <div className={styles.fact}>
-                  <dt>Name on the email</dt>
-                  <dd>
-                    {ticket.requesterName?.trim() || (
-                      <span className={styles.inlineMuted}>Not given</span>
-                    )}
-                  </dd>
-                </div>
-              </>
+              <div className={styles.fact}>
+                <dt>Name on the order</dt>
+                <dd>
+                  {order.customerName}
+                  {/* Masked at map time — the local part was destroyed on the
+                      way in and cannot be recovered. Enough to recognise the
+                      address, never enough to reuse it. It is what separates a
+                      gift from a second mailbox when the names differ. */}
+                  {order.contactEmail && (
+                    <span className={styles.contactEmail}>{order.contactEmail}</span>
+                  )}
+                </dd>
+              </div>
             )}
 
             {/* A guest checkout carries no account, so there is no name to pair —

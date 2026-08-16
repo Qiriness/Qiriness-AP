@@ -32,8 +32,6 @@ interface TicketTableProps {
   pendingId: string | null;
   emptyTitle: string;
   emptyBody: string;
-  /** "tall" is for the queue — the main table, which gets the vertical room. */
-  height?: "default" | "tall";
 }
 
 /**
@@ -62,7 +60,6 @@ export function TicketTable({
   pendingId,
   emptyTitle,
   emptyBody,
-  height = "default",
 }: TicketTableProps) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [threadTicket, setThreadTicket] = useState<TicketListItem | null>(null);
@@ -82,7 +79,7 @@ export function TicketTable({
 
   return (
     <>
-    <div className={`${styles.scroll} ${height === "tall" ? styles.tall : ""}`}>
+    <div className={styles.scroll}>
       <table className={styles.table}>
         <caption className={styles.srOnly}>
           {tickets.length.toLocaleString()} tickets

@@ -1,20 +1,20 @@
 /* The table scrolls in both axes inside a fixed height: horizontally so the
-   page body never does, vertically so three stacked sections stay reachable
-   without scrolling past 565 rows to find the next one. ~8 rows visible. */
+   page body never does, vertically so several stacked sections stay reachable
+   without scrolling past 565 rows to find the next one. ~10 rows visible.
+
+   ONE HEIGHT FOR EVERY TABLE, replacing a `tall` queue at 50vh and a 26rem
+   default for the rest. The split was there to keep a collapsed "Closed"
+   header on screen without scrolling, which is a constraint the page scroller
+   already handles — and paid for it by making Backlog and Closed feel like
+   lesser tables when they are the same table with a different filter. Opening
+   two now costs a page scroll, which is what the page scroller is for.
+
+   Capped in rem as well as vh so it stops growing on a very tall screen, where
+   a table taller than about 50rem stops being a table you can scan. */
 .scroll {
   overflow: auto;
-  max-height: 26rem;
+  max-height: min(62vh, 50rem);
   background: var(--surface);
-}
-
-/* The queue is the main table and earns the room; the secondary sections keep
-   the shorter default so both stay reachable under it.
-   50vh is not arbitrary: the cards, toolbar and queue header take ~437px, and
-   the two collapsed section headers below need ~128px, so anything past ~50vh
-   pushes "Closed" off the bottom on a 1140px viewport — which defeats the point
-   of being able to collapse them. Capped so it stops growing on a tall screen. */
-.tall {
-  max-height: min(50vh, 44rem);
 }
 
 .table {
@@ -120,35 +120,33 @@
 
 /* Priority owns two marks on a row and no more: the score, and a solid bar down
    the row's LEFT edge — the same 3px accent the header cards wear on top.
-   Full-strength, fully saturated hues, not the -100 tints: those wash out
-   against the white surface at 3px, and a band you have to squint at signals
-   nothing. Each band sits as near its own primary as contrast allows, so the
-   three are told apart by hue alone at the edge of vision. */
+   The colours are the shared `--priority-*` tokens in globals.css, so the "High
+   priority" card and the red rows it counts cannot drift apart. */
 .priorityHigh {
-  --priority-edge: #e81010;
-  --priority-text: #d61111;
+  --priority-edge: var(--priority-high);
+  --priority-text: var(--priority-high-ink);
 }
 
 .priorityMedium {
-  --priority-edge: #ff8c00;
-  --priority-text: #b85a00;
+  --priority-edge: var(--priority-medium);
+  --priority-text: var(--priority-medium-ink);
 }
 
 .priorityLow {
-  --priority-edge: #00a651;
-  --priority-text: #0b7a39;
+  --priority-edge: var(--priority-low);
+  --priority-text: var(--priority-low-ink);
 }
 
 .priorityHigh + .detailRow {
-  --priority-edge: #e81010;
+  --priority-edge: var(--priority-high);
 }
 
 .priorityMedium + .detailRow {
-  --priority-edge: #ff8c00;
+  --priority-edge: var(--priority-medium);
 }
 
 .priorityLow + .detailRow {
-  --priority-edge: #00a651;
+  --priority-edge: var(--priority-low);
 }
 
 /* Inset on the first cell rather than a border on the row: a `tr` cannot carry a

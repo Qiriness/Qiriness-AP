@@ -256,7 +256,7 @@ All Route Handlers are server-only and use the Supabase service-role key.
 | **Backlog** | `tickets`, status not resolved/closed, waiting 14+ days | Close ticket |
 | **Closed** | `tickets`, status resolved/closed | Reopen ticket |
 
-Row interactions: chevron expands the agent's reading (`TicketDetailPanel`: Results · Order · Action — the Order block pairs the name on the order with the name on the email, plus the masked order contact address, so ownership can be checked by eye); subject opens the conversation (`TicketThreadDialog`: draft + email chain). In the Irrelevant table the subject opens the dropped email (`DroppedMailDialog`). Four header cards, level tabs, search, category filter and sort — all client-side over the open-ticket set, then split into Queue and Backlog.
+Row interactions: chevron expands the agent's reading (`TicketDetailPanel`: Results · Order · Action — the Order block leads with the name on the order and the masked order contact address, so ownership can be checked against the requester by eye); subject opens the conversation (`TicketThreadDialog`: draft + email chain). In the Irrelevant table the subject opens the dropped email (`DroppedMailDialog`). Four header cards, plus level tabs, category filter and sort — all client-side over the open-ticket set, then split into Queue and Backlog. Search is **per section**, in each `TicketSection` header (shown only while the section is open), so each of the four tables filters itself.
 
 ### `/settings` — forwarding address book
 

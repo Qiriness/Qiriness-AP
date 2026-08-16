@@ -635,6 +635,28 @@ Dropped mail never reaches the `tickets` table — the gate runs before the tick
 
 Filtered on `outcome = 'blocked'`, not `label = 'irrelevant'`: the blocklist pass writes no label, and every row currently carrying `irrelevant` was in fact *kept* (the label predates the change that made it drop). Blocked is the only field that reliably means "never became a ticket".
 
+### Search belongs to a table; level, category and sort belong to the page
+
+One box above four tables re-cut every section at once, and the row you were looking for was as likely to be in a collapsed one — so a search that found nothing looked like a search that matched nothing. Each section now searches only its own rows, from its own header, and the section count follows the filtered set.
+
+**The toolbar keeps level, category and sort.** Those describe the whole open set — Queue and Backlog are one set split by age, and a level tab that applied to only half of it would be a different filter with the same name.
+
+**The box appears only when the section is open.** A control that filters rows nobody can see gives no feedback, and four collapsed headers exist to be scanned rather than typed into.
+
+**The header stopped being a single button to allow it.** An `input` inside a `button` is invalid and would toggle the section on every keystroke, so the button now covers the chevron, title, count and description while the search sits beside it; the card's border and background moved up to the container so the row looks unchanged.
+
+**Closed and Irrelevant became searchable in the process** — neither ever was. Dropped mail matches on subject, sender and the gate's reason: it has no customer and no order to match on.
+
+**One focus ring, painted on the wrapper.** The old box drew two on every click — the wrapper's teal ring, plus `--shadow-focus` from the global `:focus-visible` rule in `globals.css`, which lands on the inner `input` as well. `outline: none` never suppressed it because that global rule uses a **box-shadow**, not an outline; the input needs `box-shadow: none` under `:focus-visible` specifically. Anything else that puts a bare input inside a styled wrapper will hit this.
+
+### Two scrollers on the tickets page, and the document is not one of them
+
+**One per table, one for the page, and nothing above that.** The app is a fixed frame: the sidebar and topbar stay put while `AppShell`'s `.content` scrolls under them. A scrollbar on the document itself moves the whole frame, navigation included, which is the one thing the frame exists to prevent.
+
+`.shell` pinning itself to `100dvh` with `overflow: hidden` is not enough on its own — it stops the shell spilling, not the document from acquiring its own scrollbar. So `html, body` are pinned too, in `dvh` so they cannot disagree with `.shell` by the height of a mobile browser's chrome. Every page renders inside `AppShell` (`/` only redirects), so every page already has a scroller and none needs the document's.
+
+**All four tables share one height** (`min(62vh, 50rem)`), replacing a 50vh queue and a 26rem default for the rest. The split existed to keep a collapsed "Closed" header on screen without scrolling; the page scroller already handles that, and the cost was making Backlog and Closed read as lesser tables when they are the same table with a different filter. Capped in rem as well as vh because a table past ~50rem stops being scannable.
+
 ### The expanded row is three blocks and no more
 
 **Results** (a headline read off the verdict, plus the `established` claims), **Order**, **Action** (one sentence). The case file's other lists — `unverified`, `do_not_claim`, the tool ledger — are written for the drafting stage; pouring them in here would bury the three lines somebody opened the row to read.
@@ -648,9 +670,9 @@ Filtered on `outcome = 'blocked'`, not `label = 'irrelevant'`: the blocklist pas
 
 Two sources, two projections in `ticket-detail.ts`: order facts exist for tickets the agent never investigated, and a case file exists for tickets with no order at all, so neither read can stand in for the other. `summariseOrderContext` **labels what `buildOrderContext` stored and derives nothing** — re-deriving delivery state in the dashboard would give the app a second opinion about the same parcel, and the two would disagree the first time either changed.
 
-**The block opens with the ownership pair: the name on the order, then the name on the email.** A confirmed order means the requester's address *hashes* to the order's — it does not mean the two names agree, and a disagreement is the shape of both an innocent case (a gift, a partner's account, a married name) and one worth investigating. Until now the panel showed the number, the status and the parcel but never who the order belonged to, so that check meant opening Shopify.
+**The block opens with the name on the order.** A confirmed order means the requester's address *hashes* to the order's — it does not mean the two names agree, and a disagreement is the shape of both an innocent case (a gift, a partner's account, a married name) and one worth investigating. Until now the panel showed the number, the status and the parcel but never who the order belonged to, so that check meant opening Shopify.
 
-**It has to be two lines in the panel, because the queue row cannot supply the second one.** The requester column shows the *linked Shopify* name where a ticket has one (`customer_display_name`, falling back to `requester_name`), which is the same source as the order's own name — comparing the row against the panel would compare Shopify with itself and agree by construction. So the envelope name is restated here, directly under the account name, where the two can be read as a pair.
+**One line, not two — the envelope name is not restated here.** The first version paired it with `requester_name` off the email, on the reasoning that the queue row cannot supply that half: the requester column shows the *linked Shopify* name where a ticket has one (`customer_display_name`, falling back to `requester_name`), which is the same source as the order's own name, so reading the row against the panel can compare Shopify with itself and agree by construction. Overruled deliberately: two name lines made a four-line block about identity rather than about the order, and the row above it is where a reader already looks for the requester. The cost is worth knowing rather than hiding — on a ticket that *is* linked to a customer the row-against-panel check is weaker than it looks, and the masked address under the name is then the line that actually discriminates.
 
 The name comes from `resolved_context.customer`, not from the order: `orders` stores **no name at all** — only `customer_email_hash` and `customer_email_masked` — so the account the order points at is the only name there is. The masked address sits under it, which is what `customer_email_masked` was added for: a hash cannot be looked at, and deciding whether a second address is a gift, a partner or the same buyer's other mailbox needs a human to *see* it. A guest order with no account shows the address alone.
 
@@ -714,7 +736,18 @@ This supersedes the VIP row-border treatment above: VIP remains a crown beside t
 
 **The four header cards** recompute from the same array the tables render (`summariseTickets`, isomorphic and pure), so a card can never disagree with the rows under it.
 
-**"High priority" is level 3 + 4, not the `priority` column.** Nothing in the pipeline writes `priority`, so all 565 rows sit at its default of 3 and a card reading it would show zero for ever.
+**"High priority" is the red band** — `priorityBand === "high"`, score 70 and above — reversing the earlier "level 3 + 4" stand-in. That stand-in was right for its moment: nothing writes the `priority` column, so a card reading it would show zero for ever. The band needs no column; it is derived at read time by `scorePriority`, so the card can now count exactly the rows a reader sees marked red instead of approximating them by level.
+
+**All three queue cards count the LIVE set — everything not resolved or closed — and two of them did not.** Both errors were visible on screen:
+
+- `open` counted `status === "open"` only, dropping the 20 tickets at `awaiting_human` and 2 at `awaiting_customer` from both the numerator and the closed pile. The card read **53** while Queue + Backlog rendered **75** rows. Dropping `awaiting_human` was the worst of it: that status means the agent has explicitly said a person must act.
+- `highPriority` and `levelThree` counted closed tickets too, so "High priority" read **84** against a live set that cannot exceed 75. With no level 4 anywhere in the book it also read *identically* to "Level 3", which is what made the row of cards look broken rather than merely wrong.
+
+Measured after the change: 75 open, 5 high, 30 level 3, and the live band split `{high 5, medium 43, low 27}` sums to 75.
+
+**The denominator moved from "of N categorised" to "of N open".** Categorised was honest while high priority meant level 3 + 4 and an uncategorised ticket had no level to be counted by. Every ticket carries a priority score — an uncategorised one earns weight *for* being unread — so the set to read it against is simply everything still open.
+
+**The band colours are tokens in `globals.css`, not private values in the table's stylesheet.** The card and the rows it counts must be the same red, and while they were two separate hex values they were two different reds.
 
 **Volume windows are rolling (now −24h / −30d), not calendar day and month.** Ingestion runs in bursts; on any day without a poll the calendar figures both read zero and the card looks broken rather than idle. Counted on `first_message_at`, so reviving an old thread does not inflate today's intake.
 

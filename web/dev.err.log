@@ -67,3 +67,220 @@
     at async handleRequest (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\lib\router-server.js:359:24)
     at async requestHandlerImpl (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\lib\router-server.js:383:13)
     at async Server.requestListener (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\lib\start-server.js:141:13)
+ ⚠ Fast Refresh had to perform a full reload due to a runtime error.
+ ⨯ components\tickets\TicketTable.tsx (82:41) @ height
+ ⨯ ReferenceError: height is not defined
+    at TicketTable (./components/tickets/TicketTable.tsx:88:107)
+digest: "3773631737"
+[0m [90m 80 |[39m   [36mreturn[39m ([0m
+[0m [90m 81 |[39m     [33m<[39m[33m>[39m[0m
+[0m[31m[1m>[22m[39m[90m 82 |[39m     [33m<[39m[33mdiv[39m className[33m=[39m{[32m`${styles.scroll} ${height === "tall" ? styles.tall : ""}`[39m}[33m>[39m[0m
+[0m [90m    |[39m                                         [31m[1m^[22m[39m[0m
+[0m [90m 83 |[39m       [33m<[39m[33mtable[39m className[33m=[39m{styles[33m.[39mtable}[33m>[39m[0m
+[0m [90m 84 |[39m         [33m<[39m[33mcaption[39m className[33m=[39m{styles[33m.[39msrOnly}[33m>[39m[0m
+[0m [90m 85 |[39m           {tickets[33m.[39mlength[33m.[39mtoLocaleString()} tickets[0m
+ ⚠ Fast Refresh had to perform a full reload due to a runtime error.
+ ⨯ components\tickets\TicketsView.tsx (118:37) @ query
+ ⨯ ReferenceError: query is not defined
+    at TicketsView (./components/tickets/TicketsView.tsx:134:9)
+digest: "3765413652"
+[0m [90m 116 |[39m       [36mreturn[39m sort [33m===[39m [32m"oldest"[39m [33m?[39m at [33m-[39m bt [33m:[39m bt [33m-[39m at[33m;[39m[0m
+[0m [90m 117 |[39m     })[33m;[39m[0m
+[0m[31m[1m>[22m[39m[90m 118 |[39m   }[33m,[39m [openTickets[33m,[39m level[33m,[39m category[33m,[39m query[33m,[39m sort])[33m;[39m[0m
+[0m [90m     |[39m                                     [31m[1m^[22m[39m[0m
+[0m [90m 119 |[39m[0m
+[0m [90m 120 |[39m   [36mconst[39m queue [33m=[39m useMemo([0m
+[0m [90m 121 |[39m     () [33m=>[39m visibleOpenTickets[33m.[39mfilter((ticket) [33m=>[39m [33m![39misBacklogTicket(ticket))[33m,[39m[0m
+ ⚠ Fast Refresh had to perform a full reload due to a runtime error.
+ ⨯ components\tickets\TicketsView.tsx (100:37) @ query
+ ⨯ ReferenceError: query is not defined
+    at TicketsView (./components/tickets/TicketsView.tsx:121:9)
+digest: "3043323568"
+[0m [90m  98 |[39m       [36mreturn[39m sort [33m===[39m [32m"oldest"[39m [33m?[39m at [33m-[39m bt [33m:[39m bt [33m-[39m at[33m;[39m[0m
+[0m [90m  99 |[39m     })[33m;[39m[0m
+[0m[31m[1m>[22m[39m[90m 100 |[39m   }[33m,[39m [openTickets[33m,[39m level[33m,[39m category[33m,[39m query[33m,[39m sort])[33m;[39m[0m
+[0m [90m     |[39m                                     [31m[1m^[22m[39m[0m
+[0m [90m 101 |[39m[0m
+[0m [90m 102 |[39m   [36mconst[39m queue [33m=[39m useMemo([0m
+[0m [90m 103 |[39m     () [33m=>[39m visibleOpenTickets[33m.[39mfilter((ticket) [33m=>[39m [33m![39misBacklogTicket(ticket))[33m,[39m[0m
+ ⚠ Fast Refresh had to perform a full reload due to a runtime error.
+ ⨯ components\tickets\TicketsView.tsx (106:29) @ matchesTicket
+ ⨯ ReferenceError: matchesTicket is not defined
+    at eval (./components/tickets/TicketsView.tsx:123:200)
+    at Array.filter (<anonymous>)
+    at eval (./components/tickets/TicketsView.tsx:123:183)
+    at TicketsView (./components/tickets/TicketsView.tsx:123:65)
+digest: "2964689653"
+[0m [90m 104 |[39m       visibleOpenTickets[0m
+[0m [90m 105 |[39m         [33m.[39mfilter((ticket) [33m=>[39m [33m![39misBacklogTicket(ticket))[0m
+[0m[31m[1m>[22m[39m[90m 106 |[39m         [33m.[39mfilter((ticket) [33m=>[39m matchesTicket(ticket[33m,[39m queueQuery))[33m,[39m[0m
+[0m [90m     |[39m                             [31m[1m^[22m[39m[0m
+[0m [90m 107 |[39m     [visibleOpenTickets[33m,[39m queueQuery][0m
+[0m [90m 108 |[39m   )[33m;[39m[0m
+[0m [90m 109 |[39m   [36mconst[39m backlog [33m=[39m useMemo([0m
+ ⚠ Fast Refresh had to perform a full reload due to a runtime error.
+ ⨯ components\tickets\TicketsView.tsx (67:55) @ matchesTicket
+ ⨯ ReferenceError: matchesTicket is not defined
+    at eval (./components/tickets/TicketsView.tsx:73:160)
+    at Array.filter (<anonymous>)
+    at eval (./components/tickets/TicketsView.tsx:73:143)
+    at TicketsView (./components/tickets/TicketsView.tsx:73:66)
+digest: "1958049067"
+[0m [90m 65 |[39m   [90m// is the first time either was searchable at all.[39m[0m
+[0m [90m 66 |[39m   [36mconst[39m closed [33m=[39m useMemo([0m
+[0m[31m[1m>[22m[39m[90m 67 |[39m     () [33m=>[39m tickets[33m.[39mfilter(isClosed)[33m.[39mfilter((ticket) [33m=>[39m matchesTicket(ticket[33m,[39m closedQuery))[33m,[39m[0m
+[0m [90m    |[39m                                                       [31m[1m^[22m[39m[0m
+[0m [90m 68 |[39m     [tickets[33m,[39m closedQuery][0m
+[0m [90m 69 |[39m   )[33m;[39m[0m
+[0m [90m 70 |[39m   [36mconst[39m visibleDroppedMail [33m=[39m useMemo([0m
+ ⚠ Fast Refresh had to perform a full reload due to a runtime error.
+ ⨯ lib\ticket-stats.ts (34:14) @ getTime
+ ⨯ TypeError: now.getTime is not a function
+    at isBacklogTicket (./lib/ticket-stats.ts:35:16)
+    at Array.filter (<anonymous>)
+    at eval (./components/tickets/TicketsView.tsx:161:91)
+    at TicketsView (./components/tickets/TicketsView.tsx:161:67)
+digest: "1190367955"
+[0m [90m 32 |[39m   [36mif[39m ([33mNumber[39m[33m.[39misNaN(since)) [36mreturn[39m [36mfalse[39m[33m;[39m[0m
+[0m [90m 33 |[39m[0m
+[0m[31m[1m>[22m[39m[90m 34 |[39m   [36mreturn[39m now[33m.[39mgetTime() [33m-[39m since [33m>=[39m [33mBACKLOG_AGE_MS[39m[33m;[39m[0m
+[0m [90m    |[39m              [31m[1m^[22m[39m[0m
+[0m [90m 35 |[39m }[0m
+[0m [90m 36 |[39m[0m
+[0m [90m 37 |[39m [90m/**[39m[0m
+ ⚠ Fast Refresh had to perform a full reload due to a runtime error.
+ ⨯ lib\ticket-stats.ts (34:14) @ getTime
+ ⨯ TypeError: now.getTime is not a function
+    at isBacklogTicket (./lib/ticket-stats.ts:35:16)
+    at Array.filter (<anonymous>)
+    at eval (./components/tickets/TicketsView.tsx:159:91)
+    at TicketsView (./components/tickets/TicketsView.tsx:159:67)
+digest: "621265459"
+[0m [90m 32 |[39m   [36mif[39m ([33mNumber[39m[33m.[39misNaN(since)) [36mreturn[39m [36mfalse[39m[33m;[39m[0m
+[0m [90m 33 |[39m[0m
+[0m[31m[1m>[22m[39m[90m 34 |[39m   [36mreturn[39m now[33m.[39mgetTime() [33m-[39m since [33m>=[39m [33mBACKLOG_AGE_MS[39m[33m;[39m[0m
+[0m [90m    |[39m              [31m[1m^[22m[39m[0m
+[0m [90m 35 |[39m }[0m
+[0m [90m 36 |[39m[0m
+[0m [90m 37 |[39m [90m/**[39m[0m
+ ⚠ Fast Refresh had to perform a full reload due to a runtime error.
+ ⨯ lib\ticket-stats.ts (34:14) @ getTime
+ ⨯ TypeError: now.getTime is not a function
+    at isBacklogTicket (./lib/ticket-stats.ts:35:16)
+    at Array.filter (<anonymous>)
+    at eval (./components/tickets/TicketsView.tsx:159:91)
+    at TicketsView (./components/tickets/TicketsView.tsx:159:67)
+digest: "621265459"
+[0m [90m 32 |[39m   [36mif[39m ([33mNumber[39m[33m.[39misNaN(since)) [36mreturn[39m [36mfalse[39m[33m;[39m[0m
+[0m [90m 33 |[39m[0m
+[0m[31m[1m>[22m[39m[90m 34 |[39m   [36mreturn[39m now[33m.[39mgetTime() [33m-[39m since [33m>=[39m [33mBACKLOG_AGE_MS[39m[33m;[39m[0m
+[0m [90m    |[39m              [31m[1m^[22m[39m[0m
+[0m [90m 35 |[39m }[0m
+[0m [90m 36 |[39m[0m
+[0m [90m 37 |[39m [90m/**[39m[0m
+ ⚠ Fast Refresh had to perform a full reload due to a runtime error.
+ ⨯ lib\ticket-stats.ts (34:14) @ getTime
+ ⨯ TypeError: now.getTime is not a function
+    at isBacklogTicket (./lib/ticket-stats.ts:35:16)
+    at Array.filter (<anonymous>)
+    at eval (./components/tickets/TicketsView.tsx:159:91)
+    at TicketsView (./components/tickets/TicketsView.tsx:159:67)
+digest: "621265459"
+[0m [90m 32 |[39m   [36mif[39m ([33mNumber[39m[33m.[39misNaN(since)) [36mreturn[39m [36mfalse[39m[33m;[39m[0m
+[0m [90m 33 |[39m[0m
+[0m[31m[1m>[22m[39m[90m 34 |[39m   [36mreturn[39m now[33m.[39mgetTime() [33m-[39m since [33m>=[39m [33mBACKLOG_AGE_MS[39m[33m;[39m[0m
+[0m [90m    |[39m              [31m[1m^[22m[39m[0m
+[0m [90m 35 |[39m }[0m
+[0m [90m 36 |[39m[0m
+[0m [90m 37 |[39m [90m/**[39m[0m
+ ⚠ Fast Refresh had to perform a full reload due to a runtime error.
+ ⨯ lib\ticket-stats.ts (34:14) @ getTime
+ ⨯ TypeError: now.getTime is not a function
+    at isBacklogTicket (./lib/ticket-stats.ts:35:16)
+    at Array.filter (<anonymous>)
+    at eval (./components/tickets/TicketsView.tsx:159:91)
+    at TicketsView (./components/tickets/TicketsView.tsx:159:67)
+digest: "621265459"
+[0m [90m 32 |[39m   [36mif[39m ([33mNumber[39m[33m.[39misNaN(since)) [36mreturn[39m [36mfalse[39m[33m;[39m[0m
+[0m [90m 33 |[39m[0m
+[0m[31m[1m>[22m[39m[90m 34 |[39m   [36mreturn[39m now[33m.[39mgetTime() [33m-[39m since [33m>=[39m [33mBACKLOG_AGE_MS[39m[33m;[39m[0m
+[0m [90m    |[39m              [31m[1m^[22m[39m[0m
+[0m [90m 35 |[39m }[0m
+[0m [90m 36 |[39m[0m
+[0m [90m 37 |[39m [90m/**[39m[0m
+ ⚠ Fast Refresh had to perform a full reload due to a runtime error.
+ ⨯ lib\ticket-stats.ts (34:14) @ getTime
+ ⨯ TypeError: now.getTime is not a function
+    at isBacklogTicket (./lib/ticket-stats.ts:35:16)
+    at Array.filter (<anonymous>)
+    at eval (./components/tickets/TicketsView.tsx:159:91)
+    at TicketsView (./components/tickets/TicketsView.tsx:159:67)
+digest: "621265459"
+[0m [90m 32 |[39m   [36mif[39m ([33mNumber[39m[33m.[39misNaN(since)) [36mreturn[39m [36mfalse[39m[33m;[39m[0m
+[0m [90m 33 |[39m[0m
+[0m[31m[1m>[22m[39m[90m 34 |[39m   [36mreturn[39m now[33m.[39mgetTime() [33m-[39m since [33m>=[39m [33mBACKLOG_AGE_MS[39m[33m;[39m[0m
+[0m [90m    |[39m              [31m[1m^[22m[39m[0m
+[0m [90m 35 |[39m }[0m
+[0m [90m 36 |[39m[0m
+[0m [90m 37 |[39m [90m/**[39m[0m
+ ⚠ Fast Refresh had to perform a full reload due to a runtime error.
+ ⨯ lib\ticket-stats.ts (34:14) @ getTime
+ ⨯ TypeError: now.getTime is not a function
+    at isBacklogTicket (./lib/ticket-stats.ts:35:16)
+    at Array.filter (<anonymous>)
+    at eval (./components/tickets/TicketsView.tsx:159:91)
+    at TicketsView (./components/tickets/TicketsView.tsx:159:67)
+digest: "621265459"
+[0m [90m 32 |[39m   [36mif[39m ([33mNumber[39m[33m.[39misNaN(since)) [36mreturn[39m [36mfalse[39m[33m;[39m[0m
+[0m [90m 33 |[39m[0m
+[0m[31m[1m>[22m[39m[90m 34 |[39m   [36mreturn[39m now[33m.[39mgetTime() [33m-[39m since [33m>=[39m [33mBACKLOG_AGE_MS[39m[33m;[39m[0m
+[0m [90m    |[39m              [31m[1m^[22m[39m[0m
+[0m [90m 35 |[39m }[0m
+[0m [90m 36 |[39m[0m
+[0m [90m 37 |[39m [90m/**[39m[0m
+ ⚠ Fast Refresh had to perform a full reload due to a runtime error.
+ ⨯ lib\ticket-stats.ts (34:14) @ getTime
+ ⨯ TypeError: now.getTime is not a function
+    at isBacklogTicket (./lib/ticket-stats.ts:35:16)
+    at Array.filter (<anonymous>)
+    at eval (./components/tickets/TicketsView.tsx:159:91)
+    at TicketsView (./components/tickets/TicketsView.tsx:159:67)
+digest: "621265459"
+[0m [90m 32 |[39m   [36mif[39m ([33mNumber[39m[33m.[39misNaN(since)) [36mreturn[39m [36mfalse[39m[33m;[39m[0m
+[0m [90m 33 |[39m[0m
+[0m[31m[1m>[22m[39m[90m 34 |[39m   [36mreturn[39m now[33m.[39mgetTime() [33m-[39m since [33m>=[39m [33mBACKLOG_AGE_MS[39m[33m;[39m[0m
+[0m [90m    |[39m              [31m[1m^[22m[39m[0m
+[0m [90m 35 |[39m }[0m
+[0m [90m 36 |[39m[0m
+[0m [90m 37 |[39m [90m/**[39m[0m
+ ⚠ Fast Refresh had to perform a full reload due to a runtime error.
+ ⨯ lib\ticket-stats.ts (34:14) @ getTime
+ ⨯ TypeError: now.getTime is not a function
+    at isBacklogTicket (./lib/ticket-stats.ts:35:16)
+    at Array.filter (<anonymous>)
+    at eval (./components/tickets/TicketsView.tsx:159:91)
+    at TicketsView (./components/tickets/TicketsView.tsx:159:67)
+digest: "621265459"
+[0m [90m 32 |[39m   [36mif[39m ([33mNumber[39m[33m.[39misNaN(since)) [36mreturn[39m [36mfalse[39m[33m;[39m[0m
+[0m [90m 33 |[39m[0m
+[0m[31m[1m>[22m[39m[90m 34 |[39m   [36mreturn[39m now[33m.[39mgetTime() [33m-[39m since [33m>=[39m [33mBACKLOG_AGE_MS[39m[33m;[39m[0m
+[0m [90m    |[39m              [31m[1m^[22m[39m[0m
+[0m [90m 35 |[39m }[0m
+[0m [90m 36 |[39m[0m
+[0m [90m 37 |[39m [90m/**[39m[0m
+ ⚠ Fast Refresh had to perform a full reload due to a runtime error.
+ ⨯ lib\ticket-stats.ts (34:14) @ getTime
+ ⨯ TypeError: now.getTime is not a function
+    at isBacklogTicket (./lib/ticket-stats.ts:35:16)
+    at Array.filter (<anonymous>)
+    at eval (./components/tickets/TicketsView.tsx:159:91)
+    at TicketsView (./components/tickets/TicketsView.tsx:159:67)
+digest: "621265459"
+[0m [90m 32 |[39m   [36mif[39m ([33mNumber[39m[33m.[39misNaN(since)) [36mreturn[39m [36mfalse[39m[33m;[39m[0m
+[0m [90m 33 |[39m[0m
+[0m[31m[1m>[22m[39m[90m 34 |[39m   [36mreturn[39m now[33m.[39mgetTime() [33m-[39m since [33m>=[39m [33mBACKLOG_AGE_MS[39m[33m;[39m[0m
+[0m [90m    |[39m              [31m[1m^[22m[39m[0m
+[0m [90m 35 |[39m }[0m
+[0m [90m 36 |[39m[0m
+[0m [90m 37 |[39m [90m/**[39m[0m
+ ⚠ Fast Refresh had to perform a full reload due to a runtime error.

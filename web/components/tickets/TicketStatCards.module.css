@@ -35,8 +35,10 @@
 .open::before {
   background: var(--teal);
 }
+/* The same red as the rows this card counts — one token, so the card and the
+   table's left-edge bars cannot drift to two different reds. */
 .high::before {
-  background: var(--error);
+  background: var(--priority-high);
 }
 .level3::before {
   background: var(--warning);

@@ -112,9 +112,9 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* The masked address sits under the name it belongs to rather than beside it:
-   the two "name on…" values have to line up vertically to be compared at a
-   glance, and an inline address would push the second one out of alignment. */
+/* Under the name rather than beside it: the name is the value, the address is
+   what you fall back to when the name does not settle it. Inline, the two would
+   read as one field of equal weight. */
 .contactEmail {
   display: block;
   margin-top: 2px;
@@ -125,12 +125,6 @@
 /* Standing alone on a guest order it is the value, not an annotation on one. */
 .contactEmailOnly {
   color: var(--text-default);
-}
-
-/* `.muted` is for the block-level "nothing here" paragraphs and carries their
-   margin; this is the same colour inside a line that does have content. */
-.inlineMuted {
-  color: var(--text-subtle);
 }
 
 /* An order can ship in more than one parcel; each gets its own line. */

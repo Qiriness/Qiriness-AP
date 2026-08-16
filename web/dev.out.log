@@ -169,3 +169,26 @@
  GET /api/tickets/b2e837c4-d6b4-442e-b193-3bb02a1bd637 200 in 389ms
  GET /api/tickets/6216afc3-d4de-42e9-b6cf-87039242d70b 200 in 361ms
  GET /api/tickets/6216afc3-d4de-42e9-b6cf-87039242d70b 200 in 368ms
+ GET /api/tickets/6216afc3-d4de-42e9-b6cf-87039242d70b 200 in 648ms
+ GET /api/tickets/6216afc3-d4de-42e9-b6cf-87039242d70b 200 in 652ms
+ GET /api/tickets/6fb9529e-f89d-4750-9fc9-b53512089357 200 in 402ms
+ GET /api/tickets/6fb9529e-f89d-4750-9fc9-b53512089357 200 in 443ms
+ GET /api/tickets/b0246791-5442-401e-8964-2a1335cf8661 200 in 317ms
+ GET /api/tickets/b0246791-5442-401e-8964-2a1335cf8661 200 in 348ms
+ GET /api/tickets/b0246791-5442-401e-8964-2a1335cf8661 200 in 384ms
+ GET /api/tickets/b0246791-5442-401e-8964-2a1335cf8661 200 in 384ms
+ GET /api/tickets/6fb9529e-f89d-4750-9fc9-b53512089357 200 in 937ms
+ GET /api/tickets/6fb9529e-f89d-4750-9fc9-b53512089357 200 in 945ms
+ GET /tickets 200 in 769ms
+ GET /api/tickets/e5c77e51-f883-4ad0-865c-b85b02a653c7 200 in 509ms
+ GET /api/tickets/e5c77e51-f883-4ad0-865c-b85b02a653c7 200 in 527ms
+ GET /tickets 200 in 1267ms
+ GET /api/tickets/0dd5cfda-276c-4895-b142-0fa9e0c7b0f4 200 in 675ms
+ GET /api/tickets/0dd5cfda-276c-4895-b142-0fa9e0c7b0f4 200 in 684ms
+ GET /api/tickets/b2e837c4-d6b4-442e-b193-3bb02a1bd637 200 in 333ms
+ GET /api/tickets/b2e837c4-d6b4-442e-b193-3bb02a1bd637 200 in 342ms
+ GET /api/tickets/e5c77e51-f883-4ad0-865c-b85b02a653c7 200 in 302ms
+ GET /api/tickets/e5c77e51-f883-4ad0-865c-b85b02a653c7 200 in 320ms
+ GET /tickets 200 in 979ms
+ GET /api/tickets/6216afc3-d4de-42e9-b6cf-87039242d70b 200 in 391ms
+ GET /api/tickets/6216afc3-d4de-42e9-b6cf-87039242d70b 200 in 403ms
