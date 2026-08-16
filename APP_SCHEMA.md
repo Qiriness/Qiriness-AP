@@ -47,7 +47,7 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |   |   |-- knowledge-mapper.ts  # isomorphic: API JSON -> UI types
 |   |   |-- ticket-stats.ts      # isomorphic: summariseTickets + isClosed
 |   |   |-- ticket-detail.ts     # pure, 3 projections: case file -> 3 blocks ·
-|   |   |                        # resolved_context -> order status / tracking lines ·
+|   |   |                        # resolved_context -> order owner / status / tracking lines ·
 |   |   |                        # evidence_gaps -> the facts behind the findings
 |   |   |-- api/                 # client-side fetch wrappers (knowledge, tickets, forwarding)
 |   |   |-- relative-time.ts demo-data.ts
@@ -256,7 +256,7 @@ All Route Handlers are server-only and use the Supabase service-role key.
 | **Backlog** | `tickets`, status not resolved/closed, waiting 14+ days | Close ticket |
 | **Closed** | `tickets`, status resolved/closed | Reopen ticket |
 
-Row interactions: chevron expands the agent's reading (`TicketDetailPanel`: Results · Order · Action); subject opens the conversation (`TicketThreadDialog`: draft + email chain). In the Irrelevant table the subject opens the dropped email (`DroppedMailDialog`). Four header cards, level tabs, search, category filter and sort — all client-side over the open-ticket set, then split into Queue and Backlog.
+Row interactions: chevron expands the agent's reading (`TicketDetailPanel`: Results · Order · Action — the Order block pairs the name on the order with the name on the email, plus the masked order contact address, so ownership can be checked by eye); subject opens the conversation (`TicketThreadDialog`: draft + email chain). In the Irrelevant table the subject opens the dropped email (`DroppedMailDialog`). Four header cards, level tabs, search, category filter and sort — all client-side over the open-ticket set, then split into Queue and Backlog.
 
 ### `/settings` — forwarding address book
 

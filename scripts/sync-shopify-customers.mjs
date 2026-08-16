@@ -9,7 +9,7 @@ import {
 import {
   createSupabaseClient,
   supabaseDeleteWhereIn,
-  supabaseSelect,
+  supabaseSelectAll,
   supabaseUpsert
 } from './lib/supabase-rest-client.mjs';
 import { syncShop } from './lib/shop-sync-service.mjs';
@@ -127,8 +127,22 @@ async function upsertCustomerPage({ supabase, customerRows }) {
   );
 }
 
+/**
+ * PAGED, for the reason `loadCustomerIdMap` in the orders sync is: `supabaseSelect`
+ * is one request and PostgREST caps one request at `db-max-rows` (1000 on
+ * Supabase) silently. On 58,201 customers this pass was reading the first 1,000
+ * and calling the other 57,201 "still in Shopify" — under-deleting rather than
+ * over-deleting, which is why nothing ever looked wrong.
+ *
+ * WIDENING A DELETE IS ONLY SAFE BECAUSE THE CALLER IS NARROW. This runs solely
+ * when `!dryRun && !limit` — a complete walk of Shopify's customer list — and
+ * `fetchCustomerPage` applies no search filter, so "not in the seen set" really
+ * does mean "Shopify no longer returns it" rather than "this run stopped early".
+ * If either of those ever changes, this pass has to be re-examined before it
+ * runs again: it can now see every row it is entitled to delete.
+ */
 async function deleteCustomersMissingFromShopify({ supabase, shopId, seenShopifyCustomerIds }) {
-  const existingRows = await supabaseSelect(
+  const existingRows = await supabaseSelectAll(
     supabase,
     'customers',
     { shop_id: shopId },

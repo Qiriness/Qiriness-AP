@@ -118,92 +118,65 @@
   border-bottom-color: transparent;
 }
 
+/* Priority owns two marks on a row and no more: the score, and a solid bar down
+   the row's LEFT edge — the same 3px accent the header cards wear on top.
+   Full-strength, fully saturated hues, not the -100 tints: those wash out
+   against the white surface at 3px, and a band you have to squint at signals
+   nothing. Each band sits as near its own primary as contrast allows, so the
+   three are told apart by hue alone at the edge of vision. */
 .priorityHigh {
-  --priority-rule: var(--error-100);
-  --priority-strong: var(--error);
-  --priority-text: #9f1d1d;
+  --priority-edge: #e81010;
+  --priority-text: #d61111;
 }
 
 .priorityMedium {
-  --priority-rule: var(--warning-100);
-  --priority-strong: var(--warning);
-  --priority-text: #9a5604;
+  --priority-edge: #ff8c00;
+  --priority-text: #b85a00;
 }
 
 .priorityLow {
-  --priority-rule: var(--success-100);
-  --priority-strong: var(--success);
-  --priority-text: #166534;
+  --priority-edge: #00a651;
+  --priority-text: #0b7a39;
 }
 
 .priorityHigh + .detailRow {
-  --priority-rule: var(--error-100);
+  --priority-edge: #e81010;
 }
 
 .priorityMedium + .detailRow {
-  --priority-rule: var(--warning-100);
+  --priority-edge: #ff8c00;
 }
 
 .priorityLow + .detailRow {
-  --priority-rule: var(--success-100);
+  --priority-edge: #00a651;
 }
 
-.table tbody tr.priorityHigh > *,
-.table tbody tr.priorityMedium > *,
-.table tbody tr.priorityLow > * {
-  box-shadow: inset 0 1px 0 var(--priority-rule);
-  border-bottom-color: var(--priority-rule);
-}
-
+/* Inset on the first cell rather than a border on the row: a `tr` cannot carry a
+   border under `border-collapse`, and an inset shadow adds no width, so the bar
+   cannot shift the columns the way a real border would. Left, not right: the
+   bar and the score it belongs to then read as one mark at the start of the
+   row, and the table scrolls horizontally — a right edge can be scrolled out of
+   sight, the left one never is. */
 .table tbody tr.priorityHigh > *:first-child,
 .table tbody tr.priorityMedium > *:first-child,
 .table tbody tr.priorityLow > *:first-child {
-  box-shadow: inset 0 1px 0 var(--priority-rule), inset 1px 0 0 var(--priority-rule);
+  box-shadow: inset 3px 0 0 var(--priority-edge);
 }
 
-.table tbody tr.priorityHigh > *:last-child,
-.table tbody tr.priorityMedium > *:last-child,
-.table tbody tr.priorityLow > *:last-child {
-  box-shadow: inset 0 1px 0 var(--priority-rule), inset -1px 0 0 var(--priority-rule);
-}
-
-.table tbody tr.priorityHigh:last-child > *,
-.table tbody tr.priorityMedium:last-child > *,
-.table tbody tr.priorityLow:last-child > * {
-  box-shadow: inset 0 1px 0 var(--priority-rule), inset 0 -1px 0 var(--priority-rule);
-}
-
-.table tbody tr.priorityHigh:last-child > *:first-child,
-.table tbody tr.priorityMedium:last-child > *:first-child,
-.table tbody tr.priorityLow:last-child > *:first-child {
-  box-shadow: inset 0 1px 0 var(--priority-rule), inset 0 -1px 0 var(--priority-rule),
-    inset 1px 0 0 var(--priority-rule);
-}
-
-.table tbody tr.priorityHigh:last-child > *:last-child,
-.table tbody tr.priorityMedium:last-child > *:last-child,
-.table tbody tr.priorityLow:last-child > *:last-child {
-  box-shadow: inset 0 1px 0 var(--priority-rule), inset 0 -1px 0 var(--priority-rule),
-    inset -1px 0 0 var(--priority-rule);
-}
-
-.table tbody tr.priorityHigh.rowExpanded > *,
-.table tbody tr.priorityMedium.rowExpanded > *,
-.table tbody tr.priorityLow.rowExpanded > * {
-  border-bottom-color: transparent;
-}
-
+/* The open panel is part of the same ticket, so the bar runs down it too — its
+   single cell is both first and last child. */
 .table tbody tr.priorityHigh + .detailRow > *,
 .table tbody tr.priorityMedium + .detailRow > *,
 .table tbody tr.priorityLow + .detailRow > * {
-  border-bottom-color: var(--priority-rule);
-  box-shadow: inset 1px 0 0 var(--priority-rule), inset -1px 0 0 var(--priority-rule),
-    inset 0 -1px 0 var(--priority-rule);
+  box-shadow: inset 3px 0 0 var(--priority-edge);
 }
 
+/* The score is the number the queue is sorted by, so it is set a step above the
+   row's body text and at bold — at body weight it read as one more field. */
 .priorityScore {
   color: var(--priority-text);
-  font-weight: var(--weight-semibold);
+  font-size: var(--text-md);
+  font-weight: var(--weight-bold);
   font-variant-numeric: tabular-nums;
 }
 

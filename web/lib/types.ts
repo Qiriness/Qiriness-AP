@@ -458,6 +458,18 @@ export interface TicketTracking {
 export interface TicketOrderFacts {
   /** Shopify order name, e.g. "#1234". */
   orderName: string | null;
+  /**
+   * Who the order belongs to, from the Shopify account it is attached to — the
+   * name to read against the requester's. Not a field on `orders`: that table
+   * stores no name, so this comes through `resolved_context.customer`.
+   */
+  customerName: string | null;
+  /**
+   * The address the order was placed with, masked (`j***l@orange.fr`). Stored
+   * for exactly this reading: when the two names disagree, the address is what
+   * says whether it is a gift, a partner's account, or something worth a look.
+   */
+  contactEmail: string | null;
   /** Already labelled — the panel renders it as-is. */
   orderStatus: string | null;
   /** Already labelled. Null when the bundle carries no delivery block. */

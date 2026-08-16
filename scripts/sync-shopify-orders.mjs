@@ -11,7 +11,7 @@ import {
 import {
   createSupabaseClient,
   supabaseDelete,
-  supabaseSelect,
+  supabaseSelectAll,
   supabaseUpsert
 } from './lib/supabase-rest-client.mjs';
 import { syncShop } from './lib/shop-sync-service.mjs';
@@ -127,8 +127,19 @@ export async function runShopifyOrdersSync({ args, shopify, supabase, shopRow, s
   };
 }
 
+/**
+ * PAGED, and it is load-bearing. `supabaseSelect` is one request, and PostgREST
+ * caps one request at `db-max-rows` (1000 on Supabase) SILENTLY — 200, no error,
+ * just fewer rows. The book is 58,201 customers, so this map held the first
+ * 1,000 of them, and an order whose buyer was not among that slice was written
+ * with `customer_id: null`. Measured before the fix: 1 of 2,014 orders linked.
+ *
+ * Nothing threw, which is why it survived: the orders themselves synced fine and
+ * the null only surfaced two layers away, as an order bundle with no customer
+ * and a dashboard that could not say whose order it was.
+ */
 async function loadCustomerIdMap({ supabase, shopId }) {
-  const customers = await supabaseSelect(
+  const customers = await supabaseSelectAll(
     supabase,
     'customers',
     { shop_id: shopId },

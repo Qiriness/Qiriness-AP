@@ -140,15 +140,27 @@ export function summariseOrderContext(context: unknown): TicketOrderFacts | null
   const delivery = order.delivery ?? {};
   const facts: TicketOrderFacts = {
     orderName: nonEmpty(order.name),
+    // WHO THE ORDER BELONGS TO, read off the bundle's customer block rather than
+    // its order block: `orders` stores no name at all, only a hash and a masked
+    // address, so the account the order points at is the only name there is.
+    customerName: nonEmpty((context as any)?.customer?.name),
+    contactEmail: nonEmpty(order.contactEmailMasked),
     orderStatus: labelOrderStatus(order.status?.overall),
     trackingStatus: labelDeliveryState(delivery.state),
     tracking: readTracking(delivery.tracking),
     resolvedAt: nonEmpty((context as any)?.resolvedAt),
   };
 
-  // A bundle that carries none of the three lines is the same as no bundle: the
+  // A bundle that carries none of these lines is the same as no bundle: the
   // panel would render an empty block with a heading over it.
-  if (!facts.orderName && !facts.orderStatus && !facts.trackingStatus && facts.tracking.length === 0) {
+  if (
+    !facts.orderName &&
+    !facts.customerName &&
+    !facts.contactEmail &&
+    !facts.orderStatus &&
+    !facts.trackingStatus &&
+    facts.tracking.length === 0
+  ) {
     return null;
   }
   return facts;

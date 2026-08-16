@@ -13,3 +13,159 @@
  GET /tickets 200 in 1245ms
  GET /tickets 200 in 958ms
  GET /tickets 200 in 791ms
+ ○ Compiling /api/tickets/[id]/thread ...
+ ✓ Compiled /api/tickets/[id]/thread in 932ms (357 modules)
+ GET /api/tickets/b0246791-5442-401e-8964-2a1335cf8661/thread 500 in 6650ms
+ GET /api/tickets/b0246791-5442-401e-8964-2a1335cf8661/thread 200 in 7483ms
+ GET /api/tickets/4f4b49e4-f1bf-4ccc-b985-89262b08f3fd/thread 200 in 931ms
+ GET /api/tickets/4f4b49e4-f1bf-4ccc-b985-89262b08f3fd/thread 200 in 945ms
+ ○ Compiling /api/tickets/[id] ...
+ ✓ Compiled /api/tickets/[id] in 619ms (357 modules)
+ GET /api/tickets/4f4b49e4-f1bf-4ccc-b985-89262b08f3fd 200 in 2759ms
+ GET /api/tickets/4f4b49e4-f1bf-4ccc-b985-89262b08f3fd 200 in 2766ms
+ GET /api/tickets/b0246791-5442-401e-8964-2a1335cf8661 200 in 442ms
+ GET /api/tickets/b0246791-5442-401e-8964-2a1335cf8661 200 in 451ms
+ GET /api/tickets/4f4b49e4-f1bf-4ccc-b985-89262b08f3fd 200 in 291ms
+ GET /api/tickets/4f4b49e4-f1bf-4ccc-b985-89262b08f3fd 200 in 384ms
+ GET /api/tickets/e5c77e51-f883-4ad0-865c-b85b02a653c7 200 in 359ms
+ GET /api/tickets/e5c77e51-f883-4ad0-865c-b85b02a653c7 200 in 364ms
+ ✓ Compiled /api/tickets/[id]/thread in 282ms (359 modules)
+ GET /api/tickets/e5c77e51-f883-4ad0-865c-b85b02a653c7/thread 200 in 1077ms
+ GET /api/tickets/e5c77e51-f883-4ad0-865c-b85b02a653c7/thread 200 in 1186ms
+ GET /api/tickets/b2e837c4-d6b4-442e-b193-3bb02a1bd637/thread 200 in 732ms
+ GET /api/tickets/b2e837c4-d6b4-442e-b193-3bb02a1bd637/thread 200 in 835ms
+ GET /api/tickets/0dd5cfda-276c-4895-b142-0fa9e0c7b0f4 200 in 610ms
+ GET /api/tickets/0dd5cfda-276c-4895-b142-0fa9e0c7b0f4 200 in 641ms
+ GET /api/tickets/6216afc3-d4de-42e9-b6cf-87039242d70b 200 in 368ms
+ GET /api/tickets/6216afc3-d4de-42e9-b6cf-87039242d70b 200 in 395ms
+ GET /api/tickets/def878e2-ab5b-455b-b8df-ff02ea0ff232 200 in 585ms
+ GET /api/tickets/def878e2-ab5b-455b-b8df-ff02ea0ff232 200 in 683ms
+ GET /api/tickets/dec1cc2c-34a2-4ba6-acae-06c7ee074a49 200 in 330ms
+ GET /api/tickets/dec1cc2c-34a2-4ba6-acae-06c7ee074a49 200 in 345ms
+ GET /api/tickets/8547f4bd-8a60-4f0a-8ff3-c98bc407e298 200 in 375ms
+ GET /api/tickets/8547f4bd-8a60-4f0a-8ff3-c98bc407e298 200 in 379ms
+ GET /api/tickets/dfba7140-18a9-4269-b303-b75239815296 200 in 371ms
+ GET /api/tickets/dfba7140-18a9-4269-b303-b75239815296 200 in 387ms
+ GET /api/tickets/5d0b9de3-117c-4ad9-af9d-f3ffdd58a58e 200 in 394ms
+ GET /api/tickets/5d0b9de3-117c-4ad9-af9d-f3ffdd58a58e 200 in 399ms
+ GET /api/tickets/0544921b-0061-4de0-9947-6cd0e14a1486 200 in 339ms
+ GET /api/tickets/0544921b-0061-4de0-9947-6cd0e14a1486 200 in 433ms
+ GET /api/tickets/8a7f8bde-8d9a-4271-b5c2-de1226215795 200 in 1221ms
+ GET /api/tickets/8a7f8bde-8d9a-4271-b5c2-de1226215795 200 in 1232ms
+ GET /api/tickets/8a7f8bde-8d9a-4271-b5c2-de1226215795/thread 200 in 768ms
+ GET /api/tickets/8a7f8bde-8d9a-4271-b5c2-de1226215795/thread 200 in 772ms
+ GET /api/tickets/8a7f8bde-8d9a-4271-b5c2-de1226215795/thread 200 in 612ms
+ GET /api/tickets/8a7f8bde-8d9a-4271-b5c2-de1226215795/thread 200 in 661ms
+ GET /api/tickets/cc6f2217-be56-482e-b3d2-84ff77b779e1/thread 200 in 600ms
+ GET /api/tickets/cc6f2217-be56-482e-b3d2-84ff77b779e1/thread 200 in 645ms
+ GET /api/tickets/cc6f2217-be56-482e-b3d2-84ff77b779e1 200 in 329ms
+ GET /api/tickets/cc6f2217-be56-482e-b3d2-84ff77b779e1 200 in 338ms
+ GET /api/tickets/3e84c0c9-9ff0-41bd-93dc-18409b00de2c 200 in 407ms
+ GET /api/tickets/3e84c0c9-9ff0-41bd-93dc-18409b00de2c 200 in 411ms
+ GET /api/tickets/273f44b2-f14d-4ffd-9618-9273b6d1644b 200 in 360ms
+ GET /api/tickets/273f44b2-f14d-4ffd-9618-9273b6d1644b 200 in 365ms
+ GET /api/tickets/273f44b2-f14d-4ffd-9618-9273b6d1644b/thread 200 in 464ms
+ GET /api/tickets/273f44b2-f14d-4ffd-9618-9273b6d1644b/thread 200 in 507ms
+ GET /api/tickets/d31abd79-6828-486a-ab74-6362d4321544/thread 200 in 1555ms
+ GET /api/tickets/d31abd79-6828-486a-ab74-6362d4321544/thread 200 in 1555ms
+ GET /api/tickets/d31abd79-6828-486a-ab74-6362d4321544 200 in 544ms
+ GET /api/tickets/d31abd79-6828-486a-ab74-6362d4321544 200 in 550ms
+ GET /api/tickets/d31abd79-6828-486a-ab74-6362d4321544 200 in 514ms
+ GET /api/tickets/d31abd79-6828-486a-ab74-6362d4321544 200 in 590ms
+ GET /api/tickets/d31abd79-6828-486a-ab74-6362d4321544 200 in 328ms
+ GET /api/tickets/d31abd79-6828-486a-ab74-6362d4321544 200 in 399ms
+ GET /api/tickets/273f44b2-f14d-4ffd-9618-9273b6d1644b 200 in 366ms
+ GET /api/tickets/273f44b2-f14d-4ffd-9618-9273b6d1644b 200 in 460ms
+ GET /api/tickets/d31abd79-6828-486a-ab74-6362d4321544/thread 200 in 640ms
+ GET /api/tickets/d31abd79-6828-486a-ab74-6362d4321544/thread 200 in 657ms
+ GET /api/tickets/d31abd79-6828-486a-ab74-6362d4321544 200 in 354ms
+ GET /api/tickets/d31abd79-6828-486a-ab74-6362d4321544 200 in 363ms
+ GET /api/tickets/6522dd16-a45d-4b5d-acb9-f757359777c4 200 in 541ms
+ GET /api/tickets/6522dd16-a45d-4b5d-acb9-f757359777c4 200 in 546ms
+ GET /api/tickets/1de25be3-3a60-45e4-bd3e-dfae025fb0a9 200 in 335ms
+ GET /api/tickets/1de25be3-3a60-45e4-bd3e-dfae025fb0a9 200 in 355ms
+ GET /api/tickets/1de25be3-3a60-45e4-bd3e-dfae025fb0a9/thread 200 in 748ms
+ GET /api/tickets/1de25be3-3a60-45e4-bd3e-dfae025fb0a9/thread 200 in 751ms
+ GET /api/tickets/6b294226-15f7-4d26-9db9-4325adaf2d2b/thread 200 in 689ms
+ GET /api/tickets/6b294226-15f7-4d26-9db9-4325adaf2d2b/thread 200 in 693ms
+ GET /api/tickets/6b294226-15f7-4d26-9db9-4325adaf2d2b 200 in 359ms
+ GET /api/tickets/6b294226-15f7-4d26-9db9-4325adaf2d2b 200 in 367ms
+ GET /api/tickets/d31abd79-6828-486a-ab74-6362d4321544/thread 200 in 677ms
+ GET /api/tickets/d31abd79-6828-486a-ab74-6362d4321544/thread 200 in 725ms
+ GET /api/tickets/e204b422-14d6-4b69-a9f8-17ed7f2f3477/thread 500 in 542ms
+ GET /api/tickets/e204b422-14d6-4b69-a9f8-17ed7f2f3477/thread 200 in 1239ms
+ GET /api/tickets/e204b422-14d6-4b69-a9f8-17ed7f2f3477 200 in 480ms
+ GET /api/tickets/e204b422-14d6-4b69-a9f8-17ed7f2f3477 200 in 494ms
+ GET /api/tickets/37d1966a-ca55-4d89-82d7-18faa01764ed 200 in 913ms
+ GET /api/tickets/37d1966a-ca55-4d89-82d7-18faa01764ed 200 in 922ms
+ GET /api/tickets/c489a1d8-b9a7-4a82-bb62-dd989ee596c1/thread 200 in 481ms
+ GET /api/tickets/c489a1d8-b9a7-4a82-bb62-dd989ee596c1/thread 200 in 496ms
+ GET /api/tickets/da3b8e35-fe9e-4401-94be-4f08ab3138ad 200 in 324ms
+ GET /api/tickets/da3b8e35-fe9e-4401-94be-4f08ab3138ad 200 in 448ms
+ GET /api/tickets/43f781f3-cd65-433c-8b0b-63718ff00b67 200 in 378ms
+ GET /api/tickets/43f781f3-cd65-433c-8b0b-63718ff00b67 200 in 389ms
+ GET /api/tickets/43f781f3-cd65-433c-8b0b-63718ff00b67/thread 200 in 847ms
+ GET /api/tickets/43f781f3-cd65-433c-8b0b-63718ff00b67/thread 200 in 853ms
+ GET /api/tickets/5ea2fdf2-69af-4409-bacf-eab9576462ed/thread 500 in 428ms
+ GET /api/tickets/5ea2fdf2-69af-4409-bacf-eab9576462ed/thread 200 in 933ms
+ GET /api/tickets/5ea2fdf2-69af-4409-bacf-eab9576462ed/thread 200 in 619ms
+ GET /api/tickets/5ea2fdf2-69af-4409-bacf-eab9576462ed/thread 200 in 632ms
+ ✓ Compiled in 1446ms (658 modules)
+ GET /tickets 200 in 2463ms
+ ✓ Compiled in 1653ms (658 modules)
+ ○ Compiling /api/tickets/[id]/thread ...
+ ✓ Compiled /api/tickets/[id]/thread in 571ms (357 modules)
+ GET /api/tickets/0dd5cfda-276c-4895-b142-0fa9e0c7b0f4/thread 200 in 5072ms
+ GET /api/tickets/0dd5cfda-276c-4895-b142-0fa9e0c7b0f4/thread 200 in 5079ms
+ ✓ Compiled /api/tickets/[id] in 460ms (359 modules)
+ GET /api/tickets/0dd5cfda-276c-4895-b142-0fa9e0c7b0f4 200 in 1398ms
+ GET /api/tickets/0dd5cfda-276c-4895-b142-0fa9e0c7b0f4 200 in 1411ms
+ GET /api/tickets/0dd5cfda-276c-4895-b142-0fa9e0c7b0f4 200 in 537ms
+ GET /api/tickets/0dd5cfda-276c-4895-b142-0fa9e0c7b0f4 200 in 640ms
+ GET /api/tickets/0dd5cfda-276c-4895-b142-0fa9e0c7b0f4/thread 200 in 839ms
+ GET /api/tickets/0dd5cfda-276c-4895-b142-0fa9e0c7b0f4/thread 200 in 849ms
+ GET /api/tickets/0dd5cfda-276c-4895-b142-0fa9e0c7b0f4/thread 200 in 647ms
+ GET /api/tickets/0dd5cfda-276c-4895-b142-0fa9e0c7b0f4/thread 200 in 710ms
+ GET /api/tickets/e5c77e51-f883-4ad0-865c-b85b02a653c7 200 in 667ms
+ GET /api/tickets/e5c77e51-f883-4ad0-865c-b85b02a653c7 200 in 679ms
+ ✓ Compiled in 1854ms (648 modules)
+ ✓ Compiled in 427ms (353 modules)
+ ✓ Compiled in 807ms (648 modules)
+ ✓ Compiled in 684ms (648 modules)
+ ✓ Compiled in 1300ms (658 modules)
+ GET /tickets 200 in 1546ms
+ ○ Compiling /api/tickets/[id] ...
+ ✓ Compiled /api/tickets/[id] in 1254ms (357 modules)
+ GET /api/tickets/b0246791-5442-401e-8964-2a1335cf8661 200 in 5221ms
+ GET /api/tickets/b0246791-5442-401e-8964-2a1335cf8661 200 in 5250ms
+ GET /api/tickets/4f4b49e4-f1bf-4ccc-b985-89262b08f3fd 200 in 726ms
+ GET /api/tickets/4f4b49e4-f1bf-4ccc-b985-89262b08f3fd 200 in 806ms
+ GET /api/tickets/e5c77e51-f883-4ad0-865c-b85b02a653c7 200 in 315ms
+ GET /api/tickets/e5c77e51-f883-4ad0-865c-b85b02a653c7 200 in 465ms
+ GET /tickets 200 in 3214ms
+ ○ Compiling /api/tickets/[id]/thread ...
+ ✓ Compiled /api/tickets/[id]/thread in 659ms (359 modules)
+ GET /api/tickets/0dd5cfda-276c-4895-b142-0fa9e0c7b0f4/thread 200 in 1714ms
+ GET /api/tickets/0dd5cfda-276c-4895-b142-0fa9e0c7b0f4/thread 200 in 1775ms
+ GET /api/tickets/e5c77e51-f883-4ad0-865c-b85b02a653c7 200 in 372ms
+ GET /api/tickets/e5c77e51-f883-4ad0-865c-b85b02a653c7 200 in 394ms
+ GET /api/tickets/0dd5cfda-276c-4895-b142-0fa9e0c7b0f4 200 in 1227ms
+ GET /api/tickets/0dd5cfda-276c-4895-b142-0fa9e0c7b0f4 200 in 1230ms
+ GET /api/tickets/b2e837c4-d6b4-442e-b193-3bb02a1bd637 200 in 321ms
+ GET /api/tickets/b2e837c4-d6b4-442e-b193-3bb02a1bd637 200 in 354ms
+ GET /api/tickets/6216afc3-d4de-42e9-b6cf-87039242d70b 200 in 392ms
+ GET /api/tickets/6216afc3-d4de-42e9-b6cf-87039242d70b 200 in 399ms
+ ○ Compiling / ...
+ ✓ Compiled / in 1612ms (661 modules)
+ GET / 307 in 4617ms
+ ○ Compiling /agent-setup ...
+ ✓ Compiled /agent-setup in 4.9s (911 modules)
+ GET /agent-setup 200 in 6391ms
+ GET /api/tickets/6fb9529e-f89d-4750-9fc9-b53512089357 200 in 607ms
+ GET /api/tickets/6fb9529e-f89d-4750-9fc9-b53512089357 200 in 646ms
+ GET /tickets 200 in 1199ms
+ GET /tickets 200 in 1064ms
+ GET /api/tickets/b2e837c4-d6b4-442e-b193-3bb02a1bd637 200 in 366ms
+ GET /api/tickets/b2e837c4-d6b4-442e-b193-3bb02a1bd637 200 in 389ms
+ GET /api/tickets/6216afc3-d4de-42e9-b6cf-87039242d70b 200 in 361ms
+ GET /api/tickets/6216afc3-d4de-42e9-b6cf-87039242d70b 200 in 368ms

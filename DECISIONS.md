@@ -648,6 +648,14 @@ Filtered on `outcome = 'blocked'`, not `label = 'irrelevant'`: the blocklist pas
 
 Two sources, two projections in `ticket-detail.ts`: order facts exist for tickets the agent never investigated, and a case file exists for tickets with no order at all, so neither read can stand in for the other. `summariseOrderContext` **labels what `buildOrderContext` stored and derives nothing** — re-deriving delivery state in the dashboard would give the app a second opinion about the same parcel, and the two would disagree the first time either changed.
 
+**The block opens with the ownership pair: the name on the order, then the name on the email.** A confirmed order means the requester's address *hashes* to the order's — it does not mean the two names agree, and a disagreement is the shape of both an innocent case (a gift, a partner's account, a married name) and one worth investigating. Until now the panel showed the number, the status and the parcel but never who the order belonged to, so that check meant opening Shopify.
+
+**It has to be two lines in the panel, because the queue row cannot supply the second one.** The requester column shows the *linked Shopify* name where a ticket has one (`customer_display_name`, falling back to `requester_name`), which is the same source as the order's own name — comparing the row against the panel would compare Shopify with itself and agree by construction. So the envelope name is restated here, directly under the account name, where the two can be read as a pair.
+
+The name comes from `resolved_context.customer`, not from the order: `orders` stores **no name at all** — only `customer_email_hash` and `customer_email_masked` — so the account the order points at is the only name there is. The masked address sits under it, which is what `customer_email_masked` was added for: a hash cannot be looked at, and deciding whether a second address is a gift, a partner or the same buyer's other mailbox needs a human to *see* it. A guest order with no account shows the address alone.
+
+**The panel states the two names and judges neither.** `compareNames` in `order-verification.mjs` already does an accent- and case-insensitive comparison during resolution; repeating it in the dashboard would be the second opinion this section exists to forbid, and the two would disagree the first time either changed. Note that this pair will often differ for reasons of *casing* alone — nothing normalises names on the way in, by design.
+
 **Order status, tracking number and tracking status appear only when there is data**, as text lines rather than a fixed row of fields. Reserving a slot per field fills the block with dashes, and a dash beside "Tracking number" reads as *there is no tracking* rather than *nothing has been resolved yet*. Order status and tracking status are deliberately **two axes**: Shopify's `order_status` says whether the warehouse dispatched, `delivery.state` says whether the carrier has moved it, and "Fulfilled / Dispatched, no carrier scan yet" is the largest delivery cluster in the corpus.
 
 ### The subject opens the conversation; the chevron expands the reading
@@ -695,6 +703,12 @@ Level 4 is still a hard band at 1000: legal threats and grave personal harm cann
 Customer wait is the largest ordinary factor (`35`, logarithmic, capped at 14 days). That is deliberate: once the customer is waiting, age should move a ticket harder than one severity step, while still avoiding a linear age score where very old backlog dominates forever. Contacts (`0 / 7 / 11 / 14`), `awaiting_human` (`6`) and VIP (`2`) remain smaller nudges.
 
 This supersedes the VIP row-border treatment above: VIP remains a crown beside the requester name, while row edge colour now belongs to priority. Two border systems on one row would make VIP compete with the operational signal the queue is built around.
+
+**Priority shows as two marks and no more: the score, and a 3px bar on the row's left edge.** The first version ringed the whole row in its band colour, which turned a queue of 214 rows into a grid of coloured boxes and fought the table's own hairlines. The bar is the header cards' accent moved from the top edge to the side, so one visual device carries severity in both places; the row keeps its ordinary neutral divider. **Left, not right**, reversing the first attempt: the bar then sits against the score it belongs to instead of ten columns away from it, and the table scrolls horizontally — a right-edge bar can be scrolled out of sight, the left one cannot.
+
+**Band colours are the saturated primaries, not the semantic ramp.** The `-100` tints read as grey-pink and grey-amber at 3px, and the darkened ramp colours put a dark red one row above a dark orange, which is the same colour at a glance. Each band now sits as near its own pure hue as contrast allows — `#e81010` / `#ff8c00` / `#00a651` on the bar, one step darker on the score so it clears 4.5:1 on white. They are local to the table rather than new global tokens: they are tuned against each other for this one three-way comparison, and folding them into `--error`/`--warning`/`--success` would drag every chip and card along with them. Medium stays orange rather than shifting yellow, because gold belongs to VIP.
+
+**The score is set a step larger and bold** (`--text-md`, 700). It is the number the whole queue is ordered by; at body size and weight it read as one more field in the row.
 
 ### Stats and filters
 
