@@ -216,6 +216,15 @@ create table public.orders (
   shipping_destination jsonb not null default '{}'::jsonb,
   line_items jsonb not null default '[]'::jsonb,
   fulfillments jsonb not null default '[]'::jsonb,
+  -- Every tracking number on the order, lifted out of `fulfillments` so it can
+  -- be searched. A customer chasing a parcel usually has the tracking number and
+  -- not the order number -- it is what our dispatch mail put in front of them --
+  -- and reaching it inside the jsonb means a scan per lookup. Denormalised on
+  -- purpose: `fulfillments` stays the record, this is the index.
+  -- NORMALISED ON THE WAY IN (uppercase, no spaces, dots or hyphens) because
+  -- neither side is clean: Shopify returns numbers with punctuation attached
+  -- ('6A06497617561.' is in this table today) and carriers print them in groups.
+  tracking_numbers text[] not null default '{}',
   returns jsonb not null default '[]'::jsonb,
   refunds jsonb not null default '[]'::jsonb,
   delivered_at timestamptz,
@@ -340,6 +349,10 @@ create index orders_tags_gin_idx on public.orders using gin (tags);
 create index orders_line_items_gin_idx on public.orders using gin (line_items);
 
 create index orders_fulfillments_gin_idx on public.orders using gin (fulfillments);
+-- GIN, so the resolver can ask "which order carries any of these numbers?" for a
+-- whole batch of tickets in one indexed overlap (`&&`) rather than one query per
+-- ticket or a scan through the fulfillments jsonb.
+create index orders_tracking_numbers_gin_idx on public.orders using gin (tracking_numbers);
 
 create index orders_returns_gin_idx on public.orders using gin (returns);
 
@@ -378,6 +391,9 @@ comment on column public.orders.customer_email_hash is
 
 comment on column public.orders.customer_phone_hash is
   'Hash of the order contact phone for support lookup without duplicating raw phone on the order row.';
+
+comment on column public.orders.tracking_numbers is
+  'Every carrier tracking number on the order, lifted out of fulfillments and normalised (uppercase, no spaces/dots/hyphens) so it can be matched against what a customer types. Denormalised for lookup only -- fulfillments remains the record. Populated by the order sync; a parcel-chasing ticket that quotes a tracking number instead of an order number is resolved through this column.';
 
 comment on column public.orders.shipping_destination is
   'Coarse shipping destination only, such as city, province, country, and country code. Do not store street address or postcode here.';

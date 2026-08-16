@@ -716,6 +716,20 @@ That 35% is the number to watch. If this ever pulls attention off a level 4, it 
 
 Gold is its own token pair, not `--warning`: that ramp is orange and owns "something is wrong". Two steps only — a rule colour and a hairline — because a border needs no wash and no text sitting on one.
 
+### A parcel number is the second way into an order
+
+Somebody chasing a delivery usually has the **tracking number** and not the order number: it is what the dispatch mail put in front of them and what the carrier's site asks for. Until now such a ticket resolved to no order at all, which put every order tool out of reach of exactly the questions the corpus asks most.
+
+**It is a column, not a jsonb reach.** `orders.tracking_numbers text[]`, lifted out of `fulfillments` by the order mapper and GIN-indexed. `fulfillments` stays the record; this is the index. One `&&` overlap query answers "which orders carry any of these numbers?" for a whole pass of tickets at once — confirmed against the live table as a Bitmap Index Scan at 0.2 ms — where reaching inside the jsonb would scan 2,006 rows per lookup.
+
+**Both sides normalise through one function** (`scripts/lib/tracking-number.mjs`), and that is load-bearing rather than tidy. Shopify hands back numbers with punctuation attached — `6A06497617561.` is stored today — carriers print them in groups, and customers type in lower case. Two copies of the rule drifting by a hyphen would give a lookup that silently never matches, which reads to everyone as "we have no record of that parcel".
+
+**The patterns come from what this store actually issues**, counted over 815 numbers: Colissimo `6C20723002488` (717), GLS `ZWLGF5DA` (97), UPU `CJ123456789FR` (1). Two guards earn their place — the GLS pattern demands a digit in sixth position, because without it the shape is eight letters and `COMMANDE` matches; and a candidate glued to a file extension is dropped, because `image001.png` sits in the signature of a large share of business mail and `IMAGE001` is exactly the GLS shape. Over 296 inbound messages the parser proposes 20 candidates, 10 resolve to a retained order, and none is junk.
+
+**Finding the order is not vouching for the sender.** A tracking match runs through the same `verifyOrder`, so ownership is still decided by the email hash and `isSafeToWrite` still governs the column. Possession of a 13-character carrier number is tempting to treat as proof — it is far less guessable than a sequential order number — but the measurement says otherwise: of the 8 tickets quoting a real tracking number, **6 were staff threads about other people's parcels** (two senders, already recorded as `mismatch`). Confirming on possession alone would have written six wrong order numbers. Only 2 tickets resolve today, and that is the honest yield.
+
+**The order number wins where both appear**, which is precedence and cost control at once: it is the reference the rest of the pipeline is built on, and a message carrying both must not spend a second lookup. Tracking candidates are collected only for tickets that yielded no order number, so the common case costs nothing and the whole feature adds **one query per pass and no model tokens** — this pass has no LLM in it.
+
 ### Queue priority should be derived at read time
 
 The scorer lives in `scripts/lib/ticket-priority.mjs`, not in a column and not in the `ticket_queue` view. The view supplies facts (`inbound_count`, `waiting_since`); the weights are judgement and need unit tests and cheap tuning, not a migration.

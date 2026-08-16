@@ -151,6 +151,55 @@ test('calculateOrderRetention deletes completed returns three months after compl
   assert.equal(retention.retentionDeleteAfter, '2026-05-05T12:00:00.000Z');
 });
 
+test('tracking numbers are lifted out of fulfillments into their own column', () => {
+  const row = mapOrder(BASE_ORDER, 'shop-1', '2026-01-05T00:00:00Z');
+  assert.deepEqual(row.tracking_numbers, ['TRACK123']);
+  // The jsonb stays the record; the column is only the searchable copy.
+  assert.equal(row.fulfillments[0].tracking_info[0].number, 'TRACK123');
+});
+
+test('a tracking number is normalised so a customer typing it can match it', () => {
+  // Shopify hands back punctuation attached to the number — '6A06497617561.' is
+  // in this store's data — and carriers print the digits in groups.
+  const row = mapOrder(
+    {
+      ...BASE_ORDER,
+      fulfillments: [{
+        ...BASE_ORDER.fulfillments[0],
+        trackingInfo: [{ company: 'Colissimo', number: ' 6a0649-7617 561. ' }]
+      }]
+    },
+    'shop-1',
+    '2026-01-05T00:00:00Z'
+  );
+  assert.deepEqual(row.tracking_numbers, ['6A06497617561']);
+});
+
+test('an order with nothing dispatched carries an empty array, never null', () => {
+  // The column is `not null default '{}'`: a fulfillment with no carrier
+  // reference yet is normal and must not produce a null the resolver has to
+  // guard against.
+  const row = mapOrder(
+    { ...BASE_ORDER, fulfillments: [] },
+    'shop-1',
+    '2026-01-05T00:00:00Z'
+  );
+  assert.deepEqual(row.tracking_numbers, []);
+});
+
+test('the same parcel listed twice yields one entry', () => {
+  const fulfillment = BASE_ORDER.fulfillments[0];
+  const row = mapOrder(
+    {
+      ...BASE_ORDER,
+      fulfillments: [fulfillment, { ...fulfillment, id: 'gid://shopify/Fulfillment/2' }]
+    },
+    'shop-1',
+    '2026-01-05T00:00:00Z'
+  );
+  assert.deepEqual(row.tracking_numbers, ['TRACK123']);
+});
+
 test('calculateOrderRetention deletes undelivered orders six months after processing', () => {
   const retention = calculateOrderRetention({
     ...BASE_ORDER,

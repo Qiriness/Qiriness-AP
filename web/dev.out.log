@@ -192,3 +192,129 @@
  GET /tickets 200 in 979ms
  GET /api/tickets/6216afc3-d4de-42e9-b6cf-87039242d70b 200 in 391ms
  GET /api/tickets/6216afc3-d4de-42e9-b6cf-87039242d70b 200 in 403ms
+ GET /api/tickets/7191037d-78b6-4fcf-b5b6-3141e8342a24 200 in 602ms
+ GET /api/tickets/766c2948-ed2a-4b97-bfe3-805fd34fe2af 200 in 276ms
+ GET /api/tickets/43f781f3-cd65-433c-8b0b-63718ff00b67 200 in 650ms
+ GET /tickets 200 in 1369ms
+ GET /api/tickets/b0246791-5442-401e-8964-2a1335cf8661 200 in 398ms
+ GET /api/tickets/b0246791-5442-401e-8964-2a1335cf8661 200 in 404ms
+ GET /api/tickets/b2e837c4-d6b4-442e-b193-3bb02a1bd637 200 in 392ms
+ GET /api/tickets/b2e837c4-d6b4-442e-b193-3bb02a1bd637 200 in 399ms
+ GET /api/tickets/6216afc3-d4de-42e9-b6cf-87039242d70b 200 in 390ms
+ GET /api/tickets/6216afc3-d4de-42e9-b6cf-87039242d70b 200 in 407ms
+ GET /api/tickets/0dd5cfda-276c-4895-b142-0fa9e0c7b0f4 200 in 568ms
+ GET /api/tickets/0dd5cfda-276c-4895-b142-0fa9e0c7b0f4 200 in 580ms
+ GET /api/tickets/8547f4bd-8a60-4f0a-8ff3-c98bc407e298 200 in 393ms
+ GET /api/tickets/8547f4bd-8a60-4f0a-8ff3-c98bc407e298 200 in 396ms
+ GET /api/tickets/cc6f2217-be56-482e-b3d2-84ff77b779e1 200 in 596ms
+ GET /api/tickets/cc6f2217-be56-482e-b3d2-84ff77b779e1 200 in 648ms
+ GET /api/tickets/273f44b2-f14d-4ffd-9618-9273b6d1644b 200 in 389ms
+ GET /api/tickets/273f44b2-f14d-4ffd-9618-9273b6d1644b 200 in 400ms
+ GET /api/tickets/d31abd79-6828-486a-ab74-6362d4321544 200 in 406ms
+ GET /api/tickets/d31abd79-6828-486a-ab74-6362d4321544 200 in 418ms
+ GET /api/tickets/273f44b2-f14d-4ffd-9618-9273b6d1644b 200 in 357ms
+ GET /api/tickets/273f44b2-f14d-4ffd-9618-9273b6d1644b 200 in 375ms
+ GET /api/tickets/dfba7140-18a9-4269-b303-b75239815296 200 in 387ms
+ GET /api/tickets/dfba7140-18a9-4269-b303-b75239815296 200 in 401ms
+ ✓ Compiled in 1436ms (703 modules)
+ ✓ Compiled in 845ms (713 modules)
+ ✓ Compiled in 841ms (703 modules)
+ GET /tickets 200 in 2265ms
+ ✓ Compiled /api/tickets/[id] in 318ms (357 modules)
+ GET /api/tickets/6216afc3-d4de-42e9-b6cf-87039242d70b 200 in 4353ms
+ GET /api/tickets/6216afc3-d4de-42e9-b6cf-87039242d70b 200 in 4549ms
+ GET /api/tickets/def878e2-ab5b-455b-b8df-ff02ea0ff232 200 in 593ms
+ GET /api/tickets/def878e2-ab5b-455b-b8df-ff02ea0ff232 200 in 603ms
+ GET /api/tickets/6680a31d-2de7-455c-9796-ea8b6599a601 200 in 635ms
+ GET /api/tickets/6680a31d-2de7-455c-9796-ea8b6599a601 200 in 639ms
+ GET /api/tickets/aca54ca7-520a-4f03-83e4-cf1b093e19b8 200 in 558ms
+ GET /api/tickets/aca54ca7-520a-4f03-83e4-cf1b093e19b8 200 in 580ms
+ GET /api/tickets/4e6536e2-03ab-4723-852e-744887c73ce5 200 in 346ms
+ GET /api/tickets/4e6536e2-03ab-4723-852e-744887c73ce5 200 in 366ms
+ GET /api/tickets/67dc50d9-5fec-46dc-83ba-9ccce97ac6f6 200 in 671ms
+ GET /api/tickets/67dc50d9-5fec-46dc-83ba-9ccce97ac6f6 200 in 686ms
+ GET /api/tickets/67dc50d9-5fec-46dc-83ba-9ccce97ac6f6 200 in 369ms
+ GET /api/tickets/67dc50d9-5fec-46dc-83ba-9ccce97ac6f6 200 in 397ms
+ GET /api/tickets/52bd2a70-9eba-47e6-8bac-40494dbc079c 200 in 355ms
+ GET /api/tickets/52bd2a70-9eba-47e6-8bac-40494dbc079c 200 in 367ms
+ GET /api/tickets/799326ab-bf64-4da8-8a38-68934738d34b 200 in 350ms
+ GET /api/tickets/799326ab-bf64-4da8-8a38-68934738d34b 200 in 379ms
+ GET /api/tickets/328e0d8d-0199-4098-bcb9-90c1f4f2a621 200 in 354ms
+ GET /api/tickets/328e0d8d-0199-4098-bcb9-90c1f4f2a621 200 in 358ms
+ GET /api/tickets/865af266-4b6d-4079-ac42-a73004ffea9b 200 in 585ms
+ GET /api/tickets/865af266-4b6d-4079-ac42-a73004ffea9b 200 in 592ms
+ GET /api/tickets/881d84a8-749f-4a22-87c2-bf22ba7a14d3 200 in 359ms
+ GET /api/tickets/881d84a8-749f-4a22-87c2-bf22ba7a14d3 200 in 365ms
+ GET /api/tickets/691ed991-ee45-4776-b1b6-a813a8dc03d1 200 in 369ms
+ GET /api/tickets/691ed991-ee45-4776-b1b6-a813a8dc03d1 200 in 384ms
+ GET /api/tickets/dfb60a8e-9017-46e7-ac5f-3ec66e01fc56 200 in 371ms
+ GET /api/tickets/dfb60a8e-9017-46e7-ac5f-3ec66e01fc56 200 in 396ms
+ GET /api/tickets/0f56c9eb-9f79-4c41-9c8d-5e093ea10669 200 in 955ms
+ GET /api/tickets/0f56c9eb-9f79-4c41-9c8d-5e093ea10669 200 in 964ms
+ GET /api/tickets/a87031f1-b3e6-48ac-9535-5f8d68a8f1d3 200 in 661ms
+ GET /api/tickets/a87031f1-b3e6-48ac-9535-5f8d68a8f1d3 200 in 666ms
+ GET /api/tickets/fa46a17a-0ab1-4882-8f83-aefbdc9af563 200 in 432ms
+ GET /api/tickets/fa46a17a-0ab1-4882-8f83-aefbdc9af563 200 in 455ms
+ GET /api/tickets/db0e3ba4-0001-4b18-969a-9e782c8cc2e1 200 in 394ms
+ GET /api/tickets/db0e3ba4-0001-4b18-969a-9e782c8cc2e1 200 in 412ms
+ GET /api/tickets/def878e2-ab5b-455b-b8df-ff02ea0ff232 200 in 596ms
+ GET /api/tickets/def878e2-ab5b-455b-b8df-ff02ea0ff232 200 in 602ms
+ GET /api/tickets/d31abd79-6828-486a-ab74-6362d4321544 200 in 584ms
+ GET /api/tickets/d31abd79-6828-486a-ab74-6362d4321544 200 in 599ms
+ GET /api/tickets/273f44b2-f14d-4ffd-9618-9273b6d1644b 200 in 361ms
+ GET /api/tickets/273f44b2-f14d-4ffd-9618-9273b6d1644b 200 in 387ms
+ GET /tickets 200 in 2320ms
+ GET /tickets 200 in 1210ms
+ ✓ Compiled in 1475ms (713 modules)
+ ✓ Compiled in 2.1s (703 modules)
+ ✓ Compiled in 1483ms (703 modules)
+ GET /tickets 500 in 3063ms
+ ✓ Compiled in 944ms (703 modules)
+ ✓ Compiled in 986ms (703 modules)
+ ✓ Compiled in 564ms (717 modules)
+ GET /tickets 200 in 1668ms
+ ✓ Compiled in 615ms (717 modules)
+ ✓ Compiled in 2.8s (703 modules)
+ ✓ Compiled in 711ms (703 modules)
+ ✓ Compiled in 370ms (713 modules)
+ ✓ Compiled in 401ms (713 modules)
+ ✓ Compiled in 546ms (703 modules)
+ GET /tickets 500 in 1462ms
+ ✓ Compiled in 408ms (703 modules)
+ GET /tickets 500 in 1013ms
+ ✓ Compiled in 337ms (703 modules)
+ GET /tickets 500 in 861ms
+ ✓ Compiled in 377ms (703 modules)
+ GET /tickets 500 in 1327ms
+ ✓ Compiled in 421ms (703 modules)
+ GET /tickets 500 in 969ms
+ ✓ Compiled in 446ms (703 modules)
+ GET /tickets 500 in 1583ms
+ ✓ Compiled in 358ms (703 modules)
+ GET /tickets 500 in 760ms
+ ✓ Compiled in 334ms (703 modules)
+ GET /tickets 500 in 1264ms
+ ✓ Compiled in 399ms (703 modules)
+ GET /tickets 500 in 1129ms
+ ✓ Compiled in 335ms (703 modules)
+ GET /tickets 500 in 957ms
+ ✓ Compiled in 345ms (703 modules)
+ GET /tickets 500 in 1235ms
+ ✓ Compiled in 320ms (713 modules)
+ GET /tickets 500 in 1075ms
+ ✓ Compiled in 333ms (713 modules)
+ GET /tickets 500 in 752ms
+ ✓ Compiled in 249ms (713 modules)
+ GET /tickets 500 in 912ms
+ ✓ Compiled in 558ms (703 modules)
+ GET /tickets 200 in 1481ms
+ GET /tickets 200 in 3064ms
+ ✓ Compiled in 634ms (717 modules)
+ ✓ Compiled in 532ms (713 modules)
+ ✓ Compiled in 455ms (713 modules)
+ ✓ Compiled in 430ms (703 modules)
+ ✓ Compiled in 509ms (703 modules)
+ ✓ Compiled in 912ms (703 modules)
+ ✓ Compiled in 365ms (713 modules)
+ ○ Compiling /agent-setup ...
+ ✓ Compiled /agent-setup in 916ms (395 modules)

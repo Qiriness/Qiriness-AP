@@ -127,6 +127,8 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |   |   |                        # tool-registry · investigate (bounded loop) ·
 |   |   |                        # investigation-runner · create-investigation
 |   |   |-- resolution/          # customer-resolution-runner · order-number-parser ·
+|   |   |                        # tracking-number-parser (the second way into an
+|   |   |                        #   order, via orders.tracking_numbers) ·
 |   |   |                        # confirmation-evidence (every address in the
 |   |   |                        #   message, as hashes; no template parsing) ·
 |   |   |                        # order-verification · order-resolution-runner ·
@@ -155,7 +157,7 @@ Every table has RLS on with no policies: **service-role access only**. Shopify s
 | --- | --- |
 | `shops` | shop records, environment, app settings, `sync_cursors` (incl. mail delta link) |
 | `customers` | lean support snapshot: contact, marketing state, coarse location, lifetime totals, last order, `rfm_group`. No addresses or notes |
-| `orders` | identity, links, channel, derived `order_status`, totals, line items, fulfillments, returns, refunds. Contacts hashed, plus `customer_email_masked` (`j***l@orange.fr`) for the one question a hash cannot answer; destination coarse; `retention_delete_after` |
+| `orders` | identity, links, channel, derived `order_status`, totals, line items, fulfillments, returns, refunds. Contacts hashed, plus `customer_email_masked` (`j***l@orange.fr`) for the one question a hash cannot answer; `tracking_numbers text[]` (GIN) lifted out of fulfillments so a ticket can be resolved from a parcel number; destination coarse; `retention_delete_after` |
 | `products` | snapshots + first-class metafields, `variants` jsonb, `available_stock` |
 | `promotions` | one row per redeem code (`code = null` for automatic); `rule_snapshot` carries values, not just type names |
 | `shopify_metaobjects` | shared metaobjects (FAQ, ingredient lists) referenced by products |

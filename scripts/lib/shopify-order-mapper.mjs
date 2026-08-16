@@ -1,6 +1,7 @@
 import { stripUndefined } from './collections.mjs';
 import { hashIdentifier, maskEmail } from './compliance-audit.mjs';
 import { cleanJsonValue, cleanTextValue } from './text-cleaning.mjs';
+import { trackingNumbersFromFulfillments } from './tracking-number.mjs';
 
 const ACTIVE_RETURN_STATUSES = new Set(['OPEN', 'REQUESTED']);
 const TERMINAL_RETURN_STATUSES = new Set(['CANCELED', 'CLOSED', 'DECLINED']);
@@ -10,6 +11,10 @@ export function mapOrder(order, shopId, syncedAt, customerIdByShopifyId = new Ma
   const customerShopifyId = customer?.id || null;
   const lineItems = order.lineItems?.nodes || [];
   const fulfillments = order.fulfillments || [];
+  // Mapped first, then read for tracking numbers, so the column is derived from
+  // exactly what lands in the `fulfillments` jsonb rather than from a second
+  // reading of Shopify's payload that could disagree with it.
+  const mappedFulfillments = cleanJsonValue(fulfillments.map(mapFulfillment));
   const returns = order.returns?.nodes || [];
   const refunds = order.refunds || [];
   const retention = calculateOrderRetention(order);
@@ -49,7 +54,10 @@ export function mapOrder(order, shopId, syncedAt, customerIdByShopifyId = new Ma
     customer_phone_hash: hashIdentifier(order.phone),
     shipping_destination: shippingDestination(order.shippingAddress),
     line_items: cleanJsonValue(lineItems.map(mapLineItem)),
-    fulfillments: cleanJsonValue(fulfillments.map(mapFulfillment)),
+    fulfillments: mappedFulfillments,
+    // Lifted out of the jsonb above so a parcel-chasing ticket can be matched to
+    // its order by the number the customer actually has to hand.
+    tracking_numbers: trackingNumbersFromFulfillments(mappedFulfillments),
     returns: cleanJsonValue(returns.map(mapReturn)),
     refunds: cleanJsonValue(refunds.map(mapRefund)),
     delivered_at: retention.deliveredAt,

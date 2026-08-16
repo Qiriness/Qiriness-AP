@@ -15,10 +15,18 @@ const HASH_B = 'b'.repeat(64);
  * `written` captures the resolution the runner decided on, which is what every
  * assertion below is about.
  */
-function buildStore({ pending = [], orders = [], range = { min: 1001, max: 6300 }, customers = [] } = {}) {
+function buildStore({
+  pending = [],
+  orders = [],
+  range = { min: 1001, max: 6300 },
+  customers = [],
+  trackedOrders = []
+} = {}) {
   const written = [];
+  const trackingQueries = [];
   return {
     written,
+    trackingQueries,
     // --- the orders store ---
     async loadOrderNumberRange() { return range; },
     async loadOrders() {
@@ -26,6 +34,16 @@ function buildStore({ pending = [], orders = [], range = { min: 1001, max: 6300 
         byNumber: new Map(orders.map((o) => [o.order_number, o])),
         customersById: new Map(customers.map((c) => [c.id, c]))
       };
+    },
+    async loadOrdersByTracking(shopId, numbers) {
+      trackingQueries.push(numbers);
+      const byTracking = new Map();
+      for (const order of trackedOrders) {
+        for (const number of order.tracking_numbers || []) {
+          if (numbers.includes(number)) byTracking.set(number, order);
+        }
+      }
+      return { byTracking, customersById: new Map(customers.map((c) => [c.id, c])) };
     },
     buildResolutionColumns(ticket, resolution) {
       written.push({ ticket, resolution });
@@ -199,4 +217,92 @@ test('every outcome is recorded, so a null column is explained', async () => {
 
   assert.equal(store.written.length, 1);
   assert.equal(store.written[0].resolution.status, 'no_candidate');
+});
+
+// --- resolving from a tracking number ----------------------------------------
+// The second way into an order, for the customer chasing a parcel who has the
+// carrier's number to hand and not the order number.
+
+const TRACKED_ORDER = {
+  id: 'o1',
+  order_number: 6500,
+  name: '#6500',
+  customer_email_hash: HASH_A,
+  tracking_numbers: ['6C21070620301']
+};
+
+test('a tracking number resolves the order when no order number was given', async () => {
+  const store = buildStore({
+    pending: [{
+      ticket: TICKET,
+      text: "Bonjour, mon colis 6C21070620301 n'est toujours pas arrivé."
+    }],
+    trackedOrders: [TRACKED_ORDER]
+  });
+
+  const totals = await runOrderResolution({ store, record: store, shopId: 's1' });
+
+  assert.equal(totals.confirmed, 1);
+  assert.equal(totals.written, 1);
+  assert.equal(store.written[0].resolution.orderName, '#6500');
+  assert.equal(store.written[0].resolution.matchedBy, 'tracking_number');
+});
+
+test('the tracking number is matched however the customer spaced it', async () => {
+  const store = buildStore({
+    pending: [{ ticket: TICKET, text: 'suivi 6C 2107 0620 301' }],
+    trackedOrders: [TRACKED_ORDER]
+  });
+
+  await runOrderResolution({ store, record: store, shopId: 's1' });
+
+  assert.equal(store.written[0].resolution.orderName, '#6500');
+});
+
+test('a tracking match does NOT vouch for the sender', async () => {
+  // The whole point of keeping verification unchanged. Measured on the live
+  // mailbox, 6 of 8 tickets quoting a real tracking number were staff threads
+  // about somebody else's parcel; confirming on possession alone would have
+  // written six wrong order numbers.
+  const store = buildStore({
+    pending: [{
+      ticket: { ...TICKET, requester_email_hash: HASH_B },
+      text: 'le colis 6C21070620301 du client est en retard'
+    }],
+    trackedOrders: [TRACKED_ORDER]
+  });
+
+  const totals = await runOrderResolution({ store, record: store, shopId: 's1' });
+
+  assert.equal(totals.written, 0, 'nothing written for a sender who does not own the order');
+  assert.equal(store.written[0].resolution.status, 'mismatch');
+  assert.equal(store.written[0].resolution.matchedBy, 'tracking_number');
+});
+
+test('an order number in the message wins, and no tracking lookup is made', async () => {
+  // Cost control as much as precedence: the order number is the reference the
+  // rest of the pipeline is built on, and a message carrying both must not
+  // spend a second lookup.
+  const store = buildStore({
+    pending: [{ ticket: TICKET, text: 'commande #4854, suivi 6C21070620301' }],
+    orders: [{ order_number: 4854, name: '#4854', customer_email_hash: HASH_A }],
+    trackedOrders: [TRACKED_ORDER]
+  });
+
+  await runOrderResolution({ store, record: store, shopId: 's1' });
+
+  assert.equal(store.written[0].resolution.orderName, '#4854');
+  assert.deepEqual(store.trackingQueries, [[]], 'no tracking numbers were collected');
+});
+
+test('a tracking number we hold no order for is explained, not silently empty', async () => {
+  const store = buildStore({
+    pending: [{ ticket: TICKET, text: 'mon colis 6C29999999999 est perdu' }],
+    trackedOrders: [TRACKED_ORDER]
+  });
+
+  await runOrderResolution({ store, record: store, shopId: 's1' });
+
+  assert.equal(store.written[0].resolution.status, 'no_candidate');
+  assert.match(store.written[0].resolution.detail, /matches no order we hold/);
 });

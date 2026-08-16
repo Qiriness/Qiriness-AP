@@ -6,6 +6,7 @@ import { RPC, T } from '../../../scripts/lib/tables.mjs';
 
 import { countConfirmationMarkers, messageEmailHashes } from './confirmation-evidence.mjs';
 import { shopifyOrderCandidates, parseOrderCandidates, toOrderName } from './order-number-parser.mjs';
+import { parseTrackingCandidates } from './tracking-number-parser.mjs';
 import {
   BY_MESSAGE_EMAIL,
   CONFIRMED,
@@ -94,6 +95,58 @@ export function createOrderResolutionStore(supabase) {
     },
 
     /**
+     * Orders carrying any of these tracking numbers, plus the customers behind
+     * them — the parcel-number equivalent of `loadOrders` above.
+     *
+     * ONE OVERLAP QUERY FOR THE WHOLE PASS. `tracking_numbers` is a text[] with
+     * a GIN index, so `ov` (PostgREST's `&&`) answers "which orders carry any of
+     * these?" for every ticket at once and uses the index to do it. Reaching
+     * into the `fulfillments` jsonb instead would mean scanning the table.
+     *
+     * Keyed by tracking number rather than by order: two tickets can quote the
+     * same parcel, and one order can carry several.
+     */
+    async loadOrdersByTracking(shopId, trackingNumbers) {
+      if (trackingNumbers.length === 0) {
+        return { byTracking: new Map(), customersById: new Map() };
+      }
+      const orders = await supabaseSelectAll(
+        supabase,
+        T.ORDERS,
+        {
+          shop_id: shopId,
+          tracking_numbers: { operator: 'ov', value: `{${trackingNumbers.join(',')}}` },
+          deleted_at: { operator: 'is', value: 'null' }
+        },
+        'id,name,order_number,customer_id,customer_email_hash,tracking_numbers'
+      );
+
+      const byTracking = new Map();
+      for (const order of orders) {
+        for (const number of order.tracking_numbers || []) {
+          // Only the numbers actually asked about: an order matches on one
+          // parcel but may carry others, and indexing those would let a later
+          // ticket appear to match a number nobody quoted.
+          if (trackingNumbers.includes(number)) {
+            byTracking.set(number, order);
+          }
+        }
+      }
+
+      const customerIds = [...new Set(orders.map((o) => o.customer_id).filter(Boolean))];
+      const customers = customerIds.length
+        ? await supabaseSelectAll(
+            supabase,
+            T.CUSTOMERS,
+            { id: { operator: 'in', value: `(${customerIds.join(',')})` } },
+            'id,display_name,first_name,last_name'
+          )
+        : [];
+
+      return { byTracking, customersById: new Map(customers.map((c) => [c.id, c])) };
+    },
+
+    /**
      * Writes the resolution.
      *
      * The number goes on the column only when confirmed; the reasoning always
@@ -107,6 +160,9 @@ export function createOrderResolutionStore(supabase) {
           order_resolution: {
             status: resolution.status,
             verified_by: resolution.verifiedBy,
+            // Which reference found the order. Ownership is still decided by
+            // `verified_by`; this says what the customer gave us to go on.
+            matched_by: resolution.matchedBy || 'order_number',
             // What a human or a later drafting step should do about it —
             // typically asking which address the purchase was made with.
             suggested_action: resolution.suggestedAction || null,
@@ -150,36 +206,100 @@ export async function runOrderResolution({ store, record, shopId, logger, dryRun
   };
 
   // One batched order lookup for the whole pass rather than a query per ticket.
+  // Tracking numbers are parsed in the same sweep — the regex is free, and
+  // collecting them here is what keeps the lookup to a single extra query for
+  // the whole pass instead of one per ticket that quotes a parcel.
   const allNumbers = new Set();
+  const allTracking = new Set();
   const parsed = pending.map(({ ticket, text }) => {
     const candidates = shopifyOrderCandidates(text);
     for (const candidate of candidates) {
       allNumbers.add(candidate.orderNumber);
     }
-    return { ticket, text, candidates };
+    const tracking = candidates.length === 0 ? parseTrackingCandidates(text) : [];
+    for (const candidate of tracking) {
+      allTracking.add(candidate.trackingNumber);
+    }
+    return { ticket, text, candidates, tracking };
   });
 
   const { byNumber, customersById } = await store.loadOrders(shopId, [...allNumbers]);
+  // Only for the tickets that gave us no order number: a message carrying both
+  // is answered by the number, which is the reference the rest of the pipeline
+  // is built on. Skipped entirely when nothing quoted a parcel.
+  const { byTracking, customersById: trackingCustomers } =
+    (await store.loadOrdersByTracking?.(shopId, [...allTracking])) ?? {
+      byTracking: new Map(),
+      customersById: new Map()
+    };
   // Asked once per pass, not per ticket. Null on an empty catalogue, in which
   // case nothing is ever called out of range — an empty store has no opinion.
   const range = await store.loadOrderNumberRange?.(shopId);
 
-  for (const { ticket, text, candidates } of parsed) {
+  for (const { ticket, text, candidates, tracking } of parsed) {
     let resolution;
 
     if (candidates.length === 0) {
-      // Naming the format matters: an internal `Q00` reference failing to match
-      // is not the same as "you gave us no order number", and the reply differs.
-      const others = parseOrderCandidates(text).filter((c) => c.format !== 'web');
-      resolution = {
-        status: NO_CANDIDATE,
-        verifiedBy: null,
-        detail: others.length
-          ? `No Shopify order number; the message quotes ${others[0].raw} (${others[0].format}).`
-          : 'No order number in the message.',
-        candidates: others.map((c) => c.raw),
-        orderName: null
-      };
+      // THE PARCEL NUMBER IS THE SECOND WAY IN. Somebody chasing a delivery
+      // usually has the tracking number and not the order number — it is what
+      // our dispatch mail put in front of them and what the carrier's site asks
+      // for — and before this the ticket resolved to no order at all, which put
+      // every order tool out of reach.
+      //
+      // IT FINDS THE ORDER; IT DOES NOT VOUCH FOR THE SENDER. The same
+      // `verifyOrder` decides ownership, so a tracking match still has to clear
+      // the email hash before anything is written. That is not caution for its
+      // own sake: measured on this mailbox, 6 of the 8 tickets quoting a real
+      // tracking number were staff threads about other people's parcels, and
+      // confirming on possession of the number alone would have written six
+      // wrong order numbers.
+      const trackingResults = tracking
+        .map((candidate) => ({ candidate, order: byTracking.get(candidate.trackingNumber) || null }))
+        .filter(({ order }) => order !== null)
+        .map(({ candidate, order }) => {
+          const customer = order.customer_id ? trackingCustomers.get(order.customer_id) : null;
+          const verdict = verifyOrder({
+            order,
+            ticket,
+            customer,
+            messageEmailHashes: messageEmailHashes(text)
+          });
+          return {
+            ...verdict,
+            detail:
+              verdict.status === CONFIRMED
+                ? `Matched on the tracking number ${candidate.raw}.`
+                : `${verdict.detail} Found from the tracking number ${candidate.raw}.`,
+            orderNumber: order.order_number,
+            orderName: order.name
+          };
+        });
+
+      if (trackingResults.length > 0) {
+        resolution = {
+          ...chooseResolution(trackingResults),
+          matchedBy: 'tracking_number',
+          candidates: tracking.map((c) => c.raw)
+        };
+      } else {
+        // Naming the format matters: an internal `Q00` reference failing to match
+        // is not the same as "you gave us no order number", and the reply differs.
+        const others = parseOrderCandidates(text).filter((c) => c.format !== 'web');
+        const unmatchedTracking = tracking.length > 0;
+        resolution = {
+          status: NO_CANDIDATE,
+          verifiedBy: null,
+          detail: unmatchedTracking
+            ? `No order number; the tracking number ${tracking[0].raw} matches no order we hold.`
+            : others.length
+              ? `No Shopify order number; the message quotes ${others[0].raw} (${others[0].format}).`
+              : 'No order number in the message.',
+          candidates: unmatchedTracking
+            ? tracking.map((c) => c.raw)
+            : others.map((c) => c.raw),
+          orderName: null
+        };
+      }
     } else {
       // Hashed once per ticket rather than per candidate: the addresses in the
       // message do not change between the numbers quoted in it.
