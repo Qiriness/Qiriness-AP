@@ -17,7 +17,7 @@ A customer-support operating system for **Qiriness**, a French skincare and cosm
 
 ## Scope
 
-Built: one-way Shopify → Supabase sync, a curated knowledge library for AI context, retrieval embeddings, email ingestion into conversation-threaded tickets, categorisation, the Phase 4 retrieval tools, and the investigation agent that uses them.
+Built: one-way Shopify → Supabase sync, a curated knowledge library for AI context, retrieval embeddings, email ingestion into conversation-threaded tickets, categorisation, customer and order resolution, the Phase 4 retrieval tools, the exemplar layer, the investigation agent that uses them, team forwarding, and four analytics panels.
 
 Not built: reply drafting (Phase 5), dashboard authentication, deployed webhook routes.
 
@@ -59,58 +59,74 @@ Pending: dashboard auth, ORM/DB client for app reads (scripts use `pg` + a Supab
 
 ## Current state
 
-Working end to end against the live Shopify store (`qiriness.myshopify.com`) and the Supabase project: the Agent Setup and Tickets dashboards, the Shopify syncs, email ingestion, both spam gates, embeddings and retrieval, categorisation, the Phase 4 retrieval tools, and the investigation agent. **Drafting is not built.**
+Working end to end against the live Shopify store (`qiriness.myshopify.com`) and the Supabase project: the Agent Setup, Tickets and Insights dashboards, the Shopify syncs, email ingestion, both spam gates, embeddings and retrieval, categorisation, customer and order resolution, the Phase 4 retrieval tools, the exemplar layer, and the investigation agent. **Drafting is not built.**
 
 The full record of what was built and how far each piece is proven is in `CHANGELOG.md`; what remains unproven, with the check to run, is in `VALIDATION_LOG.md`.
 
-**The data prerequisite is met.** Measured 2026-08-11: 2052 orders spanning `#4716`–`#6770` — a range that contains every order number the mail corpus quotes — plus 58 201 customers, 116 products and 327 promotions. Customer resolution has run and links **141 of 214** tickets.
+**The data prerequisite is met.** 2052 orders spanning `#4716`–`#6770` — a range that contains every order number the mail corpus quotes — plus 58 201 customers, 116 products and 327 promotions.
 
-**The one thing gating most of the rest is now a pass, not the data.** `shopify_order_number` is null on all 214 tickets because `orders:resolve` has never been run against them, so every order-context lookup still returns `not_resolved` and the order family stays out of `ENABLED_SUBJECTS`. See step 1 below.
+**The pipeline has run over the corpus.** Measured 2026-08-17, read from the database:
 
-**Tests:** 873 from the repo root, 569 in `agent/`.
+| | |
+| --- | --- |
+| Tickets | 214, of which 203 categorised (L1 16 · L2 102 · L3 85) |
+| Messages | 451, **all 451 embedded** |
+| Customer link | 145 of 214 |
+| Order link | **52** carry a confirmed `shopify_order_number` and a built `resolved_context` |
+| Case files | 80 tickets investigated — 49 `needs_human`, 16 `needs_customer_input`, 15 `answerable`. 70 sit on tickets still live |
+| Investigation queue | 113 flagged, **0 claimable** — all closed, so the flag is unreachable (`VALIDATION_LOG.md` item 16) |
+| Knowledge | 61 chunks, all embedded — but **zero** in `delivery`, `order`, `promotions`, `payment`, `product_stock` |
+| Exemplars | 31 approved, 94 phrasings embedded; `support_answers` still empty |
+
+`orders:resolve` and `context:build` have both run: the remaining 138 order-family tickets report `no_candidate` because they quote no order reference and their sender matches no order — the resolver's designed answer, not an unrun pass.
+
+**The investigation cannot catch up with the order data**, though, and not for want of running. Only **23 of the 52** resolved tickets carry a case file; the other **29 are closed**, and `claim` requires `status = 'open'`. Auto-close retires a thread after 28 days of silence without clearing its `needs_investigation` flag, so on historical mail 139 tickets closed carrying a flag nothing can act on — **113 flagged, 0 claimable**. `--backfill` reaches 9 tickets that already have case files and none of the 113. The decision this needs is `VALIDATION_LOG.md` item 16.
+
+**Tests:** 1310 from the repo root, 771 in `agent/`.
 
 ## Next Steps
 
-**Updated 2026-08-16, after shipping the Insights panels.** Three items below are
-now partly or wholly answered, and one has become more urgent:
+**Reordered 2026-08-17, after reading the database rather than the docs.** Two items that headed this list are done and are gone from it: order resolution has run (52 tickets carry a confirmed number and a built context bundle), and `AGENT_INTEGRATION_PLAN.md` has been realigned with what was actually built. What changed the ordering:
 
-- **Fulfilment timing is now measured and visible** at `/insights/fulfilment`.
-  It shows July 2026 at 30.7% of orders shipping later than three days against a
-  steady 4–14% — worth establishing whether that was a known staffing gap or
-  news, because it decides whether this needs an alert.
-- **Step 5 (re-tune the clustering threshold) is now cheap to act on.** The topic
-  map persists (`npm run cluster:tickets:save`) and records the threshold it used,
-  so two thresholds can be compared instead of argued about.
-- **Step 8 (dashboard auth) is now the blocking item, not a tidy-up.**
-  `/insights/customers` names individual customers and their lifetime spend. The
-  panel says so at the top, but a warning is not an access control.
-- **New:** token cost is recorded from this point forward and cannot be
-  backfilled, so the cost tiles fill in only as the worker runs. Verify the
-  default prices in `scripts/lib/llm-rates.mjs` against current OpenAI pricing
-  before quoting any figure from them.
-- **New (2026-08-17): the carrier table now asks for lost / damaged / late per
-  carrier, and nothing answers it.** The columns are placeholders rendering as
-  dashes. Filling them needs a decision between two sources: the delivery feed
-  (see the Delivery section's note — dispatch posting delivery confirmations onto
-  the Shopify fulfilment fills them with no new table), or a new classification
-  axis on the ticket, which is a migration plus a categoriser prompt change plus
-  a re-categorisation backfill plus eval cases. The delivery feed is the better
-  buy if it is available at all, because it also unblocks the three tiles above.
+- **Phase 5 is now the top item.** Everything it consumes exists: 80 case files, the
+  `toDraftingPrompt` / `toHumanBrief` split, `do_not_claim`, `DRAFT_ONLY`, and a draft slot
+  already rendered in the thread dialog. What is missing is storage for a draft, the drafting
+  call itself, and the verdict/level gate.
+- **The knowledge library moved up, because the gap is now specific rather than general.**
+  61 chunks are embedded and **zero** of them are in `delivery`, `order`, `promotions`,
+  `payment` or `product_stock` — the five highest-demand subjects. A level 1 ticket is by
+  definition answerable from the library alone, so this is the ceiling on what drafting can
+  auto-answer, not a tidy-up.
+- **Three tables were empty where prose assumed rows.** `llm_usage` is fixed — nothing had
+  ever constructed a usage sink, so every model call fell back to the no-op; it is wired and
+  verified now. Still empty: `categorisation_review` (the 30 hand labels behind the
+  77% / 90% / 73% accuracy numbers are gone) and `category_forwarding` / `ticket_forwards`
+  (forwarding has never routed anything here).
+- **There is no investigation backlog, though 113 tickets look like one.** They are all
+  closed, and `claim` requires `status = 'open'` — so the queue is unreachable and the flag
+  means "was queued once". That decision (step 4) comes before any catch-up run.
+- **Dashboard auth is still the blocking compliance item.** `/insights/customers` names
+  individual customers and their lifetime spend; the panel says so, but a warning is not an
+  access control.
+- **The carrier table's lost / damaged / late columns are placeholders**, and the parcel-status
+  question behind them is now answered: Shopify has no live status (`delivered_at` on 1 order
+  in 2 006, `in_transit_at` on none). Filling them needs a delivery feed from the 3PL or a new
+  classification axis — see `AGENT_INTEGRATION_PLAN.md` § Open questions.
 
-Reordered 2026-07-30 after measuring the clustered corpus against the level taxonomy. The target is explicit: **auto-resolve level 1 and 2, and for level 3 assemble everything a human needs to act.** Across 330 customer-facing categorised tickets that splits **L1 42 (13%) · L2 156 (47%) · L3 131 (40%) · L4 1**, so 60% is in scope for automation and 40% for context assembly. What each tool is worth is in `AGENT_INTEGRATION_PLAN.md` Phase 4.
+The target is unchanged: **auto-resolve level 1 and 2, and for level 3 assemble everything a human needs to act.** On the current 203 categorised tickets that splits L1 16 (8%) · L2 102 (50%) · L3 85 (42%) · L4 0. What each tool is worth is in `AGENT_INTEGRATION_PLAN.md` Phase 4.
 
-The previous ordering put the knowledge library first, on the reasoning that only one of nine documents is `approved`. That was measured and is wrong: embedding the 19 unapproved draft chunks in memory and scoring them against the top 12 customer topics closed **0** of them. Approval was never the constraint. Roughly 127 messages of top demand need live order data and 46 need an article, so the tools layer is worth about three times the library.
-
-1. **Run `orders:resolve`, then `context:build`, then enable the order family.** ~~Sync real Shopify order data~~ — **done**: 2052 orders, `#4716`–`#6770`, which contains `#4854`, `#6216`, `#6669` and the rest of what the mail quotes. Customer resolution has also run (141 of 214 tickets linked), which unblocks the **VIP badge**. What has *not* run is order resolution: `shopify_order_number` is null on every ticket, so `getOrderContext` reports `not_resolved` and `delivery`/`order`/`payment`/`return_exchange` remain outside `ENABLED_SUBJECTS`. The sequence is `npm run orders:resolve` → `npm run context:build` → edit `ENABLED_SUBJECTS` → `npm run investigate -- --backfill` (those tickets were skipped *and* had their flag cleared, so nothing re-queues them on its own). This is 52% of the corpus and 20 of the 32 questions in `Email-Example-Queries.md`.
-2. **Decide which mailbox and which store this environment is for.** The stored corpus was ingested from `contact@qiriness.com`; `SUPPORT_MAILBOX` now points at `onouailhetas@lap-groupe.com`. Exchange item ids are mailbox-scoped, so every `graph_message_id` in the database is unusable against the configured mailbox — proven by `spam:backfill:dry-run`, which Graph rejects with `ErrorInvalidMailboxItemId` on kept and blocked messages alike. Nothing that addresses a message by id can work until these agree: not the spam-body backfill, not `/forward`, not a future "Add as ticket" re-fetch. This is one decision with step 1 and step 9.
-3. **Phase 4 — the Tool Runner.** The individual tools are built, **but nothing exposes them to a model** beyond the investigation agent's own registry: there are no typed tool schemas for a general runner, no dispatch, and no approval gate. Wiring them up, with side-effecting tools returning "needs approval" instead of executing, is what turns a library of lookups into an agent.
-4. **Fill the knowledge library — only the part clustering shows is genuinely answerable by an article.** The product questions: a product-quality problem (15) and pre-purchase questions on the LED mask, the coffret and ingredients (14+9+8) ≈ 46 messages. Leave the CGV and delivery drafts unapproved — they add retrieval noise without answering anything.
-5. **Re-tune the clustering threshold against the bigger corpus, or decide it does not need it.** 0.68 was set by eye at ~225 messages; the corpus is now 1111 (563 customer-side). Worth a threshold sweep reporting size and cohesion distributions before changing the default, and worth checking whether `delivery` (168 messages) and `legal_privacy` (8) can share one number at all.
-6. **Grow the real review set.** Ten of the 40 sampled emails are still unlabelled, and at n=30 the harness cannot resolve a change smaller than ~16 points. Label those ten, and sample toward ~100 before tuning anything against it.
-7. **Realign `AGENT_INTEGRATION_PLAN.md` with what was actually built** — it still describes migrations `011`/`012`/`013`/`014`, the `category is null` selection the re-categorisation flag replaced, and the confidence signal that has since been measured and removed.
+1. **Phase 5 — drafting.** A `ticket_drafts` table keyed on the trigger message (so a reply cannot silently overwrite a draft under review), the mid-tier drafting call over `toDraftingPrompt` + order context + brand voice + retrieved chunks + the matched exemplar, and the gate: `answerable` → draft a reply, `needs_customer_input` → draft the question in the stored `MISSING_FIELDS` wording, `needs_human` → no customer-facing draft at all. **The live slice is 22 tickets** — 9 `answerable` and open, 13 awaiting the customer — and six `answerable` threads have already auto-closed unanswered, which is this phase's absence measured. Everything stays behind `DRAFT_ONLY`; the send path is separate and blocked by step 3.
+2. **Fill the knowledge library on the five empty subjects.** `delivery`, `order`, `promotions`, `payment`, `product_stock` hold zero chunks between them, and `product` holds four. Clustering says the answerable product demand is a quality problem (15) plus pre-purchase questions on the LED mask, the coffret and ingredients (14+9+8) ≈ 46 messages. Leave the CGV drafts unapproved — they add retrieval noise without answering anything.
+3. **Decide which mailbox and which store this environment is for.** The stored corpus was ingested from `contact@qiriness.com`; `SUPPORT_MAILBOX` now points at `onouailhetas@lap-groupe.com`. Exchange item ids are mailbox-scoped, so every `graph_message_id` in the database is unusable against the configured mailbox — proven by `spam:backfill:dry-run`, which Graph rejects with `ErrorInvalidMailboxItemId` on kept and blocked messages alike. Nothing that addresses a message by id can work until these agree: not the spam-body backfill, not `/forward`, not "Add as ticket", **and not Phase 5's send step**. One decision with step 9.
+4. **Decide what a closed ticket's pending flag means** — `VALIDATION_LOG.md` item 16. 113 tickets carry `needs_investigation` and none can be claimed, because auto-close leaves the flag raised on threads it retires. Three defensible options: auto-close clears the flags it strands, `claim` stops requiring `open` for investigation, or closed threads get reopened deliberately. Until this is settled `agent_pipeline_funnel` counts 113 tickets as pending forever, and "clear the backlog" is a command with nothing behind it. ~~Confirm the token sink is writing~~ — **done 2026-08-17**: nothing had ever constructed a sink, now wired and verified. Still check `scripts/lib/llm-rates.mjs` against current OpenAI pricing before quoting a cost.
+5. **Re-sample and re-label the categorisation review set.** `categorisation_review` is empty, so the real-mail accuracy figures cannot be recomputed, extended or defended. `npm run review:sample` then blind labelling; sample toward ~100 rather than back to 30, since at n=30 the harness cannot resolve a change smaller than ~16 points.
+6. **Write the answer skeletons.** `support_answers` has 0 rows and `answer_set` is null on every exemplar, so `answer-selection.mjs` is a mechanism with no content. Estimated 10–15 answers across the four families, keyed by evidence position. Not a Phase 5 blocker; it is what later makes a reply's structure deterministic instead of model-chosen.
+7. **Configure forwarding and run it once for real.** No `category_forwarding` address is set, so the pass has never routed a message; the last live attempts returned `ErrorMailboxMoveInProgress`. Confirm a forwarded CV arrives as a CV — the one thing no test covers.
 8. **Add dashboard authentication, role policies, and human personal-data access logging into `data_access_events`.** The thread dialog and the Irrelevant dialog now render full email bodies and sender addresses in the browser with no audit event, because there is no dashboard user identity to attribute one to — which is the thing to build first. `SHOPIFY_PERSONAL_DATA_PROTECTION.md` also needs updating to describe `spam_audit.body_text` as retained personal data with a 90-day life.
 9. **Set up separate Supabase development and production projects.** Pointing a worker at a fresh mailbox triggers a full unordered delta enumeration — decide before go-live whether to ingest the backlog or seed the cursor and start clean.
-10. **Tighten the theme-template resolver's "is this a real text setting" heuristic** — it leaked raw Shopify section-setting tokens into one imported page during testing. Only affects pages with no page-metafield and no usable `Page.body`.
-11. **Add the remaining support tables for AI events**, and deploy runtime webhook routes over reusable handlers.
-12. **Expand tests:** `web/lib/server/knowledge-service.ts` has none, and the dashboard has no component or interaction tests.
-13. **Exercise the ticket detail panel against stored case files** — run `npm run investigate` so `ticket_investigations` holds rows, then check the three blocks against the CLI's `--brief` for the same ticket. The **Order block's status and tracking lines** need a ticket whose `resolved_context` is populated (blocked on step 1), and the **thread dialog** needs a ticket with more than one stored message.
+10. **Re-tune the clustering threshold, or decide it does not need it.** 0.68 was set by eye at ~225 messages. One persisted run exists (2026-08-16, threshold 0.68, `min_size` 2), so a second can be compared instead of argued about — worth a sweep reporting size and cohesion distributions, and worth checking whether `delivery` and `legal_privacy` can share one number at all.
+11. ~~**Catch up the investigation backlog**~~ — **there is no backlog.** Checked 2026-08-17: 0 of the 113 flagged tickets are claimable and `--backfill` reaches 9 that already have case files. Folded into step 4, which is the decision that has to come first.
+12. **Tighten the theme-template resolver's "is this a real text setting" heuristic** — it leaked raw Shopify section-setting tokens into one imported page during testing. Only affects pages with no page-metafield and no usable `Page.body`.
+13. **Add the remaining support tables for AI events**, and deploy runtime webhook routes over reusable handlers.
+14. **Expand tests:** `web/lib/server/knowledge-service.ts` has none, and the dashboard has no component or interaction tests.
+15. **Exercise the ticket detail panel against stored case files** — now possible: 80 tickets carry a case file and 52 of those carry a populated `resolved_context`, so the Order block's status and tracking lines have data behind them. Check the three blocks against the CLI's `--brief` for the same ticket, and use a multi-message ticket for the thread dialog.

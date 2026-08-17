@@ -136,50 +136,46 @@ test('an out-of-scope subject is skipped and its flag cleared', async () => {
   assert.deepEqual(store.updates[0].patch, { needs_investigation: false });
 });
 
-test('a thread opened by a colleague is skipped, and no model call is made', async () => {
-  // Not customer demand: nobody is drafting a reply to it, and a case file built
-  // from an internal thread would reason about a forwarded complaint as though
-  // the colleague were the customer.
+test('WHO sent it does not gate the investigation: a colleague thread is investigated', async () => {
+  // A skip on non-demand senders lived here briefly and was removed: all 14
+  // threads it would have skipped were customer work (L3 returns, team
+  // logistics). Skipping them meant no case file for a real customer return
+  // because a colleague was the one typing.
   const store = buildStore({
-    messages: [{ id: 'm1', body_text: 'peux-tu regarder la commande 6612 ?', from_email: 'tom@lap-groupe.com' }]
-  });
-  let investigated = 0;
-  const counts = await runInvestigation({
-    ...wire(store),
-    investigate: async () => {
-      investigated += 1;
-      return caseFile();
-    },
-    shopId: 's1',
-    senderDirectory: buildSenderDirectory([
-      { pattern_type: 'domain', pattern: 'lap-groupe.com', label: 'internal', note: null }
-    ])
-  });
-
-  assert.equal(counts.skipped, 1);
-  assert.equal(investigated, 0, 'the whole point is that no LLM call happens');
-  assert.equal(store.saved.length, 0);
-  assert.deepEqual(store.updates[0].patch, { needs_investigation: false });
-});
-
-test('a `retailer` is a customer, so their thread IS investigated', async () => {
-  // Nocibé places reorders. `retailer` is deliberately absent from
-  // NON_DEMAND_LABELS, and a rule that skipped every business sender would drop
-  // real B2B demand.
-  const store = buildStore({
-    messages: [{ id: 'm1', body_text: 'commande de réassort', from_email: 'achats@nocibe.fr' }]
+    messages: [{ id: 'm1', body_text: 'la cliente relance sur la commande 6612', from_email: 'tom@lap-groupe.com' }]
   });
   const counts = await runInvestigation({
     ...wire(store),
     investigate: async () => caseFile(),
     shopId: 's1',
     senderDirectory: buildSenderDirectory([
-      { pattern_type: 'domain', pattern: 'nocibe.fr', label: 'retailer', note: null }
+      { pattern_type: 'domain', pattern: 'lap-groupe.com', label: 'internal', note: 'Colleagues.' }
     ])
   });
 
   assert.equal(counts.skipped, 0);
-  assert.equal(store.saved.length, 1);
+  assert.equal(store.saved.length, 1, 'the case file is built like any other');
+});
+
+test('the sender reaches the model as context, so a colleague is not read as the customer', async () => {
+  let seen;
+  const store = buildStore({
+    messages: [{ id: 'm1', body_text: 'la cliente relance', from_email: 'tom@lap-groupe.com' }]
+  });
+  await runInvestigation({
+    ...wire(store),
+    investigate: async (input) => {
+      seen = input;
+      return caseFile();
+    },
+    shopId: 's1',
+    senderDirectory: buildSenderDirectory([
+      { pattern_type: 'domain', pattern: 'lap-groupe.com', label: 'internal', note: 'Colleagues.' }
+    ])
+  });
+
+  assert.equal(seen.sender?.label, 'internal');
+  assert.equal(seen.sender?.note, 'Colleagues.');
 });
 
 test('a thread holding no customer message is skipped, not guessed at', async () => {

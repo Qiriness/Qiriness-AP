@@ -8,8 +8,8 @@ and 15 customers, while the support mail is from the live inbox and references
 orders like `#4854`, `#6216` and `Q00 26200111`. Unit tests proved the logic;
 they could not prove assumptions about data that did not exist here.
 
-**That premise no longer holds.** The project points at `qiriness.myshopify.com`
-and the syncs have run — measured 2026-08-11:
+**That premise no longer holds, and neither does the follow-on claim that the
+passes had not run.** Re-measured **2026-08-17**, read from the database:
 
 | Table | Rows | Note |
 |---|---|---|
@@ -17,25 +17,53 @@ and the syncs have run — measured 2026-08-11:
 | `customers` | 58 201 | was 15 |
 | `products` | 116 | was 16 |
 | `promotions` | 327 | was 3 |
-| `tickets` | 214 | 141 carry a `customer_id`; **0 carry a `shopify_order_number`** |
+| `tickets` | 214 | **145** carry a `customer_id`; **52** carry a confirmed `shopify_order_number` and a populated `resolved_context` |
+| `ticket_messages` | 451 | all 451 embedded |
+| `ticket_investigations` | 80 tickets | 49 `needs_human` · 16 `needs_customer_input` · 15 `answerable` |
 
-So the items below are no longer blocked by absent data — they are simply
-**unrun**. That is a better problem and a different one: every check named here
-can now actually be executed, and the answer it gives will mean something.
+**`orders:resolve` and `context:build` have both run.** Outcomes across the 203
+categorised tickets: confirmed **52** · no_candidate **138** · mismatch **8** ·
+not_found **4** · name_match **1**. The 138 quote no order reference and their
+sender matches no order — the resolver's designed answer, not an unrun pass. Any
+item below that reads as "blocked until the resolver runs" is stale; what remains
+is judging what it produced.
 
-**The one that gates the rest:** `orders:resolve` has never run against this
-data, so no ticket carries a confirmed order number and every order-context
-lookup still reports `not_resolved`. Run it before reading anything below as
-evidence about the order family.
+**The investigation has not caught up with it, and it cannot:** only **23 of the
+52** resolved tickets carry a case file. The other **29 are closed**, and a closed
+ticket is unreachable by both `claim` and `raiseFor` — see item 16. Conversely, 29
+of the 52 investigated order-family tickets were read *before* they had an order
+number, so their case files are weaker than the data now allows. **Do not read
+`--backfill` as the fix**; it reaches 9 already-investigated tickets and none of
+these.
 
-## 0a. The two new tools have never been called by the model (2026-08-17)
+**Three tables are empty where entries below assume rows**, and each is recorded
+as its own item: `llm_usage` (item 14), `categorisation_review` (item 15), and
+`category_forwarding` / `ticket_forwards` (item 1).
+
+## 0a. The two new tools ~~have never been called by the model~~ — THE MODEL DOES CALL THEM; whether it calls them well is unjudged (re-measured 2026-08-17)
 
 `verifyPurchase` and `checkPhotoEvidence` are wired into the registry, the
-evidence vocabulary and the case file, and **both were run directly over the
-whole corpus** — so their outputs are measured. What has *not* happened is an
-investigation choosing to call them: no `npm run investigate` has run since they
-were added, so nothing yet shows whether the model uses them, ignores them, or
-spends its tool budget on them ahead of something better.
+evidence vocabulary and the case file, and both were run directly over the whole
+corpus — so their outputs are measured. **An investigation has since chosen to call
+them**, which is what this item said had not happened. The full ledger across the
+80 stored case files:
+
+| tool | calls |
+|---|---|
+| `getOrderContext` | 52 |
+| `lookupCustomer` | 49 |
+| `searchKnowledge` | 24 |
+| `lookupProduct` | 21 |
+| **`verifyPurchase`** | **17** |
+| `extractPromotionCodes` | 13 |
+| `listActivePromotions` / `lookupPromotion` | 12 / 12 |
+| `lookupStock` | 8 |
+| **`checkPhotoEvidence`** | **3** |
+
+**What that leaves open is the interesting half.** `checkPhotoEvidence` fired 3
+times while 36 tickets are `mentioned_not_attached` — the population the tool
+exists for — so it looks under-called rather than ignored. And `verifyPurchase` at
+17 calls needs reading against the tool-budget concern below.
 
 **To validate:** `cd agent && npm run investigate -- --dry-run --limit 10 --show`
 over `product` / `return_exchange` / `delivery` problem tickets, and read for:
@@ -112,9 +140,118 @@ a fact; confirming it with the business is what would let that note be deleted.
 item is only removed once someone has actually run the check and seen the
 result.
 
-Last updated: 2026-08-16 (item 13 added — the per-carrier contact rate is built
-and its arithmetic is verified, but 52 of 214 tickets can be attributed at all,
-so the figure is a floor and the carrier ordering is unconfirmed.)
+Last updated: 2026-08-17 (item 14 closed — the usage sink was never constructed,
+now wired and verified; item 16 added — the investigation queue is unreachable,
+113 flags stranded on auto-closed tickets; items 15 and the preamble re-measured.)
+
+---
+
+## 15. The categorisation review labels are gone
+
+**`categorisation_review` holds 0 rows**, measured 2026-08-17 across all shops.
+The real-mail accuracy figures quoted in `DECISIONS.md` and previously in
+`AGENT_INTEGRATION_PLAN.md` — **subject 77%, kind 90%, level 73%** — were derived
+from 30 hand-labelled rows in that table. They cannot be recomputed, extended, or
+defended against a change to the prompt.
+
+**What is not affected:** the synthetic set (`agent/eval/categorisation-cases.mjs`,
+40 cases, 38–39/40) is in the repo and still runs. It guards against regressions
+and says nothing about real mail.
+
+**Most likely cause is a rebuild, not retention.** Retention on this table is 3
+months and the sample was taken in late July, so it was not swept. The tickets and
+messages survived while this table, `ticket_forwards` and `category_forwarding` did
+not — which is what a rebuild plus a re-ingestion looks like.
+
+**To close:** `cd agent && npm run review:sample`, label blind (the agent's columns
+stay empty until after labelling), and sample toward **~100** rather than back to
+30 — at n=30 the harness cannot resolve a change smaller than ~16 points. Then
+`npm run review:compare`.
+
+**And treat the old numbers as history, not as a baseline.** A re-sample draws
+different emails, so the first re-run is a new measurement rather than a
+comparison.
+
+## 16. The investigation queue is unreachable: 113 flags on closed tickets
+
+**Found 2026-08-17 while checking whether the "backlog" was real. It is not.**
+
+| | |
+|---|---|
+| tickets flagged `needs_investigation` | **113** |
+| of those, claimable by the pass | **0** |
+| status of all 113 | `closed`, every one, `closed_reason: inactivity` |
+| what `--backfill` would raise | **9** — all open, all in scope, and **all 9 already have a case file** |
+
+**Why.** `PASSES.investigation.where` is `{status: 'open', needs_categorisation:
+false}`, so `record.claim` only ever sees open tickets. Auto-close retires a thread
+after 28 days of silence and **does not clear the pending flags it strands**. This
+corpus is historical mail (`last_message_at` spans 2026-05-22 → 2026-08-08), so
+139 tickets auto-closed for inactivity, taking their raised flag with them.
+
+`raiseFor` cannot repair it either: it requires `status = 'open'` *and* the flag
+already false, so a closed ticket is out of reach from both directions. The flag
+now means "was queued once", not "is queued".
+
+**The decision this needs** — it is a design call, not a bug fix, and all three are
+defensible:
+
+1. **Auto-close clears the flags it strands.** The queue then means what it says,
+   and the closed tickets are honestly abandoned. Smallest change, and it makes the
+   `agent_pipeline_funnel` view stop counting 113 tickets as pending forever.
+2. **`claim` stops requiring `open` for investigation.** Reading a closed thread is
+   harmless — the case file is a note, not a reply — but it spends the mid tier on
+   mail nobody is waiting for.
+3. **Leave it, and reopen deliberately** when a closed thread genuinely needs work.
+
+**Do not "clear the backlog" before deciding.** `npm run investigate -- --backfill`
+today re-runs 9 tickets that already have case files and reaches none of the 113.
+
+**A related consequence worth its own line:** 6 `answerable` and 3
+`needs_customer_input` case files sit on tickets that were then auto-closed for
+inactivity. The agent worked out that a reply could be written, and 28 days later
+the thread was retired without one. That is the cost of Phase 5 not existing,
+measured — and a warning that auto-close does not know a draft was possible.
+
+## 14. ~~Nothing has been recorded in `llm_usage`~~ — FIXED 2026-08-17
+
+**Closed.** The cause was neither a broken sink nor a silent `catch`: **nothing
+ever constructed a sink.** `usageSink` defaults to `noopUsageSink` in
+`createOpenAIClient`, `createEmbeddingsClient` and `createInvestigationStack`, and
+the worker's poll and every CLI took the default. Only the three `embed:*`
+reconcilers passed one, via `createUsageRecording` — so the table could only ever
+have been filled by a manual embedding run.
+
+Every piece downstream was correct and tested: the transport records one entry per
+HTTP call, all four call sites pass their `pass` and `ticketId`, and the store maps
+and bulk-inserts. The chain was complete except for its first link.
+
+**The fix:** `createShopUsageRecording({supabase, shopId, logger})` hands out the
+sink and its flush together, so a caller cannot take one and forget the other.
+Wired into `agent/src/index.mjs` (one buffer per process, drained at the end of
+every poll, outside `--stop-after` like retention) and into
+`agent/src/tools/run-investigation.mjs` — the most expensive pass, and the one
+about to be run over a backlog. The eval harnesses keep the no-op on purpose:
+re-running the same 40 cases would pollute per-pass cost with measurement.
+
+**Verified end to end** against the live project: one real cheap-tier
+categorisation call produced exactly one row —
+`pass: categorise · model: gpt-4o-mini · 2415 in / 44 out / 2459 total ·
+succeeded: true`. The table went from 0 rows to 1.
+
+Four regression tests pin the pairing, `write: false` (dry runs total the spend and
+store nothing), and that a failed write still drains so the next flush cannot
+double-count. Agent suite 775 pass, root 1314 pass.
+
+**One row in the table is a test row** — the synthetic call above, no `ticket_id`.
+It is left in deliberately: the money was really spent, and a ledger that omits
+real spend is worse than one carrying a 2 459-token curiosity.
+
+**Still open from this area:** the default prices in `scripts/lib/llm-rates.mjs`
+have not been checked against current OpenAI pricing, so any figure on
+`/insights/agent` is only as good as those constants. And the categoriser's prompt
+measures **2 415 input tokens per ticket**, which is the first real input to the
+cost questions in items 4b and 9.
 
 ---
 
@@ -258,15 +395,28 @@ rebuild from empty is unrelated to this refactor.
 
 ---
 
-## 1. Forwarding has never actually sent a message
+## 1. Forwarding has never actually sent a message — and its ledger is now empty too
 
-**Status:** 42 messages queued at `attempts=2`, 0 sent.
+**Status, re-measured 2026-08-17:** `ticket_forwards` holds **0 rows** and
+`category_forwarding` holds **0 addresses**. So the pass cannot route anything at
+all today: a null address is the off switch, and every category is off.
 
-Every attempt returns `ErrorMailboxMoveInProgress` — Exchange is migrating the
-mailbox between databases, which is transient and Microsoft-side. `Mail.Send` is
-granted and verified working: a direct `sendMail` test to
+**What the ledger used to say**, and what the failure was: 42 messages queued at
+`attempts=2`, 0 sent, every attempt returning `ErrorMailboxMoveInProgress` —
+Exchange migrating the mailbox between databases, transient and Microsoft-side.
+`Mail.Send` is granted and verified working: a direct `sendMail` test to
 `onouailhetas@lap-groupe.com` returned HTTP 202 and arrived. Only the `/forward`
-action is blocked, because it reads an item from the store being moved.
+action was blocked, because it reads an item from the store being moved.
+
+Those 42 rows are gone with the same rebuild that emptied item 15's table, so the
+`unique(ticket_message_id)` guard no longer has a backlog behind it — **a first
+real run would forward from scratch**, which changes the blast radius of the "42
+messages, some dating to January, going out at once" warning below rather than
+removing it.
+
+**Before anything else on this item:** set at least one address, and note that
+`/forward` addresses the original message by Graph id, so it is also gated on the
+mailbox decision (`README.md` step 3).
 
 **To validate:** once the move completes, `cd agent && npm run forward:dry-run`
 then `forward:once`. Confirm the recipient receives the original mail **with its
@@ -389,10 +539,12 @@ can.
 **To validate, then decide:** run `npm run investigate:dry-run` over a real batch
 and read the `Preuves attendues vs obtenues` summary. Four questions:
 
-1. **Is `not_attempted` ever non-zero?** This is the number the whole thing was
-   built for — a tool was allowed, the budget was there, nothing called it. If it
-   is always 0, the loop is already doing its job and step 2's steering is not
-   worth building. If it is high, that is the agent, not the library.
+1. ~~**Is `not_attempted` ever non-zero?**~~ **Answered 2026-08-17: 3.** Across the
+   80 stored case files the need states are satisfied **109** · attempted **100** ·
+   unavailable **39** · `not_attempted` **3**. The loop is very nearly always
+   calling the tools it was allowed, so **step 2's steering is not worth building**
+   — the remaining value in step 2 is enforcement and the early exit, and those
+   depend on questions 2 and 3 below, which are still open.
 2. **Is the model over-declaring?** Needs it names "just in case" inflate the
    denominator and would make step 2's enforcement punitive. Read a sample
    against the emails.
@@ -468,11 +620,16 @@ products when there are hundreds rather than sixteen (the `creme`-vs-`led`
 weighting is a function of catalogue size), and that `ambiguityMargin = 0.12`
 still reports genuine ambiguity without flagging every near-name.
 
-## 6b. The order family was enabled with 15 mismatches unexamined — OPEN AUDIT
+## 6b. The order family was enabled with mismatches unexamined — OPEN AUDIT, and the count has fallen to 8
 
 **Opened 2026-08-13, by decision rather than oversight.** `ENABLED_SUBJECTS` now
-contains `order`, `delivery`, `payment` and `return_exchange`. The 15 `mismatch`
-tickets from `orders:resolve` had **not** been reviewed when that happened.
+contains `order`, `delivery`, `payment` and `return_exchange`.
+
+**Re-measured 2026-08-17:** the resolver now records **8 `mismatch`** (down from 15,
+after the `message_email` rule rescued 6), plus **4 `not_found`** and **1
+`name_match`** — 13 refusals in total, against 52 confirmed. Read the 8; they are
+the cases where the number is real, the sender does not own it, and no address in
+the message text ties them to it.
 
 **Why it was judged safe.** A mismatch is an order number that parsed correctly
 against a real order and was refused because the requester's email hash does not
@@ -492,7 +649,7 @@ fix is in the resolver's identity rule, not in the data.
 
 **To close this item:**
 
-1. Read the 15. For each, decide whether the requester genuinely owns the order.
+1. Read the 8. For each, decide whether the requester genuinely owns the order.
    `metadata.order_resolution` holds `status`, `candidates`, `email_status` and
    `suggested_action` per ticket.
 2. If most are second-address customers, loosen the rule — `message_email`
@@ -577,16 +734,22 @@ own it, and nothing in the message ties them to it.
 the unit tests. Nobody has yet read the six tickets to confirm the order written
 is the order the customer is actually asking about.
 
-**The order-context bundle is now built** and verified by assembling the real
-`#1006` order — correct delivery state, tracking number and carrier, refund
-totals, RFM group, no street address or phone. What it has never done is run over
-*live* tickets, because none carry a confirmed order number yet; `context:build`
-currently considers zero. It unblocks the moment the resolver starts producing
-values.
+**The order-context bundle has now run over live tickets.** Re-measured
+2026-08-17: **52 tickets carry a populated `resolved_context`**, one per confirmed
+order number, and `getOrderContext` is the most-called tool in the whole ledger (52
+calls across 80 case files). The earlier note that `context:build` "currently
+considers zero" is retired.
 
-**Still blocked entirely:** tracking, which needs live parcel status — see the
-open question in `AGENT_INTEGRATION_PLAN.md` about whether that tool can report
-what a parcel is *doing* or only what its number is.
+**Two things are still unread.** Whether the bundle each of those 52 tickets got is
+the order the customer was actually asking about — the same human check as the six
+`message_email` writes above, over a larger set. And 28 of the 52 have no case file
+at all yet, so most of this data has not been exercised by the agent (see the
+preamble).
+
+**Tracking is settled rather than blocked:** Shopify has no live parcel status here
+(`delivered_at` on 1 order in 2 006, `in_transit_at` on none), so the tool can
+report a number and never a state. See `AGENT_INTEGRATION_PLAN.md` § Open questions
+for the four ways forward.
 
 ## 6c. A product name is being looked up as a discount code — KNOWN BUG
 
@@ -666,17 +829,22 @@ budget question, not a correctness one.
   does not expose an in-progress cart. The abandoned-checkout lookup is the
   partial substitute, and only for customers who reached checkout.
 
-## 8. Automatic customer resolution has never run over the live ticket table
+## 8. Automatic customer resolution HAS run — the link rate is 145 of 214, and nobody has spot-checked it
 
-**Status:** built and unit-tested (`agent/src/resolution/customer-resolution-runner.mjs`),
-never executed against the 565 real tickets.
+**Status, re-measured 2026-08-17:** it has run for real against the live table.
+**145 of 214 tickets carry a `customer_id`** (68%), against 58 201 synced
+customers. The premise this item was written under — a 15-customer dev store making
+the match rate meaningless — is gone.
 
-The dev store holds 15 customers while the corpus is live support mail, so the
-match rate here says nothing: almost every real requester is an address the dev
-`customers` table has never seen. What the dry run *can* establish is the shape
-of the answer, and three things are worth reading off it.
+**What is now worth checking is correctness, not coverage.** Any ticket linked to a
+customer whose address does not match the requester is a hash collision or a
+denylist gap, and it is the kind of bug that quietly puts one customer's order
+history in front of another's email. Spot-check a sample of the 145 by comparing
+`ticket_first_inbound.from_email` against the linked customer's address.
 
-**To validate:** `cd agent && npm run customers:resolve:dry-run`.
+**The three questions below are still worth reading off a dry run**, which now
+reports on the 69 unlinked rather than on all of them: `cd agent && npm run
+customers:resolve:dry-run`.
 
 1. **How many tickets are refused as `not_a_customer_address`.** These are the
    contact-form messages whose body did not parse, leaving Shopify's mailer as
@@ -693,19 +861,38 @@ of the answer, and three things are worth reading off it.
    nothing. That gate is what keeps a 60-second poll from rewriting a metadata
    row per unmatched ticket per minute.
 
-**Then check against production-like data:** once real customers are synced, the
-same dry run should link a substantial share of the 565, and any ticket linked
-to a customer whose address does not match the requester is a bug worth chasing
-immediately — it would mean a hash collision or a denylist gap.
+**The "565 tickets" this item was written against no longer exists** — the live
+table holds 214. Read the counts above rather than any figure quoted from that
+larger corpus.
 
 ## 9. The investigation agent has run, and what it produced is not yet judged
 
-**Status:** run for real on **40 of the 65 in-scope tickets** — 9 `answerable`,
-6 `needs_customer_input`, 25 `needs_human`, 0 failures. Its guardrails were
-checked against what was actually written: **0 unsourced claims stored, 0 claims
-dropped, 0 internal handoffs reaching a drafting projection, and a maximum of 3
-tool calls in any run against a ceiling of 6.** Those are mechanical properties,
-and they hold.
+**Status, re-measured 2026-08-17:** run for real on **80 tickets** — 15
+`answerable`, 16 `needs_customer_input`, 49 `needs_human`. **70 of those 80 sit on
+tickets that are still live** (48 `awaiting_human`, 13 `awaiting_customer`, 9 open
+and `answerable`); the other 10 were auto-closed. The 113 tickets still carrying
+`needs_investigation` are **not a backlog** — every one is closed and unreachable
+(item 16).
+
+| Shape of the 80 case files | |
+|---|---|
+| median `established` claims | 2 overall, **3** on an `answerable` verdict |
+| median `unverified` / `missing` / `do_not_claim` | 2 / 0 / 2 |
+| case files with **0** established | 12 — every one forced to `needs_human`, which is the rule working |
+| `answerable` by level | L1 3 · L2 10 · L3 2 |
+| `answerable` by subject | promotions 5 · product 4 · delivery 3 · order 3 |
+| `answerable` carrying prohibitions | 10 of 15 |
+
+Its guardrails were checked against what was actually written: **0 unsourced
+claims stored, 0 claims dropped, 0 internal handoffs reaching a drafting
+projection, and a maximum of 3 tool calls in any run against a ceiling of 6.**
+Those are mechanical properties, and they hold.
+
+**`needs_human` is 49 of 80 (61%), up from 25 of 40.** The expected cause is
+unchanged and is now measurable: retrieval has **zero chunks** in `delivery`,
+`order`, `promotions`, `payment` and `product_stock`, so for the highest-demand
+subjects there is genuinely nothing to answer from. If it stays this high after
+that content is written, the cause is the agent.
 
 **What has not been checked is whether the case files are any good.** Nobody has
 read a set of them against the emails that produced them and said "yes, a writer
@@ -729,14 +916,12 @@ and read the ten dossiers next to the original emails. Three questions:
    discipline, and a model putting real tool output under *non vérifié* is
    throwing away evidence as surely as the reverse is inventing it.
 
-**Also unvalidated:** the whole order family. `order`, `delivery`, `payment` and
-`return_exchange` have complete tool policies, opening moves and escalation
-rules — including the ten-day stale-parcel trigger that four of the seven level
-disagreements in the review set point at — and every one of them is dormant,
-because `ENABLED_SUBJECTS` excludes them until real orders are synced (item 6).
-Turning them on is one array edit **plus** `npm run investigate -- --backfill`:
-their existing tickets were skipped and their flag cleared, so nothing re-queues
-them on its own.
+**The order family is no longer dormant.** `order`, `delivery`, `payment` and
+`return_exchange` are in `ENABLED_SUBJECTS` and all 52 tickets carrying a confirmed
+order number have been investigated. **The ten-day stale-parcel trigger still
+cannot fire**, and that is now settled rather than pending: `delivered_at` is set
+on 1 order in 2 006 and `in_transit_at` on none, so there is no timestamp to do the
+arithmetic on. See `AGENT_INTEGRATION_PLAN.md` § Open questions.
 
 **And the cost is not yet measured.** 40 runs on `gpt-4o` at 1-3 tool calls each
 is cheap; 565 tickets re-investigated on every customer reply is a different

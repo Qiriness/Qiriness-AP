@@ -11,6 +11,7 @@ import { createSenderDirectoryStore } from './ingestion/sender-directory.mjs';
 import { createSupabaseSpamAuditStore } from './ingestion/spam-audit.mjs';
 import { runDeltaPoll, createSupabaseCursorStore } from './ingestion/delta-poller.mjs';
 import { createOpenAIClient } from './llm/openai-client.mjs';
+import { createShopUsageRecording } from './llm/usage-store.mjs';
 import { createSpamClassifier } from './ingestion/spam-classifier.mjs';
 import { createEmbeddingsClient } from '../../scripts/lib/embeddings/openai-embeddings-client.mjs';
 import { createMessageEmbedder } from './ingestion/message-embedder.mjs';
@@ -99,6 +100,15 @@ async function main() {
   let categorise;
   let embedMessage;
   let investigation;
+  // ONE buffer for the whole process, drained at the end of every poll. It is
+  // created here, outside the `openaiApiKey` branch, so the flush at the end of
+  // the poll can be unconditional: with no key there are no model calls, the
+  // buffer stays empty, and the flush is a no-op rather than a special case.
+  //
+  // Every client below takes THIS sink. A client that built its own would be a
+  // second buffer nobody drains, which is how the table came to hold 0 rows while
+  // the categoriser, the decomposer and the investigation agent were all running.
+  const usage = createShopUsageRecording({ supabase, shopId, logger });
   const forwardingStore = createForwardingStore(supabase);
   // One instance for the whole process: it caches a shop-wide email-hash index,
   // which the resolution pass drops itself whenever it has work to do.
@@ -106,7 +116,7 @@ async function main() {
   const orderResolutionStore = createOrderResolutionStore(supabase);
   const orderContextStore = createOrderContextStore(supabase);
   if (config.openaiApiKey) {
-    const openai = createOpenAIClient({ apiKey: config.openaiApiKey });
+    const openai = createOpenAIClient({ apiKey: config.openaiApiKey, usageSink: usage.sink });
     triage = createSpamClassifier(openai, { model: config.triageModel, logger }).triage;
     categorise = createCategoriser(openai, { model: config.categoriserModel }).categorise;
     // Embeds each stored message inline, best-effort. `npm run embed:tickets`
@@ -115,13 +125,21 @@ async function main() {
       createEmbeddingsClient({
         apiKey: config.openaiApiKey,
         model: config.embeddingModel,
-        dimensions: config.embeddingDimensions
+        dimensions: config.embeddingDimensions,
+        usageSink: usage.sink
       }),
       { logger }
     );
     // Shares the customer lookup with the resolution pass rather than building a
     // second one: it holds a shop-wide hash index that only needs loading once.
-    investigation = createInvestigationStack({ supabase, shopId, config, logger, customerLookup });
+    investigation = createInvestigationStack({
+      supabase,
+      shopId,
+      config,
+      logger,
+      customerLookup,
+      usageSink: usage.sink
+    });
   } else {
     logger.warn('ingest.llm_filter_disabled', { reason: 'OPENAI_API_KEY not set' });
   }
@@ -288,6 +306,18 @@ async function main() {
       }
     } catch (error) {
       logger.warn('ingest.spam_audit_purge_failed', { shopId, error: error.message });
+    }
+
+    // What this poll spent, written once at the end.
+    //
+    // LAST, AND OUTSIDE `--stop-after`, for the same reason retention is: the
+    // calls have already been billed, so a staged run must still record them.
+    // Best-effort by contract — `flush` swallows its own failure and returns 0
+    // written, because an accountant that can abort the pass is worse than a gap
+    // in the ledger.
+    if (usage.sink.size > 0) {
+      const spent = await usage.flush();
+      logger.info('llm_usage.flush', { shopId, ...spent });
     }
   };
 

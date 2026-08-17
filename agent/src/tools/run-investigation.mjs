@@ -9,6 +9,7 @@ import { summariseNeeds } from '../investigation/evidence-rules.mjs';
 import { createInvestigationStack } from '../investigation/create-investigation.mjs';
 import { raiseForCategorised, runInvestigation } from '../investigation/investigation-runner.mjs';
 import { createSenderDirectoryStore } from '../ingestion/sender-directory.mjs';
+import { createShopUsageRecording } from '../llm/usage-store.mjs';
 
 // Runs the investigation pass on its own.
 //
@@ -53,7 +54,18 @@ async function main() {
   const supabase = createSupabaseClient(config);
   const shopId = await resolveShopId(supabase, config.shopDomain);
   const record = createTicketRecord(supabase, { shopId });
-  const investigation = createInvestigationStack({ supabase, shopId, config, logger });
+  // A batch here is the most expensive thing this project runs — the mid tier,
+  // once or twice per ticket, over as many tickets as the backlog holds. It gets
+  // the same ledger as the worker's poll, or the one run big enough to be worth
+  // costing is the one nothing records.
+  const usage = createShopUsageRecording({ supabase, shopId, logger });
+  const investigation = createInvestigationStack({
+    supabase,
+    shopId,
+    config,
+    logger,
+    usageSink: usage.sink
+  });
   const senderDirectoryStore = createSenderDirectoryStore(supabase);
 
   if (backfill) {
@@ -121,6 +133,17 @@ async function main() {
 
   console.log('\n' + JSON.stringify(totals, null, 1));
   console.log('\nPreuves attendues vs obtenues :\n' + JSON.stringify(totalNeeds, null, 1));
+
+  // Reported on a dry run, stored only on a real one. The calls were billed
+  // either way, so the number is worth printing; writing it is not, because a dry
+  // run's whole contract is that it leaves no rows behind.
+  const spent = await usage.flush({ write: !dryRun });
+  if (spent.calls > 0) {
+    console.log(
+      `\nCoût : ${spent.calls} appel(s) modèle, ${spent.tokens} tokens` +
+        `${dryRun ? ' (dry run — non enregistré)' : ` · ${spent.written} ligne(s) dans llm_usage`}.`
+    );
+  }
 }
 
 function indent(text) {

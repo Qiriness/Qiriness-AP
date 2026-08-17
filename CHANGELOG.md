@@ -10,6 +10,110 @@ Three sibling files carry the other halves, and this one deliberately does not d
 
 ---
 
+## The usage sink was never constructed, and there is no investigation backlog (2026-08-17)
+
+Two findings from one session, and the second cancels a step this file added earlier the same day.
+
+### `llm_usage` held 0 rows because nothing ever built a sink
+
+- **The cause was the first link, not a broken write.** `usageSink` defaults to
+  `noopUsageSink` in `createOpenAIClient`, `createEmbeddingsClient` and
+  `createInvestigationStack`, and the worker's poll and every CLI took the default.
+  Only the three `embed:*` reconcilers passed one. Everything downstream was
+  correct and tested — one entry per HTTP call at the transport, `pass` and
+  `ticketId` from all four call sites, a bulk insert at the store — so the chain
+  was complete except for its beginning.
+- **`createShopUsageRecording({supabase, shopId, logger})`** now hands out the sink
+  and its flush together, because a buffer nobody drains is silently identical to
+  no buffer. Wired into `agent/src/index.mjs` — one buffer per process, drained at
+  the end of every poll, outside `--stop-after` for the same reason retention is:
+  the calls were already billed. And into `run-investigation.mjs`, the most
+  expensive pass in the project.
+- **A dry run reports the spend and stores nothing.** `flush({write: false})`
+  totals the calls and tokens without writing, so `investigate:dry-run` can say
+  what it cost while keeping its no-rows contract. It drains either way — the
+  entries describe calls that already happened, so holding them back would
+  double-count them on the next flush.
+- **Evals keep the no-op deliberately:** re-running the same 40 cases would
+  pollute per-pass cost with measurement rather than work.
+- **Verified against the live project.** One real cheap-tier categorisation call →
+  exactly one row: `categorise · gpt-4o-mini · 2415 in / 44 out / 2459 total ·
+  succeeded`. The table went 0 → 1. That 2 415-token prompt is also the first real
+  input to the unmeasured cost questions in `VALIDATION_LOG.md` items 4b and 9.
+- **Tests:** four new (the pairing, `write:false`, a failed write still drains, an
+  empty poll costs no request). Agent **775 pass**, root **1314 pass**.
+
+### The 91-ticket backlog this file described does not exist
+
+- **113 tickets carry `needs_investigation` and 0 are claimable.** Every one is
+  `closed`. `PASSES.investigation.where` is `{status: 'open', needs_categorisation:
+  false}`, and auto-close retires a thread after 28 days of silence **without
+  clearing the flag it strands**. On a corpus of historical mail (last messages
+  2026-05-22 → 2026-08-08) that closed 139 tickets, flag raised.
+- **`--backfill` is not the fix.** `raiseFor` also requires `status = 'open'` *and*
+  the flag already false, so a closed ticket is out of reach from both directions.
+  Run today it raises **9** tickets, all of which already have case files.
+- **The 29 order-resolved tickets with no case file are all closed too**, so the
+  order-context bundles nobody has read cannot be read without reopening them.
+- **Filed as a decision, not patched:** auto-close clears the flags it strands, or
+  `claim` stops requiring `open` for investigation, or closed threads are reopened
+  deliberately. `VALIDATION_LOG.md` item 16.
+- **The measurement that matters for Phase 5:** 70 of the 80 case files sit on live
+  tickets, and the live drafting set is **22** — 9 `answerable` and open, 13
+  `awaiting_customer`. **Six `answerable` threads have already auto-closed
+  unanswered**: the agent established that a reply could be written and the thread
+  was retired 28 days later without one.
+
+## The planning files re-measured against the database (2026-08-17)
+
+No code changed. `AGENT_INTEGRATION_PLAN.md`, `README.md` and `VALIDATION_LOG.md`
+were describing a state the database had moved past, in the direction of
+understating what is built.
+
+- **The correction that matters: the order family is resolved where it is
+  resolvable.** Three files said `shopify_order_number` was null on all 214 tickets
+  and that `orders:resolve` had never run. Measured: **52 tickets carry a confirmed
+  number and a populated `resolved_context`**. The other 138 order-family tickets
+  report `no_candidate` — no order reference in the text and no sender match — which
+  is the resolver's designed answer, not a pass waiting to be run.
+  `getOrderContext` is the most-called tool in the whole ledger (52 calls across 80
+  case files).
+- **The investigation has not caught up with that data, which two matching counts of
+  52 nearly hid.** Only **23** of the 52 resolved tickets carry a case file; 28 are
+  still pending, holding an order-context bundle nothing has read. And 29 of the 52
+  *investigated* order-family tickets were read before they had a number. Resolution
+  runs after investigation within a poll, so this is a backlog rather than a bug —
+  `npm run investigate -- --backfill` clears it, and it should be cleared before
+  Phase 5 reads case files.
+- **The pipeline has run further than the docs claimed** on every axis: 80 case
+  files (was 40), 145 customer links (was 141), 451 messages all embedded (was
+  348), 61 knowledge chunks all embedded (was 54 with 11 embedded), 15 approved
+  knowledge documents (was "one of nine"), 1310 root tests and 771 agent tests (was
+  873 / 569).
+- **Three tables are empty where prose assumed rows**, and each is now filed:
+  `llm_usage` 0 rows although three LLM passes have run since the sink shipped
+  (item 14); `categorisation_review` 0 rows, so the 77% / 90% / 73% real-mail
+  accuracy figures rest on labels that no longer exist (item 15); and
+  `category_forwarding` / `ticket_forwards` 0 rows, so forwarding has never routed
+  anything here and its 42-message backlog is gone (item 1).
+- **Two open questions closed by measurement rather than by work.** `not_attempted`
+  is **3** across 80 case files, so the evidence-needs report's "steering" half is
+  not worth building. And the model **does** call `verifyPurchase` (17) and
+  `checkPhotoEvidence` (3) — the latter against 36 tickets that mention a photo
+  without attaching one, so it is under-called rather than ignored.
+- **Live parcel status is answered, not pending:** `delivered_at` on 1 order in
+  2 006, `in_transit_at` on none. The ten-day stale-parcel rule cannot fire because
+  there is no timestamp to compute it from, so the level 2/3 delivery boundary needs
+  a delivery feed, not a prompt change.
+- **`AGENT_INTEGRATION_PLAN.md` is now a phase plan again.** The implemented
+  embedding, retrieval and exemplar design essays were removed in favour of pointers
+  to `DECISIONS.md`, which owns that rationale; what stayed is status, evidence, the
+  Phase 5 build, and the two genuinely forward-looking pieces (the blended-vector
+  upgrade trigger, and clustering). Migration references to `011`–`014` are gone —
+  the six-file baseline replaced them.
+- **Also corrected:** `APP_SCHEMA.md` said 15 Insights views where `06_analytics.sql`
+  creates 21, and `support_answers` now says it holds no rows.
+
 ## Contact rate per carrier (2026-08-16)
 
 - **The carrier table has a `Contacted support` column.** Per carrier: how many
@@ -444,6 +548,7 @@ Same-day revert of the Conversations routing below. Built, measured against real
 - **Root cause: `NON_DEMAND_LABELS` was reused out of context.** It was written for `cluster:tickets`, where excluding our own prose from a topic map is right. A forward is a change of messenger, not a change of subject.
 - **`/conversations` and `ConversationsView` removed**, sidebar item back to `SOON`. The queue holds every ticket again.
 - **Kept as a label, not a route**: a sender chip on the row (teal for internal/contractor, directory `note` as tooltip, `flex: none` so a long name cannot push it out) and an Anyone / Consumers only / Staff & partners only filter.
+- **The agent's skip on non-demand senders is removed too.** It was argued as saved spend on "threads nobody is drafting a reply for"; the measurement showed they are L3 customer returns needing a human, and the case file is the context that human wants. The sender still reaches the model as context via `buildInput`, so a colleague is not read as the customer.
 - The classification machinery stays — `ticket_first_inbound.from_email`, `ticket_queue.requester_email`, server-side resolution so the address never reaches the browser. Only the consequence changed.
 
 ## Conversations: our own mail leaves the ticket queue (2026-08-17)

@@ -208,7 +208,7 @@ The recurring situations, not the answers to them. Same document/chunk mechanics
 | --- | --- |
 | `support_exemplars` | canonical question, `exemplar_key` (`P-16`), subject + kind, `requirement_needs text[]` constrained to the `evidence-rules.mjs` vocabulary, `approval_status` (gates the vector), `demand_message_count` |
 | `support_exemplar_phrasings` | one row per canonical + real phrasing, each with its own `embedding vector(1536)` and the determinism quadruple. `language` + `translated_from_index` carry non-French rows; translations live at `phrasing_index >= 100`, out of reach of the importer's positional pruner. `match_support_exemplars()` returns one row per **exemplar**, scored by its best phrasing, and reports which language matched |
-| `support_answers` | answer skeletons keyed by **evidence position**, shared across exemplars rather than nested. `when_conditions jsonb` = `{need: [findings]}`; one `is_fallback` per `answer_set`. Selected by `answer-selection.mjs`, which also derives the next need to collect |
+| `support_answers` | answer skeletons keyed by **evidence position**, shared across exemplars rather than nested. `when_conditions jsonb` = `{need: [findings]}`; one `is_fallback` per `answer_set`. Selected by `answer-selection.mjs`, which also derives the next need to collect. **No rows yet** — the mechanism exists, the content does not |
 
 ### Agent email workflow
 
@@ -283,7 +283,7 @@ Written by the worker and the CLIs, read only by the Insights panels.
 | `03_knowledge.sql` | `knowledge_documents`, `knowledge_chunks`, `match_knowledge_chunks()`, `search_knowledge_chunks_text()` | 01 |
 | `04_support.sql` | `tickets`, `ticket_messages`, `email_blocklist`, `sender_directory`, `spam_audit`, `ticket_investigations`, `category_forwarding`, `ticket_forwards`, `categorisation_review`, the three views | 01, 02 |
 | `05_exemplars.sql` | `support_exemplars`, `support_exemplar_phrasings`, `support_answers`, `match_support_exemplars()` | 01, 03 (`french_unaccent`) |
-| `06_analytics.sql` | `normalise_carrier()`, `llm_usage`, `cluster_runs`, `ticket_clusters`, and the **15 Insights views** | 01, 02, 04 |
+| `06_analytics.sql` | `normalise_carrier()`, `llm_usage`, `cluster_runs`, `ticket_clusters`, and the **21 Insights views** | 01, 02, 04 |
 
 `_shared.test.mjs` holds the cross-file invariants (no data statements, RLS on every table, every table and view documented, nothing referenced before it is created, every view `security_invoker` and revoked from the anon roles, every embedded table carrying the whole determinism quadruple, and `scripts/lib/tables.mjs` naming exactly what the baseline creates). Each file has a sibling test for its own contents.
 
@@ -374,6 +374,7 @@ Run `npm run ingest:once` or `npm start` from `agent/`. One poll runs every pass
 | 12 | **Forwarding** — `contact` kind + a configured address; needs `Mail.Send` | `routing/forward-runner.mjs` |
 | 13 | **Auto-close** — 28d idle, level 4 exempt; last so it sees this poll's timestamps | `lifecycle/auto-close.mjs` |
 | 14 | **Retention purge** — nulls expired `spam_audit` bodies; best-effort | `ingestion/spam-audit.mjs` |
+| 15 | **Cost flush** — one insert of this poll's `llm_usage` rows. Like 14, runs whatever `--stop-after` says: the calls were already billed | `llm/usage-store.mjs` |
 
 Built through Phase 4 (retrieval tools + the agent that uses them). **Drafting is Phase 5 and is not built.**
 

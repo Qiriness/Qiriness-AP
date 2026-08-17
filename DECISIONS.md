@@ -686,6 +686,8 @@ So the queue holds every ticket regardless of sender, and the label becomes two 
 
 **The classification machinery was kept**, because it was never the problem: `ticket_first_inbound` still carries `from_email`, `ticket_queue` still exposes it as `requester_email`, and the service still resolves it to a label server-side so the address never reaches the browser. What changed is that the answer decorates a row instead of moving it.
 
+**The agent was briefly stopped from investigating them too, and that was removed with the routing.** The skip was argued for as saved spend — "nobody is drafting a customer reply for these" — and the measurement says the opposite: they are L3 returns needing a human, and the case file is exactly the context that human wants. The sender still reaches the model through `buildInput`, as `senderDirectory.lookup()`, so the agent knows a colleague is writing and does not read them as the customer. **Context, not a gate** — which is what the directory was always for on this path.
+
 **The general rule this leaves behind:** a signal good enough to *annotate* a ticket is not automatically good enough to *hide* one. Hiding needs evidence that nothing is lost, and here the evidence said the opposite.
 
 ### The middle section is not tickets
@@ -1096,6 +1098,10 @@ Retries inside one call are **not** separate rows: a retried 429 was never bille
 The store is best-effort and swallows its own failure. This table is a ledger of what the work cost, not part of the work; a poll that categorised twenty tickets and then failed to write its cost rows has still categorised twenty tickets. The accountant may not abort the job.
 
 **None of it can be backfilled.** OpenAI reports usage on the response and nowhere else, so the history starts at the first call after wiring — which is why this shipped before any panel that reads it.
+
+**The no-op default is safe and was also the bug (2026-08-17).** A sink nobody constructs is indistinguishable from a sink that works: for a day the table held 0 rows while the categoriser, the decomposer and the investigation agent all ran, because the poll and every CLI took the frozen no-op and no test could catch it — each half was correct in isolation. So the sink and its flush are now handed out **together**, by `createShopUsageRecording`, and a caller takes both or neither. The general rule: an optional dependency whose absence is silent needs one named constructor that cannot be half-adopted, not a default that reads as configuration.
+
+**A dry run reports the spend and stores nothing.** `flush({write: false})` totals the calls and tokens without writing, because a dry run makes real billed calls — the money is worth printing even where the run's contract is that it leaves no rows. It drains either way: the entries describe calls that already happened, so withholding them would double-count on the next flush.
 
 ### The topic map is rebuilt by hand, and says how old it is
 

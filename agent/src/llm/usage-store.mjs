@@ -53,6 +53,47 @@ export function createUsageStore(supabase, { shopId, logger } = {}) {
 }
 
 /**
+ * Sink + flush for a caller that already holds a shop id: the worker's poll and
+ * the standalone passes it shares code with.
+ *
+ * WHY THIS EXISTS AS A NAMED THING rather than two lines at each call site. A
+ * buffer nobody drains is silently equivalent to no buffer at all, and that is
+ * exactly the bug this closes — the sink and this store were built, tested and
+ * never constructed, so `llm_usage` held 0 rows while three LLM passes ran. Both
+ * halves are handed out together here so a caller cannot take one and forget the
+ * other.
+ *
+ * `flush` reports what was spent as well as what was stored, because the two are
+ * different questions and a dry run only has an answer to the first.
+ */
+export function createShopUsageRecording({ supabase, shopId, logger } = {}) {
+  const sink = createUsageSink();
+  const store = createUsageStore(supabase, { shopId, logger });
+
+  return {
+    sink,
+
+    /**
+     * Drains the buffer and returns `{calls, tokens, written}`.
+     *
+     * `write: false` totals the spend and stores nothing — a dry run makes real,
+     * billed model calls, so the money is worth reporting even where the run's
+     * whole contract is that it writes no rows.
+     *
+     * DRAINS EITHER WAY. The entries describe calls that have already happened;
+     * holding them back after a failed or skipped write would double-count them
+     * on the next flush.
+     */
+    async flush({ write = true } = {}) {
+      const entries = sink.drain();
+      const tokens = entries.reduce((total, entry) => total + (entry.totalTokens ?? 0), 0);
+      const written = write && entries.length > 0 ? await store.flush(entries) : 0;
+      return { calls: entries.length, tokens, written };
+    }
+  };
+}
+
+/**
  * Sink + flush for a caller that holds a shop DOMAIN rather than a shop id —
  * the standalone `embed:*` reconcilers, which never needed the `shops` row for
  * anything else.
