@@ -393,7 +393,7 @@ From `agent/`. Every pass has a standalone runner, most with `:dry-run`.
 | `customer:lookup -- <email> [--json] [--with-email]` | the CRM tool, no ticket needed |
 | `orders:resolve[:dry-run]` | confirm order numbers |
 | `context:build[:dry-run] [--refresh]` | fill `tickets.resolved_context` |
-| `investigate[:dry-run] [--show/--brief] [--backfill]` | run + render case files |
+| `investigate[:dry-run] [--show/--brief] [--backfill] [--include-closed]` | run + render case files. `--backfill` re-queues **open** categorised tickets; `--include-closed` widens the claim to threads the queue has moved past, leaving their status untouched. Both print what the run cost |
 | `forward:once` / `forward:dry-run` | the forwarding pass |
 | `tickets:autoclose[:dry-run]` | the lifecycle pass |
 | `eval:categorise` · `eval:retrieval` · `eval:diagnose` · `eval:exemplars` · `review:sample` · `review:compare` | every measurement — indexed in **`agent/eval/README.md`**, which says what each is judged against (three labelled sets, two proxies) |

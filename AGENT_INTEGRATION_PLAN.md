@@ -57,12 +57,21 @@ historical mail 139 tickets closed carrying a flag nothing can act on:
 | claimable by the pass | **0** |
 | what `--backfill` would raise | 9, all of which already have a case file |
 
-So there is **no backlog to clear**, and `--backfill` is not the cheap win it looks like.
-`VALIDATION_LOG.md` item 16 carries the decision this needs: auto-close clears the flags it
-strands, or `claim` stops requiring `open` for investigation, or closed threads are reopened
-deliberately. Symmetrically, 29 of the 52 investigated order-family tickets had no order
-number when they were read, so their case files are weaker than the data now allows — and
-re-reading them means reopening them.
+**This is a dev artifact, not an operational fault**, and the open-only queue is right for the
+worker: in production a ticket is categorised, investigated and drafted within a poll of
+arriving, so the 28-day window never comes near live work. What it blocks is a *backfill* over
+imported history, which is a different job.
+
+**Resolved by an opt-in** (2026-08-17): `npm run investigate -- --include-closed` drops the
+status narrowing and nothing else, and **never moves the ticket's status** — 65% of verdicts
+map to `awaiting_human`/`awaiting_customer`, and a backfill must not resurrect settled threads.
+It reaches **91 investigable tickets, 28 of them carrying an order-context bundle no case file
+has read**, at a measured **≈ $0.016 per ticket (≈ $1.45 for the lot)**. The other 22 are
+subjects with no tools; the pass clears their flag as it skips them, draining the dead queue.
+
+Symmetrically, 29 of the 52 investigated order-family tickets had no order number when they
+were read, so their case files are weaker than the data now allows — and the same flag is how
+to re-read them.
 
 **Two tables are still empty where prose elsewhere implies rows.** `ticket_forwards` and
 `category_forwarding` (0 — no address is configured, so the forwarding pass has never routed
@@ -275,19 +284,14 @@ So Phase 5's remaining work is **drafting, and the level gate around it**.
   can ship without it; the skeletons are what would later make a reply's *structure*
   deterministic rather than model-chosen.
 
-**Realistic first slice: 22 live tickets** — 9 `answerable` and open, 13
-`needs_customer_input` and awaiting the customer. Not 214, and not the 31 case files the
-verdict counts suggest: 9 of those 31 sit on threads auto-closed for inactivity.
+**The slice to build against is small and that is fine.** 22 tickets are live today (9
+`answerable` and open, 13 awaiting the customer), and `--include-closed` can raise the corpus
+to ~91 case files for about $1.45 whenever a bigger sample is wanted. Neither number is the
+production shape: on live mail the agent reads a thread minutes after it arrives, so what
+matters for the design is the *verdict mix*, not this corpus's queue state.
 
-**And the clock is running on the 22.** The open tickets are 9 to 27 days idle against a
-28-day auto-close window, so the oldest of them retire within days. **Six `answerable` case
-files have already been auto-closed unanswered** — the agent worked out that a reply could be
-written and the thread was retired without one. That is the cost of this phase not existing,
-measured, and it is also the argument for building it against live mail rather than against
-this corpus.
-
-The ceiling then rises with knowledge coverage on the five empty subjects, not with prompt
-work.
+The ceiling on how much of that mix is auto-answerable rises with knowledge coverage on the
+five empty subjects, not with prompt work.
 
 **Exit:** with `DRAFT_ONLY` on, every ticket carrying a case file produces either a stored,
 reviewable draft or an escalation, nothing auto-sends, and the flag is the single switch that

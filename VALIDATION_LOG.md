@@ -172,9 +172,42 @@ stay empty until after labelling), and sample toward **~100** rather than back t
 different emails, so the first re-run is a new measurement rather than a
 comparison.
 
-## 16. The investigation queue is unreachable: 113 flags on closed tickets
+## 16. ~~The investigation queue is unreachable~~ — RESOLVED 2026-08-17 with an opt-in
 
-**Found 2026-08-17 while checking whether the "backlog" was real. It is not.**
+**Closed by decision, not by a fix to auto-close.** The queue being open-only is
+**correct for the worker**: in production a ticket is categorised, investigated and
+(once Phase 5 lands) drafted within a poll of arriving, so the 28-day auto-close
+window never comes near live work. What was actually being measured is an artifact
+of importing a historical corpus into a dev database — mail from May–August landing
+in a queue that then retires it on schedule.
+
+**So the flag is not stranded, it is just behind a filter a person can lift.**
+`npm run investigate -- --include-closed` widens `record.claim` by dropping the
+status narrowing and nothing else — the flag, the categorisation requirement,
+`archived_at` and the soft-delete all still apply.
+
+**A widened run never moves the ticket's status.** 65% of verdicts map to
+`awaiting_human` / `awaiting_customer`, so letting the verdict act on a closed
+thread would resurrect settled threads into the live queue by the dozen. The case
+file is a note about the thread; writing one is not a reason to reopen it.
+
+**Verified live on 3 tickets:** 1 investigated (`promotions/problem` →
+`needs_customer_input`), 2 skipped as out-of-scope subjects, the ticket still
+`closed` with `closed_at` untouched, its flag cleared, and 4 rows in `llm_usage`.
+
+**What it reaches, measured:** 113 claimable with the flag lifted, **91 of them
+investigable** (the other 22 are `b2b`, `careers`, `partner_collaboration`,
+`cosmetovigilance`, `legal_privacy` — no tools by design, and the pass clears their
+flag as it skips them, which drains the dead queue as a side effect). **28 of the
+91 carry an order-context bundle no case file has read.**
+
+**Cost, now that it is measured rather than guessed:** one investigated ticket is
+4 model calls, 5 464 in / 520 out, **≈ $0.016** at the repo's current rate card. The
+remaining 90 are therefore **≈ $1.45** — and re-run before the rate card is checked
+against OpenAI's current pricing, that figure is only as good as
+`scripts/lib/llm-rates.mjs`.
+
+**The original finding, kept because the numbers are still the numbers:**
 
 | | |
 |---|---|
@@ -193,25 +226,20 @@ corpus is historical mail (`last_message_at` spans 2026-05-22 → 2026-08-08), s
 already false, so a closed ticket is out of reach from both directions. The flag
 now means "was queued once", not "is queued".
 
-**The decision this needs** — it is a design call, not a bug fix, and all three are
-defensible:
+**`--backfill` is not the same tool and does not substitute.** It raises the flag on
+**open** tickets only, so run today it reaches 9 that already have case files and
+none of the 113.
 
-1. **Auto-close clears the flags it strands.** The queue then means what it says,
-   and the closed tickets are honestly abandoned. Smallest change, and it makes the
-   `agent_pipeline_funnel` view stop counting 113 tickets as pending forever.
-2. **`claim` stops requiring `open` for investigation.** Reading a closed thread is
-   harmless — the case file is a note, not a reply — but it spends the mid tier on
-   mail nobody is waiting for.
-3. **Leave it, and reopen deliberately** when a closed thread genuinely needs work.
+**Nine case files sit on threads that later auto-closed** (6 `answerable`, 3
+`needs_customer_input`). Read as a dev artifact rather than a failure: the agent
+read a three-month-old imported thread and the auto-close window then retired it on
+schedule. On live mail the same thread would have been read minutes after arrival.
+Worth remembering only as a reason not to judge the verdict mix from this corpus
+alone.
 
-**Do not "clear the backlog" before deciding.** `npm run investigate -- --backfill`
-today re-runs 9 tickets that already have case files and reaches none of the 113.
-
-**A related consequence worth its own line:** 6 `answerable` and 3
-`needs_customer_input` case files sit on tickets that were then auto-closed for
-inactivity. The agent worked out that a reply could be written, and 28 days later
-the thread was retired without one. That is the cost of Phase 5 not existing,
-measured — and a warning that auto-close does not know a draft was possible.
+**Still genuinely open here:** `agent_pipeline_funnel` counts a flagged-but-closed
+ticket as pending, so until the widened run drains them (or they are skipped) the
+panel overstates the queue. That is a reporting question, not a pipeline one.
 
 ## 14. ~~Nothing has been recorded in `llm_usage`~~ — FIXED 2026-08-17
 

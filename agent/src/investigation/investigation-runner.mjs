@@ -45,6 +45,9 @@ export async function runInvestigation({
   logger,
   limit = DEFAULT_BATCH_LIMIT,
   dryRun = false,
+  // Widens the queue to threads the ticket queue has moved past — closed ones.
+  // A person typing `--include-closed`, never the worker: see `record.claim`.
+  anyStatus = false,
   onResult,
   // Loaded once per poll by the caller and shared across tickets: it is a small
   // map, and rebuilding it per ticket would turn a lookup back into a query.
@@ -68,7 +71,7 @@ export async function runInvestigation({
     failed: 0
   };
 
-  const pending = await record.claim('investigation', { limit });
+  const pending = await record.claim('investigation', { limit, anyStatus });
   counts.considered = pending.length;
 
   for (const ticket of pending) {
@@ -154,10 +157,16 @@ export async function runInvestigation({
       // null and the ticket stays `open`: it means a reply could be written, not
       // that one was sent, and nothing sends yet.
       //
-      // Safe to set unconditionally because `claim` already required
-      // `status = 'open'` — a ticket a human closed is never picked up, so this
-      // can only move a ticket out of open, never overrule a person.
-      const nextStatus = TICKET_STATUS_BY_VERDICT[caseFile.verdict] ?? null;
+      // A CLOSED TICKET KEEPS ITS STATUS. Normally `claim` has already required
+      // `status = 'open'`, so this can only move a ticket out of open and never
+      // overrule a person. Under `--include-closed` that guarantee is the
+      // operator's to make instead, and the verdict must not make it for them:
+      // 65% of verdicts map to `awaiting_human` / `awaiting_customer`, so a
+      // backfill over a historical corpus would otherwise resurrect dozens of
+      // settled threads into the live queue. The case file is a note about the
+      // thread; writing one is not a reason to reopen it.
+      const nextStatus =
+        ticket.status === 'open' ? (TICKET_STATUS_BY_VERDICT[caseFile.verdict] ?? null) : null;
 
       await record.complete('investigation', ticket, {
         columns: { level, ...(nextStatus ? { status: nextStatus } : {}) },

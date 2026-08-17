@@ -146,8 +146,12 @@ export const COLUMNS = {
   ticketForCategorisation: 'id,subject,metadata,category,request_kind,level,happiness',
 
   /** What the investigation needs to choose its tools and open a case file. */
+  // `status` is here for one reason: a deliberate re-run over closed threads
+  // (`investigate --include-closed`) must write the case file without moving the
+  // ticket, and the runner cannot tell an open ticket from a closed one it was
+  // handed unless the column comes back with it.
   ticketForInvestigation:
-    'id,subject,category,request_kind,level,customer_id,requester_email_hash,' +
+    'id,subject,status,category,request_kind,level,customer_id,requester_email_hash,' +
     'shopify_order_number,resolved_context,metadata',
 
   /** Customer resolution: an address hash and somewhere to record the attempt. */

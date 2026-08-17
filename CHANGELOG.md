@@ -43,6 +43,31 @@ Two findings from one session, and the second cancels a step this file added ear
 - **Tests:** four new (the pairing, `write:false`, a failed write still drains, an
   empty poll costs no request). Agent **775 pass**, root **1314 pass**.
 
+### `investigate --include-closed`, so a backfill can reach imported history
+
+- **The open-only queue is right for the worker and wrong for a backfill**, and the
+  fix is an opt-in rather than a change to auto-close. `claim({anyStatus: true})`
+  drops the status narrowing and nothing else; the flag, the categorisation
+  requirement, `archived_at` and the soft-delete all still apply. No pass descriptor
+  can set it — only a CLI flag a person typed, because it is a bill.
+- **A widened run never moves a ticket.** 65% of verdicts map to `awaiting_human` /
+  `awaiting_customer`, so acting on them here would resurrect dozens of settled
+  threads into the live queue. `nextStatus` is now computed only when the ticket was
+  open. **The status write had no test at all** — the existing one asserted the
+  lookup table rather than the patch — so tests were added in both directions along
+  with the change that could have silently broken it.
+- **`status` joins `COLUMNS.ticketForInvestigation`**, because the runner cannot
+  tell an open ticket from a claimed closed one without it.
+- **Verified live on 3 tickets:** 1 investigated (`promotions/problem` →
+  `needs_customer_input`), 2 skipped as subjects with no tools, the thread still
+  `closed` with `closed_at` untouched, its flag cleared (113 → 110), and 4 rows in
+  `llm_usage`. It reaches **91 investigable tickets, 28 carrying an order-context
+  bundle no case file has read**.
+- **The first measured unit cost in this project:** one investigated ticket is 4
+  model calls, 5 464 in / 520 out, **≈ $0.016** at the current rate card — so the
+  remaining 90 are ≈ $1.45. Both fixes in this entry had to land for that sentence
+  to be possible.
+
 ### The 91-ticket backlog this file described does not exist
 
 - **113 tickets carry `needs_investigation` and 0 are claimable.** Every one is
@@ -60,9 +85,10 @@ Two findings from one session, and the second cancels a step this file added ear
   deliberately. `VALIDATION_LOG.md` item 16.
 - **The measurement that matters for Phase 5:** 70 of the 80 case files sit on live
   tickets, and the live drafting set is **22** — 9 `answerable` and open, 13
-  `awaiting_customer`. **Six `answerable` threads have already auto-closed
-  unanswered**: the agent established that a reply could be written and the thread
-  was retired 28 days later without one.
+  `awaiting_customer`. Nine case files sit on threads that later auto-closed, which
+  is an artifact of importing three-month-old mail into a dev database rather than a
+  finding: on live mail a thread is read minutes after it arrives. What Phase 5
+  needs from this corpus is the **verdict mix**, not its queue state.
 
 ## The planning files re-measured against the database (2026-08-17)
 

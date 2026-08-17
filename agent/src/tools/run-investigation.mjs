@@ -19,11 +19,23 @@ import { createShopUsageRecording } from '../llm/usage-store.mjs';
 //   npm run investigate                          # the real pass
 //   npm run investigate -- --limit 50
 //   npm run investigate -- --backfill            # queue already-categorised tickets
+//   npm run investigate -- --include-closed      # reach threads the queue moved past
 //
 // `--backfill` is needed twice: at rollout, because every existing ticket was
 // categorised before this pass existed and the flag is only ever raised by the
 // categoriser finishing; and again whenever a subject joins ENABLED_SUBJECTS,
-// because its tickets were skipped and their flag cleared.
+// because its tickets were skipped and their flag cleared. It only ever raises
+// the flag on OPEN tickets.
+//
+// `--include-closed` is the other half, and the two are not interchangeable.
+// Auto-close retires a thread after 28 days of silence and leaves its pending
+// flag raised, so on an imported historical corpus the queue fills with work no
+// poll can claim — measured 2026-08-17 at 113 flagged tickets, 0 claimable. This
+// widens the claim to them. The ticket's status is left where it is: a case file
+// is a note about the thread, not a reason to reopen it.
+//
+// It is a person's decision because it is a bill: every ticket it reaches is a
+// mid-tier run over mail nobody is waiting on. Pair it with `--limit`.
 //
 // `--show` is the acceptance test that no unit test can replace: each rendered
 // dossier has to be something a writer could reply from without asking a
@@ -36,6 +48,7 @@ const dryRun = args.includes('--dry-run');
 const show = args.includes('--show');
 const brief = args.includes('--brief');
 const backfill = args.includes('--backfill');
+const includeClosed = args.includes('--include-closed');
 const limit = parseLimit(args);
 
 main().catch((error) => {
@@ -77,7 +90,8 @@ async function main() {
 
   console.log(
     `\n${dryRun ? 'DRY RUN — nothing written.' : 'Investigating.'} Model: ${config.investigatorModel}` +
-      ` · découpage : ${config.decomposerModel || 'désactivé'}\n`
+      ` · découpage : ${config.decomposerModel || 'désactivé'}` +
+      `${includeClosed ? ' · fils clos inclus (statut inchangé)' : ''}\n`
   );
 
   // The evidence report, summed across the batch. This is the number the whole
@@ -100,6 +114,7 @@ async function main() {
     logger,
     dryRun,
     limit,
+    anyStatus: includeClosed,
     // The same directory the worker loads, so a dry run reproduces what the
     // worker would have shown the model rather than a context-free version of it.
     senderDirectory: await senderDirectoryStore.load(shopId, {

@@ -11,6 +11,10 @@ import { runInvestigation } from './investigation-runner.mjs';
 const TICKET = {
   id: 'tk1',
   subject: 'Masque LED',
+  // What `claim` returns by default: the pass only ever sees open tickets unless
+  // an operator widened it. The runner reads this column to decide whether the
+  // verdict may move the ticket at all.
+  status: 'open',
   category: 'product',
   request_kind: 'question',
   level: 1,
@@ -463,6 +467,73 @@ test('needs_customer_input parks the ticket awaiting the customer', async () => 
     'awaiting_customer',
     'and that verdict is what parks it'
   );
+
+  // The table above says what the verdict MEANS; this says the runner acts on it.
+  // Only the second one breaks if the status write is lost, which is exactly what
+  // happened when the write became conditional on the ticket being open.
+  const patch = store.updates.find((u) => u.patch?.status);
+  assert.equal(patch?.patch.status, 'awaiting_customer', 'and the ticket is actually moved');
+});
+
+// --- a deliberate re-run over threads the queue has moved past ----------------
+
+test('a closed ticket gets a case file and keeps its status', async () => {
+  // `--include-closed` is a backfill over a historical corpus. 65% of verdicts map
+  // to awaiting_human / awaiting_customer, so letting the verdict move these would
+  // resurrect settled threads into the live queue by the dozen.
+  const closed = { ...TICKET, status: 'closed' };
+  const store = buildStore({ tickets: [closed] });
+
+  await runInvestigation({
+    ...wire(store),
+    investigate: async () =>
+      caseFile({ verdict: 'needs_human', handoff: { action: 'rembourser' }, established: [] }),
+    shopId: 's1',
+    anyStatus: true
+  });
+
+  assert.equal(store.saved.length, 1, 'the case file is written');
+  const moved = store.updates.find((u) => u.patch?.status);
+  assert.equal(moved, undefined, 'but the thread stays closed');
+  const cleared = store.updates.find((u) => u.patch?.needs_investigation === false);
+  assert.ok(cleared, 'and it leaves the queue, so a re-run does not find it again');
+});
+
+test('anyStatus reaches the claim, and nothing else widens with it', async () => {
+  const filters = [];
+  const record = createTicketRecord({}, {
+    shopId: 's1',
+    transport: {
+      async select(_client, _table, where) {
+        filters.push(where);
+        return [];
+      },
+      async selectAll() {
+        return [];
+      },
+      async insert(_client, _table, rows) {
+        return rows;
+      },
+      async update() {
+        return [];
+      },
+      async updateById() {
+        return {};
+      }
+    }
+  });
+
+  await record.claim('investigation', { limit: 5 });
+  await record.claim('investigation', { limit: 5, anyStatus: true });
+
+  assert.equal(filters[0].status, 'open', 'the worker still sees open tickets only');
+  assert.equal(filters[1].status, undefined, 'the widened claim drops the status narrowing');
+  for (const where of filters) {
+    assert.deepEqual(where.needs_investigation, { operator: 'is', value: 'true' });
+    assert.deepEqual(where.needs_categorisation, { operator: 'is', value: 'false' });
+    assert.deepEqual(where.archived_at, { operator: 'is', value: 'null' });
+    assert.deepEqual(where.deleted_at, { operator: 'is', value: 'null' });
+  }
 });
 
 test('answerable leaves the ticket open, because nothing has been sent', async () => {

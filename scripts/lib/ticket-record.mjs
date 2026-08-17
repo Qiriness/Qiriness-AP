@@ -197,11 +197,28 @@ export function createTicketRecord(supabase, { shopId, transport = REST_TRANSPOR
      * Selects on ticket STATE rather than on what the current poll wrote, so
      * anything missed is caught up next time and a single pass never has to be
      * complete.
+     *
+     * `anyStatus` DROPS THE STATUS NARROWING AND NOTHING ELSE — an operator
+     * asking for a deliberate re-run over threads the queue has moved past. It
+     * exists because the default (`status: 'open'`) is right for the worker and
+     * wrong for a backfill: auto-close retires a thread after 28 days of silence
+     * without clearing its pending flag, so on an imported historical corpus the
+     * work is all sitting behind a status filter. The flag, the categorisation
+     * requirement, `archived_at` and the soft-delete still apply, so this widens
+     * the queue rather than opening it.
+     *
+     * NEVER DEFAULTED ON, and no pass descriptor can set it: a worker that
+     * quietly spent the mid tier on closed mail nobody is waiting for would be a
+     * bill with no one asking for it. It is a per-call argument, and the only
+     * caller that passes it is a CLI flag a person typed.
      */
-    async claim(passName, { limit } = {}) {
+    async claim(passName, { limit, anyStatus = false } = {}) {
       const pass = passOrThrow(passName);
       const flags = { [pass.flag]: IS_TRUE };
       for (const [column, value] of Object.entries(pass.where)) {
+        if (anyStatus && column === 'status') {
+          continue;
+        }
         flags[column] = typeof value === 'boolean' ? (value ? IS_TRUE : IS_FALSE) : value;
       }
       return select(

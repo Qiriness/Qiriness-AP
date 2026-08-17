@@ -394,6 +394,14 @@ Three supporting reasons: a wrong match would inject a wrong situation's needs, 
 
 **Only there.** While the decomposer has spoken the exemplar is ignored entirely, because the moment it can top up a *successful* decomposition the two stop being independent. `caseFile.needsSource` records which source spoke (`model` / `exemplar` / `none`) and the row is stamped `supplied_needs`, so the comparison never measures a list against a copy of itself.
 
+### The worker sees open tickets only; a person may widen that, and a widened run never moves a ticket
+
+`PASSES.investigation.where` is `{status: 'open', needs_categorisation: false}`, so the pass never spends the mid tier on a thread the queue has moved past. That is right for the worker and wrong for a backfill: auto-close retires a thread after 28 days of silence without clearing its pending flag, so an **imported historical corpus** ends up with work no poll can claim — measured 2026-08-17 at 113 flagged tickets and 0 claimable. On live mail this never arises, because a ticket is read within a poll of arriving.
+
+`claim({anyStatus: true})`, reachable only through `investigate --include-closed`, drops the **status narrowing and nothing else** — flag, categorisation, `archived_at` and the soft-delete all still apply. It is a per-call argument that no pass descriptor can set, because a worker quietly investigating closed mail would be a bill nobody asked for.
+
+**And the verdict does not move a ticket it did not claim from the open queue.** 65% of verdicts map to `awaiting_human` or `awaiting_customer`; applied to a backfill that would resurrect dozens of settled threads into the live queue. The case file is a note about the thread, not a reason to reopen it — so `nextStatus` is computed only when the ticket was open. The status write had no test until this change went in beside it, which is why one was added in both directions.
+
 ### One investigation per inbound message
 
 `unique(shop_id, trigger_message_id)` is the idempotency key, so a reply produces a new reading instead of overwriting the previous one and the thread's trajectory survives as rows. `context_ref` **points at** `tickets.resolved_context` rather than copying it, so personal data is not duplicated per run. `customer_id` is denormalised and indexed: that is the seam Phase 7 memory hangs off.

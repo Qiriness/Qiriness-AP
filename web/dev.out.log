@@ -85,3 +85,7 @@
  GET /api/tickets/6216afc3-d4de-42e9-b6cf-87039242d70b 200 in 732ms
  GET /api/tickets/6216afc3-d4de-42e9-b6cf-87039242d70b/thread 200 in 691ms
  GET /api/tickets/6216afc3-d4de-42e9-b6cf-87039242d70b/thread 200 in 704ms
+ ○ Compiling /insights/agent ...
+ ✓ Compiled /insights/agent in 861ms (424 modules)
+ ✓ Compiled in 3s (417 modules)
+ ✓ Compiled in 3.5s (417 modules)
