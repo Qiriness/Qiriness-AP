@@ -1,4 +1,4 @@
-import type { SupportPanel } from "@/lib/types";
+import type { SupportPanel, SupportPurchaseCategory, SupportPurchaseStates } from "@/lib/types";
 import { CATEGORY_LABELS } from "@/lib/types";
 import {
   BarList,
@@ -11,6 +11,7 @@ import {
   hours,
   percent,
 } from "./InsightsKit";
+import { DownloadIcon } from "@/components/icons";
 import { formatMonth, isCurrentMonth } from "@/lib/insights-format";
 import { TopicMap } from "./TopicMap";
 import styles from "./SupportView.module.css";
@@ -28,6 +29,7 @@ import styles from "./SupportView.module.css";
  */
 export function SupportView({ panel }: { panel: SupportPanel }) {
   const { byMonth, byCategory, replies, topicMap, totals, ordersFromMonth } = panel;
+  const { purchaseStates, purchaseByCategory } = panel;
 
   // The store was trading before the mailbox was synced, so the first month of
   // the ticket series is part of a month of mail sitting over a whole month of
@@ -326,6 +328,10 @@ export function SupportView({ panel }: { panel: SupportPanel }) {
         )}
       </PanelSection>
 
+      {purchaseStates ? (
+        <PurchaseStatesSection states={purchaseStates} byCategory={purchaseByCategory} />
+      ) : null}
+
       <PanelSection
         title="Topic map"
         subtitle="What the mail is actually about, found by clustering the message embeddings rather than by trusting the categoriser's labels — so it can surface a recurring complaint that no category was ever created for."
@@ -341,5 +347,165 @@ export function SupportView({ panel }: { panel: SupportPanel }) {
         )}
       </PanelSection>
     </>
+  );
+}
+
+/**
+ * Who is writing to us, split by whether we can see them buy online.
+ *
+ * THE MIDDLE GROUP IS THE SECTION. An address that matches a customer record
+ * with zero orders is not a stranger and — this is the part the copy has to
+ * carry — not a non-customer either. A physical-shop sale never reaches Shopify,
+ * so a zero here means "we cannot see the purchase", never "there was none".
+ * Three of these people have written a product review, which nobody does for a
+ * product they never had.
+ *
+ * REACHABILITY IS TWO NUMBERS, NOT ONE, and on this store they are 22 and 8. A
+ * working address and permission to send marketing are different questions, and
+ * a single "reachable" tile would answer whichever one the reader happened to
+ * assume — the more expensive assumption being the lawful one.
+ */
+function PurchaseStatesSection({
+  states,
+  byCategory
+}: {
+  states: SupportPurchaseStates;
+  byCategory: SupportPurchaseCategory[];
+}) {
+  const unverified = states.noOrderTickets + states.unknownTickets;
+  // Only subjects where someone unverified actually wrote. A table of fourteen
+  // rows mostly reading zero buries the four that do not.
+  const rows = byCategory.filter((row) => row.noOrderTickets > 0);
+
+  return (
+    <PanelSection
+      title="Who is writing to us"
+      subtitle="Split by whether the sender's address can be matched to an online purchase. This is a question about our records, not about the customer — a sale made in a physical shop never reaches Shopify, so an unmatched address is silence rather than a denial."
+    >
+      <TileGrid>
+        <StatTile
+          label="Verified online buyers"
+          value={states.buyerTickets.toLocaleString()}
+          of={`of ${states.tickets.toLocaleString()}`}
+          foot={`${percent(states.buyerTickets, states.tickets)} of tickets — an order is visible behind the address`}
+        />
+        <StatTile
+          label="Known, never ordered online"
+          value={states.noOrderTickets.toLocaleString()}
+          of={`from ${states.noOrderCustomers.toLocaleString()} people`}
+          // Never "bad". These are customers we simply cannot see buy, and
+          // several of them demonstrably own the product.
+          tone="neutral"
+          foot="In the customer list with zero orders: newsletter signups, Shop logins, or an address taken at a till"
+        />
+        <StatTile
+          label="Address matches nothing"
+          value={states.unknownTickets.toLocaleString()}
+          of={`of ${states.tickets.toLocaleString()}`}
+          tone={states.unknownTickets / Math.max(1, states.tickets) > 0.4 ? "warn" : "neutral"}
+          foot={`${percent(states.unknownTickets, states.tickets)} — no customer record at all, so nothing can be checked`}
+        />
+        <StatTile
+          label="Reachable of those people"
+          value={states.noOrderDeliverable.toLocaleString()}
+          of={`of ${states.noOrderCustomers.toLocaleString()}`}
+          foot={`Usable address. Only ${states.noOrderMarketable.toLocaleString()} have consented to marketing — see below`}
+          action={
+            states.noOrderMarketable > 0 ? (
+              // A plain link, not a fetch-and-blob: the file is built server-side
+              // so the names and addresses never enter this page, which is
+              // otherwise pure aggregates.
+              //
+              // THE ACCESSIBLE NAME CARRIES THE COUNT AND THE FILTER. The icon
+              // shows neither, and the tile's headline figure is 22 while this
+              // downloads 8 — so a control labelled only "Download" would read
+              // as an export of everything above it. Both the tooltip and the
+              // screen-reader name say which 8.
+              <a
+                href="/api/insights/support/marketable-contacts"
+                download
+                aria-label={`Download ${states.noOrderMarketable} consented contacts as CSV`}
+                title={`Download CSV — the ${states.noOrderMarketable} people who have consented to marketing (name, email, ticket count, first and last contact dates, subjects). Not the other ${states.noOrderCustomers - states.noOrderMarketable}.`}
+              >
+                <DownloadIcon size={15} />
+              </a>
+            ) : null
+          }
+        />
+      </TileGrid>
+
+      <Note
+        tone={states.noOrderMarketable < states.noOrderDeliverable ? "warn" : "info"}
+        title="&ldquo;Reachable&rdquo; means two different things, and here they differ"
+      >
+        {states.noOrderDeliverable.toLocaleString()} of the{" "}
+        {states.noOrderCustomers.toLocaleString()} people in the middle group have an address
+        Shopify considers usable, so all of them can be <em>replied to</em>. Only{" "}
+        {states.noOrderMarketable.toLocaleString()} carry marketing consent, which is the only
+        figure an outreach campaign may be built on — the other{" "}
+        {(states.noOrderDeliverable - states.noOrderMarketable).toLocaleString()} may be answered
+        about their own ticket and not solicited. The counts are of people, not threads:{" "}
+        {states.noOrderTickets.toLocaleString()} tickets came from{" "}
+        {states.noOrderCustomers.toLocaleString()} senders, and a list built from the ticket count
+        would be{" "}
+        {(states.noOrderTickets / Math.max(1, states.noOrderCustomers)).toFixed(1)}× too long.
+      </Note>
+
+      {rows.length > 0 ? (
+        <div className={styles.tableWrap}>
+          <table className={styles.table}>
+            <thead>
+              <tr>
+                <th scope="col">Subject</th>
+                <th scope="col" className={styles.n}>
+                  Tickets
+                </th>
+                <th scope="col" className={styles.n}>
+                  Verified buyer
+                </th>
+                <th scope="col" className={styles.n}>
+                  Never ordered
+                </th>
+                <th scope="col" className={styles.n}>
+                  Unmatched
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row) => (
+                <tr key={row.category ?? "uncategorised"}>
+                  <th scope="row">
+                    {row.category ? (
+                      CATEGORY_LABELS[row.category]
+                    ) : (
+                      <span className={styles.muted}>Not categorised</span>
+                    )}
+                  </th>
+                  <td className={styles.n}>{row.tickets.toLocaleString()}</td>
+                  <td className={styles.n}>{row.buyerTickets.toLocaleString()}</td>
+                  <td className={styles.n}>
+                    {row.noOrderTickets.toLocaleString()}{" "}
+                    <span className={styles.muted}>
+                      ({percent(row.noOrderTickets, row.tickets, 0)})
+                    </span>
+                  </td>
+                  <td className={styles.n}>{row.unknownTickets.toLocaleString()}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : null}
+
+      <Note title="What this section is for">
+        {unverified.toLocaleString()} of {states.tickets.toLocaleString()} tickets (
+        {percent(unverified, states.tickets)}) arrive from someone whose purchase we cannot see.
+        The agent is told this rather than left to assume, because the two halves need opposite
+        replies: a verified buyer can be answered from their order, while an unverified one has to
+        be asked <em>where</em> they bought the product — a shop purchase changes which policy
+        applies. What the agent must never do is turn &ldquo;no order found&rdquo; into &ldquo;you
+        are not a customer&rdquo;.
+      </Note>
+    </PanelSection>
   );
 }

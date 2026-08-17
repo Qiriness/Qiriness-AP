@@ -878,6 +878,37 @@ export interface TopicMap {
   stale: boolean;
 }
 
+/**
+ * Who is writing in, split by whether we can see them buy online.
+ *
+ * The middle group is the reason this exists. `noOrderTickets` are threads from
+ * an address that IS a Shopify customer with zero orders — a newsletter signup,
+ * a Shop login, or an address captured at a till. **It is not a non-customer:**
+ * a physical-shop sale never reaches Shopify, and three of these people have
+ * written a product review, which nobody does for a product they never had.
+ *
+ * Two reachability figures because "reachable" has two meanings and they differ
+ * here: `deliverable` is a working address, `marketable` is consent to be sent
+ * marketing. Both are counts of DISTINCT PEOPLE, not threads.
+ */
+export interface SupportPurchaseStates {
+  tickets: number;
+  buyerTickets: number;
+  noOrderTickets: number;
+  unknownTickets: number;
+  noOrderCustomers: number;
+  noOrderDeliverable: number;
+  noOrderMarketable: number;
+}
+
+export interface SupportPurchaseCategory {
+  category: KnowledgeCategory | null;
+  tickets: number;
+  buyerTickets: number;
+  noOrderTickets: number;
+  unknownTickets: number;
+}
+
 export interface SupportPanel {
   byMonth: SupportMonth[];
   byCategory: SupportCategoryRow[];
@@ -891,6 +922,9 @@ export interface SupportPanel {
    * reason that has nothing to do with customers.
    */
   ordersFromMonth: string | null;
+  /** Null when no ticket has been ingested at all, never a row of zeros. */
+  purchaseStates: SupportPurchaseStates | null;
+  purchaseByCategory: SupportPurchaseCategory[];
 }
 
 // --- Customers -------------------------------------------------------------

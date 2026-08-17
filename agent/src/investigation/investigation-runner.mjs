@@ -8,6 +8,7 @@ import { emptySenderDirectory } from '../ingestion/sender-directory.mjs';
 import { TICKET_STATUS_BY_VERDICT } from './case-file.mjs';
 import { summariseNeeds } from './evidence-rules.mjs';
 import { ENABLED_SUBJECTS, isInvestigable } from './investigation-rules.mjs';
+import { summarisePhotoEvidence } from './photo-evidence.mjs';
 
 // The batch pass that investigates categorised tickets, mirroring
 // `categorise-runner.mjs` in every structural respect — because the problems are
@@ -268,7 +269,14 @@ function buildInput(ticket, messages, senderDirectory, exemplarNeeds = []) {
     // divergent account of it.
     resolvedContext: ticket.resolved_context && Object.keys(ticket.resolved_context).length > 0
       ? ticket.resolved_context
-      : null
+      : null,
+    // COMPUTED OVER EVERY INBOUND MESSAGE, not just the two that make up `text`.
+    // A customer often writes "le flacon est cassé" and attaches the photo in a
+    // second mail; taking only the first and latest would miss it whenever the
+    // thread ran to three. It is a pure function of text and stored metadata, so
+    // it is derived once here rather than inside a tool handler that would
+    // recompute the same answer on every call.
+    photoEvidence: summarisePhotoEvidence(messages)
   };
 }
 

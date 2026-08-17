@@ -43,6 +43,7 @@ export async function runDeltaPoll({
     spamBlocked: 0,
     llmSpamFiltered: 0,
     spamAudited: 0,
+    attachmentsFetched: 0,
     pages: 0
   };
   const hitCounts = new Map();
@@ -111,6 +112,8 @@ export async function runDeltaPoll({
       kept.push(item);
     }
 
+    totals.attachmentsFetched += await fetchAttachmentMetadata(graphClient, kept, logger);
+
     const counts = await writeIngestedMessages(store, record, shopId, kept, {
       triage,
       audit,
@@ -146,6 +149,54 @@ export async function runDeltaPoll({
   }
 
   throw new Error(`Delta poll exceeded ${MAX_PAGES_PER_RUN} pages; aborting to avoid a loop.`);
+}
+
+/**
+ * Fills `attachments` on the messages that have any, in place.
+ *
+ * RUNS AFTER THE BLOCKLIST GATE, deliberately. This is one extra Graph request
+ * per message with an attachment, and blocked mail is dropped before it — a
+ * newsletter with a banner image should not cost a round trip on its way to
+ * being discarded. On the stored corpus 38 of 296 inbound messages carry an
+ * attachment, so this is roughly one extra call in eight, on the kept set only.
+ *
+ * BEST-EFFORT, LIKE THE AUDIT FLUSH. A ticket whose attachment metadata could
+ * not be fetched is still a ticket, and failing the poll would re-drive the
+ * whole page. The row keeps `attachments: null`, which is the true statement —
+ * we did not learn what was attached — and the photo check reports that as
+ * unknown rather than as "no photo".
+ *
+ * A mailbox-id mismatch is the one thing worth shouting about: it fails every
+ * row for the same configuration reason, so it is logged once per message with
+ * its own event rather than buried as a generic warning.
+ */
+async function fetchAttachmentMetadata(graphClient, items, logger) {
+  if (typeof graphClient?.getAttachmentMetadata !== 'function') {
+    return 0;
+  }
+
+  let fetched = 0;
+  for (const item of items) {
+    if (item?.removed || !item?.message?.has_attachments || !item.graphMessageId) {
+      continue;
+    }
+    try {
+      const attachments = await graphClient.getAttachmentMetadata(item.graphMessageId);
+      // null means the mailbox no longer holds the message. Leave the column
+      // null too: both mean "not learned", and inventing `[]` would claim we
+      // looked and found nothing attached to a mail that says it has something.
+      if (attachments) {
+        item.message.attachments = attachments;
+        fetched += 1;
+      }
+    } catch (error) {
+      logger?.warn?.(
+        error.mailboxMismatch ? 'ingest.attachments_mailbox_mismatch' : 'ingest.attachments_failed',
+        { graphMessageId: item.graphMessageId, message: error.message }
+      );
+    }
+  }
+  return fetched;
 }
 
 // Delta cursor persisted in shops.sync_cursors.mail_ingest_delta_link, reusing the

@@ -63,15 +63,27 @@ export function StatTile({
   of,
   foot,
   tone = "neutral",
+  action,
 }: {
   label: string;
   value: ReactNode;
   of?: ReactNode;
   foot?: ReactNode;
   tone?: TileTone;
+  /**
+   * One icon-sized control belonging to this figure — an export of the rows
+   * behind it.
+   *
+   * Pinned to the tile's top-right corner, out of the reading order of label →
+   * figure → foot. It must carry its own accessible name and its own tooltip:
+   * an icon in a corner has no visible text, so whatever the caveat in `foot`
+   * says is not something a reader necessarily sees before pressing it.
+   */
+  action?: ReactNode;
 }) {
   return (
     <li className={`${styles.tile} ${styles[tone]}`}>
+      {action ? <span className={styles.tileAction}>{action}</span> : null}
       <span className={styles.tileLabel}>{label}</span>
       <span className={styles.tileFigure}>
         {value}

@@ -4,6 +4,7 @@ import { createCustomerLookup } from '../retrieval/customer-lookup.mjs';
 import { createExemplarRetrieval } from '../retrieval/exemplar-retrieval.mjs';
 import { createKnowledgeRetrieval } from '../retrieval/knowledge-retrieval.mjs';
 import { createProductLookup } from '../retrieval/product-lookup.mjs';
+import { createPurchaseLookup } from '../retrieval/purchase-lookup.mjs';
 import { createPromotionLookup } from '../retrieval/promotion-lookup.mjs';
 
 import { createDecomposer } from './decompose.mjs';
@@ -52,9 +53,15 @@ export function createInvestigationStack({
     usageSink
   });
 
+  // Constructed once and shared: the purchase check borrows the product tool's
+  // catalogue index, so building a second product lookup here would load and
+  // tokenise all 116 titles a second time to answer the same question.
+  const productLookup = createProductLookup({ supabase, shopId, logger });
+
   const registry = createToolRegistry({
     customerLookup: customerLookup || createCustomerLookup({ supabase, shopId, logger }),
-    productLookup: createProductLookup({ supabase, shopId, logger }),
+    productLookup,
+    purchaseLookup: createPurchaseLookup({ supabase, shopId, productLookup, logger }),
     promotionLookup: createPromotionLookup({ supabase, shopId, logger }),
     retrieveKnowledge: createKnowledgeRetrieval({ supabase, embeddingsClient, logger }),
     shopId,

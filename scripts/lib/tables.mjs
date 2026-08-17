@@ -98,6 +98,8 @@ export const V = {
   TICKET_REPLY_TIMES: 'ticket_reply_times',
   SUPPORT_BY_MONTH: 'support_by_month',
   SUPPORT_BY_CATEGORY: 'support_by_category',
+  SUPPORT_PURCHASE_STATES: 'support_purchase_states',
+  SUPPORT_PURCHASE_BY_CATEGORY: 'support_purchase_by_category',
   CUSTOMER_TICKET_FACTS: 'customer_ticket_facts',
   CUSTOMER_SEGMENT_TOTALS: 'customer_segment_totals',
   INVESTIGATION_EVIDENCE_GAPS: 'investigation_evidence_gaps',
@@ -184,7 +186,12 @@ export const COLUMNS = {
    * lookup (never prompted — only the label it resolves to is), and `embedding`
    * so exemplar matching reuses the vector ingestion already wrote.
    */
-  messageForInvestigation: 'id,subject,body_text,received_at,from_email,embedding',
+  // `has_attachments` AND `attachments` both travel: the boolean says something
+  // is attached, the array says what it is, and an empty array under a true
+  // boolean means "ingested before the metadata fetch existed" rather than
+  // "nothing attached". The photo-evidence check needs to tell those apart.
+  messageForInvestigation:
+    'id,subject,body_text,received_at,from_email,embedding,has_attachments,attachments',
 
   /** The case file, latest run, as the detail panel reads it. */
   investigationForDetail:

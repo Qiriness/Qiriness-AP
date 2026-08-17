@@ -628,6 +628,91 @@ revoke all on public.support_by_category from anon, authenticated;
 comment on view public.support_by_category is
   'Volume and mood per (subject, kind) pair -- the two taxonomy axes kept separate, as everywhere else. Delivery reads mean happiness 2.89 with 76% unhappy, the worst of the fourteen subjects.';
 
+-- ------------------------------------------------------- support_purchase_states
+
+-- WHO IS WRITING TO US, BY WHETHER WE CAN SEE THEM BUY.
+--
+-- Three populations, and the middle one is why this view exists:
+--   the sender's address matches a customer WITH orders      -- an online buyer
+--   it matches a customer with NONE                          -- newsletter signup,
+--                                                               Shop login, or an
+--                                                               address captured at
+--                                                               a till
+--   it matches nothing                                       -- unplaceable
+--
+-- THE COUNTS ARE RAW, THE NAMES ARE NOT HERE. `purchase-verification.mjs` owns
+-- what `known_no_orders` means and what a reply may say about it; this view only
+-- counts orders and reachability flags, the same way `support_by_category`
+-- counts `happiness >= 3` without owning the word "unhappy". A view that emitted
+-- the state names would be a second definition to disagree with the first.
+--
+-- A ZERO-ORDER CUSTOMER IS NOT A NON-CUSTOMER. A sale made in a physical shop
+-- never reaches Shopify, so this population includes people holding the product
+-- -- three of them have written a Judge.me product review. Any caller rendering
+-- these figures has to say so; see DECISIONS.md.
+create view public.support_purchase_states
+with (security_invoker = true) as
+  select
+    t.shop_id as shop_id,
+    count(*) as tickets,
+    count(*) filter (where t.customer_id is not null and coalesce(c.number_of_orders, 0) > 0)
+      as buyer_tickets,
+    count(*) filter (where t.customer_id is not null and coalesce(c.number_of_orders, 0) = 0)
+      as no_order_tickets,
+    count(*) filter (where t.customer_id is null) as unknown_tickets,
+    -- DISTINCT PEOPLE, not threads. One person who writes four times is one
+    -- person to reach, and an outreach list built from the ticket count would be
+    -- four times too long.
+    count(distinct c.id) filter (where coalesce(c.number_of_orders, 0) = 0)
+      as no_order_customers,
+    -- TWO SENSES OF "REACHABLE", BOTH REPORTED, because they answer different
+    -- questions and this store's numbers differ. `deliverable` is Shopify's own
+    -- judgement that the address works at all -- the operational sense. `marketable`
+    -- is consent to be sent marketing, which is the only one that makes an
+    -- outreach campaign lawful.
+    count(distinct c.id) filter (
+      where coalesce(c.number_of_orders, 0) = 0 and c.valid_email_address is true
+    ) as no_order_deliverable,
+    count(distinct c.id) filter (
+      where coalesce(c.number_of_orders, 0) = 0 and c.on_email_marketing_list is true
+    ) as no_order_marketable
+  from public.tickets t
+  left join public.customers c on c.id = t.customer_id
+  where t.deleted_at is null
+  group by t.shop_id;
+
+revoke all on public.support_purchase_states from anon, authenticated;
+
+comment on view public.support_purchase_states is
+  'Tickets split by whether the sender can be seen to have bought online: buyer_tickets / no_order_tickets / unknown_tickets, plus DISTINCT people behind the middle group and how many of them are reachable. `deliverable` is a usable address, `marketable` is marketing consent -- different questions, both reported. Reads 111 / 34 / 69 tickets today. A zero-order customer is not a non-customer: a shop sale never reaches Shopify.';
+
+-- --------------------------------------------------- support_purchase_by_category
+
+-- The same split, per subject, so "what do the people we cannot verify actually
+-- write about" is answerable. Ticket counts only -- they sum across rows, while
+-- a distinct-customer count would double-count anyone who wrote under two
+-- subjects, which is why those live in the shop-level view above and not here.
+create view public.support_purchase_by_category
+with (security_invoker = true) as
+  select
+    t.shop_id as shop_id,
+    t.category as category,
+    count(*) as tickets,
+    count(*) filter (where t.customer_id is not null and coalesce(c.number_of_orders, 0) > 0)
+      as buyer_tickets,
+    count(*) filter (where t.customer_id is not null and coalesce(c.number_of_orders, 0) = 0)
+      as no_order_tickets,
+    count(*) filter (where t.customer_id is null) as unknown_tickets
+  from public.tickets t
+  left join public.customers c on c.id = t.customer_id
+  where t.deleted_at is null
+  group by t.shop_id, t.category;
+
+revoke all on public.support_purchase_by_category from anon, authenticated;
+
+comment on view public.support_purchase_by_category is
+  'support_purchase_states cut by subject. Ticket counts only, so rows sum; distinct-customer counts stay in the shop-level view because one person can write under several subjects.';
+
 -- ============================================================================
 -- CUSTOMERS
 -- ============================================================================

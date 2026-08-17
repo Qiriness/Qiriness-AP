@@ -116,19 +116,50 @@ export function TicketThreadDialog({ ticket, onClose }: TicketThreadDialogProps)
 }
 
 /**
+ * Who sent a message: the display name, and the address behind it when those are
+ * two different things.
+ *
+ * THE ADDRESS IS ONLY WORTH PRINTING WHEN IT ADDS SOMETHING. A large share of
+ * rows carry an address in `from_name` — Graph reports a display name only when
+ * the sender's client supplied one, and plenty do not — so printing
+ * `name <email>` unconditionally renders `x@y.com <x@y.com>` down half the
+ * thread. Equality is what separates the two cases.
+ *
+ * Compared case-insensitively and trimmed, because an address is
+ * case-insensitive in practice: `Jean@Qiriness.com` in the name field is the
+ * same sender as `jean@qiriness.com` in the address field, and treating them as
+ * different would print the duplicate this check exists to avoid.
+ */
+function senderIdentity(message: TicketMessage, outbound: boolean): {
+  name: string;
+  email: string | null;
+} {
+  const name = message.fromName?.trim() ?? "";
+  const email = message.fromEmail?.trim() ?? "";
+
+  // Nothing at all: the direction is the only thing left to say who this was.
+  if (!name && !email) return { name: outbound ? "Qiriness" : "Unknown sender", email: null };
+  // The address is the identity — as a name on its own, not repeated beside it.
+  if (!name) return { name: email, email: null };
+  if (!email) return { name, email: null };
+
+  return { name, email: name.toLowerCase() === email.toLowerCase() ? null : email };
+}
+
+/**
  * One email. Inbound and outbound are visually distinct because the thread is
  * half our own replies — the Inbox holds both, and a wall of undifferentiated
  * blocks is precisely what makes Outlook tiring to read.
  */
 function MessageBlock({ message }: { message: TicketMessage }) {
   const outbound = message.direction === "outbound";
+  const sender = senderIdentity(message, outbound);
 
   return (
     <li className={`${styles.message} ${outbound ? styles.outbound : styles.inbound}`}>
       <div className={styles.messageHead}>
-        <span className={styles.sender}>
-          {message.fromName?.trim() || message.fromEmail || (outbound ? "Qiriness" : "Unknown sender")}
-        </span>
+        <span className={styles.sender}>{sender.name}</span>
+        {sender.email && <span className={styles.senderEmail}>{sender.email}</span>}
         <span className={styles.direction}>{outbound ? "Sent" : "Received"}</span>
         {message.at && (
           <time className={styles.when} dateTime={message.at}>

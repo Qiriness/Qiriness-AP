@@ -336,6 +336,12 @@ create table public.ticket_messages (
   body_text text,
   body_preview text,
   has_attachments boolean not null default false,
+  -- NULLABLE ON PURPOSE, and the null is the point. `[]` means "we asked Graph
+  -- and there was nothing"; null means "we never asked" -- which is every row
+  -- ingested before this column existed. A `not null default '[]'` would render
+  -- those two identical and let the photo check report "no photo attached" for a
+  -- message whose attachments were simply never fetched.
+  attachments jsonb,
 
   received_at timestamptz,
   sent_at timestamptz,
@@ -359,6 +365,12 @@ create table public.ticket_messages (
   ),
   constraint ticket_messages_raw_payload_object_check check (
     jsonb_typeof(raw_graph_payload) = 'object'
+  ),
+  -- Same guard the orders snapshot puts on line_items, returns and refunds: a
+  -- column that is read with array semantics has to be an array, or the first
+  -- object written there becomes a runtime error somewhere far away.
+  constraint ticket_messages_attachments_array_check check (
+    attachments is null or jsonb_typeof(attachments) = 'array'
   ),
   -- The same guard knowledge_chunks and support_exemplar_phrasings carry. This
   -- table copied the determinism quadruple from knowledge_chunks and did not
@@ -389,6 +401,9 @@ alter table public.ticket_messages enable row level security;
 
 comment on table public.ticket_messages is
   'Individual emails belonging to a ticket, one row per Microsoft Graph message. Inbound mail is ingested here idempotently (unique on shop_id + graph_message_id); outbound rows are the agent replies and team forwards.';
+
+comment on column public.ticket_messages.attachments is
+  'Attachment METADATA only, one object per part: name, contentType, size, isInline. Never the bytes -- Graph''s attachment resource carries contentBytes and the fetch $selects around it. `has_attachments` says something is there; this says whether it is a photo of a broken bottle or a CV, a distinction the boolean cannot make, and the two largest attachment groups in this mailbox are careers CVs and b2b catalogues. NULL means never fetched (every row predating this column); `[]` means fetched and empty. Those are different answers and the photo check reports the first as unknown rather than as "no photo".';
 
 comment on column public.ticket_messages.graph_message_id is
   'Microsoft Graph message id. The idempotency key: re-ingesting the same email is a no-op via the shop_id + graph_message_id unique constraint.';

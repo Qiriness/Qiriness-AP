@@ -1,5 +1,7 @@
 import { toOrderContextText } from '../resolution/order-context.mjs';
 
+import { toPromptText as photoPromptText } from './photo-evidence.mjs';
+
 import { planToolNames } from './decompose-rules.mjs';
 import { TOOL_NAMES, allowedTools } from './investigation-rules.mjs';
 
@@ -110,6 +112,19 @@ const DEFINITIONS = {
       'Renvoie le dossier de la commande rattachée à ce ticket : état, livraison, suivi, ' +
       'remboursements. Disponible uniquement si la commande a été confirmée.',
     parameters: NO_ARGS
+  },
+  [TOOL_NAMES.VERIFY_PURCHASE]: {
+    description:
+      'Vérifie si l’expéditeur est un client connu ayant déjà commandé en ligne, et compare ' +
+      'le produit évoqué dans le message aux produits de sa dernière commande. ' +
+      'Répond aussi « non vérifiable » : un achat en boutique physique n’apparaît jamais ici.',
+    parameters: NO_ARGS
+  },
+  [TOOL_NAMES.CHECK_PHOTO_EVIDENCE]: {
+    description:
+      'Indique si le client a joint une photo, ou s’il en mentionne une sans l’avoir jointe. ' +
+      'À utiliser pour toute casse, détérioration ou dysfonctionnement.',
+    parameters: NO_ARGS
   }
 };
 
@@ -121,6 +136,7 @@ export function createToolRegistry({
   customerLookup,
   productLookup,
   promotionLookup,
+  purchaseLookup,
   retrieveKnowledge,
   shopId,
   logger
@@ -135,7 +151,7 @@ export function createToolRegistry({
    *   data       — kept for the runner (never sent to the model verbatim)
    */
   function handlersFor(ticket) {
-    return {
+    const handlers = {
       async [TOOL_NAMES.SEARCH_KNOWLEDGE]() {
         const result = await retrieveKnowledge(
           { subject: ticket.subject, body: ticket.text, category: ticket.category },
@@ -348,8 +364,64 @@ export function createToolRegistry({
             : 'Aucune commande confirmée n’est rattachée à ce ticket.',
           data: { confirmed, orderName: ticket.shopify_order_number || null }
         };
+      },
+
+      async [TOOL_NAMES.VERIFY_PURCHASE]() {
+        const result = await purchaseLookup.verify({ ticket });
+        // THE OUTCOME IS THE STATE ITSELF, all three of them, because
+        // `evidence-rules` satisfies `purchase_verified` on `known_buyer` alone.
+        // Folding the two unverified states into one `no_match` would make a
+        // known customer with no orders indistinguishable from a stranger, which
+        // is the distinction this tool was built for.
+        return {
+          outcome: result.state,
+          caveats: result.verified ? [] : ['purchase_unverified'],
+          promptText: purchaseLookup.toPromptText(result),
+          data: {
+            state: result.state,
+            verified: result.verified,
+            lastOrderName: result.lastOrder?.name ?? null,
+            // Titles for a person reading the diagnostic, not for the model —
+            // `fromModel` sends promptText only.
+            lastOrderProducts: (result.lastOrder?.products ?? []).map((item) => item.title),
+            productVerdict: result.product?.verdict ?? null,
+            productMatched: result.product?.matched ?? null
+          }
+        };
+      },
+
+      async [TOOL_NAMES.CHECK_PHOTO_EVIDENCE]() {
+        // READ, NOT RE-DERIVED. The runner computed this from the ticket's own
+        // messages before the model was called — it is a pure function of text
+        // and metadata the investigation already holds, so recomputing it here
+        // would be a second answer to the same question with no new input.
+        const evidence = ticket.photoEvidence ?? null;
+        return {
+          outcome: evidence?.outcome ?? 'none',
+          caveats: evidence && !evidence.attachmentsKnown ? ['attachments_unrecorded'] : [],
+          promptText: photoPromptText(evidence),
+          data: {
+            outcome: evidence?.outcome ?? 'none',
+            mentioned: evidence?.mentioned ?? false,
+            matchedTerm: evidence?.matchedTerm ?? null,
+            images: evidence?.images ?? 0,
+            nonImages: evidence?.nonImages ?? 0,
+            attachmentsKnown: evidence?.attachmentsKnown ?? true
+          }
+        };
       }
     };
+
+    // A tool whose client was never constructed is dropped here rather than left
+    // to fail at call time. `toolsFor` then logs `tool_unavailable` and does not
+    // offer it to the model — the same "skip it loudly" rule this file already
+    // applies to a policy naming a tool with no definition. Handing the model a
+    // function that throws would spend a tool call to learn about our wiring.
+    if (!purchaseLookup) {
+      delete handlers[TOOL_NAMES.VERIFY_PURCHASE];
+    }
+
+    return handlers;
   }
 
   return {

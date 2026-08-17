@@ -129,6 +129,29 @@ const NEEDS = {
     asksCustomer: 'purchase_email'
   },
 
+  // --- purchase and evidence -------------------------------------------------
+  purchase_verified: {
+    label: 'si l’achat a bien été effectué en ligne chez nous',
+    // ONLY `known_buyer` SATISFIES THIS. `known_no_orders` is a real customer
+    // row with no order behind it — a newsletter signup, or an address given at
+    // a till — and treating it as a verified purchase is precisely the false
+    // green this need exists to prevent. An unsatisfied one is not a claim that
+    // the person never bought anything: a shop sale never reaches Shopify, so
+    // the question goes to the customer rather than to a conclusion.
+    satisfiedBy: [{ tool: TOOL_NAMES.VERIFY_PURCHASE, outcomes: ['known_buyer'] }],
+    asksCustomer: 'purchase_channel'
+  },
+  photo_evidence: {
+    label: 'une photo du produit cassé, abîmé ou défectueux',
+    // `mentioned_not_attached` deliberately does NOT satisfy: the customer
+    // saying a photo is attached is not a photo. `attachment_type_unknown`
+    // does not either — it is the honest gap for mail ingested before the
+    // metadata fetch existed, and closing a need on "something was attached"
+    // would let a CV settle a damage claim.
+    satisfiedBy: [{ tool: TOOL_NAMES.CHECK_PHOTO_EVIDENCE, outcomes: ['attached'] }],
+    asksCustomer: 'photo'
+  },
+
   // --- knowledge -------------------------------------------------------------
   policy_answer: {
     label: 'ce que dit une politique approuvée (retours, livraison, CGV)',

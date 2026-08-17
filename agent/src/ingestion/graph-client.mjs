@@ -141,6 +141,67 @@ export function createGraphClient(config, { fetchImpl = fetch } = {}) {
   }
 
   /**
+   * Attachment METADATA for one message. Never the bytes.
+   *
+   * `$select` is the whole safety story here. Graph's attachment resource
+   * carries `contentBytes` — the entire file, base64 — and omitting the select
+   * would pull a customer's multi-megabyte photo through this worker and into
+   * whatever logs a failure touches, for a question answerable from four scalar
+   * fields. Naming the four keeps the binary on Microsoft's side of the wire.
+   *
+   * `$top=20` because the question is "is a photo here", not "enumerate
+   * everything": twenty parts is far past the point where a person should be
+   * looking anyway, and it bounds the response on a mail with fifty inline
+   * fragments.
+   *
+   * A MISSING MESSAGE IS AN ANSWER. Same contract as `getMessage`: null when the
+   * mailbox no longer holds it, so a backfill over hundreds of rows counts
+   * deletions instead of dying on the first one. `ErrorInvalidMailboxItemId`
+   * still throws flagged, because that is a configuration answer and not a
+   * per-row one.
+   */
+  async function getAttachmentMetadata(graphMessageId) {
+    if (!graphMessageId) {
+      throw new Error('getAttachmentMetadata requires a Graph message id.');
+    }
+    const token = await getToken();
+    const response = await fetchImpl(
+      `${GRAPH_BASE}/users/${encodeURIComponent(mailbox)}/messages/${encodeURIComponent(graphMessageId)}` +
+        '/attachments?$select=id,name,contentType,size,isInline&$top=20',
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+
+    const payload = await response.json().catch(() => null);
+    const code = payload?.error?.code || '';
+
+    if (code === 'ErrorInvalidMailboxItemId') {
+      const error = new Error(
+        `Graph rejected the message id as invalid for ${mailbox}. Exchange ids are ` +
+          'mailbox-scoped, so these rows were almost certainly ingested while ' +
+          'SUPPORT_MAILBOX pointed at a different mailbox.'
+      );
+      error.code = code;
+      error.mailboxMismatch = true;
+      throw error;
+    }
+
+    if (response.status === 404) {
+      return null;
+    }
+
+    if (!response.ok) {
+      throw new Error(`Graph attachment request failed: ${code || `HTTP ${response.status}`}`);
+    }
+
+    return (Array.isArray(payload?.value) ? payload.value : []).map((attachment) => ({
+      name: attachment?.name ?? null,
+      contentType: attachment?.contentType ?? null,
+      size: Number(attachment?.size) || 0,
+      isInline: Boolean(attachment?.isInline)
+    }));
+  }
+
+  /**
    * Forwards a message the mailbox already holds, with a covering note on top.
    *
    * Graph's own `/forward` action rather than composing a new message: it keeps
@@ -188,5 +249,5 @@ export function createGraphClient(config, { fetchImpl = fetch } = {}) {
     }
   }
 
-  return { getToken, getDeltaPage, getMessage, forwardMessage };
+  return { getToken, getDeltaPage, getMessage, getAttachmentMetadata, forwardMessage };
 }

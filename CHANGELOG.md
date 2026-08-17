@@ -420,9 +420,51 @@ Four refactors, chosen from an architecture review of everything that touches Su
 
 Dashboard authentication, deployed webhook routes, and the agent's drafting stage (Phase 5). Backend/deploy config is still pending.
 
+## Tickets: the conversation shows each sender's address (2026-08-17)
+
+- **Every message block in the thread dialog now prints the sender's email beside their name.** Previously `from_email` was only a fallback for a missing name, so the address was invisible on almost every message.
+- **Suppressed where the name already is the address.** Measured over 451 stored messages: 444 have a name that differs from the address, 7 do not. Those 7 render the address once, not twice. The comparison is trimmed and case-insensitive, because `Jean@Qiriness.com` in the name field is the same sender as `jean@qiriness.com` in the address field.
+- Verified in the browser on both branches: `Catherine Monteil · catherine.monteil@yahoo.fr` renders the pair, `poline4@wanadoo.fr` renders once.
+
+## Tickets: the expanded panel wears its ticket's priority colour (2026-08-17)
+
+- **Fixed: opening a ticket turned its priority bar green.** The row's left bar is red/orange/green by priority band, and `TicketTable.module.css` was already passing `--priority-edge` down to the detail row — but `TicketDetailPanel.module.css` drew `border-left: 3px solid var(--teal)` over it. `.detailCell` has `padding: 0`, so that border landed exactly on top of the cell's own priority inset and won every time. A high-priority ticket looked low-priority at the moment someone was reading it.
+- **One line**: the panel's rule is now `var(--priority-edge, var(--teal))`. Verified in the browser across all three bands — row bar and panel border return the same computed colour (`#e81010`, `#ff8c00`, `#00a651`), and the bar now runs unbroken from row into panel.
+
 ## Agent panel: cost leads the page (2026-08-17)
 
 - **`What it costs` moved to the top of `/insights/agent`**, above the pipeline funnel and the blocker ranking. A pure reorder — the section moved verbatim, no markup or logic changed.
+
+## Support panel: consented contacts CSV (2026-08-17)
+
+- **Download icon in the top-right corner of the reachability tile** (28x28, no visible text), columns Name / Email / Tickets / First contact / Last contact / Ticket categories. Its `aria-label` and tooltip both name the count and the filter, because the tile's headline figure is 22 while the file holds 8 — an unlabelled icon would read as exporting everything above it.
+- **Consent is the query filter, not a column** — the file holds the 8 marketable people, not all 22. The 14 who may be replied to but not solicited are absent rather than flagged, because a flag gets ignored.
+- **One row per person, not per ticket.** Two of the eight wrote three times each; their subjects are joined into one cell so a mail merge cannot send them the same campaign three times.
+- **Contact dates come from `first_message_at`, never `created_at`.** All 214 tickets carry `created_at = 2026-08-09` — the single day the corpus was synced — so that column would print one date on every row and read as a bug. `first_message_at` spans 69 distinct days. Two columns rather than one because a row is a person: the two three-ticket contacts span 2026-05-28 to 06-25 and 2026-05-25 to 06-08, and picking either end silently would drop the other. ISO `YYYY-MM-DD`, which sorts as text and is not reinterpreted day/month by a French Excel.
+- **Built in a route handler, never in the page.** The panel stays pure aggregates; names and addresses leave the database only when someone asks for the file. Each download writes one `data_access_events` row with the count (`purpose: marketing_outreach_list`) — verified in the table. `no-store` on the response.
+- **UTF-8 BOM** so Excel does not mangle French names, and cells starting `= + - @` are apostrophe-prefixed against formula injection — the values are whatever a customer typed into a name field.
+- Adds an optional `action` slot to `StatTile`, absolutely positioned top-right and out of the label -> figure -> foot reading order. The label reserves right padding so it wraps before reaching the icon. New `DownloadIcon` in the shared set, on the same 24x24 / 1.6px grid.
+
+## Support panel: "Who is writing to us" (2026-08-17)
+
+- **New section splitting tickets by whether the sender's purchase is visible: 111 verified buyers, 34 from customers with no orders, 69 unmatched**, of 214.
+- **Reachability is reported twice, because it is two questions.** Those 34 tickets come from **22 distinct people; 22 have a deliverable address, only 8 have marketing consent.** Everyone in the group may be replied to about their own ticket; 14 of them may not be solicited. Counts are of people, not threads — a list built from ticket counts would be 1.5× too long.
+- **The copy never lets a zero-order customer become a non-customer.** A physical-shop sale never reaches Shopify, so an unmatched address is silence about our records, not a denial about the person.
+- **Per-subject table, filtered to subjects where someone unverified wrote.** The finding it surfaces: **13 of 21 `promotions` tickets (62%) come from people who have never ordered** — the highest share on the board. `order` 11 of 49, `product` 4 of 22, `return_exchange` 4 of 18.
+- **Two new views** (`support_purchase_states`, `support_purchase_by_category`), taking `06_analytics.sql` to 21. They count raw facts; the state *names* stay in `purchase-verification.mjs`, the same rule that keeps `is_vip` out of the customer views. The per-category cut carries ticket counts only, since distinct-customer counts do not sum across subjects.
+
+## Purchase verification and photo evidence (2026-08-17)
+
+Two new investigation tools, plus the attachment metadata that makes the second one possible.
+
+- **`verifyPurchase` — three states, not a boolean.** `known_buyer` / `known_no_orders` / `unknown`. Measured over the 214 live tickets: **111 / 34 / 69**. Those 34 are real addresses in `customers` with zero orders — newsletter signups, or an email given at a till — and a binary check would have had to call them either verified or unknown, both wrong. Only `known_buyer` satisfies the new `purchase_verified` need.
+- **Neither unverified state is allowed to become "not a customer".** A physical-shop sale never reaches Shopify, so the `purchase_unverified` caveat prohibits the denial outright and the unmet need asks the new `purchase_channel` question (our site, or a shop?) instead of concluding.
+- **The product cross-check runs against the last order's line items**, not the 116-product catalogue — but borrows the catalogue's IDF weights via a new `productLookup.catalogueIndex()`, because an index over three titles makes every word equally rare. Ambiguity is tested before absence: `matchProduct` returns `match: null` on a tie, and reading that as "not in the order" would contradict a customer about an order containing both candidates.
+- **`checkPhotoEvidence` — what they said, and what arrived, kept separate.** After backfill, over 203 tickets: **7 carry a real photo, 36 mention one and attached nothing, 160 neither.** The 36 are the drafting case. 6 of the 7 photos sit on `delivery`/`return_exchange`/`order`/`product` problems.
+- **New `ticket_messages.attachments jsonb` — metadata only, never bytes.** Ingestion now fetches `name`/`contentType`/`size`/`isInline` from Graph after the blocklist gate (so blocked mail costs no round trip) and `$select`s around `contentBytes`. **Nullable on purpose**: NULL = never fetched, `[]` = fetched and empty, and the check reports the first as `attachment_type_unknown` rather than "no photo".
+- **The boolean could never have done this.** The dry run's first 12 rows held an LED-mask manual, invoices, a packing list, two POs and the T&Cs — all identical to a photo under `has_attachments`. Signature logos (`image001.jpg`, 30 KB, inline) are excluded by name pattern plus a 50 KB inline floor; the real photos run 400 KB–2 MB.
+- **`npm run attachments:backfill[:dry-run]`** — filled **48 of 48** historical messages, 10 carrying a photo, 0 failures. `attachment_type_unknown` is now zero across the corpus. This also confirms the `README.md` item-2 mailbox mismatch is resolved: Graph accepted every stored id.
+- Both tools stay out of `cosmetovigilance`, whose tool set remains deliberately empty.
 
 ## Fulfilment panel: a returns/refunds tile in the Delivery section (2026-08-17)
 

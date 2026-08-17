@@ -33,7 +33,9 @@ export const TOOL_NAMES = {
   EXTRACT_PROMOTION_CODES: 'extractPromotionCodes',
   LOOKUP_PROMOTION: 'lookupPromotion',
   LIST_ACTIVE_PROMOTIONS: 'listActivePromotions',
-  GET_ORDER_CONTEXT: 'getOrderContext'
+  GET_ORDER_CONTEXT: 'getOrderContext',
+  VERIFY_PURCHASE: 'verifyPurchase',
+  CHECK_PHOTO_EVIDENCE: 'checkPhotoEvidence'
 };
 
 const T = TOOL_NAMES;
@@ -102,7 +104,12 @@ export const ENABLED_SUBJECTS = [
  *   investigate.
  */
 const TOOLS_BY_SUBJECT = {
-  product: [T.SEARCH_KNOWLEDGE, T.LOOKUP_PRODUCT, T.LOOKUP_STOCK],
+  // `verifyPurchase` and `checkPhotoEvidence` are added to the subjects where a
+  // product came back or went wrong. Both stay out of `cosmetovigilance` with
+  // everything else: an adverse reaction is the case where a confident-looking
+  // assembly is worse than none, and "we cannot find your order" is a
+  // particularly bad thing to put in front of someone reporting a reaction.
+  product: [T.SEARCH_KNOWLEDGE, T.LOOKUP_PRODUCT, T.LOOKUP_STOCK, T.VERIFY_PURCHASE, T.CHECK_PHOTO_EVIDENCE],
   product_stock: [T.LOOKUP_STOCK, T.LOOKUP_PRODUCT],
   promotions: [
     T.EXTRACT_PROMOTION_CODES,
@@ -115,10 +122,23 @@ const TOOLS_BY_SUBJECT = {
   other: [T.SEARCH_KNOWLEDGE],
 
   // Defined and tested, dormant until ENABLED_SUBJECTS includes them.
-  order: [T.GET_ORDER_CONTEXT, T.LOOKUP_CUSTOMER, T.SEARCH_KNOWLEDGE],
-  delivery: [T.GET_ORDER_CONTEXT, T.LOOKUP_CUSTOMER, T.SEARCH_KNOWLEDGE],
-  payment: [T.GET_ORDER_CONTEXT, T.LOOKUP_CUSTOMER, T.SEARCH_KNOWLEDGE],
-  return_exchange: [T.GET_ORDER_CONTEXT, T.LOOKUP_CUSTOMER, T.SEARCH_KNOWLEDGE],
+  order: [T.GET_ORDER_CONTEXT, T.LOOKUP_CUSTOMER, T.SEARCH_KNOWLEDGE, T.VERIFY_PURCHASE],
+  delivery: [
+    T.GET_ORDER_CONTEXT,
+    T.LOOKUP_CUSTOMER,
+    T.SEARCH_KNOWLEDGE,
+    T.VERIFY_PURCHASE,
+    // A parcel that arrived smashed is a photo case as much as a broken bottle is.
+    T.CHECK_PHOTO_EVIDENCE
+  ],
+  payment: [T.GET_ORDER_CONTEXT, T.LOOKUP_CUSTOMER, T.SEARCH_KNOWLEDGE, T.VERIFY_PURCHASE],
+  return_exchange: [
+    T.GET_ORDER_CONTEXT,
+    T.LOOKUP_CUSTOMER,
+    T.SEARCH_KNOWLEDGE,
+    T.VERIFY_PURCHASE,
+    T.CHECK_PHOTO_EVIDENCE
+  ],
 
   cosmetovigilance: [],
   legal_privacy: [],

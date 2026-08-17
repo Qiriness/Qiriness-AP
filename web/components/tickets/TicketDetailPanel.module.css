@@ -1,12 +1,23 @@
 /* The panel sits inside a full-width cell under its row, so it draws its own
    inset rather than inheriting the cell padding — the left rule is what ties it
-   back to the row it belongs to. */
+   back to the row it belongs to.
+
+   THAT RULE CARRIES THE ROW'S PRIORITY COLOUR, NOT A FIXED ONE. `--priority-edge`
+   is set on the `.detailRow` by TicketTable.module.css and inherits down to
+   here, so a high-priority ticket stays red the whole way down. It used to be a
+   hard-coded `--teal`, which painted green over the cell's own priority inset
+   (`padding: 0` on `.detailCell` puts this border exactly on top of it) and made
+   every open ticket look low-priority at the moment it was being read.
+
+   The fallback keeps the panel sane anywhere the variable is not in scope. It
+   should not happen in the table — every ticket has a band — so it is a floor,
+   not a second design. */
 .panel {
   display: grid;
   grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
   gap: var(--space-4) var(--space-6);
   padding: var(--space-4) var(--space-5);
-  border-left: 3px solid var(--teal);
+  border-left: 3px solid var(--priority-edge, var(--teal));
   background: var(--surface-sunken);
 }
 

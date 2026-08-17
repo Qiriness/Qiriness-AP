@@ -49,7 +49,9 @@ test('the exact tool set for each enabled subject', () => {
   assert.deepEqual(allowedTools('product', 'question', 1), [
     TOOL_NAMES.SEARCH_KNOWLEDGE,
     TOOL_NAMES.LOOKUP_PRODUCT,
-    TOOL_NAMES.LOOKUP_STOCK
+    TOOL_NAMES.LOOKUP_STOCK,
+    TOOL_NAMES.VERIFY_PURCHASE,
+    TOOL_NAMES.CHECK_PHOTO_EVIDENCE
   ]);
   assert.deepEqual(allowedTools('product_stock', 'question', 2), [
     TOOL_NAMES.LOOKUP_STOCK,

@@ -28,6 +28,51 @@ data, so no ticket carries a confirmed order number and every order-context
 lookup still reports `not_resolved`. Run it before reading anything below as
 evidence about the order family.
 
+## 0a. The two new tools have never been called by the model (2026-08-17)
+
+`verifyPurchase` and `checkPhotoEvidence` are wired into the registry, the
+evidence vocabulary and the case file, and **both were run directly over the
+whole corpus** — so their outputs are measured. What has *not* happened is an
+investigation choosing to call them: no `npm run investigate` has run since they
+were added, so nothing yet shows whether the model uses them, ignores them, or
+spends its tool budget on them ahead of something better.
+
+**To validate:** `cd agent && npm run investigate -- --dry-run --limit 10 --show`
+over `product` / `return_exchange` / `delivery` problem tickets, and read for:
+
+1. **Does it call `verifyPurchase` on a ticket that needs it, and does the
+   `known_no_orders` wording survive into the case file intact?** The prohibition
+   ("never say they are not a customer") is a caveat string; a model can
+   paraphrase past it, and that is the failure worth catching early.
+2. **Does `checkPhotoEvidence` get called on damage tickets, or only when the
+   customer already mentioned a photo?** The 36 `mentioned_not_attached` tickets
+   are the ones the tool exists for.
+3. **Tool budget.** Both were added to `product`, which now allows five tools
+   against a ceiling of six calls. If the agent spends calls verifying a purchase
+   on a ticket that only needed `searchKnowledge`, the allow-list is too wide.
+
+**What is already measured** (run directly, 2026-08-17):
+
+| Figure | Value |
+|---|---|
+| purchase states over 214 tickets | 111 `known_buyer` · 34 `known_no_orders` · 69 `unknown` |
+| photo evidence over 203 tickets | 7 `attached` · 36 `mentioned_not_attached` · 160 `none` |
+| attachment backfill | 48 of 48 filled, 10 with a photo, 0 failed |
+| tickets with a photo, by subject | delivery 2 · return_exchange 2 · order 1 · product 1 · partner 1 |
+
+**Known weakness, not yet decided.** Several last orders are mostly
+`- échantillon` sample lines, and the cross-check happily matches a customer's
+wording to a free sample — the same failure `product-lookup` already solves for
+the catalogue by excluding non-active products. An order's line items cannot be
+filtered that way (the customer really did receive the sample), so the honest
+options are to down-weight sample lines or to report them separately. Worth
+deciding once a real investigation has shown whether it matters.
+
+**Not measured at all: precision of the photo-mention regex.** 36 tickets fire it
+and nobody has read them to see how many are `image de marque` in a b2b thread
+rather than a customer promising a photo. The matched term is stored in the tool
+result precisely so that audit is cheap.
+
 ## 0. The refund/returns tile needs its views re-applied (2026-08-17)
 
 `fulfilment_summary` and `fulfilment_summary_by_channel` gained four columns —

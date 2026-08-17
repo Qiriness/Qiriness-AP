@@ -44,6 +44,19 @@ function buildRegistry(overrides = {}) {
         };
       }
     },
+    purchaseLookup: {
+      async verify() {
+        return {
+          state: 'known_buyer',
+          verified: true,
+          lastOrder: { name: '#6788', products: [{ title: 'Masque LED' }] },
+          product: { verdict: 'in_last_order', matched: 'Masque LED' }
+        };
+      },
+      toPromptText() {
+        return 'Client identifié : oui, avec au moins une commande en ligne.';
+      }
+    },
     async retrieveKnowledge() {
       return { verdict: 'answerable', bestSimilarity: 0.72, chunks: [{ title: 'FAQ', text: 'texte' }] };
     },

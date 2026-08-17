@@ -72,6 +72,12 @@ export function mapGraphMessage(raw, { direction, mailbox } = {}) {
     body_text: form?.body || rawBody,
     body_preview: raw?.bodyPreview ? normalizePlainText(raw.bodyPreview) : null,
     has_attachments: Boolean(raw?.hasAttachments),
+    // Left NULL here, filled by the poller after the blocklist gate. The delta
+    // payload does not carry attachment metadata — it takes a second Graph call
+    // per message — and spending that on mail we are about to drop would be one
+    // request per blocklisted newsletter. Null means "not fetched", which is
+    // exactly what is true at this point.
+    attachments: null,
     received_at: receivedAt,
     sent_at: sentAt,
     raw_graph_payload: sanitizeGraphPayload(raw, form)

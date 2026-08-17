@@ -189,6 +189,14 @@ export const RefreshIcon = (p: IconProps) => (
   </Base>
 );
 
+export const DownloadIcon = (p: IconProps) => (
+  <Base {...p}>
+    <path d="M12 4v10" />
+    <path d="M8 11l4 3 4-3" />
+    <path d="M5 18.5h14" />
+  </Base>
+);
+
 export const StoreIcon = (p: IconProps) => (
   <Base {...p}>
     <path d="M5 9.5V19a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V9.5" />

@@ -93,6 +93,16 @@
   overflow-wrap: anywhere;
 }
 
+/* Sits directly after the name, at caption weight: it identifies the sender
+   rather than competing with them, and it is only rendered at all when it is not
+   already the name (see `senderIdentity`). `anywhere` because a long address
+   must wrap inside the dialog instead of widening it. */
+.senderEmail {
+  font-size: var(--text-caption);
+  color: var(--text-subtle);
+  overflow-wrap: anywhere;
+}
+
 .direction,
 .when,
 .attachment {

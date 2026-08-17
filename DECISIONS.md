@@ -340,6 +340,42 @@ The standard retrieval upgrade is to paraphrase a question into variants and uni
 
 **The tool budget grows (+2 per extra task) and the turn budget does not.** Tool calls here are cached database reads; the expensive bound is how many times the model speaks. Holding tool calls fixed would mean the second half of an email is investigated with whatever the first half left over. Opening moves are capped at 4 so a three-way split cannot consume the budget before the model has spoken.
 
+### "Is this a customer" has three answers, and the middle one is the point
+
+`verifyPurchase` reports `known_buyer` / `known_no_orders` / `unknown`, and only the first satisfies the `purchase_verified` need.
+
+The middle state is not a technicality. **Measured over the 214 live tickets: 111 `known_buyer`, 34 `known_no_orders`, 69 `unknown`.** Those 34 are addresses that exist in `customers` with zero orders behind them — a newsletter signup, or an address given at a till. A binary check would have to put them somewhere, and both choices are wrong: called verified, the agent answers about an order that does not exist; called unknown, it tells a real customer we have never heard of them.
+
+**Neither lower state is evidence that nothing was bought.** A sale made in a physical shop never reaches Shopify, so absence here is silence, not denial. The `purchase_unverified` caveat is therefore written as a prohibition on the *denial* — « ne pas affirmer que cette personne n'a rien acheté » — and the unmet need asks `purchase_channel` (was it our site or a shop?) rather than concluding anything. Telling someone holding the product that they never bought it is the single worst reply this check could produce, so it is the one the vocabulary makes impossible.
+
+It enters from `tickets.customer_id`, not from the address: the customer-resolution pass already did that lookup on every ticket before any LLM stage, and redoing it would be a second answer to a settled question plus a second `data_access_events` row for the same access.
+
+### The product cross-check runs against the last order, not the catalogue
+
+Once the customer is known, the question "which product is this about" has a much better candidate set than 116 catalogue titles: the two to five things they actually bought. So `matchQuestionToOrder` scores the customer's wording against the last order's line items.
+
+**The IDF weights still come from the catalogue.** An index built over three line items gives every token the same weight and collapses the match to plain word overlap — `creme` would count as much as `led`. So `product-lookup` lends its `catalogueIndex()` and only the *entries* are swapped. Shared rather than rebuilt: a second index would be a second answer to "how rare is this word", and it would also re-tokenise the whole catalogue.
+
+**Ambiguity is checked before absence, and the order is load-bearing.** `matchProduct` returns `match: null` on a tie, deliberately, so a caller reading only `match` cannot silently receive one of two. Testing `!match` first reads that tie as "nothing matched" and would tell a customer their product is not in an order that contains both candidates. There is a test named for it.
+
+The cost is stated rather than hidden: someone writing about a product from three orders ago reads as `not_in_last_order`, which is why that verdict is worded « il peut venir d'une commande antérieure ou d'un achat en boutique » and never as "you did not buy this". One order also keeps this close to the data-minimisation line `customer-context.mjs` already holds — it carries no order history beyond the aggregate, and this widens that by exactly one order's line items, for one question.
+
+### Photo evidence is two signals, and they disagree
+
+`checkPhotoEvidence` reports what the customer *said* and what actually *arrived*, separately. On the real corpus those agree far less often than they diverge, which is why collapsing them into one boolean throws away the case worth acting on.
+
+**Measured over 203 tickets after backfilling attachment metadata: 7 carry a real photo, 36 mention one and attached nothing, 160 neither.** The 36 are the drafting prize — « vous mentionnez une photo mais rien n'est joint » is a different reply from « merci de nous envoyer une photo », and only a two-signal check can tell them apart. Of the 7 with a photo, 6 are `delivery/problem`, `return_exchange/problem`, `order/problem` or `product/problem` — exactly the breakage cases.
+
+**`has_attachments` alone could never have done this.** It is one boolean, and the two largest attachment groups in this mailbox are careers CVs and b2b catalogues. The dry run over the first 12 rows found an LED-mask manual, four invoices, a packing list, two purchase orders and the T&Cs — all of which the boolean reported identically to a photo of a broken bottle. So ingestion now fetches Graph's attachment metadata (`name`, `contentType`, `size`, `isInline`) and `$select`s around `contentBytes`, which would otherwise pull a customer's multi-megabyte photo through the worker to answer a question four scalars settle.
+
+**A signature logo is the false positive to beat, and `isInline` alone does not beat it.** A customer who pastes a photo into the body also produces an inline part, so excluding all inline images drops the evidence. The rule is a name pattern (`image001.png`, `logo`, Outlook placeholders) plus a 50 KB floor on inline images: the corpus's signature logos are `image001.jpg` at 30 KB and the real photos are 400 KB–2 MB, so the gap is wide and the raw counts still travel in the result for a caller that wants its own rule.
+
+**`attachments` is nullable and the null is load-bearing.** `[]` means we asked Graph and there was nothing; NULL means we never asked. A `not null default '[]'` would make those identical and let the check report "no photo attached" about a message whose own flag says otherwise — so a flagged message with no metadata reports `attachment_type_unknown`, which beats `mentioned_not_attached` precisely so nobody is asked to resend a photo they already sent.
+
+### Neither new tool goes near `cosmetovigilance`
+
+An adverse-reaction report is the one subject with an empty tool set, and both of these stayed out of it. The reasoning is unchanged and gets stronger here: assembling a confident-looking answer is worse than assembling none, and "we cannot find any order for you" is a particularly bad thing to put in front of someone reporting a reaction to a product. It goes to a person untouched.
+
 ### The matched situation is recorded and acted on by nothing
 
 Exemplar retrieval runs beside the investigation, on the message that triggered the run, and its result reaches `ticket_investigations.exemplar_match` and nowhere else. `investigate()` is never told; a test asserts the key never appears in its input.
@@ -666,6 +702,16 @@ One box above four tables re-cut every section at once, and the row you were loo
 - **The latest run only.** A ticket is investigated once per inbound message, so a thread holds a row per reading; the panel answers "where does this stand now".
 - Fetched per ticket on expand, not joined into the list: 565 rows, one open at a time. **No case file is a normal state** — uncategorised, out of `ENABLED_SUBJECTS`, or not yet reached — and reads as "not investigated", never as an empty result.
 
+### The open panel keeps its row's priority colour
+
+The row's left bar is red, orange or green by priority band, and it runs down the open panel too — the pair is one ticket, so it wears one mark.
+
+That was the intent from the start and the panel did not honour it: `TicketDetailPanel.module.css` drew `border-left: 3px solid var(--teal)`, a fixed green, while `TicketTable.module.css` was already handing `--priority-edge` down to the detail row. `.detailCell` carries `padding: 0`, so the panel's border sat exactly on top of the cell's priority inset and won. **A high-priority ticket therefore turned green at the moment somebody opened it to read it** — the one moment the colour is doing work.
+
+The rule is now `var(--priority-edge, var(--teal))`. The fallback is a floor rather than a second design: every ticket has a band, so nothing in the table should ever reach it.
+
+The lesson is narrower than "don't hard-code colours". The variable already existed and already inherited; what was missing was that the panel is a *continuation of the row* rather than a component with its own accent. Anything drawn inside `.detailRow` that wants the ticket's identity should read `--priority-edge` and not pick a colour of its own.
+
 ### The Order block reads `resolved_context`, not the case file
 
 Two sources, two projections in `ticket-detail.ts`: order facts exist for tickets the agent never investigated, and a case file exists for tickets with no order at all, so neither read can stand in for the other. `summariseOrderContext` **labels what `buildOrderContext` stored and derives nothing** — re-deriving delivery state in the dashboard would give the app a second opinion about the same parcel, and the two would disagree the first time either changed.
@@ -689,6 +735,16 @@ They were one control while there was only one thing to reveal. Both are real bu
 **Both directions, oldest first.** The Inbox holds the desk's own replies too (123 of 348 messages measured), and a thread showing only the customer's half is exactly what makes flicking to Outlook necessary.
 
 **The draft section is a placeholder and says so.** `TicketThread.draft` is always `null` — drafting is Phase 5 and no column or table holds one. The field exists so the section renders where it belongs and the wiring point is one named thing rather than a redesign.
+
+### The thread shows a sender's address, but only when it is not already the name
+
+Every message block in the conversation dialog prints the display name and the address behind it. Identity is the first thing read off a support thread — two people at one company, a personal address writing about a shop account, a colleague forwarding a customer's mail — and the name alone does not settle any of them.
+
+**The address is suppressed when it *is* the name.** Graph reports a display name only when the sender's client supplied one, so `from_name` is often the address itself; printing both unconditionally renders `poline4@wanadoo.fr poline4@wanadoo.fr`. Measured over 451 stored messages: **444 carry a name that differs from the address and 7 do not**, so the duplicate is rare — and rare is exactly what makes it worth handling, because seven odd-looking rows in a thread read as a bug rather than as a pattern.
+
+The comparison is trimmed and **case-insensitive**. An address is case-insensitive in practice, so `Jean@Qiriness.com` sitting in the name field is the same sender as `jean@qiriness.com` in the address field; matching case-sensitively would print the duplicate this rule exists to remove.
+
+`senderIdentity()` returns the pair rather than a formatted string, so the two parts can be styled and wrapped separately — the name at body weight, the address at caption. A single pre-joined `"name <email>"` string would have forced one weight on both and made the address compete with the person.
 
 ### The Irrelevant dialog shows the message and nothing else
 
@@ -900,7 +956,7 @@ Guarding every statement would obscure the schema these files exist to document,
 
 PostgREST caps a response at 1,000 rows and pages an *unordered* query in whatever order the planner returns, so consecutive pages overlap and drop rows. This is not theoretical: while designing these panels, an unordered paged tally of the 58,201 customers returned `CHAMPIONS` as **438, then 554, then 472 on three consecutive runs** against unchanged data. Only the third was right, and nothing about the first two looked wrong.
 
-So `06_analytics.sql` carries nineteen views and `readView` takes a hard limit with **no pagination at all**. A view that could return more rows than that limit is the wrong shape and belongs back in SQL as a further aggregate. The two exceptions — `customer_ticket_facts` and `ticket_reply_times` — are bounded by ticket count rather than by customer or message count, and each says so at its call site.
+So `06_analytics.sql` carries twenty-one views and `readView` takes a hard limit with **no pagination at all**. A view that could return more rows than that limit is the wrong shape and belongs back in SQL as a further aggregate. The two exceptions — `customer_ticket_facts` and `ticket_reply_times` — are bounded by ticket count rather than by customer or message count, and each says so at its call site.
 
 ### Judgement stays in JavaScript, so the views expose `rfm_group` and never `is_vip`
 
@@ -923,6 +979,36 @@ Per carrier, the column counts **shipments that produced at least one ticket**, 
 The rate itself is a **floor, and the panel says so in the same breath**. A thread reaches a parcel only through `tickets.shopify_order_number`, which the resolver fills in and which **52 of 214 tickets carry** — customers write "my parcel has not arrived" far more often than they quote #5337. A dashboard cell reading `1.2%` with nothing beside it is exactly the plausible-but-wrong number the rest of this section exists to prevent, so `fulfilment_ticket_coverage` is a view rather than a sentence in the copy: when the resolver runs again the caveat shrinks by itself instead of going stale.
 
 **What survives the caveat is the ordering.** GLS is contacted about **4.1× as often as Colissimo** (5.1% of 198 shipments against 1.2% of 1,311), and under-counting that affects both carriers hits both roughly alike. The note ranks only carriers with 100+ shipments for that reason — a six-shipment carrier tops any ratio you like.
+
+### "Who is writing to us" reports two reachability numbers, because they are two questions
+
+The Support panel splits its tickets by whether the sender's address can be matched to an online purchase: **111 verified buyers, 34 from customers with no orders, 69 unmatched**, out of 214.
+
+The middle group is the section's reason to exist, and the copy carries one prohibition throughout: **a zero-order customer is not a non-customer.** A sale made in a physical shop never reaches Shopify, so an unmatched address is silence about our records rather than a denial about the person. Three of those 22 people have written a Judge.me product review, which nobody does for a product they never had — the evidence is in the data, not in the argument.
+
+**Reachability is two tiles and a note rather than one figure.** Those 34 tickets come from 22 distinct people; **22 of 22 have a deliverable address and only 8 carry marketing consent.** "Reachable" would have answered whichever question the reader assumed, and the expensive assumption is the lawful one: everyone in that group may be *replied to* about their own ticket, and 14 of them may not be *solicited*. Both numbers count people, not threads — a list built from the ticket count would be 1.5× too long, and that ratio is rendered rather than asserted so it corrects itself.
+
+**The views count, they do not name.** `support_purchase_states` emits `buyer_tickets` / `no_order_tickets` / `unknown_tickets` and reachability flags; the words `known_no_orders` and what a reply may say about it stay in `purchase-verification.mjs`. Same rule that keeps `is_vip` out of the customer views — a view emitting the state names would be a second definition to disagree with the first. The per-category cut carries ticket counts only: they sum across rows, while a distinct-customer count would double-count anyone writing under two subjects, so those live in the shop-level view alone.
+
+The category table filters to subjects where someone unverified actually wrote. Fourteen rows mostly reading zero would bury the finding, which is that **13 of 21 `promotions` tickets (62%) come from people who have never ordered** — code-hunters, and by far the highest share on the board.
+
+### The contacts CSV filters on consent, and it is the only bulk export in the app
+
+The reachability tile carries a download of the people behind it. Four things are deliberate.
+
+**Consent is the `where` clause, not a column.** The query filters on `on_email_marketing_list`, so the file holds 8 rows and not 22. A "consented" column would eventually be sorted by hand, or ignored — and the 14 people who may be answered about their own ticket but not solicited would end up in a campaign. They are absent from the file instead of flagged in it.
+
+**One row per person, not per ticket.** Somebody who wrote three times is one person to contact; their subjects are joined into a cell. A per-ticket export would put the same address into a mail merge three times, which is a real harm rather than an untidy file — two of the eight have three tickets each.
+
+**The file is built in the route, not in the page.** The Support panel is otherwise entirely aggregates, and a client-side blob would mean shipping every name and address into the HTML on every render whether or not anyone downloads it. Personal data leaves the database only when somebody asks for the file, and that ask writes one `data_access_events` row with the count — an export is exactly the access worth being able to reconstruct later. `no-store`, because a cached export is a stale list of people and one served to a later visitor is a disclosure nobody asked for.
+
+**The dates are `first_message_at`, and that is not a detail.** `tickets.created_at` reads `2026-08-09` for all 214 rows — the day the corpus was ingested — so an export using it would stamp every contact with the same date and look like a broken column rather than a synced one. `first_message_at` is when the customer actually wrote and covers 69 distinct days. Two columns, first and last, because a row is a person and two of the eight wrote three times over several weeks; one "contact date" would have to pick an end and would drop the other without saying so.
+
+**The control is an icon, so its accessible name does the work.** The tile's headline figure is 22 and the file holds 8, so a corner icon labelled only "Download" would read as exporting everything above it. Both the `aria-label` and the tooltip name the count, the filter and the number of people deliberately left out — the `foot` caveat sits below the icon and is not necessarily read first.
+
+**Two CSV details that are correctness, not polish.** A UTF-8 BOM, because Excel opens a BOM-less file in the system codepage and turns *Frédérique* into *FrÃ©dÃ©rique* — which reads as a database fault and is not one. And cells beginning `=`, `+`, `-` or `@` are prefixed with an apostrophe: Excel and Sheets execute those, and these values are whatever a customer typed into a name field on the storefront.
+
+**The standing caveat.** `README.md` step 8 — dashboard authentication — was already the blocking item because `/insights/customers` names individuals on screen. A file of names and addresses raises what an unauthenticated visitor can walk away with, so this export tightens rather than loosens the case for shipping auth before the dashboard is exposed anywhere but localhost.
 
 ### Tickets per month carries a contact rate, and the Support panel reaches into a fulfilment view to get it
 

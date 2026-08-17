@@ -23,6 +23,8 @@ import type {
   SupportCategoryRow,
   SupportMonth,
   SupportPanel,
+  SupportPurchaseCategory,
+  SupportPurchaseStates,
   SupportReplyStats,
   TopicCluster,
   TopicMap,
@@ -37,7 +39,15 @@ import {
 import { count, getSupabaseClient, num, readView } from "./shared";
 
 export async function getSupportPanel(shopId: string): Promise<SupportPanel> {
-  const [monthRows, categoryRows, replyRows, runRows, orderMonthRows] = await Promise.all([
+  const [
+    monthRows,
+    categoryRows,
+    replyRows,
+    runRows,
+    orderMonthRows,
+    purchaseRows,
+    purchaseCategoryRows
+  ] = await Promise.all([
     readView<Record<string, unknown>>(V.SUPPORT_BY_MONTH, shopId, { order: "month.asc" }),
     readView<Record<string, unknown>>(V.SUPPORT_BY_CATEGORY, shopId, { order: "tickets.desc" }),
     // The one read in the Insights section that returns per-entity rows rather
@@ -59,6 +69,11 @@ export async function getSupportPanel(shopId: string): Promise<SupportPanel> {
     // order's `processed_at`), so joining them in SQL would have to pick one and
     // silently drop the months the other one owns.
     readView<Record<string, unknown>>(V.FULFILMENT_BY_MONTH, shopId, { order: "month.asc" }),
+    // Who wrote in, by whether we can see them buy. One row per shop.
+    readView<Record<string, unknown>>(V.SUPPORT_PURCHASE_STATES, shopId, { limit: 1 }),
+    readView<Record<string, unknown>>(V.SUPPORT_PURCHASE_BY_CATEGORY, shopId, {
+      order: "no_order_tickets.desc"
+    })
   ]);
 
   const byCategory = foldByCategory(categoryRows.map(mapCategoryPair));
@@ -73,6 +88,38 @@ export async function getSupportPanel(shopId: string): Promise<SupportPanel> {
     totals,
     // Read asc, so the first row is the earliest month that sold anything.
     ordersFromMonth: orderMonthRows.length > 0 ? String(orderMonthRows[0].month) : null,
+    purchaseStates: mapPurchaseStates(purchaseRows[0] ?? null),
+    purchaseByCategory: purchaseCategoryRows.map(mapPurchaseCategory)
+  };
+}
+
+// --- who is writing in ------------------------------------------------------
+
+/**
+ * Null in, null out. A shop with no tickets has no row in the view, and
+ * fabricating a zeroed one here would render a section claiming nobody
+ * unverified has written — which is a statement, not an absence.
+ */
+function mapPurchaseStates(row: Record<string, unknown> | null): SupportPurchaseStates | null {
+  if (!row) return null;
+  return {
+    tickets: count(row.tickets),
+    buyerTickets: count(row.buyer_tickets),
+    noOrderTickets: count(row.no_order_tickets),
+    unknownTickets: count(row.unknown_tickets),
+    noOrderCustomers: count(row.no_order_customers),
+    noOrderDeliverable: count(row.no_order_deliverable),
+    noOrderMarketable: count(row.no_order_marketable)
+  };
+}
+
+function mapPurchaseCategory(row: Record<string, unknown>): SupportPurchaseCategory {
+  return {
+    category: (row.category as KnowledgeCategory | null) ?? null,
+    tickets: count(row.tickets),
+    buyerTickets: count(row.buyer_tickets),
+    noOrderTickets: count(row.no_order_tickets),
+    unknownTickets: count(row.unknown_tickets)
   };
 }
 

@@ -92,6 +92,21 @@ export const MISSING_FIELDS = {
     label: 'le produit concerné',
     ask: 'De quel produit s’agit-il exactement ?'
   },
+  purchase_channel: {
+    label: 'où l’achat a été effectué',
+    // The question a retail purchase forces, and the reason the three-state
+    // verification exists: nothing in Shopify records a sale made at a till, so
+    // an address we cannot place is a question and not a verdict.
+    ask:
+      'Avez-vous acheté ce produit sur notre site, ou en boutique ? ' +
+      'Si c’est en boutique, pourriez-vous nous indiquer laquelle ?'
+  },
+  photo: {
+    label: 'une photo du produit concerné',
+    ask:
+      'Pourriez-vous nous envoyer une photo du produit et de son emballage ? ' +
+      'Cela nous permettra de traiter votre demande plus rapidement.'
+  },
   promotion_code: {
     label: 'le code promotionnel',
     ask: 'Pouvez-vous nous indiquer le code promotionnel que vous avez utilisé ?'
@@ -143,7 +158,19 @@ export const CAVEATS = {
     'Ne pas supposer que le client a un compte ou un historique : aucune fiche client ' +
     'ne correspond à cette adresse.',
   stock_unknown:
-    'Ne pas annoncer de disponibilité ni de date de réassort : le stock n’a pas pu être établi.'
+    'Ne pas annoncer de disponibilité ni de date de réassort : le stock n’a pas pu être établi.',
+  // THE PROHIBITION IS AGAINST THE DENIAL, not against the doubt. A sale made in
+  // a physical shop never reaches Shopify, so "aucune commande trouvée" is a
+  // statement about our records and not about the customer — and telling someone
+  // holding the product that they never bought it is the worst reply this whole
+  // check exists to prevent.
+  purchase_unverified:
+    'Ne pas affirmer que cette personne n’a rien acheté ni qu’elle n’est pas cliente : ' +
+    'l’achat n’a pas pu être vérifié, et un achat en boutique physique n’apparaît jamais ' +
+    'dans nos données. Demander où l’achat a été effectué.',
+  attachments_unrecorded:
+    'Ne pas affirmer qu’aucune photo n’a été envoyée : les pièces jointes de ce message ' +
+    'n’ont pas été enregistrées, leur contenu est inconnu.'
 };
 
 export const CAVEAT_CODES = Object.keys(CAVEATS);

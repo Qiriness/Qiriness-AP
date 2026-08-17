@@ -29,6 +29,9 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |   |       |-- tickets/[id]/route.ts         # GET case file + order facts · PATCH status
 |   |       |-- tickets/[id]/thread/route.ts  # GET the conversation (message bodies)
 |   |       |-- forwarding/route.ts           # GET 14 categories · PUT upsert one
+|   |       |-- insights/support/marketable-contacts/route.ts
+|   |       |                                  # GET the consented outreach list as CSV
+|   |       |                                  # (the ONLY bulk personal-data export)
 |   |       `-- knowledge/                    # shopify-sources · articles · articles/[id]
 |   |                                         # · articles/[id]/resync
 |   |-- components/
@@ -65,7 +68,8 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |   |       |                    # dropped-mail-service · knowledge-errors
 |   |       `-- insights/         # shared (readView -- NO paging, by design) +
 |   |                             # one service per panel: fulfilment · support ·
-|   |                             # customers · agent
+|   |                             # customers · agent · marketable-contacts
+|   |                             # (CSV export; consent is the query filter)
 |   |-- next.config.mjs          # loadEnv() from root .env.local; staleTimes 0
 |   `-- tsconfig.json            # allowJs, so services can import scripts/lib/*.mjs
 |-- scripts/                     # one sync orchestrator per Shopify resource
@@ -130,13 +134,15 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |   |   |                        # sender-directory (who a sender is: context for
 |   |   |                        # the case file, filter for the demand report) ·
 |   |   |                        # spam-audit (rows, body cap/clock, retention purge) ·
-|   |   |                        # spam-body-backfill
+|   |   |                        # spam-body-backfill · attachment-backfill
 |   |   |-- pipeline/            # categorise (classify-only) · categorise-runner
 |   |   |-- retrieval/           # retrieval-rules · knowledge-retrieval ·
 |   |   |                        # exemplar-{rules,retrieval} (which situation is this) ·
 |   |   |                        # product-{matching,context,lookup} ·
 |   |   |                        # promotion-{rules,lookup} · abandoned-checkout ·
-|   |   |                        # customer-{context,lookup}
+|   |   |                        # customer-{context,lookup} ·
+|   |   |                        # purchase-{verification,lookup} (three-state
+|   |   |                        #   customer check + last-order product match)
 |   |   |-- investigation/       # case-file (THE output contract) · investigation-rules ·
 |   |   |                        # decompose{,-rules} (tasks + needs, one call) ·
 |   |   |                        # answer-selection (which answer the findings
@@ -144,6 +150,7 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |   |   |                        # evidence-rules (19 needs, scored vs the ledger;
 |   |   |                        #   + findings = the value each took, + a
 |   |   |                        #   requires/moot DAG and orderNeeds) ·
+|   |   |                        # photo-evidence (mentioned vs attached) ·
 |   |   |                        # tool-registry · investigate (bounded loop) ·
 |   |   |                        # investigation-runner · create-investigation
 |   |   |-- resolution/          # customer-resolution-runner · order-number-parser ·
@@ -207,7 +214,7 @@ The recurring situations, not the answers to them. Same document/chunk mechanics
 | Table | Holds |
 | --- | --- |
 | `tickets` | one per Graph `conversationId`. Taxonomy axes, `level`, `responsible_team`, `customer_id`, `shopify_order_number`, signals (`language`, `happiness`, `categorisation_confidence`), `resolved_context` jsonb, lifecycle + retention timestamps |
-| `ticket_messages` | one per Graph message. Envelope, cleaned `body_text`, sanitised payload, `embedding vector(1536)` |
+| `ticket_messages` | one per Graph message. Envelope, cleaned `body_text`, sanitised payload, `embedding vector(1536)`, and `attachments jsonb` -- part METADATA only (name, contentType, size, isInline), never bytes. **NULL means never fetched**, `[]` means fetched and empty |
 | `ticket_investigations` | **the case file**: `established` / `unverified` / `missing` / `do_not_claim` (four separate columns), `handoff`, `context_ref`, `dropped_claims`, `evidence_gaps` (what the ticket required vs what was obtained, each entry carrying the `finding` and the `details` naming WHICH product or code it is about — diagnostic, does not move the verdict), `exemplar_match` (which recurring situation this is; recorded, never acted on). `unique(shop_id, trigger_message_id)` |
 | `email_blocklist` | per-shop sender email/domain rules + hit counts |
 | `sender_directory` | per-shop sender email/domain → `label` (internal, contractor, logistics, courier, retailer, distributor, supplier, partner, other) + free-text `note`. Read into the case file as context and by `cluster:tickets` to tell customer demand from our own mail. Replaces `INTERNAL_EMAIL_DOMAINS`. Rows are exceptions; an unlisted sender is a consumer |
@@ -230,7 +237,7 @@ RLS on the tables under it.
 | `ticket_queue` | the dashboard row: ticket + customer + count, soft-deleted excluded | `TICKET_LIST_SELECT` + the count join, in `tickets-service.ts` |
 | `order_number_range(shop)` | lowest and highest `order_number`, live orders only | an asc/desc pair of `limit 1` reads |
 
-**The 19 Insights views (`06_analytics.sql`).** Every figure on every panel comes
+**The 21 Insights views (`06_analytics.sql`).** Every figure on every panel comes
 from one of these. Nothing is aggregated in the browser or the server, because
 PostgREST caps a response at 1,000 rows and pages an unordered query in
 overlapping slices — see `DECISIONS.md § Insights`.
@@ -239,7 +246,7 @@ overlapping slices — see `DECISIONS.md § Insights`.
 | --- | --- |
 | Fulfilment | `order_fulfilment_timing` (base, per order; also carries `total_refunded` + `return_status`) · `fulfilment_summary` (timing **and** the returns/refunds counts) · `fulfilment_by_month` · `fulfilment_by_carrier` (also the contact rate: orders that produced a ticket) · `fulfilment_by_bucket` · `fulfilment_ticket_coverage` (the denominator that makes that rate a floor) |
 | Fulfilment, per sales channel | `fulfilment_summary_by_channel` · `fulfilment_by_channel_month` · `fulfilment_by_channel_bucket` — the same three cut by `orders.sales_channel_handle`, read with a `channel` filter. Additive: the views above keep their one-row-per-shop shape |
-| Support | `ticket_reply_times` (base, per ticket) · `support_by_month` · `support_by_category` |
+| Support | `ticket_reply_times` (base, per ticket) · `support_by_month` · `support_by_category` · `support_purchase_states` + `support_purchase_by_category` (who wrote in, by whether an online purchase is visible) |
 | Customers | `customer_ticket_facts` · `customer_segment_totals` |
 | Agent | `agent_pipeline_funnel` · `investigation_evidence_gaps` · `investigation_verdicts` · `llm_usage_by_month` · `llm_usage_summary` |
 
@@ -323,7 +330,7 @@ from an aggregate view.
 | --- | --- | --- |
 | **Fulfilment** | how long orders take to leave, and where delivery data would go | the five fulfilment views |
 | ↳ section order | Order to dispatch · Amazon only · Delivery (blocked tiles + the measured `Returned or refunded` tile) · **Carriers** — the carrier table sits under Delivery, and its `Lost` / `Damaged` / `Delivered late` columns are placeholders no source writes | — |
-| **Support** | volume, mood, reply time, and the topic map | the three support views + `ticket_clusters` + `fulfilment_by_month` (orders, as the contact-rate denominator) |
+| **Support** | volume, mood, reply time, who is writing in, and the topic map | the five support views + `ticket_clusters` + `fulfilment_by_month` (orders, as the contact-rate denominator) |
 | **Customers** | who to call, and what spend is exposed | the two customer views + `customer-segments.mjs` |
 | **Agent** | what it costs, how far tickets get, what blocks them — cost leads the page | the five agent views + `llm-rates.mjs` |
 
@@ -379,6 +386,7 @@ From `agent/`. Every pass has a standalone runner, most with `:dry-run`.
 | `ingest:reset` | clear the delta cursor |
 | `blocklist:add` | add a blocklist rule |
 | `spam:backfill[:dry-run] -- --limit=N` | re-read dropped mail from Graph to fill `spam_audit` bodies |
+| `attachments:backfill[:dry-run] -- --limit=N` | fetch attachment metadata from Graph for messages ingested before the column existed |
 | `customers:resolve[:dry-run]` | link `tickets.customer_id` from the requester hash |
 | `customer:lookup -- <email> [--json] [--with-email]` | the CRM tool, no ticket needed |
 | `orders:resolve[:dry-run]` | confirm order numbers |

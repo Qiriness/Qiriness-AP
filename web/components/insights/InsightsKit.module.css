@@ -122,6 +122,50 @@
   line-height: 1.45;
 }
 
+/* Pinned to the tile's top-right corner, out of the label -> figure -> foot
+   reading order. Absolute rather than a flex row with the label: the label wraps
+   on a narrow tile, and a flex sibling would be pushed down with it instead of
+   staying in the corner. */
+.tileAction {
+  position: absolute;
+  top: var(--space-2);
+  right: var(--space-2);
+  z-index: 1;
+}
+
+/* The label reserves room so a long one wraps before it reaches the icon rather
+   than running underneath it. Scoped to tiles that actually have an action, so
+   every other tile keeps its full width. */
+.tileAction + .tileLabel {
+  padding-right: var(--space-6);
+}
+
+.tileAction a {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  /* 28px: comfortably clickable without becoming a second focal point beside
+     the figure the tile exists to show. */
+  width: 1.75rem;
+  height: 1.75rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text-subtle);
+  text-decoration: none;
+}
+
+.tileAction a:hover {
+  background: var(--surface-sunken);
+  border-color: var(--teal);
+  color: var(--teal);
+}
+
+.tileAction a:focus-visible {
+  outline: 2px solid var(--teal);
+  outline-offset: 2px;
+}
+
 .dash {
   color: var(--text-subtle);
 }

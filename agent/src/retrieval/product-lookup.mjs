@@ -109,6 +109,22 @@ export function createProductLookup({ supabase, shopId, logger }) {
     },
 
     /**
+     * The catalogue's token index, for a caller matching against a *different*
+     * candidate set.
+     *
+     * `purchase-verification` needs it to score a question against the two or
+     * three line items of one order. Building an index over three titles would
+     * give every token the same weight and reduce the match to word overlap —
+     * `creme` would count as much as `led`. Lending the catalogue's IDF keeps
+     * the weights meaningful while the candidates stay the customer's own
+     * purchases. Shared, not copied: a second index would be a second answer to
+     * "how rare is this word".
+     */
+    catalogueIndex() {
+      return loadIndex();
+    },
+
+    /**
      * Full product context for a specific-product question.
      *
      * WHEN THE NAME IS AMBIGUOUS, BOTH ARE RETURNED. Silently picking one is the
