@@ -45,6 +45,107 @@ export function AgentView({ panel }: { panel: AgentPanel }) {
   return (
     <>
       <PanelSection
+        title="What it costs"
+        subtitle="Token counts are recorded per call and priced at read time, so a change to the rate card restates history instead of invalidating it."
+      >
+        {!hasUsageData || !usage ? (
+          <>
+            <TileGrid>
+              <BlockedTile label="Spend this month" reason="No calls recorded yet" />
+              <BlockedTile label="Tokens this month" reason="No calls recorded yet" />
+              <BlockedTile label="Average per ticket" reason="No calls recorded yet" />
+              <BlockedTile label="Worst single ticket" reason="No calls recorded yet" />
+            </TileGrid>
+            <Note title="Nothing has been recorded yet, and that is expected">
+              Token capture was only just wired into the OpenAI transport. These tiles fill in as the worker
+              runs — <code>npm run ingest:once</code> from <code>agent/</code>, or any of the{" "}
+              <code>embed:*</code> scripts. Nothing can be backfilled: OpenAI reports usage on the response
+              and nowhere else, so the history starts from the first call after wiring.
+            </Note>
+          </>
+        ) : (
+          <>
+            <TileGrid>
+              <StatTile
+                label="Spend this month"
+                value={usd(usage.monthToDateUsd)}
+                foot={`${compactNumber(usage.monthToDateTokens)} tokens month to date`}
+              />
+              <StatTile
+                label="Recorded spend"
+                value={usd(usage.costUsd)}
+                of={`${usage.calls.toLocaleString()} calls`}
+                foot={`${compactNumber(usage.totalTokens)} tokens since ${
+                  usage.firstRecordedAt ? formatMonth(usage.firstRecordedAt.slice(0, 10)) : "the first call"
+                }`}
+              />
+              <StatTile
+                label="Average per ticket"
+                value={
+                  usage.meanTokensPerTicket === null
+                    ? "—"
+                    : compactNumber(Math.round(usage.meanTokensPerTicket))
+                }
+                of="tokens"
+                foot={`Across ${usage.ticketsTouched.toLocaleString()} tickets touched`}
+              />
+              <StatTile
+                label="Worst single ticket"
+                value={
+                  usage.maxTokensOnATicket === null
+                    ? "—"
+                    : compactNumber(Math.round(usage.maxTokensOnATicket))
+                }
+                of="tokens"
+                tone={
+                  usage.maxTokensOnATicket !== null &&
+                  usage.meanTokensPerTicket !== null &&
+                  usage.maxTokensOnATicket > usage.meanTokensPerTicket * 8
+                    ? "warn"
+                    : "neutral"
+                }
+                foot="The runaway check — the investigation loop is bounded, and this is how you know it held"
+              />
+            </TileGrid>
+
+            {usage.hasUnpricedModels ? (
+              <Note tone="warn" title="Some spend is unpriced">
+                At least one model in this window has no configured rate, so the money figures above are a
+                floor rather than a total. Add it to <code>LLM_RATES</code> rather than editing the defaults.
+              </Note>
+            ) : null}
+
+            <figure className={styles.figure}>
+              <figcaption className={styles.figcaption}>
+                <span className={styles.figTitle}>Tokens by month and model</span>
+                <span className={styles.figSub}>
+                  Investigation runs on the expensive tier; categorisation and the spam gate do not.
+                </span>
+              </figcaption>
+              <BarList
+                ariaLabel="Token usage by month and model"
+                data={usageByMonth.map((m) => ({
+                  key: `${m.month}-${m.model}-${m.pass}`,
+                  label: `${formatMonth(m.month)} · ${m.model}`,
+                  value: m.totalTokens,
+                  display: compactNumber(m.totalTokens),
+                  title: `${m.pass}: ${m.calls} calls, ${m.totalTokens.toLocaleString()} tokens, ${usd(
+                    m.costUsd
+                  )}${m.failedCalls ? ` — ${m.failedCalls} failed` : ""}`,
+                }))}
+              />
+            </figure>
+
+            <Note title="Prices are configuration, not fact">
+              The default rates are list prices recorded so the panel has a number instead of a blank.
+              Verify them against current OpenAI pricing before treating any figure here as real spend, and
+              override with the <code>LLM_RATES</code> environment variable when they move.
+            </Note>
+          </>
+        )}
+      </PanelSection>
+
+      <PanelSection
         title="What the agent is getting through"
         subtitle="Each stage is a count over the same set of tickets, so the drop-offs are directly comparable."
       >
@@ -149,107 +250,6 @@ export function AgentView({ panel }: { panel: AgentPanel }) {
               It is the system reporting its own blockers, so it stays current on its own. Whatever sits at
               the top is the data that would unblock the most mail if it existed — which makes it the
               cheapest place to spend the next unit of engineering.
-            </Note>
-          </>
-        )}
-      </PanelSection>
-
-      <PanelSection
-        title="What it costs"
-        subtitle="Token counts are recorded per call and priced at read time, so a change to the rate card restates history instead of invalidating it."
-      >
-        {!hasUsageData || !usage ? (
-          <>
-            <TileGrid>
-              <BlockedTile label="Spend this month" reason="No calls recorded yet" />
-              <BlockedTile label="Tokens this month" reason="No calls recorded yet" />
-              <BlockedTile label="Average per ticket" reason="No calls recorded yet" />
-              <BlockedTile label="Worst single ticket" reason="No calls recorded yet" />
-            </TileGrid>
-            <Note title="Nothing has been recorded yet, and that is expected">
-              Token capture was only just wired into the OpenAI transport. These tiles fill in as the worker
-              runs — <code>npm run ingest:once</code> from <code>agent/</code>, or any of the{" "}
-              <code>embed:*</code> scripts. Nothing can be backfilled: OpenAI reports usage on the response
-              and nowhere else, so the history starts from the first call after wiring.
-            </Note>
-          </>
-        ) : (
-          <>
-            <TileGrid>
-              <StatTile
-                label="Spend this month"
-                value={usd(usage.monthToDateUsd)}
-                foot={`${compactNumber(usage.monthToDateTokens)} tokens month to date`}
-              />
-              <StatTile
-                label="Recorded spend"
-                value={usd(usage.costUsd)}
-                of={`${usage.calls.toLocaleString()} calls`}
-                foot={`${compactNumber(usage.totalTokens)} tokens since ${
-                  usage.firstRecordedAt ? formatMonth(usage.firstRecordedAt.slice(0, 10)) : "the first call"
-                }`}
-              />
-              <StatTile
-                label="Average per ticket"
-                value={
-                  usage.meanTokensPerTicket === null
-                    ? "—"
-                    : compactNumber(Math.round(usage.meanTokensPerTicket))
-                }
-                of="tokens"
-                foot={`Across ${usage.ticketsTouched.toLocaleString()} tickets touched`}
-              />
-              <StatTile
-                label="Worst single ticket"
-                value={
-                  usage.maxTokensOnATicket === null
-                    ? "—"
-                    : compactNumber(Math.round(usage.maxTokensOnATicket))
-                }
-                of="tokens"
-                tone={
-                  usage.maxTokensOnATicket !== null &&
-                  usage.meanTokensPerTicket !== null &&
-                  usage.maxTokensOnATicket > usage.meanTokensPerTicket * 8
-                    ? "warn"
-                    : "neutral"
-                }
-                foot="The runaway check — the investigation loop is bounded, and this is how you know it held"
-              />
-            </TileGrid>
-
-            {usage.hasUnpricedModels ? (
-              <Note tone="warn" title="Some spend is unpriced">
-                At least one model in this window has no configured rate, so the money figures above are a
-                floor rather than a total. Add it to <code>LLM_RATES</code> rather than editing the defaults.
-              </Note>
-            ) : null}
-
-            <figure className={styles.figure}>
-              <figcaption className={styles.figcaption}>
-                <span className={styles.figTitle}>Tokens by month and model</span>
-                <span className={styles.figSub}>
-                  Investigation runs on the expensive tier; categorisation and the spam gate do not.
-                </span>
-              </figcaption>
-              <BarList
-                ariaLabel="Token usage by month and model"
-                data={usageByMonth.map((m) => ({
-                  key: `${m.month}-${m.model}-${m.pass}`,
-                  label: `${formatMonth(m.month)} · ${m.model}`,
-                  value: m.totalTokens,
-                  display: compactNumber(m.totalTokens),
-                  title: `${m.pass}: ${m.calls} calls, ${m.totalTokens.toLocaleString()} tokens, ${usd(
-                    m.costUsd
-                  )}${m.failedCalls ? ` — ${m.failedCalls} failed` : ""}`,
-                }))}
-              />
-            </figure>
-
-            <Note title="Prices are configuration, not fact">
-              The default rates are list prices recorded so the panel has a number instead of a blank.
-              Verify them against current OpenAI pricing before treating any figure here as real spend, and
-              override with the <code>LLM_RATES</code> environment variable when they move.
             </Note>
           </>
         )}

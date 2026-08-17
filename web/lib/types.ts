@@ -685,6 +685,20 @@ export interface FulfilmentSummary {
   shippedWithoutTracking: number;
   /** Coverage check on delivery data: 1 of 2,006 today. */
   withDeliveryEvent: number;
+  /**
+   * Orders that came back, counted per order rather than per refund — an order
+   * refunded twice is one unhappy order. `returnsOpened` is deliberately a
+   * separate figure and not folded in: this store records 3 refunds and 0
+   * returns, and one combined number would hide that.
+   *
+   * Null where the view has not been re-applied and the column is absent, so a
+   * stale database renders a blocked tile rather than a confident zero.
+   */
+  refundedOrders: number | null;
+  fullyRefundedOrders: number | null;
+  returnsOpened: number | null;
+  /** Euros refunded across those orders, for whoever wants the money not the count. */
+  refundedAmount: number | null;
   firstOrderAt: string | null;
   lastOrderAt: string | null;
 }
@@ -706,6 +720,41 @@ export interface FulfilmentCarrier {
   p50Hours: number | null;
   over72h: number;
   withoutTracking: number;
+  /**
+   * Shipments that produced at least one ticket — the numerator of the contact
+   * rate. Orders rather than threads: one order chased four times is one
+   * contact, and on a small carrier the other arithmetic exceeds 100%.
+   */
+  ordersWithTicket: number;
+  /** The raw thread count behind those orders, shown beside the rate. */
+  tickets: number;
+  /**
+   * How each carrier's shipments actually end: shipments lost, arriving damaged,
+   * or arriving late.
+   *
+   * **Deliberately null, and there is no source for them yet.** Nothing in the
+   * schema separates a lost parcel from a damaged one from a late one — a ticket
+   * carries a `delivery` subject and a `request_kind`, and that is the finest
+   * grain there is. No carrier scan events reach Shopify either, so the delivery
+   * side cannot supply them.
+   *
+   * They are typed `number | null` rather than `number` so that the day a source
+   * exists, wiring it is a change in `mapCarrier` and nowhere else — and so that
+   * nothing can quietly default them to 0, which on this panel is a claim that
+   * no parcel was ever lost. See `DECISIONS.md § Insights`.
+   */
+  lost: number | null;
+  damaged: number | null;
+  late: number | null;
+}
+
+/**
+ * Why the contact rate is a floor: a ticket reaches a parcel only through a
+ * resolved `shopify_order_number`, and most threads never quote one.
+ */
+export interface FulfilmentTicketCoverage {
+  tickets: number;
+  withOrderNumber: number;
 }
 
 export interface FulfilmentBucket {
@@ -716,11 +765,42 @@ export interface FulfilmentBucket {
   late: boolean;
 }
 
+/**
+ * One sales channel measured on its own — the same summary, monthly trend and
+ * histogram as the store-wide panel, over that channel's orders only.
+ *
+ * The month series is the channel's own and is usually shorter than the
+ * store-wide one: a channel that sold nothing in a month has no row for it, so
+ * the two series must not be read side by side as if the indexes lined up.
+ */
+export interface FulfilmentChannelPanel {
+  /** Shopify's stable handle, e.g. `amazon`. What the view is filtered on. */
+  channel: string;
+  /** The display name Shopify shows in Admin, e.g. `Amazon`. */
+  label: string;
+  summary: FulfilmentSummary;
+  byMonth: FulfilmentMonth[];
+  byBucket: FulfilmentBucket[];
+}
+
 export interface FulfilmentPanel {
   summary: FulfilmentSummary | null;
   byMonth: FulfilmentMonth[];
   byCarrier: FulfilmentCarrier[];
   byBucket: FulfilmentBucket[];
+  /**
+   * Amazon on its own, or null if the store has no Amazon orders. A marketplace
+   * dispatches against someone else's promise, so its delay is only meaningful
+   * read against the store's own figures — which is why it renders directly
+   * below them rather than on a page of its own.
+   */
+  amazon: FulfilmentChannelPanel | null;
+  /**
+   * Null only if the desk has no tickets at all. When it is present the carrier
+   * table must state it: without it the contact-rate column reads as the whole
+   * truth rather than as the share the resolver can actually see.
+   */
+  ticketCoverage: FulfilmentTicketCoverage | null;
   /**
    * False while no carrier feeds scan events back to Shopify, which is the
    * state today. The delivery tiles then render as explicitly blocked rather
@@ -734,6 +814,12 @@ export interface FulfilmentPanel {
 export interface SupportMonth {
   month: string;
   tickets: number;
+  /**
+   * Orders placed in the same calendar month, from `fulfilment_by_month` — the
+   * denominator behind the contact rate. Null where that month has no order row
+   * at all, which is not the same as a month that sold nothing.
+   */
+  orders: number | null;
   unhappy: number;
   veryUnhappy: number;
   levelThree: number;
@@ -798,6 +884,13 @@ export interface SupportPanel {
   replies: SupportReplyStats | null;
   topicMap: TopicMap | null;
   totals: { tickets: number; open: number; unhappy: number; veryUnhappy: number } | null;
+  /**
+   * The earliest month that has orders, which is not the earliest month that has
+   * mail. Where it is earlier, the first month of the ticket series is a partial
+   * mailbox over a whole month of trading and its contact rate reads low for a
+   * reason that has nothing to do with customers.
+   */
+  ordersFromMonth: string | null;
 }
 
 // --- Customers -------------------------------------------------------------

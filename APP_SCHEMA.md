@@ -230,14 +230,15 @@ RLS on the tables under it.
 | `ticket_queue` | the dashboard row: ticket + customer + count, soft-deleted excluded | `TICKET_LIST_SELECT` + the count join, in `tickets-service.ts` |
 | `order_number_range(shop)` | lowest and highest `order_number`, live orders only | an asc/desc pair of `limit 1` reads |
 
-**The 15 Insights views (`06_analytics.sql`).** Every figure on every panel comes
+**The 19 Insights views (`06_analytics.sql`).** Every figure on every panel comes
 from one of these. Nothing is aggregated in the browser or the server, because
 PostgREST caps a response at 1,000 rows and pages an unordered query in
 overlapping slices — see `DECISIONS.md § Insights`.
 
 | Group | Views |
 | --- | --- |
-| Fulfilment | `order_fulfilment_timing` (base, per order) · `fulfilment_summary` · `fulfilment_by_month` · `fulfilment_by_carrier` · `fulfilment_by_bucket` |
+| Fulfilment | `order_fulfilment_timing` (base, per order; also carries `total_refunded` + `return_status`) · `fulfilment_summary` (timing **and** the returns/refunds counts) · `fulfilment_by_month` · `fulfilment_by_carrier` (also the contact rate: orders that produced a ticket) · `fulfilment_by_bucket` · `fulfilment_ticket_coverage` (the denominator that makes that rate a floor) |
+| Fulfilment, per sales channel | `fulfilment_summary_by_channel` · `fulfilment_by_channel_month` · `fulfilment_by_channel_bucket` — the same three cut by `orders.sales_channel_handle`, read with a `channel` filter. Additive: the views above keep their one-row-per-shop shape |
 | Support | `ticket_reply_times` (base, per ticket) · `support_by_month` · `support_by_category` |
 | Customers | `customer_ticket_facts` · `customer_segment_totals` |
 | Agent | `agent_pipeline_funnel` · `investigation_evidence_gaps` · `investigation_verdicts` · `llm_usage_by_month` · `llm_usage_summary` |
@@ -321,9 +322,10 @@ from an aggregate view.
 | Panel | Answers | Reads |
 | --- | --- | --- |
 | **Fulfilment** | how long orders take to leave, and where delivery data would go | the five fulfilment views |
-| **Support** | volume, mood, reply time, and the topic map | the three support views + `ticket_clusters` |
+| ↳ section order | Order to dispatch · Amazon only · Delivery (blocked tiles + the measured `Returned or refunded` tile) · **Carriers** — the carrier table sits under Delivery, and its `Lost` / `Damaged` / `Delivered late` columns are placeholders no source writes | — |
+| **Support** | volume, mood, reply time, and the topic map | the three support views + `ticket_clusters` + `fulfilment_by_month` (orders, as the contact-rate denominator) |
 | **Customers** | who to call, and what spend is exposed | the two customer views + `customer-segments.mjs` |
-| **Agent** | how far tickets get, what blocks them, what it costs | the five agent views + `llm-rates.mjs` |
+| **Agent** | what it costs, how far tickets get, what blocks them — cost leads the page | the five agent views + `llm-rates.mjs` |
 
 The Support topic map reads the latest `cluster_runs` row and renders each
 `ticket_clusters` row as its own treemap tile. The tile label is derived from

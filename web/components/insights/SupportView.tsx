@@ -27,7 +27,15 @@ import styles from "./SupportView.module.css";
  * section subtitle spells the attrition out before any duration appears.
  */
 export function SupportView({ panel }: { panel: SupportPanel }) {
-  const { byMonth, byCategory, replies, topicMap, totals } = panel;
+  const { byMonth, byCategory, replies, topicMap, totals, ordersFromMonth } = panel;
+
+  // The store was trading before the mailbox was synced, so the first month of
+  // the ticket series is part of a month of mail sitting over a whole month of
+  // orders. Its contact rate is a floor, and without saying so it reads as the
+  // quietest month on the chart — which is the shape a genuinely good month has.
+  const firstMonth = byMonth[0] ?? null;
+  const truncatedFirstMonth =
+    firstMonth && ordersFromMonth && ordersFromMonth < firstMonth.month ? firstMonth : null;
 
   if (!totals || totals.tickets === 0) {
     return <EmptyState>No tickets have been ingested yet. Run the agent&apos;s ingestion pass.</EmptyState>;
@@ -93,8 +101,13 @@ export function SupportView({ panel }: { panel: SupportPanel }) {
           <figcaption className={styles.figcaption}>
             <span className={styles.figTitle}>Tickets per month</span>
             <span className={styles.figSub}>
-              Months with no ingested mail are absent rather than drawn at zero. The current month is
-              partial and marked with an asterisk.
+              In brackets, the month&apos;s tickets as a share of the orders placed in that same
+              month — the contact rate. Both are calendar-month counts, not a cohort: a ticket about
+              an order placed in June counts against July if it was written in July, so a single
+              month&apos;s rate moves with when people wrote in as well as with how much sold.
+              Months with no order row show the count alone rather than a rate. Months with no
+              ingested mail are absent rather than drawn at zero, and the current month is partial
+              and marked with an asterisk.
             </span>
           </figcaption>
           <BarList
@@ -104,14 +117,22 @@ export function SupportView({ panel }: { panel: SupportPanel }) {
               // is still running depends on when the page is read, which is not
               // something SQL can know.
               const partial = isCurrentMonth(month.month);
+              // No orders for the month means no rate — never "(0.0%)", which
+              // would read as a month nobody wrote in about.
+              const rate = month.orders ? ` (${percent(month.tickets, month.orders)})` : "";
               return {
                 key: month.month,
                 label: `${formatMonth(month.month)}${partial ? "*" : ""}`,
                 value: month.tickets,
-                display: `${month.tickets.toLocaleString()}${partial ? " so far" : ""}`,
-                title: `${formatMonth(month.month)}: ${month.tickets} tickets, ${
-                  month.unhappy
-                } unhappy, ${month.stillOpen} still open, median first reply ${hours(
+                display: `${month.tickets.toLocaleString()}${rate}${partial ? " so far" : ""}`,
+                title: `${formatMonth(month.month)}: ${month.tickets} tickets${
+                  month.orders
+                    ? ` over ${month.orders.toLocaleString()} orders (${percent(
+                        month.tickets,
+                        month.orders
+                      )})`
+                    : " (no orders recorded for this month)"
+                }, ${month.unhappy} unhappy, ${month.stillOpen} still open, median first reply ${hours(
                   month.p50ReplyHours
                 )} over ${month.repliesMeasured} measured thread(s)${
                   partial ? " — month still in progress" : ""
@@ -119,6 +140,16 @@ export function SupportView({ panel }: { panel: SupportPanel }) {
               };
             })}
           />
+          {truncatedFirstMonth ? (
+            <Note tone="warn" title={`${formatMonth(truncatedFirstMonth.month)} is a floor, not a quiet month`}>
+              Orders go back to {formatMonth(ordersFromMonth!)}, but the synced mailbox starts in{" "}
+              {formatMonth(truncatedFirstMonth.month)} — so that first bar counts part of a month of
+              mail against a whole month of trading, and its{" "}
+              {percent(truncatedFirstMonth.tickets, truncatedFirstMonth.orders ?? 0)} is the lowest
+              rate on the chart for a reason that has nothing to do with customers. Compare the
+              months after it; do not read the first one as a target.
+            </Note>
+          ) : null}
         </figure>
       </PanelSection>
 

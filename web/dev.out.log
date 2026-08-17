@@ -10,19 +10,58 @@
     · outputFileTracingRoot
 
  ✓ Starting...
- ✓ Ready in 4.4s
+ ✓ Ready in 24.6s
+ ○ Compiling / ...
+ ✓ Compiled / in 7.8s (446 modules)
+ GET / 307 in 9728ms
+ GET / 307 in 101ms
+ GET / 307 in 56ms
+ ○ Compiling /agent-setup ...
+ ✓ Compiled /agent-setup in 40.7s (682 modules)
+ GET /agent-setup 200 in 45447ms
+ ○ Compiling /insights ...
+ ✓ Compiled /insights in 593ms (682 modules)
+ GET /insights 307 in 949ms
  ○ Compiling /insights/fulfilment ...
- ✓ Compiled /insights/fulfilment in 9.8s (646 modules)
- GET /insights/fulfilment 200 in 13897ms
+ ✓ Compiled /insights/fulfilment in 1085ms (704 modules)
+ GET /insights/fulfilment 200 in 2464ms
+ GET /insights/fulfilment 200 in 1537ms
  ○ Compiling /insights/support ...
- ✓ Compiled /insights/support in 6.7s (630 modules)
- GET /insights/support 200 in 10044ms
+ ✓ Compiled /insights/support in 3.4s (672 modules)
+ ✓ Compiled in 1238ms (672 modules)
+ ✓ Compiled in 468ms (341 modules)
+ ✓ Compiled in 503ms (341 modules)
+ ✓ Compiled in 427ms (341 modules)
+ ✓ Compiled in 1889ms (341 modules)
+ GET /insights/support 200 in 1541ms
+ GET /insights/fulfilment 200 in 2063ms
+ ✓ Compiled in 1609ms (672 modules)
+ ✓ Compiled in 560ms (341 modules)
+ ✓ Compiled in 489ms (341 modules)
+ ✓ Compiled in 538ms (341 modules)
+ GET /insights/support 200 in 1434ms
+ ✓ Compiled in 543ms (672 modules)
+ ✓ Compiled in 531ms (341 modules)
+ ✓ Compiled in 233ms (341 modules)
+ ✓ Compiled in 593ms (341 modules)
+ ✓ Compiled in 507ms (341 modules)
+ GET /insights/fulfilment 500 in 1638ms
+ ✓ Compiled in 537ms (341 modules)
+ GET /insights/fulfilment 500 in 1576ms
+ ✓ Compiled in 165ms (341 modules)
+ GET /insights/fulfilment 200 in 1512ms
+ ✓ Compiled in 656ms (682 modules)
+ GET /insights/fulfilment 200 in 1144ms
+ GET /insights/fulfilment 200 in 1203ms
+ ✓ Compiled in 2s (672 modules)
+ ✓ Compiled in 822ms (341 modules)
+ ✓ Compiled in 875ms (341 modules)
+ ✓ Compiled in 538ms (341 modules)
+ ✓ Compiled in 498ms (341 modules)
+ GET /insights/fulfilment 200 in 1839ms
  ○ Compiling /insights/customers ...
- ✓ Compiled /insights/customers in 970ms (636 modules)
- GET /insights/customers 200 in 4033ms
+ ✓ Compiled /insights/customers in 3.7s (687 modules)
  ○ Compiling /insights/agent ...
- ✓ Compiled /insights/agent in 697ms (646 modules)
- GET /insights/agent 200 in 3717ms
-[?25h
-
-C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web>
+ ✓ Compiled /insights/agent in 1582ms (697 modules)
+ ✓ Compiled in 958ms (358 modules)
+ GET /insights/agent 200 in 1426ms

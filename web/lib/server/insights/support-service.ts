@@ -37,7 +37,7 @@ import {
 import { count, getSupabaseClient, num, readView } from "./shared";
 
 export async function getSupportPanel(shopId: string): Promise<SupportPanel> {
-  const [monthRows, categoryRows, replyRows, runRows] = await Promise.all([
+  const [monthRows, categoryRows, replyRows, runRows, orderMonthRows] = await Promise.all([
     readView<Record<string, unknown>>(V.SUPPORT_BY_MONTH, shopId, { order: "month.asc" }),
     readView<Record<string, unknown>>(V.SUPPORT_BY_CATEGORY, shopId, { order: "tickets.desc" }),
     // The one read in the Insights section that returns per-entity rows rather
@@ -51,10 +51,18 @@ export async function getSupportPanel(shopId: string): Promise<SupportPanel> {
     // else on any panel is allowed to read rows like this.
     readView<Record<string, unknown>>(V.TICKET_REPLY_TIMES, shopId, { order: "ticket_id.asc" }),
     readView<Record<string, unknown>>(T.CLUSTER_RUNS, shopId, { order: "built_at.desc", limit: 1 }),
+    // The Support panel's one read outside the support views, and it is a
+    // denominator rather than a figure: "42 tickets" only becomes a rate once it
+    // sits over the orders that could have produced it. Deliberately the
+    // fulfilment view rather than a new `orders` column on `support_by_month` —
+    // the two aggregates key on different clocks (a ticket's first message, an
+    // order's `processed_at`), so joining them in SQL would have to pick one and
+    // silently drop the months the other one owns.
+    readView<Record<string, unknown>>(V.FULFILMENT_BY_MONTH, shopId, { order: "month.asc" }),
   ]);
 
   const byCategory = foldByCategory(categoryRows.map(mapCategoryPair));
-  const byMonth = monthRows.map(mapMonth);
+  const byMonth = withOrderCounts(monthRows.map(mapMonth), orderMonthRows);
   const totals = summariseTotals(byCategory, byMonth);
 
   return {
@@ -63,15 +71,41 @@ export async function getSupportPanel(shopId: string): Promise<SupportPanel> {
     replies: replyStats(replyRows, totals?.tickets ?? 0),
     topicMap: await loadTopicMap(shopId, runRows[0] ?? null),
     totals,
+    // Read asc, so the first row is the earliest month that sold anything.
+    ordersFromMonth: orderMonthRows.length > 0 ? String(orderMonthRows[0].month) : null,
   };
 }
 
 // --- months -----------------------------------------------------------------
 
+/**
+ * Attach each month's order count, so the panel can print tickets as a share of
+ * orders instead of as a bare volume.
+ *
+ * A month with no matching order row gets `null`, not `0`. The support series
+ * and the order series are trimmed by different things — mail is synced from a
+ * mailbox that starts at some date, orders come from Shopify's whole history —
+ * so a support month with no order row means "orders unknown here", and a 0
+ * would turn that into a division the panel would then have to render as either
+ * an em dash or, worse, an infinite contact rate.
+ *
+ * Both views emit `month` as a `date`, which PostgREST serialises as
+ * `YYYY-MM-DD` on the first of the month, so the raw string is a safe key.
+ */
+function withOrderCounts(
+  months: SupportMonth[],
+  orderMonthRows: Record<string, unknown>[]
+): SupportMonth[] {
+  const orders = new Map(orderMonthRows.map((row) => [String(row.month), count(row.orders)]));
+  return months.map((month) => ({ ...month, orders: orders.get(month.month) ?? null }));
+}
+
 function mapMonth(row: Record<string, unknown>): SupportMonth {
   return {
     month: String(row.month),
     tickets: count(row.tickets),
+    // Filled in by `withOrderCounts` — `support_by_month` has no orders in it.
+    orders: null,
     unhappy: count(row.unhappy),
     veryUnhappy: count(row.very_unhappy),
     levelThree: count(row.level_three),

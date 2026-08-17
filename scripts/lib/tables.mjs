@@ -88,7 +88,13 @@ export const V = {
   FULFILMENT_SUMMARY: 'fulfilment_summary',
   FULFILMENT_BY_MONTH: 'fulfilment_by_month',
   FULFILMENT_BY_CARRIER: 'fulfilment_by_carrier',
+  FULFILMENT_TICKET_COVERAGE: 'fulfilment_ticket_coverage',
   FULFILMENT_BY_BUCKET: 'fulfilment_by_bucket',
+  // The same three cut by sales channel. Additive rather than a channel column
+  // on the views above, which stay one row per shop for the whole book.
+  FULFILMENT_SUMMARY_BY_CHANNEL: 'fulfilment_summary_by_channel',
+  FULFILMENT_BY_CHANNEL_MONTH: 'fulfilment_by_channel_month',
+  FULFILMENT_BY_CHANNEL_BUCKET: 'fulfilment_by_channel_bucket',
   TICKET_REPLY_TIMES: 'ticket_reply_times',
   SUPPORT_BY_MONTH: 'support_by_month',
   SUPPORT_BY_CATEGORY: 'support_by_category',

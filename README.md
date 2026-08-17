@@ -88,6 +88,14 @@ now partly or wholly answered, and one has become more urgent:
   backfilled, so the cost tiles fill in only as the worker runs. Verify the
   default prices in `scripts/lib/llm-rates.mjs` against current OpenAI pricing
   before quoting any figure from them.
+- **New (2026-08-17): the carrier table now asks for lost / damaged / late per
+  carrier, and nothing answers it.** The columns are placeholders rendering as
+  dashes. Filling them needs a decision between two sources: the delivery feed
+  (see the Delivery section's note — dispatch posting delivery confirmations onto
+  the Shopify fulfilment fills them with no new table), or a new classification
+  axis on the ticket, which is a migration plus a categoriser prompt change plus
+  a re-categorisation backfill plus eval cases. The delivery feed is the better
+  buy if it is available at all, because it also unblocks the three tiles above.
 
 Reordered 2026-07-30 after measuring the clustered corpus against the level taxonomy. The target is explicit: **auto-resolve level 1 and 2, and for level 3 assemble everything a human needs to act.** Across 330 customer-facing categorised tickets that splits **L1 42 (13%) · L2 156 (47%) · L3 131 (40%) · L4 1**, so 60% is in scope for automation and 40% for context assembly. What each tool is worth is in `AGENT_INTEGRATION_PLAN.md` Phase 4.
 

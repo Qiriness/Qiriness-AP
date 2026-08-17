@@ -229,6 +229,18 @@ with (security_invoker = true) as
     o.shipping_destination ->> 'countryCode' as destination_country,
     o.total_price as total_price,
     o.delivered_at as delivered_at,
+    -- The tail of the journey: what came back. `return_status` is Shopify's own
+    -- enum and is populated on every order, so `NO_RETURN` is a recorded fact
+    -- rather than a missing value -- which is the only reason a returns count
+    -- off this view can be trusted at zero.
+    o.total_refunded as total_refunded,
+    o.return_status as return_status,
+    -- The handle, not the label: `sales_channel` is a display string Shopify can
+    -- restyle ('Amazon', 'Amazon by CedCommerce'), while the handle is the stable
+    -- key a filter can be written against. Both travel so a panel can match on
+    -- one and print the other.
+    o.sales_channel_handle as channel,
+    o.sales_channel as channel_label,
     date_trunc('month', o.processed_at)::date as processed_month
   from public.orders o
   left join lateral (
@@ -249,7 +261,7 @@ with (security_invoker = true) as
 revoke all on public.order_fulfilment_timing from anon, authenticated;
 
 comment on view public.order_fulfilment_timing is
-  'One row per live order with its fulfilment duration in hours, normalised carrier, tracking count and destination. The base every fulfilment panel aggregate reads. Delivery duration is deliberately absent -- Shopify holds no delivery events for this store.';
+  'One row per live order with its fulfilment duration in hours, normalised carrier, tracking count, destination and sales channel. The base every fulfilment panel aggregate reads. Delivery duration is deliberately absent -- Shopify holds no delivery events for this store.';
 
 -- ------------------------------------------------------- fulfilment_summary
 
@@ -269,6 +281,21 @@ with (security_invoker = true) as
     count(*) filter (where t.fulfilment_hours > 72) as over_72h,
     count(*) filter (where t.fulfilment_count > 0 and t.tracking_count = 0) as shipped_without_tracking,
     count(*) filter (where t.delivered_at is not null) as with_delivery_event,
+    -- WHAT CAME BACK. Counted per order rather than summed off the refunds
+    -- array: an order refunded twice is one unhappy order, and the money is
+    -- carried separately by `refunded_amount` for anyone who wants the euros.
+    -- `returns_opened` is a *separate* count and not folded into the refund one,
+    -- because a return and a refund are different events and this store records
+    -- 3 of the second and 0 of the first -- a combined figure would hide exactly
+    -- the thing worth noticing.
+    count(*) filter (where t.total_refunded > 0) as refunded_orders,
+    count(*) filter (
+      where t.total_refunded > 0 and t.total_price > 0 and t.total_refunded >= t.total_price
+    ) as fully_refunded_orders,
+    count(*) filter (
+      where t.return_status is not null and t.return_status <> 'NO_RETURN'
+    ) as returns_opened,
+    coalesce(sum(t.total_refunded), 0) as refunded_amount,
     min(t.processed_at) as first_order_at,
     max(t.processed_at) as last_order_at
   from public.order_fulfilment_timing t
@@ -277,7 +304,7 @@ with (security_invoker = true) as
 revoke all on public.fulfilment_summary from anon, authenticated;
 
 comment on view public.fulfilment_summary is
-  'One row per shop: median, p90 and mean fulfilment hours, the counts past two and three days, and how many fulfilled orders went out with no tracking number. `with_delivery_event` is the coverage check on delivery data and reads 1 of 2,006 today.';
+  'One row per shop: median, p90 and mean fulfilment hours, the counts past two and three days, and how many fulfilled orders went out with no tracking number. `with_delivery_event` is the coverage check on delivery data and reads 1 of 2,006 today. `refunded_orders` / `returns_opened` are the tail of the journey and read 3 and 0 of 2,006 -- the zero is a recorded NO_RETURN on every order, not a missing field, but a return handled outside Shopify is invisible to both.';
 
 -- ------------------------------------------------------- fulfilment_by_month
 
@@ -302,6 +329,17 @@ comment on view public.fulfilment_by_month is
 
 -- ------------------------------------------------------ fulfilment_by_carrier
 
+-- CONTACT RATE IS COUNTED PER ORDER, NOT PER TICKET. `orders_with_ticket` is how
+-- many of this carrier's shipments produced at least one ticket; `tickets` is the
+-- raw thread count beside it. Dividing threads by shipments would let one order
+-- that was chased four times read as four unhappy deliveries, and on a 6-shipment
+-- carrier that arithmetic produces a contact rate over 100%.
+--
+-- The join is `tickets.shopify_order_number` -> the order's name, which is the
+-- ONLY confirmed link between a thread and a parcel. It is also a partial one:
+-- the resolver has confirmed a number on a minority of threads, so both columns
+-- are floors. `fulfilment_ticket_coverage` below carries the denominator that
+-- says how partial, and the panel is required to show it beside these figures.
 create view public.fulfilment_by_carrier
 with (security_invoker = true) as
   select
@@ -310,15 +348,49 @@ with (security_invoker = true) as
     count(*) as shipments,
     percentile_cont(0.5) within group (order by t.fulfilment_hours) as p50_hours,
     count(*) filter (where t.fulfilment_hours > 72) as over_72h,
-    count(*) filter (where t.tracking_count = 0) as without_tracking
+    count(*) filter (where t.tracking_count = 0) as without_tracking,
+    count(*) filter (where k.tickets > 0) as orders_with_ticket,
+    coalesce(sum(k.tickets), 0) as tickets
   from public.order_fulfilment_timing t
+  left join lateral (
+    select count(*) as tickets
+    from public.tickets k
+    where k.shop_id = t.shop_id
+      and k.deleted_at is null
+      and k.shopify_order_number = t.order_name
+  ) k on true
   where t.carrier is not null
   group by t.shop_id, t.carrier;
 
 revoke all on public.fulfilment_by_carrier from anon, authenticated;
 
 comment on view public.fulfilment_by_carrier is
-  'Shipments and fulfilment timing per normalised carrier. Reads through normalise_carrier(), so Colissimo is one row rather than three.';
+  'Shipments and fulfilment timing per normalised carrier, plus how many of those shipments the desk was contacted about. Reads through normalise_carrier(), so Colissimo is one row rather than three. `orders_with_ticket` counts orders, not threads -- see the view body.';
+
+-- ------------------------------------------------ fulfilment_ticket_coverage
+
+-- The denominator behind the contact-rate column, and the reason it exists.
+--
+-- A ticket joins to a parcel only through `shopify_order_number`, which the
+-- order-number resolver fills in and which most threads do not carry: a customer
+-- writes "my parcel has not arrived" far more often than they quote #5337. So a
+-- per-carrier contact rate is a FLOOR, and the size of the gap is a fact the
+-- panel has to state rather than a caveat someone remembers to add. One row per
+-- shop, read beside the carrier table.
+create view public.fulfilment_ticket_coverage
+with (security_invoker = true) as
+  select
+    t.shop_id as shop_id,
+    count(*) as tickets,
+    count(*) filter (where t.shopify_order_number is not null) as with_order_number
+  from public.tickets t
+  where t.deleted_at is null
+  group by t.shop_id;
+
+revoke all on public.fulfilment_ticket_coverage from anon, authenticated;
+
+comment on view public.fulfilment_ticket_coverage is
+  'How many tickets carry a resolved order number, out of all of them -- the coverage figure that turns the per-carrier contact rate from a claim into a floor. Reads 52 of 214 today.';
 
 -- ------------------------------------------------------- fulfilment_by_bucket
 
@@ -353,6 +425,117 @@ revoke all on public.fulfilment_by_bucket from anon, authenticated;
 
 comment on view public.fulfilment_by_bucket is
   'The fulfilment-time histogram in six fixed buckets, with a sort key so the panel does not have to know the order. Buckets straddle the three-day line deliberately: 72-96h and >96h are the two the business cares about.';
+
+-- --------------------------------------------------- fulfilment BY CHANNEL
+
+-- The same three aggregates again, cut by sales channel.
+--
+-- WHY A SECOND SET RATHER THAN A CHANNEL COLUMN ON THE FIRST. The existing three
+-- views are what "the whole book" means, and every caller reads them as one row
+-- per shop. Adding `channel` to their group-by would silently turn each of them
+-- into several rows and every current reader would start reporting one channel's
+-- figures as the store's. These are additive: the originals keep their shape.
+--
+-- GROUPED BY CHANNEL, NOT FILTERED TO ONE. Amazon is the channel that prompted
+-- this -- a marketplace dispatches under someone else's clock and its delay is
+-- only legible against the store's own -- but which channel matters is a
+-- business question, and the moment 'amazon' is written into a where-clause the
+-- schema owns that answer. The caller picks the channel; the view knows the
+-- shape. Four channels exist today, so this stays a handful of rows.
+--
+-- Percentiles are recomputed per channel rather than derived: a median cannot be
+-- averaged out of a coarser one.
+
+create view public.fulfilment_summary_by_channel
+with (security_invoker = true) as
+  select
+    t.shop_id as shop_id,
+    t.channel as channel,
+    max(t.channel_label) as channel_label,
+    count(*) as orders,
+    count(*) filter (where t.fulfilment_hours is not null) as measured,
+    percentile_cont(0.5) within group (order by t.fulfilment_hours) as p50_hours,
+    percentile_cont(0.9) within group (order by t.fulfilment_hours) as p90_hours,
+    avg(t.fulfilment_hours) as mean_hours,
+    count(*) filter (where t.fulfilment_hours > 48) as over_48h,
+    count(*) filter (where t.fulfilment_hours > 72) as over_72h,
+    count(*) filter (where t.fulfilment_count > 0 and t.tracking_count = 0) as shipped_without_tracking,
+    count(*) filter (where t.delivered_at is not null) as with_delivery_event,
+    -- Kept in step with fulfilment_summary above, column for column. The two
+    -- back the same TypeScript type and render through the same component, so a
+    -- column on one and not the other is a channel section quietly reporting
+    -- zero for a figure it never selected.
+    count(*) filter (where t.total_refunded > 0) as refunded_orders,
+    count(*) filter (
+      where t.total_refunded > 0 and t.total_price > 0 and t.total_refunded >= t.total_price
+    ) as fully_refunded_orders,
+    count(*) filter (
+      where t.return_status is not null and t.return_status <> 'NO_RETURN'
+    ) as returns_opened,
+    coalesce(sum(t.total_refunded), 0) as refunded_amount,
+    min(t.processed_at) as first_order_at,
+    max(t.processed_at) as last_order_at
+  from public.order_fulfilment_timing t
+  where t.channel is not null
+  group by t.shop_id, t.channel;
+
+revoke all on public.fulfilment_summary_by_channel from anon, authenticated;
+
+comment on view public.fulfilment_summary_by_channel is
+  'fulfilment_summary cut by sales channel handle -- one row per channel per shop, same columns plus the display label. Read with a channel filter; the whole-store figures stay in fulfilment_summary.';
+
+create view public.fulfilment_by_channel_month
+with (security_invoker = true) as
+  select
+    t.shop_id as shop_id,
+    t.channel as channel,
+    t.processed_month as month,
+    count(*) as orders,
+    percentile_cont(0.5) within group (order by t.fulfilment_hours) as p50_hours,
+    percentile_cont(0.9) within group (order by t.fulfilment_hours) as p90_hours,
+    count(*) filter (where t.fulfilment_hours > 72) as over_72h,
+    count(*) filter (where t.fulfilment_hours is not null) as measured
+  from public.order_fulfilment_timing t
+  where t.processed_month is not null
+    and t.channel is not null
+  group by t.shop_id, t.channel, t.processed_month;
+
+revoke all on public.fulfilment_by_channel_month from anon, authenticated;
+
+comment on view public.fulfilment_by_channel_month is
+  'fulfilment_by_month cut by sales channel handle. A channel that sold nothing in a month has no row rather than a zero one, so the caller reads a shorter series than the store-wide trend and must not assume the two align month for month.';
+
+create view public.fulfilment_by_channel_bucket
+with (security_invoker = true) as
+  select
+    t.shop_id as shop_id,
+    t.channel as channel,
+    case
+      when t.fulfilment_hours < 12 then '<12h'
+      when t.fulfilment_hours < 24 then '12-24h'
+      when t.fulfilment_hours < 48 then '24-48h'
+      when t.fulfilment_hours < 72 then '48-72h'
+      when t.fulfilment_hours < 96 then '72-96h'
+      else '>96h'
+    end as bucket,
+    case
+      when t.fulfilment_hours < 12 then 1
+      when t.fulfilment_hours < 24 then 2
+      when t.fulfilment_hours < 48 then 3
+      when t.fulfilment_hours < 72 then 4
+      when t.fulfilment_hours < 96 then 5
+      else 6
+    end as bucket_order,
+    count(*) as orders
+  from public.order_fulfilment_timing t
+  where t.fulfilment_hours is not null
+    and t.channel is not null
+  group by t.shop_id, t.channel, 3, 4;
+
+revoke all on public.fulfilment_by_channel_bucket from anon, authenticated;
+
+comment on view public.fulfilment_by_channel_bucket is
+  'fulfilment_by_bucket cut by sales channel handle, in the same six fixed buckets with the same sort key -- identical boundaries on purpose, so a channel histogram can be read straight against the store one.';
 
 -- ============================================================================
 -- SUPPORT

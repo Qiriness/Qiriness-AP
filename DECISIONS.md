@@ -900,7 +900,7 @@ Guarding every statement would obscure the schema these files exist to document,
 
 PostgREST caps a response at 1,000 rows and pages an *unordered* query in whatever order the planner returns, so consecutive pages overlap and drop rows. This is not theoretical: while designing these panels, an unordered paged tally of the 58,201 customers returned `CHAMPIONS` as **438, then 554, then 472 on three consecutive runs** against unchanged data. Only the third was right, and nothing about the first two looked wrong.
 
-So `06_analytics.sql` carries fifteen views and `readView` takes a hard limit with **no pagination at all**. A view that could return more rows than that limit is the wrong shape and belongs back in SQL as a further aggregate. The two exceptions — `customer_ticket_facts` and `ticket_reply_times` — are bounded by ticket count rather than by customer or message count, and each says so at its call site.
+So `06_analytics.sql` carries nineteen views and `readView` takes a hard limit with **no pagination at all**. A view that could return more rows than that limit is the wrong shape and belongs back in SQL as a further aggregate. The two exceptions — `customer_ticket_facts` and `ticket_reply_times` — are bounded by ticket count rather than by customer or message count, and each says so at its call site.
 
 ### Judgement stays in JavaScript, so the views expose `rfm_group` and never `is_vip`
 
@@ -915,6 +915,58 @@ On a dashboard a zero is a claim — "nothing was late", "nobody complained", "i
 ### Fulfilment and delivery are two durations, and conflating them is what kept the measurable one unbuilt
 
 Fulfilment is `processed_at` -> first `fulfillments[].created_at`, populated on 1,993 of 2,006 orders and computable today. Delivery needs carrier scan events that never arrive. Treating "delivery metrics" as one blocked lump is why nobody had looked at dispatch timing — which turned out to show **July 2026 at 30.7% of orders past three days and a p90 of 149h**, against a steady 4-14% and ~70h in every other month.
+
+### Contact rate counts orders, and ships with its own denominator
+
+Per carrier, the column counts **shipments that produced at least one ticket**, not threads. One parcel chased four times is one unhappy delivery, and threads-over-shipments would put `AUTRE` — six shipments, four threads — past 100% while saying nothing. The thread count still rides in the same cell, because "many parcels went wrong" and "one went badly wrong" are different problems.
+
+The rate itself is a **floor, and the panel says so in the same breath**. A thread reaches a parcel only through `tickets.shopify_order_number`, which the resolver fills in and which **52 of 214 tickets carry** — customers write "my parcel has not arrived" far more often than they quote #5337. A dashboard cell reading `1.2%` with nothing beside it is exactly the plausible-but-wrong number the rest of this section exists to prevent, so `fulfilment_ticket_coverage` is a view rather than a sentence in the copy: when the resolver runs again the caveat shrinks by itself instead of going stale.
+
+**What survives the caveat is the ordering.** GLS is contacted about **4.1× as often as Colissimo** (5.1% of 198 shipments against 1.2% of 1,311), and under-counting that affects both carriers hits both roughly alike. The note ranks only carriers with 100+ shipments for that reason — a six-shipment carrier tops any ratio you like.
+
+### Tickets per month carries a contact rate, and the Support panel reaches into a fulfilment view to get it
+
+A ticket count is a volume, and a volume cannot be read without knowing whether trade grew underneath it. **85 tickets in July** looks like the worst month on the board until the orders are beside it — July did 450 orders at **18.9%**, against June's 76 over 324 at **23.5%**. The busier month is the *better* one, and the bare counts say the opposite.
+
+The denominator is `fulfilment_by_month.orders`, read by `support-service.ts` — the only read on this panel that is not a support view. The alternative was an `orders` column on `support_by_month`, and it is wrong for a reason that is not stylistic: the two aggregates key on **different clocks**. `support_by_month` groups on a ticket's `first_message_at`, `fulfilment_by_month` on an order's `processed_at`. A join in SQL has to pick one side to drive, and either choice silently drops the months the other side owns — orders in a month nobody wrote in about, or mail in a month that sold nothing. Joining in TypeScript over two already-aggregated series keeps both, and a month present in one and absent from the other stays visible as a missing rate rather than a wrong one.
+
+**It is a calendar rate, not a cohort rate.** A ticket about a June order counts against July if it was written in July. Attributing each ticket back to its order's month would be the cohort version, and it is not available: `tickets.shopify_order_number` is filled on 52 of 214 threads, so three quarters of the mail has no order to be attributed to. A cohort rate over the quarter that happens to be resolvable would be a far more confident-looking number about a far more biased sample.
+
+### The first month of the ticket series is a floor, and the panel says so
+
+Orders start **Feb 2026**; the synced mailbox starts **May 2026**. So May puts part of a month of mail over a whole month of trading and prints **7.5%** — the lowest rate on the chart, and the exact shape a genuinely quiet month has. Every other month sits at 18-24%.
+
+The panel detects this rather than hard-coding it: the service reports the earliest month with orders, and the view flags the first ticket month when the order series began before it. That is the same distinction the current-month asterisk makes, at the other end of the series — a partial month is partial whether the truncation is the sync window or the calendar. Both are decided in TypeScript for the same reason: neither is something SQL can know.
+
+### A sales channel is measured with the store's own instrument, in its own section
+
+Amazon is 467 of 2,006 orders and dispatches against a marketplace's promise rather than ours, so its dispatch time is a separate question — but only answerable *against* the store-wide figure, which is why it renders directly below it rather than on a page of its own. The section reuses the same component, the same six bucket boundaries and the same 72-hour line: two blocks that look alike can be read against each other, and a copied threshold that drifts turns a comparison into two unrelated charts.
+
+The cut lives in **three additive views** (`fulfilment_summary_by_channel`, `fulfilment_by_channel_month`, `fulfilment_by_channel_bucket`) rather than a `channel` column on the existing three. Adding one to their `group by` would have turned every existing one-row-per-shop read into several rows and made every current caller report one channel's figures as the store's — silently, with a plausible number.
+
+The views group by **every** channel and filter to none; `fulfilment-service.ts` names `amazon` in a constant. Which channel deserves its own section is a business judgement, and a `where` clause would have made the schema own it — a second channel now costs a constant and no migration. Matching is on `sales_channel_handle`, not `sales_channel`: the latter is a display label Shopify can restyle, and matching on it would turn a cosmetic change upstream into an empty panel.
+
+The channel breakdown deliberately carries **no carrier table**. Marketplace orders ship on the same carriers as everything else, and a per-channel carrier split would slice a 467-row denominator into three that are too small to read.
+
+### Returns and refunds are two figures, not one rate
+
+The Delivery section carries one measured tile among its blocked ones: orders that came back. It counts **per order, not per refund** — an order refunded twice is one unhappy order, the same arithmetic the carrier contact rate uses, and the same reason.
+
+Returns and refunds are reported **separately and never summed**, because on this store they disagree and the disagreement is the finding: **3 refunds and 0 returns across 2,006 orders**. A single combined "return/refund rate" would print 0.1% and bury it.
+
+**The zero is a recorded value, not a missing one** — `return_status` reads `NO_RETURN` on all 2,006 orders, so Shopify genuinely holds no return against any of them, and the tile is entitled to say so. What it is *not* entitled to say is that nothing came back: all three refunds were issued with no return record at all, which is the signature of a return agreed over email and settled by hand. So the tile never takes a `good` tone, and a note beside it states that 0.1% is a floor until someone confirms whether returns are supposed to be raised in Shopify. A low refund rate is only good news if everything that came back was recorded.
+
+The four new columns are read with `num`, not `count`. `count()` coerces an absent key to 0, and these columns are newer than the deployed view — a database that has not been re-applied would otherwise render **"0 orders were ever refunded"** as a confident figure. Null instead, and the tile blocks with the fix in its reason.
+
+### Carriers moved under Delivery, and ship with three columns nothing writes
+
+The carrier table used to sit between the Amazon section and Delivery, which put it in the *dispatch* half of the page. That was the wrong half. Dispatch timing is the warehouse's number and barely varies by carrier — Colissimo 24.5h against GLS 23.3h. What the table is actually asked at is a delivery question: **which carrier loses, breaks or delays parcels.** So it renders after the Delivery section, as a peer rather than nested inside it: the blocked delivery tiles stay in their own section, because a working table mixed in among them turns "waiting on a feed" into "some of this is broken".
+
+`Lost`, `Damaged` and `Delivered late` are wired to the table and to **nothing else**, deliberately, as placeholders for a source that does not exist. Neither side of the system can fill them today: no carrier scan events reach Shopify, and a ticket records only that its subject was `delivery` — a lost parcel, a broken bottle and a late one are the same row, because the taxonomy has no axis below the subject. The words *do* appear in `categorise.mjs`, but only inside the prompt that teaches the model what `delivery` means; nothing persists them.
+
+They are typed `number | null` and mapped to `null` rather than through `count()`, which is the whole point of adding them empty. `count()` coerces a missing column to `0`, and **"COLISSIMO: 0 lost"** is a claim about a carrier that nobody has measured — the same failure as the delivery tiles that this panel already blocks. The cells render as em dashes over the hatch used for a missing bar elsewhere, with a note under the table saying so in the table's own words, because a reader who screenshots the table for a 3PL takes the dashes and not the tooltip.
+
+The cost of shipping them empty is a column spec and three `null`s; the benefit is that the shape of the answer is agreed before the source is chosen, and wiring it later is one `read` per column in `mapCarrier` with no layout argument to reopen.
 
 ### Carrier names are normalised in SQL, once
 

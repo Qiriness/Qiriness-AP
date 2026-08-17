@@ -10,6 +10,68 @@ Three sibling files carry the other halves, and this one deliberately does not d
 
 ---
 
+## Contact rate per carrier (2026-08-16)
+
+- **The carrier table has a `Contacted support` column.** Per carrier: how many
+  of its shipments produced at least one ticket, as a count and a share, with
+  the raw thread count beside it when the two differ.
+- **Counted per order, not per thread.** One parcel chased four times is one
+  unhappy delivery; threads-over-shipments would have put `AUTRE` (6 shipments,
+  4 threads) past 100%. `fulfilment_by_carrier` gained `orders_with_ticket` and
+  `tickets`, joined through `tickets.shopify_order_number` — the only confirmed
+  link between a thread and a parcel.
+- **The rate ships with its denominator.** New `fulfilment_ticket_coverage` view
+  (one row per shop) reports that **52 of 214 tickets carry a resolved order
+  number**, and the panel states it under the table. Every figure in the column
+  is a lower bound; a `1.2%` cell with nothing beside it would be the exact
+  plausible-but-wrong number these views exist to prevent. It is a view rather
+  than copy so the caveat shrinks by itself when the resolver next runs.
+- **What it shows.** **GLS is contacted about 4.1× as often as Colissimo** —
+  5.1% of its 198 shipments against 1.2% of Colissimo's 1,311 — despite a
+  slightly *faster* median dispatch (23.3h vs 24.5h) and a lower past-3-days
+  rate (13.1% vs 16.1%). The under-counting hits both carriers alike, so the
+  ordering survives the caveat even though the absolute rates do not. The note
+  ranks only carriers with 100+ shipments, since a 6-shipment carrier tops any
+  ratio.
+- **Validated:** views applied forward to the dev database in one transaction
+  and read back through PostgREST; carrier shipment counts unchanged at
+  1,311 / 198 / 6 after the ticket join was added (the lateral does not multiply
+  rows); `/insights/fulfilment` rendered the column and the note; `web`
+  typecheck, lint and build passed; root `npm test` passed (**1271 pass**).
+
+---
+
+## Fulfilment per sales channel — Amazon (2026-08-16)
+
+- **The Fulfilment panel now measures Amazon on its own, directly below the
+  store-wide figures.** Same tiles, same six bucket boundaries, same 72-hour
+  line, same monthly trend — reused from one `FulfilmentBreakdown` component
+  rather than copied, so the two blocks cannot drift into measuring subtly
+  different things.
+- **Three additive views** (`fulfilment_summary_by_channel`,
+  `fulfilment_by_channel_month`, `fulfilment_by_channel_bucket`) cut the
+  existing three by `orders.sales_channel_handle`, which
+  `order_fulfilment_timing` now carries alongside the display label. The
+  store-wide views keep their one-row-per-shop shape untouched. The views group
+  by every channel and filter to none; `fulfilment-service.ts` names `amazon` in
+  a constant, so a second channel costs a constant and no migration.
+- **What it shows.** Amazon is 467 of 2,006 orders (23.3%), median 23.0h against
+  the store's 23.8h, p90 69.1h against 78.1h, and 8.4% past three days against
+  13.8% — marginally *better* than the book as a whole, which was not the
+  expected answer. July 2026 is its outlier at 31.7% past three days and a p90 of
+  137h, the same month the store-wide trend degrades.
+- **The finding worth acting on is not speed.** 402 of 467 Amazon orders (86%)
+  carry no tracking number, against 4 of 1,487 on the online store. The panel
+  states this as a marketplace data gap and `VALIDATION_LOG.md` item 12 carries
+  the check that would confirm it — it is inferred, not verified.
+- **Validated:** views applied forward to the dev database in one transaction
+  and read back through PostgREST; channel counts sum to the whole book
+  (1500 + 467 + 36 + 3 = 2006) and the Amazon histogram sums to its measured
+  467; `/insights/fulfilment` rendered 200 with both figures populated; `web`
+  typecheck, lint and build passed; root `npm test` passed (**1271 pass**).
+
+---
+
 ## Supabase new-key REST auth fix (2026-08-16)
 
 - **Fixed server-side Supabase REST requests for `sb_secret_*` keys.** The shared
@@ -357,6 +419,30 @@ Four refactors, chosen from an architecture review of everything that touches Su
 ## Not built
 
 Dashboard authentication, deployed webhook routes, and the agent's drafting stage (Phase 5). Backend/deploy config is still pending.
+
+## Agent panel: cost leads the page (2026-08-17)
+
+- **`What it costs` moved to the top of `/insights/agent`**, above the pipeline funnel and the blocker ranking. A pure reorder — the section moved verbatim, no markup or logic changed.
+
+## Fulfilment panel: a returns/refunds tile in the Delivery section (2026-08-17)
+
+- **`Returned or refunded` is the first measured figure in an otherwise blocked section: 3 of 2,006 orders, 0.1%, €44.49.** One refunded in full (`#6398`, €32.03) and two in part (€6.23 each). Counted per order, not per refund line.
+- **Returns and refunds are reported separately and never summed, because they disagree: 3 refunds, 0 returns.** `return_status` reads `NO_RETURN` on all 2,006 orders — a value Shopify recorded, not an empty column — so the zero is real. But all three refunds were issued with no return record, which is what a return agreed over email and settled by hand looks like. The tile never takes a `good` tone and a note beside it says 0.1% is a floor until someone confirms whether returns are meant to be raised in Shopify at all.
+- **Four columns added to `fulfilment_summary` and its per-channel twin** (`refunded_orders`, `fully_refunded_orders`, `returns_opened`, `refunded_amount`), fed by `total_refunded` and `return_status` newly selected in `order_fulfilment_timing`. Added to both summary views deliberately: they back the same TypeScript type, and a column on one alone is a channel section silently reporting zero.
+- **Read with `num`, not `count`, so a database whose views predate this renders a blocked tile naming the fix rather than "0 orders were ever refunded".** Verified in that state — the deployed views still need re-applying, and the drop-and-recreate is required because the baseline uses `create view` with eight views depending on `order_fulfilment_timing`. See `VALIDATION_LOG.md` item 0.
+
+## Fulfilment panel: carriers moved under Delivery, outcome columns stubbed (2026-08-17)
+
+- **The carrier table now renders after the Delivery section rather than before it.** Dispatch timing barely varies by carrier (Colissimo 24.5h, GLS 23.3h); what the table is asked at is a delivery question. It is a peer section, not nested inside Delivery — the blocked delivery tiles keep their own section so a working table does not read as broken tiles among them.
+- **Three new columns — `Lost`, `Damaged`, `Delivered late` — ship empty on purpose.** They are wired to the table and to no data source. Nothing in the system can fill them today: no carrier scan events reach Shopify, and a ticket stores only that its subject was `delivery`, so a lost parcel, a broken bottle and a late one are the same row.
+- **Typed `number | null` and mapped to `null`, never through `count()`.** A coerced `0` would print "COLISSIMO: 0 lost", which is an unmeasured claim about a carrier. The cells render as em dashes over the same hatch used for a missing bar, with a note under the table explaining the gap. Wiring a real source later is one `read` per column in `mapCarrier`.
+
+## Support panel: tickets per month as a contact rate (2026-08-17)
+
+- **Every bar on *Tickets per month* now carries its share of that month's orders in brackets**, and it reverses the reading. The bare counts make July the worst month at 85 tickets; against 450 orders that is **18.9%**, while June's 76 over 324 is **23.5%**. Measured on the dev store: May 7.5%, June 23.5%, July 18.9%, August 20.8% so far.
+- **No migration.** The denominator is `fulfilment_by_month.orders`, joined to `support_by_month` in `support-service.ts` rather than in SQL — the two views group on different clocks (`first_message_at` against `processed_at`), so a join either way drops the months the other side owns. See `DECISIONS.md § Insights`.
+- **The first month of mail is marked as a floor.** Orders start Feb 2026 and the synced mailbox starts May 2026, so May's 7.5% is a partial mailbox over a whole month of trading — the lowest bar on the chart, and indistinguishable from a genuinely quiet month. The panel derives this from the two series rather than hard-coding a date, the same way the current month is already marked partial.
+- A month with no order row prints the count with no rate, never `(0.0%)`.
 
 ## Dashboard fixes (2026-08-16)
 

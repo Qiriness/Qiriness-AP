@@ -42,7 +42,7 @@
 
 .table {
   width: 100%;
-  min-width: 34rem;
+  min-width: 44rem;
   border-collapse: collapse;
   font-size: var(--text-body);
 }
@@ -86,4 +86,33 @@
 
 .muted {
   color: var(--text-subtle);
+}
+
+/*
+ * A column that is wired to the table and to no data source.
+ *
+ * Tinted rather than hidden: the reader is meant to see that the question is
+ * asked and unanswered. The hatch echoes `.barMissing` in InsightsKit, which is
+ * how a missing series is drawn everywhere else on these panels, so "no data
+ * here" looks the same whether it is a bar or a cell.
+ */
+.pending {
+  color: var(--text-subtle);
+  background-image: repeating-linear-gradient(
+    45deg,
+    var(--mist-050) 0 4px,
+    transparent 4px 8px
+  );
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }

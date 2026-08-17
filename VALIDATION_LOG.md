@@ -28,13 +28,115 @@ data, so no ticket carries a confirmed order number and every order-context
 lookup still reports `not_resolved`. Run it before reading anything below as
 evidence about the order family.
 
+## 0. The refund/returns tile needs its views re-applied (2026-08-17)
+
+`fulfilment_summary` and `fulfilment_summary_by_channel` gained four columns —
+`refunded_orders`, `fully_refunded_orders`, `returns_opened`, `refunded_amount` —
+and `order_fulfilment_timing` now selects `total_refunded` and `return_status`.
+**The deployed views do not have them yet**, so the `Returned or refunded` tile
+in the Delivery section renders as a blocked tile naming the fix rather than as a
+figure. That degradation is deliberate (`num`, not `count`, in `mapSummary`) and
+is itself worth confirming once, because it is the guard against a stale database
+reporting *zero orders were ever refunded*.
+
+**To validate:** re-apply the fulfilment views, then load `/insights/fulfilment`.
+The views must be dropped first — the baseline uses `create view`, not `create or
+replace`, and eight views depend on `order_fulfilment_timing`.
+
+**The figures the tile should show, read straight off `orders` on 2026-08-17:**
+
+| Figure | Value |
+|---|---|
+| live orders | 2 006 |
+| orders with a refund | **3** (0.1%) — `#6398` in full at €32.03, `#6328` and `#6452` in part at €6.23 each |
+| returns opened | **0** |
+| `return_status` | `NO_RETURN` on all 2 006 — a recorded value, not a null |
+| `cancelled_at` | 0 orders |
+
+If the tile shows anything other than 3 and 0, the view is aggregating something
+other than what a direct read of `orders` says, and that is the bug to chase.
+
+**The open business question, which no check here can answer:** whether returns
+are meant to be raised in Shopify at all. All three refunds were issued with no
+return record, so the workflow may well be email-and-refund-by-hand — in which
+case 0.1% is a floor on what came back, and the real number is in the support
+mailbox. The panel says exactly this in a note rather than presenting the rate as
+a fact; confirming it with the business is what would let that note be deleted.
+
 **Each entry says what to check and how, not just that it is unchecked.** An
 item is only removed once someone has actually run the check and seen the
 result.
 
-Last updated: 2026-08-16 (item 11 added and closed: the recurring Supabase
-dashboard failure was the combination of restricted local network access and an
-obsolete REST Authorization header for new `sb_secret_*` keys.)
+Last updated: 2026-08-16 (item 13 added — the per-carrier contact rate is built
+and its arithmetic is verified, but 52 of 214 tickets can be attributed at all,
+so the figure is a floor and the carrier ordering is unconfirmed.)
+
+---
+
+## 13. The per-carrier contact rate is a floor, and its ordering is unconfirmed
+
+**Built and arithmetically verified; the number itself is not yet trustworthy.**
+The carrier table now reports how many of each carrier's shipments produced a
+ticket. Verified: shipment counts unchanged after the ticket join
+(1,311 / 198 / 6 — the lateral does not multiply rows), orders counted rather
+than threads, and the panel renders the coverage caveat from
+`fulfilment_ticket_coverage` rather than from copy.
+
+**Why it is a floor.** A thread reaches a parcel only through
+`tickets.shopify_order_number`, and **52 of 214 tickets carry one**. So the
+column under-counts by an unknown factor.
+
+**The claim on the panel that is not yet proven:** *GLS is contacted 4.1× as
+often as Colissimo* (10 of 198 against 16 of 1,311). The reasoning is that the
+under-counting hits both carriers alike, so the **ordering** survives even though
+the absolute rates do not. That assumption has not been tested, and the
+numerators are 10 and 16 — small enough that a handful of misattributed threads
+would move the ratio.
+
+**The check to run, in order:**
+
+1. Run `orders:resolve` over the ticket backlog, then re-read the column. If
+   coverage rises from 52/214 and GLS stays several times Colissimo, the
+   ordering is real.
+2. Test the even-bias assumption directly: of the 52 attributable tickets, is
+   the GLS/Colissimo split materially different from the split among tickets
+   that quote no order number but do carry a `customer_id`? A carrier whose
+   customers happen to quote order numbers more often would produce this gap on
+   its own.
+3. Only then is it worth asking whether GLS deliveries are actually worse. Note
+   what the panel already shows: GLS dispatches *faster* (23.3h vs 24.5h) and is
+   late less often (13.1% vs 16.1%), so whatever drives the contact gap is not
+   dispatch — it is the half of the journey the Delivery section cannot see.
+
+---
+
+## 12. ~~The per-channel fulfilment views have never been applied or read~~ — APPLIED 2026-08-16
+
+**Closed.** `order_fulfilment_timing` now carries `channel` /`channel_label` and
+three channel-cut views exist beside the store-wide three. Applied **forward**
+to the dev database the same way item 10 was — the block was sliced out of
+`06_analytics.sql` itself, not retyped, run in one transaction after a
+`drop view ... cascade` that only reached the four dependent fulfilment views,
+then `pgrst reload schema`; the scratchpad script was discarded. No table was
+touched. Verified after the fact:
+
+| Check | Result |
+|---|---|
+| four channels present, summing to the whole book | web 1500 + amazon 467 + connect-dev-1 36 + shop-72 3 = 2006 |
+| `fulfilment_summary` unchanged (still one row per shop) | yes |
+| Amazon p50 / p90 / past-72h | 23.0h / 69.1h / 39 of 467 (8.4%) |
+| Amazon monthly series | Feb–Aug 2026, July the outlier at 31.7% |
+| Amazon bucket histogram sums to `measured` | 93+156+114+65+22+17 = 467 |
+| read through **PostgREST**, not just SQL | yes — the panel renders from it |
+| `/insights/fulfilment` renders the section | 200, tiles and both figures populated |
+
+**What this surfaced, and what is not yet checked:** **402 of 467 Amazon orders
+(86%) carry no tracking number**, against 4 of 1,487 on the online store. The
+panel states this as a marketplace data gap rather than a dispatch failure —
+that reading is *inferred, not confirmed*. The check: open two or three of those
+Amazon orders in Shopify Admin and see whether a tracking number exists there
+and is simply not on the fulfilment record we sync, or whether none was ever
+captured. Those are different problems and only one of them is ours.
 
 ---
 
