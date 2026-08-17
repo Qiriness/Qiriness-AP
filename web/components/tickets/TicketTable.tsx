@@ -7,6 +7,7 @@ import type { TicketListItem } from "@/lib/types";
 import {
   CATEGORY_LABELS,
   RESPONSIBLE_TEAM_LABELS,
+  SENDER_LABELS,
   TICKET_STATUS_LABELS,
 } from "@/lib/types";
 import { formatRelativeTime } from "@/lib/relative-time";
@@ -189,6 +190,23 @@ export function TicketTable({
                         {ticket.customerName?.trim() ||
                           ticket.requesterName?.trim() || <span className={styles.muted}>Unknown</span>}
                       </span>
+                      {/* WHO SENT IT, NOT WHAT IT IS ABOUT. A thread opened by
+                          the logistics team is still a customer's return — these
+                          rows were briefly routed to a separate page and that
+                          hid real work, so the label marks them here instead of
+                          moving them. Null for an ordinary consumer, which is
+                          most rows and wants no chip at all. */}
+                      {ticket.senderLabel && (
+                        <span
+                          className={`${styles.senderChip} ${styles[ticket.senderLabel] ?? ""}`}
+                          title={
+                            ticket.senderNote ??
+                            `${SENDER_LABELS[ticket.senderLabel]} sender — not a consumer address`
+                          }
+                        >
+                          {SENDER_LABELS[ticket.senderLabel]}
+                        </span>
+                      )}
                       {/* The crown follows the name, and the flex row is what
                           keeps it: the NAME truncates, the crown never does —
                           the one thing worth spotting at a glance must not be

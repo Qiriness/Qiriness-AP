@@ -28,6 +28,10 @@ import {
   supabaseSelect,
 } from "../../../scripts/lib/supabase-rest-client.mjs";
 import { COLUMNS, T } from "../../../scripts/lib/tables.mjs";
+import {
+  createSenderDirectoryStore,
+  emptySenderDirectory
+} from "../../../agent/src/ingestion/sender-directory.mjs";
 import { createTicketRecord } from "../../../scripts/lib/ticket-record.mjs";
 import { KnowledgeNotFoundError } from "./knowledge-errors";
 import { summariseFacts, summariseInvestigation, summariseOrderContext } from "../ticket-detail";
@@ -85,8 +89,34 @@ function getRecord(shopId: string) {
  * the resolution pass has not linked, which is most of them until it runs.
  */
 export async function listTickets(shopId: string): Promise<TicketListItem[]> {
-  const rows = await getRecord(shopId).queue();
-  return (rows as any[]).map(mapTicketRow).sort(byPriorityThenLastActivityDesc);
+  const [rows, directory] = await Promise.all([
+    getRecord(shopId).queue(),
+    loadSenderDirectory(shopId)
+  ]);
+  return (rows as any[])
+    .map((row) => mapTicketRow(row, directory))
+    .sort(byPriorityThenLastActivityDesc);
+}
+
+/**
+ * Who counts as one of our own, read once per request.
+ *
+ * A TABLE READ RATHER THAN A CONSTANT, because the answer changes without a
+ * deploy: adding a carrier or a new corporate domain is a row, and every ticket
+ * already stored is reclassified the next time the page is rendered. That is the
+ * same reason VIP is derived at read time — a label baked into a ticket at
+ * ingestion would be stale the moment the directory moved.
+ *
+ * `supportMailbox` is passed so the directory derives our own domain as internal
+ * without anyone having to remember to add it.
+ *
+ * Nine rows today, so this is a full read of a tiny table and not worth caching
+ * — and a cache would be the thing that made a directory edit appear not to work.
+ */
+async function loadSenderDirectory(shopId: string) {
+  return createSenderDirectoryStore(getSupabaseClient()).load(shopId, {
+    supportMailbox: process.env.SUPPORT_MAILBOX || undefined
+  });
 }
 
 /**
@@ -278,8 +308,14 @@ function mapCustomer(row: any) {
   };
 }
 
-function mapTicketRow(row: any): TicketListItem {
+function mapTicketRow(row: any, directory: any = emptySenderDirectory): TicketListItem {
   const customer = mapCustomer(row);
+  // THE ADDRESS STOPS HERE. `requester_email` is read from the view so this
+  // question can be asked, and only the resulting label continues to the
+  // browser — the queue is a list of everyone who has written in, and shipping
+  // their addresses into the page to render a chip would be the widest
+  // disclosure on the dashboard for the least reason.
+  const senderEntry = directory.lookup(row.requester_email ?? null);
   const level = row.level === null || row.level === undefined ? null : (Number(row.level) as TicketLevel);
   const priorityScore = scorePriority({
     level,
@@ -305,6 +341,12 @@ function mapTicketRow(row: any): TicketListItem {
         : (Number(row.happiness) as TicketHappiness),
     responsibleTeam: (row.responsible_team as ResponsibleTeam) ?? null,
     requesterName: row.requester_name,
+    senderLabel: (senderEntry?.label as TicketListItem["senderLabel"]) ?? null,
+    senderNote: senderEntry?.note ?? null,
+    // Null requester_email — a ticket with no stored inbound message — is NOT
+    // non-demand. Eleven tickets are in that state, and defaulting them out of
+    // the queue would hide customer mail on the strength of a missing join.
+    isNonDemand: directory.isNonDemand(row.requester_email ?? null),
     ...customer,
     priorityScore,
     priorityBand: priorityBand(priorityScore) as TicketPriorityBand,

@@ -133,9 +133,12 @@ export const COLUMNS = {
    * drift: the row a mutation returns replaces a row the list rendered, and a
    * narrower shape would blank whatever the list had shown.
    */
+  // `requester_email` is here so the caller can ask `sender_directory` whether a
+  // thread was opened by a customer or by one of our own. It is resolved to a
+  // label server-side and never reaches the browser — see `mapTicketRow`.
   ticketQueue:
     'id,subject,status,category,secondary_category,level,happiness,responsible_team,' +
-    'requester_name,shopify_order_number,first_message_at,last_message_at,' +
+    'requester_name,requester_email,shopify_order_number,first_message_at,last_message_at,' +
     'customer_display_name,customer_first_name,customer_last_name,customer_rfm_group,' +
     'message_count,inbound_count,waiting_since',
 

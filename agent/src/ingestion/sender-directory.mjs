@@ -84,6 +84,13 @@ export const emptySenderDirectory = buildSenderDirectory([]);
 
 export function createSenderDirectoryStore(supabase) {
   return {
+    /**
+     * @param {string} shopId
+     * @param {{ supportMailbox?: string | null }} [options] — annotated because
+     *   `web/` type-checks this file through `allowJs`, and a bare `= null`
+     *   default makes TypeScript infer the parameter as `null` and reject the
+     *   address every real caller passes.
+     */
     async load(shopId, { supportMailbox = null } = {}) {
       const rows = await supabaseSelect(
         supabase,

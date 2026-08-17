@@ -94,6 +94,33 @@ export async function runInvestigation({
       continue;
     }
 
+    // NOT CUSTOMER DEMAND, SO NOT INVESTIGATED. A thread opened by a colleague,
+    // the warehouse or a carrier gets the same treatment as an out-of-scope
+    // subject: skipped, flag cleared, no LLM spend. There is no customer reply
+    // being prepared for it, and a case file built from an internal thread would
+    // reason about a forwarded complaint as though the colleague were the
+    // customer.
+    //
+    // CHECKED HERE RATHER THAN IN `isInvestigable`, because the answer lives on
+    // the first message and not on the ticket — `tickets` stores only a hash of
+    // the requester, which `sender_directory` cannot match. Keeping the rules
+    // module ignorant of senders is better than giving it a row it cannot read.
+    //
+    // A directory edit re-opens this: the flag was cleared, so re-enabling a
+    // domain means re-raising `needs_investigation` for its tickets, exactly as
+    // enabling a subject does.
+    if (senderDirectory?.isNonDemand?.(messages[0]?.from_email)) {
+      if (!dryRun) {
+        await record.skip('investigation', ticket.id);
+      }
+      counts.skipped += 1;
+      logger?.info?.('investigate.skipped_non_demand', {
+        ticketId: ticket.id,
+        label: senderDirectory.lookup(messages[0]?.from_email)?.label ?? null
+      });
+      continue;
+    }
+
     const triggerMessage = messages[messages.length - 1];
 
     // Before the investigation, so it cannot be influenced by it — and awaited

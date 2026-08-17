@@ -290,6 +290,35 @@ export type TicketHappiness = 1 | 2 | 3 | 4;
 /** Visual priority tier for the ticket row border. */
 export type TicketPriorityBand = "high" | "medium" | "low";
 
+/**
+ * What `sender_directory` can say a sender is. Mirrors the table's own check
+ * constraint — adding one is a migration, deliberately, because code branches on
+ * these values.
+ */
+export type SenderLabel =
+  | "internal"
+  | "contractor"
+  | "logistics"
+  | "courier"
+  | "retailer"
+  | "distributor"
+  | "supplier"
+  | "partner"
+  | "other";
+
+/** How each label reads on a chip. */
+export const SENDER_LABELS: Record<SenderLabel, string> = {
+  internal: "Internal",
+  contractor: "Contractor",
+  logistics: "Logistics",
+  courier: "Carrier",
+  retailer: "Retailer",
+  distributor: "Distributor",
+  supplier: "Supplier",
+  partner: "Partner",
+  other: "Business"
+};
+
 /** The gloss behind each score, used as the face's tooltip. */
 export const TICKET_HAPPINESS_MEANINGS: Record<TicketHappiness, string> = {
   1: "Happy",
@@ -321,6 +350,28 @@ export interface TicketListItem {
   responsibleTeam: ResponsibleTeam | null;
   /** The name on the email itself — what the sender typed, not who they are. */
   requesterName: string | null;
+  /**
+   * What `sender_directory` says the thread's opener is, or null for the
+   * ordinary case — an unlisted sender is a consumer.
+   *
+   * DERIVED SERVER-SIDE FROM AN ADDRESS THE BROWSER NEVER RECEIVES. The queue is
+   * every person who has written in, and shipping their addresses into the page
+   * to render a chip would be the widest disclosure on the dashboard for the
+   * smallest reason.
+   */
+  senderLabel: SenderLabel | null;
+  /** The directory's free-text note, shown as the chip's tooltip. */
+  senderNote: string | null;
+  /**
+   * True when the opener is `internal`, `contractor`, `logistics` or `courier` —
+   * the labels that mean "this is not customer demand". Such threads leave the
+   * Tickets queue for Conversations.
+   *
+   * False for a thread with no stored inbound message: eleven tickets are in
+   * that state, and treating a missing join as "not a customer" would hide real
+   * mail.
+   */
+  isNonDemand: boolean;
   /**
    * The matched Shopify customer's name, from `tickets.customer_id`.
    *

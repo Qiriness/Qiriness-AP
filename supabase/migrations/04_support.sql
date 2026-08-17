@@ -1235,6 +1235,14 @@ with (security_invoker = true) as
     m.id as message_id,
     m.subject as subject,
     m.body_text as body_text,
+    -- WHO OPENED THE THREAD. `tickets` deliberately keeps only a hash of the
+    -- requester, which is right for the row but leaves no way to ask "is this
+    -- one of ours" -- `sender_directory` matches on an address or a domain, and
+    -- a hash matches neither. The address lives on the message already; this
+    -- carries it up to the one place a per-ticket question can reach it.
+    -- Server-side only: the tickets service resolves it to a label and sends
+    -- the label, never the address, to the browser.
+    m.from_email as from_email,
     m.received_at as received_at
   from public.ticket_messages m
   where m.direction = 'inbound'
@@ -1285,6 +1293,10 @@ with (security_invoker = true) as
     c.first_name as customer_first_name,
     c.last_name as customer_last_name,
     c.rfm_group as customer_rfm_group,
+    -- The address that opened the thread, so the caller can ask
+    -- `sender_directory` whether this is a customer or one of our own. Resolved
+    -- to a label server-side and never sent to the browser.
+    f.from_email as requester_email,
     coalesce(n.message_count, 0) as message_count,
     coalesce(n.inbound_count, 0) as inbound_count,
     case
@@ -1296,6 +1308,7 @@ with (security_invoker = true) as
   from public.tickets t
   left join public.customers c on c.id = t.customer_id
   left join public.ticket_message_counts n on n.ticket_id = t.id
+  left join public.ticket_first_inbound f on f.ticket_id = t.id
   where t.deleted_at is null;
 
 revoke all on public.ticket_queue from anon, authenticated;

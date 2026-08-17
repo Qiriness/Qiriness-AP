@@ -435,6 +435,27 @@ Dashboard authentication, deployed webhook routes, and the agent's drafting stag
 
 - **`What it costs` moved to the top of `/insights/agent`**, above the pipeline funnel and the blocker ranking. A pure reorder — the section moved verbatim, no markup or logic changed.
 
+## Reverted: staff-sent threads stay in the ticket queue (2026-08-17)
+
+Same-day revert of the Conversations routing below. Built, measured against real data, and withdrawn.
+
+- **All 14 routed threads turned out to be customer work** — `return_exchange/problem` L3, `delivery/problem`, `order/problem`, team `logistics`: the back office coordinating real returns, not internal chatter.
+- **3 of 14 were still open at L3** (needs a human) behind a nav item nobody had opened. **1 was an orphan** — `TR: Retour Colissimo` names a consumer with no ticket of their own, so that forward is the only record of their return. **7 quoted no consumer address at all**, so coverage could not even be checked.
+- **Root cause: `NON_DEMAND_LABELS` was reused out of context.** It was written for `cluster:tickets`, where excluding our own prose from a topic map is right. A forward is a change of messenger, not a change of subject.
+- **`/conversations` and `ConversationsView` removed**, sidebar item back to `SOON`. The queue holds every ticket again.
+- **Kept as a label, not a route**: a sender chip on the row (teal for internal/contractor, directory `note` as tooltip, `flex: none` so a long name cannot push it out) and an Anyone / Consumers only / Staff & partners only filter.
+- The classification machinery stays — `ticket_first_inbound.from_email`, `ticket_queue.requester_email`, server-side resolution so the address never reaches the browser. Only the consequence changed.
+
+## Conversations: our own mail leaves the ticket queue (2026-08-17)
+
+- **New `/conversations` page** for threads that are not customer demand — colleagues, the 3PL, carriers, contractors. **14 of 214 tickets** move there (3 open, 11 closed). The sidebar item stops being a `SOON` placeholder.
+- **Routed, not dropped.** These threads carry forwarded customer requests, so the blocklist treatment would discard real work irreversibly. One row in `sender_directory` moves a domain either way.
+- **`sender_directory` drives it** — the table and `NON_DEMAND_LABELS` already existed for `cluster:tickets`; they simply never touched the queue. Added `qiriness.com` (internal, also derived from `SUPPORT_MAILBOX`), `colissimo.fr` and `laposte.fr` (courier). Directory now holds 9 rows.
+- **`retailer` stays in the queue.** Nocibé and Marionnaud open 14 tickets between them and those are reorders — real B2B demand. Covered by a test.
+- **Classification is read-time and hash-free.** `ticket_first_inbound` now carries `from_email` and `ticket_queue` surfaces it as `requester_email`; the service resolves it to a label and **the address never reaches the browser**. A ticket with no inbound message stays in the queue rather than being assumed internal.
+- **The agent skips non-demand threads** — flag cleared, no LLM call, same treatment as an out-of-scope subject. Checked in the runner, because the sender lives on the message and `isInvestigable` only sees the ticket row.
+- Conversations deliberately shows no priority sort: priority is a customer-waiting-time judgement and means nothing here.
+
 ## Support panel: consented contacts CSV (2026-08-17)
 
 - **Download icon in the top-right corner of the reachability tile** (28x28, no visible text), columns Name / Email / Tickets / First contact / Last contact / Ticket categories. Its `aria-label` and tooltip both name the count and the filter, because the tile's headline figure is 22 while the file holds 8 — an unlabelled icon would read as exporting everything above it.

@@ -74,6 +74,11 @@ export function TicketsView({ initialTickets, droppedMail, loadError }: TicketsV
   const [tickets, setTickets] = useState(initialTickets);
   const [level, setLevel] = useState<LevelFilter>("all");
   const [category, setCategory] = useState<KnowledgeCategory | "all">("all");
+  // Who opened the thread: everyone, only consumers, or only the business
+  // senders. A FILTER RATHER THAN A ROUTE — these threads were briefly moved to
+  // a page of their own and that hid real customer work, so the queue keeps them
+  // and this narrows the view on demand. See DECISIONS.md.
+  const [sender, setSender] = useState<"all" | "consumer" | "business">("all");
   // One query per table, not one for the page: see TicketSection. Level,
   // category and sort stay in the toolbar — those genuinely describe the whole
   // open set, and Queue and Backlog are one set split by age.
@@ -116,6 +121,8 @@ export function TicketsView({ initialTickets, droppedMail, loadError }: TicketsV
       if (level === "uncategorised" && ticket.level !== null) return false;
       if (level !== "all" && level !== "uncategorised" && String(ticket.level) !== level) return false;
       if (category !== "all" && ticket.category !== category) return false;
+      if (sender === "consumer" && ticket.senderLabel) return false;
+      if (sender === "business" && !ticket.senderLabel) return false;
       return true;
     });
 
@@ -134,7 +141,7 @@ export function TicketsView({ initialTickets, droppedMail, loadError }: TicketsV
       const bt = Date.parse(b.lastMessageAt ?? b.firstMessageAt ?? "") || 0;
       return sort === "oldest" ? at - bt : bt - at;
     });
-  }, [openTickets, level, category, sort]);
+  }, [openTickets, level, category, sender, sort]);
 
   const queue = useMemo(
     () =>
@@ -242,6 +249,19 @@ export function TicketsView({ initialTickets, droppedMail, loadError }: TicketsV
                   {CATEGORY_LABELS[value]}
                 </option>
               ))}
+            </select>
+          </label>
+
+          <label className={styles.selectLabel}>
+            <span className={styles.srOnly}>Filter by who sent it</span>
+            <select
+              className={styles.select}
+              value={sender}
+              onChange={(event) => setSender(event.target.value as "all" | "consumer" | "business")}
+            >
+              <option value="all">Anyone</option>
+              <option value="consumer">Consumers only</option>
+              <option value="business">Staff &amp; partners only</option>
             </select>
           </label>
 

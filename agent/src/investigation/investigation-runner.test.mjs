@@ -3,6 +3,8 @@ import test from 'node:test';
 
 import { createTicketRecord } from '../../../scripts/lib/ticket-record.mjs';
 
+import { buildSenderDirectory } from '../ingestion/sender-directory.mjs';
+
 import { TICKET_STATUS_BY_VERDICT, buildCaseFile } from './case-file.mjs';
 import { runInvestigation } from './investigation-runner.mjs';
 
@@ -132,6 +134,52 @@ test('an out-of-scope subject is skipped and its flag cleared', async () => {
   assert.equal(counts.skipped, 1);
   assert.equal(store.saved.length, 0);
   assert.deepEqual(store.updates[0].patch, { needs_investigation: false });
+});
+
+test('a thread opened by a colleague is skipped, and no model call is made', async () => {
+  // Not customer demand: nobody is drafting a reply to it, and a case file built
+  // from an internal thread would reason about a forwarded complaint as though
+  // the colleague were the customer.
+  const store = buildStore({
+    messages: [{ id: 'm1', body_text: 'peux-tu regarder la commande 6612 ?', from_email: 'tom@lap-groupe.com' }]
+  });
+  let investigated = 0;
+  const counts = await runInvestigation({
+    ...wire(store),
+    investigate: async () => {
+      investigated += 1;
+      return caseFile();
+    },
+    shopId: 's1',
+    senderDirectory: buildSenderDirectory([
+      { pattern_type: 'domain', pattern: 'lap-groupe.com', label: 'internal', note: null }
+    ])
+  });
+
+  assert.equal(counts.skipped, 1);
+  assert.equal(investigated, 0, 'the whole point is that no LLM call happens');
+  assert.equal(store.saved.length, 0);
+  assert.deepEqual(store.updates[0].patch, { needs_investigation: false });
+});
+
+test('a `retailer` is a customer, so their thread IS investigated', async () => {
+  // Nocibé places reorders. `retailer` is deliberately absent from
+  // NON_DEMAND_LABELS, and a rule that skipped every business sender would drop
+  // real B2B demand.
+  const store = buildStore({
+    messages: [{ id: 'm1', body_text: 'commande de réassort', from_email: 'achats@nocibe.fr' }]
+  });
+  const counts = await runInvestigation({
+    ...wire(store),
+    investigate: async () => caseFile(),
+    shopId: 's1',
+    senderDirectory: buildSenderDirectory([
+      { pattern_type: 'domain', pattern: 'nocibe.fr', label: 'retailer', note: null }
+    ])
+  });
+
+  assert.equal(counts.skipped, 0);
+  assert.equal(store.saved.length, 1);
 });
 
 test('a thread holding no customer message is skipped, not guessed at', async () => {

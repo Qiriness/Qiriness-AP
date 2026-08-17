@@ -307,6 +307,37 @@
   color: var(--gold-strong);
 }
 
+/* Marks a thread opened by someone who is not a consumer — the logistics team,
+   a carrier, a retail partner.
+   `flex: none` for the same reason the VIP crown has it: the NAME truncates, the
+   chip never does. A long customer name must not push out the one mark that says
+   this row is not what it looks like.
+   Quiet on purpose. It sits in a column beside level, happiness and the VIP
+   crown, and a fourth loud thing there would compete with the three that carry
+   urgency — this one carries context. */
+.senderChip {
+  flex: none;
+  padding: 1px 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill, 999px);
+  background: var(--surface-sunken);
+  color: var(--text-subtle);
+  font-size: var(--text-micro, var(--text-caption));
+  font-weight: var(--weight-medium);
+  line-height: 1.5;
+  white-space: nowrap;
+}
+
+/* Our own people read teal — the app's one accent, and the group most worth
+   telling apart from a customer at a glance. Everyone else stays neutral: they
+   are context, not a category the eye should sort by. */
+.internal,
+.contractor {
+  border-color: var(--teal-200, var(--border-strong));
+  background: var(--teal-050);
+  color: var(--teal);
+}
+
 .category {
   display: block;
 }

@@ -665,6 +665,29 @@ Unfilled core-topic slots are client-side placeholders, never database rows; cli
 
 ## Tickets dashboard
 
+### Staff-sent threads are labelled in the queue, never routed out of it — reversing an earlier call
+
+`sender_directory` says who a sender is: `internal`, `contractor`, `logistics`, `courier`, `retailer` and four more. Threads from the first four were briefly routed to a `/conversations` page of their own, on the reasoning that our own mail is not customer demand. **That was built, measured, and reverted the same day.**
+
+**The measurement is why.** All 14 routed threads were customer work. The categoriser had already labelled them `return_exchange/problem` L3, `delivery/problem`, `order/problem`, team `logistics` — the back office coordinating real returns. Subjects like *"Appel cliente ce lundi 1er juin - Mme Chantal"* are a colleague logging a customer phone call: genuine demand with no customer-side email at all.
+
+Worse, the routing hid work that could not be recovered from anywhere else:
+
+- **3 of 14 were still open at L3** — needs-a-human — sitting behind a nav item nobody had opened.
+- **1 was an orphan**: `TR: Retour Colissimo` names a consumer who has no ticket of their own. That forward is the only record of that customer's return.
+- **7 quoted no consumer address at all**, referencing only order numbers, so whether they were covered elsewhere could not even be determined.
+
+**The bug was reusing the wrong constant.** `NON_DEMAND_LABELS` was written for `cluster:tickets`, where excluding our own prose from a topic map is correct — internal wording would otherwise form clusters about how *we* write. Routing is a different question, and the label does not answer it: **a forward is a change of messenger, not a change of subject.** The customer's request is still inside it.
+
+So the queue holds every ticket regardless of sender, and the label becomes two things that cannot hide anything:
+
+- **A chip on the row**, next to the VIP crown and carrying the directory's `note` as its tooltip. `flex: none` for the same reason the crown has it — a long customer name must not push out the mark saying this row is not what it looks like. Teal for `internal` and `contractor`, neutral for the rest: our own people are the group worth telling apart at a glance, and a fourth loud thing in a column that already holds level, happiness and VIP would compete with the three that carry urgency.
+- **A filter** — Anyone / Consumers only / Staff & partners only — so the queue can be narrowed on demand and never silently.
+
+**The classification machinery was kept**, because it was never the problem: `ticket_first_inbound` still carries `from_email`, `ticket_queue` still exposes it as `requester_email`, and the service still resolves it to a label server-side so the address never reaches the browser. What changed is that the answer decorates a row instead of moving it.
+
+**The general rule this leaves behind:** a signal good enough to *annotate* a ticket is not automatically good enough to *hide* one. Hiding needs evidence that nothing is lost, and here the evidence said the opposite.
+
 ### The middle section is not tickets
 
 Dropped mail never reaches the `tickets` table — the gate runs before the ticket write — so the only trace is a `spam_audit` row. That row now carries the body, but it is still **not a `ticket_messages` row**, which is why "Add as ticket" is disabled rather than absent: promoting one back means the agent re-fetching it from Graph, and hiding the button would hide that it is recoverable at all.

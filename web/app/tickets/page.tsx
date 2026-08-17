@@ -29,6 +29,12 @@ export default async function TicketsPage() {
 
   try {
     const shopId = await getShopId();
+    // EVERY TICKET, INCLUDING THE ONES STAFF OPENED. Routing threads from
+    // internal senders to a separate page was tried and reverted: all 14 of them
+    // turned out to be the logistics team working customer returns — L3, team
+    // logistics, one naming a customer with no ticket of their own — so hiding
+    // them hid customer work. The sender is a badge and a filter here instead.
+    // See DECISIONS.md § Tickets dashboard.
     [tickets, droppedMail] = await Promise.all([listTickets(shopId), listDroppedMail(shopId)]);
   } catch (error) {
     loadError = error instanceof Error ? error.message : "Failed to load tickets.";

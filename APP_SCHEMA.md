@@ -20,7 +20,8 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |   |   |-- layout.tsx globals.css        # root layout · design tokens (teal, scale, radii)
 |   |   |-- page.tsx                      # / -> /agent-setup redirect
 |   |   |-- agent-setup/page.tsx          # Server Component: article + source fetch
-|   |   |-- tickets/page.tsx              # Server Component: the agent's queue
+|   |   |-- tickets/page.tsx              # Server Component: the agent's queue --
+|   |   |                                 # EVERY ticket, staff-sent included
 |   |   |-- insights/                     # -> /insights/fulfilment, then one route
 |   |   |                                 # per panel: fulfilment · support ·
 |   |   |                                 # customers · agent
@@ -233,8 +234,8 @@ RLS on the tables under it.
 | Object | Answers | Replaces |
 | --- | --- | --- |
 | `ticket_message_counts` | messages per ticket + inbound/outbound activity facts, soft-deleted excluded | a full read of `ticket_messages` to count in a Map |
-| `ticket_first_inbound` | one row per ticket: its earliest inbound message | a read of every inbound body in the shop, keeping one per ticket |
-| `ticket_queue` | the dashboard row: ticket + customer + count, soft-deleted excluded | `TICKET_LIST_SELECT` + the count join, in `tickets-service.ts` |
+| `ticket_first_inbound` | one row per ticket: its earliest inbound message, incl. `from_email` | a read of every inbound body in the shop, keeping one per ticket |
+| `ticket_queue` | the dashboard row: ticket + customer + count + `requester_email` (the address that opened the thread, so `sender_directory` can be asked whether it is a customer), soft-deleted excluded | `TICKET_LIST_SELECT` + the count join, in `tickets-service.ts` |
 | `order_number_range(shop)` | lowest and highest `order_number`, live orders only | an asc/desc pair of `limit 1` reads |
 
 **The 21 Insights views (`06_analytics.sql`).** Every figure on every panel comes
