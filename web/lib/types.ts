@@ -187,23 +187,33 @@ export interface Article {
  * Structured, always-included context for the drafting agent: how it should
  * describe itself and sound, regardless of what the email is about. Distinct
  * from category articles, which are retrieved selectively per email subject.
- * Response Framework and Guidelines and Guardrails are intentionally not
- * part of this shape yet — they render as fixed placeholder content (see
- * RESPONSE_FRAMEWORK_PLACEHOLDER / GUIDELINES_AND_GUARDRAILS_PLACEHOLDER)
- * until that part of the page is designed in more depth.
+ *
+ * ALL FIVE FIELDS ARE STORED, and that is what makes this the drafting agent's
+ * system prompt rather than a page. The response framework and the guardrails
+ * were previously fixed constants rendered read-only, which meant the Node
+ * worker could not read them at all — a TypeScript constant in `web/` is not
+ * reachable from `agent/`. They are seeded from the defaults below and written
+ * into `voice_profile` on the next save, so the database is the single source
+ * the drafting stage reads and there is no second copy to drift.
+ *
+ * The two lists stay read-only in the workspace for now; storing them and
+ * editing them are separate steps, and only the first one blocks Phase 5.
  */
 export interface VoiceProfile {
   roleDescription: string;
   toneAndVoice: string;
+  responseFramework: string[];
+  guidelinesAndGuardrails: string[];
+  /**
+   * The sign-off appended to every drafted reply. The response framework's last
+   * step is "apply the approved signature", and until this existed there was no
+   * approved signature anywhere in the system for it to refer to.
+   */
+  signature: string;
 }
 
-export const EMPTY_VOICE_PROFILE: VoiceProfile = {
-  roleDescription: "",
-  toneAndVoice: "",
-};
-
-/** Fixed placeholder content for the "Response Framework" section — not yet editable or stored. */
-export const RESPONSE_FRAMEWORK_PLACEHOLDER: string[] = [
+/** Seed content for the "Response framework" section. Stored on first save. */
+export const DEFAULT_RESPONSE_FRAMEWORK: string[] = [
   "Appropriate greeting",
   "Acknowledge the customer's message",
   "Give the relevant answer or resolution",
@@ -212,8 +222,8 @@ export const RESPONSE_FRAMEWORK_PLACEHOLDER: string[] = [
   "Apply the approved signature",
 ];
 
-/** Fixed placeholder content for the "Guidelines and Guardrails" section — not yet editable or stored. */
-export const GUIDELINES_AND_GUARDRAILS_PLACEHOLDER: string[] = [
+/** Seed content for the "Guidelines and guardrails" section. Stored on first save. */
+export const DEFAULT_GUIDELINES_AND_GUARDRAILS: string[] = [
   "Never invent facts.",
   "Never claim an action has been completed unless explicitly confirmed.",
   "Never promise a refund, replacement, or delivery date unless approved in the brief.",
@@ -223,6 +233,17 @@ export const GUIDELINES_AND_GUARDRAILS_PLACEHOLDER: string[] = [
   "Never request information already marked as available.",
   "Never contradict the approved resolution.",
 ];
+
+export const EMPTY_VOICE_PROFILE: VoiceProfile = {
+  roleDescription: "",
+  toneAndVoice: "",
+  // The two lists default to their seed content rather than to empty: an empty
+  // framework would read as "this shop chose to have no framework", which is a
+  // different thing from "nobody has edited it yet".
+  responseFramework: DEFAULT_RESPONSE_FRAMEWORK,
+  guidelinesAndGuardrails: DEFAULT_GUIDELINES_AND_GUARDRAILS,
+  signature: "",
+};
 
 export const STATUS_LABELS: Record<ArticleStatus, string> = {
   draft: "Draft",
@@ -626,10 +647,10 @@ export interface TicketMessage {
 /**
  * A ticket's conversation, plus the reply that would be sent for it.
  *
- * `draft` is ALWAYS null today and that is not a bug: the drafting agent is
- * Phase 5 and nothing writes a draft yet (there is no column and no table for
- * one). The field exists so the dialog renders the section it belongs in and
- * the wiring point is a single named thing rather than a redesign later.
+ * `draft` is null whenever the ticket has no case file, or its verdict was
+ * `needs_human` — both normal states rather than errors. What a human must do
+ * with a needs_human ticket is the case file's handoff, which the detail panel
+ * already shows.
  */
 export interface TicketThread {
   ticketId: string;
@@ -638,12 +659,38 @@ export interface TicketThread {
   messages: TicketMessage[];
 }
 
-/** What the agent would send, once drafting exists. */
+/**
+ * What the agent would send, and what has been decided about it.
+ *
+ * `body` is the MODEL's text and never changes; `approvedBody` is a reviewer's
+ * rewrite, when there is one. The dialog shows the model's text — the distance
+ * between the two is the drafting quality signal, and rendering only the
+ * corrected version would hide it (see 07_drafting.sql).
+ */
 export interface TicketDraft {
+  id: string;
   body: string;
+  approvedBody: string | null;
+  /** Which kind of reply this is; decided by the case file, never by wording. */
+  sourceVerdict: "answerable" | "needs_customer_input";
+  status: TicketDraftStatus;
+  /**
+   * Whether every mechanical check passed: the case file's prohibitions, the
+   * withheld identifiers, the reply language, the signature. False means the
+   * draft is readable but must not be treated as sendable.
+   */
+  checksPassed: boolean;
+  /** One entry per failed check, for the reviewer to see what was caught. */
+  failedChecks: string[];
   /** ISO timestamp of when it was written. */
   draftedAt: string | null;
 }
+
+/**
+ * Mirrors ticket_drafts_status_check in supabase/migrations/07_drafting.sql.
+ * `sent` is written by nothing today: there is no send path.
+ */
+export type TicketDraftStatus = "pending" | "approved" | "edited" | "rejected" | "sent";
 
 /**
  * One spam-gate decision that dropped an email.

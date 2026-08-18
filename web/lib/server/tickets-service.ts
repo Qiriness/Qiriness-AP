@@ -33,6 +33,7 @@ import {
   emptySenderDirectory
 } from "../../../agent/src/ingestion/sender-directory.mjs";
 import { createTicketRecord } from "../../../scripts/lib/ticket-record.mjs";
+import { createDraftRecord } from "../../../scripts/lib/draft-record.mjs";
 import { KnowledgeNotFoundError } from "./knowledge-errors";
 import { summariseFacts, summariseInvestigation, summariseOrderContext } from "../ticket-detail";
 import type {
@@ -40,6 +41,7 @@ import type {
   KnowledgeCategory,
   ResponsibleTeam,
   TicketDetail,
+  TicketDraft,
   TicketHappiness,
   TicketLevel,
   TicketListItem,
@@ -206,9 +208,13 @@ export async function getTicketDetail(shopId: string, ticketId: string): Promise
 export async function getTicketThread(shopId: string, ticketId: string): Promise<TicketThread> {
   const record = getRecord(shopId);
 
-  const [ticketRow, messageRows] = await Promise.all([
+  const [ticketRow, messageRows, draftRow] = await Promise.all([
     record.findSubject(ticketId),
     record.thread(ticketId),
+    // Read alongside the thread rather than in the panel: the draft is what an
+    // operator is deciding about, and a dialog that renders the conversation
+    // first and the draft a moment later reads as the draft being missing.
+    getDraftRecord(shopId).forTicket(ticketId),
   ]);
 
   if (!ticketRow) {
@@ -220,11 +226,42 @@ export async function getTicketThread(shopId: string, ticketId: string): Promise
   return {
     ticketId,
     subject: ticketRow.subject ?? null,
-    // Phase 5. Nothing writes a draft yet — see the type's note.
-    draft: null,
+    draft: draftRow ? mapDraftRow(draftRow) : null,
     messages,
   };
 }
+
+/** The draft row, scoped to this shop. Owned by scripts/lib/draft-record.mjs. */
+function getDraftRecord(shopId: string) {
+  return createDraftRecord(getSupabaseClient(), { shopId });
+}
+
+/**
+ * The stored draft, as the dialog needs it.
+ *
+ * `body` stays the MODEL's text even when a reviewer has rewritten it. Showing
+ * the rewrite in its place would hide the only honest measure of how good the
+ * drafting is — see 07_drafting.sql on why the two bodies are separate columns.
+ */
+function mapDraftRow(row: any): TicketDraft {
+  const checks: any[] = Array.isArray(row.checks) ? row.checks : [];
+  return {
+    id: row.id,
+    body: row.body_text ?? "",
+    approvedBody: row.approved_body_text ?? null,
+    sourceVerdict: row.source_verdict === "needs_customer_input" ? "needs_customer_input" : "answerable",
+    status: DRAFT_STATUSES.includes(row.status) ? row.status : "pending",
+    checksPassed: Boolean(row.checks_passed),
+    // Only the failures: a reviewer needs to know what was caught, not to read
+    // a list of everything that was fine.
+    failedChecks: checks
+      .filter((check) => check && check.passed === false)
+      .map((check) => String(check.detail ?? check.check ?? "unnamed check")),
+    draftedAt: row.drafted_at ?? null,
+  };
+}
+
+const DRAFT_STATUSES: string[] = ["pending", "approved", "edited", "rejected", "sent"];
 
 /** Oldest first: a conversation reads downwards, unlike the queue. */
 function byTimeAsc(a: TicketMessage, b: TicketMessage): number {

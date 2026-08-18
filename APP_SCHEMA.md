@@ -89,7 +89,7 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |       |-- shopify-*-mapper.mjs         # shop/product/metaobject/customer/order/promotion
 |       |-- shopify-sync-mappers.mjs shop-sync-service.mjs
 |       |-- supabase-rest-client.mjs     # REST select/upsert/update/delete/rpc
-|       |-- tables.mjs                   # THE SCHEMA CONTRACT: 24 tables, 3 views,
+|       |-- tables.mjs                   # THE SCHEMA CONTRACT: 28 tables, 24 views,
 |       |                                # 4 rpcs, and the recurring projections.
 |       |                                # Asserted against the DDL by _shared.test
 |       |-- ticket-record.mjs            # THE ONLY WRITER OF `tickets`: pass protocol
@@ -97,6 +97,10 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |       |                                # descriptors), the needs_* flags, the
 |       |                                # lifecycle timestamps, the metadata trail,
 |       |                                # the queue + thread reads. Shop-scoped
+|       |-- draft-record.mjs             # THE ONLY WRITER OF `ticket_drafts`:
+|       |                                # the upsert key, the two bodies, the human
+|       |                                # decision vs the machine outcome, the review
+|       |                                # stamp. Shop-scoped. Cannot send
 |       |-- ticket-priority.mjs          # pure read-time queue score + band:
 |       |                                # level, customer wait, inbound contacts,
 |       |                                # awaiting_human, VIP
@@ -162,11 +166,17 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |   |   |                        # order-verification · order-resolution-runner ·
 |   |   |                        # order-context + order-context-runner
 |   |   |-- routing/             # forward-rules · forwarding-store · forward-runner
+|   |   |-- drafting/            # brand-voice (the Brand voice row -> the system
+|   |   |                        #   prompt; approval gates it) · draft-rules (the
+|   |   |                        #   verdict + level gates, pure) · compose-draft
+|   |   |                        #   (per-ticket message + the answer schema) ·
+|   |   |                        # draft-checks (the prohibitions, in code) ·
+|   |   |                        # draft-runner (+ the derived queue). NO Graph call
 |   |   |-- lifecycle/           # auto-close (28d idle, level 4 exempt)
 |   |   `-- tools/               # one CLI per pass -- see Agent CLIs below
 |   `-- eval/                    # categorisation-cases (40 dummy) · score-categorisation ·
 |                                # sample-mailbox (review:sample) · compare-review-labels
-`-- supabase/migrations/         # BASELINE, 5 files by domain, run in order against
+`-- supabase/migrations/         # BASELINE, 7 files by domain, run in order against
                                  # an EMPTY database -- see Database Map.
                                  # _shared.test.mjs holds the cross-file invariants;
                                  # each file has its own sibling .test.mjs.
@@ -197,7 +207,7 @@ Never auto-synced — every row is an explicit import or a hand-written article.
 
 | Table | Holds |
 | --- | --- |
-| `knowledge_documents` | `content_html` is the editor's truth; `approval_status` independent of Shopify publish `status`; `core_topic` = 1 of 6 slots, max one per shop; `voice_profile` jsonb |
+| `knowledge_documents` | `content_html` is the editor's truth; `approval_status` independent of Shopify publish `status`; `core_topic` = 1 of 6 slots, max one per shop; `voice_profile` jsonb = the drafting agent's system prompt on the singleton `brand` row (`roleDescription`, `toneAndVoice`, `responseFramework[]`, `guidelinesAndGuardrails[]`, `signature`) — all five stored, so the worker reads one source rather than a constant in `web/` |
 | `knowledge_chunks` | retrieval chunks + `embedding vector(1536)` HNSW cosine, plus the determinism quadruple |
 
 ### Support exemplars
@@ -217,6 +227,7 @@ The recurring situations, not the answers to them. Same document/chunk mechanics
 | `tickets` | one per Graph `conversationId`. Taxonomy axes, `level`, `responsible_team`, `customer_id`, `shopify_order_number`, signals (`language`, `happiness`, `categorisation_confidence`), `resolved_context` jsonb, lifecycle + retention timestamps |
 | `ticket_messages` | one per Graph message. Envelope, cleaned `body_text`, sanitised payload, `embedding vector(1536)`, and `attachments jsonb` -- part METADATA only (name, contentType, size, isInline), never bytes. **NULL means never fetched**, `[]` means fetched and empty |
 | `ticket_investigations` | **the case file**: `established` / `unverified` / `missing` / `do_not_claim` (four separate columns), `handoff`, `context_ref`, `dropped_claims`, `evidence_gaps` (what the ticket required vs what was obtained, each entry carrying the `finding` and the `details` naming WHICH product or code it is about — diagnostic, does not move the verdict), `exemplar_match` (which recurring situation this is; recorded, never acted on). `unique(shop_id, trigger_message_id)` |
+| `ticket_drafts` | **what the agent would send**: `body_text` (the model's, never edited) beside `approved_body_text` (a reviewer's rewrite), `source_verdict` (`answerable` \| `needs_customer_input` — `needs_human` is refused by check constraint), `level` (1–3; level 4 is never drafted), `status` (the human decision) kept apart from `checks_passed` (the machine outcome), `auto_send_eligible`, `prompt_inputs`, `review_sent_at`. `unique(shop_id, trigger_message_id)`. **Holds no recipient and cannot send.** Owned by `scripts/lib/draft-record.mjs` |
 | `email_blocklist` | per-shop sender email/domain rules + hit counts |
 | `sender_directory` | per-shop sender email/domain → `label` (internal, contractor, logistics, courier, retailer, distributor, supplier, partner, other) + free-text `note`. Read into the case file as context and by `cluster:tickets` to tell customer demand from our own mail. Replaces `INTERNAL_EMAIL_DOMAINS`. Rows are exceptions; an unlisted sender is a consumer |
 | `spam_audit` | one row per gate decision. `outcome`, `decided_by`, `reason`, `label`, `model`, `failed_open`, sender, subject, and on a block `body_text` + `body_captured_at` + `body_expires_at` |
@@ -274,7 +285,7 @@ Written by the worker and the CLIs, read only by the Insights panels.
 
 ### Migration files
 
-**Six files, by domain, run in order against an empty database.** The order is a plain dependency chain, and every table is created *complete* — there is no `alter table … add column` anywhere in the baseline, and a test asserts that.
+**Seven files, by domain, run in order against an empty database.** The order is a plain dependency chain, and every table is created *complete* — there is no `alter table … add column` anywhere in the baseline, and a test asserts that.
 
 | File | Creates | Depends on |
 | --- | --- | --- |
@@ -284,6 +295,7 @@ Written by the worker and the CLIs, read only by the Insights panels.
 | `04_support.sql` | `tickets`, `ticket_messages`, `email_blocklist`, `sender_directory`, `spam_audit`, `ticket_investigations`, `category_forwarding`, `ticket_forwards`, `categorisation_review`, the three views | 01, 02 |
 | `05_exemplars.sql` | `support_exemplars`, `support_exemplar_phrasings`, `support_answers`, `match_support_exemplars()` | 01, 03 (`french_unaccent`) |
 | `06_analytics.sql` | `normalise_carrier()`, `llm_usage`, `cluster_runs`, `ticket_clusters`, and the **21 Insights views** | 01, 02, 04 |
+| `07_drafting.sql` | `ticket_drafts` | 01, 04 |
 
 `_shared.test.mjs` holds the cross-file invariants (no data statements, RLS on every table, every table and view documented, nothing referenced before it is created, every view `security_invoker` and revoked from the anon roles, every embedded table carrying the whole determinism quadruple, and `scripts/lib/tables.mjs` naming exactly what the baseline creates). Each file has a sibling test for its own contents.
 
@@ -376,7 +388,7 @@ Run `npm run ingest:once` or `npm start` from `agent/`. One poll runs every pass
 | 14 | **Retention purge** — nulls expired `spam_audit` bodies; best-effort | `ingestion/spam-audit.mjs` |
 | 15 | **Cost flush** — one insert of this poll's `llm_usage` rows. Like 14, runs whatever `--stop-after` says: the calls were already billed | `llm/usage-store.mjs` |
 
-Built through Phase 4 (retrieval tools + the agent that uses them). **Drafting is Phase 5 and is not built.**
+Built through Phase 4 (retrieval tools + the agent that uses them). **Drafting is built as a standalone pass (`npm run draft`) and is deliberately NOT in the poll yet** — it is the first pass whose output a customer would read, and it stays operator-triggered until the drafts have been reviewed.
 
 ### Agent CLIs
 
@@ -394,6 +406,7 @@ From `agent/`. Every pass has a standalone runner, most with `:dry-run`.
 | `orders:resolve[:dry-run]` | confirm order numbers |
 | `context:build[:dry-run] [--refresh]` | fill `tickets.resolved_context` |
 | `investigate[:dry-run] [--show/--brief] [--backfill] [--include-closed]` | run + render case files. `--backfill` re-queues **open** categorised tickets; `--include-closed` widens the claim to threads the queue has moved past, leaving their status untouched. Both print what the run cost |
+| `draft[:dry-run] [--show] [--ticket <id>] [--limit N] [--redraft]` | the drafting pass. Reads case files, writes `ticket_drafts`; **no Graph call**. Refuses unless the Brand voice article is `approved`. `--redraft` overwrites an existing draft — the queue is derived, so a ticket leaves it once one exists |
 | `forward:once` / `forward:dry-run` | the forwarding pass |
 | `tickets:autoclose[:dry-run]` | the lifecycle pass |
 | `eval:categorise` · `eval:retrieval` · `eval:diagnose` · `eval:exemplars` · `review:sample` · `review:compare` | every measurement — indexed in **`agent/eval/README.md`**, which says what each is judged against (three labelled sets, two proxies) |

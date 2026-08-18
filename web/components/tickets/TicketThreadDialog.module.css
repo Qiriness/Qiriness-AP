@@ -30,6 +30,19 @@
   overflow-wrap: anywhere;
 }
 
+/* A draft that failed a mechanical check is still shown — reading what the
+   model wrote is how you find out why it failed — but it must not look like the
+   others, or it gets approved on a skim. */
+.blocked {
+  margin: 0;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--error);
+  border-radius: var(--radius);
+  font-size: var(--text-caption);
+  line-height: 1.5;
+  color: var(--error);
+}
+
 .stamp {
   margin: 0;
   font-size: var(--text-caption);

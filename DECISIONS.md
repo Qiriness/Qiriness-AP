@@ -946,7 +946,14 @@ Editing one therefore means editing the definition — re-apply against a fresh 
 
 **That has been departed from exactly once, deliberately, and the dev database is still equivalent to a from-empty apply.** On 2026-08-15 the refactor added three views, `order_number_range()` and a check constraint; re-applying would have cost the 214 ingested tickets every measurement in this file was taken against. The additions were applied forward instead, in one transaction, with the SQL **extracted from the baseline files rather than retyped** — so what is in the database is the definition, not a second version of it. The constraint is the one statement that could not be extracted (the baseline declares it inline in `create table`) and it was applied as an `alter table … add constraint` with the same name and clause, asserted against the baseline before running. No column was added, so the column-order caveat from the 8→5 split does not arise. The script was discarded rather than checked in: a forward step living beside the baseline is precisely how a baseline turns back into a history.
 
-The general rule stands. If this becomes a second time, it is no longer an exception and wants the two-axis arrangement — baseline plus additive steps, reconciled by a test — rather than another one-off.
+**It has now happened a second time (2026-08-17), and the answer was to shrink the problem rather than to build the second axis.** Phase 5 needed two schema changes: a new table (`ticket_drafts`) and one widened check constraint (`llm_usage_pass_check`, to accept `draft`).
+
+- **A new table needs no forward step at all.** `07_drafting.sql` creates `ticket_drafts` complete, and applying that one file to the populated project is byte-for-byte what a from-empty apply would run. Baseline and database stay identical, and the file is a normal member of the chain. **Adding a table is not a departure and should not be treated as one.**
+- **The constraint is the real one**, and it was applied the same way as 2026-08-15: clause extracted from `06_analytics.sql` rather than retyped, asserted against `USAGE_PASSES` before running, dropped and re-added under the same name in one transaction, script discarded. Five existing rows, all carrying passes the wider clause still accepts.
+
+The **reconciling test now exists**, which is the half of the two-axis arrangement that was actually load-bearing: `06_analytics.test.mjs` asserts the constraint's literals equal `USAGE_PASSES`. Two copies of that list had been drifting apart with nothing watching — the sink degrades an unrecognised pass to `other`, so a constraint widened without the module would have silently mis-filed every drafting call's cost.
+
+So the general rule stands, narrowed to what it is actually about: **a change that alters an existing relation** wants a forward step, extracted and asserted; a change that only adds a new one is just another baseline file. A third *alteration* is where the additive-steps axis earns its keep — the trigger is alterations, not schema changes in general.
 
 ### Views carry joins and aggregates, never judgement
 

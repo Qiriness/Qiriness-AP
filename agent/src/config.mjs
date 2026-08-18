@@ -60,6 +60,18 @@ export function loadAgentConfig(env = loadEnv(REPO_ROOT)) {
     // request, which is what it did before this existed.
     decomposerModel:
       env.AGENT_DECOMPOSER_MODEL === undefined ? 'gpt-4o-mini' : env.AGENT_DECOMPOSER_MODEL,
+    // Drafting is the only stage whose output a customer reads, and the only
+    // one producing prose rather than a constrained choice. The cheap tier is
+    // sized for picking 1-of-14, not for writing French a person will judge the
+    // brand by — and it is one call per ticket, so the difference is affordable.
+    draftingModel: env.AGENT_DRAFTING_MODEL || 'gpt-4o',
+    // WHERE A DRAFT GOES TO BE READ, and `none` is the default so a fresh
+    // checkout cannot email anything at all. `review-mail` sends a copy to
+    // DRAFT_REVIEW_MAILBOX — the reviewer's own inbox, never a customer, and
+    // deliberately not the support mailbox: a reply to a review copy must not
+    // land somewhere the delta poller would ingest it as a new ticket.
+    draftDelivery: env.DRAFT_DELIVERY || 'none',
+    draftReviewMailbox: env.DRAFT_REVIEW_MAILBOX || '',
     // Must match what the knowledge chunks were embedded with, or cosine
     // comparison between a message and a chunk is meaningless.
     embeddingModel: env.EMBEDDING_MODEL || 'text-embedding-3-small',

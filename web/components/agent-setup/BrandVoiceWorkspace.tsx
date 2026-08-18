@@ -1,11 +1,7 @@
 "use client";
 
 import type { Article, SaveState } from "@/lib/types";
-import {
-  EMPTY_VOICE_PROFILE,
-  GUIDELINES_AND_GUARDRAILS_PLACEHOLDER,
-  RESPONSE_FRAMEWORK_PLACEHOLDER,
-} from "@/lib/types";
+import { EMPTY_VOICE_PROFILE } from "@/lib/types";
 import { RichTextEditor } from "./RichTextEditor";
 import { ChipList } from "./ChipList";
 import { WorkspaceActions } from "./WorkspaceActions";
@@ -27,6 +23,7 @@ interface BrandVoiceWorkspaceProps {
   onTitleChange: (title: string) => void;
   onRoleDescriptionChange: (roleDescription: string) => void;
   onToneAndVoiceChange: (toneAndVoice: string) => void;
+  onSignatureChange: (signature: string) => void;
   onGeneralContextChange: (html: string, wordCount: number) => void;
   onSave: () => void;
   onOptimize: () => void;
@@ -40,9 +37,12 @@ interface BrandVoiceWorkspaceProps {
  * always-included context every email the drafting agent writes inherits,
  * regardless of subject. Category-specific guidance (e.g. how to write a
  * returns email) belongs in a regular knowledge article instead — never
- * here. Five sections: Agent role description, Agent tone and voice,
- * Response framework and Guidelines and guardrails (both fixed placeholder
- * content for now, not yet editable or stored), and General context.
+ * here. Six sections: Agent role description, Agent tone and voice, Response
+ * framework and Guidelines and guardrails (stored, seeded from defaults, and
+ * read-only in this editor for now), Signature, and General context.
+ *
+ * Every section on this page is stored on the article row and read by the
+ * drafting agent as its system prompt — nothing here is decoration.
  */
 export function BrandVoiceWorkspace({
   article,
@@ -56,6 +56,7 @@ export function BrandVoiceWorkspace({
   onTitleChange,
   onRoleDescriptionChange,
   onToneAndVoiceChange,
+  onSignatureChange,
   onGeneralContextChange,
   onSave,
   onOptimize,
@@ -102,21 +103,37 @@ export function BrandVoiceWorkspace({
 
         <section className={voiceStyles.section}>
           <h3 className={voiceStyles.sectionTitle}>Response framework</h3>
-          <p className={voiceStyles.hint}>Placeholder — not yet editable.</p>
+          <p className={voiceStyles.hint}>Not yet editable here — saved with the article.</p>
           <ChipList
             label="Response framework"
-            items={RESPONSE_FRAMEWORK_PLACEHOLDER}
+            items={voiceProfile.responseFramework}
             layout="list"
           />
         </section>
 
         <section className={voiceStyles.section}>
           <h3 className={voiceStyles.sectionTitle}>Guidelines and guardrails</h3>
-          <p className={voiceStyles.hint}>Placeholder — not yet editable.</p>
+          <p className={voiceStyles.hint}>Not yet editable here — saved with the article.</p>
           <ChipList
             label="Guidelines and guardrails"
-            items={GUIDELINES_AND_GUARDRAILS_PLACEHOLDER}
+            items={voiceProfile.guidelinesAndGuardrails}
             layout="list"
+          />
+        </section>
+
+        <section className={voiceStyles.section}>
+          <h3 className={voiceStyles.sectionTitle}>Signature</h3>
+          <p className={voiceStyles.hint}>
+            The sign-off applied to every drafted reply — the last step of the response framework.
+            Write it exactly as it should appear at the foot of an email.
+          </p>
+          <textarea
+            className={voiceStyles.voiceTextarea}
+            value={voiceProfile.signature}
+            onChange={(e) => onSignatureChange(e.target.value)}
+            placeholder={"Bien cordialement,\nLe service client Qiriness"}
+            rows={3}
+            aria-label="Signature"
           />
         </section>
 

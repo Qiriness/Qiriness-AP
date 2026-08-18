@@ -67,7 +67,10 @@ export const T = {
   // 06_analytics
   LLM_USAGE: 'llm_usage',
   CLUSTER_RUNS: 'cluster_runs',
-  TICKET_CLUSTERS: 'ticket_clusters'
+  TICKET_CLUSTERS: 'ticket_clusters',
+
+  // 07_drafting
+  TICKET_DRAFTS: 'ticket_drafts'
 };
 
 /**
@@ -165,6 +168,18 @@ export const COLUMNS = {
   ticketForOrderContext: 'id,subject,shopify_order_number,customer_id,context_resolved_at',
 
   /**
+   * What drafting needs off the ticket.
+   *
+   * `happiness` travels beside `level` because the auto-send gate reads both —
+   * a level 1 question asked furiously is still the wrong one to answer without
+   * a person seeing it. `categorisation_confidence` is deliberately absent: it
+   * is only ever written by failure paths, so gating on it would read "the
+   * categoriser crashed" as "the categoriser was unsure".
+   */
+  ticketForDrafting:
+    'id,subject,status,level,language,happiness,requester_name,resolved_context',
+
+  /**
    * Auto-close. `needs_categorisation` is read so a ticket still queued for the
    * categoriser is not closed out of that queue — see auto-close.mjs.
    */
@@ -189,6 +204,16 @@ export const COLUMNS = {
   messageForCategorisation: 'subject,body_text,received_at',
 
   /**
+   * Drafting reads the message it is replying to, and nothing about who sent it.
+   *
+   * No `from_email` and no `from_name`: the reply is composed from the case
+   * file, and the one piece of identity it needs to open properly
+   * (`requester_name`) already travels on the ticket. An address in the prompt
+   * is an address the model can quote back.
+   */
+  messageForDrafting: 'id,subject,body_text',
+
+  /**
    * The investigation additionally reads `from_email` for the sender-directory
    * lookup (never prompted — only the label it resolves to is), and `embedding`
    * so exemplar matching reuses the vector ingestion already wrote.
@@ -203,6 +228,34 @@ export const COLUMNS = {
   /** The case file, latest run, as the detail panel reads it. */
   investigationForDetail:
     'verdict,established,unverified,missing,handoff,investigated_at,evidence_gaps',
+
+  /**
+   * The case file as the drafting pass reads it back.
+   *
+   * `handoff`, `tool_calls` and `dropped_claims` are ABSENT, and their absence
+   * here is the same guarantee `toDraftingPrompt` makes one layer up: internal
+   * notes reaching a customer reply is the failure that split exists to make
+   * impossible, and not selecting them is cheaper than trusting a renderer not
+   * to print them. `investigated_at` travels because the newest reading of a
+   * ticket is the only one worth drafting.
+   */
+  investigationForDrafting:
+    'id,ticket_id,trigger_message_id,verdict,established,unverified,missing,do_not_claim,' +
+    'knowledge,investigated_at',
+
+  /**
+   * A draft as both readers need it: the dashboard rendering it for approval,
+   * and the review-mail pass rendering it into an email to the reviewer.
+   *
+   * ONE PROJECTION FOR BOTH, so the two cannot show different things — the
+   * whole point of the review copy is that it is the draft the dashboard holds.
+   * `prompt_inputs` is absent: it is a debugging record of what went into the
+   * call, not part of the reply, and it is the largest column here.
+   */
+  draftForReview:
+    'id,ticket_id,trigger_message_id,source_verdict,level,language,subject,body_text,' +
+    'approved_body_text,status,checks,checks_passed,auto_send_eligible,model,drafted_at,' +
+    'review_sent_at',
 
   /**
    * The embedding determinism quadruple, plus whatever composes the input.
@@ -237,10 +290,14 @@ export const PROJECTION_SOURCE = {
   ticketForAutoClose: T.TICKETS,
   ticketForConversation: T.TICKETS,
   ticketForDetail: T.TICKETS,
+  ticketForDrafting: T.TICKETS,
   messageForThread: T.TICKET_MESSAGES,
   messageForCategorisation: T.TICKET_MESSAGES,
   messageForInvestigation: T.TICKET_MESSAGES,
+  messageForDrafting: T.TICKET_MESSAGES,
   investigationForDetail: T.TICKET_INVESTIGATIONS,
+  investigationForDrafting: T.TICKET_INVESTIGATIONS,
+  draftForReview: T.TICKET_DRAFTS,
   chunkForEmbedding: T.KNOWLEDGE_CHUNKS,
   phrasingForEmbedding: T.SUPPORT_EXEMPLAR_PHRASINGS,
   messageForEmbedding: T.TICKET_MESSAGES

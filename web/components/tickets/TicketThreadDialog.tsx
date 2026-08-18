@@ -69,26 +69,51 @@ export function TicketThreadDialog({ ticket, onClose }: TicketThreadDialogProps)
       }
     >
       <section className={styles.section}>
-        <h3 className={styles.heading}>Draft reply</h3>
+        <h3 className={styles.heading}>
+          {thread?.draft?.sourceVerdict === "needs_customer_input"
+            ? "Draft question to the customer"
+            : "Draft reply"}
+        </h3>
         {thread?.draft ? (
           <>
+            {/* The failed checks go ABOVE the text. A reviewer who reads a
+                fluent draft first has already decided it is fine by the time a
+                warning underneath it arrives. */}
+            {!thread.draft.checksPassed && (
+              <p className={styles.blocked} role="alert">
+                Not sendable — {thread.draft.failedChecks.length || "some"} mechanical{" "}
+                {thread.draft.failedChecks.length === 1 ? "check" : "checks"} failed:{" "}
+                {thread.draft.failedChecks.join("; ") || "see the draft record"}.
+              </p>
+            )}
             <pre className={styles.draft}>{thread.draft.body}</pre>
+            {/* The model's text stays above; a reviewer's rewrite is shown as a
+                second block rather than replacing it, because the difference
+                between them is what says whether the drafting is any good. */}
+            {thread.draft.approvedBody && (
+              <>
+                <h3 className={styles.heading}>Reviewer&apos;s version</h3>
+                <pre className={styles.draft}>{thread.draft.approvedBody}</pre>
+              </>
+            )}
             {thread.draft.draftedAt && (
               <p className={styles.stamp}>
                 Drafted{" "}
                 <time dateTime={thread.draft.draftedAt}>
                   {formatRelativeTime(thread.draft.draftedAt)}
                 </time>
+                {thread.draft.status !== "pending" ? ` · ${thread.draft.status}` : ""}
               </p>
             )}
           </>
         ) : (
-          /* Not an error and not an empty result: the drafting agent is not
-             built yet, so there is nothing to have failed. Saying so beats a
-             blank box that reads as a load that went wrong. */
+          /* Not an error and not an empty result. A ticket has no draft when it
+             carries no case file, or when the verdict was needs_human — both
+             normal, and saying so beats a blank box that reads as a load that
+             went wrong. */
           <p className={styles.placeholder}>
-            No draft yet — the drafting agent is not built. What the agent established
-            about this ticket is in the expanded row.
+            No draft — either this ticket has no case file, or the agent concluded it
+            needs a person. What it established is in the expanded row.
           </p>
         )}
       </section>

@@ -85,8 +85,12 @@ create table public.llm_usage (
   occurred_at timestamptz not null default now(),
   created_at timestamptz not null default now(),
 
+  -- The passes in the worker's poll order. `agent/src/llm/usage-sink.mjs` holds
+  -- the other copy of this list and validates against it before a bulk insert;
+  -- a check constraint cannot import a module, so 06_analytics.test.mjs is what
+  -- stops the two drifting apart.
   constraint llm_usage_pass_check check (
-    pass in ('spam', 'categorise', 'decompose', 'investigate', 'embed', 'other')
+    pass in ('spam', 'categorise', 'decompose', 'investigate', 'draft', 'embed', 'other')
   ),
   constraint llm_usage_input_tokens_check check (input_tokens >= 0),
   constraint llm_usage_output_tokens_check check (output_tokens >= 0),
@@ -108,7 +112,7 @@ comment on table public.llm_usage is
   'One row per LLM or embedding call: pass, model, token counts, and the ticket it was spent on. Append-only and written by the agent worker through a single sink in the OpenAI transport. Tokens are stored and money is computed at read time from a configured rate, so a price change does not invalidate history.';
 
 comment on column public.llm_usage.pass is
-  'Which agent pass spent this: spam | categorise | decompose | investigate | embed | other. Matches the passes in the worker poll order.';
+  'Which agent pass spent this: spam | categorise | decompose | investigate | draft | embed | other. Matches the passes in the worker poll order, and the USAGE_PASSES list in agent/src/llm/usage-sink.mjs.';
 
 comment on column public.llm_usage.ticket_id is
   'The ticket this call was spent on, where there is one. Null for embedding reconciliation and for spam-gate decisions, which are taken before any ticket exists.';

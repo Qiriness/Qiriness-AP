@@ -1,9 +1,12 @@
 # Agent Workflow — Phased Integration Plan
 
-Status: **built through Phase 4.** Ingestion, both spam gates, categorisation, customer and
-order resolution, the retrieval tools, the exemplar layer and the investigation agent all run
-against the live store and the live corpus. **Phase 5 (drafting) is the next build**, and the
-team-forwarding half of Phase 5 is already in place.
+Status: **built through Phase 4, and Phase 5's drafting agent now writes replies.**
+Ingestion, both spam gates, categorisation, customer and order resolution, the retrieval
+tools, the exemplar layer and the investigation agent all run against the live store and the
+live corpus. **32 drafts exist** over the whole draftable set (`npm run draft`), stored and
+unsent. What is left in Phase 5: the review copy to the reviewer's inbox, approve/edit/reject
+in the dashboard, and the send path — see `CHANGELOG.md` for what landed and
+`## Phase 5` below for what has not.
 
 This file is the **phase plan and its status**. It deliberately does not restate rationale:
 

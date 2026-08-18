@@ -21,3 +21,86 @@
     at async handleRequest (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\lib\router-server.js:359:24)
     at async requestHandlerImpl (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\lib\router-server.js:383:13)
     at async Server.requestListener (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\lib\start-server.js:141:13)
+ ⚠ ./components/agent-setup/BrandVoiceWorkspace.tsx
+Attempted import error: 'RESPONSE_FRAMEWORK_PLACEHOLDER' is not exported from '@/lib/types' (imported as 'RESPONSE_FRAMEWORK_PLACEHOLDER').
+
+Import trace for requested module:
+./components/agent-setup/BrandVoiceWorkspace.tsx
+./components/agent-setup/AgentSetup.tsx
+
+./components/agent-setup/BrandVoiceWorkspace.tsx
+Attempted import error: 'GUIDELINES_AND_GUARDRAILS_PLACEHOLDER' is not exported from '@/lib/types' (imported as 'GUIDELINES_AND_GUARDRAILS_PLACEHOLDER').
+
+Import trace for requested module:
+./components/agent-setup/BrandVoiceWorkspace.tsx
+./components/agent-setup/AgentSetup.tsx
+
+./components/agent-setup/BrandVoiceWorkspace.tsx
+Attempted import error: 'RESPONSE_FRAMEWORK_PLACEHOLDER' is not exported from '@/lib/types' (imported as 'RESPONSE_FRAMEWORK_PLACEHOLDER').
+
+Import trace for requested module:
+./components/agent-setup/BrandVoiceWorkspace.tsx
+./components/agent-setup/AgentSetup.tsx
+
+./components/agent-setup/BrandVoiceWorkspace.tsx
+Attempted import error: 'GUIDELINES_AND_GUARDRAILS_PLACEHOLDER' is not exported from '@/lib/types' (imported as 'GUIDELINES_AND_GUARDRAILS_PLACEHOLDER').
+
+Import trace for requested module:
+./components/agent-setup/BrandVoiceWorkspace.tsx
+./components/agent-setup/AgentSetup.tsx
+ ⚠ Fast Refresh had to perform a full reload due to a runtime error.
+ ⚠ ./components/agent-setup/BrandVoiceWorkspace.tsx
+Attempted import error: 'RESPONSE_FRAMEWORK_PLACEHOLDER' is not exported from '@/lib/types' (imported as 'RESPONSE_FRAMEWORK_PLACEHOLDER').
+
+Import trace for requested module:
+./components/agent-setup/BrandVoiceWorkspace.tsx
+./components/agent-setup/AgentSetup.tsx
+
+./components/agent-setup/BrandVoiceWorkspace.tsx
+Attempted import error: 'GUIDELINES_AND_GUARDRAILS_PLACEHOLDER' is not exported from '@/lib/types' (imported as 'GUIDELINES_AND_GUARDRAILS_PLACEHOLDER').
+
+Import trace for requested module:
+./components/agent-setup/BrandVoiceWorkspace.tsx
+./components/agent-setup/AgentSetup.tsx
+
+./components/agent-setup/BrandVoiceWorkspace.tsx
+Attempted import error: 'RESPONSE_FRAMEWORK_PLACEHOLDER' is not exported from '@/lib/types' (imported as 'RESPONSE_FRAMEWORK_PLACEHOLDER').
+
+Import trace for requested module:
+./components/agent-setup/BrandVoiceWorkspace.tsx
+./components/agent-setup/AgentSetup.tsx
+
+./components/agent-setup/BrandVoiceWorkspace.tsx
+Attempted import error: 'GUIDELINES_AND_GUARDRAILS_PLACEHOLDER' is not exported from '@/lib/types' (imported as 'GUIDELINES_AND_GUARDRAILS_PLACEHOLDER').
+
+Import trace for requested module:
+./components/agent-setup/BrandVoiceWorkspace.tsx
+./components/agent-setup/AgentSetup.tsx
+ ⚠ ./components/agent-setup/BrandVoiceWorkspace.tsx
+Attempted import error: 'RESPONSE_FRAMEWORK_PLACEHOLDER' is not exported from '@/lib/types' (imported as 'RESPONSE_FRAMEWORK_PLACEHOLDER').
+
+Import trace for requested module:
+./components/agent-setup/BrandVoiceWorkspace.tsx
+./components/agent-setup/AgentSetup.tsx
+
+./components/agent-setup/BrandVoiceWorkspace.tsx
+Attempted import error: 'GUIDELINES_AND_GUARDRAILS_PLACEHOLDER' is not exported from '@/lib/types' (imported as 'GUIDELINES_AND_GUARDRAILS_PLACEHOLDER').
+
+Import trace for requested module:
+./components/agent-setup/BrandVoiceWorkspace.tsx
+./components/agent-setup/AgentSetup.tsx
+
+./components/agent-setup/BrandVoiceWorkspace.tsx
+Attempted import error: 'RESPONSE_FRAMEWORK_PLACEHOLDER' is not exported from '@/lib/types' (imported as 'RESPONSE_FRAMEWORK_PLACEHOLDER').
+
+Import trace for requested module:
+./components/agent-setup/BrandVoiceWorkspace.tsx
+./components/agent-setup/AgentSetup.tsx
+
+./components/agent-setup/BrandVoiceWorkspace.tsx
+Attempted import error: 'GUIDELINES_AND_GUARDRAILS_PLACEHOLDER' is not exported from '@/lib/types' (imported as 'GUIDELINES_AND_GUARDRAILS_PLACEHOLDER').
+
+Import trace for requested module:
+./components/agent-setup/BrandVoiceWorkspace.tsx
+./components/agent-setup/AgentSetup.tsx
+ ⚠ Fast Refresh had to perform a full reload due to a runtime error.

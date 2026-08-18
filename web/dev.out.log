@@ -89,3 +89,46 @@
  ✓ Compiled /insights/agent in 861ms (424 modules)
  ✓ Compiled in 3s (417 modules)
  ✓ Compiled in 3.5s (417 modules)
+ ○ Compiling /insights/agent ...
+ ✓ Compiled /insights/agent in 1213ms (424 modules)
+ GET /insights/agent 200 in 4833ms
+ GET /agent-setup 200 in 1321ms
+ ✓ Compiled in 1436ms (783 modules)
+ ✓ Compiled in 2.3s (783 modules)
+ ✓ Compiled in 1017ms (783 modules)
+ ✓ Compiled in 1676ms (783 modules)
+ ✓ Compiled in 1170ms (783 modules)
+ ✓ Compiled in 1387ms (783 modules)
+ ✓ Compiled in 2.2s (783 modules)
+ GET /agent-setup 200 in 4291ms
+ ○ Compiling /api/knowledge/articles/[id] ...
+ ✓ Compiled /api/knowledge/articles/[id] in 1498ms (428 modules)
+ PATCH /api/knowledge/articles/0dd0968e-8847-445e-9fbb-1eee0e77dad0 200 in 6806ms
+ PATCH /api/knowledge/articles/0dd0968e-8847-445e-9fbb-1eee0e77dad0 200 in 21985ms
+ PATCH /api/knowledge/articles/0dd0968e-8847-445e-9fbb-1eee0e77dad0 200 in 26380ms
+ PATCH /api/knowledge/articles/0dd0968e-8847-445e-9fbb-1eee0e77dad0 200 in 2394ms
+ PATCH /api/knowledge/articles/0dd0968e-8847-445e-9fbb-1eee0e77dad0 200 in 652ms
+ ✓ Compiled in 1057ms (424 modules)
+ ✓ Compiled in 840ms (424 modules)
+ ✓ Compiled in 562ms (424 modules)
+ ○ Compiling /api/knowledge/articles/[id] ...
+ ✓ Compiled /api/knowledge/articles/[id] in 530ms (428 modules)
+ PATCH /api/knowledge/articles/0dd0968e-8847-445e-9fbb-1eee0e77dad0 200 in 5037ms
+ ✓ Compiled in 2.3s (787 modules)
+ ✓ Compiled in 1215ms (428 modules)
+ ✓ Compiled in 801ms (429 modules)
+ ✓ Compiled in 746ms (429 modules)
+ ✓ Compiled in 1865ms (784 modules)
+ ✓ Compiled in 1276ms (794 modules)
+ ✓ Compiled in 530ms (425 modules)
+ ○ Compiling /api/knowledge/articles/[id] ...
+ ✓ Compiled /api/knowledge/articles/[id] in 549ms (429 modules)
+ PATCH /api/knowledge/articles/0dd0968e-8847-445e-9fbb-1eee0e77dad0 200 in 4235ms
+ PATCH /api/knowledge/articles/0dd0968e-8847-445e-9fbb-1eee0e77dad0 200 in 661ms
+ PATCH /api/knowledge/articles/0dd0968e-8847-445e-9fbb-1eee0e77dad0 200 in 1350ms
+ PATCH /api/knowledge/articles/0dd0968e-8847-445e-9fbb-1eee0e77dad0 200 in 1163ms
+ PATCH /api/knowledge/articles/0dd0968e-8847-445e-9fbb-1eee0e77dad0 200 in 567ms
+ ✓ Compiled in 418ms (425 modules)
+ ✓ Compiled in 185ms (425 modules)
+ ✓ Compiled in 168ms (425 modules)
+ ✓ Compiled in 182ms (425 modules)

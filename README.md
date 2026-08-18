@@ -40,7 +40,7 @@ Pending: dashboard auth, ORM/DB client for app reads (scripts use `pg` + a Supab
 
 1. `npm install` at the repo root.
 2. Copy `.env.example` to `.env.local` and fill it in. This one repo-root file is the single source of truth for secrets — `web/next.config.mjs` and `agent/src/config.mjs` both load it, so there is no separate `web/.env.local`. Needed: `SHOPIFY_STORE_DOMAIN`, `SHOPIFY_ADMIN_API_ACCESS_TOKEN` (or `SHOPIFY_CLIENT_ID` + `SHOPIFY_CLIENT_SECRET`), `SUPABASE_URL`, `SUPABASE_SECRET_KEY`, `SUPABASE_DB_URL`, `OPENAI_API_KEY`, and the `MS_GRAPH_*` + `SUPPORT_MAILBOX` vars for the agent worker. All server-only — never prefix with `NEXT_PUBLIC_`.
-3. Apply the five files in `supabase/migrations/` **in order** with `npm run db:apply:migration supabase/migrations/<file>`: `01_foundation.sql` → `02_shopify.sql` → `03_knowledge.sql` → `04_support.sql` → `05_exemplars.sql`. They are a baseline for an empty database, not idempotent patches, and the order is a dependency chain (everything references `shops`; tickets reference customers; exemplars reuse the `french_unaccent` config from 03).
+3. Apply the seven files in `supabase/migrations/` **in order** with `npm run db:apply:migration supabase/migrations/<file>`: `01_foundation.sql` → `02_shopify.sql` → `03_knowledge.sql` → `04_support.sql` → `05_exemplars.sql` → `06_analytics.sql` → `07_drafting.sql`. They are a baseline for an empty database, not idempotent patches, and the order is a dependency chain (everything references `shops`; tickets reference customers; exemplars reuse the `french_unaccent` config from 03; analytics and drafting read the support tables).
 4. Sync Shopify data. Every script has a `:dry-run` twin — run that first to verify API access and mapping: `npm run sync:shopify:products` · `:customers` · `:orders` · `:promotions` · `:content-catalog`, or `npm run sync:shopify:nightly` for all of them in order.
 5. `npm run embed:knowledge` to embed approved knowledge chunks (`:dry-run` available).
 6. `npm test` runs the root test suite (`node --test`).
@@ -88,10 +88,18 @@ The full record of what was built and how far each piece is proven is in `CHANGE
 
 **Reordered 2026-08-17, after reading the database rather than the docs.** Two items that headed this list are done and are gone from it: order resolution has run (52 tickets carry a confirmed number and a built context bundle), and `AGENT_INTEGRATION_PLAN.md` has been realigned with what was actually built. What changed the ordering:
 
-- **Phase 5 is now the top item.** Everything it consumes exists: 80 case files, the
-  `toDraftingPrompt` / `toHumanBrief` split, `do_not_claim`, `DRAFT_ONLY`, and a draft slot
-  already rendered in the thread dialog. What is missing is storage for a draft, the drafting
-  call itself, and the verdict/level gate.
+- **Phase 5 is under way: the drafting agent writes replies.** `npm run draft` has produced
+  **32 drafts over the whole draftable set** (15 `answerable`, 17 `needs_customer_input`) at
+  ≈ $0.02 each, all passing the mechanical checks, none auto-sent. The system prompt is the
+  Brand voice article, and approval of it gates the pass. What remains in this phase:
+  **the review copy to the reviewer's own inbox**, **approve / edit / reject in the
+  dashboard**, and the **send path** — the last still blocked on which mailbox this
+  environment is for. Drafting stays operator-triggered, out of the poll, until the drafts
+  have been read.
+- **Reviewing those 32 drafts is the next real task**, and it is a reading job rather than a
+  coding one: the checks can prove a named sentence is absent and cannot say the reply is
+  right. 19 are marked `auto_send_eligible`, which is the number the eventual L1/L2
+  graduation turns on.
 - **The knowledge library moved up, because the gap is now specific rather than general.**
   61 chunks are embedded and **zero** of them are in `delivery`, `order`, `promotions`,
   `payment` or `product_stock` — the five highest-demand subjects. A level 1 ticket is by

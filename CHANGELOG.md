@@ -10,6 +10,171 @@ Three sibling files carry the other halves, and this one deliberately does not d
 
 ---
 
+## The drafting agent writes its first 32 replies (2026-08-17)
+
+`agent/src/drafting/`, `npm run draft`. **32 drafts over the whole draftable set**
+— 15 `answerable`, 17 `needs_customer_input`, levels 1×3 · 2×22 · 3×7 — at
+**67 768 tokens for 33 calls (≈ $0.02 per draft)**, all recorded in `llm_usage`
+under the new `draft` pass. **32 of 32 pass the mechanical checks; 19 are
+`auto_send_eligible`**, which nothing acts on while `DRAFT_ONLY` is true.
+
+**No Graph call anywhere in the pass.** Input is stored rows, output is a stored
+row, so the whole prompt-iteration loop runs without a mailbox — which is why
+drafting was never blocked by the mailbox question that blocks sending.
+
+### The system prompt is the Brand voice article
+
+`brand-voice.mjs` composes it: role description verbatim and first (it is written
+as a prompt, not a field), then tone, framework, guardrails, general context,
+signature, the reply language, and last `STRUCTURAL_RULES` — the seams code owns,
+declared as outranking everything above them.
+
+**Approval gates the prompt**, the same way it gates the vector for knowledge and
+exemplars, and the run refuses before the first ticket rather than per ticket: a
+missing brand voice is a property of the run, and discovering it on ticket 40 of
+91 would mean 39 replies in a voice nobody signed off.
+
+**One structural rule exists because of the brand voice, not despite it.** The
+approved role description tells the model to prefer answering over asking, with a
+worked example — correct advice about writing, and wrong if applied to the
+verdict, which the investigation already decided. The prompt says the decision is
+not open.
+
+### The checks, and the two measurements that shaped them
+
+`draft-checks.mjs` checks the drafted text in code, because `do_not_claim`
+otherwise reaches the model only as lines in a prompt.
+
+- **6 of the 10 caveats have a textual signature** and are checked as patterns
+  matching the *claim* the caveat forbids, not its subject — a reply correctly
+  saying stock cannot be confirmed contains the word "stock".
+- **4 do not, and are recorded as `passed: null`, never as passes.** "Ne rien
+  inventer sur ce point" has no signature. A suite reporting 100% while testing
+  60% is worse than one that says which 60%.
+- **Withheld identifiers, any email address, and internal machinery** are refused
+  outright. `#6686` is not an identifier — it is what the customer reads on their
+  own confirmation.
+- The signature must **end** the reply; one in the middle is a model that carried
+  on writing after signing off.
+
+**The stored-question check was rebuilt twice, both times from a measurement.**
+Exact containment of `MISSING_FIELDS[field].ask` fired on **6 of 6**
+`needs_customer_input` drafts and **0 of 6** `answerable` ones — a 100% alarm
+rate on the only verdict it applies to. The reason was instructive: on
+`shopify_order_number` the model had reproduced the stored sentence *verbatim* and
+lowercased its first letter to embed it mid-sentence. Byte-exact insertion and
+the approved brand voice (« éviter les formulations robotiques ») are in direct
+conflict, and the voice is what a person signed off. Word coverage was tried next
+and is not good enough either: a correct « l'adresse e-mail utilisée pour passer
+cette commande » scored **43%** against **15%** for a draft about the wrong field
+— a real gap, far too narrow for a threshold. What separates them cleanly is
+whether the words that *name the fact* are present at all, so `ASK_TERMS` holds
+one or two per field and all must appear. Verified to discriminate across all
+seven fields. Whether the question was reproduced word for word is kept as an
+advisory: **11 verbatim, 16 reworded** across the 32.
+
+### `--redraft`, because the queue is derived
+
+A ticket leaves the queue as soon as a draft exists — right by default, since a
+re-run must not spend the mid tier on replies nobody has read. But the loop of
+this phase is "change the prompt, look at the same tickets again", and a change to
+the checks leaves stored results describing a rule that no longer applies. Found
+by hitting exactly that: one draft carried a failure from the pre-change check and
+nothing could refresh it.
+
+### Also
+
+- `AGENT_DRAFTING_MODEL`, default **`gpt-4o`** — the only stage whose output a
+  customer reads, and one call per ticket.
+- `llm_usage.pass` accepts `draft` (forward-applied; see `DECISIONS.md § Migrations`),
+  and `06_analytics.test.mjs` now asserts the constraint against `USAGE_PASSES` —
+  two copies of that list had been drifting with nothing watching, and the failure
+  was silent because the sink degrades an unrecognised pass to `other`.
+- `DRAFT_DELIVERY` / `DRAFT_REVIEW_MAILBOX` exist in config and default to `none`.
+  **The review-mail path itself is not built yet.**
+
+**Not built:** the review copy to the reviewer's inbox, approve/edit/reject in the
+dashboard, and the send path (still blocked on the mailbox question). Suites:
+**1464** from the repo root, **864** in `agent/`.
+
+---
+
+## Phase 5 groundwork: somewhere to store a draft, and a system prompt that is stored rather than compiled in (2026-08-17)
+
+The first two build steps of the drafting phase. **No model call and no email
+yet** — this is the storage and the prompt material, not the drafting agent.
+
+### The brand voice is now five stored fields, not two plus two constants
+
+- **`Response framework` and `Guidelines and guardrails` were `web/lib/types.ts`
+  constants rendered read-only**, which meant the Node worker could not read them
+  at all: a TypeScript constant in `web/` is not reachable from `agent/`. They are
+  now part of `VoiceProfile`, seeded from the same defaults by
+  `normalizeVoiceProfile` and written into `voice_profile` on the next save, so
+  the database is the one source the drafting stage reads.
+- **`signature` is new and editable.** The response framework's last step is
+  "apply the approved signature" and nothing in the system stored one.
+- No migration: `voice_profile` is jsonb and already existed. An unsaved row
+  keeps rendering exactly what it rendered before.
+- **The row is still empty and still `draft`** — `voice_profile` is `{}` and
+  `content_text` is 0 characters on the live project. The fields exist; the
+  writing is a content task.
+
+### `ticket_drafts` (`07_drafting.sql`, applied to the live project)
+
+- **Keyed on the message, not the ticket** — `unique(shop_id, trigger_message_id)`,
+  the same rule as `ticket_investigations`: re-running rewrites one row, and a
+  customer's reply lands as a new draft instead of overwriting the one somebody
+  is reviewing.
+- **Two bodies.** `body_text` is what the model wrote and is never edited;
+  `approved_body_text` is a reviewer's rewrite. The distance between them is the
+  only honest read on drafting quality, and graduating L1/L2 auto-send turns on
+  it.
+- **What the schema refuses.** `needs_human` is not a valid `source_verdict`, so
+  the table cannot hold a customer-facing draft for a ticket the agent said needs
+  a person. `level` is constrained to 1–3, because level 4 is never drafted.
+  There is **no recipient column, no address and no send action** — a test
+  asserts the absence, because that is the property the review channel rests on.
+- **The human decision and the machine outcome are separate columns.** `status`
+  is what a person decided; `checks_passed` is whether the mechanical checks
+  passed. A draft can be clean and rejected, or edited *because* a check caught
+  something.
+- **`auto_send_eligible` is recorded from the first draft**, while `DRAFT_ONLY`
+  keeps everything inert. How often the level gate would have been right cannot
+  be answered retrospectively.
+- **The queue is derived, not flagged.** No `needs_draft` column on `tickets`:
+  that would mean an `alter table … add column` the baseline forbids, applied by
+  hand to a populated table. `withoutDrafts()` subtracts what already exists from
+  the candidate trigger messages, which is affordable because the candidate set
+  is bounded by the case files.
+
+### `scripts/lib/draft-record.mjs` — the module that owns the row
+
+- Beside `ticket-record.mjs` and for the same reason: the worker writes a draft
+  and the dashboard decides about it, and `web/` cannot import from `agent/src`.
+- **`sent` is not a decision it accepts.** It is in the column's check constraint
+  so the lifecycle reads completely, and absent from `DECISIONS` because nothing
+  here can send an email — accepting it would record a send that never happened.
+- A re-run revises the agent's text and never touches `status` or
+  `approved_body_text`: a pass that reset them would move a rejected draft back
+  into the queue, or discard an operator's rewrite, while somebody is working
+  through the list.
+- 17 tests over a recording transport, asserting the written bodies rather than
+  return values.
+
+### The dashboard reads it
+
+`tickets-service.ts` no longer returns `draft: null` with a note. The thread
+dialog renders the stored draft, names failed checks **above** the text (a
+reviewer who reads a fluent draft first has already decided it is fine), and
+shows a reviewer's rewrite as a second block rather than in place of the model's.
+
+**Not built, and next:** the drafting call itself, the system prompt composed
+from the brand voice, the mechanical checks, and the review copy to the
+reviewer's own inbox. Suite: 1361 from the repo root.
+
+---
+
 ## The usage sink was never constructed, and there is no investigation backlog (2026-08-17)
 
 Two findings from one session, and the second cancels a step this file added earlier the same day.

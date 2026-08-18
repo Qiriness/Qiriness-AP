@@ -46,6 +46,7 @@ import {
 } from "../../../scripts/lib/supabase-rest-client.mjs";
 import { KnowledgeImportError, KnowledgeNotFoundError, KnowledgeValidationError } from "./knowledge-errors";
 import type { VoiceProfile } from "../types";
+import { DEFAULT_GUIDELINES_AND_GUARDRAILS, DEFAULT_RESPONSE_FRAMEWORK } from "../types";
 
 // The imported .mjs modules have no type declarations (allowJs, no JSDoc), so
 // their exports resolve to `any`. Local shapes below keep this file itself
@@ -658,11 +659,30 @@ function mapArticleRow(row: any, catalogIdByKey: Map<string, string>): Knowledge
  * existed). Deep-defaults every field so callers never see `undefined`.
  * Exported so the PATCH route handler can reuse the same defaulting logic to
  * sanitize incoming request bodies instead of duplicating it.
+ *
+ * THIS IS ALSO THE SEED. The framework and guardrail lists were fixed constants
+ * before they were stored, so every existing row is missing them; defaulting
+ * here means the next save writes them into `voice_profile` and the drafting
+ * agent reads one source instead of a copy that lives only in this package.
+ * A caller that deliberately empties a list keeps it empty — `[]` is an array,
+ * so it passes through rather than being re-seeded.
  */
 export function normalizeVoiceProfile(raw: any): VoiceProfile {
   const v = raw || {};
   return {
     roleDescription: typeof v.roleDescription === "string" ? v.roleDescription : "",
     toneAndVoice: typeof v.toneAndVoice === "string" ? v.toneAndVoice : "",
+    responseFramework: normalizeStringList(v.responseFramework, DEFAULT_RESPONSE_FRAMEWORK),
+    guidelinesAndGuardrails: normalizeStringList(
+      v.guidelinesAndGuardrails,
+      DEFAULT_GUIDELINES_AND_GUARDRAILS
+    ),
+    signature: typeof v.signature === "string" ? v.signature : "",
   };
+}
+
+/** A stored list of lines: kept as-is when it is an array, seeded when it is absent. */
+function normalizeStringList(raw: any, fallback: string[]): string[] {
+  if (!Array.isArray(raw)) return [...fallback];
+  return raw.filter((item): item is string => typeof item === "string");
 }
