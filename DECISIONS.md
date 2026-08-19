@@ -663,6 +663,80 @@ Translations therefore live at `phrasing_index >= 100`, out of the pruner's reac
 
 ---
 
+## Drafting
+
+### Every verdict gets a reply, and every reply answers what it can
+
+Drafting first shipped with `needs_human` producing nothing, on the reasoning that a case file which resolved nothing has nothing to say. That reasoning was about the agent, and the cost was paid by three other parties: **the customer**, who heard nothing at all while a colleague worked the ticket; **the colleague**, who opened a blank page instead of an editable draft; and **the thread**, where a long wait is indistinguishable from being ignored.
+
+**The first fix was not enough, and how it failed is the useful part.** The acknowledgement was told to resolve nothing and to stay inside three or four sentences. It obeyed: 49 drafts that said « votre demande est en cours de traitement » and little else — while the case file in front of them held the product, its two-year warranty, and precisely what could not be confirmed. **The material for a specific reply was already in the prompt; the instructions forbade using it.** A reply that tells a customer nothing they did not already know is not a safe reply, it is a useless one, and it costs the same to send.
+
+So all three intent sets now share one shape: **answer what can be answered first**, and let the unresolved part — a question, or a point going to a colleague — come after it rather than instead of it.
+
+| Verdict | The reply |
+| --- | --- |
+| `answerable` | Resolve it completely. No follow-up question; the customer should have no reason to reply |
+| `needs_customer_input` | Explain what is already established, say why the missing fact is needed, then ask for exactly that. Never turn the whole reply into a request |
+| `needs_human` | Answer what is established, **name the specific point that needs checking**, say the team is taking that point. Never a deadline, a promise, or a claim that a check already happened |
+
+**Nothing was loosened.** `established` is still the only source of facts, `unverified` is still only ever attributed to the customer, and the prohibitions still hold. What changed is the order.
+
+**Two instructions had to be added because reordering alone did not work.** Measured across eight handover drafts, only 4 of 24 established facts reached the reply — "answer what can be answered" reads to a model as "acknowledge the topic". The rule now names the obligation: *a useful established fact that is not passed on is something the customer will have to ask for again.* On the LED-mask ticket that is the difference between a reply that mentions the two-year warranty and one that does not.
+
+### The last order is kept as a candidate, and never shown to the drafting agent
+
+A customer writes « je vous ai passé une commande fin juillet » and gives no number. `getOrderContext` resolves nothing, the ticket goes to a person, and that person opens Shopify and looks up the customer's most recent order by hand.
+
+**The tool layer can do that lookup in the same call that failed to confirm one**, so it does. `candidate_order` keeps the answer.
+
+**It is the order tool's fallback branch, and that is what makes the ordering structural.** It runs only after the order lookup, only when that lookup confirmed nothing, and costs no extra tool call. There is no arrangement of the loop in which a confirmed order and a candidate both appear — the duplication is *unreachable*, not merely forbidden by a rule somebody has to remember. Putting it in a tool of its own would have made the ordering a convention instead.
+
+**The same builder as a confirmed order.** `buildOrderContext` produces the bundle, so the dashboard renders it with the projection it already has and only the headings differ: Last order, Last order status, Last order items, Last order tracking, Last order delivery. A narrower shape would have meant a second renderer and a second set of decisions about what a reader is shown.
+
+**Internal, and that is the point.** The customer named no order, so this answers "which order did they most recently place", never "which order do they mean". Rendered in `toHumanBrief` and the dashboard; ABSENT from `toDraftingPrompt`, from `investigationForDrafting`, and from the tool's own `promptText` in both branches. **A number a model can see is a number it can quote**, and quoting the wrong order number at a customer is worse than quoting none. Tests assert the absence rather than trusting the renderer.
+
+**It changes no decision, and that was asked about directly.** It is derived in `buildCaseFile` *after* the verdict is settled (line order is load-bearing) and read by nothing in the investigation loop. A test asserts that the same answer with and without a candidate yields the same verdict and the same `missing`. What looked like the candidate moving a ticket from `needs_customer_input` to `needs_human` was the investigation model varying between runs — measured three times on one ticket, including once before the field existed.
+
+### `claim` can be narrowed to one ticket
+
+`record.claim(pass, { ticketId })` adds a filter to the queue; it does not bypass it. The pass's flag and its `where` still apply, so naming a ticket that is not due returns nothing rather than running it anyway — which keeps it an operator convenience ("look at this one") rather than a second, unguarded way into a pass.
+
+It exists because the queue is oldest-first over an imported corpus: 109 historical tickets carry a flag no poll can reach, so re-running one recent ticket by hand meant paying for everything ahead of it.
+
+### Asking is licensed by the case file, not by the verdict
+
+One rule across all three verdicts: **a reply may ask for a fact only if the case file named it.** That single line implements three instructions that look separate — « ne pas demander d'information supplémentaire » on an answer, « demander uniquement cette information » on a question, « ne demander une information que si le dossier en nomme une » on a handover — because they are the same rule seen from three sides.
+
+It also resolved a contradiction the first version carried. `toDraftingPrompt` renders the « À demander au client » section whenever `missing` is non-empty, regardless of verdict, so 9 of 49 handovers were handed a question to ask *and* an instruction never to ask. The model happened to resolve all 9 the safe way, which was luck. Now a named field licenses the question and the check scores which fact was asked for; an unnamed one fails as invented.
+
+### The handoff stays withheld, and the intent rules are why it can
+
+"What requires attention" is derivable from `unverified` — what could not be confirmed, and why — which is factual and proposes no remedy. The handoff's `action` proposes one: measured 2026-08-19, **10 of 49 name a refund or a replacement**, and a commercial gesture is a merchant decision the model may never invent. So the model is told to describe what needs checking, from evidence it already has, and is never shown what we might do about it. The column is read only to reduce it to a boolean for `disposition`.
+
+### The closing line is approved, not forbidden
+
+The brand voice forbids « les formules génériques de service client sans réelle valeur ajoutée », a structural rule repeated it, and the model still ended **31 of 81** drafts with a courtesy line — in 31 different wordings. A prompt has limited grip on courtesy filler.
+
+**The first reading of that number was wrong.** It looked like the model doing something it had been told not to; it was the model filling a real gap. « N’hésitez pas à revenir vers nous si vous avez d’autres questions » is worth saying — it tells the customer the door is open, and on an `answerable` reply it is the exact caveat the intent rules ask for ("no reason to reply unless they need further help"). The problem was never the sentence; it was that nobody had approved one, so the model wrote a new one every time.
+
+So `closingLine` joins `signature` as a stored, editable field on the Brand voice page, reproduced exactly and checked exactly. Same mechanism, and the mechanism is proven: the signature check passes 81/81, so prompting a verbatim block and verifying it afterwards is reliable enough not to need code that appends it.
+
+**Two checks, doing different jobs.** `closing_line` verifies the approved wording is present — a real failure. `empty_closer` stays advisory and runs against the text **with the approved line removed**, so what it reports is a *second*, invented closer. Without that removal, approving a wording would flag every draft that used it.
+
+**Advisory is still right for the invented one.** It is a weak sentence, not a wrong one, and `checks_passed` gates auto-send — refusing an otherwise correct reply for being too polite would be the check overreaching.
+
+**Seeded, not blank.** An empty field would not mean "no closing line"; it would mean the model inventing one per draft, which is the behaviour the field exists to replace. Clearing it deliberately is still available and does mean none.
+
+### Terminal and intermediary, because a send has to know whether the thread is finished
+
+A draft carries `disposition`: `terminal` when nothing is expected back and nothing is left to do, `intermediary` when the customer owes us an answer or a colleague owes them one. The distinction exists for exactly one consequence — **a terminal reply is what closes the ticket when it is sent, and an intermediary one must close nothing.** Getting it backwards closes a thread somebody still owes work on, which is the mistake in this area a customer would actually feel.
+
+**Derived in code, never asked of the model.** "Is this exchange finished" decides whether a ticket closes, and it is the judgement a drafting model has the least evidence for: it sees the reply it just wrote, not the work behind it.
+
+**Two conditions, and the second is the one that will matter later.** An answer ends the exchange only if nobody has to act afterwards, and what records that is the case file's `handoff`. Measured 2026-08-18: all 49 `needs_human` case files carry a handoff and none of the 15 `answerable` ones do, so today the verdict alone would give the same answer. Both are checked anyway, because the direction they could disagree in is the dangerous one — an answerable case file that also names an action is a ticket that must not close on send. Two check constraints state the same rule in the database, so a careless change to the derivation fails at the write rather than at the send.
+
+**`handoff` is selected by the drafting pass and reduced to a boolean at the store boundary.** It is the one internal column the drafting projection would otherwise exclude; the disposition needs to know *whether* a human owes an action, never *what* they owe. Dropping the text one line after reading it keeps the derivation correct and keeps internal prose out of the runner, let alone the prompt.
+
 ## Knowledge
 
 Nothing auto-writes `knowledge_documents`; the catalog sync only fills `shopify_content_sources`. `source_type` → `manual` **is** the manual-edit lock — no separate flag, and resync is then unavailable.
@@ -953,7 +1027,14 @@ Editing one therefore means editing the definition — re-apply against a fresh 
 
 The **reconciling test now exists**, which is the half of the two-axis arrangement that was actually load-bearing: `06_analytics.test.mjs` asserts the constraint's literals equal `USAGE_PASSES`. Two copies of that list had been drifting apart with nothing watching — the sink degrades an unrecognised pass to `other`, so a constraint widened without the module would have silently mis-filed every drafting call's cost.
 
-So the general rule stands, narrowed to what it is actually about: **a change that alters an existing relation** wants a forward step, extracted and asserted; a change that only adds a new one is just another baseline file. A third *alteration* is where the additive-steps axis earns its keep — the trigger is alterations, not schema changes in general.
+So the general rule stands, narrowed to what it is actually about: **a change that alters an existing relation** wants a forward step, extracted and asserted; a change that only adds a new one is just another baseline file.
+
+**The third alteration came the next day (2026-08-18)** — `ticket_drafts` gained a `disposition` column and its verdict check was widened to accept `needs_human`. Same method again: clauses extracted from `07_drafting.sql`, asserted before running, one transaction. Two things are worth recording because they are the first of their kind here:
+
+- **A column was added, so the column-order caveat now does apply.** `alter table … add column` appends, while a from-empty apply of the baseline places `disposition` after `source_verdict`. Nothing in this codebase reads by ordinal — every projection names its columns, which is what `tables.mjs` exists for — so the divergence is inert. It is written down because the next person to compare a dumped schema against the baseline will otherwise think something is wrong.
+- **The backfill was a decision, not a default.** The column is `not null`, and adding it with a default would have silently labelled 32 existing drafts. It was added nullable, classified from `source_verdict`, then made `not null` — so every row's disposition was chosen rather than inherited.
+
+The additive-steps axis is still not built, and the reason is now clearer than "it has only happened three times": all three alterations were widening a constraint or adding a column to a table this project owns end to end, each applied in one transaction with the clause extracted from the file that defines it. What would justify the second axis is an alteration that cannot be expressed that way — a backfill with logic in it, or a change that has to run against a database somebody else's deploy also touches.
 
 ### Views carry joins and aggregates, never judgement
 

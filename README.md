@@ -17,9 +17,9 @@ A customer-support operating system for **Qiriness**, a French skincare and cosm
 
 ## Scope
 
-Built: one-way Shopify → Supabase sync, a curated knowledge library for AI context, retrieval embeddings, email ingestion into conversation-threaded tickets, categorisation, customer and order resolution, the Phase 4 retrieval tools, the exemplar layer, the investigation agent that uses them, team forwarding, and four analytics panels.
+Built: one-way Shopify → Supabase sync, a curated knowledge library for AI context, retrieval embeddings, email ingestion into conversation-threaded tickets, categorisation, customer and order resolution, the Phase 4 retrieval tools, the exemplar layer, the investigation agent that uses them, team forwarding, four analytics panels, and **reply drafting** — stored, checked and reviewable, with nothing able to send.
 
-Not built: reply drafting (Phase 5), dashboard authentication, deployed webhook routes.
+Not built: the send path, dashboard authentication, deployed webhook routes.
 
 ## Architecture
 
@@ -59,7 +59,7 @@ Pending: dashboard auth, ORM/DB client for app reads (scripts use `pg` + a Supab
 
 ## Current state
 
-Working end to end against the live Shopify store (`qiriness.myshopify.com`) and the Supabase project: the Agent Setup, Tickets and Insights dashboards, the Shopify syncs, email ingestion, both spam gates, embeddings and retrieval, categorisation, customer and order resolution, the Phase 4 retrieval tools, the exemplar layer, and the investigation agent. **Drafting is not built.**
+Working end to end against the live Shopify store (`qiriness.myshopify.com`) and the Supabase project: the Agent Setup, Tickets and Insights dashboards, the Shopify syncs, email ingestion, both spam gates, embeddings and retrieval, categorisation, customer and order resolution, the Phase 4 retrieval tools, the exemplar layer, the investigation agent, and the drafting agent. **Nothing can send an email to a customer** — there is no code path that can address one.
 
 The full record of what was built and how far each piece is proven is in `CHANGELOG.md`; what remains unproven, with the check to run, is in `VALIDATION_LOG.md`.
 
@@ -73,7 +73,8 @@ The full record of what was built and how far each piece is proven is in `CHANGE
 | Messages | 451, **all 451 embedded** |
 | Customer link | 145 of 214 |
 | Order link | **52** carry a confirmed `shopify_order_number` and a built `resolved_context` |
-| Case files | 80 tickets investigated — 49 `needs_human`, 16 `needs_customer_input`, 15 `answerable`. 70 sit on tickets still live |
+| Case files | 81 tickets investigated — 49 `needs_human`, 17 `needs_customer_input`, 15 `answerable` |
+| Drafts | **81**, one per case file. 81/81 pass the mechanical checks · 15 `terminal` · 66 `intermediary` · 19 `auto_send_eligible` (acted on by nothing) |
 | Investigation queue | 113 flagged, **0 claimable** — all closed, so the flag is unreachable (`VALIDATION_LOG.md` item 16) |
 | Knowledge | 61 chunks, all embedded — but **zero** in `delivery`, `order`, `promotions`, `payment`, `product_stock` |
 | Exemplars | 31 approved, 94 phrasings embedded; `support_answers` still empty |
@@ -89,17 +90,27 @@ The full record of what was built and how far each piece is proven is in `CHANGE
 **Reordered 2026-08-17, after reading the database rather than the docs.** Two items that headed this list are done and are gone from it: order resolution has run (52 tickets carry a confirmed number and a built context bundle), and `AGENT_INTEGRATION_PLAN.md` has been realigned with what was actually built. What changed the ordering:
 
 - **Phase 5 is under way: the drafting agent writes replies.** `npm run draft` has produced
-  **32 drafts over the whole draftable set** (15 `answerable`, 17 `needs_customer_input`) at
-  ≈ $0.02 each, all passing the mechanical checks, none auto-sent. The system prompt is the
-  Brand voice article, and approval of it gates the pass. What remains in this phase:
-  **the review copy to the reviewer's own inbox**, **approve / edit / reject in the
-  dashboard**, and the **send path** — the last still blocked on which mailbox this
-  environment is for. Drafting stays operator-triggered, out of the poll, until the drafts
-  have been read.
-- **Reviewing those 32 drafts is the next real task**, and it is a reading job rather than a
+  **81 drafts over the whole investigated corpus** — 15 `answerable`, 17
+  `needs_customer_input` and 49 `needs_human` acknowledgements — at ≈ $0.02 each, all
+  passing the mechanical checks, none auto-sent. The system prompt is the Brand voice
+  article, and approval of it gates the pass. Every draft records a `disposition`: **15
+  terminal** (sending would close the ticket) and **66 intermediary** (somebody still owes
+  an answer).
+- **All three verdicts answer what they can.** Rewritten 2026-08-19: an answer resolves the
+  request, a question explains what is established before asking, and a handover names the
+  specific point needing a check rather than saying the request is "being processed". Median
+  length is now 559 / 526 / 565 characters by verdict; 78 of 81 pass the mechanical checks.
+- **Reviewing those 81 drafts is the next real task**, and it is a reading job rather than a
   coding one: the checks can prove a named sentence is absent and cannot say the reply is
   right. 19 are marked `auto_send_eligible`, which is the number the eventual L1/L2
   graduation turns on.
+- **Then, in this order:** the review copy to the reviewer's own inbox · approve / edit /
+  reject in the dashboard · the **send path** and the auto-close on `terminal` that
+  `disposition` exists for — the last still blocked on which mailbox this environment is
+  for. Drafting stays operator-triggered, out of the poll, until the drafts have been read.
+- **Pacing before any bigger backfill.** The 49-draft run failed 10 on HTTP 429: gpt-4o is
+  capped at 30 000 TPM here and a draft costs ~2 400, so a sustained batch outruns the retry
+  backoff at roughly 12/minute. Re-running converges, but the runner should pace itself.
 - **The knowledge library moved up, because the gap is now specific rather than general.**
   61 chunks are embedded and **zero** of them are in `delivery`, `order`, `promotions`,
   `payment` or `product_stock` — the five highest-demand subjects. A level 1 ticket is by

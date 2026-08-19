@@ -20,6 +20,7 @@ import { createShopUsageRecording } from '../llm/usage-store.mjs';
 //   npm run investigate -- --limit 50
 //   npm run investigate -- --backfill            # queue already-categorised tickets
 //   npm run investigate -- --include-closed      # reach threads the queue moved past
+//   npm run investigate -- --ticket <uuid>       # re-run one ticket, if it is due
 //
 // `--backfill` is needed twice: at rollout, because every existing ticket was
 // categorised before this pass existed and the flag is only ever raised by the
@@ -50,6 +51,7 @@ const brief = args.includes('--brief');
 const backfill = args.includes('--backfill');
 const includeClosed = args.includes('--include-closed');
 const limit = parseLimit(args);
+const ticketId = parseTicket(args);
 
 main().catch((error) => {
   console.error(error.message);
@@ -115,6 +117,7 @@ async function main() {
     dryRun,
     limit,
     anyStatus: includeClosed,
+    ticketId,
     // The same directory the worker loads, so a dry run reproduces what the
     // worker would have shown the model rather than a context-free version of it.
     senderDirectory: await senderDirectoryStore.load(shopId, {
@@ -166,6 +169,11 @@ function indent(text) {
     .split('\n')
     .map((line) => `    ${line}`)
     .join('\n');
+}
+
+function parseTicket(argv) {
+  const index = argv.indexOf('--ticket');
+  return index >= 0 && argv[index + 1] ? String(argv[index + 1]) : undefined;
 }
 
 function parseLimit(argv) {

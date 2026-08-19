@@ -46,7 +46,11 @@ import {
 } from "../../../scripts/lib/supabase-rest-client.mjs";
 import { KnowledgeImportError, KnowledgeNotFoundError, KnowledgeValidationError } from "./knowledge-errors";
 import type { VoiceProfile } from "../types";
-import { DEFAULT_GUIDELINES_AND_GUARDRAILS, DEFAULT_RESPONSE_FRAMEWORK } from "../types";
+import {
+  DEFAULT_CLOSING_LINE,
+  DEFAULT_GUIDELINES_AND_GUARDRAILS,
+  DEFAULT_RESPONSE_FRAMEWORK,
+} from "../types";
 
 // The imported .mjs modules have no type declarations (allowJs, no JSDoc), so
 // their exports resolve to `any`. Local shapes below keep this file itself
@@ -677,6 +681,9 @@ export function normalizeVoiceProfile(raw: any): VoiceProfile {
       v.guidelinesAndGuardrails,
       DEFAULT_GUIDELINES_AND_GUARDRAILS
     ),
+    // Seeded like the two lists: absent means "never edited", not "deliberately
+    // empty". A caller that clears it to "" keeps it empty.
+    closingLine: typeof v.closingLine === "string" ? v.closingLine : DEFAULT_CLOSING_LINE,
     signature: typeof v.signature === "string" ? v.signature : "",
   };
 }

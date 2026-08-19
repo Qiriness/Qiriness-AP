@@ -167,8 +167,11 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |   |   |                        # order-context + order-context-runner
 |   |   |-- routing/             # forward-rules · forwarding-store · forward-runner
 |   |   |-- drafting/            # brand-voice (the Brand voice row -> the system
-|   |   |                        #   prompt; approval gates it) · draft-rules (the
-|   |   |                        #   verdict + level gates, pure) · compose-draft
+|   |   |                        #   prompt + INTENT_RULES per verdict: answer /
+|   |   |                        #   answer-then-ask / answer-then-hand-over;
+|   |   |                        #   approval gates it) · draft-rules (verdict +
+|   |   |                        #   level gates and terminal/intermediary, pure) ·
+|   |   |                        # compose-draft
 |   |   |                        #   (per-ticket message + the answer schema) ·
 |   |   |                        # draft-checks (the prohibitions, in code) ·
 |   |   |                        # draft-runner (+ the derived queue). NO Graph call
@@ -207,7 +210,7 @@ Never auto-synced — every row is an explicit import or a hand-written article.
 
 | Table | Holds |
 | --- | --- |
-| `knowledge_documents` | `content_html` is the editor's truth; `approval_status` independent of Shopify publish `status`; `core_topic` = 1 of 6 slots, max one per shop; `voice_profile` jsonb = the drafting agent's system prompt on the singleton `brand` row (`roleDescription`, `toneAndVoice`, `responseFramework[]`, `guidelinesAndGuardrails[]`, `signature`) — all five stored, so the worker reads one source rather than a constant in `web/` |
+| `knowledge_documents` | `content_html` is the editor's truth; `approval_status` independent of Shopify publish `status`; `core_topic` = 1 of 6 slots, max one per shop; `voice_profile` jsonb = the drafting agent's system prompt on the singleton `brand` row (`roleDescription`, `toneAndVoice`, `responseFramework[]`, `guidelinesAndGuardrails[]`, `closingLine`, `signature`) — all five stored, so the worker reads one source rather than a constant in `web/` |
 | `knowledge_chunks` | retrieval chunks + `embedding vector(1536)` HNSW cosine, plus the determinism quadruple |
 
 ### Support exemplars
@@ -226,8 +229,8 @@ The recurring situations, not the answers to them. Same document/chunk mechanics
 | --- | --- |
 | `tickets` | one per Graph `conversationId`. Taxonomy axes, `level`, `responsible_team`, `customer_id`, `shopify_order_number`, signals (`language`, `happiness`, `categorisation_confidence`), `resolved_context` jsonb, lifecycle + retention timestamps |
 | `ticket_messages` | one per Graph message. Envelope, cleaned `body_text`, sanitised payload, `embedding vector(1536)`, and `attachments jsonb` -- part METADATA only (name, contentType, size, isInline), never bytes. **NULL means never fetched**, `[]` means fetched and empty |
-| `ticket_investigations` | **the case file**: `established` / `unverified` / `missing` / `do_not_claim` (four separate columns), `handoff`, `context_ref`, `dropped_claims`, `evidence_gaps` (what the ticket required vs what was obtained, each entry carrying the `finding` and the `details` naming WHICH product or code it is about — diagnostic, does not move the verdict), `exemplar_match` (which recurring situation this is; recorded, never acted on). `unique(shop_id, trigger_message_id)` |
-| `ticket_drafts` | **what the agent would send**: `body_text` (the model's, never edited) beside `approved_body_text` (a reviewer's rewrite), `source_verdict` (`answerable` \| `needs_customer_input` — `needs_human` is refused by check constraint), `level` (1–3; level 4 is never drafted), `status` (the human decision) kept apart from `checks_passed` (the machine outcome), `auto_send_eligible`, `prompt_inputs`, `review_sent_at`. `unique(shop_id, trigger_message_id)`. **Holds no recipient and cannot send.** Owned by `scripts/lib/draft-record.mjs` |
+| `ticket_investigations` | **the case file**: `established` / `unverified` / `missing` / `do_not_claim` (four separate columns), `handoff`, `context_ref`, `dropped_claims`, `evidence_gaps` (what the ticket required vs what was obtained, each entry carrying the `finding` and the `details` naming WHICH product or code it is about — diagnostic, does not move the verdict), `exemplar_match` (which recurring situation this is; recorded, never acted on), `candidate_order` (**internal**: the customer's last order as a FULL bundle, same shape and builder as `resolved_context`, fetched in the order tool's unresolved branch so it can never sit beside a confirmed order. Rendered in the human brief and the dashboard under Last order headings, **never** in the drafting prompt). `unique(shop_id, trigger_message_id)` |
+| `ticket_drafts` | **what the agent would send**: `body_text` (the model's, never edited) beside `approved_body_text` (a reviewer's rewrite), `source_verdict` (all three — `needs_human` gets an acknowledgement), `disposition` (`terminal` = sending closes the ticket \| `intermediary` = somebody still owes an answer; derived from the verdict + the case file's `handoff`, never model-chosen, and enforced by two check constraints), `level` (1–3; level 4 is never drafted), `status` (the human decision) kept apart from `checks_passed` (the machine outcome), `auto_send_eligible`, `prompt_inputs`, `review_sent_at`. `unique(shop_id, trigger_message_id)`. **Holds no recipient and cannot send.** Owned by `scripts/lib/draft-record.mjs` |
 | `email_blocklist` | per-shop sender email/domain rules + hit counts |
 | `sender_directory` | per-shop sender email/domain → `label` (internal, contractor, logistics, courier, retailer, distributor, supplier, partner, other) + free-text `note`. Read into the case file as context and by `cluster:tickets` to tell customer demand from our own mail. Replaces `INTERNAL_EMAIL_DOMAINS`. Rows are exceptions; an unlisted sender is a consumer |
 | `spam_audit` | one row per gate decision. `outcome`, `decided_by`, `reason`, `label`, `model`, `failed_open`, sender, subject, and on a block `body_text` + `body_captured_at` + `body_expires_at` |
@@ -405,7 +408,7 @@ From `agent/`. Every pass has a standalone runner, most with `:dry-run`.
 | `customer:lookup -- <email> [--json] [--with-email]` | the CRM tool, no ticket needed |
 | `orders:resolve[:dry-run]` | confirm order numbers |
 | `context:build[:dry-run] [--refresh]` | fill `tickets.resolved_context` |
-| `investigate[:dry-run] [--show/--brief] [--backfill] [--include-closed]` | run + render case files. `--backfill` re-queues **open** categorised tickets; `--include-closed` widens the claim to threads the queue has moved past, leaving their status untouched. Both print what the run cost |
+| `investigate[:dry-run] [--show/--brief] [--backfill] [--include-closed] [--ticket <id>]` | run + render case files. `--backfill` re-queues **open** categorised tickets; `--include-closed` widens the claim to threads the queue has moved past, leaving their status untouched. Both print what the run cost. `--ticket` narrows the queue to one ticket without bypassing its flag |
 | `draft[:dry-run] [--show] [--ticket <id>] [--limit N] [--redraft]` | the drafting pass. Reads case files, writes `ticket_drafts`; **no Graph call**. Refuses unless the Brand voice article is `approved`. `--redraft` overwrites an existing draft — the queue is derived, so a ticket leaves it once one exists |
 | `forward:once` / `forward:dry-run` | the forwarding pass |
 | `tickets:autoclose[:dry-run]` | the lifecycle pass |

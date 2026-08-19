@@ -4,9 +4,11 @@ import test from 'node:test';
 import { VERDICTS } from '../investigation/case-file.mjs';
 import {
   AUTO_SEND_LEVELS,
+  DISPOSITIONS,
   DRAFTABLE_VERDICTS,
   autoSendEligible,
   draftDecision,
+  draftDisposition,
   replyLanguage
 } from './draft-rules.mjs';
 
@@ -15,17 +17,17 @@ const ASKS = { verdict: 'needs_customer_input', missing: [{ field: 'shopify_orde
 
 // --- which verdicts produce text ---------------------------------------------
 
-test('exactly one verdict produces no customer-facing text', () => {
+test('every verdict produces customer-facing text', () => {
   // Stated against the investigation's own list so a fourth verdict cannot be
   // added there and silently default to draftable here.
-  const draftable = Object.keys(DRAFTABLE_VERDICTS);
-  assert.deepEqual(VERDICTS.filter((v) => !draftable.includes(v)), ['needs_human']);
+  assert.deepEqual([...VERDICTS].sort(), Object.keys(DRAFTABLE_VERDICTS).sort());
 });
 
 test('an answerable case file drafts a reply', () => {
   assert.deepEqual(draftDecision({ investigation: ANSWERABLE, ticket: { level: 2 } }), {
     draft: true,
     kind: 'reply',
+    disposition: 'terminal',
     reason: null
   });
 });
@@ -34,10 +36,55 @@ test('needs_customer_input drafts the question', () => {
   assert.equal(draftDecision({ investigation: ASKS, ticket: { level: 2 } }).kind, 'question');
 });
 
-test('needs_human drafts nothing, and that is a normal state', () => {
-  const decision = draftDecision({ investigation: { verdict: 'needs_human' }, ticket: {} });
+test('needs_human drafts an acknowledgement, and it is intermediary', () => {
+  // The customer hears back; the colleague gets something to edit; the ticket
+  // does not close, because a person still owes an answer.
+  const decision = draftDecision({
+    investigation: { verdict: 'needs_human', handoff: { action: 'rembourser' } },
+    ticket: { level: 3 }
+  });
+  assert.equal(decision.draft, true);
+  assert.equal(decision.kind, 'acknowledgement');
+  assert.equal(decision.disposition, 'intermediary');
+});
+
+test('a verdict nothing issues drafts nothing', () => {
+  const decision = draftDecision({ investigation: { verdict: 'wat' }, ticket: {} });
   assert.equal(decision.draft, false);
-  assert.equal(decision.reason, 'needs_human');
+  assert.equal(decision.reason, 'unknown_verdict');
+});
+
+// --- terminal vs intermediary ------------------------------------------------
+
+test('only an answer with no outstanding action ends the exchange', () => {
+  assert.deepEqual([...DISPOSITIONS].sort(), ['intermediary', 'terminal']);
+  assert.equal(draftDisposition({ verdict: 'answerable', handoff: null }), 'terminal');
+});
+
+test('a question is intermediary: the customer owes us an answer', () => {
+  assert.equal(draftDisposition({ verdict: 'needs_customer_input' }), 'intermediary');
+});
+
+test('an acknowledgement is intermediary: a colleague owes them one', () => {
+  assert.equal(draftDisposition({ verdict: 'needs_human', handoff: { action: 'x' } }), 'intermediary');
+  // Even without one recorded -- the verdict alone says a person owns this.
+  assert.equal(draftDisposition({ verdict: 'needs_human', handoff: null }), 'intermediary');
+});
+
+test('an answer that still leaves a human something to do is NOT terminal', () => {
+  // The direction the two conditions could disagree in, and the dangerous one:
+  // closing a ticket somebody still owes work on. No such case file exists on
+  // the corpus today (49/49 needs_human carry a handoff, 0/15 answerable do),
+  // which is exactly why the rule has to be written down rather than observed.
+  assert.equal(
+    draftDisposition({ verdict: 'answerable', handoff: { action: 'relancer le transporteur' } }),
+    'intermediary'
+  );
+});
+
+test('the decision carries the disposition, so the runner cannot re-derive it differently', () => {
+  const decision = draftDecision({ investigation: ANSWERABLE, ticket: { level: 2 } });
+  assert.equal(decision.disposition, 'terminal');
 });
 
 test('no case file is a reason of its own, not an error', () => {
@@ -59,6 +106,18 @@ test('a question with nothing to ask for is refused rather than invented', () =>
 });
 
 // --- the auto-send gate, which nothing acts on yet ---------------------------
+
+test('an acknowledgement is never auto-sent, whatever its level', () => {
+  // The verdict says a person owns the next move, and the first thing they need
+  // is the chance to answer properly rather than to follow an automated holding
+  // note the customer has already read.
+  for (const level of [1, 2]) {
+    assert.equal(
+      autoSendEligible({ level, happiness: 1, checksPassed: true, verdict: 'needs_human' }),
+      false
+    );
+  }
+});
 
 test('only the levels designed to graduate are eligible', () => {
   assert.deepEqual(AUTO_SEND_LEVELS, [1, 2]);

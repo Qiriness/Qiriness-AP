@@ -4,7 +4,12 @@ import { useEffect, useState } from "react";
 import { knowledgeErrorMessage } from "@/lib/api/knowledge";
 import { fetchTicketDetail } from "@/lib/api/tickets";
 import { formatRelativeTime } from "@/lib/relative-time";
-import type { InvestigationVerdict, TicketDetail, TicketListItem } from "@/lib/types";
+import type {
+  InvestigationVerdict,
+  TicketDetail,
+  TicketListItem,
+  TicketTracking,
+} from "@/lib/types";
 import styles from "./TicketDetailPanel.module.css";
 
 interface TicketDetailPanelProps {
@@ -45,6 +50,44 @@ const VERDICT_CLASSES: Record<InvestigationVerdict, string> = {
  * rows and one is open at a time. Unmounting on collapse means re-opening asks
  * again, which is what you want from a table the worker rewrites underneath you.
  */
+/**
+ * Parcel numbers, linked to the carrier's own tracking page where the bundle
+ * carries a URL.
+ *
+ * ONE COMPONENT FOR BOTH BLOCKS. The confirmed order and the last-order
+ * candidate render the same `TicketTracking[]`, and they were written twice —
+ * the second copy dropped the link, so the candidate showed a bare number that
+ * a reviewer had to paste into La Poste by hand. That is exactly the drift two
+ * copies of a rendering produce, and it is the reason this is a component
+ * rather than a shape repeated in two places.
+ *
+ * `noreferrer` with `target="_blank"`: the carrier is a third party and has no
+ * business receiving the dashboard URL in a Referer header.
+ */
+function TrackingList({ parcels }: { parcels: TicketTracking[] }) {
+  return (
+    <>
+      {parcels.map((parcel) => (
+        <span key={parcel.number} className={styles.parcel}>
+          {parcel.url ? (
+            <a
+              className={styles.trackingLink}
+              href={parcel.url}
+              target="_blank"
+              rel="noreferrer"
+            >
+              {parcel.number}
+            </a>
+          ) : (
+            <span className={styles.tracking}>{parcel.number}</span>
+          )}
+          {parcel.carrier && <span className={styles.carrier}>{parcel.carrier}</span>}
+        </span>
+      ))}
+    </>
+  );
+}
+
 export function TicketDetailPanel({ ticket }: TicketDetailPanelProps) {
   const [detail, setDetail] = useState<TicketDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -79,6 +122,10 @@ export function TicketDetailPanel({ ticket }: TicketDetailPanelProps) {
   // built from the order that number resolved to), but one of them is the row
   // that was rendered a minute ago.
   const orderNumber = order?.orderName ?? ticket.orderNumber;
+  // The last-order fallback, shown only where a confirmed order is not. It is
+  // derived in the tool's unresolved branch, so the two are mutually exclusive
+  // upstream; this guard states that rather than relying on it.
+  const candidate = !orderNumber ? (results?.candidateOrder ?? null) : null;
 
   return (
     <div className={styles.panel}>
@@ -232,23 +279,7 @@ export function TicketDetailPanel({ ticket }: TicketDetailPanelProps) {
               <div className={styles.fact}>
                 <dt>Tracking number</dt>
                 <dd>
-                  {order.tracking.map((parcel) => (
-                    <span key={parcel.number} className={styles.parcel}>
-                      {parcel.url ? (
-                        <a
-                          className={styles.trackingLink}
-                          href={parcel.url}
-                          target="_blank"
-                          rel="noreferrer"
-                        >
-                          {parcel.number}
-                        </a>
-                      ) : (
-                        <span className={styles.tracking}>{parcel.number}</span>
-                      )}
-                      {parcel.carrier && <span className={styles.carrier}>{parcel.carrier}</span>}
-                    </span>
-                  ))}
+                  <TrackingList parcels={order.tracking} />
                 </dd>
               </div>
             )}
@@ -260,6 +291,50 @@ export function TicketDetailPanel({ ticket }: TicketDetailPanelProps) {
               </div>
             )}
           </dl>
+        ) : candidate ? (
+          /* THE LAST ORDER, when the customer named none. Same projection as the
+             confirmed block above and different headings, because it answers a
+             different question: not "here is their order" but "here is where to
+             start looking". It can never appear beside the confirmed block — the
+             tool fetches it only in the branch where nothing was confirmed. */
+          <>
+            <p className={styles.candidateNote}>
+              No order number confirmed. Their most recent order, as a starting point —
+              the customer gave no number, so this may not be the one they mean.
+            </p>
+            <dl className={styles.facts}>
+              <div className={styles.fact}>
+                <dt>Last order</dt>
+                <dd className={styles.order}>{candidate.orderName}</dd>
+              </div>
+              {candidate.orderStatus && (
+                <div className={styles.fact}>
+                  <dt>Last order status</dt>
+                  <dd>{candidate.orderStatus}</dd>
+                </div>
+              )}
+              {candidate.items.length > 0 && (
+                <div className={styles.fact}>
+                  <dt>Last order items</dt>
+                  <dd>{candidate.items.join(", ")}</dd>
+                </div>
+              )}
+              {candidate.tracking.length > 0 && (
+                <div className={styles.fact}>
+                  <dt>Last order tracking</dt>
+                  <dd>
+                    <TrackingList parcels={candidate.tracking} />
+                  </dd>
+                </div>
+              )}
+              {candidate.trackingStatus && (
+                <div className={styles.fact}>
+                  <dt>Last order delivery</dt>
+                  <dd>{candidate.trackingStatus}</dd>
+                </div>
+              )}
+            </dl>
+          </>
         ) : (
           /* Absent is not the same as "no order": the column is written only on a
              confirmed match between the order's email hash and the requester's. */

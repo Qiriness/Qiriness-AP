@@ -48,6 +48,8 @@ export async function runInvestigation({
   // Widens the queue to threads the ticket queue has moved past — closed ones.
   // A person typing `--include-closed`, never the worker: see `record.claim`.
   anyStatus = false,
+  // One ticket by id. Narrows the queue, never bypasses it -- see record.claim.
+  ticketId = null,
   onResult,
   // Loaded once per poll by the caller and shared across tickets: it is a small
   // map, and rebuilding it per ticket would turn a lookup back into a query.
@@ -71,7 +73,7 @@ export async function runInvestigation({
     failed: 0
   };
 
-  const pending = await record.claim('investigation', { limit, anyStatus });
+  const pending = await record.claim('investigation', { limit, anyStatus, ticketId });
   counts.considered = pending.length;
 
   for (const ticket of pending) {
@@ -411,6 +413,7 @@ export function createCaseFileStore(supabase) {
             knowledge: caseFile.knowledge,
             context_ref: caseFile.contextRef || {},
             handoff: caseFile.handoff,
+            candidate_order: caseFile.candidateOrder || {},
             tool_calls: caseFile.toolCalls,
             evidence_gaps: caseFile.evidenceGaps,
             // Diagnostic, arrived at independently of everything above it.

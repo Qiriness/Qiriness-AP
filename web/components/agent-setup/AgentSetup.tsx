@@ -155,6 +155,7 @@ export function AgentSetup({ initialArticles, initialSources, loadError }: Agent
   const handleRoleDescriptionChange = (roleDescription: string) =>
     handleVoiceProfileChange({ roleDescription });
   const handleToneAndVoiceChange = (toneAndVoice: string) => handleVoiceProfileChange({ toneAndVoice });
+  const handleClosingLineChange = (closingLine: string) => handleVoiceProfileChange({ closingLine });
   const handleSignatureChange = (signature: string) => handleVoiceProfileChange({ signature });
 
   async function handleSourceChange(sourceId: string | null) {
@@ -370,6 +371,7 @@ export function AgentSetup({ initialArticles, initialSources, loadError }: Agent
                   onTitleChange={handleTitleChange}
                   onRoleDescriptionChange={handleRoleDescriptionChange}
                   onToneAndVoiceChange={handleToneAndVoiceChange}
+                  onClosingLineChange={handleClosingLineChange}
                   onSignatureChange={handleSignatureChange}
                   onGeneralContextChange={handleContentChange}
                   onSave={handleSave}

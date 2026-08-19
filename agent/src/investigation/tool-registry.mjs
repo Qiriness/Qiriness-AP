@@ -138,6 +138,10 @@ export function createToolRegistry({
   promotionLookup,
   purchaseLookup,
   retrieveKnowledge,
+  // Reads the customer's most recent order when none was confirmed. Optional:
+  // without it the order tool behaves exactly as it did before, minus the
+  // candidate.
+  lastOrderLookup = null,
   shopId,
   logger
 } = {}) {
@@ -356,13 +360,29 @@ export function createToolRegistry({
         // which meant nobody had decided what the agent is told about an order —
         // whatever the builder last wrote reached the prompt, and so would the
         // next field added to it.
+        // THE CANDIDATE IS THIS TOOL'S FALLBACK BRANCH, and putting it here
+        // rather than in a tool of its own is what makes the ordering
+        // structural. It runs only after the order lookup has failed, only
+        // when nothing was confirmed, and costs no extra tool call — so there
+        // is no arrangement of the loop in which a confirmed order and a
+        // candidate can both appear. Duplication is not prevented by a rule;
+        // it is unreachable.
+        let candidate = null;
+        if (!confirmed && lastOrderLookup && ticket.customer_id) {
+          candidate = await lastOrderLookup(ticket.customer_id);
+        }
+
         return {
           outcome: confirmed ? 'found' : 'not_resolved',
           caveats: confirmed ? [] : ['order_unconfirmed'],
+          // THE CANDIDATE IS ABSENT FROM promptText, on purpose and in both
+          // branches. The customer named no order, so this one may be the wrong
+          // one — and the model is the reader that would quote it at them. It
+          // travels in `data`, which `fromModel` never sends.
           promptText: confirmed
             ? toOrderContextText(context)
             : 'Aucune commande confirmée n’est rattachée à ce ticket.',
-          data: { confirmed, orderName: ticket.shopify_order_number || null }
+          data: { confirmed, orderName: ticket.shopify_order_number || null, candidate }
         };
       },
 

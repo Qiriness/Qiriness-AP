@@ -29,13 +29,40 @@ test('the trigger message and the case file are both required', () => {
 
 // --- what the table refuses to hold ------------------------------------------
 
-test('needs_human can never produce a customer-facing draft', () => {
-  // The routing rule stated by the schema rather than only by the code path
-  // that declines to write one.
+test('every verdict the investigation issues can be drafted from', () => {
+  // needs_human was excluded here at first, on the reasoning that it produces no
+  // customer-facing text. That was wrong: a ticket a person has to finish still
+  // owes the customer an acknowledgement. What the verdict changes is what the
+  // reply may DO, which is `disposition`.
   assert.deepEqual(literalsIn(checkClause(SQL, 'ticket_drafts_source_verdict_check')), [
     'answerable',
-    'needs_customer_input'
+    'needs_customer_input',
+    'needs_human'
   ]);
+});
+
+test('a draft is terminal or intermediary, and nothing else', () => {
+  assert.deepEqual(literalsIn(checkClause(SQL, 'ticket_drafts_disposition_check')), [
+    'intermediary',
+    'terminal'
+  ]);
+});
+
+test('a reply that resolved nothing can never be the end of the exchange', () => {
+  // The constraint that stops a ticket auto-closing on an acknowledgement. Both
+  // columns come from the same case file, so it can only fail if the derivation
+  // is changed carelessly -- which is exactly when it would matter.
+  assert.match(
+    checkClause(SQL, 'ticket_drafts_human_is_intermediary_check').replace(/\s+/g, ' ').trim(),
+    /source_verdict <> 'needs_human' or disposition = 'intermediary'/
+  );
+});
+
+test('a question is waiting on an answer, so it is never terminal either', () => {
+  assert.match(
+    checkClause(SQL, 'ticket_drafts_question_is_intermediary_check').replace(/\s+/g, ' ').trim(),
+    /source_verdict <> 'needs_customer_input' or disposition = 'intermediary'/
+  );
 });
 
 test('level 4 is never drafted', () => {

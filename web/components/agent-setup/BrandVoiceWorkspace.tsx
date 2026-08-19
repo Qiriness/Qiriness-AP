@@ -23,6 +23,7 @@ interface BrandVoiceWorkspaceProps {
   onTitleChange: (title: string) => void;
   onRoleDescriptionChange: (roleDescription: string) => void;
   onToneAndVoiceChange: (toneAndVoice: string) => void;
+  onClosingLineChange: (closingLine: string) => void;
   onSignatureChange: (signature: string) => void;
   onGeneralContextChange: (html: string, wordCount: number) => void;
   onSave: () => void;
@@ -37,9 +38,9 @@ interface BrandVoiceWorkspaceProps {
  * always-included context every email the drafting agent writes inherits,
  * regardless of subject. Category-specific guidance (e.g. how to write a
  * returns email) belongs in a regular knowledge article instead — never
- * here. Six sections: Agent role description, Agent tone and voice, Response
+ * here. Seven sections: Agent role description, Agent tone and voice, Response
  * framework and Guidelines and guardrails (stored, seeded from defaults, and
- * read-only in this editor for now), Signature, and General context.
+ * read-only in this editor for now), Closing line, Signature, and General context.
  *
  * Every section on this page is stored on the article row and read by the
  * drafting agent as its system prompt — nothing here is decoration.
@@ -56,6 +57,7 @@ export function BrandVoiceWorkspace({
   onTitleChange,
   onRoleDescriptionChange,
   onToneAndVoiceChange,
+  onClosingLineChange,
   onSignatureChange,
   onGeneralContextChange,
   onSave,
@@ -118,6 +120,24 @@ export function BrandVoiceWorkspace({
             label="Guidelines and guardrails"
             items={voiceProfile.guidelinesAndGuardrails}
             layout="list"
+          />
+        </section>
+
+        <section className={voiceStyles.section}>
+          <h3 className={voiceStyles.sectionTitle}>Closing line</h3>
+          <p className={voiceStyles.hint}>
+            The courtesy line just above the signature, reproduced exactly on every reply.
+            Left to the agent it invented one per email and worded it differently every time;
+            approving one wording is what makes it consistent. Clear this box for no closing
+            line at all.
+          </p>
+          <textarea
+            className={voiceStyles.voiceTextarea}
+            value={voiceProfile.closingLine}
+            onChange={(e) => onClosingLineChange(e.target.value)}
+            placeholder={"N’hésitez pas à revenir vers nous si vous avez d’autres questions."}
+            rows={2}
+            aria-label="Closing line"
           />
         </section>
 

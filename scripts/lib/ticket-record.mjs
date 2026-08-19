@@ -212,7 +212,7 @@ export function createTicketRecord(supabase, { shopId, transport = REST_TRANSPOR
      * bill with no one asking for it. It is a per-call argument, and the only
      * caller that passes it is a CLI flag a person typed.
      */
-    async claim(passName, { limit, anyStatus = false } = {}) {
+    async claim(passName, { limit, anyStatus = false, ticketId = null } = {}) {
       const pass = passOrThrow(passName);
       const flags = { [pass.flag]: IS_TRUE };
       for (const [column, value] of Object.entries(pass.where)) {
@@ -220,6 +220,18 @@ export function createTicketRecord(supabase, { shopId, transport = REST_TRANSPOR
           continue;
         }
         flags[column] = typeof value === 'boolean' ? (value ? IS_TRUE : IS_FALSE) : value;
+      }
+      // NARROWS, NEVER WIDENS. `ticketId` adds a filter to the queue rather than
+      // bypassing it: the pass's flag and its `where` still apply, so naming a
+      // ticket that is not due this pass returns nothing rather than running it
+      // anyway. That is what keeps it an operator convenience — "look at this
+      // one" — instead of a second, unguarded way into the pass.
+      //
+      // It exists because the queue is oldest-first over a historical corpus:
+      // 109 imported tickets carry a flag no poll can reach, so re-running one
+      // recent ticket by hand meant running everything before it.
+      if (ticketId) {
+        flags.id = ticketId;
       }
       return select(
         supabase,

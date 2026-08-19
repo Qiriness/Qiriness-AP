@@ -10,6 +10,314 @@ Three sibling files carry the other halves, and this one deliberately does not d
 
 ---
 
+## The last-order candidate becomes a full bundle, in the order tool's own fallback (2026-08-19)
+
+Three corrections to the entry below, all from review.
+
+### The ordering is now structural, not a rule
+
+The candidate was derived from `verifyPurchase`. It is now fetched in
+**`getOrderContext`'s unresolved branch** — so it runs only after the order
+lookup, only when that lookup confirmed nothing, and costs no extra tool call.
+There is no arrangement of the loop in which a confirmed order and a candidate
+both appear: the duplication is *unreachable* rather than forbidden.
+
+### It carries what a reviewer actually needs
+
+`verifyPurchase` reads three columns (`name,processed_at,line_items`) because its
+job is product matching. The candidate now comes from `buildOrderContext` with
+the full order projection, so it holds **order number, status, items, tracking
+and delivery state** — the same shape as a confirmed order, from the same
+builder.
+
+The dashboard therefore renders it with the projection it already has, under
+different headings: **Last order · Last order status · Last order items · Last
+order tracking · Last order delivery**, above a line saying the customer gave no
+number so this may not be the order they mean. `TicketOrderFacts` gained `items`
+for it; the confirmed block does not render them, because there the order is
+already known to be the right one.
+
+Verified on the ticket that prompted this: **#6576**, `FULFILLED`/`PAID`, six
+items, Colissimo **6C21109130351**, dispatched, placed 21 July — against a
+customer writing about "une commande fin juillet".
+
+**The tracking number is a link, and the two blocks now share one renderer.**
+The last-order markup was written by hand rather than reused, and the copy
+dropped the carrier link — so the candidate showed a bare number a reviewer had
+to paste into La Poste themselves. `TrackingList` is now one component used by
+both blocks: the drift two copies of a rendering produce is exactly why it is a
+component.
+
+### It changes no decision, and the verdict flip was not it
+
+Asked directly, and worth stating plainly: `candidate_order` is derived in
+`buildCaseFile` **after** the verdict is settled and is read by nothing in the
+investigation loop. A test now asserts that the same model answer with and
+without a candidate yields the same verdict and the same `missing`.
+
+**The observed change from `needs_customer_input` to `needs_human` was the
+investigation model varying between runs**, measured three times on one ticket
+— including once before the field existed: `needs_customer_input`/missing=1,
+then `needs_human`/missing=1, then `needs_human`/missing=0. That instability is
+real and is tracked separately; it is not caused by this field.
+
+End to end: the drafted reply for that ticket contains no order number and no
+tracking number.
+
+Suites: **1509** root, **905** agent.
+
+---
+
+## The last-order search had already run, and its answer was being thrown away (2026-08-19)
+
+Found from one real ticket: Cathy Faure writes « je vous ai passé une commande
+fin juillet », gives no order number, `getOrderContext` resolves nothing, and the
+ticket goes to a person — who opens Shopify and searches for her most recent
+order by hand.
+
+**That search had already run.** `verifyPurchase` fetches the last order to
+cross-check the product a customer describes, and the registry already put its
+name in the ledger's `data`. `buildCaseFile` then mapped the ledger to
+`{id, tool, argsHash, outcome}` and dropped it. Every ticket of this shape paid
+for the lookup and discarded the result.
+
+### `ticket_investigations.candidate_order`
+
+- **Derived in code from the ledger**, like `deriveDoNotClaim` — never
+  model-authored.
+- **Internal by construction.** Rendered in `toHumanBrief` and in the dashboard's
+  Action block; **absent** from `toDraftingPrompt` and from
+  `investigationForDrafting`. A test asserts the absence rather than trusting the
+  renderer. The customer named no order, so the number may be the wrong one, and
+  quoting the wrong order number at a customer is worse than quoting none.
+- **Empty when an order was confirmed** — the bundle already says everything it
+  could, and a second candidate would invite the reader to wonder which is real.
+- **Shown apart from the findings**, captioned by what the product cross-check
+  concluded: "contains the product they describe" and "the product is not in it"
+  are different confidences in the same number.
+
+Verified on Cathy's ticket: **#6576**, six products, `not_in_last_order`. That is
+the order a reviewer would otherwise have gone and found.
+
+Schema applied forward to the live table (the fourth alteration; clause extracted
+from `04_support.sql`, one transaction, 81 existing rows defaulted to `{}`).
+
+### `npm run investigate -- --ticket <id>`
+
+Needed to prove the above: the investigation queue is oldest-first, and 109
+imported tickets carry a flag no poll can reach, so re-running one recent ticket
+meant paying for everything ahead of it. `record.claim(pass, { ticketId })`
+**narrows the queue and never bypasses it** — the pass's flag and `where` still
+apply, so naming a ticket that is not due returns nothing rather than running it
+anyway. That keeps it an operator convenience, not a second way into a pass.
+
+Suites: **1508** root, **904** agent.
+
+---
+
+## The closing line is approved rather than forbidden (2026-08-19)
+
+A correction to the same day's entry below. The advisory added there recorded
+that **31 of 81** drafts ended with an invented courtesy line, and read that as
+the model doing something it had been told not to. It was the model filling a
+real gap: « N’hésitez pas à revenir vers nous si vous avez d’autres questions »
+is worth saying, and on an `answerable` reply it is the exact caveat the intent
+rules ask for. Nobody had approved a wording, so it wrote a new one every time.
+
+- **`closingLine` joins `signature`** as a stored, editable field on the Brand
+  voice page, seeded with that sentence, reproduced verbatim in the prompt just
+  above the signature. Clearing the box means no closing line at all.
+- **Same mechanism as the signature, because the mechanism is proven** — the
+  signature check passes 81/81, so a verbatim block plus an exact check is
+  reliable enough not to need code that appends it after the fact.
+- **`closing_line`** is a real check: the approved wording must be present.
+- **`empty_closer` stays advisory** and now runs against the text **with the
+  approved line removed**, so what it reports is a *second*, invented closer.
+  Without that removal, approving a wording would have flagged every draft that
+  used it. It also now recognises « n’hésitez pas à revenir vers nous », the
+  variant the brand voice names and the old pattern missed.
+- The structural rule flipped from "do not end with a courtesy formula" to "do
+  not invent one — the approved closing line is the only one allowed".
+
+**The advisory strips every approved block, not just the new field.** The live
+brand-voice row already carried the sentence inside `signature` — written there
+before a Closing line field existed — so scanning only for the new field would
+have flagged an approved sentence as invented on every draft. Text a person
+approved is not text a model invented, whichever field it was approved in, so
+both are removed before the scan. Either arrangement works; keeping them in
+separate fields is tidier but nothing forces it.
+
+**No re-draft.** The existing 81 keep their text; this takes effect on the next
+drafting run. Suites: **1502** root, **899** agent.
+
+---
+
+## The drafting behaviour is now three real behaviours, not one with a mute button (2026-08-19)
+
+**The acknowledgement was generic because it was told to be.** It was instructed
+to resolve nothing and to stay inside three or four sentences, and it obeyed: 49
+drafts saying « votre demande est en cours de traitement », written from case
+files that held the product, its two-year warranty and exactly what could not be
+confirmed. The material for a specific reply was already in the prompt — the
+instructions forbade using it.
+
+All 81 drafts re-written. **0 of 49 handovers still say « en cours de
+traitement ».** Median length by verdict is now 559 / 526 / 565 characters —
+a handover carries the same substance as an answer, where before it was 293.
+
+### The three rule sets, rewritten to one shape
+
+Every verdict now **answers what it can first**, and the unresolved part follows
+rather than replaces it.
+
+| Verdict | The reply |
+| --- | --- |
+| `answerable` | Resolve completely; no follow-up question; the customer should have no reason to reply |
+| `needs_customer_input` | Explain what is established, say why the missing fact is needed, then ask for exactly that. Never turn the whole reply into a request |
+| `needs_human` | Answer what is established, **name the specific point needing a check**, say the team is taking that point |
+
+Nothing was loosened: `established` is still the only source of facts and
+`unverified` is still only ever attributed to the customer.
+
+**Reordering alone was not enough, and the measurement is why the rules say more
+than the reorder.** Across eight handover drafts only **4 of 24** established
+facts reached the reply — "answer what can be answered" reads to a model as
+"acknowledge the topic". A rule naming the obligation (*a useful established fact
+not passed on is one the customer will have to ask for again*) roughly doubled
+it. On the LED-mask ticket that is the difference between a reply that states the
+two-year warranty and one that does not.
+
+### Asking is licensed by the case file, not by the verdict
+
+One rule replaced three: **a reply may ask for a fact only if the case file named
+it.** It implements « ne pas demander d'information supplémentaire » on an
+answer, « demander uniquement cette information » on a question and « ne demander
+une information que si le dossier en nomme une » on a handover, because those are
+one rule seen from three sides.
+
+It also closes the contradiction flagged on 2026-08-18: `toDraftingPrompt`
+renders « À demander au client » whenever `missing` is non-empty regardless of
+verdict, so 9 of 49 handovers were handed a question to ask *and* told never to
+ask. All 9 resolved the safe way, which was luck. A named field now licenses the
+question and the check scores which fact was asked for; an unnamed one fails as
+invented.
+
+### One new check, one new advisory
+
+- **`no_completed_action`** — « Après vérification, nous avons constaté… » is real
+  text from this desk's own outbound mail, and on a handover it is false: the
+  verification is the thing that has not happened. Keyed on the verbs of checking,
+  so « nous avons bien reçu votre message » stays allowed. It caught one live
+  draft.
+- **`empty_closer`, advisory.** The brand voice forbids empty courtesy, a
+  structural rule repeats it, and the model still closed **31 of 81** drafts with
+  « nous restons à votre disposition » or « merci de votre patience ». It is a
+  weak sentence, not a wrong one, and `checks_passed` gates auto-send — so it is
+  recorded (`passed: null`) and never refused.
+
+### Result
+
+**78 of 81 pass; the 3 failures are the checks working** — two handovers asked a
+question the dossier had not named, one wrote « Nous avons constaté ». The
+handoff stays withheld: `action` names a refund or replacement on 10 of 49, and
+"what needs attention" is derivable from `unverified` without it.
+
+Suites: **1496** from the repo root, **893** in `agent/`.
+
+---
+
+## Every verdict now gets a reply, and a draft says whether sending it ends the thread (2026-08-18)
+
+Two changes, one reversal and one new axis. **81 drafts now exist over the whole
+investigated corpus** — 15 `answerable`, 17 `needs_customer_input`, **49
+`needs_human`** — and **81 of 81 pass the mechanical checks**.
+
+### `needs_human` gets an acknowledgement — the original rule was wrong
+
+Drafting shipped with `needs_human` producing nothing, because a case file that
+resolved nothing has nothing to say. That reasoning was about the agent, and the
+cost fell on three other parties: the **customer** heard nothing at all while a
+colleague worked the ticket; the **colleague** opened a blank page instead of an
+editable draft; and a wait that turned out to be long was indistinguishable from
+being ignored.
+
+- **`REPLY_INTENTS.needs_human` has read `acknowledge` since the case file was
+  designed**, with a note that Phase 5 would decide whether it meant sending one.
+  This is that decision.
+- **`INTENT_RULES`, keyed by verdict**, replace a single flat instruction set.
+  The three contradict each other by design — the reply that must ask is
+  forbidden from answering — so sending all three would hand the model a prompt
+  that argues with itself. Only the matching set travels.
+- **The acknowledgement is safe because of what it may not contain.** No answer,
+  no deadline, no promise, no question. That matters more here than anywhere
+  else: **7 of the 49** are written from a case file with **zero** established
+  facts.
+- **`ACKNOWLEDGEMENT_PROHIBITIONS` checks two of those mechanically**, plus any
+  invented question. A promised deadline is the one that costs money — « nous
+  revenons vers vous sous 24 heures » is the most natural way to end a holding
+  reply, it is a commitment nobody agreed to, and the customer who does not hear
+  back has a second complaint that is entirely ours.
+- **Never auto-send eligible, at any level.** The verdict says a person owns the
+  next move, and what they need first is the chance to answer properly rather
+  than to follow an automated note the customer has already read.
+
+Measured: acknowledgements average **293 characters** against **595** for an
+answer — brief, as instructed.
+
+### `disposition`: terminal or intermediary
+
+Every draft now records whether sending it **ends** the exchange:
+
+| | |
+|---|---|
+| `terminal` | nothing expected back, nothing left to do. **The send is what closes the ticket** |
+| `intermediary` | the customer owes us an answer, or a colleague owes them one. Sending closes nothing |
+
+**15 terminal · 66 intermediary.**
+
+- **Derived in code, never asked of the model.** "Is this exchange finished"
+  decides whether a ticket closes, and it is the judgement a drafting model has
+  the least evidence for — it sees the reply it just wrote, not the work behind
+  it.
+- **Two conditions**: `answerable` AND no `handoff` on the case file. Measured
+  2026-08-18, all 49 `needs_human` case files carry a handoff and none of the 15
+  `answerable` ones do, so today the verdict alone would agree. Both are checked
+  because the direction they could disagree in is the dangerous one — an
+  answerable case file that also names an action must not close on send.
+- **Two check constraints say the same thing in the database**, so a careless
+  change to the derivation fails at the write rather than at the send.
+- **`handoff` is selected and reduced to a boolean at the store boundary.** It is
+  the one internal column the drafting projection would otherwise exclude; the
+  derivation needs to know *whether* a human owes an action, never *what*. The
+  text exists for one line and never reaches the runner, let alone the prompt.
+
+**The auto-close on send is what this exists for and is NOT built** — the send
+path is still blocked on the mailbox question. What is built is the record a send
+would read.
+
+### Schema, forward-applied
+
+`07_drafting.sql` widened its verdict check and gained `disposition` (the third
+alteration; see `DECISIONS.md § Migrations`, updated). Column added nullable,
+32 existing drafts classified from their verdict, then set `not null` — a default
+would have labelled them silently.
+
+### Also
+
+- **A rate limit, not a bug.** The 49-draft backfill failed 10 on the first pass
+  with HTTP 429: gpt-4o is capped at **30 000 TPM** here and a draft costs ~2 400,
+  so a sustained batch outruns the retry backoff at roughly 12/minute. Failure
+  isolation worked as designed and the derived queue converged on re-run. **A
+  large backfill needs pacing the runner does not have** — worth adding before
+  any run much bigger than this one.
+- The thread dialog names an acknowledgement as one ("resolves nothing") and
+  states the consequence of sending under every draft: approving one is
+  approving what it does to the ticket.
+
+Suites: **1477** from the repo root, **877** in `agent/`.
+
+---
+
 ## The drafting agent writes its first 32 replies (2026-08-17)
 
 `agent/src/drafting/`, `npm run draft`. **32 drafts over the whole draftable set**

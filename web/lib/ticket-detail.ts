@@ -46,6 +46,8 @@ export interface InvestigationRecord {
   unverified: { claim?: string | null; why?: string | null }[];
   missing: { field?: string | null }[];
   handoff: { action?: string | null; why?: string | null } | null;
+  /** Internal candidate order: a full bundle, same shape as resolved_context. */
+  candidateOrder?: unknown;
   investigatedAt: string | null;
 }
 
@@ -90,8 +92,19 @@ export function summariseInvestigation(record: InvestigationRecord): TicketResul
     // is: pairing it with "reply to the customer" would read as an instruction.
     actionReason:
       verdict === "needs_human" ? nonEmpty(record.handoff?.why) : null,
+    // THE SAME PROJECTION AS A CONFIRMED ORDER, deliberately: the bundle is
+    // built by the same builder, so rendering it needs no second set of
+    // decisions about what a reader is shown. Only the headings differ.
+    candidateOrder: hasOrder(record.candidateOrder)
+      ? summariseOrderContext(record.candidateOrder)
+      : null,
     investigatedAt: record.investigatedAt,
   };
+}
+
+/** A bundle with an order in it, as opposed to the `{}` the column defaults to. */
+function hasOrder(bundle: unknown): boolean {
+  return Boolean((bundle as { order?: unknown } | null)?.order);
 }
 
 function deriveAction(verdict: InvestigationVerdict, record: InvestigationRecord): string {
@@ -148,6 +161,7 @@ export function summariseOrderContext(context: unknown): TicketOrderFacts | null
     orderStatus: labelOrderStatus(order.status?.overall),
     trackingStatus: labelDeliveryState(delivery.state),
     tracking: readTracking(delivery.tracking),
+    items: readItems(order.items),
     resolvedAt: nonEmpty((context as any)?.resolvedAt),
   };
 
@@ -159,11 +173,24 @@ export function summariseOrderContext(context: unknown): TicketOrderFacts | null
     !facts.contactEmail &&
     !facts.orderStatus &&
     !facts.trackingStatus &&
-    facts.tracking.length === 0
+    facts.tracking.length === 0 &&
+    facts.items.length === 0
   ) {
     return null;
   }
   return facts;
+}
+
+/** Line-item titles, deduplicated — a bundle repeats a title per unit. */
+function readItems(items: unknown): string[] {
+  if (!Array.isArray(items)) return [];
+  return [
+    ...new Set(
+      items
+        .map((item) => nonEmpty((item as { title?: string })?.title))
+        .filter((title): title is string => Boolean(title))
+    ),
+  ];
 }
 
 function labelOrderStatus(value: unknown): string | null {

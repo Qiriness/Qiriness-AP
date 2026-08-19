@@ -3,6 +3,7 @@ import test from 'node:test';
 
 import { CAVEATS, MISSING_FIELDS } from '../investigation/case-file.mjs';
 import {
+  ACKNOWLEDGEMENT_PROHIBITIONS,
   ADVISORY_CAVEATS,
   ASK_TERMS,
   MECHANICAL_PROHIBITIONS,
@@ -307,4 +308,229 @@ test('failedChecks reports what a reviewer has to read, and nothing else', () =>
   assert.equal(failures.length, 2);
   assert.ok(failures.some((detail) => /nie l’achat/.test(detail)));
   assert.ok(failures.some((detail) => /adresse e-mail/.test(detail)));
+});
+
+// --- what only an acknowledgement is forbidden -------------------------------
+
+const ACK = { verdict: 'needs_human', signature: SIGNATURE };
+
+test('a promised deadline is caught — the one that costs money', () => {
+  // « Nous revenons vers vous sous 24 heures » is the most natural way to end a
+  // holding reply and a commitment nobody agreed to. The customer who does not
+  // hear back in 24 hours now has a second complaint that is entirely ours.
+  for (const body of [
+    `Bonjour,
+
+Nous revenons vers vous sous 24 heures.
+
+${SIGNATURE}`,
+    `Bonjour,
+
+Une réponse vous parviendra d’ici la fin de la semaine.
+
+${SIGNATURE}`,
+    `Bonjour,
+
+Nous vous répondrons dans les 48 heures.
+
+${SIGNATURE}`
+  ]) {
+    assert.equal(check(runDraftChecks({ ...ACK, body }), 'no_promised_deadline').passed, false, body);
+  }
+});
+
+test('a holding reply with no deadline passes', () => {
+  const body =
+    `Bonjour Catherine,
+
+Nous avons bien reçu votre message concernant votre commande. ` +
+    `Votre demande est prise en charge par notre équipe, qui reviendra vers vous.
+
+${SIGNATURE}`;
+  assert.equal(checksPassed(runDraftChecks({ ...ACK, body })), true);
+});
+
+test('a promised outcome is caught', () => {
+  const body = `Bonjour,
+
+Nous allons vous rembourser cette commande.
+
+${SIGNATURE}`;
+  assert.equal(check(runDraftChecks({ ...ACK, body }), 'no_promise').passed, false);
+});
+
+test('a question invented by an acknowledgement is caught', () => {
+  // The case file named nothing to ask for, so any request is one the model
+  // invented — and the customer will answer it, turning a holding note into a
+  // thread nobody meant to open.
+  const body = `Bonjour,
+
+Pourriez-vous nous indiquer votre numéro de commande ?
+
+${SIGNATURE}`;
+  assert.equal(check(runDraftChecks({ ...ACK, body }), 'no_invented_question').passed, false);
+});
+
+const NL = String.fromCharCode(10);
+const wrap = (middle) => 'Bonjour,' + NL + NL + middle + NL + NL + SIGNATURE;
+
+test('the handover-only prohibitions apply to handovers only', () => {
+  const checks = runDraftChecks({
+    body: wrap('Pourriez-vous nous indiquer le code promotionnel ?'),
+    verdict: 'needs_customer_input',
+    missing: [{ field: 'promotion_code' }],
+    signature: SIGNATURE
+  });
+  for (const { check: name } of ACKNOWLEDGEMENT_PROHIBITIONS) {
+    assert.equal(check(checks, name), undefined, name + ' must not apply here');
+  }
+  // It was asked to ask, so it is scored on WHAT it asked for, not on whether.
+  assert.equal(check(checks, 'no_invented_question'), undefined);
+  assert.equal(check(checks, 'asks:promotion_code').passed, true);
+});
+
+test('asking is licensed by the case file, not by the verdict', () => {
+  // ONE RULE, THREE INSTRUCTIONS: "do not ask for more" on an answer, "ask only
+  // for this" on a question, and "ask only if the dossier names one" on a
+  // handover are the same rule seen from three sides.
+  const asks = wrap('Pourriez-vous nous indiquer votre numéro de commande ?');
+
+  for (const verdict of ['answerable', 'needs_human']) {
+    assert.equal(
+      check(runDraftChecks({ body: asks, verdict, signature: SIGNATURE }), 'no_invented_question').passed,
+      false,
+      verdict
+    );
+  }
+
+  const licensed = runDraftChecks({
+    body: asks,
+    verdict: 'needs_human',
+    missing: [{ field: 'shopify_order_number' }],
+    signature: SIGNATURE
+  });
+  assert.equal(check(licensed, 'no_invented_question'), undefined);
+  assert.equal(check(licensed, 'asks:shopify_order_number').passed, true);
+});
+
+test('an answerable case file never licenses a question, even carrying a missing field', () => {
+  // The verdict says the dossier is sufficient; a follow-up on top of a complete
+  // answer is the padding the brand voice rejects.
+  const checks = runDraftChecks({
+    body: wrap('Votre commande part demain. Pourriez-vous nous indiquer votre numéro de commande ?'),
+    verdict: 'answerable',
+    missing: [{ field: 'shopify_order_number' }],
+    signature: SIGNATURE
+  });
+  assert.equal(check(checks, 'no_invented_question').passed, false);
+  assert.equal(check(checks, 'asks:shopify_order_number'), undefined);
+});
+
+test('claiming a check has already happened is caught', () => {
+  for (const middle of [
+    'Après vérification, votre colis est bien perdu.',
+    'Nous avons vérifié votre commande.',
+    'Notre équipe a confirmé le problème.'
+  ]) {
+    assert.equal(
+      check(
+        runDraftChecks({ body: wrap(middle), verdict: 'needs_human', signature: SIGNATURE }),
+        'no_completed_action'
+      ).passed,
+      false,
+      middle
+    );
+  }
+});
+
+test('confirming receipt of the message is not a completed action', () => {
+  // "Nous avons bien recu votre message" must stay allowed, so the pattern is
+  // keyed on the verbs of checking rather than on "nous avons".
+  const checks = runDraftChecks({
+    body: wrap('Nous avons bien reçu votre message.'),
+    verdict: 'needs_human',
+    signature: SIGNATURE
+  });
+  assert.equal(check(checks, 'no_completed_action').passed, true);
+});
+
+// --- the approved closing line -----------------------------------------------
+
+const CLOSING = 'N’hésitez pas à revenir vers nous si vous avez d’autres questions.';
+
+test('the approved closing line is checked exactly, like the signature', () => {
+  const ok = runDraftChecks({
+    body: wrap('Votre commande part demain.' + NL + NL + CLOSING),
+    verdict: 'answerable',
+    closingLine: CLOSING,
+    signature: SIGNATURE
+  });
+  assert.equal(check(ok, 'closing_line').passed, true);
+
+  const missing = runDraftChecks({
+    body: wrap('Votre commande part demain.'),
+    verdict: 'answerable',
+    closingLine: CLOSING,
+    signature: SIGNATURE
+  });
+  assert.equal(check(missing, 'closing_line').passed, false);
+});
+
+test('no configured closing line means no closing-line check', () => {
+  const checks = runDraftChecks({
+    body: wrap('Votre commande part demain.'),
+    verdict: 'answerable',
+    signature: SIGNATURE
+  });
+  assert.equal(check(checks, 'closing_line'), undefined);
+});
+
+test('the approved line is not itself flagged as invented courtesy', () => {
+  // It contains "n'hesitez pas a revenir vers nous", which the advisory pattern
+  // matches on purpose — so the advisory runs on the text with the approved line
+  // removed, or approving a wording would flag every draft that used it.
+  const checks = runDraftChecks({
+    body: wrap('Votre commande part demain.' + NL + NL + CLOSING),
+    verdict: 'answerable',
+    closingLine: CLOSING,
+    signature: SIGNATURE
+  });
+  assert.match(check(checks, 'empty_closer').detail, /aucune formule/);
+});
+
+test('a second courtesy line beside the approved one is still recorded', () => {
+  const checks = runDraftChecks({
+    body: wrap('Votre commande part demain.' + NL + NL + 'Merci de votre patience.' + NL + NL + CLOSING),
+    verdict: 'answerable',
+    closingLine: CLOSING,
+    signature: SIGNATURE
+  });
+  const entry = check(checks, 'empty_closer');
+  assert.equal(entry.passed, null);
+  assert.match(entry.detail, /non approuvée/);
+});
+
+test('an invented courtesy line never fails a draft', () => {
+  // A weak sentence, not a wrong one, and checks_passed gates auto-send.
+  const checks = runDraftChecks({
+    body: wrap('Votre commande part demain.' + NL + NL + 'Nous restons a votre disposition.'),
+    verdict: 'answerable',
+    signature: SIGNATURE
+  });
+  assert.equal(check(checks, 'empty_closer').passed, null);
+  assert.equal(checksPassed(checks), true);
+});
+
+test('courtesy inside the signature is approved text, not invented text', () => {
+  // Measured on the live brand-voice row: the sentence was written into the
+  // signature field before a Closing line field existed. Text a person approved
+  // is not text a model invented, whichever field it was approved in.
+  const combined = CLOSING + NL + NL + SIGNATURE;
+  const checks = runDraftChecks({
+    body: 'Bonjour,' + NL + NL + 'Votre commande part demain.' + NL + NL + combined,
+    verdict: 'answerable',
+    signature: combined
+  });
+  assert.equal(check(checks, 'signature').passed, true);
+  assert.match(check(checks, 'empty_closer').detail, /aucune formule/);
 });

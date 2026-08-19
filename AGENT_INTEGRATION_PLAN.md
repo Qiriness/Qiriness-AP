@@ -263,9 +263,28 @@ So Phase 5's remaining work is **drafting, and the level gate around it**.
      L2 10 · L3 2 across all 15).
    - `needs_customer_input` → draft the question, using the stored `MISSING_FIELDS` wording.
      **16 case files, 13 still `awaiting_customer`.**
-   - `needs_human` → **no customer-facing draft at all**; the human brief already exists and
-     is what the dashboard shows. **49 case files, 48 still `awaiting_human`.**
-   - no case file → nothing to draft from. That is a normal state, not an error.
+   - `needs_human` → **a reply that answers what it can and hands over the rest**, reversed
+     twice. The original rule was "no customer-facing draft at all"; the first fix drafted an
+     acknowledgement that was told to resolve nothing, and produced 49 near-identical
+     « votre demande est en cours de traitement ». Since 2026-08-19 it answers from the
+     established facts, names the specific point needing a check, and says the team is taking
+     that point — never a deadline, a promise, or a claim that a check already happened.
+     **49 drafted, all `intermediary`, none auto-send eligible, 0 still generic.**
+
+   **All three verdicts now share one shape: answer first, then the unresolved part.** A
+   reply may ask for a fact only if the case file named it — one rule covering "do not ask
+   for more" on an answer, "ask only for this" on a question and "ask only if named" on a
+   handover.
+
+3b. **The terminal / intermediary split, which is what a send may act on.** Every draft
+   records whether sending it ENDS the exchange (`terminal`: nothing expected back, nothing
+   left to do — the send is what closes the ticket) or does not (`intermediary`: the
+   customer owes us an answer, or a colleague owes them one). Derived in code from the
+   verdict and the case file's `handoff`, never asked of the model, and stored on the row so
+   the decision travels with the text it was made about. Measured: **15 terminal, 66
+   intermediary**. The auto-close on send is what this exists for and is not built — the
+   send path is still blocked on the mailbox question.
+
 4. **The level gate on top of it**, all of it inert while `DRAFT_ONLY` is on: L1 auto-send ·
    L2 auto-send + suggested action · L3 human-approved · L4 never drafted. Graduating L1 then
    L2 is a config flip, not a rebuild. **Gate on `level` + `happiness`, never on

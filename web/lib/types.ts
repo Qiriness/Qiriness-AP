@@ -205,6 +205,16 @@ export interface VoiceProfile {
   responseFramework: string[];
   guidelinesAndGuardrails: string[];
   /**
+   * The closing courtesy line, immediately above the signature.
+   *
+   * STORED FOR THE SAME REASON THE SIGNATURE IS, and the reason is a
+   * measurement: left to the model, 31 of 81 drafts invented their own closer
+   * and wrote it 31 different ways. The line is worth saying — it tells the
+   * customer the door is open — so the fix is not to forbid it but to approve
+   * one wording and reproduce it. Empty means no closing line at all.
+   */
+  closingLine: string;
+  /**
    * The sign-off appended to every drafted reply. The response framework's last
    * step is "apply the approved signature", and until this existed there was no
    * approved signature anywhere in the system for it to refer to.
@@ -221,6 +231,16 @@ export const DEFAULT_RESPONSE_FRAMEWORK: string[] = [
   "Close politely",
   "Apply the approved signature",
 ];
+
+/**
+ * Seed wording for the closing line. Stored on first save, editable after.
+ *
+ * Seeded rather than left blank because the alternative is not "no closing
+ * line" — it is the model inventing one per draft, which is the behaviour this
+ * field exists to replace.
+ */
+export const DEFAULT_CLOSING_LINE =
+  "N’hésitez pas à revenir vers nous si vous avez d’autres questions.";
 
 /** Seed content for the "Guidelines and guardrails" section. Stored on first save. */
 export const DEFAULT_GUIDELINES_AND_GUARDRAILS: string[] = [
@@ -242,6 +262,7 @@ export const EMPTY_VOICE_PROFILE: VoiceProfile = {
   // different thing from "nobody has edited it yet".
   responseFramework: DEFAULT_RESPONSE_FRAMEWORK,
   guidelinesAndGuardrails: DEFAULT_GUIDELINES_AND_GUARDRAILS,
+  closingLine: DEFAULT_CLOSING_LINE,
   signature: "",
 };
 
@@ -547,6 +568,13 @@ export interface TicketOrderFacts {
   /** Already labelled. Null when the bundle carries no delivery block. */
   trackingStatus: string | null;
   tracking: TicketTracking[];
+  /**
+   * Line-item titles. Read for the LAST-ORDER block, where "is this the order
+   * they mean" is the question a reviewer is actually answering and the items
+   * are what answers it. The confirmed block does not render them — there the
+   * order is already known to be the right one.
+   */
+  items: string[];
   /** When the bundle was assembled; a stale one describes an older order state. */
   resolvedAt: string | null;
 }
@@ -576,6 +604,17 @@ export interface TicketResults {
   action: string;
   /** Why a human was asked for. Internal — never customer-facing. */
   actionReason: string | null;
+  /**
+   * The customer's most recent order, when they named none.
+   *
+   * SAME SHAPE AS THE CONFIRMED BLOCK, so the panel renders it with the
+   * component it already has under different headings. A CANDIDATE, not a
+   * finding: it answers "which order did they most recently place", never
+   * "which order do they mean". Never reaches the drafting agent, and never
+   * appears beside a confirmed order — the tool fetches it only in the branch
+   * where nothing was confirmed.
+   */
+  candidateOrder: TicketOrderFacts | null;
   investigatedAt: string | null;
 }
 
@@ -672,7 +711,15 @@ export interface TicketDraft {
   body: string;
   approvedBody: string | null;
   /** Which kind of reply this is; decided by the case file, never by wording. */
-  sourceVerdict: "answerable" | "needs_customer_input";
+  sourceVerdict: "answerable" | "needs_customer_input" | "needs_human";
+  /**
+   * Whether sending this ends the thread.
+   *
+   * `terminal` is the only one a send may close the ticket on. `intermediary`
+   * means somebody still owes somebody an answer — the customer owes us one, or
+   * a colleague owes them one — so it moves the ticket rather than finishing it.
+   */
+  disposition: "terminal" | "intermediary";
   status: TicketDraftStatus;
   /**
    * Whether every mechanical check passed: the case file's prohibitions, the

@@ -1,3 +1,5 @@
+import { TOOL_NAMES } from './investigation-rules.mjs';
+
 // The case file — what the investigation agent hands to the drafting agent.
 //
 // This module is the CONTRACT, and it is pure: a model answer plus a ledger of
@@ -302,6 +304,44 @@ export function deriveDoNotClaim({ caveats = [], missing = [] } = {}) {
 }
 
 /**
+ * The order a human should look at first, when no order was confirmed.
+ *
+ * WHY THIS EXISTS. A customer writes « je vous ai passé une commande fin
+ * juillet » and gives no number. `getOrderContext` resolves nothing, the ticket
+ * goes to a person — and that person opens Shopify and looks up the customer's
+ * most recent order by hand. The tool layer can do that lookup in the same call
+ * that failed to confirm one, so it does, and this keeps the answer.
+ *
+ * IT IS THE ORDER TOOL'S FALLBACK BRANCH, which is what makes the ordering
+ * structural rather than a rule somebody has to remember: it runs only after
+ * the order lookup, only when that lookup confirmed nothing, and costs no extra
+ * tool call. There is no arrangement of the loop in which a confirmed order and
+ * a candidate both appear — the duplication is unreachable, not merely
+ * forbidden.
+ *
+ * INTERNAL, AND THAT IS THE WHOLE POINT. This is a CANDIDATE, not a fact: the
+ * customer never named an order, so it answers "which order did they most
+ * recently place", never "which order do they mean". It is rendered in
+ * `toHumanBrief` and in the dashboard, and it is ABSENT from `toDraftingPrompt`
+ * and from `investigationForDrafting`, for the same reason `handoff` is: a
+ * number a model can see is a number it can quote, and quoting the wrong order
+ * number at a customer is worse than quoting none.
+ *
+ * IT CHANGES NO DECISION. It is derived here, after the verdict is settled, and
+ * read by nothing in the investigation loop. Adding it cannot move a ticket
+ * between verdicts — a test asserts that, because the question was asked.
+ */
+export function deriveCandidateOrder(ledger = []) {
+  const order = ledger.find((entry) => entry.tool === TOOL_NAMES.GET_ORDER_CONTEXT);
+  if (!order || order.data?.confirmed || !order.data?.candidate?.order) {
+    return {};
+  }
+  // The bundle exactly as `buildOrderContext` produced it, so the dashboard
+  // reads it with the projection it already has for a confirmed order.
+  return order.data.candidate;
+}
+
+/**
  * Assembles the stored case file from the model's answer and everything code
  * knows independently of it.
  *
@@ -349,6 +389,10 @@ export function buildCaseFile({
     unverified,
     missing,
     doNotClaim: deriveDoNotClaim({ caveats, missing }),
+    // The order a human should check first when none was confirmed. Derived
+    // from the ledger, never model-authored, and never shown to the drafting
+    // stage -- see deriveCandidateOrder.
+    candidateOrder: deriveCandidateOrder(ledger),
     knowledge: Array.isArray(knowledge) ? knowledge : [],
     // A POINTER, not a copy. The order/customer bundle already lives in
     // tickets.resolved_context: copying it here would duplicate personal data
@@ -434,6 +478,26 @@ export function toDraftingPrompt(caseFile) {
  */
 export function toHumanBrief(caseFile) {
   const parts = [toDraftingPrompt(caseFile)];
+
+  // Before the handoff: it is the first thing a person would otherwise go and
+  // look up, and the whole reason for keeping it is to save them that step.
+  const candidate = caseFile.candidateOrder?.order;
+  if (candidate?.name) {
+    const items = (candidate.items || []).map((item) => item.title).filter(Boolean);
+    const tracking = (candidate.delivery?.tracking || []).map((t) => t.number).filter(Boolean);
+    const lines = [`- Commande : ${candidate.name}`];
+    lines.push(
+      `- Statut : ${candidate.status?.fulfillment || 'inconnu'}` +
+        (candidate.status?.payment ? ` · paiement ${candidate.status.payment}` : '')
+    );
+    if (items.length > 0) lines.push(`- Articles : ${items.join(', ')}`);
+    if (tracking.length > 0) lines.push(`- Suivi : ${tracking.join(', ')}`);
+    lines.push('- Le client n’a donné aucun numéro : à vérifier avant toute réponse.');
+    parts.push(
+      '## Dernière commande de ce client (interne — piste, non confirmée)\n' +
+        lines.join('\n')
+    );
+  }
 
   if (caseFile.handoff) {
     parts.push(`## Action requise (interne)\n- ${caseFile.handoff.action}\n- Motif : ${caseFile.handoff.why}`);

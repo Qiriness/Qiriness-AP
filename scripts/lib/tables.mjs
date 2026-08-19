@@ -226,22 +226,32 @@ export const COLUMNS = {
     'id,subject,body_text,received_at,from_email,embedding,has_attachments,attachments',
 
   /** The case file, latest run, as the detail panel reads it. */
+  // `candidate_order` travels HERE and deliberately not in
+  // `investigationForDrafting`: it is the order a human should check first, and
+  // a number a model can see is a number it can quote.
   investigationForDetail:
-    'verdict,established,unverified,missing,handoff,investigated_at,evidence_gaps',
+    'verdict,established,unverified,missing,handoff,candidate_order,investigated_at,evidence_gaps',
 
   /**
    * The case file as the drafting pass reads it back.
    *
-   * `handoff`, `tool_calls` and `dropped_claims` are ABSENT, and their absence
-   * here is the same guarantee `toDraftingPrompt` makes one layer up: internal
-   * notes reaching a customer reply is the failure that split exists to make
-   * impossible, and not selecting them is cheaper than trusting a renderer not
-   * to print them. `investigated_at` travels because the newest reading of a
-   * ticket is the only one worth drafting.
+   * `tool_calls` and `dropped_claims` are ABSENT, and their absence is the same
+   * guarantee `toDraftingPrompt` makes one layer up: internal notes reaching a
+   * customer reply is the failure that split exists to make impossible, and not
+   * selecting them is cheaper than trusting a renderer not to print them.
+   * `investigated_at` travels because the newest reading of a ticket is the only
+   * one worth drafting.
+   *
+   * `handoff` IS SELECTED, and it is the one exception worth stating. The
+   * draft's `disposition` turns on whether a human owes an action, which is
+   * exactly what a handoff records — and getting it wrong closes a ticket
+   * somebody still owes work on. The store reduces it to a boolean the moment it
+   * arrives (`draft-runner.mjs`), so the internal prose exists for one line and
+   * never reaches the runner or the prompt.
    */
   investigationForDrafting:
     'id,ticket_id,trigger_message_id,verdict,established,unverified,missing,do_not_claim,' +
-    'knowledge,investigated_at',
+    'knowledge,handoff,investigated_at',
 
   /**
    * A draft as both readers need it: the dashboard rendering it for approval,
@@ -253,9 +263,9 @@ export const COLUMNS = {
    * call, not part of the reply, and it is the largest column here.
    */
   draftForReview:
-    'id,ticket_id,trigger_message_id,source_verdict,level,language,subject,body_text,' +
-    'approved_body_text,status,checks,checks_passed,auto_send_eligible,model,drafted_at,' +
-    'review_sent_at',
+    'id,ticket_id,trigger_message_id,source_verdict,disposition,level,language,subject,' +
+    'body_text,approved_body_text,status,checks,checks_passed,auto_send_eligible,model,' +
+    'drafted_at,review_sent_at',
 
   /**
    * The embedding determinism quadruple, plus whatever composes the input.

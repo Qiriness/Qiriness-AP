@@ -81,7 +81,10 @@ export async function runDrafting({
     try {
       const answer = await openai.completeJson({
         model,
-        system: composeSystemPrompt(brandVoice, { language }),
+        // The verdict picks which INTENT_RULES set travels: answer, ask, or
+        // only acknowledge. Sending all three would hand the model a prompt
+        // that contradicts itself and let it choose.
+        system: composeSystemPrompt(brandVoice, { language, verdict: investigation.verdict }),
         user: composeDraftingMessage({ message, caseFile, orderContext, ticket }),
         schema: DRAFT_SCHEMA,
         schemaName: 'draft',
@@ -107,6 +110,7 @@ export async function runDrafting({
         doNotClaim: caseFile.doNotClaim,
         missing: caseFile.missing,
         verdict: investigation.verdict,
+        closingLine: brandVoice.closingLine,
         signature: brandVoice.signature
       });
       const passed = checksPassed(checks);
@@ -116,6 +120,10 @@ export async function runDrafting({
         triggerMessageId: investigation.trigger_message_id,
         investigationId: investigation.id,
         sourceVerdict: investigation.verdict,
+        // Derived by draftDecision from the verdict and the case file's
+        // handoff, and carried here rather than recomputed at send time: it
+        // decides whether sending closes the ticket.
+        disposition: decision.disposition,
         level: ticket.level ?? null,
         language,
         subject: answer?.subject || null,
@@ -125,7 +133,8 @@ export async function runDrafting({
         autoSendEligible: autoSendEligible({
           level: ticket.level,
           happiness: ticket.happiness,
-          checksPassed: passed
+          checksPassed: passed,
+          verdict: investigation.verdict
         }),
         promptInputs: promptInputs({
           caseFile,
@@ -174,7 +183,9 @@ export function createDraftingStore(supabase) {
     async claimable({ shopId, limit, ticketId = null, redraft = false }) {
       const filters = {
         shop_id: shopId,
-        verdict: { operator: 'in', value: '(answerable,needs_customer_input)' }
+        // All three verdicts produce text now. `needs_human` gets an
+        // acknowledgement rather than an answer — see DRAFTABLE_VERDICTS.
+        verdict: { operator: 'in', value: '(answerable,needs_customer_input,needs_human)' }
       };
       if (ticketId) {
         filters.ticket_id = ticketId;
@@ -190,12 +201,21 @@ export function createDraftingStore(supabase) {
 
       // Newest first from the query, so the first row seen per ticket is the
       // one to keep.
+      //
+      // `handoff` IS REDUCED TO A BOOLEAN HERE, at the boundary, and that is the
+      // whole reason this loop rewrites the row rather than passing it through.
+      // The disposition needs to know WHETHER a human owes an action; the text
+      // of what they owe is internal — « rembourser le client et relancer le
+      // transporteur » — and the drafting projection excludes it precisely so it
+      // cannot be rendered into a reply. Selecting the column and dropping its
+      // contents one line later keeps both: the derivation gets its answer, and
+      // no internal prose ever reaches the runner, let alone the prompt.
       const latest = [];
       const seen = new Set();
       for (const row of investigations) {
         if (seen.has(row.ticket_id)) continue;
         seen.add(row.ticket_id);
-        latest.push(row);
+        latest.push({ ...row, handoff: Boolean(row.handoff) });
       }
 
       const pending = redraft ? latest : await this.undrafted(shopId, latest);

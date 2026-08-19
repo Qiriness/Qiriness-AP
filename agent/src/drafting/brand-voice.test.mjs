@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
+  INTENT_RULES,
   STRUCTURAL_RULES,
   brandVoiceProblem,
   composeSystemPrompt,
@@ -14,6 +15,7 @@ const APPROVED = {
   toneAndVoice: 'Professionnel, chaleureux, concis.',
   responseFramework: ['Salutation appropriée', 'Appliquer la signature approuvée'],
   guidelinesAndGuardrails: ['Ne jamais inventer de faits.'],
+  closingLine: 'N’hésitez pas à revenir vers nous si vous avez d’autres questions.',
   signature: 'Bien cordialement,\nService Client Qiriness',
   generalContext: 'À éviter : les excuses excessives.'
 };
@@ -125,10 +127,89 @@ test('an empty optional section is omitted, not rendered as an empty heading', (
     responseFramework: [],
     guidelinesAndGuardrails: [],
     generalContext: '',
+    closingLine: '',
     signature: ''
   });
+  assert.ok(!prompt.includes('## Formule de clôture'));
   assert.ok(!prompt.includes('## Structure de la réponse'));
   assert.ok(!prompt.includes('## Règles absolues'));
   assert.ok(!prompt.includes('## Signature'));
   assert.ok(!prompt.includes('## Contexte général'));
+});
+
+// --- what each verdict's reply is allowed to do ------------------------------
+
+test('the prompt carries the rules for THIS verdict and no other', () => {
+  // The three sets contradict each other by design: the reply that must ask is
+  // forbidden from answering. Sending all three would hand the model a prompt
+  // that argues with itself and let it pick.
+  const ack = composeSystemPrompt(APPROVED, { verdict: 'needs_human' });
+  assert.ok(ack.includes(INTENT_RULES.needs_human[0]));
+  assert.ok(!ack.includes(INTENT_RULES.needs_customer_input[0]));
+  assert.ok(!ack.includes(INTENT_RULES.answerable[0]));
+
+  const ask = composeSystemPrompt(APPROVED, { verdict: 'needs_customer_input' });
+  assert.ok(ask.includes(INTENT_RULES.needs_customer_input[0]));
+  assert.ok(!ask.includes(INTENT_RULES.needs_human[0]));
+});
+
+test('a handover reply answers what it can before handing over', () => {
+  // THE CORRECTION OF 2026-08-19. The first version said the reply resolved
+  // nothing and capped it at three sentences; it produced 49 drafts saying
+  // "en cours de traitement" and nothing else, from case files holding the
+  // product, its warranty and exactly what could not be confirmed.
+  const prompt = composeSystemPrompt(APPROVED, { verdict: 'needs_human' });
+  assert.match(prompt, /répondre sur tout ce qui est déjà établi/);
+  assert.match(prompt, /nommer précisément le point/);
+  assert.doesNotMatch(prompt, /ne résout rien/);
+});
+
+test('a handover reply is told to name what needs checking, not to say it is being processed', () => {
+  assert.match(composeSystemPrompt(APPROVED, { verdict: 'needs_human' }), /en cours de/);
+  assert.match(composeSystemPrompt(APPROVED, { verdict: 'needs_human' }), /n’apporte rien au client/);
+});
+
+test('a handover reply may not invent an outcome, a date or a completed check', () => {
+  const prompt = composeSystemPrompt(APPROVED, { verdict: 'needs_human' });
+  assert.match(prompt, /Ne rien inventer/);
+  assert.match(prompt, /aucun délai ni aucune date/);
+  assert.match(prompt, /a déjà été effectuée/);
+  assert.match(prompt, /vocabulaire interne/);
+});
+
+test('a question reply answers before it asks', () => {
+  const prompt = composeSystemPrompt(APPROVED, { verdict: 'needs_customer_input' });
+  assert.match(prompt, /tout ce qui peut déjà l’être/);
+  assert.match(prompt, /Ne pas transformer toute la réponse en une demande/);
+});
+
+test('an answer is told to finish the exchange', () => {
+  const prompt = composeSystemPrompt(APPROVED, { verdict: 'answerable' });
+  assert.match(prompt, /résoudre entièrement la demande/);
+  assert.match(prompt, /aucune raison de répondre/);
+});
+
+test('every verdict has a set, so none silently drafts without one', () => {
+  for (const verdict of ['answerable', 'needs_customer_input', 'needs_human']) {
+    assert.ok(INTENT_RULES[verdict]?.length > 0, `${verdict} has no INTENT_RULES`);
+    assert.ok(composeSystemPrompt(APPROVED, { verdict }).includes('Objet de cette réponse'));
+  }
+});
+
+test('the intent rules sit above the structural rules, which still outrank them', () => {
+  const prompt = composeSystemPrompt(APPROVED, { verdict: 'needs_human' });
+  assert.ok(prompt.indexOf('Objet de cette réponse') < prompt.indexOf('prioritaires sur tout ce qui précède'));
+});
+
+test('the approved closing line is reproduced, and sits above the signature', () => {
+  // Left to the model it invented one per email and worded it 31 ways across 81
+  // drafts. Approving a wording is what makes it consistent.
+  const prompt = composeSystemPrompt(APPROVED, { verdict: 'answerable' });
+  assert.ok(prompt.includes(APPROVED.closingLine));
+  assert.ok(prompt.indexOf('Formule de clôture') < prompt.indexOf('## Signature'));
+});
+
+test('the model is told not to invent a second closing formula', () => {
+  assert.match(composeSystemPrompt(APPROVED), /Ne pas inventer de formule de politesse finale/);
+  assert.match(composeSystemPrompt(APPROVED), /la seule autorisée/);
 });

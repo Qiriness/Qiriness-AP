@@ -752,6 +752,18 @@ create table public.ticket_investigations (
   -- customer receives -- the drafting projection of a case file omits it.
   handoff jsonb,
 
+  -- INTERNAL, AND A CANDIDATE RATHER THAN A FACT. When the customer named no
+  -- order, `verifyPurchase` has already fetched their most recent one to
+  -- cross-check the product; this is that order, kept so a human does not repeat
+  -- the search by hand. It is NOT evidence: the customer may mean an earlier
+  -- order, or a purchase made in a shop Shopify never saw.
+  --
+  -- Excluded from the drafting projection for the same reason `handoff` is: a
+  -- number a model can see is a number it can quote, and quoting the wrong order
+  -- number at a customer is worse than quoting none. Empty when an order WAS
+  -- confirmed -- the bundle then says everything this could.
+  candidate_order jsonb not null default '{}'::jsonb,
+
   -- The ledger: which tools ran, with what outcome. This is what makes an
   -- established claim checkable after the fact.
   tool_calls jsonb not null default '[]'::jsonb,
@@ -811,6 +823,9 @@ create table public.ticket_investigations (
   ),
   constraint ticket_investigations_context_ref_object_check check (
     jsonb_typeof(context_ref) = 'object'
+  ),
+  constraint ticket_investigations_candidate_order_object_check check (
+    jsonb_typeof(candidate_order) = 'object'
   )
 );
 
@@ -838,6 +853,9 @@ comment on column public.ticket_investigations.unverified is
 
 comment on column public.ticket_investigations.do_not_claim is
   'Derived prohibitions for the drafting stage, generated in code from the caveats the tools raised and from the missing fields. Never model-authored.';
+
+comment on column public.ticket_investigations.candidate_order is
+  'INTERNAL. The customer''s most recent order, kept as a CANDIDATE when they named none -- verifyPurchase already fetched it to cross-check the product, so this saves a human repeating that search. Never evidence: they may mean an earlier order, or a shop purchase Shopify never saw. Excluded from the drafting projection like handoff, because a number a model can see is one it can quote. Empty when an order was confirmed.';
 
 comment on column public.ticket_investigations.handoff is
   'Internal instruction for a human when the verdict is needs_human. Excluded from every customer-facing rendering of this row.';

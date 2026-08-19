@@ -69,11 +69,31 @@ create table public.ticket_drafts (
   investigation_id uuid not null
     references public.ticket_investigations(id) on delete cascade,
 
-  -- The verdict AS IT STOOD when this was drafted. `needs_human` is absent from
-  -- the check on purpose: that verdict produces no customer-facing text at all,
-  -- and the database refusing to hold one is a stronger statement of that rule
-  -- than the code path that declines to write it.
+  -- The verdict AS IT STOOD when this was drafted. All three appear, including
+  -- `needs_human`: a ticket a person has to finish still owes the customer an
+  -- acknowledgement, and writing one is the difference between silence and
+  -- « nous avons bien reçu votre message ». What `needs_human` changes is not
+  -- whether a reply is drafted but what the reply may DO — see `disposition`.
   source_verdict text not null,
+
+  -- WHETHER SENDING THIS ENDS THE THREAD, and the reason this is a column rather
+  -- than something the send path re-derives.
+  --
+  --   terminal      the exchange is finished: nothing is expected back from the
+  --                 customer and nothing is left for a person to do. Sending it
+  --                 is what closes the ticket.
+  --   intermediary  something follows. Either the customer owes us an answer, or
+  --                 a colleague owes them one. Sending it must NOT close
+  --                 anything -- it moves the ticket to who is waited on.
+  --
+  -- DERIVED IN CODE FROM THE CASE FILE, never chosen by the model: it decides
+  -- whether a thread closes, and « is this finished » is exactly the judgement a
+  -- drafting model has the least evidence for. Stored rather than recomputed at
+  -- send time so the decision travels with the text it was made about -- a
+  -- re-investigation can move the verdict under an approved draft, and closing a
+  -- ticket on a rule that no longer describes the reply a customer received is
+  -- the one mistake here that cannot be taken back.
+  disposition text not null,
 
   -- The level gate that applied, and the language the reply is written in.
   level smallint,
@@ -130,7 +150,21 @@ create table public.ticket_drafts (
   unique (shop_id, trigger_message_id),
 
   constraint ticket_drafts_source_verdict_check check (
-    source_verdict in ('answerable', 'needs_customer_input')
+    source_verdict in ('answerable', 'needs_customer_input', 'needs_human')
+  ),
+  constraint ticket_drafts_disposition_check check (
+    disposition in ('terminal', 'intermediary')
+  ),
+  -- A reply that could not resolve anything cannot be the end of the exchange.
+  -- The two columns are derived from the same case file, so this can only fail
+  -- if the derivation is changed carelessly -- which is precisely when a ticket
+  -- would start auto-closing on an acknowledgement.
+  constraint ticket_drafts_human_is_intermediary_check check (
+    source_verdict <> 'needs_human' or disposition = 'intermediary'
+  ),
+  -- Same argument from the other side: a question is waiting on an answer.
+  constraint ticket_drafts_question_is_intermediary_check check (
+    source_verdict <> 'needs_customer_input' or disposition = 'intermediary'
   ),
   constraint ticket_drafts_status_check check (
     status in ('pending', 'approved', 'edited', 'rejected', 'sent')
@@ -188,7 +222,10 @@ comment on column public.ticket_drafts.investigation_id is
   'The case file this was written from. Not nullable: the verdict decides what kind of reply this is, and the established claims are the only facts the model may use.';
 
 comment on column public.ticket_drafts.source_verdict is
-  'The case file''s verdict as it stood when this was drafted: answerable (a reply) or needs_customer_input (the question). needs_human is excluded by check constraint -- that verdict produces no customer-facing text at all.';
+  'The case file''s verdict as it stood when this was drafted: answerable (a reply), needs_customer_input (the question) or needs_human (an acknowledgement). A ticket a person has to finish still owes the customer a reply; what the verdict decides is what that reply may do, not whether it exists.';
+
+comment on column public.ticket_drafts.disposition is
+  'Whether sending this ends the thread. terminal = nothing expected back and nothing left to do, so the send is what closes the ticket; intermediary = the customer owes us an answer or a colleague owes them one, so sending moves the ticket to whoever is waited on and closes nothing. Derived in code from the verdict and the case file''s handoff -- never chosen by the model -- and stored so the decision travels with the text it was made about.';
 
 comment on column public.ticket_drafts.body_text is
   'What the MODEL wrote, never edited in place. A human''s rewrite goes to approved_body_text, so the distance between the two stays readable as the drafting quality measure.';

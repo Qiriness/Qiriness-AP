@@ -184,6 +184,7 @@ export async function getTicketDetail(shopId: string, ticketId: string): Promise
       unverified: Array.isArray(row.unverified) ? row.unverified : [],
       missing: Array.isArray(row.missing) ? row.missing : [],
       handoff: row.handoff ?? null,
+      candidateOrder: row.candidate_order ?? null,
       investigatedAt: row.investigated_at ?? null,
     }),
   };
@@ -249,7 +250,10 @@ function mapDraftRow(row: any): TicketDraft {
     id: row.id,
     body: row.body_text ?? "",
     approvedBody: row.approved_body_text ?? null,
-    sourceVerdict: row.source_verdict === "needs_customer_input" ? "needs_customer_input" : "answerable",
+    sourceVerdict: DRAFT_VERDICTS.includes(row.source_verdict) ? row.source_verdict : "answerable",
+    // Defaults to the safe half of the pair: a draft whose disposition could not
+    // be read must not be the one a send closes a ticket on.
+    disposition: row.disposition === "terminal" ? "terminal" : "intermediary",
     status: DRAFT_STATUSES.includes(row.status) ? row.status : "pending",
     checksPassed: Boolean(row.checks_passed),
     // Only the failures: a reviewer needs to know what was caught, not to read
@@ -262,6 +266,7 @@ function mapDraftRow(row: any): TicketDraft {
 }
 
 const DRAFT_STATUSES: string[] = ["pending", "approved", "edited", "rejected", "sent"];
+const DRAFT_VERDICTS: string[] = ["answerable", "needs_customer_input", "needs_human"];
 
 /** Oldest first: a conversation reads downwards, unlike the queue. */
 function byTimeAsc(a: TicketMessage, b: TicketMessage): number {

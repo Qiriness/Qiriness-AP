@@ -33,6 +33,20 @@ interface TicketThreadDialogProps {
  * Read-only. Sending still happens in Outlook — this exists so *reading* a case
  * does not.
  */
+/**
+ * What the draft section is called, by what the case file concluded.
+ *
+ * An acknowledgement is named as one rather than as a "reply", because a
+ * reviewer skimming the queue needs to know before reading that this text
+ * resolves nothing — it is the case where the words look most like an answer
+ * and are least meant to be one.
+ */
+const DRAFT_HEADINGS: Record<string, string> = {
+  answerable: "Draft reply",
+  needs_customer_input: "Draft question to the customer",
+  needs_human: "Draft acknowledgement — resolves nothing",
+};
+
 export function TicketThreadDialog({ ticket, onClose }: TicketThreadDialogProps) {
   const [thread, setThread] = useState<TicketThread | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -69,11 +83,7 @@ export function TicketThreadDialog({ ticket, onClose }: TicketThreadDialogProps)
       }
     >
       <section className={styles.section}>
-        <h3 className={styles.heading}>
-          {thread?.draft?.sourceVerdict === "needs_customer_input"
-            ? "Draft question to the customer"
-            : "Draft reply"}
-        </h3>
+        <h3 className={styles.heading}>{DRAFT_HEADINGS[thread?.draft?.sourceVerdict ?? "answerable"]}</h3>
         {thread?.draft ? (
           <>
             {/* The failed checks go ABOVE the text. A reviewer who reads a
@@ -96,6 +106,17 @@ export function TicketThreadDialog({ ticket, onClose }: TicketThreadDialogProps)
                 <pre className={styles.draft}>{thread.draft.approvedBody}</pre>
               </>
             )}
+            {/* What happens when this is sent, said in the review surface rather
+                than left to the send path. An operator approving a draft is
+                approving its consequence too: a terminal reply finishes the
+                thread, an intermediary one hands it to whoever is waited on. */}
+            <p className={styles.stamp}>
+              {thread.draft.disposition === "terminal"
+                ? "Terminal — sending this closes the ticket."
+                : thread.draft.sourceVerdict === "needs_customer_input"
+                  ? "Intermediary — sending this waits on the customer."
+                  : "Intermediary — a colleague still owes this customer an answer."}
+            </p>
             {thread.draft.draftedAt && (
               <p className={styles.stamp}>
                 Drafted{" "}
@@ -107,13 +128,13 @@ export function TicketThreadDialog({ ticket, onClose }: TicketThreadDialogProps)
             )}
           </>
         ) : (
-          /* Not an error and not an empty result. A ticket has no draft when it
-             carries no case file, or when the verdict was needs_human — both
-             normal, and saying so beats a blank box that reads as a load that
-             went wrong. */
+          /* Not an error and not an empty result. Every verdict is drafted now,
+             so the remaining cases are a ticket nothing has investigated yet and
+             level 4, where the agent stays silent on purpose. Saying so beats a
+             blank box that reads as a load that went wrong. */
           <p className={styles.placeholder}>
-            No draft — either this ticket has no case file, or the agent concluded it
-            needs a person. What it established is in the expanded row.
+            No draft — this ticket has no case file yet, or it is level 4, where the
+            agent stays silent on purpose. What it established is in the expanded row.
           </p>
         )}
       </section>

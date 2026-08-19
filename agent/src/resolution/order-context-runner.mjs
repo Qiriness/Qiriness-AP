@@ -1,4 +1,4 @@
-import { supabaseSelectAll } from '../../../scripts/lib/supabase-rest-client.mjs';
+import { supabaseSelect, supabaseSelectAll } from '../../../scripts/lib/supabase-rest-client.mjs';
 import { T } from '../../../scripts/lib/tables.mjs';
 
 import { buildOrderContext } from './order-context.mjs';
@@ -74,6 +74,47 @@ export function createOrderContextStore(supabase) {
         byName: new Map(orders.map((o) => [o.name, o])),
         customersById: new Map(customers.map((c) => [c.id, c]))
       };
+    },
+
+    /**
+     * The customer's most recent order, as a full bundle.
+     *
+     * SAME COLUMNS, SAME BUILDER as a confirmed order, and that is the point:
+     * the dashboard renders it through the projection it already has, under
+     * different headings. A narrower shape would have meant a second renderer
+     * and a second set of decisions about what a reader is shown.
+     *
+     * ONLY EVER A CANDIDATE. It is fetched when the customer named no order, so
+     * it answers "which order did they most recently place", never "which order
+     * do they mean". The caller keeps it out of everything the model reads.
+     */
+    async loadLastOrderForCustomer(shopId, customerId) {
+      if (!customerId) {
+        return null;
+      }
+      const orders = await supabaseSelect(
+        supabase,
+        T.ORDERS,
+        {
+          shop_id: shopId,
+          customer_id: customerId,
+          deleted_at: { operator: 'is', value: 'null' }
+        },
+        ORDER_COLUMNS,
+        { order: 'processed_at.desc', limit: 1 }
+      );
+      const order = orders[0] || null;
+      if (!order) {
+        return null;
+      }
+      const customers = await supabaseSelect(
+        supabase,
+        T.CUSTOMERS,
+        { id: customerId },
+        CUSTOMER_COLUMNS,
+        { limit: 1 }
+      );
+      return { order, customer: customers[0] || null };
     },
 
     // `saveContext` left this store too: `record.setResolvedContext(ticket,

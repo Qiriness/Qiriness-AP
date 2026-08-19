@@ -121,18 +121,62 @@ test('the ticket’s language reaches the system prompt', async () => {
 
 // --- the gate ----------------------------------------------------------------
 
-test('needs_human is skipped with a reason, not drafted', async () => {
+test('needs_human is drafted as an intermediary acknowledgement', async () => {
+  // It used to be skipped. The customer heard nothing while a colleague worked
+  // on it, and the colleague started from a blank page.
   const h = harness({
     candidates: [
-      { ...CANDIDATE, investigation: { ...CANDIDATE.investigation, verdict: 'needs_human' } }
+      {
+        ...CANDIDATE,
+        investigation: {
+          ...CANDIDATE.investigation,
+          verdict: 'needs_human',
+          handoff: true
+        }
+      }
     ]
   });
   const totals = await runDrafting(h.args);
 
-  assert.equal(totals.drafted, 0);
-  assert.equal(totals.skipped, 1);
-  assert.deepEqual(totals.skippedBy, { needs_human: 1 });
-  assert.equal(h.calls.length, 0, 'a skipped ticket must not cost a model call');
+  assert.equal(totals.drafted, 1);
+  assert.equal(totals.skipped, 0);
+  assert.equal(h.saved[0].sourceVerdict, 'needs_human');
+  assert.equal(h.saved[0].disposition, 'intermediary');
+});
+
+test('the handover rule set is the one that travels for needs_human', async () => {
+  const h = harness({
+    candidates: [
+      {
+        ...CANDIDATE,
+        investigation: { ...CANDIDATE.investigation, verdict: 'needs_human', handoff: true }
+      }
+    ]
+  });
+  await runDrafting(h.args);
+  assert.match(h.calls[0].system, /nommer précisément le point/);
+  assert.doesNotMatch(h.calls[0].system, /Ne pas transformer toute la réponse/);
+});
+
+test('an acknowledgement is never auto-send eligible', async () => {
+  const h = harness({
+    candidates: [
+      {
+        ...CANDIDATE,
+        investigation: { ...CANDIDATE.investigation, verdict: 'needs_human', handoff: true },
+        ticket: { ...CANDIDATE.ticket, level: 1, happiness: 1 }
+      }
+    ]
+  });
+  await runDrafting(h.args);
+  assert.equal(h.saved[0].autoSendEligible, false);
+});
+
+test('an answer with nothing left to do is terminal', async () => {
+  // The only disposition that lets a send close the ticket.
+  const h = harness();
+  await runDrafting(h.args);
+  assert.equal(h.saved[0].disposition, 'terminal');
 });
 
 test('level 4 is skipped even with a draftable verdict', async () => {

@@ -117,6 +117,52 @@ export const FORBIDDEN_PATTERNS = [
 ];
 
 /**
+ * What an ACKNOWLEDGEMENT may not contain, on top of everything else.
+ *
+ * These apply only to a `needs_human` draft, and they exist because that reply
+ * is written from the case file that could not resolve anything — sometimes from
+ * no established fact at all. The prompt forbids all of it; these say whether it
+ * obeyed.
+ *
+ * A DEADLINE IS THE ONE THAT COSTS MONEY. « Nous revenons vers vous sous 24
+ * heures » is the single most natural sentence to end a holding reply with, it
+ * is a commitment nobody in the building agreed to, and the customer who does
+ * not hear back in 24 hours now has a second complaint that is entirely our
+ * fault. It is also the only one with a clean textual signature, which is why it
+ * is checked rather than hoped for.
+ *
+ * ASKING IS THE OTHER. The case file named nothing to ask for; a question in an
+ * acknowledgement is one the model invented, and the customer will answer it.
+ */
+export const ACKNOWLEDGEMENT_PROHIBITIONS = [
+  {
+    check: 'no_promised_deadline',
+    label: 'annonce un délai de réponse',
+    pattern:
+      /\b(sous \d+\s*(?:h|heures?|jours?|semaines?)|d[’']ici (?:demain|lundi|mardi|mercredi|jeudi|vendredi|la fin|le)|dans les (?:\d+|prochaines?|prochains?)\s*(?:\d+\s*)?(?:h|heures?|jours?)|sous \d+\s*à\s*\d+|avant (?:demain|la fin de (?:la journée|la semaine)))/i
+  },
+  {
+    check: 'no_promise',
+    label: 'promet une issue',
+    // « nous allons VOUS rembourser » is how it is actually written, so the
+    // optional pronoun is the difference between this firing and never firing.
+    pattern:
+      /\b(nous (?:allons|vous|pourrons) (?:vous )?(?:rembours|renvoy|réexpédi|remplac|procéder au rembours)\w*|un (?:remboursement|renvoi|remplacement) (?:vous )?(?:sera|est) |nous vous (?:rembourserons|renverrons|enverrons|remplacerons))/i
+  },
+  {
+    check: 'no_completed_action',
+    label: 'laisse entendre qu’une vérification a déjà eu lieu',
+    // « Après vérification, nous avons constaté… » is a real sentence from this
+    // desk's own outbound mail, and on a needs_human ticket it is false: the
+    // verification is the thing that has NOT happened yet. « Nous avons bien
+    // reçu votre message » is fine and must stay fine, so the pattern is keyed
+    // on the verbs of checking, never on « nous avons ».
+    pattern:
+      /\b(nous avons (?:bien )?(?:vérifié|contrôlé|examiné|confirmé|constaté|contacté|traité|corrigé|résolu)|après (?:vérification|examen|contrôle|analyse)|notre équipe a (?:déjà )?(?:vérifié|examiné|confirmé|contacté|traité))/i
+  }
+];
+
+/**
  * Runs every check against a drafted body.
  *
  * Returns one entry per check with `passed` either true, false, or null for the
@@ -128,8 +174,10 @@ export function runDraftChecks({
   doNotClaim = [],
   missing = [],
   verdict = 'answerable',
+  closingLine = '',
   signature = ''
 } = {}) {
+  const isHandover = verdict === 'needs_human';
   const text = String(body || '');
   const checks = [];
 
@@ -175,38 +223,22 @@ export function runDraftChecks({
     });
   }
 
-  // --- the stored questions ------------------------------------------------
+  // --- asking, and when it is allowed at all ------------------------------
   //
-  // MEASURED BEFORE IT WAS SETTLED, and the first measurement changed it. The
-  // check began as exact containment, on the reasoning that `MISSING_FIELDS`
-  // exists so the same question is worded the same way every time and a check
-  // tolerating paraphrase would permit what the table prevents. Run over 12 real
-  // case files it fired on 6 of 6 `needs_customer_input` drafts and 0 of 6
-  // `answerable` ones — a 100% alarm rate on the only verdict it applies to,
-  // which is the state in which a check gets ignored rather than obeyed.
+  // ONE RULE ACROSS ALL THREE VERDICTS: a reply may ask for a fact only if the
+  // case file named it. That single line implements three separate instructions
+  // — « ne pas demander d'information supplémentaire » on an answer, « demander
+  // uniquement cette information » on a question, and « ne demander une
+  // information que si le dossier en nomme une » on a handover — because they
+  // are the same rule seen from three sides.
   //
-  // WHY IT FIRED IS THE INTERESTING PART. On `shopify_order_number` the model
-  // had reproduced the stored sentence verbatim and lowercased its first letter
-  // to embed it mid-sentence. On `purchase_email` it turned « la commande
-  // a-t-elle été passée » into « la commande a été passée » behind a lead-in.
-  // Neither invented a different question; both integrated the stored one
-  // grammatically — which is what the brand voice asks for in as many words
-  // (« éviter les formulations robotiques ou les politesses répétitives »).
-  // Byte-exact insertion and the approved voice are in direct conflict, and the
-  // voice is the one a person signed off.
-  //
-  // SO IT CHECKS THAT THE RIGHT FACT WAS ASKED FOR, not that a sentence was
-  // pasted. Word coverage over the stored question was tried first and is not
-  // good enough either: a draft asking « l'adresse e-mail utilisée pour passer
-  // cette commande » scored 43% against « avec quelle adresse e-mail la commande
-  // a-t-elle été passée », against 15% for a draft asking about a different field
-  // entirely — a real gap, but far too narrow to put a threshold in. What
-  // separates them cleanly is not how much of the sentence survived; it is
-  // whether the WORDS THAT NAME THE FACT are there at all (see ASK_TERMS).
-  //
-  // Exact reproduction is recorded separately as an advisory, so how much
-  // rewording happens stays measurable without blocking anything.
-  if (verdict === 'needs_customer_input') {
+  // An `answerable` case file never licenses a question, even if it happens to
+  // carry a `missing` entry: the verdict says the dossier is sufficient, and a
+  // follow-up question on top of a complete answer is the padding the brand
+  // voice explicitly rejects.
+  const mustAsk = verdict !== 'answerable' && missing.length > 0;
+
+  if (mustAsk) {
     for (const field of missing) {
       const key = field?.field;
       const ask = MISSING_FIELDS[key]?.ask;
@@ -235,7 +267,65 @@ export function runDraftChecks({
           : `reformulée (${key})`
       });
     }
+  } else {
+    // Nothing was named, so any request is one the model invented — and the
+    // customer will answer it, which turns a finished reply into a thread
+    // nobody meant to open.
+    const asked = text.match(
+      /(?:pourriez|pouvez|puis-je|merci de nous (?:indiquer|communiquer|préciser|transmettre))[^.?!]*\?/i
+    );
+    checks.push({
+      check: 'no_invented_question',
+      passed: !asked,
+      detail: asked
+        ? `pose une question que le dossier ne demande pas — « ${asked[0].trim()} »`
+        : 'ne pose aucune question non demandée'
+    });
   }
+
+  // --- what only a handover reply is forbidden -----------------------------
+  if (isHandover) {
+    for (const { check, label, pattern } of ACKNOWLEDGEMENT_PROHIBITIONS) {
+      const hit = text.match(pattern);
+      checks.push({ check, passed: !hit, detail: hit ? `${label} — « ${hit[0]} »` : label });
+    }
+  }
+
+  // --- the approved closing line, and anything invented beside it ----------
+  //
+  // MEASURED 2026-08-19: left to the model, 31 of 81 drafts ended with a
+  // courtesy line and worded it 31 different ways. The line is worth saying, so
+  // it is approved once and reproduced — checked here exactly as the signature
+  // is, which is the mechanism already proven at 81/81.
+  if (closingLine) {
+    checks.push({
+      check: 'closing_line',
+      passed: normalise(text).includes(normalise(closingLine)),
+      detail: 'reprend la formule de clôture approuvée'
+    });
+  }
+
+  // What is left after removing every APPROVED block is a closer the model wrote
+  // itself. ADVISORY, NOT A FAILURE: it is a weak sentence, not a wrong one, and
+  // `checks_passed` gates auto-send — refusing an otherwise correct reply for
+  // being too polite would be the check overreaching.
+  //
+  // THE SIGNATURE IS STRIPPED TOO, and that is not belt-and-braces. Whoever
+  // maintains the brand voice may put the courtesy sentence in either field —
+  // measured on the live row, it was written into the signature before this
+  // field existed — and text a person approved is not text a model invented,
+  // wherever it was approved.
+  const withoutApproved = [closingLine, signature]
+    .filter(Boolean)
+    .reduce((acc, approved) => acc.split(normalise(approved)).join(' '), normalise(text));
+  const invented = withoutApproved.match(INVENTED_CLOSER);
+  checks.push({
+    check: 'empty_closer',
+    passed: null,
+    detail: invented
+      ? `formule de politesse non approuvée — « ${invented[0]} »`
+      : 'aucune formule de politesse inventée'
+  });
 
   // --- the approved signature ----------------------------------------------
   if (signature) {
@@ -311,6 +401,26 @@ function caveatCodesFor(doNotClaim) {
   const byText = new Map(Object.entries(CAVEATS).map(([code, line]) => [normalise(line), code]));
   return doNotClaim
     .map((line) => byText.get(normalise(String(line))))
+    .filter(Boolean);
+}
+
+/**
+ * Courtesy closers the model writes when nothing stops it.
+ *
+ * Includes « n'hesitez pas a revenir vers nous », which the brand voice's own
+ * negative constraints call out by name. That phrase is not banned — it is the
+ * approved closing line's own wording — so this pattern is only ever applied to
+ * the text with the approved line removed. What it finds is therefore a second,
+ * invented closer.
+ */
+export const INVENTED_CLOSER =
+  /\b(merci (?:de|pour) votre (?:patience|comprehension|compréhension|cooperation|coopération)|nous restons . votre disposition|votre satisfaction est notre priorité|je vous remercie d['’]avance pour votre (?:cooperation|coopération)|n['’]hésitez pas . (?:revenir vers nous|nous contacter|nous écrire))/i;
+
+/** The blank-line-separated blocks of a reply. The last is the signature. */
+function paragraphs(value) {
+  return String(value)
+    .split(/\n\s*\n/)
+    .map((block) => block.trim())
     .filter(Boolean);
 }
 

@@ -179,6 +179,15 @@
   color: var(--text-muted);
 }
 
+/* A lead, not a finding. Sits above the last-order facts so a reviewer reads
+   them as somewhere to start rather than as something the agent established. */
+.candidateNote {
+  margin: 0 0 var(--space-2);
+  font-size: var(--text-caption);
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
 .muted {
   margin: 0;
   font-size: var(--text-body);

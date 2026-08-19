@@ -5,6 +5,8 @@ import { createExemplarRetrieval } from '../retrieval/exemplar-retrieval.mjs';
 import { createKnowledgeRetrieval } from '../retrieval/knowledge-retrieval.mjs';
 import { createProductLookup } from '../retrieval/product-lookup.mjs';
 import { createPurchaseLookup } from '../retrieval/purchase-lookup.mjs';
+import { createOrderContextStore } from '../resolution/order-context-runner.mjs';
+import { buildOrderContext } from '../resolution/order-context.mjs';
 import { createPromotionLookup } from '../retrieval/promotion-lookup.mjs';
 
 import { createDecomposer } from './decompose.mjs';
@@ -57,6 +59,7 @@ export function createInvestigationStack({
   // catalogue index, so building a second product lookup here would load and
   // tokenise all 116 titles a second time to answer the same question.
   const productLookup = createProductLookup({ supabase, shopId, logger });
+  const orderContextStore = createOrderContextStore(supabase);
 
   const registry = createToolRegistry({
     customerLookup: customerLookup || createCustomerLookup({ supabase, shopId, logger }),
@@ -64,6 +67,13 @@ export function createInvestigationStack({
     purchaseLookup: createPurchaseLookup({ supabase, shopId, productLookup, logger }),
     promotionLookup: createPromotionLookup({ supabase, shopId, logger }),
     retrieveKnowledge: createKnowledgeRetrieval({ supabase, embeddingsClient, logger }),
+    // The order tool's fallback: the customer's most recent order, built with
+    // the SAME builder as a confirmed one so the dashboard renders it through
+    // the projection it already has. Never reaches the model.
+    lastOrderLookup: async (customerId) => {
+      const found = await orderContextStore.loadLastOrderForCustomer(shopId, customerId);
+      return found ? buildOrderContext(found.order, found.customer) : null;
+    },
     shopId,
     logger
   });

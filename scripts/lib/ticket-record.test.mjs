@@ -371,3 +371,30 @@ test('the pass descriptors name real columns', () => {
     if (pass.raises) assert.ok(PASSES[Object.keys(PASSES).find((k) => PASSES[k].flag === pass.raises)]);
   }
 });
+
+test('claim can be narrowed to one ticket, and still respects the queue', () => {
+  // NARROWS, NEVER WIDENS. Naming a ticket that is not due this pass must return
+  // nothing rather than running it anyway — otherwise it becomes a second,
+  // unguarded way into the pass.
+  const calls = [];
+  const record = createTicketRecord({}, {
+    shopId: 'shop-1',
+    transport: {
+      select: async (_c, table, filters) => {
+        calls.push({ table, filters });
+        return [];
+      },
+      selectAll: async () => [],
+      insert: async () => [],
+      update: async () => [],
+      updateById: async () => ({})
+    }
+  });
+  return record.claim('investigation', { ticketId: 'ticket-9' }).then(() => {
+    const [call] = calls;
+    assert.equal(call.filters.id, 'ticket-9');
+    // The pass's own gate is still there.
+    assert.ok('needs_investigation' in call.filters);
+    assert.ok('needs_categorisation' in call.filters);
+  });
+});
