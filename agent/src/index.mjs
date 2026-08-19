@@ -222,7 +222,8 @@ async function main() {
         senderDirectory: await senderDirectoryStore.load(shopId, {
           supportMailbox: config.graph.mailbox
         }),
-        retrieveExemplar: investigation.retrieveExemplar
+        retrieveExemplar: investigation.retrieveExemplar,
+        lastOrderLookup: investigation.lastOrderLookup
       });
       if (investigated.considered > 0) {
         logger.info('investigate.pass', { shopId, ...investigated });

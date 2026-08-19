@@ -52,6 +52,15 @@ export const MECHANICAL_PROHIBITIONS = {
     pattern:
       /\b(aucune commande (?:n['’]a été |n['’]est |)?(?:trouvée|enregistrée|passée)|vous n['’]avez (?:rien |jamais )?(?:acheté|commandé)|vous n['’]êtes pas (?:un(?:e)? )?client)\b/i
   },
+  delivery_unscanned: {
+    label: 'décrit le suivi transporteur ou l’avancement du colis',
+    // MEASURED: 8 of 81 drafts said this to a customer before the prohibition
+    // existed, several naming the carrier — « pas encore de scan de suivi de la
+    // part de Colissimo ». No carrier feeds scan events into Shopify for this
+    // store, so that blamed the carrier for a gap in our own integration.
+    pattern:
+      /\b(scan\w*|aucune? (?:information|donnée) de suivi|le suivi (?:n['’]est pas|n['’]affiche|indique)|pas (?:encore )?(?:de|d['’]) ?(?:mise à jour|information) de suivi|en cours d['’]acheminement|le colis (?:se trouve|est actuellement))/i
+  },
   attachments_unrecorded: {
     label: 'affirme qu’aucune photo n’a été reçue',
     pattern:
@@ -105,6 +114,15 @@ export const FORBIDDEN_PATTERNS = [
     // it — and a customer's is withheld by default, so there is no address a
     // correct draft has a reason to contain.
     pattern: /\b[\w.+-]+@[\w-]+\.[\w.]{2,}\b/
+  },
+  {
+    check: 'no_carrier_scan_wording',
+    label: 'révèle que nous ne recevons aucun scan transporteur',
+    // NOT GATED ON THE CAVEAT, unlike the prohibition above. This wording is a
+    // statement about our own integration — that no carrier feeds scan events
+    // back to us — and it is not the customer's business on any ticket, whatever
+    // the case file happened to raise.
+    pattern: /\b(scan\w*)/i
   },
   {
     check: 'no_internal_machinery',
@@ -174,6 +192,8 @@ export function runDraftChecks({
   doNotClaim = [],
   missing = [],
   verdict = 'answerable',
+  // True when the thread proves the customer wrote again before we answered.
+  chased = false,
   closingLine = '',
   signature = ''
 } = {}) {
@@ -289,6 +309,27 @@ export function runDraftChecks({
       const hit = text.match(pattern);
       checks.push({ check, passed: !hit, detail: hit ? `${label} — « ${hit[0]} »` : label });
     }
+  }
+
+  // --- the apology we owe --------------------------------------------------
+  //
+  // ONLY WHEN THE THREAD PROVES IT. The rule in the prompt is broader — it also
+  // covers a customer who says they have been waiting — but a check has to rest
+  // on something checkable, and "they wrote again before we replied" is a fact
+  // about the envelopes. The stated-only cases stay the prompt's job.
+  if (chased) {
+    // ALL FOUR LANGUAGES THE CORPUS ACTUALLY DRAFTS IN (fr 77 · it 2 · es 1 ·
+    // en 1). The first version matched French only and failed an Italian draft
+    // that opened « Ci scusiamo per il ritardo nella risposta » — a correct reply
+    // marked wrong, which is how a check earns being ignored.
+    const apology = text.match(APOLOGY);
+    checks.push({
+      check: 'apologises_for_delay',
+      passed: Boolean(apology),
+      detail: apology
+        ? `s’excuse du délai — « ${apology[0]} »`
+        : 'le client a écrit plusieurs fois sans réponse et la réponse ne s’en excuse pas'
+    });
   }
 
   // --- the approved closing line, and anything invented beside it ----------
@@ -415,6 +456,16 @@ function caveatCodesFor(doNotClaim) {
  */
 export const INVENTED_CLOSER =
   /\b(merci (?:de|pour) votre (?:patience|comprehension|compréhension|cooperation|coopération)|nous restons . votre disposition|votre satisfaction est notre priorité|je vous remercie d['’]avance pour votre (?:cooperation|coopération)|n['’]hésitez pas . (?:revenir vers nous|nous contacter|nous écrire))/i;
+
+/**
+ * Apologising, in the languages this corpus is drafted in.
+ *
+ * Kept beside the other patterns rather than inlined because it is the one that
+ * has to grow with `REPLY_LANGUAGES`: a language added to the taxonomy without
+ * a token here produces a correct reply that fails a check.
+ */
+export const APOLOGY =
+  /\b(désolé\w*|navré\w*|excus\w*|pardon|sorry|apolog\w*|scus\w*|spiacenti|rammarico|disculp\w*|lamentamos|sentimos)/i;
 
 /** The blank-line-separated blocks of a reply. The last is the signature. */
 function paragraphs(value) {

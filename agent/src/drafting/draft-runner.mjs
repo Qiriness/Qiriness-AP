@@ -3,7 +3,12 @@ import { COLUMNS, T } from '../../../scripts/lib/tables.mjs';
 
 import { brandVoiceProblem, composeSystemPrompt } from './brand-voice.mjs';
 import { checksPassed, failedChecks, runDraftChecks } from './draft-checks.mjs';
-import { autoSendEligible, draftDecision, replyLanguage } from './draft-rules.mjs';
+import {
+  autoSendEligible,
+  describesChase,
+  draftDecision,
+  replyLanguage
+} from './draft-rules.mjs';
 import {
   DRAFT_SCHEMA,
   caseFileFromRow,
@@ -66,7 +71,7 @@ export async function runDrafting({
   const skippedBy = {};
 
   for (const candidate of candidates) {
-    const { investigation, ticket, message, orderContext } = candidate;
+    const { investigation, ticket, message, orderContext, thread = [] } = candidate;
 
     const decision = draftDecision({ investigation, ticket });
     if (!decision.draft) {
@@ -77,6 +82,9 @@ export async function runDrafting({
 
     const caseFile = caseFileFromRow(investigation);
     const language = replyLanguage(ticket);
+    // Did we leave them waiting? A fact about our own conduct, computed from the
+    // thread rather than inferred from the customer's tone.
+    const chase = describesChase(thread);
 
     try {
       const answer = await openai.completeJson({
@@ -85,7 +93,7 @@ export async function runDrafting({
         // only acknowledge. Sending all three would hand the model a prompt
         // that contradicts itself and let it choose.
         system: composeSystemPrompt(brandVoice, { language, verdict: investigation.verdict }),
-        user: composeDraftingMessage({ message, caseFile, orderContext, ticket }),
+        user: composeDraftingMessage({ message, caseFile, orderContext, ticket, chase }),
         schema: DRAFT_SCHEMA,
         schemaName: 'draft',
         // A support reply runs longer than any other output in this worker: the
@@ -110,6 +118,7 @@ export async function runDrafting({
         doNotClaim: caseFile.doNotClaim,
         missing: caseFile.missing,
         verdict: investigation.verdict,
+        chased: chase.chased,
         closingLine: brandVoice.closingLine,
         signature: brandVoice.signature
       });
@@ -224,7 +233,7 @@ export function createDraftingStore(supabase) {
         return [];
       }
 
-      const [tickets, messages] = await Promise.all([
+      const [tickets, messages, envelopes] = await Promise.all([
         supabaseSelect(
           supabase,
           T.TICKETS,
@@ -245,11 +254,31 @@ export function createDraftingStore(supabase) {
             }
           },
           COLUMNS.messageForDrafting
+        ),
+        // The whole thread's envelopes — directions and timestamps, no bodies.
+        // Answers one question: was the customer left waiting (see
+        // `describesChase`).
+        supabaseSelect(
+          supabase,
+          T.TICKET_MESSAGES,
+          {
+            ticket_id: {
+              operator: 'in',
+              value: `(${claimed.map((row) => row.ticket_id).join(',')})`
+            }
+          },
+          COLUMNS.messageEnvelopesForDrafting
         )
       ]);
 
       const ticketById = new Map(tickets.map((row) => [row.id, row]));
       const messageById = new Map(messages.map((row) => [row.id, row]));
+      const threadByTicket = new Map();
+      for (const envelope of envelopes) {
+        const thread = threadByTicket.get(envelope.ticket_id) || [];
+        thread.push(envelope);
+        threadByTicket.set(envelope.ticket_id, thread);
+      }
 
       return claimed
         .map((investigation) => ({
@@ -258,7 +287,8 @@ export function createDraftingStore(supabase) {
           message: messageById.get(investigation.trigger_message_id),
           // The bundle lives on the ticket, never copied onto the case file —
           // `context_ref` is a pointer for exactly this reason.
-          orderContext: ticketById.get(investigation.ticket_id)?.resolved_context || null
+          orderContext: ticketById.get(investigation.ticket_id)?.resolved_context || null,
+          thread: threadByTicket.get(investigation.ticket_id) || []
         }))
         // A soft-deleted ticket or a purged message drops out here rather than
         // reaching the model as an undefined.

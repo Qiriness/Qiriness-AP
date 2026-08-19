@@ -204,6 +204,16 @@ export const COLUMNS = {
   messageForCategorisation: 'subject,body_text,received_at',
 
   /**
+   * The thread's SHAPE, for deciding whether the customer was left waiting.
+   *
+   * Directions and timestamps only — no bodies and no addresses. The question is
+   * "did they write again before we answered", which is answered by the order of
+   * the envelopes; pulling the bodies to answer it would ship every email in the
+   * thread to a pass that reads one.
+   */
+  messageEnvelopesForDrafting: 'ticket_id,direction,received_at,sent_at',
+
+  /**
    * Drafting reads the message it is replying to, and nothing about who sent it.
    *
    * No `from_email` and no `from_name`: the reply is composed from the case
@@ -268,6 +278,28 @@ export const COLUMNS = {
     'drafted_at,review_sent_at',
 
   /**
+   * Everything `buildOrderContext` reads to assemble an order bundle.
+   *
+   * ONE LIST, TWO CALLERS, and the second is why it moved here. The order-context
+   * pass builds a bundle for a CONFIRMED order; the purchase check builds one for
+   * the customer's LAST order when none was confirmed. Both hand the row to the
+   * same builder, so a column added for one and missed by the other would produce
+   * two bundles of different shapes from one function.
+   */
+  orderForContext:
+    'id,name,order_number,customer_id,' +
+    'financial_status,fulfillment_status,return_status,order_status,' +
+    'cancel_reason,cancelled_at,sales_channel,source_name,' +
+    'currency_code,subtotal_price,total_discounts,total_shipping_price,' +
+    'total_tax,total_price,total_refunded,total_outstanding,' +
+    'line_items,fulfillments,refunds,returns,shipping_destination,' +
+    // Read for the dashboard's benefit, not the agent's — `toOrderContextText`
+    // leaves it out of what the model is shown.
+    'customer_email_masked,' +
+    'delivered_at,return_refund_opened_at,return_refund_completed_at,' +
+    'processed_at,shopify_created_at,shopify_updated_at',
+
+  /**
    * The embedding determinism quadruple, plus whatever composes the input.
    *
    * The three embedded tables carry the SAME four vector columns by design
@@ -300,11 +332,13 @@ export const PROJECTION_SOURCE = {
   ticketForAutoClose: T.TICKETS,
   ticketForConversation: T.TICKETS,
   ticketForDetail: T.TICKETS,
+  orderForContext: T.ORDERS,
   ticketForDrafting: T.TICKETS,
   messageForThread: T.TICKET_MESSAGES,
   messageForCategorisation: T.TICKET_MESSAGES,
   messageForInvestigation: T.TICKET_MESSAGES,
   messageForDrafting: T.TICKET_MESSAGES,
+  messageEnvelopesForDrafting: T.TICKET_MESSAGES,
   investigationForDetail: T.TICKET_INVESTIGATIONS,
   investigationForDrafting: T.TICKET_INVESTIGATIONS,
   draftForReview: T.TICKET_DRAFTS,

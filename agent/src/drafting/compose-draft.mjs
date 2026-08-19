@@ -54,7 +54,8 @@ export function composeDraftingMessage({
   message,
   caseFile,
   orderContext = null,
-  ticket = null
+  ticket = null,
+  chase = null
 } = {}) {
   const parts = [];
 
@@ -71,6 +72,18 @@ export function composeDraftingMessage({
   const orderText = orderContext ? toOrderContextText(orderContext) : null;
   if (orderText) {
     parts.push(`## Commande concernée\n\n${orderText}`);
+  }
+
+  // WE LEFT THEM WAITING, stated as a fact rather than left to be inferred from
+  // the customer's tone. Measured on the corpus: 12 threads hold an unanswered
+  // chase and only 4 mention it in words, so a model reading the prose alone
+  // would miss most of them. The rule that says what to do about it is in the
+  // system prompt; this is only the fact.
+  if (chase?.chased) {
+    parts.push(
+      `## Historique de l’échange\n\n` +
+        `Le client a écrit ${chase.unanswered} fois sans avoir reçu de réponse de notre part.`
+    );
   }
 
   // The customer's name, when the thread carries one. Enough to open the reply

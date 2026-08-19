@@ -5,7 +5,6 @@ import { createExemplarRetrieval } from '../retrieval/exemplar-retrieval.mjs';
 import { createKnowledgeRetrieval } from '../retrieval/knowledge-retrieval.mjs';
 import { createProductLookup } from '../retrieval/product-lookup.mjs';
 import { createPurchaseLookup } from '../retrieval/purchase-lookup.mjs';
-import { createOrderContextStore } from '../resolution/order-context-runner.mjs';
 import { buildOrderContext } from '../resolution/order-context.mjs';
 import { createPromotionLookup } from '../retrieval/promotion-lookup.mjs';
 
@@ -59,21 +58,14 @@ export function createInvestigationStack({
   // catalogue index, so building a second product lookup here would load and
   // tokenise all 116 titles a second time to answer the same question.
   const productLookup = createProductLookup({ supabase, shopId, logger });
-  const orderContextStore = createOrderContextStore(supabase);
+  const purchaseLookup = createPurchaseLookup({ supabase, shopId, productLookup, logger });
 
   const registry = createToolRegistry({
     customerLookup: customerLookup || createCustomerLookup({ supabase, shopId, logger }),
     productLookup,
-    purchaseLookup: createPurchaseLookup({ supabase, shopId, productLookup, logger }),
+    purchaseLookup,
     promotionLookup: createPromotionLookup({ supabase, shopId, logger }),
     retrieveKnowledge: createKnowledgeRetrieval({ supabase, embeddingsClient, logger }),
-    // The order tool's fallback: the customer's most recent order, built with
-    // the SAME builder as a confirmed one so the dashboard renders it through
-    // the projection it already has. Never reaches the model.
-    lastOrderLookup: async (customerId) => {
-      const found = await orderContextStore.loadLastOrderForCustomer(shopId, customerId);
-      return found ? buildOrderContext(found.order, found.customer) : null;
-    },
     shopId,
     logger
   });
@@ -95,10 +87,35 @@ export function createInvestigationStack({
   // investigation so its answer stays independent of the run it is measuring.
   const retrieveExemplar = createExemplarRetrieval({ supabase, embeddingsClient, logger });
 
+  /**
+   * The customer's most recent order, as a bundle for a HUMAN to check first.
+   *
+   * ONE FETCH, OWNED BY THE MODULE THAT ALREADY HAD IT. `purchaseLookup` has
+   * read this exact row since Phase 4 to cross-check the product a customer
+   * describes; this borrows that read rather than adding a second — the same
+   * argument as the shared catalogue index above, which was already written on
+   * this page when a duplicate got added four lines below it.
+   *
+   * OUTSIDE THE TOOL REGISTRY, and that is the other half. It used to be a
+   * branch of `getOrderContext`, so it only ran when the model chose to call
+   * that tool — and `product` has no order tool in `allowedTools` at all, which
+   * is the subject where a reviewer most wants recent orders. Putting an order
+   * tool in front of the model there would have fixed the availability and
+   * invited the failure: a model shown an order tool starts asking customers
+   * for order numbers.
+   *
+   * So the model cannot call this, is never told it ran, and never sees it.
+   */
+  const lastOrderLookup = async (customerId) => {
+    const found = await purchaseLookup.lastOrder(customerId);
+    return found ? buildOrderContext(found.order, found.customer) : null;
+  };
+
   return {
     investigate,
     store: createCaseFileStore(supabase),
     registry,
-    retrieveExemplar
+    retrieveExemplar,
+    lastOrderLookup
   };
 }

@@ -126,6 +126,7 @@ async function main() {
     // Runs in a dry run too. It writes nothing itself, and leaving it out would
     // make the dry run stop reproducing the worker — the one thing it is for.
     retrieveExemplar: investigation.retrieveExemplar,
+    lastOrderLookup: investigation.lastOrderLookup,
     onResult: ({ ticket, caseFile, level }) => {
       const needs = summariseNeeds(caseFile.evidenceGaps);
       totalNeeds.declared += needs.declared;

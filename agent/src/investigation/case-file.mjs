@@ -1,5 +1,3 @@
-import { TOOL_NAMES } from './investigation-rules.mjs';
-
 // The case file — what the investigation agent hands to the drafting agent.
 //
 // This module is the CONTRACT, and it is pure: a model answer plus a ledger of
@@ -170,6 +168,14 @@ export const CAVEATS = {
     'Ne pas affirmer que cette personne n’a rien acheté ni qu’elle n’est pas cliente : ' +
     'l’achat n’a pas pu être vérifié, et un achat en boutique physique n’apparaît jamais ' +
     'dans nos données. Demander où l’achat a été effectué.',
+  // WHAT WE CANNOT SEE, PHRASED SO IT CANNOT BE REPEATED. The reason is
+  // deliberately absent: saying "no carrier scan is available" in a prohibition
+  // is saying it to the model, and the model paraphrased exactly that to 8
+  // customers before this existed. It states what may not be claimed and stops.
+  delivery_unscanned:
+    'Ne pas décrire où se trouve le colis, ni son avancement, ni annoncer une date ' +
+    'de livraison : rien n’est établi au-delà de l’expédition. Ne rien dire non plus ' +
+    'du suivi transporteur lui-même.',
   attachments_unrecorded:
     'Ne pas affirmer qu’aucune photo n’a été envoyée : les pièces jointes de ce message ' +
     'n’ont pas été enregistrées, leur contenu est inconnu.'
@@ -304,44 +310,6 @@ export function deriveDoNotClaim({ caveats = [], missing = [] } = {}) {
 }
 
 /**
- * The order a human should look at first, when no order was confirmed.
- *
- * WHY THIS EXISTS. A customer writes « je vous ai passé une commande fin
- * juillet » and gives no number. `getOrderContext` resolves nothing, the ticket
- * goes to a person — and that person opens Shopify and looks up the customer's
- * most recent order by hand. The tool layer can do that lookup in the same call
- * that failed to confirm one, so it does, and this keeps the answer.
- *
- * IT IS THE ORDER TOOL'S FALLBACK BRANCH, which is what makes the ordering
- * structural rather than a rule somebody has to remember: it runs only after
- * the order lookup, only when that lookup confirmed nothing, and costs no extra
- * tool call. There is no arrangement of the loop in which a confirmed order and
- * a candidate both appear — the duplication is unreachable, not merely
- * forbidden.
- *
- * INTERNAL, AND THAT IS THE WHOLE POINT. This is a CANDIDATE, not a fact: the
- * customer never named an order, so it answers "which order did they most
- * recently place", never "which order do they mean". It is rendered in
- * `toHumanBrief` and in the dashboard, and it is ABSENT from `toDraftingPrompt`
- * and from `investigationForDrafting`, for the same reason `handoff` is: a
- * number a model can see is a number it can quote, and quoting the wrong order
- * number at a customer is worse than quoting none.
- *
- * IT CHANGES NO DECISION. It is derived here, after the verdict is settled, and
- * read by nothing in the investigation loop. Adding it cannot move a ticket
- * between verdicts — a test asserts that, because the question was asked.
- */
-export function deriveCandidateOrder(ledger = []) {
-  const order = ledger.find((entry) => entry.tool === TOOL_NAMES.GET_ORDER_CONTEXT);
-  if (!order || order.data?.confirmed || !order.data?.candidate?.order) {
-    return {};
-  }
-  // The bundle exactly as `buildOrderContext` produced it, so the dashboard
-  // reads it with the projection it already has for a confirmed order.
-  return order.data.candidate;
-}
-
-/**
  * Assembles the stored case file from the model's answer and everything code
  * knows independently of it.
  *
@@ -363,6 +331,10 @@ export function buildCaseFile({
   // read the ticket, `exemplar` when it failed and a matched situation's
   // declared needs stood in, `none` when neither produced anything.
   needsSource = 'none',
+  // The customer's most recent order, when none was confirmed. Passed in rather
+  // than derived here: it must not depend on whether the model happened to call
+  // an order tool, and on a `product` ticket there is no order tool to call.
+  candidateOrder = null,
   model = null,
   now = new Date()
 } = {}) {
@@ -389,10 +361,10 @@ export function buildCaseFile({
     unverified,
     missing,
     doNotClaim: deriveDoNotClaim({ caveats, missing }),
-    // The order a human should check first when none was confirmed. Derived
-    // from the ledger, never model-authored, and never shown to the drafting
-    // stage -- see deriveCandidateOrder.
-    candidateOrder: deriveCandidateOrder(ledger),
+    // The order a human should check first when none was confirmed. Supplied by
+    // the runner, OUTSIDE the model's tool loop, and never shown to the drafting
+    // stage -- see the runner's `lastOrderLookup`.
+    candidateOrder: candidateOrder || {},
     knowledge: Array.isArray(knowledge) ? knowledge : [],
     // A POINTER, not a copy. The order/customer bundle already lives in
     // tickets.resolved_context: copying it here would duplicate personal data

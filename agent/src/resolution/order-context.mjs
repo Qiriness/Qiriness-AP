@@ -343,10 +343,29 @@ function describeDeliveryLine(delivery, signals) {
     );
   }
   if (state === 'dispatched') {
-    // The largest delivery cluster in the corpus: dispatched, no carrier scan.
-    return signals.awaitingCarrierScan
-      ? 'Livraison : expédiée, mais aucun scan transporteur pour le moment.'
-      : 'Livraison : expédiée.';
+    // THE ABSENCE OF A SCAN IS A FACT ABOUT US, NOT ABOUT THE PARCEL, and this
+    // line used to tell the model otherwise: « expédiée, mais aucun scan
+    // transporteur pour le moment ». The model believed it — 17 case files
+    // recorded it as an ESTABLISHED fact — and 8 drafts passed it to customers,
+    // several naming the carrier: « pas encore de scan de suivi de la part de
+    // Colissimo », « aucun scan transporteur » for GLS.
+    //
+    // No carrier feeds scan events into Shopify for this store at all
+    // (`delivered_at` on 1 order in 2 006, `in_transit_at` on none), so that
+    // sentence blamed the carrier for a gap in our own integration, and implied
+    // a stuck parcel where there is only an absent feed.
+    //
+    // The model is now told what is true and customer-safe: it was dispatched,
+    // and when. What we cannot see reaches it as a PROHIBITION instead
+    // (`delivery_unscanned` in case-file.mjs), because a prohibition cannot be
+    // repeated to a customer as a fact. `signals.awaitingCarrierScan` still
+    // carries it for the dashboard and the human brief, which are internal.
+    const since = delivery.daysSinceDispatch;
+    return (
+      'Livraison : expédiée' +
+      (Number.isFinite(since) ? ` il y a ${since} jours` : '') +
+      '.'
+    );
   }
   if (state === 'not_dispatched') {
     return "Livraison : pas encore expédiée.";

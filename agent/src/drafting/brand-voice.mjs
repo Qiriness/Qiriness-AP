@@ -54,6 +54,17 @@ export const STRUCTURAL_RULES = [
     'peut être mentionné comme une chose que le client rapporte, jamais comme un fait.',
   'Ne jamais citer de référence interne : identifiant technique, référence produit, ' +
     'adresse e-mail d’un client, numéro de suivi non fourni par le dossier.',
+  // A GENERAL RULE, and it covers both signals. The prompt carries the fact
+  // when we can prove the customer was left waiting (`## Historique de
+  // l’échange`); this also catches the cases only their own words reveal —
+  // measured on the corpus, 2 of 14 chases are visible in the prose alone.
+  //
+  // The apology is for OUR delay, not for their problem, and it opens the reply
+  // because an apology arriving after the answer reads as an afterthought.
+  'Si le client a dû écrire plusieurs fois, ou indique qu’il attend une réponse depuis un ' +
+    'moment, commencer par s’excuser du délai de réponse — brièvement, une phrase, sans se ' +
+    'justifier ni expliquer pourquoi. S’excuser du délai n’est pas reconnaître une faute sur ' +
+    'le fond du dossier.',
   'Ne pas inventer de formule de politesse finale (« merci de votre patience », « nous restons à ' +
     'votre disposition », « votre satisfaction est notre priorité »). La formule de clôture ' +
     'approuvée, lorsqu’elle est fournie, est la seule autorisée.',

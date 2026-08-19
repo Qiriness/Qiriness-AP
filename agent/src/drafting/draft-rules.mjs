@@ -174,6 +174,49 @@ export function autoSendEligible({ level, happiness, checksPassed, verdict } = {
 }
 
 /**
+ * Did the customer write again before we answered?
+ *
+ * TWO SIGNALS EXIST AND NEITHER IS ENOUGH ALONE. Measured across the 81 drafted
+ * tickets: 12 threads hold consecutive inbound messages with no reply between
+ * them — a chase we can PROVE — while only 4 say so in words. The overlap is 2.
+ * A prompt instruction alone would miss 10; this function alone would miss 2.
+ * So this supplies the fact, and the prompt carries the rule for the cases only
+ * the customer's own words reveal.
+ *
+ * CONSECUTIVE INBOUND, NOT A MESSAGE COUNT. A thread where the customer replied
+ * to our question has two inbound messages and is a normal exchange, not a
+ * chase. What makes it a chase is that they wrote again while nothing had come
+ * back — so the run has to be uninterrupted by an outbound.
+ *
+ * IT DESCRIBES OUR CONDUCT, NOT THE CUSTOMER'S MOOD. `happiness` already
+ * records how they sound; this records that we left them waiting, which is true
+ * whether they complained about it or not.
+ */
+export function describesChase(messages = []) {
+  const ordered = [...messages].sort(
+    (a, b) => timeOf(a) - timeOf(b)
+  );
+
+  let run = 0;
+  let longestRun = 0;
+  for (const message of ordered) {
+    if (message?.direction === 'inbound') {
+      run += 1;
+      longestRun = Math.max(longestRun, run);
+    } else {
+      run = 0;
+    }
+  }
+
+  return { chased: longestRun > 1, unanswered: longestRun };
+}
+
+/** Inbound carries `received_at`, our own replies carry `sent_at`. */
+function timeOf(message) {
+  return Date.parse(message?.received_at || message?.sent_at || '') || 0;
+}
+
+/**
  * The language to answer in.
  *
  * Falls back to French rather than to the model's judgement: the corpus, the

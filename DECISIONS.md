@@ -683,25 +683,59 @@ So all three intent sets now share one shape: **answer what can be answered firs
 
 **Two instructions had to be added because reordering alone did not work.** Measured across eight handover drafts, only 4 of 24 established facts reached the reply — "answer what can be answered" reads to a model as "acknowledge the topic". The rule now names the obligation: *a useful established fact that is not passed on is something the customer will have to ask for again.* On the LED-mask ticket that is the difference between a reply that mentions the two-year warranty and one that does not.
 
-### The last order is kept as a candidate, and never shown to the drafting agent
+### The last order is kept as a candidate, and it is not a tool
 
-A customer writes « je vous ai passé une commande fin juillet » and gives no number. `getOrderContext` resolves nothing, the ticket goes to a person, and that person opens Shopify and looks up the customer's most recent order by hand.
+A customer writes about a product problem, or a return, and names no order. A reviewer wants their recent orders in front of them; without that they open Shopify and search by hand.
 
-**The tool layer can do that lookup in the same call that failed to confirm one**, so it does. `candidate_order` keeps the answer.
+**It began as a branch of `getOrderContext`, and that was wrong for the subjects that need it most.** Which orders a reviewer sees then depended on whether the model chose to call an order tool — and `product` has no order tool in `allowedTools` at all, so the subject where recent orders are most useful was the one that never got them.
 
-**It is the order tool's fallback branch, and that is what makes the ordering structural.** It runs only after the order lookup, only when that lookup confirmed nothing, and costs no extra tool call. There is no arrangement of the loop in which a confirmed order and a candidate both appear — the duplication is *unreachable*, not merely forbidden by a rule somebody has to remember. Putting it in a tool of its own would have made the ordering a convention instead.
+**The obvious fix is the dangerous one.** Adding `GET_ORDER_CONTEXT` to `product` and `return_exchange` would put an order tool in front of the model on tickets that are not about an order, and a model shown an order tool starts asking customers for order numbers. The requirement was the opposite: show the human recent orders, and do not let that turn into a question.
 
-**The same builder as a confirmed order.** `buildOrderContext` produces the bundle, so the dashboard renders it with the projection it already has and only the headings differ: Last order, Last order status, Last order items, Last order tracking, Last order delivery. A narrower shape would have meant a second renderer and a second set of decisions about what a reader is shown.
+**So it is not a tool.** `lastOrderLookup` lives on the investigation stack, outside the registry. The model cannot call it, is never told it ran, and never sees its result. The runner calls it **after the case file is complete**, so it cannot touch the verdict or `missing` — a test asserts exactly that, on both an `answerable` and a `needs_customer_input` answer.
 
-**Internal, and that is the point.** The customer named no order, so this answers "which order did they most recently place", never "which order do they mean". Rendered in `toHumanBrief` and the dashboard; ABSENT from `toDraftingPrompt`, from `investigationForDrafting`, and from the tool's own `promptText` in both branches. **A number a model can see is a number it can quote**, and quoting the wrong order number at a customer is worse than quoting none. Tests assert the absence rather than trusting the renderer.
+**Conditions are properties of the ticket, not of the run**: no `shopify_order_number`, and a linked `customer_id`. Deterministic, so it no longer matters which tools the model happened to choose.
 
-**It changes no decision, and that was asked about directly.** It is derived in `buildCaseFile` *after* the verdict is settled (line order is load-bearing) and read by nothing in the investigation loop. A test asserts that the same answer with and without a candidate yields the same verdict and the same `missing`. What looked like the candidate moving a ticket from `needs_customer_input` to `needs_human` was the investigation model varying between runs — measured three times on one ticket, including once before the field existed.
+**Empty is often the right answer**, and reads correctly. Measured while verifying: a `return_exchange` ticket with a linked customer returned nothing because that customer has zero orders — a newsletter signup or an address given in a shop, which is the `known_no_orders` state the purchase check already distinguishes.
+
+**A failed lookup never fails the investigation.** A lead is worth having and never worth losing a case file for, so the error is logged and the field stays empty.
 
 ### `claim` can be narrowed to one ticket
 
 `record.claim(pass, { ticketId })` adds a filter to the queue; it does not bypass it. The pass's flag and its `where` still apply, so naming a ticket that is not due returns nothing rather than running it anyway — which keeps it an operator convenience ("look at this one") rather than a second, unguarded way into a pass.
 
 It exists because the queue is oldest-first over an imported corpus: 109 historical tickets carry a flag no poll can reach, so re-running one recent ticket by hand meant paying for everything ahead of it.
+
+### The absence of a carrier scan is a fact about us, and the model was told it was a fact about the parcel
+
+`toOrderContextText` — the model's projection of the order bundle — rendered a dispatched parcel as « Livraison : expédiée, mais aucun scan transporteur pour le moment. » The model believed it, because everything in that projection is presented as established: **17 case files recorded it as an established fact, and 8 of 81 drafts passed it to the customer**, several naming the carrier — « pas encore de scan de suivi de la part de Colissimo », « aucun scan transporteur » for GLS.
+
+**That sentence is wrong twice.** No carrier feeds scan events into Shopify for this store at all (`delivered_at` set on 1 order in 2 006, `in_transit_at` on none), so it blamed Colissimo and GLS for a gap in our own integration. And it implied a stuck parcel where there is only an absent feed — the customer reads "the carrier hasn't scanned it" as "your parcel is not moving".
+
+**The model is now told what is true and customer-safe**: dispatched, and how many days ago. What we cannot see reaches it as a PROHIBITION (`delivery_unscanned`) instead, and the prohibition deliberately does not explain itself — stating "no carrier scan is available" inside a `do_not_claim` line is still stating it to the model, which is exactly what it paraphrased before.
+
+**Two checks, at different scopes.** `do_not_claim:delivery_unscanned` fires only when the caveat was raised and catches the model describing the parcel's progress. `no_carrier_scan_wording` fires on **every** reply regardless of caveat, because that wording is a statement about our own integration and is not the customer's business on any ticket.
+
+`signals.awaitingCarrierScan` still carries the fact for the dashboard and the human brief, which are internal audiences. The tool layer knowing something and the model being told it are different things, and this is the case that shows why.
+
+### An unanswered chase is a fact about our conduct, not a mood to read off the customer
+
+If a customer had to write twice, the reply opens by apologising for the delay. Two signals say that happened, and **neither is enough alone** — measured across the 81 drafted tickets:
+
+| | |
+|---|---|
+| Threads holding consecutive inbound messages with no reply between | **12** |
+| Messages that SAY so in words | **4** |
+| Overlap | **2** |
+
+A prompt instruction alone would miss 10; the thread structure alone would miss 2. So `describesChase` supplies the fact where it is provable, and a general rule in the prompt covers the cases only the customer's own words reveal.
+
+**Consecutive inbound, not a message count.** A customer answering our question has two inbound messages and is a normal exchange. What makes it a chase is that they wrote again while nothing had come back, so the run has to be uninterrupted by an outbound.
+
+**It describes us, not them.** `happiness` already records how the customer sounds; this records that we left them waiting, which is true whether they complained about it or not.
+
+**Envelopes only.** The thread read selects `ticket_id,direction,received_at,sent_at` — no bodies, no addresses. The question is answered by the order of the messages, and pulling the bodies to answer it would ship every email in a thread to a pass that reads one.
+
+**The check is narrower than the rule, on purpose.** `apologises_for_delay` fires only when the thread proves the chase, because a check has to rest on something checkable; the stated-only cases stay the prompt's job. Its pattern covers all four languages the corpus drafts in — the first version was French-only and failed an Italian reply that opened « Ci scusiamo per il ritardo nella risposta », which is exactly how a check earns being ignored.
 
 ### Asking is licensed by the case file, not by the verdict
 

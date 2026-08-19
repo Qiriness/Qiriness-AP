@@ -1,4 +1,5 @@
 import { supabaseSelect } from '../../../scripts/lib/supabase-rest-client.mjs';
+import { COLUMNS, T } from '../../../scripts/lib/tables.mjs';
 
 import { toPromptText, verifyPurchase } from './purchase-verification.mjs';
 
@@ -24,7 +25,15 @@ import { toPromptText, verifyPurchase } from './purchase-verification.mjs';
 // question — does what they are describing match what they last bought.
 
 const CUSTOMER_COLUMNS = 'id,number_of_orders,last_order_name,last_order_at';
-const ORDER_COLUMNS = 'name,processed_at,line_items';
+
+// THE FULL BUNDLE PROJECTION, not the three columns the product cross-check
+// needs. Widened when the dashboard's "Last order" block started reading this
+// same row: a second fetch existed for a while, with its own copy of the
+// filters and its own column list, which is two ways to answer one question.
+// The cross-check still reads only `name`, `processed_at` and `line_items` — it
+// simply no longer owns the narrowest possible read of a row somebody else also
+// wants whole.
+const ORDER_COLUMNS = COLUMNS.orderForContext;
 
 export function createPurchaseLookup({ supabase, shopId, productLookup = null, logger = null }) {
   /**
@@ -44,10 +53,21 @@ export function createPurchaseLookup({ supabase, shopId, productLookup = null, l
   async function lastOrderFor(customerId) {
     const rows = await supabaseSelect(
       supabase,
-      'orders',
+      T.ORDERS,
       { customer_id: customerId, shop_id: shopId, deleted_at: { operator: 'is', value: 'null' } },
       ORDER_COLUMNS,
       { order: 'processed_at.desc', limit: 1 }
+    );
+    return rows[0] ?? null;
+  }
+
+  /** The customer row, or null. Narrow: only what the three-state check reads. */
+  async function customerFor(customerId) {
+    const rows = await supabaseSelect(
+      supabase,
+      T.CUSTOMERS,
+      { id: customerId, shop_id: shopId },
+      CUSTOMER_COLUMNS
     );
     return rows[0] ?? null;
   }
@@ -69,15 +89,14 @@ export function createPurchaseLookup({ supabase, shopId, productLookup = null, l
       }
 
       try {
-        const [customerRows, catalogueIndex] = await Promise.all([
-          supabaseSelect(supabase, 'customers', { id: customerId, shop_id: shopId }, CUSTOMER_COLUMNS),
+        const [customer, catalogueIndex] = await Promise.all([
+          customerFor(customerId),
           // Lent by the product tool so the order's line items are scored with
           // the catalogue's word weights. Optional: without it the match still
           // works, just more bluntly.
           productLookup?.catalogueIndex?.() ?? null
         ]);
 
-        const customer = customerRows[0] ?? null;
         // A linked customer with no orders is `known_no_orders` and needs no
         // order fetched — there is none, and asking for one is a wasted round
         // trip on every newsletter signup who writes in.
@@ -96,6 +115,37 @@ export function createPurchaseLookup({ supabase, shopId, productLookup = null, l
         logger?.warn?.('purchase.verify_failed', { ticketId: ticket?.id, message: error.message });
         return verifyPurchase({ customer: null, question: ticket?.text ?? '' });
       }
+    },
+
+    /**
+     * The customer's most recent order, as a full bundle row plus the customer.
+     *
+     * THE SAME FETCH THE CROSS-CHECK USES, exposed rather than copied. It was
+     * copied for a while — a second `loadLastOrderForCustomer` in the
+     * order-context store, same table, same filters, same ordering, different
+     * columns — which is exactly the duplication the shared catalogue index
+     * above exists to avoid.
+     *
+     * NOT A TOOL, and reached from the runner rather than the registry: the
+     * model must never see a candidate order (it would quote it), and a
+     * `product` ticket has no order tool to hang it on anyway.
+     *
+     * THE ZERO-ORDERS SHORT-CIRCUIT IS INHERITED, and it is worth more here than
+     * in the cross-check: measured on this corpus, 3 of the 4 product tickets
+     * eligible for a candidate belong to customers with no orders at all —
+     * newsletter signups who wrote in. Asking the database for their last order
+     * is a round trip that can only return nothing.
+     */
+    async lastOrder(customerId) {
+      if (!customerId) {
+        return null;
+      }
+      const customer = await customerFor(customerId);
+      if (!customer || Number(customer.number_of_orders ?? 0) === 0) {
+        return null;
+      }
+      const order = await lastOrderFor(customerId);
+      return order ? { order, customer } : null;
     },
 
     toPromptText

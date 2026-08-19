@@ -10,6 +10,126 @@ Three sibling files carry the other halves, and this one deliberately does not d
 
 ---
 
+## The last-order candidate stops being a tool, so product tickets get it too (2026-08-19)
+
+The candidate was fetched in `getOrderContext`'s unresolved branch, which meant
+two things went wrong for the subjects that need it most: it only ran when the
+model chose to call that tool, and **`product` has no order tool in
+`allowedTools` at all** — so product tickets never got one.
+
+**The obvious fix would have caused the failure the request warned about.**
+Adding `GET_ORDER_CONTEXT` to `product` and `return_exchange` puts an order tool
+in front of the model on tickets that are not about an order, and a model shown
+an order tool starts asking customers for order numbers.
+
+### So it is no longer a tool
+
+`lastOrderLookup` moved out of the registry onto the investigation stack. The
+model cannot call it, is never told it ran, and never sees its result. The runner
+calls it **after the case file is complete**, so it cannot touch the verdict or
+`missing`.
+
+- **Conditions are properties of the ticket** — no `shopify_order_number`, a
+  linked `customer_id` — not of which tools the model happened to pick.
+- `buildCaseFile` now takes `candidateOrder` as an input instead of deriving it
+  from the ledger; `deriveCandidateOrder` is gone.
+- A failed lookup logs and leaves the field empty: a lead is never worth losing a
+  case file for.
+
+**Verified on a live `product` ticket**: candidate `#6074`, `FULFILLED`, placed
+15 June, two items, Colissimo `6C20980980642` — while `missing` stayed
+`["product_name"]` and the tools the model ran were `lookupProduct`,
+`searchKnowledge`, `lookupProduct`. **No order tool offered, no order number
+demanded.**
+
+**Empty is often correct.** A `return_exchange` ticket with a linked customer
+returned nothing because that customer has zero orders — the `known_no_orders`
+state, a newsletter signup or an address given in a shop.
+
+Suites: **1520** root, **916** agent.
+
+---
+
+## A customer who had to write twice is apologised to (2026-08-19)
+
+A general drafting rule, and the measurement decided how to implement it. Across
+the 81 drafted tickets: **12 threads hold consecutive inbound messages with no
+reply between them** — a chase we can prove — while only **4** say so in words,
+overlapping on 2. A prompt instruction alone would have missed 10; thread
+structure alone would have missed 2. So it is both.
+
+- **`describesChase`** reads the thread's ENVELOPES — `direction`,
+  `received_at`, `sent_at`, no bodies — and reports the longest run of inbound
+  messages with nothing sent back. Consecutive, not a count: a customer
+  answering our question is a normal exchange, not a chase.
+- **The fact reaches the prompt** as « Le client a écrit N fois sans avoir reçu
+  de réponse de notre part. » The rule that says what to do about it is a
+  general rule in the system prompt, so it also covers the cases only the
+  customer's own words reveal.
+- **The apology is for OUR delay**, one sentence, opening the reply, without
+  justifying it — and apologising for the delay is explicitly not conceding the
+  substance of the case.
+- **`apologises_for_delay`** is narrower than the rule by design: it fires only
+  where the thread proves the chase, because a check has to rest on something
+  checkable.
+
+**Result: 10 of 12 chased drafts now apologise**, and the 2 that do not are
+flagged rather than shipped.
+
+**The check was wrong once, and the corpus caught it.** The first pattern matched
+French only and failed an Italian draft opening « Ci scusiamo per il ritardo
+nella risposta » — a correct reply marked wrong, which is how a check earns
+being ignored. It now covers all four languages the corpus drafts in (fr 77 ·
+it 2 · es 1 · en 1).
+
+Suites: **1521** root, **916** agent.
+
+---
+
+## « Aucun scan transporteur » was reaching customers, and it is a fact about us (2026-08-19)
+
+Found by review of a draft. `toOrderContextText` rendered a dispatched parcel to
+the model as « expédiée, mais aucun scan transporteur pour le moment ».
+Everything in that projection is presented as established, so the model treated
+it as one.
+
+**Measured before the fix: 17 of 82 case files held it as an ESTABLISHED fact,
+and 8 of 81 drafts said it to the customer** — several naming the carrier:
+
+> « il n’y a pas encore de scan de suivi disponible de la part de Colissimo »
+> « nous n’avons pas de confirmation de livraison de la part de GLS, car aucun
+> scan transporteur n’est disponible »
+
+**Wrong twice.** No carrier feeds scan events into Shopify for this store
+(`delivered_at` on 1 order in 2 006, `in_transit_at` on none), so it blamed
+Colissimo and GLS for a gap in our own integration — and it implied a stuck
+parcel where there is only an absent feed.
+
+### Fixed at the source, not at the output
+
+- **The model is told what is true**: dispatched, and how many days ago.
+- **What we cannot see is a PROHIBITION**, `delivery_unscanned`, which
+  deliberately does not explain itself — writing "no carrier scan is available"
+  inside a `do_not_claim` line is still writing it where the model can read and
+  paraphrase it, which is what happened before.
+- **`no_carrier_scan_wording`** refuses that vocabulary on **every** reply,
+  caveat or not: it describes our integration and is not the customer's business
+  on any ticket.
+- `signals.awaitingCarrierScan` still carries it for the dashboard and the human
+  brief — internal audiences.
+
+### Regenerated
+
+17 tickets re-investigated and re-drafted. **0 case files still claim it, 0
+drafts still mention it**, and 17 now carry the prohibition instead. Checks stand
+at 75/81 — lower than the previous 78 because re-investigation moved some
+verdicts, and the new failures are the checks working, including one draft caught
+saying « le suivi indique » by the new prohibition.
+
+Suites: **1512** root, **908** agent.
+
+---
+
 ## The last-order candidate becomes a full bundle, in the order tool's own fallback (2026-08-19)
 
 Three corrections to the entry below, all from review.

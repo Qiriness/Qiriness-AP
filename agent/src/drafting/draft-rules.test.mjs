@@ -7,6 +7,7 @@ import {
   DISPOSITIONS,
   DRAFTABLE_VERDICTS,
   autoSendEligible,
+  describesChase,
   draftDecision,
   draftDisposition,
   replyLanguage
@@ -154,4 +155,56 @@ test('the reply follows the ticket, and falls back to French', () => {
   assert.equal(replyLanguage({ language: 'en' }), 'en');
   assert.equal(replyLanguage({ language: null }), 'fr');
   assert.equal(replyLanguage(null), 'fr');
+});
+
+// --- was the customer left waiting -------------------------------------------
+
+const at = (n) => new Date(2026, 0, n).toISOString();
+
+test('two inbound messages with no reply between them is a chase', () => {
+  const { chased, unanswered } = describesChase([
+    { direction: 'inbound', received_at: at(1) },
+    { direction: 'inbound', received_at: at(3) }
+  ]);
+  assert.equal(chased, true);
+  assert.equal(unanswered, 2);
+});
+
+test('a reply between them is a normal exchange, not a chase', () => {
+  // A customer answering our question has two inbound messages and is owed no
+  // apology. What makes it a chase is that nothing came back.
+  const { chased } = describesChase([
+    { direction: 'inbound', received_at: at(1) },
+    { direction: 'outbound', sent_at: at(2) },
+    { direction: 'inbound', received_at: at(3) }
+  ]);
+  assert.equal(chased, false);
+});
+
+test('it counts the longest unanswered run, not the total', () => {
+  const { chased, unanswered } = describesChase([
+    { direction: 'inbound', received_at: at(1) },
+    { direction: 'outbound', sent_at: at(2) },
+    { direction: 'inbound', received_at: at(3) },
+    { direction: 'inbound', received_at: at(4) },
+    { direction: 'inbound', received_at: at(5) }
+  ]);
+  assert.equal(chased, true);
+  assert.equal(unanswered, 3);
+});
+
+test('order is taken from the timestamps, not the row order', () => {
+  // Inbound carries received_at and our own replies carry sent_at, so a thread
+  // read back unsorted must still resolve to the real sequence.
+  const { chased } = describesChase([
+    { direction: 'inbound', received_at: at(3) },
+    { direction: 'inbound', received_at: at(1) },
+    { direction: 'outbound', sent_at: at(2) }
+  ]);
+  assert.equal(chased, false);
+});
+
+test('a single message is never a chase', () => {
+  assert.equal(describesChase([{ direction: 'inbound', received_at: at(1) }]).chased, false);
+  assert.equal(describesChase([]).chased, false);
 });

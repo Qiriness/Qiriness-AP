@@ -302,7 +302,7 @@ export function TicketDetailPanel({ ticket }: TicketDetailPanelProps) {
               No order number confirmed. Their most recent order, as a starting point —
               the customer gave no number, so this may not be the one they mean.
             </p>
-            <dl className={styles.facts}>
+            <dl className={`${styles.facts} ${styles.candidateFacts}`}>
               <div className={styles.fact}>
                 <dt>Last order</dt>
                 <dd className={styles.order}>{candidate.orderName}</dd>

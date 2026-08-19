@@ -179,6 +179,20 @@
   color: var(--text-muted);
 }
 
+/* THE LAST-ORDER BLOCK, and the colour is the whole point of it.
+   It occupies the same slot as the confirmed order and carries the same kinds
+   of line — number, status, items, tracking — so at a glance the two are one
+   thing. Orange labels say they are not: this order is a lead, and nothing in
+   it has been matched to what the customer asked about.
+
+   `--warning` rather than a new token: that ramp already owns "something needs
+   attention" in this app, which is exactly what an unconfirmed order is. Gold is
+   reserved for VIP and would read as a status the customer holds. */
+.candidateFacts dt {
+  color: var(--warning);
+  font-weight: var(--weight-semibold);
+}
+
 /* A lead, not a finding. Sits above the last-order facts so a reviewer reads
    them as somewhere to start rather than as something the agent established. */
 .candidateNote {

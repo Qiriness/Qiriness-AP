@@ -6,7 +6,6 @@ import {
   CAVEAT_CODES,
   MISSING_FIELDS,
   buildCaseFile,
-  deriveCandidateOrder,
   deriveDoNotClaim,
   toDraftingPrompt,
   toHumanBrief,
@@ -222,82 +221,56 @@ const CANDIDATE_BUNDLE = {
   }
 };
 
-const ORDER_LEDGER = (data) => [{ id: 'c1', tool: 'getOrderContext', outcome: 'x', data }];
+const CANDIDATE_ANSWER = {
+  verdict: 'needs_customer_input',
+  established: [],
+  unverified: [],
+  missing: [{ field: 'shopify_order_number' }]
+};
 
-test('the candidate is the order tool own fallback, kept when nothing was confirmed', () => {
-  const candidate = deriveCandidateOrder(
-    ORDER_LEDGER({ confirmed: false, candidate: CANDIDATE_BUNDLE })
-  );
-  assert.equal(candidate.order.name, '#6576');
+test('the candidate is supplied by the runner, not derived from the ledger', () => {
+  // It must not depend on whether the model happened to call an order tool: a
+  // `product` ticket has no order tool at all, and that is precisely the subject
+  // where a reviewer most wants to see recent orders.
+  const caseFile = buildCaseFile({ answer: CANDIDATE_ANSWER, candidateOrder: CANDIDATE_BUNDLE });
+  assert.equal(caseFile.candidateOrder.order.name, '#6576');
 });
 
-test('a confirmed order can never sit beside a candidate', () => {
-  // Not a rule somebody has to remember: the candidate is fetched in the
-  // unresolved branch of the same tool call, so there is no arrangement of the
-  // loop that produces both.
-  assert.deepEqual(
-    deriveCandidateOrder(ORDER_LEDGER({ confirmed: true, candidate: CANDIDATE_BUNDLE })),
-    {}
-  );
-});
-
-test('no order tool call, or no last order, means no candidate', () => {
-  assert.deepEqual(deriveCandidateOrder([]), {});
-  assert.deepEqual(deriveCandidateOrder(ORDER_LEDGER({ confirmed: false, candidate: null })), {});
+test('no candidate supplied reads as empty, never undefined', () => {
+  assert.deepEqual(buildCaseFile({ answer: CANDIDATE_ANSWER }).candidateOrder, {});
 });
 
 test('the candidate never reaches the drafting prompt', () => {
   // THE PROPERTY THIS WHOLE FIELD DEPENDS ON. The customer named no order, so
   // the number may be the wrong one -- and a number a model can see is a number
   // it can quote.
-  const caseFile = buildCaseFile({
-    answer: {
-      verdict: 'needs_customer_input',
-      established: [],
-      unverified: [],
-      missing: [{ field: 'shopify_order_number' }]
-    },
-    ledger: ORDER_LEDGER({ confirmed: false, candidate: CANDIDATE_BUNDLE })
-  });
-  assert.equal(caseFile.candidateOrder.order.name, '#6576');
+  const caseFile = buildCaseFile({ answer: CANDIDATE_ANSWER, candidateOrder: CANDIDATE_BUNDLE });
   const prompt = toDraftingPrompt(caseFile);
   assert.ok(!prompt.includes('#6576'));
   assert.ok(!prompt.includes('6C21143473070'));
 });
 
 test('the candidate reaches the human brief, with status, items and tracking', () => {
-  const caseFile = buildCaseFile({
-    answer: {
-      verdict: 'needs_customer_input',
-      established: [],
-      unverified: [],
-      missing: [{ field: 'shopify_order_number' }]
-    },
-    ledger: ORDER_LEDGER({ confirmed: false, candidate: CANDIDATE_BUNDLE })
-  });
-  const brief = toHumanBrief(caseFile);
+  const brief = toHumanBrief(
+    buildCaseFile({ answer: CANDIDATE_ANSWER, candidateOrder: CANDIDATE_BUNDLE })
+  );
   assert.ok(brief.includes('#6576'));
   assert.ok(brief.includes('FULFILLED'));
   assert.ok(brief.includes('Masque LED'));
   assert.ok(brief.includes('6C21143473070'));
 });
 
-test('the candidate changes no verdict', () => {
-  // The correction of 2026-08-19: it is derived AFTER the verdict is settled and
-  // read by nothing in the investigation loop, so a ticket cannot move between
-  // verdicts because a last order happened to exist.
-  const answer = {
-    verdict: 'needs_customer_input',
-    established: [],
-    unverified: [],
-    missing: [{ field: 'shopify_order_number' }]
-  };
-  const without = buildCaseFile({ answer, ledger: ORDER_LEDGER({ confirmed: false }) });
-  const with_ = buildCaseFile({
-    answer,
-    ledger: ORDER_LEDGER({ confirmed: false, candidate: CANDIDATE_BUNDLE })
-  });
-  assert.equal(without.verdict, 'needs_customer_input');
+test('the candidate changes no verdict and asks for nothing extra', () => {
+  // Surfacing recent orders on a product or return_exchange ticket must not turn
+  // into "please give us your order number".
+  const without = buildCaseFile({ answer: CANDIDATE_ANSWER });
+  const with_ = buildCaseFile({ answer: CANDIDATE_ANSWER, candidateOrder: CANDIDATE_BUNDLE });
   assert.equal(with_.verdict, without.verdict);
   assert.deepEqual(with_.missing, without.missing);
+
+  const answerable = { verdict: 'answerable', established: [{ claim: 'x', evidence_ids: ['c1'] }], unverified: [], missing: [] };
+  const ledger = [{ id: 'c1', tool: 'lookupProduct', outcome: 'found' }];
+  const enriched = buildCaseFile({ answer: answerable, ledger, candidateOrder: CANDIDATE_BUNDLE });
+  assert.equal(enriched.verdict, 'answerable');
+  assert.deepEqual(enriched.missing, []);
 });

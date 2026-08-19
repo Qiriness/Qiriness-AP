@@ -54,6 +54,14 @@ export async function runInvestigation({
   // Loaded once per poll by the caller and shared across tickets: it is a small
   // map, and rebuilding it per ticket would turn a lookup back into a query.
   senderDirectory = emptySenderDirectory,
+  // The customer's most recent order, for a HUMAN to check first when no order
+  // was confirmed. Optional; without it the pass runs exactly as before.
+  //
+  // NOT A TOOL, deliberately. The model cannot call it and never sees its
+  // result, so surfacing recent orders on a `product` or `return_exchange`
+  // ticket cannot nudge it into asking the customer for an order number — which
+  // is what adding an order tool to those subjects would have done.
+  lastOrderLookup = null,
   // Which recurring situation this ticket is. OPTIONAL, and absent by default so
   // that a caller which has not wired it runs exactly as it did before.
   //
@@ -126,6 +134,21 @@ export async function runInvestigation({
     } catch (error) {
       await handleFailure({ record, ticket, error, counts, logger, dryRun });
       continue;
+    }
+
+    // AFTER the case file is complete, so it cannot touch the verdict or what
+    // the ticket asks the customer for. Only when nothing was confirmed: with a
+    // confirmed order the bundle already says everything this could.
+    if (lastOrderLookup && !ticket.shopify_order_number && ticket.customer_id) {
+      try {
+        caseFile.candidateOrder = (await lastOrderLookup(ticket.customer_id)) || {};
+      } catch (error) {
+        // A lead is worth having and never worth failing an investigation for.
+        logger?.warn?.('investigate.candidate_order_failed', {
+          ticketId: ticket.id,
+          reason: error.message
+        });
+      }
     }
 
     // The level may rise on what the evidence showed, never fall — the same

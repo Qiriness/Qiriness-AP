@@ -534,3 +534,99 @@ test('courtesy inside the signature is approved text, not invented text', () => 
   assert.equal(check(checks, 'signature').passed, true);
   assert.match(check(checks, 'empty_closer').detail, /aucune formule/);
 });
+
+// --- the carrier-scan leak ---------------------------------------------------
+
+test('the carrier-scan wording is refused on every reply', () => {
+  // MEASURED: 8 of 81 drafts said this to a customer, several naming the
+  // carrier. No carrier feeds scan events into Shopify for this store, so it
+  // blamed Colissimo and GLS for a gap in our own integration — and it is not
+  // the customer's business on any ticket, whatever the case file raised.
+  for (const middle of [
+    'Il semble qu’il n’y ait pas encore de scan de suivi disponible de la part de Colissimo.',
+    'Aucun scan transporteur n’est disponible pour le moment.'
+  ]) {
+    const checks = runDraftChecks({ body: wrap(middle), verdict: 'answerable', signature: SIGNATURE });
+    assert.equal(check(checks, 'no_carrier_scan_wording').passed, false, middle);
+  }
+});
+
+test('stating the dispatch date is not a leak', () => {
+  // What the model is now told is true and customer-safe: it was dispatched,
+  // and when.
+  const checks = runDraftChecks({
+    body: wrap('Votre commande a été expédiée le 21 juillet.'),
+    verdict: 'answerable',
+    signature: SIGNATURE
+  });
+  assert.equal(check(checks, 'no_carrier_scan_wording').passed, true);
+});
+
+test('the unscanned prohibition stops the model describing the parcel', () => {
+  for (const middle of [
+    'Votre colis est actuellement en cours d’acheminement.',
+    'Le suivi n’affiche aucune information pour le moment.'
+  ]) {
+    const checks = runDraftChecks({
+      body: wrap(middle),
+      verdict: 'answerable',
+      doNotClaim: [CAVEATS.delivery_unscanned],
+      signature: SIGNATURE
+    });
+    assert.equal(check(checks, 'do_not_claim:delivery_unscanned').passed, false, middle);
+  }
+});
+
+// --- the apology we owe ------------------------------------------------------
+
+test('a chased customer must be apologised to', () => {
+  const checks = runDraftChecks({
+    body: wrap('Votre commande part demain.'),
+    verdict: 'answerable',
+    chased: true,
+    signature: SIGNATURE
+  });
+  assert.equal(check(checks, 'apologises_for_delay').passed, false);
+});
+
+test('an apology for the delay satisfies it', () => {
+  const checks = runDraftChecks({
+    body: wrap('Nous sommes désolés pour le délai de notre réponse. Votre commande part demain.'),
+    verdict: 'answerable',
+    chased: true,
+    signature: SIGNATURE
+  });
+  assert.equal(check(checks, 'apologises_for_delay').passed, true);
+});
+
+test('a customer who was not left waiting is not owed one', () => {
+  // The check rests on a fact about the envelopes; the broader rule about a
+  // customer who SAYS they have been waiting stays the prompt's job.
+  const checks = runDraftChecks({
+    body: wrap('Votre commande part demain.'),
+    verdict: 'answerable',
+    signature: SIGNATURE
+  });
+  assert.equal(check(checks, 'apologises_for_delay'), undefined);
+});
+
+test('an apology is recognised in every language the corpus drafts in', () => {
+  // MEASURED: the first version matched French only and failed an Italian draft
+  // opening "Ci scusiamo per il ritardo nella risposta" — a correct reply marked
+  // wrong, which is how a check earns being ignored.
+  const byLanguage = {
+    fr: 'Nous sommes désolés pour le délai de notre réponse.',
+    it: 'Ci scusiamo per il ritardo nella risposta.',
+    en: 'We are sorry for the delay in replying.',
+    es: 'Lamentamos la demora en responder.'
+  };
+  for (const [language, line] of Object.entries(byLanguage)) {
+    const checks = runDraftChecks({
+      body: wrap(line + ' Votre commande part demain.'),
+      verdict: 'answerable',
+      chased: true,
+      signature: SIGNATURE
+    });
+    assert.equal(check(checks, 'apologises_for_delay').passed, true, language);
+  }
+});
