@@ -26,7 +26,7 @@ interface NavItem {
 
 const NAV: NavItem[] = [
   { label: "Home", href: "#", icon: HomeIcon, available: false },
-  { label: "Conversations", href: "#", icon: ChatIcon, available: false },
+  { label: "Conversations", href: "/conversations", icon: ChatIcon, available: true },
   { label: "Tickets", href: "/tickets", icon: TicketIcon, available: true },
   // Points at the section, not at a panel. `isActive` is an exact match, so
   // every page under /insights passes "/insights" as its activeHref and the
@@ -43,6 +43,16 @@ interface SidebarProps {
   onToggleCollapse: () => void;
   /** On mobile the sidebar is a slide-over; this closes it after navigation. */
   onNavigate?: () => void;
+  /**
+   * How many Conversations still need somebody, rendered as a badge.
+   *
+   * THE MITIGATION FOR ROUTING THEM OFF THE TICKETS QUEUE. Those threads used to
+   * sit in the queue where they could not be missed; they now have a page of
+   * their own, and the documented failure of that arrangement was three L3
+   * threads awaiting a human behind a nav item nobody opened. A count on the nav
+   * is how the page asks to be opened. Zero renders nothing.
+   */
+  openConversations?: number;
 }
 
 export function Sidebar({
@@ -50,6 +60,7 @@ export function Sidebar({
   collapsed,
   onToggleCollapse,
   onNavigate,
+  openConversations = 0,
 }: SidebarProps) {
   return (
     <nav
@@ -98,6 +109,15 @@ export function Sidebar({
               >
                 <Icon size={19} />
                 {!collapsed && <span className={styles.navLabel}>{item.label}</span>}
+                {item.href === "/conversations" && openConversations > 0 && (
+                  <span
+                    className={styles.badge}
+                    // Readable when collapsed too, where the number is all there is.
+                    title={`${openConversations} conversation${openConversations === 1 ? "" : "s"} still open`}
+                  >
+                    {openConversations}
+                  </span>
+                )}
               </Link>
             </li>
           );

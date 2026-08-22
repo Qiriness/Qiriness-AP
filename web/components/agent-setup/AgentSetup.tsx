@@ -10,6 +10,7 @@ import {
   resyncArticle,
   updateArticle,
 } from "@/lib/api/knowledge";
+import { TestChatDialog } from "@/components/agent-test/TestChatDialog";
 import { SetupHeader } from "./SetupHeader";
 import { ArticleLibrary, type StatusFilter } from "./ArticleLibrary";
 import { ArticleWorkspace } from "./ArticleWorkspace";
@@ -56,6 +57,12 @@ export function AgentSetup({ initialArticles, initialSources, loadError }: Agent
   const [toast, setToast] = useState<ToastMessage | null>(null);
   const [creating, setCreating] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  // The test chat. `null` is closed; an object is open, and `documentId` is what
+  // separates a free test from one checking a particular article — the header
+  // button opens it with none, the workspace button with this article's.
+  const [testing, setTesting] = useState<{ documentId: string | null; title: string | null } | null>(
+    null,
+  );
 
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
   const toastId = useRef(0);
@@ -337,7 +344,11 @@ export function AgentSetup({ initialArticles, initialSources, loadError }: Agent
   return (
     <div className={styles.page}>
       <div className={styles.inner}>
-        <SetupHeader approved={approvedCount} total={articles.length} />
+        <SetupHeader
+          approved={approvedCount}
+          total={articles.length}
+          onTest={() => setTesting({ documentId: null, title: null })}
+        />
 
         <div className={styles.panes} data-pane={mobilePane}>
           <div className={styles.listPane}>
@@ -401,6 +412,7 @@ export function AgentSetup({ initialArticles, initialSources, loadError }: Agent
                   onApprove={handleApprove}
                   onUnapprove={handleUnapprove}
                   onDelete={handleDelete}
+                  onTest={() => setTesting({ documentId: selected.id, title: selected.title })}
                 />
               )
             ) : (
@@ -409,6 +421,14 @@ export function AgentSetup({ initialArticles, initialSources, loadError }: Agent
           </div>
         </div>
       </div>
+
+      {testing && (
+        <TestChatDialog
+          expectDocumentId={testing.documentId}
+          expectDocumentTitle={testing.title}
+          onClose={() => setTesting(null)}
+        />
+      )}
 
       <Toast toast={toast} />
     </div>

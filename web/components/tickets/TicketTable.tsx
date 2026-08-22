@@ -207,6 +207,19 @@ export function TicketTable({
                           {SENDER_LABELS[ticket.senderLabel]}
                         </span>
                       )}
+                      {/* A ticket the agent will not draft on, marked in the
+                          list so somebody working the queue knows before they
+                          open it. Which ticket it duplicates is a question
+                          answered by opening it — the row only needs to say
+                          "not this one". */}
+                      {ticket.isDuplicate && (
+                        <span
+                          className={styles.duplicateChip}
+                          title="The same message already arrived on another ticket — answer there, not here"
+                        >
+                          Duplicate
+                        </span>
+                      )}
                       {/* The crown follows the name, and the flex row is what
                           keeps it: the NAME truncates, the crown never does —
                           the one thing worth spotting at a glance must not be

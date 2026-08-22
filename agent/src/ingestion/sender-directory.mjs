@@ -32,6 +32,26 @@ import { buildPatternIndex, normalizeDomain, normalizeEmail } from '../../../scr
 export const NON_DEMAND_LABELS = ['internal', 'contractor', 'logistics', 'courier'];
 
 /**
+ * Labels that mean the sender is US, stamped onto `tickets.sender_label` when
+ * one of them opens a thread.
+ *
+ * The question is "would a customer-voice reply addressed to this person be
+ * absurd" — not "is this customer demand", which is what `NON_DEMAND_LABELS`
+ * answers for the clustering report. The two lists overlap and are not the same
+ * question, so neither may be used for the other's job.
+ *
+ * `logistics` IS HERE AND `courier` IS NOT, which looks arbitrary and is not.
+ * The 3PL runs our warehouse: their threads are the back office working a
+ * customer's return, the same shape as a colleague's, and a reply opening
+ * "Bonjour Madame" would be as wrong to them as to a colleague. A courier is a
+ * third party we may genuinely need to write to as a customer of theirs.
+ *
+ * A retailer stays out entirely: Nocibé's purchase orders are real demand, and
+ * routing them off the queue would hide a class of work.
+ */
+export const OWN_SIDE_LABELS = ['internal', 'contractor', 'logistics'];
+
+/**
  * @param rows  sender_directory rows: { pattern_type, pattern, label, note }
  * @param supportMailbox  the support address, whose own domain is internal by
  *   definition. Derived rather than required as a row, so a fresh install is

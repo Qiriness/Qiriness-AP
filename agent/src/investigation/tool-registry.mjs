@@ -168,7 +168,16 @@ export function createToolRegistry({
             chunks.length > 0
               ? chunks.map((c) => `### ${c.title || 'Article'}\n${c.text || ''}`).join('\n\n')
               : 'Aucun article approuvé ne répond de façon fiable à cette question.',
-          data: { verdict, bestSimilarity: result.bestSimilarity ?? null, chunks }
+          // `candidates` is the whole ranking, chunks the band let through.
+          // Both live in `data`, which the model never sees — `fromModel` sends
+          // `promptText` and nothing else — so this reports what retrieval found
+          // without widening what it may answer from.
+          data: {
+            verdict,
+            bestSimilarity: result.bestSimilarity ?? null,
+            chunks,
+            candidates: result.candidates || []
+          }
         };
       },
 

@@ -137,8 +137,11 @@ The dashboard's Irrelevant section reads `spam_audit`, so a dropped email is rev
 without a ticket row ever existing. See `DECISIONS.md § Spam gate` for why the body is kept
 and why the earlier retention design was replaced.
 
-**Exit met.** Still open: the `Add as ticket` action is disabled, because re-fetching a
-dropped message addresses it by Graph id — the mailbox question below.
+**Exit met**, and the `Add as ticket` action is now built (2026-08-19). It never needed the
+mailbox after all: the audit row carries the body, so promoting one is a write from stored
+data through the ordinary ingestion path, and the ticket enters the queue flagged for
+categorisation like any other. Built and unit-tested, **never clicked against the live
+database** — `VALIDATION_LOG.md` item 0b.
 
 ### Phase 3 — Categorising agent — **BUILT; accuracy partly proven**
 
@@ -361,9 +364,15 @@ The corpus was ingested from `contact@qiriness.com`; `SUPPORT_MAILBOX` points at
 `spam:backfill:dry-run`, which Graph rejects with `ErrorInvalidMailboxItemId`.
 
 Consequences, all of them downstream of one decision: the spam-body backfill cannot run,
-`/forward` cannot fetch the item it forwards, the dashboard's `Add as ticket` stays disabled,
-and **Phase 5's send path cannot exist**. Drafting itself is unaffected — it reads stored
-rows — so this gates the last step of Phase 5, not its build.
+`/forward` cannot fetch the item it forwards, and **Phase 5's send path cannot exist**.
+Drafting itself is unaffected — it reads stored rows — so this gates the last step of Phase 5,
+not its build.
+
+`Add as ticket` **was on that list and no longer is** (2026-08-19), which is worth keeping as
+a warning about the list itself: it needed Graph only because the body was unstored, and it
+had been stored for over a week. Anything else here that reads *needs to address a message by
+id* is worth re-asking the same question of — what does it actually need from the mailbox
+that is not already in the database?
 
 ### Live parcel status — **ANSWERED: Shopify does not have it**
 

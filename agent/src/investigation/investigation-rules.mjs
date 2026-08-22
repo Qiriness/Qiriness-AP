@@ -169,6 +169,14 @@ export function allowedTools(category, requestKind, level) {
 
 /** Whether this ticket is in scope at all — checked before a single tool is bound. */
 export function isInvestigable(ticket = {}) {
+  // A LINKED DUPLICATE IS THE SAME CONVERSATION, and investigating it a second
+  // time buys nothing: the tools would query the same order for the same
+  // customer and reach the same case file, at full model cost. It matches
+  // `draftDecision`, which already refuses to draft here — a ticket nobody will
+  // reply on does not need evidence gathered for the reply.
+  if (ticket.duplicate_of_ticket_id) {
+    return false;
+  }
   if (!ENABLED_SUBJECTS.includes(ticket.category)) {
     return false;
   }

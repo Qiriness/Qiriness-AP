@@ -7,8 +7,38 @@ import { checkClause, columnsIn, literalsIn, read, tablesIn } from './_shared.te
 
 const SQL = read('07_drafting');
 
-test('it creates exactly the drafts table', () => {
-  assert.deepEqual(tablesIn(SQL), ['ticket_drafts']);
+test('it creates the draft and its edit log, and nothing else', () => {
+  assert.deepEqual(tablesIn(SQL), ['ticket_drafts', 'ticket_draft_edits']);
+});
+
+// --- the edit log, which exists for a reason the drafts table cannot serve ----
+
+test('an edit carries the model text it was an edit OF', () => {
+  // ticket_drafts.body_text is replaced by the next drafting run while
+  // approved_body_text is deliberately kept, so those two columns stop being a
+  // pair the moment a draft is re-run. The snapshot is what makes the record
+  // trustworthy as a learning signal.
+  const columns = columnsIn(SQL, 'ticket_draft_edits');
+  assert.ok(columns.includes('model_body_text'));
+  assert.ok(columns.includes('human_body_text'));
+});
+
+test('an edit that changed nothing is refused', () => {
+  // The most misleading training row possible: a pair implying the agent's text
+  // needed correcting into itself.
+  assert.match(
+    checkClause(SQL, 'ticket_draft_edits_changed_check').replace(/\s+/g, ' ').trim(),
+    /btrim\(human_body_text\) <> btrim\(model_body_text\)/
+  );
+});
+
+test('the mailbox is declared as an edit source before anything writes it', () => {
+  // Editing a review copy in Outlook is the intended second source; adding the
+  // value later would be a constraint change on a populated table.
+  assert.deepEqual(literalsIn(checkClause(SQL, 'ticket_draft_edits_source_check')), [
+    'dashboard',
+    'mailbox'
+  ]);
 });
 
 // --- the idempotency key -----------------------------------------------------

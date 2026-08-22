@@ -37,6 +37,16 @@
     "eval:audit-phrasings": "node eval/audit-phrasings.mjs",
     "eval:knowledge-gaps": "node eval/knowledge-gaps.mjs",
     "draft": "node src/tools/run-drafting.mjs",
-    "draft:dry-run": "node src/tools/run-drafting.mjs --dry-run"
+    "draft:dry-run": "node src/tools/run-drafting.mjs --dry-run",
+    "repair:contact-form": "node src/tools/run-contact-form-repair.mjs",
+    "repair:contact-form:dry-run": "node src/tools/run-contact-form-repair.mjs --dry-run",
+    "related:backfill": "node src/tools/run-related-backfill.mjs",
+    "related:backfill:dry-run": "node src/tools/run-related-backfill.mjs --dry-run",
+    "duplicate:backfill": "node src/tools/run-duplicate-backfill.mjs",
+    "duplicate:backfill:dry-run": "node src/tools/run-duplicate-backfill.mjs --dry-run",
+    "sender-label:backfill": "node src/tools/run-sender-label-backfill.mjs",
+    "sender-label:backfill:dry-run": "node src/tools/run-sender-label-backfill.mjs --dry-run",
+    "requester:repair": "node src/tools/run-requester-repair.mjs",
+    "requester:repair:dry-run": "node src/tools/run-requester-repair.mjs --dry-run"
   }
 }

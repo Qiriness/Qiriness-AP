@@ -280,6 +280,42 @@ export function createDraftingStore(supabase) {
         threadByTicket.set(envelope.ticket_id, thread);
       }
 
+      // THE CHASE THAT SPANS TWO TICKETS. `describesChase` finds the longest run
+      // of consecutive inbound messages, which is exactly the right question and
+      // the wrong scope: a customer who writes again under a new conversation id
+      // opens a SECOND ticket, and each thread on its own shows one lonely
+      // inbound with nothing to notice.
+      //
+      // Merging the related ticket's envelopes in makes the existing rule see
+      // the conversation the customer thinks they are having. Measured on the
+      // corpus: 4 customers wrote again, were never answered, and are currently
+      // drafted to with no apology.
+      //
+      // Envelopes only, and only for a ticket that already carries a link — the
+      // link is set by `related-rules.mjs`, which never fires for a sender
+      // listed in `sender_directory`.
+      const relatedIds = tickets.map((row) => row.related_ticket_id).filter(Boolean);
+      if (relatedIds.length > 0) {
+        const relatedEnvelopes = await supabaseSelect(
+          supabase,
+          T.TICKET_MESSAGES,
+          { ticket_id: { operator: 'in', value: `(${relatedIds.join(',')})` } },
+          COLUMNS.messageEnvelopesForDrafting
+        );
+        const byRelated = new Map();
+        for (const envelope of relatedEnvelopes) {
+          const list = byRelated.get(envelope.ticket_id) || [];
+          list.push(envelope);
+          byRelated.set(envelope.ticket_id, list);
+        }
+        for (const ticket of tickets) {
+          const earlier = byRelated.get(ticket.related_ticket_id);
+          if (earlier?.length) {
+            threadByTicket.set(ticket.id, [...earlier, ...(threadByTicket.get(ticket.id) || [])]);
+          }
+        }
+      }
+
       return claimed
         .map((investigation) => ({
           investigation,

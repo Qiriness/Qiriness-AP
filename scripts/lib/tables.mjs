@@ -70,7 +70,11 @@ export const T = {
   TICKET_CLUSTERS: 'ticket_clusters',
 
   // 07_drafting
-  TICKET_DRAFTS: 'ticket_drafts'
+  TICKET_DRAFTS: 'ticket_drafts',
+  TICKET_DRAFT_EDITS: 'ticket_draft_edits',
+
+  // 08_testing
+  AGENT_TEST_RUNS: 'agent_test_runs'
 };
 
 /**
@@ -142,6 +146,7 @@ export const COLUMNS = {
   ticketQueue:
     'id,subject,status,category,secondary_category,level,happiness,responsible_team,' +
     'requester_name,requester_email,shopify_order_number,first_message_at,last_message_at,' +
+    'duplicate_of_ticket_id,duplicate_reason,sender_label,' +
     'customer_display_name,customer_first_name,customer_last_name,customer_rfm_group,' +
     'message_count,inbound_count,waiting_since',
 
@@ -155,7 +160,7 @@ export const COLUMNS = {
   // handed unless the column comes back with it.
   ticketForInvestigation:
     'id,subject,status,category,request_kind,level,customer_id,requester_email_hash,' +
-    'shopify_order_number,resolved_context,metadata',
+    'shopify_order_number,resolved_context,metadata,duplicate_of_ticket_id',
 
   /** Customer resolution: an address hash and somewhere to record the attempt. */
   ticketForCustomerResolution: 'id,customer_id,requester_email_hash,metadata',
@@ -176,8 +181,12 @@ export const COLUMNS = {
    * is only ever written by failure paths, so gating on it would read "the
    * categoriser crashed" as "the categoriser was unsure".
    */
+  // `duplicate_of_ticket_id` travels so the pass can skip a ticket linked as a
+  // duplicate — the whole point of the link is that one customer does not get
+  // two replies to one message.
   ticketForDrafting:
-    'id,subject,status,level,language,happiness,requester_name,resolved_context',
+    'id,subject,status,level,language,happiness,requester_name,resolved_context,' +
+    'duplicate_of_ticket_id,related_ticket_id,related_score,sender_label',
 
   /**
    * Auto-close. `needs_categorisation` is read so a ticket still queued for the
@@ -278,6 +287,28 @@ export const COLUMNS = {
     'drafted_at,review_sent_at',
 
   /**
+   * The rehearsal history list, WITHOUT the trace.
+   *
+   * `trace` is by far the largest column in the schema after a message body --
+   * every model call's prompt and every tool's returned text -- and the history
+   * pane shows a row per run. Reading it to render a one-line summary would
+   * pull megabytes to display kilobytes, which is the mistake the flat columns
+   * on that table exist to prevent.
+   */
+  testRunForList:
+    'id,ran_at,status,subject,body_text,requester_email_masked,order_number,' +
+    'expect_document_id,article_verdict,gate_outcome,category,request_kind,level,language,' +
+    'verdict,draft_skipped_reason,draft_checks_passed,ideal_body_text,total_tokens',
+
+  /** One run, opened: the list columns plus the record itself. */
+  testRunForDetail:
+    'id,ran_at,status,subject,body_text,requester_name,requester_email_masked,order_number,' +
+    'expect_document_id,article_verdict,gate_outcome,category,request_kind,level,language,' +
+    'verdict,draft_body_text,draft_skipped_reason,draft_checks_passed,draft_disposition,' +
+    'ideal_body_text,ideal_saved_at,trace,input_tokens,output_tokens,total_tokens,call_count,' +
+    'failed_pass,error_message',
+
+  /**
    * Everything `buildOrderContext` reads to assemble an order bundle.
    *
    * ONE LIST, TWO CALLERS, and the second is why it moved here. The order-context
@@ -342,6 +373,8 @@ export const PROJECTION_SOURCE = {
   investigationForDetail: T.TICKET_INVESTIGATIONS,
   investigationForDrafting: T.TICKET_INVESTIGATIONS,
   draftForReview: T.TICKET_DRAFTS,
+  testRunForList: T.AGENT_TEST_RUNS,
+  testRunForDetail: T.AGENT_TEST_RUNS,
   chunkForEmbedding: T.KNOWLEDGE_CHUNKS,
   phrasingForEmbedding: T.SUPPORT_EXEMPLAR_PHRASINGS,
   messageForEmbedding: T.TICKET_MESSAGES

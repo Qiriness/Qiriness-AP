@@ -403,7 +403,15 @@ function round3(value) {
  * scripts/lib/ticket-record.mjs. What remains is the one table this pass
  * genuinely owns.
  */
-export function createCaseFileStore(supabase) {
+/**
+ * @param transport  the PostgREST call this store makes, injectable for the same
+ *   reason `ticket-record.mjs` and `draft-record.mjs` inject theirs: the test
+ *   chat runs the whole pass against an in-memory database, and a store that
+ *   reached for `supabaseUpsert` directly would be the one thing in the
+ *   investigation that could not be run without writing a row.
+ */
+export function createCaseFileStore(supabase, { transport = CASE_FILE_TRANSPORT } = {}) {
+  const { upsert } = transport;
   return {
     /**
      * Writes the case file.
@@ -419,7 +427,7 @@ export function createCaseFileStore(supabase) {
      * what clears the flag and moves the status.
      */
     async saveCaseFile({ ticket, caseFile, shopId, triggerMessageId, exemplarMatch }) {
-      await supabaseUpsert(
+      return upsert(
         supabase,
         T.TICKET_INVESTIGATIONS,
         [
@@ -453,6 +461,9 @@ export function createCaseFileStore(supabase) {
     }
   };
 }
+
+/** The PostgREST call the case-file store makes, as one object. */
+export const CASE_FILE_TRANSPORT = { upsert: supabaseUpsert };
 
 /**
  * Puts already-categorised tickets into this pass's queue.

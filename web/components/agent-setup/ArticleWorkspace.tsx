@@ -33,6 +33,7 @@ interface ArticleWorkspaceProps {
   onApprove: () => void;
   onUnapprove: () => void;
   onDelete: () => void;
+  onTest: () => void;
 }
 
 export function ArticleWorkspace({
@@ -55,6 +56,7 @@ export function ArticleWorkspace({
   onApprove,
   onUnapprove,
   onDelete,
+  onTest,
 }: ArticleWorkspaceProps) {
   const syncing = article.syncState === "syncing";
   // A source can only be attached once, to a genuinely fresh article — the
@@ -144,6 +146,7 @@ export function ArticleWorkspace({
           onApprove={onApprove}
           onUnapprove={onUnapprove}
           onDelete={onDelete}
+          onTest={onTest}
         />
       </div>
     </div>

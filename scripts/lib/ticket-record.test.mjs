@@ -221,7 +221,7 @@ test('every read excludes soft-deleted tickets', async () => {
   await record.findAwaitingContext();
   await record.findInactive(new Date('2026-01-01T00:00:00Z'));
   await record.findForDetail('t1');
-  await record.findSubject('t1');
+  await record.findForThread('t1');
 
   const ticketReads = transport.calls.filter((c) => c.table === T.TICKETS && c.kind !== 'updateById');
   assert.equal(ticketReads.length, 6);
@@ -396,5 +396,17 @@ test('claim can be narrowed to one ticket, and still respects the queue', () => 
     // The pass's own gate is still there.
     assert.ok('needs_investigation' in call.filters);
     assert.ok('needs_categorisation' in call.filters);
+  });
+});
+
+test('the thread read carries the duplicate link', () => {
+  // The dialog is where a person decides what to do with a draft, and a draft on
+  // a ticket linked as a duplicate must not be sent. Learning that after reading
+  // it is too late.
+  const { transport, record } = build();
+  return record.findForThread('t1').then(() => {
+    const call = transport.calls.find((c) => c.table === T.TICKETS && c.kind !== 'updateById');
+    assert.match(call.columns, /duplicate_of_ticket_id/);
+    assert.match(call.columns, /duplicate_reason/);
   });
 });

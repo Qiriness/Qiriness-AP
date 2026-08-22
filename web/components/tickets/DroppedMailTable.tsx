@@ -9,6 +9,10 @@ import styles from "./TicketTable.module.css";
 
 interface DroppedMailTableProps {
   mail: DroppedMail[];
+  /** Overturns the gate on one row: the email becomes a ticket. */
+  onPromote: (mail: DroppedMail) => void;
+  /** The row a promotion is in flight for, or null. */
+  pendingId: string | null;
 }
 
 const LABELS: Record<string, string> = {
@@ -19,13 +23,23 @@ const LABELS: Record<string, string> = {
 
 /**
  * Mail the spam gate dropped — `spam_audit` rows, not tickets. The email itself
- * was never stored, so there is no body, no level, no category and no message
- * count to show: what the gate wrote down is all there is.
+ * never became a ticket, so there is no level, no category and no message count
+ * to show: what the gate wrote down is all there is. The body is the exception
+ * and is on the row rather than in this table — it is what the dialog opens, and
+ * what makes the drop reviewable at all.
  *
- * "Add as ticket" is deliberately disabled rather than absent. Promoting one
- * back means re-fetching it from Graph, which is the agent worker's job, and
- * hiding the button would hide the fact that this is recoverable at all. Reuses
- * TicketTable's stylesheet so the two tables cannot drift apart visually.
+ * "Add as ticket" now writes. It was disabled for as long as promoting one back
+ * meant re-fetching it from Graph — unreachable while the stored message ids
+ * belong to another mailbox — and the stored body is what removed the need: the
+ * row already holds everything a ticket message wants. Clicking it threads the
+ * email in through the ordinary ingestion path and flags it for the categoriser,
+ * so the agent reads it on its next poll. Reuses TicketTable's stylesheet so the
+ * two tables cannot drift apart visually.
+ *
+ * IT IS STILL DISABLED WITHOUT A BODY, for the reason the dialog spells out in
+ * three sentences: never captured, or captured and since expired. The agent
+ * reads bodies, so a ticket made from a subject line is one every pass
+ * downstream would skip.
  *
  * The subject opens the decision record, the same gesture as a ticket's subject
  * — but what opens is the gate's reasoning, not a conversation, because there
@@ -33,7 +47,7 @@ const LABELS: Record<string, string> = {
  * and especially the reason are the three longest fields here and all three are
  * truncated in a row.
  */
-export function DroppedMailTable({ mail }: DroppedMailTableProps) {
+export function DroppedMailTable({ mail, onPromote, pendingId }: DroppedMailTableProps) {
   const [openMail, setOpenMail] = useState<DroppedMail | null>(null);
 
   if (mail.length === 0) {
@@ -109,8 +123,14 @@ export function DroppedMailTable({ mail }: DroppedMailTableProps) {
                 <Button
                   size="sm"
                   variant="secondary"
-                  disabled
-                  title="The email body was never stored, so promoting it back needs the agent worker to re-fetch it from Graph. Not built yet."
+                  disabled={!item.body}
+                  loading={pendingId === item.id}
+                  onClick={() => onPromote(item)}
+                  title={
+                    item.body
+                      ? "Overturn the gate: thread this email into a ticket and let the agent read it."
+                      : "The text of this email is not stored, so there is nothing for the agent to read into a ticket."
+                  }
                 >
                   Add as ticket
                 </Button>
@@ -123,7 +143,21 @@ export function DroppedMailTable({ mail }: DroppedMailTableProps) {
 
     {/* Outside the scroller and outside the table, for the same reason as the
         ticket thread: an overlay is not tabular data. */}
-    {openMail && <DroppedMailDialog mail={openMail} onClose={() => setOpenMail(null)} />}
+    {openMail && (
+      <DroppedMailDialog
+        mail={openMail}
+        onClose={() => setOpenMail(null)}
+        // The dialog is where the body is read, so it is where the answer to
+        // "should this have become a ticket?" is actually reached — the action
+        // belongs on both, not only on the row. It closes on the click: the row
+        // behind carries the pending state and then leaves the section, and a
+        // dialog left open over a row that no longer exists reads as a failure.
+        onPromote={() => {
+          onPromote(openMail);
+          setOpenMail(null);
+        }}
+      />
+    )}
     </>
   );
 }

@@ -315,6 +315,21 @@
    Quiet on purpose. It sits in a column beside level, happiness and the VIP
    crown, and a fourth loud thing there would compete with the three that carry
    urgency — this one carries context. */
+/* Same pill as the sender chip, on the warning ramp: a duplicate is not a
+   property of who wrote in, it is a reason not to work this row. */
+.duplicateChip {
+  flex: none;
+  padding: 1px 6px;
+  border: 1px solid var(--warning);
+  border-radius: var(--radius-pill, 999px);
+  background: var(--warning-050);
+  color: var(--warning);
+  font-size: var(--text-micro, var(--text-caption));
+  font-weight: var(--weight-semibold);
+  line-height: 1.5;
+  white-space: nowrap;
+}
+
 .senderChip {
   flex: none;
   padding: 1px 6px;

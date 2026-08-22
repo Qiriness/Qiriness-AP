@@ -121,9 +121,31 @@ export function summariseMatches(matches, { limit = 3 } = {}) {
     bestSimilarity: best ? best.similarity : null,
     // Only chunks worth putting in front of a model. A `none`-band chunk is
     // noise, and passing it as context invites the model to answer from it.
-    chunks: ranked.filter((m) => classifyMatch(m.similarity) !== 'none').slice(0, limit)
+    chunks: ranked.filter((m) => classifyMatch(m.similarity) !== 'none').slice(0, limit),
+    // THE WHOLE RANKING, for a reader rather than for a model.
+    //
+    // `chunks` above answers "what may be used". This answers "what was found",
+    // and the two are different questions the moment a band refuses something:
+    // an article that scored 0.52 is absent from `chunks` in exactly the same
+    // way as an article that scored nothing at all, and those two want opposite
+    // fixes — one is a wording problem, the other a category or embedding
+    // problem. Nothing in the pipeline reads this; the test chat does, and it is
+    // the only way `retrieved_withheld` can be told from `not_retrieved`.
+    //
+    // Capped, because a fusion pool is 20 candidates per retriever and a stored
+    // trace does not need the tail.
+    candidates: ranked.slice(0, CANDIDATE_REPORT).map((m) => ({
+      chunkId: m.chunkId,
+      documentId: m.documentId,
+      title: m.title,
+      heading: m.heading,
+      similarity: m.similarity
+    }))
   };
 }
+
+/** How much of the ranking `summariseMatches` reports. Diagnostic only. */
+const CANDIDATE_REPORT = 10;
 
 /**
  * Reciprocal Rank Fusion of the dense and lexical result lists.

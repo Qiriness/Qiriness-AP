@@ -31,4 +31,6 @@ Make sure that the variants have a french, english, spanish and italian version 
 Make sure that the answers have been writtne yh 
 
 
-F
+Add the link of the tracking number to the drafting email so person can click directly
+
+Pinable dashbord ( so you can pin specific metrics)

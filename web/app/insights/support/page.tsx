@@ -5,12 +5,14 @@ import { SupportView } from "@/components/insights/SupportView";
 import { getShopId } from "@/lib/server/knowledge-service";
 import { getSupportPanel } from "@/lib/server/insights/support-service";
 import type { SupportPanel } from "@/lib/types";
+import { openConversationCount } from "@/lib/server/conversation-badge";
 
 export const dynamic = "force-dynamic";
 
 export const metadata = { title: "Support - Insights - Qiriness Support OS" };
 
 export default async function SupportInsightsPage() {
+  const openConversations = await openConversationCount();
   let panel: SupportPanel | null = null;
   let loadError: string | null = null;
 
@@ -21,7 +23,7 @@ export default async function SupportInsightsPage() {
   }
 
   return (
-    <AppShell activeHref="/insights">
+    <AppShell activeHref="/insights" openConversations={openConversations}>
       <InsightsNav active="support" />
       {loadError || !panel ? (
         <PanelError message={loadError ?? "No data returned."} />

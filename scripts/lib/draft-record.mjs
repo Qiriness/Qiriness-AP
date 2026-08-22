@@ -1,4 +1,5 @@
 import {
+  supabaseInsert,
   supabaseSelect,
   supabaseUpdateById,
   supabaseUpsert
@@ -52,6 +53,7 @@ export const DECISIONS = ['approved', 'edited', 'rejected'];
  */
 export const REST_TRANSPORT = {
   select: supabaseSelect,
+  insert: supabaseInsert,
   updateById: supabaseUpdateById,
   upsert: supabaseUpsert
 };
@@ -61,7 +63,7 @@ export function createDraftRecord(supabase, { shopId, transport = REST_TRANSPORT
     throw new Error('createDraftRecord requires a shopId: every read and write here is shop-scoped.');
   }
 
-  const { select, updateById, upsert } = transport;
+  const { select, insert, updateById, upsert } = transport;
 
   return {
     /**
@@ -207,7 +209,11 @@ export function createDraftRecord(supabase, { shopId, transport = REST_TRANSPORT
      * customer — accepting it would let the dashboard record a send that never
      * happened.
      */
-    async decide(draftId, { status, approvedBodyText = null }) {
+    /**
+     * @param {string} draftId
+     * @param {{ status: string, approvedBodyText?: string | null, source?: string }} decision
+     */
+    async decide(draftId, { status, approvedBodyText = null, source = 'dashboard' }) {
       if (!DECISIONS.includes(status)) {
         throw new Error(
           `decide() takes one of ${DECISIONS.join(', ')}; got ${JSON.stringify(status)}.`
@@ -220,6 +226,38 @@ export function createDraftRecord(supabase, { shopId, transport = REST_TRANSPORT
         );
       }
 
+      // THE EDIT LOG IS WRITTEN FIRST, and the order is the point. It needs the
+      // model text as it stands RIGHT NOW — the text this person actually
+      // corrected — and `ticket_drafts.body_text` is rewritten by the next
+      // drafting run. Recording after the update would still capture it today,
+      // but reading before writing is what makes the snapshot obviously the
+      // thing that was edited rather than whatever happened to be there.
+      //
+      // An edit that changed nothing is not recorded: the database refuses it
+      // (see 07_drafting.sql), and a row asserting the agent's text needed
+      // correcting into itself is the most misleading kind of training pair.
+      if (status === 'edited') {
+        const [existing] = await select(
+          supabase,
+          T.TICKET_DRAFTS,
+          { id: draftId, shop_id: shopId },
+          'id,ticket_id,body_text',
+          { limit: 1 }
+        );
+        if (existing && normalise(existing.body_text) !== normalise(approvedBodyText)) {
+          await insert(supabase, T.TICKET_DRAFT_EDITS, [
+            {
+              shop_id: shopId,
+              ticket_id: existing.ticket_id,
+              draft_id: draftId,
+              model_body_text: existing.body_text,
+              human_body_text: approvedBodyText,
+              source
+            }
+          ]);
+        }
+      }
+
       return updateById(supabase, T.TICKET_DRAFTS, draftId, {
         status,
         // Carried on `approved` too when the reviewer supplied one, and null on
@@ -228,11 +266,33 @@ export function createDraftRecord(supabase, { shopId, transport = REST_TRANSPORT
       });
     },
 
+    /**
+     * Every recorded edit, newest first. The Phase 7 memory read.
+     *
+     * Each row is a PAIR THAT ACTUALLY EXISTED: what the agent wrote, and what a
+     * person sent instead. Nothing consumes it yet; capture had to start first,
+     * because an edit not recorded when it happened cannot be recovered.
+     */
+    async edits({ limit } = {}) {
+      return select(
+        supabase,
+        T.TICKET_DRAFT_EDITS,
+        { shop_id: shopId },
+        'id,ticket_id,draft_id,model_body_text,human_body_text,source,edited_at',
+        { order: 'edited_at.desc', limit }
+      );
+    },
+
     /** A review copy of this draft reached the reviewer's inbox. */
     async markReviewSent(draftId, at = new Date().toISOString()) {
       return updateById(supabase, T.TICKET_DRAFTS, draftId, { review_sent_at: at });
     }
   };
+}
+
+/** Whitespace is the only difference that never counts as an edit. */
+function normalise(value) {
+  return String(value ?? '').replace(/\s+/g, ' ').trim();
 }
 
 function requireText(value, message) {

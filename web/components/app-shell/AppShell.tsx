@@ -10,9 +10,11 @@ import styles from "./AppShell.module.css";
 interface AppShellProps {
   activeHref: string;
   children: ReactNode;
+  /** Open-conversation count for the sidebar badge; pages that know it pass it. */
+  openConversations?: number;
 }
 
-export function AppShell({ activeHref, children }: AppShellProps) {
+export function AppShell({ activeHref, children, openConversations }: AppShellProps) {
   const [collapsed, setCollapsed] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
 
@@ -34,6 +36,7 @@ export function AppShell({ activeHref, children }: AppShellProps) {
           collapsed={collapsed}
           onToggleCollapse={() => setCollapsed((c) => !c)}
           onNavigate={() => setDrawerOpen(false)}
+          openConversations={openConversations}
         />
       </aside>
 

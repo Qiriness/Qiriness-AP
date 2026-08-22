@@ -4,7 +4,7 @@
  * this is for the status changes a user triggers.
  */
 
-import type { TicketDetail, TicketListItem, TicketThread } from "@/lib/types";
+import type { TicketDetail, TicketDraft, TicketListItem, TicketThread } from "@/lib/types";
 import { KnowledgeApiError } from "./knowledge";
 
 /**
@@ -57,4 +57,31 @@ export async function setTicketStatus(
     throw new KnowledgeApiError(body?.error || `Request failed (${response.status}).`, response.status);
   }
   return body.ticket as TicketListItem;
+}
+
+/**
+ * Records what a reviewer decided about the drafted reply.
+ *
+ * `edited` carries the rewrite, and that pair — what the agent wrote, what a
+ * person sent instead — is appended to `ticket_draft_edits` server-side. It is
+ * the only thing in this app written specifically to be learned from later.
+ *
+ * Returns the updated draft so the dialog can replace what it was showing
+ * without refetching the whole thread.
+ */
+export async function decideOnDraft(
+  ticketId: string,
+  decision: { status: "approved" | "edited" | "rejected"; approvedBody?: string | null },
+): Promise<TicketDraft> {
+  const response = await fetch(`/api/tickets/${ticketId}/draft`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(decision),
+  });
+
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new KnowledgeApiError(body?.error || `Request failed (${response.status}).`, response.status);
+  }
+  return body.draft as TicketDraft;
 }

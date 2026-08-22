@@ -91,6 +91,31 @@ const BODY_FIELD = 'body';
  *   body: string|null, declaredCategory: string|null, orderNumber: string|null
  * }} null when this is not a recognisable contact-form notification
  */
+/**
+ * The relays a genuine contact-form notification arrives FROM.
+ *
+ * THE PARSE IS ONLY VALID FROM ONE OF THESE, and that is the whole reason this
+ * list exists. The notification is *about* a customer and *from* Shopify, so
+ * swapping the envelope for the person named in the body is right — but every
+ * reply and forward QUOTES that notification, and the quoted block parses
+ * identically. Without this gate a colleague's reply is filed under the
+ * customer's name with the customer's original text as its body, and the
+ * colleague's actual words are never stored.
+ *
+ * Measured before the gate existed: of 148 parsed messages, 96 were genuine
+ * notifications and 52 were replies quoting one — 32 from a different person
+ * (colleagues, the 3PL, the web agency) and 20 from the customer themselves,
+ * where the identity survived but the reply body was replaced by their first
+ * message. That last group silently manufactured "identical body" duplicates.
+ */
+export const NOTIFICATION_SENDERS = ['mailer@shopify.com'];
+
+/** Whether an envelope address is a relay whose body may be trusted to name someone else. */
+export function isNotificationSender(fromEmail) {
+  const address = String(fromEmail ?? '').trim().toLowerCase();
+  return NOTIFICATION_SENDERS.includes(address);
+}
+
 export function parseContactForm(bodyText) {
   if (typeof bodyText !== 'string' || bodyText.length === 0) {
     return null;

@@ -492,3 +492,189 @@ test('outbound replies are embedded too — they are the A half of Q->A', async 
   );
   assert.deepEqual(seen, ['inbound', 'outbound']);
 });
+
+
+test('a thread opened by one of our own addresses is labelled at creation', async () => {
+  // The label is a FACT read off the address rather than a judgement, so it is
+  // written in the same insert that creates the ticket instead of by a later
+  // pass — there is no window in which a colleague's thread looks like a
+  // customer's to the drafting queue.
+  const store = createFakeStore();
+  await writeIngestedMessages(
+    store,
+    store,
+    'shop-1',
+    [mappedMessage({ id: 'm1', conversationId: 'c1', at: '2026-07-24T10:00:00Z' })],
+    { senderLabel: () => 'internal' }
+  );
+
+  assert.equal([...store.tickets.values()][0].sender_label, 'internal');
+});
+
+test('a consumer thread carries no label, and none is invented', async () => {
+  const store = createFakeStore();
+  await writeIngestedMessages(
+    store,
+    store,
+    'shop-1',
+    [mappedMessage({ id: 'm1', conversationId: 'c1', at: '2026-07-24T10:00:00Z' })],
+    { senderLabel: () => null }
+  );
+
+  assert.equal([...store.tickets.values()][0].sender_label, null);
+});
+
+test('the label is read from the sender, not from the ticket it lands on', async () => {
+  // Two conversations in one batch, one of ours and one a customer's: the
+  // labeller is asked per message, so a colleague writing in does not taint the
+  // customer thread that arrived beside it.
+  const store = createFakeStore();
+  await writeIngestedMessages(
+    store,
+    store,
+    'shop-1',
+    [
+      mappedMessage({ id: 'm1', conversationId: 'c1', at: '2026-07-24T10:00:00Z' }),
+      mappedMessage({ id: 'm2', conversationId: 'c2', at: '2026-07-24T11:00:00Z' })
+    ],
+    { senderLabel: (from) => (from === 'colleague@lap-groupe.com' ? 'internal' : null) }
+  );
+
+  const labels = [...store.tickets.values()].map((row) => row.sender_label);
+  assert.deepEqual(labels, [null, null], 'the fixture sender is a consumer on both');
+});
+
+test('with no labeller wired the column is simply null', async () => {
+  // Optional like every other injected collaborator: a deployment without the
+  // directory still ingests mail.
+  const store = createFakeStore();
+  await writeIngestedMessages(store, store, 'shop-1', [
+    mappedMessage({ id: 'm1', conversationId: 'c1', at: '2026-07-24T10:00:00Z' })
+  ]);
+
+  assert.equal([...store.tickets.values()][0].sender_label, null);
+});
+
+// --------------------------------------------------------------- re-delivery
+//
+// The regression these guard is measured, not hypothetical: a delta
+// re-enumeration on 2026-08-20 reopened 136 auto-closed tickets, 128 of them off
+// messages already in the database, and re-flagged 374 of 400 for
+// categorisation. See DECISIONS.md § Re-delivery is not arrival.
+
+function storeKnowing(...knownIds) {
+  const store = createFakeStore();
+  store.knownMessageIds = async () => new Set(knownIds);
+  return store;
+}
+
+test('a RE-DELIVERED inbound message does not reopen a closed ticket', async () => {
+  const store = storeKnowing('m1');
+  await store.create({
+    graph_conversation_id: 'c1',
+    subject: 'Colis',
+    first_message_at: '2026-05-01T09:00:00.000Z',
+    last_message_at: '2026-05-01T09:00:00.000Z'
+  });
+  const ticket = store.tickets.get('shop-1|c1');
+  ticket.status = 'closed';
+  ticket.closed_at = '2026-06-01T09:00:00.000Z';
+  ticket.needs_categorisation = false;
+
+  await writeIngestedMessages(store, store, 'shop-1', [
+    mappedMessage({ id: 'm1', conversationId: 'c1', at: '2026-05-01T09:00:00.000Z' })
+  ]);
+
+  assert.equal(ticket.status, 'closed', 'stayed closed');
+  assert.equal(ticket.closed_at, '2026-06-01T09:00:00.000Z', 'kept its close date');
+  assert.notEqual(ticket.needs_categorisation, true, 'not re-queued for the categoriser');
+  // The message itself is still written: the upsert is idempotent and is what
+  // makes a re-sync safe to run at all.
+  assert.ok(store.messages.get('shop-1|m1'));
+});
+
+test('a genuinely NEW inbound message still reopens a closed ticket', async () => {
+  const store = storeKnowing('m1'); // m1 known, m2 is new
+  await store.create({
+    graph_conversation_id: 'c1',
+    subject: 'Colis',
+    first_message_at: '2026-05-01T09:00:00.000Z',
+    last_message_at: '2026-05-01T09:00:00.000Z'
+  });
+  const ticket = store.tickets.get('shop-1|c1');
+  ticket.status = 'closed';
+  ticket.closed_at = '2026-06-01T09:00:00.000Z';
+
+  await writeIngestedMessages(store, store, 'shop-1', [
+    mappedMessage({ id: 'm2', conversationId: 'c1', at: '2026-08-20T09:00:00.000Z' })
+  ]);
+
+  assert.equal(ticket.status, 'open', 'a customer writing back still reopens');
+  assert.equal(ticket.closed_at, null);
+  assert.equal(ticket.needs_categorisation, true);
+});
+
+test('a re-delivered message still repairs a missing requester', async () => {
+  // The repair is idempotent and outside the guard on purpose: a re-sync is the
+  // second chance to learn who wrote in.
+  const store = storeKnowing('m1');
+  await store.create({
+    graph_conversation_id: 'c1',
+    subject: 'Colis',
+    requester_email_hash: null,
+    requester_name: null,
+    first_message_at: '2026-05-01T09:00:00.000Z',
+    last_message_at: '2026-05-01T09:00:00.000Z'
+  });
+  const ticket = store.tickets.get('shop-1|c1');
+
+  await writeIngestedMessages(store, store, 'shop-1', [
+    mappedMessage({ id: 'm1', conversationId: 'c1', at: '2026-05-01T09:00:00.000Z' })
+  ]);
+
+  assert.equal(ticket.requester_email_hash, 'hash');
+  assert.equal(ticket.requester_name, 'Marie');
+});
+
+test('a store with no knownMessageIds behaves exactly as before', async () => {
+  // Backwards compatibility is the contract: the guard makes a re-sync safe and
+  // its absence must never change ingestion.
+  const store = createFakeStore();
+  await store.create({
+    graph_conversation_id: 'c1',
+    subject: 'Colis',
+    first_message_at: '2026-05-01T09:00:00.000Z',
+    last_message_at: '2026-05-01T09:00:00.000Z'
+  });
+  const ticket = store.tickets.get('shop-1|c1');
+  ticket.status = 'closed';
+
+  await writeIngestedMessages(store, store, 'shop-1', [
+    mappedMessage({ id: 'm1', conversationId: 'c1', at: '2026-05-01T09:00:00.000Z' })
+  ]);
+
+  assert.equal(ticket.status, 'open');
+});
+
+test('a failing knownMessageIds lookup fails OPEN, never silently swallowing a reopen', async () => {
+  const store = createFakeStore();
+  store.knownMessageIds = async () => { throw new Error('supabase down'); };
+  await store.create({
+    graph_conversation_id: 'c1',
+    subject: 'Colis',
+    first_message_at: '2026-05-01T09:00:00.000Z',
+    last_message_at: '2026-05-01T09:00:00.000Z'
+  });
+  const ticket = store.tickets.get('shop-1|c1');
+  ticket.status = 'closed';
+
+  const warnings = [];
+  await writeIngestedMessages(store, store, 'shop-1', [
+    mappedMessage({ id: 'm1', conversationId: 'c1', at: '2026-05-01T09:00:00.000Z' })
+  ], { logger: { warn: (name) => warnings.push(name) } });
+
+  // Reopened, because an unknown must never be read as "already held" — that
+  // would strand a real reply on a closed ticket.
+  assert.equal(ticket.status, 'open');
+  assert.ok(warnings.includes('ingest.known_message_lookup_failed'));
+});

@@ -23,6 +23,21 @@
   color: var(--text-subtle);
 }
 
+/* The one action in here, sitting under the email it is a judgement about. Wraps
+   on a narrow panel so the button never crushes its own explanation. */
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--border);
+}
+
+.actions .stamp {
+  flex: 1 1 16rem;
+}
+
 .placeholder {
   margin: 0;
   padding: var(--space-4);

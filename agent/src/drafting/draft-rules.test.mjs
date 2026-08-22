@@ -92,6 +92,18 @@ test('no case file is a reason of its own, not an error', () => {
   assert.equal(draftDecision({ investigation: null, ticket: {} }).reason, 'no_case_file');
 });
 
+test('a ticket linked as a duplicate is never drafted', () => {
+  // THE ENTIRE POINT OF THE LINK. Both threads stay whole; what must not happen
+  // is a customer who wrote once receiving two replies because their mail
+  // arrived under two conversation ids.
+  const decision = draftDecision({
+    investigation: ANSWERABLE,
+    ticket: { level: 2, duplicate_of_ticket_id: 'ticket-1' }
+  });
+  assert.equal(decision.draft, false);
+  assert.equal(decision.reason, 'duplicate');
+});
+
 test('level 4 is never drafted, whatever the verdict said', () => {
   // The tool layer already handed level 4 an empty registry; a case file on one
   // means the level moved afterwards, and the draft must still not be written.
@@ -207,4 +219,49 @@ test('order is taken from the timestamps, not the row order', () => {
 test('a single message is never a chase', () => {
   assert.equal(describesChase([{ direction: 'inbound', received_at: at(1) }]).chased, false);
   assert.equal(describesChase([]).chased, false);
+});
+
+test('a chase spanning two tickets is seen once the threads are merged', () => {
+  // The cross-ticket case: each thread alone shows a single inbound and looks
+  // like a first contact. Merged, the run of consecutive inbound is what the
+  // customer actually experienced — two messages, no reply.
+  const earlier = [{ direction: 'inbound', received_at: '2026-07-01T09:00:00Z' }];
+  const own = [{ direction: 'inbound', received_at: '2026-07-08T09:00:00Z' }];
+
+  assert.equal(describesChase(own).chased, false);
+  assert.equal(describesChase(earlier).chased, false);
+
+  const merged = describesChase([...earlier, ...own]);
+  assert.equal(merged.chased, true);
+  assert.equal(merged.unanswered, 2);
+});
+
+test('a reply on the earlier ticket breaks the run and is not a chase', () => {
+  const merged = describesChase([
+    { direction: 'inbound', received_at: '2026-07-01T09:00:00Z' },
+    { direction: 'outbound', received_at: '2026-07-02T09:00:00Z' },
+    { direction: 'inbound', received_at: '2026-07-08T09:00:00Z' }
+  ]);
+  assert.equal(merged.chased, false);
+});
+
+test('a thread one of us opened gets no drafted reply', () => {
+  // A colleague forwarding a customer's problem in is not a customer, and a
+  // reply in the brand's customer voice is never the right output for them.
+  const base = { verdict: 'answerable', established: [{}] };
+  assert.equal(draftDecision({ investigation: base, ticket: {} }).draft, true);
+
+  for (const label of ['internal', 'contractor']) {
+    const decision = draftDecision({ investigation: base, ticket: { sender_label: label } });
+    assert.equal(decision.draft, false);
+    assert.equal(decision.reason, 'internal_sender');
+  }
+});
+
+test('a consumer ticket carries no sender label and is unaffected', () => {
+  const decision = draftDecision({
+    investigation: { verdict: 'answerable', established: [{}] },
+    ticket: { sender_label: null }
+  });
+  assert.equal(decision.draft, true);
 });

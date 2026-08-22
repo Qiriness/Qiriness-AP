@@ -101,7 +101,14 @@ test('the number of chunks returned is capped', () => {
 test('no matches is a clean, honest result rather than a throw', () => {
   for (const input of [[], null, undefined]) {
     const result = summariseMatches(input);
-    assert.deepEqual(result, { answerable: false, verdict: 'none', bestSimilarity: null, chunks: [] });
+    assert.deepEqual(result, {
+      answerable: false,
+      verdict: 'none',
+      bestSimilarity: null,
+      chunks: [],
+      // The diagnostic ranking, empty for the same reason `chunks` is.
+      candidates: []
+    });
   }
 });
 

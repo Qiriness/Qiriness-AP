@@ -4,6 +4,7 @@ import { getShopId } from "@/lib/server/knowledge-service";
 import { listTickets } from "@/lib/server/tickets-service";
 import { listDroppedMail } from "@/lib/server/dropped-mail-service";
 import type { DroppedMail, TicketListItem } from "@/lib/types";
+import { openConversationCount } from "@/lib/server/conversation-badge";
 
 export const dynamic = "force-dynamic";
 
@@ -23,25 +24,28 @@ export const metadata = { title: "Tickets · Qiriness Support OS" };
  * buy nothing.
  */
 export default async function TicketsPage() {
+  const openConversations = await openConversationCount();
   let tickets: TicketListItem[] = [];
   let droppedMail: DroppedMail[] = [];
   let loadError: string | null = null;
 
   try {
     const shopId = await getShopId();
-    // EVERY TICKET, INCLUDING THE ONES STAFF OPENED. Routing threads from
-    // internal senders to a separate page was tried and reverted: all 14 of them
-    // turned out to be the logistics team working customer returns — L3, team
-    // logistics, one naming a customer with no ticket of their own — so hiding
-    // them hid customer work. The sender is a badge and a filter here instead.
-    // See DECISIONS.md § Tickets dashboard.
+    // CONSUMER THREADS ONLY. Threads one of our own addresses opened live on
+    // /conversations — `listTickets` and `listConversations` are two halves of
+    // one partition on `tickets.sender_label`, so nothing can fall between them.
+    //
+    // This routing was tried, reverted, and re-decided: the revert found all 14
+    // routed threads were the back office working customer returns, three of
+    // them open at L3 behind a nav item nobody opened. The sidebar badge is what
+    // answers that now. See DECISIONS.md § Tickets dashboard.
     [tickets, droppedMail] = await Promise.all([listTickets(shopId), listDroppedMail(shopId)]);
   } catch (error) {
     loadError = error instanceof Error ? error.message : "Failed to load tickets.";
   }
 
   return (
-    <AppShell activeHref="/tickets">
+    <AppShell activeHref="/tickets" openConversations={openConversations}>
       <TicketsView initialTickets={tickets} droppedMail={droppedMail} loadError={loadError} />
     </AppShell>
   );

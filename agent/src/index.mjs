@@ -1,4 +1,4 @@
-import { createSupabaseClient } from '../../scripts/lib/supabase-rest-client.mjs';
+import { createSupabaseClient, supabaseSelect } from '../../scripts/lib/supabase-rest-client.mjs';
 import { createTicketRecord } from '../../scripts/lib/ticket-record.mjs';
 
 import { loadAgentConfig, assertGraphConfig } from './config.mjs';
@@ -7,7 +7,10 @@ import { resolveShopId } from './lib/shop.mjs';
 import { createGraphClient } from './ingestion/graph-client.mjs';
 import { createSupabaseMessageStore } from './ingestion/ticket-writer.mjs';
 import { createBlocklistStore } from './ingestion/blocklist-store.mjs';
-import { createSenderDirectoryStore } from './ingestion/sender-directory.mjs';
+import { OWN_SIDE_LABELS, createSenderDirectoryStore } from './ingestion/sender-directory.mjs';
+import { createDuplicateLookup, findDuplicate } from './ingestion/duplicate-rules.mjs';
+import { createRelatedLookup, findRelated } from './ingestion/related-rules.mjs';
+import { exemptKnownSenders } from './ingestion/known-senders.mjs';
 import { createSupabaseSpamAuditStore } from './ingestion/spam-audit.mjs';
 import { runDeltaPoll, createSupabaseCursorStore } from './ingestion/delta-poller.mjs';
 import { createOpenAIClient } from './llm/openai-client.mjs';
@@ -83,6 +86,9 @@ async function main() {
   const record = createTicketRecord(supabase, { shopId });
   const store = createSupabaseMessageStore(supabase);
   const cursorStore = createSupabaseCursorStore(supabase);
+  // The narrow candidate pool duplicate detection decides against: one sender's
+  // recent messages, never the mailbox.
+  const duplicateLookup = createDuplicateLookup({ supabase, shopId, select: supabaseSelect });
   const blocklistStore = createBlocklistStore(supabase);
   const senderDirectoryStore = createSenderDirectoryStore(supabase);
   // Records why each email passed or failed the gate, and on a drop the body
@@ -156,6 +162,28 @@ async function main() {
   const poll = async () => {
     // Load the blocklist each poll so newly added rules take effect immediately.
     const { gate, rulesById } = await blocklistStore.loadGate(shopId);
+    // Loaded before ingestion because the related-ticket check needs it on the
+    // very first message, and reloaded each poll for the same reason the
+    // blocklist is: a sender labelled a retailer a minute ago must be excluded
+    // now, not next time.
+    const senderDirectory = await senderDirectoryStore.load(shopId, {
+      supportMailbox: config.graph.mailbox
+    });
+    const relatedLookup = createRelatedLookup({
+      supabase,
+      shopId,
+      select: supabaseSelect,
+      senderDirectory
+    });
+
+    // A SENDER WE HAVE WRITTEN DOWN IS NEVER SPAM, applied to both gates at once.
+    // Four emails from directory addresses were dropped before this existed —
+    // three by the model, one by a blocklist rule — and dropped mail never
+    // becomes a ticket, so the only trace was a `spam_audit` row nobody reads.
+    // Wrapped here rather than taught to either gate: the directory is loaded
+    // per poll, and a rule that lives in one place cannot be half-applied.
+    const guarded = exemptKnownSenders({ senderDirectory, gate, triage, logger });
+
     const totals = await runDeltaPoll({
       graphClient,
       store,
@@ -164,11 +192,49 @@ async function main() {
       shopId,
       logger,
       mailbox: config.graph.mailbox,
-      spamGate: gate,
+      spamGate: guarded.gate,
       recordSpamHits: (hits) => blocklistStore.recordHits(rulesById, hits),
       auditStore,
-      triage,
+      triage: guarded.triage,
       embedMessage,
+      // Deterministic duplicate detection: identical text from one sender inside
+      // an hour, or an RFC reply chain naming a message we already hold. No
+      // model, because a hit means a ticket is skipped by the drafting queue and
+      // a customer who is wrongly skipped gets no reply at all.
+      detectDuplicate: async (item) =>
+        findDuplicate({
+          candidate: { ...item.message, received_at: item.conversation?.message_at },
+          priorMessages: await duplicateLookup.priorMessages({
+            requesterEmailHash: item.conversation?.requester_email_hash,
+            before: item.conversation?.message_at
+          })
+        }),
+      // The weaker link, and deliberately the opposite consequence: this one
+      // never suppresses a draft, it adds the fact that the customer has written
+      // before — and, when we never answered, that they are still waiting.
+      //
+      // The directory is loaded once per poll and shared, like the blocklist: a
+      // sender labelled a retailer a minute ago is excluded on this poll rather
+      // than the next.
+      detectRelated: async ({ ticketId, message, requesterEmailHash }) => {
+        const { priorMessages, outboundAt } = await relatedLookup.priorMessages({
+          requesterEmailHash,
+          fromEmail: message.from_email,
+          before: message.received_at
+        });
+        return findRelated({
+          candidate: { ...message, ticket_id: ticketId },
+          priorMessages,
+          outboundAt
+        });
+      },
+      // Stamped at ticket creation from the address that opened the thread.
+      // Only the labels that mean "us" — a retailer or a courier is a real
+      // external correspondent and their mail is real work.
+      senderLabel: (fromEmail) => {
+        const label = senderDirectory.lookup(fromEmail)?.label ?? null;
+        return OWN_SIDE_LABELS.includes(label) ? label : null;
+      },
       limit
     });
     logger.info('ingest.poll', { shopId, ...totals });
@@ -219,9 +285,7 @@ async function main() {
         logger,
         // Reloaded each poll, like the blocklist, so a sender labelled in the
         // table a minute ago is context on this poll rather than the next.
-        senderDirectory: await senderDirectoryStore.load(shopId, {
-          supportMailbox: config.graph.mailbox
-        }),
+        senderDirectory,
         retrieveExemplar: investigation.retrieveExemplar,
         lastOrderLookup: investigation.lastOrderLookup
       });

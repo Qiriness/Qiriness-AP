@@ -1,5 +1,6 @@
 "use client";
 
+import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
 import { formatRelativeTime } from "@/lib/relative-time";
 import type { DroppedMail } from "@/lib/types";
@@ -8,6 +9,8 @@ import styles from "./DroppedMailDialog.module.css";
 interface DroppedMailDialogProps {
   mail: DroppedMail;
   onClose: () => void;
+  /** Overturns the gate. Offered only where there is a body to read. */
+  onPromote: () => void;
 }
 
 /**
@@ -26,7 +29,7 @@ interface DroppedMailDialogProps {
  * gets its own sentence, because "no body" alone reads as a bug in all three
  * cases and is only actionable in the first.
  */
-export function DroppedMailDialog({ mail, onClose }: DroppedMailDialogProps) {
+export function DroppedMailDialog({ mail, onClose, onPromote }: DroppedMailDialogProps) {
   // Captured-then-purged, distinguished from never-captured by the stamp the
   // backfill and ingestion both write. The expiry alone would not: a row whose
   // body is still live also has one.
@@ -67,6 +70,24 @@ export function DroppedMailDialog({ mail, onClose }: DroppedMailDialogProps) {
               The decision record is kept.
             </p>
           )}
+
+          {/* The answer to the question the dialog was opened to ask, offered
+              where it is reached. Only under a body: the action refuses without
+              one, and an enabled button that cannot work is worse than none.
+
+              The sentence beside it is the honest scope of the click — this
+              email, not this sender. Nothing here edits the blocklist or the
+              classifier, so the next email from the same address is dropped
+              again. */}
+          <div className={styles.actions}>
+            <Button variant="primary" size="sm" onClick={onPromote}>
+              Add as ticket
+            </Button>
+            <p className={styles.stamp}>
+              Threads this email into the queue and hands it to the agent. The gate&rsquo;s
+              decision record is kept, and mail from this sender is still dropped.
+            </p>
+          </div>
         </>
       ) : expired ? (
         <p className={styles.placeholder}>

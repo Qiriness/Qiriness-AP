@@ -71,7 +71,19 @@ export function createInvestigator(
     maxTurns = DEFAULT_MAX_TURNS,
     maxBodyChars = 3000,
     decomposer = null,
-    logger
+    logger,
+    // Every tool result, as it is recorded — the ledger entry WHOLE, including
+    // the French `promptText` the model was handed and the `data` the model
+    // never sees.
+    //
+    // Absent by default, so the worker runs exactly as it did. It exists because
+    // the stored `tool_calls` are `{id, tool, argsHash, outcome}` and that is
+    // the right thing to keep for hundreds of real tickets and useless for the
+    // one question the test chat asks: what did this tool actually say back.
+    //
+    // NEVER THROWS INTO THE RUN. An observer that failed would lose an
+    // investigation to bookkeeping.
+    onToolCall = null
   } = {}
 ) {
   /**
@@ -141,13 +153,19 @@ export function createInvestigator(
       ticket,
       handlers,
       maxToolCalls: planBudget(maxToolCalls, plan.tasks.length),
-      logger
+      logger,
+      onToolCall
     });
+    // Which tools this ticket was even offered. Reported to the observer before
+    // the first call, because "the model never searched knowledge" and "there
+    // was no knowledge tool in this ticket's registry" are different findings
+    // and the ledger alone cannot tell them apart.
+    run.observeRegistry(names);
 
     // Deterministic evidence first: the model starts from what is always needed
     // for these subjects rather than spending a turn asking for it.
     for (const move of planMoves(ticket, plan.tasks, decomposition.entities)) {
-      await run.call(move.tool, move.args);
+      await run.call(move.tool, move.args, 'opening_move');
     }
 
     const messages = [{ role: 'user', content: buildUserPrompt(ticket, plan, run, maxBodyChars) }];
@@ -241,11 +259,21 @@ export function createInvestigator(
  * with nothing established. Served from cache, the repeat costs nothing, returns
  * the same ledger id, and the turn limit still ends the loop.
  */
-function createRun({ ticket, handlers, maxToolCalls, logger }) {
+function createRun({ ticket, handlers, maxToolCalls, logger, onToolCall = null }) {
   const ledger = [];
   const byKey = new Map();
 
-  async function call(tool, args = {}) {
+  /** Hand one ledger entry to the observer. Its failure is never the run's. */
+  function observe(entry, source, args) {
+    if (!onToolCall) return;
+    try {
+      onToolCall({ kind: 'call', source, args, ...entry });
+    } catch {
+      // Deliberately silent: an observer is not allowed to cost a ticket.
+    }
+  }
+
+  async function call(tool, args = {}, source = 'model') {
     const handler = handlers.get(tool);
     if (!handler) {
       // Unreachable through the model (it is only offered the registry's tools),
@@ -257,6 +285,9 @@ function createRun({ ticket, handlers, maxToolCalls, logger }) {
 
     const key = `${tool}:${stableArgs(args)}`;
     if (byKey.has(key)) {
+      // Served from cache. Reported so a transcript shows the model asking
+      // twice — which is a real thing to notice — without a second ledger id.
+      observe({ ...byKey.get(key), cached: true }, source, args);
       return byKey.get(key);
     }
     if (ledger.length >= maxToolCalls) {
@@ -285,12 +316,23 @@ function createRun({ ticket, handlers, maxToolCalls, logger }) {
 
     ledger.push(entry);
     byKey.set(key, entry);
+    observe(entry, source, args);
     return entry;
   }
 
   return {
     ledger,
     call,
+
+    /** Which tools this ticket was offered, before any of them ran. */
+    observeRegistry(tools) {
+      if (!onToolCall) return;
+      try {
+        onToolCall({ kind: 'registry', tools });
+      } catch {
+        // Same rule as `observe`: an observer never costs a ticket.
+      }
+    },
 
     /** The model's own request, rendered back as the tool message it will read. */
     async fromModel(toolCall) {

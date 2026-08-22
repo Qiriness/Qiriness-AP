@@ -73,7 +73,13 @@ test('nothing found is reported honestly rather than as a weak answer', async ()
   const { retrieve, restore } = build({ rows: [] });
   try {
     const result = await retrieve(TICKET, { shopId: 'shop-1' });
-    assert.deepEqual(result, { answerable: false, verdict: 'none', bestSimilarity: null, chunks: [] });
+    assert.deepEqual(result, {
+      answerable: false,
+      verdict: 'none',
+      bestSimilarity: null,
+      chunks: [],
+      candidates: []
+    });
   } finally {
     restore();
   }

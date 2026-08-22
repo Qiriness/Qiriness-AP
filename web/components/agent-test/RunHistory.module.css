@@ -1,0 +1,126 @@
+.list {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.row {
+  display: flex;
+  align-items: stretch;
+  gap: var(--space-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.row[data-active] {
+  border-color: var(--teal);
+  background: var(--teal-050);
+}
+
+.open {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  gap: var(--space-1);
+  padding: var(--space-3);
+  border: none;
+  background: none;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.open:hover {
+  background: var(--surface-sunken);
+}
+
+.row[data-active] .open:hover {
+  background: transparent;
+}
+
+.open:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus);
+}
+
+.subject {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  color: var(--text-strong);
+  overflow-wrap: anywhere;
+}
+
+.meta {
+  font-size: var(--text-caption);
+  color: var(--text-subtle);
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+}
+
+.chip {
+  padding: 1px var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--surface-sunken);
+  font-size: var(--text-caption);
+  color: var(--text-muted);
+}
+
+.chip[data-tone="good"] {
+  border-color: var(--success-100);
+  background: var(--success-050);
+  color: var(--text-default);
+}
+
+.chip[data-tone="warn"] {
+  border-color: var(--warning-100);
+  background: var(--warning-050);
+  color: var(--text-default);
+}
+
+.chip[data-tone="bad"] {
+  border-color: var(--error-100);
+  background: var(--error-050);
+  color: var(--text-default);
+}
+
+.delete {
+  flex: none;
+  width: 2rem;
+  border: none;
+  border-left: 1px solid var(--border);
+  background: none;
+  font-size: var(--text-lg);
+  line-height: 1;
+  color: var(--text-subtle);
+  cursor: pointer;
+}
+
+.delete:hover {
+  background: var(--error-050);
+  color: var(--error);
+}
+
+.delete:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus);
+}
+
+.empty {
+  margin: 0;
+  padding: var(--space-4);
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+  line-height: 1.55;
+  color: var(--text-subtle);
+  text-align: center;
+}

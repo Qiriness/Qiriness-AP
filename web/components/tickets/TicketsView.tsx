@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { setTicketStatus } from "@/lib/api/tickets";
+import { promoteDroppedMail } from "@/lib/api/dropped-mail";
 import { knowledgeErrorMessage } from "@/lib/api/knowledge";
 import { isBacklogTicket, isClosed, summariseTickets } from "@/lib/ticket-stats";
 import type { DroppedMail, KnowledgeCategory, TicketListItem } from "@/lib/types";
@@ -72,6 +73,10 @@ function matchesDroppedMail(mail: DroppedMail, query: string): boolean {
  */
 export function TicketsView({ initialTickets, droppedMail, loadError }: TicketsViewProps) {
   const [tickets, setTickets] = useState(initialTickets);
+  // Dropped mail is held in state for the same reason tickets are: promoting one
+  // moves it out of Irrelevant and into the queue, and both sections have to
+  // agree about that in the same render.
+  const [dropped, setDropped] = useState(droppedMail);
   const [level, setLevel] = useState<LevelFilter>("all");
   const [category, setCategory] = useState<KnowledgeCategory | "all">("all");
   // Who opened the thread: everyone, only consumers, or only the business
@@ -89,6 +94,10 @@ export function TicketsView({ initialTickets, droppedMail, loadError }: TicketsV
   const [sort, setSort] = useState<SortOrder>("priority");
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  // Promoting is the one action whose result leaves the screen — the row it was
+  // taken on disappears from Irrelevant — so it is the one that has to say what
+  // happened. Closing a ticket needs no notice: the row moves and you watch it.
+  const [actionNotice, setActionNotice] = useState<string | null>(null);
 
   const stats = useMemo(() => summariseTickets(tickets), [tickets]);
   const openTickets = useMemo(() => tickets.filter((ticket) => !isClosed(ticket)), [tickets]);
@@ -100,8 +109,8 @@ export function TicketsView({ initialTickets, droppedMail, loadError }: TicketsV
     [tickets, closedQuery]
   );
   const visibleDroppedMail = useMemo(
-    () => droppedMail.filter((mail) => matchesDroppedMail(mail, droppedQuery)),
-    [droppedMail, droppedQuery]
+    () => dropped.filter((mail) => matchesDroppedMail(mail, droppedQuery)),
+    [dropped, droppedQuery]
   );
 
   // Tab counts come from the unfiltered open set, so a tab always says how many
@@ -160,9 +169,54 @@ export function TicketsView({ initialTickets, droppedMail, loadError }: TicketsV
     [visibleOpenTickets, backlogQuery]
   );
 
+  /**
+   * Overturns the gate on one dropped email.
+   *
+   * The row leaves Irrelevant and the ticket joins the queue in the same render,
+   * from the projection the API returned — the list's own, so the new row is not
+   * a thinner version of the ones beside it.
+   *
+   * TWO OUTCOMES, AND THEY ARE SAID DIFFERENTLY. A first contact becomes a
+   * ticket; a blocked reply joins the thread it belongs to, which is already in
+   * one of these sections and does not need adding again. An own-side sender
+   * goes to /conversations, so it is not added here either — that partition is
+   * the server's and the client must not contradict it.
+   */
+  async function promote(mail: DroppedMail) {
+    setPendingId(mail.id);
+    setActionError(null);
+    setActionNotice(null);
+    try {
+      const { ticket, ticketCreated } = await promoteDroppedMail(mail.id);
+      setDropped((current) => current.filter((row) => row.id !== mail.id));
+      if (!ticket.isOwnSide) {
+        // Replace rather than always prepend: a blocked reply lands on a ticket
+        // already on screen, reopened and with a message more, and two rows for
+        // one ticket would be a worse bug than a missing one.
+        setTickets((current) =>
+          current.some((row) => row.id === ticket.id)
+            ? current.map((row) => (row.id === ticket.id ? ticket : row))
+            : [ticket, ...current]
+        );
+      }
+      setActionNotice(
+        ticketCreated
+          ? ticket.isOwnSide
+            ? `“${ticket.subject ?? "(no subject)"}” was added to Conversations — the agent reads it on its next poll.`
+            : `“${ticket.subject ?? "(no subject)"}” is in the queue. The agent categorises and investigates it on its next poll.`
+          : `Added to the existing ticket “${ticket.subject ?? "(no subject)"}”, which is back in the agent's queue.`
+      );
+    } catch (error) {
+      setActionError(knowledgeErrorMessage(error));
+    } finally {
+      setPendingId(null);
+    }
+  }
+
   async function changeStatus(ticket: TicketListItem, status: "open" | "closed") {
     setPendingId(ticket.id);
     setActionError(null);
+    setActionNotice(null);
     try {
       const saved = await setTicketStatus(ticket.id, status);
       // The API returns the same queue projection as the list, including the
@@ -216,6 +270,15 @@ export function TicketsView({ initialTickets, droppedMail, loadError }: TicketsV
       {actionError && (
         <div className={styles.error} role="alert">
           <p className={styles.errorBody}>{actionError}</p>
+        </div>
+      )}
+
+      {/* `status`, not `alert`: this reports a result the operator asked for,
+          and an assertive live region would cut across whatever they are
+          reading next. */}
+      {actionNotice && (
+        <div className={styles.notice} role="status">
+          <p className={styles.noticeBody}>{actionNotice}</p>
         </div>
       )}
 
@@ -321,7 +384,11 @@ export function TicketsView({ initialTickets, droppedMail, loadError }: TicketsV
           label: "Search dropped mail",
         }}
       >
-        <DroppedMailTable mail={visibleDroppedMail} />
+        <DroppedMailTable
+          mail={visibleDroppedMail}
+          onPromote={promote}
+          pendingId={pendingId}
+        />
       </TicketSection>
 
       <TicketSection

@@ -1,0 +1,217 @@
+.card {
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.card[data-tone="good"] {
+  border-left-color: var(--success);
+}
+
+.card[data-tone="warn"] {
+  border-left-color: var(--warning);
+}
+
+.card[data-tone="bad"] {
+  border-left-color: var(--error);
+}
+
+.head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  width: 100%;
+  padding: var(--space-3) var(--space-4);
+  border: none;
+  background: none;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.head:disabled {
+  cursor: default;
+}
+
+.head:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus);
+}
+
+.chevron {
+  flex: none;
+  display: inline-flex;
+  width: 14px;
+  color: var(--text-subtle);
+  transform: translateY(2px);
+}
+
+.title {
+  flex: none;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--text-strong);
+}
+
+/* The step's answer, on the same line as its name: a collapsed transcript has
+   to be readable on its own, or every card has to be opened to find the one
+   that went wrong. */
+.summary {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+
+.body {
+  display: grid;
+  gap: var(--space-3);
+  padding: 0 var(--space-4) var(--space-4);
+}
+
+.fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+  gap: var(--space-2) var(--space-4);
+  margin: 0;
+}
+
+.field {
+  min-width: 0;
+}
+
+.fieldLabel {
+  margin: 0;
+  font-size: var(--text-caption);
+  color: var(--text-subtle);
+}
+
+.fieldValue {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--text-default);
+  overflow-wrap: anywhere;
+}
+
+.verbatim {
+  min-width: 0;
+}
+
+.verbatimLabel {
+  margin: 0 0 var(--space-1);
+  font-size: var(--text-caption);
+  font-weight: var(--weight-medium);
+  color: var(--text-subtle);
+}
+
+/* Verbatim text is never re-wrapped or prettified: the point of showing it is
+   that it is what the model read, character for character. Long lines scroll
+   inside the block rather than widening the dialog. */
+.pre {
+  margin: 0;
+  padding: var(--space-3);
+  max-height: 22rem;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-sunken);
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  font-size: var(--text-caption);
+  line-height: 1.55;
+  color: var(--text-default);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.claims {
+  min-width: 0;
+}
+
+.count {
+  display: inline-block;
+  min-width: 1.25rem;
+  padding: 0 var(--space-1);
+  border-radius: var(--radius-pill);
+  background: var(--linen);
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.claimItems {
+  margin: 0;
+  padding-left: var(--space-4);
+  font-size: var(--text-sm);
+  line-height: 1.6;
+  color: var(--text-default);
+}
+
+.none {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--text-subtle);
+  font-style: italic;
+}
+
+.calls,
+.raw {
+  border-top: 1px dashed var(--border);
+  padding-top: var(--space-3);
+}
+
+.callsSummary {
+  font-size: var(--text-caption);
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.callsSummary:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus);
+}
+
+.callList {
+  display: grid;
+  gap: var(--space-3);
+  margin-top: var(--space-3);
+}
+
+.call {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+
+.call[data-failed] {
+  border-color: var(--error-100);
+  background: var(--error-050);
+}
+
+.callHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-2);
+}
+
+.callModel {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--text-strong);
+}
+
+.callMeta {
+  font-size: var(--text-caption);
+  color: var(--text-subtle);
+}
+
+.callError {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--error);
+}

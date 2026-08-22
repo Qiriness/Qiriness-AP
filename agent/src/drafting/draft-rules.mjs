@@ -110,6 +110,26 @@ export function draftDecision({ investigation, ticket } = {}) {
     // reading of a row written by something that is not the investigation.
     return { draft: false, reason: 'unknown_verdict' };
   }
+  // A TICKET LINKED AS A DUPLICATE IS NEVER DRAFTED, and this is the entire
+  // purpose of the link. Both threads stay whole and a person can unlink either
+  // one; what must not happen is that a customer who wrote once receives two
+  // replies because their mail arrived under two conversation ids.
+  //
+  // Checked here rather than filtered in the query so the skip is COUNTED —
+  // `skippedBy.duplicate` is how anybody finds out the detection is firing, or
+  // firing too much.
+  // A THREAD ONE OF US OPENED. `sender_label` is set at ingestion from the
+  // address, so this is the colleague who forwarded a customer's problem in —
+  // and a reply written in the brand's customer voice, opening "Bonjour Madame"
+  // and closing with the signature, is never the right thing to put in front of
+  // them. The investigation still runs: whoever picks this up wants the order
+  // facts gathered, they just do not want a drafted customer email.
+  if (ticket?.sender_label) {
+    return { draft: false, reason: 'internal_sender' };
+  }
+  if (ticket?.duplicate_of_ticket_id) {
+    return { draft: false, reason: 'duplicate' };
+  }
   // Level 4 is a severity judgement, and the tool layer already handed it an
   // empty registry. It is the one case where silence is deliberate: a level 4
   // reaches a person untouched, and an automated « nous avons bien reçu votre

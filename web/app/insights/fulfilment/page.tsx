@@ -5,6 +5,7 @@ import { PanelError } from "@/components/insights/InsightsKit";
 import { getShopId } from "@/lib/server/knowledge-service";
 import { getFulfilmentPanel } from "@/lib/server/insights/fulfilment-service";
 import type { FulfilmentPanel } from "@/lib/types";
+import { openConversationCount } from "@/lib/server/conversation-badge";
 
 export const dynamic = "force-dynamic";
 
@@ -16,6 +17,7 @@ export const metadata = { title: "Fulfilment · Insights · Qiriness Support OS"
  * client-side: each figure is one row from one aggregate view.
  */
 export default async function FulfilmentInsightsPage() {
+  const openConversations = await openConversationCount();
   let panel: FulfilmentPanel | null = null;
   let loadError: string | null = null;
 
@@ -26,7 +28,7 @@ export default async function FulfilmentInsightsPage() {
   }
 
   return (
-    <AppShell activeHref="/insights">
+    <AppShell activeHref="/insights" openConversations={openConversations}>
       <InsightsNav active="fulfilment" />
       {loadError || !panel ? (
         <PanelError message={loadError ?? "No data returned."} />

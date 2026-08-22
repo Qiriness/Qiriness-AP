@@ -40,19 +40,36 @@ export function createInvestigationStack({
   // rest of the poll writes into — the stack builds its own OpenAI and
   // embeddings clients, and a sink of its own would be a second buffer nobody
   // drains. Left undefined, both clients fall back to their own no-op defaults.
-  usageSink
+  usageSink,
+  // PRE-BUILT CLIENTS, for a caller that needs to see the calls.
+  //
+  // The stack builds both itself by default and every existing caller lets it.
+  // The test chat passes a decorated OpenAI client instead — same interface,
+  // recording each call's system prompt, messages and response on the way
+  // through — because a rehearsal that could not show what was sent to the model
+  // would be showing the least interesting half of the run.
+  //
+  // Injected here rather than wrapped inside, so the worker's own path has no
+  // branch in it at all.
+  openai: injectedOpenAI = null,
+  embeddingsClient: injectedEmbeddings = null,
+  // Passed straight through to the investigator. See `investigate.mjs`.
+  onToolCall = null
 } = {}) {
   if (!config?.openaiApiKey) {
     return null;
   }
 
-  const openai = createOpenAIClient({ apiKey: config.openaiApiKey, usageSink });
-  const embeddingsClient = createEmbeddingsClient({
-    apiKey: config.openaiApiKey,
-    model: config.embeddingModel,
-    dimensions: config.embeddingDimensions,
-    usageSink
-  });
+  const openai =
+    injectedOpenAI || createOpenAIClient({ apiKey: config.openaiApiKey, usageSink });
+  const embeddingsClient =
+    injectedEmbeddings ||
+    createEmbeddingsClient({
+      apiKey: config.openaiApiKey,
+      model: config.embeddingModel,
+      dimensions: config.embeddingDimensions,
+      usageSink
+    });
 
   // Constructed once and shared: the purchase check borrows the product tool's
   // catalogue index, so building a second product lookup here would load and
@@ -79,7 +96,8 @@ export function createInvestigationStack({
     decomposer: config.decomposerModel
       ? createDecomposer(openai, { model: config.decomposerModel })
       : null,
-    logger
+    logger,
+    onToolCall
   });
 
   // NOT in the registry, and that is the design. The registry holds tools the

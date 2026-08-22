@@ -36,14 +36,24 @@ const MESSAGES_PER_TICKET = 10;
 // column growing without bound on a long-running conversation.
 const HISTORY_LIMIT = 5;
 
+// `ticketId` NARROWS THE BATCH TO ONE, and it narrows rather than bypasses: the
+// flag, the status and the soft-delete filters still apply, so naming a ticket
+// that is not due returns nothing rather than re-labelling it anyway. That is
+// `record.claim`'s own rule and this only passes the argument through.
+//
+// It exists for the same reason the investigation CLI has `--ticket`: the queue
+// is oldest-first over a corpus that keeps gaining older mail, so a recent
+// ticket sits at the BACK of it. Re-reading one by hand otherwise means paying
+// to re-read everything in front of it.
 export async function runCategorisation({
   record,
   categorise,
   logger,
-  limit = DEFAULT_BATCH_LIMIT
+  limit = DEFAULT_BATCH_LIMIT,
+  ticketId = null
 }) {
   const counts = { categorised: 0, recategorised: 0, skipped: 0, failed: 0, fallbacks: 0 };
-  const pending = await record.claim('categorisation', { limit });
+  const pending = await record.claim('categorisation', { limit, ticketId });
 
   for (const ticket of pending) {
     const messages = await record.inboundMessages(ticket.id, { limit: MESSAGES_PER_TICKET });

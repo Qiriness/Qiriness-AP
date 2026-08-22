@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { Dialog } from "@/components/ui/Dialog";
 import { knowledgeErrorMessage } from "@/lib/api/knowledge";
-import { fetchTicketThread } from "@/lib/api/tickets";
+import { decideOnDraft, fetchTicketThread } from "@/lib/api/tickets";
 import { formatRelativeTime } from "@/lib/relative-time";
 import type { TicketListItem, TicketMessage, TicketThread } from "@/lib/types";
 import styles from "./TicketThreadDialog.module.css";
@@ -41,6 +41,9 @@ interface TicketThreadDialogProps {
  * resolves nothing — it is the case where the words look most like an answer
  * and are least meant to be one.
  */
+/** Written as a constant because a literal newline escape cannot survive a JSX attribute. */
+const NEWLINE = String.fromCharCode(10);
+
 const DRAFT_HEADINGS: Record<string, string> = {
   answerable: "Draft reply",
   needs_customer_input: "Draft question to the customer",
@@ -50,6 +53,12 @@ const DRAFT_HEADINGS: Record<string, string> = {
 export function TicketThreadDialog({ ticket, onClose }: TicketThreadDialogProps) {
   const [thread, setThread] = useState<TicketThread | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // The editor is opt-in: a reviewer reads first and edits second, and a
+  // textarea that is always open invites changing text nobody had decided about.
+  const [editing, setEditing] = useState(false);
+  const [edited, setEdited] = useState("");
+  const [saving, setSaving] = useState<null | "approved" | "edited" | "rejected">(null);
+  const [decideError, setDecideError] = useState<string | null>(null);
 
   useEffect(() => {
     let live = true;
@@ -67,6 +76,28 @@ export function TicketThreadDialog({ ticket, onClose }: TicketThreadDialogProps)
     };
   }, [ticket.id]);
 
+  const draft = thread?.draft ?? null;
+
+  async function decide(status: "approved" | "edited" | "rejected") {
+    if (!draft) return;
+    setSaving(status);
+    setDecideError(null);
+    try {
+      // The rewrite travels only on an edit. Sending it with an approval would
+      // record a correction nobody made.
+      const updated = await decideOnDraft(ticket.id, {
+        status,
+        approvedBody: status === "edited" ? edited : null,
+      });
+      setThread((current) => (current ? { ...current, draft: updated } : current));
+      setEditing(false);
+    } catch (cause) {
+      setDecideError(knowledgeErrorMessage(cause));
+    } finally {
+      setSaving(null);
+    }
+  }
+
   const subject = thread?.subject ?? ticket.subject;
 
   return (
@@ -83,6 +114,29 @@ export function TicketThreadDialog({ ticket, onClose }: TicketThreadDialogProps)
       }
     >
       <section className={styles.section}>
+        {/* ABOVE THE HEADING, not beside the draft. If this ticket duplicates
+            another the whole section is something not to act on, and a warning
+            underneath the reply arrives after the reader has already decided
+            it looks fine. */}
+        {thread?.duplicateOf && (
+          <p className={styles.duplicate} role="alert">
+            Duplicate of another ticket
+            {thread.duplicateOf.reason === "identical_body"
+              ? " — the same message arrived twice"
+              : " — part of the same email conversation"}
+            . The agent will not draft here, and this reply should not be sent:
+            answer on the original instead.
+          </p>
+        )}
+        {/* Below the duplicate banner and visually calmer than it, because the
+            two say opposite things: that one means do not act, this one means
+            read the earlier thread first. Never suppresses the draft. */}
+        {thread?.relatedTo && !thread?.duplicateOf && (
+          <p className={styles.related}>
+            This customer wrote to us before about the same thing — see the earlier ticket.
+            The reply below takes that into account.
+          </p>
+        )}
         <h3 className={styles.heading}>{DRAFT_HEADINGS[thread?.draft?.sourceVerdict ?? "answerable"]}</h3>
         {thread?.draft ? (
           <>
@@ -96,7 +150,21 @@ export function TicketThreadDialog({ ticket, onClose }: TicketThreadDialogProps)
                 {thread.draft.failedChecks.join("; ") || "see the draft record"}.
               </p>
             )}
-            <pre className={styles.draft}>{thread.draft.body}</pre>
+            {/* THE MODEL'S TEXT IS NEVER EDITED IN PLACE. Opening the editor
+                copies it into a textarea; saving writes the rewrite to a
+                separate column and appends the pair to the edit log, so what
+                the agent wrote stays readable beside what a person sent. */}
+            {editing ? (
+              <textarea
+                className={styles.editor}
+                value={edited}
+                onChange={(event) => setEdited(event.target.value)}
+                rows={Math.min(24, Math.max(8, edited.split(NEWLINE).length + 2))}
+                aria-label="Edit the drafted reply"
+              />
+            ) : (
+              <pre className={styles.draft}>{thread.draft.body}</pre>
+            )}
             {/* The model's text stays above; a reviewer's rewrite is shown as a
                 second block rather than replacing it, because the difference
                 between them is what says whether the drafting is any good. */}
@@ -117,6 +185,70 @@ export function TicketThreadDialog({ ticket, onClose }: TicketThreadDialogProps)
                   ? "Intermediary — sending this waits on the customer."
                   : "Intermediary — a colleague still owes this customer an answer."}
             </p>
+            {/* The three decisions a person can reach by reading. There is no
+                fourth: nothing in this codebase can send an email, so a draft
+                leaves here approved, rewritten or rejected — never sent. */}
+            <div className={styles.actions}>
+              {editing ? (
+                <>
+                  <button
+                    type="button"
+                    className={styles.primary}
+                    disabled={saving !== null || edited.trim() === ""}
+                    onClick={() => decide("edited")}
+                  >
+                    {saving === "edited" ? "Saving…" : "Save edit"}
+                  </button>
+                  <button
+                    type="button"
+                    className={styles.secondary}
+                    disabled={saving !== null}
+                    onClick={() => setEditing(false)}
+                  >
+                    Cancel
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    className={styles.secondary}
+                    onClick={() => {
+                      // Seeded with the reviewer's own version when there is
+                      // one — editing an edit continues from where they left
+                      // off, not from the agent's text again.
+                      setEdited(thread.draft?.approvedBody ?? thread.draft?.body ?? "");
+                      setEditing(true);
+                    }}
+                  >
+                    Edit
+                  </button>
+                  <button
+                    type="button"
+                    className={styles.primary}
+                    disabled={saving !== null}
+                    onClick={() => decide("approved")}
+                  >
+                    {saving === "approved" ? "Saving…" : "Approve"}
+                  </button>
+                  <button
+                    type="button"
+                    className={styles.secondary}
+                    disabled={saving !== null}
+                    onClick={() => decide("rejected")}
+                  >
+                    {saving === "rejected" ? "Saving…" : "Reject"}
+                  </button>
+                </>
+              )}
+            </div>
+
+            {decideError && (
+              <p className={styles.error} role="alert">
+                {decideError}
+              </p>
+            )}
+
             {thread.draft.draftedAt && (
               <p className={styles.stamp}>
                 Drafted{" "}

@@ -33,6 +33,9 @@ export async function runDeltaPoll({
   // Best-effort per-message embedding; a null result stores the message without
   // a vector and the reconciler fills it in later.
   embedMessage,
+  // Deterministic duplicate detection. Optional: without it the poll behaves
+  // exactly as it did before, and no ticket is ever linked.
+  detectDuplicate,
   limit
 }) {
   const totals = {
@@ -44,7 +47,8 @@ export async function runDeltaPoll({
     llmSpamFiltered: 0,
     spamAudited: 0,
     attachmentsFetched: 0,
-    pages: 0
+    pages: 0,
+    duplicatesLinked: 0
   };
   const hitCounts = new Map();
   // Decisions from both passes buffer here and are written once per poll; the
@@ -118,6 +122,7 @@ export async function runDeltaPoll({
       triage,
       audit,
       embedMessage,
+      detectDuplicate,
       logger
     });
     totals.ticketsCreated += counts.ticketsCreated;
@@ -125,6 +130,7 @@ export async function runDeltaPoll({
     totals.messagesEmbedded += counts.messagesEmbedded;
     totals.removed += counts.removed;
     totals.llmSpamFiltered += counts.llmSpamFiltered;
+    totals.duplicatesLinked += counts.duplicatesLinked ?? 0;
 
     if (limit && processed >= limit) {
       // Hit the run budget mid-inbox: stop without advancing the cursor so this

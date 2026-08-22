@@ -40,6 +40,55 @@ these.
 as its own item: `llm_usage` (item 14), `categorisation_review` (item 15), and
 `category_forwarding` / `ticket_forwards` (item 1).
 
+## 17. The agent test chat has never been run against live data (built 2026-08-22)
+
+`08_testing.sql` **has been applied** (2026-08-22) and verified against the
+database rather than read: 30 columns with the right nullability, 14 check
+constraints and 2 foreign keys, 3 indexes, RLS on with 0 policies, the
+`updated_at` trigger firing, and a round trip that inserted a row, had all four
+of the interesting constraints refuse a bad one, saved an ideal answer, and
+deleted itself. `agent_test_runs` holds 0 rows.
+
+What remains is the part no schema check can cover: **every module is
+unit-tested and the orchestrator is smoke-tested against a stubbed `fetch` and a
+scripted model, but no rehearsal has run against real Supabase reads and real
+OpenAI calls.**
+
+**The checks to run, in order:**
+
+1. Open `/agent-setup`, press **Test the agent**, and send a message with a real
+   dev-store customer address and one of the synced order numbers
+   (`#4716`–`#6770`). Confirm: the identity step links a customer, the tool cards
+   show real product/order/knowledge results, and a draft comes back.
+2. **The claim this exists to prove — "the rehearsal reproduces the poll".** Take
+   one real ingested ticket, read its stored category, `tool_calls` and verdict,
+   then type its message into the test chat with the same sender and compare.
+   They will not match token for token (the models are not deterministic across
+   runs), but the **category, the tool set, and the verdict** should. A divergence
+   there means the substitution is not faithful and the transcript cannot be
+   trusted.
+3. Confirm the run wrote nothing: `tickets`, `ticket_messages`,
+   `ticket_investigations` and `ticket_drafts` row counts unchanged, and the
+   `/tickets` queue count unchanged. (The smoke test asserts this against a
+   stubbed transport; this is the same claim against the real one.)
+4. Test a knowledge article from its own rail with a question it should answer,
+   and check the verdict is `used`. Then test a question it should NOT answer and
+   check it is not `used` — a checker that always says yes is worse than none.
+5. Read the reported cost against the OpenAI dashboard for the same minute, to
+   confirm the per-model apportionment is roughly right. It is an estimate of an
+   estimate (tokens are totalled per run, models per call) and is labelled as one.
+
+**One number to watch on the first real run.** The investigation is capped at 4
+turns and 6 tool calls and drafting is `gpt-4o`; the drafting backfill already hit
+HTTP 429 at roughly 12 calls/minute on this account's 30 000 TPM cap. A rehearsal
+is six calls in one burst, so a run started while the worker is drafting may fail
+mid-transcript. If that happens it is the rate limit, not the harness — the pass's
+own retry handling is what the transcript will show.
+
+**What cannot be checked yet:** whether the ideal answers accumulate into
+anything useful. Nothing reads `ideal_body_text`, by design — it is capture for a
+later phase, the same standing as `ticket_draft_edits`.
+
 ## 0a. The two new tools ~~have never been called by the model~~ — THE MODEL DOES CALL THEM; whether it calls them well is unjudged (re-measured 2026-08-17)
 
 `verifyPurchase` and `checkPhotoEvidence` are wired into the registry, the
@@ -101,6 +150,46 @@ and nobody has read them to see how many are `image de marque` in a b2b thread
 rather than a customer promising a photo. The matched term is stored in the tool
 result precisely so that audit is cheap.
 
+## 0b. "Add as ticket" has never been clicked against the live database (2026-08-19)
+
+Promoting a dropped email is built, unit-tested (12 tests over the ingestion
+writer's own in-memory store) and typechecked, and **no row has been promoted**.
+Everything below the button is exercised; the button itself has produced nothing.
+
+**The three claims that unit tests cannot make**, because each depends on the
+live rows rather than on the logic:
+
+| Claim | How to see it |
+|---|---|
+| The write lands | Promote one of the **49** blocked rows; a ticket appears in Queue and the row leaves Irrelevant |
+| The agent picks it up | With the worker running, within a poll (60 s) the ticket carries a `category`, a `request_kind` and a `level` |
+| It is idempotent | Promote the same row twice (or double-click): still one ticket, one `ticket_messages` row |
+
+**Pick the row deliberately.** 25 of the 49 were dropped by the blocklist and 24
+by the classifier; the interesting case is a **classifier** drop labelled
+`irrelevant` (14 rows), since those are the ones a reviewer is most likely to
+disagree with. **2 of the 49 belong to a conversation that already has a ticket**
+— promoting one of those is the second case worth seeing, because it must join
+that ticket, reopen it and add a message rather than create a second thread.
+
+**What to check after, in the database rather than in the UI:** the new
+`ticket_messages` row carries `raw_graph_payload -> promotedFromSpamAudit` naming
+the `spam_audit` id, and the `spam_audit` row itself is **byte-for-byte
+unchanged** — the promotion is recorded by the ticket existing, never by editing
+the decision.
+
+**The one thing to expect and not read as a bug:** the ticket's
+`first_message_at` is the *decision* time, not the arrival time, because the
+audit row carries no other clock. On this imported corpus that is the import
+date, so a promoted email joins the queue as recent work.
+
+**Not a check but the obvious follow-on question:** whether promoting should ever
+also exempt the sender. It does not — the next email from that address is dropped
+again — and whether that is the right default is only answerable once somebody has
+promoted a few and seen whether they cluster on senders or on subjects.
+
+---
+
 ## 0. The refund/returns tile needs its views re-applied (2026-08-17)
 
 `fulfilment_summary` and `fulfilment_summary_by_channel` gained four columns —
@@ -140,7 +229,8 @@ a fact; confirming it with the business is what would let that note be deleted.
 item is only removed once someone has actually run the check and seen the
 result.
 
-Last updated: 2026-08-17 (item 14 closed — the usage sink was never constructed,
+Last updated: 2026-08-19 (item 0b added — "Add as ticket" is built and has never
+been clicked against the live database). Before that: 2026-08-17 (item 14 closed — the usage sink was never constructed,
 now wired and verified; item 16 added — the investigation queue is unreachable,
 113 flags stranded on auto-closed tickets; items 15 and the preamble re-measured.)
 
@@ -350,7 +440,93 @@ captured. Those are different problems and only one of them is ours.
 
 ---
 
-## 11. ~~Local dashboard validation is blocked by recurring Supabase fetch failures~~ -- FIXED 2026-08-16
+## 11b. `fetch failed` is back, and it now kills WORKER passes mid-run (2026-08-20)
+
+Item 11 below closed a *dashboard read* failure and its cause (key-shaped
+headers). **The same message is now killing long-running worker passes**, which
+is a different failure with a different consequence: a pass dies partway and
+what it had not reached is simply not done.
+
+Three in one session, all `Supabase request failed after 4 attempts: fetch failed`:
+
+| Pass | Died after | Consequence |
+|---|---|---|
+| `ingest:once --stop-after=categorise` | ~15 min of delta paging | The `customers` and `categorise` stages **never ran**, and the delta cursor only advances on completion — so the mailbox backlog is half-ingested and re-enumerates from the same point next time |
+| `customers:resolve` (1st) | ~part-way through the shop | 117 tickets left unattempted |
+| `customers:resolve` (2nd) | completed | — |
+
+**Why it matters beyond the retry.** The poll's stage order is
+`customers → categorise → … → investigate`. A crash in `ingest` therefore takes
+out customer linkage for everything that poll ingested, and the investigation
+that runs later reads those tickets **without a `customer_id`**. Measured today:
+of 10 freshly investigated tickets, 5 had never had customer resolution
+attempted, and 6 produced case files with **0 established facts** against a
+corpus norm of 12 in 80. Four of the five turned out to be genuine `no_match`,
+so the damage was one ticket — but that is luck, not a guard.
+
+**To validate:** run `npm run ingest:once` to completion once and confirm the
+delta cursor in `shops.sync_cursors.mail_ingest_delta_link` actually advances.
+Until it does, the corpus keeps re-enumerating the same pages.
+
+**Worth considering, not yet decided:** whether a pass that dies should leave a
+marker, so "not done" is distinguishable from "done and found nothing". Today the
+only way to tell the two apart is `metadata.customer_resolution` being absent
+rather than saying `no_match` — which is how the gap above was found, by hand.
+
+### The lifecycle damage that crash left behind, and the order to repair it in
+
+The same half-finished enumeration reopened the closed queue, via a separate bug
+now fixed (`CHANGELOG.md` — *Re-delivery is no longer treated as arrival*). The
+**code** is fixed; the **data** is not:
+
+| | |
+|---|---|
+| Auto-closed tickets reopened | **136** of 139 |
+| `closed_at` on them | **nulled — unrecoverable**. Only `metadata.closed_reason: "inactivity"` survives, which is how they are identifiable |
+| Tickets re-flagged `needs_categorisation` | 374 of 400 |
+| Backlog section | ~355, against 3 in Closed |
+
+**The repair had a required order, and skipping step 1 would have made step 2 a
+no-op.** `shouldAutoClose` refuses any ticket still flagged
+`needs_categorisation` — correctly, since closing an uncategorised ticket drops
+it out of the categoriser's `status = 'open'` queue for good. Before step 1,
+`tickets:autoclose --dry-run` reported **would close 0 of 329; 329 exempt**.
+
+**RUN 2026-08-21, on the owner's instruction. Both steps executed:**
+
+1. **Categorisation drained**: 371 flagged → **0**. 155 first reads, 202
+   re-reads, 14 skipped (threads holding only our own replies), **0 failed, 0
+   fallbacks**. $0.22 over 366 cheap-tier calls. Corpus now 383 of 400
+   categorised; the 17 without a subject are the skipped ones.
+2. **Auto-close run**: **327 closed of 329, 2 exempt, 0 failed.** The dry run
+   flipped from 0-of-329 to 327-of-329 once the flags cleared, which is the
+   exemption working exactly as designed.
+
+Sections went Queue ~28 → **26**, Backlog ~355 → **41**, Closed 3 → **319**.
+
+**The accepted cost, recorded so nobody rediscovers it as a bug:** all 327 carry
+`closed_at` of **2026-08-21**. Anything reading that column —
+`ticket_reply_times`, the retention reads, the Insights support panel — shows a
+cluster of closures on the day of the repair that reflects this run and not the
+business. The original dates were already unrecoverable; the choice taken was a
+wrong-but-uniform date over an empty Closed section.
+
+**The new condition this created, which is item 16's shape at larger scale:**
+357 tickets are flagged `needs_investigation` and **only 44 are still open** —
+auto-close moved the other 313 behind a closed status, and the investigation pass
+claims `status = 'open'` only. Those 313 are now reachable solely via
+`investigate --include-closed`. Nothing is lost and nothing is urgent: a closed
+ticket with a raised flag costs nothing until someone decides those case files
+are worth roughly $5. The investigation queue was deliberately **not** run.
+
+**Two level 4 tickets are open and exempt.** The corpus held zero L4 before
+2026-08-21; both came out of the newly ingested older mail. L4 is never
+auto-closed and never drafted, so they sit in the queue until a person reads
+them. **Unreviewed — that is the one item here that wants a human eye.**
+
+---
+
+## 11. ~~Local dashboard validation is blocked by recurring Supabase fetch failures~~ -- FIXED 2026-08-16 (dashboard reads only — see 11b)
 
 **Closed.** Two separate things looked like one recurring Supabase issue:
 

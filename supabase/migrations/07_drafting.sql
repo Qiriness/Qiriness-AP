@@ -247,3 +247,101 @@ comment on column public.ticket_drafts.prompt_inputs is
 
 comment on column public.ticket_drafts.review_sent_at is
   'When a review copy was mailed to the reviewer''s own inbox. The review channel never addresses the customer and is disjoint from the support mailbox; this column is what stops one draft being mailed twice.';
+
+-- ---------------------------------------------------------------- ticket_draft_edits
+
+-- ============================================================================
+-- ticket_draft_edits -- what a person changed, and what they changed it from
+-- ============================================================================
+--
+-- ONE ROW PER EDIT, APPEND-ONLY. `ticket_drafts` already holds the current
+-- pair -- `body_text` as the model wrote it, `approved_body_text` as a person
+-- rewrote it -- and that pair is what the review surface needs. It is NOT what
+-- a learning signal needs, for one specific reason:
+--
+--   A RE-DRAFT REPLACES `body_text` AND LEAVES `approved_body_text` ALONE.
+--   That is deliberate (an operator's rewrite must survive the worker running),
+--   and it means the two columns drift apart the moment the agent revises a
+--   draft somebody had already edited. Read later, they look like a pair. They
+--   are the agent's second attempt beside a human's correction of the first --
+--   a pair that never existed, which is the worst possible thing to train on.
+--
+-- So the edit is recorded at the moment it happens, with the model text it was
+-- an edit OF copied in beside it. That snapshot is the whole point of the
+-- table; without it this would be a slower way of reading two columns.
+--
+-- APPEND-ONLY ALSO MEANS EVERY PASS IS KEPT. A reviewer who edits, sends,
+-- and edits again on the next inbound message leaves two rows, and the
+-- trajectory is the interesting part -- "what do people keep changing" is a
+-- question about repetition, not about the latest state.
+--
+-- NOTHING READS THIS YET. Phase 7 memory is where it is consumed; capture has
+-- to start first, because an edit not recorded when it happened cannot be
+-- recovered afterwards. Same argument as `auto_send_eligible`.
+--
+-- PERSONAL DATA. Both columns are customer-facing prose and inherit the
+-- drafting projection's scope: a name and an order state may appear, an address
+-- or a withheld identifier may not. A compliance delete of the ticket cascades
+-- through `ticket_drafts`.
+
+create table public.ticket_draft_edits (
+  id uuid primary key default gen_random_uuid(),
+  shop_id uuid not null references public.shops(id) on delete cascade,
+  ticket_id uuid not null references public.tickets(id) on delete cascade,
+  draft_id uuid not null references public.ticket_drafts(id) on delete cascade,
+
+  -- THE SNAPSHOT. What the agent had written at the moment this edit was made,
+  -- copied rather than referenced, because the column it came from is rewritten
+  -- by the next drafting run.
+  model_body_text text not null,
+  -- What the person saved instead.
+  human_body_text text not null,
+
+  -- WHERE THE EDIT WAS MADE. `dashboard` is the only writer today; `mailbox` is
+  -- declared because editing a review copy in Outlook and having that come back
+  -- is the intended second source, and a value added later would otherwise be a
+  -- constraint change on a populated table.
+  source text not null default 'dashboard',
+
+  -- WHO. Null on every row, and it will stay null until the dashboard has
+  -- authentication -- there is no user identity to attribute an action to yet
+  -- (see AGENT_INTEGRATION_PLAN.md, Phase 6). Declared now because a learning
+  -- signal that cannot tell two reviewers apart is a weaker signal, and adding
+  -- the column later is an alteration this avoids.
+  edited_by text,
+
+  edited_at timestamptz not null default now(),
+  created_at timestamptz not null default now(),
+
+  constraint ticket_draft_edits_source_check check (
+    source in ('dashboard', 'mailbox')
+  ),
+  -- An edit that changed nothing is not an edit. It would also be the most
+  -- misleading kind of training row: a pair implying the agent's text needed
+  -- correcting into itself.
+  constraint ticket_draft_edits_changed_check check (
+    btrim(human_body_text) <> '' and btrim(human_body_text) <> btrim(model_body_text)
+  )
+);
+
+create index ticket_draft_edits_draft_idx on public.ticket_draft_edits (draft_id);
+
+create index ticket_draft_edits_ticket_idx on public.ticket_draft_edits (ticket_id);
+
+-- The learning read: every edit for this shop, newest first.
+create index ticket_draft_edits_shop_edited_idx
+  on public.ticket_draft_edits (shop_id, edited_at desc);
+
+alter table public.ticket_draft_edits enable row level security;
+
+comment on table public.ticket_draft_edits is
+  'Append-only record of every human rewrite of a drafted reply, each carrying the model text it was an edit OF. The snapshot is the point: ticket_drafts.body_text is replaced by the next drafting run while approved_body_text is deliberately kept, so those two columns stop being a pair the moment a draft is re-run. Capture for Phase 7 memory; nothing reads it yet.';
+
+comment on column public.ticket_draft_edits.model_body_text is
+  'What the agent had written when this edit was made, COPIED rather than referenced -- the column it came from is rewritten by the next drafting run.';
+
+comment on column public.ticket_draft_edits.source is
+  'Where the edit was made: dashboard (the only writer today) or mailbox (editing a review copy in Outlook, the intended second source). Declared now so adding it is not a constraint change on a populated table.';
+
+comment on column public.ticket_draft_edits.edited_by is
+  'Who made the edit. Null on every row until the dashboard has authentication -- there is no user identity to attribute an action to yet.';

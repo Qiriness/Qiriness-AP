@@ -197,3 +197,12 @@ test('escalation never lowers a level', () => {
   });
   assert.equal(level, 3);
 });
+
+
+test('a ticket linked as a duplicate is not investigated', () => {
+  // Same rule as draftDecision: the linked ticket is the same conversation, and
+  // gathering evidence for a reply nobody will send is a model call spent twice.
+  const ticket = { category: 'delivery', request_kind: 'question', level: 1 };
+  assert.equal(isInvestigable(ticket), true);
+  assert.equal(isInvestigable({ ...ticket, duplicate_of_ticket_id: 'ticket-1' }), false);
+});

@@ -405,6 +405,15 @@ export interface TicketListItem {
   /** The directory's free-text note, shown as the chip's tooltip. */
   senderNote: string | null;
   /**
+   * True when this ticket was linked as a duplicate of another.
+   *
+   * A boolean on the row rather than the linked id: the list needs to MARK it,
+   * and which ticket it duplicates is a question answered by opening it. The
+   * drafting queue already skips these — the chip is so a person working the
+   * queue knows before they read one.
+   */
+  isDuplicate: boolean;
+  /**
    * True when the opener is `internal`, `contractor`, `logistics` or `courier` —
    * the labels that mean "this is not customer demand". Such threads leave the
    * Tickets queue for Conversations.
@@ -414,6 +423,17 @@ export interface TicketListItem {
    * mail.
    */
   isNonDemand: boolean;
+  /**
+   * True when one of OUR OWN addresses opened the thread — `tickets.sender_label`,
+   * stamped at ingestion and narrower than `senderLabel` above.
+   *
+   * THE TWO ARE NOT INTERCHANGEABLE, which is why both exist. `senderLabel` is
+   * derived per request and covers every directory kind, so a Nocibé order
+   * carries `retailer`; this covers only `internal` and `contractor`, the labels
+   * that mean the sender is us. Partitioning on the wrong one moves a retailer's
+   * genuine B2B demand off the Tickets queue — 30 threads instead of 14.
+   */
+  isOwnSide: boolean;
   /**
    * The matched Shopify customer's name, from `tickets.customer_id`.
    *
@@ -694,6 +714,20 @@ export interface TicketMessage {
 export interface TicketThread {
   ticketId: string;
   subject: string | null;
+  /**
+   * Set when this ticket was linked as a duplicate of another.
+   *
+   * Shown beside the draft because that is where somebody decides to send, and
+   * the drafting queue already refuses to write a new draft here — a draft on a
+   * linked ticket is one that must not go out.
+   */
+  duplicateOf: { ticketId: string; reason: string } | null;
+  /**
+   * An earlier ticket from the same sender that this one continues. Unlike
+   * `duplicateOf` this never blocks the draft — it is context, and when the
+   * customer was never answered it is why the reply opens with an apology.
+   */
+  relatedTo: { ticketId: string; score: number } | null;
   draft: TicketDraft | null;
   messages: TicketMessage[];
 }

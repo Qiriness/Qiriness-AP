@@ -1,7 +1,7 @@
 import { htmlToText, normalizePlainText } from '../../../scripts/lib/html-to-text.mjs';
 import { hashIdentifier } from '../../../scripts/lib/compliance-audit.mjs';
 
-import { parseContactForm } from './contact-form.mjs';
+import { isNotificationSender, parseContactForm } from './contact-form.mjs';
 
 // Pure mapping from a raw Microsoft Graph message to the row fields for
 // tickets / ticket_messages. No I/O, so this is the unit-tested core of
@@ -24,6 +24,8 @@ import { parseContactForm } from './contact-form.mjs';
 //   parses as a contact form, the customer's own name, address and message
 //   replace the envelope's; the original envelope survives in raw_graph_payload.
 //   See contact-form.mjs for why this beats letting the model infer them.
+//   INBOUND ONLY — a reply of ours quotes the notification it answers, and
+//   parsing that quote would file our own reply under the customer's name.
 
 export function mapGraphMessage(raw, { direction, mailbox } = {}) {
   // Delta responses include tombstones for removed messages: `{ id, '@removed': {...} }`.
@@ -43,23 +45,39 @@ export function mapGraphMessage(raw, { direction, mailbox } = {}) {
   const conversationId = raw?.conversationId || null;
 
   const rawBody = cleanBody(raw?.body);
-  // Null when the body is not a recognisable contact-form notification, so an
-  // unrecognised or reworded template degrades to the envelope rather than to a
-  // wrong customer.
-  const form = parseContactForm(rawBody);
 
+  // DIRECTION IS DECIDED FIRST, because it gates the parse below.
   const resolvedDirection = direction || resolveDirection(envelopeEmail, mailbox);
+  const isInbound = resolvedDirection === 'inbound';
+
+  // THE ENVELOPE DECIDES WHETHER THE BODY MAY RENAME THE SENDER.
+  //
+  // The identity swap below exists because a contact-form notification is *from*
+  // Shopify and *about* a customer. But every reply and forward QUOTES that
+  // notification, and the quoted block parses identically — so "the body looks
+  // like a form" is not evidence that this message IS one. Only the envelope is.
+  //
+  // Without this gate the parse fires on replies: our own (88 outbound messages
+  // stored under a customer's address, their reply text discarded), colleagues'
+  // and the 3PL's (32 inbound messages filed as the customer), and the
+  // customer's own follow-ups (20 messages whose body was replaced by a copy of
+  // their first one — which manufactured "identical body" duplicates out of
+  // nothing).
+  //
+  // `isInbound` is still required: a notification is never something we sent.
+  const form = isInbound && isNotificationSender(envelopeEmail) ? parseContactForm(rawBody) : null;
+
   // Our own replies are never *about* a requester, and a contact-form
   // notification is about the person named in the body, not about Shopify.
   const fromEmail = form?.email || envelopeEmail;
   const fromName = form?.name || envelopeName;
-  const isInbound = resolvedDirection === 'inbound';
 
   const message = {
     graph_message_id: raw?.id || null,
     graph_conversation_id: conversationId,
     internet_message_id: raw?.internetMessageId || null,
-    in_reply_to: null,
+    in_reply_to: readHeader(raw, 'in-reply-to'),
+    reference_ids: parseMessageIds(readHeader(raw, 'references')),
     direction: resolvedDirection,
     from_email: fromEmail,
     from_name: fromName,
@@ -146,6 +164,49 @@ function recipientAddresses(recipients) {
 // For contact-form mail this is also where the ORIGINAL envelope survives: from
 // is overwritten above with the customer named in the body, and losing the fact
 // that Shopify actually sent it would make the row impossible to audit.
+/**
+ * One header by name, case-insensitively.
+ *
+ * `internetMessageHeaders` is a flat array of `{ name, value }` and the casing
+ * of a header name is whatever the sending client chose -- `In-Reply-To`,
+ * `In-reply-to` and `IN-REPLY-TO` are the same header to every mail system, and
+ * comparing them literally would work for most senders and silently fail for
+ * some.
+ *
+ * Returns null when the header set was not requested, which is what every
+ * message ingested before this existed looks like.
+ */
+function readHeader(raw, name) {
+  const headers = raw?.internetMessageHeaders;
+  if (!Array.isArray(headers)) {
+    return null;
+  }
+  const wanted = name.toLowerCase();
+  const found = headers.find((header) => String(header?.name || '').toLowerCase() === wanted);
+  const value = found?.value;
+  return typeof value === 'string' && value.trim() ? value.trim() : null;
+}
+
+/**
+ * The Message-IDs inside a `References` (or `In-Reply-To`) header.
+ *
+ * The header is a whitespace-separated list of angle-bracketed ids, and the
+ * brackets are kept: `internet_message_id` stores them exactly as Graph reports
+ * them (`<E1020004-...@shopify.com>`), so a match is a plain string comparison
+ * rather than two normalisations that have to agree.
+ *
+ * Malformed input is dropped rather than stored: this is a matching key, and a
+ * fragment that can never match anything is noise in a column somebody will one
+ * day try to reason about.
+ */
+function parseMessageIds(value) {
+  if (!value) {
+    return [];
+  }
+  const ids = String(value).match(/<[^<>\s]+>/g);
+  return ids ? [...new Set(ids)] : [];
+}
+
 function sanitizeGraphPayload(raw, form = null) {
   if (!raw || typeof raw !== 'object') {
     return {};

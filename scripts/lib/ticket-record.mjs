@@ -212,6 +212,114 @@ export function createTicketRecord(supabase, { shopId, transport = REST_TRANSPOR
      * bill with no one asking for it. It is a per-call argument, and the only
      * caller that passes it is a CLI flag a person typed.
      */
+    /**
+     * Links a ticket to the one it duplicates.
+     *
+     * WRITTEN HERE because `tickets` has one writer, and this is a ticket
+     * column like any other. The DECISION is not this module's — the rules live
+     * in `agent/src/ingestion/duplicate-rules.mjs` and are deterministic; this
+     * records what they concluded.
+     *
+     * The three columns move together, which the check constraint also enforces:
+     * a link with no reason is unreviewable, and the reason is the first thing a
+     * person needs before undoing it.
+     */
+    async linkDuplicate(ticketId, { ofTicketId, reason, at = new Date().toISOString() }) {
+      if (!ofTicketId || !reason) {
+        throw new Error('linkDuplicate requires both the ticket it duplicates and the reason.');
+      }
+      if (ofTicketId === ticketId) {
+        throw new Error('A ticket cannot be a duplicate of itself.');
+      }
+      return patch(ticketId, {
+        duplicate_of_ticket_id: ofTicketId,
+        duplicate_reason: reason,
+        duplicate_detected_at: at
+      });
+    },
+
+    /**
+     * Links a ticket to an earlier one it CONTINUES — a chase, or a thread that
+     * split across conversation ids.
+     *
+     * DELIBERATELY NOT `linkDuplicate` WITH A FLAG. The two links look alike and
+     * mean opposite things: a duplicate is answered with silence, a related
+     * ticket is answered with a reply that opens by apologising. Sharing one
+     * writer would make the difference a parameter, and a parameter is exactly
+     * what gets passed wrong.
+     *
+     * The score travels because the threshold will move, and a link recorded
+     * under the old one has to stay interpretable.
+     */
+    /**
+     * Records that one of our own addresses opened this thread.
+     *
+     * Set once, at ticket creation, and written here only by the backfill for
+     * mail that predates the column. There is no "unset" path on purpose: a
+     * thread does not stop having been started by a colleague, and a label
+     * cleared by mistake would quietly put a colleague's mail back in the
+     * customer drafting queue.
+     */
+    async setSenderLabel(ticketId, label) {
+      if (!label) {
+        throw new Error('setSenderLabel requires a label; null is the absence of one, not a value to write.');
+      }
+      return patch(ticketId, { sender_label: label });
+    },
+
+    async linkRelated(ticketId, { toTicketId, score, at = new Date().toISOString() }) {
+      if (!toTicketId || typeof score !== 'number' || Number.isNaN(score)) {
+        throw new Error('linkRelated requires the earlier ticket and the score that matched it.');
+      }
+      if (toTicketId === ticketId) {
+        throw new Error('A ticket cannot be related to itself.');
+      }
+      return patch(ticketId, {
+        related_ticket_id: toTicketId,
+        related_score: score,
+        related_detected_at: at
+      });
+    },
+
+    /**
+     * Removes a related link that the evidence no longer supports.
+     *
+     * THERE IS AN UNLINK HERE AND DELIBERATELY NOT ONE FOR THE OTHER TWO.
+     * `sender_label` records who wrote, which does not stop being true; a
+     * duplicate link suppresses a reply and may already have been reviewed by a
+     * person, so it is theirs to clear. A related link is neither — it is
+     * derived context, re-derivable from the same rule, and a link resting on a
+     * message body that has since been corrected is simply wrong. Six of nine
+     * were exactly that after the contact-form repair.
+     */
+    /**
+     * Corrects a ticket's requester.
+     *
+     * NOT PART OF INGESTION, and there is no caller in the pipeline. The
+     * write-once rule stands: a requester that changed while somebody was
+     * reading the queue would be worse than one that is occasionally stale.
+     * This exists for the reconcile tool, which decides — narrowly, and only
+     * when the stored identity is provably one of ours — that a row is wrong.
+     *
+     * The two columns move together because they describe one person: a name
+     * updated without its hash would show the right person and join to the
+     * wrong one's orders.
+     */
+    async setRequester(ticketId, { name, emailHash }) {
+      if (!emailHash) {
+        throw new Error('setRequester requires the hash; a name without one would break order matching.');
+      }
+      return patch(ticketId, { requester_name: name ?? null, requester_email_hash: emailHash });
+    },
+
+    async clearRelated(ticketId) {
+      return patch(ticketId, {
+        related_ticket_id: null,
+        related_score: null,
+        related_detected_at: null
+      });
+    },
+
     async claim(passName, { limit, anyStatus = false, ticketId = null } = {}) {
       const pass = passOrThrow(passName);
       const flags = { [pass.flag]: IS_TRUE };
@@ -559,10 +667,21 @@ export function createTicketRecord(supabase, { shopId, transport = REST_TRANSPOR
     },
 
     /** Subject only — enough to 404 a ticket that is not this shop's. */
-    async findSubject(ticketId) {
-      const rows = await select(supabase, T.TICKETS, live({ id: ticketId }), 'id,subject', {
-        limit: 1
-      });
+    /**
+     * What the thread dialog needs off the ticket itself.
+     *
+     * The duplicate link travels because the dialog is where a person decides
+     * what to do with a DRAFT, and a draft on a ticket linked as a duplicate is
+     * one that must not be sent. Learning that after reading it is too late.
+     */
+    async findForThread(ticketId) {
+      const rows = await select(
+        supabase,
+        T.TICKETS,
+        live({ id: ticketId }),
+        'id,subject,duplicate_of_ticket_id,duplicate_reason,related_ticket_id,related_score',
+        { limit: 1 }
+      );
       return rows[0] || null;
     },
 

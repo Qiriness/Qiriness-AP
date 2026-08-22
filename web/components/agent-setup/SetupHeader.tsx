@@ -4,9 +4,11 @@ import styles from "./SetupHeader.module.css";
 interface SetupHeaderProps {
   approved: number;
   total: number;
+  /** Opens the test chat: a message you write, put through the real pipeline. */
+  onTest: () => void;
 }
 
-export function SetupHeader({ approved, total }: SetupHeaderProps) {
+export function SetupHeader({ approved, total, onTest }: SetupHeaderProps) {
   const ready = total > 0 && approved === total;
   const message = ready
     ? "Your agent is ready to answer with approved knowledge."
@@ -16,8 +18,8 @@ export function SetupHeader({ approved, total }: SetupHeaderProps) {
     <header className={styles.header}>
       <div className={styles.headingRow}>
         <h1 className={styles.title}>Agent Setup</h1>
-        <button type="button" className={styles.preview}>
-          View agent preview
+        <button type="button" className={styles.preview} onClick={onTest}>
+          Test the agent
           <ArrowRightIcon size={16} />
         </button>
       </div>

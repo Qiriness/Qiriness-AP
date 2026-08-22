@@ -24,6 +24,10 @@ function recorder({ rows = [] } = {}) {
         calls.push({ kind: 'updateById', table, id, patch });
         return { id, ...patch };
       },
+      async insert(_client, table, bodies) {
+        calls.push({ kind: 'insert', table, bodies });
+        return bodies;
+      },
       async upsert(_client, table, bodies, onConflict) {
         calls.push({ kind: 'upsert', table, bodies, onConflict });
         return bodies;
@@ -182,4 +186,69 @@ test('the dashboard reads the latest draft on a ticket, not the first', async ()
 test('a ticket with no draft reads as null rather than undefined', async () => {
   const { draft } = record({ rows: [] });
   assert.equal(await draft.forTicket('ticket-1'), null);
+});
+
+// --- the edit log ------------------------------------------------------------
+
+const DRAFT_ROW = { id: 'draft-1', ticket_id: 'ticket-1', body_text: 'Bonjour, votre commande part demain.' };
+
+test('an edit is recorded with the model text it was an edit OF', () => {
+  // THE SNAPSHOT IS THE POINT. ticket_drafts.body_text is replaced by the next
+  // drafting run while approved_body_text is kept, so the two columns stop being
+  // a pair the moment a draft is re-run — and a pair that never existed is the
+  // worst thing to train on.
+  const rec = recorder({ rows: [DRAFT_ROW] });
+  const draft = createDraftRecord({}, { shopId: SHOP, transport: rec.transport });
+
+  return draft
+    .decide('draft-1', { status: 'edited', approvedBodyText: 'Bonjour, votre colis part mardi.' })
+    .then(() => {
+      const logged = rec.calls.find((call) => call.kind === 'insert');
+      assert.ok(logged, 'no edit was recorded');
+      assert.equal(logged.table, T.TICKET_DRAFT_EDITS);
+      assert.equal(logged.bodies[0].model_body_text, DRAFT_ROW.body_text);
+      assert.equal(logged.bodies[0].human_body_text, 'Bonjour, votre colis part mardi.');
+      assert.equal(logged.bodies[0].source, 'dashboard');
+      assert.equal(logged.bodies[0].ticket_id, 'ticket-1');
+    });
+});
+
+test('the mailbox can be named as the source of an edit', () => {
+  // Declared before anything writes it: editing a review copy in Outlook is the
+  // intended second source.
+  const rec = recorder({ rows: [DRAFT_ROW] });
+  const draft = createDraftRecord({}, { shopId: SHOP, transport: rec.transport });
+
+  return draft
+    .decide('draft-1', { status: 'edited', approvedBodyText: 'Autre chose.', source: 'mailbox' })
+    .then(() => {
+      assert.equal(rec.calls.find((c) => c.kind === 'insert').bodies[0].source, 'mailbox');
+    });
+});
+
+test('an edit that changed nothing but whitespace is not recorded', () => {
+  // A row asserting the agent's text needed correcting into itself is the most
+  // misleading training pair there is.
+  const rec = recorder({ rows: [DRAFT_ROW] });
+  const draft = createDraftRecord({}, { shopId: SHOP, transport: rec.transport });
+
+  return draft
+    .decide('draft-1', { status: 'edited', approvedBodyText: '  Bonjour,   votre commande part demain. ' })
+    .then(() => {
+      assert.equal(rec.calls.find((call) => call.kind === 'insert'), undefined);
+      // The decision itself is still recorded.
+      assert.ok(rec.calls.some((call) => call.kind === 'updateById'));
+    });
+});
+
+test('approving or rejecting records no edit', () => {
+  const rec = recorder({ rows: [DRAFT_ROW] });
+  const draft = createDraftRecord({}, { shopId: SHOP, transport: rec.transport });
+
+  return Promise.all([
+    draft.decide('draft-1', { status: 'approved' }),
+    draft.decide('draft-2', { status: 'rejected' })
+  ]).then(() => {
+    assert.equal(rec.calls.find((call) => call.kind === 'insert'), undefined);
+  });
 });

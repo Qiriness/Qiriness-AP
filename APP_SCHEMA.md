@@ -28,13 +28,16 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |   |   |-- settings/page.tsx             # Server Component: forwarding address book
 |   |   `-- api/
 |   |       |-- tickets/[id]/route.ts         # GET case file + order facts · PATCH status
+|   |       |-- tickets/[id]/draft/route.ts   # PATCH approve / edit / reject a draft
 |   |       |-- tickets/[id]/thread/route.ts  # GET the conversation (message bodies)
 |   |       |-- forwarding/route.ts           # GET 14 categories · PUT upsert one
 |   |       |-- insights/support/marketable-contacts/route.ts
 |   |       |                                  # GET the consented outreach list as CSV
 |   |       |                                  # (the ONLY bulk personal-data export)
-|   |       `-- knowledge/                    # shopify-sources · articles · articles/[id]
-|   |                                         # · articles/[id]/resync
+|   |       |-- knowledge/                   # shopify-sources · articles · articles/[id]
+|   |       |                                 # · articles/[id]/resync
+|   |       `-- agent-test/                   # run (NDJSON stream, writes no ticket) ·
+|   |                                         # runs · runs/[id] (ideal answer)
 |   |-- components/
 |   |   |-- icons.tsx                # inline SVG icon set
 |   |   |-- app-shell/               # AppShell (top bar + drawer) · Sidebar
@@ -49,6 +52,9 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |   |   |                            # TicketStatCards · TicketTable · TicketDetailPanel ·
 |   |   |                            # TicketThreadDialog · DroppedMailTable +
 |   |   |                            # DroppedMailDialog · LevelChip · HappinessFace
+|   |   |-- agent-test/              # TestChatDialog (the rehearsal) · TestComposer ·
+|   |   |                            # RunTranscript + StepCard (the step cards) ·
+|   |   |                            # RunHistory · IdealAnswer (the memory)
 |   |   `-- agent-setup/             # AgentSetup + SetupHeader (orchestrator, mutations) ·
 |   |                                # ArticleLibrary (left pane) · ArticleWorkspace +
 |   |                                # BrandVoiceWorkspace (right pane) · RichTextEditor ·
@@ -57,6 +63,7 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |   |-- lib/
 |   |   |-- types.ts             # UI types + label tables (categories, levels, VIP, RFM)
 |   |   |-- knowledge-mapper.ts  # isomorphic: API JSON -> UI types
+|   |   |-- agent-test-types.ts  # isomorphic: the trace shapes the test chat renders
 |   |   |-- ticket-stats.ts      # isomorphic: summariseTickets + isClosed
 |   |   |-- ticket-detail.ts     # pure, 3 projections: case file -> 3 blocks ·
 |   |   |                        # resolved_context -> order owner / status / tracking lines ·
@@ -97,7 +104,8 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |       |                                # descriptors), the needs_* flags, the
 |       |                                # lifecycle timestamps, the metadata trail,
 |       |                                # the queue + thread reads. Shop-scoped
-|       |-- draft-record.mjs             # THE ONLY WRITER OF `ticket_drafts`:
+|       |-- draft-record.mjs             # THE ONLY WRITER OF `ticket_drafts` +
+|       |                                # `ticket_draft_edits`:
 |       |                                # the upsert key, the two bodies, the human
 |       |                                # decision vs the machine outcome, the review
 |       |                                # stamp. Shop-scoped. Cannot send
@@ -137,7 +145,15 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |   |   |                        # delta-poller · ticket-writer · message-embedder ·
 |   |   |                        # spam-gate + blocklist-store + spam-classifier ·
 |   |   |                        # sender-directory (who a sender is: context for
-|   |   |                        # the case file, filter for the demand report) ·
+|   |   |                        # the case file, filter for the demand report,
+|   |   |                        # and the gate on related-rules) ·
+|   |   |                        # duplicate-rules (same message twice -> silence) ·
+|   |   |                        # related-rules (same conversation again -> context
+|   |   |                        # + apology; consumers only, never suppresses) ·
+|   |   |                        # contact-form-repair (undoes a form parse that
+|   |   |                        # fired on a reply quoting the notification) ·
+|   |   |                        # requester-repair (moves a colleague's identity
+|   |   |                        # off a ticket a customer is on) ·
 |   |   |                        # spam-audit (rows, body cap/clock, retention purge) ·
 |   |   |                        # spam-body-backfill · attachment-backfill
 |   |   |-- pipeline/            # categorise (classify-only) · categorise-runner
@@ -176,10 +192,17 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |   |   |                        # draft-checks (the prohibitions, in code) ·
 |   |   |                        # draft-runner (+ the derived queue). NO Graph call
 |   |   |-- lifecycle/           # auto-close (28d idle, level 4 exempt)
-|   |   `-- tools/               # one CLI per pass -- see Agent CLIs below
+|   |   |-- tools/              # one CLI per pass -- see Agent CLIs below
+|   |   `-- testing/            # THE REHEARSAL HARNESS behind /agent-setup's test
+|   |                           # chat. memory-transport (a PostgREST-shaped fake
+|   |                           # DB, so the REAL ticket-record and draft-record
+|   |                           # run unchanged over it) · synthetic-message ·
+|   |                           # trace (+ the OpenAI decorator) · article-check
+|   |                           # (the five verdicts) · run-rehearsal (the passes,
+|   |                           # in the poll's order, writing no row)
 |   `-- eval/                    # categorisation-cases (40 dummy) · score-categorisation ·
 |                                # sample-mailbox (review:sample) · compare-review-labels
-`-- supabase/migrations/         # BASELINE, 7 files by domain, run in order against
+`-- supabase/migrations/         # BASELINE, 8 files by domain, run in order against
                                  # an EMPTY database -- see Database Map.
                                  # _shared.test.mjs holds the cross-file invariants;
                                  # each file has its own sibling .test.mjs.
@@ -227,10 +250,11 @@ The recurring situations, not the answers to them. Same document/chunk mechanics
 
 | Table | Holds |
 | --- | --- |
-| `tickets` | one per Graph `conversationId`. Taxonomy axes, `level`, `responsible_team`, `customer_id`, `shopify_order_number`, signals (`language`, `happiness`, `categorisation_confidence`), `resolved_context` jsonb, lifecycle + retention timestamps |
-| `ticket_messages` | one per Graph message. Envelope, cleaned `body_text`, sanitised payload, `embedding vector(1536)`, and `attachments jsonb` -- part METADATA only (name, contentType, size, isInline), never bytes. **NULL means never fetched**, `[]` means fetched and empty |
+| `tickets` | one per Graph `conversationId`. Taxonomy axes, `level`, `responsible_team`, `customer_id`, `shopify_order_number`, signals (`language`, `happiness`, `categorisation_confidence`), `resolved_context` jsonb, `duplicate_of_ticket_id` + `duplicate_reason` + `duplicate_detected_at` (**linked, never merged** — set by deterministic rules only; the drafting *and* investigation queues skip a linked ticket), `sender_label` (`internal`/`contractor` when one of OUR addresses opened the thread — stamped at creation from `sender_directory`, skips drafting, investigation still runs), `related_ticket_id` + `related_score` + `related_detected_at` (an earlier ticket this one **continues** — embedding cosine ≥ 0.90, consumers only; **never suppresses a draft**, it adds thread context and drives the apology for a cross-ticket chase), lifecycle + retention timestamps |
+| `ticket_messages` | one per Graph message. Envelope, cleaned `body_text`, sanitised payload, `embedding vector(1536)`, the RFC 5322 reply chain (`in_reply_to` + `reference_ids[]`, captured for deduplication — only those two headers are kept, the rest is `Received` chains carrying relay IPs), and `attachments jsonb` -- part METADATA only (name, contentType, size, isInline), never bytes. **NULL means never fetched**, `[]` means fetched and empty |
 | `ticket_investigations` | **the case file**: `established` / `unverified` / `missing` / `do_not_claim` (four separate columns), `handoff`, `context_ref`, `dropped_claims`, `evidence_gaps` (what the ticket required vs what was obtained, each entry carrying the `finding` and the `details` naming WHICH product or code it is about — diagnostic, does not move the verdict), `exemplar_match` (which recurring situation this is; recorded, never acted on), `candidate_order` (**internal**: the customer's last order as a FULL bundle, same shape and builder as `resolved_context`, fetched in the order tool's unresolved branch so it can never sit beside a confirmed order. Rendered in the human brief and the dashboard under Last order headings, **never** in the drafting prompt). `unique(shop_id, trigger_message_id)` |
 | `ticket_drafts` | **what the agent would send**: `body_text` (the model's, never edited) beside `approved_body_text` (a reviewer's rewrite), `source_verdict` (all three — `needs_human` gets an acknowledgement), `disposition` (`terminal` = sending closes the ticket \| `intermediary` = somebody still owes an answer; derived from the verdict + the case file's `handoff`, never model-chosen, and enforced by two check constraints), `level` (1–3; level 4 is never drafted), `status` (the human decision) kept apart from `checks_passed` (the machine outcome), `auto_send_eligible`, `prompt_inputs`, `review_sent_at`. `unique(shop_id, trigger_message_id)`. **Holds no recipient and cannot send.** Owned by `scripts/lib/draft-record.mjs` |
+| `ticket_draft_edits` | **append-only record of every human rewrite**, each carrying `model_body_text` — the agent's text as it stood when the edit was made, COPIED rather than referenced, because `ticket_drafts.body_text` is replaced by the next drafting run. `source` (dashboard / mailbox), `edited_by` (null until auth exists). Capture for Phase 7 memory; nothing reads it yet |
 | `email_blocklist` | per-shop sender email/domain rules + hit counts |
 | `sender_directory` | per-shop sender email/domain → `label` (internal, contractor, logistics, courier, retailer, distributor, supplier, partner, other) + free-text `note`. Read into the case file as context and by `cluster:tickets` to tell customer demand from our own mail. Replaces `INTERNAL_EMAIL_DOMAINS`. Rows are exceptions; an unlisted sender is a consumer |
 | `spam_audit` | one row per gate decision. `outcome`, `decided_by`, `reason`, `label`, `model`, `failed_open`, sender, subject, and on a block `body_text` + `body_captured_at` + `body_expires_at` |
@@ -268,6 +292,12 @@ overlapping slices — see `DECISIONS.md § Insights`.
 They expose `rfm_group` and never `is_vip`: who counts as a VIP is a business
 rule owned by `customer-segments.mjs` and applied at read time.
 
+### Agent rehearsals
+
+| Table | Holds |
+| --- | --- |
+| `agent_test_runs` | one run of the Agent Setup **test chat**: a message an operator typed, put through the real pipeline. References no ticket, message, investigation or draft — a rehearsal writes none of them (`agent/src/testing/`). `trace` jsonb is the record (every step, every tool's returned text, every model call's prompt and response); the flat columns beside it index it so a history list never parses one. Identity is `requester_email_masked` only — neither the address nor a hash. `ideal_body_text` is **the memory**: what the operator would have sent instead — the same capture `ticket_draft_edits` makes for real mail, except the situation can be invented. Cost is recorded here and deliberately not in `llm_usage` |
+
 ### Compliance and audit
 
 | Table | Holds |
@@ -288,7 +318,7 @@ Written by the worker and the CLIs, read only by the Insights panels.
 
 ### Migration files
 
-**Seven files, by domain, run in order against an empty database.** The order is a plain dependency chain, and every table is created *complete* — there is no `alter table … add column` anywhere in the baseline, and a test asserts that.
+**Eight files, by domain, run in order against an empty database.** The order is a plain dependency chain, and every table is created *complete* — there is no `alter table … add column` anywhere in the baseline, and a test asserts that.
 
 | File | Creates | Depends on |
 | --- | --- | --- |
@@ -298,7 +328,8 @@ Written by the worker and the CLIs, read only by the Insights panels.
 | `04_support.sql` | `tickets`, `ticket_messages`, `email_blocklist`, `sender_directory`, `spam_audit`, `ticket_investigations`, `category_forwarding`, `ticket_forwards`, `categorisation_review`, the three views | 01, 02 |
 | `05_exemplars.sql` | `support_exemplars`, `support_exemplar_phrasings`, `support_answers`, `match_support_exemplars()` | 01, 03 (`french_unaccent`) |
 | `06_analytics.sql` | `normalise_carrier()`, `llm_usage`, `cluster_runs`, `ticket_clusters`, and the **21 Insights views** | 01, 02, 04 |
-| `07_drafting.sql` | `ticket_drafts` | 01, 04 |
+| `07_drafting.sql` | `ticket_drafts`, `ticket_draft_edits` | 01, 04 |
+| `08_testing.sql` | `agent_test_runs` | 01, 03 |
 
 `_shared.test.mjs` holds the cross-file invariants (no data statements, RLS on every table, every table and view documented, nothing referenced before it is created, every view `security_invoker` and revoked from the anon roles, every embedded table carrying the whole determinism quadruple, and `scripts/lib/tables.mjs` naming exactly what the baseline creates). Each file has a sibling test for its own contents.
 
@@ -317,18 +348,36 @@ All Route Handlers are server-only and use the Supabase service-role key.
 - `PATCH knowledge/articles/:id` — converts `source_type` to `manual`; demotes `approved` → `in_review` on a text change; re-embeds inline (best-effort)
 - `POST knowledge/articles/:id/resync` — 400 once `manual`. `DELETE` — hard delete, chunks cascade
 
+**The test chat** (`components/agent-test/`, over `lib/server/agent-test-service.ts`). Opened from the header button (a free test) or from an article's rail (that article's retrieval, asserted). A message goes in, the real passes run against an in-memory database, and the transcript shows every tool call with the exact text the model was handed.
+
+- `POST agent-test/run` — streams the run as NDJSON, one line per step. No ticket is written
+- `GET agent-test/runs` — the history, without traces, plus readiness (OpenAI key, brand voice)
+- `GET|PATCH|DELETE agent-test/runs/:id` — one run · save/clear the **ideal answer** · delete
+
 ### `/tickets` — the queue
+
+**Consumer threads only.** `listTickets` and `listConversations` are two halves of one partition on `tickets.sender_label` (`partitionBySender`), so a thread is on exactly one of the two pages and never on neither: 234 = 220 + 14.
 
 `web/app/tickets/` → `web/components/tickets/`, over `tickets-service.ts` + `dropped-mail-service.ts`. `tickets-service.ts` does not touch `tickets` itself: every read and the one write go through `scripts/lib/ticket-record.mjs`, and the list reads the `ticket_queue` view. Queue priority is computed in `scripts/lib/ticket-priority.mjs`; the view supplies facts (`inbound_count`, `waiting_since`), JavaScript owns the tunable judgement. Four stacked collapsible sections, each scrolling inside a fixed height:
 
 | Section | Source | Row action |
 | --- | --- | --- |
 | **Queue** | `tickets`, status not resolved/closed, waiting less than 14 days | Close ticket |
-| **Irrelevant** | `spam_audit`, `outcome = 'blocked'` | Add as ticket *(disabled)* |
+| **Irrelevant** | `spam_audit`, `outcome = 'blocked'`, minus the promoted | **Add as ticket** |
 | **Backlog** | `tickets`, status not resolved/closed, waiting 14+ days | Close ticket |
 | **Closed** | `tickets`, status resolved/closed | Reopen ticket |
 
+**Add as ticket** overturns one gate decision. `POST /api/dropped-mail/:id/promote` → `dropped-mail-service.ts` → `agent/src/ingestion/promote-dropped-mail.mjs`, which maps the `spam_audit` row into the shape `mapGraphMessage` produces and writes it through `writeIngestedMessages` — the ordinary ingestion path, so threading, idempotency, `needs_categorisation` and the reopen rule are ingestion's and not a second copy of them. The worker's next poll then categorises, resolves and investigates it like any other ticket. Disabled where the row has no stored body. **No schema change and no write to `spam_audit`**: promoted is derived — a blocked row whose `graph_message_id` now exists in `ticket_messages` — and drops out of the section on that basis.
+
 Row interactions: chevron expands the agent's reading (`TicketDetailPanel`: Results · Order · Action — the Order block leads with the name on the order and the masked order contact address, so ownership can be checked against the requester by eye); subject opens the conversation (`TicketThreadDialog`: draft + email chain). In the Irrelevant table the subject opens the dropped email (`DroppedMailDialog`). Four header cards, plus level tabs, category filter and sort — all client-side over the open-ticket set, then split into Queue and Backlog. Search is **per section**, in each `TicketSection` header (shown only while the section is open), so each of the four tables filters itself.
+
+### `/conversations` — threads we opened
+
+`web/app/conversations/` → `web/components/tickets/ConversationsView.tsx`, over `listConversations` in `tickets-service.ts`. The other half of the `/tickets` partition: threads whose opening sender is one of ours (`sender_label` = `internal` | `contractor`), stamped at ingestion from `sender_directory`. The agent investigates these but never drafts on them (`draftDecision` → `internal_sender`).
+
+Two sections over the same `TicketTable` the queue uses — **Open** (expanded, leads the page) and **Closed** (collapsed). No level tabs, category filter or stat cards: 14 rows where the only useful questions are what is still open and where a forward went.
+
+`countOpenConversations` feeds a sidebar badge rendered from **every** page in the shell via `lib/server/conversation-badge.ts`. That is the mitigation for routing these off the queue at all — the arrangement failed once by being silent. See DECISIONS.md § Tickets dashboard.
 
 ### `/insights` — the four analytics panels
 
@@ -378,8 +427,12 @@ Run `npm run ingest:once` or `npm start` from `agent/`. One poll runs every pass
 | 1 | load config, assert Graph creds, resolve `shops.id` | `index.mjs` |
 | 2 | follow Graph delta pages, persist cursor | `ingestion/delta-poller.mjs` |
 | 3 | map messages; derive direction + normalise contact-form identity | `ingestion/graph-message-mapper.mjs` |
+| 3a | **Known-sender exemption** — an address in `sender_directory` bypasses BOTH gates; the LLM call is skipped, not overruled. Can only keep mail, never block it | `ingestion/known-senders.mjs` |
 | 4 | **Gate 1** (no LLM): blocklist match → dropped before any write | `ingestion/spam-gate.mjs` |
 | 5 | thread survivors by conversation; embed inline (best-effort) | `ingestion/ticket-writer.mjs` |
+| 5a | **Duplicate link** (deterministic, pre-embedding): reply chain, or identical body inside an hour → the ticket is skipped by drafting *and* investigation. Fires only on the message that *creates* a ticket | `ingestion/duplicate-rules.mjs` |
+| 5a2 | **Sender label** — the opening address is looked up in `sender_directory`; `internal`/`contractor` stamped onto the ticket | `ingestion/sender-directory.mjs` |
+| 5b | **Related link** (post-embedding, consumers only): cosine ≥ 0.90 from the same sender inside 30 days → context + cross-ticket chase. Never suppresses | `ingestion/related-rules.mjs` |
 | 6 | **Gate 2** (LLM, new conversations only): drops `spam` **and** `irrelevant`; fails open | `ingestion/spam-classifier.mjs` |
 | 7 | flush gate decisions (with body on a block) to `spam_audit` | `ingestion/spam-audit.mjs` |
 | 8 | **Customer resolution** — needs no category, order number or LLM key | `resolution/customer-resolution-runner.mjs` |

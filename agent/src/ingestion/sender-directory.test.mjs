@@ -1,11 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import {
-  NON_DEMAND_LABELS,
-  buildSenderDirectory,
-  emptySenderDirectory
-} from './sender-directory.mjs';
+import { NON_DEMAND_LABELS, OWN_SIDE_LABELS, buildSenderDirectory, emptySenderDirectory } from './sender-directory.mjs';
 
 const rows = [
   { pattern_type: 'domain', pattern: 'lap-groupe.com', label: 'internal', note: null },
@@ -88,4 +84,29 @@ test('the empty directory knows nothing and blocks nothing', () => {
   assert.equal(emptySenderDirectory.size, 0);
   assert.equal(emptySenderDirectory.lookup('anyone@anywhere.com'), null);
   assert.equal(emptySenderDirectory.isNonDemand('anyone@anywhere.com'), false);
+});
+
+test('the 3PL counts as our own side, and a courier does not', () => {
+  // Not arbitrary: the 3PL runs the warehouse, so their threads are the back
+  // office working a customer's return — the same shape as a colleague's. A
+  // courier is a third party we may need to write to as their customer.
+  assert.ok(OWN_SIDE_LABELS.includes('logistics'));
+  assert.ok(!OWN_SIDE_LABELS.includes('courier'));
+});
+
+test('a retailer is never our own side, whatever else it is', () => {
+  // Nocibé's purchase orders are real demand; routing them off the Tickets
+  // queue would hide a class of work.
+  assert.ok(!OWN_SIDE_LABELS.includes('retailer'));
+  assert.ok(!OWN_SIDE_LABELS.includes('distributor'));
+});
+
+test('own-side and non-demand answer different questions and must not be swapped', () => {
+  // NON_DEMAND_LABELS is for the clustering report ("is this customer demand");
+  // OWN_SIDE_LABELS is for routing and drafting ("would a customer-voice reply
+  // to this person be absurd"). Reusing the first for the second is the exact
+  // bug that routed 14 threads off the queue and hid customer work.
+  assert.notDeepEqual(OWN_SIDE_LABELS, NON_DEMAND_LABELS);
+  assert.ok(NON_DEMAND_LABELS.includes('courier'));
+  assert.ok(!OWN_SIDE_LABELS.includes('courier'));
 });

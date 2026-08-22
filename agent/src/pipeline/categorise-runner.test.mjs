@@ -393,3 +393,36 @@ test('one failing ticket does not stop the batch', async () => {
   assert.equal(counts.failed, 1);
   assert.equal(counts.categorised, 1);
 });
+
+test('`ticketId` narrows the claim to one ticket, without dropping the queue filters', async () => {
+  // Asserted at the transport, because narrowing is the whole behaviour: what
+  // matters is the filter the record sends, not that a one-row fake returned one
+  // row. The pending flag and the status filter must still be there — naming a
+  // ticket is "look at this one", never a way past the queue.
+  const seen = [];
+  const record = createTicketRecord({}, {
+    shopId: 'shop',
+    transport: {
+      async select(_client, table, filters) {
+        if (table === 'tickets') {
+          seen.push(filters);
+          return [];
+        }
+        return [];
+      },
+      async selectAll() { return []; },
+      async insert(_client, _table, rows) { return rows; },
+      async update() { return []; },
+      async updateById() { return {}; }
+    }
+  });
+
+  await runCategorisation({ record, categorise: async () => verdict(), ticketId: 't-42' });
+  assert.equal(seen[0].id, 't-42');
+  assert.ok(seen[0].needs_categorisation, 'the pending flag still applies');
+  assert.ok(seen[0].status, 'the status filter still applies');
+
+  seen.length = 0;
+  await runCategorisation({ record, categorise: async () => verdict() });
+  assert.equal(seen[0].id, undefined, 'no id filter when no ticket is named');
+});

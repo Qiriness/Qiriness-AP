@@ -90,14 +90,58 @@ function getRecord(shopId: string) {
  * to satisfy the handful actually referenced. `customers` is null on any ticket
  * the resolution pass has not linked, which is most of them until it runs.
  */
+/**
+ * ONE PARTITION, TWO PAGES. Tickets and Conversations are the two halves of a
+ * single split rather than two independent queries, so no thread can appear on
+ * both surfaces or — much worse — on neither. `sender_label` is the seam: it is
+ * set at ingestion for a thread one of OUR addresses opened, and null for
+ * everyone else — and NOT the derived `senderLabel`, which also covers
+ * retailers and couriers and would move a Nocibé order off the queue.
+ *
+ * THIS HIDES WORK, AND THAT IS THE POINT OF THE CALL. An earlier version of this
+ * split was built and reverted the same day, because all 14 routed threads were
+ * the back office working real customer returns and three were open at L3 behind
+ * a nav item nobody opened. The routing is deliberate now; see DECISIONS.md.
+ * What mitigates it is `countOpenConversations`, which puts those three on the
+ * sidebar so the page announces itself instead of waiting to be found.
+ */
+function partitionBySender(rows: any[], directory: any) {
+  const mapped = rows.map((row) => mapTicketRow(row, directory)).sort(byPriorityThenLastActivityDesc);
+  return {
+    tickets: mapped.filter((ticket) => !ticket.isOwnSide),
+    conversations: mapped.filter((ticket) => ticket.isOwnSide)
+  };
+}
+
 export async function listTickets(shopId: string): Promise<TicketListItem[]> {
   const [rows, directory] = await Promise.all([
     getRecord(shopId).queue(),
     loadSenderDirectory(shopId)
   ]);
-  return (rows as any[])
-    .map((row) => mapTicketRow(row, directory))
-    .sort(byPriorityThenLastActivityDesc);
+  return partitionBySender(rows as any[], directory).tickets;
+}
+
+/** The other half: threads one of our own addresses opened. */
+export async function listConversations(shopId: string): Promise<TicketListItem[]> {
+  const [rows, directory] = await Promise.all([
+    getRecord(shopId).queue(),
+    loadSenderDirectory(shopId)
+  ]);
+  return partitionBySender(rows as any[], directory).conversations;
+}
+
+/**
+ * How many routed threads still need somebody, for the sidebar badge.
+ *
+ * THE WHOLE MITIGATION FOR ROUTING THEM OUT. The failure this exists to prevent
+ * is documented and specific: three L3 threads awaiting a human sat unseen
+ * behind a nav item last time. A count on the nav means the queue you are not
+ * looking at can still ask for you.
+ */
+export async function countOpenConversations(shopId: string): Promise<number> {
+  const conversations = await listConversations(shopId);
+  return conversations.filter((ticket) => ticket.status !== "closed" && ticket.status !== "resolved")
+    .length;
 }
 
 /**
@@ -210,7 +254,7 @@ export async function getTicketThread(shopId: string, ticketId: string): Promise
   const record = getRecord(shopId);
 
   const [ticketRow, messageRows, draftRow] = await Promise.all([
-    record.findSubject(ticketId),
+    record.findForThread(ticketId),
     record.thread(ticketId),
     // Read alongside the thread rather than in the panel: the draft is what an
     // operator is deciding about, and a dialog that renders the conversation
@@ -227,9 +271,67 @@ export async function getTicketThread(shopId: string, ticketId: string): Promise
   return {
     ticketId,
     subject: ticketRow.subject ?? null,
+    // Surfaced beside the draft rather than only in the list: this is the screen
+    // where somebody decides to send, and a draft on a linked ticket is one that
+    // must not be sent.
+    duplicateOf: ticketRow.duplicate_of_ticket_id
+      ? {
+          ticketId: ticketRow.duplicate_of_ticket_id as string,
+          reason: ticketRow.duplicate_reason as string,
+        }
+      : null,
+    // Not a warning. A related ticket means the customer has written before, so
+    // the reviewer should read the earlier thread — not that this draft is
+    // unsafe to send.
+    relatedTo: ticketRow.related_ticket_id
+      ? {
+          ticketId: ticketRow.related_ticket_id as string,
+          score: Number(ticketRow.related_score ?? 0),
+        }
+      : null,
     draft: draftRow ? mapDraftRow(draftRow) : null,
     messages,
   };
+}
+
+/**
+ * Records a reviewer's decision about the drafted reply.
+ *
+ * THE EDIT IS THE VALUABLE HALF. `approved` and `rejected` say what happened to
+ * one draft; an edit says what the agent got wrong and what a person wrote
+ * instead, and `draft-record` writes that pair to `ticket_draft_edits` with the
+ * model text snapshotted beside it. That snapshot is why the record is
+ * trustworthy later: `ticket_drafts.body_text` is replaced by the next drafting
+ * run, so the two columns on the draft row stop being a pair the moment the
+ * agent revises something a person had already corrected.
+ *
+ * Returns the draft as the dialog re-renders it, so the caller replaces the row
+ * it was showing rather than refetching the whole thread.
+ */
+export async function decideOnDraft(
+  shopId: string,
+  ticketId: string,
+  decision: { status: "approved" | "edited" | "rejected"; approvedBody: string | null }
+): Promise<TicketDraft> {
+  const record = getDraftRecord(shopId);
+
+  // The dialog knows the ticket, not the draft id — and the draft it is showing
+  // is by definition the latest reading, which is what `forTicket` returns.
+  const current = await record.forTicket(ticketId);
+  if (!current) {
+    throw new KnowledgeNotFoundError(`No draft to decide on for ticket: ${ticketId}`);
+  }
+
+  await record.decide(current.id, {
+    status: decision.status,
+    approvedBodyText: decision.approvedBody,
+    // The dashboard is the only source today. A review copy edited in Outlook is
+    // the intended second one, and the column already accepts it.
+    source: "dashboard",
+  });
+
+  const updated = await record.forTicket(ticketId);
+  return mapDraftRow(updated);
 }
 
 /** The draft row, scoped to this shop. Owned by scripts/lib/draft-record.mjs. */
@@ -316,6 +418,32 @@ export async function setTicketStatus(
   return mapTicketRow(row);
 }
 
+/**
+ * One ticket in the list's own projection, for a caller that has just made one
+ * appear.
+ *
+ * Promoting a dropped email is the only such caller: the row it produces has to
+ * join the queue on screen without a page reload, and it must be the SAME shape
+ * the list rendered or it would arrive missing its VIP badge, its message count
+ * and its priority score. Reads `ticket_queue` for exactly that reason, and the
+ * sender directory with it, since `isOwnSide` is what decides whether a thread
+ * belongs on /tickets or /conversations at all.
+ */
+export async function getTicketListItem(
+  shopId: string,
+  ticketId: string
+): Promise<TicketListItem> {
+  const [row, directory] = await Promise.all([
+    getRecord(shopId).queueRow(ticketId),
+    loadSenderDirectory(shopId),
+  ]);
+  if (!row) {
+    throw new KnowledgeNotFoundError(`Ticket not found: ${ticketId}`);
+  }
+
+  return mapTicketRow(row, directory);
+}
+
 /** Highest priority first, newest activity breaking ties. */
 function byPriorityThenLastActivityDesc(a: TicketListItem, b: TicketListItem): number {
   if (a.priorityScore !== b.priorityScore) {
@@ -358,6 +486,9 @@ function mapTicketRow(row: any, directory: any = emptySenderDirectory): TicketLi
   // their addresses into the page to render a chip would be the widest
   // disclosure on the dashboard for the least reason.
   const senderEntry = directory.lookup(row.requester_email ?? null);
+  // A boolean, not the linked id: the list marks the row, and which ticket it
+  // duplicates is answered by opening it.
+  const isDuplicate = Boolean(row.duplicate_of_ticket_id);
   const level = row.level === null || row.level === undefined ? null : (Number(row.level) as TicketLevel);
   const priorityScore = scorePriority({
     level,
@@ -385,10 +516,13 @@ function mapTicketRow(row: any, directory: any = emptySenderDirectory): TicketLi
     requesterName: row.requester_name,
     senderLabel: (senderEntry?.label as TicketListItem["senderLabel"]) ?? null,
     senderNote: senderEntry?.note ?? null,
+    isDuplicate,
     // Null requester_email — a ticket with no stored inbound message — is NOT
     // non-demand. Eleven tickets are in that state, and defaulting them out of
     // the queue would hide customer mail on the strength of a missing join.
     isNonDemand: directory.isNonDemand(row.requester_email ?? null),
+    // The stored column, not the derived label: see TicketListItem.isOwnSide.
+    isOwnSide: Boolean(row.sender_label),
     ...customer,
     priorityScore,
     priorityBand: priorityBand(priorityScore) as TicketPriorityBand,

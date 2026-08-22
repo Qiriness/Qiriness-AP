@@ -143,6 +143,23 @@
   color: var(--text-default);
 }
 
+/* The counterpart to .error, in the same slot above the toolbar: an action
+   reporting that it worked. Shares the error block's shape so the page does not
+   reflow differently depending on which one appears. */
+.notice {
+  padding: var(--space-4);
+  border: 1px solid var(--success-100);
+  border-radius: var(--radius-md);
+  background: var(--success-050);
+}
+
+.noticeBody {
+  margin: 0;
+  font-size: var(--text-body);
+  line-height: 1.55;
+  color: var(--text-default);
+}
+
 .srOnly {
   position: absolute;
   width: 1px;

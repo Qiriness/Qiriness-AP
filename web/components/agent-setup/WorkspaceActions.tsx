@@ -14,6 +14,15 @@ interface WorkspaceActionsProps {
   onApprove: () => void;
   onUnapprove: () => void;
   onDelete: () => void;
+  /**
+   * Opens the test chat with this article as the one being checked for.
+   *
+   * Optional, and absent on the brand voice: that article is the drafting system
+   * prompt, never chunked and never embedded, so "was it retrieved" is a
+   * question it can only answer no to. Offering the button there would be
+   * offering a test that cannot pass.
+   */
+  onTest?: () => void;
 }
 
 const CONFIRM_WINDOW_MS = 3000;
@@ -28,6 +37,7 @@ export function WorkspaceActions({
   onApprove,
   onUnapprove,
   onDelete,
+  onTest,
 }: WorkspaceActionsProps) {
   const approved = status === "approved";
   const busy = optimizing || saveState === "saving";
@@ -89,6 +99,22 @@ export function WorkspaceActions({
       <p className={styles.hint}>
         Approved articles become trusted sources your agent can answer from.
       </p>
+
+      {/* Directly under the approval, because that is when the question arises:
+          approving an article says it MAY be used, and only a run says whether
+          it actually is. Enabled while unapproved too — the test's first answer
+          is then "this article carries no vector and cannot be reached", which
+          is worth knowing without approving it first to find out. */}
+      {onTest && (
+        <>
+          <Button variant="secondary" block onClick={onTest} disabled={busy}>
+            Test this article
+          </Button>
+          <p className={styles.hint}>
+            Ask a question this article should answer, and see whether the agent actually reached it.
+          </p>
+        </>
+      )}
 
       <Button
         variant="danger"

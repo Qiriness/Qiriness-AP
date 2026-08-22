@@ -7,6 +7,13 @@ const DELTA_SELECT = [
   'id',
   'conversationId',
   'internetMessageId',
+  // THE REPLY CHAIN, for deduplication. Graph has no `inReplyTo` property, so
+  // the only route to `In-Reply-To` and `References` is the whole header
+  // collection -- and it is a large thing to pull per message (SPF, DKIM, and a
+  // `Received` line per relay hop). The mapper keeps exactly those two headers
+  // and drops the rest before anything is stored: the discarded ones carry
+  // relay IPs and hostnames, which is personal data with no use here.
+  'internetMessageHeaders',
   'subject',
   'from',
   'toRecipients',

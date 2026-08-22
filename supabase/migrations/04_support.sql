@@ -72,6 +72,17 @@ create table public.tickets (
   -- and dedup by sender without duplicating the raw address on this row.
   requester_email_hash text,
   requester_name text,
+  -- WHO OPENED THIS THREAD, when the answer is "one of us". Copied from
+  -- sender_directory at ticket creation and never revised: a colleague's thread
+  -- does not become a customer's because a customer was later cc'd.
+  --
+  -- Null is the ordinary case and means a consumer — the same convention
+  -- `senderDirectory.lookup()` uses for an unlisted address. Only the labels
+  -- that mean "our own side" are stamped (OWN_SIDE_LABELS): colleagues, the
+  -- agency, and the 3PL whose threads are the back office working a customer's
+  -- return. A retailer writing in is a real external correspondent with real
+  -- demand, and marking their mail non-customer would hide a class of work.
+  sender_label text,
 
   -- Categoriser queue + the signals it reads off the same email in one call.
   needs_categorisation boolean not null default true,
@@ -87,6 +98,44 @@ create table public.tickets (
   -- investigated with a tool set chosen from the previous conversation's subject.
   needs_investigation boolean not null default false,
   investigated_at timestamptz,
+
+  -- THE SAME CONVERSATION, ARRIVING TWICE. Threading is on Graph's
+  -- `conversationId`, which is right and is not always enough: a customer who
+  -- writes through the contact form and then replies to our answer can arrive
+  -- under a different one, and a mail system can double-post a submission
+  -- outright. Measured 2026-08-19: 72 consecutive ticket pairs from one sender
+  -- within 30 days, 48 sharing a category.
+  --
+  -- LINKED, NEVER MERGED. A wrong merge cannot be undone and a wrong link is a
+  -- column: both threads stay whole, and a person decides. What the link
+  -- actually prevents is the harm -- the drafting queue skips a linked ticket,
+  -- so one customer cannot receive two replies to one message.
+  --
+  -- Set by deterministic rules only (identical body inside an hour, or an RFC
+  -- reply chain pointing at a message we already store). Nothing infers it.
+  duplicate_of_ticket_id uuid references public.tickets(id) on delete set null,
+  -- Which rule fired. Kept because "why is this linked" is the first question a
+  -- reviewer asks, and a boolean cannot answer it.
+  duplicate_reason text,
+  duplicate_detected_at timestamptz,
+
+  -- THE SAME CONVERSATION, BUT NOT THE SAME MESSAGE. A duplicate is one email
+  -- arriving twice and is answered by silence; this is the customer writing
+  -- AGAIN -- a chase, or a thread that split across conversation ids -- and is
+  -- answered by a reply that opens with an apology. Nothing about this link
+  -- suppresses a draft, which is the only reason a similarity score is allowed
+  -- to set it at all: a wrong duplicate costs a customer their answer, a wrong
+  -- related link costs an unnecessary apology.
+  --
+  -- Consumers only. A retailer's weekly purchase-order template scores higher
+  -- against its own past orders (0.994-0.998) than any genuine consumer match,
+  -- and scoping to one sender is exactly what fails to separate them, so a
+  -- sender listed in sender_directory is never linked. See related-rules.mjs.
+  related_ticket_id uuid references public.tickets(id) on delete set null,
+  -- The cosine that produced the link, kept because the threshold will move and
+  -- a score recorded under the old one must stay interpretable.
+  related_score real,
+  related_detected_at timestamptz,
 
   priority smallint not null default 3,
   resolved_context jsonb not null default '{}'::jsonb,
@@ -125,6 +174,45 @@ create table public.tickets (
   constraint tickets_responsible_team_check check (
     responsible_team is null
       or responsible_team in ('finance', 'marketing', 'sales', 'logistics', 'contact')
+  ),
+  -- A ticket cannot be its own duplicate. The rules compare against OTHER
+  -- tickets, so this can only fire if one is changed carelessly -- which is
+  -- exactly when a self-link would silently remove a ticket from drafting.
+  constraint tickets_duplicate_not_self_check check (
+    duplicate_of_ticket_id is null or duplicate_of_ticket_id <> id
+  ),
+  -- A link carries its reason and its timestamp, or none of the three is set.
+  -- A link with no reason is unreviewable, and the reason is what a person needs
+  -- before they undo it.
+  constraint tickets_duplicate_complete_check check (
+    (duplicate_of_ticket_id is null and duplicate_reason is null and duplicate_detected_at is null)
+    or (duplicate_of_ticket_id is not null and duplicate_reason is not null
+        and duplicate_detected_at is not null)
+  ),
+  constraint tickets_duplicate_reason_check check (
+    duplicate_reason is null or duplicate_reason in ('identical_body', 'reply_chain')
+  ),
+  -- Same reasoning as the duplicate self-check: a self-link here would make a
+  -- ticket its own prior and report every customer as chasing themselves.
+  -- The full sender_directory vocabulary is accepted even though ingestion only
+  -- writes two of them, so widening the rule later is a code change rather than
+  -- a migration on a live table.
+  constraint tickets_sender_label_check check (
+    sender_label is null
+    or sender_label in ('internal', 'contractor', 'logistics', 'courier',
+                        'retailer', 'distributor', 'supplier', 'partner')
+  ),
+  constraint tickets_related_not_self_check check (
+    related_ticket_id is null or related_ticket_id <> id
+  ),
+  constraint tickets_related_complete_check check (
+    (related_ticket_id is null and related_score is null and related_detected_at is null)
+    or (related_ticket_id is not null and related_score is not null
+        and related_detected_at is not null)
+  ),
+  -- A cosine, so anything outside [-1, 1] means the writer sent the wrong number.
+  constraint tickets_related_score_range_check check (
+    related_score is null or (related_score >= -1 and related_score <= 1)
   ),
   constraint tickets_metadata_object_check check (
     jsonb_typeof(metadata) = 'object'
@@ -183,6 +271,15 @@ create table public.tickets (
 
 create index tickets_shop_status_idx on public.tickets (shop_id, status);
 
+-- The drafting queue's exclusion, and the "what was linked to this" read.
+create index tickets_duplicate_of_idx
+  on public.tickets (duplicate_of_ticket_id)
+  where duplicate_of_ticket_id is not null;
+
+create index tickets_related_ticket_idx
+  on public.tickets (related_ticket_id)
+  where related_ticket_id is not null;
+
 create index tickets_shop_category_idx on public.tickets (shop_id, category);
 
 create index tickets_shop_secondary_category_idx on public.tickets (shop_id, secondary_category);
@@ -233,6 +330,24 @@ alter table public.tickets enable row level security;
 
 comment on table public.tickets is
   'Support conversations for the agent email workflow. One ticket per Microsoft Graph conversationId; the categorising agent fills category, request_kind, level, responsible_team, and the resolved Shopify order number. Access through the service-role worker only until dashboard roles and policies are implemented.';
+
+comment on column public.tickets.duplicate_of_ticket_id is
+  'The ticket this one duplicates, set by deterministic rules only: an identical body from the same sender within an hour, or an RFC reply chain pointing at a message already stored. LINKED, NEVER MERGED -- both threads stay whole and a person decides. The drafting queue skips a linked ticket, which is what stops one customer receiving two replies.';
+
+comment on column public.tickets.sender_label is
+  'The sender_directory label of the address that OPENED this thread, when that address is one of ours -- internal (qiriness.com, lap-groupe.com), contractor, or logistics (the 3PL running the warehouse). Null means a consumer, the ordinary case. Set deterministically at ticket creation from the address, never by a model: who wrote to us is a fact we hold before any pass runs. The drafting queue skips a labelled ticket, because a customer-voice reply addressed to a colleague is never the right output; investigation still runs, because a colleague chasing a real order still needs the order facts gathered for whoever picks it up.';
+
+comment on column public.tickets.related_ticket_id is
+  'An earlier ticket from the SAME consumer sender that this one continues -- a chase, or a thread split across conversation ids. Set from a message-embedding cosine at or above 0.90 within 30 days, and never for a sender listed in sender_directory (a retailer''s repeated purchase-order template outscores every genuine consumer match). UNLIKE duplicate_of_ticket_id THIS NEVER SUPPRESSES A DRAFT: it adds thread context for the reviewer and tells the drafting agent the customer was left waiting, so the reply opens with an apology.';
+
+comment on column public.tickets.related_score is
+  'The cosine that produced related_ticket_id, kept so a link made under one threshold stays interpretable after the threshold moves.';
+
+comment on column public.tickets.related_detected_at is
+  'When the related link was written. Separate from the ticket clock because a link can be made long after both tickets were created.';
+
+comment on column public.tickets.duplicate_reason is
+  'Which rule linked this ticket: identical_body or reply_chain. Kept because "why is this linked" is the first question a reviewer asks, and a boolean cannot answer it.';
 
 comment on column public.tickets.graph_conversation_id is
   'Microsoft Graph conversationId. The threading key: all emails in one thread share this value and roll up to a single ticket, so tickets behave as conversations rather than individual emails.';
@@ -325,7 +440,26 @@ create table public.ticket_messages (
   graph_message_id text not null,
   graph_conversation_id text not null,
   internet_message_id text,
+  -- THE RFC 5322 REPLY CHAIN, and the reason it is captured is deduplication.
+  --
+  -- Threading here is done on Graph's `conversationId`, and it is the right
+  -- primary key for it. But it is Exchange's own notion of a conversation, and
+  -- a customer who writes through the contact form and then replies to our
+  -- answer can arrive under a DIFFERENT one -- which becomes a second ticket
+  -- for a single conversation. Measured on the corpus: 72 consecutive ticket
+  -- pairs from one sender within 30 days, 48 of them sharing a category, which
+  -- is the shape of one conversation split rather than two problems.
+  --
+  -- `In-Reply-To` and `References` are how every mail client threads, and they
+  -- point at `internet_message_id` values we already store. They are therefore
+  -- the deterministic link between the two halves of a split thread -- no
+  -- similarity, no model.
+  --
+  -- ONLY THESE TWO HEADERS ARE KEPT. Graph returns the whole header set and
+  -- most of it is `Received` chains carrying relay IPs and hostnames, which is
+  -- personal data this system has no use for.
   in_reply_to text,
+  reference_ids text[] not null default '{}',
 
   direction text not null,
   from_email text,
@@ -386,6 +520,13 @@ create index ticket_messages_ticket_id_idx on public.ticket_messages (ticket_id)
 
 create index ticket_messages_shop_conversation_idx on public.ticket_messages (shop_id, graph_conversation_id);
 
+-- The dedup lookup: "does any stored message carry a Message-ID this new one
+-- replies to". Answered against this index rather than by scanning the shop's
+-- mail, which is the difference between a threading check and a table scan.
+create index ticket_messages_shop_internet_id_idx
+  on public.ticket_messages (shop_id, internet_message_id)
+  where internet_message_id is not null;
+
 create index ticket_messages_shop_received_at_idx on public.ticket_messages (shop_id, received_at);
 
 create index ticket_messages_shop_deleted_at_idx on public.ticket_messages (shop_id, deleted_at);
@@ -407,6 +548,12 @@ comment on column public.ticket_messages.attachments is
 
 comment on column public.ticket_messages.graph_message_id is
   'Microsoft Graph message id. The idempotency key: re-ingesting the same email is a no-op via the shop_id + graph_message_id unique constraint.';
+
+comment on column public.ticket_messages.reference_ids is
+  'The RFC 5322 `References` chain: every Message-ID this email is a reply within, oldest first. Captured for deduplication -- a contact-form ticket and the customer''s emailed reply can arrive under different Graph conversationIds, and these headers are the deterministic link between them. Only In-Reply-To and References are kept from the header set; the rest is Received chains carrying relay IPs.';
+
+comment on column public.ticket_messages.in_reply_to is
+  'The RFC 5322 `In-Reply-To` header: the Message-ID this email directly answers. Null on a thread''s first message, and on any mail whose client omitted it.';
 
 comment on column public.ticket_messages.internet_message_id is
   'RFC 5322 Message-ID header, stable across mail systems. Useful for threading and correlating replies independently of Graph ids.';
@@ -1307,6 +1454,11 @@ with (security_invoker = true) as
     t.first_message_at as first_message_at,
     t.last_message_at as last_message_at,
     t.archived_at as archived_at,
+    -- The duplicate link, so the list can mark a row without opening it. A
+    -- linked ticket is skipped by the drafting queue, and an operator working
+    -- through the queue needs to know that BEFORE they read a draft on it.
+    t.duplicate_of_ticket_id as duplicate_of_ticket_id,
+    t.duplicate_reason as duplicate_reason,
     c.display_name as customer_display_name,
     c.first_name as customer_first_name,
     c.last_name as customer_last_name,
@@ -1322,7 +1474,17 @@ with (security_invoker = true) as
         and (n.latest_outbound_at is null or n.latest_inbound_at > n.latest_outbound_at)
       then n.latest_inbound_at
       else null
-    end as waiting_since
+    end as waiting_since,
+    -- LAST, AND NOT BY PREFERENCE. `create or replace view` can only APPEND
+    -- columns — inserting one beside `duplicate_reason`, where it belongs
+    -- logically, fails with "cannot change name of view column". Putting it
+    -- here is what lets the view be replaced in a transaction instead of
+    -- dropped and recreated, which on a live database is the difference
+    -- between a forward step and an outage.
+    --
+    -- Whose thread this is: the row is skipped by drafting, and somebody
+    -- working the queue should see that before they open it expecting a reply.
+    t.sender_label as sender_label
   from public.tickets t
   left join public.customers c on c.id = t.customer_id
   left join public.ticket_message_counts n on n.ticket_id = t.id

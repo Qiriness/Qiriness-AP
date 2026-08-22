@@ -5,6 +5,7 @@ import { PanelError } from "@/components/insights/InsightsKit";
 import { getShopId } from "@/lib/server/knowledge-service";
 import { getCustomersPanel } from "@/lib/server/insights/customers-service";
 import type { CustomerPanel } from "@/lib/types";
+import { openConversationCount } from "@/lib/server/conversation-badge";
 
 export const dynamic = "force-dynamic";
 
@@ -20,6 +21,7 @@ export const metadata = { title: "Customers · Insights · Qiriness Support OS" 
  * carries plain data and nothing server-only follows it across.
  */
 export default async function CustomersInsightsPage() {
+  const openConversations = await openConversationCount();
   let panel: CustomerPanel | null = null;
   let loadError: string | null = null;
 
@@ -30,7 +32,7 @@ export default async function CustomersInsightsPage() {
   }
 
   return (
-    <AppShell activeHref="/insights">
+    <AppShell activeHref="/insights" openConversations={openConversations}>
       <InsightsNav active="customers" />
       {loadError || !panel ? (
         <PanelError message={loadError ?? "No data returned."} />

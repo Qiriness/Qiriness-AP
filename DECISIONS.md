@@ -88,6 +88,8 @@ Two rules keep it proportionate:
 
 `buildBodyPatch` is the single owner of the cap and the clock, so live ingestion and the Graph backfill cannot diverge. The backfill selects on `body_captured_at is null` rather than `body_text is null` — keying on the text would make it silently undo the retention purge on every run.
 
+**No gate ever promotes one back, but a person may.** The heading still holds of the pipeline — nothing automatic turns a drop into a ticket — and the dashboard's "Add as ticket" is the deliberate human override, which the stored body is what made possible. See § Add as ticket writes, and it writes through ingestion.
+
 ### Who a sender is lives in a table, not in an env var
 
 `sender_directory` maps an email address or domain to a label — internal, contractor, logistics, courier, retailer, distributor, supplier, partner, other. It replaces `INTERNAL_EMAIL_DOMAINS` for the demand report, and the reason is a measured failure rather than a preference.
@@ -454,6 +456,27 @@ Until 2026-08-14 the verdict reached `metadata.verdict` and the investigation ro
 
 Safe to set unconditionally because the selection query already requires `status = 'open'`; a ticket a human closed is never picked up, so this can only move a ticket out of open, never overrule a person.
 
+### Re-delivery is not arrival (2026-08-20)
+
+The reopen rule below is right and stays. What was wrong is **what counted as the customer writing back**: every inbound message the writer processed, whether or not it was new to us.
+
+The message upsert is idempotent; the two state changes beside it were not. So a delta re-enumeration — which legitimately re-delivers mail already stored, and happens whenever the cursor is re-seeded or a poll dies before persisting the `deltaLink` — walked the corpus and undid its own history.
+
+**Measured on the day it happened.** Of 139 tickets auto-closed for inactivity, **136 came back to `open` with `closed_at` nulled**, and the original close dates are unrecoverable. Splitting them by what triggered it:
+
+| Trigger | Tickets |
+|---|---|
+| A genuinely new inbound message | **10** |
+| A message **already in the database**, merely re-delivered | **128** |
+
+The same non-idempotency re-raised `needs_categorisation` on **374 of 400** tickets — a model bill for re-reading conversations nobody had added to — and it cascaded: `shouldAutoClose` refuses a ticket that is still flagged, so the Closed section could not be rebuilt until the whole corpus had been re-categorised.
+
+**The fix is one boolean, and where it does *not* apply is the interesting half.** `knownMessageIds` asks once per page which ids we already hold, and only `needs_categorisation` and the status reopen consult it. Everything else in that branch runs either way, because everything else is idempotent: the first/last message window is a min/max, the subject backfill only fills a null, and the requester backfill is a *repair* — a re-sync is precisely the second chance to learn who wrote in.
+
+**It fails open, deliberately.** A failed lookup yields an empty set, so every message reads as new and the old behaviour returns. Reading an unknown as "already held" would do the opposite: silently drop the reopen for a real customer reply and strand a live ticket in `closed`. Noisy and recoverable beats silent and lost.
+
+**One query per page, not one per message.** A full enumeration is thousands of messages, and a guard against something that only bites on a re-sync must not cost a round trip per email. Chunked at 100 ids because the filter travels in the URL and Graph ids run to ~150 characters.
+
 ### Any non-open status returns to open on an inbound reply — not just the terminal two
 
 This reverses the earlier rule that only `closed`/`resolved` were rewritten, on the grounds that the worker's other states were its own. That was right while nothing ever set them, and became a trap the moment the verdict did.
@@ -663,6 +686,195 @@ Translations therefore live at `phrasing_index >= 100`, out of the pruner's reac
 
 ---
 
+## Deduplication
+
+### There are two problems, and only one of them is duplicate emails
+
+Measured on the corpus (2026-08-19):
+
+| | |
+|---|---|
+| Inbound messages | 296, **all** carrying an `internet_message_id` |
+| Same Message-ID in two tickets | **0** |
+| Identical body across tickets | 12 clusters |
+| Consecutive ticket pairs from one sender within 30 days | **72** (48 sharing a category) |
+| …beyond 30 days | **0** |
+
+**A true double-post exists and is rare.** Bavita NOBIN: same sender, identical body, **one second apart**, different Message-IDs and different Graph conversation ids — a form or mail-system double-submit.
+
+**A split conversation is the common shape and does more damage.** A customer writes through the contact form, then replies to our answer by email, and the reply arrives under a different `conversationId` — so one conversation becomes two tickets, gets investigated twice, and would be answered twice.
+
+**Message-ID does not detect either.** It is fully populated and collides zero times, because a double-post gets two Message-IDs and a split thread is genuinely two emails. Deduplication keyed on it would look rigorous and catch nothing.
+
+### The reply chain is captured before any detection is built
+
+`In-Reply-To` and `References` are how every mail client threads, and they point at `internet_message_id` values already stored — the deterministic link between the two halves of a split thread, with no similarity and no model. Graph has no `inReplyTo` property, so the only route is `internetMessageHeaders`.
+
+**Measured cost, because it is not free**: the header set is ~**10 KB per message** in transit and Graph returns 51–68 headers each. Ongoing that is 10 KB per *new* email rather than per stored one, which a support mailbox will not notice; the one-off full enumeration is the expensive moment. **46% of stored inbound messages have a reply-style subject**, so the chain will be present often enough to be worth the bytes.
+
+**Only two headers are ever stored.** The rest is `Received` chains carrying relay IPs and hostnames — personal data with no use here, and a test asserts it never reaches `raw_graph_payload`.
+
+**Capture precedes detection deliberately.** A header not requested at ingestion cannot be recovered later without re-reading the mailbox — and the mailbox question makes that unavailable. Same argument as `auto_send_eligible` and the draft edit log.
+
+### Detection: two deterministic rules, and one deliberately left out
+
+**No model, no embedding, no similarity.** A hit means a ticket is skipped by the drafting queue, and a customer who is wrongly skipped receives no reply at all. Nothing that guesses is allowed to cause that.
+
+**Rule 1 — the reply chain**, tried first because it is the strongest evidence available. `In-Reply-To` and `References` name Message-IDs we already store: a match is not a resemblance, it is the sending client stating which conversation this belongs to. No time window applies — a reply a fortnight later is still the same conversation.
+
+**Rule 2 — the double-post.** Identical text from one sender within an hour. **The window is the whole rule**: the same text three days later is a customer chasing us, which is owed an apology rather than silence. An hour is far wider than the real cases (one second, and thirty-two seconds) and far narrower than any plausible chase.
+
+**What is deliberately not a rule: sender plus quoted order number.** It looks like a third rule and is not safe as one — a customer may legitimately open a delivery ticket and then a refund ticket about a single order, and linking those would silence the second. It stays out until something measures how often that shape is a duplicate rather than a sequel.
+
+**Replayed over the whole corpus before being trusted**: 203 ticket-opening messages against the live candidate pool produced **2 links, both `identical_body`, both verified by hand as genuine double-posts** — Bavita NOBIN one second apart, Christine Alexandre thirty-two seconds apart. Zero false positives. Zero `reply_chain` hits, which is expected and not a failure: the stored corpus predates header capture, so that rule can only fire on mail arriving from now on.
+
+**Detection never fails ingestion.** A missed link costs a second reply somebody has to notice; a failed ingestion loses the email. The first is recoverable and the second is not, so the check is wrapped and logged.
+
+### Semantic matching was measured and NOT built, and the reason is not cost
+
+Phase C was a measurement, not a build: every ticket message is already embedded, so the whole candidate pool could be scored with `<=>` before writing any detection. 124 sender pairs inside 30 days were scored. The result kills the tier as designed.
+
+**The false positives score HIGHER than the true positives.**
+
+| | Cosine similarity |
+|---|---|
+| Genuine split conversations (contact form + emailed reply) | 0.795 · 0.893 · 0.928 |
+| B2B reorder POs — separate weekly transactions | 0.996 – 0.998 |
+| Partner "commandes en retard" reports — separate reports | 0.996 |
+
+A threshold at 0.95 catches none of the real ones and all thirteen B2B POs. A threshold low enough to catch the real ones sweeps in everything above it. There is no threshold, because **embeddings measure wording and duplication is about identity**: a split conversation is one person writing *different* text twice, while a repeated business process is *different* transactions in identical wording.
+
+**And the dangerous confusion is not B2B — it is a chase.** Of the pairs inside 30 days, **12 have byte-identical text and only 2 of them are duplicates**:
+
+| | |
+|---|---|
+| Identical text, within the hour → linked as a duplicate | **2** |
+| Identical text, hours or days later → a **chase** | **10** |
+
+An embedding scores all twelve at ~1.0. The only thing that separates them is elapsed time — and they need **opposite** treatment: a duplicate must be suppressed, a chase must be answered *with an apology for the delay* (see the drafting rules). A similarity-linked tier would have silenced ten customers who were already waiting and had written again, which is the worst failure this system could produce.
+
+**So the hour-long window is not a tuning parameter, it is the entire discrimination.** Phase B's rule is right for a reason the embeddings made visible rather than despite them.
+
+**What still catches split conversations is the reply chain**, deterministically, and it cannot be evaluated on this corpus because the headers predate their capture. That is a reason to wait for data, not a reason to reach for similarity.
+
+**If a semantic tier is ever revisited, it must surface rather than link.** Showing a reviewer "this looks related to ticket X" carries no suppression risk; deciding for them does.
+
+### The semantic tier, revisited (2026-08-19) — and what changed the answer
+
+It was revisited, and the conclusion above held in substance while being wrong about the reason. Two findings moved it.
+
+**Excluding business senders makes a threshold exist.** The earlier measurement mixed consumers and B2B into one distribution, where no threshold worked. Split them and the consumer band is clean: at **0.90**, 25 same-sender cross-ticket pairs inside 30 days, and inspection finds no pair that is not genuinely the same conversation. The cross-category risk that was cited as the objection — a delivery ticket followed by a refund ticket about one order — produces **5 pairs above 0.80**, and every one is the same message categorised differently, not a sequel being wrongly merged.
+
+**But same-sender scoping is exactly what does *not* save you from B2B**, because it is the same sender by construction. Nocibé's weekly purchase-order template scores **0.9945–0.9981** against its own past orders — *above* every genuine consumer match except byte-identical text. The false positives sit above the true ones, so no threshold can separate them. The sender has to.
+
+**`sender_directory` is the filter, and category is not.** The categoriser labels by *subject*, correctly, so Nocibé's mail lands under `b2b`, `order` and `delivery` alike — and the single worst false positive in the corpus (0.9957, two different lists of late orders) wears `delivery`. Filtering on category catches **13 of 14**; filtering on directory membership catches **14 of 14**. An address absent from the directory is a consumer, which is the definition this codebase already uses.
+
+**What a match means is not "duplicate".** At 0.90, **18 of 25 pairs are more than an hour apart and 14 had already been replied to** — they are chases and continuing threads. One customer's message recurs across five tickets spanning 24 days, every one answered. Suppressing on a semantic match would go silent on people we are actively in dialogue with.
+
+So the tier ships with **two outputs and neither is silence**:
+
+| | |
+|---|---|
+| `related_ticket_id` + `related_score` | thread context in the dialog, and the earlier thread merged into chase detection |
+| the **cross-ticket chase** | `describesChase` reads one thread, so a customer who writes again under a new conversation id looked like a first contact. Merging the related ticket's envelopes makes the existing rule see the conversation the customer thinks they are having |
+
+Suppression stays deterministic — reply-chain header, or identical text inside the hour. Nothing that guesses causes silence. That asymmetry is the whole licence for a similarity score here: **a wrong duplicate link costs a customer their answer; a wrong related link costs an unnecessary apology and a line in the dialog.** Only the second is safe to decide from an embedding.
+
+`MIN_RELATED_GAP_MS` is one hour, and it is a handoff rather than a tuning knob: under it, `duplicate-rules` owns the decision.
+
+On the corpus the backfill linked **9 tickets, 2 of them unanswered chases** (a ticket links to at most one earlier ticket, so this is narrower than the 25 pairwise matches).
+
+### A sender in the directory is never spam
+
+Four emails from addresses already recorded in `sender_directory` had been dropped by the spam gates:
+
+| sender | label | dropped by |
+|---|---|---|
+| `EARGENTO@nocibe.fr` | retailer | the LLM, as an "automatic notification" — it was a routing-address change |
+| `dnouali@lap-groupe.com` ×2 | internal | the LLM — a colleague forwarding a customer's message in |
+| `patrick@dopweb.com` | contractor | an explicit blocklist rule |
+
+**The directory is an assertion, not a hint.** Somebody sat down and recorded that this domain is our 3PL, our agency, a retailer we sell through. A pattern rule or a model overruling that turns configuration into a suggestion — and it fails silently, because dropped mail never becomes a ticket and its only trace is a `spam_audit` row nobody reads.
+
+`exemptKnownSenders` wraps **both** gates, because both got it wrong in different ways — one a pattern, one a model. Wrapping rather than teaching each gate is deliberate: the directory is loaded per poll, and a rule that lives in two places can be half-applied. The LLM call is **skipped, not overruled**: deciding after the model has answered pays for a judgement we were always going to discard.
+
+**It can only ever keep mail.** An unlisted sender is left to the gates untouched, so no email that would have been kept can now be blocked.
+
+**One deliberate conflict this creates.** `patrick@dopweb.com` is both an active blocklist rule and a directory contractor. The directory now wins and that rule stops firing — someone expressed both intents, and this decides which one governs. The other 15 blocklist rules are unaffected.
+
+**Sephora was a different problem with the same symptom.** Four emails from `sephora.fr` about EU regulation compliance were dropped, and `sephora.fr` is *not in the directory* — so nothing here would have saved them. The fix for those is a directory row; this change is what makes the row stick.
+
+### The 3PL is our own side; a courier is not
+
+`OWN_SIDE_LABELS` gains `logistics`. It looks arbitrary beside `courier` staying out, and it is not: the 3PL runs the warehouse, so their threads are the back office working a customer's return — the same shape as a colleague's, and a reply opening « Bonjour Madame » would be as wrong to them as to a colleague. A courier is a third party we may genuinely need to write to *as their customer*. A retailer stays out entirely because Nocibé's purchase orders are real demand.
+
+**Zero tickets move today** — no thread in the corpus was opened by Deret, only replied to by them. This is forward-looking, and the `sender_label` check constraint already accepted the whole directory vocabulary, so no migration was needed.
+
+### The contact-form parse had to be gated on the ENVELOPE, not the body
+
+Chasing why a ticket showing requester "Julie Lemaire" was labelled `internal` found a bug much larger than the label.
+
+`mapGraphMessage` swapped a message's sender and body for the customer named in the body whenever that body parsed as a Shopify contact-form notification. Correct for the notification — it is *from* Shopify and *about* a customer — and wrong for everything that quotes one, which is every reply and every forward. **"The body looks like a form" is not evidence that this message IS one. Only the envelope is.**
+
+Measured across 148 parsed messages:
+
+| | |
+|---|---|
+| genuinely from `mailer@shopify.com` — swap correct | **96** |
+| our own replies quoting one | **88** *(fixed earlier in this session by the direction gate)* |
+| colleagues, the 3PL and the web agency replying | **32** — identity *and* body wrong |
+| the customer replying to their own thread | **20** — identity fine, body replaced by a copy of their first message |
+
+The direction gate added earlier fixed only the first of those three. A colleague writing in is inbound, so 52 inbound messages stayed broken. `isNotificationSender` now gates the whole parse; a genuine notification is unaffected.
+
+**The 20 quiet ones were the most damaging.** A customer's follow-up stored as a byte-identical copy of their first message *manufactures duplicates out of nothing* — and duplicate detection is built on identical bodies. On repaired data the cross-ticket identical-body pairs fall from **19 to 2**, and both survivors are inside the hour and were already linked. Every "identical text, days apart" pair — the entire evidence base for the chase-versus-duplicate table above — was this bug.
+
+**So the hour window is still right and the argument for it was wrong.** It was defended as the discrimination between a double-post and a chase, on ten chases that did not exist. What the corpus actually shows is that identical bodies beyond an hour do not occur at all.
+
+**Six of nine related links did not survive.** Embeddings computed from corrupted text scored a customer's first message against a copy of itself. After re-embedding 140 messages the links fall to 3. `run-related-backfill` was therefore made to **reconcile** rather than append, and `clearRelated` exists for that — deliberately with no equivalent for `sender_label` (who wrote does not stop being true) or `duplicate_of_ticket_id` (it suppresses a reply and a person may already have reviewed it).
+
+**And of the 27 stale requesters, only 11 were defects.** The first count treated every ticket whose requester differs from its opening sender as broken. Measuring the consequence showed the opposite: rewriting all 27 would have made **7 tickets lose an order match**, because those are internal escalations *about* a customer — a colleague opens a thread to chase order #6045 for Julie Lemaire, `sender_label` records who wrote and `requester_email_hash` records whose order it is. Both columns are right, and they answer different questions.
+
+The genuine defect is the mirror image: **a colleague's identity on a thread a customer is also on** — `Taha LAMZOUKI` as the requester of a Nocibé enquiry. Nothing joins and the queue names the wrong person. Eleven tickets, repaired by `npm run requester:repair`: **1 gained an order match, 0 lost one.**
+
+So `requesterFor` rewrites only when the stored identity is *provably ours* and the thread has an external sender to replace it with. A requester that is already external is either correct or is the customer an internal thread is about, and nothing here can tell those apart — so it touches neither. `setRequester` exists for that tool alone; **ingestion is unchanged and the write-once rule stands**, because a requester that shifted while somebody was reading the queue would be worse than one that is occasionally stale.
+
+### A colleague is not a customer
+
+Fourteen tickets were opened by an address at `lap-groupe.com` — colleagues forwarding a customer's problem in, or instructing each other. They were categorised as ordinary customer work (`return_exchange` ×8, `delivery` ×3, `order` ×2, `account`), investigated, and drafted to. One of the drafts answers *"merci de procéder à sa réexpédition et de me communiquer le numéro de suivi"* — a work instruction from one colleague to another — with "Bonjour Léa, Je vous remercie pour votre message. Je m'excuse pour le délai… Je transmets votre demande à l'équipe concernée." It apologises to a colleague and promises to forward their own instruction to the team, addressed to the wrong name.
+
+**`sender_label` is a third axis, not a subject.** `internal` was not added to `SUBJECTS`: that axis is *what the email is about*, it is shared with the knowledge library, and a colleague's email about a return is still about a return. Who wrote it is a different question, and the answer already existed in `sender_directory` — it simply was not stored on the ticket.
+
+**The opening message decides, and the decision is never revisited.** A thread a colleague started does not become a customer's because a customer is cc'd onto message four. Graph's delta is not chronological, so "opening" is the earliest inbound by `received_at`, not whichever arrived first.
+
+**Deterministic, at creation, from the address.** No model is asked, for the same reason the investigation reads the directory rather than calling a tool: who wrote to us is a fact we hold before any pass runs.
+
+**Only the labels that mean "us".** `OWN_SIDE_LABELS` is `internal` + `contractor`, deliberately narrower than `NON_DEMAND_LABELS` (which adds `logistics` and `courier`). The two answer different questions: that one is "is this customer demand for the clustering report", this one is "would a customer-voice reply addressed to this person be absurd". A courier is a third party we might genuinely need to write to; a retailer's B2B order is real demand and marking it non-customer would hide a class of work.
+
+**Drafting stops, investigation does not.** A colleague chasing a real order still needs the order facts gathered for whoever picks it up — the thing that is never right is the drafted customer email. `draftDecision` returns `internal_sender`; `isInvestigable` is untouched.
+
+**The column is for the agent; the dashboard already knew.** `TicketListItem.senderLabel` has always been derived at read time from `ticket_first_inbound.from_email`, and the list already renders a chip. Nothing was added there. What was missing is that the *worker* had no way to branch on it without re-deriving a fact, and that a stored label is a historical one: relabelling the directory tomorrow does not rewrite what a thread was when it arrived (which is why the backfill exists).
+
+**`sender_label` sits last in `ticket_queue`, against taste.** `create or replace view` can only APPEND columns — placing it beside `duplicate_reason`, where it belongs, fails with *cannot change name of view column*. Last is what lets the view be replaced inside a transaction rather than dropped and recreated, which on a live database is the difference between a forward step and an outage.
+
+**Three drafts already written are left in place.** They are not deleted; the review UI is where a person rejects them. Deleting rows to clean up a rule change is how the drafting runner's `--redraft` flag came to exist, and it is not a thing this codebase does silently.
+
+### The duplicate backfill found nothing, and that is the result
+
+`npm run duplicate:backfill` exists and links zero tickets on this corpus. The corpus is already complete under the rule, and the reason is worth writing down because it corrects an easy miscount.
+
+Six within-hour cross-ticket identical-body **message pairs** exist. Only **two** of them are pairs in which the duplicating message *opens* its ticket — and both are already linked. In the other four the identical text is a later message inside a thread that already existed, which is a customer re-sending into an open conversation, not a second ticket for one email. Counting message pairs overstates the backlog threefold; the rule only ever fires on the message that creates a ticket.
+
+**The reply-chain rule cannot contribute here at all.** Of 315 stored inbound messages, **1 carries `in_reply_to` and 2 carry `reference_ids`** — the headers postdate most of the corpus. The rule is live for new mail and untestable on old.
+
+**The tool is kept as a verification instrument**, not dead code: "is the corpus clean under the current rule" is a recurring question and this answers it in one command. It also encodes a hazard the ingestion path does not have — see the order-independence test in `duplicate-rules.test.mjs`. At ingestion the candidate is by construction the newer message, so `findDuplicate` compares *absolute* elapsed time and is immune to Graph delivering a delta page out of order. A replay over stored history has no such guarantee, so the backfill filters its pool to strictly-earlier messages; without that it would link the older ticket to the newer and suppress the original instead of the copy.
+
+### When detection is built: link, never merge
+
+A wrong merge is unrecoverable and a wrong link is a column. The harm being prevented is that one customer receives two replies, so the minimum fix is that a ticket linked as a duplicate is skipped by the drafting queue — both threads intact, a person deciding.
+
+The candidate pool is **sender hash**, not `customer_id`: 145 of 214 tickets carry a customer and 203 carry a hash, and gating on the customer would miss **24%** of the pairs. Thirty days is the window because nothing falls outside it. And closed tickets must stay in the pool — **51 of the 72** prior tickets are already closed or resolved, because auto-close retires a thread after 28 days of silence.
+
 ## Drafting
 
 ### Every verdict gets a reply, and every reply answers what it can
@@ -737,6 +949,24 @@ A prompt instruction alone would miss 10; the thread structure alone would miss 
 
 **The check is narrower than the rule, on purpose.** `apologises_for_delay` fires only when the thread proves the chase, because a check has to rest on something checkable; the stated-only cases stay the prompt's job. Its pattern covers all four languages the corpus drafts in — the first version was French-only and failed an Italian reply that opened « Ci scusiamo per il ritardo nella risposta », which is exactly how a check earns being ignored.
 
+### A human edit is recorded against the text it corrected, not against the current draft
+
+`ticket_drafts` already holds a pair: `body_text` as the model wrote it, `approved_body_text` as a person rewrote it. That pair is right for the review surface and **wrong as a learning signal**, for one specific reason.
+
+**A re-draft replaces `body_text` and deliberately leaves `approved_body_text` alone.** The first half is the agent revising its own text; the second exists so a re-run cannot discard an operator's work while they are part-way through the queue. Both are correct. Together they mean the two columns stop being a pair the moment the agent revises a draft somebody had already edited — and read later they still *look* like one. What you would be training on is the agent's second attempt beside a human's correction of the first: a pair that never existed.
+
+So `ticket_draft_edits` records each edit as it happens, with the model text **copied in beside it**. Verified against the live database: after an edit and then a re-draft, `edit.model_body_text` still holds the text that was actually corrected while `ticket_drafts.body_text` has moved on.
+
+**Append-only, and every pass is kept.** A reviewer who edits, sends, and edits again on the next inbound message leaves two rows. "What do people keep changing" is a question about repetition, not about the latest state.
+
+**An edit that changed nothing is refused**, by a check constraint and by the record module before it. A row asserting the agent's text needed correcting into itself is the most misleading training pair available, and whitespace-only differences are not edits.
+
+**`source` is declared with `mailbox` before anything writes it.** Editing a review copy in Outlook and having that come back is the intended second source; adding the value later would be a constraint change on a populated table.
+
+**`edited_by` is null on every row and will stay null until the dashboard has authentication.** A learning signal that cannot tell two reviewers apart is a weaker one, which is why the column exists now — but nothing can fill it yet, and pretending otherwise would be worse than the gap.
+
+**Nothing reads it.** Phase 7 memory is where it is consumed. Capture had to start first: an edit not recorded when it happened cannot be recovered afterwards — the same argument as `auto_send_eligible`.
+
 ### Asking is licensed by the case file, not by the verdict
 
 One rule across all three verdicts: **a reply may ask for a fact only if the case file named it.** That single line implements three instructions that look separate — « ne pas demander d'information supplémentaire » on an answer, « demander uniquement cette information » on a question, « ne demander une information que si le dossier en nomme une » on a handover — because they are the same rule seen from three sides.
@@ -806,11 +1036,41 @@ So the queue holds every ticket regardless of sender, and the label becomes two 
 
 **The general rule this leaves behind:** a signal good enough to *annotate* a ticket is not automatically good enough to *hide* one. Hiding needs evidence that nothing is lost, and here the evidence said the opposite.
 
+### …and reversed again, deliberately, with the cost priced in (2026-08-19)
+
+`/conversations` now exists and the fourteen threads are routed to it. **This is an owner's call taken against the measurement above, not a new measurement that overturned it** — the finding still holds, re-run today: all fourteen are L3 or L2 customer work, and **three are `awaiting_human` at L3**, the same shape that reversed it last time.
+
+Two things are different, and neither is that the objection went away.
+
+**The seam is a stored column now, not a reused constant.** The original bug was routing on `NON_DEMAND_LABELS`, which was written for `cluster:tickets` and answers "is this customer demand for a topic map". Routing keys on `tickets.sender_label` — set at ingestion, `internal`/`contractor` only. That matters concretely: the derived `senderLabel` on the list item covers every directory kind, so partitioning on it would move **30** threads and take a Nocibé purchase order off the queue with them. `TicketListItem` therefore carries both `senderLabel` (derived, all kinds, for the chip) and `isOwnSide` (stored, ours only, for the routing), and they are documented as non-interchangeable.
+
+**The failure mode is answered rather than accepted.** What went wrong before was silence: three L3 threads behind a nav item nobody opened. `countOpenConversations` puts that number on the sidebar from **every** page in the shell, so the queue you are not looking at can still ask for you. It is the only loud thing in that nav, and `openConversationCount` swallows its own errors — a page must not fail to render because a decorative count could not be read.
+
+**One partition, not two queries.** `listTickets` and `listConversations` are both `partitionBySender` over one `queue()` read. Two independent filters could drift into a thread appearing on both pages or, far worse, on neither; a partition cannot. 234 = 220 + 14, asserted against the live view.
+
+**What is still true and is now a real cost:** one of the fourteen (`TR: Retour Colissimo`) names a consumer who has no ticket of their own, so that forward remains the only record of that customer's return — and it is no longer in the queue. The badge does not help once it is closed.
+
 ### The middle section is not tickets
 
-Dropped mail never reaches the `tickets` table — the gate runs before the ticket write — so the only trace is a `spam_audit` row. That row now carries the body, but it is still **not a `ticket_messages` row**, which is why "Add as ticket" is disabled rather than absent: promoting one back means the agent re-fetching it from Graph, and hiding the button would hide that it is recoverable at all.
+Dropped mail never reaches the `tickets` table — the gate runs before the ticket write — so the only trace is a `spam_audit` row. That row now carries the body, but it is still not a `ticket_messages` row, which is why "Add as ticket" was disabled rather than absent: hiding the button would have hidden that a drop is recoverable at all.
 
 Filtered on `outcome = 'blocked'`, not `label = 'irrelevant'`: the blocklist pass writes no label, and every row currently carrying `irrelevant` was in fact *kept* (the label predates the change that made it drop). Blocked is the only field that reliably means "never became a ticket".
+
+### "Add as ticket" writes, and it writes through ingestion (2026-08-19)
+
+**The premise that disabled it is gone.** The button waited on the agent re-fetching the message from Graph, which the mailbox-id mismatch blocks — and that requirement only ever existed because the body was not stored. It has been since `spam_audit` started keeping it: the row now holds sender, subject, body and conversation id, which is everything `ticket_messages` is written from. Measured on this corpus, **all 49 blocked rows carry a body and a conversation id**, so the Graph round trip buys nothing that is not already in hand. Promotion is a write from stored data and needs no mailbox.
+
+**It goes through `writeIngestedMessages`, not around it.** `promote-dropped-mail.mjs` owns one thing — turning a `spam_audit` row into the shape `mapGraphMessage` produces — and hands it to the ordinary ingestion writer. Threading on `conversationId`, idempotency on `(shop_id, graph_message_id)`, the first/last message window, `needs_categorisation`, reopening a closed thread and backfilling the requester are all ingestion's rules, and a promoted email is an ingested email that took a detour. Reimplementing them behind a button would have been a second ingestion path drifting from the first. **2 of the 49 belong to a conversation that already has a ticket** — the blocklist matches senders, so it blocks replies into live threads too — so joining an existing ticket is a normal outcome here and not an edge case.
+
+**The workflow is applied by the ticket's state, not by the click.** Every pass drains a queue defined by ticket state rather than by what the poll just wrote, so setting `needs_categorisation` is the whole handover: the next poll categorises, resolves the customer, investigates, resolves an order number and builds the context bundle. Nothing had to be added to make the agent pick it up, and nothing about the button needs the worker to be running at the moment it is pressed. Drafting stays a separate pass.
+
+**Promoted is derived, never stored.** No `promoted_at` column, for two reasons that agree. The first is the baseline's: a column here is an `alter table … add column` by hand on a populated table, which is exactly what the drafting queue avoided by deriving `withoutDrafts()`. The second is this table's own: `spam_audit` records **what the gate decided**, and rewriting the row to say a person disagreed would edit the audit trail rather than add to it. A blocked row whose `graph_message_id` now exists in `ticket_messages` was promoted; that is one query over 49 rows and it cannot disagree with itself.
+
+**The click is about this email, not this sender.** Nothing here touches `email_blocklist` or the classifier, so the next email from the same address is dropped again. That is deliberate — one email being wrongly dropped is evidence about one email — and both surfaces say so rather than letting the operator infer that they have fixed the gate. Turning a sender into a permanent exception is a blocklist edit or a `sender_directory` row.
+
+**Two things the promoted message cannot carry, both left empty rather than guessed.** Recipients, reply-chain headers, the body preview and the attachment flag are not in the audit row; `attachments` stays null, which already means "never fetched" on that column, so the photo check reads the row as unasked rather than as answered *no attachment*. And `received_at` is the **decision** time, not the arrival time — within a poll of arrival for live mail, but the import date for the backfilled corpus. It drives `first_message_at`, so a promoted historical email enters the queue as recent work, which is the honest reading: it is being started now.
+
+**No body, no promotion.** Never captured and captured-then-expired are one answer here, because the agent reads bodies: a ticket made from a subject line is one every pass downstream would skip. The button is disabled for the same reason the write would refuse, so the dashboard never offers an action that fails when used.
 
 ### Search belongs to a table; level, category and sort belong to the page
 
@@ -1045,6 +1305,54 @@ Categorisation and investigation run the identical cycle — claim a batch, then
 This is what put the crash-safety rule in one place instead of five comments: **`complete` clears this pass's flag and raises the next one in the same patch as the result**, so a failure anywhere before it leaves the ticket in the queue rather than marked done with nothing behind it. `skip` clears the flag and writes nothing else. `retry` touches no flag. `abandon` clears the flag and never raises the next — investigating a guess would spend tool and model calls on a subject nobody chose. `attemptsSoFar` and the trail merge existed twice, character for character, before this.
 
 ---
+
+## Agent test chat
+
+The rehearsal harness behind `/agent-setup`'s **Test the agent** button: a message an operator types, put through the real pipeline, with every decision shown. `agent/src/testing/`, `web/lib/server/agent-test-service.ts`, `web/components/agent-test/`.
+
+### It fakes the database, not the passes
+
+A tool that shows what the agent does is worth nothing if it shows what a *copy* of the agent does. So the passes are the worker's own — `runCategorisation`, `runInvestigation`, `runCustomerResolution`, `runOrderResolution`, `runOrderContext`, `runDrafting` — called in the poll's order, with the same prompts, the same models, and real Supabase reads for products, orders, customers, promotions and knowledge. The only substitutions are the database underneath them and a decorator around the OpenAI client.
+
+**The obvious implementation was a second ticket record**, in memory, that only the test chat uses. It was not built. `scripts/lib/ticket-record.mjs` is documented as the only writer of `tickets`, and its claim filters, flag protocol and metadata trail are where the pipeline's crash-safety lives; a second copy is a second place for them to be wrong, and the failure mode is silent — the rehearsal keeps working while the worker changes underneath it, which is the one thing a rehearsal cannot survive.
+
+Instead the substitution happens one layer lower. `createTicketRecord` and `createDraftRecord` already take their PostgREST calls as an injectable `transport`, for their own unit tests — so `memory-transport.mjs` fakes the DATABASE and the real records run on top of it, unmodified and unaware. `createCaseFileStore` gained the same parameter; it was the one store still reaching for `supabaseUpsert` directly. `memory-transport.test.mjs` drives a whole claim → complete → claim cycle through the real record and asserts the flags move. That test is what the feature rests on.
+
+**The transport throws on an operator it does not implement.** A silent "no rows" for an unknown filter looks exactly like a pass with nothing to do — in a tool whose only job is showing what the passes did. It also honours the projection rather than returning whole rows, so a pass that reads a column it did not select fails here instead of against PostgREST.
+
+**The alternative — real rows carrying `tickets.is_test` — was rejected on blast radius.** The flag would have to be honoured by `ticket_queue`, the `listTickets`/`listConversations` partition, `ticket_message_counts`, `ticket_first_inbound`, auto-close, forwarding, the derived drafting queue and a share of the 21 Insights views. One missed filter puts an invented customer in front of a human, or into a monthly figure.
+
+### The order is copied verbatim, including its one surprise
+
+The poll runs `customers → categorise → investigate → orders → context`, so a first message is investigated with `resolved_context` still null: the order tool answers "commande non confirmee" and the order facts only reach the DRAFT, which reads `tickets.resolved_context` directly. That is what happens to every newly-arrived email. The rehearsal reproduces it and the transcript states it, because the alternative — resolving the order early so the case file looks better — would make the test disagree with the thing it exists to test.
+
+### Identity is fields; the order number is not
+
+On a real email the sender is the ENVELOPE — ingestion takes `from_email` off the Graph message, and no parser ever reads an address out of a body — so the operator supplies name and address as inputs. Asking them to write their identity into the message would mean inventing a parser production does not have, and then testing that instead of the pipeline.
+
+An order number is the opposite case and gets the opposite treatment: on a real email it IS in the body, so what is typed in the field is **appended to the message** and `shopifyOrderCandidates` has to find it there. Stamping `shopify_order_number` directly would skip the pass being tested and report a confidence the pipeline has not earned.
+
+### Gate 2 runs, and stops the run
+
+"Your test email would never have become a ticket" is the most useful thing this tool can say, so the spam classifier runs first and a `blocked` verdict ends the run with that as the answer. There is a **Run it anyway** button, because an operator who has seen the finding may still want the rest. Gate 1 (the blocklist) is skipped: it is a rule about addresses that have written before, which an invented one has not.
+
+### Cost is reported, never recorded in `llm_usage`
+
+Five or six model calls a run, two on the mid tier. `llm_usage` answers one question — what does handling the real mailbox cost — and its `pass` check constraint admits only the worker's seven passes. Folding rehearsal spend in untagged would move `llm_usage_summary`'s per-ticket figures and the Agent panel's cost tiles with nothing saying why; tagging it needs a migration and a wider constraint, for a number that panel should not carry anyway. So the trace totals its own tokens through a sink of the same shape, and the dialog prices them at read time from `llm-rates.mjs`. **The trade is explicit: test spend is invisible to Insights, and visible in the tool that spent it.**
+
+### The article test reports five states, because four failures want four fixes
+
+`summariseMatches` gained a `candidates` field — the whole ranking, beside the banded `chunks` — and the knowledge tool carries it in `data`, which the model never sees. Without it, "your article scored 0.52 and the band withheld it" is indistinguishable from "your article was never found", and those want opposite fixes.
+
+`used` / `retrieved_withheld` / `outranked` / `not_retrieved` / `not_searched`. The last is the one people hit and do not expect: `allowedTools` gives `searchKnowledge` to five subjects, so a message that categorises as `delivery` or `order` has no knowledge tool in its registry at all, and the best-written article in the library cannot be reached from it. Reporting that as "not retrieved" would send somebody off to rewrite an article that was never consulted. Readiness — approved, chunked, embedded, in a searchable category — is checked BEFORE any model call, because it is free and it is the common answer.
+
+**It reports mechanism, not quality.** Whether the article that came back was the right one is the operator's judgement, and the UI says so.
+
+### Runs are kept, and the ideal answer is why
+
+A rehearsal you cannot look at again answers only "does it work right now". The two questions worth a table both need two runs: did changing the prompt, the article or the bands improve this, and **what should the agent have said**. The second is `agent_test_runs.ideal_body_text` — the same (model text, human text) capture `ticket_draft_edits` makes for real mail, with the difference that a rehearsal's situation can be INVENTED, so a gap can be written down before a customer has hit it. Nothing reads it yet and the UI says so: promising a feedback loop that does not exist is how a capture like this fills with text nobody trusts.
+
+The row keeps the MASK of the address and neither the plaintext nor a hash — nothing here matches on one, so a hash would be a bare identifier with no reader. Re-running an old test means typing the address again, which is the correct price.
 
 ## Migrations
 
