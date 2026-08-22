@@ -420,7 +420,7 @@ and "measured zero" cannot look identical.
 
 ## Agent Worker
 
-Run `npm run ingest:once` or `npm start` from `agent/`. One poll runs every pass below, **in this order** — the order is load-bearing (see `DECISIONS.md`).
+Run `npm run ingest:once` or `npm start` from `agent/`. One poll runs every pass below, **in this order** — the order is load-bearing (see `DECISIONS.md`), and `agent/src/poll-order.test.mjs` asserts it rather than trusting this table.
 
 | # | Pass | Module |
 | --- | --- | --- |
@@ -437,8 +437,8 @@ Run `npm run ingest:once` or `npm start` from `agent/`. One poll runs every pass
 | 7 | flush gate decisions (with body on a block) to `spam_audit` | `ingestion/spam-audit.mjs` |
 | 8 | **Customer resolution** — needs no category, order number or LLM key | `resolution/customer-resolution-runner.mjs` |
 | 9 | **Categorisation** (LLM) — 25/poll, oldest first, selects on the pending flag | `pipeline/categorise-runner.mjs` |
-| 10 | **Investigation** (LLM + tools) — decompose (only if long / 2 subjects / 2 `?`), then 6 tool calls +2 per extra task, 4 turns, `ENABLED_SUBJECTS` only | `investigation/investigation-runner.mjs` |
-| 11 | **Order resolution** then **order context** | `resolution/order-*-runner.mjs` |
+| 10 | **Order resolution** then **order context** — no LLM, no category needed. **Before the investigation, and that is load-bearing**: `getOrderContext` READS `tickets.resolved_context` rather than querying, so an investigation that ran first could not see an order however clearly the customer quoted it | `resolution/order-*-runner.mjs` |
+| 11 | **Investigation** (LLM + tools) — decompose (only if long / 2 subjects / 2 `?`), then 6 tool calls +2 per extra task, 4 turns, `ENABLED_SUBJECTS` only | `investigation/investigation-runner.mjs` |
 | 12 | **Forwarding** — `contact` kind + a configured address; needs `Mail.Send` | `routing/forward-runner.mjs` |
 | 13 | **Auto-close** — 28d idle, level 4 exempt; last so it sees this poll's timestamps | `lifecycle/auto-close.mjs` |
 | 14 | **Retention purge** — nulls expired `spam_audit` bodies; best-effort | `ingestion/spam-audit.mjs` |

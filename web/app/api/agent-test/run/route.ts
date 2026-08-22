@@ -23,10 +23,14 @@ export const maxDuration = 300;
  * NDJSON rather than SSE: there is one consumer, it is our own fetch, and a line
  * per event needs no framing beyond a newline.
  *
- * Line shapes:
- *   {"type":"step", ...}   one trace event, exactly as it was recorded
- *   {"type":"done", ...}   the run finished — id, status, summary, cost
- *   {"type":"failed", ...} the run could not start, or threw outside a pass
+ * Line shapes. The envelope key is `stream` and the payload is NESTED rather
+ * than spread, because a trace event carries its own `type` — spreading it
+ * beside one silently overwrote the envelope and the client dropped every step
+ * it was sent. A key that cannot collide is cheaper than remembering not to.
+ *
+ *   {"stream":"step","event":{...}}  one trace event, exactly as recorded
+ *   {"stream":"done", ...}           the run finished — id, status, cost
+ *   {"stream":"failed","error":"…"}  it could not start, or threw outside a pass
  */
 export async function POST(request: NextRequest) {
   let shopId: string;
@@ -67,10 +71,10 @@ export async function POST(request: NextRequest) {
           input,
           expectDocumentId,
           pastGate,
-          onStep: (event) => write({ type: "step", ...(event as object) }),
+          onStep: (event) => write({ stream: "step", event }),
         });
         write({
-          type: "done",
+          stream: "done",
           runId,
           status: result.status,
           summary: result.summary,
@@ -85,7 +89,7 @@ export async function POST(request: NextRequest) {
         });
       } catch (error) {
         write({
-          type: "failed",
+          stream: "failed",
           error: error instanceof Error ? error.message : "The rehearsal could not be run.",
         });
       } finally {

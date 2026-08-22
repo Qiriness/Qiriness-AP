@@ -10,6 +10,30 @@ Three sibling files carry the other halves, and this one deliberately does not d
 
 ---
 
+## The order passes moved ahead of the investigation (2026-08-22)
+
+The poll ran `categorise → investigate → orders → context`. `getOrderContext` is a **reader** — it returns what the order passes stored on the ticket and never queries for itself — so on the first message of every thread the investigation ran against an empty `resolved_context` and could not see an order however clearly the customer had quoted its number.
+
+- **Found by the test chat on its first real use**, which is the strongest thing that can be said for the harness. Order `#5144`, quoted in the message, registered to the sender's own address: `getOrderContext` answered « aucune commande confirmée », the case file recorded the order as *unverified*, the verdict came out `needs_human` — and then the resolver confirmed it `verifiedBy=email` and built the bundle. The deterministic check had the answer with certainty; the expensive one had already written the conclusion.
+- **The failure was invisible by construction.** Every step behaved correctly in isolation: the tool reported what it saw, the model refused to assert an unverified claim, the ticket went to a person. Nothing anywhere said the answer was in the database the whole time.
+- **Sized before fixing.** 60 case files on order-family tickets: 24 investigated with the order in hand, 35 blind with no order number to know (correct), **1** blind while the order was known. The backlog escaped because it was ingested in bulk and the passes ran repeatedly, so most tickets were investigated a cycle after their order resolved. For live mail, where one poll does everything, every first email quoting a number would have hit it.
+- **New order: `customers → categorise → orders → context → investigate → forward → close`.** After categorisation rather than before it, deliberately: the only constraint is "before the pass that reads its output", and moving further would have changed what `--stop-after=categorise` runs — the documented cheap corpus-building path. `--stop-after=orders` changed meaning instead (it now stops before the investigation), which nothing uses.
+- **Two dormant escalation rules woke up.** A parcel in transit with no scan for 10+ days, and a carrier reporting *delivered* on a `delivery/problem` ticket, both raise to level 3. Neither could fire on a first message while the order context was always null. Both cap at 3, so nothing is newly blocked from drafting.
+- **`agent/src/poll-order.test.mjs` is the guard**, and its absence is why this drifted: the order was documented as load-bearing and asserted nowhere. It checks what the stage list *declares*, what the poll body *does*, and that the two agree — verified to fail against the old ordering before being kept.
+- **The rehearsal harness was reordered to match**, or the test chat would have stopped mirroring the worker the moment the worker changed. Its own ordering assertions moved with it.
+- **Verified on the case that found it.** Same email, same customer, re-run through the test
+  chat: `getOrderContext` now answers `found` with the order, the tracking number and the
+  carrier; the case file moves from `needs_human` with nothing established to `answerable`
+  with four established facts; and the output moves from a handoff reading « vérifier
+  manuellement la commande #5144 » to a customer-ready reply quoting the tracking number.
+  ~$0.014 a run.
+- **A bug in the test chat's own stream, found by running it from the command line.** The
+  route wrote `{ type: "step", ...event }`, and a trace event carries its own `type` — so the
+  spread overwrote the envelope, the client matched nothing, and every step was dropped in
+  silence while the run itself worked. The envelope is now `stream` with the payload nested,
+  a key that cannot collide.
+- Suites green: 1724 root, 1082 agent.
+
 ## Agent test chat: a rehearsal of the whole pipeline, writing no ticket (2026-08-22)
 
 The **Test the agent** button on `/agent-setup` (the header slot that rendered a dead "View agent preview") opens a chat. A message you write goes through the gate, identity, categorisation, investigation with real tools, order resolution and context, and drafting — and the transcript shows every tool call, the exact French text each one returned, every model call's prompt and response, and the reply.

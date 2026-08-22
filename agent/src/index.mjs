@@ -53,13 +53,23 @@ import { resolveInternalDomains } from '../../scripts/lib/message-audience.mjs';
 // In that staged shape, `--limit` is shared by ingestion and categorisation:
 // otherwise a "500" run would ingest 500 messages but label only the normal
 // 25-ticket daemon batch, leaving the review corpus half-built.
+// ORDERS AND CONTEXT SIT BEFORE INVESTIGATE, and the order of these two lines is
+// a behaviour, not a listing. `getOrderContext` reads `tickets.resolved_context`
+// rather than querying, so an investigation that runs before those two passes
+// cannot see an order however clearly the customer quoted it.
+//
+// `--stop-after=categorise` is deliberately unaffected by the move: it still runs
+// ingest, customers and categorise, which is what the cheap corpus-building run
+// below depends on. `--stop-after=orders` changed meaning — it now stops before
+// the investigation rather than after it, which is also the more useful reading
+// of it.
 const PIPELINE_STAGES = [
   'ingest',
   'customers',
   'categorise',
-  'investigate',
   'orders',
   'context',
+  'investigate',
   'forward',
   'close'
 ];
@@ -271,33 +281,27 @@ async function main() {
       logger.info('categorise.pass', { shopId, ...categorised });
     }
 
-    // Investigation runs immediately after categorisation and consumes its
-    // output in the same poll: the categoriser raises `needs_investigation` as
-    // it clears its own flag, so a ticket labelled seconds ago gets its case
-    // file now rather than a poll later. It is also the only pass that chooses
-    // what to do, which is why its budget lives in config rather than in code.
-    if (investigation && runsThrough('investigate')) {
-      const investigated = await runInvestigation({
-        store: investigation.store,
-        record,
-        investigate: investigation.investigate,
-        shopId,
-        logger,
-        // Reloaded each poll, like the blocklist, so a sender labelled in the
-        // table a minute ago is context on this poll rather than the next.
-        senderDirectory,
-        retrieveExemplar: investigation.retrieveExemplar,
-        lastOrderLookup: investigation.lastOrderLookup
-      });
-      if (investigated.considered > 0) {
-        logger.info('investigate.pass', { shopId, ...investigated });
-      }
-    }
-
-    // Order-number resolution runs after categorisation and before forwarding:
-    // it needs nothing from the categoriser, but every order tool downstream
-    // needs its output, and it must not delay the forwarding pass behind a
-    // Shopify-shaped failure.
+    // ORDER RESOLUTION RUNS BEFORE THE INVESTIGATION, and that placement is the
+    // whole point of it. `getOrderContext` is a READER: it returns whatever this
+    // pass and the one below it stored on the ticket, and never queries for
+    // itself, so that the agent is shown the one reviewable bundle rather than a
+    // second, divergent derivation of the same facts. Which means an order the
+    // resolver has not yet confirmed does not exist as far as the agent is
+    // concerned.
+    //
+    // It used to run AFTER the investigation, and the cost was silent: every
+    // first email quoting an order number was investigated blind. Measured on a
+    // rehearsal of a real one — order #5144, quoted in the message, registered to
+    // the sender's own address — `getOrderContext` answered « aucune commande
+    // confirmée », the case file recorded the order as unverified, and the ticket
+    // went to a human. Seconds later this pass confirmed it by email hash. The
+    // deterministic check had the right answer and the expensive one wrote the
+    // conclusion first.
+    //
+    // AFTER CATEGORISATION RATHER THAN BEFORE IT, deliberately: the only real
+    // constraint is "before the pass that reads its output", and moving it any
+    // earlier would change what `--stop-after=categorise` runs for no gain (see
+    // PIPELINE_STAGES). It needs nothing from the categoriser either way.
     if (runsThrough('orders')) {
       const resolved = await runOrderResolution({
         store: orderResolutionStore,
@@ -310,9 +314,10 @@ async function main() {
       }
     }
 
-    // Context assembly consumes the resolver's output in the same poll: a
-    // ticket whose order number was just confirmed gets its bundle immediately,
-    // so a drafting step never has to wait a cycle for context.
+    // Context assembly consumes the resolver's output in the same poll: a ticket
+    // whose order number was just confirmed gets its bundle immediately, so the
+    // investigation below — and later the drafting pass — reads real order facts
+    // rather than waiting a cycle for them.
     if (runsThrough('context')) {
       const contexts = await runOrderContext({
         store: orderContextStore,
@@ -322,6 +327,34 @@ async function main() {
       });
       if (contexts.considered > 0) {
         logger.info('order.context.pass', { shopId, ...contexts });
+      }
+    }
+
+    // Investigation runs after categorisation and after the two order passes, and
+    // consumes all three in the same poll: the categoriser raises
+    // `needs_investigation` as it clears its own flag, and the order passes have
+    // filled `resolved_context` by the time `getOrderContext` reads it. It is
+    // also the only pass that chooses what to do, which is why its budget lives
+    // in config rather than in code.
+    if (investigation && runsThrough('investigate')) {
+      const investigated = await runInvestigation({
+        store: investigation.store,
+        record,
+        investigate: investigation.investigate,
+        shopId,
+        logger,
+        // Reloaded each poll, like the blocklist, so a sender labelled in the
+        // table a minute ago is context on this poll rather than the next.
+        senderDirectory,
+        retrieveExemplar: investigation.retrieveExemplar,
+        // The customer's last order, for a HUMAN, and only where no order was
+        // confirmed. It fires less often now that the resolver runs first —
+        // which is the point: it is the fallback for a ticket with no order,
+        // not a substitute for one.
+        lastOrderLookup: investigation.lastOrderLookup
+      });
+      if (investigated.considered > 0) {
+        logger.info('investigate.pass', { shopId, ...investigated });
       }
     }
 

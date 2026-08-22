@@ -125,16 +125,18 @@ export async function streamRehearsal(
       // A malformed line is not worth losing the rest of a run over.
       return;
     }
-    if (parsed.type === "step") {
-      const { type: _ignored, ...event } = parsed;
-      onStep(event as TraceEvent);
+    // `stream` is the envelope; a trace event keeps its own `type` untouched
+    // inside `event`. They were once the same key, and the collision meant every
+    // step was parsed, matched nothing, and was dropped in silence.
+    if (parsed.stream === "step") {
+      onStep(parsed.event as TraceEvent);
       return;
     }
-    if (parsed.type === "done") {
+    if (parsed.stream === "done") {
       finished = parsed as RunFinished;
       return;
     }
-    if (parsed.type === "failed") {
+    if (parsed.stream === "failed") {
       throw new AgentTestApiError(parsed.error || "The rehearsal failed.", 500);
     }
   };

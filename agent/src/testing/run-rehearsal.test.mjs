@@ -156,12 +156,14 @@ test('a rehearsal runs every pass, in the poll order, and completes', async () =
     ['input', 'gate'],
     ['gate', 'identity'],
     ['identity', 'categorise'],
-    ['categorise', 'case_file'],
-    // The one people would otherwise file as a bug: the case file is written
-    // BEFORE the order is resolved, exactly as the worker does it.
-    ['case_file', 'order_resolution'],
+    // THE FIX THIS TEST NOW GUARDS. The order passes run before the
+    // investigation, so the case file is written with the order in hand.
+    // They used to run after it, which meant every first email quoting an
+    // order number was investigated as though no order existed.
+    ['categorise', 'order_resolution'],
     ['order_resolution', 'order_context'],
-    ['order_context', 'draft']
+    ['order_context', 'case_file'],
+    ['case_file', 'draft']
   ]) {
     assert.ok(
       types.indexOf(before) >= 0 && types.indexOf(before) < types.indexOf(after),

@@ -42,13 +42,12 @@ import { createTrace, createTraceUsageSink, toolEntry, traceOpenAI } from './tra
 // the real approved knowledge, because a rehearsal against fixtures would be
 // testing the fixtures.
 //
-// THE ORDER IS COPIED VERBATIM, INCLUDING ITS ONE SURPRISE. The poll runs
-// `customers → categorise → investigate → orders → context`, so a first message
-// is investigated with `resolved_context` still null and `getOrderContext`
-// answers « commande non confirmée ». The order facts reach the DRAFT, which
-// reads `tickets.resolved_context` directly. That is what happens to every
-// newly-arrived email, so it is what happens here, and the transcript says so
-// rather than leaving somebody to file it as a bug.
+// THE ORDER IS COPIED VERBATIM: `customers → categorise → orders → context →
+// investigate → draft`. That matters more than it sounds, and this harness is
+// what proved it — the poll used to run the two order passes AFTER the
+// investigation, so every first email quoting an order number was investigated as
+// though no order existed. A rehearsal of a real ticket surfaced it (see
+// `poll-order.test.mjs`, which now guards the ordering in both places).
 //
 // WHAT IS NOT RUN, and why:
 //   · Gate 1 (the blocklist) — a rule about addresses that have written before,
@@ -226,7 +225,6 @@ export async function runRehearsal({
       record, categorise, logger, limit: 1, ticketId
     });
 
-    const categorised = (await record.claim('investigation', { limit: 1, ticketId }))[0] || null;
     const labelled = transport.rows(T.TICKETS)[0];
     Object.assign(summary, {
       category: labelled.category,
@@ -264,6 +262,9 @@ export async function runRehearsal({
       calls: callsSince(mark)
     });
 
+    // Read AFTER the order passes, so it reflects the ticket they have just
+    // written to rather than a snapshot taken before them.
+    const categorised = (await record.claim('investigation', { limit: 1, ticketId }))[0] || null;
     if (!categorised) {
       // The investigation queue refused it: an out-of-scope subject, or a
       // categorisation that fell back. Both are real outcomes.
@@ -275,6 +276,55 @@ export async function runRehearsal({
       });
       return finish('complete');
     }
+
+    // ---- order resolution, then order context -------------------------------
+    //
+    // BEFORE THE INVESTIGATION, exactly as the poll runs them. `getOrderContext`
+    // is a reader — it returns whatever these two passes stored on the ticket and
+    // never queries for itself — so an investigation that ran first could not see
+    // an order however clearly the customer quoted its number.
+
+    let orderResolution = null;
+    await runOrderResolution({
+      store: createOrderResolutionStore(supabase),
+      record,
+      shopId,
+      logger,
+      onResult: ({ resolution: result }) => {
+        orderResolution = result;
+      }
+    });
+    emit('order_resolution', {
+      status: orderResolution?.status ?? 'no_candidate',
+      orderNumber: orderResolution?.orderName ?? null,
+      verifiedBy: orderResolution?.verifiedBy ?? null,
+      // The resolver's own sentence about what it found, which already names the
+      // number and says how it failed to verify.
+      detail: orderResolution?.detail ?? null,
+      candidates: orderResolution?.candidates ?? [],
+      // NO MODEL CALL HAPPENS HERE, which is worth saying where somebody is
+      // watching a transcript full of them: the number is found by pattern, the
+      // order by lookup, and the ownership by comparing two hashes of the email
+      // address. A confirmed result is proof rather than an estimate.
+      note:
+        'Deterministic — no model call. The number is read out of the message, looked up, and matched to the sender by email hash. This runs BEFORE the investigation, so the case file below is written with the order in hand.'
+    });
+
+    let orderContext = null;
+    await runOrderContext({
+      store: createOrderContextStore(supabase),
+      record,
+      shopId,
+      logger,
+      now,
+      onResult: ({ context }) => {
+        orderContext = context;
+      }
+    });
+    emit('order_context', {
+      built: Boolean(orderContext),
+      order: orderContext ? summariseOrder(orderContext) : null
+    });
 
     // ---- investigation ------------------------------------------------------
 
@@ -352,47 +402,6 @@ export async function runRehearsal({
         calls: callsSince(investigationMark)
       });
     }
-
-    // ---- order resolution, then order context -------------------------------
-
-    let orderResolution = null;
-    await runOrderResolution({
-      store: createOrderResolutionStore(supabase),
-      record,
-      shopId,
-      logger,
-      onResult: ({ resolution: result }) => {
-        orderResolution = result;
-      }
-    });
-    emit('order_resolution', {
-      status: orderResolution?.status ?? 'no_candidate',
-      orderNumber: orderResolution?.orderName ?? null,
-      verifiedBy: orderResolution?.verifiedBy ?? null,
-      // The resolver's own sentence about what it found, which already names the
-      // number and says how it failed to verify.
-      detail: orderResolution?.detail ?? null,
-      candidates: orderResolution?.candidates ?? [],
-      // The order in which this runs is the finding people will want stated.
-      note:
-        'This runs AFTER the investigation, exactly as the poll does — so the case file above was written without order facts, and the draft below is the first pass that sees them.'
-    });
-
-    let orderContext = null;
-    await runOrderContext({
-      store: createOrderContextStore(supabase),
-      record,
-      shopId,
-      logger,
-      now,
-      onResult: ({ context }) => {
-        orderContext = context;
-      }
-    });
-    emit('order_context', {
-      built: Boolean(orderContext),
-      order: orderContext ? summariseOrder(orderContext) : null
-    });
 
     // ---- drafting -----------------------------------------------------------
 

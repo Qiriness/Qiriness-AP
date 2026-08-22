@@ -184,6 +184,26 @@ It also catches more than it was built for, and that decided the naming. Of the 
 
 **The order-status URL is the one strong identifier we still throw away.** `{{ order.order_status_url }}` renders to a per-order token whose shape is a platform invariant rather than a template choice — but `htmlToText` drops every `href`, and the raw body is not retained, so the token survives in **0 of 296** stored messages. Using it would need the href kept at map time *and* a token column on `orders`; neither exists, and the hash check does not need them.
 
+### The order passes run before the investigation, and nothing used to check that
+
+`getOrderContext` is a **reader**. It returns whatever the order passes stored on the ticket and never queries for itself — deliberately, so the agent is shown the one reviewable bundle rather than a second derivation of the same facts that could disagree with it. The consequence is that an order those passes have not yet confirmed does not exist as far as the agent is concerned.
+
+Until 2026-08-22 the poll ran `categorise → investigate → orders → context`, so on the **first** message of every thread the investigation ran against an empty `resolved_context`. The comment above the resolver said *"every order tool downstream needs its output"* while sitting downstream of the tool that needs it; the placement and its own stated rationale had disagreed since it was written.
+
+**The cost was invisible, which is why it survived.** The tool answers « Aucune commande confirmée n'est rattachée à ce ticket », the model correctly records the order as *unverified* rather than inventing a status, and the ticket goes to a human — a chain of individually correct behaviour that reads as the agent being appropriately cautious. Nothing in a log says the answer was sitting in the database the whole time.
+
+**Found by the test chat, on a real ticket.** Order `#5144`, quoted in the message, registered to the sender's own address. The trace: `getOrderContext` → `not_resolved` → case file records "la commande #5144 a été passée par le client" as unverified → verdict `needs_human` → *then* the resolver confirms it `verifiedBy=email`, and the bundle builds. The deterministic check had the answer with certainty; the expensive, fallible one had already written the conclusion.
+
+**Measured before fixing, so the claim is sized rather than assumed:** 60 case files on order-family tickets, 24 investigated with the order in hand, 35 blind with no order number to know (correct — nothing to see), and **1** blind while the order was known. The backlog largely escaped because it was ingested in bulk and the passes ran repeatedly, so most tickets were investigated on a later cycle than their order was resolved. That is an accident of loading, not a property of the design: for live mail everything happens inside one poll, and every first email quoting a number would hit it.
+
+**Placed after categorisation rather than before it.** The only real constraint is "before the pass that reads its output" — the categoriser reads the subject and the message bodies and would learn nothing from an order. Moving them ahead of `categorise` as well would have changed what `--stop-after=categorise` runs, and that flag is the documented cheap corpus-building path (`ingest:once --limit=500 --stop-after=categorise`). `--stop-after=orders` changed meaning instead, which nothing uses and which now reads more sensibly anyway: it stops before the expensive investigation rather than after it.
+
+**Two dormant rules woke up.** `escalationTriggers` reads the order's delivery state and can raise a ticket to level 3 — a parcel in transit with no scan for 10+ days, or a carrier reporting *delivered* on a `delivery/problem` ticket. Neither could fire on a first message while the context was always null. Both cap at 3, and level 4 is the only band that blocks drafting, so nothing is newly suppressed; some delivery tickets will simply sit higher in the queue than they used to.
+
+**`candidate_order` fires less often, by design.** The investigation attaches the customer's most recent order as a lead for a human, but only where no order was confirmed. With the resolver running first, more tickets carry the real one — the fallback shrinking is the fix working, not information lost.
+
+**The guard is `agent/src/poll-order.test.mjs`.** It asserts what the stage list *declares* and what the poll body *does*, and that the two agree — because this bug was exactly a list and an execution order drifting apart with nothing watching. `index.mjs` calls `main()` at module scope and cannot be imported, so the assertions read it as text, the same trade `_shared.test.mjs` makes over the `.sql` files.
+
 ### The order bundle is assembled, not handed over raw
 
 The raw order carries four separate status columns, a fulfillments array, a refunds array and twenty monetary fields. Answering "where is my parcel?" from that means the model reasoning that `fulfillment_status = FULFILLED` with `delivered_at = null` and `in_transit_at = null` means "dispatched, no scan yet" — a deduction it will sometimes get wrong, differently each time. Deriving it once here makes the answer deterministic and reviewable.
