@@ -134,11 +134,12 @@ export function createInvestigationStack({
   /**
    * The policy rules for an answer set.
    *
-   * APPROVAL IS NOT A GATE HERE, and that is the shadow phase's whole shape:
-   * the rules are `draft` until somebody has seen what they would have done, and
-   * gating on `approved` now would load nothing and measure nothing. It becomes
-   * a filter the moment a route is applied for real — a rule nobody approved
-   * must never move a customer's mail.
+   * APPROVAL IS THE GATE, since the route went live. It was deliberately not one
+   * during the shadow phase — filtering on `approved` while every rule was a
+   * draft would have loaded nothing and measured nothing — and it became one the
+   * moment a rule could move a ticket: an unapproved rule must never route
+   * somebody's mail, for the same reason an unapproved knowledge article holds no
+   * vector.
    *
    * Soft-deleted rows are excluded at the query, like everywhere else.
    */
@@ -146,7 +147,12 @@ export function createInvestigationStack({
     supabaseSelect(
       supabase,
       T.SUPPORT_ANSWERS,
-      { shop_id: shop, answer_set: answerSet, deleted_at: { operator: 'is', value: 'null' } },
+      {
+        shop_id: shop,
+        answer_set: answerSet,
+        approval_status: 'approved',
+        deleted_at: { operator: 'is', value: 'null' }
+      },
       'answer_key,situation_key,when_conditions,answer_skeleton,route,ask,priority,is_fallback,approval_status'
     );
 

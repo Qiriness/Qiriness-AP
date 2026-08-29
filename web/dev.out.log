@@ -1,0 +1,72 @@
+
+> qiriness-dashboard@0.1.0 dev
+> next dev
+
+  ▲ Next.js 14.2.35
+  - Local:        http://localhost:3000
+  - Experiments (use with caution):
+    · cpus
+    · staleTimes
+    · outputFileTracingRoot
+
+ ✓ Starting...
+ ✓ Ready in 7.9s
+ ○ Compiling /agent-setup ...
+ ✓ Compiled /agent-setup in 9.2s (733 modules)
+ GET /agent-setup 200 in 13707ms
+ ○ Compiling /api/agent-test/run ...
+ ✓ Compiled /api/agent-test/run in 3.4s (449 modules)
+{"level":"info","message":"customer.lookup","ts":"2026-08-29T21:12:27.417Z","found":true,"matchedBy":"email_hash","ordersCount":10,"rfmGroup":"CHAMPIONS","accountState":"DISABLED"}
+{"level":"info","message":"customer.resolution","ts":"2026-08-29T21:12:27.626Z","shopId":"1f0e5eb2-e375-4363-9d34-c3c352231a37","considered":1,"linked":1,"no_match":0,"not_a_customer_address":0,"deferred":0}
+{"level":"info","message":"categorise.ticket","ts":"2026-08-29T21:12:28.826Z","ticketId":"4165d0ca-20a4-4a81-9492-deaa0e73eced","category":"order","requestKind":"problem","handlingLevel":3,"happiness":2,"language":"fr"}
+{"level":"info","message":"order.resolution","ts":"2026-08-29T21:12:29.468Z","shopId":"1f0e5eb2-e375-4363-9d34-c3c352231a37","considered":1,"confirmed":1,"name_match":0,"mismatch":0,"not_found":0,"no_candidate":0,"written":1}
+{"level":"info","message":"order.context","ts":"2026-08-29T21:12:29.983Z","shopId":"1f0e5eb2-e375-4363-9d34-c3c352231a37","considered":1,"resolved":1,"order_missing":0}
+{"level":"info","message":"exemplar.retrieve","ts":"2026-08-29T21:12:32.838Z","category":"order","searched":["order"],"candidates":5,"verdict":"matched","exemplar":"O-13","best":0.884,"margin":0.313,"embedded":true}
+{"level":"info","message":"investigate.ticket","ts":"2026-08-29T21:12:41.047Z","ticketId":"4165d0ca-20a4-4a81-9492-deaa0e73eced","category":"order","verdict":"needs_human","established":2,"missing":0,"dropped":0,"toolCalls":1,"needsDeclared":2,"needsSatisfied":2,"needsNotAttempted":0,"needsComplete":true,"exemplarVerdict":"matched","exemplarKey":"O-13"}
+ POST /api/agent-test/run 200 in 50367ms
+{"level":"info","message":"customer.lookup","ts":"2026-08-29T21:12:59.912Z","found":true,"matchedBy":"email_hash","ordersCount":10,"rfmGroup":"CHAMPIONS","accountState":"DISABLED"}
+{"level":"info","message":"customer.resolution","ts":"2026-08-29T21:13:00.044Z","shopId":"1f0e5eb2-e375-4363-9d34-c3c352231a37","considered":1,"linked":1,"no_match":0,"not_a_customer_address":0,"deferred":0}
+{"level":"info","message":"categorise.ticket","ts":"2026-08-29T21:13:00.921Z","ticketId":"2a8b18f6-5828-4b60-b7c5-9b1cd63d2ac4","category":"delivery","requestKind":"problem","handlingLevel":2,"happiness":3,"language":"fr"}
+{"level":"info","message":"order.resolution","ts":"2026-08-29T21:13:01.603Z","shopId":"1f0e5eb2-e375-4363-9d34-c3c352231a37","considered":1,"confirmed":1,"name_match":0,"mismatch":0,"not_found":0,"no_candidate":0,"written":1}
+{"level":"info","message":"order.context","ts":"2026-08-29T21:13:02.168Z","shopId":"1f0e5eb2-e375-4363-9d34-c3c352231a37","considered":1,"resolved":1,"order_missing":0}
+{"level":"info","message":"exemplar.retrieve","ts":"2026-08-29T21:13:03.262Z","category":"delivery","searched":["delivery"],"candidates":5,"verdict":"matched","exemplar":"D-01","best":0.793,"margin":0.088,"embedded":true}
+{"level":"info","message":"investigate.ticket","ts":"2026-08-29T21:13:10.755Z","ticketId":"2a8b18f6-5828-4b60-b7c5-9b1cd63d2ac4","category":"delivery","verdict":"answerable","established":2,"missing":0,"dropped":0,"toolCalls":1,"needsDeclared":3,"needsSatisfied":3,"needsNotAttempted":0,"needsComplete":true,"exemplarVerdict":"matched","exemplarKey":"D-01"}
+ POST /api/agent-test/run 200 in 29666ms
+{"level":"info","message":"customer.lookup","ts":"2026-08-29T21:13:28.200Z","found":true,"matchedBy":"email_hash","ordersCount":10,"rfmGroup":"CHAMPIONS","accountState":"DISABLED"}
+{"level":"info","message":"customer.resolution","ts":"2026-08-29T21:13:28.372Z","shopId":"1f0e5eb2-e375-4363-9d34-c3c352231a37","considered":1,"linked":1,"no_match":0,"not_a_customer_address":0,"deferred":0}
+{"level":"info","message":"categorise.ticket","ts":"2026-08-29T21:13:29.201Z","ticketId":"5dddaa23-d95b-4f0e-b1af-54a36c5f5479","category":"delivery","requestKind":"problem","handlingLevel":3,"happiness":3,"language":"fr"}
+{"level":"info","message":"order.resolution","ts":"2026-08-29T21:13:29.796Z","shopId":"1f0e5eb2-e375-4363-9d34-c3c352231a37","considered":1,"confirmed":1,"name_match":0,"mismatch":0,"not_found":0,"no_candidate":0,"written":1}
+{"level":"info","message":"order.context","ts":"2026-08-29T21:13:30.270Z","shopId":"1f0e5eb2-e375-4363-9d34-c3c352231a37","considered":1,"resolved":1,"order_missing":0}
+{"level":"info","message":"exemplar.retrieve","ts":"2026-08-29T21:13:35.279Z","category":"delivery","searched":["delivery"],"candidates":5,"verdict":"matched","exemplar":"D-02","best":0.811,"margin":0.237,"embedded":true}
+{"level":"info","message":"customer.lookup","ts":"2026-08-29T21:13:37.289Z","found":true,"matchedBy":"email_hash","ordersCount":10,"rfmGroup":"CHAMPIONS","accountState":"DISABLED"}
+{"level":"info","message":"investigate.ticket","ts":"2026-08-29T21:13:43.406Z","ticketId":"5dddaa23-d95b-4f0e-b1af-54a36c5f5479","category":"delivery","verdict":"needs_human","established":3,"missing":0,"dropped":0,"toolCalls":2,"needsDeclared":3,"needsSatisfied":2,"needsNotAttempted":0,"needsComplete":false,"exemplarVerdict":"matched","exemplarKey":"D-02"}
+ POST /api/agent-test/run 200 in 32806ms
+ ✓ Compiled in 787ms (129 modules)
+ ✓ Compiled in 488ms (341 modules)
+{"level":"info","message":"customer.lookup","ts":"2026-08-29T21:15:08.554Z","found":true,"matchedBy":"email_hash","ordersCount":10,"rfmGroup":"CHAMPIONS","accountState":"DISABLED"}
+{"level":"info","message":"customer.resolution","ts":"2026-08-29T21:15:08.731Z","shopId":"1f0e5eb2-e375-4363-9d34-c3c352231a37","considered":1,"linked":1,"no_match":0,"not_a_customer_address":0,"deferred":0}
+{"level":"info","message":"categorise.ticket","ts":"2026-08-29T21:15:09.734Z","ticketId":"673c78a9-84c2-4991-94ed-2c9747c0f0a3","category":"order","requestKind":"problem","handlingLevel":3,"happiness":2,"language":"fr"}
+{"level":"info","message":"order.resolution","ts":"2026-08-29T21:15:10.319Z","shopId":"1f0e5eb2-e375-4363-9d34-c3c352231a37","considered":1,"confirmed":1,"name_match":0,"mismatch":0,"not_found":0,"no_candidate":0,"written":1}
+{"level":"info","message":"order.context","ts":"2026-08-29T21:15:10.782Z","shopId":"1f0e5eb2-e375-4363-9d34-c3c352231a37","considered":1,"resolved":1,"order_missing":0}
+{"level":"info","message":"exemplar.retrieve","ts":"2026-08-29T21:15:11.278Z","category":"order","searched":["order"],"candidates":5,"verdict":"matched","exemplar":"O-13","best":0.884,"margin":0.313,"embedded":true}
+{"level":"info","message":"investigate.ticket","ts":"2026-08-29T21:15:18.412Z","ticketId":"673c78a9-84c2-4991-94ed-2c9747c0f0a3","category":"order","verdict":"needs_human","established":2,"missing":0,"dropped":0,"toolCalls":1,"needsDeclared":2,"needsSatisfied":2,"needsNotAttempted":0,"needsComplete":true,"exemplarVerdict":"matched","exemplarKey":"O-13"}
+ POST /api/agent-test/run 200 in 35669ms
+{"level":"info","message":"customer.lookup","ts":"2026-08-29T21:15:32.577Z","found":true,"matchedBy":"email_hash","ordersCount":10,"rfmGroup":"CHAMPIONS","accountState":"DISABLED"}
+{"level":"info","message":"customer.resolution","ts":"2026-08-29T21:15:32.708Z","shopId":"1f0e5eb2-e375-4363-9d34-c3c352231a37","considered":1,"linked":1,"no_match":0,"not_a_customer_address":0,"deferred":0}
+{"level":"info","message":"categorise.ticket","ts":"2026-08-29T21:15:33.570Z","ticketId":"1187b027-9661-4035-a614-e9df5761a300","category":"delivery","requestKind":"problem","handlingLevel":2,"happiness":3,"language":"fr"}
+{"level":"info","message":"order.resolution","ts":"2026-08-29T21:15:34.217Z","shopId":"1f0e5eb2-e375-4363-9d34-c3c352231a37","considered":1,"confirmed":1,"name_match":0,"mismatch":0,"not_found":0,"no_candidate":0,"written":1}
+{"level":"info","message":"order.context","ts":"2026-08-29T21:15:34.697Z","shopId":"1f0e5eb2-e375-4363-9d34-c3c352231a37","considered":1,"resolved":1,"order_missing":0}
+{"level":"info","message":"exemplar.retrieve","ts":"2026-08-29T21:15:35.020Z","category":"delivery","searched":["delivery"],"candidates":5,"verdict":"matched","exemplar":"D-01","best":0.793,"margin":0.088,"embedded":true}
+{"level":"info","message":"investigate.ticket","ts":"2026-08-29T21:15:41.669Z","ticketId":"1187b027-9661-4035-a614-e9df5761a300","category":"delivery","verdict":"answerable","established":2,"missing":0,"dropped":0,"toolCalls":1,"needsDeclared":3,"needsSatisfied":3,"needsNotAttempted":0,"needsComplete":true,"exemplarVerdict":"matched","exemplarKey":"D-01"}
+ POST /api/agent-test/run 200 in 22914ms
+{"level":"info","message":"customer.lookup","ts":"2026-08-29T21:15:58.256Z","found":true,"matchedBy":"email_hash","ordersCount":10,"rfmGroup":"CHAMPIONS","accountState":"DISABLED"}
+{"level":"info","message":"customer.resolution","ts":"2026-08-29T21:15:58.379Z","shopId":"1f0e5eb2-e375-4363-9d34-c3c352231a37","considered":1,"linked":1,"no_match":0,"not_a_customer_address":0,"deferred":0}
+{"level":"info","message":"categorise.ticket","ts":"2026-08-29T21:15:59.376Z","ticketId":"d36ab44f-db4c-4635-9fb8-d52ce0e11062","category":"delivery","requestKind":"problem","handlingLevel":3,"happiness":3,"language":"fr"}
+{"level":"info","message":"order.resolution","ts":"2026-08-29T21:16:00.075Z","shopId":"1f0e5eb2-e375-4363-9d34-c3c352231a37","considered":1,"confirmed":1,"name_match":0,"mismatch":0,"not_found":0,"no_candidate":0,"written":1}
+{"level":"info","message":"order.context","ts":"2026-08-29T21:16:00.619Z","shopId":"1f0e5eb2-e375-4363-9d34-c3c352231a37","considered":1,"resolved":1,"order_missing":0}
+{"level":"info","message":"exemplar.retrieve","ts":"2026-08-29T21:16:00.960Z","category":"delivery","searched":["delivery"],"candidates":5,"verdict":"matched","exemplar":"D-02","best":0.811,"margin":0.237,"embedded":true}
+{"level":"info","message":"customer.lookup","ts":"2026-08-29T21:16:03.140Z","found":true,"matchedBy":"email_hash","ordersCount":10,"rfmGroup":"CHAMPIONS","accountState":"DISABLED"}
+{"level":"info","message":"investigate.ticket","ts":"2026-08-29T21:16:09.250Z","ticketId":"d36ab44f-db4c-4635-9fb8-d52ce0e11062","category":"delivery","verdict":"needs_human","established":3,"missing":0,"dropped":0,"toolCalls":2,"needsDeclared":3,"needsSatisfied":2,"needsNotAttempted":0,"needsComplete":false,"exemplarVerdict":"matched","exemplarKey":"D-02"}
+ POST /api/agent-test/run 200 in 27992ms
+ ✓ Compiled in 141ms
+ ✓ Compiled in 554ms (341 modules)

@@ -295,16 +295,16 @@ test('every askable fact is declared exactly once, and asks for the packaging', 
   assert.match(MISSING_FIELDS.photo.ask, /emballage/);
 });
 
-// --- the policy shadow -------------------------------------------------------
+// --- the policy rule, applied ------------------------------------------------
 
-test('a policy selection is recorded and never changes the verdict', () => {
-  // THE WHOLE CONTRACT OF THE SHADOW PHASE. A rule that would have sent this
-  // ticket to a person is written down beside a verdict it did not touch, so a
-  // wrong rule costs a row in a diagnostic rather than a customer a wrong reply.
+test('a rule tightens the verdict, and records what it moved from', () => {
+  // Live now, not shadow: the route is applied. `verdict_before_policy` is what
+  // makes the layer auditable afterwards — without it there is no way to tell a
+  // rule that moved a ticket from one that agreed with where it already was.
   const caseFile = buildCaseFile({
     answer: {
       verdict: 'answerable',
-      established: [{ claim: 'La commande est expédiée.', evidence_ids: ['t1'] }],
+      established: [{ claim: 'La commande est livrée.', evidence_ids: ['t1'] }],
       unverified: [],
       missing: [],
       handoff: null
@@ -313,29 +313,79 @@ test('a policy selection is recorded and never changes the verdict', () => {
     policy: { answer_key: 'livraison_contestee', route: 'needs_human', ask: null, verdict: 'selected' }
   });
 
-  assert.equal(caseFile.verdict, 'answerable', 'the investigation keeps its verdict');
-  assert.equal(caseFile.policy.answer_key, 'livraison_contestee');
-  assert.equal(caseFile.policy.would_change_verdict, true);
+  assert.equal(caseFile.verdict, 'needs_human');
+  assert.equal(caseFile.policy.verdict_before_policy, 'answerable');
+  assert.equal(caseFile.policy.applied, true);
 });
 
-test('a rule agreeing with the verdict is not counted as a change', () => {
-  // The measurement has to separate "a rule matched" from "a rule disagreed",
-  // or the review list is every ticket the policy layer touched.
+test('a rule may never loosen a verdict, only tighten it', () => {
+  // THE HALF THE SCHEMA CANNOT ENFORCE. The check constraint stops a rule
+  // routing to `answerable`; nothing in the database stops one routing to
+  // `needs_customer_input` on a ticket the investigation had already handed to a
+  // person. A written policy is a floor under the verdict, never a ceiling — the
+  // investigation saw this ticket, the rule saw a category.
+  const caseFile = buildCaseFile({
+    answer: { verdict: 'needs_human', established: [], unverified: [], missing: [], handoff: null },
+    policy: { answer_key: 'x', route: 'needs_customer_input', ask: 'photo', verdict: 'selected' }
+  });
+
+  assert.equal(caseFile.verdict, 'needs_human');
+  assert.equal(caseFile.policy.applied, false);
+  assert.deepEqual(caseFile.missing, [], 'and it must not smuggle the question in either');
+});
+
+test('a rule that asks brings its question with it', () => {
+  // Without this the verdict says "ask the customer" and nothing is named to
+  // ask, which the rule below turns straight back into needs_human — silently
+  // undoing the rule that had just fired.
+  const caseFile = buildCaseFile({
+    answer: {
+      verdict: 'answerable',
+      established: [{ claim: 'Le colis est livré.', evidence_ids: ['t1'] }],
+      unverified: [],
+      missing: [],
+      handoff: null
+    },
+    ledger: [{ id: 't1', tool: 'getOrderContext', outcome: 'found' }],
+    policy: { answer_key: 'photo_demandee', route: 'needs_customer_input', ask: 'photo', verdict: 'selected' }
+  });
+
+  assert.equal(caseFile.verdict, 'needs_customer_input');
+  assert.deepEqual(caseFile.missing, [{ field: 'photo' }]);
+});
+
+test('an ask already named is not added twice', () => {
+  const caseFile = buildCaseFile({
+    answer: {
+      verdict: 'answerable',
+      established: [{ claim: 'x', evidence_ids: ['t1'] }],
+      unverified: [],
+      missing: [{ field: 'photo' }],
+      handoff: null
+    },
+    ledger: [{ id: 't1', tool: 'getOrderContext', outcome: 'found' }],
+    policy: { answer_key: 'y', route: 'needs_customer_input', ask: 'photo', verdict: 'selected' }
+  });
+  assert.deepEqual(caseFile.missing, [{ field: 'photo' }]);
+});
+
+test('a rule agreeing with the verdict changes nothing and says so', () => {
   const caseFile = buildCaseFile({
     answer: { verdict: 'needs_human', established: [], unverified: [], missing: [], handoff: null },
     policy: { answer_key: 'article_manquant', route: 'needs_human', verdict: 'selected' }
   });
-  assert.equal(caseFile.policy.would_change_verdict, false);
+  assert.equal(caseFile.policy.applied, false);
+  assert.equal(caseFile.policy.verdict_before_policy, 'needs_human');
 });
 
-test('a rule that only supplies wording never counts as a change', () => {
-  // `route: null` means "leave the verdict alone" — most rules are this.
+test('a rule that only supplies wording leaves the verdict alone', () => {
   const caseFile = buildCaseFile({
     answer: { verdict: 'answerable', established: [{ claim: 'x', evidence_ids: ['t1'] }], unverified: [], missing: [], handoff: null },
     ledger: [{ id: 't1', tool: 'getOrderContext', outcome: 'found' }],
     policy: { answer_key: 'non_expediee', route: null, verdict: 'selected' }
   });
-  assert.equal(caseFile.policy.would_change_verdict, false);
+  assert.equal(caseFile.verdict, 'answerable');
+  assert.equal(caseFile.policy.applied, false);
 });
 
 test('no rules, no policy field — not an empty shell', () => {

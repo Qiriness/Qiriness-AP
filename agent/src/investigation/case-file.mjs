@@ -360,6 +360,30 @@ export function buildCaseFile({
   if (established.length === 0 && verdict === 'answerable') {
     verdict = 'needs_human';
   }
+
+  // --- the policy rule, applied ---------------------------------------------
+  //
+  // TIGHTEN ONLY, AND BY RANK RATHER THAN BY TRUST. The schema already forbids
+  // a rule routing to `answerable`, so a rule can never say "this is safe". This
+  // is the other half: a rule may not step DOWN either. If the investigation
+  // concluded a person is needed and a rule says to ask the customer, the rule
+  // loses — a written policy is a floor under the verdict, never a ceiling on
+  // it, because the investigation saw this ticket and the rule saw a category.
+  //
+  // The rank is the only ordering in this file, and it is deliberately shallow:
+  // "we can answer" < "the customer must answer" < "one of us must act".
+  const verdictBeforePolicy = verdict;
+  const applied = applyPolicyRoute(verdict, policy);
+  if (applied.verdict !== verdict) {
+    verdict = applied.verdict;
+    // The question travels with the route or the drafting stage has a verdict
+    // that says ask and nothing to ask for — which the rule below then turns
+    // straight back into `needs_human`, silently undoing the rule.
+    if (applied.ask && !missing.some((entry) => entry.field === applied.ask)) {
+      missing.push({ field: applied.ask });
+    }
+  }
+
   // A verdict of "ask the customer" that names nothing to ask for is not
   // actionable by the drafting stage — it would have to invent the question.
   if (verdict === 'needs_customer_input' && missing.length === 0) {
@@ -395,14 +419,19 @@ export function buildCaseFile({
     // own is that the two are independent, and a row where the exemplar supplied
     // them is not evidence of agreement. Reports must exclude `exemplar` rows.
     needsSource,
-    // The rule the evidence selects, beside the verdict the investigation
-    // reached on its own. `wouldChangeVerdict` is the measurement the shadow
-    // phase exists for: "a rule matched" says little, "a rule matched and would
-    // have sent this somewhere else" is the review list.
+    // The rule the evidence selected, and what it did.
+    //
+    // `applied` REPLACED `would_change_verdict` WHEN THE ROUTE WENT LIVE, and
+    // the rename matters: with the route applied, `route !== verdict` is false
+    // precisely when the rule worked, so the old field would have reported
+    // "changed nothing" on every ticket it moved. The verdict the investigation
+    // reached on its own is kept beside it, because that comparison is the only
+    // way to audit the layer once it stops being a shadow.
     policy: policy
       ? {
           ...policy,
-          would_change_verdict: Boolean(policy.route) && policy.route !== verdict
+          verdict_before_policy: verdictBeforePolicy,
+          applied: verdict !== verdictBeforePolicy
         }
       : null,
     proposedLevel,
@@ -575,6 +604,27 @@ function normaliseUnverified(entries) {
 }
 
 /** Unknown keys are dropped rather than defaulted: an invented field has no question to ask. */
+/** How far a verdict takes a ticket out of the agent's hands. Higher wins. */
+const VERDICT_RANK = { answerable: 0, needs_customer_input: 1, needs_human: 2 };
+
+/**
+ * The route a matched rule asks for, applied only when it tightens.
+ *
+ * RETURNS THE DECISION RATHER THAN MAKING IT, so the caller keeps the single
+ * place a verdict is assigned. A rule with no route, no rule at all, or a route
+ * the investigation has already passed leaves the verdict exactly where it was.
+ */
+function applyPolicyRoute(verdict, policy) {
+  const route = policy?.route ?? null;
+  if (!route || !(route in VERDICT_RANK)) {
+    return { verdict, ask: null };
+  }
+  if (VERDICT_RANK[route] <= VERDICT_RANK[verdict]) {
+    return { verdict, ask: null };
+  }
+  return { verdict: route, ask: policy.ask ?? null };
+}
+
 function normaliseMissing(entries) {
   const seen = new Set();
   const kept = [];

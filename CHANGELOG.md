@@ -10,6 +10,28 @@ Three sibling files carry the other halves, and this one deliberately does not d
 
 ---
 
+## The rulebook is live (2026-08-30)
+
+Phase 3. A matched rule now moves the verdict. 17 `commande` rules approved and loading.
+
+- **Tighten only, and by RANK rather than by trust.** The schema stops a rule routing to `answerable`; nothing in it stops one routing to `needs_customer_input` on a ticket the investigation had already handed to a person. `applyPolicyRoute` closes that half: `answerable < needs_customer_input < needs_human`, and a rule is applied only when it raises the rank. **A written policy is a floor under the verdict, never a ceiling — the investigation saw this ticket, the rule saw a category.**
+- **The question travels with the route.** A rule routing to `needs_customer_input` carries its `ask` into `missing`, or the very next rule in `buildCaseFile` turns the verdict back into `needs_human` for naming nothing to ask — silently undoing the rule that had just fired.
+- **Approval became a gate.** It deliberately was not one during the shadow phase: filtering on `approved` while every rule was a draft would have loaded nothing and measured nothing. It is one now, for the reason an unapproved knowledge article holds no vector.
+- **`would_change_verdict` was renamed to `applied`, and the rename is not cosmetic.** With the route live, `route !== verdict` is false precisely when the rule worked, so the old field would have reported "changed nothing" on every ticket it moved. `verdict_before_policy` is stored beside it, which is the only way to audit the layer now that it is no longer a shadow.
+
+**Verified on the two tickets the shadow run predicted would move**, re-investigated with the route live:
+
+| Ticket | Situation | Rule | Investigation said | Now |
+| --- | --- | --- | --- | --- |
+| #5144 | D-06 | `colis_retourne` | `answerable` | **`needs_human`** |
+| #5953 | D-02 | `article_manquant` | `answerable` | **`needs_human`** |
+
+Both are tickets the agent was about to answer on its own: a parcel returned to us, and an item missing from a delivered order. Neither is an answer an agent should be writing.
+
+**The blast radius is 2 of 50** on the measured sample, and both directions are safe: a rule can send a ticket to a person and can never send an answer to a customer.
+
+**The rules were approved without a per-rule reading by the operator**, which is worth stating plainly rather than leaving implicit. The shape was reviewed and corrected — D-02's photo branch exists because of that correction — but the French skeletons were not read line by line. They are one `approval_status` update away from being switched off again, individually or as a set.
+
 ## The "dilution" explanation was asserted, then tested, and does not hold (2026-08-30)
 
 A claim was made here that whole-email embedding buries the one sentence deciding which situation an email is about — offered as the reason `D-01` absorbs specific complaints, and as the case for turning on the lexical half of exemplar matching. **It was asserted without evidence. Tested, it is not supported.**

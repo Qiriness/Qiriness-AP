@@ -470,12 +470,11 @@ function TrackingParcelList({ parcels }: { parcels: TrackingParcel[] }) {
 /**
  * The policy rule this evidence selected, and what it would have done.
  *
- * SHOWN BESIDE THE VERDICT IT DID NOT CHANGE, which is the shadow phase's whole
- * proposition: the rule is recorded, the investigation's own verdict stands, and
- * a person reads the disagreement before anything is switched on. Rendering it
- * next to the case file rather than as its own step is deliberate — the question
- * being asked is "would this rule have been right about THIS ticket", and that
- * is unanswerable without the verdict in the same eyeline.
+ * SHOWN BESIDE THE VERDICT, and since the route went live it says whether the
+ * rule MOVED that verdict and what it moved from. Rendering it next to the case
+ * file rather than as its own step is deliberate: the question being asked is
+ * "was this rule right about THIS ticket", which is unanswerable without the
+ * evidence and the verdict in the same eyeline.
  */
 function PolicyBlock({ policy, verdict }: { policy: unknown; verdict: string | null }) {
   if (!policy || typeof policy !== "object") {
@@ -484,7 +483,8 @@ function PolicyBlock({ policy, verdict }: { policy: unknown; verdict: string | n
   const p = policy as Record<string, unknown>;
   const answerKey = str(p.answer_key);
   const route = str(p.route);
-  const changes = p.would_change_verdict === true;
+  const applied = p.applied === true;
+  const before = str(p.verdict_before_policy);
 
   return (
     <Fields>
@@ -492,8 +492,12 @@ function PolicyBlock({ policy, verdict }: { policy: unknown; verdict: string | n
         {answerKey ?? `no rule matched (${str(p.verdict) ?? "none"})`}
       </Field>
       {str(p.situation_key) ? <Field label="Situation">{str(p.situation_key)!}</Field> : null}
-      <Field label="Would route to">
-        {route ? `${route}${changes ? ` — differs from ${verdict ?? "the verdict"}` : " — agrees"}` : "leaves the verdict alone"}
+      <Field label="Routing">
+        {route
+          ? applied
+            ? `${route} — the rule moved it, from ${before ?? "the investigation's verdict"}`
+            : `${route} — already there, the rule changed nothing`
+          : "leaves the verdict alone"}
       </Field>
       {str(p.ask) ? <Field label="Would ask for">{str(p.ask)!}</Field> : null}
       {((p.candidates as unknown[]) ?? []).length > 1 ? (
