@@ -167,6 +167,38 @@ export function allowedTools(category, requestKind, level) {
   return TOOLS_BY_SUBJECT[category] ? [...TOOLS_BY_SUBJECT[category]] : [];
 }
 
+/**
+ * Which family of policy rules a subject draws on, when no exemplar named one.
+ *
+ * THE FALLBACK IS THE POINT, not a convenience. `support_exemplars.answer_set`
+ * is the primary route and it only exists on a ticket whose situation was
+ * matched — and matching is an embedding at 0.65, which is deliberately strict.
+ * Without this, every rule in the system would be unreachable on any ticket the
+ * matcher missed, and the policy layer's coverage would be capped by retrieval
+ * recall rather than by what has been written.
+ *
+ * A set reached this way can still only fire its situation-less rules: a rule
+ * naming `situation_key` needs a matched exemplar to name, and `selectAnswer`
+ * refuses to fire one against an unknown situation. So the fallback widens which
+ * tickets see the SHARED state rules and never puts words in the mouth of a
+ * situation nobody identified.
+ *
+ * Families follow `Email-Example-Queries.md`. Subjects absent here have no
+ * policy family, which is the honest state for the five with no tools at all.
+ */
+const ANSWER_SET_BY_SUBJECT = {
+  order: 'commande',
+  delivery: 'commande',
+  return_exchange: 'retour',
+  promotions: 'promo',
+  product: 'produit',
+  product_stock: 'produit'
+};
+
+export function answerSetFor(category) {
+  return ANSWER_SET_BY_SUBJECT[category] ?? null;
+}
+
 /** Whether this ticket is in scope at all — checked before a single tool is bound. */
 export function isInvestigable(ticket = {}) {
   // A LINKED DUPLICATE IS THE SAME CONVERSATION, and investigating it a second

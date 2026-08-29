@@ -114,11 +114,16 @@ export const MISSING_FIELDS = {
   order_date_or_amount: {
     label: 'la date ou le montant de la commande',
     ask: 'Pouvez-vous nous préciser la date et le montant de la commande ?'
-  },
-  photo: {
-    label: 'la photo du produit',
-    ask: 'Pourriez-vous nous envoyer une photo du produit concerné ?'
   }
+  // `photo` WAS DECLARED TWICE IN THIS OBJECT, here and above. The later one won
+  // silently — that is what a duplicate key does — so the live sentence asked
+  // only for « une photo du produit concerné » and the one above it, asking for
+  // the product AND ITS PACKAGING, was unreachable for as long as both existed.
+  //
+  // The packaging is not decoration. On « il manque un article dans le colis »
+  // there is no product to photograph; the box is the evidence, because whether
+  // there was room for the missing item is visible in it. The surviving sentence
+  // asked for the one thing that case does not have.
 };
 
 /**
@@ -331,6 +336,13 @@ export function buildCaseFile({
   // read the ticket, `exemplar` when it failed and a matched situation's
   // declared needs stood in, `none` when neither produced anything.
   needsSource = 'none',
+  // Which policy rule this evidence selected, and what it would have done.
+  //
+  // SHADOW: RECORDED, NOT APPLIED. The verdict below is the investigation's own
+  // and this does not touch it. Wiring the route in is a deliberate second step,
+  // because a rule that fires on the wrong ticket is free to discover now and
+  // expensive to discover once it is moving people's mail.
+  policy = null,
   // The customer's most recent order, when none was confirmed. Passed in rather
   // than derived here: it must not depend on whether the model happened to call
   // an order tool, and on a `product` ticket there is no order tool to call.
@@ -383,6 +395,16 @@ export function buildCaseFile({
     // own is that the two are independent, and a row where the exemplar supplied
     // them is not evidence of agreement. Reports must exclude `exemplar` rows.
     needsSource,
+    // The rule the evidence selects, beside the verdict the investigation
+    // reached on its own. `wouldChangeVerdict` is the measurement the shadow
+    // phase exists for: "a rule matched" says little, "a rule matched and would
+    // have sent this somewhere else" is the review list.
+    policy: policy
+      ? {
+          ...policy,
+          would_change_verdict: Boolean(policy.route) && policy.route !== verdict
+        }
+      : null,
     proposedLevel,
     // Why the level moved, in the human's words rather than a number changing on
     // its own. Computed by investigation-rules, never by the model.

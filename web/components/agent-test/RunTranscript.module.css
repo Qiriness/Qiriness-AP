@@ -82,3 +82,32 @@
   display: grid;
   gap: var(--space-2);
 }
+
+/*
+ * The parcel list on the order-facts step. Matched to `.trackingLink` in
+ * TicketDetailPanel.module.css: the same parcel shown in the dashboard and in a
+ * rehearsal should look like the same thing.
+ */
+.parcel {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.4rem;
+  margin-right: 0.75rem;
+}
+
+.trackingLink {
+  color: var(--teal);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.trackingLink:hover {
+  color: var(--teal-strong, var(--teal));
+}
+
+.carrier {
+  font-size: var(--text-caption);
+  color: var(--text-subtle);
+}

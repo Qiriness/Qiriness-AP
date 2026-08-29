@@ -6,7 +6,8 @@ import {
   planMoves,
   planTasks
 } from './decompose-rules.mjs';
-import { resolveNeeds } from './evidence-rules.mjs';
+import { findingsOf, resolveNeeds } from './evidence-rules.mjs';
+import { needsNamedBy, selectAnswer } from './answer-selection.mjs';
 import { TOOL_NAMES, escalationTriggers } from './investigation-rules.mjs';
 
 // The investigation agent: a categorised ticket in, a case file out.
@@ -243,6 +244,15 @@ export function createInvestigator(
       // measured whether it is.
       evidenceGaps: resolveNeeds(declaredNeeds, run.ledger, names),
       needsSource,
+      // WHICH POLICY RULE THIS EVIDENCE SELECTS. Computed here because this is
+      // where the ledger with its tool `data` lives — the case file keeps only
+      // `{id, tool, argsHash, outcome}`, so findings cannot be derived from it
+      // afterwards, and the runner could not do this even if it wanted to.
+      //
+      // AFTER EVERYTHING ELSE, deliberately: the verdict, the needs and every
+      // tool call are already settled by the time this runs. It reads them and
+      // adds a reading; it cannot have changed them.
+      policy: selectPolicy(ticket.policy, run.ledger, names),
       model
     });
   }
@@ -259,6 +269,47 @@ export function createInvestigator(
  * with nothing established. Served from cache, the repeat costs nothing, returns
  * the same ledger id, and the turn limit still ends the loop.
  */
+/**
+ * Which policy rule this run's evidence selects, and what it would have done.
+ *
+ * SHADOW ONLY, TODAY. The result is recorded and nothing reads it: the verdict
+ * on the case file is the investigation's own, untouched. That is the whole
+ * design of the phase — a wrong rule costs a row in a diagnostic, not a customer
+ * a wrong answer, and the disagreements are the review list before it is turned
+ * on.
+ *
+ * `wouldChangeVerdict` IS THE MEASUREMENT. "A rule matched" says almost nothing;
+ * "a rule matched and would have sent this somewhere else" is the number worth
+ * reading, and it has to be computed here because the comparison needs both
+ * verdicts in hand at once.
+ *
+ * THE RULES SAY WHAT TO SCORE. `resolveNeeds` is called over the needs the rules
+ * branch on rather than the ones the ticket declared — see `needsNamedBy`. It
+ * reads the ledger that already exists, calls no tool and costs nothing.
+ */
+function selectPolicy(policy, ledger, toolNames) {
+  const answers = policy?.answers || [];
+  if (answers.length === 0) {
+    return null;
+  }
+
+  const findings = findingsOf(resolveNeeds(needsNamedBy(answers), ledger, toolNames));
+  const result = selectAnswer(answers, findings, { situationKey: policy.situationKey ?? null });
+
+  return {
+    answer_set: policy.answerSet ?? null,
+    situation_key: policy.situationKey ?? null,
+    verdict: result.verdict,
+    answer_key: result.answer?.answerKey ?? null,
+    route: result.answer?.route ?? null,
+    ask: result.answer?.ask ?? null,
+    // Every rule that matched, not just the winner: two rules matching equally
+    // is an authoring problem, and it is invisible if only the winner is kept.
+    candidates: result.candidates.map((c) => c.answerKey),
+    findings
+  };
+}
+
 function createRun({ ticket, handlers, maxToolCalls, logger, onToolCall = null }) {
   const ledger = [];
   const byKey = new Map();

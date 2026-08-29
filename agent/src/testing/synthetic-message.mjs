@@ -23,8 +23,25 @@ import { hashIdentifier, maskEmail } from '../../../scripts/lib/compliance-audit
 // rehearsal that stamped `shopify_order_number` directly would skip the pass it
 // is meant to be testing and report a confidence the pipeline has not earned.
 
-/** The line an order number is appended as, so the transcript can show it. */
-export const ORDER_LINE = (orderNumber) => `Ma commande : ${orderNumber}`;
+/**
+ * The line an order number is appended as, so the transcript can show it.
+ *
+ * THE `#` IS ADDED WHEN THE OPERATOR OMITS IT, and that is not cosmetic. The
+ * parser takes a bare number as a candidate only when `commande` sits directly
+ * in front of it (`commande 6513`, `commande n° 6513`); the colon in this line
+ * breaks that adjacency, so `Ma commande : 6513` parsed to NOTHING and the run
+ * reported "no order number in the message" for a number the operator had
+ * typed into the field. The pipeline then behaved correctly for a ticket with
+ * no order — order tool unresolved, `order_unconfirmed`, escalated — which
+ * reads as a drafting failure and is not one.
+ *
+ * `#6513` is also how the corpus overwhelmingly writes it: 1152 messages
+ * against 225 spelled out. Left alone if the operator already typed one.
+ */
+export const ORDER_LINE = (orderNumber) => {
+  const value = String(orderNumber).trim();
+  return `Ma commande : ${/^\d/.test(value) ? `#${value}` : value}`;
+};
 
 /**
  * @param input {{ name, email, subject, body, orderNumber }}

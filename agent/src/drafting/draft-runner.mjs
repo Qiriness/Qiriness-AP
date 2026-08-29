@@ -120,7 +120,11 @@ export async function runDrafting({
         verdict: investigation.verdict,
         chased: chase.chased,
         closingLine: brandVoice.closingLine,
-        signature: brandVoice.signature
+        signature: brandVoice.signature,
+        // The signature check needs it: the approved wording is French, so on a
+        // reply in another language it should have been translated rather than
+        // reproduced, and "reproduced" is the failure.
+        language
       });
       const passed = checksPassed(checks);
 

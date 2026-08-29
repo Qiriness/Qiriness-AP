@@ -1,10 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { createContext, useContext, useState } from "react";
 import type { ReactNode } from "react";
 
 import { ChevronDownIcon, ChevronRightIcon } from "@/components/icons";
+import { TrackingText } from "@/components/ui/TrackingText";
 import type { ModelCall, TraceEvent } from "@/lib/agent-test-types";
+import type { TicketTracking } from "@/lib/types";
 
 import styles from "./StepCard.module.css";
 
@@ -89,12 +91,43 @@ export function Fields({ children }: { children: ReactNode }) {
   return <dl className={styles.fields}>{children}</dl>;
 }
 
+/**
+ * The parcels this run's order carries, for linking a tracking number wherever
+ * one appears in the transcript.
+ *
+ * A CONTEXT RATHER THAN A PROP, and that is a deliberate trade. `Verbatim` is
+ * called from eleven places across two files — every tool answer, every prompt,
+ * every model response, the draft — and a tracking number can appear in any of
+ * them, because they are all views of the same French text the order tool
+ * produced. Threading a `parcels` prop through all eleven would mean the next
+ * call site added silently renders a number that is a link everywhere else, and
+ * that specific drift is what `TicketDetailPanel` already recorded happening.
+ *
+ * Empty by default, which is exactly what a run with no confirmed order shows.
+ */
+const TranscriptParcelsContext = createContext<TicketTracking[]>([]);
+
+export function TranscriptParcels({
+  parcels,
+  children,
+}: {
+  parcels: TicketTracking[];
+  children: ReactNode;
+}) {
+  return (
+    <TranscriptParcelsContext.Provider value={parcels}>{children}</TranscriptParcelsContext.Provider>
+  );
+}
+
 /** Verbatim text — a prompt, a tool's answer, a draft. Never re-wrapped. */
 export function Verbatim({ label, text }: { label?: string; text: string }) {
+  const parcels = useContext(TranscriptParcelsContext);
   return (
     <div className={styles.verbatim}>
       {label && <p className={styles.verbatimLabel}>{label}</p>}
-      <pre className={styles.pre}>{text}</pre>
+      <pre className={styles.pre}>
+        <TrackingText text={text} parcels={parcels} />
+      </pre>
     </div>
   );
 }

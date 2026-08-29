@@ -10,6 +10,236 @@ Three sibling files carry the other halves, and this one deliberately does not d
 
 ---
 
+## The "dilution" explanation was asserted, then tested, and does not hold (2026-08-30)
+
+A claim was made here that whole-email embedding buries the one sentence deciding which situation an email is about — offered as the reason `D-01` absorbs specific complaints, and as the case for turning on the lexical half of exemplar matching. **It was asserted without evidence. Tested, it is not supported.**
+
+**Test 1 — the decisive sentence against the whole email**, on two real tickets:
+
+| Ticket | Whole email | Sentence alone |
+| --- | --- | --- |
+| #5953 « il manque un article » | **D-02 wins at 0.787**, next 0.650 | D-02 at 1.000 |
+| #5144 order shows unprocessed | D-06 0.643 · D-01 0.627 · O-09 0.609 | O-09 wins |
+
+The first case refutes the claim outright: the whole email picks the specific situation, decisively, with a 0.137 gap. The second is consistent with it — but that email is genuinely vague, and a person reading it could defend either answer.
+
+**Test 2 — sentence-level scoring across all 44 stored matches.** If the decisive sentence were being buried, scoring sentences separately and keeping the best should move the winner.
+
+```
+winner unchanged   37 of 44
+winner changed      7
+  thin matches (margin < 0.05)   4 of 6   moved
+  confident matches               3 of 38  moved
+```
+
+**What this does support**: a thin margin predicts instability — 67% of thin matches move against 8% of confident ones. That was already visible in the stored margins and needed none of this to establish.
+
+**What it does not support**: the dilution mechanism as a general explanation, or sentence scoring as a fix. Two of its seven changes are plainly worse — a promotions ticket becoming « annuler ma commande », and a disputed delivery becoming the same — which is sentence scoring latching onto a stray line rather than reading the request.
+
+**The honest blocker is ground truth.** The 44 matches were reviewed by hand and judged mostly right, but which ones were wrong was never written down, so no proposed fix can be measured against them. **Any further work on matching should start by recording that judgement, one line per ticket, and not with a mechanism.**
+
+`search_vector` on `support_exemplar_phrasings` stays as the migration left it: generated, indexed and unread. It may well be the right instrument, and nothing here has shown that it is.
+
+## O-11 merged into O-09 (2026-08-30)
+
+The fourth exemplar merge, and the first argued from a measurement rather than a reading: replaying every confusable pair through the rule selector showed **O-09 and O-11 select the same rule in all 20 evidence positions the `commande` set can distinguish**. One situation with two names, and the matcher spent 7 tickets choosing between them at a margin of 0.11.
+
+- `Email-Example-Queries.md` is the source, so the merge happened there first: O-11's real variant and its canonical question moved onto O-09 as phrasings 5 and 6, demand `18 → 22`, and the O-11 entry was removed. Re-imported (30 questions, 94 phrasings) and re-embedded (2 new vectors).
+- **O-11 needed `deleted_at` set, and the three earlier merges did not.** O-10, D-04 and P-16 were retired while still `draft`, which holds no vector and is unreachable, so leaving their rows cost nothing. **O-11 was approved and embedded** — removing it from the document would have removed it from nowhere, and it would have gone on competing for matches against the question that absorbed it. `match_support_exemplars` gates on `deleted_at is null` and on the vector existing, never on whether a question is still authored. Live exemplars: 31 → 30.
+- **A stale count was corrected rather than carried forward.** The document claimed "32 exemplars → 29" after the August merges; the importer parses 30, and the table holds 30 live rows. The figures now say what was counted.
+
+**The other confusable pairs are not merge candidates and this does not touch them.** They pair a specific complaint (`D-02` item missing, `D-03` disputed delivery, `D-06` parcel returned) with the generic `D-01` « où en est ma commande », and those genuinely differ — the answers diverge in all 20 positions. Merging them would destroy a distinction that matters; the problem there is that `D-01` absorbs specific complaints at margins as thin as 0.022, which is a retrieval problem rather than a corpus one.
+
+## Which situation confusions actually matter (2026-08-30)
+
+The operator reviewed all 44 stored situation matches by hand. **The majority are correct, and the wrong ones are wrong in one specific way: the situation chosen is near-identical to the one it should have been.** That reframes the problem — the matcher is not unreliable, it is unreliable *between near-duplicates* — and it makes the useful question not "how accurate is matching" but "which confusions change an outcome".
+
+Answered by replaying the 21 confusable pairs seen on real tickets through the real selector, across all 20 evidence positions the `commande` rules can distinguish. No model calls, no re-investigation.
+
+**Confusing these changes nothing — 7 tickets.** `O-09` (« toujours pas expédiée ») against `O-11` (« confirmation puis plus de nouvelles ») select the same rule in every position. They are the same situation wearing two names, which the source document already suspected: it flags `O-09/O-10` and `P-15/P-16` as merge candidates. **Merging is better than teaching the matcher a distinction that carries no consequence.**
+
+**Confusing these changes the outcome — 16 tickets**, and they share a shape: every one pairs a SPECIFIC problem with the generic `D-01` (« où en est ma commande »).
+
+| Pair | Diverges in | Margin |
+| --- | --- | --- |
+| `D-01` vs `D-02` (item missing) | 20 of 20 positions | 0.074–0.095 |
+| `D-01` vs `D-06` (parcel returned) | 20 of 20 | 0.022–0.062 |
+| `D-01` vs `D-03` (says delivered) | 20 of 20 | 0.092–0.122 |
+| `O-11`/`O-09`/`O-13` vs `O-12` (address) | 12 of 20 | 0.075–0.120 |
+
+**The harm is asymmetric, and only one direction is dangerous.** Mistaking a specific problem FOR `D-01` means a missing item or a disputed delivery is answered rather than escalated — the failure that matters. The reverse, `D-01` losing to a specific situation, only escalates a ticket that did not need it: wasteful, never wrong. `D-01` is the vague catch-all, so everything resembles it slightly, which is exactly why it wins narrowly against the situations it should lose to.
+
+**Nineteen of the 21 pairs are in families with no rules yet** (`promo`, `produit`), so nothing here says whether their confusions matter. `P-15` vs `P-18` alone accounts for 9 tickets and is untested.
+
+**No change made yet.** The mitigation is a choice between merging the interchangeable situations, requiring a margin over the runner-up (`summariseExemplarMatches` already accepts `minMargin` and nothing passes one), and sharpening `D-01`'s phrasings so it stops absorbing specific complaints — and picking between them is the operator's call, not a detail to settle in code.
+
+## The shadow run: 50 tickets, 2 disagreements, and the matcher is the weak link (2026-08-29)
+
+50 order/delivery tickets re-investigated in dry run against the seeded `commande` set. Nothing written, no flag moved: the real runner was driven with a read-only queue, because `--backfill` would have raised `needs_investigation` on every ticket it touched just to read it.
+
+```
+investigated       50        rule selected              situation matched
+a rule matched     22          17  expediee_sans_scan      41  none
+would change route  2           2  colis_retourne           2  D-02 · D-06 · O-11 · D-01
+                                1  livraison_contestee      1  D-03
+                                1  article_manquant
+                                1  article_manquant_photo_recue
+
+order_state:     unknown 29 · dispatched 19 · delivered 2
+photo_evidence:  unknown 46 · none 2 · attached 1 · mentioned_not_attached 1
+```
+
+**The shared rules carry the load, which is the design working.** `expediee_sans_scan` fired 17 times with no situation matched at all. Had rules been keyed to situations only — the obvious build — 41 of these 50 tickets would have had no policy whatsoever.
+
+**Two disagreements, and they are not the same kind.**
+
+- **#5953 — the rule is right and the investigation was wrong.** « Il manque un article malgré mes vérifications : Élixir eclat parfait 30ml. » The investigation concluded `answerable`; `article_manquant` would have sent it to a person. A missing item is a resend-or-refund decision and the agent has no business answering it alone.
+- **#5144 — the rule is right and the SITUATION was wrong.** The customer says the site shows their order unprocessed and they have been charged. It matched **D-06** (« mon colis est revenu chez vous ») and selected `colis_retourne`. The routing lands somewhere defensible, and the reason is false — the skeleton would have told the drafter to discuss a returned parcel that does not exist.
+
+**That second case is the finding.** The failure is in the exemplar matcher, not in the rules, and it is the risk the plan named before any of this was built: matching has only ever been validated by a PROXY — whether the winning exemplar's subject agrees with the categoriser's — and that proxy cannot tell D-06 from D-01, because both are `delivery`. Here it did not.
+
+**Coverage is also lower than the exemplar eval implied**: 9 of 50 tickets matched any situation (18%), against the 45% `eval:exemplars` reported over its own sample. Situation-keyed rules are reaching far fewer tickets than the corpus suggested they would.
+
+**Neither is a reason to hold Phase 3**, and both are reasons to keep the tighten-only constraint: a mis-matched situation can currently send a ticket to a person with a wrong reason attached, and can never send a wrong answer to a customer.
+
+**A measurement error worth recording.** The first attempt ran without `shopId` reaching `createInvestigationStack`, so `lookupCustomer`, `verifyPurchase` and `searchKnowledge` all failed — visible as `invalid input syntax for type uuid: "undefined"` and a `match_knowledge_chunks` signature miss. The numbers were wrong in a way that looked plausible. Re-run with it wired, `needs_customer_input` fell 22 → 9 and `answerable` rose 10 → 17, which is the shift you would expect once the lookups work.
+
+## The policy layer runs, and changes nothing (2026-08-29)
+
+Phase 2. Every investigation now selects a policy rule and records what it would have done. **No verdict moves.** A wrong rule costs a row in a diagnostic rather than a customer a wrong reply, and the disagreements are the review list before Phase 3.
+
+- **Selection happens inside `investigate.mjs`, after the tool loop closes**, and it had to: the case file keeps the ledger as `{id, tool, argsHash, outcome}` and drops each call's `data`, so findings cannot be derived anywhere downstream. Running it last is also what makes the shadow meaningful — the verdict, the needs and every tool call are settled before this reads them.
+- **The rules say which needs to score, not the ticket.** D-02 declares `order_identity, order_state, policy_answer` while its rules branch on `photo_evidence`; scoring only the declared set would have left every one of those rules permanently unmatched. `needsNamedBy()` closes that, and it costs nothing — it re-reads a ledger that already exists.
+- **The answer set comes from the ticket's SUBJECT**, not from `support_exemplars.answer_set`: `match_support_exemplars()` does not return that column, and today a family is exactly a grouping of subjects, so reading it would need the function widened for no difference in outcome. Worth doing the day a situation draws on a family its subject does not imply. **Until then that column is written and unread**, which is worth knowing rather than discovering.
+- **`loadAnswers` is an injected loader, not a store method.** The case-file store's transport is the seam the test chat swaps for an in-memory database; rules are read-only reference data like products and knowledge, so a rehearsal wants the real ones.
+- **Approval is deliberately not a gate yet.** The rules are `draft`, and filtering on `approved` now would load nothing and measure nothing. It becomes a filter the moment a route is applied for real.
+- **The shadow record extends `exemplar_match` rather than adding a column.** `ticket_investigations` is populated, so a column is a forward step against real rows; this is the same diagnostic subsystem with the same lifecycle, and § Investigation already records extending an existing jsonb as the cheaper correct move.
+
+**Verified end to end through the test chat**, three messages against order #6513 (dispatched 43 days ago):
+
+| Message | Situation | Rule | Verdict |
+| --- | --- | --- | --- |
+| « je souhaite annuler ma commande » | O-13 | `annulation_trop_tard` | unchanged |
+| « où en est ma commande » | D-01 | `expediee_sans_scan` | unchanged |
+| « il manque un article dans le colis » | D-02 | `article_manquant` | agrees (`needs_human`) |
+
+The third selected the backstop rather than a photo rule because the model never called `checkPhotoEvidence`, so `photo_evidence` resolved `unknown` — which is exactly what the backstop is for.
+
+**A stale comment was corrected while here.** The runner claimed the exemplar match "is not passed to `investigate`, so no tool choice, need or verdict can depend on it". It has passed `requirement_needs` since needs-fallback landed — which is why `needsSource` exists — so the comment described a contract the code had already left.
+
+## A missing item is a photo case too — and the sentence asking for one was dead (2026-08-29)
+
+Corrected by the operator: a missing item **can** be photographed, because the evidence is the packaging rather than the product. Whether there was room in the box for the article says whether it was ever in it. D-02 now follows the same three photo states as D-08, taking the `commande` set to 17 rules.
+
+**Following that correction found a live bug.** `photo` was declared **twice** in `MISSING_FIELDS`, and a duplicate key is silent — the later declaration won. So the sentence customers actually received asked for « une photo du produit concerné », while the one above it, asking for « une photo du produit **et de son emballage** », had been unreachable for as long as both existed.
+
+That is precisely the wrong half to lose. On « il manque un article dans le colis » there is no product to photograph; the surviving sentence asked for the one thing that case does not have.
+
+- **The duplicate is removed and the packaging wording is live.**
+- **`case-file.test.mjs` now checks the source text, not the object.** By the time a duplicate reaches `Object.keys` there is one key and nothing is detectable, so the test reads `case-file.mjs` and counts declarations per field. Verified by injecting a second `photo` and watching it fail (`photo is declared 2 times`) before restoring.
+
+## The `commande` policy, written down (2026-08-29)
+
+15 rules seeded into `support_answers`, and `answer_set = 'commande'` set on the 11 order/delivery situations that draw on them. Authored as `draft`: nothing reads them yet, and Phase 2 runs them in shadow.
+
+**Three shared rules do most of the work.** `non_expediee`, `expediee_sans_scan` and `commande_annulee` are keyed to the state alone, with no situation, so one rule answers D-01 « où en est ma commande », O-09 « toujours pas expédiée » and O-11 « plus aucune nouvelle » — which is the reason answers are keyed by evidence position rather than by question. They also fire when **no exemplar matched at all**, so coverage does not rest on the matcher's recall.
+
+**The situation-specific rules are the ones evidence alone cannot reach.** « Je souhaite annuler » resolves three ways off one order field:
+
+```
+O-13 + not_dispatched        -> annulation_possible      -> a person (who cancels it)
+O-13 + dispatched|delivered  -> annulation_trop_tard     -> verdict unchanged, answers directly
+O-13 + no confirmed order    -> no rule; the existing machinery asks for the number
+```
+
+Same words from the customer, three different outcomes, decided by the order record. That is the whole point of the layer.
+
+**D-08 is the three-state photo pattern**, and it is the shape the operator asked for: a photo attached routes to a person to judge it; none attached, or one the customer believes they attached, asks for it via `MISSING_FIELDS`; the photo tool never having run falls back to a person. `attachment_type_unknown` is grouped with `attached` deliberately — that gap is ours, and telling someone to resend a photo they did send reads as not having looked.
+
+**No rule promises an action.** There is no write tool for Shopify, so cancelling, changing an address and adding an item all confirm the request is *still possible* and hand over. Three rules route to a person for that reason alone.
+
+**Verified by reading the table back through the real selector** across 14 positions, including the two that matter most: an unmatched situation still gets the shared state rules, and a cancellation with no confirmed order selects nothing and leaves the verdict alone. The seed validates every rule through `normaliseConditions` and `auditAnswerSet` before writing, and refuses if a condition would be dropped — a branch that can never fire is the failure mode hardest to see from outside.
+
+**No seed script was kept.** `support_answers` is the source of truth from here, and the dashboard will edit it; a checked-in seed would be a second copy that drifts the first time somebody changes a rule in the UI.
+
+**Not covered, deliberately:** D-07 and D-33 are pure policy questions with no order behind them, so they need no state rules. `in_transit` and `stale_in_transit` have no rules because no ticket can reach those states until a carrier feed exists.
+
+## A rule can name the situation, and can tighten where a ticket goes (2026-08-29)
+
+Phase 1. `support_answers` gains the three columns that turn an answer skeleton into a policy rule, and `answer-selection.mjs` gains the second axis.
+
+- **`situation_key`, nullable.** The two axes answer different questions: `when_conditions` says what is TRUE about the order, `situation_key` says what the customer WANTS. « Où est ma commande » and « il manque un article dans le colis » are two delivery tickets with identical order facts and different answers, so evidence alone cannot separate them — and a cancellation turns on a fulfilment status no phrasing can settle. **The embedding decides the intent, the evidence decides the state.** Nullable is load-bearing: a rule naming only conditions still fires when no exemplar matched, so coverage does not depend on the matcher's recall.
+- **The situation outranks condition depth in selection.** Without that ordering a generic two-condition rule would beat the rule written for this exact request, and the specific answer would be unreachable whenever a broader one happened to name more needs. `sameDepthAs` moved with it, so the two are not reported as an ambiguous tie.
+- **`route`, tighten-only, enforced by the schema.** `answerable` is absent from the check constraint by design: a rule may hand a ticket to a person or turn it into a question, never declare one safe. `05_exemplars.test.mjs` asserts the list equals `VERDICTS` minus `answerable` rather than hard-coding the pair, so adding a fourth verdict fails the test instead of silently making it un-routable.
+- **`ask` carries a `MISSING_FIELDS` key, never a sentence.** `case-file.mjs` owns the wording; prose here would be a second copy of it.
+
+**The constraint that looked right and was not.** `check (ask is null or route = 'needs_customer_input')` accepted exactly the row it exists to refuse. With `route` null the comparison is NULL, `false or NULL` is NULL, and **a CHECK evaluating to NULL passes**. It was caught by inserting the offending row against the live table rather than by reading the clause — the verification found it, not the review. Now `route is not distinct from 'needs_customer_input'`, which is total, and the migration test asserts the two-valued form cannot come back.
+
+**Applied to the populated database as a forward step**, per `DECISIONS.md § Migrations`: `support_answers` held 0 rows, so the table was dropped and recreated from SQL **extracted programmatically from the baseline rather than retyped**, in one transaction, with every extracted statement asserted to be about `support_answers` before running. No `alter table`, so none of the column-order divergence recorded on 2026-08-18. The script was discarded. Baseline and database are identical.
+
+## The order family can be branched on (2026-08-29)
+
+Phase 0 of the situation → policy layer. `support_answers` and `answer-selection.mjs` have been built and unused since they were written, and the reason was mechanical: the order-family needs had **no findings**, so `order_state`, `delivery_state` and `payment_state` all resolved `null` and no rule could branch on any of them.
+
+- **`orderStates()` in `order-context.mjs`** projects the bundle into one closed value per axis. It lives beside the bundle deliberately — deriving these in the investigation would be a second reading of `fulfillments` and `financial_status`, free to disagree with the one the model was shown, which is the split that module exists to close.
+- **Five findings added** in `evidence-rules.mjs`: `order_state`, `delivery_state`, `payment_state`, `purchase_verified`, `photo_evidence`. They read `data.states` off the tool ledger, never prose — the rule that file already states. `getOrderContext`'s ledger `data` was widened to carry them; its French prompt text is untouched.
+- **`return_eligibility` and `refund_state` deliberately left unwired.** "Still returnable" needs a returns window, which is policy, and hardcoding it in a deriver would be a second copy of the returns article.
+- **`dispatched_no_scan` is its own state, not a flavour of `in_transit`** — and the corpus says it is the dominant one.
+
+**Measured over every built bundle (`npm run eval:order-states`, 78 tickets), and it changed two things:**
+
+```
+order_state              delivery_state             payment_state
+  73  dispatched           73  dispatched_no_scan     74  paid
+   4  delivered             4  delivered               4  partially_refunded
+   1  not_dispatched        1  not_dispatched
+                            0  in_transit
+                            0  stale_in_transit
+```
+
+- **`in_transit` and `stale_in_transit` are unreachable today**, at 0 of 78 — no carrier feeds scan events into Shopify for this store, the same gap `delivery_unscanned` exists to stop the model discussing. They are declared and unwired on the `checkout_state` principle, so the count argues for the carrier integration rather than hiding the need for it. **`escalationTriggers`' 10-day stale-parcel rule is dormant for exactly the same reason** — that was not previously written down.
+- **`not_dispatched` looks dead at 1 of 78 and is not.** No bundle in the corpus was built for an order under 7 days old (p25 35, median 60): these are historical tickets whose orders had long since shipped. A cancellation arrives hours after the order, which is precisely when this state is true. **The consequence for the plan is that Phase 2's shadow comparison cannot validate the cancellation branch — there is no historical ticket where the order was still unfulfilled.**
+
+## A reply in Italian now ends in Italian (2026-08-29)
+
+The brand voice is French and the prompt said « reproduite exactement ». The model obeyed: **all 5 non-French drafts ever written — 3 it, 1 es, 1 en — had a correct foreign-language body and a French sign-off, and all 5 passed their checks**, because the check compared them to the French text and they matched it perfectly. 25 of 400 tickets are not in French.
+
+- **The approved wording is now presented as a source text to translate**, and the framing is what does the work. Measured against the real drafting model: « traduite … ne pas la recopier en français » under a *Signature* heading produced the French verbatim; the same block under `--- source (français) ---` with « il ne doit apparaître nulle part dans la réponse » produced « Cordiali saluti, / Servizio Clienti Qiriness ». Brand names are named as proper nouns and stay put.
+- **A `STRUCTURAL_RULES` clause was quietly overriding it.** That block is declared « prioritaires sur tout ce qui précède » and said the approved closer « est la seule autorisée » — the Signature section changed nothing until that rule also distinguished French from a translation.
+- **The signature check has three states now**: French compared character for character as before; another language advisory (`null`) with "read it", because a pattern loose enough for seven languages accepts anything; another language *ending in the exact French wording* a real failure. That last one is the reported bug, and it fires.
+- **`asks:*` had the same defect** and was made advisory outside French. `ASK_TERMS` is French vocabulary — « numero d'ordine » contains no « commande » — so the first foreign-language question would have been held back for missing words it had no reason to carry. Never hit, only because no non-French draft has been `needs_customer_input` yet.
+- **Verified live**: Italian closes « Cordiali saluti, / Servizio Clienti Qiriness », English closes « Best regards, / Customer Service Qiriness ». No French regression — 6 of 6 sampled French drafts still reproduce the signature exactly, against a historical 1 failure in 87.
+- **Per-language approved wording, authored in the dashboard, is the proper fix** and is a brand-voice feature rather than a drafting one. Until it exists the model translates and a human reads it.
+
+## Tracking numbers became links, everywhere a number is shown (2026-08-29)
+
+`TicketDetailPanel`'s Order block was the only place a parcel number was clickable. The same number in the customer's own email, in the draft, and in a rehearsal transcript was text to select and paste into La Poste by hand.
+
+- **Four surfaces now, through one component.** `TrackingText` over `splitTrackingText` in `scripts/lib/tracking-number.mjs` — the email chain, the dropped-mail dialog, the draft, and the test chat transcript. The splitter sits beside the normaliser because matching is by normalised form: Shopify stores `6C20723002488`, Colissimo prints `6C 2072 3002 488`, and a customer pastes either. 14 tests, including that the segments always rebuild the original text exactly.
+- **Only where we hold a fulfilment URL**, which is also what `TrackingList` has always done. Guessing the carrier from the number's shape was rejected — 84% Colissimo is a good guess, and a wrong one sends someone to a page saying their parcel does not exist.
+- **The valuable case is the ticket with no confirmed order.** `parcelsInText` parses the thread with the agent's own tracking parser and resolves the numbers in one `ov` query against the `orders.tracking_numbers` GIN index. **Measured over 600 inbound messages: 60 quote a tracking-shaped number.** Verified end to end against live data — Colissimo and GLS both link, and a quoted number matching no order we hold correctly stays plain text.
+- **The reply names the parcel by number and never carries a URL.** Built the other way round first — given the fulfilment URL, the model pasted seventy characters of carrier URL into the prose, and once wrote « [Suivi Colissimo](https://…) », markdown that nothing renders in a plain-text reply. The number is what `TrackingText` makes clickable, so the URL never needs to be in the text: the draft now reads « le numéro de suivi 6C21108711964 » and the reader clicks the number.
+- **`no_web_link` joins `FORBIDDEN_PATTERNS`**, catching a bare URL, a bare host, markdown and an HTML anchor. Nothing in a case file is a URL, so any link in a draft is invented. **Measured first: of 92 stored drafts, zero contain one** — it forbids nothing the drafting has ever done.
+- **Verified end to end on a live rehearsal.** The order tool's answer reads « Suivi : 6C21108711964 (COLISSIMO). » with no URL anywhere in the transcript text, and both that number and the one in the draft render as links to La Poste.
+- **The test chat's order-facts step was reporting zero.** `summariseOrder` read `context.fulfilments`, a key `buildOrderContext` has never produced, so every transcript ever recorded said "0 shipments" for orders that had one. It now carries the parcels themselves; the field is `parcels`, and the renderer still reads the old `fulfilments` key so opening an old run is not a blank field.
+
+## Reuse this message, in the test chat (2026-08-29)
+
+An opened run's name, subject, body and order number go back into the composer in one click. Changing one word and running again meant retyping the whole message.
+
+- **The address is deliberately not restored.** `agent_test_runs` stores `requester_email_masked` and neither the plaintext nor a hash (08_testing.sql), so there is nothing to restore. The notice above the composer says which mask it was and why the field is empty — a rerun that silently dropped the identity would resolve no customer and no order, and the transcript would read as a regression in the agent rather than a missing input.
+
+## The test chat's order number was written in the one form the parser rejects (2026-08-29)
+
+The rehearsal appends a typed order number to the message body rather than stamping it on the ticket, so `shopifyOrderCandidates` has to find it exactly as it would in real mail. It appended it as `Ma commande : 6513` — and that parses to **nothing**.
+
+- **The colon breaks the one adjacency the parser needs.** A bare number is never a candidate by design; it counts only behind `#`, or directly behind `commande`/`order` (`/\b(?:commande|order)\s+(?:n[°ºo]\s*)?(\d{3,10})\b/`). `\s+` does not match `` : ``, so the number the operator typed into the field never reached the resolver.
+- **It reads as a drafting failure and is not one.** `order_resolution` recorded `no_candidate` / "No order number in the message", `getOrderContext` answered « Aucune commande confirmée », the case file carried `order_unconfirmed`, and the run escalated. Every pass behaved correctly for a ticket with no order — the ticket only looked like one because the harness lost the number on the way in.
+- **Only runs where the operator typed the `#` themselves ever worked.** Across eight runs on 2026-08-29: `6513`, `6257`, `4406` → `no_candidate`; `#6257`, `#4406` → parsed and looked up. Nobody could have known which half they were in from the transcript.
+- **The unit test always passed `#1006`**, so the bare form was never exercised. The new test builds a body from both forms and asserts the real parser finds the order in each — the contract that was actually missing, since appending the number is only half of it.
+- **Fixed in `ORDER_LINE` and not in the parser.** The parser's strictness is a measured decision (French support mail is full of numbers that are not orders); the harness was the side writing an order number in a shape the corpus does not use. `#` is added when the operator omits it — 1152 messages write it that way against 225 spelled out.
+- **Verified on the case that found it.** Same inputs re-run through the test chat: `order_resolution` now returns `confirmed #6513`, `verifiedBy=email`, the order context builds, `getOrderContext` answers `found`, and the draft names the order. The verdict stays `needs_human` for a new and real reason — the return address is not in the knowledge library — which is the finding the run was trying to make in the first place.
+
 ## The order passes moved ahead of the investigation (2026-08-22)
 
 The poll ran `categorise → investigate → orders → context`. `getOrderContext` is a **reader** — it returns what the order passes stored on the ticket and never queries for itself — so on the first message of every thread the investigation ran against an empty `resolved_context` and could not see an order however clearly the customer had quoted its number.

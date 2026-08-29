@@ -56,9 +56,12 @@ export function TestChatDialog({
   const [loadingHistory, setLoadingHistory] = useState(true);
   const [opened, setOpened] = useState<RunDetail | null>(null);
   const [showHistory, setShowHistory] = useState(false);
+  /** Set by `reuse`, because prefilling silently would look like a bug. */
+  const [notice, setNotice] = useState<string | null>(null);
 
   const abort = useRef<AbortController | null>(null);
   const transcriptEnd = useRef<HTMLDivElement>(null);
+  const composerTop = useRef<HTMLDivElement>(null);
 
   const loadHistory = useCallback(async () => {
     setLoadingHistory(true);
@@ -89,8 +92,40 @@ export function TestChatDialog({
     }
   }, [events, running]);
 
+  /**
+   * Puts an earlier run's message back in the composer.
+   *
+   * WHAT IT CANNOT RESTORE IS THE ADDRESS, and that is a property of the table
+   * rather than an oversight: `agent_test_runs` keeps `requester_email_masked`
+   * and deliberately neither the address nor a hash of it, because nothing here
+   * matches on one (08_testing.sql). So the field is left empty and the notice
+   * says why — a rerun that silently dropped the identity would resolve no
+   * customer and no order, and the transcript would look like a regression in
+   * the agent rather than a missing input.
+   *
+   * Everything else is exact. `body_text` holds what the operator typed, with
+   * the order number kept in its own column, so this is the same pair of inputs
+   * the first run was given.
+   */
+  function reuse(run: RunDetail) {
+    setInput({
+      name: run.requesterName ?? "",
+      email: "",
+      subject: run.subject ?? "",
+      body: run.body,
+      orderNumber: run.orderNumber ?? "",
+    });
+    setNotice(
+      run.requesterMasked
+        ? `Message reused from ${new Date(run.ranAt).toLocaleString()}. The address is never stored — only ${run.requesterMasked} — so retype it before running, or the customer and order tools have nothing to resolve.`
+        : `Message reused from ${new Date(run.ranAt).toLocaleString()}. That run carried no address, so this one will resolve no customer either unless you add one.`
+    );
+    composerTop.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
   async function run(pastGate = false) {
     setRunning(true);
+    setNotice(null);
     setError(null);
     setEvents([]);
     setFinished(null);
@@ -176,6 +211,9 @@ export function TestChatDialog({
           </div>
         ) : null}
 
+        <div ref={composerTop} />
+        {notice && <p className={styles.notice}>{notice}</p>}
+
         <TestComposer
           value={input}
           onChange={setInput}
@@ -193,6 +231,14 @@ export function TestChatDialog({
               <h3 className={styles.resultTitle}>
                 {opened ? `Run from ${new Date(opened.ranAt).toLocaleString()}` : "This run"}
               </h3>
+              {/* Only on a run opened from the history. The run just executed
+                  still has its own inputs sitting in the composer above, so a
+                  button that copied them back would do nothing visible. */}
+              {opened && (
+                <Button variant="secondary" size="sm" onClick={() => reuse(opened)} disabled={running}>
+                  Reuse this message
+                </Button>
+              )}
               <Cost finished={finished} opened={opened} running={running} />
             </header>
 

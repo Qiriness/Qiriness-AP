@@ -1,9 +1,9 @@
 "use client";
 
-import { ARTICLE_VERDICT_LABELS } from "@/lib/agent-test-types";
-import type { ArticleVerdict, ModelCall, TraceEvent } from "@/lib/agent-test-types";
+import { ARTICLE_VERDICT_LABELS, parcelsFromTrace } from "@/lib/agent-test-types";
+import type { ArticleVerdict, ModelCall, TraceEvent, TrackingParcel } from "@/lib/agent-test-types";
 
-import { ClaimList, Field, Fields, RawEvent, StepCard, Verbatim } from "./StepCard";
+import { ClaimList, Field, Fields, RawEvent, StepCard, TranscriptParcels, Verbatim } from "./StepCard";
 import styles from "./RunTranscript.module.css";
 
 /**
@@ -18,12 +18,19 @@ import styles from "./RunTranscript.module.css";
  * the ones available; everything below is what was done with what they said.
  */
 export function RunTranscript({ events }: { events: TraceEvent[] }) {
+  // Read once for the whole transcript rather than per step: the order tool's
+  // answer, the drafting prompt that quotes it and the reply itself are three
+  // views of one set of parcels, and a number should be the same link in all
+  // three.
+  const parcels = parcelsFromTrace(events);
   return (
-    <div className={styles.transcript}>
-      {events.map((event, index) => (
-        <Step key={index} event={event} />
-      ))}
-    </div>
+    <TranscriptParcels parcels={parcels}>
+      <div className={styles.transcript}>
+        {events.map((event, index) => (
+          <Step key={index} event={event} />
+        ))}
+      </div>
+    </TranscriptParcels>
   );
 }
 
@@ -190,6 +197,7 @@ function Step({ event }: { event: TraceEvent }) {
           <ClaimList label="Unverified" items={(event.unverified as unknown[]) ?? []} />
           <ClaimList label="Missing — only the customer can supply these" items={(event.missing as unknown[]) ?? []} />
           <ClaimList label="Must not claim" items={(event.doNotClaim as unknown[]) ?? []} />
+          <PolicyBlock policy={event.policy} verdict={str(event.verdict)} />
           {event.handoff ? (
             <Verbatim
               label="Handoff — internal, never sent to a customer"
@@ -251,7 +259,17 @@ function Step({ event }: { event: TraceEvent }) {
               <Field label="Order">{str(pick(event.order, "name")) ?? "—"}</Field>
               <Field label="Status">{str(pick(event.order, "status")) ?? "—"}</Field>
               <Field label="Placed">{str(pick(event.order, "placedAt")) ?? "—"}</Field>
-              <Field label="Shipments">{str(pick(event.order, "fulfilments")) ?? "0"}</Field>
+              {/* `parcels` on runs recorded from now on; `fulfilments` is what
+                  the same count was called before, and older rows still hold it.
+                  Both are read so opening an old run is not a blank field. */}
+              <Field label="Parcels">
+                {str(pick(event.order, "parcels")) ?? str(pick(event.order, "fulfilments")) ?? "0"}
+              </Field>
+              {parcelsFromTrace([event]).length > 0 && (
+                <Field label="Tracking">
+                  <TrackingParcelList parcels={parcelsFromTrace([event])} />
+                </Field>
+              )}
             </Fields>
           ) : (
             <p className={styles.note}>
@@ -421,4 +439,66 @@ function str(value: unknown): string | null {
   if (typeof value === "string") return value;
   if (typeof value === "number") return String(value);
   return null;
+}
+
+/**
+ * The run's parcels, linked to the carrier where we hold a URL.
+ *
+ * The transcript's counterpart to `TrackingList` in TicketDetailPanel, and it
+ * follows the same rule: a parcel with no fulfilment URL is shown as a number
+ * and not as a link, because a guessed carrier page is worse than none.
+ */
+function TrackingParcelList({ parcels }: { parcels: TrackingParcel[] }) {
+  return (
+    <>
+      {parcels.map((parcel) => (
+        <span key={parcel.number} className={styles.parcel}>
+          {parcel.url ? (
+            <a className={styles.trackingLink} href={parcel.url} target="_blank" rel="noreferrer">
+              {parcel.number}
+            </a>
+          ) : (
+            parcel.number
+          )}
+          {parcel.carrier ? <span className={styles.carrier}>{parcel.carrier}</span> : null}
+        </span>
+      ))}
+    </>
+  );
+}
+
+/**
+ * The policy rule this evidence selected, and what it would have done.
+ *
+ * SHOWN BESIDE THE VERDICT IT DID NOT CHANGE, which is the shadow phase's whole
+ * proposition: the rule is recorded, the investigation's own verdict stands, and
+ * a person reads the disagreement before anything is switched on. Rendering it
+ * next to the case file rather than as its own step is deliberate — the question
+ * being asked is "would this rule have been right about THIS ticket", and that
+ * is unanswerable without the verdict in the same eyeline.
+ */
+function PolicyBlock({ policy, verdict }: { policy: unknown; verdict: string | null }) {
+  if (!policy || typeof policy !== "object") {
+    return null;
+  }
+  const p = policy as Record<string, unknown>;
+  const answerKey = str(p.answer_key);
+  const route = str(p.route);
+  const changes = p.would_change_verdict === true;
+
+  return (
+    <Fields>
+      <Field label="Policy rule">
+        {answerKey ?? `no rule matched (${str(p.verdict) ?? "none"})`}
+      </Field>
+      {str(p.situation_key) ? <Field label="Situation">{str(p.situation_key)!}</Field> : null}
+      <Field label="Would route to">
+        {route ? `${route}${changes ? ` — differs from ${verdict ?? "the verdict"}` : " — agrees"}` : "leaves the verdict alone"}
+      </Field>
+      {str(p.ask) ? <Field label="Would ask for">{str(p.ask)!}</Field> : null}
+      {((p.candidates as unknown[]) ?? []).length > 1 ? (
+        <Field label="Also matched">{((p.candidates as string[]) ?? []).join(", ")}</Field>
+      ) : null}
+    </Fields>
+  );
 }

@@ -47,7 +47,7 @@ import {
 } from "../../../agent/src/ingestion/promote-dropped-mail.mjs";
 import type { DroppedMail, TicketListItem } from "../types";
 import { KnowledgeNotFoundError, KnowledgeValidationError } from "./knowledge-errors";
-import { getTicketListItem } from "./tickets-service";
+import { getTicketListItem, parcelsInText } from "./tickets-service";
 
 /** What the list and the promotion both read off `spam_audit`. */
 const AUDIT_COLUMNS =
@@ -90,10 +90,20 @@ export async function listDroppedMail(shopId: string): Promise<DroppedMail[]> {
     rows.map((row) => row.graph_message_id)
   );
 
-  return rows
+  const mail = rows
     .filter((row) => !promoted.has(row.graph_message_id))
     .map(mapDroppedMail)
     .sort((a, b) => (Date.parse(b.decidedAt ?? "") || 0) - (Date.parse(a.decidedAt ?? "") || 0));
+
+  // ONE LOOKUP FOR THE WHOLE SECTION, not one per dialog opened. A dropped mail
+  // has no ticket and no confirmed order, so the only route to a tracking link
+  // is the number in its own text — and a message the gate refused is exactly
+  // where "should this have become a ticket?" is the question, which a parcel we
+  // recognise helps answer. Shared across rows deliberately: `splitTrackingText`
+  // links only numbers a given text actually contains, so one list cannot put
+  // another mail's parcel into this one.
+  const parcels = await parcelsInText(shopId, mail.map((item) => item.body), []);
+  return parcels.length === 0 ? mail : mail.map((item) => ({ ...item, parcels }));
 }
 
 /**
@@ -206,5 +216,8 @@ function mapDroppedMail(row: any): DroppedMail {
     bodyExpiresAt: row.body_expires_at ?? null,
     failedOpen: Boolean(row.failed_open),
     decidedAt: row.decided_at,
+    // Filled in for the whole list at once below; a row on its own has no way
+    // to look one up and no business making a query to do it.
+    parcels: [],
   };
 }

@@ -11,10 +11,6 @@ Other --> Overdue Invoices, Retailers, Collaborators
 To sync Shopify pages for company knowledge --> Drop down page select in UI --> Recommended = FAQ, Privacy Policy, Brand Name
 This should then show up in UI --> changed by hand --> Reset to shopify button (are u sure popup)
 
-TEST agent (this is low priority)
-
-Chat feature that allows user to test the agents and correct its responses to help it learn.
-When its gcarrying out the task it clearly displays which part of the workflow its at so that debugging is easoier (which subagents are called upone etc)
 
 Tickets analsis (runs weekly and updates the user on current trands in tickets, may need to store tickets for longer than 6 months, like a year)
 
@@ -34,3 +30,22 @@ Make sure that the answers have been writtne yh
 Add the link of the tracking number to the drafting email so person can click directly
 
 Pinable dashbord ( so you can pin specific metrics)
+
+### Order cancellations and returns
+Need to check with people how this works
+
+Order Cancellation workflow:
+    Can't be cancelled if it has been sent
+    must be returned upon receiving parcel
+    should get the tracking number for convenience in the message
+
+Order Returns
+    Should give the return adress if asked
+
+### returns/exchanges/ product problem
+
+WHen there is a product problem or the user wants a return or exchange due to a problem with the product or order, the agent should ask for photoevidence, as well as the name of the product in question
+
+### Order
+
+

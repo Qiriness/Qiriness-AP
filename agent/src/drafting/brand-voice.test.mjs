@@ -213,3 +213,51 @@ test('the model is told not to invent a second closing formula', () => {
   assert.match(composeSystemPrompt(APPROVED), /Ne pas inventer de formule de politesse finale/);
   assert.match(composeSystemPrompt(APPROVED), /la seule autorisée/);
 });
+
+// --- the closer and the signature follow the reply's language ----------------
+
+test('a French reply reproduces the approved signature exactly', () => {
+  const prompt = composeSystemPrompt(APPROVED, { language: 'fr' });
+  assert.match(prompt, /Terminer par cette signature, reproduite exactement/);
+  assert.ok(!prompt.includes('TEXTE SOURCE'));
+});
+
+test('a reply in any other language is told to translate it', () => {
+  // FRAMED AS A SOURCE TEXT, and that framing is the fix rather than decoration.
+  // Measured against the real model on the real prompt: told « traduite … ne pas
+  // la recopier en français » with the block shown as the signature, it wrote
+  // the French back verbatim. Told the same block is a SOURCE that must not
+  // appear in the reply, it wrote « Cordiali saluti, / Servizio Clienti
+  // Qiriness ». Same instruction, and only the second one is obeyed.
+  // THE BUG THIS FIXES. « reproduite exactement » is an instruction the model
+  // follows, and it did: 5 non-French drafts carried a correct Italian, Spanish
+  // or English body and then closed « Bien Cordialement, / Service Client
+  // Qiriness ». All 5 passed their checks, because the check compared them to
+  // the French text and they matched it perfectly.
+  for (const language of ['it', 'es', 'en', 'de', 'nl', 'pt', 'other']) {
+    const prompt = composeSystemPrompt(APPROVED, { language });
+    assert.match(prompt, /TEXTE SOURCE, en français/, language);
+    assert.match(prompt, /noms de marque sont des noms propres/, language);
+    assert.ok(!prompt.includes('signature, reproduite exactement'), language);
+  }
+});
+
+test('the closing line follows the same rule as the signature', () => {
+  assert.match(
+    composeSystemPrompt(APPROVED, { language: 'it' }),
+    /la version traduite de cette phrase/
+  );
+  assert.match(
+    composeSystemPrompt(APPROVED, { language: 'fr' }),
+    /cette phrase, reproduite exactement/
+  );
+});
+
+test('the approved text itself still travels, in every language', () => {
+  // Translated or not, the model needs the wording to work from.
+  for (const language of ['fr', 'it']) {
+    const prompt = composeSystemPrompt(APPROVED, { language });
+    assert.ok(prompt.includes(APPROVED.signature), language);
+    assert.ok(prompt.includes(APPROVED.closingLine), language);
+  }
+});

@@ -5,7 +5,8 @@ import { Dialog } from "@/components/ui/Dialog";
 import { knowledgeErrorMessage } from "@/lib/api/knowledge";
 import { decideOnDraft, fetchTicketThread } from "@/lib/api/tickets";
 import { formatRelativeTime } from "@/lib/relative-time";
-import type { TicketListItem, TicketMessage, TicketThread } from "@/lib/types";
+import { TrackingText } from "@/components/ui/TrackingText";
+import type { TicketListItem, TicketMessage, TicketThread, TicketTracking } from "@/lib/types";
 import styles from "./TicketThreadDialog.module.css";
 
 interface TicketThreadDialogProps {
@@ -163,7 +164,9 @@ export function TicketThreadDialog({ ticket, onClose }: TicketThreadDialogProps)
                 aria-label="Edit the drafted reply"
               />
             ) : (
-              <pre className={styles.draft}>{thread.draft.body}</pre>
+              <pre className={styles.draft}>
+                <TrackingText text={thread.draft.body} parcels={thread.parcels} />
+              </pre>
             )}
             {/* The model's text stays above; a reviewer's rewrite is shown as a
                 second block rather than replacing it, because the difference
@@ -171,7 +174,9 @@ export function TicketThreadDialog({ ticket, onClose }: TicketThreadDialogProps)
             {thread.draft.approvedBody && (
               <>
                 <h3 className={styles.heading}>Reviewer&apos;s version</h3>
-                <pre className={styles.draft}>{thread.draft.approvedBody}</pre>
+                <pre className={styles.draft}>
+                  <TrackingText text={thread.draft.approvedBody} parcels={thread.parcels} />
+                </pre>
               </>
             )}
             {/* What happens when this is sent, said in the review surface rather
@@ -284,7 +289,7 @@ export function TicketThreadDialog({ ticket, onClose }: TicketThreadDialogProps)
         ) : (
           <ol className={styles.messages}>
             {thread.messages.map((message) => (
-              <MessageBlock key={message.id} message={message} />
+              <MessageBlock key={message.id} message={message} parcels={thread.parcels} />
             ))}
           </ol>
         )}
@@ -329,7 +334,13 @@ function senderIdentity(message: TicketMessage, outbound: boolean): {
  * half our own replies — the Inbox holds both, and a wall of undifferentiated
  * blocks is precisely what makes Outlook tiring to read.
  */
-function MessageBlock({ message }: { message: TicketMessage }) {
+function MessageBlock({
+  message,
+  parcels,
+}: {
+  message: TicketMessage;
+  parcels: TicketTracking[];
+}) {
   const outbound = message.direction === "outbound";
   const sender = senderIdentity(message, outbound);
 
@@ -350,7 +361,9 @@ function MessageBlock({ message }: { message: TicketMessage }) {
           and quoted-reply indentation are the only structure it has left after
           htmlToText, and collapsing them turns a thread into one block. */}
       {message.body?.trim() ? (
-        <pre className={styles.messageBody}>{message.body}</pre>
+        <pre className={styles.messageBody}>
+          <TrackingText text={message.body} parcels={parcels} />
+        </pre>
       ) : (
         <p className={styles.placeholder}>No body stored for this message.</p>
       )}

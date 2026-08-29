@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
 import {
@@ -273,4 +274,73 @@ test('the candidate changes no verdict and asks for nothing extra', () => {
   const enriched = buildCaseFile({ answer: answerable, ledger, candidateOrder: CANDIDATE_BUNDLE });
   assert.equal(enriched.verdict, 'answerable');
   assert.deepEqual(enriched.missing, []);
+});
+
+test('every askable fact is declared exactly once, and asks for the packaging', () => {
+  // A DUPLICATE KEY IS SILENT. `photo` was declared twice in MISSING_FIELDS and
+  // the second won, so the live request asked only for « une photo du produit
+  // concerné » while the one asking for the product AND ITS PACKAGING sat above
+  // it, unreachable. Nothing could catch that by reading the object at runtime —
+  // by then there is one key — so the check is against the source text.
+  //
+  // The packaging is the evidence on « il manque un article dans le colis »:
+  // there is no product to photograph, and whether there was room for the
+  // missing item is visible in the box.
+  const source = readFileSync(new URL('./case-file.mjs', import.meta.url), 'utf8');
+  const block = source.slice(source.indexOf('export const MISSING_FIELDS'), source.indexOf('export const CAVEATS'));
+  for (const key of Object.keys(MISSING_FIELDS)) {
+    const declarations = block.split(new RegExp(`^  ${key}: \{`, 'm')).length - 1;
+    assert.equal(declarations, 1, `${key} is declared ${declarations} times`);
+  }
+  assert.match(MISSING_FIELDS.photo.ask, /emballage/);
+});
+
+// --- the policy shadow -------------------------------------------------------
+
+test('a policy selection is recorded and never changes the verdict', () => {
+  // THE WHOLE CONTRACT OF THE SHADOW PHASE. A rule that would have sent this
+  // ticket to a person is written down beside a verdict it did not touch, so a
+  // wrong rule costs a row in a diagnostic rather than a customer a wrong reply.
+  const caseFile = buildCaseFile({
+    answer: {
+      verdict: 'answerable',
+      established: [{ claim: 'La commande est expédiée.', evidence_ids: ['t1'] }],
+      unverified: [],
+      missing: [],
+      handoff: null
+    },
+    ledger: [{ id: 't1', tool: 'getOrderContext', outcome: 'found' }],
+    policy: { answer_key: 'livraison_contestee', route: 'needs_human', ask: null, verdict: 'selected' }
+  });
+
+  assert.equal(caseFile.verdict, 'answerable', 'the investigation keeps its verdict');
+  assert.equal(caseFile.policy.answer_key, 'livraison_contestee');
+  assert.equal(caseFile.policy.would_change_verdict, true);
+});
+
+test('a rule agreeing with the verdict is not counted as a change', () => {
+  // The measurement has to separate "a rule matched" from "a rule disagreed",
+  // or the review list is every ticket the policy layer touched.
+  const caseFile = buildCaseFile({
+    answer: { verdict: 'needs_human', established: [], unverified: [], missing: [], handoff: null },
+    policy: { answer_key: 'article_manquant', route: 'needs_human', verdict: 'selected' }
+  });
+  assert.equal(caseFile.policy.would_change_verdict, false);
+});
+
+test('a rule that only supplies wording never counts as a change', () => {
+  // `route: null` means "leave the verdict alone" — most rules are this.
+  const caseFile = buildCaseFile({
+    answer: { verdict: 'answerable', established: [{ claim: 'x', evidence_ids: ['t1'] }], unverified: [], missing: [], handoff: null },
+    ledger: [{ id: 't1', tool: 'getOrderContext', outcome: 'found' }],
+    policy: { answer_key: 'non_expediee', route: null, verdict: 'selected' }
+  });
+  assert.equal(caseFile.policy.would_change_verdict, false);
+});
+
+test('no rules, no policy field — not an empty shell', () => {
+  const caseFile = buildCaseFile({
+    answer: { verdict: 'needs_human', established: [], unverified: [], missing: [], handoff: null }
+  });
+  assert.equal(caseFile.policy, null);
 });

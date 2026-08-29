@@ -1021,6 +1021,37 @@ A draft carries `disposition`: `terminal` when nothing is expected back and noth
 
 **`handoff` is selected by the drafting pass and reduced to a boolean at the store boundary.** It is the one internal column the drafting projection would otherwise exclude; the disposition needs to know *whether* a human owes an action, never *what* they owe. Dropping the text one line after reading it keeps the derivation correct and keeps internal prose out of the runner, let alone the prompt.
 
+### The reply names the parcel; the number is the link
+
+`toOrderContextText` withholds the order's contact address from the model deliberately. The tracking URL is withheld for a different reason: **the reply has no use for one.**
+
+**It was built the other way round first, and the output is why it was reverted.** Given the fulfilment URL in the prompt, the model does put a link in the reply — pasted in full, seventy characters of `https://www.laposte.fr/outils/suivre-vos-envois?code=…` sitting mid-sentence. On the first run it wrote « [Suivi Colissimo](https://…) » instead: correct markdown, which nothing renders, because `body_text` is plain text and is sent as typed. The customer would have received the brackets and the label around their own tracking link.
+
+**The number carries the same information and is already the link.** `TrackingText` turns a tracking number into an anchor on every surface that shows one — the email chain, the draft, the dropped-mail dialog, the transcript — so the URL never has to appear in the prose to be one click away. The reply says « le numéro de suivi 6C21108711964 » and the reader clicks the number.
+
+**`no_web_link` is the guard, and it forbids every URL rather than policing which.** Nothing in a case file is a URL, so any link in a draft is one the model produced from its own weights — at best right and ugly, at worst a plausible address that goes nowhere, sent by us, about their parcel. It sits in `FORBIDDEN_PATTERNS` beside the identifier and email-address rules because it is the same kind of rule, and it catches all four shapes: a bare URL, a bare host, markdown, an HTML anchor. **Measured before the rule existed: of 92 stored drafts, zero contain a URL.** It forbids nothing the drafting has ever done.
+
+**When a send path is built, the anchor is made at send time**, from the same `splitTrackingText` the dashboard renders through — not by asking the model for a URL.
+
+### The approved closer is translated, not reproduced, outside French
+
+The brand voice is authored in French and the drafting prompt told the model to reproduce the signature « reproduite exactement, sans rien y changer ». It did. **All 5 non-French drafts written before this — 3 Italian, 1 Spanish, 1 English — carried a correct foreign-language body and then closed « N'hésitez pas à revenir vers nous… / Bien Cordialement, / Service Client Qiriness ». All 5 passed their checks**, because the check compared them to the French text and they matched it perfectly. 25 of 400 tickets are not in French.
+
+**Framing the block as a SOURCE is the fix, and the wording is not decoration.** Measured against the real drafting model on the real prompt:
+
+| Prompt | Result |
+| --- | --- |
+| « traduite dans la langue de la réponse … ne pas la recopier en français », block headed *Signature* | French, verbatim |
+| Same block headed *source (français)*, « il ne doit apparaître nulle part dans la réponse » | « Cordiali saluti, / Servizio Clienti Qiriness » |
+
+Told to translate, with the text presented as the signature, the model reproduces it — the text is right there and labelled as the answer. Presented as a source that must not appear, it translates. Describing the signature without showing it works too and was rejected: the approved wording stops travelling, so nobody can tell what the reply was supposed to say.
+
+**One clause in `STRUCTURAL_RULES` was overriding all of it.** That block is headed « prioritaires sur tout ce qui précède », and « la formule de clôture approuvée … est la seule autorisée » reads as *this exact text*. The Signature section alone changed nothing until that rule also said: as-is in French, translated otherwise. A prompt that contradicts itself is resolved by the model, not by the author.
+
+**Checking a translated signature is not possible, and the check says so** rather than guessing. Three states: French is compared character for character as before; another language is `null` — advisory, "read it"; and another language *ending in the exact French wording* is a real failure, which is the one mechanical statement worth making here. **`asks:*` moved the same way** — `ASK_TERMS` is French vocabulary, and « numero d'ordine » contains no « commande », so a correct Italian question would have been held back for missing words it had no reason to carry. Not yet observed, and that is luck: it fires only on `needs_customer_input`, and no non-French draft has had that verdict yet.
+
+**The proper fix is per-language approved wording**, authored in the dashboard beside the French. That is a brand-voice feature, not a drafting one; until it exists, the model translates and a human reads it. No regression in French: 6 of 6 sampled drafts still reproduce the signature exactly, against a historical rate of 1 failure in 87.
+
 ## Knowledge
 
 Nothing auto-writes `knowledge_documents`; the catalog sync only fills `shopify_content_sources`. `source_type` → `manual` **is** the manual-edit lock — no separate flag, and resync is then unavailable.
@@ -1257,6 +1288,20 @@ Soft-deleted rows are excluded in the query, not the mapper, so a compliance del
 `components/ui/Dialog.tsx`, extracted when the second consumer arrived rather than up front. It owns only the overlay mechanics that must not drift per copy — Escape to close, body scroll frozen, focus landing inside, and a backdrop click that does not fire when the drag started on the panel — and no layout below the header, so a conversation and a one-screen record share it without either bending to the other's shape.
 
 ---
+
+### Tracking numbers are links, and only where we hold the link
+
+A tracking number is the one string in a support thread that has an obvious next action — open the carrier's page — and until now only `TicketDetailPanel`'s Order block did anything about it. The same number in the customer's own email, in the draft, or in a rehearsal transcript was text to be selected and pasted by hand. It is now a link on all four surfaces.
+
+**A number is linked only where we hold a real fulfilment URL for it.** The alternative was inferring the carrier from the number's shape — the parser already classifies Colissimo, GLS and UPU — and building a search URL from it. That was rejected: 84% Colissimo is a good guess and a wrong guess sends a reviewer, or a customer, to a page saying the parcel does not exist. **A visibly missing link is recoverable; a confidently wrong one is not.** So a number with no URL renders exactly as it did before, which is also the rule `TrackingList` has always followed.
+
+**Two sources, and the second is the one that matters.** The confirmed order's parcels come free with `resolved_context`. But the ticket worth linking is the one where the customer writes « mon colis 6C20723002488 n'est pas arrivé » and no order was ever confirmed — precisely the ticket where a reviewer most wants one click. Those numbers exist only in the text, so `parcelsInText` parses them with the agent's own parser and looks them up in one `ov` query against the `orders.tracking_numbers` GIN index. Measured over a 600-message sample of inbound mail: **60 messages quote a tracking-shaped number.**
+
+**The splitting lives in `scripts/lib/tracking-number.mjs`, beside the normaliser, and for the same reason.** Matching is by normalised form, never string equality: Shopify stores `6C20723002488`, the carrier prints `6C 2072 3002 488`, and the customer pastes whichever they were looking at. A second copy of that character class in TypeScript would drift, and the failure shape of drift is a number that silently never matches — which reads as "we have no record of that parcel". `web/lib/tracking-links.ts` is the single point where that module crosses into the browser bundle.
+
+**The draft is one of the four surfaces, and it is why the model is never given a URL** — see « The reply names the parcel; the number is the link » under Drafting.
+
+**One component, because this codebase has already paid for the alternative.** `TicketDetailPanel` records having had two copies of the parcel rendering, the second of which dropped the link. Four copies would be worse, so every surface goes through `TrackingText`. In the transcript it is reached by context rather than a prop: `Verbatim` is called from eleven places, all of them views of the same French text the order tool produced.
 
 ## Data handling
 

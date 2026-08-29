@@ -61,6 +61,31 @@ export function normaliseConditions(raw, { warn = () => {} } = {}) {
   return conditions;
 }
 
+/**
+ * Every need the rules in a set branch on.
+ *
+ * THE ANSWER TABLE IS THE EVIDENCE PLAN, stated as code rather than as a comment.
+ * A rule can only fire on a need that was actually scored, and the needs a run
+ * scores are the ones the exemplar DECLARED — which are chosen to describe what
+ * answering requires, not to enumerate what the policy happens to branch on.
+ * D-02 declares `order_identity, order_state, policy_answer` and its rules turn
+ * on `photo_evidence`, so scoring only the declared set would leave those rules
+ * permanently unmatched: a branch that can never fire, which is the failure this
+ * module refuses everywhere else.
+ *
+ * So the set's own conditions say what to score. Cheap, because scoring reads
+ * the ledger that already exists — it calls no tool and costs nothing.
+ */
+export function needsNamedBy(answers = []) {
+  const needs = new Set();
+  for (const answer of answers) {
+    for (const need of Object.keys(answer?.conditions || {})) {
+      needs.add(need);
+    }
+  }
+  return [...needs];
+}
+
 /** How deeply a condition commits. More needs named = more specific. */
 export function specificity(conditions) {
   return Object.keys(conditions || {}).length;
@@ -97,6 +122,15 @@ export function isLive(conditions, findings = {}) {
 /**
  * Selects the answer for an evidence position.
  *
+ * TWO AXES, RANKED IN THIS ORDER: the situation first, then the conditions.
+ * `situationKey` is what the customer WANTS and the conditions are what is TRUE,
+ * and they answer different questions — « où est ma commande » and « il manque
+ * un article » are two tickets with identical order facts and different replies,
+ * while a cancellation's answer turns on a fulfilment status no phrasing can
+ * settle. Naming the situation is the stronger claim, so it wins before depth is
+ * counted; otherwise a generic two-condition rule would outrank the rule written
+ * for this exact request.
+ *
  * MOST SPECIFIC WINS, `priority` breaks the tie. Never first-match-wins alone:
  * that makes authoring order silently load-bearing, so inserting a general
  * answer above a specific one would quietly shadow it.
@@ -106,13 +140,20 @@ export function isLive(conditions, findings = {}) {
  * this pipeline fails in. Silence would make a half-answered ticket look
  * identical to a fully answered one.
  */
-export function selectAnswer(answers = [], findings = {}) {
+export function selectAnswer(answers = [], findings = {}, { situationKey = null } = {}) {
   const usable = answers.filter((a) => a && !a.isFallback);
 
   const matched = usable
-    .filter((answer) => matches(answer.conditions, findings))
+    .filter((answer) => matchesSituation(answer, situationKey) && matches(answer.conditions, findings))
     .sort(
       (a, b) =>
+        // A RULE THAT NAMES THE SITUATION OUTRANKS ONE THAT DOES NOT, before
+        // conditions are counted at all. Naming it is the more specific claim —
+        // "this is what to say about a cancellation" beats "this is what to say
+        // about any order that has not shipped" — and without this the two axes
+        // would compete on depth, where a generic rule with two conditions would
+        // beat the situation-specific rule with one.
+        Number(Boolean(b.situationKey)) - Number(Boolean(a.situationKey)) ||
         specificity(b.conditions) - specificity(a.conditions) ||
         (b.priority ?? 0) - (a.priority ?? 0)
     );
@@ -122,10 +163,13 @@ export function selectAnswer(answers = [], findings = {}) {
     // Two answers matching equally deeply with equal priority is an authoring
     // bug, not a decision to make at runtime. Reported rather than resolved by
     // sort order, because sort order here is arbitrary.
-    const tied =
-      runnerUp &&
-      specificity(runnerUp.conditions) === specificity(best.conditions) &&
-      (runnerUp.priority ?? 0) === (best.priority ?? 0);
+    //
+    // COMPARED THROUGH `sameDepthAs`, which now includes the situation axis. A
+    // rule naming the situation and one that does not are NOT tied even at equal
+    // condition depth — the sort has already ranked them, deliberately — and
+    // reporting them as ambiguous would refuse to answer precisely where the two
+    // axes are working as intended.
+    const tied = runnerUp && sameDepthAs(best)(runnerUp);
 
     if (tied) {
       return { verdict: 'ambiguous', answer: null, candidates: matched.filter(sameDepthAs(best)) };
@@ -140,12 +184,35 @@ export function selectAnswer(answers = [], findings = {}) {
 }
 
 const sameDepthAs = (best) => (a) =>
+  Boolean(a.situationKey) === Boolean(best.situationKey) &&
   specificity(a.conditions) === specificity(best.conditions) &&
   (a.priority ?? 0) === (best.priority ?? 0);
 
-/** The answers still reachable given what is established so far. */
-export function liveAnswers(answers = [], findings = {}) {
-  return answers.filter((a) => a && !a.isFallback && isLive(a.conditions, findings));
+/**
+ * Whether this rule is for the situation in hand.
+ *
+ * A rule naming no situation applies to every one in its set — that is what
+ * makes a shared answer shared. A rule naming one applies only there, and
+ * critically it does NOT match when no exemplar was matched at all: `null` is
+ * "we do not know what they want", and a rule written for a specific intent must
+ * not fire on an unknown one.
+ */
+function matchesSituation(answer, situationKey) {
+  return !answer.situationKey || answer.situationKey === situationKey;
+}
+
+/**
+ * The answers still reachable given what is established so far.
+ *
+ * Filtered by situation for the same reason selection is: a rule written for a
+ * different intent cannot become this ticket's answer, so letting it drive
+ * progressive collection would spend tool calls splitting answers that were
+ * never candidates.
+ */
+export function liveAnswers(answers = [], findings = {}, { situationKey = null } = {}) {
+  return answers.filter(
+    (a) => a && !a.isFallback && matchesSituation(a, situationKey) && isLive(a.conditions, findings)
+  );
 }
 
 /**
@@ -165,8 +232,8 @@ export function liveAnswers(answers = [], findings = {}) {
  * @param findings   { need: finding } established so far
  * @param available  needs this ticket is allowed to collect (the declared set)
  */
-export function nextNeed(answers = [], findings = {}, available = []) {
-  const live = liveAnswers(answers, findings);
+export function nextNeed(answers = [], findings = {}, available = [], { situationKey = null } = {}) {
+  const live = liveAnswers(answers, findings, { situationKey });
   if (live.length <= 1) {
     return null;
   }
@@ -237,17 +304,32 @@ export function auditAnswerSet(answers = []) {
   const usable = answers.filter((a) => a && !a.isFallback);
 
   for (const answer of usable) {
-    if (specificity(answer.conditions) === 0) {
-      problems.push(`${answer.answerKey}: no conditions — use is_fallback instead`);
+    // A rule with neither an intent nor a condition matches every ticket in the
+    // set, which is what `is_fallback` means and says out loud.
+    if (specificity(answer.conditions) === 0 && !answer.situationKey) {
+      problems.push(`${answer.answerKey}: no conditions and no situation — use is_fallback instead`);
+    }
+    if (answer.ask && answer.route !== 'needs_customer_input') {
+      // The schema forbids this pair, so reaching it means a row was built in
+      // code rather than read from the table. Same failure either way: a
+      // question the drafting stage is not permitted to ask.
+      problems.push(`${answer.answerKey}: asks for ${answer.ask} without routing to the customer`);
+    }
+    if (answer.route === 'answerable') {
+      problems.push(`${answer.answerKey}: a rule may never route to answerable`);
     }
   }
 
   // Two answers with identical conditions can never be told apart.
   const byShape = new Map();
   for (const answer of usable) {
-    const shape = JSON.stringify(
+    // The situation is part of the shape: two rules with identical conditions
+    // under different situations are not duplicates, they are the point of the
+    // second axis.
+    const shape = JSON.stringify([
+      answer.situationKey ?? null,
       Object.keys(answer.conditions).sort().map((k) => [k, [...answer.conditions[k]].sort()])
-    );
+    ]);
     if (byShape.has(shape)) {
       problems.push(`${answer.answerKey}: same conditions as ${byShape.get(shape)}`);
     } else {

@@ -260,6 +260,121 @@ function num(value) {
  * a number nobody asked about. `productId` and `sku` never appear — they are
  * join keys, not facts a customer recognises.
  */
+/**
+ * The bundle reduced to the handful of STATES a policy rule may branch on.
+ *
+ * WHY THIS EXISTS SEPARATELY FROM `signals`. `buildSignals` answers a list of
+ * independent yes/no questions — is it paid, is it dispatched, is there tracking
+ * — which is what a prompt wants. A rule wants the opposite shape: one closed
+ * value per question, total, so a condition can be compared mechanically and an
+ * unmatched branch is impossible. `isPaid: false` says nothing about whether the
+ * money came back; `payment_state: refunded` does.
+ *
+ * IT LIVES HERE BECAUSE THE BUNDLE LIVES HERE. Deriving these in the
+ * investigation would be a second reading of `fulfillments` and
+ * `financial_status`, free to disagree with the first — the exact split this
+ * module was written to close (see the header). `evidence-rules.mjs` reads the
+ * values off the tool ledger and never touches an order row.
+ *
+ * EVERY VALUE IS TOTAL, `unknown` included, because a condition must always have
+ * something to compare against — the same rule the findings vocabulary follows.
+ *
+ * @param staleTransitDays how long without movement stops being "in transit" and
+ *   starts being "stuck". Passed in rather than imported: the number belongs to
+ *   `investigation-rules.mjs`, and importing it here would be the first
+ *   `resolution/` → `investigation/` edge in the codebase for one integer.
+ */
+export function orderStates(context, { staleTransitDays = null, now = new Date() } = {}) {
+  const order = context?.order;
+  if (!order) {
+    return null;
+  }
+
+  const signals = context.signals || {};
+  const delivery = order.delivery || {};
+
+  // CANCELLED OUTRANKS EVERYTHING, because it changes what every other state
+  // means — a cancelled order that was never dispatched is not awaiting
+  // dispatch, and answering it as though it were is the worst reading available.
+  const orderState = signals.isCancelled
+    ? 'cancelled'
+    : delivery.state === 'delivered'
+      ? 'delivered'
+      : delivery.state === 'in_transit' || delivery.state === 'dispatched'
+        ? 'dispatched'
+        : delivery.state === 'not_dispatched'
+          ? 'not_dispatched'
+          : 'unknown';
+
+  return {
+    order_state: orderState,
+    delivery_state: deliveryState(delivery, signals, staleTransitDays, now),
+    // REFUNDS BEFORE PAYMENT, and the order is the decision: a fully refunded
+    // order is also `PAID` in Shopify, so testing `isPaid` first would report
+    // money we have given back as money we are holding.
+    payment_state: signals.isFullyRefunded
+      ? 'refunded'
+      : signals.isRefunded
+        ? 'partially_refunded'
+        : signals.isPaid
+          ? 'paid'
+          : order.status?.payment
+            ? 'unpaid'
+            : 'unknown'
+  };
+}
+
+/**
+ * Where the parcel is, in the states a reply actually differs on.
+ *
+ * `dispatched_no_scan` IS ITS OWN STATE and not a flavour of `in_transit`.
+ * Folding it into `in_transit` would claim movement nothing has evidenced — the
+ * same claim `delivery_unscanned` already forbids the model from making in
+ * prose.
+ *
+ * MEASURED OVER EVERY BUILT BUNDLE (78 tickets, 2026-08-29):
+ *
+ *     dispatched_no_scan   73     delivered            4
+ *     not_dispatched        1     in_transit           0
+ *                                 stale_in_transit     0
+ *
+ * Two things to read out of that, both of which change how this is used:
+ *
+ * `in_transit` AND `stale_in_transit` ARE UNREACHABLE TODAY, at zero of 78. Not
+ * a bug: no carrier feeds scan events into Shopify for this store, which is the
+ * same gap `delivery_unscanned` exists to stop the model talking about. They are
+ * declared rather than dropped, on the `checkout_state` principle — listed and
+ * unwired, so the count argues for the carrier integration instead of hiding the
+ * need for it. **A rule branching on either can never fire until that exists.**
+ * `escalationTriggers`' 10-day rule is dormant for exactly the same reason.
+ *
+ * `not_dispatched` IS RARE HERE FOR A REASON THAT WILL NOT HOLD. It looks
+ * unreachable at 1 of 78, and the age distribution says otherwise: no bundle in
+ * the corpus was built for an order under 7 days old (p25 35 days, median 60).
+ * These are historical tickets whose orders had long since shipped. On live
+ * mail a cancellation arrives hours after the order, which is precisely when
+ * this state is true — so it is the corpus that is unrepresentative, not the
+ * state that is unused.
+ */
+function deliveryState(delivery, signals, staleTransitDays, now) {
+  if (delivery.state === 'delivered') {
+    return 'delivered';
+  }
+  if (delivery.state === 'not_dispatched') {
+    return 'not_dispatched';
+  }
+  if (signals.awaitingCarrierScan) {
+    return 'dispatched_no_scan';
+  }
+  if (delivery.state === 'in_transit') {
+    const since = daysBetween(delivery.inTransitAt || delivery.deliveredAt, now);
+    return Number.isFinite(staleTransitDays) && Number.isFinite(since) && since >= staleTransitDays
+      ? 'stale_in_transit'
+      : 'in_transit';
+  }
+  return 'unknown';
+}
+
 export function toOrderContextText(context) {
   const order = context?.order;
   if (!order) {
@@ -285,6 +400,17 @@ export function toOrderContextText(context) {
   lines.push(`Paiement : ${signals.isPaid ? 'réglée' : describePayment(order.status?.payment)}.`);
   lines.push(describeDeliveryLine(order.delivery, signals));
 
+  // THE NUMBER, NEVER THE URL, and this was tried the other way round first.
+  // Putting the fulfilment URL in the prompt does get a link into the reply —
+  // pasted in full, « https://www.laposte.fr/outils/suivre-vos-envois?code=… »,
+  // sitting in the middle of the sentence. That is not what a customer should
+  // receive, and it is not what the dashboard shows either: `TrackingText` turns
+  // the NUMBER into the link on every surface, which is the same information
+  // without a 70-character string in the prose.
+  //
+  // So the URL stays out of the model's reach entirely and the linking happens
+  // at render time, where it belongs. `no_web_link` in draft-checks.mjs is the
+  // guard: nothing in the dossier is a URL, so any URL in a reply is invented.
   const tracking = order.delivery?.tracking || [];
   if (tracking.length > 0) {
     lines.push(

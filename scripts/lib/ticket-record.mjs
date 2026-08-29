@@ -673,13 +673,20 @@ export function createTicketRecord(supabase, { shopId, transport = REST_TRANSPOR
      * The duplicate link travels because the dialog is where a person decides
      * what to do with a DRAFT, and a draft on a ticket linked as a duplicate is
      * one that must not be sent. Learning that after reading it is too late.
+     *
+     * `resolved_context` travels for the parcels inside it, and nothing else the
+     * bundle holds is read here: a tracking number in a message body or in the
+     * draft is rendered as a link to the carrier, and the URL only exists on
+     * this column. Without it the dialog would have the numbers and no way to
+     * know which of them we actually hold a link for — and guessing is what
+     * `splitTrackingText` refuses to do.
      */
     async findForThread(ticketId) {
       const rows = await select(
         supabase,
         T.TICKETS,
         live({ id: ticketId }),
-        'id,subject,duplicate_of_ticket_id,duplicate_reason,related_ticket_id,related_score',
+        'id,subject,duplicate_of_ticket_id,duplicate_reason,related_ticket_id,related_score,resolved_context',
         { limit: 1 }
       );
       return rows[0] || null;

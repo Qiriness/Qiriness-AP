@@ -3,6 +3,7 @@
 import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
 import { formatRelativeTime } from "@/lib/relative-time";
+import { TrackingText } from "@/components/ui/TrackingText";
 import type { DroppedMail } from "@/lib/types";
 import styles from "./DroppedMailDialog.module.css";
 
@@ -62,7 +63,9 @@ export function DroppedMailDialog({ mail, onClose, onPromote }: DroppedMailDialo
         <>
           {/* `pre`, like the ticket thread: this is the same cleaned plain text,
               whose paragraph breaks are the only structure it has left. */}
-          <pre className={styles.body}>{mail.body}</pre>
+          <pre className={styles.body}>
+            <TrackingText text={mail.body} parcels={mail.parcels} />
+          </pre>
           {mail.bodyExpiresAt && (
             <p className={styles.stamp}>
               This text is kept for review only and is deleted{" "}

@@ -1,0 +1,22 @@
+/*
+ * Matched to `.trackingLink` in TicketDetailPanel.module.css on purpose: the
+ * same parcel linked in the Order block and inside a message body should look
+ * like the same thing.
+ *
+ * `inherit` for font and size because this renders inside a `pre` on three of
+ * its four surfaces, and an anchor that picks up the UI font would break the
+ * monospace column the body is laid out in.
+ */
+.link {
+  color: var(--teal);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  /* A number printed in groups must not be split across lines mid-parcel. */
+  white-space: nowrap;
+}
+
+.link:hover {
+  color: var(--teal-strong, var(--teal));
+}

@@ -347,6 +347,7 @@ async function main() {
         // table a minute ago is context on this poll rather than the next.
         senderDirectory,
         retrieveExemplar: investigation.retrieveExemplar,
+        loadAnswers: investigation.loadAnswers,
         // The customer's last order, for a HUMAN, and only where no order was
         // confirmed. It fires less often now that the resolver runs first —
         // which is the point: it is the fallback for a ticket with no order,

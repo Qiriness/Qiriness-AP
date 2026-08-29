@@ -364,6 +364,11 @@ export async function runRehearsal({
       senderDirectory,
       lastOrderLookup: stack.lastOrderLookup,
       retrieveExemplar: stack.retrieveExemplar,
+      // The real rules from the real table. They are read-only reference data,
+      // like products and knowledge, so a rehearsal wants the ones the worker
+      // would use rather than a fixture — the transcript is worth nothing if the
+      // policy it shows is not the policy.
+      loadAnswers: stack.loadAnswers,
       onResult: ({ caseFile: result }) => {
         caseFile = result;
       }
@@ -399,6 +404,10 @@ export async function runRehearsal({
         })),
         escalationReasons: caseFile.escalationReasons,
         proposedLevel: caseFile.proposedLevel,
+        // The rule the evidence selected, beside the verdict it did not change.
+        // A shadow record nobody can see is a shadow record nobody reviews, and
+        // reviewing them is the entire point of the phase.
+        policy: caseFile.policy,
         calls: callsSince(investigationMark)
       });
     }
@@ -562,14 +571,38 @@ function rehearsalDraftingStore(transport, { shopId }) {
   };
 }
 
-/** The order bundle, reduced to what a transcript should show. */
+/**
+ * The order bundle, reduced to what a transcript should show.
+ *
+ * IT READ A SHAPE THE BUNDLE DOES NOT HAVE. `buildOrderContext` returns
+ * `{ order: { delivery: { tracking: [...] } } }` and there is no top-level
+ * `fulfilments` anywhere in it, so both counts were `?? 0` on every run ever
+ * recorded — a transcript said "0 parcels" for an order that had one. Nothing
+ * caught it because a count of zero is also the correct answer for most orders.
+ *
+ * THE PARCELS ARE CARRIED, NOT COUNTED, because the transcript links them. The
+ * URL is Shopify's own fulfilment URL — the same one the customer already got in
+ * their dispatch mail, and the one `TicketDetailPanel` has always linked — so
+ * showing it here reveals nothing the customer does not hold. Carrier and number
+ * come with it so a reader can see which parcel a link belongs to.
+ */
 function summariseOrder(context) {
+  const tracking = context?.order?.delivery?.tracking || [];
   return {
     name: context?.order?.name ?? null,
     status: context?.order?.status ?? null,
     placedAt: context?.order?.placedAt ?? null,
-    fulfilments: context?.fulfilments?.length ?? 0,
-    tracking: (context?.fulfilments || []).map((f) => f?.trackingNumber).filter(Boolean).length
+    // Renamed from `fulfilments`, which claimed to count something this bundle
+    // does not carry. Runs recorded before this hold the old key and a numeric
+    // `tracking`; the transcript reads both shapes rather than rewriting them.
+    parcels: tracking.filter((parcel) => parcel?.number).length,
+    tracking: tracking
+      .filter((parcel) => parcel?.number)
+      .map((parcel) => ({
+        number: parcel.number,
+        carrier: parcel.carrier ?? null,
+        url: parcel.url ?? null
+      }))
   };
 }
 

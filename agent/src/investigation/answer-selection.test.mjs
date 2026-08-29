@@ -3,6 +3,7 @@ import test from 'node:test';
 
 import {
   auditAnswerSet,
+  needsNamedBy,
   isLive,
   liveAnswers,
   matches,
@@ -294,4 +295,114 @@ test('specificity counts needs, not values', () => {
     specificity(normaliseConditions({ promotion_validity: 'active', promotion_eligibility: 'blocked' })),
     2
   );
+});
+
+// --- the situation axis ------------------------------------------------------
+
+const CANCEL = answer('annulation_possible', { order_state: 'not_dispatched' }, { situationKey: 'O-13' });
+const SHARED = answer('non_expediee', { order_state: 'not_dispatched' });
+
+test('a rule naming no situation applies to every situation in its set', () => {
+  // What makes a shared answer shared: « pas encore expédiée » answers both
+  // "where is my order" and "why has it not shipped".
+  for (const key of ['O-13', 'D-01', null]) {
+    const result = selectAnswer([SHARED], { order_state: 'not_dispatched' }, { situationKey: key });
+    assert.equal(result.answer?.answerKey, 'non_expediee', String(key));
+  }
+});
+
+test('a rule naming a situation fires only there', () => {
+  assert.equal(
+    selectAnswer([CANCEL], { order_state: 'not_dispatched' }, { situationKey: 'O-13' }).answer?.answerKey,
+    'annulation_possible'
+  );
+  assert.equal(
+    selectAnswer([CANCEL], { order_state: 'not_dispatched' }, { situationKey: 'O-14' }).verdict,
+    'none'
+  );
+});
+
+test('an unmatched exemplar does not fire a situation-specific rule', () => {
+  // `null` is "we do not know what they want", not "any". A rule written for a
+  // cancellation must not answer a ticket whose intent was never identified —
+  // this is what keeps a 65%-recall matcher from becoming a liability.
+  assert.equal(selectAnswer([CANCEL], { order_state: 'not_dispatched' }).verdict, 'none');
+});
+
+test('the situation outranks condition depth, not the other way round', () => {
+  // THE ORDERING DECISION. Without it a generic two-condition rule would beat
+  // the rule written for this exact request, and the specific answer would be
+  // unreachable whenever a broader one happened to name more needs.
+  const generic = answer('generique', { order_state: 'not_dispatched', payment_state: 'paid' });
+  const result = selectAnswer([generic, CANCEL], {
+    order_state: 'not_dispatched',
+    payment_state: 'paid'
+  }, { situationKey: 'O-13' });
+  assert.equal(result.answer.answerKey, 'annulation_possible');
+});
+
+test('a situation rule and a shared rule at equal depth are not ambiguous', () => {
+  // They are ranked, deliberately. Reporting them as tied would refuse to answer
+  // exactly where the two axes are doing their job.
+  const result = selectAnswer([SHARED, CANCEL], { order_state: 'not_dispatched' }, { situationKey: 'O-13' });
+  assert.equal(result.verdict, 'selected');
+  assert.equal(result.answer.answerKey, 'annulation_possible');
+});
+
+test('progressive collection ignores rules for another situation', () => {
+  // Spending a tool call to split answers that were never candidates is the
+  // whole thing `nextNeed` exists to avoid.
+  const elsewhere = answer('ailleurs', { photo_evidence: ['attached', 'none'] }, { situationKey: 'R-21' });
+  const here = answer('ici', { order_state: 'not_dispatched' }, { situationKey: 'O-13' });
+  const live = liveAnswers([elsewhere, here], {}, { situationKey: 'O-13' });
+  assert.deepEqual(live.map((a) => a.answerKey), ['ici']);
+});
+
+test('the audit knows a situation is part of a rule shape', () => {
+  // Two rules with identical conditions under different situations are not
+  // duplicates — they are the point of the second axis.
+  const a = answer('x', { order_state: 'not_dispatched' }, { situationKey: 'O-13' });
+  const b = answer('y', { order_state: 'not_dispatched' }, { situationKey: 'O-14' });
+  assert.deepEqual(auditAnswerSet([a, b]), []);
+
+  const c = answer('z', { order_state: 'not_dispatched' }, { situationKey: 'O-13' });
+  assert.equal(auditAnswerSet([a, c]).length, 1);
+});
+
+test('a rule with a situation and no conditions is legitimate', () => {
+  // "Whatever the evidence says, this is what we tell someone asking X." The
+  // audit must not push it towards is_fallback, which would apply to the set.
+  assert.deepEqual(auditAnswerSet([answer('x', {}, { situationKey: 'O-13' })]), []);
+  assert.equal(auditAnswerSet([answer('x', {})]).length, 1);
+});
+
+test('the audit catches the two outcomes the schema forbids', () => {
+  // Reachable only when a row is built in code rather than read from the table,
+  // and the failure is the same either way.
+  assert.match(
+    auditAnswerSet([answer('x', { order_state: 'not_dispatched' }, { ask: 'photo', route: 'needs_human' })])[0],
+    /asks for photo without routing to the customer/
+  );
+  assert.match(
+    auditAnswerSet([answer('y', { order_state: 'not_dispatched' }, { route: 'answerable' })])[0],
+    /may never route to answerable/
+  );
+});
+
+test('the rules say which needs to score, not the ticket', () => {
+  // THE BUG THIS PREVENTS, and it is not hypothetical: D-02 declares
+  // `order_identity, order_state, policy_answer` while its rules branch on
+  // `photo_evidence`. Scoring only the declared needs would leave every one of
+  // those rules permanently unmatched — a branch that can never fire.
+  const rules = [
+    answer('a', { photo_evidence: 'attached' }, { situationKey: 'D-02' }),
+    answer('b', { photo_evidence: ['none', 'mentioned_not_attached'] }, { situationKey: 'D-02' }),
+    answer('c', { order_state: 'not_dispatched' })
+  ];
+  assert.deepEqual(needsNamedBy(rules).sort(), ['order_state', 'photo_evidence']);
+});
+
+test('a set with no conditions anywhere names no needs', () => {
+  assert.deepEqual(needsNamedBy([answer('x', {}, { situationKey: 'O-13' })]), []);
+  assert.deepEqual(needsNamedBy([]), []);
 });

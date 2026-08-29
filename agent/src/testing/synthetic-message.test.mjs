@@ -3,6 +3,8 @@ import test from 'node:test';
 
 import { hashIdentifier } from '../../../scripts/lib/compliance-audit.mjs';
 
+import { shopifyOrderCandidates } from '../resolution/order-number-parser.mjs';
+
 import { ORDER_LINE, buildSyntheticTicket } from './synthetic-message.mjs';
 
 const SHOP = 'shop-1';
@@ -53,6 +55,22 @@ test('an order number goes into the body, never straight onto the ticket', () =>
   assert.equal(bodyText, `Ma commande est en retard.\n\n${ORDER_LINE('#1006')}`);
   // The order resolver reads the view, not the message table.
   assert.equal(firstInbound.body_text, bodyText);
+});
+
+test('the appended line is one the real parser can read, with or without the #', () => {
+  // THE TEST THAT WAS MISSING. Appending the number is only half the contract —
+  // `runOrderResolution` has to find it in the text, and it is the same parser
+  // here as in the worker. The earlier fixture always passed `#1006`, so the
+  // bare form went unexercised: `Ma commande : 6513` parsed to nothing, and a
+  // run reported "no order number in the message" for a number that was typed.
+  for (const typed of ['6513', '#6513']) {
+    const { bodyText } = build({ body: 'Je voudrais retourner ma commande.', orderNumber: typed });
+    assert.deepEqual(
+      shopifyOrderCandidates(bodyText).map((c) => c.orderNumber),
+      [6513],
+      `the parser found no order in a body built from ${typed}`
+    );
+  }
 });
 
 test('no order number leaves the body exactly as typed', () => {

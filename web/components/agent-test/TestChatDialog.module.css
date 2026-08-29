@@ -102,3 +102,17 @@
   font-size: var(--text-caption);
   text-align: center;
 }
+
+/*
+ * Says why the composer has just filled itself in. Informational, not a failure
+ * — `.error` and `.problem` are both red, and a reused message is neither.
+ */
+.notice {
+  margin: 0 0 0.75rem;
+  padding: 0.6rem 0.75rem;
+  border-left: 3px solid var(--teal);
+  background: var(--surface-subtle, rgba(0, 0, 0, 0.03));
+  color: var(--text-subtle);
+  font-size: var(--text-caption);
+  line-height: 1.5;
+}

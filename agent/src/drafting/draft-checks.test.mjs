@@ -7,6 +7,7 @@ import {
   ADVISORY_CAVEATS,
   ASK_TERMS,
   MECHANICAL_PROHIBITIONS,
+  SIGNATURE_LANGUAGE,
   checksPassed,
   failedChecks,
   runDraftChecks
@@ -629,4 +630,134 @@ test('an apology is recognised in every language the corpus drafts in', () => {
     });
     assert.equal(check(checks, 'apologises_for_delay').passed, true, language);
   }
+});
+
+// --- a reply carries no web addresses ----------------------------------------
+
+const LINK = 'https://www.laposte.fr/outils/suivre-vos-envois?code=6C20723002488';
+
+test('a URL in a reply fails the draft, tracking link included', () => {
+  // The tracking link is not the exception, it is the case that produced the
+  // rule: given the URL, the model pastes 70 characters into the prose. The
+  // parcel NUMBER carries the same information and is what becomes clickable.
+  const checks = runDraftChecks({ body: `Suivez votre colis : ${LINK}
+
+${SIGNATURE}` });
+  assert.equal(check(checks, 'no_web_link').passed, false);
+  assert.equal(checksPassed(checks), false);
+  assert.ok(failedChecks(checks).some((detail) => detail.includes('contient un lien')));
+});
+
+test('markdown and HTML links fail too, because nothing renders them', () => {
+  // MEASURED: the first run with a URL in the prompt wrote
+  // « [Suivi Colissimo](https://…) ». The reply is plain text, so the customer
+  // would have received the brackets around their own tracking link.
+  for (const body of [`[Suivi Colissimo](${LINK})`, `<a href="${LINK}">le suivi</a>`]) {
+    assert.equal(check(runDraftChecks({ body }), 'no_web_link').passed, false, body);
+  }
+});
+
+test('a bare host with no scheme is still a link', () => {
+  assert.equal(
+    check(runDraftChecks({ body: 'Voir www.qiriness.com pour nos conditions.' }), 'no_web_link').passed,
+    false
+  );
+});
+
+test('the parcel number itself is not a link and passes', () => {
+  // What a correct reply looks like: the number, which every surface renders as
+  // a link to the carrier without a URL ever appearing in the text.
+  const checks = runDraftChecks({
+    body: `Bonjour,
+
+Votre colis 6C20723002488 (COLISSIMO) est en route.
+
+${SIGNATURE}`
+  });
+  assert.equal(check(checks, 'no_web_link').passed, true);
+});
+
+// --- the signature, when the reply is not in French --------------------------
+
+test('a French reply is still compared character by character', () => {
+  assert.equal(check(runDraftChecks({ body: clean, signature: SIGNATURE }), 'signature').passed, true);
+  assert.equal(
+    check(runDraftChecks({ body: `Bonjour.
+
+Cordialement, Qiriness`, signature: SIGNATURE }), 'signature').passed,
+    false
+  );
+});
+
+test('a reply in another language that closed in French fails', () => {
+  // THE REPORTED BUG. An Italian body signed off « Bien Cordialement, / Service
+  // Client Qiriness » — correct per the old prompt, and wrong to the person
+  // reading it. It passed, because the check compared it to the French text.
+  const checks = runDraftChecks({
+    body: `Buongiorno,
+
+Il suo ordine è stato spedito.
+
+${SIGNATURE}`,
+    signature: SIGNATURE,
+    language: 'it'
+  });
+  assert.equal(check(checks, 'signature').passed, false);
+  assert.match(check(checks, 'signature').detail, /non traduite/);
+  assert.equal(checksPassed(checks), false);
+});
+
+test('a translated signature is advisory, not a pass and not a failure', () => {
+  // A pattern loose enough to accept a signature in seven languages would accept
+  // anything, so this reports "read it" rather than claiming coverage it has
+  // not got — the same honesty rule as ADVISORY_CAVEATS.
+  const checks = runDraftChecks({
+    body: `Buongiorno,
+
+Il suo ordine è stato spedito.
+
+Cordiali saluti,
+Servizio Clienti Qiriness`,
+    signature: SIGNATURE,
+    language: 'it'
+  });
+  assert.equal(check(checks, 'signature').passed, null);
+  assert.match(check(checks, 'signature').detail, /non comparable/);
+  assert.equal(checksPassed(checks), true, 'advisory must not hold the draft back');
+});
+
+test('the language defaults to the one the signature is written in', () => {
+  // A caller that does not pass a language gets the old behaviour exactly.
+  assert.equal(SIGNATURE_LANGUAGE, 'fr');
+  assert.equal(check(runDraftChecks({ body: clean, signature: SIGNATURE }), 'signature').passed, true);
+});
+
+test('the ask check is advisory on a reply that is not in French', () => {
+  // ASK_TERMS is French vocabulary. « numero d'ordine » is a correct Italian
+  // request for an order number and contains no « commande », so the check can
+  // only report the absence of words the reply had no reason to carry.
+  const missing = [{ field: 'shopify_order_number', why: 'Le client ne l a pas donné.' }];
+  const italian = runDraftChecks({
+    body: `Buongiorno,
+
+Può indicarci il numero d ordine?
+
+Cordiali saluti`,
+    missing,
+    verdict: 'needs_customer_input',
+    language: 'it'
+  });
+  assert.equal(check(italian, 'asks:shopify_order_number').passed, null);
+  assert.equal(checksPassed(italian), true, 'advisory must not hold the draft back');
+
+  // French is unchanged: still examined, still fails when the words are absent.
+  const french = runDraftChecks({
+    body: `Bonjour,
+
+Pouvez-vous nous indiquer de quoi il s agit ?`,
+    missing,
+    verdict: 'needs_customer_input',
+    language: 'fr'
+  });
+  assert.equal(check(french, 'asks:shopify_order_number').passed, false);
 });

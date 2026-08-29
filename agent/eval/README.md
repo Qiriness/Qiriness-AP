@@ -14,6 +14,7 @@ hand-labelled set; two score against a *proxy* and can only ever show you shape.
 | `npm run eval:retrieval` | `run-retrieval-eval.mjs` | Knowledge chunk retrieval | **Labelled** — `retrieval-cases.mjs` | nothing |
 | `npm run eval:diagnose` | `diagnose-retrieval.mjs` | Knowledge retrieval, per query | Live library, no labels | nothing |
 | `npm run eval:exemplars` | `diagnose-exemplars.mjs` | Exemplar matching + band calibration | **Proxy** — subject agreement | nothing |
+| `npm run eval:order-states` | `diagnose-order-states.mjs` | Which order/delivery/payment states real tickets reach | Live bundles, **no labels and no API calls** | nothing |
 | `npm run eval:exemplar-needs` | `compare-exemplar-needs.mjs` | Does the corpus describe what tickets require? | Live rows, **independence** — excludes any row where the exemplar supplied the needs | nothing |
 | `npm run eval:knowledge-gaps` | `knowledge-gaps.mjs` | Which questions the library keeps failing | Live rows — a demand report, not a quality one | nothing |
 | `npm run eval:audit-phrasings` | `audit-phrasings.mjs` | Phrasings filed under the wrong situation | Stored vectors against each other — **no API calls** | nothing |

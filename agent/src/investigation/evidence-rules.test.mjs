@@ -524,3 +524,78 @@ test('a library that DID answer adds no detail', () => {
   assert.equal(gap.finding, 'answered');
   assert.ok(!('details' in gap));
 });
+
+// --- the order family, photo and purchase ------------------------------------
+
+const withData = (id, tool, outcome, data) => ({ id, tool, outcome, data });
+const orderEntry = (states) =>
+  withData('t1', TOOL_NAMES.GET_ORDER_CONTEXT, 'found', { confirmed: true, states });
+
+const findingFor = (need, ledger) =>
+  resolveNeeds([need], ledger, ALL_TOOLS)[0].finding;
+
+test('the order states are read off the tool ledger, not re-derived', () => {
+  // The whole reason `order-context.mjs` projects them: a second reading of
+  // `fulfillment_status` here would be free to disagree with the one the model
+  // was shown.
+  const ledger = [
+    orderEntry({ order_state: 'not_dispatched', delivery_state: 'not_dispatched', payment_state: 'paid' })
+  ];
+  assert.equal(findingFor('order_state', ledger), 'not_dispatched');
+  assert.equal(findingFor('delivery_state', ledger), 'not_dispatched');
+  assert.equal(findingFor('payment_state', ledger), 'paid');
+});
+
+test('no confirmed order means unknown, for every order state', () => {
+  // 138 of 214 tickets are this. It is the ordinary case, not a failure —
+  // `order_identity` is the need that reports the gap and asks for the number.
+  const unresolved = [withData('t1', TOOL_NAMES.GET_ORDER_CONTEXT, 'not_resolved', { confirmed: false, states: null })];
+  for (const need of ['order_state', 'delivery_state', 'payment_state']) {
+    assert.equal(finding(need, unresolved), 'unknown', need);
+    assert.equal(finding(need, []), 'unknown', `${need} with no entry at all`);
+  }
+});
+
+test('a state outside the vocabulary is unknown rather than passed through', () => {
+  // A rule can only branch on values `findingValues()` declares, so anything
+  // else must collapse rather than become a value nothing can match.
+  const ledger = [orderEntry({ order_state: 'en cours', delivery_state: null, payment_state: 'PAID' })];
+  assert.equal(findingFor('order_state', ledger), 'unknown');
+  assert.equal(findingFor('delivery_state', ledger), 'unknown');
+  assert.equal(findingFor('payment_state', ledger), 'unknown');
+});
+
+test('purchase verification keeps a known customer with no orders apart from a stranger', () => {
+  assert.equal(
+    findingFor('purchase_verified', [entry('t1', TOOL_NAMES.VERIFY_PURCHASE, 'known_buyer')]),
+    'known_buyer'
+  );
+  assert.equal(
+    findingFor('purchase_verified', [entry('t1', TOOL_NAMES.VERIFY_PURCHASE, 'known_no_orders')]),
+    'known_no_orders'
+  );
+});
+
+test('photo evidence keeps its four states apart', () => {
+  // Three of them are not "no photo": a customer who believes they attached one,
+  // and metadata we never fetched, both call for something other than "resend".
+  for (const outcome of ['attached', 'mentioned_not_attached', 'attachment_type_unknown', 'none']) {
+    const ledger = [withData('t1', TOOL_NAMES.CHECK_PHOTO_EVIDENCE, outcome, { outcome })];
+    assert.equal(findingFor('photo_evidence', ledger), outcome);
+  }
+  assert.equal(findingFor('photo_evidence', []), 'unknown');
+});
+
+test('every new finding is a value its own vocabulary declares', () => {
+  // The property answer-selection depends on: a condition is validated against
+  // findingValues(), so a deriver returning something outside it would be a
+  // branch that can never match.
+  const ledger = [
+    orderEntry({ order_state: 'delivered', delivery_state: 'stale_in_transit', payment_state: 'refunded' }),
+    withData('t2', TOOL_NAMES.CHECK_PHOTO_EVIDENCE, 'attached', { outcome: 'attached' }),
+    entry('t3', TOOL_NAMES.VERIFY_PURCHASE, 'known_buyer')
+  ];
+  for (const need of ['order_state', 'delivery_state', 'payment_state', 'photo_evidence', 'purchase_verified']) {
+    assert.ok(findingValues(need).includes(finding(need, ledger)), need);
+  }
+});

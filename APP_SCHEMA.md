@@ -41,7 +41,9 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |   |-- components/
 |   |   |-- icons.tsx                # inline SVG icon set
 |   |   |-- app-shell/               # AppShell (top bar + drawer) · Sidebar
-|   |   |-- ui/                      # Button · StatusChip · Dialog (modal shell)
+|   |   |-- ui/                      # Button · StatusChip · Dialog (modal shell) ·
+|   |   |                            # TrackingText (tracking numbers -> carrier links,
+|   |   |                            # used by every surface showing a number in prose)
 |   |   |-- settings/                # ForwardingSettings (saves per row on blur)
 |   |   |-- insights/                # InsightsNav (the panel bar) · InsightsKit
 |   |   |                            # (PanelSection StatTile BlockedTile BarList
@@ -52,8 +54,10 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |   |   |                            # TicketStatCards · TicketTable · TicketDetailPanel ·
 |   |   |                            # TicketThreadDialog · DroppedMailTable +
 |   |   |                            # DroppedMailDialog · LevelChip · HappinessFace
-|   |   |-- agent-test/              # TestChatDialog (the rehearsal) · TestComposer ·
-|   |   |                            # RunTranscript + StepCard (the step cards) ·
+|   |   |-- agent-test/              # TestChatDialog (the rehearsal, + Reuse this
+|   |   |                            # message) · TestComposer · RunTranscript +
+|   |   |                            # StepCard (the step cards; StepCard owns the
+|   |   |                            # parcel context Verbatim links through) ·
 |   |   |                            # RunHistory · IdealAnswer (the memory)
 |   |   `-- agent-setup/             # AgentSetup + SetupHeader (orchestrator, mutations) ·
 |   |                                # ArticleLibrary (left pane) · ArticleWorkspace +
@@ -63,7 +67,10 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |   |-- lib/
 |   |   |-- types.ts             # UI types + label tables (categories, levels, VIP, RFM)
 |   |   |-- knowledge-mapper.ts  # isomorphic: API JSON -> UI types
-|   |   |-- agent-test-types.ts  # isomorphic: the trace shapes the test chat renders
+|   |   |-- agent-test-types.ts  # isomorphic: the trace shapes the test chat renders,
+|   |   |                        # + parcelsFromTrace (the run's parcels, for links)
+|   |   |-- tracking-links.ts    # isomorphic: the one import of scripts/lib's
+|   |   |                        # splitTrackingText into the browser bundle
 |   |   |-- ticket-stats.ts      # isomorphic: summariseTickets + isClosed
 |   |   |-- ticket-detail.ts     # pure, 3 projections: case file -> 3 blocks ·
 |   |   |                        # resolved_context -> order owner / status / tracking lines ·
@@ -242,9 +249,9 @@ The recurring situations, not the answers to them. Same document/chunk mechanics
 
 | Table | Holds |
 | --- | --- |
-| `support_exemplars` | canonical question, `exemplar_key` (`P-16`), subject + kind, `requirement_needs text[]` constrained to the `evidence-rules.mjs` vocabulary, `approval_status` (gates the vector), `demand_message_count` |
+| `support_exemplars` | canonical question, `exemplar_key` (`P-16`), subject + kind, `requirement_needs text[]` constrained to the `evidence-rules.mjs` vocabulary, `approval_status` (gates the vector), `demand_message_count`, `answer_set` naming which policy family it draws on (`commande` on the 11 order/delivery situations) |
 | `support_exemplar_phrasings` | one row per canonical + real phrasing, each with its own `embedding vector(1536)` and the determinism quadruple. `language` + `translated_from_index` carry non-French rows; translations live at `phrasing_index >= 100`, out of reach of the importer's positional pruner. `match_support_exemplars()` returns one row per **exemplar**, scored by its best phrasing, and reports which language matched |
-| `support_answers` | answer skeletons keyed by **evidence position**, shared across exemplars rather than nested. `when_conditions jsonb` = `{need: [findings]}`; one `is_fallback` per `answer_set`. Selected by `answer-selection.mjs`, which also derives the next need to collect. **No rows yet** — the mechanism exists, the content does not |
+| `support_answers` | the policy rules. Two axes: `situation_key` (what the customer wants, from the matched exemplar; null = any) and `when_conditions jsonb` = `{need: [findings]}` (what is true). A matched rule carries an `answer_skeleton`, and may `route` to `needs_human`/`needs_customer_input` and name an `ask` (a `MISSING_FIELDS` key) — **never to `answerable`**, enforced by a check constraint, so a rule can only ever tighten. One `is_fallback` per `answer_set`. Selected by `answer-selection.mjs` (situation outranks condition depth), which also derives the next need to collect. **17 draft rules in the `commande` set**, loaded per ticket by `loadAnswers` and selected after the tool loop closes. **Shadow: the selection is recorded on `ticket_investigations.exemplar_match.policy` and no verdict moves** |
 
 ### Agent email workflow
 
@@ -353,6 +360,8 @@ All Route Handlers are server-only and use the Supabase service-role key.
 - `POST agent-test/run` — streams the run as NDJSON, one line per step. No ticket is written
 - `GET agent-test/runs` — the history, without traces, plus readiness (OpenAI key, brand voice)
 - `GET|PATCH|DELETE agent-test/runs/:id` — one run · save/clear the **ideal answer** · delete
+
+**Reuse this message** on an opened run puts its name, subject, body and order number back in the composer. The address is not among them — `agent_test_runs` stores only the mask — and the notice above the composer says so, because a rerun that silently dropped the identity would resolve no customer and read as a regression in the agent.
 
 ### `/tickets` — the queue
 

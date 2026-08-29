@@ -730,6 +730,15 @@ export interface TicketThread {
   relatedTo: { ticketId: string; score: number } | null;
   draft: TicketDraft | null;
   messages: TicketMessage[];
+  /**
+   * The parcels this ticket's confirmed order carries, for linking a tracking
+   * number wherever one appears in the text — the customer's own message or the
+   * draft. Only parcels holding a real fulfilment URL can be linked, which is
+   * why the whole entry travels rather than a list of numbers.
+   *
+   * Empty for a ticket with no confirmed order, which is most of them.
+   */
+  parcels: TicketTracking[];
 }
 
 /**
@@ -805,6 +814,16 @@ export interface DroppedMail {
   bodyExpiresAt: string | null;
   failedOpen: boolean;
   decidedAt: string | null;
+  /**
+   * Parcels matching a tracking number quoted in this email, so the number is a
+   * link to the carrier. Computed for the whole list in one lookup and shared by
+   * every row: a mail can only ever link a number its own text contains, so a
+   * shared list cannot put another mail's parcel into this one.
+   *
+   * Usually empty — a dropped mail is one the gate refused, and most hold no
+   * parcel number at all.
+   */
+  parcels: TicketTracking[];
 }
 
 /**

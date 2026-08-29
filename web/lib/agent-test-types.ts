@@ -37,6 +37,41 @@ export interface ModelCall {
   error?: string;
 }
 
+/**
+ * The parcels a run's order carries, read out of its own trace.
+ *
+ * THE TRACE IS THE ONLY SOURCE HERE. A rehearsal writes no ticket, so there is
+ * no `resolved_context` to project and no row to join — `summariseOrder` in
+ * run-rehearsal.mjs puts number, carrier and URL on the `order_context` step for
+ * exactly this reason.
+ *
+ * IT TOLERATES THE OLD SHAPE. Runs recorded before parcels were carried hold a
+ * COUNT in `tracking` and a `fulfilments` key beside it; those come back as no
+ * parcels rather than as a crash, so opening an old run still works and simply
+ * shows what it always showed.
+ */
+export function parcelsFromTrace(events: TraceEvent[]): TrackingParcel[] {
+  const step = events.find((event) => event.type === "order_context");
+  const tracking = (step?.order as { tracking?: unknown } | null | undefined)?.tracking;
+  if (!Array.isArray(tracking)) {
+    return [];
+  }
+  return tracking
+    .map((parcel) => ({
+      number: String((parcel as any)?.number ?? ""),
+      carrier: ((parcel as any)?.carrier ?? null) as string | null,
+      url: ((parcel as any)?.url ?? null) as string | null,
+    }))
+    .filter((parcel) => parcel.number.length > 0);
+}
+
+/** One parcel on the run's order. Mirrors `TicketTracking` in lib/types. */
+export interface TrackingParcel {
+  number: string;
+  carrier: string | null;
+  url: string | null;
+}
+
 export interface TraceEvent {
   type: TraceStep;
   at: string;

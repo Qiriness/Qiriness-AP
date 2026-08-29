@@ -125,6 +125,26 @@ export const FORBIDDEN_PATTERNS = [
     pattern: /\b(scan\w*)/i
   },
   {
+    check: 'no_web_link',
+    label: 'contient un lien',
+    // NOTHING IN A CASE FILE IS A URL, so every link in a draft is one the model
+    // produced from its own weights — a carrier page, a help centre, a shop
+    // link. At best right and ugly; at worst a plausible address that goes
+    // nowhere, sent by us, about their parcel.
+    //
+    // THE TRACKING LINK IS NOT AN EXCEPTION, it is the case that produced this
+    // rule. Giving the model the fulfilment URL does put a link in the reply —
+    // pasted in full mid-sentence, and once as « [Suivi Colissimo](https://…) »,
+    // markdown that nothing renders because the reply is plain text. The parcel
+    // NUMBER carries the same information and `TrackingText` makes it the link
+    // on every surface that shows it, so the reply never needs the URL.
+    //
+    // Measured before the rule existed: of 92 stored drafts, ZERO contain one.
+    // This forbids nothing the drafting has ever done.
+    // Four shapes: a bare URL, a bare host, a markdown link, an HTML anchor.
+    pattern: /(https?:\/\/\S+|\bwww\.\S+|\[[^\]]*\]\(\s*\S+\s*\)|<a\s[^>]*href=)/i
+  },
+  {
     check: 'no_internal_machinery',
     label: 'mentionne un rouage interne',
     // Straight out of the guardrails on the Brand voice page: no agents, tools,
@@ -181,6 +201,17 @@ export const ACKNOWLEDGEMENT_PROHIBITIONS = [
 ];
 
 /**
+ * The language the approved closing line and signature are written in.
+ *
+ * A CONSTANT AND NOT A FIELD, honestly: the whole brand voice — role, tone,
+ * framework, guardrails, signature — is authored in French in the dashboard, and
+ * the drafting prompt is itself French. There is nowhere to store "which
+ * language is this wording in" and nothing that would write it. Named here so
+ * the assumption is visible rather than implied by a `!== 'fr'`.
+ */
+export const SIGNATURE_LANGUAGE = 'fr';
+
+/**
  * Runs every check against a drafted body.
  *
  * Returns one entry per check with `passed` either true, false, or null for the
@@ -195,7 +226,10 @@ export function runDraftChecks({
   // True when the thread proves the customer wrote again before we answered.
   chased = false,
   closingLine = '',
-  signature = ''
+  signature = '',
+  // The reply's language. Only the signature check reads it, and only to know
+  // whether the approved wording should have been reproduced or translated.
+  language = SIGNATURE_LANGUAGE
 } = {}) {
   const isHandover = verdict === 'needs_human';
   const text = String(body || '');
@@ -269,11 +303,23 @@ export function runDraftChecks({
       const terms = ASK_TERMS[key] || [];
       const absent = terms.filter((term) => !haystack.includes(foldAccents(term)));
 
+      // ASK_TERMS IS FRENCH VOCABULARY, so on a reply in another language this
+      // can only report absence of French words from a correct foreign-language
+      // question — « numero d'ordine » does not contain « commande ». Advisory
+      // there, for the same reason the translated signature is: a check that
+      // cannot examine something must say so rather than fail it.
+      //
+      // Not yet observed, and that is luck rather than safety: all 5 non-French
+      // drafts so far were `needs_human` or `answerable`, and this fires only on
+      // `needs_customer_input`. The first foreign-language question would have
+      // been held back for missing words it had no reason to contain.
+      const examinable = language === SIGNATURE_LANGUAGE;
       checks.push({
         check: `asks:${key}`,
-        passed: absent.length === 0,
-        detail:
-          absent.length === 0
+        passed: examinable ? absent.length === 0 : null,
+        detail: !examinable
+          ? `réponse en ${language} — les termes attendus sont français, à lire : ${MISSING_FIELDS[key].label}`
+          : absent.length === 0
             ? `demande bien ${MISSING_FIELDS[key].label}`
             : `ne demande pas ${MISSING_FIELDS[key].label} (« ${absent.join(' », « ')} » absent)`
       });
@@ -369,13 +415,33 @@ export function runDraftChecks({
   });
 
   // --- the approved signature ----------------------------------------------
+  //
+  // THREE STATES, BECAUSE THE APPROVED WORDING IS FRENCH. A reply in Italian
+  // that ends « Bien Cordialement, / Service Client Qiriness » obeyed the prompt
+  // exactly and is still wrong, and that is what shipped: all 5 non-French
+  // drafts written before this closed in French, and all 5 passed.
+  //
+  //   fr        — character-for-character, as it always was.
+  //   other     — advisory. A translated signature cannot be compared to the
+  //               source, and a pattern loose enough to accept every language
+  //               would accept anything.
+  //   other, but ENDING IN THE FRENCH WORDING — a real failure, and the only
+  //               mechanical statement worth making here: the model reproduced
+  //               the source instead of translating it.
   if (signature) {
+    const endsWithApproved = normalise(text).endsWith(normalise(signature));
+    const translated = language !== SIGNATURE_LANGUAGE;
+
     checks.push({
       check: 'signature',
       // ENDS WITH, not contains: a signature in the middle of a reply is a
       // model that carried on writing after signing off.
-      passed: normalise(text).endsWith(normalise(signature)),
-      detail: 'se termine par la signature approuvée'
+      passed: translated ? (endsWithApproved ? false : null) : endsWithApproved,
+      detail: translated
+        ? endsWithApproved
+          ? `réponse en ${language} terminée par la signature française, non traduite`
+          : `signature traduite en ${language} — non comparable au texte approuvé, à lire`
+        : 'se termine par la signature approuvée'
     });
   }
 

@@ -1,9 +1,9 @@
-import { toOrderContextText } from '../resolution/order-context.mjs';
+import { orderStates, toOrderContextText } from '../resolution/order-context.mjs';
 
 import { toPromptText as photoPromptText } from './photo-evidence.mjs';
 
 import { planToolNames } from './decompose-rules.mjs';
-import { TOOL_NAMES, allowedTools } from './investigation-rules.mjs';
+import { STALE_TRANSIT_DAYS, TOOL_NAMES, allowedTools } from './investigation-rules.mjs';
 
 // Binds the Phase 4 retrieval tools into something the model can call, and
 // translates what they return into the case file's vocabulary.
@@ -380,7 +380,19 @@ export function createToolRegistry({
           promptText: confirmed
             ? toOrderContextText(context)
             : 'Aucune commande confirmée n’est rattachée à ce ticket.',
-          data: { confirmed, orderName: ticket.shopify_order_number || null }
+          // THE STATES TRAVEL IN `data`, NEVER IN `promptText`. A finding is
+          // derived from structure and never from prose (see evidence-rules), so
+          // a policy rule branching on "has it shipped" needs the answer as a
+          // value here — the French sentence above is free to be reworded and
+          // must not become something code parses.
+          //
+          // Derived by the module that owns the bundle, so this is a projection
+          // of the same reading the prompt got rather than a second one.
+          data: {
+            confirmed,
+            orderName: ticket.shopify_order_number || null,
+            states: confirmed ? orderStates(context, { staleTransitDays: STALE_TRANSIT_DAYS }) : null
+          }
         };
       },
 

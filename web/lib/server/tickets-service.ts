@@ -33,6 +33,8 @@ import {
   emptySenderDirectory
 } from "../../../agent/src/ingestion/sender-directory.mjs";
 import { createTicketRecord } from "../../../scripts/lib/ticket-record.mjs";
+import { parseTrackingCandidates } from "../../../agent/src/resolution/tracking-number-parser.mjs";
+import { normaliseTrackingNumber } from "../../../scripts/lib/tracking-number.mjs";
 import { createDraftRecord } from "../../../scripts/lib/draft-record.mjs";
 import { KnowledgeNotFoundError } from "./knowledge-errors";
 import { summariseFacts, summariseInvestigation, summariseOrderContext } from "../ticket-detail";
@@ -49,6 +51,7 @@ import type {
   TicketMessage,
   TicketStatus,
   TicketThread,
+  TicketTracking,
 } from "../types";
 
 function getSupabaseClient() {
@@ -267,6 +270,17 @@ export async function getTicketThread(shopId: string, ticketId: string): Promise
   }
 
   const messages = (messageRows as any[]).map(mapMessageRow).sort(byTimeAsc);
+  const draft = draftRow ? mapDraftRow(draftRow) : null;
+
+  // The confirmed order's parcels come through the same projection the detail
+  // panel reads, so a number linked in the Order block and the same number
+  // linked in a message body cannot disagree about which parcel it is. Anything
+  // else quoted in the thread is looked up on top of that.
+  const parcels = await parcelsInText(
+    shopId,
+    [...messages.map((message) => message.body), draft?.body, draft?.approvedBody],
+    summariseOrderContext(ticketRow.resolved_context)?.tracking ?? []
+  );
 
   return {
     ticketId,
@@ -289,8 +303,9 @@ export async function getTicketThread(shopId: string, ticketId: string): Promise
           score: Number(ticketRow.related_score ?? 0),
         }
       : null,
-    draft: draftRow ? mapDraftRow(draftRow) : null,
+    draft,
     messages,
+    parcels,
   };
 }
 
@@ -535,4 +550,88 @@ function mapTicketRow(row: any, directory: any = emptySenderDirectory): TicketLi
     firstMessageAt: row.first_message_at,
     lastMessageAt: row.last_message_at,
   };
+}
+
+/**
+ * Every parcel a tracking number in this thread could be linked to.
+ *
+ * TWO SOURCES, AND THE SECOND IS THE ONE THAT MATTERS. The confirmed order's
+ * parcels come free with the bundle — but the case worth linking is the customer
+ * who writes « mon colis 6C20723002488 n'est pas arrivé » on a ticket where no
+ * order was ever confirmed, which is exactly the ticket where a reviewer most
+ * wants one click to the carrier. Those numbers are in the text and nowhere
+ * else, so they are parsed out of it and looked up.
+ *
+ * ONE OVERLAP QUERY, and only when the text actually holds a candidate the
+ * bundle did not already cover. `orders.tracking_numbers` is a text[] with a GIN
+ * index and `ov` is PostgREST's `&&`, so this is the same index the order
+ * resolver uses rather than a scan of the `fulfillments` jsonb.
+ *
+ * THE PARSER IS THE AGENT'S OWN, not a second pattern list. What a tracking
+ * number looks like was measured over 815 of this store's parcels and the
+ * reasoning is written down beside the patterns; a copy here would drift from
+ * the one the resolver matches on, and a linkifier that disagrees with the
+ * resolver about what a number is would be a puzzle rather than a bug.
+ *
+ * A number that matches no order is simply not linked — the whole rule for this
+ * feature. Nothing is guessed from a number's shape.
+ */
+export async function parcelsInText(
+  shopId: string,
+  texts: (string | null | undefined)[],
+  confirmed: TicketTracking[]
+): Promise<TicketTracking[]> {
+  const parcels: TicketTracking[] = [...confirmed];
+  const covered = new Set(parcels.map((parcel) => normaliseTrackingNumber(parcel.number)));
+
+  const candidates = new Set<string>();
+  for (const text of texts) {
+    if (!text) continue;
+    for (const candidate of parseTrackingCandidates(text)) {
+      if (!covered.has(candidate.trackingNumber)) {
+        candidates.add(candidate.trackingNumber);
+      }
+    }
+  }
+  if (candidates.size === 0) {
+    return parcels;
+  }
+
+  const wanted = [...candidates];
+  let rows: any[] = [];
+  try {
+    rows = await supabaseSelect(
+      getSupabaseClient(),
+      T.ORDERS,
+      {
+        shop_id: shopId,
+        tracking_numbers: { operator: "ov", value: `{${wanted.join(",")}}` },
+        deleted_at: { operator: "is", value: "null" },
+      },
+      "id,fulfillments"
+    );
+  } catch {
+    // A link is an enhancement to a dialog whose job is showing the email. If
+    // the lookup fails the numbers stay text, which is what they were before.
+    return parcels;
+  }
+
+  for (const row of rows) {
+    for (const fulfillment of (row?.fulfillments as any[]) ?? []) {
+      for (const info of (fulfillment?.tracking_info as any[]) ?? []) {
+        const number = normaliseTrackingNumber(info?.number);
+        const url = String(info?.url ?? "").trim();
+        // Only the numbers this thread actually quoted: an order matches on one
+        // parcel and may carry others, and linking those would put a parcel
+        // nobody mentioned into the map for the next number to collide with.
+        if (!number || !url || covered.has(number) || !candidates.has(number)) {
+          continue;
+        }
+        covered.add(number);
+        parcels.push({ number, carrier: info?.company ?? null, url });
+      }
+    }
+  }
+
+  return parcels;
 }

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { NEED_KEYS } from '../../agent/src/investigation/evidence-rules.mjs';
+import { MISSING_FIELDS, VERDICTS } from '../../agent/src/investigation/case-file.mjs';
 import {
   REPLY_LANGUAGES,
   REQUEST_KINDS,
@@ -225,4 +226,49 @@ test('the lexical index uses the same configuration the knowledge side does', ()
 test('the vector column is the right width for the embedding model', () => {
   assert.match(SQL, /embedding vector\(1536\)/);
   assert.match(SQL, /embedding_dimensions is null or embedding_dimensions = 1536/);
+});
+
+// --- what a matched rule may do ----------------------------------------------
+
+test('route accepts every verdict except the one that would loosen', () => {
+  // THE TIGHTEN-ONLY GUARANTEE, asserted as a RELATIONSHIP rather than as a
+  // hard-coded pair. Written as a literal list, adding a fourth verdict to
+  // case-file.mjs would leave this test passing while the new verdict was
+  // silently un-routable; written this way it fails and someone decides.
+  const clause = checkClause(SQL, 'support_answers_route_check');
+  assert.ok(clause, 'the constraint is missing');
+  assert.deepEqual(
+    literalsIn(clause),
+    VERDICTS.filter((v) => v !== 'answerable').sort()
+  );
+  assert.ok(!literalsIn(clause).includes('answerable'), 'a rule must never be able to declare a ticket safe');
+});
+
+test('ask accepts exactly the facts MISSING_FIELDS owns a sentence for', () => {
+  // Same drift guard as requirement_needs. A key here that case-file.mjs cannot
+  // word would be a rule asking a question nothing can write.
+  const clause = checkClause(SQL, 'support_answers_ask_check');
+  assert.ok(clause, 'the constraint is missing');
+  assert.deepEqual(literalsIn(clause), Object.keys(MISSING_FIELDS).sort());
+});
+
+test('a rule that asks must also route to the customer', () => {
+  // `draftDecision` refuses a `needs_customer_input` verdict with nothing named
+  // to ask (`nothing_to_ask`), and the mirror case — something to ask with a
+  // verdict that does not permit asking — would strand the question. The schema
+  // makes the pair impossible to author.
+  const clause = checkClause(SQL, 'support_answers_ask_needs_route_check');
+  assert.ok(clause, 'the constraint is missing');
+  assert.match(clause, /ask is null or route is not distinct from 'needs_customer_input'/);
+  // NOT `route = '…'`. That form is NULL when route is null, `false or NULL` is
+  // NULL, and a CHECK evaluating to NULL passes — so the obvious clause accepted
+  // exactly the row it exists to refuse. Caught by inserting one against the
+  // live table; asserted here so it cannot be simplified back.
+  assert.ok(!/ask is null or route = /.test(clause), 'the two-valued form silently accepts a null route');
+});
+
+test('a rule may name a situation, and is not required to', () => {
+  // Nullable is the load-bearing part: a rule naming only conditions still fires
+  // when no exemplar matched, so coverage does not depend on the matcher.
+  assert.match(SQL, /^\s*situation_key text,/m);
 });

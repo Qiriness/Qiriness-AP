@@ -258,16 +258,18 @@ Referenced by the entries below so each state is written once.
 
 ---
 
-# Commande — 5 questions · 65 messages
+# Commande — 4 questions · 65 messages
 
 ### O-09 · Ma commande n'est toujours pas expédiée. Quel est le délai entre la commande et l'expédition ?
-`order` · `problem` · **18 msgs** · 🟢
+`order` · `problem` · **22 msgs** · 🟢
 
 **Variantes réelles**
 - « Je constate que ma commande #6686 du 28 juillet 2026 n'est toujours pas traitée »
 - « Pouvez-vous m'indiquer le délai entre une commande et son traitement ? »
 - « Ma carte bleue est bien débitée mais la commande est toujours indiquée… »
 - « Ma carte a été débitée mais ma commande est toujours indiquée en attente » _(authored — was O-10's canonical question)_
+- « Commande R4F8FH09J — J'ai passé une commande le 24 mai et ai reçu la confirmation à la fin… » _(was O-11)_
+- « J'ai reçu la confirmation de commande puis plus aucune nouvelle » _(authored — was O-11's canonical question)_
 
 **needs** `order_identity`, `order_state`, `payment_state`, `policy_answer`
 **exemplaires** → jeu `commande`, état `non_expediee`
@@ -287,19 +289,21 @@ Referenced by the entries below so each state is written once.
 > `support_exemplars` until someone removes it. Harmless — a draft holds no
 > vector and is unreachable — but it is still there.
 
-**Contenu stable** _(à rédiger)_
+> **O-11 merged in, 2026-08-30, and this one was measured rather than argued.**
+> The 44 stored situation matches were reviewed by hand: most are right, and the
+> wrong ones are wrong between near-identical situations. Replaying every
+> confusable pair through the rule selector settled which of those matter —
+> **O-09 and O-11 select the same rule in all 20 evidence positions the
+> `commande` set can distinguish.** They are one situation with two names, and
+> the matcher spent 7 tickets choosing between them at a margin of 0.11.
 >
-
----
-
-### O-11 · J'ai reçu la confirmation de commande puis plus aucune nouvelle.
-`order` · `problem` · **4 msgs** · 🟢
-
-**Variantes réelles**
-- « Commande R4F8FH09J — J'ai passé une commande le 24 mai et ai reçu la confirmation à la fin… »
-
-**needs** `order_identity`, `order_state`
-**exemplaires** → jeu `commande`
+> The count becomes **22**: unlike O-10, O-11 was its own cluster, so its 4
+> messages were counted separately from these 18.
+>
+> **`O-11` IS NOT MERELY RETIRED, it had to be soft-deleted.** O-10 was a draft,
+> which holds no vector and is unreachable, so leaving it cost nothing. O-11 was
+> approved and embedded — it would have gone on winning matches against the
+> question that absorbed it. `deleted_at` is what the retrieval function checks.
 
 **Contenu stable** _(à rédiger)_
 >
@@ -775,8 +779,7 @@ another thing to translate, so translating early means paying twice. The schema
 is ready (`language`, `translated`, index space at 100+); nothing generates
 translations yet, by choice.
 
-**2. Merge candidates — all three resolved 2026-08-12.** O-09/O-10, D-03/D-04
-and P-15/P-16 are merged. 32 exemplars → 29.
+**2. Merge candidates — three resolved 2026-08-12, a fourth 2026-08-30.** O-09/O-10, D-03/D-04 and P-15/P-16 were merged then; **O-09/O-11** now. This document holds **30** questions, and `support_exemplars` **30 live rows** once O-11 is soft-deleted — counted rather than carried forward, because the “32 → 29” written here in August never matched what the importer parses.
 
 The three had three different justifications, and the difference is worth
 keeping: **O-09/O-10** and **D-03/D-04** shared a single answer, so the split was
@@ -786,6 +789,20 @@ question**, since the customer writing in cannot tell them apart either.
 
 Retired keys, whose draft rows survive in `support_exemplars` because the
 importer upserts and never deletes: **O-10, D-04, P-16**.
+
+**O-11 is different, and the difference is the lesson.** The other three were
+retired while still drafts, so their rows are unreachable and leaving them costs
+nothing. O-11 was **approved and embedded**, so removing it from this document
+would have removed it from nowhere — it would have gone on competing for matches
+against the question that absorbed it. An approved exemplar leaving this file
+needs `deleted_at` set as well.
+
+The fourth merge is also the first argued from a **measurement rather than a
+reading**: every confusable pair the matcher produced on real tickets was
+replayed through the rule selector, and O-09/O-11 was the pair whose confusion
+changed no outcome in any evidence position. The pairs that DO change an outcome
+all turned out to share a shape — a specific complaint losing narrowly to the
+generic `D-01` — and merging cannot fix those, because they are not duplicates.
 
 **2b. Faulty vs change-of-mind returns — who pays.** `retour_possible` serves
 R-21, R-22, D-08 and PR-26 as one answer, but R-22's real message asks about

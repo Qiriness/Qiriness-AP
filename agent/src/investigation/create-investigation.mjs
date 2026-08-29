@@ -1,4 +1,6 @@
 import { createEmbeddingsClient } from '../../../scripts/lib/embeddings/openai-embeddings-client.mjs';
+import { supabaseSelect } from '../../../scripts/lib/supabase-rest-client.mjs';
+import { T } from '../../../scripts/lib/tables.mjs';
 import { createOpenAIClient } from '../llm/openai-client.mjs';
 import { createCustomerLookup } from '../retrieval/customer-lookup.mjs';
 import { createExemplarRetrieval } from '../retrieval/exemplar-retrieval.mjs';
@@ -129,11 +131,31 @@ export function createInvestigationStack({
     return found ? buildOrderContext(found.order, found.customer) : null;
   };
 
+  /**
+   * The policy rules for an answer set.
+   *
+   * APPROVAL IS NOT A GATE HERE, and that is the shadow phase's whole shape:
+   * the rules are `draft` until somebody has seen what they would have done, and
+   * gating on `approved` now would load nothing and measure nothing. It becomes
+   * a filter the moment a route is applied for real — a rule nobody approved
+   * must never move a customer's mail.
+   *
+   * Soft-deleted rows are excluded at the query, like everywhere else.
+   */
+  const loadAnswers = async ({ shopId: shop, answerSet }) =>
+    supabaseSelect(
+      supabase,
+      T.SUPPORT_ANSWERS,
+      { shop_id: shop, answer_set: answerSet, deleted_at: { operator: 'is', value: 'null' } },
+      'answer_key,situation_key,when_conditions,answer_skeleton,route,ask,priority,is_fallback,approval_status'
+    );
+
   return {
     investigate,
     store: createCaseFileStore(supabase),
     registry,
     retrieveExemplar,
-    lastOrderLookup
+    lastOrderLookup,
+    loadAnswers
   };
 }

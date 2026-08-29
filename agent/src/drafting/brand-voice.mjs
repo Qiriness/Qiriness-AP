@@ -1,6 +1,8 @@
 import { supabaseSelect } from '../../../scripts/lib/supabase-rest-client.mjs';
 import { T } from '../../../scripts/lib/tables.mjs';
 
+import { SIGNATURE_LANGUAGE } from './draft-checks.mjs';
+
 // The drafting agent's system prompt, assembled from the Brand voice article.
 //
 // WHY THE PROMPT IS A DATABASE ROW. Every other prompt in this worker is a
@@ -54,6 +56,19 @@ export const STRUCTURAL_RULES = [
     'peut être mentionné comme une chose que le client rapporte, jamais comme un fait.',
   'Ne jamais citer de référence interne : identifiant technique, référence produit, ' +
     'adresse e-mail d’un client, numéro de suivi non fourni par le dossier.',
+  // NO URLS AT ALL, and the reason is that a reply has no use for one. The
+  // parcel is named by its NUMBER and the number is what becomes a link wherever
+  // the reply is read — so a pasted 70-character carrier URL is the same
+  // information, in the worst possible form, in the middle of a sentence.
+  //
+  // Tried the other way round first: given the fulfilment URL, the model pasted
+  // it in full, and on the first run wrote « [Suivi Colissimo](https://…) » —
+  // correct markdown, which nothing renders, so the customer would have received
+  // the brackets too. Measured over the 92 drafts written before any of this:
+  // ZERO contain a URL. Forbidding them outright costs nothing observed.
+  'N’écrire aucune adresse web (http, www) et aucun lien : ni en toutes lettres, ni en markdown ' +
+    '[texte](adresse), ni en HTML. Pour parler d’un colis, donner son numéro de suivi tel qu’il ' +
+    'figure dans le dossier — c’est le numéro qui est cliquable pour le lecteur.',
   // A GENERAL RULE, and it covers both signals. The prompt carries the fact
   // when we can prove the customer was left waiting (`## Historique de
   // l’échange`); this also catches the cases only their own words reveal —
@@ -65,9 +80,17 @@ export const STRUCTURAL_RULES = [
     'moment, commencer par s’excuser du délai de réponse — brièvement, une phrase, sans se ' +
     'justifier ni expliquer pourquoi. S’excuser du délai n’est pas reconnaître une faute sur ' +
     'le fond du dossier.',
+  // THE QUALIFIER IS LOAD-BEARING, and its absence is what kept the Italian
+  // drafts closing in French. This block is headed « prioritaires sur tout ce
+  // qui précède », so « la seule autorisée » outranked the Signature section
+  // telling the model to translate — and the model resolved the contradiction
+  // the way the prompt told it to, by reproducing the French. Verified: the
+  // section alone changed nothing; the section plus this clause fixed it.
   'Ne pas inventer de formule de politesse finale (« merci de votre patience », « nous restons à ' +
     'votre disposition », « votre satisfaction est notre priorité »). La formule de clôture ' +
-    'approuvée, lorsqu’elle est fournie, est la seule autorisée.',
+    'approuvée, lorsqu’elle est fournie, est la seule autorisée : telle quelle si la réponse est ' +
+    'en français, et sa traduction si elle est dans une autre langue — jamais une autre formule, ' +
+    'et jamais du français dans une réponse qui ne l’est pas.',
   'Écrire uniquement le corps de l’e-mail. Aucun objet, aucun commentaire, aucune note sur la démarche.'
 ];
 
@@ -244,6 +267,11 @@ export function composeSystemPrompt(voice, { language = 'fr', verdict = 'answera
     throw new Error(`Cannot compose a drafting prompt: ${problem}`);
   }
 
+  // The approved closing line and signature are authored in French. Answering in
+  // another language means TRANSLATING them, not reproducing them — see the two
+  // sections below, and `SIGNATURE_LANGUAGE` in draft-checks.mjs.
+  const translated = language !== SIGNATURE_LANGUAGE;
+
   const parts = [voice.roleDescription, section('Ton et voix', voice.toneAndVoice)];
 
   if (voice.responseFramework.length > 0) {
@@ -264,12 +292,23 @@ export function composeSystemPrompt(voice, { language = 'fr', verdict = 'answera
   // wording reproduced exactly, checked the same way the signature is. An empty
   // field means no closing line, and the structural rule against inventing one
   // still applies.
+  //
+  // TRANSLATED, NOT REPRODUCED, WHEN THE REPLY IS NOT IN FRENCH — see the
+  // signature section below, which is where this was actually measured.
   if (voice.closingLine) {
     parts.push(
       section(
         'Formule de clôture',
-        'Avant la signature, terminer par cette phrase, reproduite exactement, sans rien y ' +
-          `changer et sans en ajouter d’autre :
+        translated
+          ? 'Avant la signature, terminer par la version traduite de cette phrase. Elle est ici ' +
+            'en français et ne doit pas apparaître telle quelle dans la réponse — même sens, ' +
+            `même longueur, rien d’ajouté :
+
+--- source (français) ---
+${voice.closingLine}
+--- fin de la source ---`
+          : 'Avant la signature, terminer par cette phrase, reproduite exactement, sans rien y ' +
+            `changer et sans en ajouter d’autre :
 
 ${voice.closingLine}`
       )
@@ -277,14 +316,32 @@ ${voice.closingLine}`
   }
 
   if (voice.signature) {
-    // Reproduced exactly, and said twice: this is the one piece of the prompt
-    // whose output is compared character by character (see draft-checks), so a
-    // model that "improves" it fails a check rather than shipping a signature
-    // nobody approved.
+    // IN FRENCH: reproduced exactly, and said twice, because this is the one
+    // piece of the prompt whose output is compared character by character (see
+    // draft-checks) — a model that "improves" it fails a check rather than
+    // shipping a signature nobody approved.
+    //
+    // IN ANY OTHER LANGUAGE: translated, because reproducing it IS the bug.
+    // « reproduite exactement » is an instruction the model follows faithfully,
+    // and it followed it: all 5 non-French drafts written before this — 3 it,
+    // 1 es, 1 en — carried a correct foreign-language body and then closed
+    // « Bien Cordialement, / Service Client Qiriness ». Every one passed its
+    // checks, because the check compared them to the French text and they
+    // matched it perfectly.
+    //
+    // The brand name is the one thing that must survive the translation: it is a
+    // name, not a word.
     parts.push(
       section(
         'Signature',
-        `Terminer par cette signature, reproduite exactement, sans rien y changer :\n\n${voice.signature}`
+        translated
+          ? 'La réponse se termine par la version traduite du bloc ci-dessous. Ce bloc est le ' +
+            'TEXTE SOURCE, en français : il ne doit apparaître nulle part dans la réponse.\n\n' +
+            `--- source (français) ---\n${voice.signature}\n--- fin de la source ---\n\n` +
+            'Écrire à la place sa traduction dans la langue de la réponse : même structure, même ' +
+            'nombre de lignes, rien d’ajouté. Les noms de marque sont des noms propres et restent ' +
+            'inchangés.'
+          : `Terminer par cette signature, reproduite exactement, sans rien y changer :\n\n${voice.signature}`
       )
     );
   }

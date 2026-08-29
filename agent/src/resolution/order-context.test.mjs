@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { buildOrderContext, toOrderContextText } from './order-context.mjs';
+import { buildOrderContext, orderStates, toOrderContextText } from './order-context.mjs';
+import { findingValues } from '../investigation/evidence-rules.mjs';
 
 const NOW = new Date('2026-08-02T12:00:00Z');
 
@@ -196,4 +197,116 @@ test('the masked contact address reaches the bundle but never the model', () => 
     !toOrderContextText(context).includes('bluewin'),
     'the model projection withholds it'
   );
+});
+
+test('the model is given the parcel number and never its URL', () => {
+  // THE COMPANION TO THE TEST ABOVE, and the reason the two sit together: the
+  // contact address is withheld because it is not the model's business, and the
+  // tracking URL is withheld because the model has no use for it. The reply
+  // names the parcel by number; `TrackingText` turns that number into the link
+  // wherever the reply is read. Given the URL, the model pastes it into the
+  // prose in full — which is what a customer would then receive.
+  const context = buildOrderContext(ORDER, null, { now: NOW });
+  const text = toOrderContextText(context);
+
+  assert.match(text, /Suivi : TEST5 \(Colissimo\)\./);
+  assert.ok(!text.includes('laposte.fr'), 'the URL is on the bundle and not in the projection');
+  assert.ok(!/https?:\/\//.test(text), 'no URL of any kind reaches the model');
+  // Still on the bundle, because the panel and the linkifier both need it.
+  assert.equal(context.order.delivery.tracking[0].url, 'https://laposte.fr/x');
+});
+
+test('a parcel with no URL is unchanged by any of this', () => {
+  const order = {
+    ...ORDER,
+    fulfillments: [
+      { ...ORDER.fulfillments[0], tracking_info: [{ number: 'TEST5', company: 'Colissimo', url: null }] }
+    ]
+  };
+  const context = buildOrderContext(order, null, { now: NOW });
+  assert.match(toOrderContextText(context), /Suivi : TEST5 \(Colissimo\)\./);
+  assert.equal(context.order.delivery.tracking[0].url, null);
+});
+
+// --- the states a policy rule branches on ------------------------------------
+
+const STALE = 10;
+const statesFor = (order, now = NOW) =>
+  orderStates(buildOrderContext(order, null, { now }), { staleTransitDays: STALE, now });
+
+const fulfilment = (extra = {}) => ({
+  status: 'SUCCESS', display_status: 'FULFILLED', created_at: '2026-07-15T11:53:16Z',
+  delivered_at: null, in_transit_at: null, tracking_info: [{ number: 'TEST5' }], ...extra
+});
+
+test('an unfulfilled order is not dispatched, on both axes', () => {
+  // The state your cancellation rule turns on.
+  const states = statesFor({ ...ORDER, fulfillment_status: 'UNFULFILLED', fulfillments: [] });
+  assert.equal(states.order_state, 'not_dispatched');
+  assert.equal(states.delivery_state, 'not_dispatched');
+});
+
+test('dispatched with no carrier scan is its own state, never in_transit', () => {
+  // The biggest delivery cluster in the corpus. Calling it `in_transit` would
+  // claim movement nothing has evidenced — the same claim `delivery_unscanned`
+  // forbids the model from making in prose.
+  const states = statesFor({ ...ORDER, fulfillments: [fulfilment()] });
+  assert.equal(states.order_state, 'dispatched');
+  assert.equal(states.delivery_state, 'dispatched_no_scan');
+});
+
+test('a parcel that has not moved for the stale window says so', () => {
+  // Same arithmetic `escalationTriggers` already uses to raise the level, so the
+  // rule layer and the escalation cannot disagree about what "stuck" means.
+  const order = { ...ORDER, fulfillments: [fulfilment({ in_transit_at: '2026-07-16T09:00:00Z' })] };
+  assert.equal(statesFor(order, new Date('2026-07-20T12:00:00Z')).delivery_state, 'in_transit');
+  assert.equal(statesFor(order, new Date('2026-08-02T12:00:00Z')).delivery_state, 'stale_in_transit');
+});
+
+test('delivered is delivered on both axes', () => {
+  const states = statesFor({ ...ORDER, fulfillments: [fulfilment({ delivered_at: '2026-07-18T09:00:00Z' })] });
+  assert.equal(states.order_state, 'delivered');
+  assert.equal(states.delivery_state, 'delivered');
+});
+
+test('cancelled outranks every other order state', () => {
+  // A cancelled order that never shipped is not awaiting dispatch, and
+  // answering it as though it were is the worst reading available.
+  const states = statesFor({ ...ORDER, cancelled_at: '2026-07-16T10:00:00Z', fulfillments: [] });
+  assert.equal(states.order_state, 'cancelled');
+});
+
+test('a fully refunded order does not report as paid', () => {
+  // Shopify still says PAID. Testing `isPaid` first would report money we have
+  // given back as money we are holding.
+  const refunded = statesFor({
+    ...ORDER,
+    total_refunded: '74.95',
+    refunds: [{ amount: '74.95', processed_at: '2026-07-20T10:00:00Z' }]
+  });
+  assert.equal(refunded.payment_state, 'refunded');
+
+  const partial = statesFor({
+    ...ORDER,
+    total_refunded: '20.00',
+    refunds: [{ amount: '20.00', processed_at: '2026-07-20T10:00:00Z' }]
+  });
+  assert.equal(partial.payment_state, 'partially_refunded');
+
+  assert.equal(statesFor(ORDER).payment_state, 'paid');
+});
+
+test('no bundle, no states — and never a half-filled object', () => {
+  assert.equal(orderStates(null), null);
+  assert.equal(orderStates({}), null);
+});
+
+test('every state is a value the findings vocabulary accepts', () => {
+  // The seam between this module and evidence-rules: a value produced here that
+  // the enum does not declare would collapse to `unknown` and the rule that
+  // wanted it would never fire.
+  const states = statesFor({ ...ORDER, fulfillments: [fulfilment()] });
+  assert.ok(findingValues('order_state').includes(states.order_state));
+  assert.ok(findingValues('delivery_state').includes(states.delivery_state));
+  assert.ok(findingValues('payment_state').includes(states.payment_state));
 });

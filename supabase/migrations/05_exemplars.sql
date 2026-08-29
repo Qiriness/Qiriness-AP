@@ -279,11 +279,43 @@ create table public.support_answers (
   -- it. Exemplars reference the family; conditions pick the state.
   answer_set text not null,
   answer_key text not null,
+  -- WHICH SITUATION THIS RULE IS FOR, or null for "any situation in this set".
+  --
+  -- THE SECOND AXIS, and it exists because the two questions are different
+  -- kinds. `when_conditions` says what is TRUE about the order; this says what
+  -- the customer WANTS. « où est ma commande » and « il manque un article dans
+  -- le colis » are two delivery tickets with identical order facts and different
+  -- answers, so evidence alone cannot separate them. The reverse holds too: a
+  -- cancellation is possible or not depending on a fulfilment status, which no
+  -- amount of reading the customer's phrasing can settle.
+  --
+  -- So the embedding decides the intent, the evidence decides the state, and a
+  -- rule may name either or both. Nullable on purpose: a rule naming only
+  -- conditions still fires when no exemplar matched, which is why coverage does
+  -- not depend on the matcher's recall.
+  situation_key text,
   -- { need: [findings] } — a conjunction across needs, a disjunction within one.
   -- `promotion_validity: ['expired','not_found']` is one row because "the code
   -- cannot be used at all" is one answer however it got that way.
   when_conditions jsonb not null default '{}'::jsonb,
   answer_skeleton text,
+  -- WHERE A MATCHED RULE SENDS THE TICKET, or null to leave the verdict exactly
+  -- as the investigation set it.
+  --
+  -- TIGHTEN ONLY, AND THE SCHEMA IS WHAT GUARANTEES IT. `answerable` is absent
+  -- from the check by design: a rule may hand a ticket to a person or turn it
+  -- into a question, and may never declare something safe that the investigation
+  -- did not. That is the same direction `buildCaseFile` already overrides in
+  -- (downwards, never upwards) and the same ratchet the level follows — put in a
+  -- constraint rather than in code because it is the one property of this table
+  -- that must not be revisited by a future caller.
+  route text,
+  -- A `MISSING_FIELDS` key, when the rule's answer is to ask for something.
+  --
+  -- THE KEY, NEVER THE SENTENCE. `case-file.mjs` owns the exact wording of every
+  -- request; storing prose here would be a second version of it, and the two
+  -- would drift the first time somebody improved one.
+  ask text,
   -- Ordering among rows that match equally deeply. Most-specific wins first;
   -- this only breaks the tie, so authoring order never becomes load-bearing by
   -- accident.
@@ -308,6 +340,35 @@ create table public.support_answers (
   -- conditions gated it when they are ignored.
   constraint support_answers_fallback_has_no_conditions_check check (
     not is_fallback or when_conditions = '{}'::jsonb
+  ),
+  -- THE TIGHTEN-ONLY GUARANTEE. `answerable` is deliberately not in this list:
+  -- a rule may send a ticket to a person or turn it into a question, and may
+  -- never declare one safe. The two values here are exactly the verdicts in
+  -- `case-file.mjs` minus that one, and `05_exemplars.test.mjs` asserts the
+  -- relationship rather than trusting two lists to keep agreeing.
+  constraint support_answers_route_check check (
+    route is null or route in ('needs_human', 'needs_customer_input')
+  ),
+  -- Every askable fact `MISSING_FIELDS` owns the sentence for. A key outside it
+  -- would be a rule asking a question nothing can word.
+  constraint support_answers_ask_check check (
+    ask is null or ask in (
+      'shopify_order_number', 'purchase_email', 'product_name',
+      'purchase_channel', 'photo', 'promotion_code', 'order_date_or_amount'
+    )
+  ),
+  -- A rule that asks must say so in its route, or the drafting stage gets a
+  -- question to ask and a verdict that does not permit asking it —
+  -- `draftDecision` refuses that combination as `nothing_to_ask`.
+  --
+  -- `IS NOT DISTINCT FROM` RATHER THAN `=`, AND IT IS NOT STYLE. `route = '…'`
+  -- is NULL when route is null, `false or NULL` is NULL, and a CHECK that
+  -- evaluates to NULL PASSES. Written the obvious way this constraint accepted
+  -- exactly the row it exists to refuse — an `ask` with no route — which is how
+  -- it was caught: by inserting one against the live table rather than reading
+  -- the clause. The three-valued form is total.
+  constraint support_answers_ask_needs_route_check check (
+    ask is null or route is not distinct from 'needs_customer_input'
   )
 );
 
@@ -344,6 +405,15 @@ comment on column public.support_answers.answer_set is
 
 comment on column public.support_answers.is_fallback is
   'The catch-all for this set, whose conditions are ignored. At most one per set. Absent one, an unmatched evidence position yields no answer and the ticket routes to a person.';
+
+comment on column public.support_answers.situation_key is
+  'Which situation this rule is for (support_exemplars.exemplar_key), or null for any situation in the set. The second axis: when_conditions says what is true about the order, this says what the customer wants. A rule naming only conditions still fires when no exemplar matched.';
+
+comment on column public.support_answers.route is
+  'Where a matched rule sends the ticket, or null to leave the verdict as the investigation set it. Tighten only -- "answerable" is absent from the check constraint by design, so a rule can hand a ticket to a person but never declare one safe.';
+
+comment on column public.support_answers.ask is
+  'A MISSING_FIELDS key when the rule''s answer is to ask for something. The key, never the sentence: case-file.mjs owns the wording. Requires route = needs_customer_input, or drafting would hold a question it is not permitted to ask.';
 
 -- ============================================================================
 -- EXEMPLAR RETRIEVAL

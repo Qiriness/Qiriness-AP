@@ -7,7 +7,8 @@ import { emptySenderDirectory } from '../ingestion/sender-directory.mjs';
 
 import { TICKET_STATUS_BY_VERDICT } from './case-file.mjs';
 import { summariseNeeds } from './evidence-rules.mjs';
-import { ENABLED_SUBJECTS, isInvestigable } from './investigation-rules.mjs';
+import { normaliseConditions } from './answer-selection.mjs';
+import { ENABLED_SUBJECTS, answerSetFor, isInvestigable } from './investigation-rules.mjs';
 import { summarisePhotoEvidence } from './photo-evidence.mjs';
 
 // The batch pass that investigates categorised tickets, mirroring
@@ -65,12 +66,24 @@ export async function runInvestigation({
   // Which recurring situation this ticket is. OPTIONAL, and absent by default so
   // that a caller which has not wired it runs exactly as it did before.
   //
-  // REPORTED, NOT ENFORCED. Its result reaches the stored row and nothing else:
-  // it is not passed to `investigate`, so no tool choice, need or verdict can
-  // depend on it. That is the whole point — the exemplar's declared
-  // `requirement_needs` is only worth comparing against the run's own
-  // `evidence_gaps` while the two are arrived at independently.
-  retrieveExemplar = null
+  // ITS NEEDS ARE A FALLBACK, ITS IDENTITY IS A REPORT. `requirement_needs`
+  // reaches `investigate` and stands in ONLY when the decomposer produced
+  // nothing — `needsSource` records which happened, so a report comparing the
+  // two declarations can exclude the rows where one supplied the other. Nothing
+  // else about the match touches the run: no tool choice and no verdict depends
+  // on it, and the situation key is used only after the ledger is closed, to
+  // pick a policy rule for the shadow record.
+  retrieveExemplar = null,
+  // The policy rules for a ticket's answer set. OPTIONAL and absent by default,
+  // so a caller that has not wired it runs exactly as it did before — the same
+  // contract as `retrieveExemplar` and `lastOrderLookup`.
+  //
+  // A LOADER RATHER THAN A STORE METHOD, because the case-file store's transport
+  // is the seam the test chat replaces with an in-memory database. Rules are
+  // read-only reference data like products and knowledge, so a rehearsal wants
+  // the real ones; routing them through the fake would mean teaching it a table
+  // it has no reason to know.
+  loadAnswers = null
 } = {}) {
   const counts = {
     considered: 0,
@@ -126,10 +139,20 @@ export async function runInvestigation({
       retrieveExemplar, ticket, message: triggerMessage, shopId, logger
     });
 
+    // WHICH RULES COULD APPLY, loaded before the run and read after it.
+    //
+    // The set comes from the ticket's SUBJECT, not from the matched exemplar's
+    // `answer_set` column: `match_support_exemplars()` does not return that
+    // column, and today the two always agree because a family is a grouping of
+    // subjects. Reading the column would need the function widened, for no
+    // difference in outcome — worth doing the day a situation draws on a family
+    // its subject does not imply, and not before.
+    const policy = await loadPolicy({ loadAnswers, ticket, exemplarMatch, shopId, logger });
+
     let caseFile;
     try {
       caseFile = await investigate(
-        buildInput(ticket, messages, senderDirectory, exemplarMatch.requirement_needs)
+        buildInput(ticket, messages, senderDirectory, exemplarMatch.requirement_needs, policy)
       );
     } catch (error) {
       await handleFailure({ record, ticket, error, counts, logger, dryRun });
@@ -174,7 +197,15 @@ export async function runInvestigation({
         // exemplar against a copy of itself.
         exemplarMatch: {
           ...exemplarMatch,
-          ...(caseFile.needsSource === 'exemplar' ? { supplied_needs: true } : {})
+          ...(caseFile.needsSource === 'exemplar' ? { supplied_needs: true } : {}),
+          // THE SHADOW RECORD, and it lives inside this jsonb rather than in a
+          // column of its own. `ticket_investigations` is populated, so a new
+          // column is a forward step against real rows; this is the same
+          // diagnostic subsystem and the same lifecycle, and DECISIONS already
+          // records extending an existing jsonb as the cheaper correct move
+          // (`evidence_gaps`, § Investigation). It becomes a column the day
+          // something reads it in anger.
+          ...(caseFile.policy ? { policy: caseFile.policy } : {})
         }
       });
 
@@ -282,7 +313,7 @@ async function handleFailure({ record, ticket, error, counts, logger, dryRun }) 
  * question that was already answered, and the model would only ask when it
  * thought to.
  */
-function buildInput(ticket, messages, senderDirectory, exemplarNeeds = []) {
+function buildInput(ticket, messages, senderDirectory, exemplarNeeds = [], policy = null) {
   const first = messages[0];
   const latest = messages.length > 1 ? messages[messages.length - 1] : null;
   const text = [first?.body_text, latest?.body_text]
@@ -321,7 +352,15 @@ function buildInput(ticket, messages, senderDirectory, exemplarNeeds = []) {
     // thread ran to three. It is a pure function of text and stored metadata, so
     // it is derived once here rather than inside a tool handler that would
     // recompute the same answer on every call.
-    photoEvidence: summarisePhotoEvidence(messages)
+    photoEvidence: summarisePhotoEvidence(messages),
+    // THE POLICY RULES FOR THIS TICKET, and the situation they may be keyed to.
+    //
+    // READ AFTER THE RUN, NEVER BEFORE IT. `investigate` uses this only once the
+    // tool loop has finished, to score the ledger it already produced against
+    // the rules — so no tool choice, no declared need and no model turn can
+    // depend on which rules exist. That ordering is what makes the shadow phase
+    // meaningful: the run is byte-for-byte the run that would have happened.
+    policy
   };
 }
 
@@ -460,6 +499,50 @@ export function createCaseFileStore(supabase, { transport = CASE_FILE_TRANSPORT 
       );
     }
   };
+}
+
+/**
+ * The rules for this ticket's answer set, shaped the way `selectAnswer` reads
+ * them, or null when there are none.
+ *
+ * NEVER FAILS THE INVESTIGATION. A shadow record is worth having and never worth
+ * losing a case file for, so a loader that throws is logged and the run
+ * continues exactly as it would without one — the same contract `lastOrderLookup`
+ * already has for the same reason.
+ */
+async function loadPolicy({ loadAnswers, ticket, exemplarMatch, shopId, logger }) {
+  const answerSet = answerSetFor(ticket.category);
+  if (!loadAnswers || !answerSet) {
+    return null;
+  }
+
+  try {
+    const rows = await loadAnswers({ shopId, answerSet });
+    const answers = (rows || []).map((row) => ({
+      answerKey: row.answer_key,
+      situationKey: row.situation_key ?? null,
+      // Normalised through the same function the authoring path validates with,
+      // so a condition naming a need that has since been removed is dropped here
+      // rather than becoming a rule that silently never matches.
+      conditions: normaliseConditions(row.when_conditions),
+      answerSkeleton: row.answer_skeleton ?? null,
+      route: row.route ?? null,
+      ask: row.ask ?? null,
+      priority: row.priority ?? 0,
+      isFallback: Boolean(row.is_fallback)
+    }));
+
+    return answers.length > 0
+      ? { answerSet, situationKey: exemplarMatch?.exemplar_key ?? null, answers }
+      : null;
+  } catch (error) {
+    logger?.warn?.('investigation.policy_load_failed', {
+      ticketId: ticket.id,
+      answerSet,
+      reason: error.message
+    });
+    return null;
+  }
 }
 
 /** The PostgREST call the case-file store makes, as one object. */

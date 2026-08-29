@@ -336,6 +336,74 @@ const FINDINGS = {
     }
   },
 
+  // --- the order family ------------------------------------------------------
+  //
+  // READ OFF `data.states`, WHICH `order-context.mjs` DERIVED. Every other entry
+  // in this table reads a tool's own result; these read a projection the module
+  // that owns the order bundle already made, for the reason that module exists —
+  // `fulfillment_status = FULFILLED` with `delivered_at = null` is a reading, and
+  // a second reading of it here would be free to disagree with the one the model
+  // was shown.
+  //
+  // ALL THREE COLLAPSE TO `unknown` WITHOUT A CONFIRMED ORDER, which is the
+  // common case rather than a failure: 138 of 214 tickets carry no confirmed
+  // order. `order_identity` is the need that reports that gap, and the reply asks
+  // for the number — these say nothing about it.
+
+  order_state: {
+    values: ['not_dispatched', 'dispatched', 'delivered', 'cancelled', 'unknown'],
+    derive: (entries) => stateFromOrderContext(entries, 'order_state')
+  },
+
+  delivery_state: {
+    // `dispatched_no_scan` is its own value and not a flavour of `in_transit` —
+    // see `deliveryState` in order-context.mjs. It is the shape of the largest
+    // delivery cluster in the corpus, and the one place a reply must not claim
+    // the parcel is moving.
+    values: [
+      'not_dispatched',
+      'dispatched_no_scan',
+      'in_transit',
+      'stale_in_transit',
+      'delivered',
+      'unknown'
+    ],
+    derive: (entries) => stateFromOrderContext(entries, 'delivery_state')
+  },
+
+  payment_state: {
+    values: ['paid', 'unpaid', 'partially_refunded', 'refunded', 'unknown'],
+    derive: (entries) => stateFromOrderContext(entries, 'payment_state')
+  },
+
+  // --- evidence about the customer's own claim -------------------------------
+
+  purchase_verified: {
+    // THE TOOL'S OUTCOME IS ALREADY THE STATE, all three of them, and
+    // tool-registry says why it kept them apart: a known customer with no orders
+    // is not a stranger, and the reply differs.
+    values: ['known_buyer', 'known_no_orders', 'unknown'],
+    derive(entries) {
+      const entry = lastByTool(entries, TOOL_NAMES.VERIFY_PURCHASE);
+      if (!entry) return 'unknown';
+      return FINDINGS.purchase_verified.values.includes(entry.outcome) ? entry.outcome : 'unknown';
+    }
+  },
+
+  photo_evidence: {
+    // FOUR STATES AND THREE OF THEM ARE NOT "no photo". « J'ai joint la photo »
+    // with nothing attached is a customer who believes they sent one, and the
+    // metadata never having been fetched is our gap rather than theirs. Asking
+    // all three to resend reads as not having looked.
+    values: ['attached', 'mentioned_not_attached', 'attachment_type_unknown', 'none', 'unknown'],
+    derive(entries) {
+      const entry = lastByTool(entries, TOOL_NAMES.CHECK_PHOTO_EVIDENCE);
+      if (!entry) return 'unknown';
+      const outcome = entry.data?.outcome ?? entry.outcome;
+      return FINDINGS.photo_evidence.values.includes(outcome) ? outcome : 'unknown';
+    }
+  },
+
   // No tool, by design — so this can only ever be `unknown`, and listing it says
   // so explicitly rather than leaving a reader to infer it from an empty
   // `satisfiedBy`. Same argument as the need itself.
@@ -344,6 +412,20 @@ const FINDINGS = {
     derive: () => 'unknown'
   }
 };
+
+/**
+ * One state off the order tool's ledger entry.
+ *
+ * `not_resolved` and a missing entry are both `unknown`: no order was confirmed,
+ * so nothing is known about its state. That is deliberately indistinguishable
+ * here — the difference between "no order number" and "a number we could not tie
+ * to the sender" is `order_identity`'s to report, not this one's.
+ */
+function stateFromOrderContext(entries, key) {
+  const entry = lastByTool(entries, TOOL_NAMES.GET_ORDER_CONTEXT);
+  const value = entry?.data?.states?.[key] ?? null;
+  return value && FINDINGS[key].values.includes(value) ? value : 'unknown';
+}
 
 export const FINDING_KEYS = Object.keys(FINDINGS);
 
