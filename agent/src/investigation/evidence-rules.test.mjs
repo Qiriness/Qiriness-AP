@@ -467,11 +467,11 @@ test('an all-null details object is dropped, not stored as an answer', () => {
   const [gap] = resolveNeeds(
     ['customer_account_state'],
     [{ id: 't1', tool: TOOL_NAMES.LOOKUP_CUSTOMER, outcome: 'found',
-       data: { profile: { name: null, rfmGroup: null, ordersCount: null } } }],
+       data: { account: { canSignIn: true }, profile: { name: null, rfmGroup: null, ordersCount: null } } }],
     [TOOL_NAMES.LOOKUP_CUSTOMER]
   );
 
-  assert.equal(gap.finding, 'resolved');
+  assert.equal(gap.finding, 'enabled');
   assert.ok(!('details' in gap), 'nothing worth showing means no field');
 });
 
@@ -598,4 +598,47 @@ test('every new finding is a value its own vocabulary declares', () => {
   for (const need of ['order_state', 'delivery_state', 'payment_state', 'photo_evidence', 'purchase_verified']) {
     assert.ok(findingValues(need).includes(finding(need, ledger)), need);
   }
+});
+
+// --- telling "no account" from "we cannot place you" --------------------------
+
+test('the account state separates a known customer with no account from an unknown sender', () => {
+  // THE PAIR THIS VOCABULARY EXISTS FOR, and the two biggest buckets in the
+  // corpus: 156 tickets whose sender matches no customer row, and 97 whose
+  // sender matches a row with no account behind it. They need opposite replies —
+  // the first has to ASK which address the account is under, the second must not
+  // ask at all, because we already know exactly who wrote in.
+  const state = (data, outcome = 'found') =>
+    findingsOf(
+      resolveNeeds(
+        ['customer_account_state'],
+        [{ id: 't1', tool: TOOL_NAMES.LOOKUP_CUSTOMER, outcome, data }],
+        [TOOL_NAMES.LOOKUP_CUSTOMER]
+      )
+    ).customer_account_state;
+
+  assert.equal(state({ account: { canSignIn: true } }), 'enabled');
+  assert.equal(state({ account: { neverActivated: true } }), 'never_activated');
+  assert.equal(state({ account: { disabled: true } }), 'known_no_account');
+  assert.equal(state({ account: null }, 'no_match'), 'unknown_sender');
+  // No address to look up at all reaches the same reply — ask which one — but
+  // the ledger's outcome keeps the two apart for whoever reads the run.
+  assert.equal(state({ account: null }, 'no_identifier'), 'unknown_sender');
+});
+
+test('a state Shopify never set is unknown, not guessed at', () => {
+  // A customer row whose `state` is null satisfies none of the three flags. It
+  // must not fall through to `known_no_account`: that would tell somebody they
+  // have no account on the strength of a missing field.
+  const [gap] = resolveNeeds(
+    ['customer_account_state'],
+    [{ id: 't1', tool: TOOL_NAMES.LOOKUP_CUSTOMER, outcome: 'found', data: { account: {} } }],
+    [TOOL_NAMES.LOOKUP_CUSTOMER]
+  );
+  assert.equal(gap.finding, 'unknown');
+});
+
+test('the tool never having run is not the same as finding nobody', () => {
+  const [gap] = resolveNeeds(['customer_account_state'], [], [TOOL_NAMES.LOOKUP_CUSTOMER]);
+  assert.equal(gap.finding, 'unknown');
 });

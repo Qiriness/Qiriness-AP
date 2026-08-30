@@ -32,6 +32,8 @@ const SHOP_QUERY = `#graphql
       id
       name
       myshopifyDomain
+      primaryDomain { url }
+      customerAccountsV2 { customerAccountsVersion }
     }
   }
 `;

@@ -259,12 +259,17 @@ test('a rule that asks must also route to the customer', () => {
   // makes the pair impossible to author.
   const clause = checkClause(SQL, 'support_answers_ask_needs_route_check');
   assert.ok(clause, 'the constraint is missing');
-  assert.match(clause, /ask is null or route is not distinct from 'needs_customer_input'/);
+  // `cardinality(ask) = 0` since `ask` became a list. The column is `not null
+  // default '{}'`, so "asks nothing" has exactly one representation — the
+  // singular column was nullable, and an empty array beside a null would have
+  // been two ways to say it, which is how the bug below happened in the first
+  // place.
+  assert.match(clause, /cardinality\(ask\) = 0 or route is not distinct from 'needs_customer_input'/);
   // NOT `route = '…'`. That form is NULL when route is null, `false or NULL` is
   // NULL, and a CHECK evaluating to NULL passes — so the obvious clause accepted
   // exactly the row it exists to refuse. Caught by inserting one against the
   // live table; asserted here so it cannot be simplified back.
-  assert.ok(!/ask is null or route = /.test(clause), 'the two-valued form silently accepts a null route');
+  assert.ok(!/or route = /.test(clause), 'the two-valued form silently accepts a null route');
 });
 
 test('a rule may name a situation, and is not required to', () => {

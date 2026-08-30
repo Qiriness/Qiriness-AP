@@ -126,6 +126,42 @@ const DEFINITIONS = {
       'Indique si le client a joint une photo, ou s’il en mentionne une sans l’avoir jointe. ' +
       'À utiliser pour toute casse, détérioration ou dysfonctionnement.',
     parameters: NO_ARGS
+  },
+  // THE ONLY TOOL HERE THAT TAKES THE MODEL'S READING AS ITS ARGUMENT, and the
+  // description carries the whole distinction it depends on. « Le produit dont
+  // parle le message » — what `lookupProduct` answers — is the wrong question
+  // for a reaction email: « j’utilisais Untel sans souci, depuis que je suis
+  // passée à Machin j’ai des rougeurs » names two products and blames one.
+  //
+  // So the model says which one is blamed and this resolves that name against
+  // the catalogue. The reading is the model's; the identification is not.
+  [TOOL_NAMES.IDENTIFY_REACTION_PRODUCT]: {
+    description:
+      'Enregistre le produit que le client désigne comme étant à l’origine de sa réaction, ' +
+      'et la réaction qu’il décrit. Le produit mis en cause est celui que le client accuse — ' +
+      'jamais un produit simplement cité au passage : une comparaison, un soin utilisé ' +
+      'auparavant ou le produit d’une autre marque ne sont pas des produits mis en cause. ' +
+      'Si le client décrit une réaction sans désigner aucun produit, passer product: null ' +
+      'plutôt que de deviner.',
+    parameters: {
+      type: 'object',
+      properties: {
+        product: {
+          type: ['string', 'null'],
+          description:
+            'Le nom du produit mis en cause, dans les mots du client. null si le client ' +
+            'n’en désigne aucun.'
+        },
+        reaction: {
+          type: 'string',
+          description:
+            'La réaction décrite, dans les mots du client (rougeurs, boutons, démangeaisons, ' +
+            'picotements, sensation d’échauffement…).'
+        }
+      },
+      required: ['product', 'reaction'],
+      additionalProperties: false
+    }
   }
 };
 
@@ -448,6 +484,94 @@ export function createToolRegistry({
             images: evidence?.images ?? 0,
             nonImages: evidence?.nonImages ?? 0,
             attachmentsKnown: evidence?.attachmentsKnown ?? true
+          }
+        };
+      }
+,
+
+      /**
+       * The product the customer BLAMES, resolved against the catalogue.
+       *
+       * ATTRIBUTION IS NOT CAUSATION, and every part of this handler is shaped
+       * by keeping the two apart. What it establishes is a fact about the email
+       * — this customer wrote that this product gave them a reaction — which is
+       * reading. Whether the product actually caused anything is a question for
+       * a person with the batch records, and `reaction_cause_unestablished` is
+       * raised on EVERY outcome to say so, including the ones that look
+       * conclusive. Especially those.
+       *
+       * IT RETURNS AN IDENTITY, NOT A PRODUCT SHEET. `lookupProduct` answers
+       * with the description, the usage advice and the ingredient list, and on
+       * any other subject that is exactly right. Here it would be the raw
+       * material for « ce produit contient X, ce qui peut expliquer… » — a
+       * sentence this desk must never send — so the sheet is fetched, used to
+       * confirm the name exists, and dropped. `result.promptText` is deliberately
+       * not passed on.
+       *
+       * FIVE OUTCOMES, AND `not_attributed` IS THE USEFUL ONE. It means the
+       * customer described a reaction and named no product, which is the case
+       * where the reply has to ask — and it is a positive finding rather than a
+       * failure to find anything, because the model reached it by reading rather
+       * than by a lookup coming back empty.
+       */
+      async [TOOL_NAMES.IDENTIFY_REACTION_PRODUCT](args = {}) {
+        const claimed = String(args.product ?? '').trim();
+        const reaction = String(args.reaction ?? '').trim();
+
+        // The record is worth writing even with no product on it: "a reaction
+        // was reported and no product was named" is precisely what the rule
+        // that asks the customer branches on.
+        const base = { claimed: claimed || null, reaction: reaction || null, titles: [] };
+
+        if (!claimed) {
+          return {
+            outcome: 'not_attributed',
+            caveats: ['reaction_cause_unestablished'],
+            promptText:
+              'Le client décrit une réaction sans désigner de produit précis. ' +
+              'Le produit concerné reste à faire préciser.',
+            data: { ...base, outcome: 'not_attributed' }
+          };
+        }
+
+        const result = await productLookup.lookupProduct(claimed);
+        const titles = (result.products || []).map((p) => p?.title).filter(Boolean);
+        const outcome = !result.found
+          ? 'not_in_catalogue'
+          : result.ambiguous
+            ? 'ambiguous'
+            : 'identified';
+
+        // WHAT THE CUSTOMER WROTE IS QUOTED BACK, NOT REPLACED BY THE MATCH.
+        // A near-miss that resolves « ma crème de nuit » to one catalogue title
+        // is a guess, and a reply built on it tells someone we know which
+        // product harmed them when we inferred it. Both strings travel.
+        const promptText =
+          outcome === 'identified'
+            ? `Produit mis en cause par le client : ${titles[0]} (le client écrit « ${claimed} »). ` +
+              `Réaction décrite : ${reaction || 'non précisée'}. ` +
+              'Il s’agit de ce que le client rapporte, pas d’une cause établie.'
+            : outcome === 'ambiguous'
+              ? `Le client met en cause « ${claimed} », qui peut correspondre à plusieurs produits ` +
+                `du catalogue (${titles.join(', ')}). Le produit exact reste à faire préciser.`
+              : `Le client met en cause « ${claimed} », qui ne correspond à aucun produit du ` +
+                'catalogue. Il peut s’agir d’un produit d’une autre marque ou d’un nom approximatif.';
+
+        return {
+          outcome,
+          caveats:
+            outcome === 'ambiguous'
+              ? ['reaction_cause_unestablished', 'product_ambiguous']
+              : ['reaction_cause_unestablished'],
+          promptText,
+          data: {
+            ...base,
+            outcome,
+            titles,
+            // Near-misses on a no-match, for the same reason `lookupProduct`
+            // keeps them: it is what tells a reviewer whether the catalogue
+            // lacks the product or the matcher simply missed it.
+            candidates: result.candidates || []
           }
         };
       }

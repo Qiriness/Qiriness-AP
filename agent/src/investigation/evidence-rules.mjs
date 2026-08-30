@@ -119,9 +119,13 @@ const NEEDS = {
     asksCustomer: 'purchase_email'
   },
   customer_account_state: {
-    label: 'l’état du compte client (compte, newsletter)',
+    label: 'si le client a un compte, et s’il est utilisable',
     satisfiedBy: [{ tool: TOOL_NAMES.LOOKUP_CUSTOMER, outcomes: ['found'] }],
-    asksCustomer: 'purchase_email'
+    // NOT `purchase_email`, which the other two customer needs use. This need is
+    // about the ACCOUNT, and on an account ticket the two addresses are exactly
+    // what the customer is confused about — asking which one the order was
+    // placed with reliably gets the wrong one.
+    asksCustomer: 'account_email'
   },
   customer_history: {
     label: 'l’historique du client (commandes, fidélité)',
@@ -140,6 +144,17 @@ const NEEDS = {
     // the question goes to the customer rather than to a conclusion.
     satisfiedBy: [{ tool: TOOL_NAMES.VERIFY_PURCHASE, outcomes: ['known_buyer'] }],
     asksCustomer: 'purchase_channel'
+  },
+  // WHAT THE CUSTOMER BLAMES, NOT WHAT THE MESSAGE MENTIONS, and it is a
+  // separate need from `product_identity` for that reason alone — a reaction
+  // email naming three products has one product_identity and one very different
+  // reaction_product. Satisfied only by `identified`: `ambiguous` and
+  // `not_in_catalogue` are real findings a rule branches on, but neither is a
+  // product we can name back to the customer with a straight face.
+  reaction_product: {
+    label: 'le produit que le client met en cause dans sa réaction',
+    satisfiedBy: [{ tool: TOOL_NAMES.IDENTIFY_REACTION_PRODUCT, outcomes: ['identified'] }],
+    asksCustomer: 'reaction_product_name'
   },
   photo_evidence: {
     label: 'une photo du produit cassé, abîmé ou défectueux',
@@ -316,12 +331,52 @@ const FINDINGS = {
     }
   },
 
+  // FOUR STATES, AND THE SPLIT THAT MATTERS IS NOT THE OBVIOUS ONE.
+  //
+  // It used to be `resolved / none / unknown`, which recorded only whether the
+  // LOOKUP worked — so no rule could tell a customer with a working account from
+  // one who has never had one, and both got whatever the model improvised.
+  //
+  // `known_no_account` vs `unknown_sender` IS THE PAIR THIS EXISTS FOR, and they
+  // are the two biggest buckets in the corpus: 156 tickets whose sender matches
+  // no customer row at all, and 97 whose sender matches a row that has no
+  // account behind it. They need opposite replies — the first has to ASK which
+  // address the account is under, the second must not ask anything, because we
+  // already know exactly who they are and can say so.
+  //
+  // `known_no_account` IS NOT "DEACTIVATED", and the naming is deliberate.
+  // Shopify stores `DISABLED` for any customer with no account, which on this
+  // shop is 57,140 of 58,201 — `customerAccounts: OPTIONAL`, so every guest
+  // checkout and every newsletter signup lands there. Reading it as "we turned
+  // their account off" would tell 97 of the people who have written in that
+  // something was done to them that never happened.
+  //
+  // `never_activated` is 2 tickets and earns its place anyway: it is the one
+  // that looks EXACTLY like a forgotten password and is not. « Impossible de
+  // réinitialiser le mot de passe. Je commande régulièrement chez vous » is an
+  // INVITED customer in this corpus, and a reset link would have done nothing
+  // for her because there is no password to reset.
   customer_account_state: {
-    values: ['resolved', 'none', 'unknown'],
+    values: ['enabled', 'never_activated', 'known_no_account', 'unknown_sender', 'unknown'],
     derive(entries) {
       const entry = lastByTool(entries, TOOL_NAMES.LOOKUP_CUSTOMER);
       if (!entry) return 'unknown';
-      return entry.outcome === 'found' ? 'resolved' : 'none';
+      // READ FROM `data`, NOT FROM THE OUTCOME, which stays `found` / `no_match`.
+      // Widening the outcome would have rewritten the ledger vocabulary for all
+      // six subjects that call this tool, and unlike the reaction report nothing
+      // is lost by leaving it in `data`: `customers.state` is still a column, so
+      // a stored run can be re-read through `ticket_investigations.customer_id`.
+      const account = entry.data?.account;
+      // The lookup ran and matched nobody — or had no address to match on, which
+      // reaches the same reply. The outcome keeps the two apart for a reader.
+      if (!account) return 'unknown_sender';
+      if (account.neverActivated) return 'never_activated';
+      if (account.canSignIn) return 'enabled';
+      // DECLINED lands here with DISABLED, and belongs here: an invitation that
+      // was refused leaves exactly as much account behind as one never sent.
+      if (account.disabled) return 'known_no_account';
+      // A row whose `state` Shopify never set. Rare, and not worth guessing at.
+      return 'unknown';
     }
   },
 
@@ -376,6 +431,20 @@ const FINDINGS = {
     derive: (entries) => stateFromOrderContext(entries, 'payment_state')
   },
 
+  // DECLARED AS A NEED SINCE THE VOCABULARY EXISTED, AND UNDERIVABLE UNTIL NOW.
+  // R-23 (« sous quel délai suis-je remboursé ? ») has named it all along, so
+  // every run of that situation scored it `unknown` and no rule could branch on
+  // it — the same shape `customer_account_state` was in before 2026-08-30.
+  //
+  // IT IS NOT `payment_state` UNDER ANOTHER NAME. That one asks whether we are
+  // holding the customer's money; this asks where their REQUEST has got to, and
+  // the two part company exactly where the question is asked — a return opened
+  // and not yet settled is `paid` to the first and `return_open` to the second.
+  refund_state: {
+    values: ['none', 'return_open', 'refunded_partial', 'refunded_full', 'unknown'],
+    derive: (entries) => stateFromOrderContext(entries, 'refund_state')
+  },
+
   return_eligibility: {
     // THREE VALUES, AND `unknown` IS THE COMMON ONE UNTIL A NUMBER IS SET. This
     // is the only state that depends on a merchant decision rather than on the
@@ -398,6 +467,21 @@ const FINDINGS = {
       const entry = lastByTool(entries, TOOL_NAMES.VERIFY_PURCHASE);
       if (!entry) return 'unknown';
       return FINDINGS.purchase_verified.values.includes(entry.outcome) ? entry.outcome : 'unknown';
+    }
+  },
+
+  reaction_product: {
+    // `not_attributed` IS A FINDING, NOT AN ABSENCE. The customer described a
+    // reaction and named no product — established by the model reading the
+    // email and saying so, which is a different claim from the tool never
+    // having run. `unknown` is that second thing, and the two must not collapse:
+    // the rule that asks « de quel produit s'agit-il » is correct on the first
+    // and asks a customer a question we never looked into on the second.
+    values: ['identified', 'ambiguous', 'not_in_catalogue', 'not_attributed', 'unknown'],
+    derive(entries) {
+      const entry = lastByTool(entries, TOOL_NAMES.IDENTIFY_REACTION_PRODUCT);
+      if (!entry) return 'unknown';
+      return FINDINGS.reaction_product.values.includes(entry.outcome) ? entry.outcome : 'unknown';
     }
   },
 
@@ -609,6 +693,47 @@ function nonEmpty(key, value) {
 }
 
 /** The values a need can take, for the condition builder and its validation. */
+/**
+ * The reaction record, lifted out of the ledger before the ledger loses it.
+ *
+ * WHY THIS IS NOT A FINDING. `reaction_product` already reads the same entry
+ * and reduces it to one word, which is all a rule can branch on. But the words
+ * — which product, which symptoms — are what a person opening the ticket needs,
+ * and `buildCaseFile` keeps only `{id, tool, argsHash, outcome}` from every
+ * ledger entry. One word survives the run; the record has to be taken out here
+ * or it does not survive at all.
+ *
+ * NULL WHEN THE TOOL NEVER RAN, and that is not the same as a reaction with no
+ * product. `not_attributed` is a customer who described a reaction and named
+ * nothing; null is a ticket where nobody asked. Storing `{}` for both would
+ * merge them, and the first is the case a rule acts on.
+ *
+ * @returns {{outcome: string, product: string|null, claimed: string|null,
+ *            reaction: string|null, alternatives: string[]}|null}
+ */
+export function reactionReportFrom(ledger = []) {
+  const entry = lastByTool(ledger, TOOL_NAMES.IDENTIFY_REACTION_PRODUCT);
+  if (!entry) {
+    return null;
+  }
+  const data = entry.data || {};
+  const titles = Array.isArray(data.titles) ? data.titles.filter(Boolean) : [];
+  return {
+    outcome: FINDINGS.reaction_product.values.includes(entry.outcome) ? entry.outcome : 'unknown',
+    // NAMED ONLY WHEN ONE PRODUCT RESOLVED. An `ambiguous` match has three
+    // titles and no answer, and writing the first of them here would turn a
+    // reported ambiguity into a recorded product — the exact false confidence
+    // this whole subject is careful about.
+    product: entry.outcome === 'identified' ? (titles[0] ?? null) : null,
+    // The customer's own words, kept whatever the outcome: they are the only
+    // thing on this record that is not a match, an inference or a guess.
+    claimed: data.claimed ?? null,
+    reaction: data.reaction ?? null,
+    // What `ambiguous` actually means, for the person who has to resolve it.
+    alternatives: entry.outcome === 'ambiguous' ? titles : []
+  };
+}
+
 export function findingValues(need) {
   return FINDINGS[need] ? [...FINDINGS[need].values] : null;
 }

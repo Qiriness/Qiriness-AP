@@ -1,0 +1,56 @@
+
+> qiriness-dashboard@0.1.0 dev
+> next dev
+
+  ▲ Next.js 14.2.35
+  - Local:        http://localhost:3000
+  - Experiments (use with caution):
+    · cpus
+    · staleTimes
+    · outputFileTracingRoot
+
+ ✓ Starting...
+ ✓ Ready in 13.1s
+ ○ Compiling /agent-setup/rules ...
+ ✓ Compiled /agent-setup/rules in 4.3s (629 modules)
+ GET /agent-setup/rules 200 in 7570ms
+ ○ Compiling /agent-setup ...
+ ✓ Compiled /agent-setup in 1643ms (752 modules)
+ ○ Compiling /tickets ...
+ ✓ Compiled /tickets in 2.7s (752 modules)
+ ○ Compiling /agent-setup ...
+ ✓ Compiled /agent-setup in 746ms (398 modules)
+ ✓ Compiled in 635ms (386 modules)
+ ✓ Compiled in 171ms (386 modules)
+ ✓ Compiled in 424ms (386 modules)
+ ✓ Compiled in 365ms (386 modules)
+ ✓ Compiled in 189ms (386 modules)
+ ✓ Compiled in 240ms (386 modules)
+ ○ Compiling /api/knowledge/articles/[id] ...
+ ✓ Compiled /api/knowledge/articles/[id] in 1214ms (95 modules)
+ PATCH /api/knowledge/articles/956d8004-d554-4cc4-acca-b7ca30711b6c 200 in 9682ms
+ ✓ Compiled in 507ms (386 modules)
+ ✓ Compiled in 460ms (386 modules)
+ ✓ Compiled in 189ms (386 modules)
+ ✓ Compiled in 301ms (386 modules)
+ ○ Compiling /agent-setup/rules ...
+ ✓ Compiled /agent-setup/rules in 1327ms (354 modules)
+ GET /agent-setup/rules 200 in 2071ms
+ ○ Compiling /tickets ...
+ ✓ Compiled /tickets in 712ms (388 modules)
+ ✓ Compiled /api/tickets/[id]/thread in 259ms (392 modules)
+ GET /api/tickets/2d30752d-cab0-45e3-9219-8903eb212cff/thread 200 in 3231ms
+ GET /api/tickets/2d30752d-cab0-45e3-9219-8903eb212cff/thread 200 in 3308ms
+ ✓ Compiled /api/tickets/[id] in 336ms (394 modules)
+ GET /api/tickets/2d30752d-cab0-45e3-9219-8903eb212cff 200 in 3089ms
+ GET /api/tickets/2d30752d-cab0-45e3-9219-8903eb212cff 200 in 3092ms
+ ✓ Compiled in 505ms (388 modules)
+ ✓ Compiled in 372ms (388 modules)
+ ○ Compiling /agent-setup ...
+ ✓ Compiled /agent-setup in 1882ms (444 modules)
+ ✓ Compiled in 1416ms (830 modules)
+ ✓ Compiled in 47.6s (840 modules)
+ ✓ Compiled in 1689ms (830 modules)
+ GET /agent-setup/rules 200 in 3657ms
+ GET /agent-setup/rules 200 in 2341ms
+ ✓ Compiled in 576ms (444 modules)

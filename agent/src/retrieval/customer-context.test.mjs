@@ -113,3 +113,49 @@ test('toPromptText reports a customer with no orders rather than omitting the li
 
   assert.ok(text.includes('Aucune commande enregistrée'));
 });
+
+// --- the word that was false, and the link that depends on the state ----------
+
+test('a customer with no account is never described as deactivated', () => {
+  // « désactivé » was here until 2026-08-30 and it was false. Shopify stores
+  // DISABLED for any customer with no account — 57,140 of 58,201 on this shop,
+  // because `customerAccounts` is OPTIONAL — and the word was reaching the model
+  // as a fact and being repeated as one in a stored case file.
+  const text = toPromptText(
+    buildCustomerContext(CUSTOMER),
+    buildAccountState({ ...CUSTOMER, state: 'DISABLED' })
+  );
+  assert.ok(!/désactivé[^s]/.test(text.replace('PAS un compte désactivé', '')), text);
+  assert.ok(text.includes('aucun compte'));
+  assert.ok(!text.includes('DISABLED'));
+});
+
+test('each account state is sent to the page that can actually help it', () => {
+  const page = (state) =>
+    toPromptText(buildCustomerContext(CUSTOMER), buildAccountState({ ...CUSTOMER, state }), {
+      storefrontUrl: 'https://qiriness.com/'
+    });
+
+  // The login page, because this shop's theme carries the « mot de passe
+  // oublié » form inline — /account/recover is a 404 here, so naming it would
+  // send somebody to a dead page.
+  assert.ok(page('ENABLED').includes('https://qiriness.com/account/login'));
+  // Nothing to reset, so registration rather than login.
+  assert.ok(page('DISABLED').includes('https://qiriness.com/account/register'));
+  // NO LINK AT ALL, and that is the useful part: no self-serve page finishes an
+  // invitation, so the answer is a person resending it.
+  assert.ok(!/https:/.test(page('INVITED')));
+  assert.ok(page('INVITED').includes('nouvelle invitation'));
+});
+
+test('an unknown storefront address means no link, never an invented one', () => {
+  // `shops.storefront_url` comes from Shopify's primaryDomain. A shop synced
+  // before that field was fetched has none, and the reply then describes the
+  // page in words as the approved FAQ already does.
+  const text = toPromptText(
+    buildCustomerContext(CUSTOMER),
+    buildAccountState({ ...CUSTOMER, state: 'ENABLED' })
+  );
+  assert.ok(!/https?:/.test(text));
+  assert.ok(text.includes('compte actif'));
+});

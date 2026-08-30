@@ -374,6 +374,88 @@ It enters from `tickets.customer_id`, not from the address: the customer-resolut
 
 ### The product cross-check runs against the last order, not the catalogue
 
+### `DISABLED` does not mean deactivated, and the word was reaching customers
+
+Shopify's `customers.state` has four values and the obvious reading of `DISABLED` is wrong. On this shop `customerAccounts` is `OPTIONAL`, so **57,140 of 58,201 customers are `DISABLED`** — 53,677 who have never ordered (newsletter signups, a Mirakl/Yves Rocher import) and 3,463 guest checkouts, still arriving daily. It is the default for *a customer record with no account*, not a state anybody set.
+
+`describeState` rendered it as **« désactivé »** and that string went into the prompt as a fact. It was repeated as one: *« Le compte client est désactivé mais inscrit à la newsletter »* appeared in a stored case file about a customer who had simply never opened an account. On an open L3 ticket — *« Impossible de me connecter à mon compte même en changeant le mot de passe »* — the agent now establishes « n'a pas de compte client existant avec cette adresse » instead, which is both true and actionable.
+
+**No deactivation branch exists, and none should be written.** Checked for a deliberate-block marker: every tag on a `DISABLED` customer is an acquisition source (`Yves Rocher FR`, `Mirakl`, `prospect`, `newsletter`, Judge.me review tags) and nothing resembles blocked, fraud or closed. If a real block ever happens Shopify stores the same `DISABLED` for it, so it would need a tag or a note before any rule could mention reactivation.
+
+### `known_no_account` and `unknown_sender` are the pair the account vocabulary exists for
+
+`customer_account_state` was `resolved / none / unknown` — it recorded only whether the *lookup* worked, so no rule could tell a working account from one that never existed. It is now `enabled · never_activated · known_no_account · unknown_sender · unknown`.
+
+The split that matters is the last two, and they are the two biggest buckets in the corpus: **156 tickets whose sender matches no customer row at all, and 97 whose sender matches a row with no account behind it.** They take opposite replies. The first has to *ask* which address the account is under — the corpus has that exact case, a customer writing « je pense que j'ai 2 adresses mail pour mon compte ». The second must not ask anything, because we already know precisely who wrote in and can say so.
+
+**`never_activated` is 2 tickets and earns its place anyway.** It is the state that looks exactly like a forgotten password and is not: an invited customer has no password, so a reset link does nothing. The corpus proves it — *« Impossible de réinitialiser le mot de passe. Je commande régulièrement chez vous »* is an `INVITED` customer, and the agent now reaches « une nouvelle invitation doit être envoyée depuis l'administration Shopify » on that ticket rather than offering a reset.
+
+**Derived from the ledger's `data`, not from the tool's outcome**, which stays `found` / `no_match`. Widening the outcome would have rewritten the ledger vocabulary for all six subjects that call `lookupCustomer`, and unlike the reaction report nothing is lost by leaving it in `data`: `customers.state` is still a column, so a stored run can be re-read through `ticket_investigations.customer_id`.
+
+### The storefront address is fetched, never configured
+
+A reply that has to send somebody to their account page needs a URL, and there was none — **zero URLs in the entire approved knowledge base**. The alternative was a parameter for an operator to type: a second copy of something Shopify already knows, wrong the day the domain changes and wrong silently.
+
+So `shops` gained `storefront_url` from Shopify's `primaryDomain.url` (`https://qiriness.com`), kept fresh by the shop sync that already runs. `shop_domain` could not serve — that is the `*.myshopify.com` identity every webhook keys on, and no customer has ever seen it.
+
+**A different page per state, which is the point of having the states.** `/account/login` for an active account, because this theme carries the « mot de passe oublié » form inline — `/account/recover` returns **404** here, so a reply naming it would send somebody to a dead page. `/account/register` where no account exists. And **no link at all for an invited customer**: no self-serve page finishes an invitation, so the answer is a person resending it, and handing them the login page would be the third time they had tried it.
+
+`customer_accounts_version` is stored beside it. It reads `CLASSIC` today, which is what makes a password reset meaningful at all; under `NEW_CUSTOMER_ACCOUNTS` sign-in is a one-time emailed code and every reply about resetting a password would be wrong. A migration between the two is invisible from anywhere else here.
+
+**A reply may carry a link but never an address.** `FORBIDDEN_PATTERNS` refuses any email address in a draft, which constrains how the `known_no_account` case can be worded: « nous avons bien vos coordonnées sous l'adresse depuis laquelle vous nous écrivez » says it without quoting anything, and quoting the address would fail the check.
+
+### A-29 is four rules, one per account state
+
+The four states each take a different reply, which is what made them worth having:
+
+| state | route | says |
+|---|---|---|
+| `enabled` | *(verdict left alone)* | your account exists under this address; the login page carries « mot de passe oublié » |
+| `never_activated` | `needs_human` | there is no password to reset; a person resends the invitation |
+| `known_no_account` | *(verdict left alone)* | we know you, no account has been created yet; here is the registration page |
+| `unknown_sender` | `needs_customer_input` → `account_email` | nothing under this address — which one is the account under? |
+
+**Two of them route nowhere on purpose.** `enabled` and `known_no_account` are fully answerable from the tools: the account state is established, the page address comes from `shops.storefront_url`, and there is nothing left for a person to add. Leaving the verdict alone lets the investigation decide, and the tighten-only rule means a rule can never make a ticket *more* answerable than the investigation found it.
+
+**`never_activated` is the only one that needs a person**, and not because it is uncertain — it is the most certain of the four. It needs one because the action is not self-serve: no page finishes an invitation, so somebody has to resend it from the Shopify admin.
+
+**`account_email` is a new question, separate from `purchase_email`.** The existing one asks which address *the order* was placed with, and on an account ticket that reliably gets the wrong one of the two — the customer in the corpus writing « je pense que j'ai 2 adresses mail pour mon compte » has ordered under one address and is trying to sign in under the other.
+
+**The `unknown_sender` branch still carries a link.** It is the one case with no customer and therefore no account state, but the login page's « mot de passe oublié » form works against whatever address they actually used — so `lookupCustomer`'s `no_match` text names it too. It is the one thing they can try while waiting for us to answer, and it costs nothing to include.
+
+### The rulebook filters by answer set
+
+### A-35 is the first exemplar written from no real mail
+
+Nothing in the 400-ticket corpus is an account-deletion request. Searched for « supprimer / désactiver / fermer mon compte », « effacer mes données », « droit à l'oubli » and RGPD: one hit, a recruitment-check firm citing the GDPR, filed under `careers`. So the five phrasings are **authored**, and `source_note` says so — because two exemplars here (D-07, P-18) never win a ticket at all, and having no real phrasing is why.
+
+**One invented phrasing was measurably bad and was dropped.** « Je ne veux plus de compte chez vous, merci de le supprimer » scored **0.632** against a newsletter unsubscribe — 0.018 under the 0.65 threshold, close enough that a slightly different message would have been answered with instructions for deleting an account. Removing it took that case to **0.578** and cost nothing: real deletion phrasings still match at 0.704–0.828, and login questions still go to A-29 at 0.899 with A-35 half a point behind.
+
+### An explicit RGPD request leaves the agent entirely, and that is right
+
+Measured on the live categoriser: « supprimer mon compte », « désactiver mon compte » and « supprimer le compte sous l'adresse X » all land on **`account`**, so A-35 is reachable. Adding « conformément au RGPD » sends the same request to **`legal_privacy`** — which has no tools, fails `isInvestigable`, and reaches a person untouched.
+
+That is a feature rather than a gap. A formal erasure request carries a statutory deadline and a duty to verify identity; drafting one automatically is exactly the wrong economy.
+
+**So the split is now stated in the glossary rather than left emergent.** It held on every phrasing tested, but it held by inference — neither line mentioned closing an account, and the model was reconciling « données du compte » against « données personnelles » unaided every time. The `account` gloss now names supprimer / désactiver / fermer and names `legal_privacy` as the exception, following the shape `cosmetovigilance` already uses to hand defective products back to `product`.
+
+Re-measured after the change, twelve cases: the three deletion phrasings and « fermer définitivement » stay on `account`; RGPD, « droit à l'oubli » and a solicitor's letter all reach `legal_privacy`; and login, password reset, newsletter, a delivery question and a skin reaction are unmoved. `categorise.test.mjs` now asserts both halves of the boundary over the prompt source, plus that every subject in the enum has a gloss at all.
+
+### Deletion is confirmed against the sender, never against a named address
+
+The two rules split on whether the sending address resolves to a customer:
+
+- **it does** → do not ask for anything, name what will be deleted without quoting the address, and route `needs_human` — the agent has no write tool and the deletion is a person's action, so the reply says it is *taken in hand*, never *done*.
+- **it does not** → `needs_customer_input`, asking `account_email`.
+
+**A named address is not an identified account**, which is the part that looks like an exception and is not. If somebody writing from X asks to delete the account at Y, we cannot verify they hold Y — so the question is still asked, and the reply invites them to write from Y instead, framed as a protection rather than a suspicion. Acting on the mention alone would let anyone close anyone else's account by email.
+
+Retention — what survives a deletion for accounting reasons — is deliberately not stated in either skeleton. It names `policy_answer` and lets the approved privacy policy supply the sentence, the same rule every other answer follows.
+
+Three sets and 29 rules is already past the point where the page is read rather than scanned. The filter is buttons rather than a `<select>` because the per-set counts are the reason to pick one and a dropdown hides them until it opens, and it appears **only when there is more than one set** — a filter offering a single option is a control that cannot do anything.
+
+It filters the grouped sets rather than the rules, so the buttons always list every set that exists rather than only the one being looked at: a filter that hides its own way out is one you get stuck in. A set whose last rule is deleted while it is selected falls back to showing everything, rather than leaving a blank page with no visible cause.
+
 Once the customer is known, the question "which product is this about" has a much better candidate set than 116 catalogue titles: the two to five things they actually bought. So `matchQuestionToOrder` scores the customer's wording against the last order's line items.
 
 **The IDF weights still come from the catalogue.** An index built over three line items gives every token the same weight and collapses the match to plain word overlap — `creme` would count as much as `led`. So `product-lookup` lends its `catalogueIndex()` and only the *entries* are swapped. Shared rather than rebuilt: a second index would be a second answer to "how rare is this word", and it would also re-tokenise the whole catalogue.
@@ -408,6 +490,54 @@ An adverse-reaction report is the one subject with an empty tool set, and both o
 **Giving a subject tools makes it investigable, and an investigable ticket is a draftable one.** That is the risk the empty set was really buying, and an empty set is a blunt way to buy it. The `cosmetovigilance` answer set now carries one rule — no situation, no conditions, `route: needs_human` — so every ticket in the subject is pinned to a person whatever the evidence says. **Tools gather; the rule refuses to answer.** The level 4 override is untouched: a hospitalisation still strips every tool.
 
 The evidence checklist is one item — *the customer is identified* — and names nothing about the reaction. What caused it, whether the product is implicated and whether anything is owed are the judgements a person makes, and a checklist naming them would invite the case file to answer them.
+
+### The reaction tool records attribution, and attribution is not causation
+
+**REVISED 2026-08-30 again — a third tool, and rules that answer.** `identifyReactionProduct` joins the set, and it is the one product tool this subject gets.
+
+**`lookupProduct` is still out, and the difference is the whole point.** It answers *which product does this message evoke*, and a reaction email routinely evokes three: the one that was used, the one used before it, and a competitor's. « J'utilisais Untel sans souci, depuis que je suis passée à Machin j'ai des rougeurs » names two products and blames one, and picking "the product this ticket is about" from that text is a coin toss — which would then be written into a reaction record. It also returns the ingredient list and the usage advice, which are the raw material for *« ce produit contient X, ce qui peut expliquer… »*, the one sentence this desk must never send.
+
+So the model says which product the customer **blames** and the tool resolves that name against the catalogue. The reading is the model's; the identification is not. It returns an identity and nothing else — the product sheet is fetched, used to confirm the name exists, and dropped.
+
+**Four outcomes, and `not_attributed` is the useful one.** It means the customer described a reaction and named no product, which is the case where the reply has to ask — and it is a positive finding rather than an empty lookup, because the model reached it by reading. `unknown` is the tool never having run, and the two must not collapse: the rule that asks *« de quel produit s'agit-il »* is right on the first and asks a customer a question we never looked into on the second.
+
+**`reaction_cause_unestablished` is raised on every outcome, including success.** Every other caveat fires when something could not be established; this one fires hardest when something was. Naming the product a customer blames is the moment a reply is most tempted to agree that it is to blame. It forbids the denial too — *« ce produit ne peut pas causer cela »* is the same unfounded safety claim with the sign flipped, and it is the one a reply defending the brand reaches for. It is **mechanically checked** rather than advisory, because a causal claim in French needs a causal verb and that has a signature; the ingredient clause catches *« en raison de la présence de … »*, which is how a reply reaches a diagnosis without using one.
+
+**The record is lifted out of the ledger because the ledger loses it.** `tool_calls` keeps `{id, tool, argsHash, outcome}` and drops every tool's `data`, so one word survives the run and the product and the symptoms do not. `ticket_investigations.reaction_report` holds them, nullable rather than `'{}'`: an empty object would have to mean both *no reaction was reported* and *one was, with nothing identified*, and those need different replies. It is on the detail projection and deliberately not on the drafting one — a reply that needs to name the product already has it as an **established fact** cited to the tool call that resolved it, and offering a model the unchecked copy beside the checked one is the split this codebase draws everywhere else.
+
+### The cosmetovigilance rules answer, and a person still releases them
+
+**Seven rules, 2026-08-30**, replacing "one rule that refuses to answer" — which stays as the catch-all beneath them.
+
+The protocol itself — stop using the product, check whether several were layered, reintroduce cautiously once symptoms have gone — is now a rule's **skeleton** rather than a knowledge article retrieved by similarity. That was the point of the layer: an instruction fetched by cosine distance is an instruction that arrives or does not depending on how the customer phrased their email.
+
+**CV-01, CV-02 and CV-04 branch on `reaction_product`, and CV-03 does not.** A question about whether a product suits a medical condition is not a reaction report; it gets its own rule, routes to a person, and answers nothing. Every reaction situation splits two ways: the product is known, or the customer never named one and the reply asks which.
+
+**The ask rules route to `needs_customer_input`, not `needs_human`, and the schema is what decided it.** `support_answers_ask_needs_route_check` refuses an `ask` on any other route, because the drafting stage would otherwise hold a question and a verdict that does not permit asking it. This is a *lighter* route than the blanket `needs_human` these tickets used to get, and it is safe for the reason the whole route mechanism is: `applyPolicyRoute` only ever tightens, so an investigation that concluded a person is needed keeps that verdict and the rule loses.
+
+**CV-02 and CV-04 carry the same answer, stored twice.** A severe reaction and a refund demand after a reaction both get the batch number asked for, a photo invited without insistence, and a note that the team has the request — so the two rows are identical but for their keys. That is exactly the shape the tie-break had to be widened for, and the pair now resolves instead of falling through.
+
+### `ask` is a list, because one reply can need two facts
+
+`support_answers.ask` was a single `MISSING_FIELDS` key until 2026-08-30, and nobody had checked whether one was enough. It is not: a reaction reported with **no product named** needs the product *and* the batch number, and with one slot the rule had to drop one — turning a single reply into two round trips with somebody waiting on an answer about their skin. `missing` on the case file was already a list; this column was the only narrowing between a rule and it.
+
+**`text[] not null default '{}'`, so "asks nothing" has one representation.** The singular column was nullable and the route constraint turned on `ask is null`; an empty array beside a null would have been two ways to say the same thing, which is precisely the shape that produced the earlier three-valued-logic bug in that same constraint. The check is now `cardinality(ask) = 0 or route is not distinct from 'needs_customer_input'`.
+
+Both readers tolerate a bare string, so a row or a caller written against the singular shape does not silently save a rule that asks for nothing — which would be invisible, because `buildCaseFile` turns a `needs_customer_input` verdict with nothing to ask for straight back into `needs_human`.
+
+**Only the severe path asks for both.** CV-01 with no product named asks which product and stops: it never asks for a batch number when the product *is* known, so asking for one only when it is unknown would be incoherent. Traceability to a manufacturing lot is what a severe reaction or a refund claim needs, not a mild one.
+
+**Widening the column exposed an older bug, and it was the more serious one.** A rule's questions were pushed into `missing` only when the ROUTE changed the verdict — so a rule that *agreed* with the investigation contributed nothing at all. Found on the live reaction ticket: the model had already reached `needs_customer_input` by itself, the route therefore changed nothing, and the rule's « quel produit utilisiez-vous » and « quel est le numéro de lot » never arrived. The reply asked whatever the model had thought of instead, which is the non-determinism this whole layer exists to remove — arriving through the one branch where the rule and the investigation agreed.
+
+The questions now travel whenever the FINAL verdict is `needs_customer_input`, which loosens nothing: a rule asking for the batch number against an investigation that concluded a person is needed still loses, because the route could not tighten `needs_human` downward and the branch does not run. The questions only ever join a reply that was already going to ask.
+
+### Cosmetovigilance has its own draft-only switch
+
+`DRAFT_ONLY` asks *has auto-send graduated*; `DRAFT_ONLY_COSMETOVIGILANCE` asks *is this the kind of mail that may ever send itself*. Both default to true and **both must be false** before a reaction ticket can send itself. Folding the second into the first would mean the day the desk graduates is the day cosmetovigilance does, and a wrong reply to somebody describing a skin reaction is not the same size of mistake as a wrong reply about a promotion code.
+
+**It lives in `autoSendEligible`, not beside `DRAFT_ONLY`,** and that placement is the argument. `DRAFT_ONLY` is a rollout switch that gates a send path; this is a property of the subject, which puts it alongside the three conditions already there — the level, the customer's mood, and the mechanical checks. It also keeps the stored column honest: `auto_send_eligible` is the measurement auto-send will eventually be graduated on, and a cosmetovigilance draft recorded as *would have sent* would inflate exactly the number that decision reads.
+
+It **defaults to excluded**, so a caller that has not wired the config gets the safe answer rather than the permissive one. A second subject wanting this should turn the pair into a list rather than add a third boolean.
 
 ### The matched situation is recorded and acted on by nothing
 
@@ -571,6 +701,18 @@ The query side is a whole customer email — long, misspelt, half-polite. A cano
 An exemplar decides which evidence gets collected and which answer is selected. *"Probably this one, or possibly that one"* is not a state either can act on, and resolving it downstream would put the choice somewhere with less information. So `match_support_exemplars()` returns one row per **exemplar**, scored by its best phrasing — not an average, which would punish a situation for having one loosely-worded variant.
 
 **A near-tie resolves to `ambiguous`, not to the higher score.** Two situations at 0.65 and 0.64 are indistinguishable at the precision these numbers carry. The margin is reported because it is the honest confidence signal, and a persistent near-tie is the corpus telling you two exemplars want merging.
+
+**A tie the rules cannot tell apart is settled anyway — on the key, never the score.** The refusal above is made in retrieval, before any rule is loaded, so it cannot know whether the choice changes an answer. Most ties in this corpus do not: measured across the confusable pairs, the situations differed and the reply did not. Refusing there spends a matched situation, and the requirement needs that steer collection with it, to avoid a choice that was free.
+
+So `resolveSituationTie` asks the question retrieval could not. Two situations are interchangeable under a set when `selectAnswer` provably returns the same rule for either, for **every** possible findings map — which holds exactly when the rules naming them are interchangeable, and no rule branches on a need they disagree about (closed over prerequisites, because declaring a need collects its requirements too). Either condition failing leaves the ticket ambiguous, unchanged.
+
+**The first condition was "no rule names either of them" until 2026-08-30, and that version was actively harmful.** It refused the moment a rule named either situation — which is what happens as soon as you write the rules for a confusable pair. Cosmetovigilance is the case that exposed it: a severe reaction (CV-02) and a refund demand after a reaction (CV-04) get the *same* treatment, and because `situation_key` holds one key that answer has to be stored once per situation. Two identical rules made the pair unresolvable, so a tied ticket matched **neither** of them and fell through to the set's catch-all. Authoring the answer made the answer unreachable.
+
+The condition now compares what the rules **do**: identical conditions, route, ask, skeleton, priority and fallback flag, sorted at every level because none of those orderings mean anything. `answer_key` is excluded and is the only field selection never reads — two rules differing only in their key are one rule written twice. What is proved equal is the behaviour, not the credit: the recorded `answer_key` is whichever situation the key sort picked, which is a reporting nuance rather than a behavioural one. The old rule is the new rule's empty case, so nothing that resolved before stops resolving.
+
+**The pick is lexicographic on the exemplar key, and that is the whole of the determinism.** The scores are precisely what could not be trusted to order these two; breaking the tie with them would return a different situation whenever re-embedding nudged 0.660 and 0.655 past each other. `CV-02` before `CV-04` is arbitrary — arbitrary and fixed is the point, and it is only reached once the two have been proved to answer the same. On the real severe-reaction ticket, tied at 0.0051, it selects the lower-scoring CV-02; add a rule naming CV-04 and it goes back to unresolved.
+
+The verdict stays `ambiguous` and `resolved_from` records what was level, so a corpus review still sees the pair asking to be merged. Overwriting it with `matched` would erase the only evidence that the embeddings cannot separate them.
 
 ### Answers are shared across exemplars, not nested inside them
 

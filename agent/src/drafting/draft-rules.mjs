@@ -172,8 +172,34 @@ export function draftDecision({ investigation, ticket } = {}) {
  * NOT GATED ON `categorisation_confidence`. That column is only ever written by
  * failure paths, so treating it as a signal would read "the categoriser crashed"
  * as "the categoriser was unsure".
+ *
+ * A FOURTH CONDITION SINCE 2026-08-30, and it is a SUBJECT rather than a
+ * rollout switch, which is why it belongs in here beside the other three rather
+ * than beside `DRAFT_ONLY`. `DRAFT_ONLY` asks "has auto-send graduated"; this
+ * asks "is this the kind of mail that may ever send itself", and the honest
+ * answer for a reported skin reaction is no — the desk will graduate as a whole
+ * long before that subject should, and a wrong reply there is not the same size
+ * of mistake as a wrong reply about a promotion code.
+ *
+ * It also keeps the RECORDED column honest. This value is the measurement
+ * auto-send will be graduated on, and a cosmetovigilance draft counted as "would
+ * have sent" would inflate exactly the number that decision reads.
+ *
+ * DEFAULTS TO EXCLUDED, so a caller that has not wired the config still gets the
+ * guard. Passing `cosmetovigilanceDraftOnly: false` is the deliberate act of
+ * turning it off, and `DRAFT_ONLY` must be off too — the two are a conjunction.
  */
-export function autoSendEligible({ level, happiness, checksPassed, verdict } = {}) {
+export function autoSendEligible({
+  level,
+  happiness,
+  checksPassed,
+  verdict,
+  category = null,
+  cosmetovigilanceDraftOnly = true
+} = {}) {
+  if (category === 'cosmetovigilance' && cosmetovigilanceDraftOnly) {
+    return false;
+  }
   // AN ACKNOWLEDGEMENT IS NEVER AUTO-SENT, whatever its level. The verdict says
   // a person owns the next move, and the first thing that person needs is the
   // chance to answer properly rather than to follow an automated holding note

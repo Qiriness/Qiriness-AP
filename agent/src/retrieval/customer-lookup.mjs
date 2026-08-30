@@ -34,6 +34,29 @@ const COLUMNS = [
 
 export function createCustomerLookup({ supabase, shopId, logger, audit = true }) {
   let hashIndexPromise = null;
+  let storefrontPromise = null;
+
+  /**
+   * The shop's public address, loaded once and cached like the hash index.
+   *
+   * CACHED RATHER THAN PASSED IN, so no caller has to learn about it: the
+   * registry constructs this lookup synchronously and one more constructor
+   * argument would have to be awaited somewhere. It is a per-shop constant, so
+   * one read serves the whole process.
+   *
+   * A FAILURE IS NULL, NOT A THROW. The address decides whether a reply can
+   * carry a link; it must never decide whether the customer can be looked up at
+   * all. Without it the account block simply describes the page in words.
+   */
+  function storefrontUrl() {
+    storefrontPromise ??= supabaseSelectAll(supabase, 'shops', { id: shopId }, 'storefront_url')
+      .then((rows) => rows?.[0]?.storefront_url ?? null)
+      .catch((error) => {
+        logger?.warn?.('customer.storefront_unavailable', { reason: error.message });
+        return null;
+      });
+    return storefrontPromise;
+  }
 
   /**
    * Maps sha256(email) -> customer id for the whole shop.
@@ -189,6 +212,12 @@ export function createCustomerLookup({ supabase, shopId, logger, audit = true })
 
       if (!customer) {
         logger?.info?.('customer.lookup', { found: false, reason: 'no_match' });
+        // THE ONE BRANCH WITH NO CUSTOMER THAT STILL WANTS A LINK. We cannot say
+        // whether they have an account, so we cannot send them to the right
+        // page — but the login page carries the « mot de passe oublié » form,
+        // and that form works against whichever address they actually used. It
+        // is the one thing they can try while we wait for their answer.
+        const base = String((await storefrontUrl()) || '').replace(/\/+$/, '');
         return {
           found: false,
           reason: 'no_match',
@@ -196,9 +225,20 @@ export function createCustomerLookup({ supabase, shopId, logger, audit = true })
           customerId: null,
           customer: null,
           account: null,
+          // REWRITTEN 2026-08-30, because the old wording described the OTHER
+          // branch. It said « ou a commandé sans créer de compte », which is
+          // exactly the case that reaches the `found` branch instead — a guest
+          // buyer has a customer row, and lands on « aucun compte » there. Here
+          // there is no row at all, and the two need opposite replies: this one
+          // has to ask which address the account is under, and the other must
+          // not ask anything because we already know who they are.
           promptText:
-            'Aucun compte client ne correspond à cette adresse — ' +
-            'la personne n’a jamais commandé avec cette adresse, ou a commandé sans créer de compte.'
+            'Aucune fiche client ne correspond à cette adresse : ni commande, ni compte, ' +
+            'ni inscription à la newsletter sous cette adresse. Le client peut être ' +
+            'enregistré sous une AUTRE adresse — c’est la question à lui poser.' +
+            (base
+              ? ` En attendant, la page de connexion (avec le lien « mot de passe oublié ») est ${base}/account/login`
+              : '')
         };
       }
 
@@ -227,7 +267,7 @@ export function createCustomerLookup({ supabase, shopId, logger, audit = true })
         customerId: customer.id,
         customer: context,
         account,
-        promptText: toPromptText(context, account, { includeEmail })
+        promptText: toPromptText(context, account, { includeEmail, storefrontUrl: await storefrontUrl() })
       };
     }
   };

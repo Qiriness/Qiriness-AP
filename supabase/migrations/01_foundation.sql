@@ -52,6 +52,18 @@ create table public.shops (
   shopify_shop_id text,
   shop_domain text not null,
   shop_name text,
+  -- WHERE CUSTOMERS ACTUALLY GO, which `shop_domain` is not: that one is the
+  -- *.myshopify.com identity every webhook keys on and no customer has ever
+  -- seen. This is Shopify's `primaryDomain.url` -- the only address a reply may
+  -- contain, and the base for /account/login when a customer has to be sent
+  -- somewhere. Nullable: Shopify has always returned it, and a missing link is
+  -- better than an invented one.
+  storefront_url text,
+  -- CLASSIC or NEW_CUSTOMER_ACCOUNTS. Recorded because it decides whether a
+  -- password exists at all: under the new accounts, sign-in is a one-time code
+  -- emailed to the customer and every reply about resetting a password would be
+  -- wrong. A migration between the two is invisible from anywhere else here.
+  customer_accounts_version text,
   environment text not null default 'development',
   installed_at timestamptz,
   uninstalled_at timestamptz,

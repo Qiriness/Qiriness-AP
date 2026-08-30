@@ -394,3 +394,131 @@ test('no rules, no policy field — not an empty shell', () => {
   });
   assert.equal(caseFile.policy, null);
 });
+
+// --- the dashboard's copy of this vocabulary ---------------------------------
+//
+// A TEXT ASSERTION OVER A TYPESCRIPT FILE, which is the same shape as the
+// migration tests' assertions over `.sql`, and for the same reason: the file
+// cannot be imported here, and the thing worth checking is a list of literals.
+//
+// WHY IT EXISTS. `MISSING_FIELD_LABELS` is the dashboard's English rendering of
+// the keys this module owns the French sentence for, and `deriveAction` keeps
+// only the fields present in it. So a key added here and not there does not
+// break a build, does not throw, and does not warn — it renders « Ask the
+// customer for . » with the list it was building come out empty. That is exactly
+// what `purchase_channel` did, unnoticed, until 2026-08-30.
+test('the dashboard labels every field this module can ask for', () => {
+  const source = readFileSync(
+    new URL('../../../web/lib/types.ts', import.meta.url),
+    'utf8'
+  );
+
+  const labels = source.match(
+    /export const MISSING_FIELD_LABELS: Record<MissingField, string> = \{([\s\S]*?)\n\};/
+  );
+  assert.ok(labels, 'MISSING_FIELD_LABELS not found in web/lib/types.ts');
+  const labelled = [...labels[1].matchAll(/^\s{2}([a-z_]+):/gm)].map((m) => m[1]);
+
+  const union = source.match(/export type MissingField =\n([\s\S]*?);\n/);
+  assert.ok(union, 'MissingField union not found in web/lib/types.ts');
+  const declared = [...union[1].matchAll(/"([a-z_]+)"/g)].map((m) => m[1]);
+
+  const owned = Object.keys(MISSING_FIELDS);
+  assert.deepEqual([...labelled].sort(), [...owned].sort(), 'MISSING_FIELD_LABELS has drifted');
+  assert.deepEqual([...declared].sort(), [...owned].sort(), 'the MissingField union has drifted');
+});
+
+// --- a rule that asks for two things ------------------------------------------
+
+test('every field a rule asks for reaches `missing`, once each', () => {
+  // THE CASE THIS EXISTS FOR: a reaction reported with no product named needs
+  // the product AND the batch number. With one slot the rule had to drop one,
+  // which turns a single reply into two round trips with somebody waiting on an
+  // answer about their skin.
+  const built = buildCaseFile({
+    answer: { verdict: 'answerable', established: [{ claim: 'x', evidence_ids: ['t1'] }] },
+    ledger: [{ id: 't1', tool: 'identifyReactionProduct', outcome: 'not_attributed' }],
+    policy: {
+      route: 'needs_customer_input',
+      ask: ['reaction_product_name', 'lot_number']
+    }
+  });
+
+  assert.equal(built.verdict, 'needs_customer_input');
+  assert.deepEqual(
+    built.missing.map((entry) => entry.field),
+    ['reaction_product_name', 'lot_number']
+  );
+  // Both questions have to be findable by the drafting stage, or the second is
+  // a field nothing can word.
+  for (const entry of built.missing) {
+    assert.ok(MISSING_FIELDS[entry.field]?.ask, `${entry.field} has no sentence`);
+  }
+});
+
+test('a field the model already named is not asked for twice', () => {
+  const built = buildCaseFile({
+    answer: {
+      verdict: 'answerable',
+      established: [{ claim: 'x', evidence_ids: ['t1'] }],
+      missing: [{ field: 'lot_number' }]
+    },
+    ledger: [{ id: 't1', tool: 'identifyReactionProduct', outcome: 'not_attributed' }],
+    policy: { route: 'needs_customer_input', ask: ['reaction_product_name', 'lot_number'] }
+  });
+  assert.deepEqual(
+    built.missing.map((entry) => entry.field),
+    ['lot_number', 'reaction_product_name']
+  );
+});
+
+test('a rule written before `ask` was a list still works', () => {
+  // The column was singular until 2026-08-30 and the loader tolerates a bare
+  // string. Asserted rather than assumed: the failure would be a rule that
+  // silently asks for nothing, and a verdict of "ask the customer" with nothing
+  // to ask for is turned straight back into needs_human.
+  const built = buildCaseFile({
+    answer: { verdict: 'answerable', established: [{ claim: 'x', evidence_ids: ['t1'] }] },
+    ledger: [{ id: 't1', tool: 'lookupProduct', outcome: 'no_match' }],
+    policy: { route: 'needs_customer_input', ask: 'product_name' }
+  });
+  assert.equal(built.verdict, 'needs_customer_input');
+  assert.deepEqual(built.missing.map((entry) => entry.field), ['product_name']);
+});
+
+test('a rule that agrees with the verdict still contributes its questions', () => {
+  // THE BUG THIS EXISTS FOR, found on a live reaction ticket. The asks used to
+  // be pushed only when the ROUTE changed the verdict, so a rule that agreed
+  // with the investigation contributed nothing — and the reply asked whatever
+  // the model had thought of, which is the non-determinism the rules layer
+  // exists to remove, arriving through the one branch where the two AGREED.
+  const built = buildCaseFile({
+    answer: {
+      verdict: 'needs_customer_input',
+      established: [{ claim: 'x', evidence_ids: ['t1'] }],
+      missing: [{ field: 'photo' }]
+    },
+    ledger: [{ id: 't1', tool: 'identifyReactionProduct', outcome: 'not_attributed' }],
+    policy: { route: 'needs_customer_input', ask: ['reaction_product_name', 'lot_number'] }
+  });
+
+  assert.equal(built.verdict, 'needs_customer_input');
+  assert.deepEqual(
+    built.missing.map((entry) => entry.field),
+    ['photo', 'reaction_product_name', 'lot_number']
+  );
+});
+
+test('a rule may not smuggle a question past a verdict that forbids asking', () => {
+  // The mirror case, and the reason the branch is gated on the FINAL verdict.
+  // The investigation concluded a person is needed; the rule cannot loosen that,
+  // so its questions must not appear either — a `needs_human` draft is an
+  // acknowledgement, and questions in one are a reply nobody decided to send.
+  const built = buildCaseFile({
+    answer: { verdict: 'needs_human', established: [{ claim: 'x', evidence_ids: ['t1'] }] },
+    ledger: [{ id: 't1', tool: 'identifyReactionProduct', outcome: 'not_attributed' }],
+    policy: { route: 'needs_customer_input', ask: ['reaction_product_name', 'lot_number'] }
+  });
+  assert.equal(built.verdict, 'needs_human');
+  assert.deepEqual(built.missing, []);
+});

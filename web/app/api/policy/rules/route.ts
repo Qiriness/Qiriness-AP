@@ -48,7 +48,14 @@ export async function POST(request: NextRequest) {
       conditions: (body.conditions ?? {}) as Record<string, string[]>,
       answerSkeleton: body.answerSkeleton ? String(body.answerSkeleton) : null,
       route: body.route ? String(body.route) : null,
-      ask: body.ask ? String(body.ask) : null,
+      // A LIST, and a bare string is still accepted: the column was singular
+      // until 2026-08-30 and a caller written against that shape should not
+      // silently save a rule that asks for nothing.
+      ask: Array.isArray(body.ask)
+        ? body.ask.map((key: unknown) => String(key ?? ""))
+        : body.ask
+          ? [String(body.ask)]
+          : [],
       priority: Number(body.priority ?? 0),
       isFallback: body.isFallback === true,
       // NEVER APPROVED BY A SAVE. A rule reaches live mail only through the

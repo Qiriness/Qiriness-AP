@@ -249,8 +249,14 @@ export const COLUMNS = {
   // `candidate_order` travels HERE and deliberately not in
   // `investigationForDrafting`: it is the order a human should check first, and
   // a number a model can see is a number it can quote.
+  //
+  // `reaction_report` follows the same split for a different reason. A reply
+  // that needs to name the product already has it as an ESTABLISHED FACT, cited
+  // to the tool call that resolved it; this column is the same information
+  // without that verification step attached, and a drafting projection carrying
+  // both would offer a model the unchecked copy beside the checked one.
   investigationForDetail:
-    'verdict,established,unverified,missing,handoff,candidate_order,investigated_at,evidence_gaps',
+    'verdict,established,unverified,missing,handoff,candidate_order,reaction_report,investigated_at,evidence_gaps',
 
   /**
    * The case file as the drafting pass reads it back.

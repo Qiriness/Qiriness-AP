@@ -99,7 +99,11 @@ export function buildAccountState(customer) {
  * opts in explicitly, so the exception is visible at the call site rather than
  * being the silent default.
  */
-export function toPromptText(context, account = null, { includeEmail = false } = {}) {
+export function toPromptText(
+  context,
+  account = null,
+  { includeEmail = false, storefrontUrl = null } = {}
+) {
   if (!context) {
     return 'Aucun compte client ne correspond à cette adresse.';
   }
@@ -128,6 +132,14 @@ export function toPromptText(context, account = null, { includeEmail = false } =
     if (account.emailVerified === false) {
       lines.push('Adresse e-mail non vérifiée.');
     }
+    // WHERE TO SEND THEM, AND ONLY WHERE THE STATE MAKES IT USEFUL. A link is
+    // the difference between a reply that resolves a login problem and one that
+    // starts a second thread — but the wrong link is worse than none, and the
+    // right page is a different one for each state.
+    const action = accountAction(account, storefrontUrl);
+    if (action) {
+      lines.push(action);
+    }
     lines.push(
       account.marketing.subscribed
         ? 'Inscrit à la newsletter.'
@@ -139,15 +151,75 @@ export function toPromptText(context, account = null, { includeEmail = false } =
   return parts.join('\n\n');
 }
 
-function describeState(account) {
+/**
+ * The account state, in words the model may repeat.
+ *
+ * « DÉSACTIVÉ » WAS HERE UNTIL 2026-08-30 AND IT WAS FALSE. Shopify stores
+ * `DISABLED` for any customer with no account, which on this shop is 57,140 of
+ * 58,201 — `customerAccounts` is `OPTIONAL`, so every guest checkout and every
+ * newsletter signup lands there. The word was reaching the model as a fact and
+ * being repeated as one: « Le compte client est désactivé » appeared in a stored
+ * case file about a customer who had simply never opened an account.
+ *
+ * It is spelled out at length rather than named, because the failure was a model
+ * reading one adjective and drawing a conclusion. There is no adjective for this
+ * state that does not invite the wrong one.
+ */
+/**
+ * The page this customer should be sent to, or null when there is not one.
+ *
+ * A DIFFERENT PAGE PER STATE, WHICH IS THE WHOLE REASON THE STATES EXIST. An
+ * active account is sent to the login page, where this shop's theme carries the
+ * « mot de passe oublié » form inline — `/account/recover` is a 404 here, so a
+ * reply naming it would send somebody to a dead page. No account at all is sent
+ * to `/account/register`, because there is nothing to reset.
+ *
+ * AN INVITED CUSTOMER GETS NO LINK, and that is the useful part. No self-serve
+ * page finishes an invitation: a new invite has to be sent from the Shopify
+ * admin by a person. Handing them the login page would be the third time they
+ * had tried it.
+ *
+ * NULL WHEN THE STOREFRONT URL IS UNKNOWN. `shops.storefront_url` comes from
+ * Shopify's `primaryDomain`, and a shop synced before that field was fetched has
+ * none — in which case the reply describes the page in words, as the approved
+ * FAQ already does, rather than inventing an address.
+ */
+function accountAction(account, storefrontUrl) {
+  const base = String(storefrontUrl || '').replace(/\/+$/, '');
   if (account.neverActivated) {
-    return 'invité — le compte existe mais n’a jamais été activé par le client';
+    return (
+      'Pour finaliser ce compte, une nouvelle invitation doit être envoyée depuis ' +
+      'l’administration Shopify : aucune page ne permet au client de le faire lui-même.'
+    );
   }
-  if (account.disabled) {
-    return 'désactivé';
+  if (!base) {
+    return null;
   }
   if (account.canSignIn) {
-    return 'actif';
+    return `Page de connexion (le lien « mot de passe oublié » s’y trouve) : ${base}/account/login`;
+  }
+  if (account.disabled) {
+    return `Page de création de compte : ${base}/account/register`;
+  }
+  return null;
+}
+
+function describeState(account) {
+  if (account.neverActivated) {
+    return (
+      'invité — une invitation a été envoyée mais le compte n’a jamais été activé. ' +
+      'Il n’a donc pas de mot de passe, et une réinitialisation de mot de passe ne peut rien donner'
+    );
+  }
+  if (account.canSignIn) {
+    return 'compte actif — le client peut se connecter';
+  }
+  if (account.disabled) {
+    return (
+      'aucun compte — cette personne est connue de la boutique (achat sans création de compte, ' +
+      'ou inscription à la newsletter) mais aucun compte client n’existe pour cette adresse. ' +
+      'Ce n’est PAS un compte désactivé : rien n’a été fermé ni suspendu'
+    );
   }
   return 'inconnu';
 }

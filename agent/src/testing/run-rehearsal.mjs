@@ -442,6 +442,9 @@ export async function runRehearsal({
       // The same numbers the investigation used, so a rehearsal cannot quote a
       // returns window the live agent has no value for.
       parameters,
+      // And the same subject gate, so a rehearsal of a reaction ticket reports
+      // the auto-send answer the live pass would give rather than the default.
+      cosmetovigilanceDraftOnly: config.draftOnlyCosmetovigilance,
       onDraft: (result) => {
         drafted = result;
       }

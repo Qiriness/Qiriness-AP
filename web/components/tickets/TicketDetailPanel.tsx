@@ -8,6 +8,7 @@ import type {
   InvestigationVerdict,
   TicketDetail,
   TicketListItem,
+  TicketReactionReport,
   TicketTracking,
 } from "@/lib/types";
 import styles from "./TicketDetailPanel.module.css";
@@ -27,6 +28,32 @@ const VERDICT_CLASSES: Record<InvestigationVerdict, string> = {
   answerable: styles.verdictAnswerable,
   needs_customer_input: styles.verdictAsk,
   needs_human: styles.verdictHuman,
+};
+
+/**
+ * The "product blamed" line, per outcome.
+ *
+ * FOUR SENTENCES RATHER THAN A NAME AND A DASH. Every outcome here except the
+ * first is a different KIND of not-knowing, and they lead to different next
+ * moves: ambiguous means ask which one, not_in_catalogue means check whether it
+ * is even ours, not_attributed means ask at all. A dash would collapse three
+ * actions into one shrug.
+ */
+const REACTION_PRODUCT: Record<
+  TicketReactionReport["outcome"],
+  (report: TicketReactionReport) => string
+> = {
+  identified: (report) => report.product ?? "—",
+  ambiguous: (report) =>
+    report.alternatives.length > 0
+      ? `Could be ${report.alternatives.join(", ")} — needs confirming`
+      : "Matched more than one product — needs confirming",
+  not_in_catalogue: (report) =>
+    report.claimed
+      ? `“${report.claimed}” — not a product in the catalogue`
+      : "Not a product in the catalogue",
+  not_attributed: () => "The customer did not say which product",
+  unknown: () => "Not recorded",
 };
 
 /**
@@ -126,6 +153,9 @@ export function TicketDetailPanel({ ticket }: TicketDetailPanelProps) {
   // derived in the tool's unresolved branch, so the two are mutually exclusive
   // upstream; this guard states that rather than relying on it.
   const candidate = !orderNumber ? (results?.candidateOrder ?? null) : null;
+  // Null on every subject but cosmetovigilance, and on a reaction ticket whose
+  // run predates the tool — so the block below is absent rather than empty.
+  const reaction = results?.reactionReport ?? null;
 
   return (
     <div className={styles.panel}>
@@ -218,6 +248,48 @@ export function TicketDetailPanel({ ticket }: TicketDetailPanelProps) {
           </>
         )}
       </section>
+
+      {/* THE REPORTED REACTION, and its own block rather than a line among the
+          findings. An operator picking up a cosmetovigilance ticket is looking
+          for two things — which product, what happened — and on these tickets
+          the Order block below is almost always empty, so there is room and a
+          reason to give them their own heading.
+
+          IT SAYS "BLAMES", NOT "CAUSED", in the heading and in every line under
+          it. The record is a reading of the customer's email; whether the
+          product is responsible is the judgement this panel exists to hand to a
+          person, and a heading like "Cause" would quietly make it for them. */}
+      {reaction && (
+        <section className={styles.block}>
+          <h3 className={styles.heading}>Reported reaction</h3>
+          <dl className={styles.facts}>
+            <div className={styles.fact}>
+              <dt>Product blamed</dt>
+              <dd>{REACTION_PRODUCT[reaction.outcome](reaction)}</dd>
+            </div>
+            {reaction.reaction && (
+              <div className={styles.fact}>
+                <dt>Reaction described</dt>
+                <dd>{reaction.reaction}</dd>
+              </div>
+            )}
+            {/* SHOWN ONLY WHERE IT ADDS SOMETHING. When one product resolved,
+                the customer's wording is the evidence that the match is right —
+                or wrong. When nothing resolved, their words are already the
+                whole answer above and repeating them reads as a bug. */}
+            {reaction.outcome === "identified" && reaction.claimed && (
+              <div className={styles.fact}>
+                <dt>Their words</dt>
+                <dd className={styles.muted}>“{reaction.claimed}”</dd>
+              </div>
+            )}
+          </dl>
+          <p className={styles.candidateNote}>
+            What the customer attributes their reaction to. Not an established cause — the
+            agent is barred from drawing one, and so is any reply.
+          </p>
+        </section>
+      )}
 
       <section className={styles.block}>
         <h3 className={styles.heading}>Order</h3>

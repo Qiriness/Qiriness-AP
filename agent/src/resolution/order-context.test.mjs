@@ -367,3 +367,55 @@ test('the value is one the findings vocabulary accepts', () => {
   assert.ok(findingValues('return_eligibility').includes(eligibility(delivered(3), 30)));
   assert.ok(findingValues('return_eligibility').includes(eligibility(delivered(3), null)));
 });
+
+// --- where the refund has got to ---------------------------------------------
+
+test('refund_state answers a different question from payment_state', () => {
+  // THE PAIR THAT MUST NOT COLLAPSE. An order with an open return has had no
+  // money moved, so `payment_state` calls it `paid` — indistinguishable from a
+  // customer who has asked for nothing. « Sous quel délai suis-je remboursé ? »
+  // is asked precisely in that gap.
+  const withReturn = orderStates({
+    order: { refunds: { count: 0 }, delivery: {}, status: { payment: 'PAID' } },
+    signals: { isPaid: true, hasOpenReturn: true }
+  });
+  assert.equal(withReturn.payment_state, 'paid');
+  assert.equal(withReturn.refund_state, 'return_open');
+});
+
+test('an open return outranks a refund that has already gone out', () => {
+  // Checked first on purpose: a customer who has been partially refunded and has
+  // a second return open is asking about the second one.
+  const states = orderStates({
+    order: { refunds: { count: 1 }, delivery: {}, status: { payment: 'PAID' } },
+    signals: { isPaid: true, isRefunded: true, hasOpenReturn: true }
+  });
+  assert.equal(states.refund_state, 'return_open');
+});
+
+test('nothing refunded on a real order is `none`, not `unknown`', () => {
+  // The difference is whether we looked. `none` rests on a real order with no
+  // money moved, which a reply may state; `unknown` is a ticket with no order
+  // context at all, which it may not.
+  const looked = orderStates({
+    order: { refunds: { count: 0 }, delivery: {}, status: { payment: 'PAID' } },
+    signals: { isPaid: true }
+  });
+  assert.equal(looked.refund_state, 'none');
+
+  const noRefundData = orderStates({ order: { delivery: {} }, signals: {} });
+  assert.equal(noRefundData.refund_state, 'unknown');
+});
+
+test('a full refund is told from a partial one', () => {
+  const full = orderStates({
+    order: { refunds: { count: 1, isFull: true }, delivery: {} },
+    signals: { isRefunded: true, isFullyRefunded: true }
+  });
+  const partial = orderStates({
+    order: { refunds: { count: 1, isFull: false }, delivery: {} },
+    signals: { isRefunded: true }
+  });
+  assert.equal(full.refund_state, 'refunded_full');
+  assert.equal(partial.refund_state, 'refunded_partial');
+});

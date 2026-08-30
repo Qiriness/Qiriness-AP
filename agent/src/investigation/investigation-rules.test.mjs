@@ -270,11 +270,24 @@ test('cosmetovigilance gathers, and cannot reach an order tool', () => {
   // and those are the tools that produce it. That exclusion is the part of the
   // original decision that did not change.
   const tools = allowedTools('cosmetovigilance', 'problem', 2);
-  assert.deepEqual(tools, [TOOL_NAMES.LOOKUP_CUSTOMER, TOOL_NAMES.SEARCH_KNOWLEDGE]);
+  assert.deepEqual(tools, [
+    TOOL_NAMES.LOOKUP_CUSTOMER,
+    TOOL_NAMES.SEARCH_KNOWLEDGE,
+    // Added 2026-08-30. The one product tool this subject gets, and it is not
+    // `lookupProduct` — see below, which now asserts the difference rather than
+    // merely excluding the order family.
+    TOOL_NAMES.IDENTIFY_REACTION_PRODUCT
+  ]);
   for (const forbidden of [
     TOOL_NAMES.GET_ORDER_CONTEXT,
     TOOL_NAMES.VERIFY_PURCHASE,
     TOOL_NAMES.CHECK_PHOTO_EVIDENCE,
+    // STILL OUT, NOW THAT A PRODUCT TOOL IS IN — which is the assertion worth
+    // having. `lookupProduct` answers « quel produit ce message évoque-t-il »
+    // and returns the ingredient list with it; a reaction email evokes several
+    // products and the ingredient list is the raw material for a sentence about
+    // cause. `identifyReactionProduct` asks which product the customer BLAMES
+    // and returns an identity only.
     TOOL_NAMES.LOOKUP_PRODUCT
   ]) {
     assert.ok(!tools.includes(forbidden), `${forbidden} must stay out`);

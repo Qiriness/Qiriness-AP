@@ -265,3 +265,49 @@ test('a consumer ticket carries no sender label and is unaffected', () => {
   });
   assert.equal(decision.draft, true);
 });
+
+// --- the subject that never sends itself -------------------------------------
+
+test('a cosmetovigilance draft is never auto-send eligible by default', () => {
+  // Everything else about this ticket says yes: L2, a happy customer, every
+  // check passed, a verdict that is not an acknowledgement. The subject is the
+  // only thing refusing, which is the point — auto-send will graduate for the
+  // desk long before it should for a reported skin reaction.
+  const ok = { level: 2, happiness: 1, checksPassed: true, verdict: 'needs_customer_input' };
+  assert.equal(autoSendEligible(ok), true);
+  assert.equal(autoSendEligible({ ...ok, category: 'cosmetovigilance' }), false);
+  // The guard holds without the config wired: a caller that forgot it gets the
+  // safe answer rather than the permissive one.
+  assert.equal(
+    autoSendEligible({ ...ok, category: 'cosmetovigilance', cosmetovigilanceDraftOnly: undefined }),
+    false
+  );
+});
+
+test('turning the subject flag off is deliberate, and only affects that subject', () => {
+  const ok = { level: 2, happiness: 1, checksPassed: true, verdict: 'needs_customer_input' };
+  assert.equal(
+    autoSendEligible({ ...ok, category: 'cosmetovigilance', cosmetovigilanceDraftOnly: false }),
+    true
+  );
+  // It is a subject gate, not a global one: clearing it must not touch the
+  // conditions that were already there.
+  assert.equal(
+    autoSendEligible({
+      ...ok,
+      level: 3,
+      category: 'cosmetovigilance',
+      cosmetovigilanceDraftOnly: false
+    }),
+    false
+  );
+  assert.equal(
+    autoSendEligible({
+      ...ok,
+      verdict: 'needs_human',
+      category: 'cosmetovigilance',
+      cosmetovigilanceDraftOnly: false
+    }),
+    false
+  );
+});

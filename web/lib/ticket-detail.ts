@@ -29,6 +29,7 @@ import type {
   MissingField,
   OrderStatus,
   TicketOrderFacts,
+  TicketReactionReport,
   TicketResults,
   TicketTracking,
 } from "./types";
@@ -48,6 +49,8 @@ export interface InvestigationRecord {
   handoff: { action?: string | null; why?: string | null } | null;
   /** Internal candidate order: a full bundle, same shape as resolved_context. */
   candidateOrder?: unknown;
+  /** The reported reaction, on a cosmetovigilance ticket. Null everywhere else. */
+  reactionReport?: unknown;
   investigatedAt: string | null;
 }
 
@@ -98,7 +101,42 @@ export function summariseInvestigation(record: InvestigationRecord): TicketResul
     candidateOrder: hasOrder(record.candidateOrder)
       ? summariseOrderContext(record.candidateOrder)
       : null,
+    reactionReport: toReactionReport(record.reactionReport),
     investigatedAt: record.investigatedAt,
+  };
+}
+
+/** The outcomes the agent writes. Anything else is a row from a newer pass. */
+const REACTION_OUTCOMES = [
+  "identified",
+  "ambiguous",
+  "not_in_catalogue",
+  "not_attributed",
+] as const;
+
+/**
+ * The stored reaction record, narrowed for rendering.
+ *
+ * AN UNRECOGNISED OUTCOME BECOMES `unknown` RATHER THAN NULL. Dropping the whole
+ * record would hide the customer's own words along with the outcome this
+ * dashboard could not name — and those words are the half of the record that
+ * never goes stale. A newer agent writing a fifth outcome should degrade to
+ * "we could not place this", not to an empty panel.
+ */
+function toReactionReport(value: unknown): TicketReactionReport | null {
+  if (!value || typeof value !== "object") return null;
+  const record = value as Record<string, unknown>;
+  const outcome = String(record.outcome ?? "");
+  return {
+    outcome: (REACTION_OUTCOMES as readonly string[]).includes(outcome)
+      ? (outcome as TicketReactionReport["outcome"])
+      : "unknown",
+    product: nonEmpty(record.product),
+    claimed: nonEmpty(record.claimed),
+    reaction: nonEmpty(record.reaction),
+    alternatives: Array.isArray(record.alternatives)
+      ? record.alternatives.map((entry) => String(entry ?? "").trim()).filter(Boolean)
+      : [],
   };
 }
 
@@ -229,7 +267,11 @@ function joinList(items: string[]): string {
   return `${items.slice(0, -1).join(", ")} and ${items[items.length - 1]}`;
 }
 
-function nonEmpty(value: string | null | undefined): string | null {
+// `unknown` rather than `string | null | undefined`: it is also the narrowing
+// step for jsonb fields read straight off a row, where the type is a promise
+// nobody checked. The body already coerces, so widening the signature costs
+// nothing and removes the cast every such caller would otherwise write.
+function nonEmpty(value: unknown): string | null {
   const trimmed = String(value ?? "").trim();
   return trimmed.length > 0 ? trimmed : null;
 }

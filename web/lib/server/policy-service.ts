@@ -181,7 +181,8 @@ export interface RuleInput {
   conditions: Record<string, string[]>;
   answerSkeleton: string | null;
   route: string | null;
-  ask: string | null;
+  /** MISSING_FIELDS keys. A list since one reply can need two facts. */
+  ask: string[];
   priority: number;
   isFallback: boolean;
   approvalStatus: string;
@@ -220,10 +221,17 @@ export async function saveRule(shopId: string, input: RuleInput): Promise<Policy
       `A rule may route to ${ROUTES.join(" or ")} — never to answerable.`,
     );
   }
-  if (input.ask && !ASKS.includes(input.ask)) {
-    throw new KnowledgeValidationError(`There is no approved question for “${input.ask}”.`);
+  // De-duplicated, because two copies of a key would put the same question in a
+  // reply twice — `buildCaseFile` already refuses to push a field `missing`
+  // holds, but a rule carrying it twice is an authoring mistake worth naming.
+  const asks = [...new Set((input.ask ?? []).map((key) => String(key ?? "").trim()).filter(Boolean))];
+  const unknown = asks.filter((key) => !ASKS.includes(key));
+  if (unknown.length > 0) {
+    throw new KnowledgeValidationError(
+      `There is no approved question for ${unknown.map((k) => `“${k}”`).join(", ")}.`,
+    );
   }
-  if (input.ask && input.route !== "needs_customer_input") {
+  if (asks.length > 0 && input.route !== "needs_customer_input") {
     throw new KnowledgeValidationError(
       "A rule that asks the customer for something must also route to needs_customer_input.",
     );
@@ -234,7 +242,7 @@ export async function saveRule(shopId: string, input: RuleInput): Promise<Policy
     situationKey: input.situationKey || null,
     conditions,
     route: input.route || null,
-    ask: input.ask || null,
+    ask: asks,
     priority: input.priority ?? 0,
     isFallback: Boolean(input.isFallback),
   };
@@ -306,7 +314,8 @@ function mapRule(row: Record<string, unknown>): PolicyRule {
     conditions: (row.when_conditions as Record<string, string[]>) ?? {},
     answerSkeleton: (row.answer_skeleton as string) ?? null,
     route: (row.route as string) ?? null,
-    ask: (row.ask as string) ?? null,
+    // Tolerates the singular column a row may predate the list change with.
+    ask: Array.isArray(row.ask) ? (row.ask as string[]) : row.ask ? [String(row.ask)] : [],
     priority: Number(row.priority ?? 0),
     isFallback: Boolean(row.is_fallback),
     approvalStatus: String(row.approval_status ?? "draft"),

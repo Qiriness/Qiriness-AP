@@ -6,7 +6,7 @@ import {
   planMoves,
   planTasks
 } from './decompose-rules.mjs';
-import { findingsOf, resolveNeeds } from './evidence-rules.mjs';
+import { findingsOf, reactionReportFrom, resolveNeeds } from './evidence-rules.mjs';
 import { needsNamedBy, selectAnswer } from './answer-selection.mjs';
 import { TOOL_NAMES, escalationTriggers } from './investigation-rules.mjs';
 
@@ -253,6 +253,11 @@ export function createInvestigator(
       // tool call are already settled by the time this runs. It reads them and
       // adds a reading; it cannot have changed them.
       policy: selectPolicy(ticket.policy, run.ledger, names),
+      // THE SAME REASON `policy` IS COMPUTED HERE: the ledger still carries each
+      // tool's `data` at this point and the stored case file will not. Null on
+      // every ticket where the reaction tool did not run, which is all of them
+      // outside cosmetovigilance.
+      reactionReport: reactionReportFrom(run.ledger),
       model
     });
   }
@@ -302,7 +307,7 @@ function selectPolicy(policy, ledger, toolNames) {
     verdict: result.verdict,
     answer_key: result.answer?.answerKey ?? null,
     route: result.answer?.route ?? null,
-    ask: result.answer?.ask ?? null,
+    ask: result.answer?.ask ?? [],
     // The wording guidance, carried so the drafting pass can read it back off
     // the stored row. It is the one field here that reaches a model.
     answer_skeleton: result.answer?.answerSkeleton ?? null,

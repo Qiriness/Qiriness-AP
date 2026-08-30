@@ -488,19 +488,37 @@ export type InvestigationVerdict = "answerable" | "needs_customer_input" | "need
 export type MissingField =
   | "shopify_order_number"
   | "purchase_email"
+  | "account_email"
   | "product_name"
+  | "purchase_channel"
   | "promotion_code"
   | "order_date_or_amount"
-  | "photo";
+  | "photo"
+  | "reaction_product_name"
+  | "lot_number";
 
-/** Reads after "Ask the customer for …", so each label is a noun phrase. */
+/**
+ * Reads after "Ask the customer for …", so each label is a noun phrase.
+ *
+ * `purchase_channel` WAS MISSING UNTIL 2026-08-30, and the failure was silent by
+ * construction: `deriveAction` keeps only fields present in this record, so a
+ * ticket whose one question was "did you buy this in a shop?" rendered « Ask the
+ * customer for . » — the list it was building came out empty. Adding a key to
+ * the agent and not here does not break a build, which is why
+ * `case-file.test.mjs` now reads this file and compares both the union and the
+ * record against the keys the agent owns.
+ */
 export const MISSING_FIELD_LABELS: Record<MissingField, string> = {
   shopify_order_number: "the order number",
   purchase_email: "the email address the order was placed with",
+  account_email: "which email address their account is under",
   product_name: "which product this is about",
+  purchase_channel: "whether they bought it online or in a shop",
   promotion_code: "the promotion code",
   order_date_or_amount: "the order date or amount",
   photo: "a photo of the product",
+  reaction_product_name: "which product they were using",
+  lot_number: "the batch number on the packaging",
 };
 
 /**
@@ -635,7 +653,42 @@ export interface TicketResults {
    * where nothing was confirmed.
    */
   candidateOrder: TicketOrderFacts | null;
+  /**
+   * What the customer blames for a skin reaction, on a cosmetovigilance ticket.
+   *
+   * Null everywhere else, and null on a reaction ticket the tool never ran on —
+   * the panel shows the block only when there is a record, rather than an empty
+   * one saying nothing was found.
+   */
+  reactionReport: TicketReactionReport | null;
   investigatedAt: string | null;
+}
+
+/**
+ * A reported reaction, as `ticket_investigations.reaction_report` stores it.
+ *
+ * ATTRIBUTION, NOT CAUSATION, and the panel's job is to render it that way.
+ * `product` is what the customer's own words resolved to in the catalogue and
+ * `claimed` is those words — both are shown, because a resolution is a match
+ * rather than a fact, and an operator deciding what to do about a reaction needs
+ * to see whether we matched « ma crème de nuit » to something or read a name.
+ */
+export interface TicketReactionReport {
+  /**
+   * `identified` — one catalogue product, named.
+   * `ambiguous` — the words matched several; `alternatives` holds them.
+   * `not_in_catalogue` — a product we do not sell, or a name we could not place.
+   * `not_attributed` — a reaction described with no product blamed at all.
+   */
+  outcome: "identified" | "ambiguous" | "not_in_catalogue" | "not_attributed" | "unknown";
+  /** The catalogue title, only when exactly one product resolved. */
+  product: string | null;
+  /** The customer's own words for the product. The only unmatched field here. */
+  claimed: string | null;
+  /** The symptoms, in the customer's words. */
+  reaction: string | null;
+  /** The candidates behind an `ambiguous` outcome, for whoever resolves it. */
+  alternatives: string[];
 }
 
 /**
@@ -1257,8 +1310,14 @@ export interface PolicyRule {
   conditions: Record<string, string[]>;
   answerSkeleton: string | null;
   route: string | null;
-  /** A MISSING_FIELDS key. The agent owns the sentence; this names which one. */
-  ask: string | null;
+  /**
+   * MISSING_FIELDS keys. The agent owns the sentences; these name which ones.
+   *
+   * A LIST because one reply can need two facts — a reaction reported with no
+   * product named wants the product AND the batch number, and a single slot made
+   * that two round trips. Empty means the rule asks for nothing.
+   */
+  ask: string[];
   priority: number;
   isFallback: boolean;
   approvalStatus: string;

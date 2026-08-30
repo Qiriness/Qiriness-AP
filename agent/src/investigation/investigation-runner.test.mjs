@@ -6,7 +6,7 @@ import { createTicketRecord } from '../../../scripts/lib/ticket-record.mjs';
 import { buildSenderDirectory } from '../ingestion/sender-directory.mjs';
 
 import { TICKET_STATUS_BY_VERDICT, buildCaseFile } from './case-file.mjs';
-import { runInvestigation } from './investigation-runner.mjs';
+import { createCaseFileStore, runInvestigation } from './investigation-runner.mjs';
 
 const TICKET = {
   id: 'tk1',
@@ -548,4 +548,46 @@ test('answerable leaves the ticket open, because nothing has been sent', async (
 
   const patch = store.updates.find((u) => u.patch?.status);
   assert.equal(patch, undefined, 'no status was written');
+});
+
+// --- what the reaction record has to survive ---------------------------------
+//
+// THE COLUMN, NOT THE CASE FILE. Every other test here hands `saveCaseFile` a
+// fake store and asserts what the runner passed it, which never reaches the row
+// mapping — and the row mapping is the whole of this feature's persistence: the
+// tool's `data` is dropped from `tool_calls`, so a `reaction_report` that fails
+// to reach its own column is a product and a set of symptoms lost at the end of
+// the run, silently, with the case file looking correct.
+test('the reaction record reaches its own column, and null when there is none', async () => {
+  const rows = [];
+  const store = createCaseFileStore(null, {
+    transport: {
+      upsert: async (_client, _table, payload) => {
+        rows.push(payload[0]);
+        return payload;
+      }
+    }
+  });
+
+  const report = {
+    outcome: 'identified',
+    product: 'Crème Yeux Anti-Âge',
+    claimed: 'la crème pour les yeux',
+    reaction: 'rougeurs et picotements',
+    alternatives: []
+  };
+
+  const base = {
+    ticket: { id: 't1', customer_id: null },
+    shopId: 's1',
+    triggerMessageId: 'm1'
+  };
+  await store.saveCaseFile({ ...base, caseFile: { ...caseFile(), reactionReport: report } });
+  await store.saveCaseFile({ ...base, caseFile: caseFile() });
+
+  assert.deepEqual(rows[0].reaction_report, report);
+  // NULL, NOT `{}` — the empty object would have to mean both "no reaction was
+  // reported" and "one was, and nothing was identified", and the second is a
+  // finding a rule acts on.
+  assert.equal(rows[1].reaction_report, null);
 });

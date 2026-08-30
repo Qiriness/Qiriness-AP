@@ -63,6 +63,10 @@ export async function runDrafting({
   // Absent by default: a skeleton naming an unset parameter is dropped, which is
   // the behaviour before skeletons existed.
   parameters = new Map(),
+  // Whether a cosmetovigilance draft may ever count as auto-sendable. TRUE BY
+  // DEFAULT, so a caller that has not wired `config.draftOnlyCosmetovigilance`
+  // still records the safe answer rather than the permissive one.
+  cosmetovigilanceDraftOnly = true,
   onDraft
 } = {}) {
   const problem = brandVoiceProblem(brandVoice);
@@ -151,7 +155,9 @@ export async function runDrafting({
           level: ticket.level,
           happiness: ticket.happiness,
           checksPassed: passed,
-          verdict: investigation.verdict
+          verdict: investigation.verdict,
+          category: ticket.category,
+          cosmetovigilanceDraftOnly
         }),
         promptInputs: promptInputs({
           caseFile,

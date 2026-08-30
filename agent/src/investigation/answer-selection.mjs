@@ -202,6 +202,151 @@ function matchesSituation(answer, situationKey) {
 }
 
 /**
+ * Resolves a tie between situations the matcher could not separate — but only
+ * when the choice provably cannot change the outcome.
+ *
+ * WHY A TIE IS REFUSED IN THE FIRST PLACE: two exemplars scoring 0.654 and 0.650
+ * are, at the precision a cosine similarity actually carries, the same distance
+ * away. `summariseExemplarMatches` returns no situation rather than picking,
+ * because picking would be reading a decision out of noise.
+ *
+ * THAT REFUSAL IS CONSEQUENCE-BLIND, and this is the gap it leaves. It happens
+ * in retrieval, before any rule is consulted, so it cannot tell the difference
+ * between a tie that decides something and a tie between two situations this set
+ * answers identically. Measured on the confusable pairs in this corpus, most
+ * were the second kind: the situations differed and the reply did not. Refusing
+ * there costs a matched situation — and with it the requirement needs that steer
+ * collection — to avoid a choice that was free.
+ *
+ * SO THE TEST IS THE OUTCOME, NOT THE SCORE. Two situations are interchangeable
+ * under a set of rules when `selectAnswer` provably returns the same rule for
+ * either, for EVERY possible findings map. That holds exactly when:
+ *
+ *   1. the rules naming them are INTERCHANGEABLE. `matchesSituation` gives each
+ *      situation the rules naming it plus every rule naming none, and the second
+ *      half is shared — so the choice only matters through the first half. When
+ *      no rule names either, both halves are empty and they are trivially the
+ *      same; when the rules naming them do the same thing, `selectAnswer` reads
+ *      the same candidate set either way. « Same thing » is exact rather than
+ *      approximate: identical conditions, route, ask, skeleton, priority and
+ *      fallback flag. Only `answer_key` may differ, and it is the one field
+ *      selection never reads.
+ *
+ *      WIDENED 2026-08-30, AND THE NARROW VERSION WAS ACTIVELY HARMFUL. It
+ *      refused as soon as any rule named either situation — which is what
+ *      happens the moment you write the rules for a confusable pair. A pair with
+ *      two identical rules therefore lost its situation and fell through to the
+ *      set's fallback, ending up with NEITHER of the two rules that agreed on
+ *      what to do. Authoring the answer made the answer unreachable.
+ *
+ *      What is proved equal is what the rule DOES, not which row is credited for
+ *      it: the recorded `answer_key` is whichever situation the key sort picked.
+ *      That is a reporting nuance rather than a behavioural one — the route, the
+ *      question and the wording guidance are identical by construction; and
+ *   2. no rule branches on a need they disagree about. The needs are the only
+ *      other thing the choice changes: they decide what gets collected, so a
+ *      need one declares and the other does not can resolve to a finding under
+ *      one choice and stay undefined under the other. If no condition reads it,
+ *      that difference cannot reach a rule.
+ *
+ * Prerequisites are closed over for (2) because declaring a need pulls its
+ * requirements in with it — `firstUnmetPrerequisite` walks down the graph — so a
+ * need absent from both declarations can still be collected by one of them.
+ *
+ * THE PICK IS BY KEY, NOT BY SCORE, and that is the whole of the determinism.
+ * The scores are what could not be trusted to order these two; re-embedding the
+ * same email could swap them, and a tie broken by score would hand back a
+ * different situation on a rerun of an unchanged ticket. Sorting on the key is
+ * stable whatever the vectors do. It is arbitrary — CV-02 before CV-04 means
+ * nothing — but arbitrary and fixed is the point, and it is only ever reached
+ * once the two have been proved to answer the same.
+ *
+ * Returns the chosen situation, or null when the tie genuinely decides something
+ * and must stay unresolved.
+ *
+ * @param answers  the set's rules, with normalised conditions
+ * @param tied     the situations inside the margin, as `{ exemplarKey, requirementNeeds }`
+ */
+export function resolveSituationTie(answers = [], tied = []) {
+  const situations = (tied || []).filter((s) => s?.exemplarKey);
+  if (situations.length < 2) {
+    return null;
+  }
+
+  const profiles = situations.map((s) => ruleProfile(answers, s.exemplarKey));
+  if (profiles.some((profile) => profile !== profiles[0])) {
+    return null;
+  }
+
+  const branchedOn = new Set(needsNamedBy(answers));
+  for (const need of withPrerequisites(disputedNeeds(situations))) {
+    if (branchedOn.has(need)) {
+      return null;
+    }
+  }
+
+  return [...situations].sort((a, b) => (a.exemplarKey < b.exemplarKey ? -1 : 1))[0];
+}
+
+/**
+ * Everything the rules naming one situation would DO, as a comparable string.
+ *
+ * `answerKey` IS ABSENT AND THAT IS THE POINT. Two rules differing only in their
+ * key are the same rule written twice — which is exactly what a pair of
+ * situations sharing one answer produces, because `situation_key` holds a single
+ * key and a shared answer therefore has to be stored once per situation.
+ *
+ * SORTED AT EVERY LEVEL, because none of the orderings mean anything: rules come
+ * back in whatever order the loader read them, `when_conditions` is a jsonb
+ * object with no guaranteed key order, and the findings within one condition are
+ * a disjunction. Comparing unsorted would report two identical rule sets as
+ * different because one row was inserted later than the other.
+ */
+function ruleProfile(answers, situationKey) {
+  return JSON.stringify(
+    (answers || [])
+      .filter((a) => a?.situationKey === situationKey)
+      .map((a) =>
+        JSON.stringify([
+          Object.entries(a.conditions || {})
+            .map(([need, values]) => [need, [...(values || [])].sort()])
+            .sort(([left], [right]) => (left < right ? -1 : 1)),
+          a.route ?? null,
+          [...(a.ask ?? [])].sort(),
+          a.answerSkeleton ?? null,
+          a.priority ?? 0,
+          Boolean(a.isFallback)
+        ])
+      )
+      .sort()
+  );
+}
+
+/** Needs some tied situation declares and another does not. */
+function disputedNeeds(situations) {
+  const declared = situations.map((s) => new Set(normaliseNeedList(s.requirementNeeds)));
+  const every = new Set(declared.flatMap((set) => [...set]));
+  return [...every].filter((need) => declared.some((set) => !set.has(need)));
+}
+
+/** The needs themselves plus everything declaring them would drag in. */
+function withPrerequisites(needs) {
+  const seen = new Set();
+  const queue = [...needs];
+  while (queue.length > 0) {
+    const need = queue.pop();
+    if (seen.has(need)) continue;
+    seen.add(need);
+    queue.push(...needRequires(need));
+  }
+  return seen;
+}
+
+function normaliseNeedList(value) {
+  return (Array.isArray(value) ? value : []).map((v) => String(v ?? '').trim()).filter(Boolean);
+}
+
+/**
  * The answers still reachable given what is established so far.
  *
  * Filtered by situation for the same reason selection is: a rule written for a
@@ -309,11 +454,13 @@ export function auditAnswerSet(answers = []) {
     if (specificity(answer.conditions) === 0 && !answer.situationKey) {
       problems.push(`${answer.answerKey}: no conditions and no situation — use is_fallback instead`);
     }
-    if (answer.ask && answer.route !== 'needs_customer_input') {
+    if ((answer.ask?.length ?? 0) > 0 && answer.route !== 'needs_customer_input') {
       // The schema forbids this pair, so reaching it means a row was built in
       // code rather than read from the table. Same failure either way: a
       // question the drafting stage is not permitted to ask.
-      problems.push(`${answer.answerKey}: asks for ${answer.ask} without routing to the customer`);
+      problems.push(
+        `${answer.answerKey}: asks for ${answer.ask.join(', ')} without routing to the customer`
+      );
     }
     if (answer.route === 'answerable') {
       problems.push(`${answer.answerKey}: a rule may never route to answerable`);

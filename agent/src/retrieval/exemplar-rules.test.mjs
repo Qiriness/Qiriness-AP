@@ -69,6 +69,26 @@ test('two situations too close together resolve to ambiguous, not to the higher'
   assert.ok(result.margin < 0.03);
 });
 
+test('everyone inside the margin is reported as tied, not just the runner-up', () => {
+  // `margin` describes the top two and nothing else, so a third candidate can
+  // sit inside the margin of the winner while being invisible to it: 0.66 and
+  // 0.645 are 0.015 apart and both within 0.03 of 0.67. A caller resolving the
+  // tie from the pair would settle a three-way one having seen two of them.
+  const result = summariseExemplarMatches(
+    [at(0.67, 'A'), at(0.66, 'B'), at(0.645, 'C'), at(0.52, 'D')],
+    { minMargin: 0.03 }
+  );
+  assert.equal(result.verdict, 'ambiguous');
+  assert.deepEqual(result.tied.map((m) => m.exemplarKey), ['A', 'B', 'C']);
+});
+
+test('a decided match reports no tie at all', () => {
+  // Empty rather than "the winner alone": there is nothing here to resolve, and
+  // a one-element tie would invite a caller to treat every match as a resolution.
+  const result = summariseExemplarMatches([at(0.71, 'P-16'), at(0.44, 'P-19')], { minMargin: 0.03 });
+  assert.deepEqual(result.tied, []);
+});
+
 test('the margin only bites when the winner already cleared the bar', () => {
   // Two near misses close together are still just near misses; calling that
   // "ambiguous" would imply a choice was available.

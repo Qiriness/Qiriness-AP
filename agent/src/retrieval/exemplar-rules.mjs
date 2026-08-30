@@ -118,6 +118,17 @@ export function summariseExemplarMatches(matches, { minMargin = 0 } = {}) {
     exemplar: verdict === 'matched' && !ambiguous ? best : null,
     bestSimilarity: best ? best.similarity : null,
     margin,
+    // WHO IS ACTUALLY TIED, which is not always just the runner-up: three
+    // situations at 0.654 / 0.650 / 0.645 put the third inside the margin of
+    // the first while `margin` only ever describes the first two. A caller that
+    // reads the pair would think it had seen the whole tie.
+    //
+    // Reported rather than resolved, because this module cannot resolve it: it
+    // knows how close the scores are and nothing about what the situations are
+    // FOR. Whether a tie matters is a question about the rules that read it,
+    // which live a layer up — so the tie is handed over intact and this stays
+    // the same consequence-blind measurement it has always been.
+    tied: ambiguous ? ranked.filter((m) => best.similarity - m.similarity < minMargin) : [],
     // Kept whatever the verdict: a near miss is the signal that a situation is
     // missing from the corpus, which is the report worth having while it fills.
     candidates: ranked.slice(0, 3)

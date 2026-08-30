@@ -38,6 +38,7 @@ export function RuleBook({
   const [editing, setEditing] = useState<PolicyRule | "new" | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [only, setOnly] = useState<string | null>(null);
 
   const sets = useMemo(() => {
     const grouped = new Map<string, PolicyRule[]>();
@@ -47,6 +48,14 @@ export function RuleBook({
     }
     return [...grouped.entries()].sort((a, b) => a[0].localeCompare(b[0]));
   }, [rules]);
+
+  // FILTERED FROM `sets`, NOT FROM `rules`, so the buttons always list every set
+  // that exists rather than only the one being looked at — a filter that hides
+  // its own way out is one you get stuck in. And a set whose last rule is
+  // deleted while it is selected falls back to showing everything, rather than
+  // leaving an empty page with no visible reason.
+  const visible = only ? sets.filter(([set]) => set === only) : sets;
+  const showing = visible.length > 0 ? visible : sets;
 
   const questionFor = useMemo(
     () => new Map(situations.map((s) => [s.key, s.question])),
@@ -81,6 +90,35 @@ export function RuleBook({
           <span className={styles.count}>
             {liveCount} live of {rules.length}
           </span>
+          {/* ONLY WHEN THERE IS SOMETHING TO CHOOSE BETWEEN. One answer set is
+              the whole rulebook, and a filter offering a single option is a
+              control that cannot do anything.
+
+              Buttons rather than a <select>: the counts are the reason to pick
+              one, and a dropdown hides them until it is open. */}
+          {sets.length > 1 && (
+            <div className={styles.filter} role="group" aria-label="Filter by answer set">
+              <button
+                type="button"
+                className={only === null ? styles.filterOn : styles.filterOff}
+                aria-pressed={only === null}
+                onClick={() => setOnly(null)}
+              >
+                all
+              </button>
+              {sets.map(([setName, inSet]) => (
+                <button
+                  key={setName}
+                  type="button"
+                  className={only === setName ? styles.filterOn : styles.filterOff}
+                  aria-pressed={only === setName}
+                  onClick={() => setOnly(only === setName ? null : setName)}
+                >
+                  {setName} <span className={styles.filterCount}>{inSet.length}</span>
+                </button>
+              ))}
+            </div>
+          )}
           <Button variant="secondary" size="sm" onClick={() => setEditing("new")}>
             New rule
           </Button>
@@ -96,7 +134,7 @@ export function RuleBook({
         </p>
       )}
 
-      {sets.map(([set, list]) => (
+      {showing.map(([set, list]) => (
         <div key={set} className={styles.set}>
           <h3 className={styles.setName}>{set}</h3>
           <ul className={styles.rules}>
@@ -140,9 +178,9 @@ export function RuleBook({
                   {rule.route ? (
                     <>
                       <b>{rule.route}</b>
-                      {rule.ask ? (
+                      {rule.ask.length > 0 ? (
                         <>
-                          , asking for <b>{rule.ask}</b>
+                          , asking for <b>{rule.ask.join(" and ")}</b>
                         </>
                       ) : null}
                     </>

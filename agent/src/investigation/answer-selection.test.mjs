@@ -9,6 +9,7 @@ import {
   matches,
   nextNeed,
   normaliseConditions,
+  resolveSituationTie,
   selectAnswer,
   specificity
 } from './answer-selection.mjs';
@@ -380,8 +381,23 @@ test('the audit catches the two outcomes the schema forbids', () => {
   // Reachable only when a row is built in code rather than read from the table,
   // and the failure is the same either way.
   assert.match(
-    auditAnswerSet([answer('x', { order_state: 'not_dispatched' }, { ask: 'photo', route: 'needs_human' })])[0],
+    auditAnswerSet([
+      answer('x', { order_state: 'not_dispatched' }, { ask: ['photo'], route: 'needs_human' })
+    ])[0],
     /asks for photo without routing to the customer/
+  );
+  // Both keys named, because a rule asking for two facts on the wrong route is
+  // two questions the drafting stage may not put — and a message naming one of
+  // them would send somebody looking for a rule that asks for one thing.
+  assert.match(
+    auditAnswerSet([
+      answer('z', {}, {
+        situationKey: 'CV-02',
+        ask: ['reaction_product_name', 'lot_number'],
+        route: 'needs_human'
+      })
+    ])[0],
+    /asks for reaction_product_name, lot_number without routing to the customer/
   );
   assert.match(
     auditAnswerSet([answer('y', { order_state: 'not_dispatched' }, { route: 'answerable' })])[0],
@@ -405,4 +421,166 @@ test('the rules say which needs to score, not the ticket', () => {
 test('a set with no conditions anywhere names no needs', () => {
   assert.deepEqual(needsNamedBy([answer('x', {}, { situationKey: 'O-13' })]), []);
   assert.deepEqual(needsNamedBy([]), []);
+});
+
+// --- resolving a tie the rules do not care about -----------------------------
+
+/** Two situations the embeddings could not separate, as the matcher hands them over. */
+const tie = (...situations) =>
+  situations.map(([exemplarKey, requirementNeeds = []]) => ({ exemplarKey, requirementNeeds }));
+
+test('a tie between situations no rule tells apart is settled rather than dropped', () => {
+  // THE REAL CASE, from the cosmetovigilance set: a severe reaction that also
+  // demands a refund scores CV-02 and CV-04 four thousandths apart, because it
+  // genuinely is both. Neither is named by a rule and the set's one rule reads
+  // no findings at all, so both reach the same answer whatever the evidence
+  // shows — and refusing to pick would throw away the situation for nothing.
+  const rules = [answer('reaction_signalee', {}, { route: 'needs_human', situationKey: null })];
+  const chosen = resolveSituationTie(
+    rules,
+    tie(['CV-04', ['customer_identity', 'purchase_verified']], ['CV-02', ['customer_identity']])
+  );
+  assert.equal(chosen.exemplarKey, 'CV-02');
+});
+
+test('the winner is the key, not the score', () => {
+  // The scores are precisely what could not be trusted to order these two, so
+  // breaking the tie with them would hand back a different situation whenever
+  // re-embedding nudged them past each other. CV-04 arrives first here because
+  // it scored higher; the pick must not care.
+  const rules = [answer('shared', {}, { route: 'needs_human' })];
+  const first = resolveSituationTie(rules, tie(['CV-04'], ['CV-02']));
+  const reversed = resolveSituationTie(rules, tie(['CV-02'], ['CV-04']));
+  assert.equal(first.exemplarKey, 'CV-02');
+  assert.equal(reversed.exemplarKey, 'CV-02');
+});
+
+test('a tie stays unresolved when only one situation has a rule', () => {
+  // The moment one of them has an answer written for it and the other does not,
+  // the choice decides which answer — which is the whole reason ambiguity is
+  // refused.
+  const rules = [
+    answer('shared', {}, { route: 'needs_human' }),
+    answer('specific', {}, { situationKey: 'CV-04', route: 'needs_customer_input' })
+  ];
+  assert.equal(resolveSituationTie(rules, tie(['CV-02'], ['CV-04'])), null);
+});
+
+test('a tie survives both situations being named, when the rules agree', () => {
+  // THE CASE THE NARROW CHECK GOT WRONG. A severe reaction and a refund demand
+  // get the same treatment — ask for the lot number, invite a photo, tell them a
+  // person has it — so the answer is written once per situation because
+  // `situation_key` holds one key. Under the old rule that made the pair
+  // unresolvable, and a tied ticket then matched NEITHER of the two identical
+  // rules and fell through to the fallback.
+  const severe = { route: 'needs_customer_input', ask: 'lot_number', answerSkeleton: 'Demander le lot.' };
+  const rules = [
+    answer('reaction_grave', { reaction_product: 'identified' }, { situationKey: 'CV-02', ...severe }),
+    answer('remboursement', { reaction_product: 'identified' }, { situationKey: 'CV-04', ...severe })
+  ];
+  assert.equal(resolveSituationTie(rules, tie(['CV-04'], ['CV-02']))?.exemplarKey, 'CV-02');
+});
+
+test('rules that agree on everything but one field are not interchangeable', () => {
+  // `ask` is the difference here and it is the entire content of the reply: one
+  // asks for the batch number, the other for a photo. Everything else matching
+  // makes this MORE dangerous rather than less, because the pair looks
+  // interchangeable to a reader skimming the two rows.
+  const base = { route: 'needs_customer_input', answerSkeleton: 'Demander.' };
+  const rules = [
+    answer('a', { reaction_product: 'identified' }, { situationKey: 'CV-02', ...base, ask: 'lot_number' }),
+    answer('b', { reaction_product: 'identified' }, { situationKey: 'CV-04', ...base, ask: 'photo' })
+  ];
+  assert.equal(resolveSituationTie(rules, tie(['CV-02'], ['CV-04'])), null);
+});
+
+test('the answer key is the one field allowed to differ', () => {
+  // It is the only field selection never reads. Two rules differing only in
+  // their key are one rule stored twice, which is exactly what a shared answer
+  // across two situations has to be.
+  const shape = { route: 'needs_human', answerSkeleton: 'Une personne reprend le dossier.' };
+  const rules = [
+    answer('grave_cv02', {}, { situationKey: 'CV-02', ...shape }),
+    answer('grave_cv04', {}, { situationKey: 'CV-04', ...shape })
+  ];
+  assert.ok(resolveSituationTie(rules, tie(['CV-02'], ['CV-04'])));
+});
+
+test('neither condition order nor finding order makes two rules differ', () => {
+  // `when_conditions` is jsonb with no guaranteed key order and the findings
+  // within one condition are a disjunction, so both orderings are noise. Two
+  // rules that differ only in how they were typed must stay interchangeable.
+  const rules = [
+    answer(
+      'a',
+      { reaction_product: ['ambiguous', 'identified'], policy_answer: 'answered' },
+      { situationKey: 'CV-02', route: 'needs_human' }
+    ),
+    answer(
+      'b',
+      { policy_answer: 'answered', reaction_product: ['identified', 'ambiguous'] },
+      { situationKey: 'CV-04', route: 'needs_human' }
+    )
+  ];
+  assert.equal(resolveSituationTie(rules, tie(['CV-02'], ['CV-04']))?.exemplarKey, 'CV-02');
+});
+
+test('one situation carrying an extra rule breaks the tie open', () => {
+  // Equal on the rule they share and unequal on the count. The extra rule only
+  // fires in one evidence position, which is enough: interchangeable has to mean
+  // "for every findings map", not "for the common case".
+  const shape = { route: 'needs_human' };
+  const rules = [
+    answer('shared_cv02', {}, { situationKey: 'CV-02', ...shape }),
+    answer('shared_cv04', {}, { situationKey: 'CV-04', ...shape }),
+    answer('extra_cv04', { reaction_product: 'not_attributed' }, { situationKey: 'CV-04', ...shape })
+  ];
+  assert.equal(resolveSituationTie(rules, tie(['CV-02'], ['CV-04'])), null);
+});
+
+test('a tie stays unresolved when a rule reads a need the two disagree on', () => {
+  // Only CV-04 declares `purchase_verified`, so choosing it collects a finding
+  // choosing CV-02 never would. With a rule branching on that finding, the two
+  // situations reach different answers without either being named.
+  const rules = [
+    answer('unverified', { purchase_verified: 'known_no_orders' }),
+    answer('verified', { purchase_verified: 'known_buyer' })
+  ];
+  assert.equal(
+    resolveSituationTie(rules, tie(['CV-02', ['customer_identity']], ['CV-04', ['purchase_verified']])),
+    null
+  );
+});
+
+test('a disputed need drags its prerequisites into the comparison', () => {
+  // `promotion_eligibility` requires `promotion_validity`, so declaring the
+  // first collects the second. A rule branching on validity is therefore
+  // reachable under one choice and not the other, even though the two
+  // situations disagree only about eligibility and neither is named.
+  //
+  // Nothing needs to branch on eligibility itself for this to matter, and that
+  // is the point of walking the graph: the difference reaches a rule through a
+  // need neither situation mentions.
+  const rules = [answer('expired', { promotion_validity: 'expired' })];
+  assert.equal(
+    resolveSituationTie(rules, tie(['P-15', []], ['P-16', ['promotion_eligibility']])),
+    null
+  );
+});
+
+test('needs both situations declare are not a disagreement', () => {
+  // Same needs on both sides: a rule may branch on them freely, because the
+  // choice cannot change what gets collected.
+  const rules = [answer('a', { purchase_verified: 'known_buyer' })];
+  const chosen = resolveSituationTie(
+    rules,
+    tie(['CV-04', ['purchase_verified']], ['CV-02', ['purchase_verified']])
+  );
+  assert.equal(chosen.exemplarKey, 'CV-02');
+});
+
+test('nothing to resolve is not a resolution', () => {
+  assert.equal(resolveSituationTie([answer('x', {})], tie(['CV-02'])), null);
+  assert.equal(resolveSituationTie([answer('x', {})], []), null);
+  assert.equal(resolveSituationTie([], undefined), null);
 });

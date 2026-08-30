@@ -157,3 +157,42 @@
 .error {
   color: var(--danger, #b4341f);
 }
+
+/* The answer-set filter. Buttons rather than a <select>: there are three sets
+   today and a dropdown hides the counts, which are the reason to pick one. */
+.filter {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  flex-wrap: wrap;
+}
+
+.filterOff,
+.filterOn {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0.2rem 0.6rem;
+  font-size: var(--text-caption);
+  line-height: 1.4;
+  cursor: pointer;
+  background: transparent;
+  color: var(--text-subtle);
+}
+
+.filterOff:hover {
+  color: var(--text);
+  border-color: var(--border-strong, var(--border));
+}
+
+.filterOn {
+  background: var(--surface-raised, rgba(127, 127, 127, 0.14));
+  border-color: currentColor;
+  color: var(--text);
+  font-weight: 600;
+}
+
+.filterCount {
+  font-variant-numeric: tabular-nums;
+  opacity: 0.65;
+  margin-left: 0.15rem;
+}

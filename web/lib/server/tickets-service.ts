@@ -232,6 +232,7 @@ export async function getTicketDetail(shopId: string, ticketId: string): Promise
       missing: Array.isArray(row.missing) ? row.missing : [],
       handoff: row.handoff ?? null,
       candidateOrder: row.candidate_order ?? null,
+      reactionReport: row.reaction_report ?? null,
       investigatedAt: row.investigated_at ?? null,
     }),
   };

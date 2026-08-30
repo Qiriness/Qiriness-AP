@@ -683,7 +683,6 @@ about whether we *know* the answer, not about what the stock actually is
 - « Impossible de me connecter à mon compte même en changeant le mot de passe »
 
 **needs** `customer_account_state`, `policy_answer`
-
 ---
 
 ### PA-30 · Comment obtenir une facture pour ma commande ?
@@ -727,6 +726,111 @@ about whether we *know* the answer, not about what the stock actually is
 
 **needs** `payment_state`, `policy_answer`
 **exemplaires** → jeu `commande`
+
+**Contenu stable** _(à rédiger)_
+>
+
+---
+
+# Cosmétovigilance — 3 questions · 3 messages
+
+> **Read the split before writing here.** Eight tickets carried this subject and
+> only three belong to it: four were physically defective products — masks
+> arriving dried out, one contaminated — and one is an internal thread. The
+> categoriser was sharpened on 2026-08-30 so a defective item goes to `product`
+> ("le produit lui-même pose problème, pas la peau du client"), which is why the
+> counts here are small and honest rather than large and mixed.
+>
+> **Nothing in this family is ever answered by the agent.** The `cosmetovigilance`
+> answer set carries a rule routing every ticket to a person whatever the
+> evidence says, and a rule cannot route to `answerable` at all. The situations
+> below exist to shape the acknowledgement and to tell a reviewer what they are
+> looking at — not to open a path to a reply.
+
+### CV-01 · J'ai eu des rougeurs ou des boutons après avoir utilisé un produit.
+`cosmetovigilance` · `problem` · **1 msgs** · 🟢
+
+**Variantes réelles**
+- « J'ai voulu essayer une autre gamme la crème d'exception qui malheureusement m'a provoqué des rougeurs et boutons sur les joues, le nez et le front. Je vous précise avoir une peau mature très sensible et déshydratée »
+- « J'ai utilisé votre soin et j'ai eu des rougeurs et des démangeaisons » _(authored)_
+- « Après application j'ai ressenti des picotements et une sensation d'échauffement sur tout le visage » _(authored)_
+- « Ma peau a mal réagi à votre masque, j'ai des plaques depuis hier » _(authored)_
+- « Je pense être allergique à un ingrédient de votre crème, que me conseillez-vous ? » _(authored)_
+- « J'ai eu de petits boutons après deux utilisations. Dois-je arrêter le produit ou continuer ? » _(authored)_
+
+**needs** `customer_identity`, `product_identity`, `policy_answer`
+**exemplaires** → jeu `cosmetovigilance`
+
+> **The mild end, and it does not look like a complaint.** The real message thanks
+> us for the product she is still buying, reports the reaction almost in passing,
+> and asks for a sample of a third cream. `product_identity` is declared and
+> **cannot be satisfied** — this subject has no product tool — so it reports as a
+> gap, which is the honest state: a reviewer needs to know which cream, and the
+> agent cannot tell them.
+
+**Contenu stable** _(à rédiger)_
+>
+
+---
+
+### CV-02 · J'ai eu une réaction sévère et je demande un remboursement.
+`cosmetovigilance` · `problem` · **1 msgs** · 🟢
+
+**Variantes réelles**
+- « After using the product, I experienced a serious reaction. The reaction has been so severe that I have not been able to step out of my home due to the condition of my skin. Given the adverse reaction caused by your product, I expect a full refund at the earliest »
+- « J'ai fait une réaction très importante à votre produit et je demande le remboursement complet de ma commande » _(authored)_
+- « Mon visage a gonflé et me brûle depuis que j'ai appliqué votre soin. J'exige un dédommagement » _(authored)_
+- « J'ai dû consulter un médecin après avoir utilisé votre produit. Je veux être remboursée intégralement » _(authored)_
+- « Réaction violente, je ne peux plus sortir de chez moi. Que comptez-vous faire ? » _(authored)_
+- « Votre produit m'a abîmé la peau, je demande le remboursement et je compte le faire savoir » _(authored)_
+
+**needs** `customer_identity`, `product_identity`, `purchase_verified`, `policy_answer`
+**exemplaires** → jeu `cosmetovigilance`
+
+> **Separate from CV-01 because the answer is separate.** A mild reaction wants
+> care and advice; this one arrives with a refund demand, a photograph of the
+> skin, and — in the real message — a purchase made on Amazon rather than from
+> us. Both go to a person, and the person needs to know which of the two they
+> have opened before reading a line.
+>
+> **`purchase_verified` is declared and unsatisfiable here**, deliberately: no
+> refund decision can be made without knowing whether the purchase was ours, and
+> this subject has no purchase tool. The gap is the report.
+>
+> The first variant is **English**, stored as `fr`: the importer reads no language
+> annotation, and `match_support_exemplars` reports the language but never filters
+> on it. The vector is right; the label is not.
+
+**Contenu stable** _(à rédiger)_
+>
+
+---
+
+### CV-03 · Puis-je utiliser ce produit compte tenu de mon état de santé ?
+`cosmetovigilance` · `problem` · **1 msgs** · 🟢
+
+**Variantes réelles**
+- « je viens d'acquérir un masque Qiriness. pouvez vous me dire quels sont les effets secondaires pour les yeux. D'autre part j'ai été opérée il y a plusieurs années, j'espère qu'il n'y a pas de risque » _(generalised — see the note below)_
+- « Puis-je utiliser ce produit si je suis enceinte ou si je suis un traitement dermatologique ? » _(authored)_
+- « J'allaite, est-ce que votre soin est compatible ? » _(authored)_
+- « J'ai de l'eczéma / de la rosacée, votre masque est-il adapté à ma peau ? » _(authored)_
+- « Y a-t-il des contre-indications à utiliser le masque LED ? » _(authored)_
+- « Je suis sous traitement pour la peau, puis-je utiliser vos produits en même temps ? » _(authored)_
+
+**needs** `product_identity`, `policy_answer`
+**exemplaires** → jeu `cosmetovigilance`
+
+> **Asked BEFORE use, which is what makes it its own situation.** Nothing has gone
+> wrong yet; the customer is asking whether it will. It goes to a person every
+> time, with no evidence branch to reach for: a question about someone's health is
+> never answered from an article, however good the article is.
+>
+> **THE REAL PHRASING WAS GENERALISED, and the diagnosis removed.** It named the
+> condition a customer had been operated on for. A phrasing is embedded and kept
+> for as long as the corpus lives, and that detail bought nothing — matching turns
+> on the SHAPE ("I have a history, is this safe?"), which the surrounding words
+> carry perfectly well. Keeping it would have stored one customer's medical record
+> in a retrieval index to answer somebody else's question.
 
 **Contenu stable** _(à rédiger)_
 >
@@ -779,7 +883,7 @@ another thing to translate, so translating early means paying twice. The schema
 is ready (`language`, `translated`, index space at 100+); nothing generates
 translations yet, by choice.
 
-**2. Merge candidates — three resolved 2026-08-12, a fourth 2026-08-30.** O-09/O-10, D-03/D-04 and P-15/P-16 were merged then; **O-09/O-11** now. This document holds **30** questions, and `support_exemplars` **30 live rows** once O-11 is soft-deleted — counted rather than carried forward, because the “32 → 29” written here in August never matched what the importer parses.
+**2. Merge candidates — three resolved 2026-08-12, a fourth 2026-08-30.** O-09/O-10, D-03/D-04 and P-15/P-16 were merged then; **O-09/O-11** now. This document holds **33** questions, and `support_exemplars` **33 live rows** once O-11 is soft-deleted — counted rather than carried forward, because the “32 → 29” written here in August never matched what the importer parses.
 
 The three had three different justifications, and the difference is worth
 keeping: **O-09/O-10** and **D-03/D-04** shared a single answer, so the split was

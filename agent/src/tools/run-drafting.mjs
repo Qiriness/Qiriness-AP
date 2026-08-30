@@ -68,7 +68,9 @@ async function main() {
 
   console.log(
     `\n${dryRun ? 'DRY RUN — nothing written.' : 'Drafting.'} Model: ${config.draftingModel}` +
-      ` · DRAFT_ONLY=${config.draftOnly} · livraison : ${config.draftDelivery}\n`
+      ` · DRAFT_ONLY=${config.draftOnly}` +
+      ` · DRAFT_ONLY_COSMETOVIGILANCE=${config.draftOnlyCosmetovigilance}` +
+      ` · livraison : ${config.draftDelivery}\n`
   );
 
   const totals = await runDrafting({
@@ -79,6 +81,7 @@ async function main() {
     shopId,
     model: config.draftingModel,
     parameters: await loadParametersFor(supabase, shopId, logger),
+    cosmetovigilanceDraftOnly: config.draftOnlyCosmetovigilance,
     logger,
     limit,
     ticketId,

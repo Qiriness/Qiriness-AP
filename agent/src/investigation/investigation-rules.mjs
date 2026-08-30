@@ -35,7 +35,8 @@ export const TOOL_NAMES = {
   LIST_ACTIVE_PROMOTIONS: 'listActivePromotions',
   GET_ORDER_CONTEXT: 'getOrderContext',
   VERIFY_PURCHASE: 'verifyPurchase',
-  CHECK_PHOTO_EVIDENCE: 'checkPhotoEvidence'
+  CHECK_PHOTO_EVIDENCE: 'checkPhotoEvidence',
+  IDENTIFY_REACTION_PRODUCT: 'identifyReactionProduct'
 };
 
 const T = TOOL_NAMES;
@@ -164,11 +165,24 @@ const TOOLS_BY_SUBJECT = {
   // same guidance can arrive twice — once retrieved, once from a rule — and the
   // two can drift.
   //
-  // AND THE RULE IS THE SECOND HALF. Giving a subject tools makes it
+  // AND THE RULES ARE THE SECOND HALF. Giving a subject tools makes it
   // investigable, and an investigable ticket is a draftable one — so the
-  // `cosmetovigilance` answer set carries one rule that routes every ticket to a
-  // person whatever the evidence says. Tools gather; the rule refuses to answer.
-  cosmetovigilance: [T.LOOKUP_CUSTOMER, T.SEARCH_KNOWLEDGE],
+  // `cosmetovigilance` answer set routes every ticket to a person whatever the
+  // evidence says. Tools gather; the rules refuse to answer unreviewed.
+  //
+  // `identifyReactionProduct` ADDED 2026-08-30, and it is the one product tool
+  // this subject gets. `lookupProduct` is still absent and the difference is the
+  // whole point: it answers « quel produit ce message évoque-t-il », and a
+  // reaction email routinely evokes three — the one that was used, the one used
+  // before it, and a competitor's. Identifying "the product this ticket is
+  // about" on that text is a coin toss, and a coin toss is what would then be
+  // written into a reaction record.
+  //
+  // It also returns LESS than `lookupProduct` does, deliberately: an identity
+  // and nothing else, where `lookupProduct` returns the ingredient list and the
+  // usage advice. Those are the raw material for a sentence about why a reaction
+  // happened, which is exactly the sentence nobody here may write.
+  cosmetovigilance: [T.LOOKUP_CUSTOMER, T.SEARCH_KNOWLEDGE, T.IDENTIFY_REACTION_PRODUCT],
   legal_privacy: [],
   b2b: [],
   partner_collaboration: [],
@@ -283,13 +297,19 @@ const EVIDENCE_BY_SUBJECT = {
     { key: 'promotion_status', label: 'le statut du code et ses conditions sont établis' }
   ],
   account: [{ key: 'customer_identified', label: 'la fiche client correspondant à l’expéditeur est trouvée' }],
-  // ONE ITEM, AND IT IS NOT ABOUT THE REACTION. Nothing here asks what caused
-  // it, whether the product is implicated, or whether a refund is owed — those
-  // are the judgements a person makes, and a checklist naming them would invite
-  // the case file to answer them. Knowing who wrote in is the whole job.
+  // NOTHING HERE ASKS WHAT CAUSED THE REACTION, and the third item is the one
+  // that has to be read carefully to see that it does not. Whether the product
+  // is implicated, and whether a refund is owed, remain the judgements a person
+  // makes; a checklist naming them would invite the case file to answer them.
+  //
+  // « mis en cause par le client » is a fact about the EMAIL — the customer
+  // wrote that this product gave them a reaction — and establishing it is
+  // reading, not adjudicating. The distinction is load-bearing enough that the
+  // tool, the finding and the caveat all restate it.
   cosmetovigilance: [
     { key: 'customer_identified', label: 'la fiche client correspondant à l’expéditeur est trouvée' },
-    { key: 'knowledge_searched', label: 'la base de connaissances approuvée a été consultée' }
+    { key: 'knowledge_searched', label: 'la base de connaissances approuvée a été consultée' },
+    { key: 'reaction_product', label: 'le produit mis en cause par le client est identifié, ou son absence constatée' }
   ],
   other: [{ key: 'knowledge_searched', label: 'la base de connaissances approuvée a été consultée' }],
 
@@ -362,6 +382,11 @@ export function openingMoves(ticket = {}) {
     // Deterministic, and the only move this subject has: there is exactly one
     // tool and exactly one thing worth knowing, so making the model ask for it
     // would be a turn spent reaching a foregone conclusion.
+    // `identifyReactionProduct` IS DELIBERATELY NOT AN OPENING MOVE, unlike the
+    // two beside it. An opening move runs before the model's first turn and can
+    // therefore only be called with no arguments; this tool's arguments ARE the
+    // model's reading of the email — which product the customer blames, and for
+    // what. There is nothing to pre-call.
     case 'cosmetovigilance':
       add(T.LOOKUP_CUSTOMER, {});
       add(T.SEARCH_KNOWLEDGE, {});

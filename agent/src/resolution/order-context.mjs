@@ -324,8 +324,45 @@ export function orderStates(
           : order.status?.payment
             ? 'unpaid'
             : 'unknown',
-    return_eligibility: returnEligibility(order, delivery, returnsWindowDays, now)
+    return_eligibility: returnEligibility(order, delivery, returnsWindowDays, now),
+    // WHERE THE MONEY HAS GOT TO, which is not what `payment_state` answers.
+    // That one is about the ORDER — are we holding their money — and it reports
+    // `refunded` for an order whose refund went out months ago. This is about
+    // the REQUEST: a return that has been opened and not yet settled is the case
+    // « sous quel délai suis-je remboursé ? » is actually asking about, and
+    // `payment_state` calls it `paid`, indistinguishable from a customer who has
+    // asked for nothing.
+    refund_state: refundState(order, signals)
   };
+}
+
+/**
+ * How far a refund has got, from the customer's point of view.
+ *
+ * `return_open` OUTRANKS `none` AND IS CHECKED FIRST, because a return in
+ * progress with no money moved yet is the state a reply must not describe as
+ * "nothing has happened". It is the whole content of the commonest refund
+ * question.
+ *
+ * ALWAYS `none` ON THIS SHOP TODAY, and that is a data gap rather than a design
+ * one: `hasOpenReturn` is false on all 78 built bundles because returns are
+ * handled by mail and by the logistics provider rather than through Shopify's
+ * returns feature. The branch is written for the tooling that will populate it,
+ * the same way `return_eligibility` waits on a delivery date.
+ */
+function refundState(order, signals) {
+  if (signals.hasOpenReturn) {
+    return 'return_open';
+  }
+  if (signals.isFullyRefunded) {
+    return 'refunded_full';
+  }
+  if (signals.isRefunded) {
+    return 'refunded_partial';
+  }
+  // Distinguished from `unknown` by the order existing at all: we looked at a
+  // real order and no money has gone back, which is a fact a reply can rest on.
+  return order?.refunds ? 'none' : 'unknown';
 }
 
 /**

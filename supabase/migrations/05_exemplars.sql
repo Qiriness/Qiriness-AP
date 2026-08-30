@@ -84,7 +84,7 @@ create table public.support_exemplars (
       'refund_state', 'return_eligibility',
       'promotion_identity', 'promotion_validity', 'promotion_eligibility',
       'customer_identity', 'customer_account_state', 'customer_history',
-      'purchase_verified', 'photo_evidence',
+      'purchase_verified', 'photo_evidence', 'reaction_product',
       'policy_answer', 'brand_answer', 'checkout_state', 'other_fact'
     ]::text[]
   )
@@ -310,12 +310,25 @@ create table public.support_answers (
   -- constraint rather than in code because it is the one property of this table
   -- that must not be revisited by a future caller.
   route text,
-  -- A `MISSING_FIELDS` key, when the rule's answer is to ask for something.
+  -- The `MISSING_FIELDS` keys, when the rule's answer is to ask for something.
   --
   -- THE KEY, NEVER THE SENTENCE. `case-file.mjs` owns the exact wording of every
   -- request; storing prose here would be a second version of it, and the two
   -- would drift the first time somebody improved one.
-  ask text,
+  --
+  -- A LIST SINCE 2026-08-30, and it was singular for no reason anybody had
+  -- checked. A reaction reported with no product named needs BOTH the product
+  -- and the batch number, and with one slot the rule had to drop one of them —
+  -- which turns one reply into two round trips with a customer who is waiting
+  -- on an answer about their skin. `missing` on the case file was already a
+  -- list; this was the only narrowing between a rule and it.
+  --
+  -- `'{}'` RATHER THAN NULL, so "asks for nothing" has one representation. The
+  -- singular column was nullable and the route constraint below turned on
+  -- `ask is null`; an empty array and a null would have been two ways to say the
+  -- same thing, which is the shape that produces a constraint passing on the row
+  -- it exists to refuse.
+  ask text[] not null default '{}'::text[],
   -- Ordering among rows that match equally deeply. Most-specific wins first;
   -- this only breaks the tie, so authoring order never becomes load-bearing by
   -- accident.
@@ -352,10 +365,11 @@ create table public.support_answers (
   -- Every askable fact `MISSING_FIELDS` owns the sentence for. A key outside it
   -- would be a rule asking a question nothing can word.
   constraint support_answers_ask_check check (
-    ask is null or ask in (
+    ask <@ array[
       'shopify_order_number', 'purchase_email', 'product_name',
-      'purchase_channel', 'photo', 'promotion_code', 'order_date_or_amount'
-    )
+      'purchase_channel', 'photo', 'promotion_code', 'order_date_or_amount',
+      'reaction_product_name', 'lot_number', 'account_email'
+    ]::text[]
   ),
   -- A rule that asks must say so in its route, or the drafting stage gets a
   -- question to ask and a verdict that does not permit asking it —
@@ -368,7 +382,7 @@ create table public.support_answers (
   -- it was caught: by inserting one against the live table rather than reading
   -- the clause. The three-valued form is total.
   constraint support_answers_ask_needs_route_check check (
-    ask is null or route is not distinct from 'needs_customer_input'
+    cardinality(ask) = 0 or route is not distinct from 'needs_customer_input'
   )
 );
 
@@ -413,7 +427,7 @@ comment on column public.support_answers.route is
   'Where a matched rule sends the ticket, or null to leave the verdict as the investigation set it. Tighten only -- "answerable" is absent from the check constraint by design, so a rule can hand a ticket to a person but never declare one safe.';
 
 comment on column public.support_answers.ask is
-  'A MISSING_FIELDS key when the rule''s answer is to ask for something. The key, never the sentence: case-file.mjs owns the wording. Requires route = needs_customer_input, or drafting would hold a question it is not permitted to ask.';
+  'MISSING_FIELDS keys when the rule''s answer is to ask for something. Keys, never sentences: case-file.mjs owns the wording. A LIST because one reply can need two facts -- a reaction with no product named wants the product AND the batch number, and one slot would have made that two round trips. Empty rather than null for "asks nothing". A non-empty list requires route = needs_customer_input, or drafting would hold a question it is not permitted to ask.';
 
 -- ============================================================================
 -- EXEMPLAR RETRIEVAL

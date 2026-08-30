@@ -7,7 +7,7 @@ import { emptySenderDirectory } from '../ingestion/sender-directory.mjs';
 
 import { TICKET_STATUS_BY_VERDICT } from './case-file.mjs';
 import { summariseNeeds } from './evidence-rules.mjs';
-import { normaliseConditions } from './answer-selection.mjs';
+import { normaliseConditions, resolveSituationTie } from './answer-selection.mjs';
 import { ENABLED_SUBJECTS, answerSetFor, isInvestigable } from './investigation-rules.mjs';
 import { summarisePhotoEvidence } from './photo-evidence.mjs';
 
@@ -154,6 +154,18 @@ export async function runInvestigation({
     // difference in outcome — worth doing the day a situation draws on a family
     // its subject does not imply, and not before.
     const policy = await loadPolicy({ loadAnswers, ticket, exemplarMatch, shopId, logger });
+
+    // A TIE THE RULES DO NOT CARE ABOUT IS NOT A TIE. The matcher refused to
+    // separate two situations because their scores were inside the margin; that
+    // refusal is made before any rule is in hand, so it cannot know whether the
+    // choice changes an answer. Here it can be asked — and when both situations
+    // reach the same rule whatever the evidence turns out to be, the tie is
+    // settled on the key rather than thrown away with the needs it was carrying.
+    //
+    // NOTHING IS RELAXED WHEN IT MIGHT MATTER. `resolveSituationTie` returns
+    // null the moment a rule names either situation or reads a need they
+    // disagree on, and the ticket keeps the unmatched verdict it had.
+    resolveTiedSituation({ exemplarMatch, policy, ticket, logger });
 
     let caseFile;
     try {
@@ -426,7 +438,14 @@ async function matchExemplar({ retrieveExemplar, ticket, message, shopId, logger
       runner_up: result.candidates?.[1]?.exemplarKey ?? null,
       // The claim being tested: that this situation's declared needs are the
       // ones the run turns out to require.
-      requirement_needs: result.exemplar?.requirementNeeds ?? []
+      requirement_needs: result.exemplar?.requirementNeeds ?? [],
+      // Carried only so `resolveSituationTie` can be asked whether this tie
+      // decides anything, once the rules are loaded and there is something to
+      // ask it against. Empty on every match that was not ambiguous.
+      tied: (result.tied ?? []).map((m) => ({
+        exemplarKey: m.exemplarKey,
+        requirementNeeds: m.requirementNeeds ?? []
+      }))
     };
   } catch (error) {
     logger?.warn?.('investigate.exemplar_failed', {
@@ -494,6 +513,7 @@ export function createCaseFileStore(supabase, { transport = CASE_FILE_TRANSPORT 
             context_ref: caseFile.contextRef || {},
             handoff: caseFile.handoff,
             candidate_order: caseFile.candidateOrder || {},
+            reaction_report: caseFile.reactionReport ?? null,
             tool_calls: caseFile.toolCalls,
             evidence_gaps: caseFile.evidenceGaps,
             // Diagnostic, arrived at independently of everything above it.
@@ -537,7 +557,8 @@ async function loadPolicy({ loadAnswers, ticket, exemplarMatch, shopId, logger }
       conditions: normaliseConditions(row.when_conditions),
       answerSkeleton: row.answer_skeleton ?? null,
       route: row.route ?? null,
-      ask: row.ask ?? null,
+      // Always a list, even from a row written before the column was one.
+      ask: Array.isArray(row.ask) ? row.ask.filter(Boolean) : row.ask ? [row.ask] : [],
       priority: row.priority ?? 0,
       isFallback: Boolean(row.is_fallback)
     }));
@@ -553,6 +574,53 @@ async function loadPolicy({ loadAnswers, ticket, exemplarMatch, shopId, logger }
     });
     return null;
   }
+}
+
+/**
+ * Settles an ambiguous exemplar match when the rules make the choice free.
+ *
+ * MUTATES BOTH, deliberately and in one place. The match and the policy each
+ * hold the situation — `exemplar_match` because it is the record of what the
+ * matcher saw, `policy.situationKey` because it is what `selectAnswer` reads —
+ * and updating one without the other would leave a run whose stored diagnosis
+ * disagrees with the rule it fired. They are written together here, or not at
+ * all.
+ *
+ * THE VERDICT STAYS `ambiguous`. What is recorded is that a tie existed and was
+ * resolved, not that the matcher was confident: `resolved_from` names the
+ * situations that were level, so a corpus review still sees the pair asking to
+ * be merged. Overwriting the verdict with `matched` would erase the only signal
+ * that these two situations are indistinguishable to the embeddings.
+ */
+function resolveTiedSituation({ exemplarMatch, policy, ticket, logger }) {
+  // CONSUMED, NOT STORED. `tied` exists to get the candidates from the matcher
+  // to this function; the whole object is written to `exemplar_match` jsonb, and
+  // an empty array on all several hundred unambiguous matches would be a column
+  // carrying scaffolding. `resolved_from` is the part worth keeping, and it is
+  // only ever set on the runs where something actually happened.
+  const tied = exemplarMatch?.tied ?? [];
+  delete exemplarMatch?.tied;
+
+  if (!policy || exemplarMatch?.verdict !== 'ambiguous') {
+    return;
+  }
+
+  const chosen = resolveSituationTie(policy.answers, tied);
+  if (!chosen) {
+    return;
+  }
+
+  exemplarMatch.exemplar_key = chosen.exemplarKey;
+  exemplarMatch.requirement_needs = chosen.requirementNeeds ?? [];
+  exemplarMatch.resolved_from = tied.map((s) => s.exemplarKey);
+  policy.situationKey = chosen.exemplarKey;
+
+  logger?.info?.('investigate.situation_tie_resolved', {
+    ticketId: ticket.id,
+    chosen: chosen.exemplarKey,
+    among: exemplarMatch.resolved_from,
+    margin: exemplarMatch.margin
+  });
 }
 
 /** The PostgREST call the case-file store makes, as one object. */

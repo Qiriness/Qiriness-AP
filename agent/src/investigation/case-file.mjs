@@ -88,6 +88,18 @@ export const MISSING_FIELDS = {
     label: 'l’adresse e-mail de la commande',
     ask: 'Avec quelle adresse e-mail la commande a-t-elle été passée ?'
   },
+  // SEPARATE FROM `purchase_email`, WHICH ASKS ABOUT AN ORDER. On an account
+  // ticket the order is not the subject and may not exist at all — the customer
+  // in the corpus writing « je pense que j'ai 2 adresses mail pour mon compte »
+  // has ordered under one and is trying to sign in under the other. Asking which
+  // address the ORDER was placed with gets the wrong one of the two.
+  account_email: {
+    label: 'l’adresse e-mail du compte',
+    ask:
+      'Sous quelle adresse e-mail votre compte est-il enregistré ? ' +
+      'Si vous en utilisez plusieurs, indiquez-les toutes : nous vérifierons laquelle ' +
+      'porte le compte.'
+  },
   product_name: {
     label: 'le produit concerné',
     ask: 'De quel produit s’agit-il exactement ?'
@@ -114,6 +126,28 @@ export const MISSING_FIELDS = {
   order_date_or_amount: {
     label: 'la date ou le montant de la commande',
     ask: 'Pouvez-vous nous préciser la date et le montant de la commande ?'
+  },
+  // SEPARATE FROM `product_name`, WHICH ASKS THE SAME THING BADLY. « De quel
+  // produit s'agit-il exactement ? » is a fine question about an order and the
+  // wrong one here: a reaction email has usually already named several products,
+  // so asking which one it "is about" reads as not having read the message. This
+  // asks the only question that actually separates them.
+  reaction_product_name: {
+    label: 'le produit utilisé au moment de la réaction',
+    ask:
+      'Pourriez-vous nous indiquer quel produit vous utilisiez lorsque cette réaction ' +
+      'est apparue ? Si vous en appliquiez plusieurs, n’hésitez pas à tous nous les citer.'
+  },
+  // ASKED FOR THE PRODUCT, NOT FROM THE CUSTOMER'S MEMORY. The lot number is
+  // printed on the packaging, and saying where it is turns an impossible
+  // question into a thirty-second one — which is the difference between a reply
+  // that gets answered and one that ends the thread.
+  lot_number: {
+    label: 'le numéro de lot du produit',
+    ask:
+      'Pourriez-vous nous communiquer le numéro de lot du produit ? Il est imprimé ' +
+      'sur l’emballage ou sous le contenant, et commence généralement par « L ». ' +
+      'Il nous permet de remonter jusqu’au lot de fabrication concerné.'
   }
   // `photo` WAS DECLARED TWICE IN THIS OBJECT, here and above. The later one won
   // silently — that is what a duplicate key does — so the live sentence asked
@@ -183,7 +217,22 @@ export const CAVEATS = {
     'du suivi transporteur lui-même.',
   attachments_unrecorded:
     'Ne pas affirmer qu’aucune photo n’a été envoyée : les pièces jointes de ce message ' +
-    'n’ont pas été enregistrées, leur contenu est inconnu.'
+    'n’ont pas été enregistrées, leur contenu est inconnu.',
+  // RAISED ON EVERY OUTCOME OF `identifyReactionProduct`, INCLUDING SUCCESS —
+  // which is the opposite of every other caveat here. The others fire when
+  // something could not be established; this one fires hardest when something
+  // WAS. Naming the product a customer blames is the moment a reply is most
+  // tempted to agree that it is to blame, and agreeing is a claim about a
+  // cosmetic product's safety that nobody at this desk is in a position to make.
+  //
+  // It forbids the denial too. « Ce produit ne peut pas causer cela » is the
+  // same unfounded claim with the sign flipped, and it is the one a reply
+  // defending the brand reaches for.
+  reaction_cause_unestablished:
+    'Ne jamais affirmer, ni suggérer, que ce produit est à l’origine de la réaction — ' +
+    'ni l’inverse. Le lien de cause à effet n’est pas établi et ne peut pas l’être ici. ' +
+    'Ne proposer aucun diagnostic, aucune explication par les ingrédients et aucun ' +
+    'traitement : reprendre ce que le client décrit, sans le commenter.'
 };
 
 export const CAVEAT_CODES = Object.keys(CAVEATS);
@@ -336,17 +385,27 @@ export function buildCaseFile({
   // read the ticket, `exemplar` when it failed and a matched situation's
   // declared needs stood in, `none` when neither produced anything.
   needsSource = 'none',
-  // Which policy rule this evidence selected, and what it would have done.
+  // Which policy rule this evidence selected, and what it does.
   //
-  // SHADOW: RECORDED, NOT APPLIED. The verdict below is the investigation's own
-  // and this does not touch it. Wiring the route in is a deliberate second step,
-  // because a rule that fires on the wrong ticket is free to discover now and
-  // expensive to discover once it is moving people's mail.
+  // NO LONGER A SHADOW. This comment said "RECORDED, NOT APPLIED" until the
+  // route went live below — `applyPolicyRoute` reads `policy.route` and can
+  // tighten the verdict with it — and a comment claiming the opposite of the
+  // code twenty lines under it is worse than no comment.
+  //
+  // TIGHTEN ONLY, which is what made wiring it in safe: the schema forbids a
+  // rule routing to `answerable`, and the rank check below refuses a rule that
+  // would step DOWN from what the investigation concluded. A rule that fires on
+  // the wrong ticket can send it to a person; it can never clear one.
   policy = null,
   // The customer's most recent order, when none was confirmed. Passed in rather
   // than derived here: it must not depend on whether the model happened to call
   // an order tool, and on a `product` ticket there is no order tool to call.
   candidateOrder = null,
+  // What the customer blames for their reaction, and the symptoms they describe.
+  // Passed in for the same reason `candidateOrder` is — this module never reads
+  // a ledger entry's `data` — and null on every ticket where no reaction tool
+  // ran, which is every subject but one.
+  reactionReport = null,
   model = null,
   now = new Date()
 } = {}) {
@@ -373,14 +432,30 @@ export function buildCaseFile({
   // The rank is the only ordering in this file, and it is deliberately shallow:
   // "we can answer" < "the customer must answer" < "one of us must act".
   const verdictBeforePolicy = verdict;
-  const applied = applyPolicyRoute(verdict, policy);
-  if (applied.verdict !== verdict) {
-    verdict = applied.verdict;
-    // The question travels with the route or the drafting stage has a verdict
-    // that says ask and nothing to ask for — which the rule below then turns
-    // straight back into `needs_human`, silently undoing the rule.
-    if (applied.ask && !missing.some((entry) => entry.field === applied.ask)) {
-      missing.push({ field: applied.ask });
+  verdict = applyPolicyRoute(verdict, policy).verdict;
+
+  // THE RULE'S QUESTIONS TRAVEL WHENEVER ASKING IS PERMITTED — not only when the
+  // ROUTE was what permitted it, which is what this used to say and it dropped
+  // them on exactly the tickets the rule agreed with.
+  //
+  // MEASURED, on the live reaction ticket that prompted the list: the model had
+  // already concluded `needs_customer_input` by itself, so the route changed
+  // nothing, so `applyPolicyRoute` reported no ask, so the rule's « quel produit
+  // utilisiez-vous » and « quel est le numéro de lot » never reached `missing`.
+  // The reply asked whatever the model had thought of instead — which is the
+  // non-determinism this whole layer exists to remove, arriving through the one
+  // branch where the rule and the investigation AGREED.
+  //
+  // GATED ON THE FINAL VERDICT, so nothing is loosened. A rule asking for the
+  // batch number against an investigation that concluded a person is needed
+  // still loses: the route could not tighten `needs_human` down to
+  // `needs_customer_input`, the verdict stays where it was, and this branch does
+  // not run. The questions only ever join a reply that was already going to ask.
+  if (verdict === 'needs_customer_input') {
+    for (const field of policyAsks(policy)) {
+      if (!missing.some((entry) => entry.field === field)) {
+        missing.push({ field });
+      }
     }
   }
 
@@ -401,6 +476,12 @@ export function buildCaseFile({
     // the runner, OUTSIDE the model's tool loop, and never shown to the drafting
     // stage -- see the runner's `lastOrderLookup`.
     candidateOrder: candidateOrder || {},
+    // NULL RATHER THAN `{}`, unlike `candidateOrder` directly above it. An empty
+    // candidate order means "we looked and there was none"; an empty reaction
+    // report would have to mean both "no reaction was reported" and "one was,
+    // with nothing identified", and those need different replies. Null is the
+    // first; `outcome: 'not_attributed'` is the second.
+    reactionReport: reactionReport || null,
     knowledge: Array.isArray(knowledge) ? knowledge : [],
     // A POINTER, not a copy. The order/customer bundle already lives in
     // tickets.resolved_context: copying it here would duplicate personal data
@@ -617,12 +698,32 @@ const VERDICT_RANK = { answerable: 0, needs_customer_input: 1, needs_human: 2 };
 function applyPolicyRoute(verdict, policy) {
   const route = policy?.route ?? null;
   if (!route || !(route in VERDICT_RANK)) {
-    return { verdict, ask: null };
+    return { verdict };
   }
   if (VERDICT_RANK[route] <= VERDICT_RANK[verdict]) {
-    return { verdict, ask: null };
+    return { verdict };
   }
-  return { verdict: route, ask: policy.ask ?? null };
+  return { verdict: route };
+}
+
+/**
+ * The facts a matched rule names, as a list.
+ *
+ * A LIST BECAUSE ONE RULE CAN REQUIRE TWO: a reaction reported with no product
+ * named needs the product AND the batch number, and asking for one and then the
+ * other is two round trips with somebody waiting on an answer about their skin.
+ *
+ * Tolerates a bare string, because the column was a single key until 2026-08-30
+ * and a row or a caller written against that shape must not silently ask for
+ * nothing — which would be invisible, since a `needs_customer_input` verdict
+ * with an empty `missing` is turned straight back into `needs_human` below.
+ */
+function policyAsks(policy) {
+  const ask = policy?.ask;
+  if (Array.isArray(ask)) {
+    return ask.filter(Boolean);
+  }
+  return ask ? [ask] : [];
 }
 
 function normaliseMissing(entries) {

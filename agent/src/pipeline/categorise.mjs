@@ -87,12 +87,14 @@ const SUBJECT_GLOSSARY = [
   "- order : la commande AVANT son expédition — contenu, erreur de saisie, ajout ou retrait d'un article, annulation, prix ou quantité, confirmation de commande non reçue.",
   "- delivery : tout ce qui suit l'expédition — suivi, numéro de suivi, retard, colis perdu ou endommagé, article manquant à la réception, changement d'adresse d'un colis déjà parti, problème transporteur.",
   '- return_exchange : retour, échange, rétractation, remboursement.',
-  "- product : question ou conseil sur un produit (utilisation, ingrédients, routine, résultats attendus).",
+  "- product : question ou conseil sur un produit (utilisation, ingrédients, routine, résultats attendus), OU un produit reçu défectueux, desséché, abîmé, moisi ou non conforme — le produit lui-même pose problème, pas la peau du client.",
   '- product_stock : disponibilité, rupture de stock, réassort.',
   '- payment : paiement, moyen de paiement, débit, facture client.',
-  '- account : compte client (connexion, mot de passe, newsletter, données du compte).',
+  "- account : compte client — connexion, mot de passe, newsletter, données du compte — Y COMPRIS " +
+    "la demande de supprimer, désactiver ou fermer son compte. Une suppression demandée au titre du " +
+    "RGPD, du droit à l'oubli ou par un avocat n'est PAS account : c'est legal_privacy.",
   '- promotions : codes promo, réductions, offres, fidélité.',
-  "- cosmetovigilance : effet indésirable, réaction cutanée, allergie, tout problème de santé lié à un produit.",
+  "- cosmetovigilance : un effet sur LA PERSONNE — réaction cutanée, rougeurs, boutons, allergie, irritation, brûlure — ou une question de santé liée à l'utilisation d'un produit. Un produit physiquement défectueux qui n'a causé aucun effet sur la peau n'est PAS de la cosmétovigilance : c'est product.",
   '- legal_privacy : RGPD, données personnelles, mentions légales, demande juridique.',
   '- b2b : revendeurs, grossistes, pharmacies, achats professionnels, facturation B2B.',
   '- partner_collaboration : influenceurs, partenariats, presse, collaborations marketing.',

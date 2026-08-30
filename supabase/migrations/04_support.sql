@@ -911,6 +911,25 @@ create table public.ticket_investigations (
   -- confirmed -- the bundle then says everything this could.
   candidate_order jsonb not null default '{}'::jsonb,
 
+  -- WHAT THE CUSTOMER BLAMES, AND FOR WHAT. Null on every ticket outside
+  -- cosmetovigilance, and on a cosmetovigilance ticket where the reaction tool
+  -- never ran -- which is why it is nullable rather than defaulted to '{}': an
+  -- empty object here would read as "a reaction was reported and nothing was
+  -- found", and the commonest reason for no row is that no reaction was
+  -- reported at all.
+  --
+  -- ATTRIBUTION, NOT CAUSATION. `product` is the catalogue title the customer's
+  -- own words resolved to, `claimed` is those words, and both are stored because
+  -- a resolution is a match rather than a fact. Nothing in this column says the
+  -- product caused anything, and the case file carries a prohibition
+  -- (`reaction_cause_unestablished`) saying so in as many words.
+  --
+  -- IT EXISTS TO BE READ BY A PERSON AND COUNTED ACROSS ROWS. A reaction record
+  -- buried in a tool ledger is neither: `tool_calls` drops every tool's `data`,
+  -- so without this column the product and the symptoms are gone the moment the
+  -- run ends.
+  reaction_report jsonb,
+
   -- The ledger: which tools ran, with what outcome. This is what makes an
   -- established claim checkable after the fact.
   tool_calls jsonb not null default '[]'::jsonb,
@@ -973,6 +992,13 @@ create table public.ticket_investigations (
   ),
   constraint ticket_investigations_candidate_order_object_check check (
     jsonb_typeof(candidate_order) = 'object'
+  ),
+  -- Nullable, so the check has to allow null explicitly: `jsonb_typeof(null)`
+  -- is null, and a check evaluating to null passes -- but writing it out is the
+  -- difference between a constraint that is right and one that is right by
+  -- accident.
+  constraint ticket_investigations_reaction_report_object_check check (
+    reaction_report is null or jsonb_typeof(reaction_report) = 'object'
   )
 );
 
@@ -1003,6 +1029,9 @@ comment on column public.ticket_investigations.do_not_claim is
 
 comment on column public.ticket_investigations.candidate_order is
   'INTERNAL. The customer''s most recent order, kept as a CANDIDATE when they named none -- verifyPurchase already fetched it to cross-check the product, so this saves a human repeating that search. Never evidence: they may mean an earlier order, or a shop purchase Shopify never saw. Excluded from the drafting projection like handoff, because a number a model can see is one it can quote. Empty when an order was confirmed.';
+
+comment on column public.ticket_investigations.reaction_report is
+  'COSMETOVIGILANCE ONLY, and null everywhere else including on a reaction ticket where the tool never ran. What the customer BLAMES and the symptoms they describe: product is the catalogue title their words resolved to, claimed is the words themselves, outcome is identified / ambiguous / not_in_catalogue / not_attributed. Attribution, never causation -- the case file carries reaction_cause_unestablished for exactly that reason. Held here rather than in tool_calls because that column drops every tool''s data, which would lose the product and the symptoms at the end of the run.';
 
 comment on column public.ticket_investigations.handoff is
   'Internal instruction for a human when the verdict is needs_human. Excluded from every customer-facing rendering of this row.';

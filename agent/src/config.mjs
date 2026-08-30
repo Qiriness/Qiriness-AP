@@ -38,6 +38,18 @@ export function loadAgentConfig(env = loadEnv(REPO_ROOT)) {
     spamAuditBodyRetentionDays: Number(env.SPAM_AUDIT_BODY_RETENTION_DAYS) || 90,
     // Draft-only unless explicitly disabled; nothing is auto-sent while true.
     draftOnly: env.DRAFT_ONLY !== 'false',
+    // THE SAME SWITCH FOR ONE SUBJECT, AND IT IS SEPARATE ON PURPOSE. Auto-send
+    // will graduate for the desk as a whole long before it should for an adverse
+    // reaction report: a wrong reply about a promotion code is an annoyance, and
+    // a wrong reply to somebody describing a skin reaction is not. Folding this
+    // into `DRAFT_ONLY` would mean the day the desk graduates is the day
+    // cosmetovigilance does.
+    //
+    // Both default to true and both must be false before a reaction ticket can
+    // send itself — a conjunction, so clearing the global one alone changes
+    // nothing here. A second subject wanting this should turn the pair into a
+    // list rather than add a third boolean.
+    draftOnlyCosmetovigilance: env.DRAFT_ONLY_COSMETOVIGILANCE !== 'false',
     // OpenAI (LLM stages). The spam second pass is enabled only when a key is set;
     // without it, ingestion still runs and just skips the LLM filter.
     openaiApiKey: env.OPENAI_API_KEY,

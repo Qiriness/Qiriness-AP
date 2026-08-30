@@ -74,6 +74,24 @@ export const MECHANICAL_PROHIBITIONS = {
     label: 'suppose un compte ou un historique client',
     pattern:
       /\b(votre compte (?:client|Qiriness)?(?: indique| montre| affiche)|vos commandes précédentes|votre historique (?:de commandes|d['’]achats))\b/i
+  },
+  // CHECKED RATHER THAN ADVISORY, which is the harder choice and the right one.
+  // « Ne rien inventer sur ce point » has no signature and is listed as
+  // unexaminable below; « ce produit a provoqué votre réaction » has a very
+  // specific one, because a causal claim in French needs a causal verb.
+  //
+  // BOTH DIRECTIONS ARE THE SAME OFFENCE. « ne peut pas provoquer » sits here
+  // beside « a provoqué » on purpose: a reply defending the product makes an
+  // unfounded safety claim just as surely as one blaming it, and it is the
+  // likelier of the two to be written.
+  //
+  // The ingredient clause catches the explanation rather than the verdict —
+  // « en raison de la présence de … » is how a reply reaches a diagnosis without
+  // ever using a causal verb.
+  reaction_cause_unestablished: {
+    label: 'affirme, ou nie, que le produit est à l’origine de la réaction',
+    pattern:
+      /\b((?:a|ont|aurait|auraient) (?:pu )?(?:être |été )?(?:provoqu|caus|déclench|entraîn|occasionn)ée?s?|(?:est|sont|serait) (?:bien )?(?:à l['’]origine|responsable)s? de|ne (?:peut|peuvent) pas (?:avoir )?(?:provoqu|caus|déclench)er|(?:est|sont) (?:dû|due|dues|dus) (?:à|au)|s['’]explique par|en raison de la présence d|il s['’]agit (?:bien )?d['’]une (?:allergie|réaction allergique|intolérance))/i
   }
 };
 
@@ -488,6 +506,9 @@ export function failedChecks(checks = []) {
 export const ASK_TERMS = {
   shopify_order_number: ['numero', 'commande'],
   purchase_email: ['adresse', 'mail'],
+  // `compte` rather than `mail`, which is what separates this from the question
+  // above: both ask for an address, and only the noun says WHICH address.
+  account_email: ['adresse', 'compte'],
   product_name: ['produit'],
   // « en boutique ou sur le site » is the question, and `boutique` is the half a
   // reply cannot omit — the whole point is to find out whether the sale happened
@@ -495,7 +516,14 @@ export const ASK_TERMS = {
   purchase_channel: ['boutique'],
   photo: ['photo'],
   promotion_code: ['code'],
-  order_date_or_amount: ['date', 'montant']
+  order_date_or_amount: ['date', 'montant'],
+  // `produit` ALONE, not « quel produit » — the question gets asked a dozen ways
+  // (« lequel de nos soins », « le produit que vous utilisiez ») and the noun is
+  // the only word all of them share. Same reasoning as `product_name` above,
+  // which this duplicates rather than aliases: the two fields ask different
+  // questions and could diverge.
+  reaction_product_name: ['produit'],
+  lot_number: ['lot']
 };
 
 /** « e-mail » and « é-mail » are the same word to a reader and must be here too. */

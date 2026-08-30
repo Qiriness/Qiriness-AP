@@ -45,7 +45,7 @@ export function RuleEditor({
   const [conditions, setConditions] = useState<Record<string, string[]>>(rule?.conditions ?? {});
   const [skeleton, setSkeleton] = useState(rule?.answerSkeleton ?? "");
   const [route, setRoute] = useState(rule?.route ?? "");
-  const [ask, setAsk] = useState(rule?.ask ?? "");
+  const [ask, setAsk] = useState<string[]>(rule?.ask ?? []);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -62,8 +62,11 @@ export function RuleEditor({
     });
   };
 
+  const toggleAsk = (key: string) =>
+    setAsk((prev) => (prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]));
+
   // Mirrors the constraint rather than only reporting it after a round trip.
-  const askWithoutRoute = Boolean(ask) && route !== "needs_customer_input";
+  const askWithoutRoute = ask.length > 0 && route !== "needs_customer_input";
 
   return (
     <Dialog
@@ -154,7 +157,7 @@ export function RuleEditor({
               value={route}
               onChange={(e) => {
                 setRoute(e.target.value);
-                if (e.target.value !== "needs_customer_input") setAsk("");
+                if (e.target.value !== "needs_customer_input") setAsk([]);
               }}
             >
               <option value="">nobody — answer it, leave the verdict alone</option>
@@ -165,21 +168,29 @@ export function RuleEditor({
               ))}
             </select>
           </label>
-          <label className={styles.field}>
-            <span>Asking the customer for</span>
-            <select
-              value={ask}
-              onChange={(e) => setAsk(e.target.value)}
-              disabled={route !== "needs_customer_input"}
-            >
-              <option value="">nothing</option>
+          {/* CHECKBOXES, NOT A DROPDOWN, since a rule may ask for more than one
+              thing. A reaction reported with no product named needs the product
+              AND the batch number, and a single-select forced that into two
+              round trips with somebody waiting on an answer about their skin.
+              Same control as the conditions above, which is also a list. */}
+          <fieldset className={styles.field}>
+            <legend>
+              <span>Asking the customer for</span>
+            </legend>
+            <div className={styles.findings}>
               {vocabulary.asks.map((a) => (
-                <option key={a} value={a}>
-                  {a}
-                </option>
+                <label key={a} className={styles.check}>
+                  <input
+                    type="checkbox"
+                    checked={ask.includes(a)}
+                    onChange={() => toggleAsk(a)}
+                    disabled={route !== "needs_customer_input"}
+                  />
+                  <span>{a}</span>
+                </label>
               ))}
-            </select>
-          </label>
+            </div>
+          </fieldset>
         </div>
 
         <label className={styles.field}>
@@ -247,7 +258,7 @@ export function RuleEditor({
                   conditions,
                   answerSkeleton: skeleton || null,
                   route: route || null,
-                  ask: ask || null,
+                  ask,
                   priority: rule?.priority ?? 0,
                   isFallback: rule?.isFallback ?? false,
                 });

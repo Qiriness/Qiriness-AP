@@ -39,7 +39,8 @@ export interface SaveRulePayload {
   conditions: Record<string, string[]>;
   answerSkeleton: string | null;
   route: string | null;
-  ask: string | null;
+  /** MISSING_FIELDS keys — a list, since one reply can need two facts. */
+  ask: string[];
   priority: number;
   isFallback: boolean;
 }

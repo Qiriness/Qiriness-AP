@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
 import { createCategoriser, normaliseCategorisation } from './categorise.mjs';
@@ -301,4 +302,45 @@ test('the model used is carried through for the audit trail', async () => {
   const result = await categorise(input());
   assert.equal(result.model, 'gpt-4o-mini');
   assert.equal(result.reason, 'demande de statut de commande');
+});
+
+// --- the glossary the model actually reads -----------------------------------
+//
+// A TEXT ASSERTION OVER THE SOURCE, because `SUBJECT_GLOSSARY` is not exported
+// and should not be exported just to be tested — the same shape the migration
+// tests use over `.sql`. What is checkable here is which words the prompt
+// contains, and for a prompt that is most of what matters.
+test('every subject the taxonomy allows is glossed for the model', () => {
+  const source = readFileSync(new URL('./categorise.mjs', import.meta.url), 'utf8');
+  const glossary = source.match(/const SUBJECT_GLOSSARY = \[([\s\S]*?)\]\.join/);
+  assert.ok(glossary, 'SUBJECT_GLOSSARY not found');
+
+  for (const subject of TICKET_SUBJECTS) {
+    // A subject in the enum with no line in the glossary is one the model can
+    // return and has never been told the meaning of.
+    assert.ok(
+      new RegExp(`- ${subject} :`).test(glossary[1]),
+      `${subject} is a valid label with no gloss`
+    );
+  }
+});
+
+test('account owns closing an account, and legal_privacy owns the formal version', () => {
+  // THE BOUNDARY IS STATED, NOT LEFT TO THE MODEL. « Je souhaite supprimer mon
+  // compte » is an account operation and reaches the A-35 rules; the same
+  // request made as an RGPD right has a statutory deadline and an identity
+  // check behind it, and belongs with a person untouched. Both readings are
+  // defensible from the words alone, which is exactly why the prompt says which
+  // one is meant rather than leaving it to be inferred.
+  const source = readFileSync(new URL('./categorise.mjs', import.meta.url), 'utf8');
+  const account = source.match(/- account : ([\s\S]*?)",\s*'- promotions/);
+  assert.ok(account, 'the account gloss is not where this test expects it');
+
+  for (const word of ['supprimer', 'désactiver', 'fermer']) {
+    assert.ok(account[1].includes(word), `the account gloss does not name "${word}"`);
+  }
+  // And it names where the exception goes, or the split is one the model has to
+  // invent every time.
+  assert.match(account[1], /RGPD/);
+  assert.match(account[1], /legal_privacy/);
 });
