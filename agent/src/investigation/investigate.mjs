@@ -308,6 +308,10 @@ function selectPolicy(policy, ledger, toolNames) {
     answer_key: result.answer?.answerKey ?? null,
     route: result.answer?.route ?? null,
     ask: result.answer?.ask ?? [],
+    // The code the rule offers. Recorded rather than resolved here: whether it
+    // is still live is a drafting-time question, and the case file must record
+    // what the rule SAID so a stored run can be read back.
+    offer_code: result.answer?.offerCode ?? null,
     // The wording guidance, carried so the drafting pass can read it back off
     // the stored row. It is the one field here that reaches a model.
     answer_skeleton: result.answer?.answerSkeleton ?? null,

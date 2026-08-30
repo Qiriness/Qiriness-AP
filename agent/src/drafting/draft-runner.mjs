@@ -67,6 +67,11 @@ export async function runDrafting({
   // DEFAULT, so a caller that has not wired `config.draftOnlyCosmetovigilance`
   // still records the safe answer rather than the permissive one.
   cosmetovigilanceDraftOnly = true,
+  // Which discount codes are still offerable, loaded once per run by the caller
+  // like `parameters`. Empty by default, which drops every offer rather than
+  // sending a code nobody checked — the safe direction for the one field in a
+  // reply that is a key rather than prose.
+  offerableCodes = new Set(),
   onDraft
 } = {}) {
   const problem = brandVoiceProblem(brandVoice);
@@ -101,7 +106,9 @@ export async function runDrafting({
         // only acknowledge. Sending all three would hand the model a prompt
         // that contradicts itself and let it choose.
         system: composeSystemPrompt(brandVoice, { language, verdict: investigation.verdict }),
-        user: composeDraftingMessage({ message, caseFile, orderContext, ticket, chase, parameters, logger }),
+        user: composeDraftingMessage({
+          message, caseFile, orderContext, ticket, chase, parameters, offerableCodes, logger
+        }),
         schema: DRAFT_SCHEMA,
         schemaName: 'draft',
         // A support reply runs longer than any other output in this worker: the

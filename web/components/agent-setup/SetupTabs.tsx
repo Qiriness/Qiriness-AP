@@ -6,13 +6,13 @@ import { usePathname } from "next/navigation";
 import styles from "./SetupTabs.module.css";
 
 /**
- * Navigation across the three halves of setting the agent up.
+ * Navigation across the four halves of setting the agent up.
  *
  * TABS RATHER THAN BUTTONS, and the distinction is not cosmetic: a button reads
- * as an action taken from where you are, and these are three places of equal
- * standing. Knowledge is what the agent knows, the rulebook is what it does, and
- * the parameters are the numbers both of those quote. None is a detour from
- * another.
+ * as an action taken from where you are, and these are places of equal standing.
+ * Knowledge is what the agent knows, the rulebook is what it does, the
+ * parameters are the numbers both of those quote, and the promotions are which
+ * live codes a reply may hand out. None is a detour from another.
  *
  * "Test the agent" stays a button on the knowledge screen, because it IS an
  * action — it opens a dialog and goes nowhere.
@@ -21,6 +21,7 @@ const TABS = [
   { href: "/agent-setup", label: "Knowledge", hint: "what the agent knows" },
   { href: "/agent-setup/rules", label: "Rules", hint: "what it does about it" },
   { href: "/agent-setup/parameters", label: "Parameters", hint: "the numbers both quote" },
+  { href: "/agent-setup/promotions", label: "Promotions", hint: "codes a reply may offer" },
 ];
 
 export function SetupTabs() {

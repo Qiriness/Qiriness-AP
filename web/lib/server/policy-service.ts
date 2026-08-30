@@ -36,6 +36,8 @@ import {
 } from "../../../agent/src/investigation/evidence-rules.mjs";
 import { MISSING_FIELDS, VERDICTS } from "../../../agent/src/investigation/case-file.mjs";
 import { PARAMETERS } from "../../../scripts/lib/parameters.mjs";
+
+import { listOfferableCodes } from "./promotions-service";
 import { listParameters } from "./parameters-service";
 
 import { KnowledgeNotFoundError, KnowledgeValidationError } from "./knowledge-errors";
@@ -112,10 +114,16 @@ export async function policyVocabulary(shopId?: string): Promise<PolicyVocabular
   const parameters = shopId ? await listParameters(shopId) : [];
   const unsetParameters = parameters.filter((p) => p.value === null).map((p) => p.key);
 
+  // The codes an operator has cleared for customers, so the editor can offer a
+  // choice rather than a free text box. A rule naming a code nobody cleared would
+  // be dropped at drafting time and look, from the rulebook, as though it worked.
+  const offerableCodes = shopId ? await listOfferableCodes(shopId) : [];
+
   return {
     needs,
     routes: ROUTES,
     asks: ASKS,
+    offerableCodes,
     // For the skeleton box: a parameter is inserted as a placeholder, which is
     // the one place a rule names one directly.
     parameters: Object.entries(PARAMETERS).map(([key, meta]) => ({
@@ -147,7 +155,7 @@ export async function listRules(shopId: string, answerSet?: string): Promise<Pol
       ...(answerSet ? { answer_set: answerSet } : {}),
       deleted_at: { operator: "is", value: "null" },
     },
-    "id,answer_set,answer_key,situation_key,when_conditions,answer_skeleton,route,ask,priority,is_fallback,approval_status,updated_at",
+    "id,answer_set,answer_key,situation_key,when_conditions,answer_skeleton,route,ask,offer_code,priority,is_fallback,approval_status,updated_at",
   )) as Record<string, unknown>[];
 
   return rows.map(mapRule).sort(byAnswerSetThenKey);
@@ -183,6 +191,8 @@ export interface RuleInput {
   route: string | null;
   /** MISSING_FIELDS keys. A list since one reply can need two facts. */
   ask: string[];
+  /** A live discount code this rule hands the customer, or null. */
+  offerCode: string | null;
   priority: number;
   isFallback: boolean;
   approvalStatus: string;
@@ -243,6 +253,7 @@ export async function saveRule(shopId: string, input: RuleInput): Promise<Policy
     conditions,
     route: input.route || null,
     ask: asks,
+    offerCode: input.offerCode?.trim() || null,
     priority: input.priority ?? 0,
     isFallback: Boolean(input.isFallback),
   };
@@ -264,6 +275,7 @@ export async function saveRule(shopId: string, input: RuleInput): Promise<Policy
         answer_skeleton: input.answerSkeleton?.trim() || null,
         route: shaped.route,
         ask: shaped.ask,
+        offer_code: shaped.offerCode,
         priority: shaped.priority,
         is_fallback: shaped.isFallback,
         approval_status: input.approvalStatus || "draft",
@@ -316,6 +328,7 @@ function mapRule(row: Record<string, unknown>): PolicyRule {
     route: (row.route as string) ?? null,
     // Tolerates the singular column a row may predate the list change with.
     ask: Array.isArray(row.ask) ? (row.ask as string[]) : row.ask ? [String(row.ask)] : [],
+    offerCode: (row.offer_code as string) ?? null,
     priority: Number(row.priority ?? 0),
     isFallback: Boolean(row.is_fallback),
     approvalStatus: String(row.approval_status ?? "draft"),

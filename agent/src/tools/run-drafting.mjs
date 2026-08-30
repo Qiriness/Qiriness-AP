@@ -81,6 +81,7 @@ async function main() {
     shopId,
     model: config.draftingModel,
     parameters: await loadParametersFor(supabase, shopId, logger),
+    offerableCodes: await loadOfferableCodesFor(supabase, shopId, logger),
     cosmetovigilanceDraftOnly: config.draftOnlyCosmetovigilance,
     logger,
     limit,
@@ -141,6 +142,41 @@ function parseValue(argv, flag, cast) {
  * degrades to no parameters, which drops any skeleton quoting one — the
  * behaviour before skeletons existed.
  */
+/**
+ * The codes a rule is still allowed to hand out, as a set of the code strings.
+ *
+ * TWO CONDITIONS, BOTH REQUIRED. The promotion must be ACTIVE in Shopify, and an
+ * operator must have marked it offerable — a code that expired and a code that
+ * was never meant for customers are different mistakes and this is the one place
+ * that can catch either.
+ *
+ * A FAILURE RETURNS AN EMPTY SET, which drops every offer rather than sending a
+ * code nobody checked. That is the safe direction for the one field in a reply
+ * that is a key rather than prose: a reply missing an offer is incomplete, a
+ * reply carrying a dead code is a customer typing it in and writing back.
+ */
+async function loadOfferableCodesFor(supabase, shopId, logger) {
+  try {
+    const rows = await supabaseSelect(
+      supabase,
+      T.PROMOTIONS,
+      { shop_id: shopId, status: 'ACTIVE', offerable_in_replies: true },
+      'codes'
+    );
+    const codes = new Set();
+    for (const row of rows || []) {
+      for (const entry of Array.isArray(row.codes) ? row.codes : []) {
+        const code = String(entry?.code ?? '').trim();
+        if (code) codes.add(code);
+      }
+    }
+    return codes;
+  } catch (error) {
+    logger?.warn?.('draft.offerable_codes_load_failed', { reason: error.message });
+    return new Set();
+  }
+}
+
 async function loadParametersFor(supabase, shopId, logger) {
   try {
     return toParameterMap(

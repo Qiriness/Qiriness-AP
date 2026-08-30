@@ -54,3 +54,6 @@
  GET /agent-setup/rules 200 in 3657ms
  GET /agent-setup/rules 200 in 2341ms
  ✓ Compiled in 576ms (444 modules)
+ ○ Compiling /agent-setup/parameters ...
+ ✓ Compiled /agent-setup/parameters in 900ms (840 modules)
+ GET /agent-setup/rules 200 in 2356ms

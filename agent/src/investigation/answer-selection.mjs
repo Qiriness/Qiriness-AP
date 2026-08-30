@@ -314,6 +314,7 @@ function ruleProfile(answers, situationKey) {
           a.route ?? null,
           [...(a.ask ?? [])].sort(),
           a.answerSkeleton ?? null,
+          a.offerCode ?? null,
           a.priority ?? 0,
           Boolean(a.isFallback)
         ])

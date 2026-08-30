@@ -559,6 +559,9 @@ async function loadPolicy({ loadAnswers, ticket, exemplarMatch, shopId, logger }
       route: row.route ?? null,
       // Always a list, even from a row written before the column was one.
       ask: Array.isArray(row.ask) ? row.ask.filter(Boolean) : row.ask ? [row.ask] : [],
+      // The code this rule offers, if the operator chose one. Carried as
+      // written; whether it is still live is decided at drafting time.
+      offerCode: row.offer_code ?? null,
       priority: row.priority ?? 0,
       isFallback: Boolean(row.is_fallback)
     }));

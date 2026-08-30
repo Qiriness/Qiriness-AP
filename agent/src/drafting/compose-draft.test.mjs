@@ -261,3 +261,65 @@ test('no skeleton leaves the prompt exactly as it was', () => {
   });
   assert.ok(!prompt.includes('Ce que cette réponse doit faire'));
 });
+
+// --- the code a rule hands out ------------------------------------------------
+
+const OFFER_ROW = {
+  verdict: 'answerable',
+  established: [{ claim: 'x' }],
+  exemplar_match: { policy: { offer_code: 'QIRINESS20', answer_skeleton: 'Donner le code.' } }
+};
+
+test('a rule’s code reaches the prompt as a literal to reproduce', () => {
+  // A DISCOUNT CODE IS THE ONE THING IN A REPLY A MODEL MUST NEVER COMPOSE. It
+  // looks like a word and it is a key, so an invented one is indistinguishable
+  // from a real one until the customer types it in at checkout. Naming it in the
+  // prompt is what makes "do not invent a code" enforceable.
+  const message = composeDraftingMessage({
+    message: { subject: 'Code', body_text: 'Je n’ai jamais reçu mon code.' },
+    caseFile: caseFileFromRow(OFFER_ROW),
+    offerableCodes: new Set(['QIRINESS20'])
+  });
+
+  assert.match(message, /## Code à communiquer au client/);
+  assert.match(message, /QIRINESS20/);
+  assert.match(message, /sans le modifier ni en inventer un autre/);
+});
+
+test('a code that has stopped being offerable is dropped, not sent stale', () => {
+  // `promotions` is rewritten by the Shopify sync, so a code chosen months ago
+  // may since have expired or been taken off the offerable list. The rest of the
+  // rule is still right, so the offer goes and the reply is written without it —
+  // the same treatment an unset parameter gets.
+  const warnings = [];
+  const message = composeDraftingMessage({
+    message: { subject: 'Code', body_text: 'Je n’ai jamais reçu mon code.' },
+    caseFile: caseFileFromRow(OFFER_ROW),
+    offerableCodes: new Set(['AUTRECODE']),
+    logger: { warn: (event, fields) => warnings.push([event, fields]) }
+  });
+
+  assert.ok(!message.includes('QIRINESS20'));
+  assert.ok(!message.includes('Code à communiquer'));
+  assert.deepEqual(warnings, [['draft.offer_code_dropped', { code: 'QIRINESS20' }]]);
+});
+
+test('no offerable codes at all drops every offer', () => {
+  // The default. A caller that has not wired the lookup sends no code rather
+  // than one nobody checked — a reply missing an offer is incomplete, a reply
+  // carrying a dead code is a customer typing it in and writing back.
+  const message = composeDraftingMessage({
+    message: { subject: 'Code', body_text: 'Je n’ai jamais reçu mon code.' },
+    caseFile: caseFileFromRow(OFFER_ROW)
+  });
+  assert.ok(!message.includes('QIRINESS20'));
+});
+
+test('a rule offering nothing adds no code section', () => {
+  const message = composeDraftingMessage({
+    message: { subject: 'Code', body_text: 'Bonjour' },
+    caseFile: caseFileFromRow({ verdict: 'answerable', established: [{ claim: 'x' }] }),
+    offerableCodes: new Set(['QIRINESS20'])
+  });
+  assert.ok(!message.includes('Code à communiquer'));
+});

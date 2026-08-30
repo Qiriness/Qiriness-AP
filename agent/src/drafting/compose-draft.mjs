@@ -37,7 +37,11 @@ export function caseFileFromRow(row) {
     // diagnostics for a person, none of which a customer's reply has any use
     // for. Reading the skeleton by name is the narrowing; spreading the object
     // would put the whole diagnostic one careless renderer away from a prompt.
-    answerSkeleton: skeletonOf(row)
+    answerSkeleton: skeletonOf(row),
+    // The code the matched rule offers, as the rule named it. Whether it is
+    // still live is decided below, not here — this is the record of what was
+    // decided, and a stored run has to read back the same either way.
+    offerCode: offerCodeOf(row)
   };
 }
 
@@ -73,6 +77,39 @@ function resolveSkeleton(skeleton, parameters, logger) {
     unset: filled.unset
   });
   return null;
+}
+
+/**
+ * The code the rule offers, IF IT IS STILL ONE WE OFFER.
+ *
+ * RE-CHECKED AT DRAFTING TIME, and this is the whole reason it is not a foreign
+ * key. `promotions` is rewritten by the Shopify sync, so a code chosen months
+ * ago may since have expired, been deactivated, or been taken off the offerable
+ * list by an operator. A rule pointing at it is not broken — the rest of its
+ * answer is still right — so the offer is dropped and the reply is written
+ * without it, exactly the treatment `resolveSkeleton` gives a parameter nobody
+ * has set.
+ *
+ * DROPPED LOUDLY. A code that has quietly stopped being offered is a rule that
+ * has quietly stopped doing what it was written for, and the log line is how
+ * that stops being invisible.
+ */
+function resolveOfferCode(code, offerableCodes, logger) {
+  if (!code) {
+    return null;
+  }
+  if (offerableCodes?.has?.(code)) {
+    return code;
+  }
+  logger?.warn?.('draft.offer_code_dropped', { code });
+  return null;
+}
+
+/** The code a matched rule carried, or null. */
+function offerCodeOf(row) {
+  const value = row?.exemplar_match?.policy?.offer_code;
+  const trimmed = String(value ?? '').trim();
+  return trimmed.length > 0 ? trimmed : null;
 }
 
 /** The wording guidance a matched rule carried, or null. Nothing else. */
@@ -113,6 +150,9 @@ export function composeDraftingMessage({
   // The numbers a skeleton may quote. Empty is safe: a skeleton naming one that
   // is unset is dropped rather than sent half-filled — see below.
   parameters = new Map(),
+  // The codes an operator has marked offerable, loaded once per poll by the
+  // caller. Empty is safe: an offer whose code is not in here is dropped.
+  offerableCodes = new Set(),
   logger = null
 } = {}) {
   const parts = [];
@@ -148,6 +188,34 @@ export function composeDraftingMessage({
         `Ce n’est pas un texte à envoyer et il ne doit jamais être recopié tel quel : ` +
         `rédiger la réponse au client à partir des faits ci-dessus, en suivant cette consigne.\n\n` +
         skeleton
+    );
+  }
+
+  // THE CODE THE RULE OFFERS, AND THE ONLY PLACE ONE MAY COME FROM. A discount
+  // code is the one thing in a reply a model must never compose: it looks like a
+  // word and it is a key, so an invented one is indistinguishable from a real one
+  // until the customer types it in. Naming it here — after the skeleton that
+  // decided the reply would make an offer, and as a literal to reproduce — is
+  // what makes "do not invent a code" enforceable rather than hopeful.
+  //
+  // AFTER THE SKELETON, deliberately: the skeleton says what the reply does, and
+  // this is the value it does it with. A code arriving above the instruction that
+  // frames it reads as a fact about the ticket and gets quoted at random.
+  const offerCode = resolveOfferCode(caseFile?.offerCode, offerableCodes, logger);
+  if (offerCode) {
+    parts.push(
+      `## Code à communiquer au client
+
+` +
+        `Ce code a été choisi pour ce cas de figure. Le donner au client, ` +
+        `EXACTEMENT tel qu’il est écrit ici, sans le modifier ni en inventer un autre :
+
+` +
+        offerCode +
+        `
+
+Si la réponse ne se prête pas à transmettre un code, ne pas en parler — ` +
+        `mais ne jamais en citer un différent.`
     );
   }
 

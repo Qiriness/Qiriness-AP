@@ -46,6 +46,7 @@ export function RuleEditor({
   const [skeleton, setSkeleton] = useState(rule?.answerSkeleton ?? "");
   const [route, setRoute] = useState(rule?.route ?? "");
   const [ask, setAsk] = useState<string[]>(rule?.ask ?? []);
+  const [offerCode, setOfferCode] = useState(rule?.offerCode ?? "");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -203,6 +204,42 @@ export function RuleEditor({
           />
         </label>
 
+        {/* THE CODE THIS RULE HANDS OUT, and the second place a rule carries a
+            VALUE rather than a condition. A parameter is a number the shop runs
+            on; this is a commercial decision that changes with the season, so it
+            is chosen per rule rather than held once globally.
+
+            A PICKER, NEVER A TEXT BOX. A typed code is a key, and a mistyped one
+            reaches a customer looking exactly like a real one — they only find
+            out at checkout. The list is what an operator cleared on the
+            Promotions screen, so a partner's 50% rate cannot be reached from
+            here at all.
+
+            The conditions ride along with each option, because a code that
+            cannot be combined with a product discount is the commonest reason a
+            customer writes back saying it still does not work. */}
+        {vocabulary.offerableCodes.length > 0 && (
+          <label className={styles.field}>
+            <span>Give the customer a code</span>
+            <select value={offerCode} onChange={(e) => setOfferCode(e.target.value)}>
+              <option value="">no code — the reply offers nothing</option>
+              {vocabulary.offerableCodes.map((code) => (
+                <option key={code.code} value={code.code}>
+                  {code.code}
+                  {code.summary ? ` — ${code.summary}` : ""}
+                  {code.stacksWith ? ` · not combinable with ${code.stacksWith.join(", ")}` : ""}
+                  {code.oncePerCustomer ? " · once per customer" : ""}
+                </option>
+              ))}
+            </select>
+            <span className={styles.hint}>
+              Cleared on the Promotions screen. The agent is told to reproduce it exactly and never
+              to invent one — and if the code stops being offerable, the offer is dropped from the
+              reply rather than sent stale.
+            </span>
+          </label>
+        )}
+
         {/* THE ONE PLACE A RULE NAMES A PARAMETER DIRECTLY. A condition uses the
             state a number computes; this quotes the number itself. Inserted as a
             placeholder rather than typed, so changing 30 to 21 changes every
@@ -259,6 +296,7 @@ export function RuleEditor({
                   answerSkeleton: skeleton || null,
                   route: route || null,
                   ask,
+                  offerCode: offerCode || null,
                   priority: rule?.priority ?? 0,
                   isFallback: rule?.isFallback ?? false,
                 });

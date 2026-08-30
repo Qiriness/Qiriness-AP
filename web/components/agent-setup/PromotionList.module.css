@@ -1,0 +1,120 @@
+.wrap {
+  padding: 1.5rem 1.75rem 4rem;
+  max-width: 58rem;
+}
+
+.head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1.5rem;
+  margin-bottom: 1.75rem;
+}
+
+.title {
+  margin: 0 0 0.35rem;
+  font-size: var(--text-h2, 1.35rem);
+}
+
+.lede {
+  margin: 0;
+  color: var(--text-subtle);
+  max-width: 42rem;
+  line-height: 1.55;
+}
+
+.count {
+  flex-shrink: 0;
+  font-size: var(--text-caption);
+  color: var(--text-subtle);
+  font-variant-numeric: tabular-nums;
+}
+
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.6rem;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 1.5rem;
+  align-items: center;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.85rem 1.1rem;
+  background: var(--surface);
+}
+
+/* An offerable code is the exception on this list, so it is the one that is
+   marked — the default state needs no emphasis. */
+.on {
+  border-left: 3px solid var(--accent, #2f7d5c);
+}
+
+.main {
+  min-width: 0;
+}
+
+.codeLine {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.code {
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.summary {
+  color: var(--text-subtle);
+  font-size: var(--text-caption);
+}
+
+.facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.15rem 0.9rem;
+  margin-top: 0.35rem;
+  font-size: var(--text-caption);
+}
+
+.muted {
+  color: var(--text-subtle);
+}
+
+/* Not an error — a condition worth reading before choosing this code. */
+.warn {
+  color: var(--warn, #a3541a);
+}
+
+.switch {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  flex-shrink: 0;
+  font-size: var(--text-caption);
+  color: var(--text-subtle);
+  cursor: pointer;
+  user-select: none;
+}
+
+.switch input {
+  cursor: pointer;
+}
+
+.empty,
+.error {
+  color: var(--text-subtle);
+  line-height: 1.55;
+}
+
+.error {
+  color: var(--danger, #b3261e);
+}

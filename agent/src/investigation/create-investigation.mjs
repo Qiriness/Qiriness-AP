@@ -154,7 +154,7 @@ export function createInvestigationStack({
         approval_status: 'approved',
         deleted_at: { operator: 'is', value: 'null' }
       },
-      'answer_key,situation_key,when_conditions,answer_skeleton,route,ask,priority,is_fallback,approval_status'
+      'answer_key,situation_key,when_conditions,answer_skeleton,route,ask,offer_code,priority,is_fallback,approval_status'
     );
 
   /**

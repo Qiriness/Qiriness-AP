@@ -41,6 +41,8 @@ export interface SaveRulePayload {
   route: string | null;
   /** MISSING_FIELDS keys — a list, since one reply can need two facts. */
   ask: string[];
+  /** A live code this rule hands the customer, chosen from the cleared list. */
+  offerCode: string | null;
   priority: number;
   isFallback: boolean;
 }

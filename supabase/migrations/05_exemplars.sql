@@ -329,6 +329,22 @@ create table public.support_answers (
   -- same thing, which is the shape that produces a constraint passing on the row
   -- it exists to refuse.
   ask text[] not null default '{}'::text[],
+  -- A LIVE DISCOUNT CODE THIS RULE HANDS TO THE CUSTOMER, or null.
+  --
+  -- THE ONE PLACE A RULE CARRIES A VALUE RATHER THAN A CONDITION, and it is here
+  -- because "which code do we give somebody who never received theirs" is a
+  -- commercial decision that changes with the season and cannot be derived from
+  -- the ticket. The operator picks it once, on the rule, from the codes marked
+  -- `offerable_in_replies` -- so it is chosen deliberately rather than per reply
+  -- under time pressure, and the same customer situation always gets the same
+  -- offer.
+  --
+  -- NOT VALIDATED BY THIS CONSTRAINT, and it cannot be: the codes live in
+  -- `promotions`, which the Shopify sync rewrites, so a foreign key would either
+  -- block the sync or delete rules when a promotion expires. It is re-checked at
+  -- DRAFTING time instead and dropped if it has stopped being offerable, the
+  -- same treatment `fillParameters` gives a parameter nobody has set.
+  offer_code text,
   -- Ordering among rows that match equally deeply. Most-specific wins first;
   -- this only breaks the tie, so authoring order never becomes load-bearing by
   -- accident.
@@ -381,6 +397,10 @@ create table public.support_answers (
   -- exactly the row it exists to refuse — an `ask` with no route — which is how
   -- it was caught: by inserting one against the live table rather than reading
   -- the clause. The three-valued form is total.
+  -- An empty string is a code nobody can use and a null wearing a disguise.
+  constraint support_answers_offer_code_not_blank_check check (
+    offer_code is null or length(btrim(offer_code)) > 0
+  ),
   constraint support_answers_ask_needs_route_check check (
     cardinality(ask) = 0 or route is not distinct from 'needs_customer_input'
   )
@@ -425,6 +445,9 @@ comment on column public.support_answers.situation_key is
 
 comment on column public.support_answers.route is
   'Where a matched rule sends the ticket, or null to leave the verdict as the investigation set it. Tighten only -- "answerable" is absent from the check constraint by design, so a rule can hand a ticket to a person but never declare one safe.';
+
+comment on column public.support_answers.offer_code is
+  'A live discount code this rule hands to the customer, chosen by an operator from the promotions marked offerable_in_replies. The one place a rule carries a VALUE rather than a condition: which code to give somebody is a commercial decision that changes with the season and cannot be derived from the ticket. No foreign key -- promotions is Shopify-synced, so a constraint would block the sync or delete rules when a code expires. Re-checked at drafting time and dropped if it has stopped being offerable.';
 
 comment on column public.support_answers.ask is
   'MISSING_FIELDS keys when the rule''s answer is to ask for something. Keys, never sentences: case-file.mjs owns the wording. A LIST because one reply can need two facts -- a reaction with no product named wants the product AND the batch number, and one slot would have made that two round trips. Empty rather than null for "asks nothing". A non-empty list requires route = needs_customer_input, or drafting would hold a question it is not permitted to ask.';

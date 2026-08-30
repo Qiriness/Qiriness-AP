@@ -425,6 +425,96 @@ The four states each take a different reply, which is what made them worth havin
 
 ### The rulebook filters by answer set
 
+### The returns address in the parameters was wrong
+
+### The promotion machinery was already built; it had no rules to reach
+
+`evaluateStacking` has read `combines_with` from the promotions table since the promotion tool existed, and produces the sentence support actually needs — *« Ce code ne peut pas être cumulé avec une remise sur commande, une remise produit. S'il y a déjà une autre remise sur la commande, c'est la cause la plus probable. »* Beside it: `promotion_validity` across six values, `promotion_eligibility` across five, and checks on the window, the status, the usage limit and once-per-customer.
+
+All of it derived from the table, none of it guessed, and none of it reaching a customer, because the `promotions` answer set was empty. **The work here was seven rules, not a mechanism.**
+
+### There is no welcome code, and P-15 is seven tickets asking for it
+
+`BIENVENUE` expired 2025-08-25 and `BIENVENUEQIRINESS` expired 2026-06-22. P-15 has **seven real phrasings**, every one a customer who subscribed for the 20% and never received a code — and the code behind that promise has been dead for two months while the signup form kept making it.
+
+So P-15 cannot name a code, and the rule does not try. It confirms the subscription and leaves the offer to a person, which is also the answer to the harder question: *which* code. That is a commercial decision per ticket, not a constant.
+
+### `offerable_in_replies` is the one column on a synced table that is ours
+
+Of the 14 active single-code promotions, one is **100% off a product**, and two are partner rates of 50% and 26%; six further promotions carry 600 single-use bulk codes each. A picker showing "all active codes" puts a free order one mis-click from a support reply, and nothing in the data separates the welcome code from a partner's rate — not the discount type, not the size, not the title.
+
+So a person decides once, on `/agent-setup/promotions`, and the reply screen only ever sees what they chose. **It survives the sync by not being in the mapper**: `mapPromotionRow` returns a fixed column set and the upsert merges duplicates, so a column absent from the payload is left alone. That omission is load-bearing rather than incidental, and `shopify-promotion-mapper.test.mjs` now asserts it — adding the key there would silently reset every decision to false on the next sync, which would surface as codes quietly vanishing from the picker rather than as an error.
+
+### A rule may never name a code
+
+### The offer belongs to the rule, not to the reviewer
+
+The first build put the code picker on the drafting screen, beside approve/edit/reject. **That was the wrong place**, and the reason is the same one the whole rules layer rests on: a reviewer choosing a code per reply is a decision taken under time pressure that can come out differently for two identical tickets. Which code somebody who never received theirs is given is a property of the SITUATION, so it belongs on the rule — chosen once, applied the same way every time, and visible in the rulebook without opening anything.
+
+It also moves the work off people entirely. With the code on the rule the agent writes the whole reply, and P-15 — seven tickets asking for the welcome discount — stops needing a human at all.
+
+`support_answers.offer_code` is **the one place a rule carries a value rather than a condition**. Everything else it holds is a test against evidence; this is a commercial decision that changes with the season and cannot be derived from the ticket.
+
+**No foreign key, deliberately.** The codes live in `promotions`, which the Shopify sync rewrites — a constraint would either block the sync or delete rules when a promotion expires. The code is re-checked at DRAFTING time instead, against the promotions that are still both `ACTIVE` and `offerable_in_replies`, and dropped if it is neither. That is the treatment `fillParameters` already gives a parameter nobody has set: the rest of the rule is still right, so the reply is written without the offer rather than held back or sent stale. It is dropped **loudly** — a code that has quietly stopped being offered is a rule that has quietly stopped doing what it was written for.
+
+**The picker is a select, never a text box.** A typed code is a key, and a mistyped one reaches a customer looking exactly like a real one; they find out at the checkout. The options are what an operator cleared on the promotions screen, so a partner's 50% rate cannot be reached from the rule editor at all.
+
+**And the prompt names it as a literal.** A discount code is the one thing in a reply a model must never compose — it looks like a word and it is a key — so it arrives under its own heading, to be reproduced character for character, with the instruction that an absent section means there is no code rather than one to find. Four tests cover the two directions: the code reaching the prompt, and a stale one being dropped with a warning.
+
+**Two rules deliberately offer nothing.** `code_actif_ne_sapplique_pas` — their code works, and a second one would only muddy the answer. `newsletter_code_client_introuvable` — we cannot place the sender, so a welcome discount would go to somebody whose subscription we cannot verify.
+
+### P-18 branches on validity, and covers every value it can take
+
+`active` is the only branch that answers on its own — and it says only what is known: the code exists and is not expired. It must not say the code *will work*, because that depends on a basket we cannot see, and `eligibility_undetermined` forbids exactly that claim. The first draft of this skeleton said « le code est bien valable » and tripped the check; the distinction between confirming a code's existence and promising its result is the whole of that branch.
+
+`expired` / `not_yet_started` / `inactive` and `not_found` route to a person and offer a live code instead. `not_found` is worded most carefully: it means we cannot find the code, never that the customer invented it — a partner code, a magazine, or an operation nobody recorded all land there.
+
+A test asserts the branches cover **every** value `promotion_validity` can take, because the failure mode is a real ticket falling through to no rule at all, which is invisible.
+
+`returns_address` held **"31 Welbeck Street"** — a London street that appears in no approved article and no ticket in the corpus. The approved Refund policy says returns go to **Qiriness, 33 Avenue de Wagram, 75017 Paris, France**. Nothing quoted the parameter yet, so nothing had gone out; R-21 is the rule that would have.
+
+Corrected to the policy address. The two now agree, which is the point of holding the number once — a parameter that disagrees with the article it came from is worse than no parameter, because it looks authoritative.
+
+Physical returns are routed to **DERET Logistics** in internal mail, so there may be a second address the warehouse actually receives. The customer-facing one is what the policy publishes, and that is what a reply may say.
+
+### The approved returns policy contradicts itself, and every skeleton has to say so
+
+The Refund policy is Shopify's template, lightly edited. Four paragraphs after promising a 30-day window it lists exceptions that include **« les produits de soins personnels (tels que les produits de beauté) »** — which is the entire Qiriness catalogue. Read literally, nothing this shop sells can be returned.
+
+Retrieval can surface either half, and `policy_answer` is exactly how a returns rule reaches the article. So all four R-21/R-22 skeletons carry an explicit instruction never to tell a customer a product is non-returnable, naming the clause and why it is not to be relied on. **This is a workaround for a document that needs editing**, and it is written down here so the workaround is removed when the article is.
+
+### `refund_state` was a need nothing could derive
+
+R-23 (« sous quel délai suis-je remboursé ? ») has declared `refund_state` since the vocabulary existed, and there was no finding behind it — so every run scored it `unknown` and no rule could branch. The same shape `customer_account_state` was in.
+
+It is now derived in `orderStates`, and it is **not `payment_state` under another name**. That one asks whether we are holding the customer's money; this asks where their *request* has got to, and the two part company exactly where the question gets asked — a return opened and not yet settled is `paid` to the first and `return_open` to the second, and `paid` is indistinguishable from a customer who has asked for nothing.
+
+`return_open` is checked before the refund values, because a return in progress with no money moved is the state a reply must not describe as "nothing has happened". It resolves to `none` on every bundle today: `hasOpenReturn` is false on all 78, because returns are handled by mail and by the logistics provider rather than through Shopify's returns feature.
+
+### The returns rules are written for a delivery date that does not exist yet
+
+`return_eligibility` counts days from `delivery.deliveredAt`, and **4 of 78 bundles have one** — the same carrier-scan gap the DERET feed is meant to close. Setting `returns_window_days` did not unblock it; the missing date did.
+
+The rules branch on it anyway, on the explicit decision to write for the tool that will exist. What that costs today is that `unknown` is the branch that almost always fires, so it is written to be a *good* answer rather than a holding one: the procedure for requesting a return does not depend on the window, so `retour_delai_inconnu` gives it in full and says nothing about the delay in either direction. `out_of_window` is the only branch that routes to a person, and it is careful not to read as a refusal — a goodwill gesture is a human's call.
+
+**R-22 answers nothing, deliberately.** No approved article says who pays return postage. The policy mentions a label being sent once a return is accepted, which invites the inference, and the skeleton forbids drawing it: acknowledge, say a person will confirm, and move to what is certain. The rule exists to make the gap visible rather than to fill it.
+
+### Two returns situations the corpus has and the exemplars do not
+
+Scored against real customer wording rather than the thread's latest message — these are long threads, and the trigger message is usually a colleague's reply:
+
+| | | |
+|---|---|---|
+| return address (R-21) | **0.834 / 0.876** | matched |
+| return postage (R-22) | **0.764** | matched |
+| refund timing (R-23) | **0.761** | matched |
+| « vous n'avez d'étiquette pour le retour ? » | 0.640 → **0.959** | added to R-21 |
+| **droit de rétractation** ×2 real tickets | **0.572 / 0.583** | no situation |
+
+The label question was a real phrasing scoring just under the bar, and its answer is exactly R-21's — the label is issued once the return is requested and accepted. Added as a variant; the withdrawal cases were re-measured afterwards and did not move.
+
+**The right of withdrawal has no exemplar**, and it is not R-21 with different words: it is a separate legal route, 14 days rather than 30, no reason required, and `withdrawal_days` is already set for it. It appears at least three times in the corpus with real customer wording. Worth its own situation.
+
 ### A-35 is the first exemplar written from no real mail
 
 Nothing in the 400-ticket corpus is an account-deletion request. Searched for « supprimer / désactiver / fermer mon compte », « effacer mes données », « droit à l'oubli » and RGPD: one hit, a recruitment-check firm citing the GDPR, filed under `careers`. So the five phrasings are **authored**, and `source_note` says so — because two exemplars here (D-07, P-18) never win a ticket at all, and having no real phrasing is why.

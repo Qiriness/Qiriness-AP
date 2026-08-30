@@ -169,3 +169,28 @@ test('promotion_key is the discount, so a re-sync updates rather than duplicates
   const [row] = mapPromotionRows(node, 'shop-id', '2026-07-20T00:00:00Z');
   assert.equal(row.promotion_key, 'gid://shopify/DiscountNode/1');
 });
+
+test('the mapper never writes offerable_in_replies', () => {
+  // THE INVARIANT A LOCAL COLUMN ON A SYNCED TABLE RESTS ON. `offerable_in_replies`
+  // is the one column on `promotions` Shopify does not own — an operator decides
+  // which codes support may offer a customer — and it survives the sync only
+  // because this mapper omits it and the upsert merges duplicates.
+  //
+  // Add the key here and the next sync silently resets every one of those
+  // decisions to false, which would show up as codes quietly vanishing from the
+  // picker rather than as an error.
+  const [row] = mapPromotionRows(
+    {
+      id: 'gid://shopify/DiscountCodeNode/1',
+      discount: {
+        __typename: 'DiscountCodeBasic',
+        title: 'BIENVENUE',
+        status: 'ACTIVE',
+        codes: { nodes: [{ code: 'BIENVENUE' }] }
+      }
+    },
+    'shop-1',
+    '2026-08-30T00:00:00Z'
+  );
+  assert.ok(!('offerable_in_replies' in row), 'the sync would reset the operator’s choices');
+});

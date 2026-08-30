@@ -658,6 +658,20 @@ create table public.promotions (
   discount_classes text[] not null default '{}',
   combines_with jsonb not null default '{}'::jsonb,
   source_app_name text,
+  -- MAY SUPPORT OFFER THIS CODE TO A CUSTOMER? Local, and the only column on
+  -- this table Shopify does not own.
+  --
+  -- IT SURVIVES THE SYNC BY NOT BEING IN THE MAPPER. `mapPromotionRow` returns a
+  -- fixed set of columns and the upsert merges duplicates, so a column absent
+  -- from the payload is left alone. That is what makes a local flag on a synced
+  -- table safe here, and it is why nothing may ever add this key to the mapper.
+  --
+  -- DEFAULT FALSE, AND THAT IS THE WHOLE POINT. Of the 14 active single-code
+  -- promotions on this shop, one is 100% off a product and two more are partner
+  -- rates of 50% and 26%. A picker defaulting to "all active" would put those in
+  -- a support reply one mis-click away; an operator has to say which codes may
+  -- leave the building.
+  offerable_in_replies boolean not null default false,
   rule_snapshot jsonb not null default '{}'::jsonb,
   source_metadata jsonb not null default '{}'::jsonb,
   synced_at timestamptz not null default now(),
@@ -738,6 +752,9 @@ comment on column public.promotions.promotion_key is
 
 comment on column public.promotions.codes is
   'Redeem codes for this discount: [{ code, usage_count, redeem_code_id }]. Empty for automatic discounts. One row per discount rather than per code — a bulk-generated discount carries up to 600 codes, and duplicating the whole snapshot per code cost 7,512 rows and 22 MB where 324 rows do. usage_count is per CODE and is load-bearing: most codes here are single-use, so "this code has already been used" is the answer to the commonest promotions question, and a bare list of codes could not carry it.';
+
+comment on column public.promotions.offerable_in_replies is
+  'LOCAL, not from Shopify: may support offer this code to a customer? Survives the sync because mapPromotionRow does not write it and the upsert merges duplicates -- nothing may ever add this key to the mapper. Defaults to false because "all active codes" includes a 100%-off product code and two partner rates on this shop, and a picker offering those is one mis-click from a free order.';
 
 comment on column public.promotions.applies_once_per_customer is
   'Shopify appliesOncePerCustomer flag for manual filtering of customer-specific or one-use promotions.';

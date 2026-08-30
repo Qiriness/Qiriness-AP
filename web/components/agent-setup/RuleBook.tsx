@@ -183,6 +183,20 @@ export function RuleBook({
                           , asking for <b>{rule.ask.join(" and ")}</b>
                         </>
                       ) : null}
+                      {/* Rendered on the `then` line rather than beside the
+                          skeleton, because it is part of what the rule DOES —
+                          a rule that hands out 20% is a different rule from one
+                          that does not, and that has to be visible without
+                          opening the editor. */}
+                      {rule.offerCode ? (
+                        <>
+                          , giving <code>{rule.offerCode}</code>
+                        </>
+                      ) : null}
+                    </>
+                  ) : rule.offerCode ? (
+                    <>
+                      <em>answer it</em>, giving <code>{rule.offerCode}</code>
                     </>
                   ) : (
                     <em>answer it — the verdict is left alone</em>

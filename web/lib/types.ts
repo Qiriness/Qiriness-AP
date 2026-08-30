@@ -1292,6 +1292,37 @@ export interface AgentPanel {
 }
 
 /**
+ * An active code promotion, as the curation screen shows it.
+ *
+ * `offerable` IS THE ONLY FIELD A PERSON SETS. Everything else is Shopify's and
+ * is overwritten on every sync — which is exactly why the flag is not derived
+ * from any of it: no combination of discount type, size or title reliably
+ * separates "the welcome code" from "a partner's 50% rate", and guessing wrong
+ * means a support reply hands out the second.
+ */
+export interface PromotionChoice {
+  promotionKey: string;
+  code: string;
+  title: string;
+  /** Shopify's own one-liner, e.g. "20% off 94 products". */
+  summary: string | null;
+  endsAt: string | null;
+  oncePerCustomer: boolean;
+  /**
+   * What this code CANNOT be combined with, or null when it stacks with
+   * everything. Phrased as the blocked list because that is the sentence support
+   * needs — "cannot be combined with a product discount" is the commonest reason
+   * a code appears not to work. From Shopify's `combines_with`, never inferred.
+   */
+  stacksWith: string[] | null;
+  usage: { used: number; limit: number | null };
+  offerable: boolean;
+}
+
+/** The curated subset, as the reply screen sees it. Same shape, minus the flag. */
+export type OfferableCode = Omit<PromotionChoice, "offerable" | "promotionKey">;
+
+/**
  * One policy rule — a row of `support_answers`.
  *
  * Two axes, and they answer different questions: `situationKey` is what the
@@ -1318,6 +1349,16 @@ export interface PolicyRule {
    * that two round trips. Empty means the rule asks for nothing.
    */
   ask: string[];
+  /**
+   * A live discount code this rule hands the customer, or null.
+   *
+   * THE ONE PLACE A RULE CARRIES A VALUE RATHER THAN A CONDITION. Which code to
+   * give somebody who never received theirs is a commercial decision that
+   * changes with the season and cannot be derived from the ticket — so an
+   * operator picks it once here, from the codes cleared on the promotions
+   * screen, and the same situation always gets the same offer.
+   */
+  offerCode: string | null;
   priority: number;
   isFallback: boolean;
   approvalStatus: string;
@@ -1341,6 +1382,8 @@ export interface PolicyVocabulary {
   needs: { need: string; findings: string[]; poweredBy: string | null }[];
   routes: string[];
   asks: string[];
+  /** Codes an operator has cleared for customers, for the rule editor's picker. */
+  offerableCodes: OfferableCode[];
   /** For the skeleton box: the one place a rule names a parameter directly. */
   parameters: { key: string; label: string; set: boolean }[];
 }
