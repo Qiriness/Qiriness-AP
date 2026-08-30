@@ -1237,3 +1237,80 @@ export interface AgentPanel {
   /** False until the worker has run since token capture was wired. */
   hasUsageData: boolean;
 }
+
+/**
+ * One policy rule — a row of `support_answers`.
+ *
+ * Two axes, and they answer different questions: `situationKey` is what the
+ * customer WANTS (null = any situation in the set) and `conditions` is what is
+ * TRUE about the order. A rule may name either or both.
+ *
+ * `route` can only ever tighten — the schema forbids `answerable` — so a rule
+ * can hand a ticket to a person and can never declare one safe.
+ */
+export interface PolicyRule {
+  id: string;
+  answerSet: string;
+  answerKey: string;
+  situationKey: string | null;
+  /** `{ need: [findings] }` — a conjunction across needs, a disjunction within one. */
+  conditions: Record<string, string[]>;
+  answerSkeleton: string | null;
+  route: string | null;
+  /** A MISSING_FIELDS key. The agent owns the sentence; this names which one. */
+  ask: string | null;
+  priority: number;
+  isFallback: boolean;
+  approvalStatus: string;
+  updatedAt: string | null;
+}
+
+/**
+ * What the rule editor may offer, derived from the agent's own vocabulary at
+ * request time rather than restated here — a second list would let the dashboard
+ * offer a state the agent cannot score.
+ *
+ * `needs` excludes any that carry no findings: a rule cannot branch on one, so
+ * offering it would be offering a branch that never fires.
+ */
+export interface PolicyVocabulary {
+  /**
+   * `poweredBy` names the parameter a state is computed from, when there is one.
+   * Not offered as a condition — you pick the state, not the number behind it —
+   * but shown so the editor can say a rule will never fire while it is unset.
+   */
+  needs: { need: string; findings: string[]; poweredBy: string | null }[];
+  routes: string[];
+  asks: string[];
+  /** For the skeleton box: the one place a rule names a parameter directly. */
+  parameters: { key: string; label: string; set: boolean }[];
+}
+
+/** A situation a rule can be keyed to. */
+export interface PolicySituation {
+  key: string;
+  question: string;
+  category: string | null;
+  answerSet: string | null;
+}
+
+/**
+ * One number the desk runs on — a row of `support_parameters`, joined to its
+ * definition in `scripts/lib/parameters.mjs`.
+ *
+ * `value` is null when nobody has decided it yet. That is a real state and not a
+ * missing setting: every reader handles it, and it is what every parameter
+ * starts in, because seeding a guess would put a third answer into circulation
+ * wearing the authority of a setting.
+ */
+export interface SupportParameter {
+  key: string;
+  /** `days` | `amount` | `text` — how the value is parsed. */
+  kind: string;
+  label: string;
+  description: string;
+  /** What changes when this changes, in prose, for whoever is deciding. */
+  usedBy: string;
+  value: string | null;
+  updatedAt: string | null;
+}

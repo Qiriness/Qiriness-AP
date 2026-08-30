@@ -1,0 +1,165 @@
+.form {
+  display: grid;
+  gap: 1rem;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+
+.field {
+  display: grid;
+  gap: 0.3rem;
+  font-size: 0.9rem;
+}
+
+.field > span {
+  color: var(--text-subtle);
+  font-size: var(--text-caption);
+}
+
+.field input,
+.field select,
+.field textarea {
+  font: inherit;
+  padding: 0.45rem 0.55rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: inherit;
+}
+
+.field textarea {
+  resize: vertical;
+  line-height: 1.5;
+}
+
+/*
+ * The states, as checkboxes. A condition is a disjunction — "expired OR never
+ * found" is one rule — so a single-select would force the same answer to be
+ * written twice and then kept in step.
+ */
+.conditions {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.8rem 0.9rem;
+  margin: 0;
+  display: grid;
+  gap: 0.7rem;
+  max-height: 22rem;
+  overflow-y: auto;
+}
+
+.conditions legend {
+  font-size: var(--text-caption);
+  color: var(--text-subtle);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 0 0.3rem;
+}
+
+.hint {
+  margin: 0;
+  font-size: var(--text-caption);
+  color: var(--text-subtle);
+  line-height: 1.5;
+}
+
+.need {
+  display: grid;
+  gap: 0.3rem;
+}
+
+.needName {
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.findings {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.8rem;
+}
+
+.check {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.82rem;
+  color: var(--text-subtle);
+}
+
+.note {
+  margin: 0;
+  font-size: var(--text-caption);
+  color: var(--text-subtle);
+}
+
+.warn,
+.error {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--danger, #b4341f);
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+/* A state whose parameter is unset can never resolve; say so where it is ticked. */
+.blocked {
+  margin-left: 0.5rem;
+  font-weight: 400;
+  font-size: var(--text-caption);
+  color: var(--warn, #a3541a);
+}
+
+/*
+ * Inserting a parameter into the wording. The one place a rule names a parameter
+ * directly — a condition uses the state a number computes, this quotes the
+ * number itself.
+ */
+.insert {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+  margin-top: -0.4rem;
+}
+
+.insertLabel {
+  font-size: var(--text-caption);
+  color: var(--text-subtle);
+}
+
+.chip {
+  font: inherit;
+  font-size: 0.78rem;
+  padding: 0.12rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text-subtle);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.chip:hover {
+  color: var(--text);
+  border-color: var(--teal);
+}
+
+.chip[data-unset] {
+  border-style: dashed;
+}
+
+.chipWarn {
+  color: var(--warn, #a3541a);
+  font-size: 0.7rem;
+}

@@ -21,7 +21,8 @@ export const FILES = [
   '05_exemplars',
   '06_analytics',
   '07_drafting',
-  '08_testing'
+  '08_testing',
+  '09_parameters'
 ];
 
 export const read = (name) => readFileSync(new URL(`./${name}.sql`, import.meta.url), 'utf8');
@@ -403,7 +404,7 @@ test('every table holding a vector constrains its dimensions the same way', () =
   }
 });
 
-test('the eight files are the whole baseline, in this order', () => {
+test('the nine files are the whole baseline, in this order', () => {
   // README and APP_SCHEMA both name these; a file appearing without those being
   // updated is the drift this catches.
   assert.deepEqual(FILES, [
@@ -414,6 +415,7 @@ test('the eight files are the whole baseline, in this order', () => {
     '05_exemplars',
     '06_analytics',
     '07_drafting',
-    '08_testing'
+    '08_testing',
+    '09_parameters'
   ]);
 });

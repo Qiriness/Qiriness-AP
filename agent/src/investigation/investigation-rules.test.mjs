@@ -5,6 +5,7 @@ import { REQUEST_KINDS, TICKET_SUBJECTS } from '../../../scripts/lib/support-tax
 import {
   ENABLED_SUBJECTS,
   STALE_TRANSIT_DAYS,
+  answerSetFor,
   TOOL_NAMES,
   allowedTools,
   escalationTriggers,
@@ -32,9 +33,12 @@ test('the contact kind is given no tools — that mail is forwarded, not answere
   }
 });
 
-test('cosmetovigilance and legal_privacy are deliberately toolless', () => {
+test('legal_privacy is deliberately toolless', () => {
+  // An RGPD or legal request is answered by a person, and an agent reading
+  // customer records to prepare one is exactly the access this codebase
+  // minimises. `cosmetovigilance` was here too until 2026-08-30 — it now holds
+  // one lookup, and the test below says what it may and may not reach.
   for (const kind of REQUEST_KINDS) {
-    assert.deepEqual(allowedTools('cosmetovigilance', kind, 2), []);
     assert.deepEqual(allowedTools('legal_privacy', kind, 2), []);
   }
 });
@@ -109,7 +113,12 @@ test('isInvestigable refuses an empty tool set and level 4, whatever the subject
   assert.equal(isInvestigable({ category: 'promotions', request_kind: 'problem', level: 4 }), false);
   // Deliberately empty tool sets, whatever the level.
   assert.equal(isInvestigable({ category: 'careers', request_kind: 'contact', level: 2 }), false);
-  assert.equal(isInvestigable({ category: 'cosmetovigilance', request_kind: 'problem', level: 2 }), false);
+  assert.equal(isInvestigable({ category: 'legal_privacy', request_kind: 'problem', level: 2 }), false);
+  // `cosmetovigilance` WAS in that list until 2026-08-30. It is investigable now
+  // because it has one lookup — and level 4 still strips it, which is the line
+  // that matters: a hospitalisation reaches a person untouched.
+  assert.equal(isInvestigable({ category: 'cosmetovigilance', request_kind: 'problem', level: 2 }), true);
+  assert.equal(isInvestigable({ category: 'cosmetovigilance', request_kind: 'problem', level: 4 }), false);
 });
 
 test('opening moves gather the deterministic evidence before any model turn', () => {
@@ -205,4 +214,84 @@ test('a ticket linked as a duplicate is not investigated', () => {
   const ticket = { category: 'delivery', request_kind: 'question', level: 1 };
   assert.equal(isInvestigable(ticket), true);
   assert.equal(isInvestigable({ ...ticket, duplicate_of_ticket_id: 'ticket-1' }), false);
+});
+
+// --- answer sets, and the one subject that gathers without answering ---------
+
+test('a subject with no tools has no policy family', () => {
+  // The direction that must always hold: a family for a subject the agent never
+  // investigates could never be populated by anything.
+  for (const subject of TICKET_SUBJECTS) {
+    if (allowedTools(subject, 'problem', 2).length === 0) {
+      assert.equal(answerSetFor(subject), null, subject);
+    }
+  }
+});
+
+test('the subjects that have tools and no rules are exactly the known gap', () => {
+  // THE OTHER DIRECTION IS NOT AN INVARIANT, and pinning it here is how the gap
+  // stays visible. `other` is investigable — it may search the knowledge base —
+  // and has no policy family, so no rule can ever reach one of its tickets. That
+  // is a dead end rather than an empty one, and it is deliberate only in the
+  // sense that nobody has decided what `other` should do yet. This test fails
+  // the day a family is added, which is the reminder to delete it.
+  const gap = TICKET_SUBJECTS.filter(
+    (subject) => allowedTools(subject, 'problem', 2).length > 0 && !answerSetFor(subject)
+  );
+  assert.deepEqual(gap, ['other']);
+});
+
+test('a family groups the subjects that share answers', () => {
+  // The whole reason a set is not a category: « pas encore expédiée » answers a
+  // delivery question and an order question, and keying rules to categories
+  // would mean writing it twice.
+  assert.equal(answerSetFor('order'), answerSetFor('delivery'));
+  assert.equal(answerSetFor('product'), answerSetFor('product_stock'));
+  assert.notEqual(answerSetFor('order'), answerSetFor('returns'));
+});
+
+test('every family name is English, like every other identifier here', () => {
+  // They were French — commande, retour, promo, produit — which put two
+  // languages in one namespace. French is what a customer reads; a key a
+  // developer types is code.
+  for (const subject of TICKET_SUBJECTS) {
+    const set = answerSetFor(subject);
+    if (!set) continue;
+    assert.ok(/^[a-z_]+$/.test(set), set);
+    assert.ok(!['commande', 'retour', 'promo', 'produit'].includes(set), `${set} is still French`);
+  }
+});
+
+test('cosmetovigilance gathers, and cannot reach an order tool', () => {
+  // Added 2026-08-30 so a person opens the ticket with the customer and the
+  // approved guidance already on screen. What stays out is the ORDER FAMILY and
+  // `verifyPurchase`: « nous ne trouvons aucune commande à votre nom » is a
+  // particularly bad sentence to put in front of somebody reporting a reaction,
+  // and those are the tools that produce it. That exclusion is the part of the
+  // original decision that did not change.
+  const tools = allowedTools('cosmetovigilance', 'problem', 2);
+  assert.deepEqual(tools, [TOOL_NAMES.LOOKUP_CUSTOMER, TOOL_NAMES.SEARCH_KNOWLEDGE]);
+  for (const forbidden of [
+    TOOL_NAMES.GET_ORDER_CONTEXT,
+    TOOL_NAMES.VERIFY_PURCHASE,
+    TOOL_NAMES.CHECK_PHOTO_EVIDENCE,
+    TOOL_NAMES.LOOKUP_PRODUCT
+  ]) {
+    assert.ok(!tools.includes(forbidden), `${forbidden} must stay out`);
+  }
+});
+
+test('a level 4 reaction still gets nothing at all', () => {
+  // The severity override sits above the table and is not weakened by giving the
+  // subject a tool: hospitalisation reaches a person untouched.
+  assert.deepEqual(allowedTools('cosmetovigilance', 'problem', 4), []);
+});
+
+test('cosmetovigilance is investigable, which is why it needs a rule', () => {
+  // Tools make a subject investigable, and an investigable ticket is a draftable
+  // one. The `cosmetovigilance` answer set carries a rule routing every ticket
+  // to a person; this asserts the half that lives in code.
+  assert.ok(isInvestigable({ category: 'cosmetovigilance', request_kind: 'problem', level: 2 }));
+  assert.ok(ENABLED_SUBJECTS.includes('cosmetovigilance'));
+  assert.equal(answerSetFor('cosmetovigilance'), 'cosmetovigilance');
 });

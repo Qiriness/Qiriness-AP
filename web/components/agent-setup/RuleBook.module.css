@@ -1,0 +1,159 @@
+/*
+ * The rulebook list. Deliberately plainer than the article library: this screen
+ * is read to answer "what does the agent do here", and a rule that reads like a
+ * sentence beats one styled like a record.
+ */
+.wrap {
+  padding: 1.5rem 1.75rem 4rem;
+  max-width: 62rem;
+}
+
+.head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1.5rem;
+  margin-bottom: 1.75rem;
+}
+
+.title {
+  margin: 0 0 0.35rem;
+  font-size: var(--text-h2, 1.35rem);
+}
+
+.lede {
+  margin: 0;
+  color: var(--text-subtle);
+  max-width: 42rem;
+  line-height: 1.55;
+}
+
+.headActions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-shrink: 0;
+}
+
+.count {
+  color: var(--text-subtle);
+  font-size: var(--text-caption);
+  font-variant-numeric: tabular-nums;
+}
+
+.set {
+  margin-bottom: 2rem;
+}
+
+.setName {
+  margin: 0 0 0.6rem;
+  font-size: var(--text-caption);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-subtle);
+}
+
+.rules {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.6rem;
+}
+
+.rule {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.9rem 1rem;
+  background: var(--surface);
+}
+
+/* A live rule routes real mail. It should not look like a draft. */
+.live {
+  border-left: 3px solid var(--teal);
+}
+
+.ruleHead {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.5rem;
+}
+
+.key {
+  font-weight: 600;
+}
+
+.situation,
+.shared {
+  font-size: var(--text-caption);
+  color: var(--text-subtle);
+}
+
+.situation {
+  font-weight: 600;
+  color: var(--teal);
+}
+
+.liveTag,
+.draftTag {
+  margin-left: auto;
+  font-size: var(--text-caption);
+  padding: 0.05rem 0.45rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+}
+
+.liveTag {
+  color: var(--teal);
+  border-color: var(--teal);
+}
+
+.draftTag {
+  color: var(--text-subtle);
+}
+
+.when,
+.then {
+  margin: 0.15rem 0;
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+.label {
+  display: inline-block;
+  min-width: 3rem;
+  color: var(--text-subtle);
+  font-size: var(--text-caption);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.when code {
+  font-size: 0.85em;
+}
+
+.skeleton {
+  margin: 0.6rem 0 0;
+  padding-left: 3rem;
+  color: var(--text-subtle);
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+
+.actions {
+  display: flex;
+  gap: 0.4rem;
+  margin-top: 0.8rem;
+  padding-left: 3rem;
+}
+
+.empty,
+.error {
+  color: var(--text-subtle);
+}
+
+.error {
+  color: var(--danger, #b4341f);
+}

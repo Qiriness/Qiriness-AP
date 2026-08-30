@@ -142,20 +142,23 @@ test('decomposition is not a second categoriser: one task keeps the ticket label
 });
 
 test('a task in a disabled subject is dropped, not quietly enabled', () => {
-  // `cosmetovigilance` carries an EMPTY tool set on purpose — a reported adverse
+  // `legal_privacy` carries an EMPTY tool set on purpose — an RGPD request is
+  // answered by a person, and an agent reading customer records to prepare one
+  // is exactly the access this codebase minimises. (`cosmetovigilance` stood
+  // here until 2026-08-30, when it gained one lookup.) A reported adverse
   // reaction goes to a person untouched. A model naming it must not route it.
   const { tasks, skipped } = planTasks(TICKET, [
     SPLIT[0],
-    { question: 'une réaction cutanée après application', category: 'cosmetovigilance', request_kind: 'problem' }
+    { question: 'suppression de mes données personnelles', category: 'legal_privacy', request_kind: 'problem' }
   ]);
   assert.deepEqual(tasks.map((t) => t.category), ['product']);
-  assert.deepEqual(skipped.map((t) => t.category), ['cosmetovigilance']);
+  assert.deepEqual(skipped.map((t) => t.category), ['legal_privacy']);
 });
 
 test('skipped tasks are reported rather than discarded', () => {
   // Half an email silently ignored is worse than an email never split.
   const { tasks, skipped } = planTasks(TICKET, [
-    { question: 'a', category: 'cosmetovigilance', request_kind: 'problem' },
+    { question: 'a', category: 'legal_privacy', request_kind: 'problem' },
     { question: 'b', category: 'legal_privacy', request_kind: 'question' }
   ]);
   assert.equal(skipped.length, 2);

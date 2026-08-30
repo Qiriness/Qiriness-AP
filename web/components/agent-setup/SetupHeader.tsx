@@ -18,6 +18,8 @@ export function SetupHeader({ approved, total, onTest }: SetupHeaderProps) {
     <header className={styles.header}>
       <div className={styles.headingRow}>
         <h1 className={styles.title}>Agent Setup</h1>
+        {/* Navigation moved to the tab bar in the layout. This stays a button
+            because it IS an action: it opens a dialog and goes nowhere. */}
         <button type="button" className={styles.preview} onClick={onTest}>
           Test the agent
           <ArrowRightIcon size={16} />

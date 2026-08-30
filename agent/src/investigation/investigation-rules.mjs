@@ -66,11 +66,10 @@ const T = TOOL_NAMES;
  * partner, a second mailbox — and that this is the cheaper error while it is
  * measured. Tracked in `VALIDATION_LOG.md` item 6.
  *
- * The five still absent are absent on their own merits, not for want of data:
- * `cosmetovigilance`, `legal_privacy`, `b2b`, `partner_collaboration` and
- * `careers` all have deliberately empty tool sets, so `isInvestigable` would
- * refuse them anyway. Listing them here would state an intention the tool table
- * contradicts.
+ * The four still absent are absent on their own merits, not for want of data:
+ * `legal_privacy`, `b2b`, `partner_collaboration` and `careers` all have empty
+ * tool sets, so `isInvestigable` would refuse them anyway. Listing them here
+ * would state an intention the tool table contradicts.
  */
 export const ENABLED_SUBJECTS = [
   'product',
@@ -83,7 +82,11 @@ export const ENABLED_SUBJECTS = [
   'order',
   'delivery',
   'payment',
-  'return_exchange'
+  'return_exchange',
+  // Added 2026-08-30 with a tool set of exactly one lookup. It is in scope to
+  // GATHER, not to answer — see the tool table and the rule that pins every one
+  // of these tickets to a person.
+  'cosmetovigilance'
 ];
 
 /**
@@ -91,11 +94,6 @@ export const ENABLED_SUBJECTS = [
  *
  * THE EMPTY SETS ARE THE INTERESTING ONES, and each is empty for its own reason:
  *
- * - `cosmetovigilance` — a reported adverse reaction is the one subject where
- *   assembling a confident-looking answer is worse than assembling nothing. It
- *   goes to a person untouched. The categoriser already floors it at 2 and the
- *   prompt makes it beat every other subject; this keeps the machinery away from
- *   it entirely.
  * - `legal_privacy` — an RGPD or legal request is answered by a human, and an
  *   agent reading customer records to prepare one is exactly the access this
  *   codebase minimises.
@@ -140,7 +138,37 @@ const TOOLS_BY_SUBJECT = {
     T.CHECK_PHOTO_EVIDENCE
   ],
 
-  cosmetovigilance: [],
+  // CONTEXT FOR A PERSON, NEVER AN ANSWER. This set was empty until 2026-08-30,
+  // on the reasoning that a confident-looking case file about a reported skin
+  // reaction is worse than none — and that reasoning was about ANSWERING, which
+  // these two do not do.
+  //
+  // `lookupCustomer` says who wrote in. The customer's most recent order rides
+  // along with it: `lastOrderLookup` is not in this table at all, runs outside
+  // the model's loop, and reaches `candidateOrder` — read by the human brief and
+  // never by the drafting prompt. So the person picking the ticket up opens it
+  // with the customer and their last order already on screen, which is what they
+  // would otherwise go to Shopify for.
+  //
+  // WHAT IS STILL DELIBERATELY ABSENT is the whole order family and
+  // `verifyPurchase`, for the reason that has not changed: « nous ne trouvons
+  // aucune commande à votre nom » is a particularly bad sentence to put in front
+  // of somebody reporting a reaction, and those are the tools that produce it.
+  //
+  // `searchKnowledge` ADDED 2026-08-30, and the article it reaches today is a
+  // PROTOCOL rather than a fact — a numbered list of what to recommend. That is
+  // an instruction retrieved by similarity, which is the non-determinism the
+  // rules layer exists to remove, so it is a temporary shape: the protocol
+  // belongs in a rule's skeleton and the article should keep only the reference
+  // half (formulation, why a reaction can happen at all). Until it is split, the
+  // same guidance can arrive twice — once retrieved, once from a rule — and the
+  // two can drift.
+  //
+  // AND THE RULE IS THE SECOND HALF. Giving a subject tools makes it
+  // investigable, and an investigable ticket is a draftable one — so the
+  // `cosmetovigilance` answer set carries one rule that routes every ticket to a
+  // person whatever the evidence says. Tools gather; the rule refuses to answer.
+  cosmetovigilance: [T.LOOKUP_CUSTOMER, T.SEARCH_KNOWLEDGE],
   legal_privacy: [],
   b2b: [],
   partner_collaboration: [],
@@ -183,16 +211,31 @@ export function allowedTools(category, requestKind, level) {
  * tickets see the SHARED state rules and never puts words in the mouth of a
  * situation nobody identified.
  *
- * Families follow `Email-Example-Queries.md`. Subjects absent here have no
- * policy family, which is the honest state for the five with no tools at all.
+ * NAMED IN ENGLISH, like every other identifier in this codebase. They were
+ * French — `commande`, `retour`, `promo`, `produit` — which put two languages in
+ * one namespace: the French is for what a customer reads, and a key a developer
+ * types is code. Renamed 2026-08-30, in the table and the mapping together.
+ *
+ * `orders` COVERS ORDER AND DELIVERY, and `products` covers product and
+ * product_stock, which is the whole reason a set is not just a category: « pas
+ * encore expédiée » answers a delivery question and an order question, and
+ * keying rules to categories would mean writing it twice and keeping the copies
+ * in step for ever.
+ *
+ * The five with no entry — `legal_privacy`, `b2b`, `partner_collaboration`,
+ * `careers`, `other` — have no tools either. They reach a person untouched, and
+ * a policy family for them would be a family nothing could ever populate.
  */
 const ANSWER_SET_BY_SUBJECT = {
-  order: 'commande',
-  delivery: 'commande',
-  return_exchange: 'retour',
-  promotions: 'promo',
-  product: 'produit',
-  product_stock: 'produit'
+  order: 'orders',
+  delivery: 'orders',
+  return_exchange: 'returns',
+  promotions: 'promotions',
+  product: 'products',
+  product_stock: 'products',
+  payment: 'payments',
+  account: 'accounts',
+  cosmetovigilance: 'cosmetovigilance'
 };
 
 export function answerSetFor(category) {
@@ -240,6 +283,14 @@ const EVIDENCE_BY_SUBJECT = {
     { key: 'promotion_status', label: 'le statut du code et ses conditions sont établis' }
   ],
   account: [{ key: 'customer_identified', label: 'la fiche client correspondant à l’expéditeur est trouvée' }],
+  // ONE ITEM, AND IT IS NOT ABOUT THE REACTION. Nothing here asks what caused
+  // it, whether the product is implicated, or whether a refund is owed — those
+  // are the judgements a person makes, and a checklist naming them would invite
+  // the case file to answer them. Knowing who wrote in is the whole job.
+  cosmetovigilance: [
+    { key: 'customer_identified', label: 'la fiche client correspondant à l’expéditeur est trouvée' },
+    { key: 'knowledge_searched', label: 'la base de connaissances approuvée a été consultée' }
+  ],
   other: [{ key: 'knowledge_searched', label: 'la base de connaissances approuvée a été consultée' }],
 
   order: [
@@ -305,6 +356,13 @@ export function openingMoves(ticket = {}) {
       add(T.LOOKUP_CUSTOMER, {});
       break;
     case 'account':
+      add(T.LOOKUP_CUSTOMER, {});
+      add(T.SEARCH_KNOWLEDGE, {});
+      break;
+    // Deterministic, and the only move this subject has: there is exactly one
+    // tool and exactly one thing worth knowing, so making the model ask for it
+    // would be a turn spent reaching a foregone conclusion.
+    case 'cosmetovigilance':
       add(T.LOOKUP_CUSTOMER, {});
       add(T.SEARCH_KNOWLEDGE, {});
       break;

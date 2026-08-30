@@ -59,6 +59,10 @@ export async function runDrafting({
   // this rewrites one row per reading rather than accumulating variants, and it
   // never touches the human columns.
   redraft = false,
+  // The numbers a rule's skeleton may quote, loaded once per run by the caller.
+  // Absent by default: a skeleton naming an unset parameter is dropped, which is
+  // the behaviour before skeletons existed.
+  parameters = new Map(),
   onDraft
 } = {}) {
   const problem = brandVoiceProblem(brandVoice);
@@ -93,7 +97,7 @@ export async function runDrafting({
         // only acknowledge. Sending all three would hand the model a prompt
         // that contradicts itself and let it choose.
         system: composeSystemPrompt(brandVoice, { language, verdict: investigation.verdict }),
-        user: composeDraftingMessage({ message, caseFile, orderContext, ticket, chase }),
+        user: composeDraftingMessage({ message, caseFile, orderContext, ticket, chase, parameters, logger }),
         schema: DRAFT_SCHEMA,
         schemaName: 'draft',
         // A support reply runs longer than any other output in this worker: the

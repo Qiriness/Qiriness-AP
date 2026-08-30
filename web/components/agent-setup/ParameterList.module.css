@@ -1,0 +1,136 @@
+.wrap {
+  padding: 1.5rem 1.75rem 4rem;
+  max-width: 58rem;
+}
+
+.head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1.5rem;
+  margin-bottom: 1.75rem;
+}
+
+.title {
+  margin: 0 0 0.35rem;
+  font-size: var(--text-h2, 1.35rem);
+}
+
+.lede {
+  margin: 0;
+  color: var(--text-subtle);
+  max-width: 40rem;
+  line-height: 1.55;
+}
+
+/* The outstanding decisions, not a decoration — this is the work on this page. */
+.outstanding {
+  flex-shrink: 0;
+  font-size: var(--text-caption);
+  color: var(--warn, #a3541a);
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  padding: 0.15rem 0.6rem;
+}
+
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.75rem;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 1.5rem;
+  align-items: start;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 1rem 1.1rem;
+  background: var(--surface);
+}
+
+.unset {
+  border-left: 3px solid var(--warn, #a3541a);
+}
+
+.label {
+  margin: 0 0 0.3rem;
+  font-weight: 600;
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.tag {
+  font-weight: 400;
+  font-size: var(--text-caption);
+  color: var(--warn, #a3541a);
+}
+
+.description {
+  margin: 0 0 0.35rem;
+  color: var(--text-subtle);
+  font-size: 0.88rem;
+  line-height: 1.5;
+}
+
+.usedBy {
+  margin: 0;
+  font-size: var(--text-caption);
+  color: var(--text-subtle);
+}
+
+.usedByLabel {
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.control {
+  display: grid;
+  gap: 0.5rem;
+  justify-items: end;
+}
+
+.inputRow {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.input {
+  font: inherit;
+  width: 9rem;
+  padding: 0.4rem 0.55rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: inherit;
+  font-variant-numeric: tabular-nums;
+}
+
+.unit {
+  color: var(--text-subtle);
+  font-size: 0.85rem;
+}
+
+.actions {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.error {
+  color: var(--danger, #b4341f);
+}
+
+@media (max-width: 46rem) {
+  .row {
+    grid-template-columns: 1fr;
+  }
+  .control {
+    justify-items: start;
+  }
+}

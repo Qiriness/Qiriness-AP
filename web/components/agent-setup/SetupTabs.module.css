@@ -1,0 +1,55 @@
+/*
+ * Three places of equal standing, so the bar reads as a row of destinations
+ * rather than one selected thing among options. The underline carries the
+ * current page; nothing else moves.
+ */
+.tabs {
+  display: flex;
+  gap: 0.25rem;
+  border-bottom: 1px solid var(--border);
+  padding: 0 1.75rem;
+  background: var(--surface);
+}
+
+.tab {
+  display: grid;
+  gap: 0.1rem;
+  padding: 0.7rem 0.9rem 0.6rem;
+  text-decoration: none;
+  color: var(--text-subtle);
+  border-bottom: 2px solid transparent;
+  /* The label must not shift when it becomes bold on selection. */
+  min-width: 8rem;
+}
+
+.tab:hover {
+  color: var(--text);
+}
+
+.tab[data-active] {
+  color: var(--text);
+  border-bottom-color: var(--teal);
+}
+
+.label {
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+
+.hint {
+  font-size: var(--text-caption);
+  color: var(--text-subtle);
+}
+
+@media (max-width: 40rem) {
+  .tabs {
+    padding: 0 1rem;
+    overflow-x: auto;
+  }
+  .hint {
+    display: none;
+  }
+  .tab {
+    min-width: 0;
+  }
+}

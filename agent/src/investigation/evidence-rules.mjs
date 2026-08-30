@@ -376,6 +376,17 @@ const FINDINGS = {
     derive: (entries) => stateFromOrderContext(entries, 'payment_state')
   },
 
+  return_eligibility: {
+    // THREE VALUES, AND `unknown` IS THE COMMON ONE UNTIL A NUMBER IS SET. This
+    // is the only state that depends on a merchant decision rather than on the
+    // order: the returns window is a parameter, and while it is undecided every
+    // ticket resolves `unknown` and routes to a person. That is the correct
+    // behaviour for a shop that has not written its window down, and it is
+    // visible rather than silent — the rule editor says the parameter is unset.
+    values: ['possible', 'out_of_window', 'unknown'],
+    derive: (entries) => stateFromOrderContext(entries, 'return_eligibility')
+  },
+
   // --- evidence about the customer's own claim -------------------------------
 
   purchase_verified: {

@@ -10,6 +10,123 @@ Three sibling files carry the other halves, and this one deliberately does not d
 
 ---
 
+## `searchKnowledge` for cosmetovigilance, and what it reaches is a protocol (2026-08-30)
+
+The subject's tools are now `lookupCustomer` + `searchKnowledge`, both as opening moves, and its checklist gains *the knowledge base was consulted*. The order family and `verifyPurchase` stay out, which is the half of the original decision that has not changed.
+
+**The article it reaches is guidance, not knowledge, and that is worth recording rather than discovering later.** *"Cosmétovigilance — Rougeurs, irritations et réactions cutanées"* opens with reference content — formulations, Hanbang, why a reaction can occur with any cosmetic — and then becomes a **numbered protocol**: recommend stopping use, check whether several products were layered, reintroduce cautiously once symptoms clear.
+
+That second half is **an instruction retrieved by similarity**, which is precisely the non-determinism the rules layer was built to remove. Whether the agent is told to recommend stopping use would depend on a cosine score, on a subject where it should depend on nothing at all.
+
+**So this is a deliberately temporary shape.** The protocol belongs in a rule's skeleton, where it applies every time or not at all; the article should keep the reference half, which is what an article is for. Until they are split, the same guidance can arrive twice — once retrieved, once from a rule — and the two can drift, which is the failure the parameters table was built to stop for numbers and the same failure in prose.
+
+**Nothing about answering changed.** The blanket `reaction_signalee` rule still routes every ticket in the subject to a person whatever the evidence says, and a rule cannot route to `answerable` at all. Retrieval gathers; the rule refuses. Level 4 still strips every tool.
+
+## Answer sets in English, three new ones, and cosmetovigilance gets a lookup (2026-08-30)
+
+**The sets are English.** `commande · retour · promo · produit` → **`orders · returns · promotions · products`**, renamed in the mapping and in both tables at once. Two languages in one namespace was the problem: French is what a customer reads, and a key a developer types is code.
+
+**Three families added — `payments`, `accounts`, `cosmetovigilance`** — closing a gap that was a dead end rather than an empty one. `payment` and `account` had tools, four live situations (`PA-30`, `PA-31`, `PA-32`, `A-29`) and 15 real messages, and **no rule could ever reach one of their tickets**, because the code looked up a family and found nothing. `answer_set` is now set on all 31 live situations from the same mapping the runner uses, so the column agrees with the code instead of sitting stale.
+
+**`other` remains the one subject with a tool and no family.** A test pins it by name so the gap stays visible and fails the day somebody decides what `other` should do.
+
+## Cosmetovigilance gathers, and still never answers
+
+The empty tool set was documented and deliberate: *"assembling a confident-looking answer is worse than assembling none."* It now holds `lookupCustomer`, and the subject is in `ENABLED_SUBJECTS`.
+
+**The reasoning was about ANSWERING, and that half is untouched.** Every order tool and `verifyPurchase` stay out, because « nous ne trouvons aucune commande à votre nom » is exactly what they produce and exactly what must not reach somebody reporting a skin reaction. What was never separated from it is GATHERING: a person picking the ticket up needs to know who wrote in and what they last bought, and was opening Shopify for it.
+
+`lookupCustomer` answers the first. **The last order arrives free** — `lastOrderLookup` is not in the tool table at all, runs outside the model's loop, and lands in `candidateOrder`, which the human brief renders and the drafting prompt does not. Context reaches the person and never the reply.
+
+**The rule is the other half, and it is why this is safe.** Tools make a subject investigable, and an investigable ticket is a draftable one — which is the risk the empty set was really buying, bluntly. The `cosmetovigilance` set carries one rule: no situation, no conditions, `route: needs_human`. Every ticket in the subject is pinned to a person whatever the evidence says. **Tools gather; the rule refuses to answer.** Level 4 is untouched — a hospitalisation still strips every tool, asserted.
+
+Its evidence checklist is one item, *the customer is identified*, and names nothing about the reaction: cause, product implication and what is owed are a person's judgements, and a checklist naming them would invite the case file to answer them.
+
+**Six tests were asserting the old intent** — four used `cosmetovigilance` as the canonical toolless fixture. They now use `legal_privacy`, which still is, and the two that describe the subject directly say what it may and may not reach.
+
+## Parameters now reach the rules, both ways (2026-08-30)
+
+The parameters screen shipped as a store with no consumers — a number you could set that changed nothing. Both links now exist, and they are different mechanisms for different jobs.
+
+**The decision link: pre-wired, invisible, deterministic.** `returns_window_days` feeds `orderStates`, which derives **`return_eligibility` — `possible · out_of_window · unknown`** — and a rule branches on the state. Nobody attaches the parameter to a rule; the wiring is in the deriver, exactly as the 10-day stale-transit threshold already worked. The difference is that this number is a merchant decision rather than a measurement, so it comes in as a parameter instead of a constant.
+
+**An undecided window resolves `unknown`, never a default.** A default here would be a policy: 30 would quote customers a window nobody approved, 0 would refuse every return. `unknown` routes to a person, which is the right behaviour for a shop that has not written the number down — and this one's two approved articles disagree about it, so there is no default to reach for.
+
+**Counted from delivery, not from the order**, which is what both articles say. An undelivered order is `unknown` too rather than `possible`: the clock has not started, and telling somebody they can return a parcel nobody has received answers a different question.
+
+**The wording link: yours, per skeleton.** A skeleton writes `{returns_window_days}` and it is substituted when the prompt is composed. The rule editor has an insert list under the skeleton box — the one place a rule names a parameter directly.
+
+**An unresolved placeholder drops the whole skeleton**, and the alternatives are worse. Sent as-is, the model sees a brace-wrapped token and either copies it into the reply or invents a number. Refusing to draft blocks a ticket over a wording gap when the case file and the route are both fine. Dropping it degrades to the behaviour before skeletons existed, and `draft.skeleton_dropped` records which parameter was missing so it is not silent.
+
+**The editor says when a rule cannot fire.** Ticking a state computed from an unset parameter now shows *"needs returns_window_days, which is not set — this rule cannot fire yet"*, which is cheaper than finding out from a transcript. The state→parameter map is declared in the service because the wiring lives inside a deriver and nothing exposes it.
+
+**A drift guard caught real drift.** `_shared.test.mjs` asserts every `T.*` constant is created by a baseline file, and adding `support_parameters` broke it across eleven tests — the file list is mirrored in `README.md` and `APP_SCHEMA.md`, and the test exists precisely so a ninth baseline cannot appear without them. All four updated.
+
+**Six parameters, all still unset**, so `return_eligibility` resolves `unknown` on every ticket today and every returns question still routes to a person. That is correct and it is also the remaining work: the number is the merchant's, and their own articles give two answers.
+
+## Parameters, and one bar across the three setup screens (2026-08-30)
+
+**The failure that argued for this was already live, in approved content.** Two approved articles gave two different returns windows — "Refund policy" says « une politique de retour de 30 jours », "Livraisons et retours" says « un droit de rétractation … de 14 jours » — so which one a customer is told depends on which article retrieval happens to surface. That is not a content bug to fix once; it is what happens whenever one number lives in two paragraphs.
+
+`09_parameters.sql` + `scripts/lib/parameters.mjs` hold each number once, for a rule to compare against, an article to state, and a skeleton to quote.
+
+- **The catalogue is code, the values are data.** Which parameters exist and what each means live in `parameters.mjs`; only the numbers are in the table. A screen letting somebody invent a key would let them spend an afternoon setting something nothing reads — and rows are created on demand, so adding a parameter needs no migration and no backfill.
+- **Every value starts NULL, and that is the honest state.** The numbers are the merchant's, and this shop's articles disagree about the most important one; seeding a guess would put a **third** answer into circulation wearing the authority of a setting. Null is a state every reader handles, and the screen calls it out — *"3 still to decide"* is the work, not an empty field.
+- **`kind` is checked in the schema and mirrored by the reader**, so a `days` parameter can always be compared against a date without a caller checking first. `09_parameters.test.mjs` asserts the constraint's literals equal `PARAMETER_KINDS`, the same arrangement holding `requirement_needs` to the investigation vocabulary.
+- **No approval step, unlike a rule.** A parameter is a fact about the business rather than a behaviour: there is no state in which the number is decided and should not yet be used, and an approval flag would only be a second place for "which number is live" to be wrong.
+- **Clearing is a real operation.** Taking a wrong number out of circulation must not require inventing a right one first.
+
+**Six parameters offered, all unset**: returns window, EU withdrawal period, refund processing time, dispatch delay, free-shipping threshold, returns address.
+
+## Tabs, not buttons
+
+Knowledge · Rules · Parameters now sit in one bar, in a shared `layout.tsx`, so the three cannot drift into showing different navigation — the exact failure a tab bar exists to prevent. A button reads as an action taken from where you are; **these are three places of equal standing**: what the agent knows, what it does about it, and the numbers both quote.
+
+"Test the agent" stays a button, because it IS an action — it opens a dialog and goes nowhere.
+
+The active tab is matched **exactly, never by prefix**: `/agent-setup` is a prefix of both other routes, so a `startsWith` test would light every tab at once on the rulebook.
+
+**Verified against the running app** — every refusal is a sentence: `30.5` days refused, `seventy` euros refused, an unknown key refused; set, read back and cleared.
+
+## The rule's wording reaches the reply (2026-08-30)
+
+Phase 5, and the last of the layer. A matched rule's `answer_skeleton` now travels into the drafting prompt, so a rule shapes what the customer reads and not only where the ticket goes.
+
+- **One field out of `exemplar_match`, read by name.** That column also carries the similarity, the margin, the runner-up and every finding the run resolved — diagnostics for a person, none of which a reply has a use for. `caseFileFromRow` narrows to `policy.answer_skeleton`; spreading the object would put the whole diagnostic one careless renderer away from a prompt.
+- **After the facts, before the rest.** The model needs to know what the reply is FOR while the evidence is still in view; above the case file, an instruction about shape outranks the facts it is shaped around. Same reason the customer's own words come first.
+- **Framed as an instruction, never as a reply**, and the framing is load-bearing: a skeleton is shared across situations by design, so handed over as text to send it would give different customers the same words.
+
+**And it immediately produced the failure it was always going to produce.** The first live run of `annulation_trop_tard`, whose skeleton said to give the return procedure *« telle qu'elle figure au dossier »*, met a dossier with no returns article. The model invented three steps and a **numéro d'autorisation de retour** that this shop does not issue — and the draft **passed every mechanical check**, because the checks prove a named sentence is absent and can say nothing about whether an invented one is true.
+
+**The rule this is worth stating as a rule: a skeleton is an instruction, and instructions get followed.** One that tells the model to state something the dossier *may not contain* converts a missing fact into an invented one — which is the single failure this pipeline is built around, arriving through the one door that had just been opened.
+
+**A skeleton may describe what to do with facts that are present. It may never instruct stating a fact that may be absent.** `commande_annulee` already had the safe shape by accident (« mentionner le remboursement uniquement s'il figure au dossier »); `annulation_trop_tard` did not, and now reads: give only what the dossier explicitly holds, and if it holds nothing, describe no procedure, no step, no delay and no authorisation number.
+
+Re-run after the fix, the invented procedure is gone and the reply says a colleague will send the instructions. **Corrected through the rulebook screen's own API**, which is also the first exercise of it: editing a live rule returned it to `draft` and it needed re-approving, exactly as designed.
+
+## The rulebook has a screen (2026-08-30)
+
+Phase 4. `/agent-setup/rules` — rules read, written, approved and deleted without a deploy.
+
+- **The editor cannot offer a state the agent cannot score.** `policyVocabulary()` derives the needs, routes and asks from `evidence-rules.mjs` and `case-file.mjs` at request time; nothing is restated in `web/`. Needs carrying no findings are **excluded rather than shown empty** — `return_eligibility` and `refund_state` are needs with no states, so a rule branching on one could never fire, and a dropdown is the wrong place to advertise that gap. 16 needs offered, 2 withheld.
+- **Validation is the agent's own functions, not a second copy.** `normaliseConditions` drops anything the vocabulary does not know, and the save compares what it kept against what was sent — so « en_cours » is a refusal with a sentence rather than a row that reads correctly and never matches. `auditAnswerSet` runs before the row exists instead of after.
+- **Saving never approves.** A save always lands as `draft`; approval is its own endpoint. Sharing a handler would mean a typo fix silently re-approving a rule somebody had withdrawn — the same split `import-exemplars.mjs` keeps, for the same reason.
+- **`answerable` is absent from the route dropdown**, as it is from the check constraint. The UI, the service and the schema all refuse it, which is right for the one property of this table that must never be revisited by a future caller.
+- **A route, not a tab.** `AgentSetup` already holds the article library, the editor, the brand voice and the test chat in one client component; the rulebook shares no state with any of them.
+
+**Verified against the running app** — every refusal returns a sentence an operator can act on:
+
+| Attempt | Result |
+| --- | --- |
+| a state that does not exist | refused — « en_cours » is not a finding of order_state |
+| a need that does not exist | refused — unknown need « colour » in a condition |
+| routing to `answerable` | refused — never to answerable |
+| asking without routing to the customer | refused |
+| no conditions and no situation | refused — use is_fallback instead |
+| a legitimate rule | created as `draft`, approved, deleted |
+
+**One retyping at the boundary, recorded because it looks like a workaround.** `answer-selection.mjs` declares its `warn` option through a JSDoc default, so TypeScript reads it as taking no arguments and rejects a handler that wants the message. `normaliseConditions` is narrowed once where the two languages meet, rather than cast at the call site, so the `.mjs` stays the only definition of what a condition is.
+
 ## The rulebook is live (2026-08-30)
 
 Phase 3. A matched rule now moves the verdict. 17 `commande` rules approved and loading.

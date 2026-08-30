@@ -303,6 +303,9 @@ function selectPolicy(policy, ledger, toolNames) {
     answer_key: result.answer?.answerKey ?? null,
     route: result.answer?.route ?? null,
     ask: result.answer?.ask ?? null,
+    // The wording guidance, carried so the drafting pass can read it back off
+    // the stored row. It is the one field here that reaches a model.
+    answer_skeleton: result.answer?.answerSkeleton ?? null,
     // Every rule that matched, not just the winner: two rules matching equally
     // is an authoring problem, and it is invisible if only the winner is kept.
     candidates: result.candidates.map((c) => c.answerKey),

@@ -1,4 +1,6 @@
-import { createSupabaseClient } from '../../../scripts/lib/supabase-rest-client.mjs';
+import { createSupabaseClient, supabaseSelect } from '../../../scripts/lib/supabase-rest-client.mjs';
+import { T } from '../../../scripts/lib/tables.mjs';
+import { toParameterMap } from '../../../scripts/lib/parameters.mjs';
 import { createDraftRecord } from '../../../scripts/lib/draft-record.mjs';
 
 import { loadAgentConfig } from '../config.mjs';
@@ -76,6 +78,7 @@ async function main() {
     brandVoice,
     shopId,
     model: config.draftingModel,
+    parameters: await loadParametersFor(supabase, shopId, logger),
     logger,
     limit,
     ticketId,
@@ -125,4 +128,23 @@ function parseValue(argv, flag, cast) {
   }
   const value = cast(argv[index + 1]);
   return Number.isNaN(value) ? undefined : value;
+}
+
+/**
+ * The numbers a skeleton may quote.
+ *
+ * Loaded here rather than taken from the investigation stack, which this CLI
+ * does not build: drafting reads stored case files and needs no tools. A failure
+ * degrades to no parameters, which drops any skeleton quoting one — the
+ * behaviour before skeletons existed.
+ */
+async function loadParametersFor(supabase, shopId, logger) {
+  try {
+    return toParameterMap(
+      await supabaseSelect(supabase, T.SUPPORT_PARAMETERS, { shop_id: shopId }, 'parameter_key,value')
+    );
+  } catch (error) {
+    logger?.warn?.('draft.parameters_load_failed', { reason: error.message });
+    return new Map();
+  }
 }

@@ -83,7 +83,13 @@ export async function runInvestigation({
   // read-only reference data like products and knowledge, so a rehearsal wants
   // the real ones; routing them through the fake would mean teaching it a table
   // it has no reason to know.
-  loadAnswers = null
+  loadAnswers = null,
+  // The numbers the desk runs on, loaded ONCE PER POLL by the caller and shared
+  // across tickets — the same treatment `senderDirectory` gets, and for the same
+  // reason: a small map, and rebuilding it per ticket turns a lookup into a
+  // query. Absent by default, which resolves every parameter to null and every
+  // state that depends on one to `unknown`.
+  parameters = new Map()
 } = {}) {
   const counts = {
     considered: 0,
@@ -152,7 +158,7 @@ export async function runInvestigation({
     let caseFile;
     try {
       caseFile = await investigate(
-        buildInput(ticket, messages, senderDirectory, exemplarMatch.requirement_needs, policy)
+        buildInput(ticket, messages, senderDirectory, exemplarMatch.requirement_needs, policy, parameters)
       );
     } catch (error) {
       await handleFailure({ record, ticket, error, counts, logger, dryRun });
@@ -313,7 +319,7 @@ async function handleFailure({ record, ticket, error, counts, logger, dryRun }) 
  * question that was already answered, and the model would only ask when it
  * thought to.
  */
-function buildInput(ticket, messages, senderDirectory, exemplarNeeds = [], policy = null) {
+function buildInput(ticket, messages, senderDirectory, exemplarNeeds = [], policy = null, parameters = new Map()) {
   const first = messages[0];
   const latest = messages.length > 1 ? messages[messages.length - 1] : null;
   const text = [first?.body_text, latest?.body_text]
@@ -360,7 +366,11 @@ function buildInput(ticket, messages, senderDirectory, exemplarNeeds = [], polic
     // the rules — so no tool choice, no declared need and no model turn can
     // depend on which rules exist. That ordering is what makes the shadow phase
     // meaningful: the run is byte-for-byte the run that would have happened.
-    policy
+    policy,
+    // Read by the order tool to derive `return_eligibility`, and by nothing that
+    // talks to the model: a parameter is an input to a calculation, never a
+    // sentence handed over.
+    parameters
   };
 }
 

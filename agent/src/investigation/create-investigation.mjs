@@ -1,6 +1,7 @@
 import { createEmbeddingsClient } from '../../../scripts/lib/embeddings/openai-embeddings-client.mjs';
 import { supabaseSelect } from '../../../scripts/lib/supabase-rest-client.mjs';
 import { T } from '../../../scripts/lib/tables.mjs';
+import { toParameterMap } from '../../../scripts/lib/parameters.mjs';
 import { createOpenAIClient } from '../llm/openai-client.mjs';
 import { createCustomerLookup } from '../retrieval/customer-lookup.mjs';
 import { createExemplarRetrieval } from '../retrieval/exemplar-retrieval.mjs';
@@ -156,12 +157,40 @@ export function createInvestigationStack({
       'answer_key,situation_key,when_conditions,answer_skeleton,route,ask,priority,is_fallback,approval_status'
     );
 
+  /**
+   * The numbers the desk runs on, as a map the readers in `parameters.mjs` take.
+   *
+   * NO APPROVAL GATE, unlike the rules: a parameter is a fact about the business
+   * rather than a behaviour, so there is no state in which the number is decided
+   * and should not yet be used. An unset one simply reads as null.
+   *
+   * A FAILURE HERE IS NOT AN INVESTIGATION'S PROBLEM. Without parameters the
+   * states that depend on one resolve `unknown` and their tickets route to a
+   * person — which is exactly what an undecided window should do — so a load
+   * error degrades to the pre-parameter behaviour rather than failing a poll.
+   */
+  const loadParameters = async (shop) => {
+    try {
+      const rows = await supabaseSelect(
+        supabase,
+        T.SUPPORT_PARAMETERS,
+        { shop_id: shop },
+        'parameter_key,value'
+      );
+      return toParameterMap(rows);
+    } catch (error) {
+      logger?.warn?.('investigation.parameters_load_failed', { reason: error.message });
+      return new Map();
+    }
+  };
+
   return {
     investigate,
     store: createCaseFileStore(supabase),
     registry,
     retrieveExemplar,
     lastOrderLookup,
-    loadAnswers
+    loadAnswers,
+    loadParameters
   };
 }

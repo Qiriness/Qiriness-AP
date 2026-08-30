@@ -72,7 +72,7 @@ function caseFileAnswer(overrides = {}) {
 }
 
 test('a ticket with no allowed tools is decided without a model call', async () => {
-  // Level 4, `contact`, cosmetovigilance and legal_privacy all land here.
+  // Level 4, `contact` and legal_privacy all land here.
   const openai = buildOpenAI([{ content: caseFileAnswer() }]);
   const registry = { toolsFor: () => ({ names: [], definitions: [], handlers: new Map() }) };
   const { investigate } = createInvestigator(openai, registry, { model: 'm' });
@@ -366,8 +366,8 @@ test('the model is told to answer every request the email contains', async () =>
 });
 
 test('a request the agent cannot investigate is declared, not dropped', async () => {
-  // `cosmetovigilance` is out of scope by policy, not by data. The case file must
-  // say so rather than answer the product half and leave the reported reaction
+  // `legal_privacy` is out of scope by policy, not by data. The case file must
+  // say so rather than answer the product half and leave the privacy request
   // unanswered in silence.
   const registry = buildPlanningRegistry({
     [TOOL_NAMES.LOOKUP_PRODUCT]: async () => OK_RESULT,
@@ -376,7 +376,7 @@ test('a request the agent cannot investigate is declared, not dropped', async ()
   const decomposer = buildDecomposer({
     tasks: [
       { question: 'Le masque convient-il ?', category: 'product', request_kind: 'question' },
-      { question: 'une réaction cutanée après application', category: 'cosmetovigilance', request_kind: 'problem' }
+      { question: 'suppression de mes données personnelles', category: 'legal_privacy', request_kind: 'problem' }
     ]
   });
   const openai = buildOpenAI([{ content: caseFileAnswer() }]);
@@ -385,7 +385,7 @@ test('a request the agent cannot investigate is declared, not dropped', async ()
   await investigate(PRODUCT_TICKET);
 
   const prompt = openai.sent[0].messages[0].content;
-  assert.match(prompt, /réaction cutanée après application/);
+  assert.match(prompt, /suppression de mes données personnelles/);
   assert.match(prompt, /needs_human/);
 });
 

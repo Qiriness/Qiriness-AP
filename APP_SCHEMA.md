@@ -20,6 +20,9 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |   |   |-- layout.tsx globals.css        # root layout · design tokens (teal, scale, radii)
 |   |   |-- page.tsx                      # / -> /agent-setup redirect
 |   |   |-- agent-setup/page.tsx          # Server Component: article + source fetch
+|   |   |-- agent-setup/layout.tsx        # AppShell + the tab bar, shared by all three
+|   |   |-- agent-setup/rules/page.tsx    # Server Component: the rulebook
+|   |   |-- agent-setup/parameters/page.tsx  # Server Component: the numbers
 |   |   |-- tickets/page.tsx              # Server Component: the agent's queue --
 |   |   |                                 # EVERY ticket, staff-sent included
 |   |   |-- insights/                     # -> /insights/fulfilment, then one route
@@ -251,7 +254,7 @@ The recurring situations, not the answers to them. Same document/chunk mechanics
 | --- | --- |
 | `support_exemplars` | canonical question, `exemplar_key` (`P-16`), subject + kind, `requirement_needs text[]` constrained to the `evidence-rules.mjs` vocabulary, `approval_status` (gates the vector), `demand_message_count`, `answer_set` naming which policy family it draws on (`commande` on the 11 order/delivery situations) |
 | `support_exemplar_phrasings` | one row per canonical + real phrasing, each with its own `embedding vector(1536)` and the determinism quadruple. `language` + `translated_from_index` carry non-French rows; translations live at `phrasing_index >= 100`, out of reach of the importer's positional pruner. `match_support_exemplars()` returns one row per **exemplar**, scored by its best phrasing, and reports which language matched |
-| `support_answers` | the policy rules. Two axes: `situation_key` (what the customer wants, from the matched exemplar; null = any) and `when_conditions jsonb` = `{need: [findings]}` (what is true). A matched rule carries an `answer_skeleton`, and may `route` to `needs_human`/`needs_customer_input` and name an `ask` (a `MISSING_FIELDS` key) — **never to `answerable`**, enforced by a check constraint, so a rule can only ever tighten. One `is_fallback` per `answer_set`. Selected by `answer-selection.mjs` (situation outranks condition depth), which also derives the next need to collect. **17 approved rules in the `commande` set**, loaded per ticket by `loadAnswers` (approved only) and selected after the tool loop closes. **Live: a matched route tightens the verdict in `buildCaseFile`, never loosens it**, and the selection is recorded on `ticket_investigations.exemplar_match.policy` with `verdict_before_policy` beside it |
+| `support_answers` | the policy rules. Two axes: `situation_key` (what the customer wants, from the matched exemplar; null = any) and `when_conditions jsonb` = `{need: [findings]}` (what is true). A matched rule carries an `answer_skeleton`, and may `route` to `needs_human`/`needs_customer_input` and name an `ask` (a `MISSING_FIELDS` key) — **never to `answerable`**, enforced by a check constraint, so a rule can only ever tighten. One `is_fallback` per `answer_set`. Selected by `answer-selection.mjs` (situation outranks condition depth), which also derives the next need to collect. **18 approved rules — 17 in `orders`, 1 in `cosmetovigilance`**, loaded per ticket by `loadAnswers` (approved only) and selected after the tool loop closes. **Live: a matched route tightens the verdict in `buildCaseFile`, never loosens it**, and the selection is recorded on `ticket_investigations.exemplar_match.policy` with `verdict_before_policy` beside it. `answer_skeleton` travels into the drafting prompt as `## Ce que cette réponse doit faire` — read out of `exemplar_match.policy` **by name**, so the diagnostics beside it cannot reach a model |
 
 ### Agent email workflow
 
@@ -334,6 +337,7 @@ Written by the worker and the CLIs, read only by the Insights panels.
 | `03_knowledge.sql` | `knowledge_documents`, `knowledge_chunks`, `match_knowledge_chunks()`, `search_knowledge_chunks_text()` | 01 |
 | `04_support.sql` | `tickets`, `ticket_messages`, `email_blocklist`, `sender_directory`, `spam_audit`, `ticket_investigations`, `category_forwarding`, `ticket_forwards`, `categorisation_review`, the three views | 01, 02 |
 | `05_exemplars.sql` | `support_exemplars`, `support_exemplar_phrasings`, `support_answers`, `match_support_exemplars()` | 01, 03 (`french_unaccent`) |
+| `09_parameters.sql` | `support_parameters` | 01 |
 | `06_analytics.sql` | `normalise_carrier()`, `llm_usage`, `cluster_runs`, `ticket_clusters`, and the **21 Insights views** | 01, 02, 04 |
 | `07_drafting.sql` | `ticket_drafts`, `ticket_draft_edits` | 01, 04 |
 | `08_testing.sql` | `agent_test_runs` | 01, 03 |
@@ -354,6 +358,19 @@ All Route Handlers are server-only and use the Supabase service-role key.
 - `GET|POST knowledge/articles` — list; create empty, or resolve a `sourceId`'s live content
 - `PATCH knowledge/articles/:id` — converts `source_type` to `manual`; demotes `approved` → `in_review` on a text change; re-embeds inline (best-effort)
 - `POST knowledge/articles/:id/resync` — 400 once `manual`. `DELETE` — hard delete, chunks cascade
+
+**Parameters** (`/agent-setup/parameters` → `components/agent-setup/ParameterList`, over `lib/server/parameters-service.ts`). One number held once, so a rule comparing against it, an article stating it and a skeleton quoting it cannot disagree — the failure that argued for it was live: two approved articles gave two different returns windows. **The catalogue is code** (`scripts/lib/parameters.mjs`) and only the values are data, so the screen offers exactly the parameters something reads; rows are created on demand. **Every value starts null**, which is a real state each reader handles. No approval step, unlike a rule: a parameter is a fact rather than a behaviour.
+
+- `GET|PUT parameters` — every parameter set or not · set one, or clear it with a null
+
+**Navigation is a tab bar** in `agent-setup/layout.tsx` — Knowledge · Rules · Parameters, three places of equal standing. Matched exactly rather than by prefix, since `/agent-setup` is a prefix of the other two.
+
+**The rulebook** (`/agent-setup/rules` → `components/agent-setup/RuleBook` + `RuleEditor`, over `lib/server/policy-service.ts`). Reads and writes `support_answers`. The editor's every choice — which states a condition may name, where a rule may route, what it may ask for — is derived from `evidence-rules.mjs` and `case-file.mjs` at request time, so the dashboard can never offer a state the agent cannot score. Needs with no findings are excluded rather than shown empty. Validation is `normaliseConditions` + `auditAnswerSet`, the agent's own functions, run before the row exists.
+
+- `GET|POST policy/rules` — the rules, situations and vocabulary in one payload · save (always as `draft`)
+- `PATCH|DELETE policy/rules/:id` — approve or withdraw · remove
+
+**Saving never approves.** Approval is its own endpoint, because editing a rule is authoring and approving one is what lets it move somebody's mail.
 
 **The test chat** (`components/agent-test/`, over `lib/server/agent-test-service.ts`). Opened from the header button (a free test) or from an article's rail (that article's retrieval, asserted). A message goes in, the real passes run against an in-memory database, and the transcript shows every tool call with the exact text the model was handed.
 

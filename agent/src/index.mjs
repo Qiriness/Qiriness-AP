@@ -348,6 +348,7 @@ async function main() {
         senderDirectory,
         retrieveExemplar: investigation.retrieveExemplar,
         loadAnswers: investigation.loadAnswers,
+        parameters: await investigation.loadParameters(shopId),
         // The customer's last order, for a HUMAN, and only where no order was
         // confirmed. It fires less often now that the resolver runs first —
         // which is the point: it is the fallback for a ticket with no order,

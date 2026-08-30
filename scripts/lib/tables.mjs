@@ -63,6 +63,7 @@ export const T = {
   SUPPORT_EXEMPLARS: 'support_exemplars',
   SUPPORT_EXEMPLAR_PHRASINGS: 'support_exemplar_phrasings',
   SUPPORT_ANSWERS: 'support_answers',
+  SUPPORT_PARAMETERS: 'support_parameters',
 
   // 06_analytics
   LLM_USAGE: 'llm_usage',
@@ -267,10 +268,18 @@ export const COLUMNS = {
    * somebody still owes work on. The store reduces it to a boolean the moment it
    * arrives (`draft-runner.mjs`), so the internal prose exists for one line and
    * never reaches the runner or the prompt.
+   *
+   * `exemplar_match` TRAVELS FOR ONE FIELD INSIDE IT: `policy.answer_skeleton`,
+   * the wording guidance a matched rule carries. The rest of that object is
+   * diagnostic — similarity, margin, the runner-up, the resolved findings — and
+   * `caseFileFromRow` reads only the skeleton out of it, so nothing else in
+   * there can reach a prompt. Selecting the column and narrowing in the mapper
+   * is the cheaper half of the guarantee `tool_calls` gets by being absent:
+   * there is no second copy of the skeleton to keep in step with this one.
    */
   investigationForDrafting:
     'id,ticket_id,trigger_message_id,verdict,established,unverified,missing,do_not_claim,' +
-    'knowledge,handoff,investigated_at',
+    'knowledge,handoff,investigated_at,exemplar_match',
 
   /**
    * A draft as both readers need it: the dashboard rendering it for approval,

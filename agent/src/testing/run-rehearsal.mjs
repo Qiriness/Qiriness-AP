@@ -353,6 +353,11 @@ export async function runRehearsal({
     });
 
     let caseFile = null;
+    // Loaded once and shared by the investigation and the drafting pass — the
+    // real numbers, like the real rules: a rehearsal using defaults would answer
+    // a returns question the live agent could not.
+    const parameters = await stack.loadParameters(shopId);
+
     const investigation = await runInvestigation({
       store: createCaseFileStore(null, { transport }),
       record,
@@ -369,6 +374,7 @@ export async function runRehearsal({
       // would use rather than a fixture — the transcript is worth nothing if the
       // policy it shows is not the policy.
       loadAnswers: stack.loadAnswers,
+      parameters,
       onResult: ({ caseFile: result }) => {
         caseFile = result;
       }
@@ -433,6 +439,9 @@ export async function runRehearsal({
       model: config.draftingModel,
       logger,
       ticketId,
+      // The same numbers the investigation used, so a rehearsal cannot quote a
+      // returns window the live agent has no value for.
+      parameters,
       onDraft: (result) => {
         drafted = result;
       }

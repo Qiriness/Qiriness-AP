@@ -1,3 +1,4 @@
+import { days } from '../../../scripts/lib/parameters.mjs';
 import { orderStates, toOrderContextText } from '../resolution/order-context.mjs';
 
 import { toPromptText as photoPromptText } from './photo-evidence.mjs';
@@ -391,7 +392,17 @@ export function createToolRegistry({
           data: {
             confirmed,
             orderName: ticket.shopify_order_number || null,
-            states: confirmed ? orderStates(context, { staleTransitDays: STALE_TRANSIT_DAYS }) : null
+            states: confirmed
+              ? orderStates(context, {
+                  staleTransitDays: STALE_TRANSIT_DAYS,
+                  // FROM THE MERCHANT, NOT FROM CODE. The stale-transit
+                  // threshold above is a measurement this codebase made; the
+                  // returns window is a policy only the shop can state, and its
+                  // two approved articles disagree about it. Undecided arrives
+                  // here as null and resolves `unknown`, never a default.
+                  returnsWindowDays: days(ticket.parameters, 'returns_window_days')
+                })
+              : null
           }
         };
       },

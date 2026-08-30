@@ -57,3 +57,10 @@
 .status[data-ready] .statusIcon {
   color: var(--success);
 }
+
+/* Two links where there was one. */
+.headingActions {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}

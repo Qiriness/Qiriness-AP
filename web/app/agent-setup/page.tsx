@@ -1,9 +1,7 @@
-import { AppShell } from "@/components/app-shell/AppShell";
 import { AgentSetup } from "@/components/agent-setup/AgentSetup";
 import { getShopId, listArticles, listShopifySources } from "@/lib/server/knowledge-service";
 import { mapArticleResponse, mapSourceResponse } from "@/lib/knowledge-mapper";
 import type { Article, ShopifySource } from "@/lib/types";
-import { openConversationCount } from "@/lib/server/conversation-badge";
 
 export const dynamic = "force-dynamic";
 
@@ -14,7 +12,6 @@ export const dynamic = "force-dynamic";
  * API client-side (web/lib/api/knowledge.ts).
  */
 export default async function AgentSetupPage() {
-  const openConversations = await openConversationCount();
   let initialArticles: Article[] = [];
   let initialSources: ShopifySource[] = [];
   let loadError: string | null = null;
@@ -29,12 +26,10 @@ export default async function AgentSetupPage() {
   }
 
   return (
-    <AppShell activeHref="/agent-setup" openConversations={openConversations}>
-      <AgentSetup
-        initialArticles={initialArticles}
-        initialSources={initialSources}
-        loadError={loadError}
-      />
-    </AppShell>
+    <AgentSetup
+      initialArticles={initialArticles}
+      initialSources={initialSources}
+      loadError={loadError}
+    />
   );
 }

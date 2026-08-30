@@ -310,3 +310,60 @@ test('every state is a value the findings vocabulary accepts', () => {
   assert.ok(findingValues('delivery_state').includes(states.delivery_state));
   assert.ok(findingValues('payment_state').includes(states.payment_state));
 });
+
+// --- the one state that needs a merchant decision ----------------------------
+
+const delivered = (daysAgo) => ({
+  ...ORDER,
+  fulfillments: [
+    {
+      status: 'SUCCESS', display_status: 'FULFILLED', created_at: '2026-07-15T11:53:16Z',
+      delivered_at: new Date(NOW.getTime() - daysAgo * 86400000).toISOString(),
+      in_transit_at: null, tracking_info: [{ number: 'TEST5' }]
+    }
+  ]
+});
+
+const eligibility = (order, windowDays) =>
+  orderStates(buildOrderContext(order, null, { now: NOW }), {
+    staleTransitDays: STALE,
+    returnsWindowDays: windowDays,
+    now: NOW
+  }).return_eligibility;
+
+test('an undecided returns window resolves unknown, never a default', () => {
+  // THE POINT OF THE PARAMETER. A default here would be a policy: 30 would tell
+  // customers a window nobody approved, 0 would refuse every return. `unknown`
+  // routes to a person, which is the right behaviour for a shop that has not
+  // written its returns window down — and this shop's two approved articles
+  // disagree, so there is no default to reach for.
+  assert.equal(eligibility(delivered(3), null), 'unknown');
+  assert.equal(eligibility(delivered(3), undefined), 'unknown');
+});
+
+test('inside the window is possible, outside it is out_of_window', () => {
+  assert.equal(eligibility(delivered(3), 30), 'possible');
+  assert.equal(eligibility(delivered(30), 30), 'possible', 'the last day is still inside');
+  assert.equal(eligibility(delivered(31), 30), 'out_of_window');
+});
+
+test('the same order flips on the window alone', () => {
+  // What makes this a parameter rather than a constant: the merchant's number
+  // decides, and the two their articles give disagree about this very order.
+  const order = delivered(20);
+  assert.equal(eligibility(order, 30), 'possible');
+  assert.equal(eligibility(order, 14), 'out_of_window');
+});
+
+test('an undelivered order is unknown, not possible', () => {
+  // The clock runs from receipt, which is what both articles say. Telling
+  // somebody they can return a parcel nobody has received answers a different
+  // question.
+  const notYet = { ...ORDER, fulfillment_status: 'UNFULFILLED', fulfillments: [] };
+  assert.equal(eligibility(notYet, 30), 'unknown');
+});
+
+test('the value is one the findings vocabulary accepts', () => {
+  assert.ok(findingValues('return_eligibility').includes(eligibility(delivered(3), 30)));
+  assert.ok(findingValues('return_eligibility').includes(eligibility(delivered(3), null)));
+});

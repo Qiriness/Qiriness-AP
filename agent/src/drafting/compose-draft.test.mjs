@@ -173,3 +173,91 @@ test('it records which fields were asked for, so a reworded draft is traceable',
   });
   assert.deepEqual(inputs.missing_fields, ['purchase_email']);
 });
+
+// --- the rule's wording reaching the prompt ----------------------------------
+
+test('a matched rule reaches the case file as guidance, and nothing else does', () => {
+  // ONE FIELD OUT OF `exemplar_match`, NAMED. That column also carries the
+  // similarity, the margin, the runner-up and every finding the run resolved —
+  // diagnostics for a person, none of which a customer's reply has a use for.
+  const caseFile = caseFileFromRow({
+    verdict: 'answerable',
+    established: [],
+    exemplar_match: {
+      exemplar_key: 'O-13',
+      similarity: 0.71,
+      margin: 0.09,
+      runner_up: 'O-14',
+      policy: {
+        answer_key: 'annulation_trop_tard',
+        answer_skeleton: 'La commande est déjà partie.',
+        route: null,
+        findings: { order_state: 'dispatched' }
+      }
+    }
+  });
+
+  assert.equal(caseFile.answerSkeleton, 'La commande est déjà partie.');
+  assert.ok(!('exemplarMatch' in caseFile), 'the diagnostic must not travel whole');
+  assert.ok(!JSON.stringify(caseFile).includes('0.71'), 'nor any part of it');
+});
+
+test('no rule, no skeleton — and never an empty string', () => {
+  assert.equal(caseFileFromRow({ verdict: 'needs_human' }).answerSkeleton, null);
+  assert.equal(
+    caseFileFromRow({ verdict: 'needs_human', exemplar_match: { policy: { answer_skeleton: '   ' } } })
+      .answerSkeleton,
+    null
+  );
+});
+
+test('the skeleton is framed as an instruction, never as a reply', () => {
+  // THE FRAMING IS THE LOAD-BEARING PART. Told to "follow this", a model returns
+  // the skeleton with a greeting bolted on; told it is an internal instruction
+  // about the shape of a reply, it writes one. A skeleton is shared across
+  // situations by design, so sending it as text would give different customers
+  // the same reply.
+  const prompt = composeDraftingMessage({
+    message: { subject: 'Annulation', body_text: 'Je souhaite annuler ma commande.' },
+    caseFile: {
+      verdict: 'answerable',
+      established: [],
+      unverified: [],
+      missing: [],
+      doNotClaim: [],
+      knowledge: [],
+      answerSkeleton: 'La commande est déjà partie et ne peut plus être annulée.'
+    }
+  });
+
+  assert.match(prompt, /## Ce que cette réponse doit faire/);
+  assert.match(prompt, /jamais être recopié tel quel/);
+  assert.ok(prompt.includes('La commande est déjà partie et ne peut plus être annulée.'));
+});
+
+test('the guidance sits after the facts, not before them', () => {
+  // A model handed an instruction about shape before the evidence tends to
+  // answer the instruction. Same reason the customer's own words come first.
+  const prompt = composeDraftingMessage({
+    message: { subject: 'x', body_text: 'y' },
+    caseFile: {
+      verdict: 'answerable',
+      established: [],
+      unverified: [],
+      missing: [],
+      doNotClaim: [],
+      knowledge: [],
+      answerSkeleton: 'consigne'
+    }
+  });
+  assert.ok(prompt.indexOf('# Message du client') < prompt.indexOf('Ce que cette réponse doit faire'));
+  assert.ok(prompt.indexOf('# Dossier') < prompt.indexOf('Ce que cette réponse doit faire'));
+});
+
+test('no skeleton leaves the prompt exactly as it was', () => {
+  const prompt = composeDraftingMessage({
+    message: { subject: 'x', body_text: 'y' },
+    caseFile: { verdict: 'answerable', established: [], unverified: [], missing: [], doNotClaim: [], knowledge: [] }
+  });
+  assert.ok(!prompt.includes('Ce que cette réponse doit faire'));
+});

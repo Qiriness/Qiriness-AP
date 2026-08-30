@@ -398,6 +398,17 @@ The cost is stated rather than hidden: someone writing about a product from thre
 
 An adverse-reaction report is the one subject with an empty tool set, and both of these stayed out of it. The reasoning is unchanged and gets stronger here: assembling a confident-looking answer is worse than assembling none, and "we cannot find any order for you" is a particularly bad thing to put in front of someone reporting a reaction to a product. It goes to a person untouched.
 
+
+**REVISED 2026-08-30 — one lookup, and a rule that refuses to answer.** The set is no longer empty: `lookupCustomer` is in it, and the subject is in `ENABLED_SUBJECTS`.
+
+**What changed is the question being asked.** The paragraph above is about ANSWERING, and it still holds — every order tool and `verifyPurchase` stay out, because « nous ne trouvons aucune commande à votre nom » is exactly the sentence they produce and exactly the one that must not reach somebody reporting a reaction. What was never separated from it is GATHERING. A person picking up one of these tickets needs to know who wrote in and what they last bought, and was going to Shopify for it.
+
+`lookupCustomer` answers the first. The second arrives free: `lastOrderLookup` is not in the tool table at all — it runs outside the model's loop and lands in `candidateOrder`, which the human brief renders and the drafting prompt does not. So the context reaches the person and never the reply.
+
+**Giving a subject tools makes it investigable, and an investigable ticket is a draftable one.** That is the risk the empty set was really buying, and an empty set is a blunt way to buy it. The `cosmetovigilance` answer set now carries one rule — no situation, no conditions, `route: needs_human` — so every ticket in the subject is pinned to a person whatever the evidence says. **Tools gather; the rule refuses to answer.** The level 4 override is untouched: a hospitalisation still strips every tool.
+
+The evidence checklist is one item — *the customer is identified* — and names nothing about the reaction. What caused it, whether the product is implicated and whether anything is owed are the judgements a person makes, and a checklist naming them would invite the case file to answer them.
+
 ### The matched situation is recorded and acted on by nothing
 
 Exemplar retrieval runs beside the investigation, on the message that triggered the run, and its result reaches `ticket_investigations.exemplar_match` and nowhere else. `investigate()` is never told; a test asserts the key never appears in its input.
@@ -1051,6 +1062,52 @@ Told to translate, with the text presented as the signature, the model reproduce
 **Checking a translated signature is not possible, and the check says so** rather than guessing. Three states: French is compared character for character as before; another language is `null` — advisory, "read it"; and another language *ending in the exact French wording* is a real failure, which is the one mechanical statement worth making here. **`asks:*` moved the same way** — `ASK_TERMS` is French vocabulary, and « numero d'ordine » contains no « commande », so a correct Italian question would have been held back for missing words it had no reason to carry. Not yet observed, and that is luck: it fires only on `needs_customer_input`, and no non-French draft has had that verdict yet.
 
 **The proper fix is per-language approved wording**, authored in the dashboard beside the French. That is a brand-voice feature, not a drafting one; until it exists, the model translates and a human reads it. No regression in French: 6 of 6 sampled drafts still reproduce the signature exactly, against a historical rate of 1 failure in 87.
+
+### A skeleton may shape an answer, never supply a fact
+
+The policy layer's `answer_skeleton` reaches the drafting prompt as an internal
+instruction about the shape of a reply. **It is an instruction, and instructions
+get followed** — which makes one that names a fact the dossier may not hold a
+reliable way to manufacture that fact.
+
+**Measured on the first live run of it.** `annulation_trop_tard` said to explain
+the order had shipped and then give the return procedure « telle qu'elle figure
+au dossier ». The dossier held no returns article. The model produced three
+numbered steps and a **numéro d'autorisation de retour** this shop does not
+issue, and the draft **passed every mechanical check** — correctly, because those
+checks prove a named sentence is ABSENT and can say nothing about whether an
+invented one is true.
+
+So the rule, and it applies to every skeleton written from here:
+
+- **Describe what to do with facts that are present.** « Donner la date
+  d'expédition et le numéro de suivi » is safe on a rule that only fires with a
+  confirmed order, because both are then in the bundle.
+- **Never instruct stating a fact that may be absent.** Where a skeleton wants
+  something the dossier only sometimes carries, it must say so conditionally and
+  name what NOT to write when it is missing — no procedure, no delay, no
+  reference number.
+- **The condition is the better tool where one exists.** A rule can branch on
+  `policy_answer: answered`, which is the honest version of « if the library
+  covered it »: two rules, one for each state, rather than one instruction
+  hoping.
+
+This is the cost of the skeleton reaching a model at all, and it is worth paying
+— the alternative is a layer that decides where a ticket goes and has nothing to
+say about what it says. But it moves the failure mode: before this, an unanswered
+question produced a vague reply, and now it can produce a confident wrong one.
+**The review queue is what stands behind it, and this is the first thing a
+reviewer of a rule-shaped draft should look for.**
+
+### Answer sets are English, and group the subjects that share answers
+
+Named `commande`, `retour`, `promo`, `produit` until 2026-08-30, which put two languages in one namespace. The French belongs in what a customer reads; a key a developer types is code. Renamed in the mapping and in both tables together: **`orders`, `returns`, `promotions`, `products`**, plus **`payments`, `accounts`, `cosmetovigilance`**.
+
+**A set is not a category, and the difference is the reason it exists.** A category says what a ticket is ABOUT — it drives the tool set, which knowledge categories are searched, and forwarding. A set says which family of ANSWERS applies. They are many-to-one: `orders` covers order and delivery, `products` covers product and product_stock, because « pas encore expédiée » answers a delivery question and an order question alike. Keying rules to categories would mean writing that rule twice and keeping the copies in step for ever — the same multiplication that made answers shared by evidence position rather than nested under questions.
+
+**A rule never names a category.** The link is `answerSetFor(category)`, one fixed mapping, so a rule cannot drift from the taxonomy and a subject cannot acquire rules by accident.
+
+**`other` has a tool and no family, and that is a dead end rather than an empty one.** A ticket categorised `other` may search the knowledge base, so it is investigated, and no rule can ever reach it. Nobody has decided what `other` should do; a test pins the gap by name so it stays visible and fails the day a family is added.
 
 ## Knowledge
 

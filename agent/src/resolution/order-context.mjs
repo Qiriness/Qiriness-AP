@@ -284,7 +284,10 @@ function num(value) {
  *   `investigation-rules.mjs`, and importing it here would be the first
  *   `resolution/` → `investigation/` edge in the codebase for one integer.
  */
-export function orderStates(context, { staleTransitDays = null, now = new Date() } = {}) {
+export function orderStates(
+  context,
+  { staleTransitDays = null, returnsWindowDays = null, now = new Date() } = {}
+) {
   const order = context?.order;
   if (!order) {
     return null;
@@ -320,8 +323,45 @@ export function orderStates(context, { staleTransitDays = null, now = new Date()
           ? 'paid'
           : order.status?.payment
             ? 'unpaid'
-            : 'unknown'
+            : 'unknown',
+    return_eligibility: returnEligibility(order, delivery, returnsWindowDays, now)
   };
+}
+
+/**
+ * Is a return still possible?
+ *
+ * THE ONE STATE THAT NEEDS A NUMBER NOBODY WROTE IN CODE. Every other state here
+ * is read off the order: shipped or not, paid or not. "Still returnable" is the
+ * order's delivery date compared against a window that is a MERCHANT DECISION,
+ * and this shop's two approved articles disagree about it — 30 days in one, 14
+ * in the other. Hardcoding either would have made this deriver a third answer.
+ *
+ * SO IT COMES IN AS A PARAMETER, and `null` — nobody has decided yet — resolves
+ * `unknown` rather than to a default. A default here is a policy: 30 would tell
+ * customers a window nobody approved, and 0 would refuse every return. `unknown`
+ * is what the rules already handle, and it routes to a person, which is the
+ * correct behaviour for a shop that has not written its returns window down.
+ *
+ * COUNTED FROM DELIVERY, not from the order date, because that is what both
+ * articles say — « après réception ». An order that has not been delivered has
+ * no clock running yet, so it is `unknown` too rather than `possible`: the
+ * window has not started, and saying "yes you can return it" about a parcel
+ * nobody has received is answering a different question.
+ */
+function returnEligibility(order, delivery, windowDays, now) {
+  if (!Number.isInteger(windowDays) || windowDays < 0) {
+    return 'unknown';
+  }
+  const deliveredAt = delivery?.deliveredAt || null;
+  if (!deliveredAt) {
+    return 'unknown';
+  }
+  const since = daysBetween(deliveredAt, now);
+  if (!Number.isFinite(since)) {
+    return 'unknown';
+  }
+  return since <= windowDays ? 'possible' : 'out_of_window';
 }
 
 /**

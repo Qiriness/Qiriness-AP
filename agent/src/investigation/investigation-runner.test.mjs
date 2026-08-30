@@ -129,10 +129,10 @@ test('the agent is given the first and the latest inbound message', async () => 
 });
 
 test('an out-of-scope subject is skipped and its flag cleared', async () => {
-  // `cosmetovigilance` is left to a person by policy: its tool set is empty, so
+  // `legal_privacy` is left to a person by policy: its tool set is empty, so
   // `isInvestigable` refuses it. Leaving the flag set would park it at the front
   // of an oldest-first batch for good.
-  const store = buildStore({ tickets: [{ ...TICKET, category: 'cosmetovigilance', request_kind: 'problem', level: 2 }] });
+  const store = buildStore({ tickets: [{ ...TICKET, category: 'legal_privacy', request_kind: 'problem', level: 2 }] });
   const counts = await runInvestigation({ ...wire(store), investigate: async () => caseFile(), shopId: 's1' });
 
   assert.equal(counts.skipped, 1);
