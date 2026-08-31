@@ -10,155 +10,73 @@
     · outputFileTracingRoot
 
  ✓ Starting...
- ✓ Ready in 13.1s
- ○ Compiling /agent-setup/rules ...
- ✓ Compiled /agent-setup/rules in 4.3s (629 modules)
- GET /agent-setup/rules 200 in 7570ms
+ ✓ Ready in 3.7s
  ○ Compiling /agent-setup ...
- ✓ Compiled /agent-setup in 1643ms (752 modules)
- ○ Compiling /tickets ...
- ✓ Compiled /tickets in 2.7s (752 modules)
- ○ Compiling /agent-setup ...
- ✓ Compiled /agent-setup in 746ms (398 modules)
- ✓ Compiled in 635ms (386 modules)
- ✓ Compiled in 171ms (386 modules)
- ✓ Compiled in 424ms (386 modules)
- ✓ Compiled in 365ms (386 modules)
- ✓ Compiled in 189ms (386 modules)
- ✓ Compiled in 240ms (386 modules)
- ○ Compiling /api/knowledge/articles/[id] ...
- ✓ Compiled /api/knowledge/articles/[id] in 1214ms (95 modules)
- PATCH /api/knowledge/articles/956d8004-d554-4cc4-acca-b7ca30711b6c 200 in 9682ms
- ✓ Compiled in 507ms (386 modules)
- ✓ Compiled in 460ms (386 modules)
- ✓ Compiled in 189ms (386 modules)
- ✓ Compiled in 301ms (386 modules)
- ○ Compiling /agent-setup/rules ...
- ✓ Compiled /agent-setup/rules in 1327ms (354 modules)
- GET /agent-setup/rules 200 in 2071ms
- ○ Compiling /tickets ...
- ✓ Compiled /tickets in 712ms (388 modules)
- ✓ Compiled /api/tickets/[id]/thread in 259ms (392 modules)
- GET /api/tickets/2d30752d-cab0-45e3-9219-8903eb212cff/thread 200 in 3231ms
- GET /api/tickets/2d30752d-cab0-45e3-9219-8903eb212cff/thread 200 in 3308ms
- ✓ Compiled /api/tickets/[id] in 336ms (394 modules)
- GET /api/tickets/2d30752d-cab0-45e3-9219-8903eb212cff 200 in 3089ms
- GET /api/tickets/2d30752d-cab0-45e3-9219-8903eb212cff 200 in 3092ms
- ✓ Compiled in 505ms (388 modules)
- ✓ Compiled in 372ms (388 modules)
- ○ Compiling /agent-setup ...
- ✓ Compiled /agent-setup in 1882ms (444 modules)
- ✓ Compiled in 1416ms (830 modules)
- ✓ Compiled in 47.6s (840 modules)
- ✓ Compiled in 1689ms (830 modules)
- GET /agent-setup/rules 200 in 3657ms
- GET /agent-setup/rules 200 in 2341ms
- ✓ Compiled in 576ms (444 modules)
- ○ Compiling /agent-setup/parameters ...
- ✓ Compiled /agent-setup/parameters in 900ms (840 modules)
- GET /agent-setup/rules 200 in 2356ms
- ✓ Compiled in 776ms (834 modules)
- ✓ Compiled in 393ms (834 modules)
- ✓ Compiled in 515ms (834 modules)
- ✓ Compiled in 874ms (834 modules)
- ✓ Compiled in 697ms (836 modules)
- ✓ Compiled in 536ms (836 modules)
- ✓ Compiled in 1099ms (846 modules)
- ○ Compiling /agent-setup/promotions ...
- ✓ Compiled /agent-setup/promotions in 1606ms (857 modules)
- GET /agent-setup/promotions 200 in 2871ms
- GET /tickets 200 in 2136ms
- ✓ Compiled /api/tickets/[id] in 507ms (456 modules)
- GET /api/tickets/5f64d154-7595-446b-8cc9-90300774fa3d 200 in 3237ms
- GET /api/tickets/5f64d154-7595-446b-8cc9-90300774fa3d 200 in 3242ms
- ✓ Compiled /api/promotions in 376ms (456 modules)
- GET /api/promotions?offerable=true 200 in 1133ms
- GET /api/promotions 200 in 418ms
- GET /agent-setup/rules 200 in 2009ms
- ✓ Compiled /api/tickets/[id] in 452ms (456 modules)
- GET /api/tickets/f5124f7a-9f1d-4c17-b34a-2c7ff8661f1f 200 in 1180ms
- GET /api/tickets/f5124f7a-9f1d-4c17-b34a-2c7ff8661f1f 200 in 1189ms
- GET /api/tickets/315b0f1c-90c1-4743-9b50-d9f07c86e6f0 200 in 732ms
- GET /api/tickets/315b0f1c-90c1-4743-9b50-d9f07c86e6f0 200 in 738ms
- GET /api/tickets/f5124f7a-9f1d-4c17-b34a-2c7ff8661f1f 200 in 620ms
- GET /api/tickets/f5124f7a-9f1d-4c17-b34a-2c7ff8661f1f 200 in 643ms
- GET /api/tickets/315b0f1c-90c1-4743-9b50-d9f07c86e6f0 200 in 610ms
- GET /api/tickets/315b0f1c-90c1-4743-9b50-d9f07c86e6f0 200 in 626ms
- GET /tickets 200 in 2308ms
- GET /api/tickets/315b0f1c-90c1-4743-9b50-d9f07c86e6f0 200 in 566ms
- GET /api/tickets/315b0f1c-90c1-4743-9b50-d9f07c86e6f0 200 in 616ms
- ✓ Compiled /api/tickets/[id]/thread in 366ms (456 modules)
- ✓ Compiled (458 modules)
- GET /api/tickets/315b0f1c-90c1-4743-9b50-d9f07c86e6f0/thread 500 in 1406ms
- GET /api/promotions?offerable=true 200 in 1732ms
- GET /api/tickets/315b0f1c-90c1-4743-9b50-d9f07c86e6f0/thread 200 in 1821ms
- GET /api/promotions?offerable=true 200 in 392ms
- GET /api/promotions?offerable=true 200 in 417ms
- GET /api/tickets/315b0f1c-90c1-4743-9b50-d9f07c86e6f0/thread 200 in 519ms
- GET /api/tickets/315b0f1c-90c1-4743-9b50-d9f07c86e6f0/thread 200 in 568ms
- GET /api/promotions?offerable=true 200 in 314ms
- GET /api/promotions?offerable=true 200 in 630ms
- GET /api/tickets/f5124f7a-9f1d-4c17-b34a-2c7ff8661f1f/thread 200 in 768ms
- GET /api/tickets/f5124f7a-9f1d-4c17-b34a-2c7ff8661f1f/thread 200 in 806ms
- GET /api/promotions?offerable=true 200 in 381ms
- ✓ Compiled in 431ms (452 modules)
- ✓ Compiled /api/tickets/[id]/thread in 2.5s (855 modules)
- ✓ Compiled in 1ms (455 modules)
- GET /api/tickets/f5124f7a-9f1d-4c17-b34a-2c7ff8661f1f/thread 200 in 2964ms
- GET /api/tickets/f5124f7a-9f1d-4c17-b34a-2c7ff8661f1f/thread 200 in 3354ms
- ✓ Compiled in 407ms (455 modules)
- ✓ Compiled in 390ms (451 modules)
- ✓ Compiled in 161ms (451 modules)
- ✓ Compiled in 511ms (845 modules)
- ✓ Compiled in 245ms (451 modules)
- ✓ Compiled in 932ms (845 modules)
- ✓ Compiled in 390ms (845 modules)
- ✓ Compiled in 953ms (845 modules)
- ○ Compiling /api/policy/rules ...
- ✓ Compiled /api/policy/rules in 628ms (455 modules)
- GET /api/policy/rules?answerSet=promotions 200 in 3260ms
- GET /tickets 200 in 2907ms
- ○ Compiling /api/tickets/[id]/thread ...
- ✓ Compiled /api/tickets/[id]/thread in 512ms (455 modules)
- GET /api/tickets/def878e2-ab5b-455b-b8df-ff02ea0ff232/thread 500 in 2048ms
- GET /api/tickets/def878e2-ab5b-455b-b8df-ff02ea0ff232/thread 200 in 3150ms
- GET /api/tickets/def878e2-ab5b-455b-b8df-ff02ea0ff232/thread 200 in 518ms
- GET /api/tickets/def878e2-ab5b-455b-b8df-ff02ea0ff232/thread 200 in 787ms
- GET /api/tickets/9e232eea-7360-4050-9b7c-e6ecf20a87bf/thread 200 in 822ms
- GET /api/tickets/9e232eea-7360-4050-9b7c-e6ecf20a87bf/thread 200 in 984ms
- GET /api/tickets/177410cb-9f05-477d-abc6-8f923e75600d/thread 200 in 1128ms
- GET /api/tickets/177410cb-9f05-477d-abc6-8f923e75600d/thread 200 in 1132ms
- GET /api/tickets/273f44b2-f14d-4ffd-9618-9273b6d1644b/thread 200 in 703ms
- GET /api/tickets/273f44b2-f14d-4ffd-9618-9273b6d1644b/thread 200 in 718ms
- GET /api/tickets/d31abd79-6828-486a-ab74-6362d4321544/thread 200 in 694ms
- GET /api/tickets/d31abd79-6828-486a-ab74-6362d4321544/thread 200 in 751ms
- ✓ Compiled in 842ms (451 modules)
- ✓ Compiled in 497ms (451 modules)
- ✓ Compiled in 537ms (451 modules)
- ✓ Compiled in 1088ms (845 modules)
- ✓ Compiled in 365ms (845 modules)
- ✓ Compiled in 342ms (845 modules)
- ✓ Compiled in 983ms (845 modules)
+ ✓ Compiled /agent-setup in 12.3s (1033 modules)
+ ○ Compiling /_not-found ...
+ GET /agent-setup 200 in 13840ms
+ GET /agent-setup 200 in 14749ms
+ ✓ Compiled /api/recommendations in 9.9s (752 modules)
+ ✓ Compiled (758 modules)
+ GET /api/recommendations 200 in 11346ms
+ GET /api/recommendations 200 in 778ms
+ GET /agent-setup 200 in 2035ms
+ GET /api/recommendations 200 in 1933ms
+ ✓ Compiled /api/knowledge/articles in 372ms (408 modules)
+ POST /api/knowledge/articles 201 in 926ms
+ ✓ Compiled /api/knowledge/articles/[id] in 152ms (410 modules)
+ PATCH /api/knowledge/articles/53321983-1e83-4498-a8a7-a5ae6219f187 200 in 2034ms
+ GET /agent-setup 200 in 2220ms
+ GET /api/recommendations 200 in 864ms
+ GET /agent-setup 200 in 1128ms
+ GET /api/recommendations 200 in 628ms
+ GET /api/recommendations 200 in 1431ms
+ GET /api/recommendations 200 in 602ms
+ GET /api/recommendations 200 in 624ms
+ ✓ Compiled in 722ms (755 modules)
+ ✓ Compiled in 381ms (749 modules)
  ○ Compiling /api/recommendations ...
- ✓ Compiled /api/recommendations in 791ms (457 modules)
- GET /api/recommendations 200 in 4315ms
- ○ Compiling /agent-setup/recommendations ...
- ✓ Compiled /agent-setup/recommendations in 1541ms (871 modules)
- GET /agent-setup/recommendations 200 in 3215ms
- GET /agent-setup/rules 200 in 2032ms
- GET /agent-setup/rules 200 in 867ms
- ✓ Compiled in 1387ms (857 modules)
- GET /agent-setup/recommendations 500 in 2977ms
- ✓ Compiled in 908ms (857 modules)
- GET /agent-setup/recommendations 200 in 2183ms
- ✓ Compiled in 570ms (867 modules)
- GET /agent-setup/recommendations 200 in 1437ms
+ ✓ Compiled /api/recommendations in 1599ms (406 modules)
+ GET /api/recommendations 200 in 4431ms
+ ✓ Compiled in 303ms (755 modules)
+ ✓ Compiled in 367ms (755 modules)
+ GET /api/recommendations 200 in 803ms
+ ✓ Compiled in 339ms (755 modules)
+ ✓ Compiled in 768ms (765 modules)
+ GET /agent-setup 200 in 1093ms
+ ✓ Compiled in 740ms (749 modules)
  ○ Compiling /api/recommendations ...
- ✓ Compiled /api/recommendations in 651ms (463 modules)
- GET /api/recommendations 200 in 4545ms
- GET /api/recommendations 200 in 816ms
- ○ Compiling /api/knowledge/articles/[id] ...
- ✓ Compiled /api/knowledge/articles/[id] in 664ms (463 modules)
- PATCH /api/knowledge/articles/1d7f8325-00a7-4e5e-a2fa-593bed799812 200 in 4199ms
- ✓ Compiled in 513ms (459 modules)
- ✓ Compiled in 615ms (459 modules)
+ ✓ Compiled /api/recommendations in 1719ms (406 modules)
+ GET /api/recommendations 200 in 4786ms
+ ✓ Compiled in 285ms (755 modules)
+ ✓ Compiled in 304ms (765 modules)
+ GET /agent-setup 200 in 1361ms
+ ✓ Compiled /api/knowledge/articles/[id] in 452ms (404 modules)
+ PATCH /api/knowledge/articles/53321983-1e83-4498-a8a7-a5ae6219f187 200 in 6285ms
+ ✓ Compiled in 975ms (749 modules)
+ GET /agent-setup 500 in 4082ms
+ ✓ Compiled in 368ms (749 modules)
+ GET /agent-setup 500 in 1624ms
+ ✓ Compiled in 988ms (759 modules)
+ GET /agent-setup 200 in 653ms
+ GET /agent-setup 200 in 1748ms
+ ✓ Compiled /api/recommendations in 332ms (406 modules)
+ GET /api/recommendations 200 in 4673ms
+ GET /agent-setup 200 in 1167ms
+ ✓ Compiled /api/knowledge/articles/[id] in 359ms (404 modules)
+ PATCH /api/knowledge/articles/53321983-1e83-4498-a8a7-a5ae6219f187 200 in 6236ms
+ DELETE /api/knowledge/articles/3643c366-f428-4bff-9042-599ea80e8499 204 in 978ms
+ ✓ Compiled /api/knowledge/articles in 301ms (406 modules)
+ POST /api/knowledge/articles 201 in 808ms
+ ✓ Compiled in 1068ms (749 modules)
+ ✓ Compiled in 478ms (749 modules)
+ ✓ Compiled /api/knowledge/articles in 103ms (404 modules)
+ GET /api/knowledge/articles 200 in 2796ms
+ POST /api/knowledge/articles 201 in 2276ms
+ ✓ Compiled /api/recommendations in 341ms (408 modules)
+ GET /api/recommendations 200 in 1217ms
+ ✓ Compiled /api/knowledge/articles/[id] in 234ms (410 modules)
+ DELETE /api/knowledge/articles/66697429-d8a4-45ee-af49-7964e37f31dd 204 in 940ms
+ ○ Compiling /agent-setup/rules ...
+ ✓ Compiled /agent-setup/rules in 1450ms (795 modules)
+ GET /agent-setup/rules 200 in 2022ms

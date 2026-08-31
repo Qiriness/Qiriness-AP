@@ -163,9 +163,6 @@ comment on column public.knowledge_documents.voice_profile is
 comment on column public.knowledge_documents.product_ids is
   'Products this article is about, set by an operator in the knowledge editor. Lets a retrieved chunk resolve the product a question was about when the title matcher could not -- the words customers use about a device (batterie, telecommande, s''allume) are in no product title. Denormalised onto knowledge_chunks. Never overrides a product the customer named, and never sets reaction_product: a cosmetovigilance attribution must come from the customer, not from which article was retrieved.';
 
-comment on column public.knowledge_chunks.product_ids is
-  'Denormalised from knowledge_documents.product_ids, the same way category is, so retrieval can resolve a product without a second query per hit.';
-
 comment on column public.knowledge_documents.source_metadata is
   'Small sanitized source metadata snapshot. Do not store full page HTML or unnecessary raw payloads here.';
 
@@ -289,6 +286,9 @@ comment on column public.knowledge_chunks.embedded_input_hash is
 
 comment on column public.knowledge_chunks.embedded_at is
   'Timestamp the embedding was last computed.';
+
+comment on column public.knowledge_chunks.product_ids is
+  'Denormalised from knowledge_documents.product_ids, the same way category is, so retrieval can resolve a product without a second query per hit.';
 
 comment on column public.knowledge_chunks.category is
   'Denormalised copy of the parent knowledge_documents.category, kept in step with it. Included in embedded_input_hash, so a category change invalidates the chunk vector and the next embed run refreshes it.';

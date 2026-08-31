@@ -35,7 +35,13 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       // products anyway, so an id that no longer exists resolves to nothing
       // rather than to the wrong product.
       productIds: Array.isArray(body.productIds)
-        ? [...new Set(body.productIds.filter((id: unknown): id is string => typeof id === "string" && id.length > 0))]
+        ? Array.from(
+            new Set(
+              (body.productIds as unknown[]).filter(
+                (id): id is string => typeof id === "string" && id.length > 0
+              )
+            )
+          )
         : undefined,
     });
     return NextResponse.json({ article });

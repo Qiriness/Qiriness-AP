@@ -580,7 +580,7 @@ Referenced by the entries below so each state is written once.
 
 **Variantes réelles**
 - « J'aimerais avoir des conseils personnalisés pour ma routine svp merci »
-- « je suis femme de 57 ans et j'ai toujours eu des poches sous les yeux… »
+- « je suis femme de 57 ans et j'ai toujours eu des poches sous les yeux… »cpu
 
 **needs** `product_identity`, `product_property`
 **exemplaires** → jeu `produit` — `produit_ambigu` is the likely default here

@@ -23,6 +23,7 @@ interface RawArticle {
   updatedAt: string;
   syncedAt: string | null;
   voiceProfile: VoiceProfile | null;
+  productIds?: string[] | null;
 }
 
 interface RawSource {
@@ -52,6 +53,7 @@ export function mapArticleResponse(raw: RawArticle): Article {
     updatedLabel: formatRelativeTime(raw.updatedAt),
     lastSyncedLabel: raw.syncedAt ? formatRelativeTime(raw.syncedAt) : undefined,
     voiceProfile: raw.voiceProfile ?? null,
+    productIds: Array.isArray(raw.productIds) ? raw.productIds : [],
   };
 }
 

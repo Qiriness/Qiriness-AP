@@ -68,6 +68,19 @@ export const PARAMETERS = {
     description: 'In the shop currency. "Livraisons et retours" states 70 €.',
     usedBy: 'delivery replies'
   },
+  consumer_order_ceiling: {
+    kind: 'amount',
+    label: 'Above what order total is a sender not a consumer?',
+    description:
+      'In the shop currency. A message naming a sum above this is treated as coming ' +
+      'from a trade customer rather than a shopper, because no consumer order comes ' +
+      'anywhere near it: the largest ever placed is 488,60 € and the 99th percentile ' +
+      'is 248,57 €. Measured at 500 € this catches all four trade tickets that were ' +
+      'filed as payment or promotions, and no consumer ticket at all. Deliberately not ' +
+      '"the largest order ever", which ratchets: one trade order syncing into Shopify ' +
+      'would raise the ceiling above itself and switch the guard off.',
+    usedBy: 'the buyer_type state, and the payments rules that route a trade sender to a person'
+  },
   returns_address: {
     kind: 'text',
     label: 'Where does a customer send a return?',

@@ -153,6 +153,10 @@ export function AgentSetup({ initialArticles, initialSources, loadError }: Agent
     applyEdit({ category });
   }
 
+  function handleProductIdsChange(productIds: string[]) {
+    applyEdit({ productIds });
+  }
+
   function handleVoiceProfileChange(patch: Partial<VoiceProfile>) {
     if (!selected) return;
     const current = selected.voiceProfile ?? EMPTY_VOICE_PROFILE;
@@ -202,7 +206,7 @@ export function AgentSetup({ initialArticles, initialSources, loadError }: Agent
   async function handleSave() {
     if (!selected || saveState !== "unsaved") return;
     const id = selected.id;
-    const { title, content, category, status, voiceProfile } = selected;
+    const { title, content, category, status, voiceProfile, productIds } = selected;
     setSaveState("saving");
     try {
       const updated = await updateArticle(id, {
@@ -211,6 +215,7 @@ export function AgentSetup({ initialArticles, initialSources, loadError }: Agent
         category,
         approvalStatus: status,
         voiceProfile: selected.coreTopic === "brand" ? voiceProfile ?? EMPTY_VOICE_PROFILE : undefined,
+        productIds,
       });
       patchArticle(id, updated);
       setSaveState("saved");
@@ -243,7 +248,7 @@ export function AgentSetup({ initialArticles, initialSources, loadError }: Agent
   async function handleApprove() {
     if (!selected || selected.status === "approved") return;
     const id = selected.id;
-    const { title, content, category, voiceProfile } = selected;
+    const { title, content, category, voiceProfile, productIds } = selected;
     setSaveState("saving");
     try {
       const updated = await updateArticle(id, {
@@ -252,6 +257,7 @@ export function AgentSetup({ initialArticles, initialSources, loadError }: Agent
         category,
         approvalStatus: "approved",
         voiceProfile: selected.coreTopic === "brand" ? voiceProfile ?? EMPTY_VOICE_PROFILE : undefined,
+        productIds,
       });
       patchArticle(id, updated);
       setSaveState("saved");
@@ -265,7 +271,7 @@ export function AgentSetup({ initialArticles, initialSources, loadError }: Agent
   async function handleUnapprove() {
     if (!selected || selected.status !== "approved") return;
     const id = selected.id;
-    const { title, content, category, voiceProfile } = selected;
+    const { title, content, category, voiceProfile, productIds } = selected;
     setSaveState("saving");
     try {
       const updated = await updateArticle(id, {
@@ -274,6 +280,7 @@ export function AgentSetup({ initialArticles, initialSources, loadError }: Agent
         category,
         approvalStatus: "draft",
         voiceProfile: selected.coreTopic === "brand" ? voiceProfile ?? EMPTY_VOICE_PROFILE : undefined,
+        productIds,
       });
       patchArticle(id, updated);
       setSaveState("saved");
@@ -406,6 +413,7 @@ export function AgentSetup({ initialArticles, initialSources, loadError }: Agent
                   onContentChange={handleContentChange}
                   onSourceChange={handleSourceChange}
                   onCategoryChange={handleCategoryChange}
+                  onProductIdsChange={handleProductIdsChange}
                   onResync={handleResync}
                   onSave={handleSave}
                   onOptimize={handleOptimize}

@@ -520,6 +520,65 @@ The ranking was inverted, not merely low. The denominator is now `min(titleWeigh
 
 **Measured against the live catalogue before and after, not just against the suite.** Every other case scored identically or moved slightly toward the right answer — « Caresse Temps Sublime »'s two real creams rose from 0.451 to 0.470 against the coffret leading them.
 
+### PA-30 confirms the order and then stops, because no facture exists to send
+
+`facture_commande_confirmee` routes to a person even when the order is fully identified, and that is the finished state rather than a gap waiting to be filled.
+
+**Three separate things are missing, and any one of them is enough.** Shopify exposes no invoice PDF for a regular order — `statusPageUrl` is the customer-facing status page and `invoiceUrl` exists only on *draft* orders, where it is a payment link. No invoicing app's output reaches this database: the stored payloads contain no `invoice`, no `facture`, no document URL. And there is no outbound send path at all — `autoSendEligible` exists, nothing auto-sends, and `attachments` is inbound-only, so a PDF in hand would have nowhere to go.
+
+**Confirmed 2026-08-31: the merchant has no way to produce a facture at all.** So this is not a plumbing problem to solve later; the document does not exist upstream.
+
+**The order gate still earns its keep.** Identifying the order changes nothing about who answers, but it changes what they receive: a case with the order named, rather than a round trip that starts by asking. The skeleton forbids inventing a download link for the same reason the knowledge bands refuse a weak chunk — a plausible URL is worse than an honest hand-off.
+
+### A trade buyer is a finding, not a category
+
+Four tickets from professionals were filed as `payment` or `promotions`: a pharmacy and a company asking for invoice duplicates, an invoice reminder, and a €1,901.93 « facture définitive » request. The tempting fix is to teach the categoriser to send them to `b2b`. **It is the wrong fix on three counts.**
+
+**`b2b` is not where they belong.** That set is trade *correspondence* — partner reorder POs, supplier dunning, freight quotes — and 22 of its 25 tickets are `request_kind: contact`. A customer asking for their invoice is `problem`, and filing it beside *Overdue Invoices Silgan Dispensing Systems* loses what it was about.
+
+**The category is already right.** « Comment obtenir la facture définitive » IS a payment question; a pharmacy asking it asks the same question a shopper does. What was missing is who is asking — and that is the findings axis, the same split that stops a phrasing deciding a shipping status.
+
+**Precision cannot be won from the text.** The first pattern tried here matched twelve job applications on « projet professionnel ». Any instruction strong enough to catch « prix pro » also catches « je suis esthéticienne professionnelle ».
+
+**So `buyer_type` is derived from evidence.** Measured over all 574 inbound messages, six name a sum above the ceiling and all six are trade; no consumer ticket trips it.
+
+**A MISSING ORDER IS DELIBERATELY NOT A TRADE SIGNAL**, though it was the first thing tried. Shopify not finding the order is why PA-30 asks for a number, but a mistyped reference or a guest checkout produces it too — inferring wholesale from it would misroute ordinary customers on the strength of a typo.
+
+**The ceiling is a parameter, not `max(total_price)`.** A maximum ratchets: one trade order syncing into Shopify would raise the ceiling above itself and switch the guard off. 500 € sits above the 99th percentile (248,57 €) and the largest order ever placed (488,60 €), and is the merchant's to move.
+
+**Parsing money was the hard part and was wrong twice.** Reading `.` as a thousands separator turned « 1605.71€ » into €160,571 and invented four trade customers; the correction then matched nothing; a third version read across a date, taking « 06/08 1605.71€ » as €81,605.71. The decimal mark is now decided per amount, a lookbehind refuses a start mid-number, and two decimals are the cap — which is what rejects « 8829,6201€ », two order references with a comma between them.
+
+**A situation-less guard cannot pre-empt a situation rule**, and the first version of these rules was broken by it. `selectAnswer` ranks a rule naming the situation above one that does not *before* priority is read, so `client_professionnel` at priority 40 still lost to a PA-30 rule at 20 — and the pharmacy was asked for a Shopify order number, the exact failure the guard exists to prevent. The situation rules now carry `buyer_type: [consumer, unknown]` and decline the case themselves.
+
+### The article names the product, because the matcher reads titles and the words are not in one
+
+Measured, and it is not a threshold problem. « la batterie de mon masque ne tient pas », « la télécommande ne fonctionne plus », « il ne s'allume plus » identify nothing, because « batterie », « télécommande » and « s'allume » appear in no product title.
+
+**Reading product DESCRIPTIONS instead makes it worse, not better.** Counted over the live catalogue:
+
+```
+"batterie"      2 products  -- NEITHER is the LED mask
+"recharge"      7 products  -- on a cosmetic it means REFILL
+"allum"         0 products  -- the mask never mentions lighting up
+"telecommande"  1 product   -- the mask
+```
+
+« mon masque ne se recharge plus » would have matched seven refillable creams. So the identity comes from the other direction: retrieval finds the right article easily — those words are distinctive *because* they appear almost nowhere — and an operator has said which products that article is about. `knowledge_documents.product_ids`, denormalised onto chunks.
+
+**Three gates, and each is one the matcher already enforces somewhere.**
+
+- **It fills a gap, never overrides one.** A named product, a range, or an honest ambiguity all stand; a tag only speaks when the matcher resolved nothing. A customer's own word beats an inference about what they meant.
+- **Top band only.** `searchKnowledge` drops every chunk when the *best* is weak, but an answerable result still carries weak chunks behind it. Letting one name a product would turn a retrieval the bands refused to answer from into a hard fact by a longer route.
+- **Two articles disagreeing is an ambiguity**, exactly as two titles scoring alike is. Several products on ONE article is not — that is how a range is expressed, since ranges are computed from title bigrams and have no id to store.
+
+**Never `reaction_product`.** Cosmetovigilance is where attributing the wrong product is actually harmful; which product caused a reaction has to come from the customer, not from which article was retrieved.
+
+**`satisfiedBy` gained an optional `satisfies` predicate** so `product_identity`'s need and its finding read one helper. Those two answering differently is precisely the defect `product_property` carried until 2026-08-31. `KNOWLEDGE_NEEDS` counts only *unconditional* library sources, so the gap report keeps meaning "an article somebody could write" rather than "the title matcher missed".
+
+**Not in `content_hash`.** Retagging rewrites the chunk rows and re-uses every stored vector — which products an article is about does not change a word of its text.
+
+**Nothing fires yet, and that is content rather than code.** Measured against the live library, all four device questions return `verdict: none` — the only LED text is a marketing section scoring 0.477, under the 0.50 floor. The tag round-trips through the RPC; the article it needs does not exist.
+
 ### The bare name « Caresse Temps Sublime » resolves to a coffret that is not called that — open
 
 Not caused by the median cap: **0.596 before and after.** « Caresse Temps Sublime » is the name of two live creams — `… Caresse Temps Sublime` and `… Caresse Temps Sublime Riche` — and the matcher confidently returns *Coffret Temps Sublime - Anti-âge*, whose title contains no « caresse » at all. It clears `CLEAR_MATCH` because a short title is well covered by « temps sublime » alone.

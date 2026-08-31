@@ -1,4 +1,5 @@
-import { days } from '../../../scripts/lib/parameters.mjs';
+import { amount, days } from '../../../scripts/lib/parameters.mjs';
+import { amountAboveConsumerCeiling, deriveBuyerType } from './trade-signals.mjs';
 import { orderStates, toOrderContextText } from '../resolution/order-context.mjs';
 
 import { toPromptText as photoPromptText } from './photo-evidence.mjs';
@@ -288,6 +289,11 @@ export function createToolRegistry({
           data: {
             found: result.found,
             ambiguous: Boolean(result.ambiguous),
+            // WHICH KIND of non-answer this was. `no_match` covers a range, a
+            // near-miss and a question naming no product at all, and those want
+            // different replies — `product_identity` reads this to tell a range
+            // (already an answer) from a gap an article may fill.
+            reason: result.reason ?? null,
             titles: (result.products || []).map((p) => p?.title).filter(Boolean),
             // Near-misses on a no-match, which is what tells a reviewer whether
             // the catalogue lacks the product or the matcher simply missed it.
@@ -470,7 +476,21 @@ export function createToolRegistry({
                   // here as null and resolves `unknown`, never a default.
                   returnsWindowDays: days(ticket.parameters, 'returns_window_days')
                 })
-              : null
+              : null,
+            // WHO IS ASKING, carried by this tool because confirming the order
+            // is the same step that answers it. A pharmacy asking for an
+            // invoice duplicate asks the same question a shopper does, so the
+            // subject is right and only the sender is unusual — it belongs on
+            // the findings axis, never in the category.
+            //
+            // The amount is read from the customer's own words; the ceiling is
+            // the merchant's. Undecided arrives as null and the signal simply
+            // does not fire, rather than treating every sum as above it.
+            buyerType: deriveBuyerType({
+              orderFound: confirmed,
+              namedAmountOverCeiling: namedAmountOverCeiling(ticket)
+            }),
+            namedAmountOverCeiling: namedAmountOverCeiling(ticket)
           }
         };
       },
@@ -753,6 +773,20 @@ export const TOOL_DEFINITIONS = DEFINITIONS;
  * An empty ticket text refuses nothing: with no message to check against, the
  * guard has no opinion.
  */
+/**
+ * The largest sum the customer named that no consumer order could be.
+ *
+ * Reads the ticket's own text rather than a tool result, the way
+ * `checkPhotoEvidence` does — it is a pure function of what was written. Null
+ * whenever the merchant has not set a ceiling: an unset parameter must disable
+ * the signal, not make every amount look like a trade order.
+ */
+function namedAmountOverCeiling(ticket) {
+  const ceiling = amount(ticket?.parameters, 'consumer_order_ceiling');
+  if (ceiling == null) return null;
+  return amountAboveConsumerCeiling(ticket?.text ?? '', Number(ceiling));
+}
+
 function appearsAsToken(code, text) {
   const haystack = String(text || '');
   if (!haystack.trim()) {

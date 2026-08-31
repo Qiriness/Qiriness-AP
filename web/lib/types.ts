@@ -181,6 +181,12 @@ export interface Article {
   lastSyncedLabel?: string;
   /** Structured brand-voice fields. Only meaningful when coreTopic === "brand". */
   voiceProfile?: VoiceProfile | null;
+  /**
+   * Products this article is about. Lets a retrieved article name the product a
+   * question was about when the title matcher cannot — the words customers use
+   * about a device are in no product title. Empty on most articles.
+   */
+  productIds: string[];
 }
 
 /**

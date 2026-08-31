@@ -53,6 +53,27 @@ function parse(value) {
   return text;
 }
 
+/**
+ * A link worth carrying its URL: one that resolves to a file rather than a page.
+ *
+ * BY EXTENSION, not by host, so a manual moved off Shopify's CDN still counts and
+ * nothing here knows which shop it is running for. `http(s)` only — a `mailto:`
+ * or a relative path is not something to paste into a reply.
+ */
+const DOCUMENT_EXTENSIONS = /\.(pdf|docx?|xlsx?|pptx?|csv|zip)$/i;
+
+function isDocumentUrl(url) {
+  if (typeof url !== 'string') return false;
+  try {
+    const parsed = new URL(url);
+    // The query string is where Shopify puts `?v=1760451724`, so the extension
+    // has to be read from the path alone.
+    return /^https?:$/.test(parsed.protocol) && DOCUMENT_EXTENSIONS.test(parsed.pathname);
+  } catch {
+    return false;
+  }
+}
+
 function render(node, depth) {
   if (node === null || node === undefined) {
     return '';
@@ -83,8 +104,22 @@ function render(node, depth) {
     case 'list-item':
       return `- ${children().trim()}\n`;
     case 'link':
-      // Keep the label, drop the URL: a support answer wants the words.
-      return children();
+      // KEEP THE LABEL, AND THE URL ONLY WHEN IT IS A DOCUMENT.
+      //
+      // Dropping every URL was right until a link turned out to BE the answer.
+      // « Guide d'utilisation et fiche technique » on the LED mask pointed at the
+      // user manual — the one source answering battery life, the remote and what
+      // to do when it will not switch on — and flattened to those five words with
+      // nothing behind them, which is worse than omitting it: the sheet tells the
+      // agent a guide exists and gives it no way to hand it over.
+      //
+      // MEASURED ACROSS THE WHOLE CATALOGUE, where exactly three links exist and
+      // they split on this line: two are storefront product pages (merchandising
+      // cross-sell, one carrying `?_pos=4&_sid=…` tracking) and one is the manual.
+      // A page is navigation the agent has no business pasting — `crossSellFor`
+      // already owns recommending products — while a document is a thing a
+      // customer can be given.
+      return isDocumentUrl(node.url) ? `${children()} (${node.url})` : children();
     case 'root':
       return children();
     default:

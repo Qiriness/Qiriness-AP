@@ -5,6 +5,7 @@ import type { KnowledgeCategory } from "@/lib/types";
 import { RichTextEditor } from "./RichTextEditor";
 import { SourcePageSelect } from "./SourcePageSelect";
 import { CategorySelect } from "./CategorySelect";
+import { ProductAttachSelect } from "./ProductAttachSelect";
 import { WorkspaceActions } from "./WorkspaceActions";
 import { WorkspaceHeader } from "./WorkspaceHeader";
 import { EditorFooter } from "./EditorFooter";
@@ -27,6 +28,7 @@ interface ArticleWorkspaceProps {
   onContentChange: (html: string, wordCount: number) => void;
   onSourceChange: (sourceId: string | null) => void;
   onCategoryChange: (category: KnowledgeCategory) => void;
+  onProductIdsChange: (productIds: string[]) => void;
   onResync: () => void;
   onSave: () => void;
   onOptimize: () => void;
@@ -50,6 +52,7 @@ export function ArticleWorkspace({
   onContentChange,
   onSourceChange,
   onCategoryChange,
+  onProductIdsChange,
   onResync,
   onSave,
   onOptimize,
@@ -106,6 +109,31 @@ export function ArticleWorkspace({
             <div aria-labelledby="category-label">
               <CategorySelect value={article.category} onChange={onCategoryChange} />
             </div>
+          </div>
+
+          {/* Under the category, because the two answer different questions and
+              are read together: the category decides WHEN this article is
+              searched, the products decide WHAT it resolves to once found. An
+              article filed outside `faq` is only searched for tickets of its own
+              subject, and attaching a product does not change that. */}
+          <div className={styles.categoryRow}>
+            <ProductAttachSelect
+              // REMOUNTED PER ARTICLE, like the editor above it. This workspace is
+              // reused rather than rebuilt when somebody clicks a different
+              // article, so without a key the picker keeps the previous
+              // article’s open/closed state: opening a product-specific article
+              // and then a new one showed the new one as product-specific too.
+              //
+              // It also settles what "checked but empty" means. That state is a
+              // step on the way to attaching something, not an article property
+              // — nothing persists it — so leaving and coming back recomputes it
+              // from what is actually attached, and an empty one comes back
+              // unchecked.
+              key={article.id}
+              value={article.productIds}
+              disabled={syncing}
+              onChange={onProductIdsChange}
+            />
           </div>
         </div>
 

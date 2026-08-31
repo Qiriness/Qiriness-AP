@@ -1,6 +1,33 @@
 import { isVipRfmGroup } from '../../../scripts/lib/customer-segments.mjs';
 
 import { TOOL_NAMES } from './investigation-rules.mjs';
+import { productFromKnowledge } from '../retrieval/product-from-knowledge.mjs';
+
+/**
+ * Which product a retrieved ARTICLE says the question was about.
+ *
+ * THE ONE PLACE THIS IS DECIDED, read by both `product_identity`'s `satisfiedBy`
+ * and its `derive`. Those two answering differently is precisely the defect
+ * `product_property` carried until 2026-08-31 — a need reported unmet while the
+ * finding said it was answered — so they share a function rather than a rule.
+ *
+ * The precedence and confidence gates live in `productFromKnowledge`; this only
+ * assembles the two ledger entries it reads.
+ */
+function productFromArticles(entries) {
+  const lookup = lastByTool(entries, TOOL_NAMES.LOOKUP_PRODUCT);
+  const match = lookup
+    ? {
+        match: lookup.outcome === 'found' || null,
+        ambiguous: lookup.outcome === 'ambiguous',
+        // A range IS a resolution — the question was about a family — so it
+        // stands, and an article tag must not narrow it back to one product.
+        range: lookup.data?.reason === 'range' || null
+      }
+    : null;
+
+  return productFromKnowledge(match, lastByTool(entries, TOOL_NAMES.SEARCH_KNOWLEDGE)?.data?.chunks || []);
+}
 
 // What answering a ticket REQUIRES, and whether the investigation got it.
 //
@@ -33,9 +60,22 @@ const NEEDS = {
   // --- product ---------------------------------------------------------------
   product_identity: {
     label: 'quel produit est concerné',
-    satisfiedBy: [{ tool: TOOL_NAMES.LOOKUP_PRODUCT, outcomes: ['found'] }],
+    satisfiedBy: [
+      { tool: TOOL_NAMES.LOOKUP_PRODUCT, outcomes: ['found'] },
+      // THE ARTICLE CAN NAME THE PRODUCT THE TITLE MATCHER COULD NOT. « la
+      // batterie de mon masque ne tient pas » matches no title, because no title
+      // contains « batterie » — but the article answering it is tagged to the
+      // mask. Conditional, and deliberately so: an answerable knowledge result
+      // about anything else satisfies nothing here.
+      {
+        tool: TOOL_NAMES.SEARCH_KNOWLEDGE,
+        outcomes: ['answerable'],
+        satisfies: (_entry, entries) => productFromArticles(entries)?.ambiguous === false
+      }
+    ],
     // `ambiguous` deliberately does NOT satisfy: a tie between two products is
-    // precisely the case where the reply must ask rather than pick.
+    // precisely the case where the reply must ask rather than pick. That holds
+    // for two articles disagreeing exactly as it does for two titles.
     asksCustomer: 'product_name'
   },
   product_property: {
@@ -81,6 +121,16 @@ const NEEDS = {
     label: 'l’état du paiement',
     satisfiedBy: [{ tool: TOOL_NAMES.GET_ORDER_CONTEXT, outcomes: ['found'] }],
     asksCustomer: 'order_date_or_amount'
+  },
+  // WHO IS WRITING, which is not the same question as what they want. A
+  // pharmacy asking for an invoice duplicate asks a payment question; the
+  // subject is right and only the sender is unusual. Four such tickets sit in
+  // `payment` and `promotions` today, and recategorising them to `b2b` would
+  // file them beside supplier dunning and lose what they were about.
+  buyer_type: {
+    label: 'si l’expéditeur est un client professionnel ou un particulier',
+    satisfiedBy: [{ tool: TOOL_NAMES.GET_ORDER_CONTEXT, outcomes: ['found', 'not_resolved'] }],
+    asksCustomer: null
   },
   refund_state: {
     label: 'l’état du remboursement',
@@ -231,9 +281,16 @@ export const NEED_KEYS = Object.keys(NEEDS);
  *
  * SUBJECT-AGNOSTIC BY CONSTRUCTION. Nothing here knows about products; a report
  * built on it works for any answer set without change.
+ *
+ * UNCONDITIONAL SOURCES ONLY. `product_identity` reads the library too, but only
+ * to learn which product a tagged article was about — an article that answers a
+ * question without naming a product settles nothing there. Counting it would
+ * make the gap report claim the library is missing an article whenever the title
+ * matcher missed, which is a different problem with a different fix, and would
+ * bury the real gaps under it.
  */
 export const KNOWLEDGE_NEEDS = NEED_KEYS.filter((key) =>
-  (NEEDS[key].satisfiedBy || []).some((rule) => rule.tool === TOOL_NAMES.SEARCH_KNOWLEDGE)
+  (NEEDS[key].satisfiedBy || []).some((rule) => rule.tool === TOOL_NAMES.SEARCH_KNOWLEDGE && !rule.satisfies)
 );
 
 export function needLabel(key) {
@@ -288,12 +345,34 @@ function deriveKnowledge(entries) {
 }
 
 const FINDINGS = {
+  buyer_type: {
+    values: ['trade', 'consumer', 'unknown'],
+    // MEASURED, not guessed: 6 of 574 inbound messages name a sum above the
+    // ceiling and all six are trade — a pharmacy, a company, an invoice
+    // reminder, a partner chasing late orders, and a €1,901.93 « facture
+    // définitive » against an order Shopify has never held. No consumer
+    // ticket trips it.
+    //
+    // A MISSING ORDER IS DELIBERATELY NOT A TRADE SIGNAL. It is why PA-30
+    // asks for a number, but a mistyped reference or a guest checkout
+    // produces one too — see `deriveBuyerType`.
+    derive(entries) {
+      return lastByTool(entries, TOOL_NAMES.GET_ORDER_CONTEXT)?.data?.buyerType ?? 'unknown';
+    }
+  },
+
   product_identity: {
     values: ['resolved', 'ambiguous', 'none', 'unknown'],
     // `ambiguous` is a value in its own right, not a failure: a tie between two
     // products is the case where the reply must ask, and an answer variant
     // wants to branch on exactly that.
     derive(entries) {
+      // The article route runs FIRST and yields on its own: `productFromKnowledge`
+      // returns null whenever the matcher resolved anything, so a product the
+      // customer named can never be overwritten by one an article inferred.
+      const fromArticle = productFromArticles(entries);
+      if (fromArticle) return fromArticle.ambiguous ? 'ambiguous' : 'resolved';
+
       const entry = lastByTool(entries, TOOL_NAMES.LOOKUP_PRODUCT);
       if (!entry) return 'unknown';
       if (entry.outcome === 'found') return 'resolved';
@@ -924,7 +1003,14 @@ export function resolveNeeds(needs = [], ledger = [], toolNames = []) {
       for (const entry of entries) {
         if (entry?.tool !== source.tool) continue;
         attempted = true;
-        if (source.outcomes.includes(entry.outcome)) {
+        // `satisfies` is the optional narrower half of a source: tool + outcome
+        // is coarse, and some evidence only counts conditionally. An answerable
+        // knowledge result satisfies `product_identity` ONLY when the article it
+        // found was tagged with a product — without this the need and its
+        // finding drift apart, which is exactly the bug `product_property` had.
+        // It reads the whole ledger, so a source can depend on what another tool
+        // returned.
+        if (source.outcomes.includes(entry.outcome) && (!source.satisfies || source.satisfies(entry, entries))) {
           evidenceIds.push(entry.id);
         }
       }

@@ -251,7 +251,7 @@ Never auto-synced — every row is an explicit import or a hand-written article.
 | Table | Holds |
 | --- | --- |
 | `knowledge_documents` | `content_html` is the editor's truth; `approval_status` independent of Shopify publish `status`; `core_topic` = 1 of 6 slots, max one per shop; `voice_profile` jsonb = the drafting agent's system prompt on the singleton `brand` row (`roleDescription`, `toneAndVoice`, `responseFramework[]`, `guidelinesAndGuardrails[]`, `closingLine`, `signature`) — all five stored, so the worker reads one source rather than a constant in `web/` |
-| `knowledge_chunks` | retrieval chunks + `embedding vector(1536)` HNSW cosine, plus the determinism quadruple |
+| `knowledge_chunks` | retrieval chunks + `embedding vector(1536)` HNSW cosine, plus the determinism quadruple; `category` and `product_ids` denormalised from the parent document |
 
 ### Support exemplars
 
@@ -341,7 +341,7 @@ Written by the worker and the CLIs, read only by the Insights panels.
 | --- | --- | --- |
 | `01_foundation.sql` | extensions, `set_updated_at()`, `shops`, `integration_events`, `privacy_requests`, `data_access_events` | — |
 | `02_shopify.sql` | `is_valid_product_faqs()`, `customers`, `orders`, `products`, `shopify_metaobjects`, `promotions`, `shopify_content_sources`, `order_number_range()` | 01 |
-| `03_knowledge.sql` | `knowledge_documents`, `knowledge_chunks`, `match_knowledge_chunks()`, `search_knowledge_chunks_text()` | 01 |
+| `03_knowledge.sql` | `knowledge_documents` (+ `product_ids`), `knowledge_chunks` (+ `product_ids`), `match_knowledge_chunks()`, `search_knowledge_chunks_text()` — both RPCs return `product_ids` | 01 |
 | `04_support.sql` | `tickets`, `ticket_messages`, `email_blocklist`, `sender_directory`, `spam_audit`, `ticket_investigations`, `category_forwarding`, `ticket_forwards`, `categorisation_review`, the three views | 01, 02 |
 | `05_exemplars.sql` | `support_exemplars`, `support_exemplar_phrasings`, `support_answers`, `match_support_exemplars()` | 01, 03 (`french_unaccent`) |
 | `09_parameters.sql` | `support_parameters` | 01 |
@@ -371,6 +371,10 @@ All Route Handlers are server-only and use the Supabase service-role key.
 - `GET|PUT parameters` — every parameter set or not · set one, or clear it with a null
 
 **Navigation is a tab bar** in `agent-setup/layout.tsx` — Knowledge · Rules · Parameters, three places of equal standing. Matched exactly rather than by prefix, since `/agent-setup` is a prefix of the other two.
+
+**Which product an article is about** (`ProductAttachSelect` in the article workspace, over `PATCH /api/knowledge/articles/[id]`; the catalogue comes from the existing `/api/recommendations`). Writes `knowledge_documents.product_ids`, denormalised onto `knowledge_chunks` by `buildKnowledgeChunks` the same way `category` is, and returned by both retrieval RPCs. `agent/src/retrieval/product-from-knowledge.mjs` turns a retrieved chunk's tag into an identity, and `evidence-rules.mjs` reads it from one helper (`productFromArticles`) shared by `product_identity`'s `satisfiedBy` and its `derive`, so the need and the finding cannot disagree. Deliberately NOT in `content_hash`: retagging rewrites chunk rows without re-embedding a word.
+
+> `category` and `product_ids` answer different questions — the first decides **when** an article is searched (`categoriesToSearch` = the ticket's subject plus `faq`/`brand_story`/`other`), the second decides **what it resolves to** once found. Attaching a product does not make an article reachable from another subject.
 
 **What we suggest, by skin type** (`/agent-setup/recommendations` → `components/agent-setup/RecommendationList`, over `lib/server/recommendations-service.ts` and `/api/recommendations`). Writes `products.recommended_for_concerns` — the one column on that synced table this app owns. Curated rather than derived from the tags: `peaux sensibles` is on 52 of 90 sellable products and « tous les types de peaux » on 52 more, so a tag query answers "these 64", which is not a recommendation. The tag match is shown as a starting hint, and the list is searchable over title AND description (90 rows, and half these products are looked for by what they do rather than by the name on the box). `agent/src/retrieval/product-concerns.mjs` holds the closed concern vocabulary (catalogue `tags` ↔ customer `cues`) and `unclassifiedSkinTags` reports skin-family tags belonging to no concern after a product sync.
 

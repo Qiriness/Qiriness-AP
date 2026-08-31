@@ -48,6 +48,8 @@ export interface UpdateArticlePayload {
   approvalStatus?: Article["status"];
   sourceId?: string;
   voiceProfile?: VoiceProfile;
+  /** Full replacement of the attached products; [] detaches every one. */
+  productIds?: string[];
 }
 
 export async function createArticle(payload: CreateArticlePayload): Promise<Article> {
