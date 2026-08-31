@@ -228,6 +228,14 @@ export const CAVEATS = {
   // It forbids the denial too. « Ce produit ne peut pas causer cela » is the
   // same unfounded claim with the sign flipped, and it is the one a reply
   // defending the brand reaches for.
+  // THE SHOP HAS NOT DECIDED, WHICH IS NOT THE SAME AS "NO PRODUCT WOULD SUIT".
+  // The tags say most products suit most skin, so improvising from them would
+  // produce a confident recommendation nobody stands behind — and a customer
+  // acts on a product recommendation by buying it.
+  recommendation_uncurated:
+    'Ne recommander aucun produit précis : la boutique n’a arrêté aucune sélection pour ce cas. ' +
+    'Ne pas en déduire qu’aucun produit ne conviendrait, et ne pas en choisir un à partir des ' +
+    'descriptions ou des étiquettes — proposer que l’équipe revienne vers le client avec un conseil.',
   reaction_cause_unestablished:
     'Ne jamais affirmer, ni suggérer, que ce produit est à l’origine de la réaction — ' +
     'ni l’inverse. Le lien de cause à effet n’est pas établi et ne peut pas l’être ici. ' +

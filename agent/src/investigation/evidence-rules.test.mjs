@@ -5,6 +5,7 @@ import { MISSING_FIELDS } from './case-file.mjs';
 import {
   DETAIL_KEYS,
   FINDING_KEYS,
+  KNOWLEDGE_NEEDS,
   NEED_KEYS,
   NEED_STATES,
   findingValues,
@@ -641,4 +642,81 @@ test('a state Shopify never set is unknown, not guessed at', () => {
 test('the tool never having run is not the same as finding nobody', () => {
   const [gap] = resolveNeeds(['customer_account_state'], [], [TOOL_NAMES.LOOKUP_CUSTOMER]);
   assert.equal(gap.finding, 'unknown');
+});
+
+// --- which needs an article could answer --------------------------------------
+
+test('a knowledge need is exactly one an approved article can satisfy', () => {
+  // TESTED THROUGH THE BEHAVIOUR, not against the table it is derived from —
+  // asserting the list matches `satisfiedBy` would just restate the derivation.
+  // What matters is the observable property: a successful library search settles
+  // a knowledge need and settles nothing else.
+  //
+  // A HARDCODED LIST WOULD DRIFT SILENTLY, and the failure would be a gap report
+  // that stops counting a need — the one thing a report about missing knowledge
+  // must not do.
+  const answered = [
+    { id: 't1', tool: TOOL_NAMES.SEARCH_KNOWLEDGE, outcome: 'answerable', data: { verdict: 'answerable' } }
+  ];
+
+  for (const need of KNOWLEDGE_NEEDS) {
+    const [gap] = resolveNeeds([need], answered, [TOOL_NAMES.SEARCH_KNOWLEDGE]);
+    assert.equal(gap.state, 'satisfied', `${need} should be satisfied by an approved article`);
+  }
+
+  for (const need of NEED_KEYS.filter((key) => !KNOWLEDGE_NEEDS.includes(key))) {
+    const [gap] = resolveNeeds([need], answered, [TOOL_NAMES.SEARCH_KNOWLEDGE]);
+    assert.notEqual(gap.state, 'satisfied', `${need} must not be settled by a library search`);
+  }
+});
+
+test('a need no tool can satisfy is not mistaken for a missing article', () => {
+  // The gap report exists to name articles somebody could write. `other_fact` and
+  // `checkout_state` can never be satisfied by anything, so counting them would
+  // commission an article for a question no library can answer.
+  assert.ok(!KNOWLEDGE_NEEDS.includes('other_fact'));
+  assert.ok(!KNOWLEDGE_NEEDS.includes('checkout_state'));
+});
+
+test('the product sheet answers a product characteristic, not just the library', () => {
+  // THE NEED IS SATISFIED BY EITHER TOOL AND THE FINDING READ ONLY ONE. A run
+  // that pulled the whole sheet — description, usage, ingredients — and answered
+  // from it scored `none`, meaning "the library had nothing", which was true and
+  // beside the point.
+  //
+  // Measured before the fix: 8 of 13 product investigations reported as
+  // unanswered were `state: satisfied` with `finding: none`. The consequence is
+  // worse than a wrong report — a rule branching on `answered` could never fire
+  // for a question answered from the catalogue, where 89 of 98 active products
+  // keep their usage instructions.
+  const finding = (entries) =>
+    findingsOf(
+      resolveNeeds(['product_property'], entries, [TOOL_NAMES.LOOKUP_PRODUCT, TOOL_NAMES.SEARCH_KNOWLEDGE])
+    ).product_property;
+
+  const sheet = { id: 'p', tool: TOOL_NAMES.LOOKUP_PRODUCT, outcome: 'found' };
+  const silent = { id: 'k', tool: TOOL_NAMES.SEARCH_KNOWLEDGE, outcome: 'none' };
+
+  assert.equal(finding([sheet, silent]), 'answered');
+  // The sheet wins when both spoke: it is the more specific source for a
+  // characteristic OF A PRODUCT, where the library answers about the shop.
+  assert.equal(finding([sheet, { ...silent, outcome: 'weak' }]), 'answered');
+  // The library still answers on its own.
+  assert.equal(finding([{ ...silent, outcome: 'answerable' }]), 'answered');
+});
+
+test('an ambiguous product is not an answered characteristic', () => {
+  // Two possible products means two possible ingredient lists, and neither is an
+  // answer — which is why `satisfiedBy` requires `found` and this matches it.
+  const finding = findingsOf(
+    resolveNeeds(
+      ['product_property'],
+      [
+        { id: 'p', tool: TOOL_NAMES.LOOKUP_PRODUCT, outcome: 'ambiguous' },
+        { id: 'k', tool: TOOL_NAMES.SEARCH_KNOWLEDGE, outcome: 'none' }
+      ],
+      [TOOL_NAMES.LOOKUP_PRODUCT, TOOL_NAMES.SEARCH_KNOWLEDGE]
+    )
+  ).product_property;
+  assert.equal(finding, 'none');
 });

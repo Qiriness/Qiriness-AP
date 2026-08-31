@@ -3,6 +3,8 @@ import { orderStates, toOrderContextText } from '../resolution/order-context.mjs
 
 import { toPromptText as photoPromptText } from './photo-evidence.mjs';
 
+import { concernsInText } from '../retrieval/product-concerns.mjs';
+
 import { planToolNames } from './decompose-rules.mjs';
 import { STALE_TRANSIT_DAYS, TOOL_NAMES, allowedTools } from './investigation-rules.mjs';
 
@@ -160,6 +162,36 @@ const DEFINITIONS = {
         }
       },
       required: ['product', 'reaction'],
+      additionalProperties: false
+    }
+  },
+  // THE ADVICE HALF OF THE PRODUCT SUBJECT. `lookupProduct` answers « parle-moi
+  // de ce produit »; this answers « lequel me conseillez-vous », which has no
+  // product to look up until it has recommended one.
+  //
+  // ONE ARGUMENT, AND THE SKIN CONCERN IS NOT IT. Which concerns a message
+  // mentions is read deterministically from the text by `concernsInText`, so it
+  // is not something the model is asked for and cannot be something it invents.
+  // What the model does supply is the product the customer says they ALREADY
+  // use, which needs reading rather than matching — « je suis passée de X à Y »
+  // names two and asks about neither.
+  [TOOL_NAMES.RECOMMEND_PRODUCTS]: {
+    description:
+      'Propose des produits à un client qui demande conseil. Si le client cite un produit qu’il ' +
+      'utilise déjà, le passer en argument : la boutique indique elle-même quels produits vont avec. ' +
+      'Sinon passer product: null — le type de peau est lu automatiquement dans le message. ' +
+      'Ne renvoie que des produits que la boutique a validés ; une liste vide veut dire qu’aucune ' +
+      'recommandation n’a été arrêtée, jamais qu’aucun produit ne conviendrait.',
+    parameters: {
+      type: 'object',
+      properties: {
+        product: {
+          type: ['string', 'null'],
+          description:
+            'Le produit que le client dit déjà utiliser, dans ses mots. null s’il n’en cite aucun.'
+        }
+      },
+      required: ['product'],
       additionalProperties: false
     }
   }
@@ -573,6 +605,79 @@ export function createToolRegistry({
             // lacks the product or the matcher simply missed it.
             candidates: result.candidates || []
           }
+        };
+      }
+,
+
+      /**
+       * What to put forward to somebody asking for advice.
+       *
+       * TWO SOURCES AND THEY ARE NOT INTERCHANGEABLE. A named product resolves
+       * to the shop's own cross-sell links — 198 of them, filled in per product
+       * by whoever set the catalogue up, so « quel autre produit irait bien avec
+       * celui-ci » is a join and not a judgement. A concern resolves to the
+       * curated column, which somebody has to fill in and which is empty until
+       * they do.
+       *
+       * THE TAGS ARE DELIBERATELY NOT A FALLBACK. `peaux sensibles` is on 52 of
+       * the 90 sellable products and « tous les types de peaux » on 52 more, so
+       * a tag query answers "for sensitive skin, these 64" — a list that reads
+       * like an answer and is not one. `not_curated` is the honest outcome and
+       * it is a state a rule can act on by handing the ticket to a person.
+       *
+       * NOTHING IS RANKED. The tool returns what the shop has decided, in the
+       * order the database gives; choosing three of them and writing a sentence
+       * around them is the drafting stage's job, under a rule.
+       */
+      async [TOOL_NAMES.RECOMMEND_PRODUCTS](args = {}) {
+        const named = String(args.product ?? '').trim();
+        // READ FROM THE MESSAGE, NOT ASKED OF THE MODEL. A closed cue list over
+        // the customer's own words cannot invent a concern the catalogue has
+        // never heard of.
+        const concerns = concernsInText(ticket.text);
+
+        if (named) {
+          const cross = await productLookup.crossSellFor(named);
+          if (cross.found && cross.products.length > 0) {
+            return {
+              outcome: 'cross_sell',
+              caveats: [],
+              promptText:
+                `Le client utilise « ${named} » (identifié : ${cross.source}). ` +
+                'La boutique associe ce produit aux suivants :\n' +
+                cross.products.map((p) => `- ${p.title}${p.summary ? ` — ${p.summary}` : ''}`).join('\n'),
+              data: { source: cross.source, concerns, titles: cross.products.map((p) => p.title) }
+            };
+          }
+        }
+
+        const recommended = await productLookup.recommendedFor(concerns);
+        if (recommended.length > 0) {
+          return {
+            outcome: 'by_concern',
+            caveats: [],
+            promptText:
+              `Type de peau lu dans le message : ${concerns.join(', ')}. ` +
+              'Produits que la boutique recommande pour cela :\n' +
+              recommended.map((p) => `- ${p.title}${p.summary ? ` — ${p.summary}` : ''}`).join('\n'),
+            data: { concerns, titles: recommended.map((p) => p.title) }
+          };
+        }
+
+        // Told apart because they need different replies: one is a question we
+        // have not answered yet, the other is a question we could not read.
+        const outcome = concerns.length > 0 ? 'not_curated' : 'nothing_to_go_on';
+        return {
+          outcome,
+          caveats: ['recommendation_uncurated'],
+          promptText:
+            outcome === 'not_curated'
+              ? `Type de peau lu dans le message : ${concerns.join(', ')}. ` +
+                'Aucune recommandation n’a été arrêtée par la boutique pour ce type de peau — ' +
+                'ne pas en improviser une.'
+              : 'Le message ne cite aucun produit et ne décrit aucun type de peau exploitable : ' +
+                'il n’y a pas de quoi recommander quoi que ce soit.',
+          data: { concerns, titles: [] }
         };
       }
     };

@@ -27,6 +27,12 @@ export function buildKnowledgeChunks(documentRow, options = {}) {
         section_index: Number.isInteger(section.order) ? section.order : null,
         section_heading: section.heading || null,
         category: documentRow.category,
+        // Denormalised with the category, and for the same reason: retrieval
+        // returns chunks, so anything a hit must be able to state has to travel
+        // on the chunk. Deliberately NOT part of `content_hash` below — the
+        // hash decides whether text needs re-embedding, and which products an
+        // article is about does not change a single word of it.
+        product_ids: Array.isArray(documentRow.product_ids) ? [...documentRow.product_ids] : [],
         chunk_text: chunkText,
         token_count: approximateTokenCount(chunkText),
         content_hash: hashJson({

@@ -24,6 +24,8 @@
     "embed:tickets:dry-run": "node scripts/embed-ticket-messages.mjs --dry-run",
     "embed:exemplars": "node scripts/embed-exemplars.mjs",
     "embed:exemplars:dry-run": "node scripts/embed-exemplars.mjs --dry-run",
+    "report:knowledge-gaps": "node scripts/report-knowledge-gaps.mjs",
+    "eval:matching": "node scripts/eval-product-matching.mjs",
     "import:exemplars": "node scripts/import-exemplars.mjs",
     "import:exemplars:dry-run": "node scripts/import-exemplars.mjs --dry-run",
     "cluster:tickets": "node scripts/cluster-ticket-messages.mjs",

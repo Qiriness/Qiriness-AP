@@ -29,6 +29,14 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         body.voiceProfile && typeof body.voiceProfile === "object"
           ? normalizeVoiceProfile(body.voiceProfile)
           : undefined,
+      // Ids only, deduplicated, non-strings dropped. The column has no foreign
+      // key (an array element cannot carry one), so this is the only place a
+      // malformed value can be rejected — and resolution filters to active
+      // products anyway, so an id that no longer exists resolves to nothing
+      // rather than to the wrong product.
+      productIds: Array.isArray(body.productIds)
+        ? [...new Set(body.productIds.filter((id: unknown): id is string => typeof id === "string" && id.length > 0))]
+        : undefined,
     });
     return NextResponse.json({ article });
   } catch (error) {

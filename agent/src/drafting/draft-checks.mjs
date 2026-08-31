@@ -107,7 +107,12 @@ export const ADVISORY_CAVEATS = [
   'knowledge_weak',
   'knowledge_none',
   'order_unconfirmed',
-  'product_ambiguous'
+  'product_ambiguous',
+  // "Do not improvise a recommendation" forbids a class of sentence rather than
+  // a phrasing: any product name in a reply could be a recommendation or could
+  // be the product the customer themselves named, and no pattern separates
+  // those. Listed so a reviewer sees it was not examined.
+  'recommendation_uncurated'
 ];
 
 /**

@@ -449,6 +449,149 @@ So a person decides once, on `/agent-setup/promotions`, and the reply screen onl
 
 ### The offer belongs to the rule, not to the reviewer
 
+### Product questions need branches, not more exemplars
+
+### `other` is reachable from every subject, because of what it means
+
+### A product question comes in four shapes, and the matcher reported two
+
+`matchProduct` answered "one product", "two products" or "nothing". Measured against the questions that actually arrive, that lost three distinctions:
+
+| the question | before | now |
+|---|---|---|
+| « le coffret Caresse Temps Sublime » | **ambiguous** (a sample won) | matched, 0.83 |
+| « la gamme Temps Sublime convient-elle… » | ambiguous | **range**, 12 products |
+| « vos produits sont-ils testés sur les animaux ? » | no_match | `no_product_named` |
+| « un lait solaire Caresse soleil suprême » | no_match | `partial_match` |
+
+Device versus cosmetic needed nothing: `led` is in one of 98 titles, so IDF already makes it nearly decisive while « masque » spans fifteen and settles nothing.
+
+### Samples were candidates for months, behind a filter that looked like it handled them
+
+A sample's title is the range name plus « échantillon » — short, so almost fully covered by any question naming the range. « Caresse Temps Sublime - échantillon » outranked **both** real coffrets, and « gamme active énergie » resolved to a sample too.
+
+`loadIndex` has claimed since it was written that samples are excluded. The query filtered `status = 'active'` — and the sample in the ticket that prompted that comment was `unlisted`, so it went away and the class looked closed. **Eight samples are `active`.** They are excluded by `product_type` now, which is why the title index loads that column, and `isCustomerFacing` states the rule where the matching reasoning lives rather than in a query.
+
+Excluding them fixed the coffret case on its own, before any of the rest.
+
+### A range is an intent read from the question, not a fallback for a weak match
+
+« gamme » appears in **zero** of the 98 titles, so a range has no marker in the data — it is simply a phrase several products share. `buildRanges` computes those from the catalogue: adjacent word pairs spanning two or more products, where at least one half of the pair is distinctive. « temps sublime » and « active energie » qualify; « soin visage » names a category and does not.
+
+**Derived, so next season's range works the day it syncs.** A hand-kept list would be wrong from the first product added to it.
+
+**A cue is required, and that is the guard.** « Le coffret Caresse Temps Sublime jour et nuit » contains a family phrase and asks about one product; without `gamme` / `ligne` / `collection` in the question it stays an ordinary match or an ordinary ambiguity. The cue list is the one hand-written vocabulary in the module, and unavoidably so — there is nothing in the titles to derive it from.
+
+**It yields to a confident match.** Both signals can be present: « la crème nuit Caresse Temps Sublime de la gamme anti-âge » scores 0.76 and is one product, while « la gamme Temps Sublime convient-elle… » scores 0.40 and is the family. Below 0.7 the cue wins.
+
+`match` is null whenever a range answered, for the same reason it is null on ambiguity: a caller reading only `match` must never silently get one product where the honest answer was a family.
+
+### `partial_match` claims only what it measures
+
+Two ways to match nothing need opposite replies — a shop-wide question wants an answer, a mis-named product wants « de quel produit s'agit-il ? ». The split is the best raw title coverage, floored at 0.15. Measured:
+
+```
+vos produits sont-ils testés sur les animaux ?   0.000
+100% de vos produits sont-ils vegan ?            0.088
+faire évoluer ma routine de soins du visage      0.202   <- named nothing
+un lait solaire Caresse soleil suprême           0.219   <- named something
+le mode pulsé sur le masque qiriness             0.250   <- named something
+la Crème Yeux Anti-Âge Regard d'Exception        1.000
+```
+
+The bands overlap, and the advice question sits on the wrong side. That miscall is cheap — advice is `recommendProducts`' job and this reason changes no reply — and separating them properly would need to know that « routine » is a request and « lait solaire » is a noun, which no token score can tell.
+
+**It is deliberately not called `not_in_catalogue`.** A product the shop never listed shares no words with any title, so it looks exactly like a question that named nothing and lands in `no_product_named`. The limit is in the signal rather than the threshold, and naming the value for the stronger claim would have been a lie the tests would then have enforced.
+
+### Coverage divides by the median title, because a verbose name was harder to say
+
+Title coverage asked "how much of this name did they say", so every marketing word appended to a title made that product harder to identify. « Déodorant Bille Anti-transpirant 48H - Fleur d'Oranger 100% Naturel - Roll On - Sans Alcool » is 51 weight over twelve tokens; a customer writing « le déodorant fleur d'oranger » covered 13.5 of it and scored **0.265 — below vague questions naming no product at all**:
+
+```
+                                matched  titleTotal   ratio
+le déodorant fleur d'oranger      13.53     51.0      0.265   <- correct, rejected
+un masque pour le visage           4.08     14.6      0.280   <- vague, scored higher
+une crème anti-âge                 4.54     14.7      0.309   <- vague, scored higher
+```
+
+The ranking was inverted, not merely low. The denominator is now `min(titleWeight, medianTitleWeight)`: identification needs only enough of a name that no other product fits, and past that more of it is redundant. The déodorant goes to 0.666 and matches.
+
+**The median rather than a constant**, so it tracks the catalogue instead of dating — and so `matchQuestionToOrder`, which reuses this scorer over the two or three lines of one order, gets a cap sitting next to both titles that therefore never binds. The same reuse already forced `EXACT_TIE_GAP`; a hardcoded saturation would have broken it a second time.
+
+**Measured against the live catalogue before and after, not just against the suite.** Every other case scored identically or moved slightly toward the right answer — « Caresse Temps Sublime »'s two real creams rose from 0.451 to 0.470 against the coffret leading them.
+
+### The bare name « Caresse Temps Sublime » resolves to a coffret that is not called that — open
+
+Not caused by the median cap: **0.596 before and after.** « Caresse Temps Sublime » is the name of two live creams — `… Caresse Temps Sublime` and `… Caresse Temps Sublime Riche` — and the matcher confidently returns *Coffret Temps Sublime - Anti-âge*, whose title contains no « caresse » at all. It clears `CLEAR_MATCH` because a short title is well covered by « temps sublime » alone.
+
+The gap is that **nothing penalises a leader for ignoring a distinctive word the customer used**. Coverage is measured in one direction only; a candidate missing « caresse » is not scored differently from one containing it. This is the exact class the module exists to prevent — quoting one product's ingredients at someone asking about another — so it is recorded here rather than left in a test.
+
+The taxonomy defines `other` as « rien de ce qui précède » — so an article filed there is one whose subject the taxonomy could not name, and restricting it to tickets the categoriser also gave up on is the narrowest possible audience for the broadest possible content. It joins `faq` and `brand_story` as always-searched.
+
+**Found by a real miss.** « Nos Points de Vente » — eight embedded chunks listing the shops that stock the brand — sat in `other` while « où puis-je acheter votre crème à Paris ? » arrived as `product`. The one article that answered it was the one the category filter hid. That article has been recategorised; this is the guard against the next one, and the principle is that **a mis-filed article should cost relevance, not reachability**.
+
+It costs nothing today: `other` holds one empty draft, so the category list is longer and the result set is not.
+
+### The retrieval fallback that was proposed, and why most of it already existed
+
+A cascade was proposed for unmatched questions: search knowledge, then fall back to FAQ chunks, mixing in keyword search, verifying the chosen chunk, then escalating to agentic RAG.
+
+**Three of those five already run on every call.** `searchKnowledge` issues dense (20) and lexical (20) **in parallel** over the ticket's category plus the shared ones, fuses them by rank, and bands the result three ways — `answerable` / `weak` / `none` — with `weak` never shown to a model. Sequencing knowledge *then* FAQ would issue two queries for rows one query already returns.
+
+**The measured problem was not retrieval.** The library is **61 chunks** (faq 11, product 4, legal 18) and knowledge reached a reply in **3 of 93 investigations**. Of product investigations, **13 of 15 wanted an article and got none** — every other subject scores 0–1. An agent that searches harder over four product chunks finds the same nothing, several model calls later: the failure is absence, not mis-ranking.
+
+**So agentic retrieval is deferred, and the condition for revisiting it is written down**: a report showing articles that EXIST and are not being found. That is not today's shape, and the cheap measurement is what would prove it either way.
+
+### The gap report costs nothing per ticket, and that is the point
+
+`npm run report:knowledge-gaps` reads `ticket_investigations.evidence_gaps`, which the investigation already stores, and joins it to the ticket the question arrived on. It writes nothing and runs no model. An agentic loop would answer the same question by spending a call per ticket, forever, to rediscover the same absences.
+
+**`weak` counts as a gap.** A chunk below the band is one the model was never shown, so as far as the reply is concerned the library was silent.
+
+**It reports the customer's own words, not the subject line.** Half this corpus arrives as « Nouveau message de client le 12 août », which names nothing — somebody deciding what to write needs the question, not the envelope.
+
+**`KNOWLEDGE_NEEDS` is derived from `satisfiedBy`, never listed.** A hardcoded list would be a second statement of which needs read the library, and the day a fourth is added the report would quietly stop counting it — the one failure a report about missing knowledge cannot have. It is also what makes the report subject-agnostic: nothing in it knows about products, so any answer set gets the same output for free.
+
+First run: **product 13 of 15 (87%)**, all but two of them `product_property` — the missing content is product facts (expiry dates, LED warranty, pulse mode, vegan status), not policy. That is the commissioning list, and it is the thing that moves the number.
+
+Product questions vary enormously in CONTENT and barely at all in ASK. There are about five asks on this subject — advice, product facts, a defect, stock, brand policy — and unlimited content. Content is what `lookupProduct` answers; putting it in the exemplar corpus would mean matching by embedding what the findings already carry.
+
+**The general/specific split is `product_identity`**, which has existed all along: `resolved · ambiguous · none · unknown`. « Quel produit avec celui-ci » names a product and « quel produit pour peau sensible » names a concern — the same ask, different evidence. So PR-25 stays one situation and gains phrasings for both shapes, and the branching happens in `when_conditions`.
+
+Measured after adding them: an unseen advice wording matches PR-25 at **0.752** and the other four product exemplars keep their own tickets (PR-24 0.958, PR-26 0.930, PR-28 0.828). The one shape that does not generalise is « qu'est-ce qui va bien avec » at **0.551** — which is the argument for the branch rather than for more phrasings.
+
+### The concern vocabulary joins two languages, and is not a tag normaliser
+
+`peaux sensibles` is a tag nobody writes in an email; « ma peau tiraille » is an email nobody tags a product with. `product-concerns.mjs` holds the closed list in the middle: five readable concerns, each with catalogue `tags` on one side and customer `cues` on the other, plus `all_types` which is catalogue-only because nothing resolves to it from a message.
+
+**Without it there is no left-hand side.** « Si le client a la peau sensible, proposer X » is only a rule if *sensitive* is a value something resolves to; otherwise it is a phrase a model re-interprets every time, and "which products do we suggest for sensitive skin" has no readable answer.
+
+**IT IS NOT FOR CLEANING THE TAGS, which is what it looked like it should be.** The variant spellings are near-total overlaps — `peaux sèche` is on 56 products, all 56 also carrying `peaux sèches`; querying the plural alone misses **0** for dry, **0** for mature and **1** for combination. The duplicates are noise in the tag list, not gaps in coverage. An earlier note here claimed a query for `peaux sensibles` would miss things tagged `peau sensible`; it would not, because that tag is on no products at all.
+
+Cues are deliberately conservative: « rougeurs », « démangeaisons » and « brûlure » are absent from `sensitive` even though a dermatologist would list them, because a cue that also appears in an adverse-reaction report would pull a cosmetovigilance ticket into product advice. The subject split happens upstream and this must not fight it.
+
+### The tag reconcile runs on the sync that already happened
+
+Tags arrive on every product with every sync, so there is nothing extra to fetch and no second list to keep in step — a separate "all tags" table would be a copy of `products.tags` free to go stale on its own.
+
+**Scoped to the skin family, not to every tag.** This catalogue carries 190 distinct tags on the sellable products, and reporting all the unclassified ones would be a list nobody reads. `unclassifiedSkinTags` flags tags that look like they belong to this vocabulary and are not in it — four today: three descriptors (`eau de peau`, `effet seconde peau`, `soin de la peau`) and one real candidate, `peau terne et fatiguée`. Short enough to act on, which is the point.
+
+### Recommending is curation, not inference — the tags cannot do it
+
+The obvious build was "customer says sensitive → return products tagged sensitive". Measured, that returns **64 of the 90 sellable products**, because the merchandising is generous by design: `peaux sensibles` on 52 and « tous les types de peaux » on 52 more. That is right on a product page and useless in a reply. Narrowing helps only once: adding the `Apaisant` claim takes it to four — but claims are on **44 of 90 products**, so narrowing that way silently drops half the catalogue.
+
+So `products.recommended_for_concerns` is a curated column, filled in on `/agent-setup/recommendations`, and **the tags are deliberately not a fallback**. An uncurated concern returns nothing and the reply hands off, because a shortlist of 64 reads like an answer and is not one. It is the same decision `promotions.offerable_in_replies` records, for the same reason: no property of the data separates "what we would put forward" from "what is compatible", and a customer acts on a product recommendation by buying it.
+
+Both local columns survive the Shopify sync by not being in their mappers, and both mappers now have a test asserting that — adding either key would silently empty every choice on the next sync, which surfaces as the agent quietly recommending nothing rather than as an error.
+
+### `recommendProducts` has two sources and they are not interchangeable
+
+A named product resolves to `custom.cross_sell_products` — 198 links across 50 products, every one resolving, filled in by whoever set the catalogue up. « Quel autre produit irait bien avec celui-ci » is therefore a join and not a judgement, and it works today with nothing curated.
+
+A concern resolves to the curated column. `not_curated` and `nothing_to_go_on` are separate outcomes because they need opposite replies: the first is a question the shop has not answered, where a colleague should advise; the second is a message with nothing to go on, where the customer should be asked.
+
+**The skin concern is not an argument.** It is read from the message by `concernsInText`, a closed cue list over the customer's own words, so it cannot be a concern the model invented. What the model does supply is the product the customer says they already use — « je suis passée de X à Y » names two and asks about neither, which needs reading rather than matching.
+
 The first build put the code picker on the drafting screen, beside approve/edit/reject. **That was the wrong place**, and the reason is the same one the whole rules layer rests on: a reviewer choosing a code per reply is a decision taken under time pressure that can come out differently for two identical tickets. Which code somebody who never received theirs is given is a property of the SITUATION, so it belongs on the rule — chosen once, applied the same way every time, and visible in the rulebook without opening anything.
 
 It also moves the work off people entirely. With the code on the rule the agent writes the whole reply, and P-15 — seven tickets asking for the welcome discount — stops needing a human at all.

@@ -36,7 +36,8 @@ export const TOOL_NAMES = {
   GET_ORDER_CONTEXT: 'getOrderContext',
   VERIFY_PURCHASE: 'verifyPurchase',
   CHECK_PHOTO_EVIDENCE: 'checkPhotoEvidence',
-  IDENTIFY_REACTION_PRODUCT: 'identifyReactionProduct'
+  IDENTIFY_REACTION_PRODUCT: 'identifyReactionProduct',
+  RECOMMEND_PRODUCTS: 'recommendProducts'
 };
 
 const T = TOOL_NAMES;
@@ -108,7 +109,19 @@ const TOOLS_BY_SUBJECT = {
   // everything else: an adverse reaction is the case where a confident-looking
   // assembly is worse than none, and "we cannot find your order" is a
   // particularly bad thing to put in front of someone reporting a reaction.
-  product: [T.SEARCH_KNOWLEDGE, T.LOOKUP_PRODUCT, T.LOOKUP_STOCK, T.VERIFY_PURCHASE, T.CHECK_PHOTO_EVIDENCE],
+  // `recommendProducts` ADDED 2026-08-31 for the advice half of this subject.
+  // It is separate from `lookupProduct` because the questions are opposite:
+  // that one answers « parle-moi de CE produit », this one answers « lequel me
+  // conseillez-vous » — and the second has no product to look up until it has
+  // recommended one.
+  product: [
+    T.SEARCH_KNOWLEDGE,
+    T.LOOKUP_PRODUCT,
+    T.LOOKUP_STOCK,
+    T.VERIFY_PURCHASE,
+    T.CHECK_PHOTO_EVIDENCE,
+    T.RECOMMEND_PRODUCTS
+  ],
   product_stock: [T.LOOKUP_STOCK, T.LOOKUP_PRODUCT],
   promotions: [
     T.EXTRACT_PROMOTION_CODES,

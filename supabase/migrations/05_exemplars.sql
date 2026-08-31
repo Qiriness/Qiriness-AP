@@ -79,7 +79,7 @@ create table public.support_exemplars (
   -- unrecognised key would read as a requirement nothing can ever satisfy.
   constraint support_exemplars_requirement_needs_check check (
     requirement_needs <@ array[
-      'product_identity', 'product_property', 'product_availability',
+      'product_identity', 'product_property', 'product_availability', 'product_recommendation',
       'order_identity', 'order_state', 'delivery_state', 'payment_state',
       'refund_state', 'return_eligibility',
       'promotion_identity', 'promotion_validity', 'promotion_eligibility',

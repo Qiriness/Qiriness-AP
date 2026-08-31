@@ -52,7 +52,14 @@ test('a genuinely ambiguous name is reported, never guessed', () => {
   // "Caresse Temps Sublime" is in a coffret AND a night cream. Picking one and
   // quoting its ingredients at someone asking about an allergy is the failure
   // this prevents.
-  const result = matchProduct('le coffret Caresse Temps sublime jour et nuit', index);
+  //
+  // THE BARE NAME, because that is the case being described. This used to pass
+  // « le coffret Caresse Temps sublime jour et nuit », which on the real 98-title
+  // catalogue resolves cleanly to the Coffret at 0.83 — the words « coffret » and
+  // « jour et nuit » are doing real work. It only tied in this 14-product fixture,
+  // where IDF weights are nothing like the live ones, so the test was asserting a
+  // fixture artefact rather than the principle in its own comment.
+  const result = matchProduct('je vous écris au sujet de Caresse Temps Sublime', index);
   assert.equal(result.match, null);
   assert.equal(result.ambiguous, true);
   assert.ok(result.candidates.length >= 2);
@@ -76,7 +83,16 @@ test('a question naming no product at all matches nothing', () => {
 test('an empty catalogue does not throw', () => {
   const empty = buildProductIndex([]);
   assert.deepEqual(matchProduct('masque LED', empty), {
-    match: null, confidence: 0, ambiguous: false, tied: [], candidates: []
+    match: null,
+    confidence: 0,
+    ambiguous: false,
+    range: null,
+    // No catalogue means nothing can have been named in it — the caller must not
+    // read this as "we do not sell that", which is a claim about a catalogue we
+    // do not have.
+    reason: 'no_product_named',
+    tied: [],
+    candidates: []
   });
 });
 
@@ -95,4 +111,68 @@ test('candidates come back ranked with what matched, for a human to check', () =
   const result = matchProduct('masque LED visage', index, { minScore: 0.1 });
   assert.ok(result.candidates[0].score >= result.candidates[result.candidates.length - 1].score);
   assert.ok(result.candidates[0].matchedTokens.includes('led'));
+});
+
+// --- the four shapes a product question comes in ------------------------------
+
+test('a sample is never a candidate, however well its title matches', () => {
+  // THE BIGGEST MATCHING DEFECT ON THE REAL CATALOGUE, and it hid behind a
+  // status filter for months. A sample's title is the range name plus
+  // « échantillon » — short, so almost fully covered by any question naming the
+  // range — and eight of them are `active`, so filtering on status never touched
+  // them. On the live data « Caresse Temps Sublime - échantillon » outranked
+  // both real coffrets.
+  const withSample = buildProductIndex([
+    ...CATALOGUE,
+    { id: '99', title: 'Caresse Temps Sublime - échantillon', product_type: 'SAMPLE PRODUCT' }
+  ]);
+  const result = matchProduct('la crème nuit Caresse Temps Sublime', withSample);
+  assert.ok(!/échantillon/.test(result.match?.title ?? ''), 'a sample won the match');
+  assert.ok(!result.candidates.some((c) => /échantillon/.test(c.product.title)));
+});
+
+test('a range question is answered with the family, not one of its members', () => {
+  // « gamme » appears in ZERO of the 98 real titles, so a range has no marker in
+  // the data — it is a phrase several products share, computed from the
+  // catalogue so next season's range works the day it syncs.
+  const result = matchProduct('la gamme Temps Sublime convient-elle aux peaux sensibles ?', index);
+  assert.equal(result.ambiguous, false, 'a range is an answer, not a question to send back');
+  assert.equal(result.match, null);
+  assert.ok(result.range, 'no range reported');
+  assert.equal(result.range.name, 'temps sublime');
+  assert.ok(result.range.products.length >= 2);
+});
+
+test('naming a family without asking about the family is still one product', () => {
+  // THE GUARD THAT KEEPS RANGES FROM EATING ORDINARY AMBIGUITY. « Le coffret
+  // Caresse Temps Sublime jour et nuit » contains a family phrase and is asking
+  // about ONE product — answering about the range would answer a question nobody
+  // asked, and lose the ambiguity that should go back to the customer.
+  const result = matchProduct('le coffret Caresse Temps sublime jour et nuit', index);
+  assert.equal(result.range, null);
+  // Resolved rather than tied: « coffret » and « jour et nuit » are doing real
+  // work, and on the live catalogue this lands on the Coffret at 0.83. What this
+  // test guards is the absence of a RANGE — the question names a family phrase
+  // and is asking about one item.
+  assert.ok(result.match, 'a question naming one product should resolve to it');
+});
+
+test('a device is told from a cosmetic by the catalogue, not by a rule', () => {
+  // `led` is in exactly one of 98 titles, so IDF makes it nearly decisive with
+  // no device-vs-cosmetic list to maintain.
+  assert.match(matchProduct('mon masque LED ne se recharge plus', index).match.title, /Masque LED/);
+});
+
+test('a question naming nothing is told from one naming something we lost', () => {
+  // OPPOSITE REPLIES. « Vos produits sont-ils testés sur les animaux ? » wants a
+  // shop-wide answer; a customer naming a discontinued product wants to hear that
+  // we no longer list it. Asking « de quel produit s'agit-il ? » is wrong for
+  // both, and telling the caller only "no match" leaves it to guess which.
+  assert.equal(matchProduct('vos produits sont-ils testés sur les animaux ?', index).reason, 'no_product_named');
+  assert.equal(matchProduct('bonjour, où est ma commande ?', index).reason, 'no_product_named');
+  assert.equal(
+    matchProduct('j’ai retrouvé un Coffret Énergie Lift trio vitalité de votre marque', index).reason ?? 'matched',
+    'matched',
+    'a product we DO sell should not report a reason at all'
+  );
 });

@@ -39,7 +39,7 @@ test('a ticket is embedded once and searched in its own category plus the shared
     assert.equal(calls.embedded.length, 1, 'exactly one embedding call');
     assert.match(calls.embedded[0], /Masque LED/);
     assert.match(calls.rpc[0].url, /\/rpc\/match_knowledge_chunks$/);
-    assert.deepEqual(calls.rpc[0].args.match_categories, ['product', 'faq', 'brand_story']);
+    assert.deepEqual(calls.rpc[0].args.match_categories, ['product', 'faq', 'brand_story', 'other']);
     assert.equal(calls.rpc[0].args.match_shop_id, 'shop-1');
     assert.equal(result.answerable, true);
     assert.equal(result.chunks[0].title, 'FAQ');

@@ -82,6 +82,8 @@ export interface KnowledgeArticleResponse {
   syncedAt: string | null;
   /** Structured brand-voice fields. Only non-null on the core_topic = 'brand' row. */
   voiceProfile: VoiceProfile | null;
+  /** Products this article is about. Empty when it is not product-specific. */
+  productIds: string[];
 }
 
 export interface CreateArticleInput {
@@ -110,6 +112,16 @@ export interface UpdateArticleInput {
   sourceId?: string;
   /** Full replacement of the structured brand-voice fields (see UpdateArticleInput.content for the analogous convention). Only meaningful on the core_topic = 'brand' row. */
   voiceProfile?: VoiceProfile;
+  /**
+   * Full replacement of the attached products (products.id). An empty array
+   * detaches every one, which is why this is a replacement rather than a
+   * merge — there would otherwise be no way to express "none".
+   *
+   * Does NOT touch the text, so it never converts an imported article to
+   * manual and never demotes an approved one: which products an article is
+   * about is metadata about the article, not a change to it.
+   */
+  productIds?: string[];
 }
 
 let cachedConfig: any = null;
@@ -327,6 +339,7 @@ export async function updateArticle(
     sections,
     content_hash: hashJson({ title, contentText, sections }),
     voice_profile: input.voiceProfile,
+    product_ids: input.productIds,
     // Once an imported article's content is edited it becomes a manual
     // article — shopify_source_id and handle are kept for provenance, but
     // nothing will resync it again.
@@ -654,6 +667,7 @@ function mapArticleRow(row: any, catalogIdByKey: Map<string, string>): Knowledge
     updatedAt: row.updated_at,
     syncedAt: row.synced_at,
     voiceProfile: row.core_topic === "brand" ? normalizeVoiceProfile(row.voice_profile) : null,
+    productIds: Array.isArray(row.product_ids) ? row.product_ids : [],
   };
 }
 

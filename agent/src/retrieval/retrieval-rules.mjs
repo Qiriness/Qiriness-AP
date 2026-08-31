@@ -37,10 +37,26 @@
  *
  * Searched for every subject, like `faq`, because a brand question arrives under
  * whatever subject the categoriser gave the surrounding email.
+ *
+ * `other` JOINED THEM 2026-08-31, AND THE REASON IS WHAT THE CATEGORY MEANS.
+ * The taxonomy defines it as « rien de ce qui précède » — so an article filed
+ * there is by definition one whose subject the taxonomy could not name, and
+ * restricting it to tickets the categoriser also gave up on is the narrowest
+ * possible audience for the broadest possible content.
+ *
+ * FOUND BY A REAL MISS. « Nos Points de Vente » — eight embedded chunks listing
+ * the shops that stock the brand — sat in `other` while « où puis-je acheter
+ * votre crème à Paris ? » arrived as `product`, so the one article that answered
+ * it was the one the filter hid. That article has since been recategorised, and
+ * this is the guard against the next one: a mis-filed article should cost
+ * relevance, not reachability.
+ *
+ * IT COSTS NOTHING TODAY. `other` holds one empty draft, so the list is longer
+ * and the result set is not — and an unembedded draft is unreachable anyway.
  */
 export function categoriesToSearch(subject) {
   const category = String(subject || '').trim();
-  const always = ['faq', 'brand_story'];
+  const always = ['faq', 'brand_story', 'other'];
   if (!category || always.includes(category)) {
     return always;
   }

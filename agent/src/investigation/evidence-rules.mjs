@@ -46,6 +46,15 @@ const NEEDS = {
     ],
     asksCustomer: null
   },
+  // WHAT WE HAVE TO PUT FORWARD, which is not `product_identity`. That one asks
+  // which product the message is about; this asks which products we can offer
+  // somebody who has not named one — the two are opposite ends of the same
+  // subject, and a rule for « lequel me conseillez-vous » needs the second.
+  product_recommendation: {
+    label: 'ce que la boutique recommande à ce client',
+    satisfiedBy: [{ tool: TOOL_NAMES.RECOMMEND_PRODUCTS, outcomes: ['cross_sell', 'by_concern'] }],
+    asksCustomer: null
+  },
   product_availability: {
     label: 'la disponibilité du produit',
     satisfiedBy: [{ tool: TOOL_NAMES.LOOKUP_STOCK, outcomes: ['found'] }],
@@ -208,6 +217,25 @@ const NEEDS = {
 
 export const NEED_KEYS = Object.keys(NEEDS);
 
+/**
+ * The needs an ARTICLE answers, derived rather than listed.
+ *
+ * DERIVED FROM `satisfiedBy`, so it cannot drift. A hardcoded list would be a
+ * second statement of which needs read the library, and the day somebody adds a
+ * fourth the gap report would quietly stop counting it — which is the one thing
+ * a report about missing knowledge must not do.
+ *
+ * WHAT IT IS FOR: telling "we looked in the library and it had nothing" apart
+ * from "no tool could have answered this". Only the first is an article somebody
+ * could write, and it is the whole input to deciding what to write next.
+ *
+ * SUBJECT-AGNOSTIC BY CONSTRUCTION. Nothing here knows about products; a report
+ * built on it works for any answer set without change.
+ */
+export const KNOWLEDGE_NEEDS = NEED_KEYS.filter((key) =>
+  (NEEDS[key].satisfiedBy || []).some((rule) => rule.tool === TOOL_NAMES.SEARCH_KNOWLEDGE)
+);
+
 export function needLabel(key) {
   return NEEDS[key]?.label || null;
 }
@@ -275,7 +303,31 @@ const FINDINGS = {
     }
   },
 
-  product_property: { values: KNOWLEDGE_FINDINGS, derive: deriveKnowledge },
+  // THE PRODUCT SHEET COUNTS, AND UNTIL 2026-08-31 IT DID NOT. This need is
+  // `satisfiedBy` either `lookupProduct` or `searchKnowledge`, and the finding
+  // read only the second — so a run that pulled the whole sheet and answered the
+  // question from it scored `product_property: none`, meaning "the library had
+  // nothing", which was true and beside the point.
+  //
+  // MEASURED: of 13 product investigations reported as unanswered, 8 were
+  // `state: satisfied` with `finding: none` — the tool had answered and the
+  // finding said otherwise. The consequence is worse than a wrong report: a rule
+  // branching on `product_property: answered` could never fire for a question
+  // answered from the catalogue, which is where 89 of 98 active products keep
+  // their usage instructions and 82 their ingredient lists.
+  //
+  // THE SHEET WINS WHEN BOTH SPOKE, because it is the more specific source for a
+  // characteristic OF A PRODUCT — the library answers about the shop.
+  // `ambiguous` deliberately does not count, matching `satisfiedBy`: two possible
+  // products means two possible ingredient lists, and neither is an answer.
+  product_property: {
+    values: KNOWLEDGE_FINDINGS,
+    derive(entries) {
+      const sheet = lastByTool(entries, TOOL_NAMES.LOOKUP_PRODUCT);
+      if (sheet?.outcome === 'found') return 'answered';
+      return deriveKnowledge(entries);
+    }
+  },
   policy_answer: { values: KNOWLEDGE_FINDINGS, derive: deriveKnowledge },
   brand_answer: { values: KNOWLEDGE_FINDINGS, derive: deriveKnowledge },
 
@@ -377,6 +429,21 @@ const FINDINGS = {
       if (account.disabled) return 'known_no_account';
       // A row whose `state` Shopify never set. Rare, and not worth guessing at.
       return 'unknown';
+    }
+  },
+
+  // FOUR OUTCOMES AND TWO OF THEM ARE "NOTHING TO SUGGEST" FOR DIFFERENT REASONS.
+  // `not_curated` is a skin type we read and have no answer for — the shop has
+  // not decided, and a reply should say a colleague will advise. `nothing_to_go_on`
+  // is a message with no product and no readable skin type, where asking the
+  // customer is the move. Collapsing them would send the wrong one of those two
+  // replies about half the time.
+  product_recommendation: {
+    values: ['cross_sell', 'by_concern', 'not_curated', 'nothing_to_go_on', 'unknown'],
+    derive(entries) {
+      const entry = lastByTool(entries, TOOL_NAMES.RECOMMEND_PRODUCTS);
+      if (!entry) return 'unknown';
+      return FINDINGS.product_recommendation.values.includes(entry.outcome) ? entry.outcome : 'unknown';
     }
   },
 

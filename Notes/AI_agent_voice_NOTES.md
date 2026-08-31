@@ -49,3 +49,7 @@ WHen there is a product problem or the user wants a return or exchange due to a 
 ### Order
 
 
+### Product
+
+Ask Qiriness rules for answering product questions and suggestions
+ if a client has sensitive skin suggest x product, or if they have used x product beofre suggest y product or if a specific body part is claimed respond with productlake 

@@ -166,3 +166,21 @@ test('the descriptionHtml fallback is converted to text, not stored as markup', 
   assert.match(row.description, /Hydrate/);
   assert.doesNotMatch(row.description, /<[a-z]|&[a-z]+;/i);
 });
+
+test('the mapper never writes recommended_for_concerns', () => {
+  // THE INVARIANT THE CURATION RESTS ON, the same one `offerable_in_replies`
+  // depends on over in promotions. `recommended_for_concerns` is the one column
+  // on `products` Shopify does not own — a person decides which products support
+  // puts forward for a skin concern — and it survives the sync only because this
+  // mapper omits it and the upsert merges duplicates.
+  //
+  // Add the key here and the next sync silently empties every curated list,
+  // which would show up as the agent quietly recommending nothing rather than as
+  // an error.
+  const row = mapProduct(
+    { id: 'gid://shopify/Product/1', title: 'Crème', status: 'ACTIVE', tags: ['peaux sensibles'] },
+    'shop-1',
+    '2026-08-31T00:00:00Z'
+  );
+  assert.ok(!('recommended_for_concerns' in row), 'the sync would empty the curated lists');
+});

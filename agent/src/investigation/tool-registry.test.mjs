@@ -20,6 +20,12 @@ function buildRegistry(overrides = {}) {
       },
       async lookupStock() {
         return { found: true, ambiguous: false, products: [{ title: 'Masque LED', purchasable: true }] };
+      },
+      async crossSellFor() {
+        return { found: true, source: 'Masque LED', products: [{ title: 'Crème Source d’Eau', summary: null }] };
+      },
+      async recommendedFor() {
+        return [{ title: 'Crème Apaisante', summary: null, concerns: ['sensitive'] }];
       }
     },
     promotionLookup: {

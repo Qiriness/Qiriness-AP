@@ -3,9 +3,14 @@ import test from 'node:test';
 
 import { createProductLookup } from './product-lookup.mjs';
 
+// Titles verbatim from the live catalogue. Products 4 and 5 are the real
+// ambiguity « Caresse Temps Sublime » names — two anti-âge creams that differ
+// only by `Nuit` and `Riche` — and both are here because a fixture small enough
+// that nothing can tie cannot test what happens when something does.
 const CATALOGUE = [
   { id: '2', title: 'Coffret Temps Sublime – Rituel Anti-Âge Global Crème et Gommage', status: 'active' },
   { id: '4', title: 'Crème Nuit Anti-Âge Régénérante Rétinol Vitamine C - Caresse Temps Sublime', status: 'active' },
+  { id: '5', title: 'Crème Anti-âge - Rétinol & Acide Hyaluronique - Caresse Temps Sublime Riche', status: 'active' },
   { id: '11', title: 'Masque LED Visage Éclat & Régénération', status: 'active' },
   { id: '15', title: 'Caresse Temps Sublime Nuit - échantillon', status: 'unlisted' }
 ];
@@ -19,6 +24,11 @@ const ROWS = {
   '4': {
     id: '4', title: 'Crème Nuit Anti-Âge Régénérante Rétinol Vitamine C - Caresse Temps Sublime',
     status: 'active', available_stock: 24, short_description: 'La crème de nuit.',
+    product_faqs: [], product_ingredients: [], variants: []
+  },
+  '5': {
+    id: '5', title: 'Crème Anti-âge - Rétinol & Acide Hyaluronique - Caresse Temps Sublime Riche',
+    status: 'active', available_stock: 61, short_description: 'La crème riche.',
     product_faqs: [], product_ingredients: [], variants: []
   },
   '11': {
@@ -89,10 +99,11 @@ test('the title index loads titles only, never descriptions', async () => {
 
 test('an ambiguous name returns BOTH products, not a refusal', async () => {
   // Silently picking one is the dangerous case; withholding both is merely
-  // unhelpful. "Le coffret Caresse Temps Sublime" genuinely names two products.
+  // unhelpful. « Caresse Temps Sublime » is the name of two real creams, and a
+  // customer writing it has told us everything they know.
   const { restore } = buildSupabase();
   try {
-    const r = await tools().lookupProduct('le coffret Caresse Temps sublime jour et nuit');
+    const r = await tools().lookupProduct('je vous écris au sujet de Caresse Temps Sublime');
     assert.equal(r.found, true);
     assert.equal(r.ambiguous, true);
     assert.equal(r.products.length, 2);
@@ -107,7 +118,7 @@ test('the rendered text states the ambiguity before either product', async () =>
   // second as extra detail — the silent pick, one layer up.
   const { restore } = buildSupabase();
   try {
-    const r = await tools().lookupProduct('le coffret Caresse Temps sublime jour et nuit');
+    const r = await tools().lookupProduct('je vous écris au sujet de Caresse Temps Sublime');
     assert.match(r.promptText, /^Attention : la demande peut correspondre à 2 produits/);
     assert.ok(r.promptText.indexOf('Attention') < r.promptText.indexOf('# '), 'warning comes first');
     assert.equal((r.promptText.match(/^# /gm) || []).length, 2, 'both products rendered');
@@ -154,7 +165,14 @@ test('a product nobody sells any more resolves to nothing', async () => {
   try {
     const r = await tools().lookupProduct('Galets Bain lacté relaxant, je ne vois plus ce produit');
     assert.equal(r.found, false);
-    assert.equal(r.reason, 'no_match');
+    // `no_product_named`, AND THAT IS THE HONEST LIMIT OF THE MEASURE. The
+    // customer did name a product — it simply shares no words with anything in
+    // the catalogue, so a title-overlap score cannot tell it from a question
+    // that named nothing at all. `partial_match` means "overlaps our vocabulary
+    // and still did not resolve", which is a narrower and truthful claim; a
+    // product the shop never listed lands here instead, and no scoring of titles
+    // could put it anywhere else.
+    assert.equal(r.reason, 'no_product_named');
   } finally {
     restore();
   }
@@ -192,7 +210,7 @@ test('an ambiguous stock question answers for every candidate', async () => {
   // usable reply where "which do you mean?" is another round trip.
   const { restore } = buildSupabase();
   try {
-    const r = await tools().lookupStock('le coffret Caresse Temps sublime');
+    const r = await tools().lookupStock('je vous écris au sujet de Caresse Temps Sublime');
     assert.equal(r.found, true);
     assert.equal(r.ambiguous, true);
     assert.equal(r.products.length, 2);

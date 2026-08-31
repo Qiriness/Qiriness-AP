@@ -1292,6 +1292,32 @@ export interface AgentPanel {
 }
 
 /**
+ * A sellable product, with what the catalogue says and what a person decided.
+ *
+ * `compatibleWith` COMES FROM THE TAGS AND IS ONLY A HINT. The merchandising is
+ * generous — most products are tagged as suiting most skin — which is right on a
+ * product page and useless in a reply. `concerns` is what support will actually
+ * put forward, and it is empty until somebody says otherwise.
+ */
+export interface RecommendableProduct {
+  id: string;
+  title: string;
+  summary: string | null;
+  productType: string | null;
+  /** Curated: the concerns this product may be recommended for. */
+  concerns: string[];
+  /** From the catalogue tags. Where to start curating, never the answer. */
+  compatibleWith: string[];
+}
+
+/** A concern a rule can branch on, with how many products are curated for it. */
+export interface ConcernOption {
+  key: string;
+  label: string;
+  curated: number;
+}
+
+/**
  * An active code promotion, as the curation screen shows it.
  *
  * `offerable` IS THE ONLY FIELD A PERSON SETS. Everything else is Shopify's and

@@ -1,0 +1,179 @@
+.wrap {
+  padding: 1.5rem 1.75rem 4rem;
+  max-width: 58rem;
+}
+
+.head {
+  margin-bottom: 1.25rem;
+}
+
+.title {
+  margin: 0 0 0.35rem;
+  font-size: var(--text-h2, 1.35rem);
+}
+
+.lede {
+  margin: 0;
+  color: var(--text-subtle);
+  max-width: 44rem;
+  line-height: 1.55;
+}
+
+/* The skin types, as tabs. The count is the curated total, which is the number
+   somebody is here to change. */
+.concerns {
+  display: flex;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.85rem;
+}
+
+.concernOff,
+.concernOn {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.4rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0.25rem 0.7rem;
+  font-size: var(--text-caption);
+  background: transparent;
+  color: var(--text-subtle);
+  cursor: pointer;
+}
+
+.concernOn {
+  background: var(--surface-raised, rgba(127, 127, 127, 0.14));
+  border-color: currentColor;
+  color: var(--text);
+  font-weight: 600;
+}
+
+.concernCount {
+  font-variant-numeric: tabular-nums;
+  opacity: 0.7;
+}
+
+/* Search and the tag filter on one line: they narrow the same list and reading
+   them apart invites using one without noticing the other. */
+.controls {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-bottom: 1rem;
+}
+
+.searchWrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0 0.65rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius, 8px);
+  background: var(--surface);
+  color: var(--text-subtle);
+}
+
+/* ONE focus ring, on the wrapper, matching the tickets search: the wrapper is
+   what looks like the control, and the global :focus-visible rule would
+   otherwise paint a second ring just inside this border. */
+.searchWrap:focus-within {
+  border-color: var(--teal, #2f7d5c);
+  box-shadow: 0 0 0 3px var(--teal-050, rgba(47, 125, 92, 0.15));
+}
+
+.searchInput {
+  width: 240px;
+  max-width: 100%;
+  padding: 6px 0;
+  border: none;
+  background: transparent;
+  font-family: inherit;
+  font-size: var(--text-body);
+  color: var(--text-strong);
+}
+
+.searchInput:focus,
+.searchInput:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+
+.filter {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: var(--text-caption);
+  color: var(--text-subtle);
+  cursor: pointer;
+}
+
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.4rem;
+}
+
+.row {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+}
+
+/* A curated product is the exception on this list, so it is the marked one. */
+.on {
+  border-left: 3px solid var(--accent, #2f7d5c);
+}
+
+.pick {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.7rem;
+  padding: 0.7rem 1rem;
+  cursor: pointer;
+}
+
+.main {
+  display: grid;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.name {
+  font-weight: 500;
+}
+
+.summary,
+.facts {
+  font-size: var(--text-caption);
+  color: var(--text-subtle);
+}
+
+.facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.15rem 0.9rem;
+}
+
+.muted {
+  color: var(--text-subtle);
+}
+
+/* Not an error: curating a product the tags do not cover is allowed, and worth
+   noticing while doing it. */
+.warn {
+  color: var(--warn, #a3541a);
+}
+
+.empty,
+.error {
+  color: var(--text-subtle);
+  line-height: 1.55;
+}
+
+.error {
+  color: var(--danger, #b3261e);
+}

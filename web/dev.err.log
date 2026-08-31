@@ -1,0 +1,60 @@
+[knowledge-api] Error: Supabase select from shops failed: JWT issued at future
+    at supabaseSelect (webpack-internal:///(rsc)/../scripts/lib/supabase-rest-client.mjs:140:15)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async getShopId (webpack-internal:///(rsc)/./lib/server/knowledge-service.ts:76:18)
+    at async GET (webpack-internal:///(rsc)/./app/api/tickets/[id]/thread/route.ts:26:24)
+    at async C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\compiled\next-server\app-route.runtime.dev.js:6:57228
+    at async eT.execute (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\compiled\next-server\app-route.runtime.dev.js:6:46851)
+    at async eT.handle (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\compiled\next-server\app-route.runtime.dev.js:6:58760)
+    at async doRender (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\base-server.js:1366:42)
+    at async cacheEntry.responseCache.get.routeKind (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\base-server.js:1576:40)
+    at async DevServer.renderToResponseWithComponentsImpl (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\base-server.js:1496:28)
+    at async DevServer.renderPageComponent (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\base-server.js:1924:24)
+    at async DevServer.renderToResponseImpl (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\base-server.js:1962:32)
+    at async DevServer.pipeImpl (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\base-server.js:922:25)
+    at async NextNodeServer.handleCatchallRenderRequest (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\next-server.js:272:17)
+    at async DevServer.handleRequestImpl (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\base-server.js:818:17)
+    at async C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\dev\next-dev-server.js:339:20
+    at async Span.traceAsyncFn (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\trace\trace.js:154:20)
+    at async DevServer.handleRequest (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\dev\next-dev-server.js:336:24)
+    at async invokeRender (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\lib\router-server.js:179:21)
+    at async handleRequest (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\lib\router-server.js:359:24)
+    at async requestHandlerImpl (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\lib\router-server.js:383:13)
+    at async Server.requestListener (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\lib\start-server.js:141:13)
+[knowledge-api] Error: Supabase select from shops failed: JWT issued at future
+    at supabaseSelect (webpack-internal:///(rsc)/../scripts/lib/supabase-rest-client.mjs:140:15)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async getShopId (webpack-internal:///(rsc)/./lib/server/knowledge-service.ts:76:18)
+    at async GET (webpack-internal:///(rsc)/./app/api/tickets/[id]/thread/route.ts:26:24)
+    at async C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\compiled\next-server\app-route.runtime.dev.js:6:57228
+    at async eT.execute (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\compiled\next-server\app-route.runtime.dev.js:6:46851)
+    at async eT.handle (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\compiled\next-server\app-route.runtime.dev.js:6:58760)
+    at async doRender (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\base-server.js:1366:42)
+    at async cacheEntry.responseCache.get.routeKind (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\base-server.js:1576:40)
+    at async DevServer.renderToResponseWithComponentsImpl (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\base-server.js:1496:28)
+    at async DevServer.renderPageComponent (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\base-server.js:1924:24)
+    at async DevServer.renderToResponseImpl (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\base-server.js:1962:32)
+    at async DevServer.pipeImpl (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\base-server.js:922:25)
+    at async NextNodeServer.handleCatchallRenderRequest (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\next-server.js:272:17)
+    at async DevServer.handleRequestImpl (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\base-server.js:818:17)
+    at async C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\dev\next-dev-server.js:339:20
+    at async Span.traceAsyncFn (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\trace\trace.js:154:20)
+    at async DevServer.handleRequest (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\dev\next-dev-server.js:336:24)
+    at async invokeRender (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\lib\router-server.js:179:21)
+    at async handleRequest (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\lib\router-server.js:359:24)
+    at async requestHandlerImpl (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\lib\router-server.js:383:13)
+    at async Server.requestListener (C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\node_modules\next\dist\server\lib\start-server.js:141:13)
+ ⚠ Fast Refresh had to perform a full reload due to a runtime error.
+ ⨯ components\agent-setup\RecommendationList.tsx (63:20) @ fold
+ ⨯ ReferenceError: fold is not defined
+    at eval (./components/agent-setup/RecommendationList.tsx:56:24)
+    at RecommendationList (./components/agent-setup/RecommendationList.tsx:55:65)
+digest: "1423543886"
+[0m [90m 61 |[39m   [90m// which of the two filters is responsible.[39m[0m
+[0m [90m 62 |[39m   [36mconst[39m shown [33m=[39m useMemo(() [33m=>[39m {[0m
+[0m[31m[1m>[22m[39m[90m 63 |[39m     [36mconst[39m needle [33m=[39m fold(query)[33m;[39m[0m
+[0m [90m    |[39m                    [31m[1m^[22m[39m[0m
+[0m [90m 64 |[39m     [36mreturn[39m products[33m.[39mfilter((p) [33m=>[39m {[0m
+[0m [90m 65 |[39m       [36mconst[39m compatible [33m=[39m[0m
+[0m [90m 66 |[39m         [33m![39monlyCompatible [33m||[39m p[33m.[39mcompatibleWith[33m.[39mincludes(concern) [33m||[39m p[33m.[39mconcerns[33m.[39mincludes(concern)[33m;[39m[0m
+ ⚠ Fast Refresh had to perform a full reload due to a runtime error.

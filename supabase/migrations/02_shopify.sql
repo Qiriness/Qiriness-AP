@@ -451,6 +451,23 @@ create table public.products (
   product_faqs jsonb not null default '[]'::jsonb,
   product_faq_metaobject_ids text[] not null default '{}',
   available_stock integer,
+  -- WHICH SKIN CONCERNS SUPPORT MAY RECOMMEND THIS PRODUCT FOR. Local, like
+  -- promotions.offerable_in_replies, and it survives the sync for the same
+  -- reason: `mapProductRow` returns a fixed column set and the upsert merges
+  -- duplicates, so a column absent from the payload is left alone. Nothing may
+  -- ever add this key to the mapper.
+  --
+  -- WHY IT IS NOT THE TAGS. `peaux sensibles` is on 52 of the 90 sellable
+  -- products and `tous les types de peaux` on 52 more — the merchandising says,
+  -- correctly, that most products suit most skin. That is the right answer for a
+  -- product page and a useless one for a recommendation: "for sensitive skin we
+  -- suggest these 64 products" is not a reply. The tags say what a product is
+  -- COMPATIBLE with; this says what support should actually put forward, which
+  -- is a judgement nobody has written down anywhere else.
+  --
+  -- EMPTY MEANS NOT CURATED, and the concern lookup returns nothing rather than
+  -- falling back to the tags — a shortlist of 64 would read as an answer.
+  recommended_for_concerns text[] not null default '{}',
   structured_facts jsonb not null default '{}'::jsonb,
   variants jsonb not null default '[]'::jsonb,
   published_at timestamptz,

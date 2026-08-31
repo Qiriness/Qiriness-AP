@@ -39,6 +39,21 @@ create table public.knowledge_documents (
   content_hash text not null,
   approval_status text not null default 'draft',
   core_topic text,
+  -- Products this article is ABOUT, so a chunk that retrieval found can say
+  -- which product the question was about when the title matcher could not.
+  --
+  -- `matchProduct` reads titles only, so « la batterie de mon masque ne tient
+  -- pas » identifies nothing: none of those words is in any title. The article
+  -- answering it knows what it is about, and retrieval finds it easily —
+  -- « batterie » and « télécommande » appear in zero other chunks — so the
+  -- article carries the identity the question could not.
+  --
+  -- NO FOREIGN KEY, because Postgres cannot reference from an array element.
+  -- The safe direction is the one that fails quietly: products are soft-deleted,
+  -- so ids persist, and resolution filters to active products anyway — a stale
+  -- id resolves to nothing rather than to the wrong product. Same shape as
+  -- orders.tracking_numbers and products.recommended_for_concerns.
+  product_ids uuid[] not null default '{}',
   voice_profile jsonb not null default '{}'::jsonb,
   synced_at timestamptz not null default now(),
   shopify_updated_at timestamptz,
@@ -109,6 +124,8 @@ create index knowledge_documents_shop_deleted_at_idx on public.knowledge_documen
 
 create index knowledge_documents_sections_gin_idx on public.knowledge_documents using gin (sections);
 
+create index knowledge_documents_product_ids_gin_idx on public.knowledge_documents using gin (product_ids);
+
 create trigger knowledge_documents_set_updated_at
 before update on public.knowledge_documents
 for each row
@@ -142,6 +159,12 @@ comment on column public.knowledge_documents.core_topic is
 
 comment on column public.knowledge_documents.voice_profile is
   'Structured brand-voice fields for the singleton Brand Voice article (core_topic = ''brand''): { roleDescription: string, toneAndVoice: string }. Empty ({}) on every other article. Always-included drafting-agent context, distinct from content_html (used on this row for freeform general-context guidance) and from ordinary knowledge_documents rows, which are selectively retrieved via knowledge_chunks.';
+
+comment on column public.knowledge_documents.product_ids is
+  'Products this article is about, set by an operator in the knowledge editor. Lets a retrieved chunk resolve the product a question was about when the title matcher could not -- the words customers use about a device (batterie, telecommande, s''allume) are in no product title. Denormalised onto knowledge_chunks. Never overrides a product the customer named, and never sets reaction_product: a cosmetovigilance attribution must come from the customer, not from which article was retrieved.';
+
+comment on column public.knowledge_chunks.product_ids is
+  'Denormalised from knowledge_documents.product_ids, the same way category is, so retrieval can resolve a product without a second query per hit.';
 
 comment on column public.knowledge_documents.source_metadata is
   'Small sanitized source metadata snapshot. Do not store full page HTML or unnecessary raw payloads here.';
@@ -181,6 +204,10 @@ create table public.knowledge_chunks (
   section_heading text,
   -- Denormalised from the parent document; constrained with it in 03.
   category text,
+  -- Denormalised from the parent document, the same way category is: retrieval
+  -- returns chunks, so the identity has to travel with the chunk or every hit
+  -- would need a second query back to its document.
+  product_ids uuid[] not null default '{}',
   chunk_text text not null,
   token_count integer,
   content_hash text not null,
@@ -225,6 +252,8 @@ create table public.knowledge_chunks (
 create index knowledge_chunks_document_id_idx on public.knowledge_chunks (knowledge_document_id);
 
 create index knowledge_chunks_category_idx on public.knowledge_chunks (category);
+
+create index knowledge_chunks_product_ids_gin_idx on public.knowledge_chunks using gin (product_ids);
 
 -- Approximate-nearest-neighbour index for cosine retrieval. HNSW needs pgvector
 -- >= 0.5.0 (Supabase's managed pgvector has it); on an older target, swap for
@@ -308,6 +337,7 @@ returns table (
   document_title text,
   section_heading text,
   category text,
+  product_ids uuid[],
   chunk_text text,
   similarity double precision
 )
@@ -323,6 +353,7 @@ as $$
     kd.title,
     kc.section_heading,
     kc.category,
+    kc.product_ids,
     kc.chunk_text,
     1 - (kc.embedding <=> query_embedding) as similarity
   from public.knowledge_chunks kc
@@ -365,6 +396,7 @@ returns table (
   document_title text,
   section_heading text,
   category text,
+  product_ids uuid[],
   chunk_text text,
   rank double precision
 )
@@ -398,6 +430,7 @@ as $$
     d.title,
     c.section_heading,
     c.category,
+    c.product_ids,
     c.chunk_text,
     ts_rank_cd(c.search_vector, q.tsq)::double precision
   from public.knowledge_chunks c

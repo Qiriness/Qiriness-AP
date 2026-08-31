@@ -71,6 +71,10 @@ export function createKnowledgeRetrieval({ supabase, embeddingsClient, logger })
       title: row.document_title,
       heading: row.section_heading,
       category: row.category,
+      // Products the article was tagged with, carried so a caller can resolve
+      // what the title matcher could not. It is only ever a candidate here —
+      // `productFromKnowledge` decides whether it is trustworthy enough to use.
+      productIds: Array.isArray(row.product_ids) ? row.product_ids : [],
       text: row.chunk_text,
       similarity
     });

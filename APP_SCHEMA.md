@@ -167,9 +167,16 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |   |   |                        # spam-audit (rows, body cap/clock, retention purge) ·
 |   |   |                        # spam-body-backfill · attachment-backfill
 |   |   |-- pipeline/            # categorise (classify-only) · categorise-runner
-|   |   |-- retrieval/           # retrieval-rules · knowledge-retrieval ·
+|   |   |-- retrieval/           # retrieval-rules (categoriesToSearch: the subject
+|   |   |                        #   plus faq + brand_story + other, all three
+|   |   |                        #   cross-subject) · knowledge-retrieval (dense 20
+|   |   |                        #   + lexical 20, fused by rank, banded three ways) ·
 |   |   |                        # exemplar-{rules,retrieval} (which situation is this) ·
-|   |   |                        # product-{matching,context,lookup} ·
+|   |   |                        # product-{matching,context,lookup} (four shapes:
+|   |   |                        #   one product / a range / ambiguous / nothing,
+|   |   |                        #   ranges derived from shared title bigrams;
+|   |   |                        #   samples are never candidates) ·
+|   |   |                        # product-concerns (customer cues <-> catalogue tags) ·
 |   |   |                        # promotion-{rules,lookup} · abandoned-checkout ·
 |   |   |                        # customer-{context,lookup} ·
 |   |   |                        # purchase-{verification,lookup} (three-state
@@ -178,7 +185,7 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |   |   |                        # decompose{,-rules} (tasks + needs, one call) ·
 |   |   |                        # answer-selection (which answer the findings
 |   |   |                        #   select, and the next need to collect) ·
-|   |   |                        # evidence-rules (20 needs, scored vs the ledger;
+|   |   |                        # evidence-rules (23 needs, scored vs the ledger;
 |   |   |                        #   + findings = the value each took, + a
 |   |   |                        #   requires/moot DAG and orderNeeds) ·
 |   |   |                        # photo-evidence (mentioned vs attached) ·
@@ -364,6 +371,8 @@ All Route Handlers are server-only and use the Supabase service-role key.
 - `GET|PUT parameters` — every parameter set or not · set one, or clear it with a null
 
 **Navigation is a tab bar** in `agent-setup/layout.tsx` — Knowledge · Rules · Parameters, three places of equal standing. Matched exactly rather than by prefix, since `/agent-setup` is a prefix of the other two.
+
+**What we suggest, by skin type** (`/agent-setup/recommendations` → `components/agent-setup/RecommendationList`, over `lib/server/recommendations-service.ts` and `/api/recommendations`). Writes `products.recommended_for_concerns` — the one column on that synced table this app owns. Curated rather than derived from the tags: `peaux sensibles` is on 52 of 90 sellable products and « tous les types de peaux » on 52 more, so a tag query answers "these 64", which is not a recommendation. The tag match is shown as a starting hint, and the list is searchable over title AND description (90 rows, and half these products are looked for by what they do rather than by the name on the box). `agent/src/retrieval/product-concerns.mjs` holds the closed concern vocabulary (catalogue `tags` ↔ customer `cues`) and `unclassifiedSkinTags` reports skin-family tags belonging to no concern after a product sync.
 
 **Codes support may offer** (`/agent-setup/promotions` → `components/agent-setup/PromotionList`, over `lib/server/promotions-service.ts` and `/api/promotions`). Every ACTIVE code discount from Shopify, with one switch per row writing `promotions.offerable_in_replies` — the only column on that synced table this app owns, and the only thing on the screen that is editable. `?offerable=true` is what the drafting screen fetches, so partner rates and the 100%-off product code never reach a reply surface.
 
