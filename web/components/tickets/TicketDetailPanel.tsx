@@ -340,6 +340,20 @@ export function TicketDetailPanel({ ticket }: TicketDetailPanelProps) {
                 each one is omitted entirely when the bundle does not carry it.
                 A row of dashes reads as "we looked and there is nothing", which
                 is a different and usually wrong claim. */}
+            {/* FIRST, AND ONLY WHEN IT IS NOT THE WEB STORE. A marketplace order
+                changes how every line under it reads — an Amazon order marked
+                Fulfilled with no parcel is normal, and the same pair on a web
+                order means something went wrong. The reviewer needs that before
+                the facts, not after them. */}
+            {order?.channel && (
+              <div className={styles.fact}>
+                <dt>Sales channel</dt>
+                <dd>
+                  <span className={styles.channelChip}>{order.channel}</span>
+                </dd>
+              </div>
+            )}
+
             {order?.orderStatus && (
               <div className={styles.fact}>
                 <dt>Order status</dt>

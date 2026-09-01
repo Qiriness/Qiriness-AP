@@ -197,7 +197,11 @@ function Step({ event }: { event: TraceEvent }) {
           <ClaimList label="Unverified" items={(event.unverified as unknown[]) ?? []} />
           <ClaimList label="Missing — only the customer can supply these" items={(event.missing as unknown[]) ?? []} />
           <ClaimList label="Must not claim" items={(event.doNotClaim as unknown[]) ?? []} />
-          <PolicyBlock policy={event.policy} verdict={str(event.verdict)} />
+          <PolicyBlock
+            policy={event.policy}
+            verdict={str(event.verdict)}
+            answerSet={str(event.answerSet)}
+          />
           {event.handoff ? (
             <Verbatim
               label="Handoff — internal, never sent to a customer"
@@ -468,41 +472,123 @@ function TrackingParcelList({ parcels }: { parcels: TrackingParcel[] }) {
 }
 
 /**
- * The policy rule this evidence selected, and what it would have done.
+ * The policy rule this evidence selected, and what it did.
  *
  * SHOWN BESIDE THE VERDICT, and since the route went live it says whether the
  * rule MOVED that verdict and what it moved from. Rendering it next to the case
  * file rather than as its own step is deliberate: the question being asked is
  * "was this rule right about THIS ticket", which is unanswerable without the
  * evidence and the verdict in the same eyeline.
+ *
+ * THE FINDINGS ARE PART OF THE ANSWER, NOT A DETAIL BELOW IT. A rule is chosen
+ * by a map of `need -> finding` derived from the tool ledger, so "why this rule"
+ * and "why no rule" are both unanswerable from the key alone. They are rendered
+ * whether a rule matched or not, because the run that matched nothing is
+ * precisely the one whose findings a reviewer needs — a missing rule and a
+ * finding that came back `unknown` look identical without them.
  */
-function PolicyBlock({ policy, verdict }: { policy: unknown; verdict: string | null }) {
+function PolicyBlock({
+  policy,
+  verdict,
+  answerSet
+}: {
+  policy: unknown;
+  verdict: string | null;
+  answerSet: string | null;
+}) {
+  // NO POLICY IS A FINDING, and the transcript used to render nothing at all for
+  // it — which read as the rules layer not being wired, the one thing a
+  // rehearsal of that layer must never look like. `selectPolicy` returns null
+  // when the ticket's subject maps to no answer set, when the set holds no
+  // approved rule, and (rarely, logged as `investigation.policy_load_failed`)
+  // when the load threw. The copy covers all three by saying what came back
+  // rather than why.
   if (!policy || typeof policy !== "object") {
-    return null;
+    return (
+      <Fields>
+        <Field label="Policy rule">
+          {answerSet
+            ? `none consulted — the ${answerSet} set returned no approved rule`
+            : "none consulted — this subject has no answer set, so no rule can ever reach it"}
+        </Field>
+      </Fields>
+    );
   }
   const p = policy as Record<string, unknown>;
   const answerKey = str(p.answer_key);
   const route = str(p.route);
   const applied = p.applied === true;
   const before = str(p.verdict_before_policy);
+  // TOLERATES A BARE STRING for the same reason the loader does: `ask` was a
+  // single key until 2026-08-30. Reading it with `str()` — which returns null
+  // for an array — is what hid this field on every rule written since.
+  const ask = Array.isArray(p.ask)
+    ? (p.ask as unknown[]).map(str).filter((field): field is string => Boolean(field))
+    : str(p.ask)
+      ? [str(p.ask)!]
+      : [];
+  const findings = Object.entries(
+    (p.findings as Record<string, unknown> | null | undefined) ?? {}
+  );
+  const skeleton = str(p.answer_skeleton);
+  const offerCode = str(p.offer_code);
 
   return (
-    <Fields>
-      <Field label="Policy rule">
-        {answerKey ?? `no rule matched (${str(p.verdict) ?? "none"})`}
-      </Field>
-      {str(p.situation_key) ? <Field label="Situation">{str(p.situation_key)!}</Field> : null}
-      <Field label="Routing">
-        {route
-          ? applied
-            ? `${route} — the rule moved it, from ${before ?? "the investigation's verdict"}`
-            : `${route} — already there, the rule changed nothing`
-          : "leaves the verdict alone"}
-      </Field>
-      {str(p.ask) ? <Field label="Would ask for">{str(p.ask)!}</Field> : null}
-      {((p.candidates as unknown[]) ?? []).length > 1 ? (
-        <Field label="Also matched">{((p.candidates as string[]) ?? []).join(", ")}</Field>
+    <>
+      <Fields>
+        <Field label="Policy rule">
+          {answerKey ?? `no rule matched (${str(p.verdict) ?? "none"})`}
+        </Field>
+        <Field label="Answer set">{answerSet ?? str(p.answer_set) ?? "—"}</Field>
+        {str(p.situation_key) ? <Field label="Situation">{str(p.situation_key)!}</Field> : null}
+        <Field label="Routing">
+          {route
+            ? applied
+              ? `${route} — the rule moved it, from ${before ?? "the investigation's verdict"}`
+              : `${route} — already there, the rule changed nothing`
+            : "leaves the verdict alone"}
+        </Field>
+        {ask.length > 0 ? (
+          <Field label="Asks the customer for">
+            {ask.join(", ")}
+            {/* THE ASK IS GATED ON THE FINAL VERDICT, not on the route: the
+                questions join `missing` only where the reply was already going
+                to ask. Saying so here is the difference between a rule that
+                asked and a rule that wanted to. */}
+            {verdict === "needs_customer_input"
+              ? null
+              : ` — not asked: the verdict is ${verdict ?? "unknown"}`}
+          </Field>
+        ) : null}
+        {offerCode ? (
+          <Field label="Offers code">
+            {offerCode} — re-checked at drafting time, and dropped if it is no longer active
+          </Field>
+        ) : null}
+        {((p.candidates as unknown[]) ?? []).length > 1 ? (
+          <Field label="Also matched">{((p.candidates as string[]) ?? []).join(", ")}</Field>
+        ) : null}
+      </Fields>
+      {findings.length > 0 ? (
+        <div>
+          <p className={styles.subLabel}>
+            Findings the rule was selected on — derived from the tool ledger, never from the model
+          </p>
+          <ul className={styles.findings}>
+            {findings.map(([need, finding]) => (
+              <li key={need}>
+                {need} <span className={styles.finding}>{str(finding) ?? "—"}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
       ) : null}
-    </Fields>
+      {skeleton ? (
+        <Verbatim
+          label="Answer skeleton — the one field from this layer that reaches the drafting model"
+          text={skeleton}
+        />
+      ) : null}
+    </>
   );
 }

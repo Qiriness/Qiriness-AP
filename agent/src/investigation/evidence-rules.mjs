@@ -117,6 +117,17 @@ const NEEDS = {
     satisfiedBy: [{ tool: TOOL_NAMES.GET_ORDER_CONTEXT, outcomes: ['found'] }],
     asksCustomer: 'shopify_order_number'
   },
+  // WHETHER THE SHOP'S OWN DISPATCH WINDOW HAS RUN OUT, which is not what
+  // `order_state: not_dispatched` says. That one says the parcel has not left;
+  // this says whether it is LATE in leaving, and the two want opposite replies.
+  // Quoting the window at somebody already past it reads as a brush-off, and a
+  // customer asking whether their order has shipped has by definition waited
+  // long enough to wonder.
+  dispatch_state: {
+    label: 'si le délai d’expédition annoncé est dépassé',
+    satisfiedBy: [{ tool: TOOL_NAMES.GET_ORDER_CONTEXT, outcomes: ['found'] }],
+    asksCustomer: 'shopify_order_number'
+  },
   payment_state: {
     label: 'l’état du paiement',
     satisfiedBy: [{ tool: TOOL_NAMES.GET_ORDER_CONTEXT, outcomes: ['found'] }],
@@ -158,7 +169,29 @@ const NEEDS = {
     // including `undetermined` — that verdict is about eligibility, not validity.
     satisfiedBy: [
       { tool: TOOL_NAMES.LOOKUP_PROMOTION, outcomes: ['eligible', 'blocked', 'undetermined'] },
-      { tool: TOOL_NAMES.LIST_ACTIVE_PROMOTIONS, outcomes: ['found'] }
+      // THE LISTING ONLY SETTLES ANYTHING ONCE A CODE HAS BEEN IDENTIFIED, and
+      // until 2026-09-01 it settled this need unconditionally.
+      //
+      // The reasoning it was added under still holds where it applies: listing
+      // the active promotions establishes that the customer's code exists
+      // without saying which state that ONE code is in, so `satisfied` with a
+      // finding of `unknown` is the honest pair. What it missed is that
+      // `outcome: 'found'` here means THE SHOP has at least one active
+      // promotion — a fact about the shop, true on essentially every ticket,
+      // and independent of the email being read.
+      //
+      // MEASURED on the first promotions ticket a rule ever fired on
+      // (2026-09-01): `extractPromotionCodes` found nothing, so no code existed
+      // to be valid, and `promotion_validity` was still recorded `satisfied`.
+      // Nothing branched on it, because rules read findings rather than states —
+      // but the completeness gate in `codex_plans/Rule_Guided_Investigation_Plan.md`
+      // reads states, and would have counted the need as established while it
+      // held nothing.
+      {
+        tool: TOOL_NAMES.LIST_ACTIVE_PROMOTIONS,
+        outcomes: ['found'],
+        satisfies: (_entry, entries) => promotionIdentified(entries)
+      }
     ],
     asksCustomer: 'promotion_code'
   },
@@ -551,9 +584,40 @@ const FINDINGS = {
   // order. `order_identity` is the need that reports that gap, and the reply asks
   // for the number — these say nothing about it.
 
+  // WHICH ORDER, AS A VALUE — added 2026-09-01, and its absence was a live trap.
+  //
+  // `order_state: unknown` means two different things, because
+  // `stateFromOrderContext` returns it both when no order was confirmed (there
+  // are no states to read) and when an order WAS confirmed whose delivery state
+  // is unrecognised. A rule keyed on that pair asks the customer for a number we
+  // are already holding — the exact failure the "never ask for what is known"
+  // rule exists to stop.
+  //
+  // Derived from the tool's own outcome, which already draws the line: `found`
+  // against `not_resolved`. Same shape as `promotion_identity`, for the same
+  // reason — an identity is a value an answer branches on, not just a gap.
+  order_identity: {
+    values: ['resolved', 'none', 'unknown'],
+    derive(entries) {
+      const entry = lastByTool(entries, TOOL_NAMES.GET_ORDER_CONTEXT);
+      if (!entry) return 'unknown';
+      if (entry.outcome === 'found') return 'resolved';
+      if (entry.outcome === 'not_resolved') return 'none';
+      return 'unknown';
+    }
+  },
+
   order_state: {
     values: ['not_dispatched', 'dispatched', 'delivered', 'cancelled', 'unknown'],
     derive: (entries) => stateFromOrderContext(entries, 'order_state')
+  },
+
+  // `unknown` CARRIES REAL WEIGHT HERE: it is what a shop that has not set
+  // `dispatch_days` resolves to, and a rule branching on `within_window` must
+  // therefore never fire on a guess. See `dispatchState` in order-context.mjs.
+  dispatch_state: {
+    values: ['within_window', 'overdue', 'unknown'],
+    derive: (entries) => stateFromOrderContext(entries, 'dispatch_state')
   },
 
   delivery_state: {
@@ -901,6 +965,22 @@ export function findingValues(need) {
 // without identifying any single product, and asserting a dependency there
 // would force a lookup that the question does not need.
 
+/**
+ * Did any tool actually pin down WHICH code the customer means?
+ *
+ * `extractPromotionCodes` is crude on purpose and then filtered against the real
+ * promotions table, so a `found` outcome means the code exists — which is
+ * exactly the premise the active-listing leans on when it claims to settle
+ * validity. Shared rather than inlined, on the same principle as
+ * `productFromArticles`: a source's condition and the finding it feeds must read
+ * the same thing or they drift apart.
+ */
+function promotionIdentified(entries = []) {
+  return entries.some(
+    (entry) => entry?.tool === TOOL_NAMES.EXTRACT_PROMOTION_CODES && entry.outcome === 'found'
+  );
+}
+
 const DEPENDENCIES = {
   promotion_validity: { requires: ['promotion_identity'] },
   promotion_eligibility: {
@@ -913,6 +993,7 @@ const DEPENDENCIES = {
 
   // Dormant with the order family, and correct for when it wakes up.
   order_state: { requires: ['order_identity'] },
+  dispatch_state: { requires: ['order_identity'] },
   delivery_state: { requires: ['order_identity'] },
   payment_state: { requires: ['order_identity'] },
   refund_state: { requires: ['order_identity'] },

@@ -330,6 +330,38 @@ A finding states a value; it never states what the value is *of*. `promotion_val
 
 **Only the branched-on needs get a vocabulary.** Nine, chosen from what the 32 questions in `Email-Example-Queries.md` actually distinguish. Inventing enums for all 19 would be guessing at distinctions no answer depends on.
 
+### The active listing settles a code's validity only once a code is known (2026-09-01)
+
+`promotion_validity.satisfiedBy` named `listActivePromotions` unconditionally, on the reasoning recorded above: listing the active promotions establishes that the code exists without settling which state that ONE code is in, so `satisfied` + `unknown` is the honest pair.
+
+**The reasoning holds. Its premise does not always.** `outcome: 'found'` on that tool means THE SHOP has at least one active promotion — a fact about the shop, true on essentially every ticket, and independent of the email being read. Where no code was identified there is nothing for « le code existe et est actif » to be about, and the need was marked settled anyway.
+
+**Found on the first promotions ticket a rule ever fired on.** `extractPromotionCodes` returned `none`, `listActivePromotions` returned `found`, and `promotion_validity` was recorded `satisfied` while holding `unknown`. Nothing branched on it — **rules read findings, never states** — so no reply was affected. The completeness gate proposed in `codex_plans/Rule_Guided_Investigation_Plan.md` reads states, and would have counted the need as established while it held nothing.
+
+**Gated, not removed**, through the `satisfies` half of a source — the same mechanism `product_identity` uses for its knowledge route, reading a shared helper so the condition and the finding cannot drift. With a code identified the original reasoning applies unchanged and the pair stays `satisfied` + `unknown`; without one the listing satisfies nothing.
+
+**`satisfied` + `unknown` is therefore still legitimate, and `report:evidence-vocabulary` reports it as its own class rather than as a fault.** What it is worth reading for is exactly this: a source that is coarse on EVERY ticket is a source that should not satisfy at all.
+
+### `order_identity` gets a value, because `unknown` was two answers (2026-09-01)
+
+`stateFromOrderContext` returns `unknown` when no order was confirmed — there are no states to read — **and** when one was confirmed whose delivery state is unrecognised. A rule branching on `order_state: unknown` therefore fires on both, and the first wants « quel est votre numéro de commande » while the second wants a person.
+
+Asking a customer for a number already in the dossier is the failure the *never ask for what is known* rule exists to stop, so the fix belongs upstream of the rule: `order_identity` now carries `resolved` / `none` / `unknown`, derived from the tool's own outcome, which already draws the line between `found` and `not_resolved`. Same shape as `promotion_identity`, for the same reason — **an identity is a value an answer branches on, not merely a gap it reports.**
+
+It was one of three needs with no vocabulary, under the rule that only the branched-on needs get one. That rule stands; this need turned out to be branched-on.
+
+### The dispatch window is a state, because the number alone insults the reader
+
+`dispatch_days` was stored so a reply could stop guessing at how long dispatch takes. Quoting it turns out to be useful on day one and an insult on day eight — and day eight is the common case, because **a customer who writes to ask whether their order has shipped has by definition already waited long enough to wonder.** The most-asked question in the corpus (O-09, 22 messages) would have been answered with a brush-off.
+
+So the number is not the answer; **which side of it this order is on** is. `orderStates` gains `dispatch_state` — `within_window` / `overdue` / `unknown` — computed from `placedAt` against the parameter, exactly as `stale_in_transit` is computed against `staleTransitDays`.
+
+**Working days, and public holidays are not modelled.** That makes the elapsed count slightly high, which is the safe direction: it can tip an order into `overdue` a day early and route it to a person, and can never leave an overdue order looking `within_window` and send the brush-off.
+
+**`unknown` when the shop has not set the parameter.** Every parameter starts null, and a default here would be this codebase inventing a delivery promise on the merchant's behalf.
+
+**Read with `order_state`, never alone.** It is a statement about time since the order and says nothing about whether the parcel has since moved.
+
 ### Evidence dependencies are universal, so they live in code
 
 `requires` and `moot` sit beside `satisfiedBy`. Eligibility requires validity requires identity — for every ticket on earth, not for one situation — so restating it per exemplar would duplicate one graph N times and put control flow in a dashboard. An exemplar names the *set*; `orderNeeds()` derives the sequence.
@@ -354,7 +386,9 @@ The standard retrieval upgrade is to paraphrase a question into variants and uni
 - **It cannot enable a disabled subject.** A task landing on `delivery` is dropped from routing and reported to the model as a part it must declare unhandled. Half an email silently ignored is worse than an email never split.
 - **It cannot fail the investigation.** No call, a bad answer, or an API error all degrade to one task with the ticket's labels — exactly the pre-decomposition behaviour.
 
-**It runs in the investigation, not the categoriser**, although the categoriser already reads the same email and emits structured output. The categoriser runs on *every* ticket; investigation runs only on `ENABLED_SUBJECTS`, so decomposing there would pay for forwarded mail, level 4 and the `contact` kind. `shouldDecompose()` narrows further on cheap structural signals — a second subject from the categoriser, ≥320 chars, or ≥2 question marks — so an ordinary one-question ticket spends nothing.
+**It runs in the investigation, not the categoriser**, although the categoriser already reads the same email and emits structured output. The categoriser runs on *every* ticket; investigation runs only on `ENABLED_SUBJECTS`, so decomposing there would pay for forwarded mail, level 4 and the `contact` kind.
+
+**`shouldDecompose()` was removed on 2026-08-09 and this paragraph described it for three weeks after.** The gate — a second subject from the categoriser, ≥320 chars, or ≥2 question marks — was right while the call only *split* an email: paying a model to be told one question is one task is waste. It stopped being right when the same call began declaring the ticket's EVIDENCE NEEDS, which have to exist for every investigated ticket or the completeness report has a hole exactly where the short ordinary tickets are, and those are most of them. So the decomposer now runs on **every investigated ticket**: one `gpt-4o-mini` call against the two `gpt-4o` calls the investigation already makes.
 
 **Entities are copied, not inferred.** The extraction is told to return what the customer *wrote*; a date, an amount or a `Q00…` reference is not an order number. They are hints for the router, never facts: an order number still has to be confirmed against the order's email hash before anything is written.
 
@@ -1478,6 +1512,24 @@ A draft carries `disposition`: `terminal` when nothing is expected back and noth
 
 **When a send path is built, the anchor is made at send time**, from the same `splitTrackingText` the dashboard renders through — not by asking the model for a URL.
 
+### The parcel number is verified, not left to discretion (2026-09-01)
+
+`toOrderContextText` has always put the number in the prompt and never the URL, so the INPUT was already deterministic: the model is handed « Suivi : 6C21108711964 (Colissimo) » exactly when one exists. What was left to discretion was whether it used it — and a number withheld is a customer writing again to ask for something we were already holding.
+
+**An obligation, and the only one in `draft-checks.mjs`.** Every other check there proves a sentence is ABSENT; this one proves a fact was PASSED ON. Verified rather than appended by code, on the mechanism the signature already proves at 81/81 — the number belongs inside a sentence, not bolted onto the end of one.
+
+**Scoped to `order` and `delivery`.** Other subjects can carry a confirmed order without the parcel being what was asked about, and a check that fires on correct drafts is ignored within a week.
+
+**The measurement is why the skeleton stays conditional.** 1,483 of 1,487 fulfilled web orders carry a number, but 402 of 467 Amazon orders carry none — the marketplace fulfils them and nothing returns through Shopify. Three of the 78 tickets with a confirmed order hold no parcel. So the check asks for the number when we have one, and the SKELETON must never instruct giving one unconditionally: that is the `annulation_trop_tard` shape, and a fabricated tracking number looks real until the customer pastes it into La Poste.
+
+### A marketplace order is marked, because it changes how the block reads
+
+`sales_channel` is `Online Store` on 1,500 of 2,006 orders, `Amazon` on 467, `Mirakl Connect` on 36, `Shop` on 3. The panel shows it **only when it is not the online store**, because a mark on three quarters of orders is one nobody reads.
+
+**What it buys a reviewer:** `Fulfilled` with no parcel number is *normal* on an Amazon order and a *fault* on a web one. Without the channel those two are the same three lines.
+
+**Not an allow-list of marketplaces.** Anything that is not the web store is named, whatever it is called, so a channel added in Shopify appears on its first support ticket rather than when somebody remembers to extend a list.
+
 ### The approved closer is translated, not reproduced, outside French
 
 The brand voice is authored in French and the drafting prompt told the model to reproduce the signature « reproduite exactement, sans rien y changer ». It did. **All 5 non-French drafts written before this — 3 Italian, 1 Spanish, 1 English — carried a correct foreign-language body and then closed « N'hésitez pas à revenir vers nous… / Bien Cordialement, / Service Client Qiriness ». All 5 passed their checks**, because the check compared them to the French text and they matched it perfectly. 25 of 400 tickets are not in French.
@@ -1909,6 +1961,18 @@ Five or six model calls a run, two on the mid tier. `llm_usage` answers one ques
 A rehearsal you cannot look at again answers only "does it work right now". The two questions worth a table both need two runs: did changing the prompt, the article or the bands improve this, and **what should the agent have said**. The second is `agent_test_runs.ideal_body_text` — the same (model text, human text) capture `ticket_draft_edits` makes for real mail, with the difference that a rehearsal's situation can be INVENTED, so a gap can be written down before a customer has hit it. Nothing reads it yet and the UI says so: promising a feedback loop that does not exist is how a capture like this fills with text nobody trusts.
 
 The row keeps the MASK of the address and neither the plaintext nor a hash — nothing here matches on one, so a hash would be a bare identifier with no reader. Re-running an old test means typing the address again, which is the correct price.
+
+### A rule the transcript cannot show is a rule nobody reviews
+
+The rehearsal has always run the REAL rules — `loadAnswers` reads the same table the worker does, because a transcript is worth nothing if the policy it shows is not the policy. What it showed of them was thinner than what it applied, in three ways, and each one hid the question a reviewer was there to ask.
+
+**The `ask` field rendered on no rule at all.** `ask` became a list on 2026-08-30; the transcript read it with a helper that returns null for an array. A field that silently never appears is worse than an absent one — the block looked complete. It now tolerates the bare string too, exactly as the loader does, and says when the questions did NOT reach the case file: they join `missing` only where the final verdict is already `needs_customer_input`, so « asked » and « wanted to ask » are two different outcomes and the transcript now separates them.
+
+**The findings were not rendered.** They are what SELECTS the rule — a `need -> finding` map derived from the tool ledger — so both « why this rule » and « why no rule » are unanswerable from the key alone. Shown whether or not a rule matched, because the run that matched nothing is exactly the one whose findings are the answer: a missing rule and a finding that came back `unknown` are indistinguishable without them, and they want opposite fixes.
+
+**The skeleton was not rendered anywhere in the run.** It is the one field from this layer that reaches a model, and the failure mode it carries is documented — an instruction naming a fact the dossier does not hold is a reliable way to manufacture that fact, measured on `annulation_trop_tard` and a return-authorisation number this shop does not issue. That draft passed every mechanical check. **The review queue is what stands behind it**, and a reviewer who cannot see the skeleton is reviewing the reply without the instruction that shaped it.
+
+**And no policy at all is a finding, not a blank.** `selectPolicy` returns null when the subject maps to no answer set, when the set holds no approved rule, and when the load threw — it cannot say which, because it returns before it knows. The transcript rendered nothing, which read as the rules layer not being wired. The rehearsal now emits the answer set beside the case file, from the same mapping the runner used, so the block always states what could have applied.
 
 ## Migrations
 

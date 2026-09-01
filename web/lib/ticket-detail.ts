@@ -196,6 +196,10 @@ export function summariseOrderContext(context: unknown): TicketOrderFacts | null
     // address, so the account the order points at is the only name there is.
     customerName: nonEmpty((context as any)?.customer?.name),
     contactEmail: nonEmpty(order.contactEmailMasked),
+    // WEB IS THE ABSENCE OF A MARK, not a label saying "Online Store". A fact
+    // restated on 1,500 of 2,006 orders stops being read, and the whole value
+    // here is that an unusual channel catches the eye.
+    channel: marketplaceChannel(order.channel),
     orderStatus: labelOrderStatus(order.status?.overall),
     trackingStatus: labelDeliveryState(delivery.state),
     tracking: readTracking(delivery.tracking),
@@ -211,12 +215,34 @@ export function summariseOrderContext(context: unknown): TicketOrderFacts | null
     !facts.contactEmail &&
     !facts.orderStatus &&
     !facts.trackingStatus &&
+    !facts.channel &&
     facts.tracking.length === 0 &&
     facts.items.length === 0
   ) {
     return null;
   }
   return facts;
+}
+
+/**
+ * The channel, when it is worth naming.
+ *
+ * `buildOrderContext` stores `sales_channel || source_name`, which is "Online
+ * Store" for 1,500 of 2,006 orders and one of `Amazon` (467), `Mirakl Connect`
+ * (36) or `Shop` (3) for the rest. Only the rest are returned: the mark exists
+ * to say "this order does not behave like the others", and one that appeared on
+ * three quarters of orders would say nothing.
+ *
+ * NOT AN ALLOW-LIST OF MARKETPLACES. A new channel added in Shopify tomorrow
+ * should show up on the day it produces its first support ticket, not once
+ * somebody remembers to add it here — so anything that is not the online store
+ * is named, whatever it is called.
+ */
+function marketplaceChannel(channel: unknown): string | null {
+  const name = nonEmpty(channel);
+  if (!name) return null;
+  const normalised = name.trim().toLowerCase();
+  return normalised === "online store" || normalised === "web" ? null : name;
 }
 
 /** Line-item titles, deduplicated — a bundle repeats a title per unit. */

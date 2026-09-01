@@ -474,7 +474,11 @@ export function createToolRegistry({
                   // returns window is a policy only the shop can state, and its
                   // two approved articles disagree about it. Undecided arrives
                   // here as null and resolves `unknown`, never a default.
-                  returnsWindowDays: days(ticket.parameters, 'returns_window_days')
+                  returnsWindowDays: days(ticket.parameters, 'returns_window_days'),
+                  // Same contract as the returns window: the shop's number, or
+                  // null and a finding of `unknown`. Never a default — a
+                  // dispatch promise is the merchant's to make.
+                  dispatchDays: days(ticket.parameters, 'dispatch_days')
                 })
               : null,
             // WHO IS ASKING, carried by this tool because confirming the order

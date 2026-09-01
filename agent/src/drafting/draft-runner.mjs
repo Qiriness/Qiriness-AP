@@ -139,7 +139,13 @@ export async function runDrafting({
         // The signature check needs it: the approved wording is French, so on a
         // reply in another language it should have been translated rather than
         // reproduced, and "reproduced" is the failure.
-        language
+        language,
+        // The parcels we are already holding, and the subject that says whether
+        // the customer asked about them. Read from the same bundle the prompt
+        // was built from, so the check cannot ask for a number the model was
+        // never given.
+        parcels: orderContext?.order?.delivery?.tracking || [],
+        category: ticket.category
       });
       const passed = checksPassed(checks);
 

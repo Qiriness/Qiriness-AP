@@ -250,12 +250,32 @@ test('an active code in its window is active', () => {
 });
 
 test('a satisfied need can still be unknown when the tool is too coarse', () => {
-  // Listing active promotions satisfies promotion_validity, but says nothing
-  // about which state one specific code is in. Reporting `active` here would be
-  // inventing the very fact the listing does not carry.
-  const ledger = [{ id: 't1', tool: TOOL_NAMES.LIST_ACTIVE_PROMOTIONS, outcome: 'found', data: {} }];
+  // Listing active promotions satisfies promotion_validity ONCE A CODE IS KNOWN
+  // to exist, but says nothing about which state that one code is in. Reporting
+  // `active` here would be inventing the very fact the listing does not carry.
+  const ledger = [
+    { id: 't1', tool: TOOL_NAMES.EXTRACT_PROMOTION_CODES, outcome: 'found', data: {} },
+    { id: 't2', tool: TOOL_NAMES.LIST_ACTIVE_PROMOTIONS, outcome: 'found', data: {} }
+  ];
   const [resolved] = resolveNeeds(['promotion_validity'], ledger, ALL_TOOLS);
   assert.equal(resolved.state, 'satisfied');
+  assert.equal(resolved.finding, 'unknown');
+});
+
+test('the active listing settles nothing when no code was identified', () => {
+  // `outcome: 'found'` on the listing means THE SHOP has active promotions —
+  // true on nearly every ticket, and a fact about the shop rather than about the
+  // email. Without a code there is nothing for « le code existe et est actif »
+  // to be about, so the need is not settled.
+  //
+  // MEASURED 2026-09-01 on the first promotions ticket a rule fired on: no code
+  // was extracted and `promotion_validity` was recorded `satisfied` anyway.
+  const ledger = [
+    { id: 't1', tool: TOOL_NAMES.EXTRACT_PROMOTION_CODES, outcome: 'none', data: {} },
+    { id: 't2', tool: TOOL_NAMES.LIST_ACTIVE_PROMOTIONS, outcome: 'found', data: {} }
+  ];
+  const [resolved] = resolveNeeds(['promotion_validity'], ledger, ALL_TOOLS);
+  assert.equal(resolved.state, 'attempted', 'a tool ran, and none of them settled it');
   assert.equal(resolved.finding, 'unknown');
 });
 
@@ -719,4 +739,43 @@ test('an ambiguous product is not an answered characteristic', () => {
     )
   ).product_property;
   assert.equal(finding, 'none');
+});
+
+test('order_identity resolves to a value, so a rule can tell "which order" from "what state"', () => {
+  // THE TRAP THIS CLOSES. `order_state` reports `unknown` both when no order was
+  // confirmed and when one was whose delivery state is unrecognised. A rule
+  // keyed on that pair asks the customer for a number already in hand.
+  const resolved = [{ id: 't1', tool: TOOL_NAMES.GET_ORDER_CONTEXT, outcome: 'found', data: {} }];
+  const unresolved = [
+    { id: 't1', tool: TOOL_NAMES.GET_ORDER_CONTEXT, outcome: 'not_resolved', data: {} }
+  ];
+
+  assert.equal(finding('order_identity', resolved), 'resolved');
+  assert.equal(finding('order_identity', unresolved), 'none');
+  // Both report `order_state: unknown`, which is exactly why the pair was
+  // indistinguishable before this finding existed.
+  assert.equal(finding('order_state', resolved), 'unknown');
+  assert.equal(finding('order_state', unresolved), 'unknown');
+
+  // A tool that never ran is neither.
+  assert.equal(finding('order_identity', []), 'unknown');
+});
+
+test('dispatch_state is read off the order bundle like the other order states', () => {
+  const overdue = [
+    {
+      id: 't1',
+      tool: TOOL_NAMES.GET_ORDER_CONTEXT,
+      outcome: 'found',
+      data: { states: { dispatch_state: 'overdue' } }
+    }
+  ];
+  assert.equal(finding('dispatch_state', overdue), 'overdue');
+  // A shop that has not set `dispatch_days` resolves `unknown`, never a guess.
+  assert.equal(
+    finding('dispatch_state', [
+      { id: 't1', tool: TOOL_NAMES.GET_ORDER_CONTEXT, outcome: 'found', data: { states: {} } }
+    ]),
+    'unknown'
+  );
 });

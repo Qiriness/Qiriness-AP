@@ -1081,6 +1081,11 @@ function OrderFactsBlock({ order, candidate }: { order: TicketOrderFacts; candid
       <InfoList
         rows={[
           [candidate ? "Last order" : "Order", order.orderName],
+          // Named here as well as in the detail panel: this block is the one a
+          // reviewer reads first, and a marketplace order changes how the
+          // status and tracking lines under it should be read. Null on a web
+          // order, and `InfoList` drops a null row.
+          ["Sales channel", order.channel],
           ["Name on order", order.customerName],
           ["Order contact", order.contactEmail],
           ["Order status", order.orderStatus],

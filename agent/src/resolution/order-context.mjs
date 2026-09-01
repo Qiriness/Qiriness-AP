@@ -286,7 +286,7 @@ function num(value) {
  */
 export function orderStates(
   context,
-  { staleTransitDays = null, returnsWindowDays = null, now = new Date() } = {}
+  { staleTransitDays = null, returnsWindowDays = null, dispatchDays = null, now = new Date() } = {}
 ) {
   const order = context?.order;
   if (!order) {
@@ -312,6 +312,10 @@ export function orderStates(
   return {
     order_state: orderState,
     delivery_state: deliveryState(delivery, signals, staleTransitDays, now),
+    // HAS THE SHOP'S OWN DISPATCH WINDOW ELAPSED. Read together with
+    // `order_state`, never alone: it is a statement about time since the order,
+    // and says nothing about whether the parcel has since moved.
+    dispatch_state: dispatchState(order, dispatchDays, now),
     // REFUNDS BEFORE PAYMENT, and the order is the decision: a fully refunded
     // order is also `PAID` in Shopify, so testing `isPaid` first would report
     // money we have given back as money we are holding.
@@ -433,6 +437,56 @@ function returnEligibility(order, delivery, windowDays, now) {
  * this state is true — so it is the corpus that is unrepresentative, not the
  * state that is unused.
  */
+/**
+ * Whether the shop's own dispatch window has run out.
+ *
+ * WHY THIS EXISTS AT ALL. `dispatch_days` was stored so a reply could stop
+ * guessing at « votre commande part sous X jours ». Quoting that window is
+ * useful to somebody on day one and an insult to somebody on day eight — and
+ * the second is the common case, because a customer who writes to ask whether
+ * their order has shipped has, by definition, already waited long enough to
+ * wonder. So the number alone is not enough: a rule has to be able to branch on
+ * WHICH SIDE of the window this order is.
+ *
+ * WORKING DAYS, because that is what the parameter says it is. Public holidays
+ * are not modelled, which makes the count of elapsed working days slightly
+ * HIGH — and that is the safe direction: it can tip an order into `overdue` a
+ * day early, which routes to a person, and can never keep an overdue order
+ * looking `within_window`, which would send the brush-off reply.
+ *
+ * `unknown` WHEN THE SHOP HAS NOT SAID. `dispatch_days` starts null like every
+ * parameter, and a default here would be this codebase inventing a delivery
+ * promise on the merchant's behalf.
+ */
+function dispatchState(order, dispatchDays, now) {
+  if (!Number.isFinite(dispatchDays) || !order?.placedAt) {
+    return 'unknown';
+  }
+  const elapsed = workingDaysBetween(order.placedAt, now);
+  if (elapsed === null) {
+    return 'unknown';
+  }
+  return elapsed > dispatchDays ? 'overdue' : 'within_window';
+}
+
+/** Whole working days from `from` to `now`, Saturdays and Sundays excluded. */
+function workingDaysBetween(from, now) {
+  const start = new Date(from);
+  const end = new Date(now);
+  if (!Number.isFinite(start.getTime()) || !Number.isFinite(end.getTime())) {
+    return null;
+  }
+  const days = Math.max(0, Math.floor((end.getTime() - start.getTime()) / 86400000));
+  let working = 0;
+  for (let i = 1; i <= days; i += 1) {
+    const day = new Date(start.getTime() + i * 86400000).getUTCDay();
+    if (day !== 0 && day !== 6) {
+      working += 1;
+    }
+  }
+  return working;
+}
+
 function deliveryState(delivery, signals, staleTransitDays, now) {
   if (delivery.state === 'delivered') {
     return 'delivered';

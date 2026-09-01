@@ -607,6 +607,18 @@ export interface TicketOrderFacts {
    * says whether it is a gift, a partner's account, or something worth a look.
    */
   contactEmail: string | null;
+  /**
+   * The sales channel, and ONLY when it is not the online store — `Amazon`,
+   * `Mirakl Connect`, `Shop`. Null for a web order, which is the ordinary case
+   * and needs no mark.
+   *
+   * A marketplace order behaves differently in ways a reviewer has to know
+   * before replying: 402 of 467 Amazon orders carry no tracking number at all,
+   * because the marketplace fulfils them and the number never returns through
+   * Shopify. Reading "Fulfilled" with no parcel on a web order means something
+   * is wrong; on an Amazon order it is normal.
+   */
+  channel: string | null;
   /** Already labelled — the panel renders it as-is. */
   orderStatus: string | null;
   /** Already labelled. Null when the bundle carries no delivery block. */

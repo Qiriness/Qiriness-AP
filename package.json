@@ -25,6 +25,8 @@
     "embed:exemplars": "node scripts/embed-exemplars.mjs",
     "embed:exemplars:dry-run": "node scripts/embed-exemplars.mjs --dry-run",
     "report:knowledge-gaps": "node scripts/report-knowledge-gaps.mjs",
+    "report:investigation-calls": "node scripts/report-investigation-calls.mjs",
+    "report:evidence-vocabulary": "node scripts/report-evidence-vocabulary.mjs",
     "eval:matching": "node scripts/eval-product-matching.mjs",
     "import:exemplars": "node scripts/import-exemplars.mjs",
     "import:exemplars:dry-run": "node scripts/import-exemplars.mjs --dry-run",

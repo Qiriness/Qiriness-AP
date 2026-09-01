@@ -761,3 +761,53 @@ Pouvez-vous nous indiquer de quoi il s agit ?`,
   });
   assert.equal(check(french, 'asks:shopify_order_number').passed, false);
 });
+
+test('a parcel number we are holding has to reach the customer', () => {
+  const parcels = [{ number: '6C21108711964', carrier: 'Colissimo' }];
+  const find = (checks) => checks.find((c) => c.check === 'tracking_number_given');
+
+  const withheld = runDraftChecks({
+    body: clean,
+    signature: SIGNATURE,
+    category: 'delivery',
+    parcels
+  });
+  assert.equal(find(withheld).passed, false, 'the number was in the dossier and not in the reply');
+
+  const given = runDraftChecks({
+    body: `Bonjour,\n\nVotre colis 6C21108711964 est parti.\n\n${SIGNATURE}`,
+    signature: SIGNATURE,
+    category: 'delivery',
+    parcels
+  });
+  assert.equal(find(given).passed, true);
+
+  // A model that spaces the number out has still passed it on; failing that
+  // would be pedantry about whitespace rather than a check about facts.
+  const spaced = runDraftChecks({
+    body: `Bonjour,\n\nVotre colis 6C21 1087 11964 est parti.\n\n${SIGNATURE}`,
+    signature: SIGNATURE,
+    category: 'delivery',
+    parcels
+  });
+  assert.equal(find(spaced).passed, true);
+});
+
+test('the parcel check stays out of subjects the parcel is not the question in', () => {
+  const parcels = [{ number: '6C21108711964', carrier: 'Colissimo' }];
+  // A reaction reported on an order that happens to carry a parcel. Quoting the
+  // tracking number here would be a non-sequitur, so the check must not ask for
+  // it — a check that fires on correct drafts gets ignored within a week.
+  for (const category of ['cosmetovigilance', 'return_exchange', 'promotions', null]) {
+    const checks = runDraftChecks({ body: clean, signature: SIGNATURE, category, parcels });
+    assert.equal(
+      checks.some((c) => c.check === 'tracking_number_given'),
+      false,
+      `${category} should not be asked for a parcel number`
+    );
+  }
+
+  // And no parcel means nothing to pass on, whatever the subject.
+  const none = runDraftChecks({ body: clean, signature: SIGNATURE, category: 'delivery', parcels: [] });
+  assert.equal(none.some((c) => c.check === 'tracking_number_given'), false);
+});

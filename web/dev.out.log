@@ -80,3 +80,30 @@
  ○ Compiling /agent-setup/rules ...
  ✓ Compiled /agent-setup/rules in 1450ms (795 modules)
  GET /agent-setup/rules 200 in 2022ms
+ ✓ Compiled in 591ms (419 modules)
+ ✓ Compiled in 522ms (419 modules)
+ GET /agent-setup/rules 200 in 2132ms
+ ✓ Compiled in 924ms (776 modules)
+ ✓ Compiled in 418ms (786 modules)
+ ○ Compiling /api/policy/rules/[id] ...
+ ✓ Compiled /api/policy/rules/[id] in 2.1s (423 modules)
+ PATCH /api/policy/rules/9fa6754e-da74-4bf1-a164-f9fd268fe3c5 200 in 6418ms
+ PATCH /api/policy/rules/427b3767-4452-4bb8-ac3c-5aeb0e2d5b92 200 in 11598ms
+ PATCH /api/policy/rules/56e7ccac-d1f1-426f-a480-947a9250c572 200 in 7615ms
+ PATCH /api/policy/rules/d6ce6020-3a82-45ec-afe1-3623a6d1eeed 200 in 7618ms
+ PATCH /api/policy/rules/2a647b99-5d86-4209-ac83-15dd2b9adcac 200 in 7624ms
+ PATCH /api/policy/rules/ba2364d4-6ff0-420f-9e16-29616692003f 200 in 10740ms
+ GET /agent-setup/rules 200 in 1822ms
+ PATCH /api/policy/rules/4ab10e37-babe-4532-8503-596846fb1280 200 in 525ms
+ PATCH /api/policy/rules/596099f3-6c2d-4db3-bc9d-51839ec75ac0 200 in 301ms
+ PATCH /api/policy/rules/5c6cb6c1-319c-4356-a4f5-635a97e25938 200 in 403ms
+ PATCH /api/policy/rules/8ebcdadb-7b1c-4adf-be54-72c30280fd06 200 in 298ms
+ PATCH /api/policy/rules/ae377558-9d3b-43cd-a52c-980ce859ec53 200 in 288ms
+ PATCH /api/policy/rules/8271d2d0-8fca-4484-bd5a-f3a20133a29f 200 in 299ms
+ PATCH /api/policy/rules/9a399f1f-e05a-40b3-a31d-a5623221b381 200 in 452ms
+ PATCH /api/policy/rules/32f9bd61-5993-47ae-99b8-2fc4724b1bc0 200 in 347ms
+ PATCH /api/policy/rules/ffa67293-04fa-47d2-ac69-dfe2eda3c98e 200 in 358ms
+ ✓ Compiled in 498ms (419 modules)
+ ✓ Compiled in 573ms (419 modules)
+ ✓ Compiled in 1031ms (776 modules)
+ ✓ Compiled in 1236ms (786 modules)

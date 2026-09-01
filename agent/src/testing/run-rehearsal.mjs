@@ -12,7 +12,7 @@ import {
 import { createSpamClassifier } from '../ingestion/spam-classifier.mjs';
 import { createInvestigationStack } from '../investigation/create-investigation.mjs';
 import { createCaseFileStore, runInvestigation } from '../investigation/investigation-runner.mjs';
-import { allowedTools } from '../investigation/investigation-rules.mjs';
+import { allowedTools, answerSetFor } from '../investigation/investigation-rules.mjs';
 import { createOpenAIClient } from '../llm/openai-client.mjs';
 import { createCategoriser } from '../pipeline/categorise.mjs';
 import { runCategorisation } from '../pipeline/categorise-runner.mjs';
@@ -414,6 +414,13 @@ export async function runRehearsal({
         // A shadow record nobody can see is a shadow record nobody reviews, and
         // reviewing them is the entire point of the phase.
         policy: caseFile.policy,
+        // WHICH FAMILY OF RULES COULD HAVE APPLIED, and it is emitted because
+        // `policy` is null in three different situations a reader has to tell
+        // apart: the subject maps to no answer set, the set holds no approved
+        // rule, or the load failed. `selectPolicy` cannot say which — it returns
+        // null before it knows — so the set is read here, from the same mapping
+        // the runner used, and the transcript names it either way.
+        answerSet: answerSetFor(categorised.category),
         calls: callsSince(investigationMark)
       });
     }

@@ -255,3 +255,18 @@
   color: var(--text-subtle);
   font-style: italic;
 }
+
+/* The sales channel, when it is not the web store. A chip rather than plain
+   text because it is a warning about how to read the block, not another fact in
+   it — and neutral rather than loud, since an Amazon order is unusual, not
+   wrong. */
+.channelChip {
+  display: inline-block;
+  padding: 1px var(--space-2);
+  border-radius: var(--radius-pill);
+  background: var(--surface-sunken);
+  border: 1px solid var(--border);
+  font-size: var(--text-caption);
+  font-weight: var(--weight-medium);
+  color: var(--text-default);
+}

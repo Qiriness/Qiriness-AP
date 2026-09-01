@@ -10,6 +10,81 @@ Three sibling files carry the other halves, and this one deliberately does not d
 
 ---
 
+## The parcel number is checked, not left to the model, and a marketplace order says so (2026-09-01)
+
+**`tracking_number_given`** — the first OBLIGATION in `draft-checks.mjs`, where every other check proves a sentence is absent. When the dossier holds a parcel number and the ticket is `order` or `delivery`, the reply has to contain it. Whitespace-tolerant, because a model that writes « 6C21 1087 11964 » has passed the number on.
+
+Prompted-then-verified rather than appended by code, on the mechanism the signature check already proves at 81/81: the number belongs inside a sentence, not bolted to the end of one. The prompt has always carried the number and never the URL, so `no_web_link` still forbids the link.
+
+**Scoped to two subjects deliberately.** A cosmetovigilance reply about a reaction has no business quoting the tracking number of the order the product came from, and a check that fires on correct drafts gets ignored within a week.
+
+**Measured first, and the measurement changed the skeleton advice.** Of 1,487 fulfilled WEB orders 1,483 carry a number (99.7%) — but across all channels it is 80%, because 402 of 467 Amazon orders carry none: the marketplace fulfils them and the number never returns through Shopify. Zero of the 78 tickets with a confirmed order are Amazon, so the tail is small, but 3 of those 78 carry no parcel at all. **A skeleton must therefore still say « if the dossier holds one »** — an instruction to give a number that is absent is how one gets invented.
+
+**The sales channel is now on the ticket** — `TicketOrderFacts.channel`, rendered as a chip in the detail panel and a row in the expanded block, **only when it is not the online store**. Web is the absence of a mark: a fact restated on 1,500 of 2,006 orders stops being read. Not an allow-list of marketplaces either — anything that is not the web store is named, so a channel added in Shopify tomorrow shows up on its first support ticket rather than when somebody remembers to add it.
+
+Why it earns the space: an Amazon order reading `Fulfilled` with no parcel is normal, and the identical pair on a web order means something went wrong. The chip tells a reviewer which of the two they are looking at.
+
+## Two findings the O-09 rules need before they can be written (2026-09-01)
+
+**`order_identity` now resolves to a value** — `resolved` / `none` / `unknown`, from the order tool's `found` vs `not_resolved` outcome. It had none, so `order_state: unknown` was the only way to ask "do we know which order", and that value also covers a *confirmed* order whose state is unreadable. A rule on the pair would have asked customers for a number already in the dossier.
+
+**`dispatch_state` is new** — `within_window` / `overdue` / `unknown`, computed in `orderStates()` from `placedAt` against the stored `dispatch_days` (3), in working days. It exists because quoting the dispatch window at somebody already past it is a brush-off, and that is the common case for the corpus's most-asked question. See `DECISIONS.md § The dispatch window is a state`.
+
+The migration's `requirement_needs` check constraint gained `dispatch_state` too — caught by the test that exists to hold the SQL list and `NEED_KEYS` together, which is the second time that guard has paid for itself.
+
+## The corpus is fresh: 39 investigations, and the rules layer measured on real mail (2026-09-01)
+
+Every ticket in an enabled subject re-investigated — 186 model calls, ~332k tokens. Four hit OpenAI's 30k TPM ceiling on `gpt-4o`; three succeeded on retry and one exhausted its three attempts and was routed to a person with the reason recorded, exactly as `handleFailure` promises.
+
+**Rules reached 18 of 39 tickets, though only 12 matched a situation.** The difference is condition-only rules firing regardless of the matcher — which is the property that makes coverage independent of the 31% match rate. One verdict was tightened; none was loosened.
+
+**`return_exchange` has 8 approved rules and none of them fired**, on any of its three tickets. R-21 was the closest exemplar every time and matched none. A coverage hole in the authored set, invisible before this run.
+
+**The vocabulary is in better shape than the old corpus suggested**: 118 need entries, 2 contradictions, 5 coarse. No `product_property` satisfied-but-empty entry appeared, which is the first evidence that the 2026-08-31 fix holds against real mail.
+
+`report:evidence-vocabulary` gained one more distinction on the way: **`refund_state: none` means the order has no refund** — a fact the order bundle establishes — while `product_property: none` means the library held nothing. Same word, opposite epistemic status, so the empty-finding test now lists its exceptions by `need:finding` rather than by value alone.
+
+## A rule fired on real mail for the first time, and it found a bug (2026-09-01)
+
+One promotions ticket, run for real: 5 model calls, 7,284 tokens. **P-18 matched at 0.74** and `aucun_code_identifie` was selected — the first `support_answers` rule ever applied outside the test chat.
+
+**It did the job the layer exists for.** The investigation concluded `answerable`; the rule tightened it to `needs_customer_input`, asked for `promotion_code`, and offered `QIRINESS20`. `verdict_before_policy: answerable` beside `applied: true` is the tighten-only ratchet working on live mail.
+
+**The decomposer split the email into two tasks** — `promotions/problem` and `delivery/question` — and one rule fired, from the promotions set only. The delivery half was investigated and got no rule and no skeleton. That is the per-ticket/per-task gap described in the plan, observed rather than predicted.
+
+**The fresh row exposed a live scoring bug**, fixed the same day — see `DECISIONS.md § The active listing settles a code's validity only once a code is known`. `promotion_validity` was `satisfied` while holding `unknown`, because `listActivePromotions` satisfied it whether or not a code had been identified. Re-scoring the stored ledger with the fix moves it to `attempted`, and nothing else on the ticket moves.
+
+**The audit gained a distinction it was missing.** `satisfied` + `unknown` is not a disagreement — it is the documented honest pair for a tool too coarse to name a value — so it is now reported as its own class beside the real contradictions. The corpus reads 9 contradictions plus 2 coarse entries, rather than 11 faults.
+
+## Two read-only reports, and what they found (2026-09-01)
+
+`npm run report:investigation-calls` and `npm run report:evidence-vocabulary`. Both write nothing, call no model, and read tables the pipeline already fills. Built to answer the two questions that gate `codex_plans/Rule_Guided_Investigation_Plan.md`.
+
+**How much of an investigation the model chooses.** `tool_calls` drops the ledger's `source`, so opening moves are reconstructed by asking `openingMoves()` what the ticket's category would have opened with. That over-counts a decomposed ticket's extra moves as the model's, so every figure is an upper bound — the useful direction, since a near-zero upper bound would have settled the question. It is not near zero: **median 1 call beyond the floor, p90 2, 69% of investigations reach beyond it.** By subject, the share reaching: promotions 100%, payment 100%, return_exchange 100%, order 80%, product 53%, delivery 39%, account 33%.
+
+**Whether the evidence vocabulary agrees with itself.** Each gap entry states the same thing twice — `state` from `satisfiedBy`, `finding` from `derive` — by different routes over the same ledger, so a disagreement means one of them is wrong without needing a labelled set. **11 contradictions in 294 entries**, in four groups, the largest being the `satisfied` + `finding: none` shape that the `product_property` bug made.
+
+**The first version reported 20, and nine were its own false positive**: `attempted` + `promotion_eligibility: undetermined` is the *designed* pairing — `satisfiedBy` excludes `undetermined` deliberately so the tool's one honest gap is not laundered. `undetermined` joined the empty-findings set.
+
+**Three facts the reports turned up that matter more than their own output:**
+
+- **No rule has ever fired on real mail** — 0 of 93 investigations carry a policy record. The layer has only ever run in the test chat. 44 of 93 matched a situation, so its input exists.
+- **The corpus ends 2026-08-21**, eleven days ago. Every contradiction's most recent occurrence predates the `product_property` fix of 2026-08-31, which proves nothing, because nothing has run since. A backfill is now a prerequisite for concluding anything about the vocabulary.
+- **`products` (9) and `payments` (6) rules are `draft`.** `loadAnswers` reads approved only, so they are invisible to the agent. Approved counts: orders 17, cosmetovigilance 8, returns 8, promotions 7, accounts 6.
+
+## The test chat shows the rule it fired, and the evidence that picked it (2026-08-31)
+
+The rehearsal already ran the real rules — `loadAnswers` against the real table, the route tightening the verdict exactly as it does on live mail. The transcript showed less than it applied. Four fixes, all in `PolicyBlock` plus one field on the trace:
+
+- **`ask` rendered on no rule at all.** It became a list on 2026-08-30 and the block read it with a string helper, so « Would ask for » was silently absent on every rule written since. Now rendered, tolerating the pre-2026-08-30 bare string, and it says when the questions did not reach the case file — they join `missing` only where the final verdict is already `needs_customer_input`.
+- **The findings are shown**, matched or not. They are the `need -> finding` map the selection actually reads, so without them a missing rule and a finding of `unknown` look the same.
+- **The answer skeleton is shown**, labelled as the one field from this layer that reaches the drafting model. It is what a reviewer of a rule-shaped draft should read first.
+- **No policy is stated rather than blank.** `selectPolicy` returns null for three different reasons and cannot say which, so the rehearsal now emits `answerSet` beside the case file and the block names the family that could have applied.
+
+The offer code renders too, with the note that it is re-checked at drafting time.
+
+**Nothing about selection changed** — no agent behaviour is different, and the one agent-side edit is a field on the trace. `agent npm test` 1228 pass (one new), `web` typecheck and lint clean.
+
 ## `searchKnowledge` for cosmetovigilance, and what it reaches is a protocol (2026-08-30)
 
 The subject's tools are now `lookupCustomer` + `searchKnowledge`, both as opening moves, and its checklist gains *the knowledge base was consulted*. The order family and `verifyPurchase` stay out, which is the half of the original decision that has not changed.

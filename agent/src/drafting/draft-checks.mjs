@@ -241,6 +241,15 @@ export const SIGNATURE_LANGUAGE = 'fr';
  * advisory ones — never a bare list of failures, because the record of what was
  * examined is the part that stays useful after the draft is approved.
  */
+/**
+ * The subjects where a parcel number is part of the answer.
+ *
+ * `order` and `delivery` only. The other subjects can carry a confirmed order —
+ * a return, a payment question, a reaction — without the parcel being what the
+ * customer asked about.
+ */
+const PARCEL_SUBJECTS = ['order', 'delivery'];
+
 export function runDraftChecks({
   body = '',
   doNotClaim = [],
@@ -252,7 +261,13 @@ export function runDraftChecks({
   signature = '',
   // The reply's language. Only the signature check reads it, and only to know
   // whether the approved wording should have been reproduced or translated.
-  language = SIGNATURE_LANGUAGE
+  language = SIGNATURE_LANGUAGE,
+  // The parcels on this ticket's CONFIRMED order, as `resolved_context` holds
+  // them. Empty for the ticket with no confirmed order, which is most of them.
+  parcels = [],
+  // The ticket's subject. Read by one check, to know whether this reply is about
+  // where a parcel is.
+  category = null
 } = {}) {
   const isHandover = verdict === 'needs_human';
   const text = String(body || '');
@@ -297,6 +312,49 @@ export function runDraftChecks({
       check,
       passed: !hit,
       detail: hit ? `${label} — « ${hit[0]} »` : label
+    });
+  }
+
+  // --- the parcel number, when we are holding one --------------------------
+  //
+  // NOT A PROHIBITION BUT AN OBLIGATION, and the only one in this file. Every
+  // other check here proves a sentence is ABSENT; this one proves a fact was
+  // PASSED ON. It exists because the alternative is leaving it to the model's
+  // discretion, and a tracking number withheld is a customer who has to write
+  // again to ask for the thing we were already holding.
+  //
+  // WHY A CHECK RATHER THAN CODE THAT APPENDS IT. The same reason the signature
+  // is prompted and then verified rather than concatenated: the number belongs
+  // in a sentence, not bolted to the end of one, and the mechanism is proven —
+  // the signature check passes 81/81. The prompt already carries the number and
+  // never the URL (`toOrderContextText`), so `no_web_link` still forbids the
+  // link and this asks only that the number itself was used.
+  //
+  // SCOPED TO ORDER AND DELIVERY, deliberately narrow. A cosmetovigilance reply
+  // about a reaction has no business quoting a tracking number just because the
+  // order it came from carries one, and firing there would be the check
+  // overreaching — which is how a check earns being ignored.
+  //
+  // MEASURED BEFORE IT WAS WRITTEN: of 1,487 fulfilled web orders, 1,483 carry a
+  // number, so this fires on nearly every dispatched order ticket. The four that
+  // do not are why the SKELETON must stay conditional — an instruction to give a
+  // number the dossier lacks is how one gets invented.
+  const numbers = (Array.isArray(parcels) ? parcels : [])
+    .map((parcel) => String(parcel?.number ?? '').trim())
+    .filter(Boolean);
+
+  if (numbers.length > 0 && PARCEL_SUBJECTS.includes(category)) {
+    // Spaces stripped on both sides: a model that writes « 6C21 1087 11964 » has
+    // passed the number on, and failing that would be pedantry about whitespace.
+    const packed = text.replace(/\s+/g, '');
+    const given = numbers.filter((number) => packed.includes(number.replace(/\s+/g, '')));
+    checks.push({
+      check: 'tracking_number_given',
+      passed: given.length > 0,
+      detail:
+        given.length > 0
+          ? `parcel number passed to the customer — ${given.join(', ')}`
+          : `the dossier holds ${numbers.join(', ')} and the reply names no parcel number`
     });
   }
 

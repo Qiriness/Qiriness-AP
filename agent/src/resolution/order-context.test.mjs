@@ -419,3 +419,35 @@ test('a full refund is told from a partial one', () => {
   assert.equal(full.refund_state, 'refunded_full');
   assert.equal(partial.refund_state, 'refunded_partial');
 });
+
+test('the dispatch window is measured in working days, and only when the shop has set one', () => {
+  // Placed Friday; "now" is the following Tuesday. Three calendar days have
+  // passed, but only two of them are working days — so a 3-day window has NOT
+  // run out yet.
+  const placed = { order: { placedAt: '2026-07-03T10:00:00Z', delivery: {} }, signals: {} };
+  const tuesday = new Date('2026-07-07T10:00:00Z');
+  assert.equal(
+    orderStates(placed, { dispatchDays: 3, now: tuesday }).dispatch_state,
+    'within_window',
+    'the weekend does not count against the shop'
+  );
+
+  // A week later it plainly has.
+  assert.equal(
+    orderStates(placed, { dispatchDays: 3, now: new Date('2026-07-15T10:00:00Z') }).dispatch_state,
+    'overdue'
+  );
+
+  // NO PARAMETER, NO CLAIM. `dispatch_days` starts null like every parameter,
+  // and defaulting here would invent a delivery promise on the shop's behalf.
+  assert.equal(
+    orderStates(placed, { now: new Date('2026-07-15T10:00:00Z') }).dispatch_state,
+    'unknown'
+  );
+
+  // And nothing to measure from is the same answer.
+  assert.equal(
+    orderStates({ order: { delivery: {} }, signals: {} }, { dispatchDays: 3 }).dispatch_state,
+    'unknown'
+  );
+});

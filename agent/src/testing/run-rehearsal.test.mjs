@@ -189,6 +189,18 @@ test('it reports the labels, the verdict and the reply it produced', async () =>
   assert.equal(draft.disposition, 'intermediary');
 });
 
+test('the case file names the answer set, even when no rule was consulted', async () => {
+  const { steps } = await rehearse();
+
+  const caseFile = steps.find((step) => step.type === 'case_file');
+  // `policy` is null in three situations a reader has to tell apart — no answer
+  // set for the subject, no approved rule in the set, a load that failed — and
+  // `selectPolicy` returns null before it can say which. Without the set beside
+  // it the transcript rendered nothing at all, which read as the rules layer not
+  // being wired rather than as having nothing to apply.
+  assert.equal(caseFile.answerSet, 'products');
+});
+
 test('every pass ran through the traced client, so its prompts are on the run', async () => {
   const { openaiClient, steps } = await rehearse();
 
