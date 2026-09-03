@@ -10,6 +10,106 @@ Three sibling files carry the other halves, and this one deliberately does not d
 
 ---
 
+## D-33 gets the plain question, three situations come back into the document, PR-27 and D-07 get rules (2026-09-03)
+
+**D-33 had two variants and neither was the question.** Both were long, specific customer stories — a German whose distributor collapsed, an enquiry about US duties — and the plain form nobody had written down was « Est-ce que vous livrez en Italie ? ». Five phrasings added: two plain forms (FR and EN), the checkout half of the canonical, and the two real messages verbatim. Extra phrasings cannot dilute, because `match_support_exemplars` scores an exemplar by its BEST phrasing.
+
+**O-11, CV-04 and A-35 are back in `Email-Example-Queries.md`.** They were approved, embedded and matching tickets while living only in the database. The import now reads **37 parsed, 37 stored, 0 stale** — the document and the agent finally describe the same corpus.
+
+**PR-27 gets three rules** mirroring PR-28, and **D-07 gets one** — the situation the `dispatch_days` parameter was stored for. Its skeleton names what is knowable and what is not: we know our own dispatch window, we do not know transit time, and it forbids adding the two into a total nobody has calculated.
+
+**Three condition-only parcel rules were proposed and then not written.** Measuring first showed `in_transit` and `stale_in_transit` occur in **0 of 2,006 orders** — they wait on the carrier feed — and `delivered` in one. See `DECISIONS.md § Six rules are dormant`.
+
+**P-17 was left alone deliberately.** Four gift promotions are active at once, two of them containing « masque », so identifying which one a customer means is a coin flip; and all four are threshold offers whose condition depends on a basket we cannot see. A rule there would have had to guess twice.
+
+**87 rules, all approved. 37 exemplars, all in the document.**
+
+## D-01 mirrors O-09, three more situations get rules, and a shadowed rule is fixed (2026-09-01)
+
+**83 rules now, all approved.** The set went from 69 by mirroring O-09 onto D-01 and covering D-36, D-05 and PR-28.
+
+**A bug in the O-09 set, caught by simulating states rather than reading the table.** `paiement_non_abouti` was one condition (`payment_state: unpaid`) and `expedition_dans_le_delai` was two — and **an unpaid order is also an undispatched one**, so both matched and the deeper rule won. A customer whose payment failed would have been told we were preparing their order. Priority could not fix it: `selectAnswer` compares specificity BEFORE priority, so the payment rule had to become equally deep (`+ order_state: not_dispatched`) and then win the tie on priority.
+
+**D-01 is a mirror, not a merge.** D-01 (« où en est ma commande », 19 messages, the largest cluster) and O-09 resolve to the same answers today because the same order states settle both. They stay separate because the carrier API will split them: D-01 will be able to say where the parcel actually IS, and O-09 never will. Until then the two sets must be edited in step — which is why they are written from one list rather than copied by hand.
+
+**Why they were duplicated rather than made condition-only.** Dropping the situation would have let them answer the six-in-ten tickets that match nothing — but `commande_non_identifiee` would then fire on any delivery ticket without an order, including « livrez-vous en Italie ? ». The situation is what makes asking for an order number safe.
+
+**D-36 has one rule and no conditions**, which is deliberate: the customer asking for a refund-or-resend is a commercial decision whatever the parcel is doing. The evidence changes what we can tell them, never whether we may agree.
+
+**D-05** gets the two honest answers to « le suivi n'a pas bougé » — confirm it has stalled and take it to the carrier, or say it is moving normally without inventing transport steps. **PR-28** gets three, including one that refuses to name a wavelength or an irradiance the dossier does not hold: a wrong technical value on a device is worse than no answer.
+
+**Simulated across nine order states × five situations, plus four product states.** Every cell resolves to its intended rule and `auditAnswerSet` reports zero problems on both sets.
+
+## O-09 has rules, D-36 is live, and the parcel instruction is conditional (2026-09-01)
+
+**Eight rules for O-09**, the most-asked question in the corpus (22 messages) and — until now — the most-matched situation with no rule of its own: it won five tickets in the backfill and fell through all five.
+
+| when | route |
+| --- | --- |
+| `order_identity: none` | `needs_customer_input`, asks for the order number |
+| `order_identity: resolved` + `order_state: unknown` | `needs_human` |
+| `payment_state: unpaid` | `needs_human` |
+| `order_state: not_dispatched` + `dispatch_state: within_window` | — |
+| `order_state: not_dispatched` + `dispatch_state: overdue` | **`needs_human`** |
+| `delivery_state: in_transit` | — |
+| `delivery_state: stale_in_transit` | `needs_human` |
+| `order_state: delivered` | `needs_human` |
+
+**The `within_window` / `overdue` split is the point of the set.** Quoting « nous expédions sous 3 jours ouvrés » is useful on day one and an insult on day eight, and day eight is the common case: somebody who writes to ask whether their order has shipped has by definition already waited long enough to wonder. The overdue branch acknowledges it, says we are taking the order up with logistics, promises no date, and goes to a person — because saying we are paying attention is only honest if somebody is.
+
+The in-window skeleton quotes `{dispatch_days}` from the parameters table rather than writing the number in prose, so a rule and an article can never disagree about it. An unset parameter drops the whole skeleton rather than sending a brace to a model.
+
+**Simulated across all nine states an O-09 ticket can present** — each resolves to its intended rule, `auditAnswerSet` reports zero problems, and `expediee_sans_scan` still wins the no-scan case, so nothing was duplicated.
+
+**`expediee_sans_scan`'s parcel instruction is now conditional.** It said « donner le numéro de suivi » unconditionally; 3 of the 78 tickets with a confirmed order hold no parcel, and an instruction to give a number the dossier lacks is how one gets invented. It now names what NOT to write when there is none — and pairs with the `tracking_number_given` check, which asks for the number only when we are holding one.
+
+**D-36 approved and embedded.** 69 rules, all approved; 36 exemplars.
+
+## Our own subject lines no longer decide which situation a customer's email is (2026-09-01)
+
+`buildMessageEmbeddingInput` prefixed the subject to every message. On **225 of 574 inbound messages — 39%** that subject is one we wrote: « Nouveau message de client le 7 août 2026 à 09:51 » from the contact form, « Votre commande est confirmée » from the order mail a customer hit reply on. The first is a near-constant with a date in it, shared by hundreds of unrelated tickets; the second is worse than empty — a complaint that an order never arrived, embedded under a heading announcing it was confirmed.
+
+**The chunk composer already made this argument and nobody had applied it to the query side**: *"a constant contributes nothing to ranking while diluting the actual content."*
+
+**Measured before it was written.** 60 tickets in the 0.55–0.65 band with one of these subjects, embedded both ways: **9 crossed into `matched`, 0 fell out**, median margin +13%. A third changed which exemplar won, and by subject agreement — the same proxy the band was calibrated with — that churn was neutral, 33/60 either way.
+
+**Measured again after re-embedding the corpus**, over all 328 tickets with an embedded first message:
+
+| | before | after |
+| --- | --- | --- |
+| matched (≥ 0.65) | 120 | **123** |
+| ≥ 0.70 | 79 | **83** |
+| ≥ 0.80 | 24 | **38** |
+| agreeing with the categoriser | 156 | **160** |
+| best score seen | 0.915 | **1.000** |
+
+The headline is the 0.80 band: **high-confidence matches went from 24 to 38.** Net matched moved only +3, smaller than the cohort predicted, and part of that gap is noise — `eval:exemplars` re-embeds the phrasings in memory on every run, so the two sides are not bit-identical between runs.
+
+**On the three tickets that started it:** « commande 6669 … montant débité » went from no match, to 0.712 tied with O-09, to **0.804 with a 0.131 margin — a clean D-01**. The D-06 chase holds at 0.665. « Je n'ai toujours pas reçu ma commande » rose 0.606 → 0.628 and is still short: four lines of substance under a signature, and no subject rule reaches that.
+
+**The version lives in the hash salt, not the composed string**, so it never reaches the model. The cost is blunt — a bump re-embeds all 851 messages, not the 225 whose text changed — and worth it: a stale vector is a wrong match for ever, and the corpus costs a fraction of a cent.
+
+## Four phrasings, one new situation, and what they did and did not fix (2026-09-01)
+
+Added to `Email-Example-Queries.md`, imported, embedded. **D-36** is new — a late order where the customer has stopped wanting to wait and asks for a refund or a reshipment. One situation for both remedies, because they call for the same reply: a commercial decision, taken by a person. It is a `draft`, so it is not reachable by retrieval until somebody approves it.
+
+Three phrasings added to existing exemplars, all from real mail this corpus already holds: D-01 *« Je n'ai toujours pas reçu ma commande. »*, D-02 *« … j'ai payé pour 4 produits mais je n'ai pas reçu la totalité »*, D-06 *« Je n'ai pas de nouvelles depuis 1 semaine au sujet de la réexpédition… »*.
+
+**Measured against the four tickets that prompted them**, by cosine over the stored vectors:
+
+| ticket | before | after |
+| --- | --- | --- |
+| D-06 chase | near | **0.665 — matched**, on the new phrasing |
+| D-01 « commande 6669 … montant débité » | none | 0.712, but O-09 is 0.702 — a 0.010 margin, so still ambiguous |
+| D-01 « je n'ai toujours pas reçu ma commande » | near | 0.606 — **unchanged in effect** |
+| D-02 missing item | matched | 0.768 — unchanged |
+
+**One clean fix, one half, one that says the diagnosis was wrong.** The new D-01 phrasing did not even become D-01's best match on the ticket it was taken from — the canonical still wins at 0.606. That message is four lines of substance followed by an Outlook signature and a quoted Shopify confirmation, and the embedding is of the whole thing. **The near-miss is body noise, not missing vocabulary**, which is a different and larger lever than any number of phrasings.
+
+**A caution about the importer, learned the hard way.** The document is the source of truth for phrasings and the import prunes anything not in it: the first run removed **7 stale phrasings**, one of which was R-21's *« Vous n'avez d'étiquette pour le retour ? »* — added outside the document at some point and destroyed by an import that had nothing to do with it. It is restored, in the document this time. The other six are unrecoverable.
+
+**Whole exemplars added outside the document survive; phrasings added outside it do not.** Three exemplars live only in the database — `CV-04` (7 phrasings), `A-35` (5), `O-11` (2) — all approved, all live in retrieval, and two of them carry rules. Anyone reading `Email-Example-Queries.md` is looking at 34 of the 37 situations the agent actually uses.
+
 ## The parcel number is checked, not left to the model, and a marketplace order says so (2026-09-01)
 
 **`tracking_number_given`** — the first OBLIGATION in `draft-checks.mjs`, where every other check proves a sentence is absent. When the dossier holds a parcel number and the ticket is `order` or `delivery`, the reply has to contain it. Whitespace-tolerant, because a model that writes « 6C21 1087 11964 » has passed the number on.

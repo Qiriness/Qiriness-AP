@@ -10,100 +10,17 @@
     · outputFileTracingRoot
 
  ✓ Starting...
- ✓ Ready in 3.7s
+ ✓ Ready in 16.8s
  ○ Compiling /agent-setup ...
- ✓ Compiled /agent-setup in 12.3s (1033 modules)
- ○ Compiling /_not-found ...
- GET /agent-setup 200 in 13840ms
- GET /agent-setup 200 in 14749ms
- ✓ Compiled /api/recommendations in 9.9s (752 modules)
- ✓ Compiled (758 modules)
- GET /api/recommendations 200 in 11346ms
- GET /api/recommendations 200 in 778ms
- GET /agent-setup 200 in 2035ms
- GET /api/recommendations 200 in 1933ms
- ✓ Compiled /api/knowledge/articles in 372ms (408 modules)
- POST /api/knowledge/articles 201 in 926ms
- ✓ Compiled /api/knowledge/articles/[id] in 152ms (410 modules)
- PATCH /api/knowledge/articles/53321983-1e83-4498-a8a7-a5ae6219f187 200 in 2034ms
- GET /agent-setup 200 in 2220ms
- GET /api/recommendations 200 in 864ms
- GET /agent-setup 200 in 1128ms
- GET /api/recommendations 200 in 628ms
- GET /api/recommendations 200 in 1431ms
- GET /api/recommendations 200 in 602ms
- GET /api/recommendations 200 in 624ms
- ✓ Compiled in 722ms (755 modules)
- ✓ Compiled in 381ms (749 modules)
- ○ Compiling /api/recommendations ...
- ✓ Compiled /api/recommendations in 1599ms (406 modules)
- GET /api/recommendations 200 in 4431ms
- ✓ Compiled in 303ms (755 modules)
- ✓ Compiled in 367ms (755 modules)
- GET /api/recommendations 200 in 803ms
- ✓ Compiled in 339ms (755 modules)
- ✓ Compiled in 768ms (765 modules)
- GET /agent-setup 200 in 1093ms
- ✓ Compiled in 740ms (749 modules)
- ○ Compiling /api/recommendations ...
- ✓ Compiled /api/recommendations in 1719ms (406 modules)
- GET /api/recommendations 200 in 4786ms
- ✓ Compiled in 285ms (755 modules)
- ✓ Compiled in 304ms (765 modules)
- GET /agent-setup 200 in 1361ms
- ✓ Compiled /api/knowledge/articles/[id] in 452ms (404 modules)
- PATCH /api/knowledge/articles/53321983-1e83-4498-a8a7-a5ae6219f187 200 in 6285ms
- ✓ Compiled in 975ms (749 modules)
- GET /agent-setup 500 in 4082ms
- ✓ Compiled in 368ms (749 modules)
- GET /agent-setup 500 in 1624ms
- ✓ Compiled in 988ms (759 modules)
- GET /agent-setup 200 in 653ms
- GET /agent-setup 200 in 1748ms
- ✓ Compiled /api/recommendations in 332ms (406 modules)
- GET /api/recommendations 200 in 4673ms
- GET /agent-setup 200 in 1167ms
- ✓ Compiled /api/knowledge/articles/[id] in 359ms (404 modules)
- PATCH /api/knowledge/articles/53321983-1e83-4498-a8a7-a5ae6219f187 200 in 6236ms
- DELETE /api/knowledge/articles/3643c366-f428-4bff-9042-599ea80e8499 204 in 978ms
- ✓ Compiled /api/knowledge/articles in 301ms (406 modules)
- POST /api/knowledge/articles 201 in 808ms
- ✓ Compiled in 1068ms (749 modules)
- ✓ Compiled in 478ms (749 modules)
- ✓ Compiled /api/knowledge/articles in 103ms (404 modules)
- GET /api/knowledge/articles 200 in 2796ms
- POST /api/knowledge/articles 201 in 2276ms
- ✓ Compiled /api/recommendations in 341ms (408 modules)
- GET /api/recommendations 200 in 1217ms
- ✓ Compiled /api/knowledge/articles/[id] in 234ms (410 modules)
- DELETE /api/knowledge/articles/66697429-d8a4-45ee-af49-7964e37f31dd 204 in 940ms
- ○ Compiling /agent-setup/rules ...
- ✓ Compiled /agent-setup/rules in 1450ms (795 modules)
- GET /agent-setup/rules 200 in 2022ms
- ✓ Compiled in 591ms (419 modules)
- ✓ Compiled in 522ms (419 modules)
- GET /agent-setup/rules 200 in 2132ms
- ✓ Compiled in 924ms (776 modules)
- ✓ Compiled in 418ms (786 modules)
- ○ Compiling /api/policy/rules/[id] ...
- ✓ Compiled /api/policy/rules/[id] in 2.1s (423 modules)
- PATCH /api/policy/rules/9fa6754e-da74-4bf1-a164-f9fd268fe3c5 200 in 6418ms
- PATCH /api/policy/rules/427b3767-4452-4bb8-ac3c-5aeb0e2d5b92 200 in 11598ms
- PATCH /api/policy/rules/56e7ccac-d1f1-426f-a480-947a9250c572 200 in 7615ms
- PATCH /api/policy/rules/d6ce6020-3a82-45ec-afe1-3623a6d1eeed 200 in 7618ms
- PATCH /api/policy/rules/2a647b99-5d86-4209-ac83-15dd2b9adcac 200 in 7624ms
- PATCH /api/policy/rules/ba2364d4-6ff0-420f-9e16-29616692003f 200 in 10740ms
- GET /agent-setup/rules 200 in 1822ms
- PATCH /api/policy/rules/4ab10e37-babe-4532-8503-596846fb1280 200 in 525ms
- PATCH /api/policy/rules/596099f3-6c2d-4db3-bc9d-51839ec75ac0 200 in 301ms
- PATCH /api/policy/rules/5c6cb6c1-319c-4356-a4f5-635a97e25938 200 in 403ms
- PATCH /api/policy/rules/8ebcdadb-7b1c-4adf-be54-72c30280fd06 200 in 298ms
- PATCH /api/policy/rules/ae377558-9d3b-43cd-a52c-980ce859ec53 200 in 288ms
- PATCH /api/policy/rules/8271d2d0-8fca-4484-bd5a-f3a20133a29f 200 in 299ms
- PATCH /api/policy/rules/9a399f1f-e05a-40b3-a31d-a5623221b381 200 in 452ms
- PATCH /api/policy/rules/32f9bd61-5993-47ae-99b8-2fc4724b1bc0 200 in 347ms
- PATCH /api/policy/rules/ffa67293-04fa-47d2-ac69-dfe2eda3c98e 200 in 358ms
- ✓ Compiled in 498ms (419 modules)
- ✓ Compiled in 573ms (419 modules)
- ✓ Compiled in 1031ms (776 modules)
- ✓ Compiled in 1236ms (786 modules)
+ ✓ Compiled /agent-setup/rules in 38.6s (795 modules)
+ GET /agent-setup/rules 200 in 16199ms
+ ✓ Compiled /api/recommendations in 383ms (425 modules)
+ GET /api/recommendations 200 in 2770ms
+ ○ Compiling /agent-setup/parameters ...
+ ✓ Compiled /agent-setup/parameters in 1069ms (796 modules)
+ ○ Compiling /agent-setup/promotions ...
+ ✓ Compiled /agent-setup/promotions in 551ms (806 modules)
+ ○ Compiling /agent-setup/recommendations ...
+ ✓ Compiled /agent-setup/recommendations in 755ms (818 modules)
+ ○ Compiling /settings ...
+ ✓ Compiled /settings in 2.1s (831 modules)

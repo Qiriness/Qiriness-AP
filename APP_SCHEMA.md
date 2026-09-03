@@ -13,7 +13,9 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |-- *.md             # AGENTS (rules) · DECISIONS (why) · PRODUCT (design) · README (status)
 |                    # AGENT_INTEGRATION_PLAN + Agent_Workflow (agent phases)
 |                    # SHOPIFY_PERSONAL_DATA_PROTECTION + MERCHANT_DATA_USE_DISCLOSURE
-|-- package.json     # sync:shopify:* · embed:* · cluster:tickets · db:apply:migration · test
+|-- package.json     # sync:shopify:* · embed:* · import:exemplars · cluster:tickets
+|                    # report:knowledge-gaps · report:investigation-calls
+|                    # report:evidence-vocabulary · db:apply:migration · test
 |-- shopify.app.toml # Shopify app scopes (all read_*)
 |-- web/
 |   |-- app/
@@ -352,6 +354,18 @@ Written by the worker and the CLIs, read only by the Insights panels.
 `_shared.test.mjs` holds the cross-file invariants (no data statements, RLS on every table, every table and view documented, nothing referenced before it is created, every view `security_invoker` and revoked from the anon roles, every embedded table carrying the whole determinism quadruple, and `scripts/lib/tables.mjs` naming exactly what the baseline creates). Each file has a sibling test for its own contents.
 
 `_live.test.mjs` is the only test that **runs** the SQL: it applies the baseline into a throwaway schema, seeds a handful of rows, asserts each projection returns what it claims, and drops the schema. Skipped unless `SUPABASE_DB_URL` is set, so `npm test` still passes without a database.
+
+### Read-only reports
+
+`scripts/report-*.mjs`. No writes, no model calls, every figure from a table the
+pipeline already fills. Each exists because the question it answers was being
+argued about rather than measured.
+
+| Command | Answers |
+| --- | --- |
+| `report:knowledge-gaps` | what customers asked that the library could not answer — the commissioning list for new articles |
+| `report:investigation-calls` | how much of an investigation the MODEL chose, against what the opening moves had already decided. An upper bound: `tool_calls` drops the ledger's `source`, so opening moves are reconstructed from `openingMoves()` and a decomposed ticket's extra moves count as the model's |
+| `report:evidence-vocabulary` | whether `state` and `finding` agree with each other. They read the same ledger by different routes, so a disagreement means one is wrong — no labelled set needed. `--since` cuts the corpus to runs after a date, because a derivation fixed last week leaves its wrong rows behind for ever |
 
 ## Surfaces
 

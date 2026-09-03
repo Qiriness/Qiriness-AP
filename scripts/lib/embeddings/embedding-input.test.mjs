@@ -5,6 +5,7 @@ import {
   buildEmbeddingInput,
   buildMessageEmbeddingInput,
   hashEmbeddingInput,
+  isShopNotificationSubject,
   MESSAGE_HASH_SALT
 } from './embedding-input.mjs';
 
@@ -136,4 +137,46 @@ test('the same message always hashes the same', () => {
     hashEmbeddingInput(buildMessageEmbeddingInput(message), { salt: MESSAGE_HASH_SALT }),
     hashEmbeddingInput(buildMessageEmbeddingInput(message), { salt: MESSAGE_HASH_SALT })
   );
+});
+
+test('our own notification subjects are dropped from the embedded text', () => {
+  // 225 of 574 inbound messages carry one of these. « Nouveau message de client
+  // le 7 août 2026 » is a near-constant with a date in it — hundreds of
+  // unrelated tickets sharing a phrase they have no business sharing — and
+  // « Votre commande est confirmée » is worse than empty on a complaint that the
+  // order never arrived.
+  const ours = buildMessageEmbeddingInput({
+    subject: 'Nouveau message de client le 7 août 2026 à 09:51',
+    body_text: "Je n'ai toujours pas reçu ma commande."
+  });
+  assert.equal(ours, "Je n'ai toujours pas reçu ma commande.");
+
+  // A subject the CUSTOMER wrote still carries real signal and is kept.
+  const theirs = buildMessageEmbeddingInput({
+    subject: 'Commande 6059',
+    body_text: "Je n'ai toujours pas reçu ma commande."
+  });
+  assert.equal(theirs, "Commande 6059\n\nJe n'ai toujours pas reçu ma commande.");
+});
+
+test('the reply markers a subject collects down a thread do not hide it', () => {
+  // « RE: RE: Nouveau message de client » is the same worthless heading three
+  // replies later, and that shape is common in the corpus.
+  assert.equal(isShopNotificationSubject('RE:  RE: Nouveau message de client le 3 mai'), true);
+  assert.equal(isShopNotificationSubject('Re: Votre commande est confirmée'), true);
+  assert.equal(isShopNotificationSubject('TR: Votre commande #6216 est en route'), true);
+
+  // Anchored at the start, so a real subject that merely contains the words is
+  // not swallowed — and the word boundary keeps « clientele » out.
+  assert.equal(isShopNotificationSubject('Commande 6059'), false);
+  assert.equal(isShopNotificationSubject('Nouveau message de clientele important'), false);
+  assert.equal(isShopNotificationSubject(null), false);
+});
+
+test('the hash salt covers what is composed, not only how quotes are stripped', () => {
+  // Dropping the subject changed the text for 225 messages and left 349
+  // byte-identical. Those must not be re-embedded, so the version cannot live in
+  // the composed string — it lives in the salt, which every message hashes with.
+  assert.match(MESSAGE_HASH_SALT, /quoted-reply\//);
+  assert.match(MESSAGE_HASH_SALT, /message-input\//);
 });

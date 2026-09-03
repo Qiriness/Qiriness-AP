@@ -96,6 +96,7 @@ Referenced by the entries below so each state is written once.
 - « URGENT — Commande #6216 du 27 juin 2026. Je n'ai toujours pas reçu cette commande, payée et encaissée »
 - « Ma commande 6669 n'a pas été livrée mais le montant bien débité de mon compte »
 - « Je suis toujours en attente de ma commande numéro 6275 qui devait être livrée hier »
+- « Je n'ai toujours pas reçu ma commande. »
 
 **needs** `order_identity`, `delivery_state`
 **exemplaires** → jeu `commande`
@@ -111,6 +112,7 @@ Referenced by the entries below so each state is written once.
 **Variantes réelles**
 - « J'ai effectué une commande #5953 et je viens de recevoir mon colis. Il manque un article »
 - « J'ai reçu ce jour ma commande 6045 du 10/06/26. J'avais commandé 2x caressé source d'eau… »
+- « J'ai reçu ce jour ma commande numéro #6748. J'ai payé pour 4 produits mais je n'ai pas reçu la totalité. Il m'en manque un »
 
 **needs** `order_identity`, `order_state`, `policy_answer`
 **exemplaires** → jeu `commande` (+ un état `article_manquant_confirme`)
@@ -170,6 +172,7 @@ Referenced by the entries below so each state is written once.
 
 **Variantes réelles**
 - « Vous avez tenté de me joindre concernant ma commande qui est revenue chez vous »
+- « Je n'ai pas de nouvelles depuis 1 semaine au sujet de la réexpédition de ma commande — pourriez-vous vérifier que vos services s'en occupent ? »
 
 **needs** `order_identity`, `order_state`
 **exemplaires** → jeu `commande`
@@ -228,6 +231,11 @@ Referenced by the entries below so each state is written once.
 **Variantes réelles**
 - « Malheureusement, votre boutique en ligne ne fonctionne pas avec mon adresse allemande. Quelles autres options pouvez-vous me proposer pour obtenir des produits Qiriness ? »
 - « en raison des difficultés économiques de votre partenaire de distribution, les produits ne sont plus disponibles dans mon pays »
+- « Est-ce que vous livrez en Italie ? »
+- « Do you ship to Germany? »
+- « Je n'arrive pas à sélectionner mon pays au moment de la commande. »
+- « maybe I made a mistake, but it seems that I can not buy your products living in Germany as I can not choose this country during the order process »
+- « hello. is there additional duties or taxes for shipments to USA? »
 
 > **Split out of D-07, which was asking two questions at once.** That entry's
 > heading ran *"quels sont vos délais de livraison, et vers quels pays
@@ -259,6 +267,29 @@ Referenced by the entries below so each state is written once.
 ---
 
 # Commande — 4 questions · 65 messages
+
+### D-36 · Ma commande a beaucoup de retard — si elle n'arrive pas, je préfère être remboursé(e) ou en recevoir une autre.
+`delivery` · `problem` · **2 msgs** · 🟢
+
+**Variantes réelles**
+- « la poste nous a prevenu d'un peu de retard, mon colis n'est toujours pas la, une semaine plus tard, j'ai besoin de mes produits. Je souhaiterai un remboursement si mon colis n'arrive pas d'ici samedi »
+- « J'ai commandé une crème qui devait être livrée le 10 juillet, mais je ne l'ai toujours pas reçue. Si elle ne peut pas être livrée, pourriez-vous simplement en renvoyer une nouvelle à l'adresse que j'ai indiquée ? »
+
+**needs** `order_identity`, `delivery_state`, `refund_state`
+**exemplaires** → jeu `commande`
+
+**Contenu stable** _(à rédiger)_
+>
+
+**Pourquoi ce n'est pas D-01** — la question est la même et la réponse ne l'est
+pas. D-01 se répond avec un état et un numéro de suivi ; ici le client a déjà
+décidé qu'attendre ne lui suffit plus et demande un geste — remboursement ou
+réexpédition. Répondre « voici votre suivi » sans traiter cette demande est
+précisément ce qui fait monter un client d'un cran. Les deux remèdes tiennent
+dans une seule situation parce qu'ils appellent la même réponse : une décision
+commerciale, prise par une personne.
+
+---
 
 ### O-09 · Ma commande n'est toujours pas expédiée. Quel est le délai entre la commande et l'expédition ?
 `order` · `problem` · **22 msgs** · 🟢
@@ -492,6 +523,7 @@ Referenced by the entries below so each state is written once.
 **Variantes réelles**
 - « Hi, accidently ordered the wrong products. How can I return? I do not see a return address on the… »
 - « Pourquoi je ne peux pas le déposer au magasin ? » _(extrait — la question sur les frais de retour qui l'accompagne est sur R-22)_
+- « Vous n'avez d'étiquette pour le retour ? »
 
 **needs** `return_eligibility`, `policy_answer`
 **exemplaires** → jeu `retour`
@@ -670,6 +702,27 @@ about whether we *know* the answer, not about what the stock actually is
 
 # Compte et paiement — 4 questions · 17 messages
 
+### O-11 · J'ai reçu la confirmation de commande puis plus aucune nouvelle.
+`order` · `problem` · **4 msgs**
+
+**Variantes réelles**
+- « Commande R4F8FH09J — J'ai passé une commande le 24 mai et ai reçu la confirmation à la fin… »
+
+**needs** `order_identity`, `order_state`
+**exemplaires** → jeu `commande`
+
+**Contenu stable** _(à rédiger)_
+>
+
+> **Written back into this document on 2026-09-03, having lived only in the
+> database.** It was approved, embedded and matching real tickets while being
+> invisible to anyone reading the corpus here. The importer never deletes an
+> exemplar that has left the document, so a row authored elsewhere survives every
+> import in silence — which is how the document came to show 34 of the 37
+> situations the agent actually uses.
+
+---
+
 ### A-29 · Je n'arrive pas à réinitialiser mon mot de passe ni à me connecter.
 `account` · `problem` · **5 msgs** · ✅ **ALREADY WORKS — retrieves at 0.61–0.62**
 
@@ -683,6 +736,29 @@ about whether we *know* the answer, not about what the stock actually is
 - « Impossible de me connecter à mon compte même en changeant le mot de passe »
 
 **needs** `customer_account_state`, `policy_answer`
+---
+
+### A-35 · Je souhaite supprimer mon compte client.
+`account` · `problem` · _no cluster_
+
+**Variantes réelles**
+- « Bonjour, pouvez-vous supprimer mon compte s'il vous plaît ? »
+- « Je souhaite désactiver mon compte, je ne l'utilise plus. »
+- « Merci de fermer mon compte définitivement. »
+- « Bonjour, je voudrais que vous supprimiez le compte enregistré à mon nom. »
+
+**needs** `customer_account_state`, `policy_answer`
+**exemplaires** → jeu `compte`
+
+**Contenu stable** _(à rédiger)_
+>
+
+> **Phrasings authored 2026-08-30, not taken from real mail:** no deletion
+> request exists in the ingested corpus. Re-derive them once one arrives — an
+> exemplar built on invented wording is the known cause of a situation that never
+> wins. **Written back into this document on 2026-09-03**, having lived only in
+> the database; see the note on O-11.
+
 ---
 
 ### PA-30 · Comment obtenir une facture pour ma commande ?
@@ -803,6 +879,32 @@ about whether we *know* the answer, not about what the stock actually is
 
 **Contenu stable** _(à rédiger)_
 >
+
+---
+
+### CV-04 · J'ai eu une réaction et je demande un remboursement ou un dédommagement.
+`cosmetovigilance` · `problem` · **1 msg**
+
+**Variantes réelles**
+- « Given the adverse reaction caused by your product, I expect a full refund at the earliest »
+- « J'ai fait une réaction à votre produit et je demande le remboursement complet de ma commande »
+- « Ma peau a réagi, j'exige un dédommagement »
+- « Je veux être remboursée intégralement suite à cette réaction »
+- « Après cette réaction je demande le remboursement, et je compte le faire savoir »
+- « Quelle compensation proposez-vous après ce que votre produit m'a causé ? »
+
+**needs** `customer_identity`, `product_identity`, `purchase_verified`, `policy_answer`
+**exemplaires** → jeu `cosmetovigilance`
+
+**Contenu stable** _(à rédiger)_
+>
+
+> **Written back into this document on 2026-09-03, having lived only in the
+> database** — see the note on O-11. It carries two rules and seven phrasings,
+> so it was among the most consequential of the three to have been missing here.
+> Separate from CV-02 because the demand is the point: a reaction reported is a
+> safety matter, a reaction plus a demand for money is that AND a commercial
+> decision, and only a person may take the second.
 
 ---
 

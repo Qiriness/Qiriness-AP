@@ -24,7 +24,7 @@ Draft modification, memory, so that it can remeber and improve over time.
 Check the evidence-rules.mjs:30
 
 Make sure that the variants have a french, english, spanish and italian version of all the questions.
-Make sure that the answers have been writtne yh 
+Make sure that the answers have been written
 
 
 Add the link of the tracking number to the drafting email so person can click directly
@@ -53,3 +53,10 @@ WHen there is a product problem or the user wants a return or exchange due to a 
 
 Ask Qiriness rules for answering product questions and suggestions
  if a client has sensitive skin suggest x product, or if they have used x product beofre suggest y product or if a specific body part is claimed respond with productlake 
+
+
+
+ # APP ideas
+
+ Add a tab that allows to chat with agent that has access to the enitire database. I've notice when claude goes through database it finds out really interesting things. 
+ Question: Main problem is token use --> how to allow enough freedom to go through database without spending too much money and still getting quality answers 

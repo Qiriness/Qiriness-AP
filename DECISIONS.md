@@ -479,6 +479,42 @@ Of the 14 active single-code promotions, one is **100% off a product**, and two 
 
 So a person decides once, on `/agent-setup/promotions`, and the reply screen only ever sees what they chose. **It survives the sync by not being in the mapper**: `mapPromotionRow` returns a fixed column set and the upsert merges duplicates, so a column absent from the payload is left alone. That omission is load-bearing rather than incidental, and `shopify-promotion-mapper.test.mjs` now asserts it — adding the key there would silently reset every decision to false on the next sync, which would surface as codes quietly vanishing from the picker rather than as an error.
 
+### Specificity outranks priority, so a shallow rule cannot be rescued by it (2026-09-01)
+
+`paiement_non_abouti` branched on `{payment_state: unpaid}` and `expedition_dans_le_delai` on `{order_state: not_dispatched, dispatch_state: within_window}`. **An unpaid order is also an undispatched one**, so both matched every time and the two-condition rule won: the customer whose payment failed was told their order was being prepared, inside the normal window.
+
+**Priority is not the fix, and reaching for it is the mistake worth recording.** `selectAnswer` sorts on the situation, then on condition depth, then on priority — so a one-condition rule can never outrank a two-condition one however high its priority. The rule has to be made equally deep and then win the tie.
+
+**Found by simulation, not by reading.** Nine order states were run against the loaded set and the winner printed for each; the table looked correct to the eye and was wrong in one cell. Any rule set worth approving is worth enumerating this way, because shadowing is a relation between rules and no single row shows it.
+
+### Six rules are dormant because two delivery states cannot occur yet (2026-09-03)
+
+Measured across all 2,006 orders: `dispatched_no_scan` **1,992 (99%)**, `not_dispatched` 13, `delivered` 1, **`in_transit` 0, `stale_in_transit` 0**.
+
+Without the carrier feed nothing ever reports a scan, so every dispatched parcel stays in `dispatched_no_scan` permanently and the two transit states are unreachable. `colis_en_transit`, `d01_colis_en_transit`, `suivi_bloque`, `d01_suivi_bloque`, `d05_suivi_avance` and `d05_suivi_bloque` therefore fire on nothing.
+
+**They are kept, not deleted**, on the same discipline `checkout_state` already has — listed and unwired, so the gap argues for itself rather than being forgotten. They are correct, and they are early.
+
+**Two consequences worth stating plainly.** `expediee_sans_scan` is not an edge case: it is 99% of shipped orders, so for virtually every dispatched parcel the honest reply is « c'est parti, et nous n'en savons pas plus ». And **D-05 (« le suivi n'a pas bougé ») describes the normal state of the estate while the evidence to confirm it does not exist** — the customer's complaint is real and unanswerable today.
+
+This is also why three proposed condition-only parcel rules were NOT written: two would have been dead on arrival and the third would have fired on one order in two thousand.
+
+### The document is the corpus, and three situations had left it
+
+`O-11`, `CV-04` and `A-35` were approved, embedded and matching real tickets while existing only in the database — `CV-04` carrying two rules and seven phrasings. The importer never deletes an exemplar that has left the document, so a row authored elsewhere survives every import in silence, and the document came to show 34 of the 37 situations the agent actually uses.
+
+**Phrasings behave the opposite way and that asymmetry is the trap.** A phrasing added outside the document is pruned by the next import — R-21 lost « Vous n'avez d'étiquette pour le retour ? » to an import that had nothing to do with it. So the two halves of an exemplar have opposite failure modes: whole rows drift out of sight, individual phrasings vanish.
+
+All three are written back, and the import now reports **37 parsed, 37 in the database, 0 stale**. A future divergence is visible in that one line.
+
+### D-01 mirrors O-09 rather than merging with it
+
+Both are settled by the same order states, so the two sets are identical today — which is exactly the argument for merging them, and the reason not to is dated rather than principled: **the carrier API will split them.** D-01 (« où en est ma commande ») will then be answerable from where the parcel actually is; O-09 (« pas encore expédiée ») never will be. A merge now would have to be undone then, and merges are judged on the ANSWER — which is about to change for one of them and not the other.
+
+**The cost is that they must be edited in step**, and it is real. It is paid deliberately, and the duplication is written from a single list in one place rather than copied by hand across a dashboard.
+
+**Condition-only rules were the alternative and were rejected on one row.** Dropping the situation would have covered the six-in-ten tickets that match nothing — but `commande_non_identifiee` fires on `order_identity: none`, which is true of « livrez-vous en Italie ? » as much as of « où est ma commande ». The situation is what licenses asking for an order number. The other seven would have been safe; one being unsafe is enough.
+
 ### A rule may never name a code
 
 ### The offer belongs to the rule, not to the reviewer
@@ -991,6 +1027,20 @@ Both share one determinism quadruple (`embedding_model`, `embedding_dimensions`,
 Message hashes are additionally salted with the quoted-reply stripper version, so changing how history is stripped correctly invalidates every message vector without the version ever reaching the model. `embedded_input_hash` covers title + category too, so a rename invalidates the vector even though `content_hash` ignores it.
 
 Unapproving regenerates chunks vectorless. Embedding runs both inline (on approval, best-effort) and via the reconciler.
+
+### A subject we wrote ourselves is not a subject (2026-09-01)
+
+The subject is prefixed to every message embedding because support subject lines carry real signal — « Colis bloqué », « remboursement commande #5229 ». On 39% of inbound mail it carries the opposite.
+
+**Two shapes, and the second is the dangerous one.** « Nouveau message de client le 7 août 2026 à 09:51 » is the contact form notifying us: no content, and a date that hundreds of unrelated tickets then share. « Votre commande est confirmée » is the order mail the customer hit reply on — so a complaint that nothing arrived is embedded under a heading saying it was confirmed. Measured: O-09 (« pas encore expédiée ») outranked D-01 (« toujours pas reçue ») on exactly such a ticket.
+
+**The argument already existed one file away.** `buildEmbeddingInput` excludes the category from knowledge chunks because "a constant contributes nothing to ranking while diluting the actual content". Nobody had applied it to the query side, where 39% of queries carried one.
+
+**Matched on the subject only, never the body.** A customer writing « votre commande est confirmée ? » in a sentence is asking us something. Reply and forward markers are stripped first, because « RE: RE: Nouveau message de client » is the same worthless heading three replies later.
+
+**Measured twice.** On 60 near-band tickets: 9 crossed into `matched`, 0 fell out, margin +13%, relevance proxy unchanged at 33/60. Across the whole corpus after re-embedding: matched 120 → 123, and the ≥0.80 band 24 → 38 — the gain is mostly in CONFIDENCE rather than in count, which is what removing a diluting constant should do.
+
+**What it does not fix.** « Je n'ai toujours pas reçu ma commande » rose 0.606 → 0.628 and still misses: four lines of substance under a name and an Outlook footer. Mail-client footers survive in only 4% of embedded text, so there is no second lever of this size — the remaining near misses are short bodies, not noisy ones.
 
 ### One reconciler, three descriptors
 
