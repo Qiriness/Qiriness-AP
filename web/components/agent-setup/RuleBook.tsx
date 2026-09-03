@@ -1,27 +1,47 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
+import { AlertIcon, CheckCircleIcon, DotIcon, PlusIcon } from "@/components/icons";
 import { Button } from "@/components/ui/Button";
 import { knowledgeErrorMessage } from "@/lib/api/knowledge";
 import { deleteRule, saveRule, setRuleApproval } from "@/lib/api/policy";
 import type { PolicyRule, PolicySituation, PolicyVocabulary } from "@/lib/types";
 
 import { RuleEditor } from "./RuleEditor";
+import type { RuleEditorSeed } from "./RuleEditor";
 import styles from "./RuleBook.module.css";
 
+const SHARED = "__shared__";
+
+type BranchStatus = "covered" | "missing" | "prerequisite";
+
+interface BranchValue {
+  finding: string;
+  rules: PolicyRule[];
+  status: BranchStatus;
+  continues: boolean;
+}
+
+interface WorkflowNeed {
+  need: string;
+  findings: string[];
+  requires: string[];
+  isPrerequisiteOnly: boolean;
+  branches: BranchValue[];
+}
+
+interface EditorState {
+  rule: PolicyRule | null;
+  seed?: RuleEditorSeed;
+}
+
 /**
- * The rulebook: what Qiriness does in each situation, as rows a person edits.
+ * The rulebook as a workflow projection.
  *
- * GROUPED BY ANSWER SET, AND WITHIN IT SHARED RULES FIRST. That order is the
- * order they are read in — a rule naming no situation applies to every ticket in
- * the set, so it is the general case and belongs above the exceptions. Sorting by
- * key instead would scatter the three rules that carry most of the volume.
- *
- * APPROVAL IS SHOWN AS "LIVE", not as a status chip. `approved` is the word the
- * table uses and it undersells what it means: an approved rule routes real mail.
- * A person deciding whether to flip that switch is better served by the
- * consequence than by the column name.
+ * The backend is still NOT a first-match tree: `selectAnswer` ranks by situation,
+ * then condition specificity, then priority. This screen makes that relation
+ * readable by situation without making visual order part of runtime behaviour.
  */
 export function RuleBook({
   initialRules,
@@ -34,33 +54,83 @@ export function RuleBook({
   vocabulary: PolicyVocabulary;
   loadError: string | null;
 }) {
+  const startingAnswerSet =
+    initialRules[0]?.answerSet ?? situations.find((situation) => situation.answerSet)?.answerSet ?? "";
+  const startingSituation =
+    situations.find((situation) => situation.answerSet === startingAnswerSet)?.key ?? SHARED;
+
   const [rules, setRules] = useState<PolicyRule[]>(initialRules);
-  const [editing, setEditing] = useState<PolicyRule | "new" | null>(null);
+  const [editing, setEditing] = useState<EditorState | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [only, setOnly] = useState<string | null>(null);
+  const [answerSet, setAnswerSet] = useState(startingAnswerSet);
+  const [activeSituation, setActiveSituation] = useState<string>(startingSituation);
+  const [selectedRuleId, setSelectedRuleId] = useState<string | null>(initialRules[0]?.id ?? null);
 
-  const sets = useMemo(() => {
-    const grouped = new Map<string, PolicyRule[]>();
-    for (const rule of rules) {
-      if (!grouped.has(rule.answerSet)) grouped.set(rule.answerSet, []);
-      grouped.get(rule.answerSet)!.push(rule);
-    }
-    return [...grouped.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+  const ruleCountsBySet = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const rule of rules) counts.set(rule.answerSet, (counts.get(rule.answerSet) ?? 0) + 1);
+    return counts;
   }, [rules]);
 
-  // FILTERED FROM `sets`, NOT FROM `rules`, so the buttons always list every set
-  // that exists rather than only the one being looked at — a filter that hides
-  // its own way out is one you get stuck in. And a set whose last rule is
-  // deleted while it is selected falls back to showing everything, rather than
-  // leaving an empty page with no visible reason.
-  const visible = only ? sets.filter(([set]) => set === only) : sets;
-  const showing = visible.length > 0 ? visible : sets;
+  const answerSets = useMemo(() => {
+    const names = new Set<string>();
+    for (const rule of rules) names.add(rule.answerSet);
+    for (const situation of situations) if (situation.answerSet) names.add(situation.answerSet);
+    return [...names].sort((a, b) => a.localeCompare(b));
+  }, [rules, situations]);
 
-  const questionFor = useMemo(
-    () => new Map(situations.map((s) => [s.key, s.question])),
-    [situations],
+  useEffect(() => {
+    if (answerSet && answerSets.includes(answerSet)) return;
+    setAnswerSet(answerSets[0] ?? "");
+  }, [answerSet, answerSets]);
+
+  const rulesInSet = useMemo(
+    () => rules.filter((rule) => rule.answerSet === answerSet).sort(sortRuleForWorkflow),
+    [rules, answerSet],
   );
+
+  const situationsForSet = useMemo(() => {
+    const namedInRules = new Set(rulesInSet.map((rule) => rule.situationKey).filter(Boolean));
+    return situations
+      .filter((situation) => situation.answerSet === answerSet || namedInRules.has(situation.key))
+      .sort((a, b) => a.key.localeCompare(b.key));
+  }, [rulesInSet, situations, answerSet]);
+
+  useEffect(() => {
+    if (activeSituation === SHARED) return;
+    if (situationsForSet.some((situation) => situation.key === activeSituation)) return;
+    setActiveSituation(situationsForSet[0]?.key ?? SHARED);
+  }, [activeSituation, situationsForSet]);
+
+  const activeSituationMeta = situationsForSet.find((situation) => situation.key === activeSituation) ?? null;
+  const selectedSituationKey = activeSituation === SHARED ? null : activeSituation;
+
+  const visibleRules = useMemo(
+    () =>
+      selectedSituationKey
+        ? rulesInSet.filter((rule) => !rule.situationKey || rule.situationKey === selectedSituationKey)
+        : rulesInSet.filter((rule) => !rule.situationKey),
+    [rulesInSet, selectedSituationKey],
+  );
+
+  const specificRuleCount = visibleRules.filter((rule) => rule.situationKey).length;
+  const sharedRuleCount = visibleRules.length - specificRuleCount;
+  const liveCount = rules.filter((rule) => rule.approvalStatus === "approved").length;
+
+  const workflow = useMemo(
+    () => buildWorkflow(visibleRules, vocabulary),
+    [visibleRules, vocabulary],
+  );
+
+  const selectedRule = selectedRuleId
+    ? visibleRules.find((rule) => rule.id === selectedRuleId) ?? null
+    : null;
+
+  useEffect(() => {
+    if (!selectedRuleId || visibleRules.some((rule) => rule.id === selectedRuleId)) return;
+    setSelectedRuleId(visibleRules[0]?.id ?? null);
+  }, [selectedRuleId, visibleRules]);
 
   async function run(id: string, work: () => Promise<void>) {
     setBusy(id);
@@ -74,52 +144,53 @@ export function RuleBook({
     }
   }
 
-  const liveCount = rules.filter((r) => r.approvalStatus === "approved").length;
+  function openNewRule(seed: RuleEditorSeed = {}) {
+    setEditing({
+      rule: null,
+      seed: {
+        answerSet,
+        situationKey: selectedSituationKey,
+        ...seed,
+      },
+    });
+  }
+
+  async function approve(rule: PolicyRule) {
+    await run(rule.id, async () => {
+      const updated = await setRuleApproval(rule.id, rule.approvalStatus !== "approved");
+      setRules((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
+      setSelectedRuleId(updated.id);
+    });
+  }
+
+  async function remove(rule: PolicyRule) {
+    await run(rule.id, async () => {
+      await deleteRule(rule.id);
+      setRules((prev) => prev.filter((item) => item.id !== rule.id));
+      setSelectedRuleId(null);
+    });
+  }
 
   return (
     <section className={styles.wrap}>
       <header className={styles.head}>
-        <div>
-          <h2 className={styles.title}>Rulebook</h2>
+        <div className={styles.headText}>
+          <h2 className={styles.title}>Rule workflows</h2>
           <p className={styles.lede}>
-            What the agent does in each situation. A rule can hand a ticket to a person or ask the
-            customer for something — it can never mark one safe to answer.
+            Pick a situation and review the branches the agent can take. The canvas shows the
+            decision shape; the agent still applies the approved rules by situation and specificity.
           </p>
         </div>
         <div className={styles.headActions}>
           <span className={styles.count}>
             {liveCount} live of {rules.length}
           </span>
-          {/* ONLY WHEN THERE IS SOMETHING TO CHOOSE BETWEEN. One answer set is
-              the whole rulebook, and a filter offering a single option is a
-              control that cannot do anything.
-
-              Buttons rather than a <select>: the counts are the reason to pick
-              one, and a dropdown hides them until it is open. */}
-          {sets.length > 1 && (
-            <div className={styles.filter} role="group" aria-label="Filter by answer set">
-              <button
-                type="button"
-                className={only === null ? styles.filterOn : styles.filterOff}
-                aria-pressed={only === null}
-                onClick={() => setOnly(null)}
-              >
-                all
-              </button>
-              {sets.map(([setName, inSet]) => (
-                <button
-                  key={setName}
-                  type="button"
-                  className={only === setName ? styles.filterOn : styles.filterOff}
-                  aria-pressed={only === setName}
-                  onClick={() => setOnly(only === setName ? null : setName)}
-                >
-                  {setName} <span className={styles.filterCount}>{inSet.length}</span>
-                </button>
-              ))}
-            </div>
-          )}
-          <Button variant="secondary" size="sm" onClick={() => setEditing("new")}>
+          <Button
+            variant="secondary"
+            size="sm"
+            leadingIcon={<PlusIcon size={15} />}
+            onClick={() => openNewRule()}
+          >
             New rule
           </Button>
         </div>
@@ -128,140 +199,445 @@ export function RuleBook({
       {loadError && <p className={styles.error}>{loadError}</p>}
       {error && <p className={styles.error}>{error}</p>}
 
-      {sets.length === 0 && !loadError && (
+      {answerSets.length === 0 && !loadError ? (
         <p className={styles.empty}>
           No rules yet. The agent behaves exactly as it did before any of this existed.
         </p>
-      )}
+      ) : (
+        <div className={styles.workspace}>
+          <aside className={styles.rail} aria-label="Situations">
+            <div className={styles.railBlock}>
+              <p className={styles.railLabel}>Answer set</p>
+              <div className={styles.setList} role="list">
+                {answerSets.map((setName) => (
+                  <button
+                    key={setName}
+                    type="button"
+                    className={answerSet === setName ? styles.setButtonOn : styles.setButton}
+                    onClick={() => {
+                      setAnswerSet(setName);
+                      setSelectedRuleId(null);
+                    }}
+                  >
+                    <span>{setName}</span>
+                    <span className={styles.badge}>{ruleCountsBySet.get(setName) ?? 0}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
 
-      {showing.map(([set, list]) => (
-        <div key={set} className={styles.set}>
-          <h3 className={styles.setName}>{set}</h3>
-          <ul className={styles.rules}>
-            {list.map((rule) => (
-              <li
-                key={rule.id}
-                className={`${styles.rule} ${rule.approvalStatus === "approved" ? styles.live : ""}`}
+            <div className={styles.railBlock}>
+              <p className={styles.railLabel}>Situation</p>
+              <button
+                type="button"
+                className={activeSituation === SHARED ? styles.situationOn : styles.situationButton}
+                onClick={() => {
+                  setActiveSituation(SHARED);
+                  setSelectedRuleId(null);
+                }}
               >
-                <div className={styles.ruleHead}>
-                  <span className={styles.key}>{rule.answerKey}</span>
-                  {rule.situationKey ? (
-                    <span className={styles.situation} title={questionFor.get(rule.situationKey) ?? ""}>
-                      {rule.situationKey}
+                <span className={styles.situationKey}>Any situation</span>
+                <span className={styles.situationQuestion}>Shared rules for the whole set</span>
+              </button>
+              {situationsForSet.map((situation) => {
+                const count = rulesInSet.filter((rule) => rule.situationKey === situation.key).length;
+                return (
+                  <button
+                    key={situation.key}
+                    type="button"
+                    className={activeSituation === situation.key ? styles.situationOn : styles.situationButton}
+                    onClick={() => {
+                      setActiveSituation(situation.key);
+                      setSelectedRuleId(null);
+                    }}
+                  >
+                    <span className={styles.situationLine}>
+                      <span className={styles.situationKey}>{situation.key}</span>
+                      <span className={styles.badge}>{count}</span>
                     </span>
-                  ) : (
-                    <span className={styles.shared}>any situation</span>
-                  )}
-                  {rule.approvalStatus === "approved" ? (
-                    <span className={styles.liveTag}>live</span>
-                  ) : (
-                    <span className={styles.draftTag}>draft</span>
-                  )}
+                    <span className={styles.situationQuestion}>{situation.question}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </aside>
+
+          <main className={styles.canvas} aria-label="Rule workflow canvas">
+            <div className={styles.canvasTop}>
+              <div>
+                <p className={styles.canvasKicker}>{answerSet || "No answer set"}</p>
+                <h3 className={styles.canvasTitle}>
+                  {activeSituationMeta ? activeSituationMeta.key : "Any situation"}
+                </h3>
+                <p className={styles.canvasMeta}>
+                  {activeSituationMeta?.question ?? "Shared rules that can apply when no specific situation wins."}
+                </p>
+              </div>
+              <div className={styles.canvasStats} aria-label="Workflow summary">
+                <span>{specificRuleCount} situation rules</span>
+                <span>{sharedRuleCount} shared</span>
+                <span>{workflow.missingBranches} gaps</span>
+              </div>
+            </div>
+
+            <div className={styles.flow}>
+              <div className={styles.rootNode}>
+                <span className={styles.nodeIcon}>
+                  <DotIcon size={14} />
+                </span>
+                <div>
+                  <p className={styles.nodeLabel}>Start</p>
+                  <h4>{activeSituationMeta ? activeSituationMeta.question : "Any matched request in this set"}</h4>
                 </div>
+              </div>
 
-                <p className={styles.when}>
-                  <span className={styles.label}>when</span>{" "}
-                  {Object.keys(rule.conditions).length === 0 ? (
-                    <em>any evidence</em>
-                  ) : (
-                    Object.entries(rule.conditions).map(([need, values], i) => (
-                      <span key={need}>
-                        {i > 0 ? " and " : ""}
-                        <code>{need}</code> is {values.join(" or ")}
-                      </span>
-                    ))
-                  )}
-                </p>
-
-                <p className={styles.then}>
-                  <span className={styles.label}>then</span>{" "}
-                  {rule.route ? (
-                    <>
-                      <b>{rule.route}</b>
-                      {rule.ask.length > 0 ? (
-                        <>
-                          , asking for <b>{rule.ask.join(" and ")}</b>
-                        </>
-                      ) : null}
-                      {/* Rendered on the `then` line rather than beside the
-                          skeleton, because it is part of what the rule DOES —
-                          a rule that hands out 20% is a different rule from one
-                          that does not, and that has to be visible without
-                          opening the editor. */}
-                      {rule.offerCode ? (
-                        <>
-                          , giving <code>{rule.offerCode}</code>
-                        </>
-                      ) : null}
-                    </>
-                  ) : rule.offerCode ? (
-                    <>
-                      <em>answer it</em>, giving <code>{rule.offerCode}</code>
-                    </>
-                  ) : (
-                    <em>answer it — the verdict is left alone</em>
-                  )}
-                </p>
-
-                {rule.answerSkeleton && <p className={styles.skeleton}>{rule.answerSkeleton}</p>}
-
-                <div className={styles.actions}>
-                  <Button variant="secondary" size="sm" onClick={() => setEditing(rule)}>
-                    Edit
-                  </Button>
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    disabled={busy === rule.id}
-                    onClick={() =>
-                      run(rule.id, async () => {
-                        const updated = await setRuleApproval(
-                          rule.id,
-                          rule.approvalStatus !== "approved",
-                        );
-                        setRules((prev) => prev.map((r) => (r.id === updated.id ? updated : r)));
-                      })
-                    }
-                  >
-                    {rule.approvalStatus === "approved" ? "Take off live mail" : "Put live"}
-                  </Button>
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    disabled={busy === rule.id}
-                    onClick={() =>
-                      run(rule.id, async () => {
-                        await deleteRule(rule.id);
-                        setRules((prev) => prev.filter((r) => r.id !== rule.id));
-                      })
-                    }
-                  >
-                    Delete
+              {workflow.needs.length === 0 ? (
+                <div className={styles.noBranches}>
+                  <p>No evidence branches are defined here yet.</p>
+                  <Button size="sm" variant="secondary" onClick={() => openNewRule()}>
+                    Add first branch
                   </Button>
                 </div>
-              </li>
-            ))}
-          </ul>
+              ) : (
+                workflow.needs.map((need, index) => (
+                  <section key={need.need} className={styles.decisionStep}>
+                    <div className={styles.connector} aria-hidden="true" />
+                    <div className={styles.decisionNode}>
+                      <header className={styles.nodeHeader}>
+                        <div>
+                          <p className={styles.nodeLabel}>Decision {index + 1}</p>
+                          <h4>{labelNeed(need.need)}</h4>
+                        </div>
+                        {need.isPrerequisiteOnly ? (
+                          <span className={styles.prereqTag}>required first</span>
+                        ) : (
+                          <span className={styles.coverageTag}>{coveredCount(need)} / {need.findings.length}</span>
+                        )}
+                      </header>
+
+                      {need.requires.length > 0 && (
+                        <p className={styles.requires}>Requires {need.requires.map(labelNeed).join(", ")}</p>
+                      )}
+
+                      {need.isPrerequisiteOnly ? (
+                        <p className={styles.prereqText}>
+                          Later branches depend on this fact, so the agent has to establish it before
+                          the deeper answer can be selected.
+                        </p>
+                      ) : (
+                        <div className={styles.branches}>
+                          {need.branches.map((branch) => (
+                            <div key={branch.finding} className={styles.branch}>
+                              <div className={styles.branchHead}>
+                                <span className={styles.branchFinding}>{branch.finding}</span>
+                                <BranchStatusIcon status={branch.status} />
+                              </div>
+                              {branch.rules.length > 0 ? (
+                                <div className={styles.outcomes}>
+                                  {branch.rules.map((rule) => (
+                                    <button
+                                      key={rule.id}
+                                      type="button"
+                                      className={
+                                        selectedRuleId === rule.id ? styles.outcomeOn : styles.outcomeButton
+                                      }
+                                      onClick={() => setSelectedRuleId(rule.id)}
+                                    >
+                                      <span className={styles.outcomeKey}>{rule.answerKey}</span>
+                                      <span className={styles.outcomeAction}>{actionSummary(rule)}</span>
+                                    </button>
+                                  ))}
+                                </div>
+                              ) : branch.continues ? (
+                                <p className={styles.continues}>Continues to a deeper decision.</p>
+                              ) : (
+                                <button
+                                  type="button"
+                                  className={styles.missingButton}
+                                  onClick={() =>
+                                    openNewRule({
+                                      conditions: { [need.need]: [branch.finding] },
+                                    })
+                                  }
+                                >
+                                  Add branch
+                                </button>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </section>
+                ))
+              )}
+
+              {workflow.conditionlessRules.length > 0 && (
+                <section className={styles.decisionStep}>
+                  <div className={styles.connector} aria-hidden="true" />
+                  <div className={styles.decisionNode}>
+                    <header className={styles.nodeHeader}>
+                      <div>
+                        <p className={styles.nodeLabel}>Fallback lane</p>
+                        <h4>Rules without evidence conditions</h4>
+                      </div>
+                    </header>
+                    <div className={styles.outcomes}>
+                      {workflow.conditionlessRules.map((rule) => (
+                        <button
+                          key={rule.id}
+                          type="button"
+                          className={selectedRuleId === rule.id ? styles.outcomeOn : styles.outcomeButton}
+                          onClick={() => setSelectedRuleId(rule.id)}
+                        >
+                          <span className={styles.outcomeKey}>{rule.answerKey}</span>
+                          <span className={styles.outcomeAction}>{actionSummary(rule)}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </section>
+              )}
+            </div>
+          </main>
+
+          <aside className={styles.inspector} aria-label="Selected rule">
+            {selectedRule ? (
+              <RuleInspector
+                rule={selectedRule}
+                busy={busy === selectedRule.id}
+                onEdit={() => setEditing({ rule: selectedRule })}
+                onApprove={() => approve(selectedRule)}
+                onDelete={() => remove(selectedRule)}
+              />
+            ) : (
+              <div className={styles.inspectorEmpty}>
+                <p className={styles.inspectorLabel}>Inspector</p>
+                <h3>Select a rule or missing branch</h3>
+                <p>
+                  The inspector keeps edits tied to one outcome. Missing branches can be added from
+                  the canvas with the situation and condition already filled in.
+                </p>
+              </div>
+            )}
+          </aside>
         </div>
-      ))}
+      )}
 
       {editing && (
         <RuleEditor
-          rule={editing === "new" ? null : editing}
+          rule={editing.rule}
+          seed={editing.seed}
           situations={situations}
           vocabulary={vocabulary}
-          knownSets={[...new Set(rules.map((r) => r.answerSet))]}
+          knownSets={answerSets}
           onClose={() => setEditing(null)}
           onSave={async (payload) => {
             const saved = await saveRule(payload);
             setRules((prev) => {
-              const without = prev.filter((r) => r.id !== saved.id);
+              const without = prev.filter((rule) => rule.id !== saved.id);
               return [...without, saved];
             });
+            setSelectedRuleId(saved.id);
             setEditing(null);
           }}
         />
       )}
     </section>
   );
+}
+
+function RuleInspector({
+  rule,
+  busy,
+  onEdit,
+  onApprove,
+  onDelete,
+}: {
+  rule: PolicyRule;
+  busy: boolean;
+  onEdit: () => void;
+  onApprove: () => void;
+  onDelete: () => void;
+}) {
+  return (
+    <div className={styles.inspectorBody}>
+      <div className={styles.inspectorHead}>
+        <div>
+          <p className={styles.inspectorLabel}>Selected rule</p>
+          <h3>{rule.answerKey}</h3>
+        </div>
+        <span className={rule.approvalStatus === "approved" ? styles.liveTag : styles.draftTag}>
+          {rule.approvalStatus === "approved" ? "live" : "draft"}
+        </span>
+      </div>
+
+      <dl className={styles.ruleFacts}>
+        <div>
+          <dt>Situation</dt>
+          <dd>{rule.situationKey ?? "Any situation"}</dd>
+        </div>
+        <div>
+          <dt>When</dt>
+          <dd>{conditionSummary(rule)}</dd>
+        </div>
+        <div>
+          <dt>Then</dt>
+          <dd>{actionSummary(rule)}</dd>
+        </div>
+        {rule.offerCode && (
+          <div>
+            <dt>Code</dt>
+            <dd>{rule.offerCode}</dd>
+          </div>
+        )}
+      </dl>
+
+      {rule.answerSkeleton && <p className={styles.skeleton}>{rule.answerSkeleton}</p>}
+
+      <div className={styles.inspectorActions}>
+        <Button variant="secondary" size="sm" onClick={onEdit}>
+          Edit
+        </Button>
+        <Button variant="secondary" size="sm" disabled={busy} onClick={onApprove}>
+          {rule.approvalStatus === "approved" ? "Take off live mail" : "Put live"}
+        </Button>
+        <Button variant="secondary" size="sm" disabled={busy} onClick={onDelete}>
+          Delete
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function BranchStatusIcon({ status }: { status: BranchStatus }) {
+  if (status === "covered") {
+    return (
+      <span className={styles.branchCovered} title="Covered">
+        <CheckCircleIcon size={14} />
+      </span>
+    );
+  }
+  if (status === "missing") {
+    return (
+      <span className={styles.branchMissing} title="Missing branch">
+        <AlertIcon size={14} />
+      </span>
+    );
+  }
+  return null;
+}
+
+function buildWorkflow(rules: PolicyRule[], vocabulary: PolicyVocabulary) {
+  const needIndex = new Map(vocabulary.needs.map((need, index) => [need.need, index]));
+  const needMeta = new Map(vocabulary.needs.map((need) => [need.need, need]));
+  const mentioned = new Set<string>();
+
+  for (const rule of rules) {
+    for (const need of Object.keys(rule.conditions)) mentioned.add(need);
+  }
+
+  const expanded = new Set<string>(mentioned);
+  function addPrerequisites(need: string) {
+    const meta = needMeta.get(need);
+    if (!meta) return;
+    for (const prerequisite of meta.requires) {
+      if (!needMeta.has(prerequisite) || expanded.has(prerequisite)) continue;
+      expanded.add(prerequisite);
+      addPrerequisites(prerequisite);
+    }
+  }
+  for (const need of mentioned) addPrerequisites(need);
+
+  const orderedNeeds = [...expanded]
+    .filter((need) => needMeta.has(need))
+    .sort(
+      (a, b) =>
+        dependencyDepth(a, needMeta) - dependencyDepth(b, needMeta) ||
+        (needIndex.get(a) ?? 0) - (needIndex.get(b) ?? 0),
+    );
+  const workflowOrder = new Map(orderedNeeds.map((need, index) => [need, index]));
+
+  const needs = orderedNeeds
+    .map((need): WorkflowNeed => {
+      const meta = needMeta.get(need)!;
+      const isPrerequisiteOnly = !mentioned.has(need);
+      const branches: BranchValue[] = meta.findings.map((finding) => {
+        const candidates = rules.filter((rule) => rule.conditions[need]?.includes(finding));
+        const matching = candidates.filter((rule) => deepestConditionNeed(rule, workflowOrder) === need);
+        const continues = candidates.length > matching.length;
+        const status: BranchStatus =
+          matching.length > 0 || continues ? "covered" : isPrerequisiteOnly ? "prerequisite" : "missing";
+        return {
+          finding,
+          rules: matching.sort(sortRuleForWorkflow),
+          status,
+          continues,
+        };
+      });
+      return {
+        need,
+        findings: meta.findings,
+        requires: meta.requires,
+        isPrerequisiteOnly,
+        branches,
+      };
+    });
+
+  const conditionlessRules = rules
+    .filter((rule) => Object.keys(rule.conditions).length === 0)
+    .sort(sortRuleForWorkflow);
+  const missingBranches = needs.reduce(
+    (count, need) => count + need.branches.filter((branch) => branch.status === "missing").length,
+    0,
+  );
+
+  return { needs, conditionlessRules, missingBranches };
+}
+
+function deepestConditionNeed(rule: PolicyRule, order: Map<string, number>): string | null {
+  return Object.keys(rule.conditions)
+    .filter((need) => order.has(need))
+    .sort((a, b) => (order.get(b) ?? 0) - (order.get(a) ?? 0))[0] ?? null;
+}
+
+function dependencyDepth(
+  need: string,
+  meta: Map<string, { requires: string[] }>,
+  seen = new Set<string>(),
+): number {
+  if (seen.has(need)) return 0;
+  seen.add(need);
+  const requires = meta.get(need)?.requires ?? [];
+  if (requires.length === 0) return 0;
+  return 1 + Math.max(...requires.map((prerequisite) => dependencyDepth(prerequisite, meta, seen)));
+}
+
+function coveredCount(need: WorkflowNeed): number {
+  return need.branches.filter((branch) => branch.status === "covered").length;
+}
+
+function sortRuleForWorkflow(a: PolicyRule, b: PolicyRule): number {
+  if (Boolean(a.situationKey) !== Boolean(b.situationKey)) return a.situationKey ? -1 : 1;
+  return Object.keys(b.conditions).length - Object.keys(a.conditions).length || a.answerKey.localeCompare(b.answerKey);
+}
+
+function labelNeed(need: string): string {
+  return need.replace(/_/g, " ");
+}
+
+function conditionSummary(rule: PolicyRule): string {
+  const entries = Object.entries(rule.conditions);
+  if (entries.length === 0) return "Any evidence";
+  return entries.map(([need, values]) => `${labelNeed(need)} is ${values.join(" or ")}`).join("; ");
+}
+
+function actionSummary(rule: PolicyRule): string {
+  if (rule.route) {
+    const ask = rule.ask.length > 0 ? `, ask for ${rule.ask.join(" and ")}` : "";
+    const offer = rule.offerCode ? `, give ${rule.offerCode}` : "";
+    return `${rule.route}${ask}${offer}`;
+  }
+  if (rule.offerCode) return `answer it, give ${rule.offerCode}`;
+  return "answer it, leave verdict alone";
 }

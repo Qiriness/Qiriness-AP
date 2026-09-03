@@ -10,8 +10,11 @@ import {
   NEED_STATES,
   findingValues,
   findingsOf,
+  gapClosability,
+  isDesignedGap,
   isMoot,
   needRequires,
+  needsSatisfiedBy,
   normaliseNeeds,
   orderNeeds,
   resolveNeeds,
@@ -777,5 +780,133 @@ test('dispatch_state is read off the order bundle like the other order states', 
       { id: 't1', tool: TOOL_NAMES.GET_ORDER_CONTEXT, outcome: 'found', data: { states: {} } }
     ]),
     'unknown'
+  );
+});
+
+test('the product family orders identity before the facts that depend on it', () => {
+  // Stock is a fact about one variant, so a planner walking this graph must not
+  // propose a stock check before it knows which product.
+  assert.deepEqual(
+    orderNeeds(['product_availability', 'product_property', 'product_identity']),
+    ['product_identity', 'product_property', 'product_availability']
+  );
+
+  // `product_property` is deliberately NOT ordered behind identity: the library
+  // answers « vos produits sont-ils testés sur les animaux ? » without a product
+  // being named at all, so a prerequisite there would order a collection that
+  // does not need one.
+  assert.deepEqual(needRequires('product_property'), []);
+
+  // And `product_recommendation` asks what we can put forward to somebody who
+  // has named nothing — requiring identity would make it uncollectable exactly
+  // when it is the need that matters.
+  assert.deepEqual(needRequires('product_recommendation'), []);
+});
+
+test('a photo and a purchase check are chased after the thing they are about', () => {
+  assert.deepEqual(needRequires('photo_evidence'), ['product_identity']);
+  assert.deepEqual(needRequires('purchase_verified'), ['customer_identity']);
+  const ordered = orderNeeds(['photo_evidence', 'purchase_verified', 'product_identity', 'customer_identity']);
+  assert.ok(ordered.indexOf('product_identity') < ordered.indexOf('photo_evidence'));
+  assert.ok(ordered.indexOf('customer_identity') < ordered.indexOf('purchase_verified'));
+});
+
+test('the dependency graph has no cycle', () => {
+  // `orderNeeds` falls back to declaration order on a cycle rather than hanging,
+  // so a bad edge would mis-order silently instead of failing. This is what
+  // catches it.
+  const seen = new Set();
+  const visit = (key, stack) => {
+    if (stack.includes(key)) assert.fail(`cycle through ${key}: ${stack.join(' -> ')}`);
+    if (seen.has(key)) return;
+    seen.add(key);
+    for (const next of needRequires(key)) visit(next, [...stack, key]);
+  };
+  for (const key of NEED_KEYS) visit(key, []);
+});
+
+test('a designed gap is one only an attempted need may claim', () => {
+  // The narrowing is the whole argument: a tie cannot ALSO be resolved, and a
+  // tool that never ran cannot have found a tie either.
+  assert.equal(isDesignedGap('product_identity', 'ambiguous', 'attempted'), true);
+  assert.equal(isDesignedGap('product_identity', 'ambiguous', 'satisfied'), false);
+  assert.equal(isDesignedGap('product_identity', 'ambiguous', 'not_attempted'), false);
+  assert.equal(isDesignedGap('order_identity', 'none', 'attempted'), false);
+});
+
+test('closability reads the question before the state, and the finding before both', () => {
+  // `not_attempted` is our own miss and outranks having a question to ask: a
+  // customer must never be asked for what we never looked for.
+  assert.equal(
+    gapClosability({ need: 'order_identity', state: 'not_attempted', asksCustomer: 'shopify_order_number' }),
+    'now'
+  );
+  // `unavailable` is every need on a cosmetovigilance ticket, where the empty
+  // tool set is deliberate — and CV-01 still asks which product was used.
+  assert.equal(
+    gapClosability({ need: 'reaction_product', state: 'unavailable', asksCustomer: 'reaction_product_name' }),
+    'customer'
+  );
+  // The finding outranks the state: a tool ran and the basket is still invisible.
+  assert.equal(
+    gapClosability({
+      need: 'promotion_eligibility',
+      state: 'attempted',
+      finding: 'undetermined',
+      asksCustomer: 'promotion_code'
+    }),
+    'never'
+  );
+  // Unsatisfiable by design, so that a ticket whose real requirement cannot be
+  // named can never report as complete.
+  assert.equal(gapClosability({ need: 'other_fact', state: 'unavailable' }), 'never');
+  // Attempted, nothing found, nobody to ask. A real class, and deliberately not
+  // folded into `never`: an article somebody could write is not a fact that does
+  // not exist.
+  assert.equal(gapClosability({ need: 'policy_answer', state: 'attempted', finding: 'none' }), 'unclear');
+});
+
+test('every need scores a closability, and none of them scores "satisfied"', () => {
+  // A gate reads this for every open need, so a need the classifier falls
+  // through on would be silently unblockable.
+  for (const need of NEED_KEYS) {
+    for (const state of NEED_STATES) {
+      const kind = gapClosability({ need, state, finding: 'unknown' });
+      assert.ok(['now', 'customer', 'never', 'unclear'].includes(kind), `${need}/${state} -> ${kind}`);
+    }
+  }
+});
+
+test('the satisfiedBy table reads backwards, and only for tools that appear in it', () => {
+  assert.ok(needsSatisfiedBy(TOOL_NAMES.LOOKUP_STOCK).includes('product_availability'));
+  assert.ok(needsSatisfiedBy(TOOL_NAMES.SEARCH_KNOWLEDGE).includes('policy_answer'));
+  // `other_fact` declares no source at all, so no tool can ever name it.
+  for (const need of NEED_KEYS) {
+    const sources = needsSatisfiedBy('noSuchTool');
+    assert.equal(sources.includes(need), false);
+  }
+});
+
+test('with no tool available, only a question that names the FACT closes the gap', () => {
+  // The subtle half, and neither plain ordering gets it right. `asksCustomer` is
+  // many-to-one: on `product_identity` the question IS the answer, and on
+  // `product_availability` it is only the key a tool would have needed — and
+  // `unavailable` is precisely the statement that the tool cannot run.
+  const unavailable = (need, asksCustomer) =>
+    gapClosability({ need, state: 'unavailable', finding: 'unknown', asksCustomer });
+
+  assert.equal(unavailable('product_identity', 'product_name'), 'customer');
+  assert.equal(unavailable('reaction_product', 'reaction_product_name'), 'customer');
+  assert.equal(unavailable('photo_evidence', 'photo'), 'customer');
+
+  assert.equal(unavailable('product_availability', 'product_name'), 'never', 'the name is not the stock');
+  assert.equal(unavailable('refund_state', 'shopify_order_number'), 'never', 'the number is not the refund');
+  assert.equal(unavailable('promotion_validity', 'promotion_code'), 'never', 'the code is not its validity');
+
+  // Where a tool COULD still run, the same question is worth putting: the tool
+  // is there to use the answer.
+  assert.equal(
+    gapClosability({ need: 'promotion_validity', state: 'attempted', finding: 'unknown', asksCustomer: 'promotion_code' }),
+    'customer'
   );
 });

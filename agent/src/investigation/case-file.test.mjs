@@ -45,6 +45,21 @@ test('a claim citing a call that never ran is dropped', () => {
   assert.equal(dropped.length, 2);
 });
 
+test('the findings trace travels through untouched, and defaults to empty', () => {
+  // A PASS-THROUGH ON PURPOSE. This module imports nothing and must not learn to
+  // derive a finding — the investigation builds the trace where the ledger still
+  // carries each tool's `data`, and hands it over whole.
+  const trace = [{ call: 't1', tool: 'lookupPromotion', findings: { promotion_identity: 'resolved' } }];
+
+  assert.deepEqual(buildCaseFile({ answer: ANSWER, ledger: LEDGER, findingsTrace: trace }).findingsTrace, trace);
+  assert.deepEqual(buildCaseFile({ answer: ANSWER, ledger: LEDGER }).findingsTrace, []);
+  assert.deepEqual(
+    buildCaseFile({ answer: ANSWER, ledger: LEDGER, findingsTrace: null }).findingsTrace,
+    [],
+    'a caller that supplies nothing usable gets an empty tape, never a null one'
+  );
+});
+
 test('an answerable verdict resting on nothing becomes needs_human', () => {
   const caseFile = buildCaseFile({
     answer: { ...ANSWER, established: [{ claim: 'Tout va bien.', evidence_ids: ['t9'] }] },
@@ -521,4 +536,56 @@ test('a rule may not smuggle a question past a verdict that forbids asking', () 
   });
   assert.equal(built.verdict, 'needs_human');
   assert.deepEqual(built.missing, []);
+});
+
+test('a rule never asks for a fact the dossier already answers', () => {
+  // A rule names its question from the evidence position it fired on, and a
+  // position is not the whole dossier: a rule keyed only to a situation fires
+  // whatever else was found, so it can ask for an order number the run resolved.
+  const asking = {
+    situation_key: 'O-13',
+    answer_key: 'o13_commande_non_identifiee',
+    route: 'needs_customer_input',
+    ask: ['shopify_order_number']
+  };
+
+  const held = buildCaseFile({
+    answer: { verdict: 'needs_customer_input', established: [], unverified: [], missing: [] },
+    policy: asking,
+    answeredFields: ['shopify_order_number'],
+    ledger: [],
+    model: 'test'
+  });
+  // Nothing left to ask for, so the verdict falls back to a person rather than
+  // shipping a question with no question in it.
+  assert.deepEqual(held.missing, []);
+  assert.equal(held.verdict, 'needs_human');
+
+  const notHeld = buildCaseFile({
+    answer: { verdict: 'needs_customer_input', established: [], unverified: [], missing: [] },
+    policy: asking,
+    answeredFields: [],
+    ledger: [],
+    model: 'test'
+  });
+  assert.deepEqual(notHeld.missing, [{ field: 'shopify_order_number' }]);
+  assert.equal(notHeld.verdict, 'needs_customer_input');
+});
+
+test('only the field actually held is suppressed', () => {
+  // Two questions, one of them answered. Dropping both would be the mirror of
+  // the bug — a reaction with no product named needs the product AND the batch.
+  const caseFile = buildCaseFile({
+    answer: { verdict: 'needs_customer_input', established: [], unverified: [], missing: [] },
+    policy: {
+      situation_key: 'CV-01',
+      answer_key: 'reaction_produit_a_preciser',
+      route: 'needs_customer_input',
+      ask: ['reaction_product_name', 'lot_number']
+    },
+    answeredFields: ['reaction_product_name'],
+    ledger: [],
+    model: 'test'
+  });
+  assert.deepEqual(caseFile.missing, [{ field: 'lot_number' }]);
 });

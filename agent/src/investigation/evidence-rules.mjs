@@ -982,6 +982,37 @@ function promotionIdentified(entries = []) {
 }
 
 const DEPENDENCIES = {
+  // --- product ---------------------------------------------------------------
+  //
+  // FILLED IN 2026-09-03. Fifteen of twenty-five needs had no prerequisite and
+  // the whole product family was among them, so a planner walking this graph
+  // would have proposed a stock check before knowing which product.
+  //
+  // `product_availability` REQUIRES IDENTITY AND `product_property` DOES NOT,
+  // which looks inconsistent and is the point. Stock is a fact about one
+  // variant, so without a product there is nothing to look up. A characteristic
+  // can also be settled by the library — « vos produits sont-ils testés sur les
+  // animaux ? » is answered without naming a product at all — and declaring a
+  // prerequisite there would order a collection that does not need one.
+  //
+  // `product_recommendation` HAS NONE, deliberately: it asks what we can put
+  // forward to somebody who has named nothing, which is the opposite end of the
+  // same subject. Requiring identity would make it uncollectable exactly when it
+  // is the need that matters.
+  product_availability: { requires: ['product_identity'] },
+  // The reaction tool takes the model's reading of the email, so nothing has to
+  // be established first — but a photo is evidence ABOUT a product, and chasing
+  // one before knowing which product is a question nobody can act on.
+  photo_evidence: { requires: ['product_identity'] },
+
+  // --- customer --------------------------------------------------------------
+  //
+  // `verifyPurchase` answers "is this person a customer who bought online", and
+  // it resolves the sender itself — but the order of collection still matters:
+  // knowing who they are first is what makes an unverified purchase mean « nous
+  // ne trouvons pas d'achat » rather than « nous ne vous trouvons pas ».
+  purchase_verified: { requires: ['customer_identity'] },
+
   promotion_validity: { requires: ['promotion_identity'] },
   promotion_eligibility: {
     requires: ['promotion_validity'],
@@ -999,6 +1030,56 @@ const DEPENDENCIES = {
   refund_state: { requires: ['order_identity'] },
   return_eligibility: { requires: ['order_identity'] }
 };
+
+/**
+ * Which askable facts we are ALREADY HOLDING, given what the run established.
+ *
+ * A need declares `asksCustomer` — the `MISSING_FIELDS` key to ask for when it
+ * stays open. This is the mirror: the findings under which that question has
+ * already been answered by our own tools and must not be put to the customer.
+ *
+ * ONLY THE IDENTITY NEEDS APPEAR, and that is the whole subtlety. `asksCustomer`
+ * is many-to-one — five needs name `shopify_order_number` — but knowing an
+ * order's STATE does not mean we hold its number; knowing its IDENTITY does. A
+ * need that merely depends on the fact cannot vouch for it.
+ *
+ * `customer_account_state` is the one that is not an identity and belongs
+ * anyway: every value except `unknown_sender` means we found the account, so
+ * asking « sous quelle adresse votre compte est-il enregistré » is asking for
+ * something already in the dossier.
+ */
+const ASK_ANSWERED_BY = {
+  order_identity: ['resolved'],
+  promotion_identity: ['resolved'],
+  product_identity: ['resolved'],
+  customer_identity: ['resolved'],
+  customer_account_state: ['enabled', 'never_activated', 'known_no_account'],
+  // Both mean something arrived. `attachment_type_unknown` is an attachment we
+  // could not identify, which is still not a customer who sent nothing.
+  photo_evidence: ['attached', 'attachment_type_unknown'],
+  reaction_product: ['identified']
+};
+
+/**
+ * The `MISSING_FIELDS` keys the dossier already answers.
+ *
+ * Read by `buildCaseFile` before a rule's `ask` reaches `missing`: a rule may
+ * name a question, and the case file decides whether it is still worth asking.
+ *
+ * WHY IT LIVES HERE rather than beside the rule. The rule knows what it wants;
+ * only the evidence vocabulary knows what has been found, and it already owns
+ * both halves — `asksCustomer` on the way out and the findings on the way back.
+ */
+export function fieldsAlreadyAnswered(findings = {}) {
+  const answered = new Set();
+  for (const [need, values] of Object.entries(ASK_ANSWERED_BY)) {
+    const field = NEEDS[need]?.asksCustomer;
+    if (field && values.includes(findings[need])) {
+      answered.add(field);
+    }
+  }
+  return answered;
+}
 
 export function needRequires(key) {
   return [...(DEPENDENCIES[key]?.requires || [])];
@@ -1057,6 +1138,137 @@ export function orderNeeds(needs = []) {
  * it. Everything else is the world being uncooperative; that one is the agent.
  */
 export const NEED_STATES = ['satisfied', 'attempted', 'unavailable', 'not_attempted'];
+
+/**
+ * `<need>:<finding>` pairs where a need that was NOT satisfied is nevertheless
+ * entitled to a positive finding, because the finding says WHY it could not be
+ * settled rather than claiming it was.
+ *
+ * "ONLY A SATISFIED NEED MAY MAKE A POSITIVE CLAIM" IS TOO STRONG A RULE, and
+ * these four are why. Each says so in its own declaration above:
+ *
+ *   photo_evidence:mentioned_not_attached  — "the customer saying a photo is
+ *     attached is not a photo", and the drafting prize besides: 36 of 203
+ *     tickets, where « vous mentionnez une photo mais rien n'est joint » is a
+ *     different reply from « merci de nous envoyer une photo ».
+ *   product_identity:ambiguous  — a tie between two products is precisely the
+ *     case where the reply must ask rather than pick.
+ *   reaction_product:not_in_catalogue  — a real finding a rule branches on, and
+ *     not a product we can name back to somebody reporting a reaction.
+ *   product_property:weak  — the library answered below the band that answers.
+ *
+ * IT LIVES HERE RATHER THAN IN THE REPORT THAT FIRST NEEDED IT, because whether
+ * a finding is a legitimate statement about a failure is a property of the
+ * vocabulary, and two readers now ask: the vocabulary audit, and the
+ * completeness gate through `gapClosability`.
+ */
+const DESIGNED_GAP = new Set([
+  'photo_evidence:mentioned_not_attached',
+  'product_identity:ambiguous',
+  'reaction_product:not_in_catalogue',
+  'product_property:weak'
+]);
+
+/**
+ * Is this non-satisfying finding a statement the need is entitled to make?
+ *
+ * TRUE ONLY UNDER `attempted`, and the narrowing carries the argument: the same
+ * pair under `satisfied` is still a contradiction — a tie cannot also be
+ * resolved — and so is the same pair under `unavailable` or `not_attempted`,
+ * because a tool that never ran cannot have found a tie. Only where the tool
+ * actually ran is the value a finding rather than a fabrication.
+ */
+export function isDesignedGap(need, finding, state = 'attempted') {
+  return state === 'attempted' && DESIGNED_GAP.has(`${need}:${finding}`);
+}
+
+/**
+ * Findings that mean NO FURTHER COLLECTION CAN HELP — not by us, not by asking.
+ *
+ * Distinct from `DESIGNED_GAP` and the distinction is the point: both describe a
+ * legitimate open need, but `photo_evidence: mentioned_not_attached` is one the
+ * customer closes by attaching the photo, while this one nobody closes at all.
+ *
+ * `promotion_eligibility: undetermined` is the whole set today. The tool could
+ * not decide because the basket is invisible to us, and it is excluded from
+ * `satisfiedBy` deliberately so the gap is not laundered — asking the customer
+ * what is in their basket does not make it checkable.
+ */
+const NOTHING_CAN_CLOSE = new Set(['promotion_eligibility:undetermined']);
+
+/**
+ * Who, if anyone, could still close this gap.
+ *
+ * WHY A GATE NEEDS THIS AND NOT JUST THE STATE. A completeness gate refuses an
+ * `answerable` verdict while a declared need is open, which assumes somebody can
+ * close it. Measured over the fresh corpus: of the 12 `answerable` runs a naive
+ * gate would downgrade, FOUR have nothing open but gaps nobody can ever close,
+ * and four more are part-way there. Downgrading those sends a ticket to a person
+ * who can do no more about it than the agent could.
+ *
+ * ORDER MATTERS, and it is not the order of the states:
+ *
+ *   `other_fact` first, because it is unsatisfiable by design — the escape hatch
+ *   that exists so a ticket whose real requirement is unnameable cannot report
+ *   as complete. It fails towards a person on purpose, and that is not a gap to
+ *   be closed.
+ *
+ *   `NOTHING_CAN_CLOSE` next, before the state is read at all: the finding is a
+ *   stronger statement than the state here.
+ *
+ *   `not_attempted` before `asksCustomer`, because a tool was ALLOWED and the
+ *   budget was there and nothing called it. That is our miss, and putting the
+ *   question to a customer we never looked for the answer to is the one outcome
+ *   this whole layer exists to prevent.
+ *
+ *   `asksCustomer` before `unavailable` ONLY WHERE THE QUESTION NAMES THE FACT
+ *   ITSELF, which is the subtle half and neither ordering gets right on its own.
+ *   `unavailable` means no tool in this ticket's registry can settle the need —
+ *   on a cosmetovigilance ticket that is every tool, by design — and the
+ *   customer can still be asked which product they used, which is exactly what
+ *   CV-01 does. But `asksCustomer` is many-to-one, and on half the needs that
+ *   carry one the question names a PREREQUISITE rather than the answer:
+ *   `product_availability` asks for `product_name`, and being told the name does
+ *   not tell us the stock — only `lookupStock` does, and `unavailable` is
+ *   precisely the statement that it cannot run. Asking there costs the customer
+ *   a reply and closes nothing.
+ *
+ *   `ASK_ANSWERED_BY` ALREADY DRAWS THAT LINE and is reused rather than
+ *   restated: it is the table of needs whose own satisfaction answers their
+ *   question, written for `fieldsAlreadyAnswered` with the same observation —
+ *   knowing an order's STATE does not mean holding its number; knowing its
+ *   IDENTITY does. Read forwards it says "stop asking, we have it"; read
+ *   backwards it says "asking would actually get it".
+ *
+ * `unclear` is the honest remainder: attempted, found nothing, and no question
+ * to put to anybody. It is a real class and deliberately not folded into
+ * `never` — a knowledge gap somebody could write an article for is not the same
+ * as a fact that does not exist.
+ */
+export function gapClosability(gap = {}) {
+  const { need, finding = null, state = null, asksCustomer = null } = gap;
+  if (need === 'other_fact') return 'never';
+  if (NOTHING_CAN_CLOSE.has(`${need}:${finding}`)) return 'never';
+  if (state === 'not_attempted') return 'now';
+  // Where a tool COULD still run, the question is worth putting even when it
+  // only supplies a key: the tool is there to use the answer. Where no tool can
+  // run, only a question that names the fact itself closes anything.
+  if (asksCustomer && (state !== 'unavailable' || need in ASK_ANSWERED_BY)) return 'customer';
+  if (state === 'unavailable') return 'never';
+  return 'unclear';
+}
+
+/**
+ * Which needs a tool can establish — the `satisfiedBy` table, read backwards.
+ *
+ * A failing tool is only worth reporting against the needs it could have
+ * settled: `lookupStock` erroring on a delivery ticket that declared no
+ * availability need is noise, and the same error on a stock question is the
+ * reason the answer is thin.
+ */
+export function needsSatisfiedBy(tool) {
+  return NEED_KEYS.filter((key) => NEEDS[key].satisfiedBy.some((source) => source.tool === tool));
+}
 
 /** Keeps only needs this vocabulary knows, deduped. Order follows the vocabulary. */
 export function normaliseNeeds(raw) {

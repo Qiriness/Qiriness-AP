@@ -33,6 +33,7 @@ import {
 import {
   NEED_KEYS,
   findingValues,
+  needRequires,
 } from "../../../agent/src/investigation/evidence-rules.mjs";
 import { MISSING_FIELDS, VERDICTS } from "../../../agent/src/investigation/case-file.mjs";
 import { PARAMETERS } from "../../../scripts/lib/parameters.mjs";
@@ -102,6 +103,7 @@ export async function policyVocabulary(shopId?: string): Promise<PolicyVocabular
   const needs = NEED_KEYS.map((need: string) => ({
     need,
     findings: (findingValues(need) as string[] | null) ?? [],
+    requires: needRequires(need),
     // Which parameter this state is computed from, when it is computed from one.
     // The editor does not offer it as a CONDITION — you pick the state, not the
     // number behind it — but it must say so when the number is missing, because

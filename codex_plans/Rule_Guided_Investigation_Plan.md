@@ -199,6 +199,20 @@ When enforced — and note the verdict is `needs_human`, there is no
 | Customer-only (`asksCustomer`) | `needs_customer_input` |
 | Human action required | `needs_human` |
 | Material tool failure | never `answerable` |
+| **Nothing can ever close it** | **the gate must not fire** |
+
+**The fifth row was added after the report ran, and is the reason it ran first.**
+The four rows above route a gap by WHO closes it and assume somebody can. Measured
+over 91 fresh runs, the gate would downgrade 12 — and on **4 of them every open
+gap is one nobody can close**: `checkout_state` has no tool wired at all,
+`other_fact` is unsatisfiable by design, `product_recommendation` comes back
+`unavailable`, and `promotion_eligibility: undetermined` is the vocabulary's own
+honest gap because the basket is invisible. Downgrading those hands a ticket to a
+person who can do no more about it than the agent could. `gapClosability` in
+`evidence-rules.mjs` is the classifier, and its READ ORDER matters as much as its
+result — `not_attempted` outranks `asksCustomer` (never ask for what we did not
+look for), and `asksCustomer` outranks `unavailable` (a cosmetovigilance ticket
+has no tools by design and CV-01 still asks which product was used).
 
 **Report-only until the vocabulary is validated.** `product_property` was derived
 wrong until 2026-08-31 — of 13 product investigations reported unanswered, 8 were
@@ -469,11 +483,11 @@ Measurements first, because two of them are prerequisites rather than validation
 | --- | --- | --- |
 | 0 | **Run a backfill** — `investigate --backfill` | DONE FOR STEPS 1–2 BY THIS MEASUREMENT, and it found the blocker: the corpus ends 2026-08-21, so no stored run has ever loaded a rule or exercised the 2026-08-31 fix. Steps 1 and 2 cannot be *concluded* on it, only started |
 | 1 | ~~Count model-initiated calls~~ — **done** | Median 1, p90 2, 69% reach beyond the floor. Promotions reaches on 100% of tickets |
-| 2 | Re-run the vocabulary audit after the backfill | 11 contradictions in 294 entries today, all predating the fix that may already have removed them |
-| 3 | Ship `findings_trace` | §10 cannot run without it, and no existing store substitutes |
-| 4 | Ship §8 — never ask for what is known | Independent; fixes a live hole |
-| 5 | Fill in `DEPENDENCIES` | Authoring. Nine entries, none for products, five dormant |
-| 6 | Gate as a report (§7) | Read the disagreements before enforcing any |
+| 2 | ~~Re-run the vocabulary audit after the backfill~~ — **done 2026-09-03** | **0 contradictions in 279 fresh entries.** Both `satisfied_but_empty` faults are history; the four that remained were one class of false positive and are encoded |
+| 3 | ~~Ship `findings_trace`~~ — **done 2026-09-03** | Written from 2026-09-03; the 137 rows before it read NULL and can never be filled, so §10 is restricted to mail investigated from today |
+| 4 | ~~Ship §8 — never ask for what is known~~ — **done 2026-09-03** | `fieldsAlreadyAnswered` filters a rule's `ask` on the findings. The not-attempted half is deliberately left: the answer there is to run the tool, not to drop the question |
+| 5 | ~~Fill in `DEPENDENCIES`~~ — **done 2026-09-03** | Nine entries became thirteen; the product family has one for the first time. A cycle test guards it |
+| 6 | ~~Gate as a report (§7)~~ — **done 2026-09-03** | `npm run report:completeness-gate`. 12 downgrades in 91 runs, split **4 right / 4 mixed / 4 where nothing can ever close the gap**. The last four are why §7 gained a fifth row |
 | 7 | Planner, additive only (§§2–5) | May add and reorder; may not suppress |
 | 8 | Per-task rules | When a second set goes `rule_directed` |
 | 9 | Suppression, per situation | Only where the replay shows no evidence loss |

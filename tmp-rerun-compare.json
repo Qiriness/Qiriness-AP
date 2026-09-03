@@ -1,0 +1,1152 @@
+[
+ {
+  "ticketId": "4ceac4db-118e-4bc5-9779-099a2714ffef",
+  "category": "delivery",
+  "subject": "Nouveau message de client le 19 août 2026 à 10:04",
+  "before": {
+   "verdict": "needs_human",
+   "exVerdict": "ambiguous",
+   "ex": "D-36",
+   "rule": null,
+   "applied": false,
+   "gaps": 3
+  },
+  "after": {
+   "verdict": "needs_human",
+   "exVerdict": "ambiguous",
+   "ex": "D-36",
+   "rule": null,
+   "applied": false,
+   "tools": 2,
+   "gaps": 3,
+   "at": "2026-09-03T11:18:06.941+00:00"
+  }
+ },
+ {
+  "ticketId": "5f64d154-7595-446b-8cc9-90300774fa3d",
+  "category": "delivery",
+  "subject": "Mancata consegna",
+  "before": {
+   "verdict": "answerable",
+   "exVerdict": "none",
+   "ex": "D-01",
+   "rule": "expediee_sans_scan",
+   "applied": false,
+   "gaps": 0
+  },
+  "after": {
+   "verdict": "answerable",
+   "exVerdict": "none",
+   "ex": "D-01",
+   "rule": "expediee_sans_scan",
+   "applied": false,
+   "tools": 1,
+   "gaps": 0,
+   "at": "2026-09-03T11:17:46.268+00:00"
+  }
+ },
+ {
+  "ticketId": "43b029f7-265f-4a4e-800c-3fc07f706e61",
+  "category": "delivery",
+  "subject": "Nouveau message de client le 10 août 2026 à 13:15",
+  "before": {
+   "verdict": "needs_customer_input",
+   "exVerdict": "matched",
+   "ex": "D-01",
+   "rule": "d01_commande_non_identifiee",
+   "applied": false,
+   "gaps": 4
+  },
+  "after": {
+   "verdict": "needs_customer_input",
+   "exVerdict": "matched",
+   "ex": "D-01",
+   "rule": "d01_commande_non_identifiee",
+   "applied": false,
+   "tools": 2,
+   "gaps": 4,
+   "at": "2026-09-03T11:17:04.908+00:00"
+  }
+ },
+ {
+  "ticketId": "dfba7140-18a9-4269-b303-b75239815296",
+  "category": "delivery",
+  "subject": "Livraison commande #6746",
+  "before": {
+   "verdict": "needs_human",
+   "exVerdict": "matched",
+   "ex": "D-02",
+   "rule": "article_manquant",
+   "applied": true,
+   "gaps": 2
+  },
+  "after": {
+   "verdict": "needs_human",
+   "exVerdict": "matched",
+   "ex": "D-02",
+   "rule": "article_manquant",
+   "applied": false,
+   "tools": 1,
+   "gaps": 2,
+   "at": "2026-09-03T11:16:31.783+00:00"
+  }
+ },
+ {
+  "ticketId": "e5c77e51-f883-4ad0-865c-b85b02a653c7",
+  "category": "delivery",
+  "subject": "Re: Ma comande expire 7/8, aujoud’hui pour le recuperer",
+  "before": {
+   "verdict": "needs_human",
+   "exVerdict": "near",
+   "ex": "D-36",
+   "rule": "expediee_sans_scan",
+   "applied": false,
+   "gaps": 0
+  },
+  "after": {
+   "verdict": "needs_human",
+   "exVerdict": "near",
+   "ex": "D-36",
+   "rule": "expediee_sans_scan",
+   "applied": false,
+   "tools": 2,
+   "gaps": 0,
+   "at": "2026-09-03T11:16:22.082+00:00"
+  }
+ },
+ {
+  "ticketId": "8547f4bd-8a60-4f0a-8ff3-c98bc407e298",
+  "category": "delivery",
+  "subject": "Nouveau message de client le 7 août 2026 à 09:51",
+  "before": {
+   "verdict": "needs_human",
+   "exVerdict": "matched",
+   "ex": "D-02",
+   "rule": "article_manquant",
+   "applied": true,
+   "gaps": 1
+  },
+  "after": {
+   "verdict": "needs_human",
+   "exVerdict": "matched",
+   "ex": "D-02",
+   "rule": "article_manquant",
+   "applied": false,
+   "tools": 1,
+   "gaps": 1,
+   "at": "2026-09-03T11:16:11.61+00:00"
+  }
+ },
+ {
+  "ticketId": "dec1cc2c-34a2-4ba6-acae-06c7ee074a49",
+  "category": "delivery",
+  "subject": "Nouveau message de client le 6 août 2026 à 11:06",
+  "before": {
+   "verdict": "needs_human",
+   "exVerdict": "matched",
+   "ex": "D-36",
+   "rule": "retard_client_veut_sortir",
+   "applied": false,
+   "gaps": 4
+  },
+  "after": {
+   "verdict": "needs_human",
+   "exVerdict": "matched",
+   "ex": "D-36",
+   "rule": "d36_commande_non_identifiee",
+   "applied": false,
+   "tools": 3,
+   "gaps": 4,
+   "at": "2026-09-03T11:16:00.662+00:00"
+  }
+ },
+ {
+  "ticketId": "0dd5cfda-276c-4895-b142-0fa9e0c7b0f4",
+  "category": "delivery",
+  "subject": "Demande de remboursement – Colis perdu n° 6C21070620301",
+  "before": {
+   "verdict": "needs_human",
+   "exVerdict": "near",
+   "ex": "D-36",
+   "rule": "expediee_sans_scan",
+   "applied": false,
+   "gaps": 1
+  },
+  "after": {
+   "verdict": "needs_human",
+   "exVerdict": "near",
+   "ex": "D-36",
+   "rule": "expediee_sans_scan",
+   "applied": false,
+   "tools": 1,
+   "gaps": 1,
+   "at": "2026-09-03T11:15:07.259+00:00"
+  }
+ },
+ {
+  "ticketId": "3e84c0c9-9ff0-41bd-93dc-18409b00de2c",
+  "category": "delivery",
+  "subject": "RE: Data di consegna n. Ordine 6672",
+  "before": {
+   "verdict": "needs_human",
+   "exVerdict": "none",
+   "ex": "D-01",
+   "rule": null,
+   "applied": false,
+   "gaps": 3
+  },
+  "after": {
+   "verdict": "needs_human",
+   "exVerdict": "none",
+   "ex": "D-01",
+   "rule": null,
+   "applied": false,
+   "tools": 2,
+   "gaps": 3,
+   "at": "2026-09-03T11:14:47.852+00:00"
+  }
+ },
+ {
+  "ticketId": "287ce163-f387-41a5-9815-e74c7d44458b",
+  "category": "delivery",
+  "subject": "Nouveau message de client le 31 juillet 2026 à 10:49",
+  "before": {
+   "verdict": "answerable",
+   "exVerdict": "near",
+   "ex": "D-36",
+   "rule": "expediee_sans_scan",
+   "applied": false,
+   "gaps": 0
+  },
+  "after": {
+   "verdict": "answerable",
+   "exVerdict": "near",
+   "ex": "D-36",
+   "rule": "expediee_sans_scan",
+   "applied": false,
+   "tools": 1,
+   "gaps": 0,
+   "at": "2026-09-03T11:13:34.693+00:00"
+  }
+ },
+ {
+  "ticketId": "669fdc2c-a9e8-40bb-8439-bb2a46e6bf41",
+  "category": "delivery",
+  "subject": "Re: Votre commande est confirmée",
+  "before": {
+   "verdict": "needs_human",
+   "exVerdict": "near",
+   "ex": "D-01",
+   "rule": "expediee_sans_scan",
+   "applied": false,
+   "gaps": 0
+  },
+  "after": {
+   "verdict": "needs_human",
+   "exVerdict": "near",
+   "ex": "D-01",
+   "rule": "expediee_sans_scan",
+   "applied": false,
+   "tools": 1,
+   "gaps": 0,
+   "at": "2026-09-03T11:13:26.15+00:00"
+  }
+ },
+ {
+  "ticketId": "01355530-4e03-4e60-9559-8407022fe0cd",
+  "category": "delivery",
+  "subject": "Nouveau message de client le 30 juillet 2026 à 16:39",
+  "before": {
+   "verdict": "answerable",
+   "exVerdict": "none",
+   "ex": "D-01",
+   "rule": "expediee_sans_scan",
+   "applied": false,
+   "gaps": 0
+  },
+  "after": {
+   "verdict": "answerable",
+   "exVerdict": "none",
+   "ex": "D-01",
+   "rule": "expediee_sans_scan",
+   "applied": false,
+   "tools": 1,
+   "gaps": 0,
+   "at": "2026-09-03T11:13:09.769+00:00"
+  }
+ },
+ {
+  "ticketId": "8a7f8bde-8d9a-4271-b5c2-de1226215795",
+  "category": "product_stock",
+  "subject": "Nouveau message de client le 9 août 2026 à 01:18",
+  "before": {
+   "verdict": "needs_customer_input",
+   "exVerdict": "matched",
+   "ex": "S-34",
+   "rule": null,
+   "applied": false,
+   "gaps": 2
+  },
+  "after": {
+   "verdict": "needs_customer_input",
+   "exVerdict": "matched",
+   "ex": "S-34",
+   "rule": null,
+   "applied": false,
+   "tools": 2,
+   "gaps": 2,
+   "at": "2026-09-03T11:16:38.586+00:00"
+  }
+ },
+ {
+  "ticketId": "f5124f7a-9f1d-4c17-b34a-2c7ff8661f1f",
+  "category": "promotions",
+  "subject": "Nouveau message de client le 31 juillet 2026 à 16:19",
+  "before": {
+   "verdict": "needs_customer_input",
+   "exVerdict": "matched",
+   "ex": "P-18",
+   "rule": "aucun_code_identifie",
+   "applied": true,
+   "gaps": 4
+  },
+  "after": {
+   "verdict": "needs_customer_input",
+   "exVerdict": "matched",
+   "ex": "P-18",
+   "rule": "aucun_code_identifie",
+   "applied": true,
+   "tools": 5,
+   "gaps": 4,
+   "at": "2026-09-03T11:14:29.837+00:00"
+  }
+ },
+ {
+  "ticketId": "315b0f1c-90c1-4743-9b50-d9f07c86e6f0",
+  "category": "promotions",
+  "subject": "RE: Nouveau message de client le 27 juillet 2026 à 09:14",
+  "before": {
+   "verdict": "needs_human",
+   "exVerdict": "matched",
+   "ex": "P-15",
+   "rule": "newsletter_code_client_connu",
+   "applied": false,
+   "gaps": 2
+  },
+  "after": {
+   "verdict": "answerable",
+   "exVerdict": "matched",
+   "ex": "P-15",
+   "rule": "newsletter_code_client_connu",
+   "applied": false,
+   "tools": 4,
+   "gaps": 2,
+   "at": "2026-09-03T11:12:22.397+00:00"
+  }
+ },
+ {
+  "ticketId": "3fce1d21-6549-466c-8f65-ff4c7f61cd81",
+  "category": "promotions",
+  "subject": "RE: Nouveau message de client le 20 juillet 2026 à 19:19",
+  "before": {
+   "verdict": "answerable",
+   "exVerdict": "matched",
+   "ex": "P-15",
+   "rule": "newsletter_code_client_connu",
+   "applied": false,
+   "gaps": 2
+  },
+  "after": {
+   "verdict": "answerable",
+   "exVerdict": "matched",
+   "ex": "P-15",
+   "rule": "newsletter_code_client_connu",
+   "applied": false,
+   "tools": 4,
+   "gaps": 2,
+   "at": "2026-09-03T11:11:35.343+00:00"
+  }
+ },
+ {
+  "ticketId": "a209c20c-d6b7-424d-9af3-ed8ee649ff60",
+  "category": "promotions",
+  "subject": "RE: Nouveau message de client le 20 juillet 2026 à 14:34",
+  "before": {
+   "verdict": "answerable",
+   "exVerdict": "matched",
+   "ex": "P-15",
+   "rule": "newsletter_code_client_connu",
+   "applied": false,
+   "gaps": 2
+  },
+  "after": {
+   "verdict": "answerable",
+   "exVerdict": "matched",
+   "ex": "P-15",
+   "rule": "newsletter_code_client_connu",
+   "applied": false,
+   "tools": 4,
+   "gaps": 2,
+   "at": "2026-09-03T11:11:15.81+00:00"
+  }
+ },
+ {
+  "ticketId": "e940b2c9-8af7-459a-9baa-ec1c981cfe68",
+  "category": "promotions",
+  "subject": "RE: Nouveau message de client le 17 juillet 2026 à 15:03",
+  "before": {
+   "verdict": "needs_customer_input",
+   "exVerdict": "matched",
+   "ex": "P-18",
+   "rule": "code_introuvable",
+   "applied": false,
+   "gaps": 4
+  },
+  "after": {
+   "verdict": "needs_customer_input",
+   "exVerdict": "matched",
+   "ex": "P-18",
+   "rule": "code_introuvable",
+   "applied": false,
+   "tools": 8,
+   "gaps": 4,
+   "at": "2026-09-03T11:11:06.932+00:00"
+  }
+ },
+ {
+  "ticketId": "5ed80bd5-1626-40df-978d-da707d35bdc6",
+  "category": "product",
+  "subject": "Produit défectueux ?",
+  "before": {
+   "verdict": "answerable",
+   "exVerdict": "none",
+   "ex": "PR-26",
+   "rule": null,
+   "applied": false,
+   "gaps": 1
+  },
+  "after": {
+   "verdict": "answerable",
+   "exVerdict": "none",
+   "ex": "PR-26",
+   "rule": null,
+   "applied": false,
+   "tools": 4,
+   "gaps": 1,
+   "at": "2026-09-03T11:18:18.622+00:00"
+  }
+ },
+ {
+  "ticketId": "177410cb-9f05-477d-abc6-8f923e75600d",
+  "category": "product",
+  "subject": "Nouveau message de client le 13 août 2026 à 22:18",
+  "before": {
+   "verdict": "needs_human",
+   "exVerdict": "none",
+   "ex": "PR-24",
+   "rule": "produit_non_documente",
+   "applied": false,
+   "gaps": 1
+  },
+  "after": {
+   "verdict": "needs_human",
+   "exVerdict": "none",
+   "ex": "PR-24",
+   "rule": "produit_non_documente",
+   "applied": false,
+   "tools": 2,
+   "gaps": 1,
+   "at": "2026-09-03T11:17:31.398+00:00"
+  }
+ },
+ {
+  "ticketId": "9e232eea-7360-4050-9b7c-e6ecf20a87bf",
+  "category": "product",
+  "subject": "Protection oculaire noir",
+  "before": {
+   "verdict": "needs_customer_input",
+   "exVerdict": "near",
+   "ex": "PR-28",
+   "rule": null,
+   "applied": false,
+   "gaps": 1
+  },
+  "after": {
+   "verdict": "needs_customer_input",
+   "exVerdict": "near",
+   "ex": "PR-28",
+   "rule": null,
+   "applied": false,
+   "tools": 4,
+   "gaps": 1,
+   "at": "2026-09-03T11:16:48.443+00:00"
+  }
+ },
+ {
+  "ticketId": "d31abd79-6828-486a-ab74-6362d4321544",
+  "category": "product",
+  "subject": "RE: Nouveau message de client le 4 août 2026 à 15:12",
+  "before": {
+   "verdict": "needs_human",
+   "exVerdict": "near",
+   "ex": "PR-25",
+   "rule": "produit_non_documente",
+   "applied": true,
+   "gaps": 2
+  },
+  "after": {
+   "verdict": "needs_human",
+   "exVerdict": "near",
+   "ex": "PR-25",
+   "rule": "produit_non_documente",
+   "applied": true,
+   "tools": 3,
+   "gaps": 2,
+   "at": "2026-09-03T11:15:48.162+00:00"
+  }
+ },
+ {
+  "ticketId": "273f44b2-f14d-4ffd-9618-9273b6d1644b",
+  "category": "product",
+  "subject": "RE: Demande d’information masque Led",
+  "before": {
+   "verdict": "answerable",
+   "exVerdict": "matched",
+   "ex": "PR-28",
+   "rule": "pr28_caracteristiques_connues",
+   "applied": false,
+   "gaps": 3
+  },
+  "after": {
+   "verdict": "answerable",
+   "exVerdict": "matched",
+   "ex": "PR-28",
+   "rule": "pr28_caracteristiques_connues",
+   "applied": false,
+   "tools": 5,
+   "gaps": 3,
+   "at": "2026-09-03T11:15:39.989+00:00"
+  }
+ },
+ {
+  "ticketId": "def878e2-ab5b-455b-b8df-ff02ea0ff232",
+  "category": "product",
+  "subject": "Nouveau message de client le 3 août 2026 à 13:31",
+  "before": {
+   "verdict": "needs_human",
+   "exVerdict": "none",
+   "ex": "PR-26",
+   "rule": null,
+   "applied": false,
+   "gaps": 1
+  },
+  "after": {
+   "verdict": "needs_human",
+   "exVerdict": "none",
+   "ex": "PR-26",
+   "rule": null,
+   "applied": false,
+   "tools": 3,
+   "gaps": 2,
+   "at": "2026-09-03T11:15:17.747+00:00"
+  }
+ },
+ {
+  "ticketId": "60ce9b22-fc8b-41b1-a353-341363586edc",
+  "category": "product",
+  "subject": "RE: Nouveau message de client le 8 juillet 2026 à 04:17",
+  "before": {
+   "verdict": "needs_customer_input",
+   "exVerdict": "near",
+   "ex": "PR-26",
+   "rule": null,
+   "applied": false,
+   "gaps": 2
+  },
+  "after": {
+   "verdict": "needs_customer_input",
+   "exVerdict": "near",
+   "ex": "PR-26",
+   "rule": null,
+   "applied": false,
+   "tools": 2,
+   "gaps": 2,
+   "at": "2026-09-03T11:10:13.685+00:00"
+  }
+ },
+ {
+  "ticketId": "f0903ebf-b7af-4a20-887e-05327f81ccf8",
+  "category": "other",
+  "subject": "Nouveau message de client le 11 août 2026 à 18:11",
+  "before": {
+   "verdict": "needs_human",
+   "exVerdict": "none",
+   "ex": null,
+   "rule": null,
+   "applied": false,
+   "gaps": 2
+  },
+  "after": {
+   "verdict": "needs_human",
+   "exVerdict": "none",
+   "ex": null,
+   "rule": null,
+   "applied": false,
+   "tools": 1,
+   "gaps": 2,
+   "at": "2026-09-03T11:17:22.038+00:00"
+  }
+ },
+ {
+  "ticketId": "798bfe33-bf0d-4d89-bf3a-463d9db9a366",
+  "category": "payment",
+  "subject": "Fwd: Votre commande est confirmée",
+  "before": {
+   "verdict": "needs_human",
+   "exVerdict": "near",
+   "ex": "PA-30",
+   "rule": null,
+   "applied": false,
+   "gaps": 1
+  },
+  "after": {
+   "verdict": "needs_human",
+   "exVerdict": "near",
+   "ex": "PA-30",
+   "rule": null,
+   "applied": false,
+   "tools": 2,
+   "gaps": 1,
+   "at": "2026-09-03T11:14:02.103+00:00"
+  }
+ },
+ {
+  "ticketId": "5981c0e5-8141-40d8-baf0-8dbf61507034",
+  "category": "payment",
+  "subject": "RE: Nouveau message de client le 23 juillet 2026 à 21:51",
+  "before": {
+   "verdict": "needs_customer_input",
+   "exVerdict": "none",
+   "ex": "PA-32",
+   "rule": null,
+   "applied": false,
+   "gaps": 2
+  },
+  "after": {
+   "verdict": "needs_customer_input",
+   "exVerdict": "none",
+   "ex": "PA-32",
+   "rule": null,
+   "applied": false,
+   "tools": 3,
+   "gaps": 2,
+   "at": "2026-09-03T11:12:02.109+00:00"
+  }
+ },
+ {
+  "ticketId": "63760c2c-f3d6-4b1b-83ea-d987698df2bf",
+  "category": "payment",
+  "subject": "RE: Nouveau message de client le 16 juillet 2026 à 21:36",
+  "before": {
+   "verdict": "needs_customer_input",
+   "exVerdict": "matched",
+   "ex": "PA-31",
+   "rule": "frais_supplementaires_sans_commande",
+   "applied": false,
+   "gaps": 2
+  },
+  "after": {
+   "verdict": "needs_customer_input",
+   "exVerdict": "matched",
+   "ex": "PA-31",
+   "rule": "frais_supplementaires_sans_commande",
+   "applied": false,
+   "tools": 3,
+   "gaps": 2,
+   "at": "2026-09-03T11:10:46.396+00:00"
+  }
+ },
+ {
+  "ticketId": "36be63ab-4082-4d65-a8d7-c6950d804ac7",
+  "category": "cosmetovigilance",
+  "subject": "RE: Nouveau message de client le 31 mai 2026 à 16:02",
+  "before": {
+   "verdict": "needs_human",
+   "exVerdict": "none",
+   "ex": "CV-02",
+   "rule": "reaction_signalee",
+   "applied": true,
+   "gaps": 3
+  },
+  "after": {
+   "verdict": "needs_human",
+   "exVerdict": "none",
+   "ex": "CV-02",
+   "rule": "reaction_signalee",
+   "applied": true,
+   "tools": 3,
+   "gaps": 3,
+   "at": "2026-09-03T11:10:00.059+00:00"
+  }
+ },
+ {
+  "ticketId": "69d05938-250a-4792-b7ef-3466ed8c5e8e",
+  "category": "order",
+  "subject": "Fwd: Votre commande est confirmée",
+  "before": {
+   "verdict": "needs_human",
+   "exVerdict": "matched",
+   "ex": "O-09",
+   "rule": "expedition_en_retard",
+   "applied": true,
+   "gaps": 0
+  },
+  "after": {
+   "verdict": "needs_human",
+   "exVerdict": "matched",
+   "ex": "O-09",
+   "rule": "expedition_en_retard",
+   "applied": true,
+   "tools": 1,
+   "gaps": 0,
+   "at": "2026-09-03T11:17:55.608+00:00"
+  }
+ },
+ {
+  "ticketId": "e4887e11-daa2-4f41-abaf-aafda862bf00",
+  "category": "order",
+  "subject": "Annulation commande  6711",
+  "before": {
+   "verdict": "needs_customer_input",
+   "exVerdict": "matched",
+   "ex": "O-13",
+   "rule": null,
+   "applied": false,
+   "gaps": 3
+  },
+  "after": {
+   "verdict": "needs_customer_input",
+   "exVerdict": "matched",
+   "ex": "O-13",
+   "rule": "o13_commande_non_identifiee",
+   "applied": false,
+   "tools": 3,
+   "gaps": 3,
+   "at": "2026-09-03T11:17:37.601+00:00"
+  }
+ },
+ {
+  "ticketId": "b6bb3607-756c-4a9a-b451-0e20ab908ca2",
+  "category": "order",
+  "subject": "Annulation de commande ",
+  "before": {
+   "verdict": "needs_customer_input",
+   "exVerdict": "matched",
+   "ex": "O-13",
+   "rule": null,
+   "applied": false,
+   "gaps": 3
+  },
+  "after": {
+   "verdict": "needs_customer_input",
+   "exVerdict": "matched",
+   "ex": "O-13",
+   "rule": "o13_commande_non_identifiee",
+   "applied": false,
+   "tools": 3,
+   "gaps": 3,
+   "at": "2026-09-03T11:17:13.769+00:00"
+  }
+ },
+ {
+  "ticketId": "7ef96bb3-af30-4253-bc7e-a1fcebf11c1a",
+  "category": "order",
+  "subject": "Nouveau message de client le 10 août 2026 à 13:13",
+  "before": {
+   "verdict": "needs_customer_input",
+   "exVerdict": "near",
+   "ex": "O-09",
+   "rule": null,
+   "applied": false,
+   "gaps": 3
+  },
+  "after": {
+   "verdict": "needs_customer_input",
+   "exVerdict": "near",
+   "ex": "O-09",
+   "rule": null,
+   "applied": false,
+   "tools": 3,
+   "gaps": 3,
+   "at": "2026-09-03T11:16:55.533+00:00"
+  }
+ },
+ {
+  "ticketId": "6fb9529e-f89d-4750-9fc9-b53512089357",
+  "category": "order",
+  "subject": "Re: Nouveau message de client le 3 août 2026 à 15:52",
+  "before": {
+   "verdict": "answerable",
+   "exVerdict": "near",
+   "ex": "O-12",
+   "rule": "expediee_sans_scan",
+   "applied": false,
+   "gaps": 0
+  },
+  "after": {
+   "verdict": "answerable",
+   "exVerdict": "matched",
+   "ex": "O-09",
+   "rule": "expediee_sans_scan",
+   "applied": false,
+   "tools": 1,
+   "gaps": 0,
+   "at": "2026-09-03T11:15:27.061+00:00"
+  }
+ },
+ {
+  "ticketId": "b2e837c4-d6b4-442e-b193-3bb02a1bd637",
+  "category": "order",
+  "subject": "Nouveau message de client le 3 août 2026 à 09:21",
+  "before": {
+   "verdict": "needs_customer_input",
+   "exVerdict": "near",
+   "ex": "O-09",
+   "rule": null,
+   "applied": false,
+   "gaps": 3
+  },
+  "after": {
+   "verdict": "needs_customer_input",
+   "exVerdict": "near",
+   "ex": "O-09",
+   "rule": null,
+   "applied": false,
+   "tools": 3,
+   "gaps": 3,
+   "at": "2026-09-03T11:14:57.658+00:00"
+  }
+ },
+ {
+  "ticketId": "9844fea3-dfbc-410d-a085-3c26490dede5",
+  "category": "order",
+  "subject": "Nouveau message de client le 31 juillet 2026 à 16:27",
+  "before": {
+   "verdict": "needs_human",
+   "exVerdict": "matched",
+   "ex": "O-09",
+   "rule": null,
+   "applied": false,
+   "gaps": 1
+  },
+  "after": {
+   "verdict": "needs_human",
+   "exVerdict": "matched",
+   "ex": "O-09",
+   "rule": null,
+   "applied": false,
+   "tools": 3,
+   "gaps": 1,
+   "at": "2026-08-19T12:47:31.794+00:00"
+  }
+ },
+ {
+  "ticketId": "ddc3d6ba-66b6-4a27-8592-39d41d52ad68",
+  "category": "order",
+  "subject": "Nouveau message de client le 31 juillet 2026 à 16:27",
+  "before": {
+   "verdict": "needs_human",
+   "exVerdict": "near",
+   "ex": "O-09",
+   "rule": null,
+   "applied": false,
+   "gaps": 2
+  },
+  "after": {
+   "verdict": "needs_human",
+   "exVerdict": "near",
+   "ex": "O-09",
+   "rule": null,
+   "applied": false,
+   "tools": 3,
+   "gaps": 1,
+   "at": "2026-09-03T11:14:39.214+00:00"
+  }
+ },
+ {
+  "ticketId": "4f4b49e4-f1bf-4ccc-b985-89262b08f3fd",
+  "category": "order",
+  "subject": "Re:  commande du 29 courant numéro 6707",
+  "before": {
+   "verdict": "needs_human",
+   "exVerdict": "matched",
+   "ex": "O-09",
+   "rule": "commande_non_identifiee",
+   "applied": false,
+   "gaps": 2
+  },
+  "after": {
+   "verdict": "needs_human",
+   "exVerdict": "matched",
+   "ex": "O-09",
+   "rule": "commande_non_identifiee",
+   "applied": false,
+   "tools": 3,
+   "gaps": 2,
+   "at": "2026-09-03T11:14:17.051+00:00"
+  }
+ },
+ {
+  "ticketId": "8153289f-8c07-4df0-890f-8bf2e0ef0cdc",
+  "category": "order",
+  "subject": "Nouveau message de client le 31 juillet 2026 à 11:43",
+  "before": {
+   "verdict": "needs_customer_input",
+   "exVerdict": "matched",
+   "ex": "O-09",
+   "rule": "commande_non_identifiee",
+   "applied": false,
+   "gaps": 2
+  },
+  "after": {
+   "verdict": "needs_customer_input",
+   "exVerdict": "matched",
+   "ex": "O-09",
+   "rule": "commande_non_identifiee",
+   "applied": false,
+   "tools": 3,
+   "gaps": 2,
+   "at": "2026-09-03T11:13:47.053+00:00"
+  }
+ },
+ {
+  "ticketId": "9c7e0421-f0b0-4e0d-81ae-7f058570b00b",
+  "category": "order",
+  "subject": "Re: Ordine #6668 confermato",
+  "before": {
+   "verdict": "answerable",
+   "exVerdict": "none",
+   "ex": "O-09",
+   "rule": "expediee_sans_scan",
+   "applied": false,
+   "gaps": 0
+  },
+  "after": {
+   "verdict": "answerable",
+   "exVerdict": "none",
+   "ex": "O-09",
+   "rule": "expediee_sans_scan",
+   "applied": false,
+   "tools": 1,
+   "gaps": 0,
+   "at": "2026-09-03T11:13:18.568+00:00"
+  }
+ },
+ {
+  "ticketId": "942fc78c-ac04-45b8-bc63-f0d60d17f0f5",
+  "category": "order",
+  "subject": "RE: Votre commande est confirmée",
+  "before": {
+   "verdict": "needs_human",
+   "exVerdict": "near",
+   "ex": "P-17",
+   "rule": "expediee_sans_scan",
+   "applied": false,
+   "gaps": 2
+  },
+  "after": {
+   "verdict": "needs_human",
+   "exVerdict": "near",
+   "ex": "P-17",
+   "rule": "expediee_sans_scan",
+   "applied": false,
+   "tools": 1,
+   "gaps": 2,
+   "at": "2026-09-03T11:12:34.107+00:00"
+  }
+ },
+ {
+  "ticketId": "37d1966a-ca55-4d89-82d7-18faa01764ed",
+  "category": "return_exchange",
+  "subject": "RE: Commande retour",
+  "before": {
+   "verdict": "needs_human",
+   "exVerdict": "none",
+   "ex": "R-21",
+   "rule": null,
+   "applied": false,
+   "gaps": 5
+  },
+  "after": {
+   "verdict": "needs_human",
+   "exVerdict": "none",
+   "ex": "R-21",
+   "rule": null,
+   "applied": false,
+   "tools": 4,
+   "gaps": 5,
+   "at": "2026-09-03T11:13:01.345+00:00"
+  }
+ },
+ {
+  "ticketId": "219bfa71-4375-4223-8845-24975a7e766f",
+  "category": "return_exchange",
+  "subject": "RE: Retour commande Q0026204303",
+  "before": {
+   "verdict": "needs_human",
+   "exVerdict": "none",
+   "ex": "R-21",
+   "rule": null,
+   "applied": false,
+   "gaps": 2
+  },
+  "after": {
+   "verdict": "needs_human",
+   "exVerdict": "none",
+   "ex": "R-23",
+   "rule": null,
+   "applied": false,
+   "tools": 3,
+   "gaps": 2,
+   "at": "2026-09-03T11:11:45.363+00:00"
+  }
+ },
+ {
+  "ticketId": "3177b5c3-df39-4ba3-9480-bd3b24d42cef",
+  "category": "return_exchange",
+  "subject": "RE: Retour commande web# 6210 --- Ré-expédition",
+  "before": {
+   "verdict": "needs_human",
+   "exVerdict": "none",
+   "ex": "R-21",
+   "rule": null,
+   "applied": false,
+   "gaps": 0
+  },
+  "after": {
+   "verdict": "needs_human",
+   "exVerdict": "none",
+   "ex": "R-23",
+   "rule": null,
+   "applied": false,
+   "tools": 2,
+   "gaps": 0,
+   "at": "2026-09-03T11:11:26.732+00:00"
+  }
+ },
+ {
+  "ticketId": "732fe2ed-2d89-4cc4-80d3-192b20e988c4",
+  "category": "return_exchange",
+  "subject": "Re: Votre commande est en cours de remboursement",
+  "before": {
+   "verdict": "answerable",
+   "exVerdict": "near",
+   "ex": "R-23",
+   "rule": null,
+   "applied": false,
+   "gaps": 0
+  },
+  "after": {
+   "verdict": "answerable",
+   "exVerdict": "near",
+   "ex": "R-23",
+   "rule": null,
+   "applied": false,
+   "tools": 1,
+   "gaps": 0,
+   "at": "2026-09-03T11:10:53.028+00:00"
+  }
+ },
+ {
+  "ticketId": "e204b422-14d6-4b69-a9f8-17ed7f2f3477",
+  "category": "return_exchange",
+  "subject": "Re: Votre commande est confirmée",
+  "before": {
+   "verdict": "needs_human",
+   "exVerdict": "none",
+   "ex": "R-21",
+   "rule": null,
+   "applied": false,
+   "gaps": 1
+  },
+  "after": {
+   "verdict": "needs_human",
+   "exVerdict": "none",
+   "ex": "R-22",
+   "rule": null,
+   "applied": false,
+   "tools": 3,
+   "gaps": 1,
+   "at": "2026-09-03T11:10:35.545+00:00"
+  }
+ },
+ {
+  "ticketId": "8a7a9c55-3f6a-40bb-a8e8-8928d3b3e717",
+  "category": "return_exchange",
+  "subject": "TR: Retour commande Q0026203922",
+  "before": {
+   "verdict": "needs_human",
+   "exVerdict": "none",
+   "ex": "R-21",
+   "rule": null,
+   "applied": false,
+   "gaps": 2
+  },
+  "after": {
+   "verdict": "needs_human",
+   "exVerdict": "none",
+   "ex": "R-21",
+   "rule": null,
+   "applied": false,
+   "tools": 2,
+   "gaps": 3,
+   "at": "2026-09-03T11:10:23.985+00:00"
+  }
+ },
+ {
+  "ticketId": "e297eb68-737c-4ddb-95a6-bf8cfc67eed5",
+  "category": "account",
+  "subject": "Nouveau message de client le 30 juillet 2026 à 09:38",
+  "before": {
+   "verdict": "needs_human",
+   "exVerdict": "none",
+   "ex": "A-29",
+   "rule": null,
+   "applied": false,
+   "gaps": 0
+  },
+  "after": {
+   "verdict": "needs_human",
+   "exVerdict": "none",
+   "ex": "A-29",
+   "rule": null,
+   "applied": false,
+   "tools": 5,
+   "gaps": 0,
+   "at": "2026-09-03T11:12:49.609+00:00"
+  }
+ },
+ {
+  "ticketId": "2d30752d-cab0-45e3-9219-8903eb212cff",
+  "category": "account",
+  "subject": "Nouveau message de client le 24 juillet 2026 à 13:54",
+  "before": {
+   "verdict": "needs_human",
+   "exVerdict": "matched",
+   "ex": "A-29",
+   "rule": "connexion_aucun_compte",
+   "applied": false,
+   "gaps": 0
+  },
+  "after": {
+   "verdict": "needs_human",
+   "exVerdict": "matched",
+   "ex": "A-29",
+   "rule": "connexion_aucun_compte",
+   "applied": false,
+   "tools": 2,
+   "gaps": 0,
+   "at": "2026-09-03T11:12:11.751+00:00"
+  }
+ }
+]

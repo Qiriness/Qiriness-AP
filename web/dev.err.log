@@ -1,0 +1,24 @@
+ ⨯ ./components/agent-setup/RuleBook.tsx
+Error: Failed to read source code from C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\components\agent-setup\RuleBook.tsx
+
+Caused by:
+    The system cannot find the file specified. (os error 2)
+
+Import trace for requested module:
+./components/agent-setup/RuleBook.tsx
+./app/agent-setup/rules/page.tsx
+ ⨯ ./components/agent-setup/RuleBook.module.css
+Error: ENOENT: no such file or directory, open 'C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\components\agent-setup\RuleBook.module.css'
+
+Import trace for requested module:
+./components/agent-setup/RuleBook.module.css
+./components/agent-setup/RuleBook.tsx
+ ⨯ ./components/agent-setup/RuleBook.module.css
+Module not found: Can't resolve 'C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\components\agent-setup\RuleBook.module.css'
+
+https://nextjs.org/docs/messages/module-not-found
+
+Import trace for requested module:
+./components/agent-setup/RuleBook.tsx
+<w> [webpack.cache.PackFileCacheStrategy] Caching failed for pack: Error: unexpected end of file
+<w> [webpack.cache.PackFileCacheStrategy] Caching failed for pack: Error: ENOENT: no such file or directory, rename 'C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\.next\cache\webpack\server-development\0.pack.gz_' -> 'C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation\web\.next\cache\webpack\server-development\0.pack.gz'

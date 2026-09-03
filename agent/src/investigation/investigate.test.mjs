@@ -455,6 +455,90 @@ test('a fact nobody looked for is distinguishable from one nothing could find', 
   assert.equal(caseFile.evidenceGaps[0].state, 'not_attempted');
 });
 
+// --- the findings trace -----------------------------------------------------
+
+test('every call leaves a snapshot, in call order and keyed to its ledger id', async () => {
+  const registry = buildPlanningRegistry({
+    [TOOL_NAMES.LOOKUP_PRODUCT]: async () => OK_RESULT,
+    [TOOL_NAMES.SEARCH_KNOWLEDGE]: async () => ({ ...OK_RESULT, outcome: 'none' })
+  });
+  const decomposer = buildDecomposer({
+    tasks: [{ question: 'Le masque convient-il ?', category: 'product', request_kind: 'question' }],
+    needs: ['product_identity', 'policy_answer']
+  });
+  const openai = buildOpenAI([{ content: caseFileAnswer() }]);
+  const { investigate } = createInvestigator(openai, registry, { model: 'm', decomposer });
+
+  const caseFile = await investigate(PRODUCT_TICKET);
+
+  assert.ok(caseFile.toolCalls.length > 1, 'this scenario needs more than one call to be worth testing');
+  assert.equal(caseFile.findingsTrace.length, caseFile.toolCalls.length);
+  assert.deepEqual(
+    caseFile.findingsTrace.map((s) => [s.call, s.tool]),
+    caseFile.toolCalls.map((c) => [c.id, c.tool])
+  );
+});
+
+test('the last snapshot is the same reading the case file itself reports', async () => {
+  // THE INVARIANT WORTH PINNING. The trace and `evidence_gaps` are derived from
+  // the same ledger by the same function, so the end of the tape must agree with
+  // the gaps beside it. If it ever does not, one of the two is being built from
+  // a different ledger — which is exactly the bug a replay would inherit
+  // silently and act on.
+  const registry = buildPlanningRegistry({
+    [TOOL_NAMES.LOOKUP_PRODUCT]: async () => OK_RESULT,
+    [TOOL_NAMES.SEARCH_KNOWLEDGE]: async () => ({ ...OK_RESULT, outcome: 'none' })
+  });
+  const decomposer = buildDecomposer({
+    tasks: [{ question: 'Le masque convient-il ?', category: 'product', request_kind: 'question' }],
+    needs: ['product_identity', 'policy_answer']
+  });
+  const openai = buildOpenAI([{ content: caseFileAnswer() }]);
+  const { investigate } = createInvestigator(openai, registry, { model: 'm', decomposer });
+
+  const caseFile = await investigate(PRODUCT_TICKET);
+  const last = caseFile.findingsTrace.at(-1).findings;
+
+  for (const gap of caseFile.evidenceGaps) {
+    if (gap.finding == null) continue;
+    assert.equal(last[gap.need], gap.finding, gap.need);
+  }
+});
+
+test('the trace scores the whole vocabulary, not just what this ticket declared', async () => {
+  // A need nobody declared still gets a reading, because the row can never be
+  // recomputed: the tool `data` these are derived from does not survive the run,
+  // and a rule authored next month may branch on a need this ticket never named.
+  const registry = buildPlanningRegistry({
+    [TOOL_NAMES.LOOKUP_PRODUCT]: async () => OK_RESULT,
+    [TOOL_NAMES.SEARCH_KNOWLEDGE]: async () => ({ ...OK_RESULT, outcome: 'none' })
+  });
+  const decomposer = buildDecomposer({
+    tasks: [{ question: 'x', category: 'product', request_kind: 'question' }],
+    needs: ['product_identity']
+  });
+  const openai = buildOpenAI([{ content: caseFileAnswer() }]);
+  const { investigate } = createInvestigator(openai, registry, { model: 'm', decomposer });
+
+  const caseFile = await investigate(PRODUCT_TICKET);
+  const last = caseFile.findingsTrace.at(-1).findings;
+
+  assert.equal(caseFile.evidenceGaps.length, 1, 'one need declared');
+  assert.ok(Object.keys(last).length > 1, 'the trace reads more than the declared one');
+  assert.ok('order_identity' in last, 'a need from another family is still scored');
+});
+
+test('a run that called nothing traces nothing, which is not the same as no trace', async () => {
+  // `[]` here; NULL in the column means the row predates the trace entirely.
+  const openai = buildOpenAI([{ content: caseFileAnswer() }]);
+  const registry = { toolsFor: () => ({ names: [], definitions: [], handlers: new Map() }) };
+  const { investigate } = createInvestigator(openai, registry, { model: 'm' });
+
+  const caseFile = await investigate({ ...PRODUCT_TICKET, level: 4 });
+
+  assert.deepEqual(caseFile.findingsTrace, []);
+});
+
 test('the report does not move the verdict — that is deliberately the next step', async () => {
   const registry = buildPlanningRegistry({
     [TOOL_NAMES.LOOKUP_PRODUCT]: async () => OK_RESULT,

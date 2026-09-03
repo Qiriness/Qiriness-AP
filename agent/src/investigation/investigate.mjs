@@ -6,7 +6,13 @@ import {
   planMoves,
   planTasks
 } from './decompose-rules.mjs';
-import { findingsOf, reactionReportFrom, resolveNeeds } from './evidence-rules.mjs';
+import {
+  NEED_KEYS,
+  fieldsAlreadyAnswered,
+  findingsOf,
+  reactionReportFrom,
+  resolveNeeds
+} from './evidence-rules.mjs';
 import { needsNamedBy, selectAnswer } from './answer-selection.mjs';
 import { TOOL_NAMES, escalationTriggers } from './investigation-rules.mjs';
 
@@ -253,11 +259,23 @@ export function createInvestigator(
       // tool call are already settled by the time this runs. It reads them and
       // adds a reading; it cannot have changed them.
       policy: selectPolicy(ticket.policy, run.ledger, names),
+      // WHAT THE DOSSIER ALREADY ANSWERS, so a rule cannot put a question to a
+      // customer that our own tools have settled. Derived from the same ledger
+      // everything else here reads, and handed over as plain keys because
+      // `case-file.mjs` imports nothing.
+      answeredFields: [
+        ...fieldsAlreadyAnswered(findingsOf(resolveNeeds(declaredNeeds, run.ledger, names)))
+      ],
       // THE SAME REASON `policy` IS COMPUTED HERE: the ledger still carries each
       // tool's `data` at this point and the stored case file will not. Null on
       // every ticket where the reaction tool did not run, which is all of them
       // outside cosmetovigilance.
       reactionReport: reactionReportFrom(run.ledger),
+      // WHAT WAS KNOWN AFTER EACH CALL, so a run can be replayed once it is
+      // stored. Third field on this list computed here for the one reason all
+      // three share: the ledger still carries each tool's `data`, and the case
+      // file will not.
+      findingsTrace: traceFindings(run.ledger, names),
       model
     });
   }
@@ -320,6 +338,43 @@ function selectPolicy(policy, ledger, toolNames) {
     candidates: result.candidates.map((c) => c.answerKey),
     findings
   };
+}
+
+/**
+ * What was established after each tool call, in call order.
+ *
+ * WHY IT IS STORED AT ALL. Neither existing store can replay a run. `tool_calls`
+ * keeps `{id, tool, argsHash, outcome}` and drops every tool's `data` on
+ * purpose — but 8 of the finding derivations READ that data, which is the whole
+ * discriminator for promotions and for accounts. A replay over `tool_calls`
+ * would score those findings as absent, fire fewer rules and stop earlier: it
+ * would flatter rule-guided collection exactly where it is most likely to
+ * under-collect. Findings are a closed enum carrying no personal data, which is
+ * why they are safe to keep where `data` was correctly dropped.
+ *
+ * A FOLD OVER PREFIXES, NOT AN INSTRUMENTED LOOP. `resolveNeeds` is pure over
+ * its entries, so scoring `ledger.slice(0, n)` after the fact gives exactly what
+ * snapshotting live would have — and cannot perturb the run it measures.
+ *
+ * THE WHOLE VOCABULARY, not this ticket's declared needs and not the ones the
+ * loaded rules branch on. It costs nothing (findings do not depend on the tool
+ * registry — only `state` does, and that is discarded here) and the row can
+ * never be recomputed: a trace scoped to today's needs could not answer a
+ * question about a rule set authored next month. `findingsOf` drops the two
+ * needs with no derivation.
+ *
+ * FULL SNAPSHOTS, NOT DELTAS. A delta is derivable from these; a snapshot is not
+ * recoverable from deltas if the reconstruction is wrong, and this store exists
+ * precisely because the recompute path is gone.
+ */
+function traceFindings(ledger = [], toolNames = []) {
+  const entries = Array.isArray(ledger) ? ledger : [];
+  return entries.map((entry, index) => ({
+    // The ledger id, so a snapshot can be read beside the call that produced it.
+    call: entry?.id ?? null,
+    tool: entry?.tool ?? null,
+    findings: findingsOf(resolveNeeds(NEED_KEYS, entries.slice(0, index + 1), toolNames))
+  }));
 }
 
 function createRun({ ticket, handlers, maxToolCalls, logger, onToolCall = null }) {

@@ -248,6 +248,22 @@ test('a deleted customer nulls the link rather than deleting the case file', () 
   assert.match(body, /customer_id uuid references public\.customers\(id\) on delete set null/i);
 });
 
+test('the findings trace is nullable, and the null is the point', () => {
+  // NULL means the row predates the trace; `[]` means the run made no tool
+  // calls. A `not null default '[]'` would state the second about every row
+  // written before the column existed, and their tool `data` is gone, so no
+  // backfill could ever correct it.
+  const body = sql.split('create table public.ticket_investigations')[1].split('\n);')[0];
+  assert.match(body, /findings_trace jsonb,/i);
+  assert.doesNotMatch(body, /findings_trace jsonb not null/i);
+  // Nullable, so the check has to allow null explicitly — a check evaluating to
+  // null passes, and being right by accident is not the same as being right.
+  assert.match(
+    checkClause(sql, 'ticket_investigations_findings_trace_array_check'),
+    /findings_trace is null or jsonb_typeof\(findings_trace\) = 'array'/i
+  );
+});
+
 test('no column stores the reply intent or a confidence score', () => {
   // Both were measured to be worthless: the intent is derived from the verdict,
   // and the confidence answered `high` on 40 of 40 cases.

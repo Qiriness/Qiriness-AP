@@ -10,6 +10,12 @@ import type { PolicyRule, PolicySituation, PolicyVocabulary } from "@/lib/types"
 
 import styles from "./RuleEditor.module.css";
 
+export interface RuleEditorSeed {
+  answerSet?: string;
+  situationKey?: string | null;
+  conditions?: Record<string, string[]>;
+}
+
 /**
  * Writing one rule.
  *
@@ -26,6 +32,7 @@ import styles from "./RuleEditor.module.css";
  */
 export function RuleEditor({
   rule,
+  seed,
   situations,
   vocabulary,
   knownSets,
@@ -33,16 +40,17 @@ export function RuleEditor({
   onSave,
 }: {
   rule: PolicyRule | null;
+  seed?: RuleEditorSeed;
   situations: PolicySituation[];
   vocabulary: PolicyVocabulary;
   knownSets: string[];
   onClose: () => void;
   onSave: (payload: SaveRulePayload) => Promise<void>;
 }) {
-  const [answerSet, setAnswerSet] = useState(rule?.answerSet ?? knownSets[0] ?? "commande");
+  const [answerSet, setAnswerSet] = useState(rule?.answerSet ?? seed?.answerSet ?? knownSets[0] ?? "commande");
   const [answerKey, setAnswerKey] = useState(rule?.answerKey ?? "");
-  const [situationKey, setSituationKey] = useState(rule?.situationKey ?? "");
-  const [conditions, setConditions] = useState<Record<string, string[]>>(rule?.conditions ?? {});
+  const [situationKey, setSituationKey] = useState(rule?.situationKey ?? seed?.situationKey ?? "");
+  const [conditions, setConditions] = useState<Record<string, string[]>>(rule?.conditions ?? seed?.conditions ?? {});
   const [skeleton, setSkeleton] = useState(rule?.answerSkeleton ?? "");
   const [route, setRoute] = useState(rule?.route ?? "");
   const [ask, setAsk] = useState<string[]>(rule?.ask ?? []);

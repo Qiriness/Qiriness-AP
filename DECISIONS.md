@@ -487,6 +487,110 @@ So a person decides once, on `/agent-setup/promotions`, and the reply screen onl
 
 **Found by simulation, not by reading.** Nine order states were run against the loaded set and the winner printed for each; the table looked correct to the eye and was wrong in one cell. Any rule set worth approving is worth enumerating this way, because shadowing is a relation between rules and no single row shows it.
 
+### A completeness gate needs to know who could close the gap, not just that it is open (2026-09-03)
+
+The gate refuses an `answerable` verdict while a declared need is still open. Run over the fresh corpus before enforcing anything, it would downgrade **12 of 91 runs — and on 4 of them every open gap is one nobody can ever close.**
+
+**The specification assumed somebody always can.** Its table routes a gap by who closes it — us, the customer, or a person — and has no row for *nobody*. But `checkout_state` has no tool wired at all, `product_recommendation` comes back `unavailable`, `other_fact` is unsatisfiable by design so that a ticket whose real requirement cannot be named can never read as complete, and `promotion_eligibility: undetermined` is the vocabulary's own honest gap because the basket is invisible to us. Downgrading those hands a ticket to a person who can do no more about it than the agent could — the cost of a gate with none of the benefit.
+
+**So closability is now a property of the vocabulary**, beside `asksCustomer` and `moot`, rather than a rule the gate invents. `gapClosability` returns `now` / `customer` / `never` / `unclear`, and **the order it reads in carries the whole argument**:
+
+- **`other_fact` first**, because it is the escape hatch and failing towards a person is its job, not a gap to be closed.
+- **The finding before the state.** `promotion_eligibility: undetermined` means a tool ran and still could not decide; that is a stronger statement than `attempted`.
+- **`not_attempted` before `asksCustomer`.** A tool was allowed, the budget was there, and nothing called it — that is our miss, and putting a question to a customer we never looked for the answer to is the one outcome this whole layer exists to prevent.
+- **`asksCustomer` before `unavailable`, but only where the question names the FACT — and neither plain ordering gets this right.** `unavailable` means no tool in this ticket's registry can settle the need, which on a cosmetovigilance ticket is every tool, deliberately; the customer can still be asked which product they used, which is exactly what CV-01 does. But `asksCustomer` is many-to-one, and on half the needs carrying one it names a **prerequisite** rather than the answer: `product_availability` asks for `product_name`, and being told the name does not tell us the stock — only `lookupStock` does, and `unavailable` is precisely the statement that it cannot run. Asking there costs a customer a reply and closes nothing.
+
+  **`ASK_ANSWERED_BY` already draws that line**, so it is reused rather than restated. Written for `fieldsAlreadyAnswered` on the same observation — knowing an order's STATE does not mean holding its number, knowing its IDENTITY does — it reads forwards as "stop asking, we have it" and backwards as "asking would actually get it". Measured over the corpus: of the 20 `unavailable` gaps that carry a question, **13 name the fact and 7 name only a key**.
+
+**`unclear` is kept as its own class** — attempted, nothing found, nobody to ask — and deliberately not folded into `never`. A knowledge gap somebody could write an article for is not the same as a fact that does not exist.
+
+**`DESIGNED_GAP` moved out of the audit script and into the vocabulary** on the same reasoning, and the two sets are related but not equal: both describe a legitimate open need, but `photo_evidence: mentioned_not_attached` is one the CUSTOMER closes by attaching the photo, while `promotion_eligibility: undetermined` nobody closes at all. Collapsing them would have marked the drafting prize unclosable.
+
+**Reported, not enforced, and that ordering is the point.** `product_property` was derived wrong until 2026-08-31; a gate enforced over that bug would have turned 8 correct `answerable` verdicts into handovers. The same discipline found this: the design was wrong in a way only the measurement showed.
+
+### Findings are kept where tool data was correctly dropped (2026-09-03)
+
+`ticket_investigations.findings_trace`: the derived findings after each tool call, in call order. Nothing reads it yet. It exists because the shadow replay that gates suppression cannot be built later over what is stored today.
+
+**Neither existing store can replay a run.** `tool_calls` keeps `{id, tool, argsHash, outcome}` and drops every tool's `data` on purpose — but **8 of the finding derivations read that data**: `buyer_type`, `product_identity`, `promotion_validity`, `promotion_eligibility`, `customer_account_state`, `product_availability`, `photo_evidence`, `checkout_state`, which is the whole discriminator for promotions and for accounts. Rehearsal traces are no better: `toolEntry` keeps an allow-list of `data` fields chosen precisely so a column added later cannot leak into a stored trace.
+
+**A replay over either would fail in the flattering direction.** Those findings score as absent, so fewer rules fire, so the run stops earlier — it would report rule-guided collection as cheap exactly where it is most likely to under-collect, which is the one error that would be acted on.
+
+**Findings, not data, is what makes this safe.** A closed enum of a few dozen values carrying no personal data. Widening `tool_calls` was the other, wrong fix — it would undo a deliberate minimisation to serve a diagnostic.
+
+**Built where `policy` and `reaction_report` are built**, in the investigation rather than the case file, for the reason all three share: that is the one place the ledger still carries each tool's `data`. And built as a **fold over ledger prefixes** rather than by instrumenting the tool loop — `resolveNeeds` is pure over its entries, so scoring `slice(0, n)` afterwards gives exactly what snapshotting live would have, and cannot perturb the run it measures.
+
+**The whole vocabulary, not the declared needs.** Findings do not depend on the tool registry — only `state` does — so the wider scoring is free, and the row can never be recomputed: a trace scoped to today's needs could not answer a question about a rule set authored next month. Measured on a live promotions ticket: 7 calls, 23 findings each, **4.9 KB**.
+
+**Full snapshots, not deltas.** A delta is derivable from snapshots; a snapshot is not recoverable from deltas if the reconstruction is wrong, and this store exists precisely because the recompute path is gone.
+
+**NULLABLE, and the null is load-bearing**, the same argument `reaction_report` and `ticket_messages.attachments` already make. `[]` means the run made no tool calls; NULL means the row predates the column. A `not null default '[]'` would have stated the first about all 137 existing rows, and **their tool data is gone, so no backfill can ever correct it**. Every replay is therefore restricted to mail investigated after 2026-09-03 — which is the argument for writing it before the replay is built rather than after.
+
+**On no projection.** `scripts/lib/tables.mjs` selects explicit column allow-lists, so a new column is invisible to drafting and to the detail panel until somebody types its name. Not an omission — the property that made adding this cheap.
+
+### A need may be entitled to a positive finding it was never satisfied by (2026-09-03)
+
+The vocabulary audit's rule was *only a satisfied need may make a positive claim*, and on the post-backfill corpus every contradiction it found was that rule being too strong. Four needs deliberately score a value that states **why they could not be settled**, and each says so in its own declaration:
+
+- `photo_evidence: mentioned_not_attached` — « the customer saying a photo is attached is not a photo ». It is also the drafting prize: 36 of 203 tickets mention one and attach nothing, and « vous mentionnez une photo mais rien n'est joint » is a different reply from « merci de nous envoyer une photo ».
+- `product_identity: ambiguous` — a tie between two products is precisely the case where the reply must ask rather than pick.
+- `reaction_product: not_in_catalogue` — a real finding a rule branches on, and not a product we can name back to somebody reporting a reaction.
+- `product_property: weak` — the library answered below the band that answers.
+
+**A reason a need is open IS an evidence gap**, which is what the need was recording in the first place. The report was reading the value as a claim to have settled the need and calling it a disagreement.
+
+**Checked on `attempted` alone, not as a blanket pair exemption** like `refund_state: none`, and the narrowing carries the whole argument. The same pair under `satisfied` is still a contradiction — a tie cannot also be resolved — and so is the same pair under `unavailable` or `not_attempted`, because a tool that never ran cannot have found a tie. Only where the tool actually ran is the value a finding rather than a fabrication.
+
+**This is the third false positive of the same family**, after `promotion_eligibility: attempted + undetermined` and `refund_state: none`, and the pattern is now clear enough to state: the audit's two statements are independent by construction, so every exception has to be written down by the person who owns the vocabulary. Inferring them from `satisfiedBy` would cancel exactly the disagreements the report exists to find — the `product_property` bug of 2026-08-31 lived in that gap.
+
+**`return_eligibility` stays reported and is not a fault.** Three coarse entries, `satisfied` with `unknown`, and `possible`/`out_of_window` have never once been seen: the returns window is a merchant parameter nobody has set, so every ticket resolves `unknown` and routes to a person. That is the documented behaviour, and it means no rule may branch on the two real values yet — the same dormancy as the six delivery rules.
+
+### The situation is matched on the opening message, reversing an earlier call (2026-09-03)
+
+The matcher read `triggerMessage`, the newest inbound. The test pinning that behaviour named the problem in its own comment — *"the bands were calibrated on each ticket's FIRST message; the run is triggered by the LATEST"* — and settled it by making the trigger unambiguous rather than by aligning the two. So a 0.65 threshold derived from one distribution was applied to another.
+
+**The two are different questions.** The investigation asks *what does this customer need now*, which is the newest message. The matcher asks *what is this thread about*, which is the request that opened it.
+
+**Measured on the ticket that exposed it.** A thread opening « je constate que ma commande #6686 du 28 juillet n'est toujours pas traitée » and closing « je vous confirme que j'ai bien reçu ma commande » scored **0.623 against O-12** — an address-change situation whose nearest phrasing merely shares « je viens de passer une commande » — on the last message, and **0.869 against O-09** on the first. Across the nine multi-message threads in the sample the opening message scored higher on six, and doubled the matches from 2 to 4.
+
+**The trigger is unchanged.** `trigger_message_id` still keys the case file to the newest message, and the investigation still reads it. Only what the matcher is handed moved.
+
+**Follow-ups remain an open problem and this does not solve them.** A thread that opens « où est ma commande » and becomes « finalement je veux être remboursé » still matches the first intent. What a later message should do to a situation already matched is undecided — in production every thread's opening message goes through the workflow and later ones are additive, so treating a follow-up as a fresh match would let a courtesy note redefine what a ticket is about.
+
+### A rule may name a question; the case file decides whether to ask it
+
+`policyAsks` pushed a rule's `ask` into `missing` gated on the verdict alone, never on what had been found. A rule names its question from the **evidence position it fired on**, and a position is not the whole dossier: a rule keyed only to a situation fires whatever else was established, so it could ask for an order number the run had resolved twenty lines earlier.
+
+**Gated on the findings, because the rule is not the one that knows.** `fieldsAlreadyAnswered` reads the identity needs and returns the `MISSING_FIELDS` keys the dossier already answers.
+
+**Only the identity needs can vouch for an askable fact, and that is the subtlety.** `asksCustomer` is many-to-one — five needs name `shopify_order_number` — but knowing an order's STATE does not mean we hold its number; knowing its IDENTITY does. `customer_account_state` is the one non-identity in the table and belongs there: every value but `unknown_sender` means we found the account.
+
+**Suppression is per field, not per rule.** A reaction with no product named needs the product AND the batch number, so dropping both because one is held would be the mirror of the bug.
+
+**Passed in rather than derived**, like `candidateOrder`: `case-file.mjs` imports nothing and stays a pure contract, so the investigation computes the set and hands over plain keys.
+
+**What this deliberately does not do.** A need never attempted on a ticket whose registry could have settled it is also a question that should not reach a customer — but the answer there is to run the tool, not to drop the question, and this module cannot run tools. It stays visible as `not_attempted` in `evidenceGaps`.
+
+### The dependency graph reaches the product family (2026-09-03)
+
+Fifteen of twenty-five needs had no prerequisite declared and the whole product family was among them, so a planner walking this graph would have proposed a stock check before knowing which product. Thirteen now have one.
+
+**`product_availability` requires identity and `product_property` does not**, which looks inconsistent and is the point. Stock is a fact about one variant, so without a product there is nothing to look up. A characteristic can also be settled by the library — « vos produits sont-ils testés sur les animaux ? » is answered without a product being named — and a prerequisite there would order a collection that does not need one.
+
+**`product_recommendation` has none, deliberately.** It asks what we can put forward to somebody who has named nothing, which is the opposite end of the same subject; requiring identity would make it uncollectable exactly when it is the need that matters.
+
+**`photo_evidence` and `purchase_verified` are ordered behind the thing they are about** — a photo of an unidentified product is a question nobody can act on, and an unverified purchase reads as « nous ne trouvons pas d'achat » only once we know who is asking.
+
+A test now walks every need for a cycle, because `orderNeeds` falls back to declaration order rather than hanging — a bad edge would mis-order silently.
+
+### A situation that requires evidence needs a branch for not having it
+
+Nine situations whose answer requires an order had no rule for the case where no order number was given — D-02, D-03, O-12, O-13, O-14, D-05, D-06, D-08, D-36 — so they fired **nothing at all** on the commonest state in the corpus. Only O-09 and D-01 had that branch, and only because they were authored after `order_identity` gained a findings vocabulary.
+
+**The pattern was already settled everywhere else**, which is what made the gap invisible: CV-01 covers it through `reaction_product: not_attributed`, P-15 through `customer_account_state: unknown_sender`, PR-25 through `product_recommendation: nothing_to_go_on`. The order family simply could not express it until the vocabulary existed.
+
+**Two skeletons say something the others do not.** On O-12 and O-13 the ask is time-critical — an address change or a cancellation is only possible while the order has not left — so they say the number is needed quickly **and** are forbidden from implying that anything has been paused meanwhile. On D-36 the demand is answered first and the ask second, because asking for a number is otherwise indistinguishable from ignoring what was asked.
+
 ### Six rules are dormant because two delivery states cannot occur yet (2026-09-03)
 
 Measured across all 2,006 orders: `dispatched_no_scan` **1,992 (99%)**, `not_dispatched` 13, `delivered` 1, **`in_transit` 0, `stale_in_transit` 0**.

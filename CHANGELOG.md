@@ -10,6 +10,72 @@ Three sibling files carry the other halves, and this one deliberately does not d
 
 ---
 
+## The completeness gate is measured before it is built, and the measurement rewrites it (2026-09-03)
+
+**Plan step 6. `npm run report:completeness-gate`, read-only, three reads and no model call.** It scores every stored run on the four fields §7 specifies — `response_complete`, `decision_complete`, `mandatory_gaps`, `tool_errors_affecting_answer` — and prints the downgrades a gate would make.
+
+**Over 91 fresh runs: 19 are response-complete, and the gate would downgrade 12.** Split by whether the open gap could ever be closed: **4 right, 4 mixed, 4 where every open gap is one nobody can ever close.**
+
+**That last four is the finding, and it changes the gate's design.** §7's table routes a gap by who closes it and has no row for *nobody* — but `checkout_state` has no tool wired, `other_fact` is unsatisfiable by design, and `promotion_eligibility: undetermined` is the vocabulary's own honest gap. So `gapClosability` now lives in `evidence-rules.mjs` beside `asksCustomer` and `moot`, returning `now` / `customer` / `never` / `unclear`.
+
+**The read order is the design.** `not_attempted` outranks `asksCustomer` — a customer must never be asked for what we never looked for. And `asksCustomer` outranks `unavailable` **only where the question names the fact itself**: every need on a cosmetovigilance ticket is `unavailable` by design and CV-01 still asks which product was used, but asking for a `product_name` does not tell us the stock when `lookupStock` is the thing that cannot run. `ASK_ANSWERED_BY` already separates those two and is reused rather than restated — 13 of the 20 `unavailable` gaps that carry a question name the fact, 7 name only a key.
+
+**`DESIGNED_GAP` moved out of the vocabulary audit into the vocabulary itself**, now that two readers ask. The audit still reports **0 contradictions** on the fresh corpus, which is what proves the move changed nothing.
+
+**`decision_complete` is dull and worth recording as such**: 84 of 91 runs already have one live rule or none. **`tool_errors_affecting_answer` is 0 across the corpus** — the counter exists because the gate is specified in terms of it, and because a counter reporting nothing is how the first one gets noticed. **1962 tests pass.**
+
+## The run gets a replay tape (2026-09-03)
+
+**Plan step 3. `ticket_investigations.findings_trace`: the derived findings after each tool call, in call order.** Nothing reads it. It is written now because it cannot be written later — the shadow replay that gates suppression needs a store that does not exist, and the evidence it derives from does not survive the run.
+
+**Why neither existing store would do.** `tool_calls` drops every tool's `data` deliberately, and 8 of the finding derivations read it — the whole discriminator for promotions and for accounts. A replay over it would score those findings as absent, fire fewer rules and stop earlier: it would report rule-guided collection as cheap **exactly where it is most likely to under-collect**. Findings are a closed enum carrying no personal data, which is why they are safe to keep where `data` was correctly dropped.
+
+**A fold over ledger prefixes, not an instrumented loop.** `resolveNeeds` is pure over its entries, so the trace is computed after the fact in `investigate.mjs` — beside `policy` and `reaction_report`, for the reason all three share — and cannot perturb the run it measures.
+
+**Nullable, and the null is the point.** `[]` means the run made no calls; NULL means the row predates the column. All 137 existing rows read NULL and can never be filled, so every replay is restricted to mail investigated from today.
+
+**Verified on a live promotions ticket**: 7 calls, 7 snapshots, ids in call order, the last snapshot agreeing with the row's own `evidence_gaps`, 4.9 KB. The tape reads as it should — `lookupCustomer` settles `customer_identity`, `searchKnowledge` moves three needs to `weak`, `lookupStock` changes nothing. **1947 tests pass.**
+
+## The vocabulary audit comes back clean, and the last four faults were the report's own rule (2026-09-03)
+
+**Plan step 2, and the number it was waiting for: 0 contradictions in 279 need entries across 92 fresh investigations.** The audit could not say anything about today until mail had been investigated after the fixes; it has now, so it can.
+
+**Both `satisfied_but_empty` faults are history, dated.** The three surviving `product_property` rows are all from 2026-08-14 and the `promotion_validity` one from 2026-08-19 — before the 2026-08-31 fix, and absent from every run since. The all-time report still shows them, which is the point of keeping the dates.
+
+**The four that remained were one class of false positive**, not four faults: `photo_evidence: mentioned_not_attached`, `product_identity: ambiguous`, `reaction_product: not_in_catalogue` and `product_property: weak` are each a positive finding saying *why* a need stayed open, and each is declared deliberate in `evidence-rules.mjs`. Encoded as `DESIGNED_GAP` and read under `attempted` only — the same pair under `satisfied`, `unavailable` or `not_attempted` still contradicts, because a tool that never ran cannot have found a tie.
+
+**`return_eligibility` is left reported.** Three coarse entries, and `possible`/`out_of_window` never seen at all: the returns window is an unset merchant parameter, so no rule may branch on its real values yet.
+
+## Rulebook becomes a per-situation workflow canvas (2026-09-03)
+
+- **`/agent-setup/rules` now reads like a Klaviyo-style workflow builder**: answer-set and situation selection on the left, evidence decisions in the center, and the selected rule in a right-hand inspector.
+- **No policy semantics changed.** The canvas is a projection of existing `support_answers`; runtime selection still comes from `answer-selection.mjs` by situation, condition specificity, then priority.
+- **Evidence prerequisites are visible.** `policyVocabulary()` now includes each need's `requires` list from `needRequires()`, so order situations show `order_identity` before dependent facts such as `order_state`, `delivery_state`, `dispatch_state`, and `payment_state`.
+- **Branch authoring is faster.** Missing branch buttons open `RuleEditor` with the answer set, situation, and selected condition prefilled, while saves still return as draft and approval remains separate.
+- **Verified:** `npm.cmd run typecheck`, `npm.cmd run build`, `npm.cmd test` (1,936 passing), plus Chrome/Playwright checks at 1440x960 and 390x844. The O-09 order workflow shows `order_identity` first, `none` asks for `shopify_order_number`, and `resolved` continues to deeper decisions.
+
+## Plan steps 4 and 5: rules stop asking for what we hold, and the graph reaches products (2026-09-03)
+
+**Step 4 — never ask for what is known.** A rule's `ask` reached `missing` gated on the verdict alone, so a situation-keyed rule could ask for an order number the run had already resolved. It is now filtered through `fieldsAlreadyAnswered`, which reads the identity needs — the only ones that can vouch for an askable fact, since knowing an order's state does not mean holding its number. Per field, not per rule: a reaction needs the product AND the batch, so one being held must not drop the other. Computed in the investigation and passed in as plain keys, because `case-file.mjs` imports nothing and stays pure.
+
+When every question a rule wanted is already answered, the verdict falls back to `needs_human` — the existing rule that a `needs_customer_input` naming nothing to ask for is not actionable.
+
+**Step 5 — the dependency graph.** Nine entries became thirteen, and the product family has one for the first time: `product_availability` and `photo_evidence` behind `product_identity`, `purchase_verified` behind `customer_identity`. `product_property` and `product_recommendation` deliberately keep none — the first is answerable from the library without a product being named, the second is the need that exists *because* nothing was named.
+
+A cycle test now walks every need, since `orderNeeds` degrades to declaration order rather than failing.
+
+**1941 tests pass.** Neither step changes what the agent fetches today — `nextNeed` is still unwired — but both are prerequisites for step 7, and step 4 closes a hole that was live.
+
+## The matcher reads the opening message, and eleven situations learn to ask (2026-09-03)
+
+**`matchExemplar` is handed `messages[0]`, not the trigger.** The 0.65 band was calibrated on first messages and production scored last messages — a mismatch its own test had recorded and settled the wrong way. On the nine multi-message threads in the sample the opening message scored higher on six and doubled the matches; the ticket that exposed it went from 0.623 against the wrong situation to **0.869 against the right one**. The trigger still keys the case file; only the matcher's input moved.
+
+**Eleven rules for evidence we do not have.** Nine situations that need an order — D-02, D-03, O-12, O-13, O-14, D-05, D-06, D-08, D-36 — had no branch for the customer not quoting one, so they fired nothing on the commonest state in the corpus. Plus PR-26 and D-08 for an unidentifiable product.
+
+The gap was invisible because the pattern was settled everywhere else through a *different* need: CV-01 via `reaction_product`, P-15 via `customer_account_state`, PR-25 via `product_recommendation`. The order family could not express it until `order_identity` gained findings two days ago.
+
+**98 rules, all approved.** Simulated across every situation with no order identified: each now asks for the number, with a skeleton fitted to why it needs one — and O-12 and O-13 say the request is time-critical without implying anything has been paused.
+
 ## D-33 gets the plain question, three situations come back into the document, PR-27 and D-07 get rules (2026-09-03)
 
 **D-33 had two variants and neither was the question.** Both were long, specific customer stories — a German whose distributor collapsed, an enquiry about US duties — and the plain form nobody had written down was « Est-ce que vous livrez en Italie ? ». Five phrasings added: two plain forms (FR and EN), the checkout half of the canonical, and the two real messages verbatim. Extra phrasings cannot dilute, because `match_support_exemplars` scores an exemplar by its BEST phrasing.

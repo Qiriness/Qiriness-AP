@@ -940,6 +940,29 @@ create table public.ticket_investigations (
   -- What answering this ticket REQUIRED, against what the run actually got.
   evidence_gaps jsonb not null default '[]'::jsonb,
 
+  -- THE DERIVED FINDINGS AFTER EACH TOOL CALL, IN CALL ORDER. One snapshot per
+  -- entry in tool_calls, each `{call, tool, findings}`.
+  --
+  -- IT EXISTS BECAUSE A RUN CANNOT BE REPLAYED FROM ANYTHING ELSE HERE.
+  -- `tool_calls` drops every tool's `data` on purpose, and 8 of the 30 finding
+  -- derivations read it -- buyer_type, product_identity, promotion_validity,
+  -- promotion_eligibility, customer_account_state, product_availability,
+  -- photo_evidence, checkout_state, which is the whole discriminator for
+  -- promotions and for accounts. A replay over `tool_calls` would score those as
+  -- absent, fire fewer rules and stop earlier -- flattering rule-guided
+  -- collection exactly where it is most likely to under-collect.
+  --
+  -- FINDINGS, NOT DATA, is what makes this safe to keep where `data` was
+  -- correctly dropped: a closed enum of a few dozen values carrying no personal
+  -- data. Widening `tool_calls` instead would have been the other, wrong fix.
+  --
+  -- NULLABLE, AND THE NULL IS LOAD-BEARING, same as `reaction_report` below and
+  -- `ticket_messages.attachments`. NULL means this run predates the trace; `[]`
+  -- means the run made no tool calls. A `not null default '[]'` would state the
+  -- second about every row written before this column existed, and their `data`
+  -- is gone, so no backfill could ever correct it.
+  findings_trace jsonb,
+
   -- WHICH RECURRING SITUATION THIS TICKET IS, from support_exemplars.
   --
   -- RECORDED, NOT ACTED ON. The investigation does not read it: no tool choice,
@@ -986,6 +1009,12 @@ create table public.ticket_investigations (
   ),
   constraint ticket_investigations_evidence_gaps_array_check check (
     jsonb_typeof(evidence_gaps) = 'array'
+  ),
+  -- Nullable, so the null is spelled out rather than left to the fact that a
+  -- check evaluating to null passes -- the same reasoning the reaction_report
+  -- check states below.
+  constraint ticket_investigations_findings_trace_array_check check (
+    findings_trace is null or jsonb_typeof(findings_trace) = 'array'
   ),
   constraint ticket_investigations_context_ref_object_check check (
     jsonb_typeof(context_ref) = 'object'
@@ -1039,6 +1068,8 @@ comment on column public.ticket_investigations.handoff is
 comment on column public.ticket_investigations.evidence_gaps is
   'One entry per fact answering this ticket required, each satisfied / attempted / unavailable / not_attempted. DIAGNOSTIC: it does not move the verdict. The requirements are declared per ticket from a closed vocabulary (agent evidence-rules.mjs) and scored in code against tool_calls, so "there was nothing to find" can be told from "the agent never looked" -- not_attempted is the latter. other_fact is the escape hatch for a requirement the vocabulary cannot name and can never be satisfied.';
 
+comment on column public.ticket_investigations.findings_trace is
+  'The derived findings after each tool call, in call order: one entry per tool_calls entry, each { call, tool, findings }. THE REPLAY TAPE. tool_calls drops every tool''s data on purpose, and 8 of the finding derivations read it -- buyer_type, product_identity, promotion_validity, promotion_eligibility, customer_account_state, product_availability, photo_evidence, checkout_state -- so a replay over tool_calls alone would score those as absent, fire fewer rules and stop earlier, flattering rule-guided collection exactly where it is most likely to under-collect. Findings are a closed enum carrying no personal data, which is why they are safe to keep where data was correctly dropped. NULL means the row predates this column and can never be filled, since the data it derives from is gone; [] means the run made no tool calls.';
 comment on column public.ticket_investigations.exemplar_match is
   'Which support_exemplars situation this ticket matched: { verdict, exemplar_key, closest, similarity, margin, runner_up, requirement_needs }. REPORTED, NEVER ACTED ON -- nothing in the investigation reads it and the model is never told, so requirement_needs can be compared against the run''s own evidence_gaps as an independent measure. exemplar_key is the committed match and is null unless the verdict is matched; closest is the nearest situation whatever the verdict, which on a near miss is the diagnostic worth having. verdict is matched / near / weak / none / ambiguous, where ambiguous means two situations were closer together than the margin can separate. Empty when retrieval found nothing or failed -- it is best-effort and never fails a run.';
 

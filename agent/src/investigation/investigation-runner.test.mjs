@@ -333,9 +333,22 @@ test('the matched situation is stored beside the case file', async () => {
   });
 });
 
-test('it is matched on the message that triggered the run, and reuses its vector', async () => {
-  // The bands were calibrated on each ticket's FIRST message; the run is
-  // triggered by the LATEST. Which one is matched has to be unambiguous.
+test('it is matched on the opening message, and reuses that message vector', async () => {
+  // REVERSED 2026-09-03. This test used to assert `latest`, and its own comment
+  // named the reason it was wrong: "the bands were calibrated on each ticket's
+  // FIRST message; the run is triggered by the LATEST". The mismatch was known
+  // and settled the other way — unambiguously matching the trigger — which
+  // applied a 0.65 threshold to a distribution it had never been measured on.
+  //
+  // What changed is a measurement rather than an opinion. On the nine
+  // multi-message threads in the 2026-09-03 sample the opening message scored
+  // higher on six and doubled the matches; the ticket that exposed it opens
+  // « ma commande #6686 n'est toujours pas traitée » and closes « j'ai bien reçu
+  // ma commande », scoring 0.623 against an address-change situation on the last
+  // message and 0.869 against O-09 on the first.
+  //
+  // The vector reuse is the half that did not change: whichever message is
+  // matched, its stored embedding is used rather than paying to embed again.
   const seen = [];
   const store = buildStore({
     messages: [
@@ -354,8 +367,10 @@ test('it is matched on the message that triggered the run, and reuses its vector
     }
   });
 
-  assert.equal(seen[0].body, 'latest');
-  assert.equal(seen[0].embedding, '[0.2]', 'the stored vector is reused rather than re-embedded');
+  assert.equal(seen[0].body, 'first');
+  assert.equal(seen[0].embedding, '[0.1]', 'the stored vector is reused rather than re-embedded');
+  // The case file is still keyed to the TRIGGER, which is the newest message.
+  // Changing what the matcher reads must not move where the row lands.
   assert.equal(store.saved[0].triggerMessageId, 'm2');
 });
 
@@ -590,4 +605,43 @@ test('the reaction record reaches its own column, and null when there is none', 
   // reported" and "one was, and nothing was identified", and the second is a
   // finding a rule acts on.
   assert.equal(rows[1].reaction_report, null);
+});
+
+test('the situation is matched on the opening message, not the latest one', async () => {
+  // THE TWO QUESTIONS ARE DIFFERENT. The investigation answers « what does this
+  // customer need now » and is driven by the newest message; the matcher answers
+  // « what is this thread about », which is the request that opened it.
+  //
+  // MEASURED on the ticket that exposed it: a thread opening « ma commande #6686
+  // n'est toujours pas traitée » and closing « je vous confirme que j'ai bien
+  // reçu ma commande » scored 0.623 against an address-change situation on the
+  // last message, and 0.869 against O-09 on the first.
+  const store = buildStore({
+    messages: [
+      { id: 'm1', body_text: "ma commande n'est toujours pas traitée", subject: 'Commande 6686' },
+      { id: 'm2', body_text: "merci, j'ai bien reçu ma commande", subject: 'RE: Commande 6686' }
+    ]
+  });
+
+  let matchedOn = null;
+  let investigatedOn = null;
+  await runInvestigation({
+    ...wire(store),
+    investigate: async (input) => {
+      investigatedOn = input.text;
+      return caseFile();
+    },
+    shopId: 's1',
+    retrieveExemplar: async ({ body }) => {
+      matchedOn = body;
+      return EXEMPLAR_RESULT;
+    }
+  });
+
+  assert.match(matchedOn, /toujours pas traitée/, 'the matcher reads the opening message');
+  assert.match(investigatedOn, /bien reçu/, 'the investigation still reads the latest');
+
+  // And the case file is still keyed to the trigger, which is the newest
+  // message: changing what the matcher reads must not move where the row lands.
+  assert.equal(store.saved[0].triggerMessageId, 'm2');
 });

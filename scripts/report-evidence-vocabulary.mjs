@@ -1,6 +1,11 @@
 import { loadConfig, loadEnv } from './lib/sync-config.mjs';
 import { createSupabaseClient, supabaseSelectAll } from './lib/supabase-rest-client.mjs';
-import { NEED_KEYS, findingValues, needLabel } from '../agent/src/investigation/evidence-rules.mjs';
+import {
+  NEED_KEYS,
+  findingValues,
+  isDesignedGap,
+  needLabel
+} from '../agent/src/investigation/evidence-rules.mjs';
 
 // Does the evidence vocabulary agree with itself?
 //
@@ -67,6 +72,15 @@ const EMPTY_FINDINGS = new Set([
 // is a property of what the tool was looking for, and only the person who wrote
 // the vocabulary knows which.
 const POSITIVE_ABSENCE = new Set(['refund_state:none']);
+
+// The third false positive of the same family as the two above — "only a
+// satisfied need may make a positive claim" is too strong a rule, because four
+// needs deliberately score a value that says WHY they could not be settled — is
+// `isDesignedGap`, imported rather than listed here.
+//
+// IT MOVED INTO THE VOCABULARY once the completeness gate needed the same fact:
+// whether a finding is a legitimate statement about a failure is a property of
+// what the tool was looking for, not of this report, and two readers now ask.
 
 main().catch((error) => {
   console.error(error.message);
@@ -269,6 +283,9 @@ function contradictionKind(state, finding, need) {
   // satisfied need is entitled to one. `unknown` in an unsatisfied state is the
   // honest, expected pairing and is not reported.
   if (EMPTY_FINDINGS.has(finding)) return null;
+  // ...unless the claim IS the reason the need stayed open, and only where the
+  // tool actually ran to produce it.
+  if (isDesignedGap(need, finding, state)) return null;
   return state === 'unavailable' ? 'unavailable_but_found' : 'unsatisfied_but_found';
 }
 

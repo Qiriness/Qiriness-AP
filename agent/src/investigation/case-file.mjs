@@ -414,6 +414,17 @@ export function buildCaseFile({
   // a ledger entry's `data` — and null on every ticket where no reaction tool
   // ran, which is every subject but one.
   reactionReport = null,
+  // The `MISSING_FIELDS` keys the dossier already answers, from
+  // `fieldsAlreadyAnswered` in evidence-rules.mjs. Passed rather than derived,
+  // like `candidateOrder` and for the same reason: this module imports nothing.
+  // Read where a rule's `ask` is applied, below.
+  answeredFields = [],
+  // What was established after each tool call, in call order, from
+  // `traceFindings` in the investigation. A PASS-THROUGH and deliberately
+  // nothing more: this module imports nothing and must not learn to derive a
+  // finding, which is the same reason `policy` and `answeredFields` arrive
+  // ready-made.
+  findingsTrace = [],
   model = null,
   now = new Date()
 } = {}) {
@@ -460,7 +471,26 @@ export function buildCaseFile({
   // `needs_customer_input`, the verdict stays where it was, and this branch does
   // not run. The questions only ever join a reply that was already going to ask.
   if (verdict === 'needs_customer_input') {
+    // NEVER ASK FOR WHAT WE ARE ALREADY HOLDING. A rule names its question from
+    // the evidence position it fired on, and a position is not the whole
+    // dossier: a rule keyed only to a situation fires whatever else was found,
+    // so it can ask for an order number the run resolved twenty lines earlier.
+    //
+    // GATED ON THE FINDINGS, NOT ON THE RULE, because the rule is not the one
+    // that knows. `fieldsAlreadyAnswered` reads the identity needs — the only
+    // ones that can vouch for an askable fact — and returns the `MISSING_FIELDS`
+    // keys the dossier already answers.
+    //
+    // WHAT THIS DELIBERATELY DOES NOT DO. A need never attempted on a ticket
+    // whose registry could have settled it is also a question that should not
+    // reach a customer, but the answer there is to run the tool rather than to
+    // drop the question, and this module cannot run tools. `evidenceGaps` keeps
+    // reporting it as `not_attempted`, where it stays visible.
+    const answered = new Set(Array.isArray(answeredFields) ? answeredFields : []);
     for (const field of policyAsks(policy)) {
+      if (answered.has(field)) {
+        continue;
+      }
       if (!missing.some((entry) => entry.field === field)) {
         missing.push({ field });
       }
@@ -508,6 +538,11 @@ export function buildCaseFile({
     // own is that the two are independent, and a row where the exemplar supplied
     // them is not evidence of agreement. Reports must exclude `exemplar` rows.
     needsSource,
+    // The run's own replay tape: the findings after each call, in call order.
+    // Nothing reads it yet — it is the store the shadow replay needs, and it has
+    // to start being written before that replay can be built, because the tool
+    // `data` it is derived from does not survive the run.
+    findingsTrace: Array.isArray(findingsTrace) ? findingsTrace : [],
     // The rule the evidence selected, and what it did.
     //
     // `applied` REPLACED `would_change_verdict` WHEN THE ROUTE WENT LIVE, and

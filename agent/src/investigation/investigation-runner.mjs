@@ -141,8 +141,36 @@ export async function runInvestigation({
 
     // Before the investigation, so it cannot be influenced by it — and awaited
     // rather than raced, because the stored row must describe one message.
+    // THE SITUATION IS MATCHED ON THE OPENING MESSAGE, NOT THE LATEST ONE, and
+    // they answer different questions. The investigation asks « what does this
+    // customer need now », so it is driven by `triggerMessage` — the most recent
+    // thing they said. The matcher asks « what is this thread about », and that
+    // is the request that opened it.
+    //
+    // MEASURED 2026-09-03, on the ticket that exposed it. A thread opening « je
+    // constate que ma commande #6686 du 28 juillet n'est toujours pas traitée »
+    // ends with « je vous confirme que j'ai bien reçu ma commande ». Scored on
+    // the last message it reaches 0.623 against O-12, an address-change
+    // situation whose nearest phrasing merely shares the words « je viens de
+    // passer une commande »; scored on the first it reaches 0.869 against O-09,
+    // which is plainly what it is. Across the nine multi-message threads in the
+    // sample the opening message scored higher on six, and doubled the matches.
+    //
+    // IT ALSO REALIGNS PRODUCTION WITH THE CALIBRATION. The 0.65 band was
+    // derived by `eval:exemplars` over the FIRST inbound message of 190 real
+    // tickets, so scoring the last one applied a threshold to a distribution it
+    // had never been measured against.
+    //
+    // FOLLOW-UPS ARE A SEPARATE PROBLEM AND THIS DOES NOT SOLVE IT. A thread
+    // that opens « où est ma commande » and becomes « finalement je veux être
+    // remboursé » still matches the first intent. What a later message should do
+    // to a situation already matched is undecided: it is additive to the thread
+    // rather than a new request, and treating it as a fresh match would let a
+    // courtesy note redefine what a ticket is about.
+    const openingMessage = messages[0];
+
     const exemplarMatch = await matchExemplar({
-      retrieveExemplar, ticket, message: triggerMessage, shopId, logger
+      retrieveExemplar, ticket, message: openingMessage, shopId, logger
     });
 
     // WHICH RULES COULD APPLY, loaded before the run and read after it.
@@ -516,6 +544,11 @@ export function createCaseFileStore(supabase, { transport = CASE_FILE_TRANSPORT 
             reaction_report: caseFile.reactionReport ?? null,
             tool_calls: caseFile.toolCalls,
             evidence_gaps: caseFile.evidenceGaps,
+            // NULL RATHER THAN `[]` WHEN THERE IS NONE, matching the column: an
+            // empty array says the run made no tool calls, and null says the row
+            // predates the trace. A case file always carries one, so this only
+            // fires for a caller that built one without the investigation.
+            findings_trace: caseFile.findingsTrace ?? null,
             // Diagnostic, arrived at independently of everything above it.
             exemplar_match: exemplarMatch || {},
             dropped_claims: caseFile.droppedClaims,

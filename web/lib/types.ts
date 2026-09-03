@@ -1423,7 +1423,7 @@ export interface PolicyVocabulary {
    * Not offered as a condition — you pick the state, not the number behind it —
    * but shown so the editor can say a rule will never fire while it is unset.
    */
-  needs: { need: string; findings: string[]; poweredBy: string | null }[];
+  needs: { need: string; findings: string[]; poweredBy: string | null; requires: string[] }[];
   routes: string[];
   asks: string[];
   /** Codes an operator has cleared for customers, for the rule editor's picker. */
