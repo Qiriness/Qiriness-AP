@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { AlertIcon, CheckCircleIcon, DotIcon, PlusIcon } from "@/components/icons";
 import { Button } from "@/components/ui/Button";
 import { knowledgeErrorMessage } from "@/lib/api/knowledge";
-import { deleteRule, saveRule, setRuleApproval } from "@/lib/api/policy";
+import { deleteRule, saveRule, setCollectionMode, setRuleApproval } from "@/lib/api/policy";
 import type { PolicyRule, PolicySituation, PolicyVocabulary } from "@/lib/types";
 
 import { RuleEditor } from "./RuleEditor";
@@ -60,6 +60,9 @@ export function RuleBook({
     situations.find((situation) => situation.answerSet === startingAnswerSet)?.key ?? SHARED;
 
   const [rules, setRules] = useState<PolicyRule[]>(initialRules);
+  const [modes, setModes] = useState<Record<string, string>>(() =>
+    Object.fromEntries(situations.map((situation) => [situation.key, situation.collectionMode])),
+  );
   const [editing, setEditing] = useState<EditorState | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -118,9 +121,18 @@ export function RuleBook({
   const sharedRuleCount = visibleRules.length - specificRuleCount;
   const liveCount = rules.filter((rule) => rule.approvalStatus === "approved").length;
 
+  // id -> title, so the inspector can name the pinned article rather than print
+  // a uuid. Built from the vocabulary the editor already offers pins from, so a
+  // rule pointing at an article that has since been unapproved shows no title —
+  // which is the same thing drafting does with it.
+  const articleTitles = useMemo(
+    () => new Map(vocabulary.articles.map((article) => [article.id, article.title])),
+    [vocabulary.articles],
+  );
+
   const workflow = useMemo(
-    () => buildWorkflow(visibleRules, vocabulary),
-    [visibleRules, vocabulary],
+    () => buildWorkflow(visibleRules, vocabulary, selectedSituationKey),
+    [visibleRules, vocabulary, selectedSituationKey],
   );
 
   const selectedRule = selectedRuleId
@@ -152,6 +164,14 @@ export function RuleBook({
         situationKey: selectedSituationKey,
         ...seed,
       },
+    });
+  }
+
+  async function toggleCollectionMode(key: string) {
+    const next = modes[key] === "rule_directed" ? "model" : "rule_directed";
+    await run(`mode:${key}`, async () => {
+      await setCollectionMode(key, next);
+      setModes((prev) => ({ ...prev, [key]: next }));
     });
   }
 
@@ -277,6 +297,30 @@ export function RuleBook({
                 <span>{specificRuleCount} situation rules</span>
                 <span>{sharedRuleCount} shared</span>
                 <span>{workflow.missingBranches} gaps</span>
+                {/* WHO DECIDES WHAT GETS COLLECTED for this situation. `model`
+                    is today's behaviour: the deterministic opening moves run and
+                    the model chooses the rest. `rule_directed` additionally lets
+                    these rules propose the next fact to establish — it may ADD
+                    and REORDER calls, never remove one.
+
+                    Set per situation and never inferred from rule count: a set
+                    with three of eight rules approved converges FASTER than a
+                    complete one, so counting rules would rate it readiest exactly
+                    when it is least ready. Run
+                    `npm run report:collection-planner` to see what it would
+                    collect here before switching it on. */}
+                {activeSituationMeta && (
+                  <button
+                    type="button"
+                    className={styles.modeToggle}
+                    disabled={busy === `mode:${activeSituationMeta.key}`}
+                    onClick={() => toggleCollectionMode(activeSituationMeta.key)}
+                  >
+                    {modes[activeSituationMeta.key] === "rule_directed"
+                      ? "rules collect"
+                      : "model collects"}
+                  </button>
+                )}
               </div>
             </div>
 
@@ -372,6 +416,37 @@ export function RuleBook({
                 ))
               )}
 
+              {workflow.sharedRules.length > 0 && (
+                <section className={styles.decisionStep}>
+                  <div className={styles.connector} aria-hidden="true" />
+                  <div className={styles.decisionNode}>
+                    <header className={styles.nodeHeader}>
+                      <div>
+                        <p className={styles.nodeLabel}>Shared across the set</p>
+                        <h4>Rules not keyed to this situation</h4>
+                        <p className={styles.requires}>
+                          They apply to any situation, and lose to the rules above whenever one of
+                          those matches — a situation outranks condition depth.
+                        </p>
+                      </div>
+                    </header>
+                    <div className={styles.outcomes}>
+                      {workflow.sharedRules.map((rule) => (
+                        <button
+                          key={rule.id}
+                          type="button"
+                          className={selectedRuleId === rule.id ? styles.outcomeOn : styles.outcomeButton}
+                          onClick={() => setSelectedRuleId(rule.id)}
+                        >
+                          <span className={styles.outcomeKey}>{rule.answerKey}</span>
+                          <span className={styles.outcomeAction}>{actionSummary(rule)}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </section>
+              )}
+
               {workflow.conditionlessRules.length > 0 && (
                 <section className={styles.decisionStep}>
                   <div className={styles.connector} aria-hidden="true" />
@@ -405,6 +480,11 @@ export function RuleBook({
             {selectedRule ? (
               <RuleInspector
                 rule={selectedRule}
+                articleTitle={
+                  selectedRule.knowledgeDocumentId
+                    ? articleTitles.get(selectedRule.knowledgeDocumentId) ?? null
+                    : null
+                }
                 busy={busy === selectedRule.id}
                 onEdit={() => setEditing({ rule: selectedRule })}
                 onApprove={() => approve(selectedRule)}
@@ -449,12 +529,14 @@ export function RuleBook({
 
 function RuleInspector({
   rule,
+  articleTitle,
   busy,
   onEdit,
   onApprove,
   onDelete,
 }: {
   rule: PolicyRule;
+  articleTitle: string | null;
   busy: boolean;
   onEdit: () => void;
   onApprove: () => void;
@@ -489,6 +571,15 @@ function RuleInspector({
           <div>
             <dt>Code</dt>
             <dd>{rule.offerCode}</dd>
+          </div>
+        )}
+        {rule.knowledgeDocumentId && (
+          <div>
+            <dt>Article</dt>
+            {/* No title means the pin points at something no longer approved.
+                Saying so beats printing a uuid: it is the same rule drafting
+                applies, surfaced where it can be fixed. */}
+            <dd>{articleTitle ?? "linked article is no longer approved"}</dd>
           </div>
         )}
       </dl>
@@ -528,12 +619,27 @@ function BranchStatusIcon({ status }: { status: BranchStatus }) {
   return null;
 }
 
-function buildWorkflow(rules: PolicyRule[], vocabulary: PolicyVocabulary) {
+function buildWorkflow(
+  rules: PolicyRule[],
+  vocabulary: PolicyVocabulary,
+  situationKey: string | null = null,
+) {
+  // A SITUATION'S DECISIONS ARE ITS OWN. The set's situation-less rules still
+  // apply at runtime, but they cannot win here: `selectAnswer` ranks situation
+  // above condition depth, so a rule keyed to this situation always outranks a
+  // shared one. Building the decision list from both put `order_state` and
+  // `delivery_state` on D-33 — a pure shipping-policy question that branches on
+  // nothing but `policy_answer` — and dragged `order_identity` in behind them as
+  // a prerequisite. Three decisions the reader cannot act on and no rule here
+  // reads. They keep their own lane below instead of disappearing.
+  const scoped = situationKey ? rules.filter((rule) => rule.situationKey === situationKey) : rules;
+  const sharedRules = situationKey ? rules.filter((rule) => !rule.situationKey) : [];
+
   const needIndex = new Map(vocabulary.needs.map((need, index) => [need.need, index]));
   const needMeta = new Map(vocabulary.needs.map((need) => [need.need, need]));
   const mentioned = new Set<string>();
 
-  for (const rule of rules) {
+  for (const rule of scoped) {
     for (const need of Object.keys(rule.conditions)) mentioned.add(need);
   }
 
@@ -563,7 +669,7 @@ function buildWorkflow(rules: PolicyRule[], vocabulary: PolicyVocabulary) {
       const meta = needMeta.get(need)!;
       const isPrerequisiteOnly = !mentioned.has(need);
       const branches: BranchValue[] = meta.findings.map((finding) => {
-        const candidates = rules.filter((rule) => rule.conditions[need]?.includes(finding));
+        const candidates = scoped.filter((rule) => rule.conditions[need]?.includes(finding));
         const matching = candidates.filter((rule) => deepestConditionNeed(rule, workflowOrder) === need);
         const continues = candidates.length > matching.length;
         const status: BranchStatus =
@@ -584,7 +690,7 @@ function buildWorkflow(rules: PolicyRule[], vocabulary: PolicyVocabulary) {
       };
     });
 
-  const conditionlessRules = rules
+  const conditionlessRules = scoped
     .filter((rule) => Object.keys(rule.conditions).length === 0)
     .sort(sortRuleForWorkflow);
   const missingBranches = needs.reduce(
@@ -592,7 +698,7 @@ function buildWorkflow(rules: PolicyRule[], vocabulary: PolicyVocabulary) {
     0,
   );
 
-  return { needs, conditionlessRules, missingBranches };
+  return { needs, conditionlessRules, sharedRules: sharedRules.sort(sortRuleForWorkflow), missingBranches };
 }
 
 function deepestConditionNeed(rule: PolicyRule, order: Map<string, number>): string | null {

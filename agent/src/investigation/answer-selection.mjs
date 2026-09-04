@@ -76,6 +76,35 @@ export function normaliseConditions(raw, { warn = () => {} } = {}) {
  * So the set's own conditions say what to score. Cheap, because scoring reads
  * the ledger that already exists — it calls no tool and costs nothing.
  */
+/**
+ * A `support_answers` row, as this module reads answers.
+ *
+ * HERE BECAUSE THIS MODULE DEFINES WHAT AN ANSWER IS. Two callers load rules —
+ * the ticket's own set and, when an email carries a second request, that
+ * request's set — and a second copy of this mapping is a second place for a
+ * column to be forgotten.
+ */
+export function answerFromRow(row) {
+  return {
+    answerKey: row.answer_key,
+    situationKey: row.situation_key ?? null,
+    // Normalised through the same function the authoring path validates with, so
+    // a condition naming a need that has since been removed is dropped here
+    // rather than becoming a rule that silently never matches.
+    conditions: normaliseConditions(row.when_conditions),
+    answerSkeleton: row.answer_skeleton ?? null,
+    route: row.route ?? null,
+    // Always a list, even from a row written before the column was one.
+    ask: Array.isArray(row.ask) ? row.ask.filter(Boolean) : row.ask ? [row.ask] : [],
+    // Carried as written; whether the code is still live and whether the article
+    // is still approved are drafting-time questions.
+    offerCode: row.offer_code ?? null,
+    knowledgeDocumentId: row.knowledge_document_id ?? null,
+    priority: row.priority ?? 0,
+    isFallback: Boolean(row.is_fallback)
+  };
+}
+
 export function needsNamedBy(answers = []) {
   const needs = new Set();
   for (const answer of answers) {

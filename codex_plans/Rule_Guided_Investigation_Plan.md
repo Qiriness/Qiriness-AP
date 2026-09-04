@@ -456,7 +456,11 @@ a positive fact, unlike `product_property: none` which means the library was
 silent. Same word, opposite epistemic status; the classifier now lists the
 exceptions explicitly.
 
-### The pilot is P-18, and it is a textbook case
+### The pilot was P-18, and it turned out to be dormant (corrected 2026-09-03)
+
+**`extractPromotionCodes` has returned `found` on zero runs in the corpus**, so every P-18 ticket resolves its validity without a code, keeps one live answer, and has nothing left to collect. The reasoning below is still right — it is about a chain no ticket has walked. **D-02 is the live pilot**: opted in, a real ticket went from 1 tool call to 3 and closed its unsearched gap.
+
+### The original P-18 argument, kept because the mechanism is what it explains
 
 Fourteen approved situations already carry more than one rule. P-18 carries four,
 and all four branch on the same need, covering every value it can take:
@@ -488,9 +492,9 @@ Measurements first, because two of them are prerequisites rather than validation
 | 4 | ~~Ship §8 — never ask for what is known~~ — **done 2026-09-03** | `fieldsAlreadyAnswered` filters a rule's `ask` on the findings. The not-attempted half is deliberately left: the answer there is to run the tool, not to drop the question |
 | 5 | ~~Fill in `DEPENDENCIES`~~ — **done 2026-09-03** | Nine entries became thirteen; the product family has one for the first time. A cycle test guards it |
 | 6 | ~~Gate as a report (§7)~~ — **done 2026-09-03** | `npm run report:completeness-gate`. 12 downgrades in 91 runs, split **4 right / 4 mixed / 4 where nothing can ever close the gap**. The last four are why §7 gained a fifth row |
-| 7 | Planner, additive only (§§2–5) | May add and reorder; may not suppress |
-| 8 | Per-task rules | When a second set goes `rule_directed` |
-| 9 | Suppression, per situation | Only where the replay shows no evidence loss |
+| 7 | ~~Planner, additive only (§§2–5)~~ — **done 2026-09-03** | Opt-in per situation, default `model`. §2 understated it: `nextNeed` proposes nothing on a real findings map, and `available` had to become the rules’ needs plus prerequisites. **30 of 90** runs would collect. §6 deliberately left — its keys are not needs |
+| 8 | ~~Per-task rules~~ — **done 2026-09-04** | Per REQUEST, from the decomposer’s tasks and the categoriser’s `secondary_category` — 21% of tickets carry a second rulebook. Strictest route wins; skeletons concatenate. `taskIndex` deliberately not built: a model-initiated call cannot be attributed to a request |
+| 9 | Suppression, per situation — **replay built, suppression NOT enabled 2026-09-03** | `report:collection-replay` over 47 traced runs: **13 calls saved, 7 established facts lost**. Every situation that saves anything also loses something. The mechanism ships off; re-run the replay after the rules improve |
 
 Steps 4 and 5 are worth doing whatever is decided about the rest.
 

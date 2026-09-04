@@ -11,10 +11,12 @@ import {
   fieldsAlreadyAnswered,
   findingsOf,
   reactionReportFrom,
-  resolveNeeds
+  resolveNeeds,
+  responseComplete
 } from './evidence-rules.mjs';
-import { needsNamedBy, selectAnswer } from './answer-selection.mjs';
-import { TOOL_NAMES, escalationTriggers } from './investigation-rules.mjs';
+import { liveAnswers, needsNamedBy, selectAnswer } from './answer-selection.mjs';
+import { collectableNeeds, collectedFindings, proposeCollection } from './collection-planner.mjs';
+import { TOOL_NAMES, answerSetFor, escalationTriggers } from './investigation-rules.mjs';
 
 // The investigation agent: a categorised ticket in, a case file out.
 //
@@ -39,6 +41,13 @@ import { TOOL_NAMES, escalationTriggers } from './investigation-rules.mjs';
 // already reads, and the French renderings the tools produce.
 
 const DEFAULT_MAX_TOOL_CALLS = 6;
+
+// CALLS THE PLANNER MAY NOT SPEND. Whatever the rules want, the model keeps a
+// guaranteed remainder — because the planner only ever speaks for the situation
+// that matched, and a decomposed email can carry a second request the rules have
+// nothing to say about. Two is the smallest number that leaves the fallback able
+// to look something up AND still write a case file.
+const PLANNER_MODEL_RESERVE = 2;
 const DEFAULT_MAX_TURNS = 4;
 
 const SYSTEM_PROMPT = [
@@ -78,6 +87,16 @@ export function createInvestigator(
     maxTurns = DEFAULT_MAX_TURNS,
     maxBodyChars = 3000,
     decomposer = null,
+    // Loads the rules for ONE request: its answer set, and the situation its own
+    // wording matches. Supplied by the runner, which owns the shop id and the
+    // retrieval client; absent means an email is ruled on as one request, exactly
+    // as it was before.
+    policyForRequest = null,
+    // THE GLOBAL OFF SWITCH for rule-directed collection, beside the per-situation
+    // `collection_mode` column. Two levels on purpose: one bad situation is turned
+    // off by a person in the dashboard, and the whole layer is turned off by an
+    // env flag without a deploy.
+    plannerEnabled = true,
     logger,
     // Every tool result, as it is recorded — the ledger entry WHOLE, including
     // the French `promptText` the model was handed and the `data` the model
@@ -180,9 +199,102 @@ export function createInvestigator(
     // Turns before the last are the model's chance to ask for more. The final
     // turn is reserved: `tool_choice: 'none'` plus the schema, so a run always
     // ends with a case file rather than with one more request.
+    // THE RULES GET FIRST REFUSAL ON EACH TURN, when this situation is opted in.
+    //
+    // ADDITIVE ONLY. A proposal ADDS a call; nothing here ends the loop, skips a
+    // model turn that would otherwise happen, or changes a verdict. The model
+    // still gets every turn it would have had — the planner spends its own
+    // reserve, and when that is gone the run proceeds exactly as today.
+    //
+    // OFF UNLESS THREE THINGS HOLD: a situation matched, that situation is
+    // `rule_directed`, and its set loaded approved rules. Any one missing and
+    // this block never runs, which is what makes the change inert on delivery
+    // until somebody opts a situation in.
+    const ruleDirected =
+      plannerEnabled &&
+      ticket.policy?.collectionMode === 'rule_directed' &&
+      Boolean(ticket.policy?.situationKey) &&
+      (ticket.policy?.answers?.length ?? 0) > 0;
+
     for (let turn = 1; turn < maxTurns; turn += 1) {
       if (run.exhausted()) {
         break;
+      }
+
+      // BUDGET IS RESERVED, NOT SHARED. The model keeps a guaranteed remainder,
+      // so a chatty planner cannot starve the fallback on exactly the tickets
+      // that need it — a multi-task email where the rules only speak to one half.
+      while (ruleDirected && run.remaining() > PLANNER_MODEL_RESERVE) {
+        // RESOLVED OVER THE PREREQUISITES TOO, not just the needs the rules name.
+        // `collectableNeeds` is the same set the planner ranks over, and scoring a
+        // narrower one hides the state of exactly the needs the dependency walk
+        // reaches: P-18's rules name only `promotion_validity`, so scoring that
+        // alone leaves `promotion_identity` with no state, the planner reads it
+        // as uncollected, and proposes a tool the opening moves already ran.
+        const proposal = proposeCollection(
+          ticket.policy.answers,
+          resolveNeeds(collectableNeeds(ticket.policy.answers), run.ledger, names),
+          {
+            situationKey: ticket.policy.situationKey,
+            ticket,
+            ledger: run.ledger,
+            allowedTools: names
+          }
+        );
+        if (!proposal) break;
+
+        // THE LEDGER MUST GROW OR THE PLANNER STOPS, and this is a correctness
+        // guard rather than a belt-and-braces one. `run.call` serves a repeat
+        // from cache and returns the ORIGINAL entry — truthy, with no new id and
+        // no new row. A planner that read that as success would re-derive the
+        // same findings, propose the same need, and spin without ever spending
+        // budget. Measured: it hangs the run.
+        //
+        // A cache hit also means the evidence is already in hand, so there is
+        // nothing this proposal could add even if the loop were safe.
+        const before = run.ledger.length;
+        const entry = await run.call(proposal.tool, proposal.args, 'planner');
+        if (!entry || run.ledger.length === before) break;
+        logger?.info?.('investigation.planner_called', {
+          ticketId: ticket.id,
+          situation: ticket.policy.situationKey,
+          need: proposal.need,
+          tool: proposal.tool
+        });
+      }
+
+      if (run.exhausted()) {
+        break;
+      }
+
+      // COLLECTION MAY STOP HERE, and only where a person has said it may.
+      //
+      // TWO CONDITIONS, NEVER ONE. `nextNeed` returning null means THE RULE IS
+      // DECIDED, which is not the same as the investigation being done: a rule
+      // branches only on what changes the routing, and a reply rests on facts
+      // that change nothing about which answer is selected. Measured across 90
+      // runs -- 58 had the rule decided, and 50 of those still produced
+      // established facts. Stopping on the rule alone would have dropped the
+      // collection behind 115 claims.
+      //
+      // OFF EVERYWHERE UNTIL THE REPLAY SAYS OTHERWISE.
+      // `report:collection-replay` scores what stopping early would have cost,
+      // per situation; today it says 13 calls saved against 7 established facts
+      // lost, so no situation carries this flag.
+      if (ruleDirected && ticket.policy?.suppresses === true) {
+        const resolved = resolveNeeds(NEED_KEYS, run.ledger, names);
+        const decided =
+          liveAnswers(ticket.policy.answers, collectedFindings(resolved), {
+            situationKey: ticket.policy.situationKey
+          }).length <= 1;
+        if (decided && responseComplete(ticket.category, resolved)) {
+          logger?.info?.('investigation.collection_suppressed', {
+            ticketId: ticket.id,
+            situation: ticket.policy.situationKey,
+            afterCalls: run.ledger.length
+          });
+          break;
+        }
       }
 
       const response = await openai.completeWithTools({
@@ -210,6 +322,11 @@ export function createInvestigator(
         });
       }
     }
+
+    // EVERY REQUEST THIS EMAIL CARRIES, each with its own rulebook and situation.
+    // Resolved after the loop for the same reason the policy is selected there:
+    // nothing about collection depends on it, so it cannot have steered the run.
+    const requests = await resolveRequests({ ticket, plan, policyForRequest, logger });
 
     const final = await openai.completeWithTools({
       model,
@@ -258,7 +375,7 @@ export function createInvestigator(
       // AFTER EVERYTHING ELSE, deliberately: the verdict, the needs and every
       // tool call are already settled by the time this runs. It reads them and
       // adds a reading; it cannot have changed them.
-      policy: selectPolicy(ticket.policy, run.ledger, names),
+      policy: selectPolicyForRequests(requests, run.ledger, names),
       // WHAT THE DOSSIER ALREADY ANSWERS, so a rule cannot put a question to a
       // customer that our own tools have settled. Derived from the same ledger
       // everything else here reads, and handed over as plain keys because
@@ -293,6 +410,155 @@ export function createInvestigator(
  * the same ledger id, and the turn limit still ends the loop.
  */
 /**
+ * The requests an email carries, each paired with the rulebook that answers it.
+ *
+ * TWO SOURCES, AND THE SECOND IS THE ONE THAT WAS BEING THROWN AWAY. The
+ * decomposer names a category per task; the CATEGORISER already recorded a
+ * `secondary_category` on the ticket and nothing downstream ever read it. When
+ * the decomposer is absent or collapses to one task,
+ * `normaliseDecomposition` falls back to the ticket's own category alone — so
+ * without the second source the extra request disappears on exactly the runs
+ * least able to afford it.
+ *
+ * DEDUPLICATED BY ANSWER SET, because two tasks in one family are one selection:
+ * the rulebook is the same and the findings are the same, so selecting twice
+ * would just double the skeleton.
+ *
+ * THE TICKET'S OWN POLICY IS ALWAYS FIRST and is never re-derived — it was
+ * loaded and situation-matched by the runner, and re-matching it here would spend
+ * an embedding to reach the same answer less accurately.
+ */
+async function resolveRequests({ ticket, plan, policyForRequest, logger }) {
+  const primary = ticket.policy ?? null;
+  const requests = primary ? [{ ...primary, question: null }] : [];
+  if (!policyForRequest) return requests;
+
+  const seen = new Set(requests.map((request) => request.answerSet).filter(Boolean));
+  const candidates = [
+    ...plan.tasks.map((task) => ({ category: task.category, question: task.question })),
+    // The categoriser's second axis, with the whole email as its text: there is no
+    // sub-question to match on when the decomposer did not produce one.
+    { category: ticket.secondary_category, question: null }
+  ];
+
+  for (const candidate of candidates) {
+    const answerSet = answerSetFor(candidate.category);
+    if (!answerSet || seen.has(answerSet)) continue;
+    seen.add(answerSet);
+    try {
+      const loaded = await policyForRequest({
+        answerSet,
+        category: candidate.category,
+        question: candidate.question,
+        ticket
+      });
+      if (loaded?.answers?.length) {
+        requests.push({ ...loaded, question: candidate.question });
+      }
+    } catch (error) {
+      // NEVER FAILS AN INVESTIGATION over a second rulebook, the same contract
+      // `loadPolicy` and `lastOrderLookup` already keep.
+      logger?.warn?.('investigation.request_policy_failed', {
+        ticketId: ticket.id,
+        answerSet,
+        reason: error.message
+      });
+    }
+  }
+
+  return requests;
+}
+
+/**
+ * Which rules this run selects — one per REQUEST the email carries.
+ *
+ * AN EMAIL CAN ASK TWO THINGS AND THE RULES USED TO ANSWER ONE. The rulebook is
+ * opened by subject, and a ticket has one subject, so a mask-specification email
+ * that also asks for a discount code selected a `products` rule and nothing else
+ * — while the promotion it asked about sat established in the same case file.
+ * Measured: 66 of 309 investigable tickets (21%) carry a secondary subject that
+ * opens a different rulebook.
+ *
+ * ONE REQUEST STILL PRODUCES EXACTLY TODAY’S OBJECT, byte for byte. That is the
+ * safety property and the regression test: 79% of tickets must not move, and the
+ * combining branch below cannot run for them.
+ */
+function selectPolicyForRequests(requests, ledger, toolNames) {
+  const selections = [];
+  for (const request of requests) {
+    const selected = selectOnePolicy(request, ledger, toolNames);
+    if (selected) selections.push({ ...selected, question: request.question ?? null });
+  }
+  if (selections.length === 0) return null;
+  if (selections.length === 1) {
+    const { question, ...only } = selections[0];
+    return only;
+  }
+  return combinePolicies(selections);
+}
+
+/**
+ * Several requests, one ticket, one verdict.
+ *
+ * THE STRICTEST ROUTE WINS, and that is what keeps tighten-only intact for free:
+ * the strictest of several tightenings is still a tightening, and a request whose
+ * rule wants to answer can never clear one whose rule wants a person.
+ *
+ * SKELETONS CONCATENATE, EACH LABELLED WITH ITS QUESTION, because the failure
+ * being fixed is a reply that answers one half well and improvises the other. A
+ * merged instruction that named neither would be no better.
+ *
+ * ONE OFFER AND ONE ARTICLE AT MOST. Two rules each handing out a different
+ * discount code is an authoring problem, not something to resolve by picking; the
+ * first is taken and every selection is recorded in `per_request` so the clash is
+ * visible rather than silently settled.
+ */
+function combinePolicies(selections) {
+  const RANK = { answerable: 0, needs_customer_input: 1, needs_human: 2 };
+  const routed = selections.filter((s) => s.route);
+  const route =
+    routed.length > 0
+      ? routed.reduce((worst, s) => (RANK[s.route] > RANK[worst.route] ? s : worst)).route
+      : null;
+
+  const ask = [];
+  for (const selection of selections) {
+    for (const field of selection.ask || []) if (!ask.includes(field)) ask.push(field);
+  }
+
+  const skeleton = selections
+    .filter((s) => s.answer_skeleton)
+    .map((s) => (s.question ? `« ${s.question} »\n${s.answer_skeleton}` : s.answer_skeleton))
+    .join('\n\n');
+
+  const primary = selections[0];
+  return {
+    answer_set: primary.answer_set,
+    situation_key: primary.situation_key,
+    verdict: selections.some((s) => s.verdict === 'selected') ? 'selected' : primary.verdict,
+    answer_key: primary.answer_key,
+    route,
+    ask,
+    offer_code: selections.find((s) => s.offer_code)?.offer_code ?? null,
+    knowledge_document_id: selections.find((s) => s.knowledge_document_id)?.knowledge_document_id ?? null,
+    answer_skeleton: skeleton || null,
+    candidates: [...new Set(selections.flatMap((s) => s.candidates))],
+    // The findings are one map for the whole ticket, so any selection’s copy is
+    // the same map. See DECISIONS for why they are not scoped per request.
+    findings: primary.findings,
+    // WHAT EACH REQUEST SELECTED, so a stored run reads back and a report can
+    // tell a combined selection from a single one.
+    per_request: selections.map((s) => ({
+      question: s.question,
+      answer_set: s.answer_set,
+      situation_key: s.situation_key,
+      answer_key: s.answer_key,
+      route: s.route
+    }))
+  };
+}
+
+/**
  * Which policy rule this run's evidence selects, and what it would have done.
  *
  * SHADOW ONLY, TODAY. The result is recorded and nothing reads it: the verdict
@@ -310,7 +576,7 @@ export function createInvestigator(
  * branch on rather than the ones the ticket declared — see `needsNamedBy`. It
  * reads the ledger that already exists, calls no tool and costs nothing.
  */
-function selectPolicy(policy, ledger, toolNames) {
+function selectOnePolicy(policy, ledger, toolNames) {
   const answers = policy?.answers || [];
   if (answers.length === 0) {
     return null;
@@ -330,6 +596,10 @@ function selectPolicy(policy, ledger, toolNames) {
     // is still live is a drafting-time question, and the case file must record
     // what the rule SAID so a stored run can be read back.
     offer_code: result.answer?.offerCode ?? null,
+    // The article the rule pins, recorded rather than resolved for the reason
+    // above it: the drafting pass re-checks that the document is still approved
+    // and drops it if not, and a stored run has to say which one was chosen.
+    knowledge_document_id: result.answer?.knowledgeDocumentId ?? null,
     // The wording guidance, carried so the drafting pass can read it back off
     // the stored row. It is the one field here that reaches a model.
     answer_skeleton: result.answer?.answerSkeleton ?? null,
@@ -468,6 +738,11 @@ function createRun({ ticket, handlers, maxToolCalls, logger, onToolCall = null }
 
     exhausted() {
       return ledger.length >= maxToolCalls;
+    },
+
+    /** Calls still available. Read by the planner, which spends a reserve. */
+    remaining() {
+      return Math.max(0, maxToolCalls - ledger.length);
     },
 
     caveats() {

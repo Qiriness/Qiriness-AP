@@ -1266,6 +1266,101 @@ export function gapClosability(gap = {}) {
  * availability need is noise, and the same error on a stock question is the
  * reason the answer is thin.
  */
+/**
+ * Which tools could establish this need, in the vocabulary's own order.
+ *
+ * ORDERED, AND THE ORDER IS THE PREFERENCE. `product_identity` lists
+ * `lookupProduct` before `searchKnowledge` because the title matcher is the
+ * direct answer and the article is the fallback that catches what no title
+ * contains. A planner picking a tool for a need walks this list and takes the
+ * first one the ticket is allowed and can supply arguments for.
+ */
+export function toolsForNeed(need) {
+  return (NEEDS[need]?.satisfiedBy ?? []).map((source) => source.tool);
+}
+
+/**
+ * What a COMPLETE REPLY on this subject rests on, per subject.
+ *
+ * The other half of the two stopping conditions. `nextNeed` returning null
+ * means THE RULE IS DECIDED, not that the investigation is done: a rule
+ * branches only on what changes the routing, and a reply needs facts that
+ * change nothing about which answer is selected. Measured on the corpus — on
+ * 58 of 90 runs the rule was already decided, and 50 of those still produced
+ * established facts, 115 claims in all. Stopping on the rule alone would have
+ * dropped the collection that produced them.
+ *
+ * TRANSLATED FROM `requiredEvidence`, NOT PROMOTED FROM IT. That list is prompt
+ * text in its own key vocabulary (`product_identified`, `stock_known`), and the
+ * mapping is mostly obvious — except for one entry that has no need at all.
+ *
+ * `knowledge_searched` IS DELIBERATELY ABSENT. « la base de connaissances a été
+ * consultée » names a TOOL CALL, and a need is a FACT: `product_identity` is
+ * "we know which product this is", never "lookupProduct ran". Admitting it here
+ * would put the one shape this vocabulary refuses into the list that decides
+ * when collection may stop. Nothing is lost by dropping it — `searchKnowledge`
+ * is already an opening move on every subject that listed it.
+ *
+ * `return_state` MAPS TO `refund_state`, NOT `return_eligibility`. The label is
+ * « l’état du retour ou du remboursement », which is what `refund_state`
+ * reports; `return_eligibility` answers whether a return is still POSSIBLE and
+ * resolves `unknown` on every ticket until the returns window is set, so a
+ * floor built on it could never be met.
+ */
+const RESPONSE_NEEDS_BY_SUBJECT = {
+  product: ['product_identity', 'product_property'],
+  product_stock: ['product_identity', 'product_availability'],
+  promotions: ['promotion_identity', 'promotion_validity'],
+  account: ['customer_identity'],
+  // The subject with no tools by design. Listed for completeness; it is never
+  // rule-directed, so nothing here can end its loop early.
+  cosmetovigilance: ['customer_identity', 'reaction_product'],
+  other: [],
+  // `customer_identity` ON ALL FOUR, added 2026-09-04 after the replay showed
+  // the floor was lying about when a reply is ready: 24 established claims across
+  // these subjects rest on `lookupCustomer`, and the floor named it nowhere. It
+  // costs nothing to require now that the same commit made it an opening move.
+  order: ['order_identity', 'customer_identity', 'order_state'],
+  delivery: ['order_identity', 'customer_identity', 'delivery_state'],
+  payment: ['order_identity', 'customer_identity', 'payment_state'],
+  return_exchange: ['order_identity', 'customer_identity', 'refund_state']
+};
+
+/** The subject floor, plus whatever a rule added. Rules may ADD, never shrink. */
+export function responseNeeds(subject, added = []) {
+  const floor = RESPONSE_NEEDS_BY_SUBJECT[subject] ?? [];
+  return normaliseNeeds([...floor, ...(Array.isArray(added) ? added : [])]);
+}
+
+/**
+ * Has the run established everything a reply on this subject rests on?
+ *
+ * SATISFIED, MOOT, OR UNCLOSABLE. The first two are obvious. The third reuses
+ * step 6’s `gapClosability`: a need nothing can ever close is not a reason to
+ * keep collecting, and treating it as one would mean the loop never ends on any
+ * subject carrying a need with no tool wired — which is most of them.
+ *
+ * A SUBJECT WITH NO FLOOR IS NOT COMPLETE, IT IS UNGOVERNED. `other` declares
+ * nothing, so this returns false there rather than true: an empty list is the
+ * absence of a rule about when to stop, not a licence to stop immediately.
+ */
+export function responseComplete(subject, resolved = [], added = []) {
+  const wanted = responseNeeds(subject, added);
+  if (wanted.length === 0) return false;
+
+  const byNeed = new Map(resolved.map((item) => [item?.need, item]));
+  const findings = {};
+  for (const item of resolved) if (item?.finding != null) findings[item.need] = item.finding;
+
+  return wanted.every((need) => {
+    const item = byNeed.get(need);
+    if (!item) return false;
+    if (item.state === 'satisfied') return true;
+    if (isMoot(need, findings)) return true;
+    return gapClosability(item) === 'never';
+  });
+}
+
 export function needsSatisfiedBy(tool) {
   return NEED_KEYS.filter((key) => NEEDS[key].satisfiedBy.some((source) => source.tool === tool));
 }

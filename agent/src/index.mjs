@@ -348,6 +348,7 @@ async function main() {
         senderDirectory,
         retrieveExemplar: investigation.retrieveExemplar,
         loadAnswers: investigation.loadAnswers,
+        loadCollectionMode: investigation.loadCollectionMode,
         parameters: await investigation.loadParameters(shopId),
         // The customer's last order, for a HUMAN, and only where no order was
         // confirmed. It fires less often now that the resolver runs first —

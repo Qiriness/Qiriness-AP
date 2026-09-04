@@ -38,6 +38,7 @@ import {
 import { MISSING_FIELDS, VERDICTS } from "../../../agent/src/investigation/case-file.mjs";
 import { PARAMETERS } from "../../../scripts/lib/parameters.mjs";
 
+import { listPinnableArticles } from "./knowledge-service";
 import { listOfferableCodes } from "./promotions-service";
 import { listParameters } from "./parameters-service";
 
@@ -121,11 +122,17 @@ export async function policyVocabulary(shopId?: string): Promise<PolicyVocabular
   // be dropped at drafting time and look, from the rulebook, as though it worked.
   const offerableCodes = shopId ? await listOfferableCodes(shopId) : [];
 
+  // The approved articles a rule may answer from. Same reasoning as the codes:
+  // a picker rather than an id typed by hand, and only what is approved, so the
+  // rulebook cannot offer a pin that drafting will drop.
+  const articles = shopId ? await listPinnableArticles(shopId) : [];
+
   return {
     needs,
     routes: ROUTES,
     asks: ASKS,
     offerableCodes,
+    articles,
     // For the skeleton box: a parameter is inserted as a placeholder, which is
     // the one place a rule names one directly.
     parameters: Object.entries(PARAMETERS).map(([key, meta]) => ({
@@ -157,7 +164,7 @@ export async function listRules(shopId: string, answerSet?: string): Promise<Pol
       ...(answerSet ? { answer_set: answerSet } : {}),
       deleted_at: { operator: "is", value: "null" },
     },
-    "id,answer_set,answer_key,situation_key,when_conditions,answer_skeleton,route,ask,offer_code,priority,is_fallback,approval_status,updated_at",
+    "id,answer_set,answer_key,situation_key,when_conditions,answer_skeleton,route,ask,offer_code,knowledge_document_id,priority,is_fallback,approval_status,updated_at",
   )) as Record<string, unknown>[];
 
   return rows.map(mapRule).sort(byAnswerSetThenKey);
@@ -166,12 +173,14 @@ export async function listRules(shopId: string, answerSet?: string): Promise<Pol
 /** The situations a rule may be keyed to, so the editor offers keys that exist. */
 export async function listSituations(
   shopId: string,
-): Promise<{ key: string; question: string; category: string | null; answerSet: string | null }[]> {
+): Promise<
+  { key: string; question: string; category: string | null; answerSet: string | null; collectionMode: string }[]
+> {
   const rows = (await supabaseSelect(
     getSupabaseClient(),
     T.SUPPORT_EXEMPLARS,
     { shop_id: shopId, deleted_at: { operator: "is", value: "null" } },
-    "exemplar_key,canonical_question,category,answer_set",
+    "exemplar_key,canonical_question,category,answer_set,collection_mode",
   )) as Record<string, unknown>[];
 
   return rows
@@ -180,6 +189,7 @@ export async function listSituations(
       question: String(row.canonical_question ?? ""),
       category: (row.category as string) ?? null,
       answerSet: (row.answer_set as string) ?? null,
+      collectionMode: (row.collection_mode as string) ?? "model",
     }))
     .sort((a, b) => a.key.localeCompare(b.key));
 }
@@ -195,6 +205,8 @@ export interface RuleInput {
   ask: string[];
   /** A live discount code this rule hands the customer, or null. */
   offerCode: string | null;
+  /** The approved article this rule answers from, or null. */
+  knowledgeDocumentId: string | null;
   priority: number;
   isFallback: boolean;
   approvalStatus: string;
@@ -256,6 +268,7 @@ export async function saveRule(shopId: string, input: RuleInput): Promise<Policy
     route: input.route || null,
     ask: asks,
     offerCode: input.offerCode?.trim() || null,
+    knowledgeDocumentId: input.knowledgeDocumentId?.trim() || null,
     priority: input.priority ?? 0,
     isFallback: Boolean(input.isFallback),
   };
@@ -278,6 +291,7 @@ export async function saveRule(shopId: string, input: RuleInput): Promise<Policy
         route: shaped.route,
         ask: shaped.ask,
         offer_code: shaped.offerCode,
+        knowledge_document_id: shaped.knowledgeDocumentId,
         priority: shaped.priority,
         is_fallback: shaped.isFallback,
         approval_status: input.approvalStatus || "draft",
@@ -319,6 +333,30 @@ export async function deleteRule(shopId: string, id: string): Promise<void> {
   await supabaseDelete(getSupabaseClient(), T.SUPPORT_ANSWERS, { id, shop_id: shopId });
 }
 
+/**
+ * Turns rule-directed collection on or off for one situation.
+ *
+ * PER SITUATION, SET BY A PERSON, and never inferred from how many rules exist:
+ * a set with three of eight rules approved converges FASTER than a complete one,
+ * so readiness measured by rule count would rate it highest exactly when it is
+ * least ready.
+ */
+export async function setCollectionMode(
+  shopId: string,
+  exemplarKey: string,
+  mode: "model" | "rule_directed",
+): Promise<void> {
+  if (mode !== "model" && mode !== "rule_directed") {
+    throw new KnowledgeValidationError("A situation collects either by model or by rule.");
+  }
+  await supabaseUpdate(
+    getSupabaseClient(),
+    T.SUPPORT_EXEMPLARS,
+    { shop_id: shopId, exemplar_key: exemplarKey },
+    { collection_mode: mode },
+  );
+}
+
 function mapRule(row: Record<string, unknown>): PolicyRule {
   return {
     id: String(row.id),
@@ -331,6 +369,7 @@ function mapRule(row: Record<string, unknown>): PolicyRule {
     // Tolerates the singular column a row may predate the list change with.
     ask: Array.isArray(row.ask) ? (row.ask as string[]) : row.ask ? [String(row.ask)] : [],
     offerCode: (row.offer_code as string) ?? null,
+    knowledgeDocumentId: (row.knowledge_document_id as string) ?? null,
     priority: Number(row.priority ?? 0),
     isFallback: Boolean(row.is_fallback),
     approvalStatus: String(row.approval_status ?? "draft"),

@@ -11,6 +11,7 @@ import { createPurchaseLookup } from '../retrieval/purchase-lookup.mjs';
 import { buildOrderContext } from '../resolution/order-context.mjs';
 import { createPromotionLookup } from '../retrieval/promotion-lookup.mjs';
 
+import { answerFromRow } from './answer-selection.mjs';
 import { createDecomposer } from './decompose.mjs';
 import { createInvestigator } from './investigate.mjs';
 import { createCaseFileStore } from './investigation-runner.mjs';
@@ -90,6 +91,65 @@ export function createInvestigationStack({
     logger
   });
 
+  /**
+   * The rules for ONE request an email carries, with the situation its own
+   * wording matches.
+   *
+   * BUILT HERE because it needs three things the investigation must not hold: the
+   * shop id, the answers loader, and the retrieval client. The investigator gets a
+   * callback and stays ignorant of all three, the same way it takes a `decomposer`
+   * rather than an OpenAI client.
+   *
+   * MATCHED ON THE REQUEST, NOT THE EMAIL. `question` is the decomposer's
+   * one-sentence restatement of this half, which is the text the semantic matchers
+   * already get for split tickets. Falling back to the whole email is right when
+   * the second subject came from the CATEGORISER rather than the decomposer: there
+   * is no sub-question to match on, and the whole text is what produced the label.
+   *
+   * NO EMBEDDING IS PASSED, so retrieval embeds on demand. Only the ticket-level
+   * match can reuse the vector ingestion wrote; a sub-question has none.
+   */
+  const policyForRequest = async ({ answerSet, category, question, ticket }) => {
+    const rows = await supabaseSelect(
+      supabase,
+      T.SUPPORT_ANSWERS,
+      {
+        shop_id: shopId,
+        answer_set: answerSet,
+        approval_status: 'approved',
+        deleted_at: { operator: 'is', value: 'null' }
+      },
+      'answer_key,situation_key,when_conditions,answer_skeleton,route,ask,offer_code,knowledge_document_id,priority,is_fallback'
+    );
+    const answers = (rows || []).map(answerFromRow);
+    if (answers.length === 0) return null;
+
+    let situationKey = null;
+    try {
+      const match = await retrieveExemplar(
+        {
+          subject: ticket.subject,
+          body: question || ticket.text,
+          category
+        },
+        { shopId }
+      );
+      situationKey = match?.exemplar?.exemplarKey ?? null;
+    } catch (error) {
+      // A request keeps its rules without a situation: the situation-less ones
+      // still apply, and losing the match is better than losing the request.
+      logger?.warn?.('investigation.request_situation_failed', {
+        answerSet,
+        reason: error.message
+      });
+    }
+
+    // COLLECTION MODE IS NOT READ HERE, deliberately. Rule-directed collection is
+    // opted in per situation for the TICKET, and a second request must not be able
+    // to switch it on for the whole run.
+    return { answerSet, situationKey, answers };
+  };
+
   const { investigate } = createInvestigator(openai, registry, {
     model: config.investigatorModel,
     maxToolCalls: config.investigationMaxToolCalls,
@@ -99,6 +159,8 @@ export function createInvestigationStack({
     decomposer: config.decomposerModel
       ? createDecomposer(openai, { model: config.decomposerModel })
       : null,
+    policyForRequest,
+    plannerEnabled: config.plannerEnabled !== false,
     logger,
     onToolCall
   });
@@ -154,7 +216,7 @@ export function createInvestigationStack({
         approval_status: 'approved',
         deleted_at: { operator: 'is', value: 'null' }
       },
-      'answer_key,situation_key,when_conditions,answer_skeleton,route,ask,offer_code,priority,is_fallback,approval_status'
+      'answer_key,situation_key,when_conditions,answer_skeleton,route,ask,offer_code,knowledge_document_id,priority,is_fallback,approval_status'
     );
 
   /**
@@ -184,6 +246,31 @@ export function createInvestigationStack({
     }
   };
 
+  /**
+   * Whether this situation lets the rules direct collection.
+   *
+   * A SEPARATE READ RATHER THAN A WIDER RPC. The exemplar match comes back from
+   * `match_support_exemplars`, and adding a column there would mean changing a
+   * SQL function to carry a flag that only matters after the match is already
+   * decided. One narrow select, only on a ticket that matched a situation.
+   *
+   * NEVER FAILS AN INVESTIGATION. A loader that throws leaves the ticket in
+   * `model` mode, which is the behaviour it would have had anyway — the same
+   * contract `loadAnswers` and `lastOrderLookup` already keep.
+   */
+  const loadCollectionMode = async ({ shopId: shop, exemplarKey }) => {
+    const rows = await supabaseSelect(
+      supabase,
+      T.SUPPORT_EXEMPLARS,
+      { shop_id: shop, exemplar_key: exemplarKey, deleted_at: { operator: 'is', value: 'null' } },
+      'collection_mode,collection_suppresses'
+    );
+    return {
+      collectionMode: rows?.[0]?.collection_mode ?? 'model',
+      suppresses: rows?.[0]?.collection_suppresses === true
+    };
+  };
+
   return {
     investigate,
     store: createCaseFileStore(supabase),
@@ -191,6 +278,7 @@ export function createInvestigationStack({
     retrieveExemplar,
     lastOrderLookup,
     loadAnswers,
+    loadCollectionMode,
     loadParameters
   };
 }

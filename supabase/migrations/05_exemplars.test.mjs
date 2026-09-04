@@ -272,6 +272,30 @@ test('a rule that asks must also route to the customer', () => {
   assert.ok(!/or route = /.test(clause), 'the two-valued form silently accepts a null route');
 });
 
+test('a pinned article is a real reference, and losing it never loses the rule', () => {
+  // Unlike `offer_code`, which cannot be a foreign key because the Shopify sync
+  // rewrites `promotions` under it. These rows are ours, so the reference is
+  // enforced -- and `set null` rather than cascade, because deleting an article
+  // must not delete every rule that cited it.
+  const body = SQL.split('create table public.support_answers')[1].split('\n);')[0];
+  assert.match(
+    body,
+    /knowledge_document_id uuid references public\.knowledge_documents\(id\) on delete set null/i
+  );
+});
+
+test('collection mode defaults to the behaviour that existed before it', () => {
+  // Shipping the planner must change no ticket. The default IS the safety
+  // property: a situation collects by model until a person opts it in, and the
+  // check is what stops a third value being invented in a migration.
+  const body = SQL.split('create table public.support_exemplars')[1].split('\n);')[0];
+  assert.match(body, /collection_mode text not null default 'model'/i);
+  assert.deepEqual(
+    literalsIn(checkClause(SQL, 'support_exemplars_collection_mode_check')).sort(),
+    ['model', 'rule_directed']
+  );
+});
+
 test('a rule may name a situation, and is not required to', () => {
   // Nullable is the load-bearing part: a rule naming only conditions still fires
   // when no exemplar matched, so coverage does not depend on the matcher.

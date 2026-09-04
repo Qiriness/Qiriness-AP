@@ -10,6 +10,70 @@ Three sibling files carry the other halves, and this one deliberately does not d
 
 ---
 
+## An email that asks two things now gets two rules (2026-09-04)
+
+**Row 8.** The rules layer opened one rulebook per ticket while the investigation had already split the email into requests. So a mask-specification email that also asked « avez-vous une offre ou un code promotionnel ? » selected a `products` rule and nothing else — while `UKLED20` sat established in the same case file.
+
+**The categoriser already knew**: that ticket is filed `product / promotions`, and the second axis was never read. **66 of 309 investigable tickets (21%)** carry a secondary subject that opens a different rulebook.
+
+**Scoped to the request, not bolted onto the email**, because three approved rules apply to any situation — `reaction_signalee` has no conditions at all. A second rulebook opened for the email at large would misfire; opened for the request that named it, it does not.
+
+**Combining**: strictest route wins (so it can only ever tighten), `ask` unions and deduplicates, skeletons concatenate labelled with their question. **A single-request ticket produces exactly the object it produced yesterday**, with no `per_request` key — that is the regression test for the other 79%.
+
+**A reaction reported as a SECONDARY subject now reaches a person.** `reaction_signalee` is the cosmetovigilance fallback and routes to `needs_human`; tickets carrying it as a secondary previously ran on their primary family alone.
+
+**Verified on the anchor ticket**: the decomposer split it, the promotions rulebook opened, and the sub-question came through as « Avez-vous une offre ou un code promotionnel en cours pour le Masque LED visage ? ». **No promotions rule fired** — all three promotions situations are about a code that does not work, and none covers a pre-purchase « do you have an offer ». The plumbing turned an invisible failure into a nameable rulebook gap. **2003 tests pass.**
+
+## The customer lookup stops being optional, and the replay improves (2026-09-04)
+
+**`lookupCustomer` is now an opening move on order, delivery, payment and return_exchange**, and `customer_identity` is on those subjects’ response floors.
+
+**Why: 24 established claims across five subjects rested on that lookup, and the floor named it nowhere.** The floor decides when a reply is "ready", so it was calling runs ready while a quarter of their evidence came from a tool it never asked about — which is exactly the 7 facts the replay said suppression would lose.
+
+**It was also the least consistent call in the pipeline**: the model reached for it on 86% of order runs, 100% of payment, 93% of returns — and **42% of delivery**. Same fact, same importance, collected or not depending on the subject.
+
+**Cost, measured: 19 calls across 67 runs.** It already ran on 48; the spend is the 28% where nobody thought of it, which is the set where it was needed and missing.
+
+**Result on a re-traced corpus: facts suppression would lose fell 7 → 3, discretionary calls 60 → 48.** Delivery’s discretionary rate dropped to 34% with a median of 0. **Suppression stays off everywhere** — still no situation that both saves something and loses nothing — but the number moved as the diagnosis predicted. **1997 tests pass.**
+
+## The replay is built, and it says do not suppress (2026-09-03)
+
+**Plan step 9, and the answer is no — for now.** `npm run report:collection-replay` scores what stopping collection early would have cost, per situation, from `findings_trace`. Over 47 traced runs: **13 calls saved, 7 established facts lost across 6 runs.** Every situation that would save anything would also lose something; every safe situation saves nothing. **No situation is suppressed.**
+
+**The mechanism ships off**: `support_exemplars.collection_suppresses`, a second column rather than a third value on `collection_mode`, because adding a call and removing one are different risks and want different opt-ins.
+
+**Response needs (§6), deferred out of step 7, had to be built here.** `nextNeed` returning null means the RULE is decided, not that the reply is ready: on 58 of 90 runs the rule was already decided and 50 of those still produced established facts — 115 claims a rule-only stop would have dropped. `responseComplete` is the second condition, and both must hold.
+
+**One entry of the old checklist had no need and was dropped.** `knowledge_searched` names a tool call, and this vocabulary says needs are facts. Admitting it to the list that decides when collection stops would have been the point lost where it matters most.
+
+**The traces were bought.** Only 2 of 137 runs carried one and they cannot be backfilled, so the 50-ticket sample was re-investigated — 204 model calls, 325k tokens — to produce 47. **1997 tests pass.**
+
+## The rules can direct collection, per situation, opt-in (2026-09-03)
+
+**Plan step 7, and the first step that changes what the agent does.** `collection-planner.mjs` proposes the next fact to establish from the same answer table that decides the reply. **Additive only**: it may add and reorder calls, never remove one.
+
+**As specified it would have proposed nothing.** `nextNeed` filters candidates on `findings[need] === undefined`, and no run produces an undefined finding — every `derive` returns `unknown` when its tool has not run. `unknown` is both « personne n’a cherché » and « nous avons cherché sans conclure », and rules branch on the second. The planner reads `state` from `resolveNeeds` instead; the rules keep reading findings.
+
+**And `available` had to change.** The plan said the ticket’s declared needs; that proposes nothing on all 90 stored runs. With the needs the rules name — plus their prerequisites, or the dependency walk cannot reach them — **30 of 90** get a proposal.
+
+**A cache hit hung the run.** `run.call` serves a repeat from cache and returns a truthy entry with no new row, so the planner proposed the same need forever and starved the event loop doing it. The loop now requires the ledger to grow, with a regression test on the case that produced it.
+
+**Two off switches**: `support_exemplars.collection_mode` per situation (default `model`, so shipping this changed no ticket) and `RULE_DIRECTED_COLLECTION=false` globally. **`npm run report:collection-planner`** shows what each situation would collect, so one is opted in on evidence.
+
+**Verified on D-02**: opted in, a real ticket went 1 tool call → 3, its unsearched evidence gap closed, and with the env switch set it returned to exactly today’s run. Set back to `model` afterwards. **1988 tests pass.**
+
+## A rule can name the article it answers from (2026-09-03)
+
+**`support_answers.knowledge_document_id`: pick an approved article in the rule editor, and it travels with that rule into every draft.** The same affordance as the discount code beside it, for the same reason — which source answers a recurring case is a decision, not a similarity score.
+
+**D-33 is why.** « Livrez-vous dans mon pays ? » is answered by three approved articles with three different country lists: Germany appears only in the FAQ, Hong Kong only in *Livraisons et retours*, and the CGV calls foreign orders exceptional. A delivery ticket searches `delivery, faq, brand_story, other`, there is no delivery article, so it reaches the FAQ and nothing else. Which list the customer gets depends on the ticket's category.
+
+**Per rule, not per situation**, and D-33 shows why that is not pedantry: pinned to the situation, the article would attach to the branch that exists *because* no article answered.
+
+**Recorded at investigation, resolved at drafting** — the offer-code contract exactly. An article that stops being approved is dropped and logged as `draft.pinned_article_dropped`, degrading to the behaviour before pinning existed. Capped at 6,000 characters against an 18k worst case, because an article that dwarfs the case file is one the reply gets written from instead of the evidence.
+
+**Its own prompt heading**, « Article de référence pour cette situation », never folded into « Base de connaissances approuvée »: retrieval found one, a person chose the other. **1971 tests pass.**
+
 ## The completeness gate is measured before it is built, and the measurement rewrites it (2026-09-03)
 
 **Plan step 6. `npm run report:completeness-gate`, read-only, three reads and no model call.** It scores every stored run on the four fields §7 specifies — `response_complete`, `decision_complete`, `mandatory_gaps`, `tool_errors_affecting_answer` — and prints the downgrades a gate would make.

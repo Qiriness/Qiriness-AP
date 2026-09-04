@@ -7,7 +7,9 @@ import { emptySenderDirectory } from '../ingestion/sender-directory.mjs';
 
 import { TICKET_STATUS_BY_VERDICT } from './case-file.mjs';
 import { summariseNeeds } from './evidence-rules.mjs';
-import { normaliseConditions, resolveSituationTie } from './answer-selection.mjs';
+import { normaliseConditions, resolveSituationTie,
+  answerFromRow
+} from './answer-selection.mjs';
 import { ENABLED_SUBJECTS, answerSetFor, isInvestigable } from './investigation-rules.mjs';
 import { summarisePhotoEvidence } from './photo-evidence.mjs';
 
@@ -84,6 +86,7 @@ export async function runInvestigation({
   // the real ones; routing them through the fake would mean teaching it a table
   // it has no reason to know.
   loadAnswers = null,
+  loadCollectionMode = null,
   // The numbers the desk runs on, loaded ONCE PER POLL by the caller and shared
   // across tickets — the same treatment `senderDirectory` gets, and for the same
   // reason: a small map, and rebuilding it per ticket turns a lookup into a
@@ -181,7 +184,7 @@ export async function runInvestigation({
     // subjects. Reading the column would need the function widened, for no
     // difference in outcome — worth doing the day a situation draws on a family
     // its subject does not imply, and not before.
-    const policy = await loadPolicy({ loadAnswers, ticket, exemplarMatch, shopId, logger });
+    const policy = await loadPolicy({ loadAnswers, loadCollectionMode, ticket, exemplarMatch, shopId, logger });
 
     // A TIE THE RULES DO NOT CARE ABOUT IS NOT A TIE. The matcher refused to
     // separate two situations because their scores were inside the margin; that
@@ -573,7 +576,7 @@ export function createCaseFileStore(supabase, { transport = CASE_FILE_TRANSPORT 
  * continues exactly as it would without one — the same contract `lastOrderLookup`
  * already has for the same reason.
  */
-async function loadPolicy({ loadAnswers, ticket, exemplarMatch, shopId, logger }) {
+async function loadPolicy({ loadAnswers, loadCollectionMode, ticket, exemplarMatch, shopId, logger }) {
   const answerSet = answerSetFor(ticket.category);
   if (!loadAnswers || !answerSet) {
     return null;
@@ -581,26 +584,29 @@ async function loadPolicy({ loadAnswers, ticket, exemplarMatch, shopId, logger }
 
   try {
     const rows = await loadAnswers({ shopId, answerSet });
-    const answers = (rows || []).map((row) => ({
-      answerKey: row.answer_key,
-      situationKey: row.situation_key ?? null,
-      // Normalised through the same function the authoring path validates with,
-      // so a condition naming a need that has since been removed is dropped here
-      // rather than becoming a rule that silently never matches.
-      conditions: normaliseConditions(row.when_conditions),
-      answerSkeleton: row.answer_skeleton ?? null,
-      route: row.route ?? null,
-      // Always a list, even from a row written before the column was one.
-      ask: Array.isArray(row.ask) ? row.ask.filter(Boolean) : row.ask ? [row.ask] : [],
-      // The code this rule offers, if the operator chose one. Carried as
-      // written; whether it is still live is decided at drafting time.
-      offerCode: row.offer_code ?? null,
-      priority: row.priority ?? 0,
-      isFallback: Boolean(row.is_fallback)
-    }));
+    const answers = (rows || []).map(answerFromRow);
+
+    // OPT-IN, AND ONLY WHERE A SITUATION MATCHED. Without a situation there is
+    // nothing to have opted in, so the mode stays `model` and the planner never
+    // runs — which is also the safe reading of a loader that failed.
+    const situationKey = exemplarMatch?.exemplar_key ?? null;
+    let collectionMode = 'model';
+    let suppresses = false;
+    if (situationKey && loadCollectionMode) {
+      try {
+        const mode = await loadCollectionMode({ shopId, exemplarKey: situationKey });
+        collectionMode = mode?.collectionMode ?? 'model';
+        suppresses = mode?.suppresses === true;
+      } catch (error) {
+        logger?.warn?.('investigation.collection_mode_load_failed', {
+          ticketId: ticket.id,
+          reason: error.message
+        });
+      }
+    }
 
     return answers.length > 0
-      ? { answerSet, situationKey: exemplarMatch?.exemplar_key ?? null, answers }
+      ? { answerSet, situationKey, collectionMode, suppresses, answers }
       : null;
   } catch (error) {
     logger?.warn?.('investigation.policy_load_failed', {

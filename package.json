@@ -28,6 +28,8 @@
     "report:investigation-calls": "node scripts/report-investigation-calls.mjs",
     "report:evidence-vocabulary": "node scripts/report-evidence-vocabulary.mjs",
     "report:completeness-gate": "node scripts/report-completeness-gate.mjs",
+    "report:collection-planner": "node scripts/report-collection-planner.mjs",
+    "report:collection-replay": "node scripts/report-collection-replay.mjs",
     "eval:matching": "node scripts/eval-product-matching.mjs",
     "import:exemplars": "node scripts/import-exemplars.mjs",
     "import:exemplars:dry-run": "node scripts/import-exemplars.mjs --dry-run",

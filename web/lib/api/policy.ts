@@ -43,6 +43,7 @@ export interface SaveRulePayload {
   ask: string[];
   /** A live code this rule hands the customer, chosen from the cleared list. */
   offerCode: string | null;
+  knowledgeDocumentId: string | null;
   priority: number;
   isFallback: boolean;
 }
@@ -65,6 +66,17 @@ export async function setRuleApproval(id: string, approved: boolean): Promise<Po
     body: JSON.stringify({ approved }),
   });
   return rule;
+}
+
+/** Turns rule-directed collection on or off for one situation. */
+export async function setCollectionMode(
+  key: string,
+  collectionMode: "model" | "rule_directed",
+): Promise<{ key: string; collectionMode: string }> {
+  return request<{ key: string; collectionMode: string }>(
+    `/api/policy/situations/${encodeURIComponent(key)}`,
+    { method: "PATCH", body: JSON.stringify({ collectionMode }) },
+  );
 }
 
 export async function deleteRule(id: string): Promise<void> {

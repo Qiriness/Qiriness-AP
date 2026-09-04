@@ -642,3 +642,22 @@
     min-width: 0;
   }
 }
+
+/* The per-situation collection opt-in. Deliberately quiet: it changes how every
+   ticket in the situation is investigated, so it reads as a state you can see
+   rather than a button inviting a click. */
+.modeToggle {
+  border: 1px solid var(--border, #d9dee3);
+  background: transparent;
+  border-radius: 999px;
+  padding: 2px 10px;
+  font: inherit;
+  font-size: 12px;
+  color: inherit;
+  cursor: pointer;
+}
+
+.modeToggle:disabled {
+  opacity: 0.5;
+  cursor: progress;
+}

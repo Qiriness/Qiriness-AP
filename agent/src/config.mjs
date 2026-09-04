@@ -50,6 +50,11 @@ export function loadAgentConfig(env = loadEnv(REPO_ROOT)) {
     // nothing here. A second subject wanting this should turn the pair into a
     // list rather than add a third boolean.
     draftOnlyCosmetovigilance: env.DRAFT_ONLY_COSMETOVIGILANCE !== 'false',
+    // RULE-DIRECTED COLLECTION, GLOBALLY. The per-situation `collection_mode`
+    // column is the normal control; this is the one a person reaches for at
+    // 2am without a deploy. Defaults ON because the column defaults to
+    // `model` — with no situation opted in, "on" changes nothing.
+    plannerEnabled: env.RULE_DIRECTED_COLLECTION !== 'false',
     // OpenAI (LLM stages). The spam second pass is enabled only when a key is set;
     // without it, ingestion still runs and just skips the LLM filter.
     openaiApiKey: env.OPENAI_API_KEY,

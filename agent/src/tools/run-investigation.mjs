@@ -127,6 +127,7 @@ async function main() {
     // make the dry run stop reproducing the worker — the one thing it is for.
     retrieveExemplar: investigation.retrieveExemplar,
     loadAnswers: investigation.loadAnswers,
+    loadCollectionMode: investigation.loadCollectionMode,
     parameters: await investigation.loadParameters(shopId),
     lastOrderLookup: investigation.lastOrderLookup,
     onResult: ({ ticket, caseFile, level }) => {

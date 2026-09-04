@@ -19,7 +19,8 @@
 -- embedding reconciler, the staleness gate and the approve-gates-the-vector rule
 -- are reused rather than reimplemented.
 --
--- Requires: 01_foundation.sql (shops, set_updated_at, the `vector` extension)
+-- Requires: 01_foundation.sql (shops, set_updated_at, the `vector` extension) and
+-- 03_knowledge.sql (knowledge_documents, which a rule may pin an article from).
 -- and 03_knowledge.sql (the `public.french_unaccent` text search configuration).
 -- ============================================================================
 
@@ -45,6 +46,41 @@ create table public.support_exemplars (
   -- and O-09, and nesting answers inside exemplars would mean writing it twice
   -- and maintaining two copies of it for ever.
   answer_set text,
+  -- WHETHER THE RULES MAY DIRECT COLLECTION FOR THIS SITUATION.
+  --
+  -- `model` is today's behaviour: the deterministic opening moves run and the
+  -- model chooses everything after them. `rule_directed` additionally lets the
+  -- planner propose the next fact to establish, from the same answer table that
+  -- decides the reply. It may ADD and REORDER calls; it may never suppress one.
+  --
+  -- SET BY A PERSON, PER SITUATION, AND NEVER INFERRED FROM HOW MANY RULES
+  -- EXIST. A set with 8 rules of which 3 are approved is worse than no rules at
+  -- all: the live set converges faster because there is less to separate, so
+  -- collection stops earlier while looking like it decided something. Per-set
+  -- readiness is too coarse to see that, and per-rule is too fine to mean
+  -- anything.
+  --
+  -- DEFAULTING TO `model` IS WHAT MAKES THE PLANNER INERT ON DELIVERY. Shipping
+  -- it changes no ticket until a person opts a situation in.
+  collection_mode text not null default 'model',
+  -- WHETHER THE RULES MAY STOP COLLECTION EARLY for this situation.
+  --
+  -- A SECOND COLUMN RATHER THAN A THIRD VALUE ON THE ONE ABOVE, because they
+  -- are different risks. Directing collection can only ADD a call, and its worst
+  -- case is a wasted lookup. Stopping it can REMOVE one, and its worst case is a
+  -- reply resting on a fact nobody fetched. A shop that wants the first must not
+  -- get the second by implication.
+  --
+  -- BOTH STOPPING CONDITIONS MUST HOLD: the rule decided AND the response
+  -- complete. Measured before this shipped -- on 58 of 90 runs the rule was
+  -- already decided and 50 of those still produced established facts, 115 claims
+  -- in all. The rule being settled says nothing about the reply being ready.
+  --
+  -- OFF, AND THE REPLAY SAYS KEEP IT OFF FOR NOW. Over 47 traced runs it would
+  -- have saved 13 calls and lost 7 established facts, and every situation that
+  -- saved anything also lost something. Re-run `report:collection-replay` before
+  -- setting this anywhere.
+  collection_suppresses boolean not null default false,
   locale text not null default 'fr',
   approval_status text not null default 'draft',
   -- Measured demand from `npm run cluster:tickets`: how many real messages sat
@@ -56,6 +92,9 @@ create table public.support_exemplars (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
 
+  constraint support_exemplars_collection_mode_check check (
+    collection_mode in ('model', 'rule_directed')
+  ),
   constraint support_exemplars_approval_status_check check (
     approval_status in ('draft', 'in_review', 'approved', 'needs_optimization')
   ),
@@ -345,6 +384,28 @@ create table public.support_answers (
   -- DRAFTING time instead and dropped if it has stopped being offerable, the
   -- same treatment `fillParameters` gives a parameter nobody has set.
   offer_code text,
+  -- THE APPROVED ARTICLE THAT ANSWERS THIS RULE'S POSITION, or null.
+  --
+  -- The second value a rule carries, and the same kind of decision `offer_code`
+  -- is: some situations have a canonical answer sitting in one article, and
+  -- rediscovering that by semantic search on every ticket makes the reply depend
+  -- on retrieval's mood. « livrez-vous dans mon pays ? » is the case that
+  -- prompted it -- three approved articles answer it with three different
+  -- country lists, and which one retrieval reaches depends on the ticket's
+  -- category.
+  --
+  -- PER RULE, NOT PER SITUATION, which looks like the wrong axis until D-33 is
+  -- read: pinned to the situation, the article would also attach to the branch
+  -- that fires when NO article answered, which exists for exactly that case. The
+  -- branch is what knows whether an article applies. A rule already carries
+  -- `situation_key`, so per-rule says "per situation" whenever it should.
+  --
+  -- A REAL FOREIGN KEY, unlike `offer_code` -- these rows are ours and are not
+  -- rewritten by a Shopify sync, so the reference can be enforced. `set null`
+  -- rather than cascade: deleting an article must never delete the rules that
+  -- cited it. Approval is still re-checked at DRAFTING time, because a document
+  -- can be unapproved without being deleted.
+  knowledge_document_id uuid references public.knowledge_documents(id) on delete set null,
   -- Ordering among rows that match equally deeply. Most-specific wins first;
   -- this only breaks the tie, so authoring order never becomes load-bearing by
   -- accident.
@@ -449,6 +510,8 @@ comment on column public.support_answers.route is
 comment on column public.support_answers.offer_code is
   'A live discount code this rule hands to the customer, chosen by an operator from the promotions marked offerable_in_replies. The one place a rule carries a VALUE rather than a condition: which code to give somebody is a commercial decision that changes with the season and cannot be derived from the ticket. No foreign key -- promotions is Shopify-synced, so a constraint would block the sync or delete rules when a code expires. Re-checked at drafting time and dropped if it has stopped being offerable.';
 
+comment on column public.support_answers.knowledge_document_id is
+  'The approved article that answers this rule''s position, or null. The second value a rule carries rather than a condition, alongside offer_code, and for the same reason: some situations have a canonical answer in one article and rediscovering it by semantic search per ticket makes the reply depend on retrieval. PER RULE, NOT PER SITUATION -- pinned to the situation it would also attach to the branch that fires when NO article answered, which is the branch that exists for exactly that case. A real FK, unlike offer_code, because these rows are ours and no sync rewrites them; set null on delete so removing an article never removes a rule. Approval is re-checked at drafting time and the article dropped if it is no longer approved, the same treatment offer_code gets.';
 comment on column public.support_answers.ask is
   'MISSING_FIELDS keys when the rule''s answer is to ask for something. Keys, never sentences: case-file.mjs owns the wording. A LIST because one reply can need two facts -- a reaction with no product named wants the product AND the batch number, and one slot would have made that two round trips. Empty rather than null for "asks nothing". A non-empty list requires route = needs_customer_input, or drafting would hold a question it is not permitted to ask.';
 

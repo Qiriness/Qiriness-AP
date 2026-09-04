@@ -82,6 +82,7 @@ async function main() {
     model: config.draftingModel,
     parameters: await loadParametersFor(supabase, shopId, logger),
     offerableCodes: await loadOfferableCodesFor(supabase, shopId, logger),
+    pinnedArticles: await loadPinnedArticlesFor(supabase, shopId, logger),
     cosmetovigilanceDraftOnly: config.draftOnlyCosmetovigilance,
     logger,
     limit,
@@ -174,6 +175,53 @@ async function loadOfferableCodesFor(supabase, shopId, logger) {
   } catch (error) {
     logger?.warn?.('draft.offerable_codes_load_failed', { reason: error.message });
     return new Set();
+  }
+}
+
+/**
+ * The articles approved rules pin, by document id.
+ *
+ * TWO READS RATHER THAN A JOIN, because PostgREST embeds are a different shape
+ * per relationship and the id list here is tiny — at most one per rule, and
+ * there are 107 rules. Approved rules only, matching `loadAnswers`: a draft
+ * rule is not one the agent can be steered by, so its article is not one worth
+ * loading.
+ *
+ * APPROVAL IS RE-CHECKED HERE and not trusted from the rule, which is the whole
+ * point of resolving at drafting time — an operator can unapprove an article
+ * without touching the rule that cites it.
+ *
+ * NEVER FAILS A DRAFT. An empty map drops every pin, which degrades to the
+ * behaviour before pinning existed.
+ */
+async function loadPinnedArticlesFor(supabase, shopId, logger) {
+  try {
+    const rules = await supabaseSelect(
+      supabase,
+      T.SUPPORT_ANSWERS,
+      { shop_id: shopId, approval_status: 'approved' },
+      'knowledge_document_id'
+    );
+    const ids = [...new Set((rules || []).map((row) => row.knowledge_document_id).filter(Boolean))];
+    if (ids.length === 0) {
+      return new Map();
+    }
+    const documents = await supabaseSelect(
+      supabase,
+      T.KNOWLEDGE_DOCUMENTS,
+      { shop_id: shopId, approval_status: 'approved' },
+      'id,title,content_text,deleted_at'
+    );
+    const wanted = new Set(ids);
+    const map = new Map();
+    for (const doc of documents || []) {
+      if (!wanted.has(doc.id) || doc.deleted_at) continue;
+      map.set(doc.id, { title: doc.title ?? null, text: doc.content_text ?? '' });
+    }
+    return map;
+  } catch (error) {
+    logger?.warn?.('draft.pinned_articles_load_failed', { reason: error.message });
+    return new Map();
   }
 }
 

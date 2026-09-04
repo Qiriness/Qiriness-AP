@@ -1403,6 +1403,8 @@ export interface PolicyRule {
    * screen, and the same situation always gets the same offer.
    */
   offerCode: string | null;
+  /** The approved article an operator pinned to this rule, or null. */
+  knowledgeDocumentId: string | null;
   priority: number;
   isFallback: boolean;
   approvalStatus: string;
@@ -1428,6 +1430,8 @@ export interface PolicyVocabulary {
   asks: string[];
   /** Codes an operator has cleared for customers, for the rule editor's picker. */
   offerableCodes: OfferableCode[];
+  /** Approved articles a rule may answer from, for the same kind of picker. */
+  articles: { id: string; title: string; category: string | null }[];
   /** For the skeleton box: the one place a rule names a parameter directly. */
   parameters: { key: string; label: string; set: boolean }[];
 }
@@ -1438,6 +1442,8 @@ export interface PolicySituation {
   question: string;
   category: string | null;
   answerSet: string | null;
+  /** 'model' (today's behaviour) or 'rule_directed' (the rules may collect). */
+  collectionMode: string;
 }
 
 /**

@@ -15,12 +15,14 @@ import {
   isMoot,
   needRequires,
   needsSatisfiedBy,
+  responseComplete,
+  responseNeeds,
   normaliseNeeds,
   orderNeeds,
   resolveNeeds,
   summariseNeeds
 } from './evidence-rules.mjs';
-import { TOOL_NAMES } from './investigation-rules.mjs';
+import { ENABLED_SUBJECTS, TOOL_NAMES } from './investigation-rules.mjs';
 
 const ALL_TOOLS = Object.values(TOOL_NAMES);
 const entry = (id, tool, outcome) => ({ id, tool, outcome });
@@ -909,4 +911,82 @@ test('with no tool available, only a question that names the FACT closes the gap
     gapClosability({ need: 'promotion_validity', state: 'attempted', finding: 'unknown', asksCustomer: 'promotion_code' }),
     'customer'
   );
+});
+
+test('every enabled subject declares what a complete reply rests on', () => {
+  // A subject with no floor cannot have collection stopped on it, so the gap
+  // would be silent rather than loud. `other` is the deliberate exception: it is
+  // the catch-all, and there is no fact a reply to "anything else" always needs.
+  for (const subject of ENABLED_SUBJECTS) {
+    const needs = responseNeeds(subject);
+    if (subject === 'other') {
+      assert.deepEqual(needs, [], 'the catch-all declares nothing, on purpose');
+      continue;
+    }
+    assert.ok(needs.length > 0, subject);
+    for (const need of needs) assert.ok(NEED_KEYS.includes(need), `${subject} -> ${need}`);
+  }
+});
+
+test('a tool call is never a response need, however the checklist words it', () => {
+  // `knowledge_searched` is « la base de connaissances a été consultée » — an
+  // ACTION. This vocabulary says needs are facts, and admitting the one shape it
+  // refuses into the list that decides when collection stops would be the whole
+  // point lost.
+  for (const subject of ENABLED_SUBJECTS) {
+    assert.ok(!responseNeeds(subject).includes('knowledge_searched'));
+  }
+  assert.ok(!NEED_KEYS.includes('knowledge_searched'));
+});
+
+test('a rule may add a response need and may never shrink the floor', () => {
+  const floor = responseNeeds('account');
+  const widened = responseNeeds('account', ['order_identity']);
+
+  for (const need of floor) assert.ok(widened.includes(need), 'the floor survived');
+  assert.ok(widened.includes('order_identity'), 'and the rule added to it');
+  assert.deepEqual(responseNeeds('account', []), floor, 'adding nothing changes nothing');
+});
+
+test('completeness needs every fact settled, and unknown does not count', () => {
+  const order = { need: 'order_identity', state: 'satisfied', finding: 'resolved' };
+  // On the floor since 2026-09-04: 24 established claims across the order family
+  // rested on the customer lookup while the floor named it nowhere.
+  const customer = { need: 'customer_identity', state: 'satisfied', finding: 'resolved' };
+
+  assert.equal(
+    responseComplete('delivery', [order, customer, { need: 'delivery_state', state: 'satisfied', finding: 'delivered' }]),
+    true
+  );
+  assert.equal(
+    responseComplete('delivery', [order, customer, { need: 'delivery_state', state: 'not_attempted', finding: 'unknown' }]),
+    false,
+    'nobody looked, so the reply is not ready however decided the rule is'
+  );
+  assert.equal(
+    responseComplete('delivery', [order, { need: 'delivery_state', state: 'satisfied', finding: 'delivered' }]),
+    false,
+    'and the customer lookup is part of ready now, not an optional extra'
+  );
+});
+
+test('a fact nothing can ever establish does not hold the loop open', () => {
+  // Reuses step 6's closability: a need with no tool wired is not a reason to
+  // keep collecting, and treating it as one would mean the loop never ends on
+  // most subjects.
+  assert.equal(
+    responseComplete('delivery', [
+      { need: 'order_identity', state: 'satisfied', finding: 'resolved' },
+      { need: 'customer_identity', state: 'satisfied', finding: 'resolved' },
+      { need: 'delivery_state', state: 'unavailable', finding: 'unknown' }
+    ]),
+    true
+  );
+});
+
+test('a subject with no declared floor is ungoverned, not complete', () => {
+  // An empty list is the absence of a rule about when to stop, and reading it as
+  // "stop now" would suppress collection hardest exactly where nobody has said
+  // what a good answer needs.
+  assert.equal(responseComplete('other', [{ need: 'policy_answer', state: 'satisfied', finding: 'answered' }]), false);
 });

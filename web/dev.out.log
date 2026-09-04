@@ -10,108 +10,45 @@
     · outputFileTracingRoot
 
  ✓ Starting...
- ✓ Ready in 16.8s
- ○ Compiling /agent-setup ...
- ✓ Compiled /agent-setup/rules in 38.6s (795 modules)
- GET /agent-setup/rules 200 in 16199ms
- ✓ Compiled /api/recommendations in 383ms (425 modules)
- GET /api/recommendations 200 in 2770ms
- ○ Compiling /agent-setup/parameters ...
- ✓ Compiled /agent-setup/parameters in 1069ms (796 modules)
- ○ Compiling /agent-setup/promotions ...
- ✓ Compiled /agent-setup/promotions in 551ms (806 modules)
- ○ Compiling /agent-setup/recommendations ...
- ✓ Compiled /agent-setup/recommendations in 755ms (818 modules)
- ○ Compiling /settings ...
- ✓ Compiled /settings in 2.1s (831 modules)
- ○ Compiling /tickets ...
- ✓ Compiled /tickets in 1962ms (843 modules)
- ✓ Compiled /api/tickets/[id]/thread in 472ms (398 modules)
- ✓ Compiled (400 modules)
- GET /api/tickets/f36b7fc3-8b8b-40b5-8461-1f41289735ed 200 in 4667ms
- GET /api/tickets/f36b7fc3-8b8b-40b5-8461-1f41289735ed/thread 200 in 4797ms
- GET /api/tickets/e204b422-14d6-4b69-a9f8-17ed7f2f3477 200 in 725ms
- GET /api/tickets/e204b422-14d6-4b69-a9f8-17ed7f2f3477/thread 200 in 730ms
- GET /api/tickets/f3218875-0bde-46b2-a65b-75886cc38a38 200 in 446ms
- GET /api/tickets/f3218875-0bde-46b2-a65b-75886cc38a38/thread 200 in 554ms
- GET /api/tickets/3c31fc89-adfa-4a9f-9191-ea2fd4b9a6dd 200 in 249ms
- GET /api/tickets/3c31fc89-adfa-4a9f-9191-ea2fd4b9a6dd/thread 200 in 620ms
- GET /api/tickets/fd54743e-2854-4b29-b0e9-07bdc360e133 200 in 646ms
- GET /api/tickets/fd54743e-2854-4b29-b0e9-07bdc360e133/thread 200 in 1038ms
- GET /api/tickets/aecbad65-1fcf-4ac6-ba7f-6096a3b1d4c6 200 in 333ms
- GET /api/tickets/aecbad65-1fcf-4ac6-ba7f-6096a3b1d4c6/thread 200 in 445ms
- GET /api/tickets/d4e4e13f-2fc8-4944-b6cf-305cade9b8ac 200 in 304ms
- GET /api/tickets/d4e4e13f-2fc8-4944-b6cf-305cade9b8ac/thread 200 in 408ms
- GET /api/tickets/715fbe27-497b-485f-b680-1734640e9cc2 200 in 260ms
- GET /api/tickets/715fbe27-497b-485f-b680-1734640e9cc2/thread 200 in 375ms
- GET /api/tickets/9fd04f62-9ff1-4f0a-9466-d9a7d455e5f8 200 in 272ms
- GET /api/tickets/9fd04f62-9ff1-4f0a-9466-d9a7d455e5f8/thread 200 in 528ms
- GET /api/tickets/599b9f6b-7b3f-4204-a0cd-0383b34cadee 200 in 465ms
- GET /api/tickets/599b9f6b-7b3f-4204-a0cd-0383b34cadee/thread 200 in 601ms
- GET /api/tickets/1de25be3-3a60-45e4-bd3e-dfae025fb0a9 200 in 325ms
- GET /api/tickets/1de25be3-3a60-45e4-bd3e-dfae025fb0a9/thread 200 in 452ms
- GET /api/tickets/9fd04f62-9ff1-4f0a-9466-d9a7d455e5f8 200 in 415ms
- GET /api/tickets/9fd04f62-9ff1-4f0a-9466-d9a7d455e5f8/thread 200 in 630ms
- GET /api/tickets/58eb9f35-c11c-400d-90d7-23b5d0bd154a 200 in 313ms
- GET /api/tickets/58eb9f35-c11c-400d-90d7-23b5d0bd154a/thread 200 in 409ms
- GET /api/tickets/eb77d058-5852-4157-a685-6120b43d6344 200 in 458ms
- GET /api/tickets/eb77d058-5852-4157-a685-6120b43d6344/thread 200 in 532ms
- GET /api/tickets/732fe2ed-2d89-4cc4-80d3-192b20e988c4 200 in 297ms
- GET /api/tickets/732fe2ed-2d89-4cc4-80d3-192b20e988c4/thread 200 in 377ms
- GET /api/tickets/16481d65-6806-4893-aca7-986fd7b7220f 200 in 593ms
- GET /api/tickets/16481d65-6806-4893-aca7-986fd7b7220f/thread 200 in 744ms
- ○ Compiling /agent-setup ...
- ✓ Compiled /agent-setup in 1404ms (452 modules)
- GET /agent-setup/rules 200 in 2303ms
- GET /agent-setup/rules 200 in 1095ms
- GET /agent-setup/rules 200 in 1079ms
- ✓ Compiled in 3.9s (775 modules)
- ✓ Compiled in 1030ms (785 modules)
- GET /agent-setup/rules 200 in 1186ms
- GET /agent-setup/rules 200 in 2364ms
- ✓ Compiled in 2.7s (775 modules)
- GET /agent-setup/rules 200 in 1759ms
- ✓ Compiled in 2.8s (775 modules)
- ✓ Compiled in 785ms (394 modules)
- ✓ Compiled in 2.8s (775 modules)
- ✓ Compiled in 2.2s (775 modules)
- ✓ Compiled in 1068ms (785 modules)
- ✓ Compiled in 1188ms (775 modules)
- ✓ Compiled in 3s (775 modules)
- ✓ Compiled in 1780ms (785 modules)
- ✓ Compiled in 2.1s (775 modules)
- ✓ Compiled in 2s (785 modules)
- ✓ Compiled in 2.6s (394 modules)
- ○ Compiling /_not-found ...
- ✓ Compiled /_not-found in 738ms (778 modules)
- GET /_next/static/css/app/layout.css?v=1788435945014 404 in 891ms
- GET /_next/static/css/app/agent-setup/layout.css?v=1788435945014 404 in 38ms
- GET /_next/static/css/app/agent-setup/rules/page.css?v=1788435945014 404 in 73ms
- ✓ Compiled in 471ms (395 modules)
- GET /_next/static/css/app/layout.css?v=1788435976204 404 in 83ms
- GET /_next/static/css/app/agent-setup/layout.css?v=1788435976204 404 in 28ms
- GET /_next/static/css/app/agent-setup/rules/page.css?v=1788435976204 404 in 52ms
- ✓ Compiled in 302ms (395 modules)
- GET /_next/static/css/app/layout.css?v=1788436005836 404 in 75ms
- GET /_next/static/css/app/agent-setup/layout.css?v=1788436005836 404 in 29ms
- GET /_next/static/css/app/agent-setup/rules/page.css?v=1788436005836 404 in 40ms
- ✓ Compiled in 405ms (395 modules)
- GET /_next/static/css/app/layout.css?v=1788436050300 404 in 121ms
- GET /_next/static/css/app/agent-setup/layout.css?v=1788436050300 404 in 29ms
- GET /_next/static/css/app/agent-setup/rules/page.css?v=1788436050300 404 in 42ms
- ✓ Compiled in 710ms (394 modules)
- ○ Compiling /_not-found ...
- ✓ Compiled /_not-found in 630ms (778 modules)
- GET /_next/static/css/app/layout.css?v=1788436147445 404 in 736ms
- GET /_next/static/css/app/agent-setup/layout.css?v=1788436147445 404 in 25ms
- GET /_next/static/css/app/agent-setup/rules/page.css?v=1788436147445 404 in 55ms
- GET /_next/static/css/app/agent-setup/layout.css?v=1788439801846 404 in 249ms
- GET /_next/static/css/app/layout.css?v=1788439801846 404 in 271ms
- GET /_next/static/css/app/agent-setup/rules/page.css?v=1788439801846 404 in 257ms
- GET /agent-setup/rules 200 in 4938ms
- GET /_next/static/chunks/main-app.js?v=1788439801846 404 in 335ms
- GET /_next/static/chunks/app-pages-internals.js 404 in 330ms
- GET /_next/static/chunks/app/agent-setup/rules/page.js 404 in 129ms
- GET /_next/static/chunks/app/agent-setup/layout.js 404 in 117ms
- ✓ Compiled in 1462ms (394 modules)
- ✓ Compiled in 484ms (394 modules)
+ ✓ Ready in 14.5s
+ ○ Compiling /agent-setup/rules ...
+ ✓ Compiled /agent-setup/rules in 36.6s (709 modules)
+ GET /agent-setup/rules 200 in 17484ms
+ GET /agent-setup/rules 200 in 40242ms
+ GET /agent-setup/rules 200 in 921ms
+ ✓ Compiled /api/policy/rules in 441ms (361 modules)
+ GET /api/policy/rules 200 in 3169ms
+ GET /agent-setup/rules 200 in 1311ms
+ ✓ Compiled in 1028ms (632 modules)
+ ✓ Compiled in 587ms (632 modules)
+ ✓ Compiled in 521ms (632 modules)
+ ✓ Compiled in 563ms (632 modules)
+ GET /agent-setup/rules 200 in 2376ms
+ ✓ Compiled in 1173ms (632 modules)
+ ✓ Compiled in 301ms (357 modules)
+ ✓ Compiled in 398ms (632 modules)
+ GET /agent-setup/rules 200 in 1138ms
+ GET /agent-setup/rules 200 in 636ms
+ GET /agent-setup/rules 200 in 649ms
+ ✓ Compiled in 479ms (632 modules)
+ ✓ Compiled in 662ms (632 modules)
+ GET /agent-setup/rules 200 in 3427ms
+ ✓ Compiled /api/policy/rules in 373ms (361 modules)
+ GET /api/policy/rules 200 in 3146ms
+ GET /agent-setup/rules 200 in 2390ms
+ POST /api/policy/rules 201 in 1174ms
+ ✓ Compiled /api/policy/rules/[id] in 423ms (361 modules)
+ PATCH /api/policy/rules/c9204362-ff08-4d75-b14c-3dfad9fbc486 200 in 3801ms
+ PATCH /api/policy/rules/46a156de-85ff-4bcf-bb4d-31cec602ab1a 200 in 2766ms
+ ✓ Compiled in 621ms (357 modules)
+ ✓ Compiled in 722ms (632 modules)
+ ✓ Compiled in 425ms (632 modules)
+ ✓ Compiled in 701ms (632 modules)
+ ✓ Compiled in 1470ms (642 modules)
+ GET /agent-setup/rules 200 in 881ms
+ ✓ Compiled /api/policy/situations/[key] in 268ms (361 modules)
+ PATCH /api/policy/situations/D-02 200 in 3505ms
+ PATCH /api/policy/situations/D-02 200 in 466ms
+ ✓ Compiled in 756ms (357 modules)
+ ✓ Compiled in 864ms (357 modules)
+ ✓ Compiled in 3.4s (357 modules)

@@ -55,6 +55,7 @@ export function RuleEditor({
   const [route, setRoute] = useState(rule?.route ?? "");
   const [ask, setAsk] = useState<string[]>(rule?.ask ?? []);
   const [offerCode, setOfferCode] = useState(rule?.offerCode ?? "");
+  const [knowledgeDocumentId, setKnowledgeDocumentId] = useState(rule?.knowledgeDocumentId ?? "");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -248,6 +249,39 @@ export function RuleEditor({
           </label>
         )}
 
+        {/* THE ARTICLE THIS RULE ANSWERS FROM, and the same argument as the code
+            above it: a picker, not an id typed by hand, and only what is
+            approved — a rule pinning a draft article would be dropped at
+            drafting time and look, from here, as though it worked.
+
+            WHY PIN AT ALL. Some situations have their answer in one article, and
+            leaving retrieval to rediscover it per ticket makes the reply depend
+            on which category the ticket landed in. « livrez-vous dans mon pays »
+            is the case: three approved articles answer it with three different
+            country lists. */}
+        {vocabulary.articles.length > 0 && (
+          <label className={styles.field}>
+            <span>Answer from a specific article</span>
+            <select
+              value={knowledgeDocumentId}
+              onChange={(e) => setKnowledgeDocumentId(e.target.value)}
+            >
+              <option value="">no article — the reply uses whatever retrieval found</option>
+              {vocabulary.articles.map((article) => (
+                <option key={article.id} value={article.id}>
+                  {article.title}
+                  {article.category ? ` — ${article.category}` : ""}
+                </option>
+              ))}
+            </select>
+            <span className={styles.hint}>
+              Travels with this rule into the drafting prompt, under its own heading and separate
+              from what retrieval found. Re-checked when the reply is written: if the article stops
+              being approved, it is dropped rather than quoted.
+            </span>
+          </label>
+        )}
+
         {/* THE ONE PLACE A RULE NAMES A PARAMETER DIRECTLY. A condition uses the
             state a number computes; this quotes the number itself. Inserted as a
             placeholder rather than typed, so changing 30 to 21 changes every
@@ -305,6 +339,7 @@ export function RuleEditor({
                   route: route || null,
                   ask,
                   offerCode: offerCode || null,
+                  knowledgeDocumentId: knowledgeDocumentId || null,
                   priority: rule?.priority ?? 0,
                   isFallback: rule?.isFallback ?? false,
                 });

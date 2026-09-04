@@ -323,3 +323,77 @@ test('a rule offering nothing adds no code section', () => {
   });
   assert.ok(!message.includes('Code à communiquer'));
 });
+
+// --- the article a rule pins -------------------------------------------------
+
+const PINNED_ROW = {
+  ...ROW,
+  exemplar_match: {
+    policy: { knowledge_document_id: 'doc-1', answer_skeleton: 'Répondre sur le pays nommé.' }
+  }
+};
+const ARTICLES = new Map([['doc-1', { title: 'Livraisons et retours', text: 'Nous livrons en Belgique.' }]]);
+
+test('a pinned article reaches the prompt under its own heading', () => {
+  // NOT inside « Base de connaissances approuvée ». That section is what
+  // retrieval scored and cleared; this one is what a person chose. Same library,
+  // different provenance, and a reply written from the wrong assumption about
+  // which is which is a different kind of mistake.
+  const composed = composeDraftingMessage({
+    message: MESSAGE,
+    caseFile: caseFileFromRow(PINNED_ROW),
+    pinnedArticles: ARTICLES
+  });
+
+  assert.ok(composed.includes('## Article de référence pour cette situation'));
+  assert.ok(composed.includes('Nous livrons en Belgique.'));
+  const pinnedAt = composed.indexOf('## Article de référence');
+  const retrievedAt = composed.indexOf('## Base de connaissances approuvée');
+  assert.ok(retrievedAt !== -1 && pinnedAt !== -1 && retrievedAt < pinnedAt, 'two sections, not one');
+});
+
+test('an article that is no longer approved is dropped and logged', () => {
+  // The loader only carries approved, undeleted documents, so "absent from the
+  // map" IS "no longer usable" — the same treatment an offer code gets when it
+  // stops being offerable.
+  const warnings = [];
+  const composed = composeDraftingMessage({
+    message: MESSAGE,
+    caseFile: caseFileFromRow(PINNED_ROW),
+    pinnedArticles: new Map(),
+    logger: { warn: (event, data) => warnings.push([event, data]) }
+  });
+
+  assert.ok(!composed.includes('## Article de référence pour cette situation'));
+  assert.deepEqual(warnings, [['draft.pinned_article_dropped', { knowledgeDocumentId: 'doc-1' }]]);
+});
+
+test('a rule with no pin renders no heading at all', () => {
+  const composed = composeDraftingMessage({
+    message: MESSAGE,
+    caseFile: caseFileFromRow(ROW),
+    pinnedArticles: ARTICLES
+  });
+  assert.ok(!composed.includes('## Article de référence'));
+});
+
+test('an over-long article is capped rather than allowed to crowd out the case file', () => {
+  const warnings = [];
+  const long = 'a'.repeat(20000);
+  const composed = composeDraftingMessage({
+    message: MESSAGE,
+    caseFile: caseFileFromRow(PINNED_ROW),
+    pinnedArticles: new Map([['doc-1', { title: 'CGV', text: long }]]),
+    logger: { warn: (event, data) => warnings.push([event, data]) }
+  });
+
+  assert.ok(composed.includes('## Article de référence pour cette situation'));
+  assert.ok(!composed.includes(long), 'the whole 20k did not travel');
+  assert.equal(warnings[0][0], 'draft.pinned_article_truncated');
+});
+
+test('the pinned id is read by name, never spread from the diagnostics beside it', () => {
+  const caseFile = caseFileFromRow(PINNED_ROW);
+  assert.equal(caseFile.knowledgeDocumentId, 'doc-1');
+  assert.equal(caseFileFromRow(ROW).knowledgeDocumentId, null);
+});

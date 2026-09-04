@@ -72,6 +72,10 @@ export async function runDrafting({
   // sending a code nobody checked — the safe direction for the one field in a
   // reply that is a key rather than prose.
   offerableCodes = new Set(),
+  // The articles rules pin, loaded once per run by the caller like the codes.
+  // Empty by default and safe: a pin whose document is missing here is dropped,
+  // which is exactly what an unapproved or deleted article looks like.
+  pinnedArticles = new Map(),
   onDraft
 } = {}) {
   const problem = brandVoiceProblem(brandVoice);
@@ -107,7 +111,8 @@ export async function runDrafting({
         // that contradicts itself and let it choose.
         system: composeSystemPrompt(brandVoice, { language, verdict: investigation.verdict }),
         user: composeDraftingMessage({
-          message, caseFile, orderContext, ticket, chase, parameters, offerableCodes, logger
+          message, caseFile, orderContext, ticket, chase, parameters, offerableCodes,
+          pinnedArticles, logger
         }),
         schema: DRAFT_SCHEMA,
         schemaName: 'draft',

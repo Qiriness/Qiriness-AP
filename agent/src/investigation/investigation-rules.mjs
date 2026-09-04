@@ -328,18 +328,22 @@ const EVIDENCE_BY_SUBJECT = {
 
   order: [
     { key: 'order_identified', label: 'la commande concernée est identifiée et rattachée au client' },
+    { key: 'customer_identified', label: 'la fiche client correspondant à l’expéditeur est trouvée' },
     { key: 'order_state', label: 'l’état de la commande est établi' }
   ],
   delivery: [
     { key: 'order_identified', label: 'la commande concernée est identifiée et rattachée au client' },
+    { key: 'customer_identified', label: 'la fiche client correspondant à l’expéditeur est trouvée' },
     { key: 'delivery_state', label: 'l’état de la livraison est établi' }
   ],
   payment: [
     { key: 'order_identified', label: 'la commande concernée est identifiée et rattachée au client' },
+    { key: 'customer_identified', label: 'la fiche client correspondant à l’expéditeur est trouvée' },
     { key: 'payment_state', label: 'l’état du paiement est établi' }
   ],
   return_exchange: [
     { key: 'order_identified', label: 'la commande concernée est identifiée et rattachée au client' },
+    { key: 'customer_identified', label: 'la fiche client correspondant à l’expéditeur est trouvée' },
     { key: 'return_state', label: 'l’état du retour ou du remboursement est établi' }
   ]
 };
@@ -412,6 +416,18 @@ export function openingMoves(ticket = {}) {
     case 'payment':
     case 'return_exchange':
       add(T.GET_ORDER_CONTEXT, {});
+      // WHO WROTE IN, DETERMINISTICALLY. Added 2026-09-04 on the evidence, not
+      // on taste: across the order family 24 established claims rest on this
+      // lookup, and the model reached for it on only 72% of runs -- 100% on
+      // payment, 93% on returns, 86% on order, and 42% on DELIVERY. The same
+      // fact, load-bearing, collected or not depending on which subject the
+      // mail landed in. That spread is the inconsistency this layer exists to
+      // remove, and it is the argument this function already makes for itself.
+      //
+      // COSTS 19 CALLS ACROSS 67 RUNS, measured: it already ran on 48 of them,
+      // so the marginal spend is the 28% where nobody thought of it -- which is
+      // exactly the set where a customer identity was needed and missing.
+      add(T.LOOKUP_CUSTOMER, {});
       break;
     default:
       break;

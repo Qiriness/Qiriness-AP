@@ -24,6 +24,11 @@ import { toOrderContextText } from '../resolution/order-context.mjs';
  * projection actually renders are mapped — `handoff`, `tool_calls` and
  * `dropped_claims` are absent here for the same reason they are absent there.
  */
+// The ceiling on a pinned article in the prompt. The longest approved document
+// is 18k characters against a 2.5k median, and one article that dwarfs the case
+// file is an article the reply gets written from instead of the evidence.
+const MAX_PINNED_ARTICLE_CHARS = 6000;
+
 export function caseFileFromRow(row) {
   return {
     verdict: row?.verdict || 'needs_human',
@@ -41,7 +46,11 @@ export function caseFileFromRow(row) {
     // The code the matched rule offers, as the rule named it. Whether it is
     // still live is decided below, not here — this is the record of what was
     // decided, and a stored run has to read back the same either way.
-    offerCode: offerCodeOf(row)
+    offerCode: offerCodeOf(row),
+    // The article the matched rule pinned, as an ID. Resolved below against the
+    // documents still approved, for the same reason the code is: an operator can
+    // unapprove an article between the investigation and the draft.
+    knowledgeDocumentId: pinnedArticleIdOf(row)
   };
 }
 
@@ -105,9 +114,55 @@ function resolveOfferCode(code, offerableCodes, logger) {
   return null;
 }
 
+/**
+ * The pinned article's text, or null when it can no longer be used.
+ *
+ * THE SAME TREATMENT AN OFFER CODE GETS, and for the same reason: an operator
+ * pins an article once and can unapprove or delete it later, so what the rule
+ * recorded is a claim about the past. Dropping degrades to the behaviour before
+ * pinning existed -- the draft is written from the case file and whatever
+ * retrieval found -- rather than blocking a ticket over a library edit.
+ *
+ * CAPPED. The longest approved document is 18k characters against a 2.5k median,
+ * and a prompt where one article dwarfs the case file is a prompt that gets
+ * answered from the article. Truncation is logged, because an article that keeps
+ * hitting the ceiling wants pinning by section instead.
+ */
+function resolvePinnedArticle(id, pinnedArticles, logger) {
+  if (!id) {
+    return null;
+  }
+  const article = pinnedArticles?.get?.(id) ?? null;
+  if (!article) {
+    logger?.warn?.('draft.pinned_article_dropped', { knowledgeDocumentId: id });
+    return null;
+  }
+  const text = String(article.text ?? '').trim();
+  if (text.length === 0) {
+    logger?.warn?.('draft.pinned_article_dropped', { knowledgeDocumentId: id, reason: 'empty' });
+    return null;
+  }
+  if (text.length > MAX_PINNED_ARTICLE_CHARS) {
+    logger?.warn?.('draft.pinned_article_truncated', {
+      knowledgeDocumentId: id,
+      length: text.length,
+      cap: MAX_PINNED_ARTICLE_CHARS
+    });
+    return { title: article.title ?? null, text: text.slice(0, MAX_PINNED_ARTICLE_CHARS) };
+  }
+  return { title: article.title ?? null, text };
+}
+
 /** The code a matched rule carried, or null. */
 function offerCodeOf(row) {
   const value = row?.exemplar_match?.policy?.offer_code;
+  const trimmed = String(value ?? '').trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+/** The article id a matched rule pinned, or null. */
+function pinnedArticleIdOf(row) {
+  const value = row?.exemplar_match?.policy?.knowledge_document_id;
   const trimmed = String(value ?? '').trim();
   return trimmed.length > 0 ? trimmed : null;
 }
@@ -153,6 +208,10 @@ export function composeDraftingMessage({
   // The codes an operator has marked offerable, loaded once per poll by the
   // caller. Empty is safe: an offer whose code is not in here is dropped.
   offerableCodes = new Set(),
+  // The articles rules pin, loaded once per poll by the caller the same way.
+  // Empty is safe: a pin whose document is not in here is dropped, which is what
+  // an unapproved or deleted article looks like from here.
+  pinnedArticles = new Map(),
   logger = null
 } = {}) {
   const parts = [];
@@ -216,6 +275,31 @@ export function composeDraftingMessage({
 
 Si la réponse ne se prête pas à transmettre un code, ne pas en parler — ` +
         `mais ne jamais en citer un différent.`
+    );
+  }
+
+  // THE ARTICLE A PERSON CHOSE FOR THIS SITUATION, under its own heading and
+  // deliberately not inside « Base de connaissances approuvée ». That section is
+  // what retrieval scored and cleared; this one is what an operator decided
+  // answers this case. Same library, different provenance — and a reply written
+  // from the wrong assumption about which is which is a different kind of
+  // mistake, so the prompt does not blur them.
+  //
+  // AFTER THE SKELETON, for the reason the code is: the skeleton says what the
+  // reply must do, and this is the material it does it with.
+  const pinned = resolvePinnedArticle(caseFile?.knowledgeDocumentId, pinnedArticles, logger);
+  if (pinned) {
+    parts.push(
+      `## Article de référence pour cette situation
+
+` +
+        `Cet article a été retenu par l'équipe comme la source qui répond à ce cas. ` +
+        `Répondre à partir de lui, et ne rien affirmer qu'il ne dise pas :
+
+` +
+        (pinned.title ? `### ${pinned.title}
+` : '') +
+        pinned.text
     );
   }
 

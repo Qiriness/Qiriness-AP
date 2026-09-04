@@ -487,6 +487,107 @@ So a person decides once, on `/agent-setup/promotions`, and the reply screen onl
 
 **Found by simulation, not by reading.** Nine order states were run against the loaded set and the winner printed for each; the table looked correct to the eye and was wrong in one cell. Any rule set worth approving is worth enumerating this way, because shadowing is a relation between rules and no single row shows it.
 
+### Rules go per request; the verdict stays per ticket (2026-09-04)
+
+An email can ask two things. The investigation has always known that — the decomposer splits it, and tools, budget and evidence all follow the split. The rules layer did not: one rulebook, one situation, one selection, for the whole email.
+
+**The case that names it.** A customer asked four questions about the LED mask and then « avez-vous une offre ou un code promotionnel dont je pourrais bénéficier ? ». The agent FOUND the answer — `UKLED20` sits in `established` — and selected `pr28_caracteristiques_connues`, whose guidance is entirely about product characteristics. Nothing addressed the discount. The human who replied did answer it.
+
+**The categoriser already knew.** That ticket is filed `category: product / secondary_category: promotions`. The second axis has been on the row since categorisation and nothing downstream read it. **66 of 309 investigable tickets (21%)** carry a secondary subject that opens a different rulebook.
+
+**Opening the second rulebook is NOT safe on its own**, which is why this is one change rather than the two I first proposed. Three approved rules apply to any situation: `reaction_signalee {}` has no conditions at all, `produit_non_documente` fires whenever a knowledge search comes back empty, and `non_expediee` on an order state. Open the cosmetovigilance book for an email at large and the first fires on any evidence whatsoever. A second rulebook is only safe when it is scoped to the REQUEST that named it.
+
+**So: per request for rules and wording, per ticket for the verdict.**
+
+- **The strictest route wins.** Tighten-only survives for free — the strictest of several tightenings is still a tightening, and a request whose rule wants to answer can never clear one whose rule wants a person.
+- **`ask` unions and deduplicates**, so two requests needing the customer produce one reply asking for both rather than two round trips.
+- **Skeletons concatenate, each labelled with its question**, because the failure being fixed is a reply that answers one half well and improvises the other; a merged instruction naming neither would be no better.
+- **One request produces exactly today’s object**, byte for byte, with no `per_request` key. That is the safety property for the other 79% and the regression test.
+
+**Two sources for the request list, and the second is the one that was thrown away.** The decomposer names a category per task; the categoriser’s `secondary_category` covers the case where the decomposer is absent or collapses to one task, which is exactly when `normaliseDecomposition` falls back to the ticket’s own category and loses the other subject.
+
+**A consequence worth stating: a reported reaction now reaches a person.** `reaction_signalee` is the cosmetovigilance fallback and routes to `needs_human`. A ticket whose SECONDARY subject is cosmetovigilance previously ran on its primary family alone and could be answered automatically; it now picks up that fallback and goes to somebody. That is the documented stance on adverse reactions, applied where it was silently not applying.
+
+**Findings stay per ticket, and not out of laziness.** The plan calls a `taskIndex` on ledger entries the prerequisite for all of this. It is not, and it would only half work: opening moves are attributable because `planMoves` iterates tasks, but a MODEL-initiated call cannot be attributed at all — the model is never asked which request it is serving. A findings map reliable for the deterministic half and guesswork for the discretionary half is worse than one honest shared map. The cost: where two families share a need — `policy_answer`, `customer_identity` — a finding from one request can select another’s rule. Both are facts about the sender or the shop rather than about a specific product or order, which is what makes the sharing tolerable.
+
+### Who the customer is becomes a floor fact, not a thing the model remembers (2026-09-04)
+
+The replay said suppression would lose 7 established facts, so nothing was suppressed. The cause was not the rules and not the mechanism — it was the response floor, which I had set from an old prompt checklist rather than from what replies demonstrably rest on.
+
+**Measured against the claims themselves: `lookupCustomer` carried 24 established claims across five subjects and appeared in none of their floors.** The floor said a reply was ready while a quarter of the evidence behind it came from a tool the floor never mentioned. That is what "stopped too early" meant in practice.
+
+**And it was not deterministic where it mattered most.** It is an opening move on `promotions`, `account` and `cosmetovigilance` — not on the order family, where the model had to think of it: **86% on order, 100% on payment, 93% on returns, and 42% on delivery.** The same load-bearing fact, collected or not depending on which subject the mail landed in. That spread is the inconsistency this layer exists to remove, and `openingMoves` already makes the argument in its own words: having a model ask for a foregone conclusion is a model call spent to reach one.
+
+**So it became an opening move on all four, and `customer_identity` joined their floors.** The order costs nothing: making it deterministic first is what makes requiring it free. Measured cost of the move itself: **19 calls across 67 runs**, because it already ran on 48 of them — the spend is exactly the 28% where a customer identity was load-bearing and nobody established it.
+
+**`EVIDENCE_BY_SUBJECT` gained the matching entry.** The checklist the model is shown and the list that gates suppression are two statements of one requirement, and letting them drift is the failure this repo guards against everywhere else.
+
+**Result, on a re-traced corpus: established facts lost fell from 7 to 3, and discretionary calls from 60 to 48.** The floor is more honest and the model has one less thing to remember. **Suppression is still off everywhere** — no situation both saves something and loses nothing — but the number moved in the direction the diagnosis predicted, which is what says the diagnosis was right.
+
+**What the floor is NOT.** A list of every fact some reply happened to use. `verifyPurchase` (2 claims) and `recommendProducts` (1) stayed out: a floor is what a reply ALWAYS needs, and fitting it to a 47-run sample would be over-fitting the next measurement into agreement with itself. `other` keeps no floor at all — there is no fact a reply to "anything else" always rests on, so it can never suppress, which is the safe direction.
+
+### The replay says do not suppress, and that is the result (2026-09-03)
+
+Collection may now stop early — the mechanism exists, per situation, and **not one situation has it on**, because the measurement built to justify it says it would cost more than it saves.
+
+**Over 47 traced runs: 13 calls saved, 7 established facts lost across 6 runs, 1 `answerable` stopped with an open gap.** And the shape is worse than the totals: **every situation that would save anything would also lose something**, and every situation that is safe saves nothing. There is no situation where the trade is worth making today.
+
+**Two stopping conditions, and the measurement that forced the second.** `nextNeed` returning null means THE RULE IS DECIDED, not that the investigation is done — a rule branches only on what changes the routing, and a reply rests on facts that change nothing about which answer is selected. Measured before any of this was built: on **58 of 90** runs the rule was already decided, and **50 of those still produced established facts**, 115 claims in all. A loop stopping on the rule alone would have dropped the collection behind every one of them. So `responseComplete` had to be built here, not deferred again.
+
+**`knowledge_searched` is not a response need, and could not be.** The per-subject checklist it comes from is prompt text in its own vocabulary, and that entry names a TOOL CALL — « la base de connaissances a été consultée ». This vocabulary says in as many words that needs are facts, not tool calls. Admitting the one shape it refuses into the list that decides when collection may STOP would have been the point lost exactly where it matters most. Nothing is lost by dropping it: `searchKnowledge` is already an opening move on every subject that listed it.
+
+**`return_state` maps to `refund_state`, not `return_eligibility`.** The label is « l’état du retour ou du remboursement », which is what `refund_state` reports. `return_eligibility` answers whether a return is still possible and resolves `unknown` on every ticket until the returns window is set — a floor built on it could never be met, so it would have disabled suppression on returns by accident rather than by decision.
+
+**A need nothing can close does not hold the loop open.** `responseComplete` accepts satisfied, moot, or `gapClosability === 'never'`, reusing step 6’s classifier. Without that clause the loop would never end on any subject carrying a need with no tool wired, which is most of them — the feature would be dead rather than off.
+
+**A second column rather than a third value on `collection_mode`.** Directing collection can only ADD a call and its worst case is a wasted lookup; stopping it REMOVES one and its worst case is a reply resting on a fact nobody fetched. Different risks want different opt-ins, and a shop that wants the first must not get the second by implication.
+
+**The traces had to be bought.** Only 2 of 137 stored runs carried one, and a trace cannot be filled in afterwards — the tool `data` it derives from does not survive the run. Re-investigating the stratified 50-ticket sample produced 47, at 204 model calls and 325k tokens. That spend is what the number above rests on, and it is the reason `findings_trace` was built first.
+
+### The planner reads a need’s STATE, because `unknown` means two things (2026-09-03)
+
+Rule-directed collection ships as `collection-planner.mjs`: the rules propose the next fact to establish, per situation, opt-in. It may add and reorder calls; it may never suppress one.
+
+**The design in the plan would have proposed nothing, ever.** `nextNeed`’s candidate filter is `findings[need] === undefined`, and a run never produces an undefined finding: every `derive` returns `unknown` when its tool has not run, so `findingsOf` hands back a value for every need a rule names. Measured against P-18’s own four rules — `nextNeed` proposes `promotion_identity` on an empty map and **null** on the map a real run produces.
+
+**`unknown` is overloaded and both readings are load-bearing.** To a rule it means « nous avons cherché et nous ne savons pas », which `aucun_code_identifie` legitimately branches on. To a planner it has to mean « personne n’a encore cherché ». The distinction the flat map loses is in `resolveNeeds`: `state`. So the planner reads state and the rules read findings, and neither has to change to accommodate the other — `collectedFindings` is that translation and it is why the module exists rather than being a wrapper.
+
+**`available` is the needs the RULES name, plus their prerequisites** — not the ticket’s declared needs, which is what the plan specified. Over 90 stored runs the declared set proposes nothing at all: the decomposer declares what a good ANSWER rests on, while rules branch on what separates one answer from another. With the rules’ own needs, **30 of 90** get a proposal. The prerequisites have to be in the set too, or `firstUnmetPrerequisite` cannot reach them — P-18 proves it, since its rules name only `promotion_validity` and the code that must be extracted first appears in no rule at all.
+
+**A proposal whose arguments cannot be assembled is skipped, never guessed.** `lookupPromotion` with no extracted code is the live case, and it is where every P-18 ticket in the corpus sits. Inventing a code there would be fabricating evidence. `identifyReactionProduct` can never be assembled at all — its arguments ARE the model’s reading of the email — which is what makes **cosmetovigilance never rule-directed**, at no cost, since that subject goes to a person whatever the evidence says.
+
+**A cache hit is not progress, and reading it as progress hung the run.** `run.call` serves a repeat from cache and returns the original entry: truthy, no new id, no new row. The planner re-derived the same findings, proposed the same need, and spun — and because every await resolves as a microtask it starved the event loop rather than merely looping. The loop now requires the ledger to GROW. A regression test holds it, on the ordinary case that produced it: a rule branching on what an opening move already established.
+
+**Two off switches at different altitudes.** `collection_mode` per situation, set by a person in the rulebook and **never inferred from how many rules exist** — a set with three of eight rules approved converges faster than a complete one, so counting rules would rate it readiest exactly when it is least ready. And `RULE_DIRECTED_COLLECTION=false` globally, for the decision taken at 2am without a deploy. The column defaults to `model`, which is what makes shipping this change no ticket at all.
+
+**The pilot the plan named is dormant.** P-18 needs a promotion code and `extractPromotionCodes` has returned `found` on **zero** runs in the whole corpus. D-02 is the live one: opted in, a real ticket went from 1 tool call to 3 — `searchKnowledge` for `product_identity`, `checkPhotoEvidence` for `photo_evidence` — and its « 1 non cherchés » evidence gap closed. Set back to `model` afterwards; opting a situation in is an operator’s decision.
+
+### A rule may pin the article it answers from (2026-09-03)
+
+Some situations have their answer in one approved article, and leaving retrieval to rediscover it per ticket makes the reply depend on which category the ticket landed in. D-33 is the case: « livrez-vous dans mon pays ? » is answered by **three** approved articles with **three different country lists** — Germany appears only in the FAQ, Hong Kong only in *Livraisons et retours*, and the CGV calls foreign orders exceptional. A `delivery` ticket searches `delivery, faq, brand_story, other`, and there is no `delivery` article, so it reaches the FAQ and nothing else.
+
+**`support_answers.knowledge_document_id`, the second value a rule carries rather than a condition**, and the same kind of decision `offer_code` is: which source answers this case is a choice a person makes once, not a similarity score.
+
+**PER RULE, NOT PER SITUATION**, which reads like the wrong axis until D-33 is looked at. Pinned to the situation, the article would also attach to `d33_livraison_non_documentee` — the branch that fires when NO article answered, which exists for exactly that case. The branch is what knows whether an article applies, and a rule already carries `situation_key`, so per-rule says "per situation" whenever it should.
+
+**A real foreign key, unlike `offer_code`.** That one cannot be constrained because the Shopify sync rewrites `promotions` underneath it; these rows are ours. `on delete set null` rather than cascade: deleting an article must never delete the rules that cited it.
+
+**Recorded at investigation, resolved at drafting**, exactly as the offer code is, and for the reason already written there: whether the document is still approved is a drafting-time question, and a stored run has to read back which article the rule chose either way. An unapproved or deleted article is dropped and logged, which degrades to the behaviour before pinning existed rather than blocking a ticket over a library edit.
+
+**Its own heading, not `caseFile.knowledge`.** That array is documented as chunks that cleared the answerable band; a pinned article cleared no band, and putting it there would change what the column means and leave a reader hunting for a `searchKnowledge` call that never happened. The prompt says « Article de référence pour cette situation » instead — retrieval found one, a person chose the other, and a reply written from the wrong assumption about which is which is a different kind of mistake.
+
+**Capped at 6,000 characters, logged when it bites.** The longest approved document is 18k against a 2.5k median, and one article that dwarfs the case file is an article the reply gets written from instead of the evidence. An article that keeps hitting the ceiling wants pinning by section, which the chunks already carry headings for.
+
+**It does not skip the tool call, deliberately.** The rule is not selected until the tool loop has closed, so skipping `searchKnowledge` means acting on the situation during collection — which is `collection_mode: rule_directed`, gated per situation for its own reasons. It would also be self-defeating here: skip the call and `policy_answer` derives `unknown`, so the D-33 branch that fires is the one for having no article.
+
+### A situation's decisions are its own, and the shared rules get a lane (2026-09-03)
+
+The canvas built its evidence decisions from every rule visible under a situation, which included the set's situation-less ones. So D-33 — « livrez-vous dans mon pays ? », a rule that branches on `policy_answer` and nothing else — showed `order_state` and `delivery_state` as decisions, borrowed from `non_expediee` and `expediee_sans_scan`, with `order_identity` dragged in behind them as their prerequisite. Three decisions on a shipping-policy question, none of which any rule on that screen reads.
+
+**They are not merely noise, they are unreachable.** `selectAnswer` ranks situation above condition depth, so a rule keyed to the situation always outranks a shared one. With D-33 covering all four `policy_answer` values, no shared branch can ever win there — the canvas was drawing paths the runtime cannot take.
+
+**Listed, not hidden.** A situation-less rule still applies to the set, and dropping it from the screen would misrepresent that as surely as folding it into the decisions did. It gets its own lane saying what it is and why it loses.
+
 ### A completeness gate needs to know who could close the gap, not just that it is open (2026-09-03)
 
 The gate refuses an `answerable` verdict while a declared need is still open. Run over the fresh corpus before enforcing anything, it would downgrade **12 of 91 runs — and on 4 of them every open gap is one nobody can ever close.**

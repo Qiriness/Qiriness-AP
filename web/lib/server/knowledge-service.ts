@@ -186,6 +186,37 @@ export async function listShopifySources(shopId: string): Promise<ShopifySourceO
     .sort((a: ShopifySourceOption, b: ShopifySourceOption) => a.title.localeCompare(b.title));
 }
 
+/**
+ * The articles a rule may pin, as {id, title, category}.
+ *
+ * SEPARATE FROM `listArticles` and deliberately thin: that one selects `*` and
+ * maps the whole record, which for a dropdown means pulling every article's HTML
+ * and body text to render eighteen titles.
+ *
+ * APPROVED AND UNDELETED ONLY. A rule pinning a draft article would be a rule
+ * whose answer is dropped at drafting time and looks, from the rulebook, as
+ * though it worked — the same trap `listOfferableCodes` avoids for codes.
+ */
+export async function listPinnableArticles(
+  shopId: string,
+): Promise<{ id: string; title: string; category: string | null }[]> {
+  const supabase = getSupabaseClient();
+  const rows = await supabaseSelect(
+    supabase,
+    "knowledge_documents",
+    { shop_id: shopId, approval_status: "approved" },
+    "id,title,category,deleted_at",
+  );
+  return (rows as any[])
+    .filter((row) => !row.deleted_at)
+    .map((row) => ({
+      id: String(row.id),
+      title: String(row.title ?? "(sans titre)"),
+      category: (row.category as string) ?? null,
+    }))
+    .sort((a, b) => a.title.localeCompare(b.title));
+}
+
 export async function listArticles(shopId: string): Promise<KnowledgeArticleResponse[]> {
   const supabase = getSupabaseClient();
   const [articleRows, catalogIdByKey] = await Promise.all([
