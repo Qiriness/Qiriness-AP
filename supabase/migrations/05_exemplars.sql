@@ -119,6 +119,7 @@ create table public.support_exemplars (
   constraint support_exemplars_requirement_needs_check check (
     requirement_needs <@ array[
       'product_identity', 'product_property', 'product_availability', 'product_recommendation',
+      'product_offer',
       'order_identity', 'order_state', 'delivery_state', 'dispatch_state', 'payment_state',
       'refund_state', 'return_eligibility', 'buyer_type',
       'promotion_identity', 'promotion_validity', 'promotion_eligibility',

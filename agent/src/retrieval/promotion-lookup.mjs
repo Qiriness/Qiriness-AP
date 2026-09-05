@@ -19,7 +19,9 @@ const COLUMNS = [
   'id', 'codes', 'title', 'method', 'discount_type', 'status',
   'summary', 'short_summary', 'starts_at', 'ends_at',
   'usage_limit', 'discount_usage_count',
-  'applies_once_per_customer', 'discount_classes', 'combines_with', 'rule_snapshot'
+  'applies_once_per_customer', 'discount_classes', 'combines_with', 'rule_snapshot',
+  // Only codes an operator cleared may ever be named to a customer.
+  'offerable_in_replies'
 ].join(',');
 
 /**
@@ -183,6 +185,49 @@ export function createPromotionLookup({ supabase, shopId, logger }) {
      * — a naming convention or a Shopify tag — and that is a merchant decision,
      * not something this function can infer.
      */
+    /**
+     * The offerable promotions that cover ONE product, split by how narrow they
+     * are.
+     *
+     * SPECIFIC MEANS NARROW, AND NARROW IS COUNTED RATHER THAN ASSERTED. A code
+     * scoped to 94 products is a general sale wearing a product scope; naming it
+     * as "an offer on your product" would be true and misleading. The line is
+     * ten OTHER products: past that the promotion is about the catalogue rather
+     * than about this item, and the general branch says so more honestly.
+     *
+     * OFFERABLE ONLY. `offerable_in_replies` is what an operator cleared, and it
+     * is the same gate the rule editor's picker uses — a partner rate or a
+     * 100%-off code must never reach a reply because a lookup happened to find
+     * it.
+     */
+    async offersForProduct(shopifyProductId, { now = new Date(), maxOtherProducts = 10 } = {}) {
+      const rows = await loadRows();
+      const live = rows.filter((row) => {
+        if (!row.offerable_in_replies) return false;
+        if (String(row.status || '').toUpperCase() !== 'ACTIVE') return false;
+        if (row.starts_at && now < new Date(row.starts_at)) return false;
+        if (row.ends_at && now > new Date(row.ends_at)) return false;
+        return true;
+      });
+
+      const specific = [];
+      const general = [];
+      for (const row of live) {
+        const items = row.rule_snapshot?.customer_gets?.items ?? null;
+        const scoped = items?.scope === 'products' ? items.products ?? [] : null;
+        // No product scope at all means it applies to the order, which is the
+        // most general thing a promotion can be.
+        if (!scoped) {
+          general.push(summarise(flattenPromotion(row)[0] ?? row));
+          continue;
+        }
+        if (!shopifyProductId || !scoped.some((p) => p?.id === shopifyProductId)) continue;
+        const target = scoped.length - 1 > maxOtherProducts ? general : specific;
+        target.push(summarise(flattenPromotion(row)[0] ?? row));
+      }
+      return { specific, general };
+    },
+
     async listActive({ now = new Date(), limit = MAX_ACTIVE_LISTED } = {}) {
       const rows = await loadRows();
       const active = rows.filter((row) => {

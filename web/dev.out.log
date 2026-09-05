@@ -52,3 +52,40 @@
  ✓ Compiled in 756ms (357 modules)
  ✓ Compiled in 864ms (357 modules)
  ✓ Compiled in 3.4s (357 modules)
+ ○ Compiling /agent-setup/promotions ...
+ ✓ Compiled /agent-setup/promotions in 1959ms (652 modules)
+ ✓ Compiled /api/promotions in 392ms (367 modules)
+ PATCH /api/promotions 200 in 2642ms
+ ✓ Compiled in 599ms (357 modules)
+ GET /agent-setup/rules 200 in 4945ms
+ ✓ Compiled in 896ms (357 modules)
+ GET /agent-setup/rules 200 in 1237ms
+ ○ Compiling /agent-setup ...
+ ✓ Compiled /agent-setup in 5.2s (1006 modules)
+ ○ Compiling /api/recommendations ...
+ ✓ Compiled /api/recommendations in 550ms (425 modules)
+ GET /api/recommendations 200 in 2947ms
+ ○ Compiling /tickets ...
+ ✓ Compiled /tickets in 1391ms (816 modules)
+ ✓ Compiled /api/tickets/[id]/thread in 387ms (440 modules)
+ ✓ Compiled (442 modules)
+ GET /api/tickets/4f4b49e4-f1bf-4ccc-b985-89262b08f3fd 200 in 9859ms
+ GET /api/tickets/4f4b49e4-f1bf-4ccc-b985-89262b08f3fd/thread 200 in 9933ms
+ GET /api/tickets/cc6f2217-be56-482e-b3d2-84ff77b779e1 200 in 407ms
+ GET /api/tickets/cc6f2217-be56-482e-b3d2-84ff77b779e1/thread 200 in 500ms
+ GET /api/tickets/4fdeb1b3-dc47-4a7c-bb06-5b6289175bff 200 in 609ms
+ GET /api/tickets/4fdeb1b3-dc47-4a7c-bb06-5b6289175bff/thread 200 in 640ms
+ GET /api/tickets/db1409ec-e7d1-4177-9f54-9fc089652ca0 200 in 532ms
+ GET /api/tickets/db1409ec-e7d1-4177-9f54-9fc089652ca0/thread 200 in 701ms
+ GET /api/tickets/9e232eea-7360-4050-9b7c-e6ecf20a87bf 200 in 418ms
+ GET /api/tickets/9e232eea-7360-4050-9b7c-e6ecf20a87bf/thread 200 in 522ms
+ GET /agent-setup/rules 200 in 2111ms
+ ○ Compiling /api/policy/rules ...
+ ✓ Compiled /api/policy/rules in 744ms (436 modules)
+ POST /api/policy/rules 201 in 1661ms
+ POST /api/policy/rules 201 in 348ms
+ ○ Compiling /api/tickets/[id]/thread ...
+ ✓ Compiled /api/tickets/[id]/thread in 1921ms (436 modules)
+ ✓ Compiled (438 modules)
+ GET /api/tickets/b0246791-5442-401e-8964-2a1335cf8661 200 in 5058ms
+ GET /api/tickets/b0246791-5442-401e-8964-2a1335cf8661/thread 200 in 5473ms

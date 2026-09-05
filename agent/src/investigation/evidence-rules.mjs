@@ -95,6 +95,24 @@ const NEEDS = {
     satisfiedBy: [{ tool: TOOL_NAMES.RECOMMEND_PRODUCTS, outcomes: ['cross_sell', 'by_concern'] }],
     asksCustomer: null
   },
+  // WHETHER AN OFFER COVERS THIS PRODUCT, and how narrowly.
+  //
+  // SEPARATE FROM `promotion_validity`, which asks whether a code the CUSTOMER
+  // named is usable. This asks the opposite direction: the customer named a
+  // product and no code, and wants to know if one exists. Nothing in the
+  // vocabulary answered that until now, which is why P-21 had no evidence to
+  // branch on.
+  product_offer: {
+    label: 'si une offre proposable couvre ce produit',
+    // EVERY CONCLUSIVE OUTCOME SATISFIES, including `none`: "there is no offer
+    // for this product" is a fact the shop established, not a gap. Only
+    // `no_match` leaves it open, and that is a product problem rather than an
+    // offer one.
+    satisfiedBy: [
+      { tool: TOOL_NAMES.LOOKUP_PRODUCT_OFFER, outcomes: ['found', 'general', 'none'] }
+    ],
+    asksCustomer: null
+  },
   product_availability: {
     label: 'la disponibilité du produit',
     satisfiedBy: [{ tool: TOOL_NAMES.LOOKUP_STOCK, outcomes: ['found'] }],
@@ -559,6 +577,17 @@ const FINDINGS = {
     }
   },
 
+  product_offer: {
+    values: ['specific', 'general_only', 'none', 'unknown'],
+    derive(entries) {
+      const entry = lastByTool(entries, TOOL_NAMES.LOOKUP_PRODUCT_OFFER);
+      if (!entry) return 'unknown';
+      if (entry.outcome === 'found') return 'specific';
+      if (entry.outcome === 'general') return 'general_only';
+      if (entry.outcome === 'none') return 'none';
+      return 'unknown';
+    }
+  },
   product_availability: {
     values: ['in_stock', 'out_of_stock', 'unknown'],
     derive(entries) {
@@ -1000,6 +1029,9 @@ const DEPENDENCIES = {
   // same subject. Requiring identity would make it uncollectable exactly when it
   // is the need that matters.
   product_availability: { requires: ['product_identity'] },
+  // An offer is scoped to a product, so there is nothing to look up until one
+  // is named.
+  product_offer: { requires: ['product_identity'] },
   // The reaction tool takes the model's reading of the email, so nothing has to
   // be established first — but a photo is evidence ABOUT a product, and chasing
   // one before knowing which product is a question nobody can act on.

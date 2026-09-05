@@ -66,6 +66,13 @@ export function createUsageSink({ now = () => new Date() } = {}) {
     } = {}) {
       const inputTokens = toCount(usage?.prompt_tokens ?? usage?.input_tokens);
       const outputTokens = toCount(usage?.completion_tokens ?? usage?.output_tokens);
+      // HOW MANY OF THOSE INPUT TOKENS CAME FROM THE PROMPT CACHE. Nested under
+      // `prompt_tokens_details` on chat completions and absent everywhere else,
+      // including embeddings — so a missing field reads as zero rather than as a
+      // fault. Coerced like every other count here: bookkeeping must not throw.
+      const cachedInputTokens = toCount(
+        usage?.prompt_tokens_details?.cached_tokens ?? usage?.cached_tokens
+      );
       const entry = {
         pass: PASS_SET.has(pass) ? pass : 'other',
         // The model is what the bill is priced against, so an unknown one is
@@ -74,6 +81,7 @@ export function createUsageSink({ now = () => new Date() } = {}) {
         model: model || 'unknown',
         ticketId: ticketId ?? null,
         inputTokens,
+        cachedInputTokens,
         outputTokens,
         // Trusted from the response where it exists: OpenAI counts cached and
         // reasoning tokens into the total, and re-deriving it from the two

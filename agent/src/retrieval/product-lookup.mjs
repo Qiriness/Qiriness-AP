@@ -115,6 +115,28 @@ export function createProductLookup({ supabase, shopId, logger }) {
   }
 
   return {
+    /**
+     * The product a message is about, as the CATALOGUE identifies it.
+     *
+     * `shopifyProductId` is the one field that matters here and the reason this
+     * exists beside `lookupStock`: a promotion records its scope as Shopify
+     * product GIDs, so matching a discount to a product by title would be
+     * matching two strings that only happen to come from the same source.
+     */
+    async resolveProductRef(question, options = {}) {
+      const { match, ambiguous, tied } = await resolve(question, options);
+      const chosen = match || (tied.length === 1 ? tied[0] : null);
+      if (!chosen) return { found: false, ambiguous, title: null, shopifyProductId: null };
+      const row = await fetchRow(chosen.id, 'id,title,shopify_product_id');
+      if (!row) return { found: false, ambiguous, title: null, shopifyProductId: null };
+      return {
+        found: true,
+        ambiguous,
+        title: row.title,
+        shopifyProductId: row.shopify_product_id ?? null
+      };
+    },
+
     /** Drops the cached title index — call after a product sync. */
     refresh() {
       indexPromise = null;

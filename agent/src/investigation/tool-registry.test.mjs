@@ -18,6 +18,9 @@ function buildRegistry(overrides = {}) {
       async lookupProduct() {
         return { found: true, ambiguous: false, promptText: '# Masque LED' };
       },
+      async resolveProductRef() {
+        return { found: true, ambiguous: false, title: 'Masque LED', shopifyProductId: 'gid://shopify/Product/1' };
+      },
       async lookupStock() {
         return { found: true, ambiguous: false, products: [{ title: 'Masque LED', purchasable: true }] };
       },
@@ -39,6 +42,9 @@ function buildRegistry(overrides = {}) {
           eligibility: { verdict: 'undetermined', blocking: [], unknowns: ['minimum d’achat'] },
           promptText: '# Code BIENVENUE10'
         };
+      },
+      async offersForProduct() {
+        return { specific: [{ code: 'UKLED20', title: 'LED', summary: '20% off' }], general: [] };
       },
       async listActive() {
         // Shape changed when listActive stopped answering per redeem code:
@@ -149,6 +155,9 @@ test('an eligible promotion drops the eligibility caveat but keeps the basket on
       async lookupPromotion() {
         return { found: true, code: 'X', eligibility: { verdict: 'eligible', blocking: [], unknowns: [] }, promptText: 'x' };
       },
+      async offersForProduct() {
+        return { specific: [{ code: 'UKLED20', title: 'LED', summary: '20% off' }], general: [] };
+      },
       async listActive() {
         return { promotions: [], total: 0, truncated: false };
       }
@@ -195,6 +204,9 @@ test('an ambiguous product is a caveat, never a silent pick', async () => {
     productLookup: {
       async lookupProduct() {
         return { found: true, ambiguous: true, promptText: 'Attention : deux produits…' };
+      },
+      async resolveProductRef() {
+        return { found: true, ambiguous: false, title: 'Masque LED', shopifyProductId: 'gid://shopify/Product/1' };
       },
       async lookupStock() {
         return { found: false };
@@ -298,6 +310,9 @@ test('a code the customer never wrote is refused, not looked up', async () => {
       async extractCodes() {
         return [];
       },
+      async offersForProduct() {
+        return { specific: [{ code: 'UKLED20', title: 'LED', summary: '20% off' }], general: [] };
+      },
       async listActive() {
         return { promotions: [], total: 0, truncated: false };
       }
@@ -326,6 +341,9 @@ test('a typo the customer typed still gets the ordinary not-found answer', async
         return { found: false, code: null, promptText: 'Le code n’existe pas. Voulez-vous dire QIRINESS20 ?' };
       },
       async extractCodes() { return []; },
+      async offersForProduct() {
+        return { specific: [{ code: 'UKLED20', title: 'LED', summary: '20% off' }], general: [] };
+      },
       async listActive() { return { promotions: [], total: 0, truncated: false }; }
     }
   });
@@ -350,6 +368,9 @@ test('a code the customer DID write is looked up, punctuation and case aside', a
       },
       async extractCodes() {
         return [];
+      },
+      async offersForProduct() {
+        return { specific: [{ code: 'UKLED20', title: 'LED', summary: '20% off' }], general: [] };
       },
       async listActive() {
         return { promotions: [], total: 0, truncated: false };

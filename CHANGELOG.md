@@ -10,6 +10,30 @@ Three sibling files carry the other halves, and this one deliberately does not d
 
 ---
 
+## An offer on YOUR product, when there is one (2026-09-04)
+
+**`lookupProductOffer`**: given the product a message is about, which offerable promotions cover it — split into one that is genuinely about that product and one that is a catalogue-wide sale. **The line is ten other products.** `UKLED20` covers one and is specific; `QIRINESS20` covers 94 and is not.
+
+**A new need, `product_offer`** (`specific` / `general_only` / `none` / `unknown`), because nothing in the vocabulary answered « existe-t-il une offre sur ce produit » — `promotion_validity` asks whether a code the CUSTOMER named works, which is the other direction.
+
+**`p21_offre_produit`** fires on `specific` and carries **no** `offer_code`: a rule holds one code, and the right code here depends on the product. It travels as evidence instead, with the skeleton saying to reproduce it exactly and invent nothing.
+
+**Matched on Shopify GIDs, not titles**, and gated on `offerable_in_replies` inside the query — a partner rate must never reach a customer because a lookup found it.
+
+**Verified on the anchor ticket**: `lookupProductOffer` ran, `p21_offre_produit` was selected, and the case file now carries « Une offre spécifique de 20% de réduction est disponible pour le Masque LED Visage Éclat & Régénération **avec le code UKLED20** ». **2008 tests pass.**
+
+## P-21, and every remaining rule goes live (2026-09-04)
+
+**A new situation: « avez-vous une offre ou un code promotionnel en cours ? »** Four phrasings — the plain form, the verbatim from ticket 273f44b2, and a customer waiting for a promotion before ordering. All three promotions situations until now were about a code that does not WORK; none covered asking whether one exists.
+
+**One rule, `p21_offre_en_cours`, offering `QIRINESS10`.** Its skeleton carries the conditional rather than the schema: give the code if one is in the dossier, say we have no offer and invite the newsletter if not, and never hint at a promotion to come.
+
+**No new column.** An empty offer dropdown already produces silence, not a message — only a skeleton speaks. Saying « nous n’avons pas d’offre » while codes exist is expressed by writing that skeleton and picking no code.
+
+**Eight rules approved, and P-21 with them. 108 rules live, no drafts left.** Every answer set audited as it would be AFTER approval, not before — a draft that shadows an approved rule only becomes a problem the moment it is approved. All clean.
+
+**Verified end to end on the anchor ticket**: the promotions half now matches P-21, selects `p21_offre_en_cours`, and `QIRINESS10` reaches the case file. Both skeletons arrive labelled with their question. Re-matched all 24 previously-matched runs: **no ticket moved situation.** **2003 tests pass.**
+
 ## An email that asks two things now gets two rules (2026-09-04)
 
 **Row 8.** The rules layer opened one rulebook per ticket while the investigation had already split the email into requests. So a mask-specification email that also asked « avez-vous une offre ou un code promotionnel ? » selected a `products` rule and nothing else — while `UKLED20` sat established in the same case file.

@@ -107,6 +107,24 @@ const DEFINITIONS = {
       additionalProperties: false
     }
   },
+  [TOOL_NAMES.LOOKUP_PRODUCT_OFFER]: {
+    description:
+      'Indique si une offre proposable couvre le produit dont parle le message. ' +
+      'Distingue une offre PROPRE à ce produit d’une remise générale qui le couvre ' +
+      'parmi beaucoup d’autres. À utiliser quand le client demande s’il existe une ' +
+      'promotion sur un produit précis.',
+    parameters: {
+      type: 'object',
+      properties: {
+        question: {
+          type: 'string',
+          description: 'Le produit dont parle le client, dans ses mots.'
+        }
+      },
+      required: ['question'],
+      additionalProperties: false
+    }
+  },
   [TOOL_NAMES.LIST_ACTIVE_PROMOTIONS]: {
     description: 'Liste les promotions actuellement actives dans la boutique.',
     parameters: NO_ARGS
@@ -402,6 +420,44 @@ export function createToolRegistry({
               reason: c.reason ?? null
             }))
           }
+        };
+      },
+
+      async [TOOL_NAMES.LOOKUP_PRODUCT_OFFER](args = {}) {
+        const question = String(args.question || ticket.text || '');
+        const product = await productLookup.resolveProductRef(question);
+        if (!product.found) {
+          return {
+            outcome: 'no_match',
+            caveats: ['product_ambiguous'],
+            promptText: 'Aucun produit du catalogue ne correspond au message : impossible de dire si une offre le couvre.',
+            data: { found: false }
+          };
+        }
+        const { specific, general } = await promotionLookup.offersForProduct(product.shopifyProductId);
+        if (specific.length > 0) {
+          return {
+            outcome: 'found',
+            caveats: ['basket_unseeable'],
+            promptText:
+              `Offre propre à ${product.title} :\n` +
+              specific.map((p) => `- ${p.code || p.title} : ${p.summary || p.title}`).join('\n'),
+            data: { product: product.title, specific, general }
+          };
+        }
+        if (general.length > 0) {
+          return {
+            outcome: 'general',
+            caveats: ['basket_unseeable'],
+            promptText: `Aucune offre propre à ${product.title}. Des remises générales existent.`,
+            data: { product: product.title, specific: [], general }
+          };
+        }
+        return {
+          outcome: 'none',
+          caveats: [],
+          promptText: `Aucune offre proposable ne couvre ${product.title} actuellement.`,
+          data: { product: product.title, specific: [], general: [] }
         };
       },
 

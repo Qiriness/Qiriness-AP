@@ -487,6 +487,38 @@ So a person decides once, on `/agent-setup/promotions`, and the reply screen onl
 
 **Found by simulation, not by reading.** Nine order states were run against the loaded set and the winner printed for each; the table looked correct to the eye and was wrong in one cell. Any rule set worth approving is worth enumerating this way, because shadowing is a relation between rules and no single row shows it.
 
+### An offer is specific to a product, or it is a sale wearing a product scope (2026-09-04)
+
+`lookupProductOffer` answers a question nothing in the vocabulary could: the customer named a PRODUCT and no code, and wants to know whether an offer exists for it. `promotion_validity` asks the opposite direction — whether a code the customer named is usable — which is why P-21 had no evidence to branch on until now.
+
+**SPECIFIC IS COUNTED, NOT ASSERTED, and the count is the whole rule.** `QIRINESS20` is scoped to 94 products; naming it as « une offre sur votre produit » would be true and misleading. The line is **ten OTHER products**: past that the promotion is about the catalogue rather than about this item, and the general branch says so more honestly. `UKLED20` covers one product and is specific; a 12-product bundle is not.
+
+**Matched on the Shopify GID, never on the title.** `promotions.rule_snapshot.customer_gets.items.products[].id` and `products.shopify_product_id` are the same identifier from the same sync. Matching by title would be matching two strings that only happen to share a source.
+
+**`offerable_in_replies` gates the lookup exactly as it gates the picker.** A partner rate or a 100%-off code must never reach a customer because a lookup happened to find one — and one such code WAS flagged offerable by mistake and removed on 2026-09-04, which is why the gate is in the query rather than in the caller.
+
+**The rule carries no `offer_code`, and that is the difference from every other offer rule.** A rule holds ONE code, so a `product_identity: resolved` branch holding `UKLED20` would offer the LED code for any product. Here the code is whichever one covers the product, so it travels as EVIDENCE — the tool names it, the model cites it, and the skeleton says to reproduce it exactly and invent nothing. The cost of that choice, stated: `offer_code` is re-checked at drafting for still being offerable and a code carried as evidence is not, so a promotion ending between investigation and drafting would still be quoted. The window is minutes.
+
+**`none` satisfies the need.** « There is no offer for this product » is a fact the shop established, not a gap — the same distinction `refund_state: none` makes. Only `no_match`, where no product could be identified, leaves it open, and that is a product problem rather than an offer one.
+
+### An empty offer dropdown says nothing; the skeleton says everything (2026-09-04)
+
+P-21 — « avez-vous une offre ou un code promotionnel en cours ? » — is the situation the per-request work surfaced: the promotions half of a product enquiry matched nothing, because all three promotions situations were about a code that does NOT work.
+
+**The design question it raised, and the column that turned out not to be needed.** The intent was three branches: offer a product-specific code, offer a general one, or say we have none. The third looked like it needed a sentinel in the offer dropdown — `(no codes available)` — to distinguish "the operator picked nothing" from "there is nothing to pick", with a worry that the no-offer wording would otherwise fire on every rule with an empty dropdown.
+
+**It cannot.** `resolveOfferCode(null)` returns null and no code section is added, so an empty dropdown produces SILENCE. The only thing that mentions offers is the rule’s own skeleton. Every other rule in the book has an empty dropdown and none of them talks about promotions, because none of their skeletons do. The sentinel would have encoded in a column what the skeleton already says in words — a second home for one intent, which is the drift this codebase keeps removing.
+
+**Including the case that motivated it**: saying « nous n’avons pas d’offre » while codes DO exist is a commercial decision, and it is expressed by writing that skeleton and picking no code. The rule withholds; nothing has to model withholding.
+
+**The conditional lives in the skeleton, where the truth is.** `p21_offre_en_cours` reads "if a code appears in this dossier, give it; if none does, say we have no offer and invite the newsletter". That survives the code being dropped at drafting time for stopping to be offerable — which is the one soft spot of a skeleton that assumes a code it may not get.
+
+**And it forbids the thing a promotions answer most wants to do**: hint at a promotion to come. A customer told a sale is coming does not order now, and we do not announce them in advance.
+
+**The product-specific branch is not built.** A rule carries ONE code, so a `product_identity: resolved` branch holding `UKLED20` would offer the LED code for any identified product. Doing it properly needs a lookup over `promotions.rule_snapshot.customer_gets.items.products`, which carries the scoping and which no tool reads. Until then the general code answers, less precisely and never wrongly.
+
+**Approval is what earns an embedding, and an embedding is what makes a situation matchable** — so P-21 was created as a draft and approved only once its rule existed. Approved earlier it could have pulled a ticket off P-18 and left it with no rule at all. Re-matched all 24 previously-matched runs afterwards: **no ticket’s situation changed.**
+
 ### Rules go per request; the verdict stays per ticket (2026-09-04)
 
 An email can ask two things. The investigation has always known that — the decomposer splits it, and tools, budget and evidence all follow the split. The rules layer did not: one rulebook, one situation, one selection, for the whole email.

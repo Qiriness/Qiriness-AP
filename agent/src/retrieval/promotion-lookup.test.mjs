@@ -155,3 +155,96 @@ test('refresh drops the row cache too, not only the flattened one', async () => 
     assert.equal(promotions.length, 2, 'the second read saw the new row');
   } finally { restore(); }
 });
+
+// --- offers scoped to one product --------------------------------------------
+
+const LED = 'gid://shopify/Product/led';
+
+/** An offerable, active promotion scoped to `count` products including the LED. */
+const scopedTo = (code, count) => ({
+  id: `p-${code}`,
+  title: code,
+  codes: [{ code }],
+  method: 'CODE',
+  discount_type: 'PERCENTAGE',
+  status: 'ACTIVE',
+  summary: `${code} summary`,
+  offerable_in_replies: true,
+  rule_snapshot: {
+    customer_gets: {
+      items: {
+        scope: 'products',
+        products: [
+          { id: LED, title: 'Masque LED' },
+          ...Array.from({ length: count - 1 }, (_, i) => ({ id: `gid://other/${i}`, title: `Other ${i}` }))
+        ]
+      }
+    }
+  }
+});
+
+test('an offer on one product is specific; one on the whole catalogue is not', async () => {
+  // THE LINE IS TEN OTHER PRODUCTS. A code scoped to 94 products is a general
+  // sale wearing a product scope: naming it as "an offer on your product" would
+  // be true and misleading.
+  const { lookup, restore } = lookupOver([scopedTo('UKLED20', 1), scopedTo('SALE94', 94)]);
+  try {
+    const { specific, general } = await lookup.offersForProduct(LED);
+    assert.deepEqual(specific.map((p) => p.code), ['UKLED20']);
+    assert.deepEqual(general.map((p) => p.code), ['SALE94']);
+  } finally {
+    restore();
+  }
+});
+
+test('the boundary is ten others, not eleven', async () => {
+  const { lookup, restore } = lookupOver([scopedTo('ELEVEN', 11), scopedTo('TWELVE', 12)]);
+  try {
+    const { specific, general } = await lookup.offersForProduct(LED);
+    assert.deepEqual(specific.map((p) => p.code), ['ELEVEN'], 'ten others is still about this product');
+    assert.deepEqual(general.map((p) => p.code), ['TWELVE'], 'eleven others is about the catalogue');
+  } finally {
+    restore();
+  }
+});
+
+test('a code nobody cleared is never returned, however well it fits', async () => {
+  // The same gate the rule editor's picker uses. A partner rate or a 100%-off
+  // code must not reach a customer because a lookup happened to find it.
+  const hidden = { ...scopedTo('SECRET', 1), offerable_in_replies: false };
+  const { lookup, restore } = lookupOver([hidden]);
+  try {
+    const { specific, general } = await lookup.offersForProduct(LED);
+    assert.deepEqual(specific, []);
+    assert.deepEqual(general, []);
+  } finally {
+    restore();
+  }
+});
+
+test('an order-wide offer is general even though it covers the product', async () => {
+  const orderWide = {
+    id: 'p-order', title: 'ORDER10', codes: [{ code: 'ORDER10' }], method: 'CODE',
+    discount_type: 'PERCENTAGE', status: 'ACTIVE', summary: '10% off the order',
+    offerable_in_replies: true, rule_snapshot: { customer_gets: { items: null } }
+  };
+  const { lookup, restore } = lookupOver([orderWide]);
+  try {
+    const { specific, general } = await lookup.offersForProduct(LED);
+    assert.deepEqual(specific, []);
+    assert.deepEqual(general.map((p) => p.code), ['ORDER10']);
+  } finally {
+    restore();
+  }
+});
+
+test('a product with no offer at all comes back empty rather than guessing', async () => {
+  const { lookup, restore } = lookupOver([scopedTo('OTHER', 1)]);
+  try {
+    const { specific, general } = await lookup.offersForProduct('gid://shopify/Product/nothing');
+    assert.deepEqual(specific, []);
+    assert.deepEqual(general, []);
+  } finally {
+    restore();
+  }
+});

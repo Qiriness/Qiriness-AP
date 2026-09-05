@@ -59,11 +59,15 @@ test('the exact tool set for each enabled subject', () => {
     // Added 2026-08-31 for the advice half of this subject: `lookupProduct`
     // answers « parle-moi de ce produit », this answers « lequel me
     // conseillez-vous », which has no product to look up until it recommends one.
-    TOOL_NAMES.RECOMMEND_PRODUCTS
+    TOOL_NAMES.RECOMMEND_PRODUCTS,
+    // Added 2026-09-04: « avez-vous une offre sur ce produit » is a product
+    // question whose answer lives in the promotions table.
+    TOOL_NAMES.LOOKUP_PRODUCT_OFFER
   ]);
   assert.deepEqual(allowedTools('product_stock', 'question', 2), [
     TOOL_NAMES.LOOKUP_STOCK,
-    TOOL_NAMES.LOOKUP_PRODUCT
+    TOOL_NAMES.LOOKUP_PRODUCT,
+    TOOL_NAMES.LOOKUP_PRODUCT_OFFER
   ]);
   assert.deepEqual(allowedTools('account', 'problem', 2), [
     TOOL_NAMES.LOOKUP_CUSTOMER,

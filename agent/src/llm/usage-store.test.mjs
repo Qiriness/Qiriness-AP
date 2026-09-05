@@ -66,6 +66,9 @@ test('maps a sink entry onto the table\'s columns', async () => {
       pass: 'categorise',
       model: 'gpt-4o-mini',
       input_tokens: 900,
+      // Defaulted rather than dropped: a sink entry written before this column
+      // existed still has to produce a valid row.
+      cached_input_tokens: 0,
       output_tokens: 100,
       total_tokens: 1000,
       call_count: 1,

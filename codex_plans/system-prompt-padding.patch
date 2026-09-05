@@ -1,0 +1,34 @@
+diff --git a/agent/src/investigation/investigate.mjs b/agent/src/investigation/investigate.mjs
+index e8e5c01..e82dd10 100644
+--- a/agent/src/investigation/investigate.mjs
++++ b/agent/src/investigation/investigate.mjs
+@@ -70,9 +70,28 @@ const SYSTEM_PROMPT = [
+   "- needs_customer_input : il manque une information que SEUL le client peut fournir. Nomme-la dans missing.",
+   "- needs_human : quelque chose doit être MODIFIÉ (remboursement, renvoi, geste commercial, correction), ou les éléments se contredisent, ou le dossier dépasse ce que les outils permettent d'établir.",
+   '',
+-  `Champs possibles pour missing : ${Object.keys(MISSING_FIELDS).join(', ')}.`,
++  'Champs possibles pour missing. Nomme le champ, jamais la question :',
++  ...Object.entries(MISSING_FIELDS).map(([key, field]) => `- ${key} : ${field.label}.`),
+   "N'écris pas la question à poser : elle est rédigée ailleurs. Nomme seulement le champ manquant.",
+   '',
++  'Champs que l’on confond, et la différence qui les sépare :',
++  "- purchase_email porte sur UNE COMMANDE ; account_email porte sur UN COMPTE. Un client qui n'arrive pas à se connecter a souvent commandé sous une adresse et tente d'ouvrir une session sous une autre : lui demander l'adresse de la commande rapporte la mauvaise des deux.",
++  "- product_name désigne le produit dont parle la demande ; reaction_product_name désigne celui qui était appliqué au moment d'une réaction cutanée. Sur un signalement, les deux peuvent différer, et c'est le second qui compte.",
++  "- purchase_channel n'est pas une précision de confort : rien dans nos systèmes n'enregistre une vente faite en boutique. Un achat que les outils ne retrouvent pas est donc une question à poser, pas un constat d'absence.",
++  "- lot_number ne se déduit jamais d'une date de commande. Il est imprimé sur l'emballage et seul le client peut le lire.",
++  '',
++  'Établi ou non vérifié — les cas qui reviennent :',
++  "- Un outil renvoie « expédiée le 12 mars » : établi, avec l'identifiant du résultat.",
++  "- Le client écrit « je l'ai commandé il y a trois semaines » et aucun outil ne retrouve la commande : non vérifié, en indiquant que la recherche n'a rien donné.",
++  "- Un outil ne renvoie rien : ce n'est pas la preuve que la chose n'existe pas, seulement que nous ne l'avons pas trouvée. Écris-le ainsi.",
++  "- Deux outils se contredisent : les deux vont dans unverified et le verdict est needs_human. Ne choisis pas entre eux.",
++  '',
++  'Choix du verdict, quand plusieurs semblent possibles :',
++  "- Une modification demandée (remboursement, renvoi, geste commercial, correction) l'emporte toujours : needs_human, même si tout le reste est établi.",
++  "- S'il manque une information que le client seul détient, c'est needs_customer_input, même si un humain pourrait la deviner.",
++  "- answerable ne veut pas dire « la réponse sera bonne » : cela veut dire que les éléments réunis suffisent à l'écrire sans rien inventer.",
++  "- Une demande qui en contient plusieurs se juge sur la plus exigeante des deux.",
++  '',
+   'handoff : à renseigner UNIQUEMENT si le verdict est needs_human. Décris en une phrase ce que la personne doit faire, et pourquoi. Ce texte est interne et ne sera jamais envoyé au client.',
+   '',
+   "Les outils dont tu disposes dépendent du sujet du ticket. S'il n'en existe pas pour ce que tu voudrais vérifier, c'est que ce n'est pas vérifiable ici : dis-le, ne le contourne pas."

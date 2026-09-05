@@ -77,6 +77,22 @@ create table public.llm_usage (
   pass text not null,
   model text not null,
   input_tokens integer not null default 0,
+  -- HOW MUCH OF `input_tokens` THE PROVIDER SERVED FROM ITS PROMPT CACHE.
+  --
+  -- A SUBSET OF `input_tokens`, NOT AN ADDITION TO IT. OpenAI counts cached
+  -- tokens inside `prompt_tokens`, so the two must never be summed — this says
+  -- how many of the input tokens were billed at the reduced rate.
+  --
+  -- WHY IT IS WORTH A COLUMN. Input is 76% of the bill at 12.5 input tokens per
+  -- output token, so the prompt cache is the largest single lever on cost — and
+  -- without this field nothing distinguishes a cache working perfectly from one
+  -- that never engages. Every cost calculation in codex_plans/Model_Cost_Notes.md
+  -- is arithmetic over an assumption until this column has data in it.
+  --
+  -- ZERO IS A REAL ANSWER, and the common one: caching needs a stable prefix
+  -- above a minimum length, and a prompt whose first ticket-specific token comes
+  -- early can never earn it.
+  cached_input_tokens integer not null default 0,
   output_tokens integer not null default 0,
   total_tokens integer not null default 0,
   call_count integer not null default 1,
@@ -93,6 +109,10 @@ create table public.llm_usage (
     pass in ('spam', 'categorise', 'decompose', 'investigate', 'draft', 'embed', 'other')
   ),
   constraint llm_usage_input_tokens_check check (input_tokens >= 0),
+  -- Deliberately NOT `<= input_tokens`. Usage is bookkeeping riding beside real
+  -- work, and a provider reporting an unexpected shape must cost a ticket
+  -- nothing — a refused insert here would fail the batch that carries it.
+  constraint llm_usage_cached_input_tokens_check check (cached_input_tokens >= 0),
   constraint llm_usage_output_tokens_check check (output_tokens >= 0),
   constraint llm_usage_total_tokens_check check (total_tokens >= 0),
   constraint llm_usage_call_count_check check (call_count > 0)

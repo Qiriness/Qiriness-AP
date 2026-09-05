@@ -141,6 +141,7 @@ function toRow(entry, shopId) {
     pass: entry.pass,
     model: entry.model,
     input_tokens: entry.inputTokens,
+    cached_input_tokens: entry.cachedInputTokens ?? 0,
     output_tokens: entry.outputTokens,
     total_tokens: entry.totalTokens,
     call_count: entry.callCount ?? 1,

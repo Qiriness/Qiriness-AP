@@ -23,6 +23,9 @@ test('records the two halves and the total OpenAI reported', () => {
       model: 'gpt-4o-mini',
       ticketId: 't-1',
       inputTokens: 900,
+      // Absent from the response, which is the ordinary case: nothing cached,
+      // or a pass that has no prompt cache at all.
+      cachedInputTokens: 0,
       outputTokens: 120,
       totalTokens: 1020,
       callCount: 1,
@@ -222,4 +225,53 @@ test('an unlabelled call still lands somewhere countable', async () => {
   const [entry] = sink.drain();
   assert.equal(entry.pass, 'other');
   assert.equal(entry.ticketId, null);
+});
+
+test('the cached half of the input is recorded, not folded into the total', () => {
+  // WHY THIS FIELD EXISTS. Input is 76% of the bill, so the prompt cache is the
+  // largest lever on cost — and `prompt_tokens` ALREADY INCLUDES cached tokens,
+  // which means without this split nothing distinguishes a cache working
+  // perfectly from one that never engages.
+  const sink = createUsageSink({ now: at });
+  sink.record({
+    pass: 'investigate',
+    model: 'gpt-4o',
+    ticketId: 't-1',
+    usage: {
+      prompt_tokens: 1800,
+      prompt_tokens_details: { cached_tokens: 1408 },
+      completion_tokens: 140,
+      total_tokens: 1940
+    }
+  });
+
+  const [entry] = sink.drain();
+  assert.equal(entry.inputTokens, 1800, 'the provider already counted the cached tokens in here');
+  assert.equal(entry.cachedInputTokens, 1408, 'and this says how many of them were discounted');
+  assert.equal(entry.totalTokens, 1940, 'the total is unchanged — cached is a subset, never an addition');
+});
+
+test('a response with no cache details reads as nothing cached', () => {
+  // Embeddings carry no `prompt_tokens_details` at all, and a chat completion
+  // below the cacheable length carries it with a zero. Neither is a fault.
+  const sink = createUsageSink({ now: at });
+  sink.record({ pass: 'embed', model: 'text-embedding-3-small', usage: { prompt_tokens: 400, total_tokens: 400 } });
+  sink.record({ pass: 'categorise', model: 'gpt-4o-mini', usage: { prompt_tokens: 900, prompt_tokens_details: {}, completion_tokens: 40 } });
+
+  for (const entry of sink.drain()) {
+    assert.equal(entry.cachedInputTokens, 0);
+  }
+});
+
+test('a malformed cache count costs the ticket nothing', () => {
+  // Bookkeeping rides beside real work: every field here is coerced rather than
+  // validated, because a usage row must never be the thing that fails a run.
+  const sink = createUsageSink({ now: at });
+  sink.record({
+    pass: 'investigate',
+    model: 'gpt-4o',
+    usage: { prompt_tokens: 500, prompt_tokens_details: { cached_tokens: 'lots' }, completion_tokens: 10 }
+  });
+
+  assert.equal(sink.drain()[0].cachedInputTokens, 0);
 });
