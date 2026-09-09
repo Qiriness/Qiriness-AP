@@ -4,6 +4,7 @@ import test from 'node:test';
 import { T } from '../../../scripts/lib/tables.mjs';
 
 import { runRehearsal } from './run-rehearsal.mjs';
+import { FINALIZE_TOOL_NAME } from '../investigation/case-file.mjs';
 
 /**
  * The orchestrator, actually executed.
@@ -84,12 +85,20 @@ function scriptedOpenAI({ label = 'legitimate' } = {}) {
       }
       throw new Error(`unscripted completeJson pass: ${pass}`);
     },
-    async completeWithTools({ pass, schema }) {
+    async completeWithTools({ pass, toolChoice }) {
       seen.push(pass);
       // The investigation's loop: no tool requests, then the case file on the
-      // turn that carries the schema.
-      if (schema) {
-        return { message: {}, content: JSON.stringify(CASE_FILE), toolCalls: [], usage: null };
+      // turn that FORCES the finalise tool. It used to be the turn that carried
+      // a response schema; since 2026-09-07 the schema travels as that tool's
+      // parameters instead, to keep the closing call in the loop's prompt-cache
+      // partition. See codex_plans/Model_Cost_Notes.md § SOLVED 2026-09-07.
+      if (toolChoice?.function?.name === FINALIZE_TOOL_NAME) {
+        return {
+          message: {},
+          content: null,
+          toolCalls: [{ id: 'final', name: FINALIZE_TOOL_NAME, args: CASE_FILE, argsError: null }],
+          usage: null
+        };
       }
       return { message: {}, content: null, toolCalls: [], usage: null };
     }

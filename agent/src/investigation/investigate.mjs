@@ -1,4 +1,9 @@
-import { CASE_FILE_SCHEMA, MISSING_FIELDS, buildCaseFile } from './case-file.mjs';
+import {
+  FINALIZE_TOOL,
+  FINALIZE_TOOL_NAME,
+  MISSING_FIELDS,
+  buildCaseFile
+} from './case-file.mjs';
 import {
   normaliseDecomposition,
   planBudget,
@@ -175,6 +180,14 @@ export function createInvestigator(
     }
 
     const { names, definitions, handlers } = registry.toolsFor(ticket, { tasks: plan.tasks });
+
+    // THE TOOL ARRAY THE MODEL SEES, identical on every turn of this run —
+    // which is the whole point. `definitions` stays the registry's answer to
+    // "what can this ticket look up"; `modelTools` adds the case-file tool that
+    // replaces `response_format` on the closing call. Appending it here rather
+    // than in the registry keeps the empty-tool-set guard above, and the
+    // registry's own scope tests, reading the real tools only.
+    const modelTools = [...definitions, FINALIZE_TOOL];
     const run = createRun({
       ticket,
       handlers,
@@ -301,7 +314,7 @@ export function createInvestigator(
         model,
         system: SYSTEM_PROMPT,
         messages,
-        tools: definitions,
+        tools: modelTools,
         // Every turn of the loop is its own row. Investigation is the only pass
         // that can spend more than one model call on a ticket, so a per-call row
         // is what makes "the worst single ticket" answerable at all.
@@ -309,12 +322,50 @@ export function createInvestigator(
         ticketId: ticket.id ?? null
       });
 
-      if (response.toolCalls.length === 0) {
+      // THE MODEL SAYING IT IS DONE, in either of the two ways it can say it.
+      //
+      // `finalize_investigation` is offered on every turn (it has to be, or the
+      // tool array would differ between the loop and the closing call and the
+      // cache partition would split again — which is the bug this whole change
+      // fixes). So the model can reach for it mid-loop, and it does.
+      //
+      // DELIBERATELY NOT AN EARLY EXIT. Its arguments are a complete case file
+      // and using them here would skip the closing call entirely — one model
+      // call saved per ticket. That is exactly the suppression trade measured in
+      // DECISIONS.md and reversed: stopping collection when the MODEL feels
+      // finished cost established facts. So this is mapped onto the existing
+      // "no tool calls" signal instead — stop collecting, then close as usual.
+      // Behaviour is unchanged from before this tool existed; only the cache
+      // partition moved.
+      const collectable = response.toolCalls.filter((call) => call.name !== FINALIZE_TOOL_NAME);
+      const finalised = collectable.length < response.toolCalls.length;
+      if (finalised) {
+        logger?.info?.('investigation.model_finalised_in_loop', {
+          ticketId: ticket.id,
+          afterCalls: run.ledger.length,
+          alongsideLookups: collectable.length
+        });
+      }
+      if (collectable.length === 0) {
         break;
       }
 
-      messages.push(response.message);
-      for (const call of response.toolCalls) {
+      // A finalise asked for ALONGSIDE a real lookup is dropped from the message
+      // that travels on: every tool_call in an assistant message must be
+      // answered by a tool result, and this one has no handler to answer it.
+      // The lookup is kept — the model wanting to finish is not a reason to
+      // throw away the call it made in the same breath.
+      messages.push(
+        finalised
+          ? {
+              ...response.message,
+              tool_calls: (response.message.tool_calls || []).filter(
+                (call) => call.function?.name !== FINALIZE_TOOL_NAME
+              )
+            }
+          : response.message
+      );
+      for (const call of collectable) {
         messages.push({
           role: 'tool',
           tool_call_id: call.id,
@@ -332,23 +383,34 @@ export function createInvestigator(
       model,
       system: SYSTEM_PROMPT,
       messages: [...messages, { role: 'user', content: closingPrompt(run) }],
-      tools: definitions,
-      toolChoice: 'none',
-      schema: CASE_FILE_SCHEMA,
-      schemaName: 'case_file',
+      tools: modelTools,
+      // THE CASE FILE COMES BACK AS A FORCED TOOL CALL, not as `response_format`.
+      // Forcing the tool gives the same guarantee `tool_choice: 'none'` plus a
+      // schema gave — the model cannot spend this turn asking for another lookup
+      // — while keeping the request in the same prompt-cache partition as the
+      // loop turns before it. Measured: 0% cached before, 96% after.
+      toolChoice: { type: 'function', function: { name: FINALIZE_TOOL_NAME } },
       maxTokens: 900,
       pass: 'investigate',
       ticketId: ticket.id ?? null
     });
 
-    if (!final.content) {
+    // The case file now arrives as the forced tool call's arguments. The client
+    // has already JSON-parsed them; `argsError` is how it reports arguments the
+    // model truncated or malformed, which for this call is the same failure the
+    // old `JSON.parse(final.content)` threw on.
+    //
+    // A failure throws: the runner counts the attempt and retries, exactly as it
+    // does for a failed categorisation. Guessing at a case file would be worse
+    // than not having one.
+    const finalCall = final.toolCalls.find((call) => call.name === FINALIZE_TOOL_NAME);
+    if (!finalCall) {
       throw new Error('Investigation returned no case file.');
     }
-
-    // A parse failure throws: the runner counts the attempt and retries, exactly
-    // as it does for a failed categorisation. Guessing at a case file would be
-    // worse than not having one.
-    const answer = JSON.parse(final.content);
+    if (finalCall.argsError) {
+      throw new Error(`Investigation case file was unparseable: ${finalCall.argsError}`);
+    }
+    const answer = finalCall.args;
     const escalation = escalationTriggers({ ticket, orderContext: ticket.resolvedContext || null });
 
     return buildCaseFile({

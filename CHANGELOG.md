@@ -10,6 +10,24 @@ Three sibling files carry the other halves, and this one deliberately does not d
 
 ---
 
+## The case file comes back as a tool, and the closing call starts caching (2026-09-07)
+
+**The closing investigation call cached 0% on 8 of 8 production tickets** while the loop turn immediately before it cached 64%, on a byte-identical prefix. Recorded since 2026-09-05 as real, reproducible and unexplained, after four hypotheses were tested and disproved.
+
+**The cause is `response_format`, and it PARTITIONS the cache rather than breaking it.** Five calls on ticket `9c7e0421` (#6668), messages and tools byte-identical throughout: `tool_choice: none` alone still cached **89.6%**; adding the `json_schema` response_format dropped it to **0%**; repeating that same closing shape cached **94.6%**. A request carrying a response_format reads and writes its own partition — and the investigation makes exactly one such call per ticket, so it could never hit.
+
+**Which is why the earlier hypotheses tested clean.** Both the schema and `max_tokens` tests measured a *repeated* closing shape. The sequence production actually runs — loop shape, then closing shape — had never been sent.
+
+**The case file now travels as a forced `finalize_investigation` tool call.** The same `CASE_FILE_SCHEMA`, carried as the tool's parameters, with `tool_choice` forcing it and no `response_format` anywhere. Forcing the tool gives the same guarantee `tool_choice: 'none'` plus a schema gave — the model cannot spend that turn asking for another lookup. Measured on the same ticket: **96.2% cached**, and **27 tokens smaller** than the response_format it replaces.
+
+**The tool is offered on every turn, and it has to be** — a tools array that differed between the loop and the closing call would split the partition again. So the model can reach for it mid-loop, and it does. **That is mapped onto the existing "no tool calls" signal, not used as an early exit**: its arguments are a complete case file and taking them would save a call, but that is exactly the suppression trade `DECISIONS.md` records as measured and reversed. Behaviour is unchanged; only the cache partition moved.
+
+**Appended in `investigate.mjs`, not in the registry.** `toolsFor()` stays the answer to "what can this ticket look up", which is what the empty-tool-set guard and the registry's scope tests read it as.
+
+**Worth ≈1,100–1,300 effective input tokens a ticket — ~17% of investigation input, ~13% of the per-ticket bill**, against the 8 production closing calls (mean 2,987 input, 0 cached) at ~95% hit and the 50% cached rate. About $2.80 per 1,000 tickets: a real percentage, a small sum at current volume.
+
+**`npm run probe:prompt-cache` reproduces both experiments** against the live API, reading the system prompt out of `investigate.mjs` so it cannot drift. **2013 tests pass.** Not yet run end to end against a real batch — `VALIDATION_LOG.md` item 18.
+
 ## An offer on YOUR product, when there is one (2026-09-04)
 
 **`lookupProductOffer`**: given the product a message is about, which offerable promotions cover it — split into one that is genuinely about that product and one that is a catalogue-wide sale. **The line is ten other products.** `UKLED20` covers one and is specific; `QIRINESS20` covers 94 and is not.

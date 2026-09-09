@@ -216,7 +216,7 @@ loops turns out to decide the sign of the whole thing.
 | cache threshold | 1,024 tokens |
 | cached input billed at | 50% of full rate — **the load-bearing assumption**, tested at 25% below |
 | cache warm | yes: a 50-ticket batch reuses the prefix within seconds |
-| prefix matching | exact, longest-prefix, no 128-token rounding |
+| prefix matching | exact, longest-prefix, no 128-token rounding — **WRONG, corrected 2026-09-07**: every cached value observed is a multiple of 128 (1,536 / 1,920 / 2,176 / 2,944 / 3,840), so caching is granular to 128 tokens and any break-even sum near the threshold is off by up to that much |
 | turns reaching 1 / 2 / 3 / 4 | 48 / 46 / 27 / 4 runs per 50 tickets (measured) |
 | investigation system prompt | 566 tokens (measured) |
 | turn inputs | 1,507 / 1,718 / 1,881 / 2,325 (measured) |
@@ -305,14 +305,21 @@ and **both are wrong**:
 
 Re-bucketing the production rows by burst rather than by hour — in case two runs
 of one ticket were being merged — gives the same table. The effect is real and
-its cause is unknown.
+its cause is unknown. **SOLVED 2026-09-07 — see below. It is the response
+schema, and hypothesis 1 tested clean because the test was wrong.**
 
-**Four hypotheses tested and all four disproved.** Each was tested against the
-real API, not modelled:
+One row in that sample is a failure, not a zero: `e5c77e51` turn 3 has
+`input_tokens = 0, succeeded = false, error_kind = http_429`. The closing call is
+0-cached in **8 of 8 successful** closings. Exclude failures or they will poison
+later samples.
+
+**Four hypotheses tested and all four disproved — and the first two were tested
+wrongly.** Each was run against the real API, not modelled:
 
 1. *The response schema changes the cache key.* A shared prefix sent as loop
    shape twice, then as closing shape, cached 94% then **88%** — the closing call
-   inherited the loop's prefix. Not the cause.
+   inherited the loop's prefix. Not the cause. **WRONG: this measured a REPEATED
+   closing shape, which does cache. See the 2026-09-07 section.**
 2. *`max_tokens` 800 vs 900 changes the key.* Same test with production's real
    values: the closing call cached **82%**, and dropping it back to 800 changed
    nothing meaningful. Not the cause.
@@ -355,24 +362,103 @@ itself is genuinely better instruction and is kept in
 `codex_plans/system-prompt-padding.patch` — re-apply it if it is ever wanted for
 answer quality, but never for cost.
 
-The instrumentation is worth rebuilding if this is picked up again: a hook in
-`request()` in `agent/src/llm/openai-client.mjs` printing a sha1 per message plus
-`cached_tokens`, behind `CACHE_DEBUG=1`. It turned three days of inference into one
-run.
+The `CACHE_DEBUG=1` hook was never committed and is gone. It is worth rebuilding
+if this is picked up again — a hash per message in `request()` in
+`agent/src/llm/openai-client.mjs` — but hash **the tools array and
+`response_format` too**, not only the messages. Hashing only the messages is
+exactly why the trace above could see that the prefix was identical and still not
+see what was different.
 
-### Test in this order, and do not skip the first
+### SOLVED 2026-09-07 — `response_format` PARTITIONS the cache
 
-1. **Record `cached_tokens`.** Everything above is arithmetic over an assumption
-   until this exists. `prompt_tokens` already includes cached tokens, so no
-   number currently in this file distinguishes a working cache from none at all.
-2. **Confirm the cached-input rate and the TTL.** The rate decides the sign for
-   the investigation. TTL decides whether any of this applies to live polling at
-   all: a batch reuses the prefix within seconds, a poll trickling one ticket
-   every few minutes may expire it between tickets and earn nothing — which would
-   make the saving a property of *scheduling* rather than of prompt design.
-3. **Only then consider extending a prefix**, single-call passes first, with
-   content chosen for the output it improves and measured on quality as well as
-   cost.
+Five calls against the live API with the real system prompt, real tools and the
+real `CASE_FILE_SCHEMA`, on ticket `9c7e0421` (#6668, `order/problem` L2).
+Messages and tools are byte-identical across calls 2–5:
+
+| call | shape | input | cached | hit |
+| --- | --- | --- | --- | --- |
+| 1 | loop, no history (warms) | 1,310 | 0 | 0% |
+| 2 | loop + tool history | 1,428 | 1,152 | 80.7% |
+| 3 | **only** `tool_choice: none` | 1,429 | 1,280 | **89.6%** |
+| 4 | production closing (adds `response_format`) | 1,624 | **0** | **0%** |
+| 5 | call 4 repeated | 1,624 | 1,536 | **94.6%** |
+
+**Call 3 clears `tool_choice`. Call 4 is the entire effect. Call 5 is the
+mechanism**: the closing shape caches perfectly off ANOTHER closing-shape call.
+A request carrying a `json_schema` response_format reads and writes a SEPARATE
+cache partition. The schema does not break caching — it moves it.
+
+**Which is why production is always 0.** Each ticket makes exactly ONE call in
+the schema partition. It writes an entry nothing ever reads: the next ticket
+diverges immediately after the 566-token system prompt, which is under the
+minimum. Every ticket pays to populate a cache entry that is then thrown away.
+
+**And why hypotheses 1 and 2 tested clean.** Both measured a *repeated* closing
+shape — call 5, not call 4. The one sequence production actually runs, loop shape
+then closing shape, was never sent.
+
+`response_format` also costs **+195 input tokens** (1,429 → 1,624): the schema is
+serialized into the prompt, and early enough to spoil the whole prefix.
+
+### The fix, measured before proposing it
+
+A permanent `finalize_investigation` tool carrying `CASE_FILE_SCHEMA` as its
+parameters, forced through `tool_choice` on the closing call, with no
+`response_format` anywhere. Same ticket:
+
+| call | shape | input | cached | hit |
+| --- | --- | --- | --- | --- |
+| A | loop t1, + finalize tool | 1,467 | 0 | 0% |
+| B | loop t2, + finalize tool | 1,585 | 1,408 | 88.8% |
+| C | forced finalize, no `response_format` | 1,597 | **1,536** | **96.2%** |
+
+It is also **smaller in raw tokens** than today's closing call (1,597 vs 1,624):
+a tool definition serializes cheaper than a response_format.
+
+**Worth**, against the 8 successful production closing calls (mean 2,987 input,
+0 cached), at ~95% hit and the 50% cached rate: ≈1,100–1,300 effective input
+tokens a ticket — **~17% of investigation input, ~13% of the per-ticket bill**,
+about $2.80 per 1,000 tickets at gpt-4o list. A real percentage and a small
+absolute sum: do it because it is four edits and permanent, not because it moves
+this month's total.
+
+**THE CATCH, and it is a behaviour change.** In call B the model, offered the
+tool under `tool_choice: auto`, finalised at loop turn 2 instead of calling
+another lookup — 887 bytes of valid case file. Today that name is unregistered
+and `run.fromModel` would fail on it. The loop must treat a
+`finalize_investigation` call as the signal it already reads from
+`toolCalls.length === 0`: break, and use those arguments as the case file.
+Arguably better than today, but it can shorten an investigation that would have
+made another lookup, so it needs the replay check the floor changes got.
+
+**Four edits, no new module** (`completeWithTools` already passes an object
+`toolChoice` straight through):
+
+1. `tool-registry.mjs` — append the definition in `toolsFor()`, so the tools
+   array is identical on every turn.
+2. `investigate.mjs:331` — drop `schema`/`schemaName`, set
+   `toolChoice: { type: 'function', function: { name: 'finalize_investigation' } }`.
+3. Read the case file from `final.toolCalls[0].args`, not `final.content`.
+4. Handle the loop calling `finalize_investigation` — the catch above.
+
+**Withdrawn:** `prompt_cache_key`. The request body carries none, and adding one
+would earn nothing — across tickets the prefix diverges after 566 tokens, so
+there is no entry to route to.
+
+### Still open on the cache
+
+- **The cached-input rate and the TTL.** The rate scales every number above. TTL
+  decides whether any of it survives live polling: a batch reuses a prefix within
+  seconds, a poll trickling one ticket every few minutes may expire it between
+  tickets — which would make the saving a property of *scheduling* rather than of
+  prompt design.
+- **Turn 1 is uncacheable and is ~40% of investigation input.** Nothing above
+  touches it. The only lever is a stable prefix longer than 1,024 tokens shared
+  across tickets, and the padding test says do not buy that with filler.
+- **One production counter-example.** Ticket `e297eb68` (account) has a *loop*
+  call that cached 0 despite going 3,406 → 3,552. The partition finding does not
+  explain it. One row, so it may be noise — but any future theory has to survive
+  it.
 
 ---
 
@@ -406,18 +492,30 @@ matching is expensive; it is not.
 
 ## The order I would work it
 
-1. **Record `cached_tokens`.** One field. Turns the largest cost centre from
-   guesswork into data, and may show a discount already being earned — or a
-   simple prompt reordering that would earn one.
-2. **Store the decomposer's task count.** One field. The prerequisite for the
-   18% idea, and worthless to argue about without it.
+Reordered 2026-09-07. Item 1 — record `cached_tokens` — is **done**:
+`llm_usage.cached_input_tokens` exists and `npm run report:prompt-cache` reads
+it. It paid for itself immediately: it is what made the closing-call hole
+visible, and then measurable.
+
+1. **Ship the `finalize_investigation` fix.** Four edits, measured at 96% cache
+   on the call that gets 0% today, ~17% of investigation input. The only one of
+   these that changes behaviour, and the only one with a number already attached.
+   Owes the replay check before it counts as proven.
+2. **Store the decomposer's task count.** One field. Still the prerequisite for
+   the 18% idea, and still worthless to argue about without it. Now the largest
+   *unmeasured* lever in the file.
 3. **Find out whether the spam gate calls a model**, and record it if so. It runs
-   on more messages than anything else in the pipeline.
+   on more messages than anything else in the pipeline and is still invisible
+   here.
 4. **Keep promoting near-certain lookups to the floor.** Proven: 19% in one day.
    `report:collection-planner` is the instrument.
-5. Only then look at trimming the conversation, and only with the evidence-id
+5. **Confirm the cached-input rate and the TTL.** Not a lever of its own — it
+   scales items 1 and 4, and decides whether caching survives live polling.
+6. Only then look at trimming the conversation, and only with the evidence-id
    constraint above firmly in mind.
 
-Nothing in items 1–3 changes behaviour. They are all measurement, and this file
-exists because the two cost ideas that looked most obvious — suppression, and
-trimming output — were both measured and turned out to be wrong.
+Items 2, 3 and 5 change no behaviour. They are measurement, and this file exists
+because the cost ideas that looked most obvious — suppression, trimming output,
+and padding the prefix — were each measured and each turned out to be wrong. The
+closing-call fix is the first one that survived being measured, and it only
+surfaced because a field was added that made the loss visible.

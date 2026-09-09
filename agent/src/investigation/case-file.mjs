@@ -256,6 +256,8 @@ export const CAVEAT_CODES = Object.keys(CAVEATS);
  * Strict mode requires every property in `required` and forbids numeric bounds,
  * so "absent" is expressed as null and enums do the constraining.
  */
+export const FINALIZE_TOOL_NAME = 'finalize_investigation';
+
 export const CASE_FILE_SCHEMA = {
   type: 'object',
   additionalProperties: false,
@@ -309,6 +311,35 @@ export const CASE_FILE_SCHEMA = {
     }
   },
   required: ['verdict', 'established', 'unverified', 'missing', 'handoff']
+};
+
+/**
+ * The case file, carried as a TOOL rather than as `response_format`.
+ *
+ * WHY IT IS A TOOL. Measured 2026-09-07: a request carrying a `json_schema`
+ * response_format reads and writes a SEPARATE prompt-cache partition from one
+ * without it. The investigation makes exactly one such call per ticket, so it
+ * could never hit — the closing call cached 0% on 8 of 8 production tickets
+ * while the loop turn before it cached 64%. Carrying the same schema as tool
+ * parameters keeps every call of a run in one partition: the same closing call
+ * measured 96% cached, and 27 tokens smaller. See
+ * codex_plans/Model_Cost_Notes.md § SOLVED 2026-09-07.
+ *
+ * It is NOT in the tool registry: it has no handler, is never executed, and is
+ * appended to the model's tool list by the investigator alone. `toolsFor()`
+ * stays the answer to "what can this ticket look up", which is what the
+ * empty-tool-set guard and the scope tests read it as.
+ */
+export const FINALIZE_TOOL = {
+  type: 'function',
+  function: {
+    name: FINALIZE_TOOL_NAME,
+    description:
+      'Produis le dossier final à partir des éléments établis. ' +
+      "N'appelle cet outil que lorsque l'enquête est terminée.",
+    parameters: CASE_FILE_SCHEMA,
+    strict: true
+  }
 };
 
 /**

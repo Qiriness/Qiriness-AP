@@ -40,6 +40,48 @@ these.
 as its own item: `llm_usage` (item 14), `categorisation_review` (item 15), and
 `category_forwarding` / `ticket_forwards` (item 1).
 
+## 18. The case-file tool caches in a probe, not yet in a real batch (built 2026-09-07)
+
+The closing investigation call stopped carrying `response_format` and now returns
+the case file as a forced `finalize_investigation` tool call, to keep it in the
+same prompt-cache partition as the loop turns. See `CHANGELOG.md` 2026-09-07 and
+`codex_plans/Model_Cost_Notes.md` § SOLVED 2026-09-07.
+
+**What is proven.** 2013 unit tests, including that the tools array is identical
+on every turn and that a mid-loop finalise still closes normally. And
+`npm run probe:prompt-cache`, twice, against the live API: the closing shape
+caches **96.2%** where production measured 0%.
+
+**What is not.** The probe replays a hand-built conversation. **No real ticket
+has run through the changed `investigate.mjs` yet**, so nothing in `llm_usage`
+shows the fix working in the pass itself.
+
+**The checks to run, in order:**
+
+1. **Run a batch and re-read the cache report.** `npm run report:prompt-cache`
+   after ≥10 tickets. The claim to confirm is that the LAST investigate call per
+   ticket now reports a non-zero `cached_input_tokens` — it was 0 on 8 of 8.
+   Exclude failed rows: one 2026-09-05 row (`e5c77e51`) has `input_tokens = 0`
+   and `error_kind = http_429`, and counting it as a zero would flatter or spoil
+   the result depending on which side it lands.
+2. **Check the case files still parse and are no worse.** The schema is
+   unchanged, but it now arrives as tool arguments rather than message content,
+   and `strict` on a function is not identical machinery to `strict` on a
+   response format. Compare verdicts and established-fact counts against the
+   runs stored before the change.
+3. **THE ONE THAT DECIDES IT — how often does the model finalise mid-loop, and
+   does it cost a lookup?** The tool is offered on every turn, so it can. Grep
+   the logs for `investigation.model_finalised_in_loop`. Today that is treated
+   exactly as an empty turn, so a run that finalises early stops collecting
+   early — which is the suppression trade `DECISIONS.md` records as measured and
+   REVERSED (11 lookups saved against 2 established facts lost). If this fires
+   often, `report:collection-replay` is the instrument, and the answer may be to
+   withhold the tool until the budget is spent — at the cost of splitting the
+   partition again on the turns before that.
+
+**Not blocking the fix**, which is a strict improvement on cost with behaviour
+mapped onto an existing signal. Blocking the claim that it is free.
+
 ## 17. The agent test chat has never been run against live data (built 2026-08-22)
 
 `08_testing.sql` **has been applied** (2026-08-22) and verified against the

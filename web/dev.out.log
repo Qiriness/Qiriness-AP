@@ -10,82 +10,57 @@
     · outputFileTracingRoot
 
  ✓ Starting...
- ✓ Ready in 14.5s
- ○ Compiling /agent-setup/rules ...
- ✓ Compiled /agent-setup/rules in 36.6s (709 modules)
- GET /agent-setup/rules 200 in 17484ms
- GET /agent-setup/rules 200 in 40242ms
- GET /agent-setup/rules 200 in 921ms
- ✓ Compiled /api/policy/rules in 441ms (361 modules)
- GET /api/policy/rules 200 in 3169ms
- GET /agent-setup/rules 200 in 1311ms
- ✓ Compiled in 1028ms (632 modules)
- ✓ Compiled in 587ms (632 modules)
- ✓ Compiled in 521ms (632 modules)
- ✓ Compiled in 563ms (632 modules)
- GET /agent-setup/rules 200 in 2376ms
- ✓ Compiled in 1173ms (632 modules)
- ✓ Compiled in 301ms (357 modules)
- ✓ Compiled in 398ms (632 modules)
- GET /agent-setup/rules 200 in 1138ms
- GET /agent-setup/rules 200 in 636ms
- GET /agent-setup/rules 200 in 649ms
- ✓ Compiled in 479ms (632 modules)
- ✓ Compiled in 662ms (632 modules)
- GET /agent-setup/rules 200 in 3427ms
- ✓ Compiled /api/policy/rules in 373ms (361 modules)
- GET /api/policy/rules 200 in 3146ms
- GET /agent-setup/rules 200 in 2390ms
- POST /api/policy/rules 201 in 1174ms
- ✓ Compiled /api/policy/rules/[id] in 423ms (361 modules)
- PATCH /api/policy/rules/c9204362-ff08-4d75-b14c-3dfad9fbc486 200 in 3801ms
- PATCH /api/policy/rules/46a156de-85ff-4bcf-bb4d-31cec602ab1a 200 in 2766ms
- ✓ Compiled in 621ms (357 modules)
- ✓ Compiled in 722ms (632 modules)
- ✓ Compiled in 425ms (632 modules)
- ✓ Compiled in 701ms (632 modules)
- ✓ Compiled in 1470ms (642 modules)
- GET /agent-setup/rules 200 in 881ms
- ✓ Compiled /api/policy/situations/[key] in 268ms (361 modules)
- PATCH /api/policy/situations/D-02 200 in 3505ms
- PATCH /api/policy/situations/D-02 200 in 466ms
- ✓ Compiled in 756ms (357 modules)
- ✓ Compiled in 864ms (357 modules)
- ✓ Compiled in 3.4s (357 modules)
- ○ Compiling /agent-setup/promotions ...
- ✓ Compiled /agent-setup/promotions in 1959ms (652 modules)
- ✓ Compiled /api/promotions in 392ms (367 modules)
- PATCH /api/promotions 200 in 2642ms
- ✓ Compiled in 599ms (357 modules)
- GET /agent-setup/rules 200 in 4945ms
- ✓ Compiled in 896ms (357 modules)
- GET /agent-setup/rules 200 in 1237ms
- ○ Compiling /agent-setup ...
- ✓ Compiled /agent-setup in 5.2s (1006 modules)
- ○ Compiling /api/recommendations ...
- ✓ Compiled /api/recommendations in 550ms (425 modules)
- GET /api/recommendations 200 in 2947ms
- ○ Compiling /tickets ...
- ✓ Compiled /tickets in 1391ms (816 modules)
- ✓ Compiled /api/tickets/[id]/thread in 387ms (440 modules)
- ✓ Compiled (442 modules)
- GET /api/tickets/4f4b49e4-f1bf-4ccc-b985-89262b08f3fd 200 in 9859ms
- GET /api/tickets/4f4b49e4-f1bf-4ccc-b985-89262b08f3fd/thread 200 in 9933ms
- GET /api/tickets/cc6f2217-be56-482e-b3d2-84ff77b779e1 200 in 407ms
- GET /api/tickets/cc6f2217-be56-482e-b3d2-84ff77b779e1/thread 200 in 500ms
- GET /api/tickets/4fdeb1b3-dc47-4a7c-bb06-5b6289175bff 200 in 609ms
- GET /api/tickets/4fdeb1b3-dc47-4a7c-bb06-5b6289175bff/thread 200 in 640ms
- GET /api/tickets/db1409ec-e7d1-4177-9f54-9fc089652ca0 200 in 532ms
- GET /api/tickets/db1409ec-e7d1-4177-9f54-9fc089652ca0/thread 200 in 701ms
- GET /api/tickets/9e232eea-7360-4050-9b7c-e6ecf20a87bf 200 in 418ms
- GET /api/tickets/9e232eea-7360-4050-9b7c-e6ecf20a87bf/thread 200 in 522ms
- GET /agent-setup/rules 200 in 2111ms
- ○ Compiling /api/policy/rules ...
- ✓ Compiled /api/policy/rules in 744ms (436 modules)
- POST /api/policy/rules 201 in 1661ms
- POST /api/policy/rules 201 in 348ms
+ ✓ Ready in 28.7s
+ ○ Compiling / ...
+ ✓ Compiled /tickets in 54.3s (788 modules)
+ GET / 307 in 13473ms
+ GET /agent-setup 200 in 1509ms
+ GET /tickets 200 in 17648ms
  ○ Compiling /api/tickets/[id]/thread ...
- ✓ Compiled /api/tickets/[id]/thread in 1921ms (436 modules)
- ✓ Compiled (438 modules)
- GET /api/tickets/b0246791-5442-401e-8964-2a1335cf8661 200 in 5058ms
- GET /api/tickets/b0246791-5442-401e-8964-2a1335cf8661/thread 200 in 5473ms
+ ✓ Compiled /api/tickets/[id]/thread in 553ms (425 modules)
+ ✓ Compiled (427 modules)
+ GET /api/tickets/dfba7140-18a9-4269-b303-b75239815296 200 in 6069ms
+ GET /api/tickets/dfba7140-18a9-4269-b303-b75239815296/thread 200 in 6274ms
+ ○ Compiling /api/recommendations ...
+ ✓ Compiled /api/recommendations in 848ms (419 modules)
+ GET /api/recommendations 200 in 4896ms
+ ✓ Compiled /api/knowledge/articles in 466ms (421 modules)
+ POST /api/knowledge/articles 201 in 2035ms
+ ✓ Compiled /api/knowledge/articles/[id] in 404ms (419 modules)
+ PATCH /api/knowledge/articles/790c8e35-fa8d-46f2-94f3-773d82cd5992 500 in 5432ms
+ PATCH /api/knowledge/articles/790c8e35-fa8d-46f2-94f3-773d82cd5992 500 in 1636ms
+ GET /agent-setup 200 in 1198ms
+ ✓ Compiled /api/recommendations in 389ms (423 modules)
+ GET /api/recommendations 200 in 1087ms
+ POST /api/knowledge/articles 201 in 460ms
+ PATCH /api/knowledge/articles/a2b414ab-b07c-49a7-bbbf-ba3598689596 500 in 1458ms
+ POST /api/knowledge/articles 201 in 582ms
+ ○ Compiling /agent-setup/rules ...
+ ✓ Compiled /agent-setup/rules in 3.5s (816 modules)
+ ○ Compiling /agent-setup/parameters ...
+ ✓ Compiled /agent-setup/parameters in 5.9s (817 modules)
+ ○ Compiling /agent-setup/promotions ...
+ ✓ Compiled /agent-setup/promotions in 1331ms (827 modules)
+ ○ Compiling /agent-setup/recommendations ...
+ ✓ Compiled /agent-setup/recommendations in 1190ms (839 modules)
+ ○ Compiling /conversations ...
+ ✓ Compiled /conversations in 3.5s (911 modules)
+ ○ Compiling /insights ...
+ ✓ Compiled /insights in 1456ms (806 modules)
+ ○ Compiling /insights/fulfilment ...
+ ✓ Compiled /insights/fulfilment in 1941ms (855 modules)
+ ○ Compiling /insights/support ...
+ ✓ Compiled /insights/support in 3.1s (846 modules)
+ ○ Compiling /api/insights/support/marketable-contacts ...
+ ✓ Compiled /api/insights/support/marketable-contacts in 1530ms (412 modules)
+ GET /api/insights/support/marketable-contacts 200 in 6040ms
+ ○ Compiling /insights/customers ...
+ ✓ Compiled /insights/customers in 2.4s (844 modules)
+ ○ Compiling /insights/agent ...
+ ✓ Compiled /insights/agent in 2.3s (840 modules)
+ ○ Compiling / ...
+ ✓ Compiled / in 1159ms (379 modules)
+ GET / 307 in 1754ms
+ ○ Compiling /agent-setup ...
+ ✓ Compiled /agent-setup in 1987ms (454 modules)
+ GET /agent-setup 200 in 7548ms

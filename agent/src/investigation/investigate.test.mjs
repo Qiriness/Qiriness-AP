@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { createInvestigator } from './investigate.mjs';
+import { FINALIZE_TOOL_NAME } from './case-file.mjs';
 import { TOOL_NAMES } from './investigation-rules.mjs';
 
 const PRODUCT_TICKET = {
@@ -49,6 +50,34 @@ function buildOpenAI(turns) {
       sent.push(request);
       const turn = turns[index] || turns[turns.length - 1];
       index += 1;
+
+      // A scripted turn carrying `content` and no tool calls is the CLOSING
+      // turn. Since 2026-09-07 the case file comes back as a forced
+      // `finalize_investigation` tool call rather than as message content — see
+      // case-file.mjs § FINALIZE_TOOL — so the double emits it in that shape
+      // while tests go on writing the case file as a JSON string.
+      if (turn.content !== undefined && !turn.toolCalls) {
+        let args = null;
+        let argsError = null;
+        try {
+          args = JSON.parse(turn.content);
+        } catch (error) {
+          argsError = error.message;
+        }
+        const raw = {
+          id: 'final',
+          type: 'function',
+          function: { name: FINALIZE_TOOL_NAME, arguments: turn.content }
+        };
+        return {
+          message: { role: 'assistant', content: null, tool_calls: [raw] },
+          content: null,
+          toolCalls: [{ id: 'final', name: FINALIZE_TOOL_NAME, args, argsError }],
+          finishReason: null,
+          usage: null
+        };
+      }
+
       return {
         message: { role: 'assistant', content: turn.content ?? null, tool_calls: turn.rawToolCalls },
         content: turn.content ?? null,
@@ -231,7 +260,7 @@ test('malformed arguments are handed back to the model rather than thrown', asyn
   assert.match(toolMessage.content, /Arguments invalides/);
 });
 
-test('the final turn forbids further tool calls and demands the schema', async () => {
+test('the final turn forces the case-file tool instead of a response schema', async () => {
   const registry = buildRegistry({ [TOOL_NAMES.SEARCH_KNOWLEDGE]: async () => OK_RESULT });
   const openai = buildOpenAI([{ content: caseFileAnswer() }]);
   const { investigate } = createInvestigator(openai, registry, { model: 'm' });
@@ -239,8 +268,62 @@ test('the final turn forbids further tool calls and demands the schema', async (
   await investigate({ ...PRODUCT_TICKET, category: 'other' });
 
   const final = openai.sent.at(-1);
-  assert.equal(final.toolChoice, 'none');
-  assert.equal(final.schemaName, 'case_file');
+  assert.deepEqual(final.toolChoice, {
+    type: 'function',
+    function: { name: FINALIZE_TOOL_NAME }
+  });
+  // No `response_format` anywhere: carrying one puts the request in a different
+  // prompt-cache partition from the loop turns, which cost 100% of the closing
+  // call's cache. See codex_plans/Model_Cost_Notes.md § SOLVED 2026-09-07.
+  assert.equal(final.schema, undefined);
+  assert.equal(final.schemaName, undefined);
+});
+
+test('the tool array is identical on every turn, closing call included', async () => {
+  // THE PROPERTY THE CACHE FIX RESTS ON. A tools array that differs between the
+  // loop and the closing call splits the cache partition again, which is the
+  // whole bug — so this is asserted rather than left to reading.
+  const registry = buildRegistry({ [TOOL_NAMES.SEARCH_KNOWLEDGE]: async () => OK_RESULT });
+  const openai = buildOpenAI([
+    { toolCalls: [{ id: 'c1', name: TOOL_NAMES.SEARCH_KNOWLEDGE, args: {}, argsError: null }] },
+    { content: caseFileAnswer() }
+  ]);
+  const { investigate } = createInvestigator(openai, registry, { model: 'm' });
+
+  await investigate({ ...PRODUCT_TICKET, category: 'other' });
+
+  assert.ok(openai.sent.length >= 2);
+  const shapes = openai.sent.map((request) => JSON.stringify(request.tools));
+  assert.equal(new Set(shapes).size, 1);
+  assert.ok(openai.sent[0].tools.some((tool) => tool.function.name === FINALIZE_TOOL_NAME));
+});
+
+test('a model that finalises mid-loop stops collecting but still closes', async () => {
+  // It CAN reach for the tool early, because the tool is offered on every turn.
+  // Mapped onto the existing "no tool calls" signal rather than used as an early
+  // exit: taking its arguments here would be the suppression trade DECISIONS.md
+  // records as measured and reversed.
+  const registry = buildRegistry({ [TOOL_NAMES.SEARCH_KNOWLEDGE]: async () => OK_RESULT });
+  const openai = buildOpenAI([
+    {
+      toolCalls: [{ id: 'f1', name: FINALIZE_TOOL_NAME, args: {}, argsError: null }],
+      rawToolCalls: [
+        { id: 'f1', type: 'function', function: { name: FINALIZE_TOOL_NAME, arguments: '{}' } }
+      ]
+    },
+    { content: caseFileAnswer() }
+  ]);
+  const { investigate } = createInvestigator(openai, registry, { model: 'm' });
+
+  const caseFile = await investigate({ ...PRODUCT_TICKET, category: 'other' });
+
+  // Two calls: the loop turn that finalised, then the closing call that follows
+  // it exactly as it follows an empty turn today.
+  assert.equal(openai.sent.length, 2);
+  assert.equal(caseFile.verdict, 'answerable');
+  // The finalise never reached a handler, so it left no ledger entry of its own
+  // (the entry that IS there is the opening move, which runs before the model).
+  assert.ok(caseFile.toolCalls.every((call) => call.tool !== FINALIZE_TOOL_NAME));
 });
 
 test('claims citing a call that never ran are dropped from the case file', async () => {
