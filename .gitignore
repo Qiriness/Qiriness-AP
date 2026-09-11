@@ -8,6 +8,13 @@
 node_modules/
 npm-debug.log*
 
+# Dev-server output. Eleven of these were tracked, and a running dev server
+# rewrites them constantly -- so every checkout and merge tripped over "local
+# changes would be overwritten", which is what forced a branch-ref push instead
+# of a normal merge. Machine-local process output, no value in history.
+# Covers npm-debug.log* above too; that line is kept because it is conventional.
+*.log
+
 # Review reports generated from live data. They quote real customer messages in
 # full — names, phone numbers, order references — which is the whole reason they
 # are useful and the whole reason they must not be committed.
