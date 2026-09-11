@@ -17,6 +17,12 @@ import {
 import { syncShop } from './lib/shop-sync-service.mjs';
 import { mapOrder } from './lib/shopify-sync-mappers.mjs';
 import { hashIdentifier, recordDataAccessEvent } from './lib/compliance-audit.mjs';
+import {
+  describeRetentionPolicy,
+  isIndefinite,
+  orderSyncMonths,
+  readRetentionPolicy
+} from './lib/order-retention.mjs';
 
 if (isDirectRun()) {
   main().catch((error) => {
@@ -54,22 +60,31 @@ export async function runShopifyOrdersSync({ args, shopify, supabase, shopRow, s
     ? new Map()
     : await loadCustomerIdMap({ supabase, shopId: shopRow.id });
 
-  // State what window this run covers. Unbounded is a real choice with a real
-  // cost, so it should never be something you discover afterwards from the
-  // order count.
+  // The shop's retention setting decides both how long rows live and how far
+  // back this run asks Shopify. Read once, here, and carried through the mapper
+  // so every row on this run is stamped under the same policy.
+  const retentionPolicy = readRetentionPolicy(shopRow);
+  const keepsIndefinitely = isIndefinite(retentionPolicy);
+
+  // State what window this run covers and what it will keep. Unbounded is a real
+  // choice with a real cost, so neither should ever be something you discover
+  // afterwards from the order count.
   const months =
-    args.orderSinceMonths === undefined ? ORDER_SYNC_DEFAULT_MONTHS : args.orderSinceMonths;
+    args.orderSinceMonths === undefined ? orderSyncMonths(retentionPolicy) : args.orderSinceMonths;
   const filter = orderSyncQuery(months);
+  console.log(`Retention: orders are ${describeRetentionPolicy(retentionPolicy)}.`);
   console.log(
     filter
       ? `Fetching orders updated in the last ${months} months (${filter}). Use --all-orders for the full history.`
-      : 'Fetching the FULL order history (--all-orders). Retention still deletes anything past its window.'
+      : keepsIndefinitely
+        ? 'Fetching the FULL order history: this shop keeps orders indefinitely, so there is no window to bound it to.'
+        : 'Fetching the FULL order history (--all-orders). Retention still deletes anything past its window.'
   );
 
   do {
-    const page = await fetchOrderPage(shopify, args, cursor);
+    const page = await fetchOrderPage(shopify, args, cursor, months);
     const orderRows = page.orders.nodes.map((order) => (
-      mapOrder(order, shopRow.id, syncedAt, customerIdByShopifyId)
+      mapOrder(order, shopRow.id, syncedAt, customerIdByShopifyId, retentionPolicy)
     ));
 
     totalOrders += orderRows.length;
@@ -105,7 +120,13 @@ export async function runShopifyOrdersSync({ args, shopify, supabase, shopRow, s
     }
   } while (cursor);
 
-  if (!args.dryRun) {
+  // SKIPPED ENTIRELY WHEN RETENTION IS INDEFINITE rather than relied on to match
+  // nothing. Every row written above already carries a null delete date, so the
+  // query would be a no-op — but a row stamped under a previous policy and not
+  // seen by this run would still be sitting there with an old date on it, and
+  // this pass would delete it. The guard is what makes raising retention safe
+  // before the backfill has caught up.
+  if (!args.dryRun && !keepsIndefinitely) {
     deletedExpiredOrders = await deleteExpiredOrders({
       supabase,
       shopId: shopRow.id,

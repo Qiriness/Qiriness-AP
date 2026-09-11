@@ -1,12 +1,19 @@
 import { stripUndefined } from './collections.mjs';
 import { hashIdentifier, maskEmail } from './compliance-audit.mjs';
+import { DEFAULT_RETENTION_POLICY, retentionDeleteAfter } from './order-retention.mjs';
 import { cleanJsonValue, cleanTextValue } from './text-cleaning.mjs';
 import { trackingNumbersFromFulfillments } from './tracking-number.mjs';
 
 const ACTIVE_RETURN_STATUSES = new Set(['OPEN', 'REQUESTED']);
 const TERMINAL_RETURN_STATUSES = new Set(['CANCELED', 'CLOSED', 'DECLINED']);
 
-export function mapOrder(order, shopId, syncedAt, customerIdByShopifyId = new Map()) {
+export function mapOrder(
+  order,
+  shopId,
+  syncedAt,
+  customerIdByShopifyId = new Map(),
+  retentionPolicy = DEFAULT_RETENTION_POLICY
+) {
   const customer = order.customer || null;
   const customerShopifyId = customer?.id || null;
   const lineItems = order.lineItems?.nodes || [];
@@ -17,7 +24,7 @@ export function mapOrder(order, shopId, syncedAt, customerIdByShopifyId = new Ma
   const mappedFulfillments = cleanJsonValue(fulfillments.map(mapFulfillment));
   const returns = order.returns?.nodes || [];
   const refunds = order.refunds || [];
-  const retention = calculateOrderRetention(order);
+  const retention = calculateOrderRetention(order, retentionPolicy);
 
   return stripUndefined({
     shop_id: shopId,
@@ -75,7 +82,14 @@ export function mapOrder(order, shopId, syncedAt, customerIdByShopifyId = new Ma
   });
 }
 
-export function calculateOrderRetention(order) {
+/**
+ * Why this order's retention clock started, and when it runs out.
+ *
+ * The rule names the REASON only; `order-retention.mjs` owns the duration and
+ * returns null for it when the shop keeps orders indefinitely. See that module
+ * for why the two were separated.
+ */
+export function calculateOrderRetention(order, retentionPolicy = DEFAULT_RETENTION_POLICY) {
   const fulfillments = order.fulfillments || [];
   const returns = order.returns?.nodes || [];
   const refunds = order.refunds || [];
@@ -102,8 +116,8 @@ export function calculateOrderRetention(order) {
       deliveredAt,
       returnRefundOpenedAt,
       returnRefundCompletedAt: null,
-      retentionRule: 'return_refund_open_plus_6_months',
-      retentionDeleteAfter: addMonths(returnRefundOpenedAt || orderAnchor, 6)
+      retentionRule: 'return_refund_open',
+      retentionDeleteAfter: retentionDeleteAfter(returnRefundOpenedAt || orderAnchor, retentionPolicy)
     };
   }
 
@@ -112,8 +126,8 @@ export function calculateOrderRetention(order) {
       deliveredAt,
       returnRefundOpenedAt,
       returnRefundCompletedAt,
-      retentionRule: 'return_refund_completed_plus_3_months',
-      retentionDeleteAfter: addMonths(returnRefundCompletedAt, 3)
+      retentionRule: 'return_refund_completed',
+      retentionDeleteAfter: retentionDeleteAfter(returnRefundCompletedAt, retentionPolicy)
     };
   }
 
@@ -122,8 +136,8 @@ export function calculateOrderRetention(order) {
       deliveredAt,
       returnRefundOpenedAt: null,
       returnRefundCompletedAt: null,
-      retentionRule: 'delivered_plus_3_months',
-      retentionDeleteAfter: addMonths(deliveredAt, 3)
+      retentionRule: 'delivered',
+      retentionDeleteAfter: retentionDeleteAfter(deliveredAt, retentionPolicy)
     };
   }
 
@@ -131,8 +145,8 @@ export function calculateOrderRetention(order) {
     deliveredAt: null,
     returnRefundOpenedAt: null,
     returnRefundCompletedAt: null,
-    retentionRule: 'undelivered_plus_6_months',
-    retentionDeleteAfter: addMonths(orderAnchor, 6)
+    retentionRule: 'undelivered',
+    retentionDeleteAfter: retentionDeleteAfter(orderAnchor, retentionPolicy)
   };
 }
 
@@ -141,11 +155,14 @@ export function deriveOrderStatus(order, retention = calculateOrderRetention(ord
     return 'cancelled';
   }
 
-  if (retention.retentionRule === 'return_refund_open_plus_6_months') {
+  // These ask WHY the clock started, which is all they ever wanted to know. They
+  // used to compare against duration-bearing names, so a change of period
+  // silently broke the status derivation as well as the constraint.
+  if (retention.retentionRule === 'return_refund_open') {
     return 'return_refund_in_progress';
   }
 
-  if (retention.retentionRule === 'return_refund_completed_plus_3_months') {
+  if (retention.retentionRule === 'return_refund_completed') {
     return 'return_refund_completed';
   }
 
@@ -365,18 +382,4 @@ function selectDate(values, compare) {
   }
 
   return selected ? selected.toISOString() : null;
-}
-
-function addMonths(value, months) {
-  if (!value) {
-    return null;
-  }
-
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return null;
-  }
-
-  date.setUTCMonth(date.getUTCMonth() + months);
-  return date.toISOString();
 }

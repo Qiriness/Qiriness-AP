@@ -1,0 +1,119 @@
+# Nightly Shopify -> Supabase sync.
+#
+# WHY THIS EXISTS AT ALL. `npm run sync:shopify:nightly` has always been a manual
+# command -- README lists job scheduling as pending, and SYNC_CRON was only ever
+# recorded as metadata on the integration event, read by nothing. So the data was
+# only as fresh as the last time somebody remembered. The order table stopping on
+# 2026-08-16 while the store kept selling is what that looks like.
+#
+# WHY HERE RATHER THAN ON A MACHINE. A scheduled task on a desktop runs only when
+# the desktop is on, and a missed night is silent. This is meant to move to the
+# app server when there is one: the job is a single npm script, so that migration
+# is a cron line, not a rewrite.
+#
+# CREDENTIALS. Everything below comes from repository secrets -- nothing is
+# committed. The Supabase secret key is service-role and bypasses RLS, so it must
+# be a repository secret (or an environment secret with required reviewers), not
+# a variable, and this workflow must never be triggered by `pull_request`, which
+# would expose it to a fork.
+#
+# The four that must exist, verified working locally on 2026-09-11:
+#   SHOPIFY_STORE_DOMAIN, SHOPIFY_CLIENT_ID, SHOPIFY_CLIENT_SECRET, SUPABASE_URL,
+#   SUPABASE_SECRET_KEY
+# `loadConfig` throws by name if any is missing, so a misconfigured run fails on
+# the first line rather than half-syncing.
+
+name: Nightly Shopify sync
+
+on:
+  schedule:
+    # 02:00 UTC, matching the SYNC_CRON default. GitHub cron is UTC-only and does
+    # not observe Europe/London, so this drifts an hour against local time across
+    # BST -- deliberately accepted: the run reconciles a window, it does not
+    # depend on the hour it starts.
+    - cron: '0 2 * * *'
+  # A manual button, so a sync can be forced without waiting for the schedule and
+  # without anyone needing a local checkout.
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Fetch and report without writing to Supabase'
+        type: boolean
+        default: false
+
+# A long sync must never overlap the next scheduled one: both would upsert the
+# same rows, and the retention purge would run twice against a moving target.
+concurrency:
+  group: nightly-shopify-sync
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    # Shopify pagination over thousands of orders is slow, and an indefinite
+    # retention window means no date bound at all on the order query. The default
+    # 360-minute cap would let a hung run burn six hours before anyone noticed.
+    timeout-minutes: 60
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      # `ci` rather than `install`: the lockfile is the point of running this
+      # unattended. A sync that silently picked up a new minor of `pg` overnight
+      # is not a sync anyone can reason about afterwards.
+      - run: npm ci
+
+      # The suite is fast, needs no database, and covers the mappers this run is
+      # about to write rows with. Cheaper than discovering a bad mapping in
+      # production data at 2am.
+      - run: npm test
+
+      - name: Sync Shopify into Supabase
+        env:
+          SHOPIFY_STORE_DOMAIN: ${{ secrets.SHOPIFY_STORE_DOMAIN }}
+          # THIS SHOP AUTHENTICATES WITH THE CLIENT PAIR, not a long-lived admin
+          # token: `.env.local` has no SHOPIFY_ADMIN_API_ACCESS_TOKEN, so
+          # `createShopifyClient` mints a fresh access token from these two on
+          # every run. That is the better arrangement for an unattended job --
+          # there is no stored token to quietly expire between nightly runs, and
+          # the only thing that can go stale is the client secret itself.
+          SHOPIFY_CLIENT_ID: ${{ secrets.SHOPIFY_CLIENT_ID }}
+          SHOPIFY_CLIENT_SECRET: ${{ secrets.SHOPIFY_CLIENT_SECRET }}
+          # Optional, and left as a variable rather than a secret because an API
+          # version is not sensitive. Unset falls back to DEFAULT_API_VERSION.
+          SHOPIFY_API_VERSION: ${{ vars.SHOPIFY_API_VERSION }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+          APP_ENV: production
+          SYNC_CRON: '0 2 * * *'
+          SYNC_TIMEZONE: UTC
+        run: |
+          if [ "${{ inputs.dry_run }}" = "true" ]; then
+            npm run sync:shopify:nightly -- --dry-run
+          else
+            npm run sync:shopify:nightly
+          fi
+
+      # The run log is inside the job; this puts the headline on the run itself so
+      # a failure is legible from the Actions list without opening it.
+      - name: Record the outcome
+        if: always()
+        run: |
+          {
+            echo "### Nightly Shopify sync"
+            echo ""
+            echo "- Result: **${{ job.status }}**"
+            echo "- Started: $(date -u '+%Y-%m-%d %H:%M UTC')"
+            echo "- Dry run: ${{ inputs.dry_run || false }}"
+            echo ""
+            echo "Counts are in the sync step's log. Retention policy is stated on"
+            echo "its first line, and is the shop setting, not a constant here."
+          } >> "$GITHUB_STEP_SUMMARY"

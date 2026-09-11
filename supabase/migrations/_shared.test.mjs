@@ -25,6 +25,21 @@ export const FILES = [
   '09_parameters'
 ];
 
+/**
+ * Incremental migrations, which are NOT part of the baseline and deliberately
+ * not in `FILES`.
+ *
+ * The baseline invariants above are that these files create schema and never
+ * migrate data, and that each states its final shape with no corrective
+ * re-work — both true of 01-09 and both false of anything that ALTERs a live
+ * database into a new state. A fresh install applies the baseline and gets the
+ * end state directly; an existing database applies these on top.
+ *
+ * Each is written to be idempotent, so applying one to a fresh baseline is a
+ * no-op rather than an error. They are tested by their own files.
+ */
+export const INCREMENTAL_FILES = ['10_order_retention'];
+
 export const read = (name) => readFileSync(new URL(`./${name}.sql`, import.meta.url), 'utf8');
 
 /** All five files concatenated, in apply order. */

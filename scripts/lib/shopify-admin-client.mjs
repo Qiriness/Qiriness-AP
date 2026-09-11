@@ -1,3 +1,8 @@
+import {
+  FALLBACK_RETENTION_MONTHS,
+  SYNC_WINDOW_MARGIN_MONTHS
+} from './order-retention.mjs';
+
 export const PRODUCT_VARIANT_PAGE_SIZE = 25;
 // Products on a real merchandised store carry FAR more metafields than a dev
 // fixture. Measured on Qiriness: 49-50 per product, with every field the support
@@ -1021,19 +1026,36 @@ export function orderSyncQuery(months = ORDER_SYNC_DEFAULT_MONTHS, now = new Dat
   return `updated_at:>=${since.toISOString().slice(0, 10)}`;
 }
 
-// 6 months is the longest anything is retained; the extra month absorbs clock
-// skew and a sync that has not run for a few weeks.
-export const ORDER_SYNC_DEFAULT_MONTHS = 7;
+// The window a sync uses when nobody has told it the shop's retention policy —
+// the fallback period plus its margin. The real window is DERIVED from the
+// shop's setting by `orderSyncMonths`, because a fetch window shorter than
+// retention is a table that can never fill: the setting would look broken rather
+// than misconfigured. Kept as a named export because the sync logs it and the
+// tests assert on it.
+export const ORDER_SYNC_DEFAULT_MONTHS =
+  FALLBACK_RETENTION_MONTHS + SYNC_WINDOW_MARGIN_MONTHS;
 
-export async function fetchOrderPage(shopify, args, cursor) {
+/**
+ * `sinceMonths` is the window the CALLER resolved — from the shop's retention
+ * setting, or from `--since-months`/`--all-orders`. It is passed in rather than
+ * recomputed here because this function used to fall back to a fixed constant
+ * while the caller logged a different number: the run announced one window and
+ * fetched another, and raising retention changed only the message.
+ *
+ * `null` means no date bound at all. `undefined` keeps the old default for
+ * callers that have no policy to hand.
+ */
+export async function fetchOrderPage(shopify, args, cursor, sinceMonths) {
   const includeReturns = !shopify.orderReturnsAccessDenied;
+  const resolvedMonths = sinceMonths === undefined
+    ? (args.orderSinceMonths === undefined ? ORDER_SYNC_DEFAULT_MONTHS : args.orderSinceMonths)
+    : sinceMonths;
   const variables = {
     first: args.pageSize,
     after: cursor,
-    // args.orderSinceMonths === null means "everything", for a full backfill.
-    query: orderSyncQuery(
-      args.orderSinceMonths === undefined ? ORDER_SYNC_DEFAULT_MONTHS : args.orderSinceMonths
-    ),
+    // A null window means "everything", for a full backfill or a shop that keeps
+    // its orders indefinitely.
+    query: orderSyncQuery(resolvedMonths),
     lineItemFirst: ORDER_LINE_ITEM_PAGE_SIZE,
     fulfillmentFirst: ORDER_FULFILLMENT_PAGE_SIZE
   };

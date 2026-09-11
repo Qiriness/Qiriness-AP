@@ -103,15 +103,32 @@ test('mapOrder stores channel labels and avoids raw contact/address duplication'
   assert.equal(row.raw_shopify_payload.shippingAddress.address1, undefined);
 });
 
-test('calculateOrderRetention deletes delivered orders three months after delivery', () => {
-  const retention = calculateOrderRetention(BASE_ORDER);
+test('calculateOrderRetention anchors a delivered order to its delivery date', () => {
+  // The RULE names the reason only. The period comes from the shop setting, so
+  // the same order produces a different date under a different policy and the
+  // same rule under all of them -- which is what makes the period switchable.
+  const retention = calculateOrderRetention(BASE_ORDER, { mode: 'months', months: 3 });
 
-  assert.equal(retention.retentionRule, 'delivered_plus_3_months');
+  assert.equal(retention.retentionRule, 'delivered');
   assert.equal(retention.deliveredAt, '2026-01-04T10:00:00.000Z');
   assert.equal(retention.retentionDeleteAfter, '2026-04-04T10:00:00.000Z');
+
+  const twelve = calculateOrderRetention(BASE_ORDER, { mode: 'months', months: 12 });
+  assert.equal(twelve.retentionRule, 'delivered');
+  assert.equal(twelve.retentionDeleteAfter, '2027-01-04T10:00:00.000Z');
 });
 
-test('calculateOrderRetention keeps unresolved returns for six months after opening', () => {
+test('an indefinite policy keeps the reason and drops the date', () => {
+  // The reason is still worth recording -- `deriveOrderStatus` reads it -- and
+  // the null date is what the purge never matches.
+  const retention = calculateOrderRetention(BASE_ORDER, { mode: 'indefinite', months: null });
+
+  assert.equal(retention.retentionRule, 'delivered');
+  assert.equal(retention.deliveredAt, '2026-01-04T10:00:00.000Z');
+  assert.equal(retention.retentionDeleteAfter, null);
+});
+
+test('calculateOrderRetention anchors an unresolved return to when it opened', () => {
   const retention = calculateOrderRetention({
     ...BASE_ORDER,
     returnStatus: 'IN_PROGRESS',
@@ -124,14 +141,14 @@ test('calculateOrderRetention keeps unresolved returns for six months after open
         requestApprovedAt: '2026-02-02T12:00:00Z'
       }]
     }
-  });
+  }, { mode: 'months', months: 6 });
 
-  assert.equal(retention.retentionRule, 'return_refund_open_plus_6_months');
+  assert.equal(retention.retentionRule, 'return_refund_open');
   assert.equal(retention.returnRefundOpenedAt, '2026-02-01T12:00:00.000Z');
   assert.equal(retention.retentionDeleteAfter, '2026-08-01T12:00:00.000Z');
 });
 
-test('calculateOrderRetention deletes completed returns three months after completion', () => {
+test('calculateOrderRetention anchors a completed return to its completion', () => {
   const retention = calculateOrderRetention({
     ...BASE_ORDER,
     returnStatus: 'RETURNED',
@@ -144,9 +161,9 @@ test('calculateOrderRetention deletes completed returns three months after compl
         closedAt: '2026-02-05T12:00:00Z'
       }]
     }
-  });
+  }, { mode: 'months', months: 3 });
 
-  assert.equal(retention.retentionRule, 'return_refund_completed_plus_3_months');
+  assert.equal(retention.retentionRule, 'return_refund_completed');
   assert.equal(retention.returnRefundCompletedAt, '2026-02-05T12:00:00.000Z');
   assert.equal(retention.retentionDeleteAfter, '2026-05-05T12:00:00.000Z');
 });
@@ -207,7 +224,7 @@ test('calculateOrderRetention deletes undelivered orders six months after proces
     fulfillments: []
   });
 
-  assert.equal(retention.retentionRule, 'undelivered_plus_6_months');
+  assert.equal(retention.retentionRule, 'undelivered');
   assert.equal(retention.retentionDeleteAfter, '2026-07-01T10:00:00.000Z');
 });
 

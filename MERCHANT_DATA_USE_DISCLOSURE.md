@@ -41,6 +41,8 @@ Operational event tables store metadata only. They must not store raw webhook pa
 
 The retention source of truth is Shopify. Customer data is kept locally until Shopify sends a deletion/redaction request, a shop redaction request is received, or customer reconciliation determines that Shopify no longer returns the customer.
 
+Order snapshots additionally carry a merchant-configured retention period (`shops.order_retention_mode`): a number of months after which they are deleted by the order sync, or `indefinite`. **This shop is currently set to `indefinite`**, so order snapshots are retained until one of the deletion paths above removes them. Shopify deletion and redaction requests take precedence over this setting in every case.
+
 For Shopify `customers/redact`, the app hard deletes matching customer rows from Supabase.
 
 For Shopify `shop/redact`, the app deletes the shop row, which cascades shop-scoped operational snapshots, while keeping metadata-only privacy request evidence with shop references cleared.

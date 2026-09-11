@@ -283,13 +283,22 @@ create table public.orders (
         'open'
       )
   ),
+  -- THE REASON THE CLOCK STARTED, NOT HOW LONG IT RUNS. These used to carry the
+  -- period in the name -- `delivered_plus_3_months` -- which made the period
+  -- unswitchable: every new window multiplied this list and needed a matching
+  -- branch in `deriveOrderStatus`, which only ever cared why. The duration now
+  -- lives in `shops.order_retention_mode`/`_months` and arrives here already
+  -- applied, as `retention_delete_after`.
+  --
+  -- Mirrored by RETENTION_REASONS in `scripts/lib/order-retention.mjs`, and held
+  -- to it by the migration test.
   constraint orders_retention_rule_check check (
     retention_rule is null
       or retention_rule in (
-        'delivered_plus_3_months',
-        'undelivered_plus_6_months',
-        'return_refund_completed_plus_3_months',
-        'return_refund_open_plus_6_months'
+        'delivered',
+        'undelivered',
+        'return_refund_completed',
+        'return_refund_open'
       )
   ),
   constraint orders_shipping_destination_object_check check (
@@ -420,10 +429,10 @@ comment on column public.orders.return_refund_completed_at is
   'Timestamp when a return or refund process was completed. Used as the retention anchor before deleting completed return/refund cases.';
 
 comment on column public.orders.retention_rule is
-  'Order retention rule selected by sync: delivered_plus_3_months, undelivered_plus_6_months, return_refund_completed_plus_3_months, or return_refund_open_plus_6_months.';
+  'WHY the retention clock started, not how long it runs: delivered, undelivered, return_refund_completed, or return_refund_open. The period is the shop setting (shops.order_retention_mode/_months) and arrives here already applied as retention_delete_after.';
 
 comment on column public.orders.retention_delete_after is
-  'Timestamp after which the local operational order snapshot can be deleted: delivered_at plus 3 months, return/refund completion plus 3 months, order creation/processing plus 6 months if not delivered, or return/refund opening plus 6 months if unresolved.';
+  'Timestamp after which the local operational order snapshot can be deleted: the anchor named by retention_rule plus the shop retention period. NULL MEANS KEPT INDEFINITELY -- not a missing value. The purge selects rows whose date is at or before now, so a null is simply never matched and needs no special case in the delete path.';
 
 comment on column public.orders.raw_shopify_payload is
   'Sanitized raw Shopify order payload for traceability. Exclude street addresses, raw contact values, payment details, and other unnecessary personal data.';

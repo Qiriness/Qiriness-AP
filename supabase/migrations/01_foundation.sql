@@ -64,6 +64,28 @@ create table public.shops (
   -- emailed to the customer and every reply about resetting a password would be
   -- wrong. A migration between the two is invisible from anywhere else here.
   customer_accounts_version text,
+  -- HOW LONG ORDERS ARE KEPT, as a switch rather than a constant in code.
+  --
+  -- 'months' with a number, or 'indefinite' with none. The pair is constrained
+  -- below so the two can never disagree, and "keep for ever" is a word somebody
+  -- typed rather than an empty field that happens to read that way. That
+  -- distinction is the reason this is not a `support_parameters` row: there,
+  -- null means "nobody has decided yet", and indefinite retention of personal
+  -- data must never be reachable by leaving something blank.
+  --
+  -- Read by `scripts/lib/order-retention.mjs`, which is the only thing that
+  -- parses these. NOT written by `mapShop`: the shop mapper returns a fixed
+  -- column set and the upsert merges, so a column absent from its payload
+  -- survives the nightly sync -- same arrangement as
+  -- products.recommended_for_concerns, and for the same reason. Nothing may ever
+  -- add these keys to that mapper.
+  order_retention_mode text not null default 'months',
+  order_retention_months integer default 6,
+  -- Who moved it and why. Retention is a compliance control, and the live
+  -- constraint has already drifted from this repo once because a change was
+  -- made directly against the database and never written down.
+  order_retention_changed_at timestamptz,
+  order_retention_reason text,
   environment text not null default 'development',
   installed_at timestamptz,
   uninstalled_at timestamptz,
@@ -77,6 +99,14 @@ create table public.shops (
   constraint shops_shop_domain_unique unique (shop_domain),
   constraint shops_environment_check check (
     environment in ('development', 'staging', 'production')
+  ),
+  -- The mode and the number must agree. 'indefinite' carrying a month count
+  -- would leave two readings of the same setting, and 'months' without one would
+  -- be a retention policy with no period -- which the reader would have to
+  -- resolve by guessing.
+  constraint shops_order_retention_check check (
+    (order_retention_mode = 'months' and order_retention_months is not null and order_retention_months > 0)
+    or (order_retention_mode = 'indefinite' and order_retention_months is null)
   ),
   constraint shops_sync_cursors_object_check check (
     jsonb_typeof(sync_cursors) = 'object'
