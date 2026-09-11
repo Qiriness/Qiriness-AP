@@ -40,47 +40,233 @@ these.
 as its own item: `llm_usage` (item 14), `categorisation_review` (item 15), and
 `category_forwarding` / `ticket_forwards` (item 1).
 
-## 18. The case-file tool caches in a probe, not yet in a real batch (built 2026-09-07)
+## 22. The VIP rule is built and unset (2026-09-11)
+
+Nobody is a VIP until the owner saves a rule on the Customers panel. Two checks once they do:
+
+- **The gold border's share of the queue.** The RFM rule put 75 of 214 tickets (35%) in gold, and DECISIONS § Tickets dashboard says to turn the tokens down rather than the feature off if it ever pulls attention from a level 4. **Check:** after saving, count gold rows against the open queue.
+- **The agent's `isVip`.** The lookup now asks `vip_customers()`; no investigation has run since. **Check:** run one ticket from a known VIP through `npm run investigate -- --ticket <id>` and confirm the case file's customer details say `isVip: true`.
+
+## 21. Ranged Insights: six edges not yet seen in production (2026-09-11)
+
+Built and tested against the live database; these are the parts a test could not reach.
+
+- **The shop timezone is still null.** The nightly sync that ran today used the old `mapShop`. Until a sync runs the new one, days are cut in UTC and the strip says so. **Check:** after the next sync, `select iana_timezone from shops` reads `Europe/Paris` and the "Days cut in UTC" chip is gone.
+- **The mail cursor should now survive a Shopify sync.** **Check:** after the next manual mail poll *and* the following nightly sync, `shops.sync_cursors` still holds `mail_ingest_delta_link`, and the poll after that pages from the cursor rather than re-enumerating.
+- **A daylight-saving boundary has not been crossed.** The conversion is Postgres's and the live test covers a summer midnight, but no chart has yet spanned the 25 October change. **Check:** on "Last 7 days" in late October, the change day has one bar and orders at 02:30 land on the right day.
+- **"Last 24 hours" is mostly unsynced for orders** while the order sync is nightly — drawn hatched, correctly, but worth deciding whether that preset should exist for orders before a faster sync does.
+- **Churn and capture rest on the consent snapshot.** Both are floors by construction, and the churn denominator is reconstructed. **Check:** export the Shopify customer events for one month and compare its unsubscribes and list size with the card; the gap is the size of the floor.
+- **New vs returning differs from the reference tool** (102 / 102 against its 108 / 99 on the same 30 days). Ours counts "no earlier order since May 2024". **Check:** pick three customers the two disagree on and read their Shopify history.
+
+## 20. ~~The translated library is written but unproven~~ — RESOLVED 2026-09-09, end to end (built 2026-09-09)
+
+562 translations over 140 phrasings, generated, imported, embedded and measured
+the same day. See `CHANGELOG.md` 2026-09-09 and `DECISIONS.md` § "Translate the
+library, not the query".
+
+**Every check this item asked for has been run.**
+
+- **Imported.** `support_exemplar_phrasings` holds **706** rows — 702 from the
+  document plus P-21's 4, dashboard-authored and correctly untouched. Approval
+  unchanged at 38, 0 stale rows removed.
+- **The language column tells the truth.** It read `fr` on all 144 rows before,
+  including the eleven that are not French. It now reads en 6 / es 3 / nl 2 on
+  the authored variants, and the target language on all 562 translations.
+- **The forward step is applied, before the embeddings.** The multiplier is
+  **64** in the database. The SQL was extracted from `05_exemplars.sql` rather
+  than retyped, asserted to be one `create or replace function` carrying no
+  `drop`/`truncate`/`alter table` and a multiplier above the 60-row ceiling, and
+  applied through `db:apply:migration`. The script was discarded.
+- **Embedded: 696 of 706.** The 10 without a vector are O-11's, which is
+  soft-deleted — the reconciler excludes deleted exemplars deliberately. D-33 is
+  the largest exemplar at 40 embedded phrasings, inside 64.
+- **Measured on a same-corpus A/B**, since the historical figures were taken over
+  214 tickets and the corpus is 328. `--authored-only` scores the French library
+  alone: **125 → 133 tickets clear MATCHED**, Italian 0 → 4 of 6 on a +0.132
+  median, English +0.032 and no band movement, Spanish unchanged and winning
+  nothing with a translation because it already carries real Spanish phrasings.
+- **The prediction was 14 tickets and ~7%. The answer is 8 and 6.4%** — recorded
+  as the smaller number.
+- **Confirmed against the live RPC**, which is what the eval could not do:
+  12 non-French tickets through `match_support_exemplars()`, **3 exemplars
+  returned on 12 of 12**, none starved.
+- Tests: 2061 root, 1299 agent, typecheck and lint clean.
+
+**Two findings this closed out, both recorded rather than silently fixed:**
+
+1. **The eval scored 38 exemplars where the RPC scores 37** — `deleted_at` was
+   filtered on tickets and not on exemplars. Fixed. It changed no per-language
+   median, because O-11's phrasings sit verbatim under O-09 which absorbed them;
+   only the overall median moves 0.626 → 0.627.
+2. **O-11 is merged away but still in `Email-Example-Queries.md`.** The importer
+   re-creates it on every run and the translator paid to translate it 8 times,
+   for a situation that can never be retrieved. Inert, not broken.
+
+**What is left, and none of it blocks anything.**
+
+- **Delete O-11 from the document**, or accept an exemplar that is re-created and
+  re-translated on every import and can never win.
+- **P-21 is never translated.** It exists only in the database, so the
+  translator — which reads the document — cannot see it. Either write it into
+  `Email-Example-Queries.md` or accept one French-only approved situation.
+- **~130 of the translations are unread.** Four sources were spot-checked across
+  all four targets; the rest were not. The register rule fails quietly — a
+  translation that tidies « jai pas recu ma commande » into correct English
+  rebuilds the mismatch the variants exist to remove, and it looks fine to a
+  reviewer skimming for meaning. A 240 KB diff, and a reading job for whoever
+  reads the target language.
+- **The bands were calibrated on the French-only library.** `MATCHED` 0.65 and
+  `NEAR` 0.55 predate 562 rows landing in the pool, and the score distribution
+  has shifted under them. Worth re-reading the sweep in section 2 of
+  `eval:exemplars` before trusting the bands on non-French mail.
+
+## 19. The Attachments block is rendered and seen; four of its states are not (built 2026-09-09)
+
+The detail panel's fourth block lists what the customer attached, warns when they
+mentioned a photo that never arrived, and **shows the photo itself**, proxied
+from the mailbox. See `CHANGELOG.md` 2026-09-09 (both entries) and `DECISIONS.md`
+§ "The photo is shown, and still not stored".
+
+**What is proven, and more than when this item was opened.** The projection is
+pure and tested — 16 cases in `scripts/lib/photo-evidence-rules.test.mjs`,
+including the furniture rules, the outbound exclusion, the null-metadata case,
+and the boundary that keeps the Exchange message id out of the browser. Run over
+the **real corpus**: the block renders on **114 of 383** tickets, splitting into
+15 with a photo, 74 mentioning one that never arrived, 24 with only non-image
+files, 0 with unfetched metadata.
+
+**The proxy is proven end to end against the live mailbox.** On ticket
+`13779dd6`, all three photos returned 200 with `image/jpeg`, the correct
+`content-length`, `nosniff`, `no-store`, an `inline` disposition carrying the
+right filename, and bytes beginning `ffd8` — real JPEGs, not an error page. The
+refusal paths were exercised too: an out-of-range index, a non-numeric index and
+a ticket with no photos all return 404, the first with
+`X-Attachment-Reason: not_found`. Across the corpus, **35 of 37 image parts
+resolve and 2 messages have left the mailbox**.
+
+**It has now been seen in a browser, on the page that actually renders it.** The
+block first went into `TicketDetailPanel`, which `/tickets` does not mount — see
+`CHANGELOG.md` 2026-09-09. It lives in `TicketContextPane` now, and on ticket
+`5ed80bd5` (« Produit défectueux ? ») the rail shows both photos, captioned
+`125325.jpg · JPEG · 1.8 MB` and `125326.jpg · JPEG · 3.0 MB`, decoded at
+**1848×4000** through the proxy.
+
+**What is still not seen.** No component or interaction test framework exists for
+the dashboard (`README.md` step 18), and one ticket exercises one of the four
+states. Checks 1, 4, 5 and 6 below are all unrun.
+
+**The checks to run, in order:**
+
+1. **Look at a photo, and confirm it is the right photo.** `13779dd6`
+   (`delivery/problem`) carries three. The proxy was verified by content type and
+   magic bytes, which proves a JPEG arrived — **not that image 0 is the one
+   captioned `1000025991.jpg`**, and a mismatch there would put one customer's
+   photo under another's name. `matchHandle` matches on name and size and falls
+   back to position; this is the check that the fallback never fires wrongly.
+2. **Confirm nothing is cached on disk.** After viewing that ticket, search
+   `.next/cache` for image data. The `<img>` deliberately avoids `next/image` for
+   this reason, and the whole "nothing is stored" claim rests on it.
+3. ~~**Check the layout with two portrait images.**~~ **Done.** The rail's grid is
+   `repeat(auto-fill, minmax(96px, 1fr))` with a 120px height cap and
+   `object-fit: contain`; two 1848×4000 photos render side by side, uncropped.
+   Still worth doing on **Andre Sylvie**'s eight-photo ticket
+   (`f6fd150d`, closed), which is four times the widest case seen, and on the
+   mobile `contextSheet`, which reuses the same pane at a different width.
+4. **Find a photo that has left the mailbox and read what it says.** Two of the
+   37 are gone. The panel should show "Not available — the message may have left
+   the mailbox" rather than a broken-image glyph. If a `<img onError>` state is
+   never reachable in practice, this is the case that proves it works.
+5. **Read the warning on a mentioned-not-attached ticket.** `0dd5cfda`
+   (`delivery/problem`, « pièce jointe ») and `0f56c9eb` (`payment/problem`,
+   « ci-joint », which also carries one non-image file and one furniture part, so
+   it exercises three states at once). It is `var(--warning)` and deliberately
+   not `--error`: confirm it reads as "something for you to do", not a failure.
+6. **THE ONE THAT MATTERS FOR TRUST — check a false positive is legible as one.**
+   `PHOTO_TERMS` includes `image`, and `image de marque` in a b2b email fires it.
+   The block prints the matched term for this reason. Find a `partner_collaboration`
+   or `b2b` ticket among the 74 and confirm an operator can see *why* the warning
+   appeared. If the term is not doing that work it is noise and should be dropped.
+7. **Confirm the block is absent, not empty, on an ordinary ticket.** Any of the
+   269. A "no attachments" line on two thirds of the queue is the failure this
+   design avoids.
+
+**One thing this item cannot close, and it is not a rendering question.** The
+dashboard has no authentication (`README.md` step 11), so this route serves
+customers' photos to anyone who can reach the port. That was true of the email
+bodies already on the screen; a photo raises it, because it can carry a face, a
+doorway or an address label. The route is as narrow as it can be made — one
+ticket's own images, by offset, images only, no caching — and none of that is
+access control.
+
+## 18. ~~The case-file tool caches in a probe, not yet in a real batch~~ — RESOLVED 2026-09-09 on a real batch (built 2026-09-07)
 
 The closing investigation call stopped carrying `response_format` and now returns
 the case file as a forced `finalize_investigation` tool call, to keep it in the
 same prompt-cache partition as the loop turns. See `CHANGELOG.md` 2026-09-07 and
 `codex_plans/Model_Cost_Notes.md` § SOLVED 2026-09-07.
 
-**What is proven.** 2013 unit tests, including that the tools array is identical
-on every turn and that a mid-loop finalise still closes normally. And
-`npm run probe:prompt-cache`, twice, against the live API: the closing shape
-caches **96.2%** where production measured 0%.
+**Closed by `npm run investigate -- --backfill --include-closed --limit 12` on
+2026-09-09**: 12 considered, 10 investigated, 2 skipped, **0 failed**, 45 model
+calls and 78 740 tokens, 45 rows in `llm_usage`.
 
-**What is not.** The probe replays a hand-built conversation. **No real ticket
-has run through the changed `investigate.mjs` yet**, so nothing in `llm_usage`
-shows the fix working in the pass itself.
+**Check 1 — PASSED, 10 of 10.** Every ticket's LAST investigate call now reports
+a non-zero `cached_input_tokens` (1 152 – 3 840), where it was 0 on 8 of 8.
+`report:prompt-cache --since 2026-09-09`: the investigate pass caches **61%**
+against 21% in the last pre-fix window (2026-09-05), and per turn within a run:
 
-**The checks to run, in order:**
+| turn | calls | avg cached | share | before the fix |
+| --- | --- | --- | --- | --- |
+| 1 | 10 | 0 | 0% | 0% — expected, a run cannot hit on its first call |
+| 2 | 10 | 1 792 | **87%** | 56% |
+| 3 | 7 | 2 066 | **93%** | **0%** |
+| 4 | 2 | 1 920 | **91%** | — |
 
-1. **Run a batch and re-read the cache report.** `npm run report:prompt-cache`
-   after ≥10 tickets. The claim to confirm is that the LAST investigate call per
-   ticket now reports a non-zero `cached_input_tokens` — it was 0 on 8 of 8.
-   Exclude failed rows: one 2026-09-05 row (`e5c77e51`) has `input_tokens = 0`
-   and `error_kind = http_429`, and counting it as a zero would flatter or spoil
-   the result depending on which side it lands.
-2. **Check the case files still parse and are no worse.** The schema is
-   unchanged, but it now arrives as tool arguments rather than message content,
-   and `strict` on a function is not identical machinery to `strict` on a
-   response format. Compare verdicts and established-fact counts against the
-   runs stored before the change.
-3. **THE ONE THAT DECIDES IT — how often does the model finalise mid-loop, and
-   does it cost a lookup?** The tool is offered on every turn, so it can. Grep
-   the logs for `investigation.model_finalised_in_loop`. Today that is treated
-   exactly as an empty turn, so a run that finalises early stops collecting
-   early — which is the suppression trade `DECISIONS.md` records as measured and
-   REVERSED (11 lookups saved against 2 established facts lost). If this fires
-   often, `report:collection-replay` is the instrument, and the answer may be to
-   withhold the tool until the budget is spent — at the cost of splitting the
-   partition again on the turns before that.
+Turn 1 caching nothing is the designed shape, not a residual fault: two tickets
+share too little prefix for the cache to engage before their first call.
 
-**Not blocking the fix**, which is a strict improvement on cost with behaviour
-mapped onto an existing signal. Blocking the claim that it is free.
+**Check 2 — PASSED, and it can only ever be answered in aggregate.** The pass
+**upserts one row per ticket**, so these 10 runs overwrote their own predecessors
+and a per-ticket before/after comparison is no longer possible for them. Note
+that for the next comparison of this kind: snapshot the rows first. In aggregate
+the case files are not worse but better, on 10 runs against the 127 that remain:
+mean established facts **3.00 vs 1.88**, and higher in every category present —
+delivery 3.67 vs 2.00, order 3.25 vs 1.93, product 2.00 vs 1.53. All 10 parsed
+as tool arguments with no `argsError`, which is the thing `strict` on a function
+rather than on a response format had to be shown to do.
+
+**Most of that rise belongs to the rules layer, not to this change.** The cache
+fix is behaviour-neutral by construction; what it had to prove was the absence of
+a regression, and 0 failures with richer case files is that.
+
+**Check 3 — the one that was to decide it — ANSWERED, and the answer is "always,
+harmlessly".** `investigation.model_finalised_in_loop` fired on **10 of 10**
+tickets, and `alongsideLookups` was **0 every time**: the model never asked to
+finish in the same breath as a lookup, so no lookup was dropped. On several runs
+it finalised on its very FIRST turn, immediately after `openingMoves()` had run
+the floor's lookups — `afterCalls` equals the floor's ledger length, and the run
+made no discretionary call at all.
+
+**No collection was lost, because the break is where it always was.** A finalise
+is mapped onto the "no tool calls" signal, and the closing call is made
+unconditionally after the loop — there is no path that skips it. The suppression
+trade `DECISIONS.md` records as measured and reversed is therefore not what this
+fires; the model finalising and the model going quiet are the same event.
+
+**What it does cost, and what is now worth re-examining.** The CHANGELOG says the
+model "can reach for it mid-loop, and it does"; the measurement says it does so on
+every single ticket. Its arguments are a complete case file that is discarded, and
+then the closing call generates the case file again — so the project pays output
+tokens twice per ticket, on every ticket. The code comment declines to use those
+arguments on the grounds that it is the suppression trade, and **on this evidence
+it is not**: collection has already stopped either way, and the only real
+difference is that a mid-loop finalise has not seen `closingPrompt(run)`.
+
+**The cheap experiment, if this is picked up:** on the same run, compare the
+discarded mid-loop arguments against the closing call's output — verdict,
+established facts, dropped claims. If they agree, the closing call is one model
+call per ticket bought for nothing. If they do not, the closing prompt is doing
+real work and this is settled for good, in writing. Either answer is worth having;
+neither blocks anything today.
 
 ## 17. The agent test chat has never been run against live data (built 2026-08-22)
 

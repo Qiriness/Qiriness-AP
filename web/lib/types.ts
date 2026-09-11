@@ -449,12 +449,11 @@ export interface TicketListItem {
    * `requesterName` stays the fallback rather than being replaced.
    */
   customerName: string | null;
-  /** Raw Shopify RFM segment, already labelled for display. */
+  /** Shopify's RFM segment, labelled for display — context only, it no longer decides VIP. */
   rfmGroup: string | null;
   /**
-   * Derived from the RFM group at read time, never stored — Shopify recomputes
-   * the segment as a customer buys, so a flag copied onto the ticket would go
-   * stale on any open thread. See scripts/lib/customer-segments.mjs.
+   * Under the shop's VIP rule (spend AND orders inside a window, set on the
+   * Customers panel), answered at read time by `vip_tickets()`. Never stored.
    */
   isVip: boolean;
   /**
@@ -756,6 +755,57 @@ export interface TicketDetail {
    * while these exist only because an investigation ran.
    */
   facts: TicketFact[];
+  /**
+   * What the customer attached, and whether they said they were attaching
+   * something. Never null — a ticket with no attachments and no mention is a
+   * valid answer, and the panel decides from the contents whether to render a
+   * block at all.
+   */
+  attachments: TicketAttachments;
+}
+
+/** One attached file, as Graph described it. Metadata only — never the bytes. */
+export interface TicketAttachmentFile {
+  name: string | null;
+  contentType: string | null;
+  /** Bytes, as Graph reports them. 0 where the size was not recorded. */
+  size: number;
+  /**
+   * Where to ask for the image, for entries in `images` only.
+   *
+   * A PATH UNDER THIS ORIGIN, not a Graph URL and not an Exchange id: the
+   * server proxies the bytes and the browser never learns how the mailbox
+   * addresses them. null on `others`, which are listed by name and never
+   * served — see `web/lib/server/attachment-service.ts`.
+   */
+  src: string | null;
+}
+
+/**
+ * The attachment picture for one ticket, from `scripts/lib/photo-evidence-rules.mjs`.
+ *
+ * TWO SIGNALS, NOT ONE, for the reason the shared module documents at length:
+ * over the corpus, 74 tickets mention a photo and attach nothing against 16 that
+ * actually carry one, and those need different things from a human.
+ */
+export interface TicketAttachments {
+  /** Image parts the customer sent, in arrival order. Furniture excluded. */
+  images: TicketAttachmentFile[];
+  /** Everything else they attached — CVs, catalogues, invoices, a PDF. */
+  others: TicketAttachmentFile[];
+  /** Signature logos and inline placeholders: counted so the panel can say so. */
+  furniture: number;
+  /**
+   * false when a message flags an attachment whose metadata was never fetched.
+   * The panel must say "not recorded" rather than "nothing attached" — the
+   * distinction the `attachments` column's null was created to keep.
+   */
+  known: boolean;
+  /** Did the customer's own words say a photo was coming? */
+  mentioned: boolean;
+  /** The French term that matched, shown to explain why we think one is missing. */
+  matchedTerm: string | null;
+  outcome: "attached" | "mentioned_not_attached" | "attachment_type_unknown" | "none";
 }
 
 /* ------------------------------------------------------- ticket thread */
@@ -920,67 +970,133 @@ export interface TicketStats {
 
 // ---------------------------------------------------------------- Insights
 //
-// The four analytics panels. Every shape here is the mapped form of one view in
-// `supabase/migrations/06_analytics.sql` — the panels never aggregate rows in
-// the browser or the server, because PostgREST caps a response at 1,000 rows
-// and pages an unordered query in overlapping slices. The one thing that IS
-// derived in TypeScript is who counts as a VIP, which is a business rule owned
-// by `scripts/lib/customer-segments.mjs`.
+// The analytics panels, read over a date range. Every figure is the mapped form
+// of one row from a ranged function in `supabase/migrations/06_analytics.sql`
+// (RANGED READS) — the panels never aggregate rows in the browser or the
+// server, because PostgREST caps a response at 1,000 rows and pages an
+// unordered query in overlapping slices. What IS decided in TypeScript is
+// judgement: who counts as a VIP (`customer-segments.mjs`), which channels make
+// a platform, and which empty bucket is a zero (`insights-range.mjs`).
 //
-// `null` means "not measurable", never zero. A month with no ingested mail and
-// a month with no tickets look identical on a chart unless that difference
-// survives all the way to the component.
+// `null` means "not measurable", never zero. A day with no synced mail and a day
+// with no tickets look identical on a chart unless that difference survives all
+// the way to the component — which is what `BucketState` carries.
 
 /** Which panel is on screen. Real routes, so a panel can be linked to. */
-export type InsightsPanel = "support" | "fulfilment" | "customers" | "agent";
+export type InsightsPanel = "sales" | "fulfilment" | "support" | "customers" | "agent";
 
 export const INSIGHTS_PANELS: { id: InsightsPanel; label: string; href: string }[] = [
+  { id: "sales", label: "Sales", href: "/insights/sales" },
   { id: "fulfilment", label: "Fulfilment", href: "/insights/fulfilment" },
   { id: "support", label: "Support", href: "/insights/support" },
   { id: "customers", label: "Customers", href: "/insights/customers" },
-  { id: "agent", label: "Agent", href: "/insights/agent" },
+  { id: "agent", label: "AI agent", href: "/insights/agent" },
 ];
 
-// --- Fulfilment ------------------------------------------------------------
+export type Grain = "hour" | "day" | "week" | "month";
 
-export interface FulfilmentSummary {
+/**
+ * A bucket's standing against what its source holds: `measured` (an empty one
+ * is a real zero), `partial` (the source's edge or "now" falls inside it), or
+ * `missing` (before the source begins, or after it was last synced).
+ */
+export type BucketState = "measured" | "partial" | "missing";
+
+/** How a chart or tile formats its values. Components format; services don't. */
+export type ValueUnit = "count" | "euro" | "hours" | "percent" | "usd" | "tokens";
+
+export type PlatformId = "all" | "shopify" | "amazon" | "yves_rocher";
+
+/** The resolved range, as `resolveRange` in scripts/lib/insights-range.mjs returns it. */
+export interface InsightsRange {
+  preset: string;
+  tz: string;
+  grain: Grain;
+  label: string;
+  compareLabel: string;
+  from: string;
+  to: string;
+  now: string;
+  previous: { from: string; to: string };
+  keys: string[];
+  currentKey: string | null;
+  query: Record<string, string>;
+}
+
+/** What scopes a panel: which filters apply to it at all. */
+export interface InsightsScope {
+  /** False on a snapshot panel, where a date range would be a pretence. */
+  range: boolean;
+  /** False where the rows are tickets, which belong to no sales channel. */
+  platform: boolean;
+  /** The tooltip on a disabled control: why this filter does not apply here. */
+  rangeReason?: string;
+  platformReason?: string;
+}
+
+export interface SeriesPoint {
+  key: string;
+  label: string;
+  title: string;
+  value: number | null;
+  state: BucketState;
+}
+
+export type FreshnessTone = "ok" | "info" | "warn" | "error";
+
+export interface FreshnessItem {
+  id: "orders" | "mail" | "sync" | "topics";
+  label: string;
+  text: string;
+  tone: FreshnessTone;
+  /** The instant behind the text, for the tooltip. */
+  at: string | null;
+}
+
+/** When each source last moved: the edges every coverage decision is made against. */
+export interface Freshness {
+  items: FreshnessItem[];
+  ordersFrom: string | null;
+  ordersThrough: string | null;
+  mailFrom: string | null;
+  mailThrough: string | null;
+  topicMapBuiltAt: string | null;
+}
+
+/** A figure beside the same figure one period earlier. */
+export interface Compared<T = number | null> {
+  current: T;
+  /** Null when the previous period is outside what the source covers. */
+  previous: T | null;
+}
+
+// --- Orders (Sales + Fulfilment) --------------------------------------------
+
+export interface OrdersSummary {
   orders: number;
+  cancelledOrders: number;
+  /** Net of refunds, cancelled orders excluded. */
+  revenue: number;
+  grossRevenue: number;
   measured: number;
   p50Hours: number | null;
   p90Hours: number | null;
   meanHours: number | null;
-  over48h: number;
   over72h: number;
   shippedWithoutTracking: number;
-  /** Coverage check on delivery data: 1 of 2,006 today. */
   withDeliveryEvent: number;
-  /**
-   * Orders that came back, counted per order rather than per refund — an order
-   * refunded twice is one unhappy order. `returnsOpened` is deliberately a
-   * separate figure and not folded in: this store records 3 refunds and 0
-   * returns, and one combined number would hide that.
-   *
-   * Null where the view has not been re-applied and the column is absent, so a
-   * stale database renders a blocked tile rather than a confident zero.
-   */
-  refundedOrders: number | null;
-  fullyRefundedOrders: number | null;
-  returnsOpened: number | null;
-  /** Euros refunded across those orders, for whoever wants the money not the count. */
-  refundedAmount: number | null;
-  firstOrderAt: string | null;
-  lastOrderAt: string | null;
+  refundedOrders: number;
+  fullyRefundedOrders: number;
+  returnsOpened: number;
+  refundedAmount: number;
 }
 
-export interface FulfilmentMonth {
-  month: string;
+export interface FulfilmentBucket {
+  bucket: string;
+  order: number;
   orders: number;
-  p50Hours: number | null;
-  p90Hours: number | null;
-  over72h: number;
-  measured: number;
-  /** The month being read: half a month of data, and labelled as such. */
-  partial: boolean;
+  /** Past the three-day line. */
+  late: boolean;
 }
 
 export interface FulfilmentCarrier {
@@ -989,28 +1105,14 @@ export interface FulfilmentCarrier {
   p50Hours: number | null;
   over72h: number;
   withoutTracking: number;
-  /**
-   * Shipments that produced at least one ticket — the numerator of the contact
-   * rate. Orders rather than threads: one order chased four times is one
-   * contact, and on a small carrier the other arithmetic exceeds 100%.
-   */
+  /** Shipments that produced at least one ticket — orders, not threads. */
   ordersWithTicket: number;
-  /** The raw thread count behind those orders, shown beside the rate. */
   tickets: number;
   /**
-   * How each carrier's shipments actually end: shipments lost, arriving damaged,
-   * or arriving late.
-   *
-   * **Deliberately null, and there is no source for them yet.** Nothing in the
-   * schema separates a lost parcel from a damaged one from a late one — a ticket
-   * carries a `delivery` subject and a `request_kind`, and that is the finest
-   * grain there is. No carrier scan events reach Shopify either, so the delivery
-   * side cannot supply them.
-   *
-   * They are typed `number | null` rather than `number` so that the day a source
-   * exists, wiring it is a change in `mapCarrier` and nowhere else — and so that
-   * nothing can quietly default them to 0, which on this panel is a claim that
-   * no parcel was ever lost. See `DECISIONS.md § Insights`.
+   * Lost / damaged / late. **Deliberately null**: nothing separates them yet —
+   * no carrier scan events, and a ticket's subject is only `delivery`. Typed
+   * so that wiring a source is a change in the mapper and nowhere else, and so
+   * nothing can default them to a confident 0. See DECISIONS.md § Insights.
    */
   lost: number | null;
   damaged: number | null;
@@ -1018,85 +1120,139 @@ export interface FulfilmentCarrier {
 }
 
 /**
- * Why the contact rate is a floor: a ticket reaches a parcel only through a
- * resolved `shopify_order_number`, and most threads never quote one.
+ * One order still waiting to ship, for the Fulfilment list. Names and emails:
+ * this is personal data on screen, like the Customers call list.
  */
-export interface FulfilmentTicketCoverage {
-  tickets: number;
-  withOrderNumber: number;
-}
-
-export interface FulfilmentBucket {
-  bucket: string;
-  order: number;
-  orders: number;
-  /** Past the three-day line: the two buckets the business argues about. */
+export interface OpenOrder {
+  orderId: string;
+  name: string;
+  /** Shopify admin link for the order, or null without its legacy id. */
+  adminUrl: string | null;
+  placedAt: string;
+  /** The day it was placed, on the shop clock (`4 Sep 2026`). */
+  placedLabel: string;
+  /** Whole days since the order was placed. */
+  daysWaiting: number;
+  /** Three days or more — past the line the dispatch figures are held to. */
   late: boolean;
-}
-
-/**
- * One sales channel measured on its own — the same summary, monthly trend and
- * histogram as the store-wide panel, over that channel's orders only.
- *
- * The month series is the channel's own and is usually shorter than the
- * store-wide one: a channel that sold nothing in a month has no row for it, so
- * the two series must not be read side by side as if the indexes lined up.
- */
-export interface FulfilmentChannelPanel {
-  /** Shopify's stable handle, e.g. `amazon`. What the view is filtered on. */
-  channel: string;
-  /** The display name Shopify shows in Admin, e.g. `Amazon`. */
-  label: string;
-  summary: FulfilmentSummary;
-  byMonth: FulfilmentMonth[];
-  byBucket: FulfilmentBucket[];
+  platform: PlatformId;
+  platformLabel: string;
+  channelLabel: string | null;
+  status: string;
+  total: number;
+  units: number;
+  customerName: string | null;
+  /** Null for marketplace buyers, whose record carries a placeholder address. */
+  email: string | null;
+  isVip: boolean;
 }
 
 export interface FulfilmentPanel {
-  summary: FulfilmentSummary | null;
-  byMonth: FulfilmentMonth[];
-  byCarrier: FulfilmentCarrier[];
-  byBucket: FulfilmentBucket[];
-  /**
-   * Amazon on its own, or null if the store has no Amazon orders. A marketplace
-   * dispatches against someone else's promise, so its delay is only meaningful
-   * read against the store's own figures — which is why it renders directly
-   * below them rather than on a page of its own.
-   */
-  amazon: FulfilmentChannelPanel | null;
-  /**
-   * Null only if the desk has no tickets at all. When it is present the carrier
-   * table must state it: without it the contact-rate column reads as the whole
-   * truth rather than as the share the resolver can actually see.
-   */
-  ticketCoverage: FulfilmentTicketCoverage | null;
-  /**
-   * False while no carrier feeds scan events back to Shopify, which is the
-   * state today. The delivery tiles then render as explicitly blocked rather
-   * than as zeros — a zero would read as "nothing is late".
-   */
+  summary: Compared<OrdersSummary>;
+  openOrders: OpenOrder[];
+  /** False while no VIP rule is set — the VIP view then says so rather than showing an empty list. */
+  vipRuleSet: boolean;
+  orders: SeriesPoint[];
+  medianHours: SeriesPoint[];
+  lateShare: SeriesPoint[];
+  buckets: FulfilmentBucket[];
+  carriers: FulfilmentCarrier[];
+  /** False while no carrier feeds delivery events back — the state today. */
   hasDeliveryData: boolean;
 }
 
-// --- Support ---------------------------------------------------------------
+export interface PlatformSplit {
+  platform: PlatformId;
+  label: string;
+  orders: number;
+  revenue: number;
+}
 
-export interface SupportMonth {
-  month: string;
+export interface ProductSale {
+  productId: string;
+  title: string;
+  orders: number;
+  units: number;
+  revenue: number;
+}
+
+export interface ProductGroup {
+  /** Country code, or `all`. */
+  key: string;
+  label: string;
+  orders: number;
+  revenue: number;
+  products: ProductSale[];
+}
+
+export interface CustomerMix {
+  newCustomers: number;
+  returningCustomers: number;
+  newCustomerOrders: number;
+  returningCustomerOrders: number;
+}
+
+export interface SalesPanel {
+  summary: Compared<OrdersSummary>;
+  /** Days of the range elapsed so far — the divisor behind "per day". */
+  days: number;
+  revenue: SeriesPoint[];
+  orders: SeriesPoint[];
+  /** Null on a marketplace platform, which mints one customer per order. */
+  customerMix: CustomerMix | null;
+  platforms: PlatformSplit[];
+  products: {
+    global: ProductGroup;
+    byCountry: { revenue: ProductGroup[]; orders: ProductGroup[] };
+  };
+  countries: CountrySale[];
+  pairs: PairGroup[];
+}
+
+export interface CountrySale {
+  code: string;
+  label: string;
+  orders: number;
+  revenue: number;
+}
+
+/** Two products bought in the same order, whatever else the order held. */
+export interface ProductPair {
+  a: { id: string; title: string };
+  b: { id: string; title: string };
+  orders: number;
+  /** What the two lines brought in together, across those orders. */
+  revenue: number;
+  rankByOrders: number;
+  rankByRevenue: number;
+}
+
+export interface PairGroup {
+  /** `all`, or a country code. */
+  key: string;
+  label: string;
+  pairs: ProductPair[];
+}
+
+// --- Support -----------------------------------------------------------------
+
+export interface SupportSummary {
   tickets: number;
-  /**
-   * Orders placed in the same calendar month, from `fulfilment_by_month` — the
-   * denominator behind the contact rate. Null where that month has no order row
-   * at all, which is not the same as a month that sold nothing.
-   */
-  orders: number | null;
+  categorised: number;
+  stillOpen: number;
   unhappy: number;
   veryUnhappy: number;
   levelThree: number;
-  stillOpen: number;
-  meanHappiness: number | null;
-  p50ReplyHours: number | null;
-  repliedWithin24h: number;
   repliesMeasured: number;
+  p50ReplyHours: number | null;
+  p90ReplyHours: number | null;
+  repliedWithin24h: number;
+  buyerTickets: number;
+  noOrderTickets: number;
+  unknownTickets: number;
+  noOrderCustomers: number;
+  noOrderDeliverable: number;
+  noOrderMarketable: number;
 }
 
 export interface SupportCategoryRow {
@@ -1106,15 +1262,9 @@ export interface SupportCategoryRow {
   unhappy: number;
   levelThree: number;
   meanHappiness: number | null;
-}
-
-export interface SupportReplyStats {
-  /** Tickets the desk answered from the synced mailbox — the honest denominator. */
-  measured: number;
-  total: number;
-  p50Hours: number | null;
-  p90Hours: number | null;
-  within24h: number;
+  buyerTickets: number;
+  noOrderTickets: number;
+  unknownTickets: number;
 }
 
 export interface TopicCluster {
@@ -1127,9 +1277,9 @@ export interface TopicCluster {
 }
 
 /**
- * The topic map's provenance. It is rebuilt by hand on purpose — clustering is
- * an all-pairs comparison whose threshold is hand-tuned — so the panel has to
- * say how old the map is and whether the corpus has moved on since.
+ * The topic map's provenance. Rebuilt by hand on purpose — clustering is an
+ * all-pairs comparison whose threshold is hand-tuned — so the panel says how
+ * old the map is and whether the corpus has moved on since.
  */
 export interface TopicMap {
   runId: string;
@@ -1141,67 +1291,36 @@ export interface TopicMap {
   subjectCount: number;
   topicCount: number;
   clusters: TopicCluster[];
-  /** Live embedded customer messages now, against `messageCount` when built. */
   liveMessageCount: number | null;
-  /** True once the corpus has drifted far enough that the map describes a different inbox. */
   stale: boolean;
 }
 
-/**
- * Who is writing in, split by whether we can see them buy online.
- *
- * The middle group is the reason this exists. `noOrderTickets` are threads from
- * an address that IS a Shopify customer with zero orders — a newsletter signup,
- * a Shop login, or an address captured at a till. **It is not a non-customer:**
- * a physical-shop sale never reaches Shopify, and three of these people have
- * written a product review, which nobody does for a product they never had.
- *
- * Two reachability figures because "reachable" has two meanings and they differ
- * here: `deliverable` is a working address, `marketable` is consent to be sent
- * marketing. Both are counts of DISTINCT PEOPLE, not threads.
- */
-export interface SupportPurchaseStates {
-  tickets: number;
-  buyerTickets: number;
-  noOrderTickets: number;
-  unknownTickets: number;
-  noOrderCustomers: number;
-  noOrderDeliverable: number;
-  noOrderMarketable: number;
-}
-
-export interface SupportPurchaseCategory {
-  category: KnowledgeCategory | null;
-  tickets: number;
-  buyerTickets: number;
-  noOrderTickets: number;
-  unknownTickets: number;
-}
-
 export interface SupportPanel {
-  byMonth: SupportMonth[];
-  byCategory: SupportCategoryRow[];
-  replies: SupportReplyStats | null;
+  summary: Compared<SupportSummary>;
+  /** Orders in the same range, every platform — the contact-rate denominator. */
+  orders: Compared<number | null>;
+  tickets: SeriesPoint[];
+  medianReply: SeriesPoint[];
+  categories: SupportCategoryRow[];
   topicMap: TopicMap | null;
-  totals: { tickets: number; open: number; unhappy: number; veryUnhappy: number } | null;
+  /** All-time category mood, for the topic map's colour ramp. */
+  topicCategories: SupportCategoryRow[];
+  /** The newest synced message, and whether that is too old to trust the range's end. */
+  mailThrough: string | null;
+  mailBehind: boolean;
   /**
-   * The earliest month that has orders, which is not the earliest month that has
-   * mail. Where it is earlier, the first month of the ticket series is a partial
-   * mailbox over a whole month of trading and its contact rate reads low for a
-   * reason that has nothing to do with customers.
+   * How many people the CSV export holds. The export is all-time, so its count
+   * is named on its own rather than borrowed from a ranged tile beside it.
    */
-  ordersFromMonth: string | null;
-  /** Null when no ticket has been ingested at all, never a row of zeros. */
-  purchaseStates: SupportPurchaseStates | null;
-  purchaseByCategory: SupportPurchaseCategory[];
+  allTimeMarketable: number;
 }
 
-// --- Customers -------------------------------------------------------------
+// --- Customers ---------------------------------------------------------------
 
+/** One of Shopify's RFM segments, shown as Shopify's. It does not decide VIP status. */
 export interface SegmentTotal {
   rfmGroup: string | null;
   label: string | null;
-  isVip: boolean;
   customers: number;
   buyers: number;
   repeatBuyers: number;
@@ -1223,20 +1342,79 @@ export interface CustomerAtRisk {
   firstMessageAt: string | null;
 }
 
+/**
+ * Who counts as a VIP: net spend MORE THAN minSpend AND more than minOrders
+ * orders, both inside the last windowMonths. Set on the Customers panel, stored
+ * on `shops`, applied by `vip_customers()`.
+ */
+export interface VipRule {
+  minSpend: number;
+  minOrders: number;
+  windowMonths: number;
+}
+
 export interface CustomerPanel {
   segments: SegmentTotal[];
-  /**
-   * Both denominators, always. 53,942 of 58,201 customers have never ordered,
-   * so a percentage quoted against the wrong one is meaningless.
-   */
+  /** Both denominators, always: most customers on file have never ordered. */
   base: { customers: number; buyers: number; repeatBuyers: number; marketingOptedIn: number } | null;
-  vip: { customers: number; ticketsLinked: number; vipTickets: number; contactRate: number | null } | null;
+  /** The shop's VIP rule, or null while nobody has set one (then nobody is a VIP). */
+  vipRule: (VipRule & { description: string }) | null;
+  vip: {
+    customers: number;
+    /** Customers who ordered at all inside the rule's window — the VIP share's denominator. */
+    buyersInWindow: number;
+    ticketsLinked: number;
+    vipTickets: number;
+    contactRate: number | null;
+  } | null;
   vipByCategory: { category: KnowledgeCategory | null; tickets: number }[];
   atRisk: CustomerAtRisk[];
   spendExposed: number;
 }
 
-// --- Agent -----------------------------------------------------------------
+/**
+ * What customers DID inside the selected range — the ranged half of the
+ * Customers panel, beside the snapshot above. People, so marketplace orders are
+ * left out throughout (they mint one customer per order).
+ */
+export interface CustomerActivity {
+  /** Customers by how many orders they placed in the range; the last bucket is "N or more". */
+  ordersPerCustomer: { orders: number; orMore: boolean; customers: number }[];
+  marketing: {
+    current: MarketingSummary;
+    previous: MarketingSummary | null;
+    subscribed: SeriesPoint[];
+    unsubscribed: SeriesPoint[];
+    /** The earliest unsubscribe the snapshot holds; before it churn is unmeasured, not low. */
+    unsubscribesFrom: string | null;
+    /** False when the range starts before that edge — the churn figure is then withheld. */
+    covered: boolean;
+  };
+  capture: CapturePoint[];
+}
+
+/** Newsletter movement in a range, read off the consent snapshot — floors throughout. */
+export interface MarketingSummary {
+  subscribed: number;
+  unsubscribed: number;
+  /** Reconstructed from the snapshot: an estimate, and labelled as one. */
+  listAtStart: number;
+  subscribersNow: number;
+  /** Days of the range, for turning a range total into a daily or monthly rate. */
+  days: number;
+}
+
+export interface CapturePoint {
+  key: string;
+  label: string;
+  title: string;
+  state: BucketState;
+  firstOrders: number;
+  subscribedBefore: number;
+  subscribedAtCheckout: number;
+}
+
+// --- Agent -------------------------------------------------------------------
 
 export interface PipelineFunnel {
   tickets: number;
@@ -1266,47 +1444,27 @@ export interface VerdictRow {
   withHandoff: number;
 }
 
-export interface UsageMonth {
-  month: string;
-  model: string;
-  pass: string;
+export interface UsageSummary {
   calls: number;
-  inputTokens: number;
-  outputTokens: number;
   totalTokens: number;
   failedCalls: number;
-  /** Null when the model has no configured rate — never silently 0. */
+  /** Summed per model, so an unpriced model does not quietly read as free. */
   costUsd: number | null;
-}
-
-export interface UsageSummary {
-  totalTokens: number;
-  inputTokens: number;
-  outputTokens: number;
-  calls: number;
+  hasUnpricedModels: boolean;
   ticketsTouched: number;
   meanTokensPerTicket: number | null;
   maxTokensOnATicket: number | null;
-  firstRecordedAt: string | null;
-  lastRecordedAt: string | null;
-  /** Summed per model, so an unpriced model does not quietly read as free. */
-  costUsd: number | null;
-  /** True when at least one model in the window has no configured rate. */
-  hasUnpricedModels: boolean;
-  monthToDateUsd: number | null;
-  monthToDateTokens: number;
+  byModel: { model: string; calls: number; totalTokens: number; costUsd: number | null }[];
 }
 
 export interface AgentPanel {
-  funnel: PipelineFunnel | null;
-  /** Unsatisfied needs only, ranked — a satisfied need is not a blocker. */
-  blockers: EvidenceGapRow[];
+  usage: Compared<UsageSummary>;
+  spend: SeriesPoint[];
+  funnel: PipelineFunnel;
   verdicts: VerdictRow[];
   automationCeiling: number | null;
-  usage: UsageSummary | null;
-  usageByMonth: UsageMonth[];
-  /** False until the worker has run since token capture was wired. */
-  hasUsageData: boolean;
+  /** Unsatisfied needs only, ranked. */
+  blockers: EvidenceGapRow[];
 }
 
 /**

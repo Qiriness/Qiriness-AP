@@ -569,13 +569,22 @@ as $$
     -- of three.
     --
     -- THE INVARIANT: the multiplier must stay above the largest number of
-    -- phrasings any one exemplar has. It is 8; the largest authored count is 5.
+    -- phrasings any one exemplar has.
     --
-    -- **Translation breaks this and must raise it in the same change.** Five
-    -- phrasings translated into three languages is twenty rows for one exemplar,
-    -- which would fill all 24 slots of a three-exemplar request by itself and
-    -- return one result. The failure is silent and reads as a retrieval quality
-    -- problem rather than as arithmetic.
+    -- IT IS 64 BECAUSE THE LIBRARY IS TRANSLATED. It was 8 against a largest
+    -- authored count of 5, and translation is what the old comment here warned
+    -- would break it: D-33 has 8 authored phrasings and 32 translations, so at
+    -- 8 it alone would fill all 24 slots of a three-exemplar request and the
+    -- function would return one result. Silently — it reads as a retrieval
+    -- quality problem rather than as arithmetic, which is why the number is
+    -- derived rather than observed.
+    --
+    -- 64 IS THE INDEX SCHEME'S CEILING, NOT TODAY'S LARGEST ROW. Translations
+    -- are addressed `100 + source * 10 + language slot`, which
+    -- `exemplar-translation.mjs` caps at 10 authored phrasings and 5 languages
+    -- — at most 60 rows for one exemplar, whatever anybody adds to the
+    -- document. Setting it from the measured 40 instead would mean one new
+    -- variant on D-33 could quietly reintroduce the same failure.
     select
       p.support_exemplar_id,
       p.phrasing_text,
@@ -589,7 +598,7 @@ as $$
       and e.deleted_at is null
       and (match_categories is null or e.category = any (match_categories))
     order by p.embedding <=> query_embedding
-    limit greatest(match_count, 1) * 8
+    limit greatest(match_count, 1) * 64
   ),
   best as (
     select distinct on (support_exemplar_id) *

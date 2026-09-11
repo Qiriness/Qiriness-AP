@@ -13,7 +13,7 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |-- *.md             # AGENTS (rules) · DECISIONS (why) · PRODUCT (design) · README (status)
 |                    # AGENT_INTEGRATION_PLAN + Agent_Workflow (agent phases)
 |                    # SHOPIFY_PERSONAL_DATA_PROTECTION + MERCHANT_DATA_USE_DISCLOSURE
-|-- package.json     # sync:shopify:* · embed:* · import:exemplars · cluster:tickets
+|-- package.json     # sync:shopify:* · embed:* · import/translate:exemplars · cluster:tickets
 |                    # report:knowledge-gaps · report:investigation-calls
 |                    # report:evidence-vocabulary · report:completeness-gate
 |                    # report:collection-planner · report:collection-replay
@@ -29,15 +29,24 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |   |   |-- agent-setup/parameters/page.tsx  # Server Component: the numbers
 |   |   |-- tickets/page.tsx              # Server Component: the agent's queue --
 |   |   |                                 # EVERY ticket, staff-sent included
-|   |   |-- insights/                     # -> /insights/fulfilment, then one route
-|   |   |                                 # per panel: fulfilment · support ·
-|   |   |                                 # customers · agent
+|   |   |-- insights/                     # -> /insights/sales, then one route
+|   |   |                                 # per panel: sales · fulfilment · support ·
+|   |   |                                 # customers · agent. Each reads ?range=
+|   |   |                                 # (24h|7d|30d|6m|1y) or ?from=&to=, and ?platform=
 |   |   |-- settings/page.tsx             # Server Component: forwarding address book
 |   |   `-- api/
 |   |       |-- tickets/[id]/route.ts         # GET case file + order facts · PATCH status
 |   |       |-- tickets/[id]/draft/route.ts   # PATCH approve / edit / reject a draft
 |   |       |-- tickets/[id]/thread/route.ts  # GET the conversation (message bodies)
+|   |       |-- tickets/[id]/attachments/[index]/route.ts
+|   |       |                                # GET one photo, proxied from the mailbox.
+|   |       |                                # The only binary response in this API;
+|   |       |                                # nothing is stored. attachment-service.ts
 |   |       |-- forwarding/route.ts           # GET 14 categories · PUT upsert one
+|   |       |-- insights/vip-rule/route.ts   # GET the rule / preview a draft count ·
+|   |       |                                  # PUT save or clear it (vip-rule.mjs)
+|   |       |-- insights/topic-map/route.ts  # POST rebuild the topic map (no args;
+|   |       |                                  # one run at a time) — topic-map-rebuild.ts
 |   |       |-- insights/support/marketable-contacts/route.ts
 |   |       |                                  # GET the consented outreach list as CSV
 |   |       |                                  # (the ONLY bulk personal-data export)
@@ -52,11 +61,19 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |   |   |                            # TrackingText (tracking numbers -> carrier links,
 |   |   |                            # used by every surface showing a number in prose)
 |   |   |-- settings/                # ForwardingSettings (saves per row on blur)
-|   |   |-- insights/                # InsightsNav (the panel bar) · InsightsKit
-|   |   |                            # (PanelSection StatTile BlockedTile BarList
-|   |   |                            # Note + formatters) · FulfilmentView ·
-|   |   |                            # SupportView + TopicMap · CustomersView ·
-|   |   |                            # AgentView
+|   |   |-- insights/                # InsightsPage (shell + header + one panel) ·
+|   |   |                            # InsightsFrame (URL navigation, pending dim) ·
+|   |   |                            # PinBoard (pin a row to the top, 2 max, per
+|   |   |                            # panel in localStorage; Grid pin="id") ·
+|   |   |                            # InsightsHeader + InsightsNav + FilterBar +
+|   |   |                            # LiveRefresh (5-min refresh) · InsightsKit (Grid
+|   |   |                            # Card KpiCard DeltaChip BlockedCard BarList) ·
+|   |   |                            # TimeSeriesChart · ColumnChart (stacked, negative,
+|   |   |                            # net line) · SplitBar · Segmented · Flag (inline SVG) ·
+|   |   |                            # tables.module.css · SalesView + BestProducts +
+|   |   |                            # CountrySales + ProductPairs · FulfilmentView ·
+|   |   |                            # OpenOrders · SupportView + TopicMap · CustomersView +
+|   |   |                            # VipRuleCard + CustomerActivityRows · AgentView
 |   |   |-- tickets/                 # TicketsView (orchestrator) · TicketSection ·
 |   |   |                            # TicketStatCards · TicketTable · TicketDetailPanel ·
 |   |   |                            # TicketThreadDialog · DroppedMailTable +
@@ -72,7 +89,7 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |   |                                # WorkspaceHeader EditorFooter CategorySelect
 |   |                                # SourcePageSelect ChipList Toast (and friends)
 |   |-- lib/
-|   |   |-- types.ts             # UI types + label tables (categories, levels, VIP, RFM)
+|   |   |-- types.ts             # UI types + label tables (categories, levels, VipRule, RFM)
 |   |   |-- knowledge-mapper.ts  # isomorphic: API JSON -> UI types
 |   |   |-- agent-test-types.ts  # isomorphic: the trace shapes the test chat renders,
 |   |   |                        # + parcelsFromTrace (the run's parcels, for links)
@@ -83,15 +100,21 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |   |   |                        # resolved_context -> order owner / status / tracking lines ·
 |   |   |                        # evidence_gaps -> the facts behind the findings
 |   |   |-- api/                 # client-side fetch wrappers (knowledge, tickets, forwarding)
-|   |   |-- insights-format.ts   # isomorphic: month + age labels for the panels
+|   |   |-- insights-format.ts   # isomorphic: every Insights formatter, incl.
+|   |   |                        # formatValue(unit) for the client charts
 |   |   |-- relative-time.ts demo-data.ts
 |   |   `-- server/              # knowledge-service · forwarding-service ·
 |   |       |                    # tickets-service (list + detail + thread + status) ·
 |   |       |                    # dropped-mail-service · knowledge-errors
-|   |       `-- insights/         # shared (readView -- NO paging, by design) +
-|   |                             # one service per panel: fulfilment · support ·
-|   |                             # customers · agent · marketable-contacts
-|   |                             # (CSV export; consent is the query filter)
+|   |       `-- insights/         # shared (readView + callRpc -- NO paging) ·
+|   |                             # context (shop, tz, range, platform, freshness
+|   |                             # from the URL) · series (sparse SQL -> points,
+|   |                             # with coverage) · orders (shared by sales +
+|   |                             # fulfilment) · one service per panel: sales ·
+|   |                             # fulfilment · support · customers (+ customer-
+|   |                             # activity for the ranged rows) · agent ·
+|   |                             # marketable-contacts (CSV; consent is the
+|   |                             # query filter) · topic-map-rebuild
 |   |-- next.config.mjs          # loadEnv() from root .env.local; staleTimes 0
 |   `-- tsconfig.json            # allowJs, so services can import scripts/lib/*.mjs
 |-- scripts/                     # one sync orchestrator per Shopify resource
@@ -100,6 +123,11 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |   |-- embed-{knowledge-chunks,ticket-messages,exemplars}.mjs  # embedding reconcilers
 |   |-- import-exemplars.mjs             # Email-Example-Queries.md -> exemplar rows
 |   |                                    # (drafts only; lib/exemplar-import.mjs parses)
+|   |                                    # attaches the generated translations too
+|   |-- translate-exemplars.mjs          # translate:exemplars -- every phrasing into
+|   |                                    # fr/en/es/it/de, into
+|   |                                    # Email-Example-Queries.translations.json.
+|   |                                    # Reviewed as a diff, then imported
 |   |-- cluster-ticket-messages.mjs      # cluster:tickets -- recurring topics per
 |   |                                    # subject. Print-only by default;
 |   |                                    # cluster:tickets:save persists a run
@@ -111,7 +139,7 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |       |-- shopify-sync-mappers.mjs shop-sync-service.mjs
 |       |-- supabase-rest-client.mjs     # REST select/upsert/update/delete/rpc
 |       |-- tables.mjs                   # THE SCHEMA CONTRACT: 28 tables, 24 views,
-|       |                                # 4 rpcs, and the recurring projections.
+|       |                                # 32 rpcs, and the recurring projections.
 |       |                                # Asserted against the DDL by _shared.test
 |       |-- ticket-record.mjs            # THE ONLY WRITER OF `tickets`: pass protocol
 |       |                                # (claim/complete/skip/retry/abandon +
@@ -135,10 +163,23 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |       |-- compliance-audit.mjs shopify-compliance-webhooks.mjs
 |       |-- support-taxonomy.mjs         # THE vocabulary: 14 subjects · 4 kinds ·
 |       |                                # level + team derivation · signal enums
-|       |-- customer-segments.mjs        # THE VIP rule: rfm_group -> isVipRfmGroup
+|       |-- vip-rule.mjs                 # THE VIP RULE's reader: shops thresholds ->
+|       |                                # vip_customers/vip_tickets/vip_summary RPCs;
+|       |                                # validate, describe, save. Queue, panel, agent
+|       |-- customer-segments.mjs        # Shopify RFM segment labels (display only)
 |       |-- llm-rates.mjs                # per-model $/1M + estimateCost. Read-time
 |       |                                # pricing; NOT authoritative, override with
 |       |                                # LLM_RATES
+|       |-- insights-range.mjs           # pure: range presets, wall-clock buckets in
+|       |                                # the shop tz, like-for-like comparison,
+|       |                                # coverage (measured/partial/missing), and
+|       |                                # platform -> channel handles
+|       |-- insights-freshness.mjs       # pure: how current each source is, and when
+|       |                                # that is a warning (the thresholds)
+|       |-- photo-evidence-rules.mjs     # what counts as a photo vs signature
+|       |                                # furniture, + toPublicAttachments (strips
+|       |                                # the Exchange id before the browser).
+|       |                                # Readers: agent, backfill, ticket panel
 |       |-- cluster-store.mjs            # persists a cluster run + its topics
 |       |-- knowledge-{chunker,categories,document-mapper,navigation}.mjs
 |       |-- embeddings/                  # embedding-input · openai-embeddings-client ·
@@ -192,7 +233,7 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |   |   |                        # evidence-rules (23 needs, scored vs the ledger;
 |   |   |                        #   + findings = the value each took, + a
 |   |   |                        #   requires/moot DAG and orderNeeds) ·
-|   |   |                        # photo-evidence (mentioned vs attached) ·
+|   |   |                        # photo-evidence (re-exports scripts/lib/photo-evidence-rules) ·
 |   |   |                        # tool-registry · investigate (bounded loop) ·
 |   |   |                        # investigation-runner · create-investigation
 |   |   |-- resolution/          # customer-resolution-runner · order-number-parser ·
@@ -240,9 +281,9 @@ Every table has RLS on with no policies: **service-role access only**. Shopify s
 
 | Table | Holds |
 | --- | --- |
-| `shops` | shop records, environment, app settings, `sync_cursors` (incl. mail delta link), `storefront_url` (Shopify `primaryDomain.url` — where customers go, unlike `shop_domain` which is the *.myshopify.com identity webhooks key on; the base for `/account/login`), `customer_accounts_version` (`CLASSIC` — decides whether a password exists at all) |
+| `shops` | shop records, environment, app settings, `sync_cursors` (incl. mail delta link), `storefront_url` (Shopify `primaryDomain.url` — where customers go, unlike `shop_domain` which is the *.myshopify.com identity webhooks key on; the base for `/account/login`), `customer_accounts_version` (`CLASSIC` — decides whether a password exists at all), `iana_timezone` (Shopify's `ianaTimezone` — where a day starts on the Insights charts; null until a sync runs the current `mapShop`), `sync_cursors` (incl. the mail delta link — **never written by `mapShop`**), **order retention switch** `order_retention_mode` (`months`/`indefinite`) + `_months` + `_changed_at` + `_reason` — read by `scripts/lib/order-retention.mjs`, never written by `mapShop`; **the VIP rule** `vip_min_spend` + `vip_min_orders` + `vip_window_months` (all or none) + `vip_rule_changed_at` — set on the Customers panel, read by `scripts/lib/vip-rule.mjs` |
 | `customers` | lean support snapshot: contact, marketing state, coarse location, lifetime totals, last order, `rfm_group`. No addresses or notes |
-| `orders` | identity, links, channel, derived `order_status`, totals, line items, fulfillments, returns, refunds. Contacts hashed, plus `customer_email_masked` (`j***l@orange.fr`) for the one question a hash cannot answer; `tracking_numbers text[]` (GIN) lifted out of fulfillments so a ticket can be resolved from a parcel number; destination coarse; `retention_delete_after` |
+| `orders` | identity, links, channel, derived `order_status`, totals, line items, fulfillments, returns, refunds. Contacts hashed, plus `customer_email_masked` (`j***l@orange.fr`) for the one question a hash cannot answer; `tracking_numbers text[]` (GIN) lifted out of fulfillments so a ticket can be resolved from a parcel number; destination coarse; `retention_rule` names only WHY the clock started, `retention_delete_after` carries the period and is **null when kept indefinitely** |
 | `products` | snapshots + first-class metafields, `variants` jsonb, `available_stock` |
 | `promotions` | one row per redeem code (`code = null` for automatic); `rule_snapshot` carries values, not just type names |
 | `shopify_metaobjects` | shared metaobjects (FAQ, ingredient lists) referenced by products |
@@ -264,7 +305,7 @@ The recurring situations, not the answers to them. Same document/chunk mechanics
 | Table | Holds |
 | --- | --- |
 | `support_exemplars` | canonical question, `exemplar_key` (`P-16`), subject + kind, `requirement_needs text[]` constrained to the `evidence-rules.mjs` vocabulary, `approval_status` (gates the vector), `demand_message_count`, `answer_set` naming which policy family it draws on (`commande` on the 11 order/delivery situations) |
-| `support_exemplar_phrasings` | one row per canonical + real phrasing, each with its own `embedding vector(1536)` and the determinism quadruple. `language` + `translated_from_index` carry non-French rows; translations live at `phrasing_index >= 100`, out of reach of the importer's positional pruner. `match_support_exemplars()` returns one row per **exemplar**, scored by its best phrasing, and reports which language matched |
+| `support_exemplar_phrasings` | one row per canonical + real phrasing, each with its own `embedding vector(1536)` and the determinism quadruple. `language` is declared in the document — a variant's annotation may open with a code (`_(en)_`), and **11 of the 140 authored phrasings are real English, Spanish or Dutch mail**. Translations live at `phrasing_index >= 100` (`TRANSLATION_INDEX_BASE + source * 10 + language slot`, from `lib/exemplar-translation.mjs`), out of reach of the importer's pruner; every authored phrasing is translated into each of `fr en es it de` it is not already written in, giving **702 rows for 140 phrasings**. `match_support_exemplars()` returns one row per **exemplar**, scored by its best phrasing, reports which language matched, and over-fetches `match_count * 64` — above the 60-row ceiling one exemplar's translations can reach |
 | `support_answers` | the policy rules. Two axes: `situation_key` (what the customer wants, from the matched exemplar; null = any) and `when_conditions jsonb` = `{need: [findings]}` (what is true). A matched rule carries an `answer_skeleton`, and may `route` to `needs_human`/`needs_customer_input`, hand out **`offer_code`** (a live discount code, picked by an operator from the promotions cleared on `/agent-setup/promotions`; no FK because `promotions` is Shopify-synced, so it is re-checked at drafting time and dropped if it stops being ACTIVE + offerable), and name **`ask text[]`** (`MISSING_FIELDS` keys — a list since 2026-08-30, because a reaction with no product named needs the product *and* the batch number) — **never to `answerable`**, enforced by a check constraint, so a rule can only ever tighten. A rule may also pin **`knowledge_document_id`** — the approved article it answers from, chosen in the editor like a code and carried into the drafting prompt under its own heading, separate from what retrieval found. A real FK (`on delete set null`) unlike `offer_code`, because no sync rewrites these rows; approval is still re-checked at drafting and the article dropped if it is no longer approved. One `is_fallback` per `answer_set`. Selected by `answer-selection.mjs` (situation outranks condition depth), which also derives the next need to collect. **46 approved rules — 17 in `orders`, 8 in `cosmetovigilance`, 8 in `returns`, 7 in `promotions`, 6 in `accounts`**, loaded per ticket by `loadAnswers` (approved only) and selected after the tool loop closes. **Live: a matched route tightens the verdict in `buildCaseFile`, never loosens it**, and the selection is recorded on `ticket_investigations.exemplar_match.policy` with `verdict_before_policy` beside it. `answer_skeleton` travels into the drafting prompt as `## Ce que cette réponse doit faire` — read out of `exemplar_match.policy` **by name**, so the diagnostics beside it cannot reach a model |
 
 ### Agent email workflow
@@ -297,8 +338,11 @@ RLS on the tables under it.
 | `ticket_queue` | the dashboard row: ticket + customer + count + `requester_email` (the address that opened the thread, so `sender_directory` can be asked whether it is a customer), soft-deleted excluded | `TICKET_LIST_SELECT` + the count join, in `tickets-service.ts` |
 | `order_number_range(shop)` | lowest and highest `order_number`, live orders only | an asc/desc pair of `limit 1` reads |
 
-**The 21 Insights views (`06_analytics.sql`).** Every figure on every panel comes
-from one of these. Nothing is aggregated in the browser or the server, because
+**The 21 Insights views (`06_analytics.sql`).** The all-time aggregates. The panels
+now read the ranged functions below instead — only the Customers panel still reads
+two of these (a snapshot has no range). The rest have no reader and are kept as the
+all-time definitions, and the ranged functions build on `order_fulfilment_timing`.
+Either way nothing is aggregated in the browser or the server, because
 PostgREST caps a response at 1,000 rows and pages an unordered query in
 overlapping slices — see `DECISIONS.md § Insights`.
 
@@ -309,6 +353,20 @@ overlapping slices — see `DECISIONS.md § Insights`.
 | Support | `ticket_reply_times` (base, per ticket) · `support_by_month` · `support_by_category` · `support_purchase_states` + `support_purchase_by_category` (who wrote in, by whether an online purchase is visible) |
 | Customers | `customer_ticket_facts` · `customer_segment_totals` |
 | Agent | `agent_pipeline_funnel` · `investigation_evidence_gaps` · `investigation_verdicts` · `llm_usage_by_month` · `llm_usage_summary` |
+
+**The 24 ranged functions (`RANGED READS`, `06_analytics.sql`).** Every Insights
+figure is now read over a date range: `insights_orders_summary` / `_series` /
+`_by_channel`, `insights_customer_mix`, `insights_fulfilment_buckets` /
+`_carriers`, `insights_product_sales`, `insights_country_product_sales`,
+`insights_orders_by_country`, `insights_product_pairs`, `insights_orders_per_customer`,
+`insights_marketing_summary` / `_series`, `insights_capture_series`,
+`insights_support_summary` / `_series` / `_categories`, `insights_agent_funnel` /
+`_verdicts` / `_blockers`, `insights_llm_usage` / `_series` / `_ticket_stats`, and
+`insights_freshness` (when each source last moved). One convention: the range as
+wall-clock `timestamp`s plus `p_tz`, half-open; series take `p_grain` and return
+only non-empty buckets; order functions take `p_channels` / `p_not_channels`.
+
+**The VIP rule** is three functions in `06_analytics.sql`: `vip_customers()` (the rule: net spend AND orders in the window, both strictly above the shop's thresholds; Shopify orders only), and `vip_tickets()` / `vip_summary()` built on it, plus `open_orders()` — orders not fulfilled, cancelled or closed, each buyer marked VIP through it.
 
 They expose `rfm_group` and never `is_vip`: who counts as a VIP is a business
 rule owned by `customer-segments.mjs` and applied at read time.
@@ -349,9 +407,17 @@ Written by the worker and the CLIs, read only by the Insights panels.
 | `04_support.sql` | `tickets`, `ticket_messages`, `email_blocklist`, `sender_directory`, `spam_audit`, `ticket_investigations`, `category_forwarding`, `ticket_forwards`, `categorisation_review`, the three views | 01, 02 |
 | `05_exemplars.sql` | `support_exemplars`, `support_exemplar_phrasings`, `support_answers`, `match_support_exemplars()` | 01, 03 (`french_unaccent`) |
 | `09_parameters.sql` | `support_parameters` | 01 |
-| `06_analytics.sql` | `normalise_carrier()`, `llm_usage`, `cluster_runs`, `ticket_clusters`, and the **21 Insights views** | 01, 02, 04 |
+| `06_analytics.sql` | `normalise_carrier()`, `llm_usage`, `cluster_runs`, `ticket_clusters`, the **21 Insights views**, and the **24 ranged functions** | 01, 02, 04 |
 | `07_drafting.sql` | `ticket_drafts`, `ticket_draft_edits` | 01, 04 |
 | `08_testing.sql` | `agent_test_runs` | 01, 03 |
+
+**Incremental migrations** run on top of the baseline, and are deliberately not part of it — the invariants above (creates schema, never migrates data; final shape with no corrective re-work) are properties of the baseline alone. Each is idempotent, so applying one to a fresh install is a no-op.
+
+| File | Does | Depends on |
+| --- | --- | --- |
+| `10_order_retention.sql` | order retention becomes a shop setting: adds the `shops` switch, rewrites `retention_rule` to reason-only names (reconciling a live/repo drift), sets this shop to `indefinite` and clears its delete dates | 01, 02 |
+| `12_vip_rule.sql` | adds the `shops` VIP rule columns + check, and `vip_customers()` / `vip_tickets()` / `vip_summary()`, copied from 06 (its test asserts it, and that the rule is AND with strict comparisons). Sets no rule. Applied 2026-09-11 | 01, 02, 04, 06 |
+| `11_insights_ranges.sql` | adds `shops.iana_timezone` and the 18 ranged Insights functions, **copied byte-for-byte from 06** (its test asserts it). Applied to the live database 2026-09-11 | 01, 02, 04, 06 |
 
 `_shared.test.mjs` holds the cross-file invariants (no data statements, RLS on every table, every table and view documented, nothing referenced before it is created, every view `security_invoker` and revoked from the anon roles, every embedded table carrying the whole determinism quadruple, and `scripts/lib/tables.mjs` naming exactly what the baseline creates). Each file has a sibling test for its own contents.
 
@@ -429,7 +495,7 @@ All Route Handlers are server-only and use the Supabase service-role key.
 
 **Add as ticket** overturns one gate decision. `POST /api/dropped-mail/:id/promote` → `dropped-mail-service.ts` → `agent/src/ingestion/promote-dropped-mail.mjs`, which maps the `spam_audit` row into the shape `mapGraphMessage` produces and writes it through `writeIngestedMessages` — the ordinary ingestion path, so threading, idempotency, `needs_categorisation` and the reopen rule are ingestion's and not a second copy of them. The worker's next poll then categorises, resolves and investigates it like any other ticket. Disabled where the row has no stored body. **No schema change and no write to `spam_audit`**: promoted is derived — a blocked row whose `graph_message_id` now exists in `ticket_messages` — and drops out of the section on that basis.
 
-Row interactions: chevron expands the agent's reading (`TicketDetailPanel`: Results · Reported reaction (cosmetovigilance only, from `reaction_report`) · Order · Action — the Order block leads with the name on the order and the masked order contact address, so ownership can be checked against the requester by eye); subject opens the conversation (`TicketThreadDialog`: draft + email chain). In the Irrelevant table the subject opens the dropped email (`DroppedMailDialog`). Four header cards, plus level tabs, category filter and sort — all client-side over the open-ticket set, then split into Queue and Backlog. Search is **per section**, in each `TicketSection` header (shown only while the section is open), so each of the four tables filters itself.
+Layout: **three panes, selection-driven** (`TicketWorkspace`) — `TicketListPane` (the queue), `detailPane` (`TicketDetailWorkspace`: header, `ConversationThread`, `DraftResponsePanel`), and the right-hand `contextPane` (`TicketContextPane`: Customer · Ticket · Order · Investigation · Required action · **Attachments**). The context rail is also the mobile `contextSheet`. **`TicketTable` and `TicketDetailPanel` are NOT on this page** — they render `/conversations` only, and this line described them as the Tickets row expansion until 2026-09-09, which is a stale description that cost a feature being built into the wrong component. The Attachments block is last in the rail and renders only on the 114 of 383 tickets that carry a file or claim to: the customer's photos inline — proxied per view from the mailbox through `/api/tickets/[id]/attachments/[index]`, never stored — plus a warning where a photo was mentioned and none arrived, and the names of any non-image files. Four header cards, plus level tabs, category filter, sender filter and sort, all client-side over the open-ticket set. Search is per view. In the Irrelevant view the subject opens the dropped email (`DroppedMailDialog`).
 
 ### `/conversations` — threads we opened
 
@@ -439,40 +505,34 @@ Two sections over the same `TicketTable` the queue uses — **Open** (expanded, 
 
 `countOpenConversations` feeds a sidebar badge rendered from **every** page in the shell via `lib/server/conversation-badge.ts`. That is the mitigation for routing these off the queue at all — the arrangement failed once by being silent. See DECISIONS.md § Tickets dashboard.
 
-### `/insights` — the four analytics panels
+### `/insights` — the five analytics panels
 
-`web/app/insights/{fulfilment,support,customers,agent}/page.tsx` →
-`web/components/insights/`, over `web/lib/server/insights/*-service.ts`.
-`/insights` itself redirects to `/insights/fulfilment`.
+`web/app/insights/{sales,fulfilment,support,customers,agent}/page.tsx` → `InsightsPage`
+→ one view in `web/components/insights/`, over `web/lib/server/insights/*-service.ts`.
+`/insights` redirects to `/insights/sales`.
 
-Four **real routes**, not tab state, so a panel can be linked to and bookmarked;
-`InsightsNav` is the bar across the top and the sidebar keeps owning the app.
-Every page is a Server Component that reads one service and renders one view —
-there is nothing to filter client-side, because each figure is already a row
-from an aggregate view.
+**The URL is the state.** `context.ts` resolves shop, timezone, range
+(`resolveRange` in `scripts/lib/insights-range.mjs`), platform and freshness from
+the query string; `FilterBar` and `InsightsNav` write it (tabs carry the range
+across). The server re-renders; nothing is aggregated in the browser.
+`LiveRefresh` re-renders every 5 minutes while visible.
 
-| Panel | Answers | Reads |
-| --- | --- | --- |
-| **Fulfilment** | how long orders take to leave, and where delivery data would go | the five fulfilment views |
-| ↳ section order | Order to dispatch · Amazon only · Delivery (blocked tiles + the measured `Returned or refunded` tile) · **Carriers** — the carrier table sits under Delivery, and its `Lost` / `Damaged` / `Delivered late` columns are placeholders no source writes | — |
-| **Support** | volume, mood, reply time, who is writing in, and the topic map | the five support views + `ticket_clusters` + `fulfilment_by_month` (orders, as the contact-rate denominator) |
-| **Customers** | who to call, and what spend is exposed | the two customer views + `customer-segments.mjs` |
-| **Agent** | what it costs, how far tickets get, what blocks them — cost leads the page | the five agent views + `llm-rates.mjs` |
+| Panel | Range | Platform | Reads |
+| --- | --- | --- | --- |
+| **Sales** | yes | yes | orders summary + series + by channel + by country, customer mix (marketplaces excluded), product sales, country product sales, product pairs |
+| **Fulfilment** | yes (the open-orders list is "now") | yes | orders summary + series, fulfilment buckets + carriers, `open_orders()` (orders waiting to ship, VIP-marked, with name + email — `open-orders.ts`) |
+| **Support** | yes | no — tickets have none | support summary + series + categories, orders summary (contact-rate denominator), the latest `cluster_runs` for the topic map (all-time, with a Rebuild button) |
+| **Customers** | the activity rows only (the base is a snapshot) | no — people, so always Shopify | `customer_segment_totals` + `customer_ticket_facts` + `customer-segments.mjs`; orders per customer, marketing summary + series, capture series (`customer-activity-service.ts`) |
+| **AI agent** | yes | no | llm usage + series + ticket stats (priced by `llm-rates.mjs`), agent funnel + verdicts + blockers |
+
+**Every chart point carries a state** — `measured` / `partial` / `missing` from
+`bucketCoverage` against the freshness edges — and `TimeSeriesChart` hatches
+`missing`, so an unsynced day never draws as zero. A figure that cannot be
+computed is a `BlockedCard` with a required reason, never `0`.
 
 The Support topic map reads the latest `cluster_runs` row and renders each
-`ticket_clusters` row as its own treemap tile. The tile label is derived from
-the stored `representative_excerpt` by `clusterLabel()` in
-`web/lib/insights-support.ts`; the cluster's `subject` is only contextual
-metadata for the category label and the subject-level happiness colour.
-
-Shared pieces live in `components/insights/InsightsKit.tsx` (`PanelSection`,
-`TileGrid`, `StatTile`, `BlockedTile`, `BarList`, `Note`, formatters) and
-`lib/insights-format.ts` (isomorphic month and age labels).
-
-**Two rules the kit enforces.** A metric that cannot be computed renders as a
-`BlockedTile` with a required reason, never as `0` — on a dashboard a zero is a
-claim. And a missing series renders hatched rather than at zero, so "no data"
-and "measured zero" cannot look identical.
+`ticket_clusters` row as its own treemap tile; labels come from
+`clusterLabel()` in `web/lib/insights-support.ts`.
 
 ### `/settings` — forwarding address book
 
@@ -525,7 +585,7 @@ From `agent/`. Every pass has a standalone runner, most with `:dry-run`.
 | `draft[:dry-run] [--show] [--ticket <id>] [--limit N] [--redraft]` | the drafting pass. Reads case files, writes `ticket_drafts`; **no Graph call**. Refuses unless the Brand voice article is `approved`. `--redraft` overwrites an existing draft — the queue is derived, so a ticket leaves it once one exists |
 | `forward:once` / `forward:dry-run` | the forwarding pass |
 | `tickets:autoclose[:dry-run]` | the lifecycle pass |
-| `eval:categorise` · `eval:retrieval` · `eval:diagnose` · `eval:exemplars` · `review:sample` · `review:compare` | every measurement — indexed in **`agent/eval/README.md`**, which says what each is judged against (three labelled sets, two proxies) |
+| `eval:categorise` · `eval:retrieval` · `eval:diagnose` · `eval:exemplars` (`-- --authored-only` drops the translations, for a same-corpus A/B) · `review:sample` · `review:compare` | every measurement — indexed in **`agent/eval/README.md`**, which says what each is judged against (three labelled sets, two proxies) |
 
 ## Read Order
 

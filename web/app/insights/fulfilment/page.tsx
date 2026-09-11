@@ -1,40 +1,21 @@
-import { AppShell } from "@/components/app-shell/AppShell";
-import { InsightsNav } from "@/components/insights/InsightsNav";
+import { InsightsPage } from "@/components/insights/InsightsPage";
 import { FulfilmentView } from "@/components/insights/FulfilmentView";
-import { PanelError } from "@/components/insights/InsightsKit";
-import { getShopId } from "@/lib/server/knowledge-service";
 import { getFulfilmentPanel } from "@/lib/server/insights/fulfilment-service";
-import type { FulfilmentPanel } from "@/lib/types";
-import { openConversationCount } from "@/lib/server/conversation-badge";
+import type { SearchParams } from "@/lib/server/insights/context";
 
 export const dynamic = "force-dynamic";
 
 export const metadata = { title: "Fulfilment · Insights · Qiriness Support OS" };
 
-/**
- * Loads server-side like every other surface here, so the panel paints with
- * real figures rather than flashing empty tiles. There is nothing to filter
- * client-side: each figure is one row from one aggregate view.
- */
-export default async function FulfilmentInsightsPage() {
-  const openConversations = await openConversationCount();
-  let panel: FulfilmentPanel | null = null;
-  let loadError: string | null = null;
-
-  try {
-    panel = await getFulfilmentPanel(await getShopId());
-  } catch (error) {
-    loadError = error instanceof Error ? error.message : "Failed to load fulfilment insights.";
-  }
-
+export default function FulfilmentInsightsPage({ searchParams }: { searchParams: SearchParams }) {
   return (
-    <AppShell activeHref="/insights" openConversations={openConversations}>
-      <InsightsNav active="fulfilment" />
-      {loadError || !panel ? (
-        <PanelError message={loadError ?? "No data returned."} />
-      ) : (
-        <FulfilmentView panel={panel} />
+    <InsightsPage
+      active="fulfilment"
+      scope={{ range: true, platform: true }}
+      searchParams={searchParams}
+      render={async (ctx) => (
+        <FulfilmentView panel={await getFulfilmentPanel(ctx)} compareLabel={ctx.range.compareLabel} />
       )}
-    </AppShell>
+    />
   );
 }

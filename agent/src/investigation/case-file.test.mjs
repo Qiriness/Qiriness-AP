@@ -422,6 +422,11 @@ test('no rules, no policy field — not an empty shell', () => {
 // break a build, does not throw, and does not warn — it renders « Ask the
 // customer for . » with the list it was building come out empty. That is exactly
 // what `purchase_channel` did, unnoticed, until 2026-08-30.
+// BOTH REGEXES TOLERATE A CARRIAGE RETURN. This repo checks out with
+// core.autocrlf=true, so a file git stores with Unix endings has Windows
+// endings in the working tree. Anchoring the match on a bare newline made
+// this assert on the platform it ran on rather than on whether the union
+// had actually drifted.
 test('the dashboard labels every field this module can ask for', () => {
   const source = readFileSync(
     new URL('../../../web/lib/types.ts', import.meta.url),
@@ -429,12 +434,12 @@ test('the dashboard labels every field this module can ask for', () => {
   );
 
   const labels = source.match(
-    /export const MISSING_FIELD_LABELS: Record<MissingField, string> = \{([\s\S]*?)\n\};/
+    /export const MISSING_FIELD_LABELS: Record<MissingField, string> = \{([\s\S]*?)\r?\n\};/
   );
   assert.ok(labels, 'MISSING_FIELD_LABELS not found in web/lib/types.ts');
   const labelled = [...labels[1].matchAll(/^\s{2}([a-z_]+):/gm)].map((m) => m[1]);
 
-  const union = source.match(/export type MissingField =\n([\s\S]*?);\n/);
+  const union = source.match(/export type MissingField =\r?\n([\s\S]*?);\r?\n/);
   assert.ok(union, 'MissingField union not found in web/lib/types.ts');
   const declared = [...union[1].matchAll(/"([a-z_]+)"/g)].map((m) => m[1]);
 

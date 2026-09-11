@@ -1,5 +1,5 @@
 import { NEED_KEYS } from '../../agent/src/investigation/evidence-rules.mjs';
-import { REQUEST_KINDS, TICKET_SUBJECTS } from './support-taxonomy.mjs';
+import { REPLY_LANGUAGES, REQUEST_KINDS, TICKET_SUBJECTS } from './support-taxonomy.mjs';
 
 // Reads Email-Example-Queries.md into exemplar rows.
 //
@@ -34,6 +34,38 @@ import { REQUEST_KINDS, TICKET_SUBJECTS } from './support-taxonomy.mjs';
  * phrasings — so there is no arithmetic to get wrong at the boundary.
  */
 export const TRANSLATION_INDEX_BASE = 100;
+
+/**
+ * What an authored phrasing is written in unless the document says otherwise.
+ *
+ * The corpus is French and the column default matches, so this is only ever the
+ * fallback. It is named rather than inlined because the translator has to ask
+ * "what is this row's language" of every phrasing, and a literal 'fr' in two
+ * modules is the drift this codebase keeps writing constraints to prevent.
+ */
+export const DEFAULT_PHRASING_LANGUAGE = 'fr';
+
+/**
+ * `_(en)_`, or `_(es — extrait, la suite est sur R-22)_`.
+ *
+ * ELEVEN AUTHORED PHRASINGS ARE NOT FRENCH — real English, Spanish and Dutch
+ * mail, kept because messy foreign mail matches messy foreign mail better than
+ * a translation of it does. Nothing recorded that, so every one of them was
+ * being written to the table as `fr`: the language column existed to measure
+ * exactly this and was measuring the opposite.
+ *
+ * DECLARED IN THE DOCUMENT RATHER THAN DETECTED. Detection is a guess on a
+ * one-line fragment — « Do you ship to Germany? » and « URGENT — Commande
+ * #6216 » are both short enough to fool a classifier — and this is the input to
+ * a translation pass, where a wrong language means paying to translate English
+ * into English. The person pasting a phrasing in knows what it is.
+ *
+ * THE MARKER IS THE WHOLE ANNOTATION OR IT IS FOLLOWED BY A DASH, and that
+ * shape is doing real work: half the existing annotations are French prose and
+ * « en cours — … » opens with two letters that are also a language code. A code
+ * must stand alone or introduce the note, which no prose annotation does.
+ */
+const LANGUAGE_ANNOTATION = /^([a-z]{2})(?:\s*$|\s*[—–-]\s*)/;
 
 /** `### D-01 · Où en est ma commande ?` */
 const HEADING = /^###\s+([A-Z]{1,3}-\d{2})\s+·\s+(.+?)\s*$/;
@@ -181,8 +213,15 @@ function parseCount(block) {
  * about the situation, not a way of saying it.
  */
 function parsePhrasings(block, warn) {
+  // The canonical question is always French: it is written by us, not quoted
+  // from a customer, and the document is French throughout its own prose.
   const phrasings = [
-    { index: 0, kind: 'canonical', text: collapse(block.question) }
+    {
+      index: 0,
+      kind: 'canonical',
+      text: collapse(block.question),
+      language: DEFAULT_PHRASING_LANGUAGE
+    }
   ];
 
   let inVariants = false;
@@ -222,10 +261,37 @@ function parsePhrasings(block, warn) {
     if (seen.has(key)) continue;
     seen.add(key);
 
-    phrasings.push({ index: phrasings.length, kind: 'variant', text });
+    phrasings.push({
+      index: phrasings.length,
+      kind: 'variant',
+      text,
+      language: parseLanguage(annotation, block.key, warn)
+    });
   }
 
   return phrasings;
+}
+
+/**
+ * The language code at the head of a variant's annotation, if there is one.
+ *
+ * FORGIVING IN THE SAME DIRECTION AS THE REST OF THIS PARSER: an annotation
+ * that opens with something other than a language code is prose (« authored »,
+ * « extrait — … », « was O-11 »), and prose means French, which is the default
+ * anyway. The one case worth a warning is an opener in the marker's SHAPE whose
+ * code is not in the vocabulary — that is a typo in a marker somebody meant to
+ * work, and reading it silently as French is how the eleven foreign phrasings
+ * came to be labelled French in the first place.
+ */
+function parseLanguage(annotation, key, warn) {
+  const match = LANGUAGE_ANNOTATION.exec(String(annotation ?? '').trim());
+  if (!match) return DEFAULT_PHRASING_LANGUAGE;
+
+  const code = match[1];
+  if (REPLY_LANGUAGES.includes(code)) return code;
+
+  warn(`${key}: unknown language marker « ${code} », read as ${DEFAULT_PHRASING_LANGUAGE}`);
+  return DEFAULT_PHRASING_LANGUAGE;
 }
 
 function buildNote({ marker, secondaryCategory }) {

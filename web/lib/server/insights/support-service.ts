@@ -1,245 +1,127 @@
 /**
- * The Support panel's reads: how much mail arrives, what it is about, how it
- * feels, how fast it is answered — and the topic map behind all of it.
+ * The Support panel's reads, over the range in the URL: how much mail arrives,
+ * what it is about, how it feels, how fast it is answered — and the topic map.
  *
- * THE DENOMINATOR IS THE PRODUCT HERE. Support has three different populations
- * hiding behind the word "tickets", and this service resolves all three rather
- * than letting a component pick one by accident:
- *   214  live tickets                                     (support_by_category)
- *   203  of those have a synced inbound message           (ticket_reply_times)
- *   101  of those got an outbound reply after it          (reply_hours not null)
- * A mean reply time is therefore computed over 101 threads, not 214, and the
- * panel says so on the tile. An unstated denominator is the specific failure
- * this panel exists to avoid — "we answer in 67 hours" reads as a fact about
- * the desk when it is a fact about the half of the desk we can see.
+ * MAIL IS ONLY AS CURRENT AS THE LAST TIME THE WORKER RAN. The worker is run by
+ * hand for now, so a range can reach past the newest synced message. Buckets
+ * after that are drawn as missing, and while the mailbox is behind, the panel
+ * does not compare against the previous period or divide by orders: tickets
+ * from half a range over orders from all of it is a rate that only looks low.
  *
- * Server-only; see ./shared.ts for why nothing here pages rows and reduces.
+ * Tickets belong to no sales channel, so the platform filter does not apply.
+ *
+ * Server-only; see ./shared.ts for why nothing here pages rows.
  */
 
-import { T, V } from "../../../../scripts/lib/tables.mjs";
+import { RPC, T } from "../../../../scripts/lib/tables.mjs";
 import { supabaseHeaders } from "../../../../scripts/lib/supabase-rest-client.mjs";
 import type {
   KnowledgeCategory,
   SupportCategoryRow,
-  SupportMonth,
   SupportPanel,
-  SupportPurchaseCategory,
-  SupportPurchaseStates,
-  SupportReplyStats,
+  SupportSummary,
   TopicCluster,
   TopicMap,
 } from "../../types";
-import {
-  corpusBaseline,
-  foldByCategory,
-  hasCorpusDrifted,
-  percentileCont,
-  type SupportCategoryPair,
-} from "../../insights-support";
-import { count, getSupabaseClient, num, readView } from "./shared";
+import { corpusBaseline, hasCorpusDrifted } from "../../insights-support";
+import { orderArgs, rangeArgs, type InsightsContext } from "./context";
+import { previousCovered, toSeries, type Coverage } from "./series";
+import { callRpc, callRpcOne, count, getSupabaseClient, num, readView } from "./shared";
 
-export async function getSupportPanel(shopId: string): Promise<SupportPanel> {
-  const [
-    monthRows,
-    categoryRows,
-    replyRows,
-    runRows,
-    orderMonthRows,
-    purchaseRows,
-    purchaseCategoryRows
-  ] = await Promise.all([
-    readView<Record<string, unknown>>(V.SUPPORT_BY_MONTH, shopId, { order: "month.asc" }),
-    readView<Record<string, unknown>>(V.SUPPORT_BY_CATEGORY, shopId, { order: "tickets.desc" }),
-    // The one read in the Insights section that returns per-entity rows rather
-    // than an aggregate, and it is safe for a reason worth stating: this view
-    // is one row per live ticket, so it is bounded by the ticket table — 203
-    // rows today against readView's 500 cap, and support volume is tens of
-    // tickets a month. p50 and p90 over a bounded set are cheaper to compute in
-    // TypeScript than as two more percentile views, and the reply section needs
-    // the raw values anyway to state its own denominator. If ticket volume ever
-    // approaches the cap this must move back into SQL as an aggregate; nothing
-    // else on any panel is allowed to read rows like this.
-    readView<Record<string, unknown>>(V.TICKET_REPLY_TIMES, shopId, { order: "ticket_id.asc" }),
-    readView<Record<string, unknown>>(T.CLUSTER_RUNS, shopId, { order: "built_at.desc", limit: 1 }),
-    // The Support panel's one read outside the support views, and it is a
-    // denominator rather than a figure: "42 tickets" only becomes a rate once it
-    // sits over the orders that could have produced it. Deliberately the
-    // fulfilment view rather than a new `orders` column on `support_by_month` —
-    // the two aggregates key on different clocks (a ticket's first message, an
-    // order's `processed_at`), so joining them in SQL would have to pick one and
-    // silently drop the months the other one owns.
-    readView<Record<string, unknown>>(V.FULFILMENT_BY_MONTH, shopId, { order: "month.asc" }),
-    // Who wrote in, by whether we can see them buy. One row per shop.
-    readView<Record<string, unknown>>(V.SUPPORT_PURCHASE_STATES, shopId, { limit: 1 }),
-    readView<Record<string, unknown>>(V.SUPPORT_PURCHASE_BY_CATEGORY, shopId, {
-      order: "no_order_tickets.desc"
-    })
-  ]);
+/** Every ticket ever, for the topic map's colours — the map is not a ranged thing. */
+const ALL_TIME = { from: "2000-01-01T00:00:00", to: "2100-01-01T00:00:00" };
 
-  const byCategory = foldByCategory(categoryRows.map(mapCategoryPair));
-  const byMonth = withOrderCounts(monthRows.map(mapMonth), orderMonthRows);
-  const totals = summariseTotals(byCategory, byMonth);
+export async function getSupportPanel(ctx: InsightsContext): Promise<SupportPanel> {
+  const coverage: Coverage = { from: ctx.freshness.mailFrom, through: ctx.freshness.mailThrough };
+  const mailCurrent = ctx.freshness.items.find((item) => item.id === "mail")?.tone === "ok";
+  const comparable = mailCurrent && previousCovered(ctx.range, coverage);
+
+  const [current, previous, seriesRows, categoryRows, ordersNow, ordersBefore, runRows, allCategories, allTime] =
+    await Promise.all([
+      callRpcOne<Record<string, unknown>>(RPC.INSIGHTS_SUPPORT_SUMMARY, rangeArgs(ctx)),
+      comparable
+        ? callRpcOne<Record<string, unknown>>(RPC.INSIGHTS_SUPPORT_SUMMARY, rangeArgs(ctx, ctx.range.previous))
+        : Promise.resolve(null),
+      callRpc<Record<string, unknown>>(RPC.INSIGHTS_SUPPORT_SERIES, { ...rangeArgs(ctx), p_grain: ctx.range.grain }),
+      callRpc<Record<string, unknown>>(RPC.INSIGHTS_SUPPORT_CATEGORIES, rangeArgs(ctx)),
+      // The contact-rate denominator: every platform, since a ticket has none.
+      mailCurrent
+        ? callRpcOne<Record<string, unknown>>(RPC.INSIGHTS_ORDERS_SUMMARY, orderArgs(ctx, ctx.range, "all"))
+        : Promise.resolve(null),
+      comparable
+        ? callRpcOne<Record<string, unknown>>(RPC.INSIGHTS_ORDERS_SUMMARY, orderArgs(ctx, ctx.range.previous, "all"))
+        : Promise.resolve(null),
+      readView<Record<string, unknown>>(T.CLUSTER_RUNS, ctx.shopId, { order: "built_at.desc", limit: 1 }),
+      callRpc<Record<string, unknown>>(RPC.INSIGHTS_SUPPORT_CATEGORIES, rangeArgs(ctx, ALL_TIME)),
+      callRpcOne<Record<string, unknown>>(RPC.INSIGHTS_SUPPORT_SUMMARY, rangeArgs(ctx, ALL_TIME)),
+    ]);
 
   return {
-    byMonth,
-    byCategory,
-    replies: replyStats(replyRows, totals?.tickets ?? 0),
-    topicMap: await loadTopicMap(shopId, runRows[0] ?? null),
-    totals,
-    // Read asc, so the first row is the earliest month that sold anything.
-    ordersFromMonth: orderMonthRows.length > 0 ? String(orderMonthRows[0].month) : null,
-    purchaseStates: mapPurchaseStates(purchaseRows[0] ?? null),
-    purchaseByCategory: purchaseCategoryRows.map(mapPurchaseCategory)
+    summary: { current: mapSummary(current ?? {}), previous: previous ? mapSummary(previous) : null },
+    orders: {
+      current: ordersNow ? count(ordersNow.orders) : null,
+      previous: ordersBefore ? count(ordersBefore.orders) : null,
+    },
+    tickets: toSeries(
+      ctx.range,
+      seriesRows.map((row) => ({ ...row, bucket: String(row.bucket) }) as Record<string, unknown> & { bucket: string }),
+      (row) => (row ? count(row.tickets) : 0),
+      coverage
+    ),
+    medianReply: toSeries(
+      ctx.range,
+      seriesRows.map((row) => ({ ...row, bucket: String(row.bucket) }) as Record<string, unknown> & { bucket: string }),
+      (row) => (row ? num(row.p50_reply_hours) : null),
+      coverage
+    ),
+    categories: categoryRows.map(mapCategory),
+    topicMap: await loadTopicMap(ctx.shopId, runRows[0] ?? null),
+    topicCategories: allCategories.map(mapCategory),
+    mailThrough: ctx.freshness.mailThrough,
+    mailBehind: !mailCurrent,
+    allTimeMarketable: allTime ? count(allTime.no_order_marketable) : 0,
   };
 }
 
-// --- who is writing in ------------------------------------------------------
-
-/**
- * Null in, null out. A shop with no tickets has no row in the view, and
- * fabricating a zeroed one here would render a section claiming nobody
- * unverified has written — which is a statement, not an absence.
- */
-function mapPurchaseStates(row: Record<string, unknown> | null): SupportPurchaseStates | null {
-  if (!row) return null;
+function mapSummary(row: Record<string, unknown>): SupportSummary {
   return {
     tickets: count(row.tickets),
+    categorised: count(row.categorised),
+    stillOpen: count(row.still_open),
+    unhappy: count(row.unhappy),
+    veryUnhappy: count(row.very_unhappy),
+    levelThree: count(row.level_three),
+    repliesMeasured: count(row.replies_measured),
+    p50ReplyHours: num(row.p50_reply_hours),
+    p90ReplyHours: num(row.p90_reply_hours),
+    repliedWithin24h: count(row.replied_within_24h),
     buyerTickets: count(row.buyer_tickets),
     noOrderTickets: count(row.no_order_tickets),
     unknownTickets: count(row.unknown_tickets),
     noOrderCustomers: count(row.no_order_customers),
     noOrderDeliverable: count(row.no_order_deliverable),
-    noOrderMarketable: count(row.no_order_marketable)
+    noOrderMarketable: count(row.no_order_marketable),
   };
 }
 
-function mapPurchaseCategory(row: Record<string, unknown>): SupportPurchaseCategory {
+function mapCategory(row: Record<string, unknown>): SupportCategoryRow {
   return {
     category: (row.category as KnowledgeCategory | null) ?? null,
     tickets: count(row.tickets),
+    stillOpen: count(row.still_open),
+    unhappy: count(row.unhappy),
+    levelThree: count(row.level_three),
+    // Null, not 0: on a 1-4 scale a zero sorts as the happiest subject.
+    meanHappiness: num(row.mean_happiness),
     buyerTickets: count(row.buyer_tickets),
     noOrderTickets: count(row.no_order_tickets),
-    unknownTickets: count(row.unknown_tickets)
-  };
-}
-
-// --- months -----------------------------------------------------------------
-
-/**
- * Attach each month's order count, so the panel can print tickets as a share of
- * orders instead of as a bare volume.
- *
- * A month with no matching order row gets `null`, not `0`. The support series
- * and the order series are trimmed by different things — mail is synced from a
- * mailbox that starts at some date, orders come from Shopify's whole history —
- * so a support month with no order row means "orders unknown here", and a 0
- * would turn that into a division the panel would then have to render as either
- * an em dash or, worse, an infinite contact rate.
- *
- * Both views emit `month` as a `date`, which PostgREST serialises as
- * `YYYY-MM-DD` on the first of the month, so the raw string is a safe key.
- */
-function withOrderCounts(
-  months: SupportMonth[],
-  orderMonthRows: Record<string, unknown>[]
-): SupportMonth[] {
-  const orders = new Map(orderMonthRows.map((row) => [String(row.month), count(row.orders)]));
-  return months.map((month) => ({ ...month, orders: orders.get(month.month) ?? null }));
-}
-
-function mapMonth(row: Record<string, unknown>): SupportMonth {
-  return {
-    month: String(row.month),
-    tickets: count(row.tickets),
-    // Filled in by `withOrderCounts` — `support_by_month` has no orders in it.
-    orders: null,
-    unhappy: count(row.unhappy),
-    veryUnhappy: count(row.very_unhappy),
-    levelThree: count(row.level_three),
-    stillOpen: count(row.still_open),
-    meanHappiness: num(row.mean_happiness),
-    p50ReplyHours: num(row.p50_reply_hours),
-    repliedWithin24h: count(row.replied_within_24h),
-    repliesMeasured: count(row.replies_measured),
-  };
-}
-
-// --- categories -------------------------------------------------------------
-
-function mapCategoryPair(row: Record<string, unknown>): SupportCategoryPair {
-  return {
-    category: (row.category as KnowledgeCategory | null) ?? null,
-    requestKind: (row.request_kind as string | null) ?? null,
-    tickets: count(row.tickets),
-    stillOpen: count(row.still_open),
-    unhappy: count(row.unhappy),
-    levelThree: count(row.level_three),
-    meanHappiness: num(row.mean_happiness),
-  };
-}
-
-/**
- * Headline counts, summed from the folded subject rows rather than read from a
- * fifth view.
- *
- * This is not the row-paging mistake `shared.ts` warns about: the input is a
- * dozen already-aggregated rows, one per subject, and every ticket appears in
- * exactly one of them because the view groups on the subject axis. Summing
- * aggregates is arithmetic; paging a table to count it is the thing that goes
- * wrong. Deliberately taken from the category view and not the month view —
- * `support_by_month` drops tickets with no `first_message_at`, so it would
- * report a smaller total for no reason a reader could see. The one exception is
- * `veryUnhappy` — happiness = 4 is split out only by the month view, so it is
- * summed there, and it is a subset of `unhappy` rather than a rival total.
- */
-function summariseTotals(byCategory: SupportCategoryRow[], byMonth: SupportMonth[]) {
-  if (byCategory.length === 0) return null;
-  const totals = byCategory.reduce(
-    (acc, row) => ({
-      tickets: acc.tickets + row.tickets,
-      open: acc.open + row.stillOpen,
-      unhappy: acc.unhappy + row.unhappy,
-    }),
-    { tickets: 0, open: 0, unhappy: 0 }
-  );
-  return { ...totals, veryUnhappy: byMonth.reduce((sum, m) => sum + m.veryUnhappy, 0) };
-}
-
-// --- reply times ------------------------------------------------------------
-
-/**
- * First-response statistics with the population they were computed over.
- *
- * `total` is every live ticket, not the number of rows in the view: the view
- * itself already excludes the eleven tickets with no synced inbound message,
- * and quoting its row count as the denominator would quietly shrink the
- * population to make the coverage look better than it is.
- */
-export function replyStats(
-  rows: Record<string, unknown>[],
-  totalTickets: number
-): SupportReplyStats | null {
-  if (rows.length === 0 && totalTickets === 0) return null;
-
-  const measured = rows
-    .map((row) => num(row.reply_hours))
-    .filter((value): value is number => value !== null);
-
-  return {
-    measured: measured.length,
-    total: Math.max(totalTickets, rows.length),
-    p50Hours: percentileCont(measured, 0.5),
-    p90Hours: percentileCont(measured, 0.9),
-    within24h: measured.filter((value) => value <= 24).length,
+    unknownTickets: count(row.unknown_tickets),
   };
 }
 
 // --- topic map --------------------------------------------------------------
 
-async function loadTopicMap(
-  shopId: string,
-  runRow: Record<string, unknown> | null
-): Promise<TopicMap | null> {
+async function loadTopicMap(shopId: string, runRow: Record<string, unknown> | null): Promise<TopicMap | null> {
   if (!runRow) return null;
 
   const runId = String(runRow.id);
@@ -247,16 +129,13 @@ async function loadTopicMap(
   const internalExcluded = count(runRow.internal_excluded);
 
   const [clusterRows, liveMessageCount] = await Promise.all([
-    // Filtered to one run, so this is 46 rows and cannot grow with history —
-    // every rebuild writes a new run_id rather than appending to this one.
+    // Filtered to one run, so bounded by that run's topics.
     readView<Record<string, unknown>>(T.TICKET_CLUSTERS, shopId, {
       order: "size.desc",
       filters: { run_id: runId },
     }),
     countCorpusMessages(shopId),
   ]);
-
-  const baseline = corpusBaseline(messageCount, internalExcluded);
 
   return {
     runId,
@@ -269,7 +148,7 @@ async function loadTopicMap(
     topicCount: count(runRow.topic_count),
     clusters: clusterRows.map(mapCluster),
     liveMessageCount,
-    stale: hasCorpusDrifted(liveMessageCount, baseline),
+    stale: hasCorpusDrifted(liveMessageCount, corpusBaseline(messageCount, internalExcluded)),
   };
 }
 
@@ -285,23 +164,11 @@ function mapCluster(row: Record<string, unknown>): TopicCluster {
 }
 
 /**
- * How many messages the clustering job would load if it ran right now.
- *
- * A COUNT, NOT A READ. The corpus is 296 embedded messages each carrying a
- * 1536-float vector; pulling them to length-check an array would be several
- * megabytes over the wire on every page view, to learn one integer. PostgREST
- * returns that integer in `Content-Range` when asked with `Prefer: count=exact`
- * and a HEAD, so no row body crosses the network at all.
- *
- * The filters mirror `loadEmbeddedMessages` in cluster-ticket-messages.mjs —
- * inbound, embedded, not deleted, and on a categorised ticket — because a
- * baseline computed from a different population would drift against the run for
- * reasons that have nothing to do with new mail. The `tickets!inner` embed is
- * how that last condition is expressed without a second round trip.
- *
- * Null on any failure. A staleness banner that cannot check must say it cannot
- * check; guessing zero would declare every map stale the first time the network
- * blinked.
+ * How many messages the clustering job would load right now — a COUNT via
+ * `Prefer: count=exact` on a HEAD, never a read of 1536-float vectors. The
+ * filters mirror `loadEmbeddedMessages` in cluster-ticket-messages.mjs, or the
+ * baseline drifts for reasons unrelated to new mail. Null on any failure: a
+ * staleness check that could not run must not declare the map stale.
  */
 async function countCorpusMessages(shopId: string): Promise<number | null> {
   try {
@@ -318,14 +185,9 @@ async function countCorpusMessages(shopId: string): Promise<number | null> {
 
     const response = await fetch(`${client.baseUrl}/${T.TICKET_MESSAGES}?${params.toString()}`, {
       method: "HEAD",
-      // Load-bearing, not defensive. Next patches global fetch inside Server
-      // Components and caches the response for a year keyed on the URL, so
-      // without this the drift check would answer with whatever it saw the
-      // first time the page was ever rendered and never notice a rebuild.
+      // Load-bearing: Next caches Server Component fetches by URL otherwise.
       cache: "no-store",
-      headers: supabaseHeaders(client, {
-        Prefer: "count=exact",
-      }),
+      headers: supabaseHeaders(client, { Prefer: "count=exact" }),
     });
 
     if (!response.ok) return null;

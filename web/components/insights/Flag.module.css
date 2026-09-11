@@ -1,0 +1,24 @@
+.flag {
+  flex: none;
+  display: block;
+  width: 22px;
+  height: 15px;
+  border-radius: 2px;
+  /* A hairline so a white stripe does not dissolve into the card. */
+  box-shadow: 0 0 0 1px rgba(15, 20, 27, 0.12);
+}
+
+.badge {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 15px;
+  border-radius: 2px;
+  background: var(--mist-050);
+  box-shadow: 0 0 0 1px var(--border);
+  font-size: 9px;
+  font-weight: var(--weight-semibold);
+  color: var(--text-muted);
+}

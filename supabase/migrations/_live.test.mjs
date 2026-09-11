@@ -228,6 +228,107 @@ test('the baseline applies, and its projections return what they claim', { skip 
       assert.equal(rows[0].min_order_number, null);
       assert.equal(rows[0].max_order_number, null);
     });
+
+    // ------------------------------------------------------- ranged reads
+    //
+    // Four orders either side of midnight in Paris (UTC+2 in summer). In UTC,
+    // A and B share 31 July; in Paris, A is 1 August. That single order is the
+    // whole reason the functions take a timezone.
+    const { rows: [ranges] } = await client.query(
+      `insert into ${schema}.shops (shop_domain) values ('ranges.test') returning id`
+    );
+    await client.query(
+      `insert into ${schema}.orders
+         (shop_id, shopify_order_id, name, processed_at, total_price, total_refunded, sales_channel_handle, cancelled_at)
+       values
+         ($1, 'gid://r/a', '#A', '2026-07-31T22:30:00Z', 100, 0, 'web', null),
+         ($1, 'gid://r/b', '#B', '2026-07-31T21:30:00Z', 50, 0, 'amazon', null),
+         ($1, 'gid://r/c', '#C', '2026-08-01T10:00:00Z', 30, 10, 'web', null),
+         ($1, 'gid://r/d', '#D', '2026-08-01T11:00:00Z', 999, 0, 'web', '2026-08-01T12:00:00Z')`,
+      [ranges.id]
+    );
+    const window = [ranges.id, '2026-07-31T00:00:00', '2026-08-02T00:00:00', 'Europe/Paris'];
+
+    await t.test('series bucket on the shop clock, not the database one', async () => {
+      const { rows } = await client.query(
+        `select bucket::text as bucket, orders, revenue
+         from ${schema}.insights_orders_series($1, $2, $3, $4, 'day')`,
+        window
+      );
+      assert.deepEqual(
+        rows.map((r) => [r.bucket, Number(r.orders)]),
+        [['2026-07-31 00:00:00', 1], ['2026-08-01 00:00:00', 3]]
+      );
+      // A's 100 plus C net of its refund; the cancelled D earns nothing.
+      assert.equal(Number(rows[1].revenue), 120);
+    });
+
+    await t.test('the channel filters keep and drop by handle', async () => {
+      const summary = async (channels, notChannels) =>
+        (
+          await client.query(
+            `select * from ${schema}.insights_orders_summary($1, $2, $3, $4, $5, $6)`,
+            [...window, channels, notChannels]
+          )
+        ).rows[0];
+
+      const all = await summary(null, null);
+      assert.equal(Number(all.orders), 4);
+      assert.equal(Number(all.cancelled_orders), 1);
+      assert.equal(Number(all.revenue), 170);
+
+      assert.equal(Number((await summary(['amazon'], null)).orders), 1);
+      const shopify = await summary(null, ['amazon']);
+      assert.equal(Number(shopify.orders), 3);
+      assert.equal(Number(shopify.revenue), 120);
+    });
+
+    await t.test('the VIP rule needs BOTH conditions, each strictly exceeded, inside the window', async () => {
+      // Four customers, rule "> €100 and > 1 order in 12 months":
+      //   both    — 2 orders, €150            -> VIP
+      //   spender — 1 order, €500             -> not: one condition is not both
+      //   regular — 3 orders, €60             -> not: the other one
+      //   stale   — 2 orders, €300, 2 years ago -> not: outside the window
+      //   edge    — 2 orders, exactly €100    -> not: "more than" is strict
+      const people = ['both', 'spender', 'regular', 'stale', 'edge'];
+      const ids = {};
+      for (const name of people) {
+        const { rows: [row] } = await client.query(
+          `insert into ${schema}.customers (shop_id, shopify_customer_id, display_name) values ($1, $2, $3) returning id`,
+          [ranges.id, `gid://vip/${name}`, name]
+        );
+        ids[name] = row.id;
+      }
+      const orders = [
+        ['both', 100, 'now()'], ['both', 50, 'now()'],
+        ['spender', 500, 'now()'],
+        ['regular', 20, 'now()'], ['regular', 20, 'now()'], ['regular', 20, 'now()'],
+        ['stale', 150, "now() - interval '2 years'"], ['stale', 150, "now() - interval '2 years'"],
+        ['edge', 50, 'now()'], ['edge', 50, 'now()']
+      ];
+      for (const [i, [name, price, at]] of orders.entries()) {
+        await client.query(
+          `insert into ${schema}.orders (shop_id, shopify_order_id, shopify_customer_id, name, processed_at, total_price, sales_channel_handle)
+           values ($1, $2, $3, $4, ${at}, $5, 'web')`,
+          [ranges.id, `gid://vip-order/${i}`, `gid://vip/${name}`, `#V${i}`, price]
+        );
+      }
+      const { rows } = await client.query(
+        `select customer_id from ${schema}.vip_customers($1, 100, 1, 12, array['amazon'])`,
+        [ranges.id]
+      );
+      assert.deepEqual(rows.map((r) => r.customer_id), [ids.both]);
+    });
+
+    await t.test('an empty range is one row of zeros, never no row', async () => {
+      const { rows } = await client.query(
+        `select * from ${schema}.insights_orders_summary($1, '2020-01-01T00:00:00', '2020-01-02T00:00:00', 'UTC')`,
+        [ranges.id]
+      );
+      assert.equal(rows.length, 1);
+      assert.equal(Number(rows[0].orders), 0);
+      assert.equal(rows[0].p50_hours, null);
+    });
   } finally {
     await client.query(`drop schema if exists ${schema} cascade`).catch(() => {});
     await client.end();

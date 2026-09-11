@@ -1,0 +1,85 @@
+.wrap {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
+.lateCount {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--priority-high-ink);
+}
+
+.lateDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--priority-high);
+}
+
+/* Three days or more: a red edge and a red wash, so the row reads before its
+   number does. An inset shadow, like the VIP row, so the row keeps its height. */
+.lateRow th:first-child {
+  box-shadow: inset 3px 0 0 var(--priority-high);
+}
+
+.lateRow {
+  background: var(--error-050);
+}
+
+.lateRow:hover {
+  background: #fde8e8 !important;
+}
+
+.days {
+  font-weight: var(--weight-semibold);
+  color: var(--text-strong);
+}
+
+.lateDays {
+  display: inline-block;
+  padding: 1px var(--space-2);
+  border-radius: var(--radius-sm);
+  background: var(--priority-high);
+  color: #ffffff;
+  font-weight: var(--weight-semibold);
+}
+
+.vip {
+  display: inline-block;
+  margin-left: var(--space-2);
+  padding: 1px var(--space-2);
+  border: 1px solid var(--gold-100);
+  border-radius: var(--radius-pill);
+  background: var(--surface);
+  font-size: var(--text-caption);
+  font-weight: var(--weight-semibold);
+  letter-spacing: 0.06em;
+  color: var(--gold-strong);
+  vertical-align: middle;
+}
+
+.email {
+  color: var(--text-default);
+  user-select: all;
+}
+
+.empty {
+  margin: 0;
+  padding: var(--space-5);
+  text-align: center;
+  color: var(--text-subtle);
+  background: var(--surface-sunken);
+  border-radius: var(--radius-md);
+}

@@ -1,47 +1,18 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import {
-  VIP_RFM_GROUPS,
-  formatRfmGroup,
-  isVipRfmGroup,
-  normaliseRfmGroup
-} from './customer-segments.mjs';
+import * as segments from './customer-segments.mjs';
 
-test('the VIP set is exactly the two best-customer segments', () => {
-  // The business rule, asserted so a widening is a deliberate edit rather than
-  // something that drifts in with a UI change.
-  assert.deepEqual(VIP_RFM_GROUPS, ['CHAMPIONS', 'LOYAL']);
-});
+const { formatRfmGroup, normaliseRfmGroup } = segments;
 
-test('champions and loyal customers are VIPs', () => {
-  assert.equal(isVipRfmGroup('CHAMPIONS'), true);
-  assert.equal(isVipRfmGroup('LOYAL'), true);
-});
-
-test('ACTIVE is deliberately not VIP', () => {
-  // "Has ordered recently" is most of the customer table; a badge nearly every
-  // row carries tells an operator nothing.
-  assert.equal(isVipRfmGroup('ACTIVE'), false);
-});
-
-test('every other group observed on real data is not VIP', () => {
-  for (const group of ['PROSPECTS', 'DORMANT', 'AT_RISK', 'ALMOST_LOST', 'LOST']) {
-    assert.equal(isVipRfmGroup(group), false, group);
-  }
-});
-
-test('no group at all is never VIP', () => {
-  // Absence of evidence is not VIP status: an unlinked ticket, or a customer
-  // Shopify has not scored, must not be badged.
-  for (const value of [null, undefined, '', '   ', 42, {}]) {
-    assert.equal(isVipRfmGroup(value), false, String(value));
-  }
+test('Shopify segments no longer decide VIP status', () => {
+  // VIP is the shop's own rule now (vip-rule.mjs). A second definition left
+  // here would be imported by somebody and disagree with the first.
+  assert.equal('isVipRfmGroup' in segments, false);
+  assert.equal('VIP_RFM_GROUPS' in segments, false);
 });
 
 test('matching survives casing and padding', () => {
-  assert.equal(isVipRfmGroup('champions'), true);
-  assert.equal(isVipRfmGroup('  Loyal  '), true);
   assert.equal(normaliseRfmGroup(' loyal '), 'LOYAL');
   assert.equal(normaliseRfmGroup(null), '');
 });

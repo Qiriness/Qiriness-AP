@@ -1,5 +1,6 @@
 import { hashIdentifier, recordDataAccessEvent } from '../../../scripts/lib/compliance-audit.mjs';
 import { supabaseSelectAll } from '../../../scripts/lib/supabase-rest-client.mjs';
+import { loadVipCustomers, loadVipRule } from '../../../scripts/lib/vip-rule.mjs';
 
 import { buildAccountState, buildCustomerContext, toPromptText } from './customer-context.mjs';
 
@@ -35,6 +36,7 @@ const COLUMNS = [
 export function createCustomerLookup({ supabase, shopId, logger, audit = true }) {
   let hashIndexPromise = null;
   let storefrontPromise = null;
+  let vipRulePromise = null;
 
   /**
    * The shop's public address, loaded once and cached like the hash index.
@@ -48,6 +50,31 @@ export function createCustomerLookup({ supabase, shopId, logger, audit = true })
    * carry a link; it must never decide whether the customer can be looked up at
    * all. Without it the account block simply describes the page in words.
    */
+  /**
+   * Is this customer a VIP under the SHOP'S rule (vip-rule.mjs)?
+   *
+   * The same question the ticket queue and the Customers panel ask, through the
+   * same SQL function, so the case file cannot call somebody a VIP the dashboard
+   * does not. The rule is read once per lookup instance, like the storefront.
+   *
+   * NULL ON ANY FAILURE, never a throw and never `false`: "we could not check"
+   * must not read as "checked, and not a VIP". No rule set is a real answer —
+   * nobody is a VIP — and comes back `false`.
+   */
+  async function vipStatus(customerId) {
+    try {
+      vipRulePromise ??= loadVipRule(supabase, shopId);
+      const rule = await vipRulePromise;
+      if (!rule) return false;
+      const vips = await loadVipCustomers(supabase, shopId, rule, [customerId]);
+      return vips.has(customerId);
+    } catch (error) {
+      logger?.warn?.('customer.vip_unavailable', { reason: error.message });
+      vipRulePromise = null;
+      return null;
+    }
+  }
+
   function storefrontUrl() {
     storefrontPromise ??= supabaseSelectAll(supabase, 'shops', { id: shopId }, 'storefront_url')
       .then((rows) => rows?.[0]?.storefront_url ?? null)
@@ -255,6 +282,7 @@ export function createCustomerLookup({ supabase, shopId, logger, audit = true })
       });
 
       await recordAccess(customer, matchedBy);
+      const isVip = await vipStatus(customer.id);
 
       return {
         found: true,
@@ -265,6 +293,9 @@ export function createCustomerLookup({ supabase, shopId, logger, audit = true })
         // `tickets.resolved_context.customer` — adding a field there would
         // rewrite every bundle written so far.
         customerId: customer.id,
+        // Beside the bundle, like the id: `context` is the stored shape, and VIP
+        // is a read-time answer that must not be frozen into it.
+        isVip,
         customer: context,
         account,
         promptText: toPromptText(context, account, { includeEmail, storefrontUrl: await storefrontUrl() })

@@ -1,0 +1,166 @@
+/* Gold is VIP's own token pair — the edge says which rule this card owns. */
+.card {
+  position: relative;
+  margin: 0 0 var(--space-4);
+  padding: var(--space-5);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-xs), inset 3px 0 0 var(--gold-strong);
+}
+
+.head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  margin: 0 0 var(--space-4);
+}
+
+.title {
+  margin: 0;
+  font-size: var(--text-md);
+  font-weight: var(--weight-semibold);
+  color: var(--text-strong);
+}
+
+.state {
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+/* The form reads as the rule: a sentence with the numbers in it. */
+.sentence {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-2);
+  font-size: var(--text-md);
+  color: var(--text-default);
+}
+
+.field {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.prefix {
+  position: absolute;
+  left: var(--space-3);
+  color: var(--text-subtle);
+  pointer-events: none;
+}
+
+.input {
+  width: 7.5rem;
+  height: 2.5rem;
+  padding: 0 var(--space-3) 0 1.6rem;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  font: inherit;
+  font-size: var(--text-lg);
+  font-weight: var(--weight-semibold);
+  color: var(--text-strong);
+  font-variant-numeric: tabular-nums;
+}
+
+.narrow {
+  width: 5rem;
+  padding-left: var(--space-3);
+}
+
+.input:focus {
+  outline: none;
+  border-color: var(--teal);
+  box-shadow: var(--shadow-focus);
+}
+
+.and {
+  padding: 2px var(--space-2);
+  border-radius: var(--radius-sm);
+  background: var(--gold-100);
+  color: var(--gold-strong);
+  font-size: var(--text-sm);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.actions {
+  display: inline-flex;
+  gap: var(--space-2);
+  margin-left: auto;
+}
+
+.save,
+.clear {
+  height: 2.5rem;
+  padding: 0 var(--space-4);
+  border-radius: var(--radius-md);
+  font: inherit;
+  font-size: var(--text-body);
+  font-weight: var(--weight-semibold);
+  cursor: pointer;
+}
+
+.save {
+  border: 1px solid var(--teal);
+  background: var(--teal);
+  color: var(--text-on-teal);
+}
+
+.save:hover:not(:disabled) {
+  background: var(--teal-strong);
+}
+
+.save:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.clear {
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
+  color: var(--text-muted);
+}
+
+.clear:hover:not(:disabled) {
+  color: var(--priority-high-ink);
+  border-color: var(--error-100);
+}
+
+.result {
+  margin: var(--space-4) 0 0;
+  font-size: var(--text-body);
+  color: var(--text-muted);
+}
+
+.result strong {
+  font-size: var(--text-lg);
+  color: var(--text-strong);
+}
+
+.note {
+  display: block;
+  margin-top: 2px;
+  font-size: var(--text-sm);
+  color: var(--text-subtle);
+}
+
+.error {
+  color: var(--priority-high-ink);
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}

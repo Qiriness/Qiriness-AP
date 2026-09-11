@@ -1,12 +1,10 @@
 import type { ReactNode } from "react";
+import { change } from "../../../scripts/lib/insights-range.mjs";
+import { PinnableRow } from "./PinBoard";
 import styles from "./InsightsKit.module.css";
 
 /**
- * The pieces every panel is built from.
- *
- * One file rather than six, because each of these is a dozen lines and they are
- * only ever used together — splitting them would be six imports at the top of
- * every panel to save nothing. They are presentational and server-renderable:
+ * The pieces every panel is built from. Presentational and server-renderable:
  * no state, no effects, no "use client".
  *
  * THE HOUSE RULE THEY ENCODE: a figure that could not be measured renders as an
@@ -15,104 +13,202 @@ import styles from "./InsightsKit.module.css";
  * look like one is the fastest way to lose trust in the whole screen.
  */
 
-// --- section --------------------------------------------------------------
+export { compactNumber, euros, formatValue, hours, percent, usd } from "@/lib/insights-format";
 
-export function PanelSection({
-  title,
-  subtitle,
-  actions,
+// --- layout ---------------------------------------------------------------
+
+/**
+ * A row of cards. With `pin` it carries a pin button in its rightmost card and
+ * can be moved to the panel's Pinned section (PinBoard.tsx); `pin` is the row's
+ * stable id within its panel, `label` names it for the button.
+ */
+export function Grid({
   children,
+  min = 15,
+  pin,
+  label,
 }: {
-  title: string;
-  subtitle?: ReactNode;
-  actions?: ReactNode;
   children: ReactNode;
+  min?: number;
+  pin?: string;
+  label?: string;
+}) {
+  const style = { gridTemplateColumns: `repeat(auto-fit, minmax(min(100%, ${min}rem), 1fr))` };
+  if (pin) {
+    return (
+      <PinnableRow id={pin} label={label ?? pin} style={style}>
+        {children}
+      </PinnableRow>
+    );
+  }
+  return (
+    <div className={styles.grid} style={style}>
+      {children}
+    </div>
+  );
+}
+
+/** A white card with a small heading — the unit every panel is laid out in. */
+export function Card({
+  title,
+  aside,
+  children,
+  span,
+  className,
+}: {
+  title?: ReactNode;
+  aside?: ReactNode;
+  children: ReactNode;
+  /** Columns to span in a `Grid` (desktop only; stacks on narrow screens). */
+  span?: 2 | 3;
+  className?: string;
 }) {
   return (
-    <section className={styles.section}>
-      <header className={styles.sectionHead}>
-        <div className={styles.sectionTitles}>
-          <h2 className={styles.sectionTitle}>{title}</h2>
-          {subtitle ? <p className={styles.sectionSub}>{subtitle}</p> : null}
-        </div>
-        {actions ? <div className={styles.sectionActions}>{actions}</div> : null}
-      </header>
+    <section className={`${styles.card} ${span ? styles[`span${span}`] : ""} ${className ?? ""}`}>
+      {title || aside ? (
+        <header className={styles.cardHead}>
+          {title ? <h2 className={styles.cardTitle}>{title}</h2> : <span />}
+          {aside ? <div className={styles.cardAside}>{aside}</div> : null}
+        </header>
+      ) : null}
       {children}
     </section>
   );
 }
 
-// --- tiles ----------------------------------------------------------------
+// --- figures --------------------------------------------------------------
 
-export type TileTone = "neutral" | "good" | "warn" | "bad" | "blocked";
+/**
+ * Whether a rise in this figure is good news. Colours the change chip:
+ * direction x goodness, so "dispatch time up" is red and "revenue up" green.
+ */
+export type Polarity = "up" | "down" | "neutral";
 
-export function TileGrid({ children }: { children: ReactNode }) {
-  return <ul className={styles.tileGrid}>{children}</ul>;
+/**
+ * The change against the previous period.
+ *
+ * `points` renders a percentage-point difference rather than a relative change:
+ * "late shipments 6% -> 9%" is +3 pts, and "+50%" would be true and useless.
+ * A comparison that does not exist renders nothing rather than a dash, so the
+ * tile never implies one was attempted.
+ */
+export function DeltaChip({
+  current,
+  previous,
+  polarity,
+  points = false,
+  compareLabel,
+}: {
+  current: number | null;
+  previous: number | null | undefined;
+  polarity: Polarity;
+  points?: boolean;
+  compareLabel: string;
+}) {
+  if (current === null || previous === null || previous === undefined) return null;
+
+  const diff = points ? current - previous : change(current, previous);
+  if (diff === null || !Number.isFinite(diff)) return null;
+
+  const flat = Math.abs(points ? diff : diff * 100) < 0.05;
+  const up = diff > 0;
+  const tone = flat || polarity === "neutral" ? "flat" : up === (polarity === "up") ? "good" : "bad";
+  const text = points
+    ? `${up ? "+" : ""}${diff.toFixed(1)} pts`
+    : `${up ? "+" : ""}${(diff * 100).toFixed(1)}%`;
+
+  return (
+    <span className={styles.deltaRow}>
+      <span className={`${styles.delta} ${styles[`delta_${tone}`]}`}>
+        <span aria-hidden="true">{flat ? "→" : up ? "↑" : "↓"}</span>
+        {text.replace(/^[+-]/, "")}
+        <span className={styles.srOnly}>{up ? " up" : " down"}</span>
+      </span>
+      <span className={styles.deltaLabel}>vs {compareLabel}</span>
+    </span>
+  );
+}
+
+export interface SubMetric {
+  label: string;
+  value: ReactNode;
 }
 
 /**
- * One headline figure.
- *
- * `value` is already formatted by the caller — the service knows whether a
- * number is hours, euros or a count, and a tile that reformats it would be a
- * second place for the unit to be wrong.
+ * One headline figure, the size the screenshot set: the number is the loudest
+ * thing on the card, its change sits under it, and up to three supporting
+ * figures sit below a hairline.
  */
-export function StatTile({
+export function KpiCard({
   label,
   value,
-  of,
-  foot,
-  tone = "neutral",
+  unit,
+  delta,
+  sub,
+  hero = false,
+  tone,
   action,
+  span,
 }: {
   label: string;
   value: ReactNode;
-  of?: ReactNode;
-  foot?: ReactNode;
-  tone?: TileTone;
-  /**
-   * One icon-sized control belonging to this figure — an export of the rows
-   * behind it.
-   *
-   * Pinned to the tile's top-right corner, out of the reading order of label →
-   * figure → foot. It must carry its own accessible name and its own tooltip:
-   * an icon in a corner has no visible text, so whatever the caveat in `foot`
-   * says is not something a reader necessarily sees before pressing it.
-   */
+  /** Small text after the figure: "orders", "of 207". */
+  unit?: ReactNode;
+  delta?: ReactNode;
+  sub?: SubMetric[];
+  hero?: boolean;
+  tone?: "warn" | "bad";
   action?: ReactNode;
+  span?: 2 | 3;
 }) {
   return (
-    <li className={`${styles.tile} ${styles[tone]}`}>
-      {action ? <span className={styles.tileAction}>{action}</span> : null}
-      <span className={styles.tileLabel}>{label}</span>
-      <span className={styles.tileFigure}>
-        {value}
-        {of ? <span className={styles.tileOf}>{of}</span> : null}
-      </span>
-      {foot ? <span className={styles.tileFoot}>{foot}</span> : null}
-    </li>
+    <section
+      className={`${styles.card} ${styles.kpi} ${hero ? styles.hero : ""} ${tone ? styles[`kpi_${tone}`] : ""} ${
+        span ? styles[`span${span}`] : ""
+      }`}
+    >
+      <header className={styles.kpiHead}>
+        <h2 className={styles.kpiLabel}>{label}</h2>
+        {action ? <span className={styles.kpiAction}>{action}</span> : null}
+      </header>
+      <p className={styles.kpiFigure}>
+        <span className={styles.kpiValue}>{value}</span>
+        {unit ? <span className={styles.kpiUnit}>{unit}</span> : null}
+      </p>
+      {delta ? <div className={styles.kpiDelta}>{delta}</div> : null}
+      {sub && sub.length > 0 ? (
+        <dl className={styles.kpiSub}>
+          {sub.map((item) => (
+            <div key={item.label} className={styles.kpiSubItem}>
+              <dt>{item.label}</dt>
+              <dd>{item.value}</dd>
+            </div>
+          ))}
+        </dl>
+      ) : null}
+    </section>
   );
 }
 
 /**
- * A tile for a metric that cannot be computed yet.
- *
- * Deliberately a different component from a zero-valued `StatTile`: the reason
- * is required, so a blocked metric can never ship without saying what is
- * missing.
+ * A figure that cannot be computed yet. A different component from a zero, and
+ * the reason is required, so a blocked metric can never ship without saying
+ * what is missing.
  */
-export function BlockedTile({ label, reason }: { label: string; reason: string }) {
+export function BlockedCard({ label, reason }: { label: string; reason: string }) {
   return (
-    <li className={`${styles.tile} ${styles.blocked}`}>
-      <span className={styles.tileLabel}>{label}</span>
-      <span className={styles.tileFigure}>
-        <span className={styles.dash} aria-hidden="true">
+    <section className={`${styles.card} ${styles.kpi} ${styles.blocked}`}>
+      <header className={styles.kpiHead}>
+        <h2 className={styles.kpiLabel}>{label}</h2>
+      </header>
+      <p className={styles.kpiFigure}>
+        <span className={styles.kpiValue} aria-hidden="true">
           —
         </span>
         <span className={styles.srOnly}>Not measurable</span>
-      </span>
-      <span className={styles.tileFoot}>{reason}</span>
-    </li>
+      </p>
+      <p className={styles.blockedReason}>{reason}</p>
+    </section>
   );
 }
 
@@ -120,11 +216,11 @@ export function BlockedTile({ label, reason }: { label: string; reason: string }
 
 export interface BarDatum {
   key: string;
-  label: string;
+  label: ReactNode;
   value: number | null;
   /** Rendered at the end of the row; the caller owns the unit. */
-  display?: string;
-  /** Draws attention without a second colour scale — used for "past the line". */
+  display?: ReactNode;
+  /** Past the line — the one other colour a bar may take. */
   emphasis?: boolean;
   /** No data, as opposed to a measured zero. Renders hatched. */
   missing?: boolean;
@@ -132,12 +228,8 @@ export interface BarDatum {
 }
 
 /**
- * A horizontal bar list — the workhorse of these panels.
- *
- * Scaled against `max` across the whole list rather than per row, because the
- * comparison between rows is the entire point. A missing row is hatched at full
- * width instead of drawn at zero: an empty bar and a bar that was never
- * measured are the same picture otherwise.
+ * A horizontal bar list, scaled against the whole list so rows compare. A
+ * missing row is hatched at full width instead of drawn at zero.
  */
 export function BarList({ data, ariaLabel }: { data: BarDatum[]; ariaLabel: string }) {
   const max = Math.max(1, ...data.map((d) => (d.missing ? 0 : d.value ?? 0)));
@@ -149,14 +241,12 @@ export function BarList({ data, ariaLabel }: { data: BarDatum[]; ariaLabel: stri
           <span className={styles.barKey}>{d.label}</span>
           <span className={styles.barTrack}>
             <span
-              className={`${styles.barFill} ${d.emphasis ? styles.barEmphasis : ""} ${
-                d.missing ? styles.barMissing : ""
-              }`}
-              style={{ width: d.missing ? "100%" : `${(((d.value ?? 0) / max) * 100).toFixed(1)}%` }}
+              className={`${styles.barFill} ${d.emphasis ? styles.barEmphasis : ""} ${d.missing ? styles.barMissing : ""}`}
+              style={{ width: d.missing ? "100%" : `${Math.max(0, ((d.value ?? 0) / max) * 100).toFixed(1)}%` }}
             />
           </span>
           <span className={`${styles.barValue} ${d.missing ? styles.barValueDim : ""}`}>
-            {d.missing ? "no data" : d.display ?? (d.value ?? 0).toLocaleString()}
+            {d.missing ? "no data" : d.display ?? (d.value ?? 0).toLocaleString("en-GB")}
           </span>
         </li>
       ))}
@@ -164,30 +254,12 @@ export function BarList({ data, ariaLabel }: { data: BarDatum[]; ariaLabel: stri
   );
 }
 
-// --- notes ----------------------------------------------------------------
-
-export function Note({
-  tone = "info",
-  title,
-  children,
-}: {
-  tone?: "info" | "warn";
-  title: string;
-  children: ReactNode;
-}) {
-  return (
-    <div className={`${styles.note} ${tone === "warn" ? styles.noteWarn : ""}`}>
-      <span className={styles.noteTitle}>{title}</span>
-      <p className={styles.noteBody}>{children}</p>
-    </div>
-  );
-}
+// --- states ---------------------------------------------------------------
 
 export function PanelError({ message }: { message: string }) {
   return (
-    <div className={`${styles.note} ${styles.noteWarn}`} role="alert">
-      <span className={styles.noteTitle}>This panel could not load</span>
-      <p className={styles.noteBody}>{message}</p>
+    <div className={styles.error} role="alert">
+      <strong>This panel could not load.</strong> {message}
     </div>
   );
 }
@@ -196,36 +268,20 @@ export function EmptyState({ children }: { children: ReactNode }) {
   return <p className={styles.empty}>{children}</p>;
 }
 
-// --- formatting -----------------------------------------------------------
-// Shared so two panels cannot render the same quantity two ways.
-
-/** An hours figure, at the precision the number deserves. */
-export function hours(value: number | null): string {
-  if (value === null) return "—";
-  if (value >= 100) return `${Math.round(value)}h`;
-  return `${value.toFixed(1)}h`;
-}
-
-export function percent(part: number, whole: number, digits = 1): string {
-  if (!whole) return "—";
-  return `${((part / whole) * 100).toFixed(digits)}%`;
-}
-
-export function euros(value: number): string {
-  return value.toLocaleString("en-GB", { style: "currency", currency: "EUR", maximumFractionDigits: 0 });
-}
-
 /**
- * A dollar figure that stays honest at both ends: agent spend is currently
- * fractions of a cent per call and could be hundreds of dollars a month later,
- * and `$0.00` for a real cost is the same lie as a zero on a tile.
+ * A small heading over a group of rows — used where one panel mixes a snapshot
+ * with ranged figures, so "today" and "in the selected range" cannot be confused.
  */
-export function usd(value: number | null): string {
-  if (value === null) return "—";
-  if (value > 0 && value < 0.01) return "<$0.01";
-  return value.toLocaleString("en-US", { style: "currency", currency: "USD" });
+export function SectionLabel({ children, aside }: { children: ReactNode; aside?: ReactNode }) {
+  return (
+    <div className={styles.sectionLabel}>
+      <h2>{children}</h2>
+      {aside ? <span>{aside}</span> : null}
+    </div>
+  );
 }
 
-export function compactNumber(value: number): string {
-  return value.toLocaleString("en-GB", { notation: value >= 10_000 ? "compact" : "standard" });
+/** A short line under a figure or table — a fact about the data, never an essay. */
+export function Caption({ children }: { children: ReactNode }) {
+  return <p className={styles.caption}>{children}</p>;
 }

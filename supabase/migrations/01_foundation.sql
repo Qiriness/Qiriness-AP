@@ -64,6 +64,11 @@ create table public.shops (
   -- emailed to the customer and every reply about resetting a password would be
   -- wrong. A migration between the two is invisible from anywhere else here.
   customer_accounts_version text,
+  -- The shop's IANA timezone (`Europe/Paris`), from Shopify's `ianaTimezone`.
+  -- Where a day starts on every Insights chart: bucketing in the database's UTC
+  -- puts an order placed at 00:30 in Paris on the previous day. Nullable, and
+  -- the reader falls back to UTC and says so rather than assuming a zone.
+  iana_timezone text,
   -- HOW LONG ORDERS ARE KEPT, as a switch rather than a constant in code.
   --
   -- 'months' with a number, or 'indefinite' with none. The pair is constrained
@@ -86,6 +91,16 @@ create table public.shops (
   -- made directly against the database and never written down.
   order_retention_changed_at timestamptz,
   order_retention_reason text,
+  -- WHO COUNTS AS A VIP, set by the shop on the Customers panel: net spend
+  -- above `vip_min_spend` AND more than `vip_min_orders` orders, both inside the
+  -- last `vip_window_months`. All three or none — constrained below — and none
+  -- means nobody is a VIP, never a default somebody did not choose. Read by
+  -- scripts/lib/vip-rule.mjs and applied by vip_customers() in 06_analytics.sql.
+  -- Not written by `mapShop`, for the same reason as the retention switch.
+  vip_min_spend numeric(12, 2),
+  vip_min_orders integer,
+  vip_window_months integer,
+  vip_rule_changed_at timestamptz,
   environment text not null default 'development',
   installed_at timestamptz,
   uninstalled_at timestamptz,
@@ -107,6 +122,12 @@ create table public.shops (
   constraint shops_order_retention_check check (
     (order_retention_mode = 'months' and order_retention_months is not null and order_retention_months > 0)
     or (order_retention_mode = 'indefinite' and order_retention_months is null)
+  ),
+  -- The VIP rule is complete or absent. A rule with a spend floor and no window
+  -- would have to guess the window, and the guess would decide who gets a call.
+  constraint shops_vip_rule_check check (
+    (vip_min_spend is null and vip_min_orders is null and vip_window_months is null)
+    or (vip_min_spend >= 0 and vip_min_orders >= 0 and vip_window_months between 1 and 120)
   ),
   constraint shops_sync_cursors_object_check check (
     jsonb_typeof(sync_cursors) = 'object'
@@ -152,6 +173,12 @@ comment on table public.shops is
 
 comment on column public.shops.sync_cursors is
   'Per-resource sync cursors for Shopify imports, webhooks, and reconciliation jobs.';
+
+comment on column public.shops.vip_min_spend is
+  'VIP rule, set on the Customers panel: net spend inside the window must be MORE THAN this (EUR), AND orders more than vip_min_orders. Null with the other two = no rule, nobody is VIP.';
+
+comment on column public.shops.iana_timezone is
+  'The shop''s IANA timezone from Shopify''s ianaTimezone (Europe/Paris). Where a day starts on the Insights charts. Null until the next shop sync; the reader falls back to UTC and says so.';
 
 -- ---------------------------------------------------------------- integration_events
 

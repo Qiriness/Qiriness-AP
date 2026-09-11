@@ -1,7 +1,6 @@
 /**
  * Pure arithmetic for the Support panel: the percentile the reply section
- * quotes, the fold that collapses the category view's two axes back to one, the
- * treemap geometry, and the unhappiness ramp.
+ * quotes, the treemap geometry, and the unhappiness ramp.
  *
  * Isomorphic and dependency-free on purpose. `support-service.ts` folds and
  * ranks on the server, `TopicMap.tsx` lays out and colours in the browser, and
@@ -11,8 +10,6 @@
  *
  * No Supabase import, nothing server-only. Mirrors insights-format.ts's role.
  */
-
-import type { KnowledgeCategory, SupportCategoryRow } from "./types";
 
 // --- percentiles ------------------------------------------------------------
 
@@ -36,75 +33,6 @@ export function percentileCont(values: number[], p: number): number | null {
   const upper = Math.ceil(position);
   if (lower === upper) return sorted[lower];
   return sorted[lower] + (sorted[upper] - sorted[lower]) * (position - lower);
-}
-
-// --- category fold ----------------------------------------------------------
-
-/** One row of `support_by_category`, already coerced. */
-export interface SupportCategoryPair {
-  category: KnowledgeCategory | null;
-  requestKind: string | null;
-  tickets: number;
-  stillOpen: number;
-  unhappy: number;
-  levelThree: number;
-  meanHappiness: number | null;
-}
-
-/**
- * Collapse the (subject, kind) grid back to one row per subject.
- *
- * `support_by_category` groups on both taxonomy axes, so delivery arrives as
- * several rows — one per request kind. Rendering those straight gives a table
- * where "delivery" appears four times and no row states the 46 tickets the
- * business actually argues about. Counts add; the mean does not, so it is
- * re-weighted by ticket volume.
- *
- * THE WEIGHTED MEAN IS EXACT ONLY WHILE HAPPINESS IS SET ON EVERY TICKET IN THE
- * PAIR. `avg()` skips nulls, so its true denominator is "tickets with a
- * happiness" and the view does not publish that number; weighting by `tickets`
- * silently assumes the two are equal. Checked against live data when this was
- * written — the fold reproduces delivery at 2.891, which is the figure the view
- * comment records, so the assumption holds today. If a scored and an unscored
- * kind ever coexist under one subject this drifts, and the fix is a
- * `happiness_scored` count in the view rather than more arithmetic here.
- */
-export function foldByCategory(pairs: SupportCategoryPair[]): SupportCategoryRow[] {
-  const folded = new Map<string, SupportCategoryRow & { happinessWeight: number; happinessSum: number }>();
-
-  for (const pair of pairs) {
-    const key = pair.category ?? "";
-    const row = folded.get(key) ?? {
-      category: pair.category,
-      tickets: 0,
-      stillOpen: 0,
-      unhappy: 0,
-      levelThree: 0,
-      meanHappiness: null,
-      happinessWeight: 0,
-      happinessSum: 0,
-    };
-
-    row.tickets += pair.tickets;
-    row.stillOpen += pair.stillOpen;
-    row.unhappy += pair.unhappy;
-    row.levelThree += pair.levelThree;
-    if (pair.meanHappiness !== null) {
-      row.happinessSum += pair.meanHappiness * pair.tickets;
-      row.happinessWeight += pair.tickets;
-    }
-
-    folded.set(key, row);
-  }
-
-  return [...folded.values()]
-    .map(({ happinessSum, happinessWeight, ...row }) => ({
-      ...row,
-      // Null, not 0: an unscored subject has no mood, and 0 on a 1-4 scale
-      // would render as the happiest subject on the board.
-      meanHappiness: happinessWeight > 0 ? happinessSum / happinessWeight : null,
-    }))
-    .sort((a, b) => b.tickets - a.tickets || (a.category ?? "").localeCompare(b.category ?? ""));
 }
 
 // --- the unhappiness ramp ---------------------------------------------------

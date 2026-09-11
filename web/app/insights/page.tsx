@@ -2,10 +2,9 @@ import { redirect } from "next/navigation";
 
 /**
  * `/insights` has no content of its own — it is the section, and the sidebar
- * links to it. Fulfilment is the landing panel because it is the only one whose
- * figures are complete today: every order carries the timestamps it needs, so
- * it is the panel least likely to greet a first-time reader with a caveat.
+ * links to it. Sales is the landing panel: it is the first tab, and revenue is
+ * the figure a reader opens a dashboard for.
  */
 export default function InsightsIndexPage() {
-  redirect("/insights/fulfilment");
+  redirect("/insights/sales");
 }

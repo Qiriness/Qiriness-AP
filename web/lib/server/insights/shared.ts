@@ -22,8 +22,33 @@
 import { loadConfig } from "../../../../scripts/lib/sync-config.mjs";
 import {
   createSupabaseClient,
+  supabaseRpc,
   supabaseSelect,
 } from "../../../../scripts/lib/supabase-rest-client.mjs";
+
+/**
+ * Call one of the ranged functions (RANGED READS in 06_analytics.sql).
+ *
+ * Every one is an aggregate bounded by its range and grain — a few dozen rows at
+ * most — so there is no paging here either, for the same reason `readView` has
+ * none. A function that could return a table's worth of rows is the wrong shape.
+ */
+export async function callRpc<T = Record<string, unknown>>(
+  fn: string,
+  args: Record<string, unknown>
+): Promise<T[]> {
+  const rows = await supabaseRpc(getSupabaseClient(), fn, args);
+  return Array.isArray(rows) ? (rows as T[]) : [];
+}
+
+/** The one-row functions: a summary always returns exactly one row. */
+export async function callRpcOne<T = Record<string, unknown>>(
+  fn: string,
+  args: Record<string, unknown>
+): Promise<T | null> {
+  const rows = await callRpc<T>(fn, args);
+  return rows[0] ?? null;
+}
 
 /** The most rows any analytics view is allowed to return in one read. */
 const MAX_VIEW_ROWS = 500;
@@ -80,11 +105,3 @@ export function num(value: unknown): number | null {
 export function count(value: unknown): number {
   return num(value) ?? 0;
 }
-
-/**
- * Month labelling lives in `web/lib/insights-format.ts` — isomorphic, because
- * the services mark a month partial and the components label it, and two
- * implementations of "which month is it" would eventually disagree on a
- * timezone boundary.
- */
-export { formatMonth, isCurrentMonth } from "../../insights-format";

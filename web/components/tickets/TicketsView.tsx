@@ -21,6 +21,7 @@ import type {
   DroppedMail,
   InvestigationVerdict,
   KnowledgeCategory,
+  TicketAttachmentFile,
   TicketDetail,
   TicketDraft,
   TicketListItem,
@@ -681,7 +682,7 @@ function TicketListPane({
                   {requesterName(ticket)}
                   {ticket.orderNumber ? ` - Order ${ticket.orderNumber}` : ""}
                   {ticket.isVip && (
-                    <span className={styles.vipInline} title={`VIP - RFM segment: ${ticket.rfmGroup ?? "unknown"}`}>
+                    <span className={styles.vipInline} title="VIP customer — by the rule set on Insights → Customers">
                       <CrownIcon size={12} />
                       <span className={styles.srOnly}>VIP customer</span>
                     </span>
@@ -986,7 +987,7 @@ function TicketContextPane({
         <InfoList
           rows={[
             ["Name", requesterName(ticket)],
-            ["RFM segment", ticket.rfmGroup],
+            ["Shopify segment", ticket.rfmGroup],
             ["VIP", ticket.isVip ? "Yes" : null],
             ["Sender", ticket.senderLabel ? SENDER_LABELS[ticket.senderLabel] : "Consumer"],
           ]}
@@ -1048,8 +1049,146 @@ function TicketContextPane({
           <p className={styles.actionText}>Triage this one by hand.</p>
         )}
       </ContextSection>
+
+      {/* LAST, AND ABSENT ON MOST TICKETS. 310 of 400 carry no attachment and no
+          mention of one, so a permanent "Attachments — none" heading would push
+          the sections above it off a pane that already scrolls. */}
+      <AttachmentsSection detail={detail} error={error} />
     </div>
   );
+}
+
+/**
+ * What the customer attached, at the bottom of the context rail.
+ *
+ * TWO THINGS WORTH SHOWING, and they are not the same thing. A ticket that
+ * CARRIES a photo (15 in the corpus) is one where a person should look at it —
+ * so the photo is shown, proxied from the mailbox and stored nowhere. A ticket
+ * that MENTIONS one and carries nothing (74, nearly five times more) is
+ * invisible today: the operator reads « vous trouverez la photo ci-jointe »,
+ * goes looking in Outlook, and finds the same nothing.
+ *
+ * The images and the verdict both come from `detail.attachments`, derived by
+ * `scripts/lib/photo-evidence-rules.mjs` — the same module the investigation
+ * scores `photo_evidence` with, so the rail and the case file cannot disagree
+ * about whether a photo arrived.
+ */
+function AttachmentsSection({
+  detail,
+  error,
+}: {
+  detail: TicketDetail | null;
+  error: string | null;
+}) {
+  const attachments = detail?.attachments ?? null;
+  if (error || !attachments) return null;
+
+  const { images, others, furniture, known, mentioned, matchedTerm } = attachments;
+  const missing = mentioned && images.length === 0;
+  if (images.length === 0 && others.length === 0 && !missing && known) return null;
+
+  return (
+    <ContextSection title="Attachments">
+      {missing && (
+        <p className={styles.attachmentWarning}>
+          The customer mentions a photo
+          {matchedTerm ? <> (“{matchedTerm}”)</> : null} but nothing image-shaped arrived.
+        </p>
+      )}
+
+      {!known && (
+        /* The `attachments` column's null, surfaced. Saying "no photo" about a
+           message whose own flag says otherwise is the one wrong answer here. */
+        <p className={styles.muted}>
+          Something is attached, but its type was never recorded — this thread was ingested
+          before attachment metadata was fetched.
+        </p>
+      )}
+
+      {images.length > 0 && (
+        <ul className={styles.photoGrid}>
+          {images.map((file, index) => (
+            <li key={`${file.name ?? "image"}-${index}`}>
+              <AttachmentPhoto file={file} />
+              <span className={styles.photoCaption}>
+                {file.name ?? "Unnamed image"} · {describeAttachment(file)}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {others.length > 0 && (
+        <ul className={styles.attachmentFiles}>
+          {others.map((file, index) => (
+            <li key={`${file.name ?? "file"}-${index}`}>
+              {file.name ?? "Unnamed file"} · {describeAttachment(file)}
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {furniture > 0 && (
+        <p className={styles.muted}>
+          {furniture} inline image{furniture === 1 ? "" : "s"} ignored (signature logos and
+          placeholders).
+        </p>
+      )}
+    </ContextSection>
+  );
+}
+
+/**
+ * The photo, proxied from the mailbox.
+ *
+ * A PLAIN `<img>` AND NOT `next/image`: the optimiser would fetch this URL from
+ * the Next server and cache the result on disk, putting customers' photos in
+ * `.next/cache` with no retention rule attached — the exact property the proxy
+ * exists to keep.
+ *
+ * THE ERROR STATE IS THE POINT. The bytes live in a mailbox this app does not
+ * control, and mail leaves it: 2 of the 37 stored photo parts are already gone.
+ * `onError` turns that into a sentence rather than a broken-image glyph, which
+ * tells an operator nothing about whether Outlook is worth opening.
+ */
+function AttachmentPhoto({ file }: { file: TicketAttachmentFile }) {
+  const [failed, setFailed] = useState(false);
+
+  if (!file.src || failed) {
+    return (
+      <span className={styles.photoMissing}>
+        Not available — the message may have left the mailbox.
+      </span>
+    );
+  }
+
+  return (
+    <a href={file.src} target="_blank" rel="noreferrer" className={styles.photoLink}>
+      {/* eslint-disable-next-line @next/next/no-img-element -- see above */}
+      <img
+        className={styles.photoThumb}
+        src={file.src}
+        alt={file.name ?? "Photo attached by the customer"}
+        loading="lazy"
+        onError={() => setFailed(true)}
+      />
+    </a>
+  );
+}
+
+/** "JPEG · 820 KB" — the two things that separate a phone photo from a logo. */
+function describeAttachment(file: TicketAttachmentFile): string {
+  const subtype = file.contentType?.split("/")[1]?.toUpperCase() ?? null;
+  const size = formatAttachmentBytes(file.size);
+  return [subtype, size].filter(Boolean).join(" · ");
+}
+
+/** Bytes as a person reads them. 0 means Graph did not record a size. */
+function formatAttachmentBytes(size: number): string | null {
+  if (!Number.isFinite(size) || size <= 0) return null;
+  if (size < 1024) return `${size} B`;
+  if (size < 1024 * 1024) return `${Math.round(size / 1024)} KB`;
+  return `${(size / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 function ContextSection({ title, children }: { title: string; children: ReactNode }) {

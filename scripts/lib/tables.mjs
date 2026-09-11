@@ -122,7 +122,43 @@ export const RPC = {
   MATCH_KNOWLEDGE_CHUNKS: 'match_knowledge_chunks',
   SEARCH_KNOWLEDGE_CHUNKS_TEXT: 'search_knowledge_chunks_text',
   MATCH_SUPPORT_EXEMPLARS: 'match_support_exemplars',
-  ORDER_NUMBER_RANGE: 'order_number_range'
+  ORDER_NUMBER_RANGE: 'order_number_range',
+
+  // 06_analytics — the Insights panels over a date range. Every one takes the
+  // range as wall-clock timestamps plus the shop's timezone; see the header of
+  // the RANGED READS section for the convention.
+  INSIGHTS_ORDERS_SUMMARY: 'insights_orders_summary',
+  INSIGHTS_ORDERS_SERIES: 'insights_orders_series',
+  INSIGHTS_ORDERS_BY_CHANNEL: 'insights_orders_by_channel',
+  INSIGHTS_CUSTOMER_MIX: 'insights_customer_mix',
+  INSIGHTS_FULFILMENT_BUCKETS: 'insights_fulfilment_buckets',
+  INSIGHTS_FULFILMENT_CARRIERS: 'insights_fulfilment_carriers',
+  INSIGHTS_PRODUCT_SALES: 'insights_product_sales',
+  INSIGHTS_COUNTRY_PRODUCT_SALES: 'insights_country_product_sales',
+  INSIGHTS_SUPPORT_SUMMARY: 'insights_support_summary',
+  INSIGHTS_SUPPORT_SERIES: 'insights_support_series',
+  INSIGHTS_SUPPORT_CATEGORIES: 'insights_support_categories',
+  INSIGHTS_AGENT_FUNNEL: 'insights_agent_funnel',
+  INSIGHTS_AGENT_VERDICTS: 'insights_agent_verdicts',
+  INSIGHTS_AGENT_BLOCKERS: 'insights_agent_blockers',
+  INSIGHTS_LLM_USAGE: 'insights_llm_usage',
+  INSIGHTS_LLM_SERIES: 'insights_llm_series',
+  INSIGHTS_LLM_TICKET_STATS: 'insights_llm_ticket_stats',
+  INSIGHTS_FRESHNESS: 'insights_freshness',
+  INSIGHTS_ORDERS_BY_COUNTRY: 'insights_orders_by_country',
+  INSIGHTS_PRODUCT_PAIRS: 'insights_product_pairs',
+  INSIGHTS_ORDERS_PER_CUSTOMER: 'insights_orders_per_customer',
+  INSIGHTS_MARKETING_SERIES: 'insights_marketing_series',
+  INSIGHTS_MARKETING_SUMMARY: 'insights_marketing_summary',
+  INSIGHTS_CAPTURE_SERIES: 'insights_capture_series',
+
+  // 06_analytics — THE VIP RULE. vip_customers() is the one place it is written;
+  // the thresholds come from shops via scripts/lib/vip-rule.mjs.
+  VIP_CUSTOMERS: 'vip_customers',
+  VIP_TICKETS: 'vip_tickets',
+  VIP_SUMMARY: 'vip_summary',
+  // Orders waiting to ship, each marked VIP through vip_customers().
+  OPEN_ORDERS: 'open_orders'
 };
 
 /**
@@ -212,6 +248,28 @@ export const COLUMNS = {
 
   /** The categoriser reads the customer's words and nothing else. */
   messageForCategorisation: 'subject,body_text,received_at',
+
+  /**
+   * What the detail panel needs to say what the customer attached.
+   *
+   * `body_text` TRAVELS, and it is the one debatable field here: the thread
+   * dialog exists precisely so bodies are not fetched on every row expansion.
+   * It is here because the panel's second signal — "they said « ci-joint » and
+   * nothing arrived", 74 tickets against 16 that carry a real photo — is read
+   * out of the words and nowhere else. Measured before deciding: bodies are
+   * 3.2 KB per ticket on average and 38 KB at the worst, against a case-file
+   * row the same read already fetches. `body_preview` would have been smaller
+   * and would miss a « ci-joint » past the first line, which is where it
+   * usually sits.
+   *
+   * No addresses and no subject: who sent it is already on the ticket, and the
+   * panel is answering "what is attached", not "who is this".
+   *
+   * `graph_message_id` travels because it is half the address of an attachment:
+   * Graph fetches bytes as (message, attachment id), and the panel's proxy has
+   * no other way to say which message a listed part belongs to.
+   */
+  messageForAttachments: 'direction,graph_message_id,body_text,has_attachments,attachments',
 
   /**
    * The thread's SHAPE, for deciding whether the customer was left waiting.
@@ -382,6 +440,7 @@ export const PROJECTION_SOURCE = {
   ticketForDrafting: T.TICKETS,
   messageForThread: T.TICKET_MESSAGES,
   messageForCategorisation: T.TICKET_MESSAGES,
+  messageForAttachments: T.TICKET_MESSAGES,
   messageForInvestigation: T.TICKET_MESSAGES,
   messageForDrafting: T.TICKET_MESSAGES,
   messageEnvelopesForDrafting: T.TICKET_MESSAGES,

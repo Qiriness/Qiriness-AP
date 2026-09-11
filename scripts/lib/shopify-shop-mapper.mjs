@@ -25,15 +25,23 @@ export function mapShop(shop, config) {
     // somebody to reset one would be wrong. Recorded so that change is visible
     // rather than discovered from a customer's confusion.
     customer_accounts_version: shop.customerAccountsV2?.customerAccountsVersion || null,
+    // The shop's own clock (`Europe/Paris`), which is where "a day" starts on
+    // the Insights charts. Null when Shopify does not return it; the reader
+    // falls back to UTC and says so, rather than guessing a zone.
+    iana_timezone: shop.ianaTimezone || null,
     environment: config.appEnv,
-    sync_cursors: {},
-    app_settings: {},
+    // NO `sync_cursors` AND NO `app_settings`, deliberately. Both are ours, not
+    // Shopify's — `sync_cursors` holds the mail delta link — and both have a
+    // `'{}'` column default for a first insert. Sending `{}` here made every
+    // Shopify sync wipe the mail cursor, so each mail poll after a nightly sync
+    // re-enumerated the whole mailbox. See DECISIONS.md § Ingestion.
     raw_shopify_payload: stripUndefined({
       id: shop.id,
       name: shop.name,
       myshopifyDomain: shop.myshopifyDomain,
       primaryDomain: shop.primaryDomain,
-      customerAccountsV2: shop.customerAccountsV2
+      customerAccountsV2: shop.customerAccountsV2,
+      ianaTimezone: shop.ianaTimezone
     })
   };
 }

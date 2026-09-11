@@ -6,6 +6,8 @@ import { fetchTicketDetail } from "@/lib/api/tickets";
 import { formatRelativeTime } from "@/lib/relative-time";
 import type {
   InvestigationVerdict,
+  TicketAttachmentFile,
+  TicketAttachments,
   TicketDetail,
   TicketListItem,
   TicketReactionReport,
@@ -59,11 +61,16 @@ const REACTION_PRODUCT: Record<
 /**
  * What the agent made of a ticket, revealed under its row.
  *
- * THREE BLOCKS, and the order is the question an operator actually has: what
- * came of it (Results), which order it concerns (Order), and what to do next
- * (Action). Everything else the case file holds — the unverified claims, the
- * prohibitions, the tool ledger — is written for the drafting stage, and pouring
- * it in here would bury the three lines somebody opened the row to read.
+ * FOUR BLOCKS, and the order is the question an operator actually has: what
+ * came of it (Results), which order it concerns (Order), what to do next
+ * (Action), and what the customer sent with it (Attachments). Everything else
+ * the case file holds — the unverified claims, the prohibitions, the tool ledger
+ * — is written for the drafting stage, and pouring it in here would bury the
+ * lines somebody opened the row to read.
+ *
+ * ATTACHMENTS IS LAST AND OFTEN ABSENT. It renders on the 90 tickets in 400 that
+ * carry a file or claim to, and on the other 310 the panel is exactly what it
+ * was before — which is why it sits below Action rather than competing with it.
  *
  * THE ORDER BLOCK IS A TEXT LIST, NOT A ROW. Who the order belongs to, order
  * status, tracking number and tracking status are labelled lines that appear
@@ -450,6 +457,161 @@ export function TicketDetailPanel({ ticket }: TicketDetailPanelProps) {
           </>
         )}
       </section>
+
+      <AttachmentsBlock attachments={detail?.attachments ?? null} />
     </div>
   );
+}
+
+/**
+ * What the customer attached, at the bottom of the panel.
+ *
+ * ABSENT RATHER THAN EMPTY, like every other block here: 310 of 400 tickets have
+ * no attachment and no mention of one, and a "Attachments — none" heading on all
+ * of them would push the blocks that matter off the screen to say nothing.
+ *
+ * TWO THINGS WORTH SHOWING, and they are not the same thing. A ticket that
+ * CARRIES a photo (16 in the corpus) is one where a person should look at it. A
+ * ticket that MENTIONS one and carries nothing (74 — four and a half times more)
+ * is one where the reply writes itself, and it is invisible today: the operator
+ * reads « vous trouverez la photo ci-jointe », goes looking in Outlook, and
+ * finds the same nothing.
+ *
+ * NO THUMBNAIL YET, and the block says so rather than leaving a reader to
+ * wonder. Graph's attachment bytes have never been fetched — see DECISIONS.md
+ * § "The photo itself is not stored" — and the note is the honest form of a
+ * half-built feature: it states what is known and what is not, in the place
+ * where somebody is about to want the other half.
+ */
+function AttachmentsBlock({ attachments }: { attachments: TicketAttachments | null }) {
+  if (!attachments) return null;
+
+  const { images, others, furniture, known, mentioned, matchedTerm } = attachments;
+  const missing = mentioned && images.length === 0;
+
+  // Nothing attached, nothing claimed, nothing unrecorded: no block.
+  if (images.length === 0 && others.length === 0 && !missing && known) {
+    return null;
+  }
+
+  return (
+    <section className={styles.block}>
+      <h3 className={styles.heading}>Attachments</h3>
+
+      {missing && (
+        <p className={styles.missingPhoto}>
+          The customer mentions a photo
+          {matchedTerm && <> (<span className={styles.matchedTerm}>“{matchedTerm}”</span>)</>} but
+          nothing image-shaped arrived.
+        </p>
+      )}
+
+      {!known && (
+        /* The `attachments` column's null, surfaced. Saying "no photo" about a
+           message whose own flag says otherwise is the one wrong answer here. */
+        <p className={styles.muted}>
+          Something is attached, but its type was never recorded — this thread was ingested
+          before attachment metadata was fetched.
+        </p>
+      )}
+
+      {images.length > 0 && (
+        <ul className={styles.photos}>
+          {images.map((file, index) => (
+            <li key={`${file.name ?? "image"}-${index}`}>
+              <Photo file={file} />
+              <span className={styles.fileName}>{file.name ?? "Unnamed image"}</span>{" "}
+              <span className={styles.fileMeta}>{describeFile(file)}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {others.length > 0 && (
+        <ul className={styles.files}>
+          {others.map((file, index) => (
+            <li key={`${file.name ?? "file"}-${index}`}>
+              <span className={styles.fileName}>{file.name ?? "Unnamed file"}</span>{" "}
+              <span className={styles.fileMeta}>{describeFile(file)}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {furniture > 0 && (
+        <p className={styles.furnitureNote}>
+          {furniture} inline image{furniture === 1 ? "" : "s"} ignored (signature logos and
+          placeholders).
+        </p>
+      )}
+    </section>
+  );
+}
+
+/**
+ * The photo, proxied from the mailbox.
+ *
+ * A PLAIN `<img>` AND NOT `next/image`. The optimiser would fetch this URL from
+ * the Next server and cache the result on disk, which is exactly the "nothing is
+ * stored" property the proxy exists to keep — a customer's photo would end up in
+ * `.next/cache` with no retention rule attached to it.
+ *
+ * `loading="lazy"`: the panel renders inside a collapsed table row, and a damage
+ * claim carries up to three images of 2 MB each. They are fetched when the row
+ * is actually opened rather than when the queue renders.
+ *
+ * THE ERROR STATE IS THE POINT OF THE COMPONENT. The bytes live in a mailbox
+ * this app does not control, and mail leaves it — measured on this corpus, at
+ * least one message with a stored photo is already gone. `onError` turns that
+ * into a sentence instead of a browser's broken-image glyph, which tells an
+ * operator nothing about whether to go looking in Outlook.
+ */
+function Photo({ file }: { file: TicketAttachmentFile }) {
+  const [failed, setFailed] = useState(false);
+
+  if (!file.src || failed) {
+    return (
+      <span className={styles.photoMissing}>
+        Not available — the message may have left the mailbox. Open it in Outlook.
+      </span>
+    );
+  }
+
+  return (
+    <a href={file.src} target="_blank" rel="noreferrer" className={styles.photoLink}>
+      {/* eslint-disable-next-line @next/next/no-img-element --
+          `next/image` is refused here on purpose: it proxies the URL through
+          the Next optimiser and writes the result into `.next/cache`, which
+          would put customers' photos on this machine's disk with no retention
+          rule attached — the exact property this whole design exists to keep.
+          The bandwidth the rule is warning about is the price of that. */}
+      <img
+        className={styles.photo}
+        src={file.src}
+        alt={file.name ?? "Photo attached by the customer"}
+        loading="lazy"
+        onError={() => setFailed(true)}
+      />
+    </a>
+  );
+}
+
+/**
+ * "JPEG · 820 KB" — the two things that separate a phone photo from a logo.
+ *
+ * The MIME subtype rather than the whole type: an operator reads "JPEG", not
+ * "image/jpeg", and the prefix is already implied by the block it sits in.
+ */
+function describeFile(file: TicketAttachmentFile): string {
+  const subtype = file.contentType?.split("/")[1]?.toUpperCase() ?? null;
+  const parts = [subtype, formatBytes(file.size)].filter(Boolean);
+  return parts.join(" · ");
+}
+
+/** Bytes as a person reads them. 0 is "size unknown", which is what Graph gives. */
+function formatBytes(size: number): string | null {
+  if (!Number.isFinite(size) || size <= 0) return null;
+  if (size < 1024) return `${size} B`;
+  if (size < 1024 * 1024) return `${Math.round(size / 1024)} KB`;
+  return `${(size / (1024 * 1024)).toFixed(1)} MB`;
 }

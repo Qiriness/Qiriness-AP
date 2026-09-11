@@ -231,7 +231,7 @@ export function TicketTable({
                       {ticket.isVip && (
                         <span
                           className={styles.vipMark}
-                          title={`VIP — RFM segment: ${ticket.rfmGroup}`}
+                          title="VIP customer — by the rule set on Insights → Customers"
                         >
                           <CrownIcon size={14} />
                           <span className={styles.srOnly}>VIP customer</span>

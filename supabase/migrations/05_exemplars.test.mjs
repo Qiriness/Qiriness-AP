@@ -9,6 +9,10 @@ import {
   TICKET_SUBJECTS
 } from '../../scripts/lib/support-taxonomy.mjs';
 import { TRANSLATION_INDEX_BASE } from '../../scripts/lib/exemplar-import.mjs';
+import {
+  MAX_AUTHORED_PHRASINGS,
+  TRANSLATION_LANGUAGES
+} from '../../scripts/lib/exemplar-translation.mjs';
 
 import { checkClause, codeOnly, literalsIn, read, tablesIn } from './_shared.test.mjs';
 
@@ -170,6 +174,25 @@ test('the phrasing pool is over-fetched relative to the exemplar count', () => {
   // without headroom one situation whose variants all rank highly starves the
   // result set.
   assert.match(SQL, /limit greatest\(match_count, 1\) \* \d+/);
+});
+
+test('the over-fetch covers the most phrasings one exemplar can ever have', () => {
+  // THE INVARIANT, ASSERTED FROM THE MODULE THAT SETS IT rather than from the
+  // corpus as it stands today. The multiplier was 8 against a largest authored
+  // count of 5, and translation took D-33 to 40 rows — at 8 that one exemplar
+  // would fill every slot of a three-exemplar request and the function would
+  // return a single result, silently, looking like a retrieval quality problem.
+  //
+  // The ceiling is what the addressing scheme allows, not what the document
+  // currently holds: 10 authored phrasings, each with a translation in every
+  // language it is not already written in.
+  const ceiling = MAX_AUTHORED_PHRASINGS * (1 + TRANSLATION_LANGUAGES.length);
+  const [, multiplier] = /limit greatest\(match_count, 1\) \* (\d+)/.exec(SQL);
+
+  assert.ok(
+    Number(multiplier) > ceiling,
+    `the over-fetch multiplier is ${multiplier}, which is not above the ${ceiling}-phrasing ceiling`
+  );
 });
 
 test('retrieval cannot reach an unembedded or deleted exemplar', () => {

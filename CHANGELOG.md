@@ -10,6 +10,195 @@ Three sibling files carry the other halves, and this one deliberately does not d
 
 ---
 
+## The dashboard fills large screens (2026-09-11)
+
+The sidebar is larger (16.5rem wide, 16px labels, 22px icons at the base size) and the whole app scales up a step above 1600px, 1920px and 2400px. Insights no longer stops at 1480px: it fills the window to the app-wide 2400px ceiling with a responsive gutter, and charts get taller as they get wider. Smaller screens are unchanged. **Measured in a browser** on a 2544px viewport — see DECISIONS.md, "Large screens get a larger UI". `tsc` and `next lint` clean.
+
+## "Bought together" fits its card (2026-09-11)
+
+The pairs table scrolled sideways: the shared table style forbids wrapping, and two long French product names side by side outgrew the card. It is now a fixed-layout table at the card's width — narrow set columns for #, orders and revenue, the pair column taking the rest — with each pair on two stacked lines that shorten with an ellipsis (full name on hover). **Measured in a browser**: table 932 px in a 980 px card, and 330 px in a 378 px card, with no horizontal scroller in either the global or the by-country view.
+
+## Pin any row of cards to the top (2026-09-11)
+
+All 28 rows across the five panels carry a pin in their rightmost card's top-right corner. Pinning moves the row into a **Pinned** section at the top of the panel (two at most; the third pin is disabled with "unpin one first"), and the choice survives a reload — kept per panel in the browser, not in the database.
+
+**Verified in a browser** on Fulfilment: pinned Carriers then Orders waiting to ship, both moved to the top in that order, the third pin refused, the pins were still there after a reload, no console errors. The two test pins were cleared afterwards. `tsc` and `next lint` clean.
+
+## Orders waiting to ship, on Fulfilment (2026-09-11)
+
+A list under the Fulfilment panel's first row: every order not yet shipped, oldest first, with the customer's **name, email, provenance (Shopify / Amazon / Yves Rocher, plus the channel), order size (€ and items), placed date and days waiting — red from 3 days**. It opens on **VIP customers** under the shop's rule and switches to all unfulfilled orders; order numbers open in Shopify admin. One new function, `open_orders()`, built on `vip_customers()` and added to migration 12 (re-applied).
+
+**On the live data**, under the rule the owner saved (> €80 and > 1 order in 6 months, 192 VIPs): **7** orders are waiting, **2** of them VIPs', one of those **7 days** old. Six older rows that read UNFULFILLED were refunded instead of shipped and are left out.
+
+**Proven**: migration tests green including 12's identity and "goes through vip_customers" checks; `tsc` and `next lint` clean; the page fetched against the live database. Not looked at in a browser this round.
+
+## VIP is the shop's own rule now (2026-09-11)
+
+**VIP no longer means Shopify's CHAMPIONS + LOYAL.** It is set on the Customers panel as three numbers — **more than €X spent AND more than N orders, both in the last M months** — stored on `shops` and applied by one SQL function, `vip_customers()`, that the ticket queue, the Customers panel and the agent's customer lookup all ask. The form reads as the sentence and shows a live count of who would qualify before saving.
+
+**Measured on the live database**: at > €300 and > 2 orders in 12 months, **97** customers qualify of 2,738 who ordered in that window (an OR would have admitted 288), and **32** queue tickets take the gold border. The rule was saved and read back through the real API, the queue and the panel checked under it, then **removed again** — no VIP rule is set, so nobody is a VIP until the owner chooses the numbers.
+
+**Shopify segments are kept as context**: the segment table is titled "Shopify segments (RFM)" with no VIP highlight, and the ticket pane says "Shopify segment". `customer-segments.mjs` keeps only the labels; `isVipRfmGroup` is gone, and a test asserts it stays gone.
+
+**Proven**: migration tests 396 / 396, including a live case that admits only the customer who clears both thresholds (not the big single-order spender, not the frequent small buyer, not the one outside the window, not the one exactly at the threshold); root 2,183 and agent 1,299 suites green; `tsc` and `next lint` clean; migration 12 applied.
+
+## Customers reads a range; Sales gets countries and pairs; gender removed (2026-09-11)
+
+**Customers** keeps its snapshot row ("today") and gains three ranged rows beneath it, following the filter bar: **customers by number of orders** (1, 2, 3 … 10+), **newsletter subscribes and unsubscribes** with a net line and a **churn card** (daily on day-grain ranges, monthly on longer ones), and **first-time buyers on the newsletter** — split into subscribed-before and joined-at-checkout, with the capture rate on each column. Shopify customers only; the platform control stays disabled with its reason. On the last 30 days: 204 customers ordered, churn 0.18 %/day over an estimated list of 3,738, capture 79 % (19 % before ordering, 61 % at checkout).
+
+**Sales** gains **sales by country** (flags, revenue, bar, a chevron for the rest — France €13,578.66, Belgium €1,006.78, Italy €775.37, Spain €411.38, matching the reference card) and **bought together**, the most common product pairs, global or by country, by orders or revenue.
+
+**"By gender" is gone.** It was the product's range from catalogue tags, which answers a different question from the one asked; no customer gender exists in the data.
+
+**Two bugs found while checking it in a browser.** The yearly churn card compared against a year the snapshot only half covers (unsubscribes start April 2025) and printed "↑98 %" — the edge is now derived in SQL, hatched on the chart, and a comparison across it is withheld. And the Customers page failed hydration on every load because Node and Chrome format "58.4K" and "58.4k" differently; `euros` and `compactNumber` are now built by hand.
+
+**6 more ranged functions** (24 in all), added to `06` and `11` and re-applied to the live database; `insights_marketing_summary` changed shape, so `11` drops it before re-creating it. **Proven**: migration tests 373 / 373 including the live apply; `tsc` and `next lint` clean; every function dry-run in a rolled-back transaction against live data before it was written into a migration; Customers and Sales fetched at several ranges, and one browser pass with the console read for errors.
+
+## Insights is ranged, live, and redesigned — and a Sales panel (2026-09-11)
+
+**Every panel is now read over a range the reader picks** — Last 24 hours · 7 days · **30 days (default)** · 6 months · Last year, or a custom from/to on the browser's date picker — with a platform filter (All · Shopify · Amazon · Yves Rocher), both held in the URL. Figures come from **18 new ranged SQL functions** (`RANGED READS` in `06_analytics.sql`, brought to the live database by incremental `11_insights_ranges.sql`), bucketed on the shop's clock, each compared like for like with the previous period.
+
+**Why the dashboard "still showed August".** Not caching — every page was already `force-dynamic`. Two real causes, measured: the mail worker had not been run since **20 August** (the newest synced message), so Support genuinely had no newer mail; and every chart was all-time, so the monthly series just kept growing. The first is now *stated* on every panel — a freshness strip (orders synced 5 min ago · last email 22 days ago ⚠ · nightly sync · topic map age) and hatched, unmeasured buckets instead of zeros — and the second is gone. Open pages re-render themselves every 5 minutes.
+
+**A Shopify sync was wiping the mail cursor.** `mapShop` sent `sync_cursors: {}` on every shop upsert, so each sync erased the Graph delta link and the next mail poll re-read the whole mailbox. Fixed (the mapper no longer sends either column that is ours), pinned by `shopify-shop-mapper.test.mjs`. **Not yet effective in production**: the nightly workflow runs whatever code it checks out.
+
+**Redesign**, after the reference screenshots and in the app's teal: headline figures at 36–46 px, KPI cards with change chips, one `TimeSeriesChart` (2px line over a 10% wash, crosshair + tooltip + keyboard, a hidden table view), `SplitBar` for shares. The explanatory notes are gone from the panels — their reasoning was already in `DECISIONS.md`. Categorical colours were run through the dataviz validator: brand teal `#008080` fails the chroma floor beside orange and violet, so multi-series slot 1 is `#00918a`.
+
+**The Sales panel is new**: revenue (net of refunds, cancelled excluded), average per day, basket, new vs returning (marketplaces excluded), revenue by platform, the revenue curve, and best products — global or by country — ranked by revenue or orders (a "by product range" view shipped too and was removed the same day; see the entry above). On the last 30 days it reproduces the reference dashboard to the cent: **€16,375.77**, €545.86 a day, €79.11 basket, Shopify 99.9% / Yves Rocher €9.80.
+
+**The Amazon section left Fulfilment** — the platform filter replaces it for every marketplace. **The topic map has a Rebuild button** (~9 s run, no arguments, one at a time), reversing the "command, not a button" decision on the owner's request.
+
+**Proven**: `npm test` 2,162 / 2,162, including `_live.test.mjs` applying the baseline and asserting the Paris-midnight bucketing and the channel filters on real Postgres; `tsc` and `next lint` clean; every panel fetched at several ranges and platforms against the live database; one browser pass over Sales, Fulfilment and Support. **Not proven**: see `VALIDATION_LOG.md` item 21.
+
+## The photos were built into the wrong component, and APP_SCHEMA is why (2026-09-09)
+
+**The Attachments block went into `TicketDetailPanel`, which `/tickets` does not render.** `TicketsView` — what the Tickets page actually mounts — never imports `TicketTable`, and `TicketTable` is the only thing that renders `TicketDetailPanel`. Both now serve `/conversations` alone. The work was correct and invisible: the API returned the attachments, the proxy served the bytes, and nothing appeared on the screen.
+
+**`APP_SCHEMA.md` described the page as it was two rebuilds ago** — "chevron expands the agent's reading (`TicketDetailPanel` …)" — and `AGENTS.md` says to use it as the primary source of architectural context before opening code files. Following that instruction is what put the block in a dead component; **I then edited that same stale line to describe the new block, which made the map more confidently wrong.** The line now describes the real three-pane layout and says outright that `TicketTable`/`TicketDetailPanel` are not on this page.
+
+**The block now lives in `TicketContextPane`**, last in the right-hand rail, under Required action — where it was asked for. `TicketsView` already receives `detail`, so nothing new is fetched. The copy in `TicketDetailPanel` is kept rather than deleted: `/conversations` renders it, and internal threads carry attachments too.
+
+**Verified in a browser this time**, on ticket `5ed80bd5` (« Produit défectueux ? », Loanne Lepine): the rail shows an Attachments section with two photos, `125325.jpg · JPEG · 1.8 MB` and `125326.jpg · JPEG · 3.0 MB`, both fetched through the proxy and decoded at **1848×4000** — portrait, which is exactly the case `object-fit: contain` and a height cap exist for.
+
+**The lesson is about the map, not the code.** A structural description that is read every session and updated only when someone remembers is a description that will eventually be wrong in a way that costs a day. This one had drifted through a full UI rebuild.
+
+## The photo is on the screen, and the blocker that was going to stop it had already gone (2026-09-09)
+
+**The ticket panel shows the customer's photo.** `GET /api/tickets/[id]/attachments/[index]` proxies it from the mailbox on demand — the first binary response this API has ever served — and **nothing is stored**: no bucket, no `bytea`, no file on disk. Verified end to end against the live mailbox on ticket `13779dd6`, whose three JPEGs came back at 1.8, 2.1 and 2.1 MB with `image/jpeg`, `nosniff`, `no-store` and the right filename, each starting `ffd8` where a JPEG should.
+
+**The mailbox mismatch this was supposed to be blocked on does not exist.** `SUPPORT_MAILBOX` is `contact@qiriness.com` — the mailbox the corpus was ingested from — so stored message ids resolve. Measured across the whole corpus: **35 of 37 image parts fetch, 2 messages have left the mailbox, and zero return `ErrorInvalidMailboxItemId`.** `README.md` step 3 said the opposite, truthfully when it was written; `.env.local` is gitignored, so nothing in the repo could catch the variable moving back. **The spam-body backfill and `/forward` were parked on the same premise and should be re-tested rather than assumed broken.**
+
+**Fetch-on-demand was chosen before anything was built, and the reason is compliance rather than engineering.** A Supabase Storage bucket would be faster and would survive the mail being deleted, and it is net-new infrastructure that must have a retention job and redaction-webhook deletion before it holds its first byte. Proxying keeps the question at "who may look at this". The cost is two Graph calls per view and a permanent hole where a message has gone — which the panel states rather than showing a broken image.
+
+**The offset is the authorisation model.** A request names a ticket and a position in the images derived for it; the server rebuilds that list and resolves the position itself, so nothing outside the ticket's own stored metadata is addressable and the furniture rules stay load-bearing — a signature logo is not in `images`, so it cannot be requested. Images only (a route that streams CVs out of the support mailbox is a different feature), the **stored** content type is served rather than Graph's, and an 8 MB cap refuses rather than truncates.
+
+**`toPublicAttachments` is the boundary, and it is tested.** The server-side list carries `messageId` — an Exchange item id — so the proxy can find the file again; the published shape carries neither it nor `partIndex`. A test asserts the id is absent from the serialised payload, because the dashboard has no authentication and anything it returns is readable by anyone who opens the page.
+
+**`next/image` is refused at the call site**: it would proxy the URL through the optimiser and write customers' photos into `.next/cache` with no retention rule attached — the exact property the design exists to keep.
+
+**A test was asserting on the platform rather than on the code.** `case-file.test.mjs` reads `web/lib/types.ts` off disk and anchored its regexes on a bare newline; this repo checks out with `core.autocrlf=true`, so the working-tree file has Windows endings and the union match failed the moment the file was rewritten. Both regexes now tolerate a carriage return.
+
+**2061 tests from the root, agent suite clean, typecheck and lint clean.** The panel has still never been rendered in a browser — `VALIDATION_LOG.md` item 19.
+
+## The translated library is imported and measured: 8 more tickets match, and Spanish proves the cheaper rule (2026-09-09)
+
+**702 phrasings imported, 562 of them translations, and the eleven foreign variants stop claiming to be French.** `support_exemplar_phrasings` went 144 → 706 rows (the extra 4 are P-21, dashboard-authored and absent from the document, which the importer correctly leaves alone). Approval state unchanged at 38 approved; 0 stale phrasings removed.
+
+**Measured properly, which meant not making the comparison the plan asked for.** `VALIDATION_LOG.md` item 20 said to compare against English 0.476 / French 0.637. Those were taken over **214** tickets and the corpus is now **328**, so reading today's number against them measures the corpus, not the translations. `diagnose-exemplars.mjs` gained `--authored-only`, and the honest A/B is the same 328 tickets scored twice.
+
+| Ticket language | n | authored only | translated | clears 0.65 | won by a translation |
+|---|---|---|---|---|---|
+| fr | 303 | 0.624 | 0.628 | 119 → 122 | 17 |
+| en | 13 | 0.432 | **0.464** | 4 → 4 | 9 |
+| it | 6 | 0.545 | **0.677** | 0 → **4** | 6 |
+| de | 3 | 0.588 | 0.625 | 0 → 1 | 3 |
+| es | 2 | 0.891 | 0.891 | 2 → 2 | **0** |
+
+**125 → 133 tickets clear MATCHED. The prediction was 14 tickets and about 7%; the answer is 8 and 6.4%** — right magnitude, slightly optimistic. Italian is where it pays and the only language whose band moves properly: 0 of 6 cleared MATCHED, 4 do now. English gains 0.032 of median and moves nobody across the band, closing about a fifth of its 0.16 gap to French.
+
+**Spanish is unchanged, and it is the most useful row in the table.** It is the one language whose exemplars carry *real* Spanish phrasings, and not one Spanish ticket is won by a translation. Machine translation added nothing where real foreign mail already existed — the "lift real phrasings where the corpus has them" rule, confirmed on its own terms rather than assumed.
+
+**`reportLanguages` now says which KIND of phrasing won**, because the medians hide it: adding rows lifts a best-of score whether or not a translation ever wins, and the two are different claims.
+
+**The forward step is applied and the library is embedded — in that order, which was the whole point.** `match_support_exemplars()` reads 64 in the database, and **696 of 706 phrasings carry a vector**. The 10 that do not are O-11's, correctly: it is soft-deleted, and the reconciler excludes deleted exemplars because a vector must not outlive the intent. D-33 is the largest exemplar at 40 embedded phrasings, comfortably inside 64.
+
+**Confirmed against the live function, not just in JS.** 12 non-French tickets put through `match_support_exemplars()` directly: **3 exemplars returned on 12 of 12**, none starved. The winner is a translation in the ticket's own language everywhere except the three tickets that have a real foreign phrasing to match instead — D-08 hits its Spanish variant at 0.891, R-21 its English at 0.836, D-33 its English at 1.000. Italian tickets, which matched nothing above the floor this morning, now land on Italian translations at 0.57–0.68.
+
+**The eval was scoring a library production does not have.** `diagnose-exemplars.mjs` filtered `deleted_at` on tickets but not on exemplars — 38 against the RPC's 37. Fixing it changed no per-language median and no MATCHED count, because O-11's phrasings exist verbatim under O-09, which absorbed them in the merge; only the overall median moves 0.626 → 0.627. The filter still belongs there, since the next merge need not leave a duplicate behind to cover for it. **O-11 is also still in `Email-Example-Queries.md` despite being merged away**, so the importer keeps re-creating it and the translator paid to translate it 8 times.
+
+## The exemplar library is translated into five languages, and eleven phrasings stop claiming to be French (2026-09-09)
+
+**Every authored phrasing now has a translation in each of `fr en es it de` it is not already written in — 562 rows over 140 phrasings.** Two passes in the order `DECISIONS.md` § "Translate the library, not the query" asked for: the eleven foreign phrasings into French first, then everything into the other four. `scripts/translate-exemplars.mjs`, `gpt-4o`, ~$0.70 once.
+
+**The language column was recording the opposite of the truth on the eleven rows it existed for.** `import-exemplars.mjs` never wrote `language`, so every phrasing took the `fr` default — including six English, three Spanish and two Dutch ones. The column was added on 2026-08-12 to measure the language gap; nothing could have caught this, because the eleven read as French phrasings that happened to score oddly. A variant's annotation may now open with a code (`- « Do you ship to Germany? »  _(en)_`), declared in the document and never detected: these are one-line fragments, and a misread source language means paying to translate English into English.
+
+**Nothing replaces a real foreign phrasing.** `fr` is a target like any other, so R-21's French sits *beside* its English original at its own index. That is the variants thesis applied to language — messy foreign mail matches messy foreign mail, and Spanish tickets already score median 0.814, the highest of any language. The two Dutch phrasings therefore get five translations rather than four: `nl` is a source and not a target, because two phrasings is not demand enough to justify 140 more rows.
+
+**The generated file is the review gate, because the approval gate is not one.** `DECISIONS.md` claimed a human would see translations at approval time. That is true of a new exemplar and false of a new phrasing on an approved one — and all 38 exemplars are approved, with approval the only thing gating a vector. A translation written straight to the table would have been embedded and matched against real customer mail unread. So the translator writes `Email-Example-Queries.translations.json` and stops; `import:exemplars` is what loads it, and the review is the diff.
+
+**A third staleness gate, distinct from the two that exist.** `content_hash` answers *does this row need re-embedding*; `embedded_input_hash` covers the composed embedding input; neither can see a French variant being edited under its four translations. Each entry carries `sourceHash` — the hash of the phrasing it was made from — and a translation whose source has changed is **dropped at import rather than written**, because a stale translation is indistinguishable from a fresh one and answers a question nobody asks any more. A re-run after editing one variant costs four calls, not 562.
+
+**The pruner had silently stopped pruning.** `removeStalePhrasings` deleted anything at or past `exemplar.phrasings.length`, which was correct while the list was contiguous. Attaching translations to the same array made a three-variant exemplar 15 long, so every authored row below 15 read as current and nothing was ever removed. It now compares against the set of indexes actually written. The translations file being **absent** means "nothing to say about translations", not "there are none" — otherwise an import from a checkout without the file would quietly empty the non-French half of the library.
+
+**`match_support_exemplars()` over-fetches `match_count * 64`, up from 8**, in the same change that generated the translations, exactly as the comment in `05_exemplars.sql` demanded. D-33 has 8 authored phrasings and 32 translations: at 8, that one exemplar would have filled every slot of a three-exemplar request and the function would have returned a single result — silently, looking like a retrieval quality problem. **64 is the addressing scheme's ceiling (10 phrasings × 5 languages plus the originals), not the 40 D-33 measures today**, so one new variant cannot reintroduce it, and `05_exemplars.test.mjs` asserts the multiplier against the module rather than against a number.
+
+**Translations are addressed `100 + source * 10 + language slot`.** A decade per source, so the address survives a phrasing being added or removed above it, and deterministic, which is the whole idempotence story: the upsert keys on `(exemplar, index)`, so a re-run updates in place.
+
+**548 of 551 landed on the first pass; the 3 that did not were the validator's fault, not the model's.** P-17's source ends « … quand je clique sur "je le veux" », so a faithful translation ends in a quote mark — and the wrapping check tested the first and last character separately, throwing away three correct translations. It now looks for a matching pair the source does not itself have. Re-run: 3 of 3.
+
+**Tests: +32 (2057 from the root, 1299 in `agent/`, all green), typecheck and lint clean.** **Nothing has been imported, embedded, or measured** — the file is the whole of it. `VALIDATION_LOG.md` item 20 carries the four steps and the order they must run in, including that the migration's forward step lands *before* the embeddings.
+
+## The ticket panel says what the customer attached, and one signature stops being a photo (2026-09-09)
+
+**A fourth block at the bottom of the detail panel: Attachments.** Every file the customer sent, by name, type and size — and, when they said a photo was coming and none arrived, a warning saying so with the French term that matched. **It renders on 114 of 383 tickets and is absent on the other 269**, like every other block here: a heading over nothing is worse than no heading.
+
+**The second signal is the one worth having, and it is four times more common.** 15 tickets carry a real photo; **74 mention one and attached nothing**. That second case is invisible today — an operator reads « vous trouverez la photo ci-jointe », goes to Outlook, and finds the same nothing. Both numbers come from the classifier, not from an eyeball.
+
+**The image itself is still not fetched, and the block says so** rather than leaving a reader to wonder where the thumbnail is. Bytes need the Graph message id, and the whole stored corpus was ingested from a different mailbox — `getAttachmentMetadata` already throws `mailboxMismatch` for exactly that reason — so none of the 15 photos is reachable until `README.md` step 3 is settled. When it is built it will proxy on demand rather than store: no new personal-data store, no retention job, and the compliance question stays "who may look at this". See `DECISIONS.md` § "The photo itself is not stored".
+
+**`Signature_6C20675392446.png` was being counted as a customer's photo.** `\b` does not exist between `Signature` and `_`, because `_` is a word character — the same trap the `cliché` pattern in the same file already documents for `é`. `FURNITURE_NAME` now ends in `(?![a-z0-9])`. **Measured before changing it: 1 part in the corpus's 115 image parts moves**, that one, on ticket `6ad65501` — a `delivery/problem` whose case file read `photo_evidence: attached` with no photo on the ticket. The corpus's real-photo count is **15, not 16**, and the agent was being told evidence had arrived when it had not.
+
+**The rules moved to `scripts/lib/photo-evidence-rules.mjs`** now that the agent, the attachment backfill and the dashboard all apply them; `agent/src/investigation/photo-evidence.mjs` re-exports every name, so no caller changed, and it keeps `toPromptText` because prompt wording is the agent's business. The furniture test is a single function both readers call — the panel classifying a part differently from the case file is precisely the drift that would show an operator a logo as evidence.
+
+**`body_text` travels into the panel read, which is the one debatable call here.** The thread dialog exists so bodies are not fetched on every row expansion, and the mention signal is readable from nowhere else. Measured before deciding: **3.2 KB per ticket on average, 38 KB at the worst**, against a case-file row the same read already fetches. `body_preview` would have been smaller and would miss a « ci-joint » past the first line, which is where it usually sits.
+
+**2025 tests from the root, 1299 in `agent/`, typecheck and lint clean.** The block itself has never been rendered in a browser — the dashboard has no component test framework — which is `VALIDATION_LOG.md` item 19.
+
+## The cache fix is proven on real mail, and the measurement asks a new question (2026-09-09)
+
+**The 2026-09-07 `finalize_investigation` change works in the pass, not only in the probe.**
+A 12-ticket batch — `investigate --backfill --include-closed --limit 12`, 10 investigated,
+2 skipped, **0 failed**, 45 model calls, 78 740 tokens — took the investigate pass from
+**21% to 61% cached**. The closing call, 0% on 8 of 8 before, now caches on **10 of 10**:
+turn 2 87%, turn 3 **93%** where it was 0%, turn 4 91%. Turn 1 stays at 0% by design, because
+two tickets share too little prefix to hit before their first call. `VALIDATION_LOG.md` item
+18 is closed.
+
+**The case files are not worse, and the comparison could only ever be made in aggregate.**
+The pass upserts one row per ticket, so these 10 runs overwrote their own predecessors —
+snapshot first, next time. Against the 127 rows that remain: mean established facts **3.00
+vs 1.88**, higher in every category present (delivery 3.67 vs 2.00, order 3.25 vs 1.93,
+product 2.00 vs 1.53), and all 10 parsed as tool arguments with no `argsError`. Most of that
+rise belongs to the rules layer rather than to this change, which is behaviour-neutral by
+construction; what it had to show was the absence of a regression.
+
+**The model finalises mid-loop on every ticket — 10 of 10 — and never alongside a lookup.**
+`alongsideLookups` was 0 every time, so nothing was dropped, and on several runs it finalised
+on its first turn, straight after `openingMoves()`, having made no discretionary call at all.
+The break is where it always was and the closing call is unconditional, so no collection was
+lost.
+
+**Which retires the reason given for discarding those arguments.** The code declines to use
+the mid-loop case file on the grounds that it is the suppression trade `DECISIONS.md` records
+as reversed — but collection has already stopped either way, and the only real difference is
+that a mid-loop finalise has not seen `closingPrompt(run)`. As it stands the project generates
+a complete case file, throws it away, and generates it again, on every ticket. **Not changed
+here**: the experiment that settles it is to compare the discarded arguments against the
+closing call's output on the same run, and it is worth doing before either is assumed.
+
+**No code changed.** `README.md` § Current state and § Next Steps were re-measured against the
+database, and `VALIDATION_LOG.md` item 18 closed with the numbers above.
+
 ## The case file comes back as a tool, and the closing call starts caching (2026-09-07)
 
 **The closing investigation call cached 0% on 8 of 8 production tickets** while the loop turn immediately before it cached 64%, on a byte-identical prefix. Recorded since 2026-09-05 as real, reproducible and unexplained, after four hypotheses were tested and disproved.

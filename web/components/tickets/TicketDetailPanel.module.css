@@ -22,9 +22,14 @@
 }
 
 /* Results is the reason the row was opened, so it takes the left column and
-   both rows of it; Order and Action stack down the right. */
+   every row of it; Order, Action and Attachments stack down the right.
+
+   `1 / -1` RATHER THAN `span 2`, because the right column's height is now
+   conditional: the Attachments block renders only on a ticket that has one, so
+   a fixed span left Results one row short and dropped Attachments underneath it
+   into the left column on exactly the tickets it was built for. */
 .block:first-child {
-  grid-row: span 2;
+  grid-row: 1 / -1;
 }
 
 .heading {
@@ -269,4 +274,119 @@
   font-size: var(--text-caption);
   font-weight: var(--weight-medium);
   color: var(--text-default);
+}
+
+/* ---------------------------------------------------------- attachments */
+
+/* One row per file. A list and not a `dl`: these have no label/value shape —
+   every entry is the same kind of thing, and what varies is which file it is. */
+.files {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+/* The file name leads, because it is what the customer chose and the only part
+   that says anything about the contents. */
+.fileName {
+  font-size: var(--text-body);
+  overflow-wrap: anywhere;
+}
+
+/* Type and size, quieter and on the same line: they answer "is this the photo
+   or the signature logo" at a glance, and neither is worth its own row. */
+.fileMeta {
+  font-size: var(--text-caption);
+  color: var(--text-subtle);
+}
+
+/* The customer said a photo was coming and none arrived. An operator acts on
+   this — it is the sentence that turns into "vous mentionnez une photo mais
+   rien n'est joint" — so it is coloured as a warning rather than muted away.
+
+   NOT `.error`: nothing has gone wrong in the system, and painting a normal
+   customer mistake in the failure colour is how a panel teaches people to
+   ignore its colours. */
+.missingPhoto {
+  margin: 0;
+  font-size: var(--text-body);
+  line-height: 1.5;
+  color: var(--warning);
+}
+
+/* The term that fired the check, shown so a false positive is visible as one:
+   `image de marque` in a b2b email matches, and an operator who can see the
+   matched word can dismiss it in a second instead of hunting for a photo. */
+.matchedTerm {
+  font-style: italic;
+  color: var(--text-subtle);
+}
+
+/* Counted, never named — see listTicketAttachments. */
+.furnitureNote {
+  margin: var(--space-1) 0 0;
+  font-size: var(--text-caption);
+  color: var(--text-subtle);
+}
+
+/* Why there is no thumbnail. States a limit of the system rather than a fact
+   about the ticket, so it is the quietest thing in the block. */
+.notStored {
+  margin: var(--space-2) 0 0;
+  font-size: var(--text-caption);
+  line-height: 1.5;
+  color: var(--text-subtle);
+}
+
+/* The photos themselves. A grid rather than the plain `.files` list: an image
+   needs its caption underneath it, and three 2 MB damage-claim photos have to
+   sit side by side in a column that is a third of the panel. */
+.photos {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: var(--space-3);
+}
+
+/* Capped by HEIGHT, not width. A parcel photo is portrait as often as
+   landscape, and constraining the width alone lets a portrait shot run the
+   panel down the page. `contain` because these are evidence: cropping to fill
+   a square is exactly how the corner of a damaged box gets cut off. */
+.photo {
+  display: block;
+  width: 100%;
+  max-height: 160px;
+  object-fit: contain;
+  border: 1px solid var(--border-subtle, rgba(0, 0, 0, 0.12));
+  border-radius: var(--radius-sm, 4px);
+  background: var(--surface-default, #fff);
+}
+
+/* The link is the full-size view — the proxy serves the original bytes, so
+   opening it in a tab is the "look closer" affordance without a lightbox. */
+.photoLink {
+  display: block;
+}
+
+.photoLink:hover .photo {
+  border-color: var(--teal);
+}
+
+/* What replaces the image when the mailbox no longer has it. Sized like the
+   image it stands in for, so a row of photos does not reflow around the gap. */
+.photoMissing {
+  display: flex;
+  align-items: center;
+  min-height: 80px;
+  padding: var(--space-2);
+  border: 1px dashed var(--border-subtle, rgba(0, 0, 0, 0.18));
+  border-radius: var(--radius-sm, 4px);
+  font-size: var(--text-caption);
+  line-height: 1.4;
+  color: var(--text-subtle);
 }

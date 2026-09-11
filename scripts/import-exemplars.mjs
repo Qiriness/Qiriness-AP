@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 
 import { parseArgs, loadConfig, loadEnv } from './lib/sync-config.mjs';
@@ -14,6 +14,7 @@ import {
   parseExemplarDocument,
   validateExemplar
 } from './lib/exemplar-import.mjs';
+import { sourceHash } from './lib/exemplar-translation.mjs';
 import { resolveShopId } from '../agent/src/lib/shop.mjs';
 
 // Loads Email-Example-Queries.md into support_exemplars + phrasings.
@@ -30,9 +31,23 @@ import { resolveShopId } from '../agent/src/lib/shop.mjs';
 // until a person has read it. That review is not a formality: the phrasings are
 // real customer sentences and several quote order numbers.
 //
+// TRANSLATIONS COME FROM A SECOND FILE, and are attached here rather than
+// generated here. `translate-exemplars.mjs` writes them; this reads them, drops
+// any whose source text has since been edited, and upserts them alongside the
+// authored rows at `phrasing_index >= 100`. That file is the review gate: all 38
+// exemplars are approved, approval is the only thing gating a vector, so a
+// translation written straight to the table would be embedded and matched
+// against real mail without anyone reading it.
+//
+// A STALE TRANSLATION IS DROPPED, NOT WRITTEN. Each entry carries the hash of
+// the phrasing it was made from. Editing a French variant without re-running the
+// translator would otherwise leave four rows in the index answering a question
+// nobody asks any more, and they would look exactly like the fresh ones.
+//
 // Flags: --dry-run (parse and report, write nothing), --file=PATH.
 
 const DEFAULT_FILE = new URL('../Email-Example-Queries.md', import.meta.url);
+const TRANSLATIONS_FILE = new URL('../Email-Example-Queries.translations.json', import.meta.url);
 
 if (isDirectRun()) {
   main().catch((error) => {
@@ -56,7 +71,13 @@ async function main() {
     (problems.length === 0 ? usable : skipped).push({ exemplar, problems });
   }
 
-  report({ parsed, usable, skipped, warnings });
+  const held = readTranslations();
+  const translations = {
+    hasFile: held.hasFile,
+    ...attachTranslations(usable.map((u) => u.exemplar), held.exemplars, (m) => warnings.push(m))
+  };
+
+  report({ parsed, usable, skipped, warnings, translations });
 
   if (args.dryRun) {
     console.log('\nDry run: nothing written.');
@@ -67,10 +88,15 @@ async function main() {
   const supabase = createSupabaseClient(config);
   const shopId = await resolveShopId(supabase, config.shopDomain);
 
-  const written = await write({ supabase, shopId, usable: usable.map((u) => u.exemplar) });
+  const written = await write({
+    supabase,
+    shopId,
+    usable: usable.map((u) => u.exemplar),
+    pruneTranslations: translations.hasFile
+  });
   console.log(
-    `\nImported ${written.exemplars} exemplar(s) and ${written.phrasings} phrasing(s); ` +
-      `removed ${written.removed} stale phrasing(s).`
+    `\nImported ${written.exemplars} exemplar(s) and ${written.phrasings} phrasing(s) ` +
+      `(${written.translated} translated); removed ${written.removed} stale phrasing(s).`
   );
 
   // READ BACK RATHER THAN ASSUMED. This line used to say "All are drafts" every
@@ -111,7 +137,82 @@ async function main() {
   }
 }
 
-async function write({ supabase, shopId, usable }) {
+/**
+ * The generated translations, or nothing.
+ *
+ * ABSENT IS FINE AND IS NOT A DEFAULT TO PAPER OVER: the document imports
+ * perfectly well without a single translation, and it did for the first month.
+ * Malformed is not fine — reading a broken file as empty would silently import a
+ * French-only library and report success.
+ */
+function readTranslations() {
+  if (!existsSync(TRANSLATIONS_FILE)) return { hasFile: false, exemplars: {} };
+
+  const raw = readFileSync(TRANSLATIONS_FILE, 'utf8');
+  try {
+    return { hasFile: true, exemplars: JSON.parse(raw)?.exemplars ?? {} };
+  } catch (error) {
+    throw new Error(
+      `Email-Example-Queries.translations.json is not readable JSON (${error.message}). ` +
+        'Fix it or delete it and re-run `npm run translate:exemplars`.'
+    );
+  }
+}
+
+/**
+ * Adds the translated phrasings to each exemplar's list, in place.
+ *
+ * TWO THINGS DISQUALIFY A TRANSLATION, and either would otherwise leave a row in
+ * the retrieval index answering a question nobody asks any more: its source
+ * phrasing no longer exists, or its source text has changed since the
+ * translation was made. Both are reported rather than thrown — the authored half
+ * of the import is still correct, and the fix is to re-run the translator rather
+ * than to block the load.
+ */
+export function attachTranslations(exemplars, held, warn = () => {}) {
+  let attached = 0;
+  let dropped = 0;
+
+  for (const exemplar of exemplars) {
+    const entries = held[exemplar.exemplarKey];
+    if (!entries) continue;
+
+    const authored = new Map(exemplar.phrasings.map((p) => [p.index, p]));
+
+    for (const entry of Object.values(entries)) {
+      const source = authored.get(entry.sourceIndex);
+      if (!source) {
+        warn(
+          `${exemplar.exemplarKey}: dropped a ${entry.language} translation of ` +
+            `phrasing ${entry.sourceIndex}, which no longer exists`
+        );
+        dropped += 1;
+        continue;
+      }
+      if (sourceHash(source.text) !== entry.sourceHash) {
+        warn(
+          `${exemplar.exemplarKey}: dropped the ${entry.language} translation of phrasing ` +
+            `${entry.sourceIndex} — its source text has changed since it was made`
+        );
+        dropped += 1;
+        continue;
+      }
+
+      exemplar.phrasings.push({
+        index: entry.index,
+        kind: 'translated',
+        text: entry.text,
+        language: entry.language,
+        translatedFromIndex: entry.sourceIndex
+      });
+      attached += 1;
+    }
+  }
+
+  return { attached, dropped };
+}
+
+async function write({ supabase, shopId, usable, pruneTranslations }) {
   // One upsert for the parents, so a re-import updates in place rather than
   // creating a second row per key.
   const rows = usable.map((e) => ({
@@ -148,6 +249,10 @@ async function write({ supabase, shopId, usable }) {
         phrasing_index: phrasing.index,
         phrasing_kind: phrasing.kind,
         phrasing_text: phrasing.text,
+        language: phrasing.language,
+        // Null on everything but a translation, and the check constraint reads
+        // it both ways: a translation must name a source, and nothing else may.
+        translated_from_index: phrasing.translatedFromIndex ?? null,
         // Covers the text only. The embedding's own staleness gate is
         // `embedded_input_hash`, which is computed from the composed input —
         // these are deliberately different hashes, as on the knowledge side.
@@ -163,30 +268,45 @@ async function write({ supabase, shopId, usable }) {
     'support_exemplar_id,phrasing_index'
   );
 
-  const removed = await removeStalePhrasings({ supabase, usable, idByKey });
+  const removed = await removeStalePhrasings({ supabase, usable, idByKey, pruneTranslations });
 
-  return { exemplars: rows.length, phrasings: phrasingRows.length, removed };
+  return {
+    exemplars: rows.length,
+    phrasings: phrasingRows.length,
+    translated: phrasingRows.filter((row) => row.phrasing_kind === 'translated').length,
+    removed
+  };
 }
 
 /**
- * Drops phrasings past the end of a shortened list.
+ * Drops phrasings this import did not write.
  *
- * The upsert overwrites indexes 0..n-1 but cannot know that an exemplar which
- * used to have five phrasings now has three — indexes 3 and 4 would survive as
- * text nobody wrote, still embedded and still retrievable.
+ * The upsert overwrites the indexes it was given but cannot know that an
+ * exemplar which used to have five phrasings now has three — indexes 3 and 4
+ * would survive as text nobody wrote, still embedded and still retrievable.
  *
- * TRANSLATIONS ARE NOT AUTHORED HERE and must survive this. They are generated
- * from the phrasings rather than parsed out of the document, so by the only test
- * this function has — "is it past the end of the authored list?" — every one of
- * them looks stale. They live at `TRANSLATION_INDEX_BASE` and above precisely so
- * that the question can be asked of authored rows only.
+ * IT WAS "PAST THE END OF THE LIST" UNTIL TRANSLATIONS EXISTED, and that test
+ * silently stopped working the moment translations joined `phrasings`: a
+ * three-variant exemplar with twelve translations has a list of length 15, so
+ * every authored row below 15 read as current and nothing was ever pruned. The
+ * set of indexes actually written says the same thing about a shortened list and
+ * keeps saying it once the list is no longer contiguous.
+ *
+ * `pruneTranslations` IS OFF WHEN THE TRANSLATIONS FILE IS ABSENT. Without it
+ * the written set contains no index above 100, so every translation in the table
+ * would read as stale and be deleted — an import run from a checkout that
+ * happens not to have the file would quietly empty the non-French half of the
+ * library. Absent means "nothing to say about translations", not "there are
+ * none".
  */
-async function removeStalePhrasings({ supabase, usable, idByKey }) {
+async function removeStalePhrasings({ supabase, usable, idByKey, pruneTranslations }) {
   let removed = 0;
 
   for (const exemplar of usable) {
     const exemplarId = idByKey.get(exemplar.exemplarKey);
     if (!exemplarId) continue;
+
+    const written = new Set(exemplar.phrasings.map((p) => p.index));
 
     const existing = await supabaseSelect(
       supabase,
@@ -194,11 +314,10 @@ async function removeStalePhrasings({ supabase, usable, idByKey }) {
       { support_exemplar_id: exemplarId },
       'id,phrasing_index'
     );
-    const stale = existing.filter(
-      (row) =>
-        row.phrasing_index < TRANSLATION_INDEX_BASE &&
-        row.phrasing_index >= exemplar.phrasings.length
-    );
+    const stale = existing.filter((row) => {
+      if (written.has(row.phrasing_index)) return false;
+      return row.phrasing_index < TRANSLATION_INDEX_BASE || pruneTranslations;
+    });
     if (stale.length === 0) continue;
 
     await supabaseDeleteWhereIn(
@@ -213,14 +332,36 @@ async function removeStalePhrasings({ supabase, usable, idByKey }) {
   return removed;
 }
 
-function report({ parsed, usable, skipped, warnings }) {
-  const phrasings = usable.reduce((n, u) => n + u.exemplar.phrasings.length, 0);
-  const variants = phrasings - usable.length;
+function report({ parsed, usable, skipped, warnings, translations }) {
+  // COUNTED BY KIND, NOT BY LENGTH. `phrasings` holds the attached translations
+  // too, so every arithmetic shortcut over its length — "everything after the
+  // canonical is a variant", "length 1 means no variant" — started lying the day
+  // translations were attached, and each would have gone on printing a
+  // plausible-looking number.
+  const authored = (u) => u.exemplar.phrasings.filter((p) => p.kind !== 'translated');
+  const canonical = usable.length;
+  const variants = usable.reduce((n, u) => n + authored(u).length, 0) - canonical;
+  const translated = usable.reduce(
+    (n, u) => n + u.exemplar.phrasings.filter((p) => p.kind === 'translated').length,
+    0
+  );
 
   console.log(
     `Parsed ${parsed.length} exemplar(s): ${usable.length} usable, ${skipped.length} skipped.\n` +
-      `${phrasings} phrasing(s) — ${usable.length} canonical + ${variants} real variant(s).\n`
+      `${canonical + variants + translated} phrasing(s) — ${canonical} canonical + ` +
+      `${variants} real variant(s) + ${translated} translated.\n`
   );
+
+  if (!translations?.hasFile) {
+    console.log(
+      'No Email-Example-Queries.translations.json: importing French only, and leaving\n' +
+        'any translations already in the table alone. Run `npm run translate:exemplars`.\n'
+    );
+  } else if (translations.dropped > 0) {
+    console.log(
+      `${translations.dropped} translation(s) dropped as stale — re-run \`npm run translate:exemplars\`.\n`
+    );
+  }
 
   const bySubject = new Map();
   for (const { exemplar } of usable) {
@@ -240,7 +381,7 @@ function report({ parsed, usable, skipped, warnings }) {
     );
   }
 
-  const noVariants = usable.filter((u) => u.exemplar.phrasings.length === 1);
+  const noVariants = usable.filter((u) => authored(u).length === 1);
   if (noVariants.length > 0) {
     // The canonical question alone is the tidy register; without a real phrasing
     // these will match a messy email worst.

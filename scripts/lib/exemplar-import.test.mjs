@@ -197,3 +197,86 @@ test('validation names every missing piece rather than the first', () => {
   const problems = validateExemplar({ canonicalQuestion: '', category: null, phrasings: [] });
   assert.equal(problems.length, 3);
 });
+
+// --- phrasing language -------------------------------------------------------
+
+const LANGUAGES = `
+### D-33 · Livrez-vous dans mon pays ?
+\`delivery\` · \`question\` · **7 msgs** · 🟢
+
+**Variantes réelles**
+- « Est-ce que vous livrez en Italie ? »
+- « Do you ship to Germany? »  _(en)_
+- « Mi pedido num. 6298 ha venido erróneo »  _(es — extrait, la suite est sur D-08)_
+- « Kan geen bestelling plaatsen »  _(nl)_
+- « Je n'arrive pas à sélectionner mon pays »  _(authored)_
+- « nouvelle adresse pour recevoir mon coli »  _(objet du message)_
+
+**needs** \`policy_answer\`
+`;
+
+test('a variant is French unless its annotation opens with a language code', () => {
+  const { exemplars } = parse(LANGUAGES);
+  const byText = new Map(exemplars[0].phrasings.map((p) => [p.text.slice(0, 12), p.language]));
+
+  assert.equal(byText.get('Est-ce que v'), 'fr');
+  assert.equal(byText.get('Do you ship '), 'en');
+  assert.equal(byText.get('Mi pedido nu'), 'es');
+  assert.equal(byText.get('Kan geen bes'), 'nl');
+});
+
+test('a prose annotation is not read as a language code', () => {
+  const { exemplars, warnings } = parse(LANGUAGES);
+  const byText = new Map(exemplars[0].phrasings.map((p) => [p.text.slice(0, 12), p.language]));
+
+  // « authored » and « objet du message » both open with letters; neither has
+  // the marker's shape, so neither may change a phrasing's language.
+  assert.equal(byText.get("Je n'arrive "), 'fr');
+  assert.equal(byText.get('nouvelle adr'), 'fr');
+  assert.deepEqual(warnings, []);
+});
+
+test('the canonical question is always French', () => {
+  const { exemplars } = parse(LANGUAGES);
+  assert.equal(exemplars[0].phrasings[0].kind, 'canonical');
+  assert.equal(exemplars[0].phrasings[0].language, 'fr');
+});
+
+test('a two-letter opener that is not a language is reported, not read as one', () => {
+  const { exemplars, warnings } = parse(`
+### D-99 · Une question.
+\`delivery\` · \`question\` · **1 msgs** · 🟢
+
+**Variantes réelles**
+- « une phrase »  _(xx — pas un code)_
+
+**needs** \`policy_answer\`
+`);
+
+  assert.equal(exemplars[0].phrasings[1].language, 'fr');
+  assert.equal(warnings.length, 1);
+  assert.match(warnings[0], /unknown language marker/);
+});
+
+test('the real corpus declares exactly the foreign phrasings it holds', async () => {
+  const { readFileSync } = await import('node:fs');
+  const markdown = readFileSync(new URL('../../Email-Example-Queries.md', import.meta.url), 'utf8');
+  const { exemplars, warnings } = parse(markdown);
+
+  const foreign = exemplars.flatMap((e) =>
+    e.phrasings.filter((p) => p.language !== 'fr').map((p) => `${e.exemplarKey}:${p.language}`)
+  );
+
+  // Eleven, and the count is the point: before the marker existed every one of
+  // these was written to the table as French, so the language column measured
+  // the opposite of what it was added to measure.
+  assert.equal(foreign.length, 11);
+  assert.deepEqual(
+    [...new Set(foreign.map((f) => f.split(':')[1]))].sort(),
+    ['en', 'es', 'nl']
+  );
+  assert.ok(
+    !warnings.some((w) => /language marker/.test(w)),
+    `unread language markers: ${warnings.join('; ')}`
+  );
+});

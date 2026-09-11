@@ -1,0 +1,10 @@
+.note {
+  margin: 0;
+  font-size: var(--text-body);
+  color: var(--text-subtle);
+}
+
+.dim {
+  color: var(--text-subtle);
+  font-weight: var(--weight-regular);
+}

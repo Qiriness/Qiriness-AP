@@ -256,5 +256,132 @@ export function createGraphClient(config, { fetchImpl = fetch } = {}) {
     }
   }
 
-  return { getToken, getDeltaPage, getMessage, getAttachmentMetadata, forwardMessage };
+
+  /**
+   * Attachment IDS as well as the four scalars, for the one caller that needs
+   * to fetch something.
+   *
+   * SEPARATE FROM `getAttachmentMetadata` AND DELIBERATELY SO. That function's
+   * whole documented contract is that the id never travels: it answers "is a
+   * photo here" and its result is written to `ticket_messages.attachments`,
+   * where an Exchange item id would be a mailbox-scoped handle stored beside
+   * data that outlives the mailbox. This one is read at request time, used
+   * immediately, and never persisted.
+   */
+  async function listAttachmentHandles(graphMessageId) {
+    if (!graphMessageId) {
+      throw new Error('listAttachmentHandles requires a Graph message id.');
+    }
+    const token = await getToken();
+    const response = await fetchImpl(
+      `${GRAPH_BASE}/users/${encodeURIComponent(mailbox)}/messages/${encodeURIComponent(graphMessageId)}` +
+        '/attachments?$select=id,name,contentType,size,isInline&$top=20',
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+
+    const payload = await response.json().catch(() => null);
+    const code = payload?.error?.code || '';
+
+    if (code === 'ErrorInvalidMailboxItemId') {
+      const error = new Error(
+        `Graph rejected the message id as invalid for ${mailbox}. Exchange ids are ` +
+          'mailbox-scoped, so these rows were almost certainly ingested while ' +
+          'SUPPORT_MAILBOX pointed at a different mailbox.'
+      );
+      error.code = code;
+      error.mailboxMismatch = true;
+      throw error;
+    }
+
+    if (response.status === 404) {
+      return null;
+    }
+
+    if (!response.ok) {
+      throw new Error(`Graph attachment request failed: ${code || `HTTP ${response.status}`}`);
+    }
+
+    return (Array.isArray(payload?.value) ? payload.value : []).map((attachment) => ({
+      id: attachment?.id ?? null,
+      name: attachment?.name ?? null,
+      contentType: attachment?.contentType ?? null,
+      size: Number(attachment?.size) || 0,
+      isInline: Boolean(attachment?.isInline)
+    }));
+  }
+
+  /**
+   * The bytes of one attachment. THE ONLY PLACE THIS PROJECT READS A FILE A
+   * CUSTOMER SENT.
+   *
+   * `/$value` RATHER THAN `contentBytes`. The attachment resource returns the
+   * file base64-encoded inside a JSON envelope, which costs a third more bytes
+   * over the wire and forces the whole thing through `JSON.parse` before
+   * anything can look at it. `/$value` is the raw file with a real
+   * `Content-Type`, so it streams.
+   *
+   * `maxBytes` IS A REFUSAL, NOT A TRUNCATION. A truncated image is a corrupt
+   * image, and handing a browser half a JPEG is worse than telling it no: the
+   * caller shows "too large to display" and the operator opens Outlook. The cap
+   * exists because Graph will happily hand back the 12 MB video in this corpus
+   * and the dashboard has no business streaming that into a table row.
+   *
+   * A MISSING MESSAGE IS AN ANSWER, the same contract as the rest of this file:
+   * null when the mailbox no longer holds it. Historical mail leaves — measured
+   * on this corpus, at least one message with a stored photo is already gone —
+   * so a caller has to render that state rather than treat it as an error.
+   */
+  async function getAttachmentContent(graphMessageId, attachmentId, { maxBytes = 8 * 1024 * 1024 } = {}) {
+    if (!graphMessageId || !attachmentId) {
+      throw new Error('getAttachmentContent requires a message id and an attachment id.');
+    }
+    const token = await getToken();
+    const response = await fetchImpl(
+      `${GRAPH_BASE}/users/${encodeURIComponent(mailbox)}/messages/${encodeURIComponent(graphMessageId)}` +
+        `/attachments/${encodeURIComponent(attachmentId)}/$value`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+
+    if (response.status === 404) {
+      return null;
+    }
+    if (!response.ok) {
+      throw new Error(`Graph attachment content failed: HTTP ${response.status}`);
+    }
+
+    // Checked before reading the body where Graph declares a length, and again
+    // after: `content-length` is absent on a chunked response, so it is a cheap
+    // first gate rather than the guarantee.
+    const declared = Number(response.headers?.get?.('content-length')) || 0;
+    if (declared > maxBytes) {
+      const error = new Error(`Attachment is ${declared} bytes, over the ${maxBytes} cap.`);
+      error.tooLarge = true;
+      throw error;
+    }
+
+    const buffer = Buffer.from(await response.arrayBuffer());
+    if (buffer.byteLength > maxBytes) {
+      const error = new Error(`Attachment is ${buffer.byteLength} bytes, over the ${maxBytes} cap.`);
+      error.tooLarge = true;
+      throw error;
+    }
+
+    return {
+      buffer,
+      // Graph's own header, kept only to compare against what we stored. The
+      // caller serves the STORED type, so a mailbox that starts describing a
+      // file differently cannot change what the browser is told to render.
+      contentType: response.headers?.get?.('content-type') || null
+    };
+  }
+
+  return {
+    getToken,
+    getDeltaPage,
+    getMessage,
+    getAttachmentMetadata,
+    listAttachmentHandles,
+    getAttachmentContent,
+    forwardMessage
+  };
 }

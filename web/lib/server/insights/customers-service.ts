@@ -18,21 +18,23 @@
  * silently wrong totals; a bounded one does not. The bound is enforced below
  * rather than assumed — see `TICKET_FACT_LIMIT`.
  *
- * VIP IS DERIVED HERE, IN TYPESCRIPT, AND NOWHERE ELSE. The views expose
- * `rfm_group` and deliberately never `is_vip`: who counts as a VIP is a business
- * rule that moves with the business, and freezing it into a view would put a
- * second definition of it in the codebase the first time it moved. The one
- * definition is `scripts/lib/customer-segments.mjs`, which the drafting agent
- * also reads, so a customer badged VIP on a ticket is VIP in a generated reply
- * too.
+ * VIP IS THE SHOP'S RULE, ASKED, NEVER RE-DERIVED. The thresholds are set on
+ * this panel and stored on `shops`; `vip_customers()` applies them (spend AND
+ * orders inside a window). This service asks it through `vip-rule.mjs`, as the
+ * ticket queue and the agent do, so a customer badged VIP on a ticket is VIP
+ * here and in the case file. Shopify's RFM segments are still shown, as
+ * Shopify's, and decide nothing.
  *
  * Server-only; see ./shared.ts for the read rules this obeys.
  */
 
+import { formatRfmGroup } from "../../../../scripts/lib/customer-segments.mjs";
 import {
-  formatRfmGroup,
-  isVipRfmGroup,
-} from "../../../../scripts/lib/customer-segments.mjs";
+  describeVipRule,
+  loadVipCustomers,
+  loadVipRule,
+  summariseVipRule,
+} from "../../../../scripts/lib/vip-rule.mjs";
 import { V } from "../../../../scripts/lib/tables.mjs";
 import type {
   CustomerAtRisk,
@@ -44,7 +46,7 @@ import type {
   TicketStatus,
 } from "../../types";
 import { CLOSED_STATUSES } from "../../ticket-stats";
-import { count, readView } from "./shared";
+import { count, getSupabaseClient, readView } from "./shared";
 
 /**
  * The hard cap on the one row-level read, and the point at which this panel
@@ -95,7 +97,9 @@ interface TicketFactRow {
 }
 
 export async function getCustomersPanel(shopId: string): Promise<CustomerPanel> {
-  const [segmentRows, factRows] = await Promise.all([
+  const supabase = getSupabaseClient();
+  const rule = await loadVipRule(supabase, shopId);
+  const [segmentRows, factRows, summary] = await Promise.all([
     // Biggest segment first, which on this shop means the panel opens on
     // PROSPECTS at 53,942 — the denominator problem stated by the data itself.
     readView<Record<string, unknown>>(V.CUSTOMER_SEGMENT_TOTALS, shopId, {
@@ -108,6 +112,7 @@ export async function getCustomersPanel(shopId: string): Promise<CustomerPanel> 
       order: "ticket_id.asc",
       limit: TICKET_FACT_LIMIT,
     }),
+    summariseVipRule(supabase, shopId, rule),
   ]);
 
   if (factRows.length >= TICKET_FACT_LIMIT) {
@@ -128,12 +133,18 @@ export async function getCustomersPanel(shopId: string): Promise<CustomerPanel> 
       }
     : null;
 
-  const vipFacts = factRows.filter((row) => isVipRfmGroup(row.rfm_group));
+  // THE SHOP'S RULE, asked once for every customer behind a ticket — bounded by
+  // TICKET_FACT_LIMIT, so one RPC body. The rule itself is applied in SQL
+  // (vip_customers); nothing here compares a number.
+  const linkedIds = [...new Set(factRows.map((row) => row.customer_id))];
+  const vipIds = await loadVipCustomers(supabase, shopId, rule, linkedIds);
+  const vipFacts = factRows.filter((row) => vipIds.has(row.customer_id));
 
   return {
     segments,
     base,
-    vip: base ? buildVip(segments, factRows, vipFacts) : null,
+    vipRule: rule ? { ...rule, description: describeVipRule(rule) } : null,
+    vip: rule && summary ? buildVip(summary, factRows, vipFacts) : null,
     vipByCategory: groupByCategory(vipFacts),
     atRisk: buildCallList(vipFacts),
     spendExposed: spendExposedToComplaints(factRows),
@@ -149,7 +160,6 @@ function mapSegment(row: Record<string, unknown>): SegmentTotal {
     // Labelled from the shared rule so an RFM group Shopify adds tomorrow renders
     // as title-cased text rather than as a blank cell in the segment table.
     label: formatRfmGroup(rfmGroup),
-    isVip: isVipRfmGroup(rfmGroup),
     customers: count(row.customers),
     buyers: count(row.buyers),
     repeatBuyers: count(row.repeat_buyers),
@@ -173,18 +183,16 @@ function mapSegment(row: Record<string, unknown>): SegmentTotal {
  * customer opened enough threads.
  */
 function buildVip(
-  segments: SegmentTotal[],
+  summary: { vipCustomers: number; buyersInWindow: number },
   factRows: TicketFactRow[],
   vipFacts: TicketFactRow[]
 ): NonNullable<CustomerPanel["vip"]> {
-  const vipCustomers = sumBy(
-    segments.filter((s) => s.isVip),
-    (s) => s.customers
-  );
+  const vipCustomers = summary.vipCustomers;
   const contacted = new Set(vipFacts.map((row) => row.customer_id)).size;
 
   return {
     customers: vipCustomers,
+    buyersInWindow: summary.buyersInWindow,
     ticketsLinked: factRows.length,
     vipTickets: vipFacts.length,
     // Null rather than 0 when there are no VIPs at all: "no VIP has contacted

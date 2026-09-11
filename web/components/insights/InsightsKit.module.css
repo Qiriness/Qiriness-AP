@@ -1,172 +1,300 @@
-/* --- section --- */
+/* --- layout --- */
 
-.section {
-  margin: 0 0 var(--space-6);
+.grid {
+  display: grid;
+  gap: var(--space-4);
+  margin: 0 0 var(--space-4);
 }
 
-.sectionHead {
+.card {
+  position: relative;
+  min-width: 0;
+  padding: var(--space-5);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-xs);
+}
+
+@media (min-width: 900px) {
+  .span2 {
+    grid-column: span 2;
+  }
+  .span3 {
+    grid-column: span 3;
+  }
+}
+
+.cardHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  margin: 0 0 var(--space-4);
+}
+
+.cardTitle {
+  margin: 0;
+  font-size: var(--text-md);
+  font-weight: var(--weight-semibold);
+  color: var(--text-strong);
+}
+
+.cardAside {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+/* --- KPI --- */
+
+.kpi {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.kpiHead {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: var(--space-4);
-  flex-wrap: wrap;
-  margin: 0 0 var(--space-3);
+  gap: var(--space-2);
 }
 
-.sectionTitles {
+.kpiLabel {
+  margin: 0;
+  font-size: var(--text-body);
+  font-weight: var(--weight-medium);
+  color: var(--text-muted);
+}
+
+.kpiAction a {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text-subtle);
+  text-decoration: none;
+}
+
+.kpiAction a:hover {
+  border-color: var(--teal);
+  color: var(--teal);
+}
+
+.kpiFigure {
   display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin: 0;
+  line-height: 1.1;
+}
+
+/* Proportional figures at display size: tabular digits look loose this big. */
+.kpiValue {
+  font-size: var(--text-3xl);
+  font-weight: var(--weight-semibold);
+  letter-spacing: -0.02em;
+  color: var(--text-strong);
+}
+
+.hero .kpiValue {
+  font-size: var(--text-display);
+}
+
+.kpiUnit {
+  font-size: var(--text-lg);
+  font-weight: var(--weight-medium);
+  color: var(--text-muted);
+}
+
+.kpi_warn .kpiValue {
+  color: var(--priority-medium-ink);
+}
+
+.kpi_bad .kpiValue {
+  color: var(--priority-high-ink);
+}
+
+.kpiDelta {
+  min-height: 1.5rem;
+}
+
+.kpiSub {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(7rem, 1fr));
+  gap: var(--space-3) var(--space-4);
+  margin: auto 0 0;
+  padding: var(--space-3) 0 0;
+  border-top: 1px solid var(--mist-050);
+}
+
+.kpiSubItem {
   min-width: 0;
 }
 
-.sectionTitle {
-  margin: 0;
+.kpiSubItem dt {
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+.kpiSubItem dd {
+  margin: 2px 0 0;
   font-size: var(--text-lg);
   font-weight: var(--weight-semibold);
   color: var(--text-strong);
 }
 
-.sectionSub {
-  margin: 0;
-  font-size: var(--text-body);
-  color: var(--text-muted);
-  max-width: 62ch;
+.blocked {
+  background: var(--surface-sunken);
 }
 
-.sectionActions {
-  display: flex;
+.blocked .kpiValue {
+  color: var(--text-subtle);
+}
+
+.blockedReason {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+/* --- delta chip --- */
+
+.deltaRow {
+  display: inline-flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: var(--space-2);
 }
 
-/* --- tiles --- */
+.delta {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 1px var(--space-2);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  font-variant-numeric: tabular-nums;
+}
 
-.tileGrid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+.delta_good {
+  color: var(--priority-low-ink);
+  background: var(--success-050);
+}
+
+.delta_bad {
+  color: var(--priority-high-ink);
+  background: var(--error-050);
+}
+
+.delta_flat {
+  color: var(--text-muted);
+  background: var(--mist-050);
+}
+
+.deltaLabel {
+  font-size: var(--text-sm);
+  color: var(--text-subtle);
+}
+
+/* --- bars --- */
+
+.bars {
+  display: flex;
+  flex-direction: column;
   gap: var(--space-3);
-  margin: 0 0 var(--space-5);
+  margin: 0;
   padding: 0;
   list-style: none;
 }
 
-.tile {
+.barRow {
+  display: grid;
+  grid-template-columns: minmax(6rem, 13rem) 1fr minmax(4rem, auto);
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.barKey {
+  font-size: var(--text-body);
+  color: var(--text-default);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.barTrack {
   position: relative;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-  padding: var(--space-4);
-  padding-top: calc(var(--space-4) - 1px);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  background: var(--surface);
-  box-shadow: var(--shadow-xs);
+  height: 0.875rem;
+  background: var(--mist-050);
+  border-radius: var(--radius-sm);
   overflow: hidden;
 }
 
-/* One accent bar per tile — the only colour on an otherwise neutral card, so
-   state reads before any number is parsed. */
-.tile::before {
-  content: "";
-  position: absolute;
-  inset: 0 0 auto;
-  height: 3px;
-  background: var(--teal);
+/* Square at the baseline, rounded at the data end. */
+.barFill {
+  display: block;
+  height: 100%;
+  background: var(--chart-line);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
 }
 
-.good::before {
-  background: var(--success);
-}
-.warn::before {
-  background: var(--warning);
-}
-.bad::before {
+.barEmphasis {
   background: var(--priority-high);
 }
-/* Grey, not red: a metric that cannot be computed is not a failing metric, and
-   painting it red would put it in competition with the ones that are. */
-.blocked::before {
-  background: var(--border-strong);
+
+/* Hatched, not empty: "never measured" must not look like "measured at zero". */
+.barMissing {
+  background: repeating-linear-gradient(45deg, var(--mist) 0 4px, transparent 4px 8px);
 }
 
-.tileLabel {
-  font-size: var(--text-caption);
-  font-weight: var(--weight-semibold);
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--text-subtle);
-}
-
-.tileFigure {
-  display: flex;
-  align-items: baseline;
-  flex-wrap: wrap;
-  gap: var(--space-2);
-  font-size: var(--text-2xl);
-  font-weight: var(--weight-semibold);
-  line-height: 1.15;
-  color: var(--text-strong);
-  font-variant-numeric: tabular-nums;
-}
-
-.tileOf {
+.barValue {
   font-size: var(--text-body);
+  font-weight: var(--weight-semibold);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-strong);
+  text-align: right;
+  white-space: nowrap;
+}
+
+.barValueDim {
   font-weight: var(--weight-regular);
   color: var(--text-subtle);
 }
 
-.tileFoot {
-  font-size: var(--text-caption);
-  color: var(--text-muted);
-  line-height: 1.45;
+/* --- states --- */
+
+.error {
+  padding: var(--space-4) var(--space-5);
+  border: 1px solid var(--error-100);
+  border-radius: var(--radius-lg);
+  background: var(--error-050);
+  color: var(--text-default);
 }
 
-/* Pinned to the tile's top-right corner, out of the label -> figure -> foot
-   reading order. Absolute rather than a flex row with the label: the label wraps
-   on a narrow tile, and a flex sibling would be pushed down with it instead of
-   staying in the corner. */
-.tileAction {
-  position: absolute;
-  top: var(--space-2);
-  right: var(--space-2);
-  z-index: 1;
-}
-
-/* The label reserves room so a long one wraps before it reaches the icon rather
-   than running underneath it. Scoped to tiles that actually have an action, so
-   every other tile keeps its full width. */
-.tileAction + .tileLabel {
-  padding-right: var(--space-6);
-}
-
-.tileAction a {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  /* 28px: comfortably clickable without becoming a second focal point beside
-     the figure the tile exists to show. */
-  width: 1.75rem;
-  height: 1.75rem;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--surface);
+.empty {
+  margin: 0;
+  padding: var(--space-6) var(--space-5);
+  text-align: center;
+  font-size: var(--text-body);
   color: var(--text-subtle);
-  text-decoration: none;
-}
-
-.tileAction a:hover {
   background: var(--surface-sunken);
-  border-color: var(--teal);
-  color: var(--teal);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-md);
 }
 
-.tileAction a:focus-visible {
-  outline: 2px solid var(--teal);
-  outline-offset: 2px;
-}
-
-.dash {
+.caption {
+  margin: var(--space-3) 0 0;
+  font-size: var(--text-sm);
   color: var(--text-subtle);
 }
 
@@ -182,125 +310,144 @@
   border: 0;
 }
 
-/* --- bars --- */
+@media (max-width: 620px) {
+  .card {
+    padding: var(--space-4);
+  }
+  .barRow {
+    grid-template-columns: minmax(4.5rem, 7rem) 1fr auto;
+    gap: var(--space-2);
+  }
+  .hero .kpiValue {
+    font-size: var(--text-3xl);
+  }
+}
 
-.bars {
+/* --- section label --- */
+
+.sectionLabel {
   display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.barRow {
-  display: grid;
-  grid-template-columns: minmax(5rem, 9rem) 1fr minmax(3.5rem, auto);
-  align-items: center;
+  align-items: baseline;
+  justify-content: space-between;
   gap: var(--space-3);
+  flex-wrap: wrap;
+  margin: var(--space-5) 0 var(--space-3);
 }
 
-.barKey {
+.sectionLabel:first-child {
+  margin-top: 0;
+}
+
+.sectionLabel h2 {
+  margin: 0;
   font-size: var(--text-sm);
-  color: var(--text-muted);
-  text-align: right;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.barTrack {
-  position: relative;
-  height: 1.15rem;
-  background: var(--surface-sunken);
-  border: 1px solid var(--mist-050);
-  border-radius: var(--radius-sm);
-  overflow: hidden;
-}
-
-.barFill {
-  display: block;
-  height: 100%;
-  background: var(--teal);
-  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
-}
-
-.barEmphasis {
-  background: var(--priority-high);
-}
-
-/* Hatched, not empty: "never measured" must not look like "measured at zero". */
-.barMissing {
-  background: repeating-linear-gradient(
-    45deg,
-    var(--mist) 0 4px,
-    transparent 4px 8px
-  );
-}
-
-.barValue {
-  font-size: var(--text-sm);
-  font-variant-numeric: tabular-nums;
-  color: var(--text-strong);
-  text-align: right;
-  white-space: nowrap;
-}
-
-.barValueDim {
+  font-weight: var(--weight-semibold);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
   color: var(--text-subtle);
 }
 
-/* --- notes --- */
+.sectionLabel span {
+  font-size: var(--text-sm);
+  color: var(--text-subtle);
+}
 
-.note {
+/* --- pinning --- */
+
+.pinned {
   display: flex;
   flex-direction: column;
-  gap: var(--space-1);
-  padding: var(--space-3) var(--space-4);
-  margin: 0 0 var(--space-4);
-  border: 1px solid var(--border-teal);
-  border-radius: var(--radius-md);
+  margin: 0 0 var(--space-5);
+  padding: var(--space-4) var(--space-4) 0;
+  border: 1px dashed var(--border-teal);
+  border-radius: var(--radius-lg);
   background: var(--teal-050);
 }
 
-.noteWarn {
-  border-color: var(--error-100);
-  background: var(--error-050);
+.pinnedEmpty {
+  display: none;
 }
 
-.noteTitle {
-  font-size: var(--text-caption);
+.pinnedHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin: 0 0 var(--space-3);
+}
+
+.pinnedHead h2 {
+  margin: 0;
+  font-size: var(--text-sm);
   font-weight: var(--weight-semibold);
   letter-spacing: 0.04em;
   text-transform: uppercase;
   color: var(--teal-ink);
 }
 
-.noteWarn .noteTitle {
-  color: var(--error);
-}
-
-.noteBody {
-  margin: 0;
-  font-size: var(--text-body);
-  color: var(--text-default);
-  max-width: 74ch;
-}
-
-.empty {
-  margin: 0;
-  padding: var(--space-5);
-  text-align: center;
-  font-size: var(--text-body);
+.pinnedHead span {
+  font-size: var(--text-sm);
   color: var(--text-subtle);
-  background: var(--surface-sunken);
-  border: 1px dashed var(--border);
-  border-radius: var(--radius-md);
 }
 
-@media (max-width: 620px) {
-  .barRow {
-    grid-template-columns: minmax(4rem, 6rem) 1fr auto;
-    gap: var(--space-2);
-  }
+/* The row is the positioning box, so the button lands in the top-right corner
+   of its rightmost card; it is out of flow and takes no grid cell. */
+.pinRow {
+  position: relative;
+}
+
+.pinButton {
+  position: absolute;
+  top: calc(var(--space-5) - 6px);
+  right: calc(var(--space-5) - 8px);
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--text-subtle);
+  cursor: pointer;
+  opacity: 0.55;
+  transition: opacity var(--dur-fast) var(--ease-out), background var(--dur-fast) var(--ease-out);
+}
+
+.pinRow:hover .pinButton,
+.pinButton:focus-visible {
+  opacity: 1;
+}
+
+.pinButton:hover:not(:disabled) {
+  background: var(--teal-050);
+  border-color: var(--border-teal);
+  color: var(--teal-ink);
+}
+
+.pinButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.25;
+}
+
+.pinOn {
+  opacity: 1;
+  color: var(--teal);
+}
+
+/* Room in the rightmost card's header, so the button never sits on an aside
+   (a sort toggle, a CSV link, "built 26 days ago"). The button is the row's
+   last DOM child, so the rightmost CARD is the one before it. The kit's cards
+   carry their head as a direct child, hence the child combinator. */
+.pinRow > :nth-last-child(2) > .cardHead,
+.pinRow > :nth-last-child(2) > .kpiHead,
+/* When the row stacks to one column the corner belongs to the FIRST card. */
+.pinRow > :first-child > .cardHead,
+.pinRow > :first-child > .kpiHead {
+  padding-right: 2rem;
+}
+
+.isPinned {
+  margin-bottom: var(--space-4);
 }

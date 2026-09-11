@@ -39,6 +39,7 @@ const SHOP_QUERY = `#graphql
       myshopifyDomain
       primaryDomain { url }
       customerAccountsV2 { customerAccountsVersion }
+      ianaTimezone
     }
   }
 `;

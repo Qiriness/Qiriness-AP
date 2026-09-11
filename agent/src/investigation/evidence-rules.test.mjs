@@ -453,7 +453,7 @@ test('VIP is derived through the same rule the badge uses', () => {
   const [gap] = resolveNeeds(
     ['customer_account_state'],
     [{ id: 't1', tool: T.LOOKUP_CUSTOMER, outcome: 'found',
-       data: { profile: { name: 'Élodie Bonnet', rfmGroup: 'CHAMPIONS', ordersCount: 7 } } }],
+       data: { profile: { name: 'Élodie Bonnet', rfmGroup: 'CHAMPIONS', isVip: true, ordersCount: 7 } } }],
     [T.LOOKUP_CUSTOMER]
   );
 
@@ -508,7 +508,7 @@ test('customer details read the profile, not the account state', () => {
     ['customer_identity'],
     [{ id: 't1', tool: TOOL_NAMES.LOOKUP_CUSTOMER, outcome: 'found',
        data: { account: { state: 'active' },
-               profile: { name: 'Sabrina Gani', rfmGroup: 'LOYAL', ordersCount: 2 } } }],
+               profile: { name: 'Sabrina Gani', rfmGroup: 'LOYAL', isVip: true, ordersCount: 2 } } }],
     [TOOL_NAMES.LOOKUP_CUSTOMER]
   );
 

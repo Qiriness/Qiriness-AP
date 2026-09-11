@@ -1,0 +1,98 @@
+.wrap {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.controls {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
+.spacer {
+  flex: 1;
+}
+
+/* No sideways scroll: the box never clips or scrolls, because the table inside
+   is sized to it rather than to its content. */
+.tableBox {
+  width: 100%;
+  min-width: 0;
+}
+
+/* Fixed layout: column widths come from the <colgroup>, not from the longest
+   product name. `table.fit` outranks the shared `.table th/td` nowrap rule. */
+table.fit {
+  table-layout: fixed;
+  width: 100%;
+}
+
+table.fit th,
+table.fit td {
+  white-space: normal;
+  vertical-align: top;
+}
+
+.colRank {
+  width: 2.25rem;
+}
+
+.colOrders {
+  width: 5rem;
+}
+
+.colRevenue {
+  width: 5.75rem;
+}
+
+/* One product per line; each line may shorten, none may widen the row. */
+.pair {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.productLine {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.product {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.plus {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.25rem;
+  height: 1.25rem;
+  border-radius: 50%;
+  background: var(--teal-050);
+  color: var(--teal-ink);
+  font-weight: var(--weight-semibold);
+}
+
+.lead {
+  font-weight: var(--weight-semibold);
+  color: var(--text-strong);
+}
+
+.empty {
+  margin: 0;
+  padding: var(--space-5);
+  text-align: center;
+  color: var(--text-subtle);
+  background: var(--surface-sunken);
+  border-radius: var(--radius-md);
+}

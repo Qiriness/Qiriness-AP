@@ -44,6 +44,22 @@ asking *"où est ma commande"* retrieves a **draft reply** as though it were pol
   leave the exemplar until the tool exists. (Same discipline as `checkout_state`
   in `evidence-rules.mjs`: listed, unwired, so the report argues for building it.)
 
+### Declaring a phrasing's language
+
+A variant is French unless its annotation opens with a language code:
+`- « Do you ship to Germany? »  _(en)_`, or `_(es — extrait, la suite est sur R-22)_`
+when there is a note to carry as well. The code must be one of `fr en es de it nl
+pt other` and must either be the whole annotation or be followed by a dash — half
+the annotations here are French prose and « en cours — … » opens with two letters
+that are also a language code.
+
+**Declared, never detected.** These are one-line fragments and the marker is the
+input to the translation pass, where a wrong language means paying to translate
+English into English. Eleven phrasings are real English, Spanish or Dutch mail;
+they are kept in the original because messy foreign mail matches messy foreign
+mail better than a tidy translation of it does, and `translate:exemplars` adds
+the French beside them rather than replacing them.
+
 ---
 
 ## State vocabularies
@@ -215,7 +231,7 @@ Referenced by the entries below so each state is written once.
 `delivery` · `problem` · **2 msgs** (ES) · 🟢
 
 **Variantes réelles**
-- « Mi pedido num. 6298 ha venido erróneo, el producto "CARESSE TEMPS SUBLIME NUIT"… »
+- « Mi pedido num. 6298 ha venido erróneo, el producto "CARESSE TEMPS SUBLIME NUIT"… »  _(es)_
 
 **needs** `order_identity`, `product_identity`, `policy_answer`
 **exemplaires** → jeu `retour`
@@ -232,10 +248,10 @@ Referenced by the entries below so each state is written once.
 - « Malheureusement, votre boutique en ligne ne fonctionne pas avec mon adresse allemande. Quelles autres options pouvez-vous me proposer pour obtenir des produits Qiriness ? »
 - « en raison des difficultés économiques de votre partenaire de distribution, les produits ne sont plus disponibles dans mon pays »
 - « Est-ce que vous livrez en Italie ? »
-- « Do you ship to Germany? »
+- « Do you ship to Germany? »  _(en)_
 - « Je n'arrive pas à sélectionner mon pays au moment de la commande. »
-- « maybe I made a mistake, but it seems that I can not buy your products living in Germany as I can not choose this country during the order process »
-- « hello. is there additional duties or taxes for shipments to USA? »
+- « maybe I made a mistake, but it seems that I can not buy your products living in Germany as I can not choose this country during the order process »  _(en)_
+- « hello. is there additional duties or taxes for shipments to USA? »  _(en)_
 
 > **Split out of D-07, which was asking two questions at once.** That entry's
 > heading ran *"quels sont vos délais de livraison, et vers quels pays
@@ -505,7 +521,7 @@ commerciale, prise par une personne.
 
 **Variantes réelles**
 - « Pour une première #5907 commande, je n'ai pas reçu mon échantillon ? »
-- « He olvidado pedir las tres muestras de regalo… »
+- « He olvidado pedir las tres muestras de regalo… »  _(es)_
 
 **needs** `order_identity`, `policy_answer`
 **exemplaires** → jeu `promo`
@@ -521,7 +537,7 @@ commerciale, prise par une personne.
 `return_exchange` · `question` · **5 msgs** (EN, cohesion 0.89) · 🟢
 
 **Variantes réelles**
-- « Hi, accidently ordered the wrong products. How can I return? I do not see a return address on the… »
+- « Hi, accidently ordered the wrong products. How can I return? I do not see a return address on the… »  _(en)_
 - « Pourquoi je ne peux pas le déposer au magasin ? » _(extrait — la question sur les frais de retour qui l'accompagne est sur R-22)_
 - « Vous n'avez d'étiquette pour le retour ? »
 
@@ -576,7 +592,7 @@ commerciale, prise par une personne.
 `return_exchange` · `question` · **4 msgs** (ES) · 🔒 `remboursement_en_cours`
 
 **Variantes réelles**
-- « Hasta la fecha no he recibido contestación a mi correo de reclamación »
+- « Hasta la fecha no he recibido contestación a mi correo de reclamación »  _(es)_
 
 **needs** `refund_state`, `policy_answer`
 **exemplaires** → jeu `retour`
@@ -797,8 +813,8 @@ about whether we *know* the answer, not about what the stock actually is
 `payment` · `problem` · **2 msgs** (NL) · currently **NO ARTICLE** · 🟢
 
 **Variantes réelles**
-- « Kan geen bestelling plaatsen, is er iets mis ofzo? »
-- « wil iets anders bestellen en hang elke keer vast bij de betaling »
+- « Kan geen bestelling plaatsen, is er iets mis ofzo? »  _(nl)_
+- « wil iets anders bestellen en hang elke keer vast bij de betaling »  _(nl)_
 
 **needs** `payment_state`, `policy_answer`
 **exemplaires** → jeu `commande`
@@ -853,7 +869,7 @@ about whether we *know* the answer, not about what the stock actually is
 `cosmetovigilance` · `problem` · **1 msgs** · 🟢
 
 **Variantes réelles**
-- « After using the product, I experienced a serious reaction. The reaction has been so severe that I have not been able to step out of my home due to the condition of my skin. Given the adverse reaction caused by your product, I expect a full refund at the earliest »
+- « After using the product, I experienced a serious reaction. The reaction has been so severe that I have not been able to step out of my home due to the condition of my skin. Given the adverse reaction caused by your product, I expect a full refund at the earliest »  _(en)_
 - « J'ai fait une réaction très importante à votre produit et je demande le remboursement complet de ma commande » _(authored)_
 - « Mon visage a gonflé et me brûle depuis que j'ai appliqué votre soin. J'exige un dédommagement » _(authored)_
 - « J'ai dû consulter un médecin après avoir utilisé votre produit. Je veux être remboursée intégralement » _(authored)_
@@ -886,7 +902,7 @@ about whether we *know* the answer, not about what the stock actually is
 `cosmetovigilance` · `problem` · **1 msg**
 
 **Variantes réelles**
-- « Given the adverse reaction caused by your product, I expect a full refund at the earliest »
+- « Given the adverse reaction caused by your product, I expect a full refund at the earliest »  _(en)_
 - « J'ai fait une réaction à votre produit et je demande le remboursement complet de ma commande »
 - « Ma peau a réagi, j'exige un dédommagement »
 - « Je veux être remboursée intégralement suite à cette réaction »

@@ -47,6 +47,12 @@ It never falls **across** re-categorisations either (`ratchetLevel`). A thread i
 
 ## Ingestion
 
+### A Shopify sync never writes `sync_cursors` (2026-09-11)
+
+`mapShop` returned `sync_cursors: {}` and `app_settings: {}`, and every Shopify sync upserts the shop — so **every sync wiped the mail delta link**, and the next mail poll re-enumerated the whole mailbox. Found while building the Insights freshness strip: `shops.sync_cursors` read `{}` on a shop whose worker had run many times. It is the likely cause of the mail window moving back on re-enumeration, and with the nightly sync now scheduled it would have happened every night.
+
+Both columns are ours, not Shopify's, and both have a `'{}'` default for a first insert, so the mapper now omits them — the same arrangement as `order_retention_mode`, which it already left alone. `shopify-shop-mapper.test.mjs` pins it. The re-delivery rule (below) is what kept the wiped cursor from corrupting tickets; it did not stop the cost of re-reading.
+
 ### Direction: the Inbox is not only inbound
 
 The team's replies land back in it. A message whose sender is the support mailbox is recorded `outbound`. Measured on real mail, 123 of 348 messages; before this they were stored as customer mail and sat at the end of 43% of threads, exactly where the categoriser looks for how the customer currently feels.
@@ -1075,6 +1081,40 @@ The cost is stated rather than hidden: someone writing about a product from thre
 
 **`attachments` is nullable and the null is load-bearing.** `[]` means we asked Graph and there was nothing; NULL means we never asked. A `not null default '[]'` would make those identical and let the check report "no photo attached" about a message whose own flag says otherwise — so a flagged message with no metadata reports `attachment_type_unknown`, which beats `mentioned_not_attached` precisely so nobody is asked to resend a photo they already sent.
 
+### The photo is shown, and still not stored
+
+**The panel renders the customer's photo, fetched from the mailbox when a browser asks and kept nowhere.** No bucket, no `bytea`, no file on disk. `web/lib/server/attachment-service.ts` resolves the part, `GET /api/tickets/[id]/attachments/[index]` streams it, and the bytes exist only in that response.
+
+**Fetch-on-demand rather than a store, decided 2026-09-09 before anything was built.** The alternative was a Supabase Storage bucket: faster, survives the mail being deleted, and net-new infrastructure — there is no Storage usage anywhere in this repo — that would need a retention job and redaction-webhook deletion *before it could hold its first byte*. Proxying keeps the compliance question at "who may look at this" instead of also "what do we now keep, and for how long", and `SHOPIFY_PERSONAL_DATA_PROTECTION.md` line 85 is explicit that adding personal-data retention is not something to do in passing. A parcel photo can carry a face, a doorway or an address label; it is the least minimisable data this project touches.
+
+**The price is paid per view and it is small.** Two Graph calls — list the message's parts, then `/$value` for the one we want — because the Exchange attachment id is deliberately *not* stored (see below). Measured over the whole corpus: **35 of 37 image parts resolve, 2 have left the mailbox, 0 mailbox mismatches.** A photo that has left is a permanent hole, which is the honest cost of not keeping a copy, and the panel says so rather than showing a broken image.
+
+**THE INDEX IS THE AUTHORISATION MODEL.** A request names a ticket and an offset into the images `listTicketAttachments` derives for that ticket; the server rebuilds the same list and resolves the offset itself. Nothing that is not already in the ticket's own stored metadata can be addressed, so no crafted id reaches another customer's mail, and the furniture rules stay load-bearing — a signature logo is not in `images`, so it cannot be requested either. Exchange ids are never accepted from a browser and never rendered into a page: `toPublicAttachments` strips `messageId` and `partIndex`, and a test asserts the id is absent from the serialised payload, because the dashboard still has no authentication and anything it returns is readable by anyone who opens it.
+
+**Images only, and the STORED content type wins.** The list also holds CVs, catalogues and invoices; the route refuses them, because streaming arbitrary files out of the support mailbox is a different feature from showing a photo of a broken bottle. And the type served is the one we stored and classified, never the one Graph currently reports — letting a mailbox decide what a URL on this origin renders as is the shape of a stored-XSS bug. `nosniff`, `sandbox`, `no-store` and `no-referrer` go with it.
+
+**8 MB cap, as a refusal rather than a truncation.** Half a JPEG is a corrupt JPEG, and the corpus holds a 12 MB video and a 12 MB image. The panel says "too large" and the operator opens Outlook.
+
+**`next/image` is refused deliberately.** It would proxy the URL through the Next optimiser and write the result into `.next/cache` — customers' photos on the server's disk with no retention rule attached, which is precisely the property this design exists to keep. The lint rule is disabled at the call site with that reason.
+
+**The Exchange attachment id is still not stored, and that is the one thing worth revisiting.** Storing it at ingestion would make this one Graph call instead of two. It is left out because `ticket_messages.attachments` is metadata that outlives the mailbox, and a mailbox-scoped handle stored beside it is a stale pointer waiting to happen — the same reasoning that keeps `contentBytes` out of the ingestion `$select`. If per-view latency ever matters, that is the trade to make, with a backfill behind it.
+
+### The mailbox mismatch that blocked this is gone
+
+**`SUPPORT_MAILBOX` is `contact@qiriness.com`, the mailbox the corpus was ingested from.** Measured 2026-09-09 against the live API: attachment metadata resolves for stored messages, and 35 of 37 stored photos can be fetched with **zero** `ErrorInvalidMailboxItemId`.
+
+**Several documents said otherwise and were wrong.** `README.md` step 3 and the notes that referred to it described every stored `graph_message_id` as unusable because the variable pointed at `onouailhetas@lap-groupe.com`. That was true when it was written and stopped being true when the variable changed; `.env.local` is gitignored, so nothing in the repo could have caught it drifting back. **The lesson is the one this file keeps relearning: a claim about configuration is a measurement with an expiry date, and it belongs beside the check that produced it.** The spam-body backfill and `/forward` were blocked on the same premise and should be re-tested rather than assumed broken.
+
+### A signature separated by an underscore was being read as a photo
+
+**`\b` does not exist between `Signature` and `_`, because `_` is a word character.** So `Signature_6C20675392446.png` — 12 KB, not inline, unmistakably corporate furniture — passed the name pattern and was counted as a customer's photo. `FURNITURE_NAME` now ends in `(?![a-z0-9])`, which is what the pattern meant before `\b` was reached for as shorthand.
+
+**This is the second time this exact trap has been sprung in this file.** The `cliché` pattern above carries the same note: `\b` is ASCII-only, so it does not exist after `é` either. Two bugs from one shorthand is the argument for the lookahead being the default here rather than the exception.
+
+**Measured before changing it: 1 part in 115.** Across every inbound image part in the corpus, exactly one changes classification — that file, on ticket `6ad65501`, a `delivery/problem` whose case file read `photo_evidence: attached` while the ticket carried no photo at all. So the corpus's real-photo count is **15 tickets, not 16**, and one case file was wrong in the direction that matters: it told the agent evidence had arrived.
+
+**`Signatures.png` is still not furniture, deliberately.** The lookahead stops at the word, so a plural or a longer word starting with the same letters — `signatures-bon-de-livraison.jpg`, a photographed delivery note — stays evidence. Widening further would start eating the thing the rule exists to protect.
+
 ### Neither new tool goes near `cosmetovigilance`
 
 An adverse-reaction report is the one subject with an empty tool set, and both of these stayed out of it. The reasoning is unchanged and gets stronger here: assembling a confident-looking answer is worse than assembling none, and "we cannot find any order for you" is a particularly bad thing to put in front of someone reporting a reaction to a product. It goes to a person untouched.
@@ -1454,6 +1494,74 @@ So: lift real phrasings where the corpus has them, translate to fill the rest. *
 
 The whole of it is worth 14 tickets, about 7%. It is a real win and a small one, and it sits behind the review surface and the answer skeletons deliberately.
 
+**Done 2026-09-09**, in two passes and in this order: the 11 foreign phrasings into French first, then all 140 into `fr en es it de`. 562 rows, `gpt-4o`, `scripts/translate-exemplars.mjs`. The French pass runs first because French is the language the team reads, so it is the only pass anybody can actually review closely, and a source language read wrongly there would have been multiplied by four in the second.
+
+### The language of an authored phrasing is declared, never detected
+
+The importer never wrote `language`, so the column took its `fr` default on every row — including the six English, three Spanish and two Dutch phrasings. **The column added to measure the language gap was recording the opposite of the truth for the eleven rows it existed for**, and no report could have caught it: they read as French phrasings that happened to score oddly.
+
+A variant's annotation may now open with a code — `- « Do you ship to Germany? »  _(en)_` — and the parser reads it, with a warning where the code is not in `REPLY_LANGUAGES`.
+
+**Detected would have been cheaper and is wrong.** These are one-line fragments; « Do you ship to Germany? » is four words and « URGENT — Commande #6216 » is barely a sentence. The marker is also the input to the translation pass, where a misread language means paying to translate English into English and storing the result as a translation. The person pasting a phrasing in knows what it is, and this is the same choice `requirement_needs` already makes.
+
+The marker must be the whole annotation or be followed by a dash, because half the existing annotations are French prose and « en cours — … » opens with two letters that are also a language code.
+
+### `fr` is a translation target like any other
+
+Nothing replaces a real foreign phrasing. They are the most valuable rows in the library — real foreign mail is messy in the right way, which is the entire variants thesis applied to language — so the French translation of R-21 is written *beside* the English original, at its own index, and both are embedded.
+
+Which also means the two Dutch phrasings get five translations rather than four. `nl` is in `REPLY_LANGUAGES` and deliberately not in `TRANSLATION_LANGUAGES`: two phrasings is not demand enough to justify 140 more rows, and Portuguese has none at all. A language can be a source without being a target.
+
+### The generated file is the review gate, because the approval gate is not one
+
+The claim above — *"a human sees the output at approval time because the approval gate already exists"* — is true of a new exemplar and **false of a new phrasing on an approved one**. All 38 exemplars are approved; approval is the only thing gating a vector; so a translation written straight to `support_exemplar_phrasings` would be embedded by the next `embed:exemplars` run and matched against real customer mail with nobody having read it.
+
+So `translate-exemplars.mjs` writes `Email-Example-Queries.translations.json` and stops. `import-exemplars.mjs` is what puts it in the table. The review is the diff, which is a real gate with a real reviewer, and it costs no schema.
+
+**Each entry carries the hash of the phrasing it was made from**, and that is a third staleness gate distinct from the two that already exist: `content_hash` covers a row's own text and answers *does this need re-embedding*; `embedded_input_hash` covers the composed embedding input; `sourceHash` covers the text a row was *derived from* and answers *does this need re-translating*. Neither of the first two can see a French variant being edited under its four translations. A translation whose source has changed is **dropped at import rather than written** — a stale translation in the index is indistinguishable from a fresh one and answers a question nobody asks any more.
+
+### The pruner now asks which indexes were written, not how long the list is
+
+`removeStalePhrasings` deleted anything at or past `exemplar.phrasings.length`. That was correct while the list was contiguous and authored, and it stopped being correct the moment translations joined the same array: a three-variant exemplar with twelve translations has a list of length 15, so every authored row below 15 read as current and **nothing was ever pruned**. Comparing against the set of indexes actually written says the same thing about a shortened list and keeps saying it once the list has a hole in it at 4..99.
+
+The one case that needs care is the translations file being **absent**, which now means "nothing to say about translations" rather than "there are none" — otherwise an import run from a checkout without the file would quietly delete the whole non-French half of the library.
+
+### What the translated library is actually worth, measured
+
+Run twice over the same 328 tickets — `eval:exemplars` with and without `--authored-only`, which is the only comparison that means anything, since the 2026-08-12 figures were taken over 214 tickets and reading today's number against them measures the corpus rather than the translations.
+
+| Ticket language | n | authored only | translated | best match clears 0.65 | won by a translation |
+|---|---|---|---|---|---|
+| fr | 303 | 0.624 | 0.628 | 119 → 122 | 17 |
+| en | 13 | 0.432 | **0.464** | 4 → 4 | 9 |
+| it | 6 | 0.545 | **0.677** | 0 → **4** | 6 |
+| de | 3 | 0.588 | 0.625 | 0 → 1 | 3 |
+| es | 2 | 0.891 | 0.891 | 2 → 2 | **0** |
+
+Overall median 0.619 → 0.627, p25 0.545 → 0.556, and **125 → 133 tickets clear MATCHED**. The prediction was "worth 14 tickets, about 7%"; the answer is **8 tickets, 6.4%** — the right order of magnitude and slightly optimistic.
+
+Confirmed against the live `match_support_exemplars()` afterwards rather than left as a JS number: 12 non-French tickets, **3 exemplars returned on 12 of 12**, none starved, and the winner is a translation in its own language on all but the three tickets that have a real foreign phrasing to match instead.
+
+**Italian is where it pays**, and it is the only language where the band moves: 0 of 6 tickets cleared MATCHED before and 4 do now, on a +0.132 median. German moves 1 ticket. **English gains 0.032 of median and moves nobody across the band** — the gap to French is 0.16 and this closes a fifth of it, so language is still costing English tickets more than a band.
+
+**Spanish is unchanged at 0.891, and that is the most useful row in the table.** It is the one language whose exemplars already carry *real* Spanish phrasings (D-08, P-20, R-23), and not one of its tickets is won by a translation. Real foreign mail had already done the work, and machine translation added exactly nothing on top of it. **This is the "lift real phrasings where the corpus has them" rule confirmed on its own terms** — where a real phrasing exists, translating is spend with no return, and the corpus is the place to look first.
+
+**17 French tickets are won by a translation**, which can only be one of the 11 French renderings of foreign mail. Phase 1 was the cheapest of the two passes and it earns its place on more French tickets than the whole English pass wins English ones.
+
+### The exemplar eval scored a library production does not have
+
+`diagnose-exemplars.mjs` filtered `deleted_at` on tickets and not on exemplars, so it scored **38** while `match_support_exemplars()` scores **37**. O-11 was merged into O-09 and soft-deleted in the dashboard, but it is still in `Email-Example-Queries.md` — so the importer keeps re-creating it, the translator keeps translating it, and the eval kept scoring it. It took the library growing to make the gap visible: O-11 now holds 10 rows, all unembedded, because the embedding reconciler had `deleted_at` right from the start.
+
+**Fixing it moved nothing, and why is the interesting part.** Every per-language median and every MATCHED count is identical with O-11 excluded; only the overall median moves, 0.626 → 0.627. O-11's phrasings exist *verbatim* under O-09, which absorbed them in the merge, so dropping O-11 hands those tickets to O-09 at the same similarity. That is this file's own `DUPLICATE` diagnosis showing up in the arithmetic: the same text under two keys, which is what a merge leaves behind when the importer upserts and never deletes.
+
+So the numbers above are unaffected, and the filter still belongs there: an eval that predicts the RPC must model the RPC's exclusions, and the next merge may not leave a duplicate behind to cover for it.
+
+### The over-fetch multiplier is derived from the index scheme, not from the corpus
+
+Raised from 8 to **64** in the same change that generated the translations, as the warning in `05_exemplars.sql` required. D-33 has 8 authored phrasings and 32 translations: at 8 that one exemplar would have filled every slot of a three-exemplar request and the function would have returned a single result, silently.
+
+**64 is the ceiling the addressing scheme allows — 10 authored phrasings × 5 languages plus the originals — and not the 40 D-33 measures today.** Setting it from the measurement would mean one new variant on D-33 reintroducing the same failure. `05_exemplars.test.mjs` asserts the multiplier against `MAX_AUTHORED_PHRASINGS` and `TRANSLATION_LANGUAGES`, so the invariant is checked rather than commented.
+
 ### Two index spaces in one column, because the pruner deletes by position
 
 `import-exemplars.mjs` deletes any phrasing at or past the end of the authored list — the only way it can know that an exemplar which used to have five phrasings now has three. Translations are generated rather than parsed out of the document, so by that test every one of them looks stale and would be destroyed on the next import.
@@ -1464,7 +1572,7 @@ Translations therefore live at `phrasing_index >= 100`, out of the pruner's reac
 
 **Every phrasing is embedded alone and separately**, translations included — `buildExemplarEmbeddingInput` takes the text and nothing else, no language tag, so an English email meets the English row directly and the exemplar takes its best phrasing rather than an average. Translations can therefore only raise an exemplar's score, never lower it.
 
-**Which is exactly what breaks the over-fetch.** `match_support_exemplars()` fetches `match_count * 8` phrasings because the inner limit counts phrasings while the caller counts exemplars, and 8 works only while no exemplar has more than about that many. Five phrasings in four languages is twenty rows for one situation, enough to fill a three-exemplar request on its own and return one result — silently, looking like a retrieval quality problem. **The multiplier must be raised in the same change that generates translations**, not afterwards.
+**Which is exactly what breaks the over-fetch.** `match_support_exemplars()` fetches `match_count * N` phrasings because the inner limit counts phrasings while the caller counts exemplars, and 8 worked only while no exemplar had more than about that many. Eight phrasings in five languages is 40 rows for one situation — D-33 — enough to fill a three-exemplar request on its own and return one result, silently, looking like a retrieval quality problem. **The multiplier was raised in the same change that generated the translations** (8 → 64, 2026-09-09); see "The over-fetch multiplier is derived from the index scheme" below.
 
 ### Subject filter only — the opposite of the knowledge policy
 
@@ -2038,6 +2146,8 @@ Verdict, gate, reason and timing are already columns in the row it was opened fr
 
 Shopify recomputes `rfm_group` as a customer buys, so a flag copied onto a ticket would be a snapshot of the day the mail arrived — a customer who became a champion last week would still read as ordinary on their open thread.
 
+**Superseded 2026-09-11 — see "VIP is the shop's rule" below.** The read-time principle stands; the RFM definition does not.
+
 **`CHAMPIONS` + `LOYAL` only**, and that array is the one line to edit: `ACTIVE` merely means "has ordered recently", which is most of the table, and a badge nearly every row carries signals nothing. The label map is deliberately **partial** — Shopify owns this vocabulary and can add to it, so an unrecognised segment is simply not VIP and renders from its own text rather than vanishing.
 
 `TICKET_LIST_SELECT` is shared by the list read **and** `setTicketStatus`, which passes it to PostgREST as the PATCH's `select`. The row a mutation returns replaces a row the list rendered, so without the embed closing a ticket would silently strip the VIP badge off it.
@@ -2053,6 +2163,22 @@ That 35% is the number to watch. If this ever pulls attention off a level 4, it 
 **The rules are inset box-shadows, not borders.** An ordinary row carries only a bottom border, so giving a VIP row a top and two sides made it 1px taller than its neighbours and pushed the mood face 2px right — measured at 68px against 67px, a visible limp down a column of 214 rows. The bottom edge stays a real border, because every row already has one and a border paints over an inset shadow.
 
 Gold is its own token pair, not `--warning`: that ramp is orange and owns "something is wrong". Two steps only — a rule colour and a hairline — because a border needs no wash and no text sitting on one.
+
+### VIP is the shop's rule: spend AND orders inside a window (2026-09-11)
+
+**Replaces CHAMPIONS + LOYAL.** Shopify's RFM grouping did not match who the business treats as a VIP, and it could not be tuned — it is Shopify's formula. The owner now sets the rule on the Customers panel as three numbers: **net spend MORE THAN €X AND MORE THAN N orders, both inside the last M months.** Both conditions, never either: at > €300 and > 2 orders in 12 months the rule admits **97** customers, where "either" would admit **288** (measured 2026-09-11, 2,738 customers ordered in that window). Strict on both, because the screen says "more than".
+
+**The numbers are data, the rule is one SQL function.** Three columns on `shops`, all set or none (`shops_vip_rule_check`), read by `scripts/lib/vip-rule.mjs` and passed to `vip_customers()`, where the comparison is written once. The ticket queue (`vip_tickets()`, one call per read), the Customers panel (`vip_summary()` and the call list) and the agent's customer lookup all ask it, so a VIP border on a ticket, a VIP on the panel and `isVip` in a case file cannot disagree. `vip_tickets` and `vip_summary` call `vip_customers` rather than restating it, and `12_vip_rule.test.mjs` asserts that.
+
+**This moves a judgement into SQL, deliberately**, against the Insights rule that judgement stays in JavaScript. The rule is now a comparison over windowed order aggregates, which only SQL can count without paging, and the part that changes with the business — the three numbers — is data rather than code. What would have been the second definition (a JS `isVip(spend, orders)`) does not exist.
+
+**Still read-time, more so than before.** The window rolls forward every day, so a stored flag would go stale overnight on top of going stale when the rule is edited.
+
+**No rule, no VIPs.** The columns shipped null and nobody chose a default: until the numbers are set, no ticket has a gold border and the call list says to set a rule. A VIP threshold written into a migration would be a business decision made by whoever wrote it.
+
+**Net spend, uncancelled orders, Shopify only.** Spend is `total_price - total_refunded`, the same net figure Sales reports. Marketplace channels are excluded — they mint one customer per order, so no marketplace buyer can ever repeat. The agent's `isVip` comes back **null, not false**, when the check cannot run, so "we could not check" never reads as "not a VIP".
+
+**Shopify's segments stay, as Shopify's.** The segment table on the Customers panel is titled "Shopify segments (RFM)" and no longer highlights VIP rows; the ticket context pane labels the field "Shopify segment".
 
 ### A parcel number is the second way into an order
 
@@ -2165,7 +2291,15 @@ Sync paths write service events, and so does the agent's customer lookup — rea
 
 ### Retention
 
-`orders`: delivered or completed return/refund +3mo, undelivered or unresolved +6mo → `retention_delete_after`, deleted by the order sync. `tickets` mirrors it (`resolved_at`/`closed_at`/`archived_at`/`retention_delete_after`); `deleted_at` is the separate compliance soft-delete. `categorisation_review`: 3-month default. `spam_audit.body_text`: 90 days from capture, purged per poll.
+`orders`: **a setting, not a constant** — `shops.order_retention_mode` is `months` (with `order_retention_months`) or `indefinite` (with none), read by `scripts/lib/order-retention.mjs`. **This shop is set to `indefinite`**, recorded in `order_retention_reason` with the date it changed. `retention_rule` names only WHY the clock started (`delivered`, `undelivered`, `return_refund_open`, `return_refund_completed`); the period arrives applied, as `retention_delete_after`, and a **null there means kept indefinitely** — the purge selects `lte now`, so a null is never matched and needs no special case. The order sync skips the purge entirely while the mode is indefinite, so a row stamped under an older policy is not deleted before a backfill catches up.
+
+The duration used to live in the rule name (`delivered_plus_3_months`), enumerated in a check constraint and compared literally in `deriveOrderStatus`. That is what made the period unswitchable: every new window multiplied the enum and needed a branch in code that only ever cared why. It is also how the live constraint drifted — a 3→6 month change was applied to the database by hand and never written down here, leaving the mapper emitting a value the constraint would refuse. Migration 10 reconciles both vocabularies.
+
+The fetch window is **derived** from retention (`orderSyncMonths` = period + 1 month margin, unbounded when indefinite) rather than set beside it. They were two independent constants, and a fetch window shorter than retention is a table that can never fill — the setting would look broken rather than misconfigured.
+
+Reading the setting **fails safe, not open**: an unreadable or unknown value resolves to 6 months, never to indefinite. This is the opposite of `parameters.mjs`, where a null makes a reply decline to quote a number. A typo that silently became permanent retention of personal data is the one outcome nobody would notice. For the same reason the switch is not a `support_parameters` row: there null means "not decided yet", and indefinite retention must not be reachable by leaving a field blank.
+
+**Raising retention is not retroactive.** The purge hard-deletes, so anything already removed is gone locally and only a backfill restores it, and only while Shopify still holds it. Lowering it deletes on the next sync. `tickets` mirrors it (`resolved_at`/`closed_at`/`archived_at`/`retention_delete_after`); `deleted_at` is the separate compliance soft-delete. `categorisation_review`: 3-month default. `spam_audit.body_text`: 90 days from capture, purged per poll.
 
 ### Supabase REST client
 
@@ -2330,6 +2464,8 @@ So `06_analytics.sql` carries twenty-one views and `readView` takes a hard limit
 
 ### Judgement stays in JavaScript, so the views expose `rfm_group` and never `is_vip`
 
+**One deliberate exception since 2026-09-11:** the VIP comparison lives in `vip_customers()`, because it is a comparison over windowed order aggregates and its thresholds are data on `shops`. See § Tickets dashboard, "VIP is the shop's rule".
+
 Same rule as the queue: joins and aggregates in SQL, business rules in tested JS. Who counts as a VIP changes with the business and is owned by `customer-segments.mjs`; writing it into a view would freeze it into a schema object and create a second definition to disagree with the first.
 
 ### A metric that cannot be computed renders as a dash, never as zero
@@ -2455,3 +2591,92 @@ Clustering is an all-pairs cosine comparison over the whole embedded corpus, and
 `cluster:tickets` therefore stays **print-only by default** and `cluster:tickets:save` persists — the script's header has always promised it is read-only and free to re-run, and people rely on that.
 
 Resync is a documented command rather than a button: the job is an all-pairs comparison over the corpus and this app has no job queue, so running it inside a web request would block a worker for its duration.
+
+**Reversed 2026-09-11: there is a Rebuild button, because the owner asked for one.** Both reasons were re-checked rather than overruled. The whole `--save` run takes **~9 seconds** over the live corpus, so a request can wait for it; and the button takes **no arguments** — it always runs at the script's tuned defaults — so "re-run until the map looks nice" is designed out rather than left to discipline. `topic-map-rebuild.ts` spawns the same script (so the job's config, logging and exit code are what the terminal sees) and allows one run at a time: a second click joins the first, because two concurrent saves would each prune the other's run. If the corpus grows until the run no longer fits a request, this is the decision to revisit.
+
+### Every panel is read over a range, and the range is the URL (2026-09-11)
+
+The panels were all-time, and it showed: with the order sync reaching back to May 2024, the monthly dispatch chart had 23 bars and gained one a month for ever. Now every panel reads over a range the reader picks — **Last 24 hours · 7 days · 30 days (default) · 6 months · Last year**, or a custom from/to — and the range lives in the query string, so a filtered panel is linkable and two people reading one URL see one thing. Nothing is aggregated in the browser: the server re-renders against the new URL.
+
+**Each ranged figure is its own SQL function** (`RANGED READS` in `06_analytics.sql`), not a filter over a finer view, because a median cannot be summed out of daily rows. The 21 views stay for their other readers.
+
+**The range crosses the wire as wall-clock timestamps plus the shop's timezone**, and Postgres converts with `at time zone`. The database runs in UTC, so bucketing there put an order placed at 00:30 in Paris on the previous day; and doing the conversion in JavaScript would have meant re-deriving daylight saving. `11_insights_ranges.test.mjs` asserts no ranged function takes a `timestamptz`. The zone is Shopify's `ianaTimezone` on `shops`; while it is null the panels cut days in UTC **and say so** rather than assume Paris.
+
+**The grain follows the range** — hours for a day, days up to two months, weeks to six, months beyond — so a chart has a readable number of points at every range.
+
+**The comparison is like for like.** "vs previous 30 days" covers the same *elapsed* time one span earlier: 14:00 today is set against 14:00 thirty days ago, not against a finished day, which would invent a drop every afternoon. A comparison whose window starts before a source's history is not shown at all — "the 30 days before our first synced order" is unmeasured, not quiet.
+
+### A live dashboard says how old its data is (2026-09-11)
+
+The panels were never stale in the caching sense — every page is `force-dynamic` and every fetch `no-store`. They were stale in the sense that matters: **the jobs feeding them stop, and the charts keep drawing the last thing they were given.** The mail worker was last run on 20 August, and Support carried on showing August for three weeks with nothing on screen to say why.
+
+Three mechanisms, each for a different failure:
+
+- **The freshness strip** (`insights_freshness` + `insights-freshness.mjs`) states when orders last synced, the newest message, the last nightly run and the topic map's age, with thresholds in one place: orders stale past 30 h (nightly sync), mail past 48 h, a sync `processing` past 6 h is an error (it died without closing its row).
+- **Buckets outside a source's coverage are missing, not zero.** SQL returns only non-empty buckets; `bucketCoverage` decides which empty ones are a real zero and which fall before the source begins or after it was last synced, and those draw hatched with a gap in the line. The mail edge is the newest message in either direction, because the worker records no "last poll" anywhere. While mail is behind, Support also withholds the comparison and the contact rate: tickets from half a range over orders from all of it is a rate that only looks low.
+- **An open page refreshes itself** every five minutes while visible, and on returning to the tab after a minute away — a server re-render of the same URL, holding the old render dimmed until the new one lands. Tighter would re-read identical rows: the data moves on the order sync and on each mail poll.
+
+### Platforms are folded from channel handles, in JavaScript (2026-09-11)
+
+The filter offers **Shopify · Amazon · Yves Rocher**. **Yves Rocher is not a handle**: it is the Mirakl Connect channel, `connect-dev-1`, and all 409 of its orders carry the tags `Mirakl` and `Yves Rocher FR`. **Shopify is defined as every channel that is not a marketplace** (online store, draft orders, the Shop app), so a new first-party channel lands in Shopify rather than in nothing. The mapping is in `insights-range.mjs`, beside where `AMAZON_CHANNEL` used to be, for the reason that constant existed: which channels make a platform is a business judgement, and SQL takes handle lists.
+
+**The Amazon section is gone from Fulfilment** because the filter does its job for every marketplace, with the same component and the same 72-hour line. The comparison it existed for is now the same panel with and without the filter.
+
+A filter that does not apply is **disabled with its reason, never hidden**: tickets belong to no platform, and the customer base is a snapshot with no honest date range. A control that vanishes between tabs reads as a bug.
+
+### Sales: four definitions a reader would otherwise have to guess (2026-09-11)
+
+- **Revenue is net of refunds, cancelled orders excluded.** Subtracting refunds alone would still count a cancelled order that was never paid. On the last 30 days this reproduces the reference dashboard exactly: €16,375.77, Shopify 99.9%, Yves Rocher €9.80.
+- **A free line is not a sale.** Samples ride along on most orders at €0; counted, they top every "best product by orders" list. Lines with a zero discounted total are excluded from product rankings.
+- **New vs returning is never computed over a marketplace**, which mints one customer record per order and would read every buyer as new. "New" is "no earlier order in our data", and our orders start in May 2024 — so the split differs from a tool that sees older history (the reference showed 108 / 99 where this shows 102 / 102).
+- **There is no "by gender", and that is a reversal.** It first shipped as the *product's* range, read off the catalogue tags (`femme` on 83 products, `homme` on 6), because no customer gender exists anywhere in this store. **Removed the same day at the owner's request as misleading:** the question being asked was about buyers, and a women's-range ranking answers a different one while looking like it answers that. Customer gender would need a source first — a Shopify customer metafield or a survey field — and inferring it from first names was not considered: it would be wrong often enough to mislead and it is personal data derived without consent.
+
+### The explanatory notes came off the panels (2026-09-11)
+
+Asked for by the owner: the panels no longer carry paragraphs of interpretation: the figures lead, at the sizes of the reference dashboard. The reasoning those notes carried is this section, where it already lived. Two things were kept because they are facts about the data rather than commentary: **a blocked figure still renders as a dash with a one-line reason**, never a zero; and **the Customers panel keeps a one-line warning** that it names people and the dashboard has no sign-in.
+
+### The Customers panel reads a range now, beside a snapshot (2026-09-11)
+
+It was all snapshot. It now carries three ranged figures under the snapshot row, asked for by the owner — orders per customer, newsletter movement with churn, and capture — and says which rows are which ("Customer base today" / "In the selected range"). The platform control stays **disabled** here: every figure counts *people*, and marketplaces mint one customer per order, so each ranged read passes the Shopify filter whatever the control says. Four definitions:
+
+- **Orders per customer** counts orders *inside the range* per Shopify customer, uncancelled. The last column is "10 or more" so a year's tail fits one axis; the average treats it as 10, a floor.
+- **Subscribes and unsubscribes come from a snapshot.** `customers` holds each person's current consent and when it last changed — one timestamp — so a person who joined in March and left in June appears only in June. Both series are floors, the card says so, and the chart hatches after the newest consent change **and before the earliest recorded unsubscribe**: measured 2026-09-11 the snapshot holds subscribes back to 2022 but unsubscribes only from **April 2025**, and the first version of the churn card compared a year against that half-empty year and printed **"↑98% vs previous 12 months"**. Both edges are derived in SQL (`consent_through`, `unsubscribes_from`), never written down.
+- **Churn is unsubscribes over the list size at the start, and the start is an estimate.** Reconstructed from the snapshot as *subscribed now with a last change before the range* plus *unsubscribed now with a change inside or after it* — exact only when nobody changed twice, and labelled "(est.)". It is stated **per day on day-grain ranges and per month on longer ones** (the average rate over the range, scaled), because a 30-day window and a 12-month window cannot share one unit and stay readable. A range starting before the unsubscribe edge gets a blocked card, not a low number.
+- **Capture rate is the share of first-time buyers who were on the newsletter by that first order**, split into *subscribed before ordering* and *joined at checkout*. Checkout is a consent change within **60 minutes** of the first order — a judgement, so the constant lives in `customer-activity-service.ts` and SQL takes it as a parameter. Measured 2026-09-11 on first buyers since March: 874, of whom 227 subscribed before and 362 at checkout — the checkout opt-in is most of the list's growth, which is why the two are drawn apart rather than summed. A floor too: someone who opted in and has since left counts as not captured.
+
+### Sales adds countries and pairs (2026-09-11)
+
+**Sales by country** is net revenue per destination country with a flag, the reference card's layout; the first five show and a chevron opens the rest. **The flags are inline SVGs**, deliberately: Windows ships no flag emoji, so `🇫🇷` renders as the letters "FR" on the machine this is read on. Designs are simplified to what survives at 22 px; a country without one gets its code in a neutral badge rather than a wrong flag.
+
+**Bought together** ranks product pairs: every pair of distinct paid products in the same order counts once for that order, whatever else was in it. Revenue is what the two lines brought in together. Global and per-country come from one `GROUPING SETS` query, ranked both ways in SQL, so switching metric is a re-sort. **Free lines are excluded** for the same reason as the product ranking: samples ride along on most orders and would pair with everything.
+
+### Numbers a client component prints are formatted by hand (2026-09-11)
+
+`Intl` output is not the same on the server and in the browser: Node printed **"58.4K"** where Chrome printed **"58.4k"**, and fr-FR's thousands separator has moved between U+00A0 and U+202F across CLDR versions. Either mismatch fails hydration, and React then re-renders the whole page on load — found on the Customers panel as a console error, not by eye. `euros` and `compactNumber` in `insights-format.ts` now build their strings from digits, so the characters are identical everywhere. Plain `en-GB` integer grouping is left to `toLocaleString`; it has been stable.
+
+### Orders waiting to ship, VIPs first (2026-09-11)
+
+The Fulfilment panel lists every order still waiting to ship, under its first row of cards, asked for by the owner: name, email, provenance, order size, placed date, and days waiting — **red at 3 days or more**, the same line the dispatch figures use. It opens on **VIP customers** and switches to **all unfulfilled**.
+
+- **Waiting means not FULFILLED or RESTOCKED, not cancelled, and not closed.** "Not closed" is load-bearing: six orders read UNFULFILLED for ever because they were refunded instead of shipped (#1095, #1794, #1923, #4687, #4886, #6398), and they are waiting for nothing.
+- **Provenance is mostly "Shopify" in the VIP view, by construction.** A marketplace buyer is a new customer record per order and can never meet a VIP rule; Amazon and Yves Rocher orders appear in the "all" view, **without an email** — their record holds a placeholder address (example.com, mail.codisto.com) that would read as real.
+- **Now, not ranged.** An order a fortnight old and unshipped is the one that matters, so the date range does not cut the list; the platform filter does. It is as current as the last order sync, which the card says.
+- **VIP comes from `open_orders()` calling `vip_customers()`**, never compared in TypeScript, and the order number links to the order in Shopify admin. The card warns that it shows names and emails, as the Customers call list does.
+
+### Any row of cards can be pinned to the top, two at most (2026-09-11)
+
+Every row on every panel carries a pin in the top-right corner of its rightmost card, asked for by the owner. A pinned row moves into a **Pinned** section at the top of that panel; two rows at most, and a third pin is **disabled with its reason** rather than silently bumping the oldest — a row vanishing from the top without being unpinned reads as a bug.
+
+- **Moved, not re-ordered.** A pinned row is portalled into the Pinned section (`PinBoard.tsx`), so DOM order — what a screen reader reads and Tab walks — matches the screen. CSS `order` would have been less code and put the two out of step.
+- **Per viewer, per panel, in the browser.** Which rows someone keeps at the top is a personal view, so it lives in `localStorage` under `qiriness.insights.pins.<panel>`, read after mount (the first render matches the server's, no pins) and guarded on every access. A pin whose row is not on the page today leaves no empty band.
+- **Every row needs a stable id** — `<Grid pin="…" label="…">`. Renaming an id forgets that pin for anyone who had it; the label is only the button's accessible name.
+
+### Large screens get a larger UI, not wider margins (2026-09-11)
+
+On a wide monitor the dashboard sat in the middle at a laptop's size: Insights stopped at 1480px and centred, and everything was sized for 16px. Three changes, and smaller screens are untouched by all of them:
+
+- **The root size steps up above 1600px** (17px, 18px from 1920, 20px from 2400) in `globals.css`. Nearly every size in the app is in rem, so type, spacing, cards and the sidebar grow together, in proportion. The sidebar width moved from px to rem for that reason, and its icons are sized in CSS rather than by their `size` prop.
+- **Insights fills the window** up to the same 2400px ceiling Tickets and Agent Setup use, with a gutter of `clamp(1rem, 2.4vw, 3rem)`. It had no padding of its own, so a narrow window used to put the cards flush against the sidebar.
+- **Charts grow taller with their width**, up to 1.6x their base height, because a chart stretched across 2000px at 280px tall reads as a flat line. Axis text is in rem and the room reserved for it follows the root size.
+
+Measured on the owner's screen (2544px viewport): root 20px, sidebar 330px, the Insights page exactly the width of its scroll area (2201px), the revenue chart 2018x484, and no horizontal overflow on Insights, Tickets or Agent Setup.

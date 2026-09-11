@@ -432,88 +432,46 @@
   color: var(--text-subtle);
 }
 
-/* --- resync --- */
+/* --- rebuild --- */
 
 .resync {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   flex-wrap: wrap;
   gap: var(--space-3);
-  padding: var(--space-3) var(--space-4);
-  border: 1px dashed var(--border-strong);
-  border-radius: var(--radius-md);
-  background: var(--surface-sunken);
 }
 
-.resyncText {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-  min-width: 16rem;
-  flex: 1 1 22rem;
-}
-
-.resyncTitle {
-  font-size: var(--text-caption);
-  font-weight: var(--weight-semibold);
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--text-subtle);
-}
-
-.resyncBody {
-  margin: 0;
-  font-size: var(--text-caption);
-  color: var(--text-muted);
-  max-width: 62ch;
-  line-height: 1.5;
-}
-
-.resyncControl {
-  display: flex;
-  align-items: stretch;
-  gap: var(--space-2);
-  flex-wrap: wrap;
-}
-
-/* Selectable text, always — the copy button can be refused by the browser and
-   the command still has to be gettable by hand. */
-.command {
-  display: inline-flex;
-  align-items: center;
-  padding: var(--space-2) var(--space-3);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--surface);
-  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
-  font-size: var(--text-sm);
-  color: var(--text-strong);
-  user-select: all;
-  white-space: nowrap;
-}
-
-.copyButton {
+.rebuildButton {
   padding: var(--space-2) var(--space-4);
   border: 1px solid var(--teal);
-  border-radius: var(--radius);
+  border-radius: var(--radius-md);
   background: var(--teal);
   color: var(--text-on-teal);
   font: inherit;
-  font-size: var(--text-sm);
+  font-size: var(--text-body);
   font-weight: var(--weight-semibold);
   cursor: pointer;
   transition: background var(--dur-fast) var(--ease-out);
 }
 
-.copyButton:hover {
+.rebuildButton:hover:not(:disabled) {
   background: var(--teal-strong);
   border-color: var(--teal-strong);
 }
 
-.copyButton:focus-visible {
-  outline: none;
-  box-shadow: var(--shadow-focus);
+.rebuildButton:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+.rebuildNote {
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+.rebuildError {
+  font-size: var(--text-sm);
+  color: var(--priority-high-ink);
 }
 
 @media (max-width: 720px) {
@@ -529,12 +487,4 @@
     display: none;
   }
 
-  .resyncControl {
-    width: 100%;
-  }
-
-  .command {
-    flex: 1 1 auto;
-    overflow-x: auto;
-  }
 }

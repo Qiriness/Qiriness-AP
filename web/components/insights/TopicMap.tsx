@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
+import { useInsightsFrame } from "./InsightsFrame";
 import type { SupportCategoryRow, TopicCluster, TopicMap as TopicMapData } from "@/lib/types";
 import { CATEGORY_LABELS } from "@/lib/types";
 import { formatAge } from "@/lib/insights-format";
@@ -14,35 +15,14 @@ import {
   unhappinessStep,
   type TreemapInput,
 } from "@/lib/insights-support";
-import { EmptyState, Note, percent } from "./InsightsKit";
+import { EmptyState, percent } from "./InsightsKit";
 import styles from "./TopicMap.module.css";
 
 /**
- * What the inbox is about, drawn to scale.
- *
- * WHY THIS IS ONE CLIENT COMPONENT. The treemap itself is static and would
- * render happily on the server, but the two controls beside it cannot: copying
- * the resync command needs `navigator.clipboard`, and the table underneath
- * sorts on click. Splitting the static half out would mean three files and a
- * prop-drilled boundary to save the client a few hundred bytes of markup it is
- * already downloading as data. The panel around this stays a Server Component,
- * which is where the saving actually is.
+ * What the inbox is about, drawn to scale. One client component because the
+ * table sorts on click and the rebuild button posts; the panel around it stays
+ * a Server Component.
  */
-
-/**
- * The rebuild is a COMMAND, NOT A BUTTON, and that is a deliberate constraint
- * rather than an unfinished feature.
- *
- * Clustering is an all-pairs cosine comparison over the whole embedded corpus,
- * and this app has no job queue — a route handler that started it would hold
- * the request open for the entire run, past any serverless timeout, with no
- * progress and no way to cancel. Worse, the similarity threshold is hand-tuned
- * and corpus-specific; a one-click rebuild invites re-running it until the map
- * looks nice, which is how a measurement turns into a drawing. So the panel
- * hands over the command and lets a human run it in a terminal where the output
- * is visible and the arguments can be changed.
- */
-const RESYNC_COMMAND = "npm run cluster:tickets:save";
 
 interface ClusterNode extends TreemapInput {
   label: string;
@@ -71,7 +51,7 @@ export function TopicMap({ map, categories }: { map: TopicMapData; categories: S
           This saved run did not find any repeated customer topics of at least {map.minSize} messages at
           threshold {map.threshold}. That is a measured empty map, not a missing rebuild.
         </EmptyState>
-        <Resync />
+        <RebuildButton />
       </div>
     );
   }
@@ -80,23 +60,9 @@ export function TopicMap({ map, categories }: { map: TopicMapData; categories: S
     <div className={styles.wrap}>
       <StalenessBanner map={map} drift={drift} baseline={baseline} />
 
-      {map.stale ? (
-        <Note tone="warn" title="The corpus has moved on">
-          The mailbox now holds {map.liveMessageCount?.toLocaleString()} embedded messages against the{" "}
-          {baseline.toLocaleString()} this map was built from — {formatDrift(drift)}. Topics found below
-          are still real, but their relative sizes are describing an older inbox. Rebuild before drawing a
-          conclusion about what is growing.
-        </Note>
-      ) : null}
-
       <figure className={styles.figure}>
         <figcaption className={styles.caption}>
           <span className={styles.capTitle}>Message volume by cluster</span>
-          <span className={styles.capSub}>
-            Each tile is one saved cluster from the latest run. Area is exactly proportional to the
-            messages in that cluster. Colour still uses the parent subject&apos;s mean happiness, because
-            the cluster row is a bag of messages and has no ticket mood of its own.
-          </span>
         </figcaption>
 
         <ul className={styles.map}>
@@ -147,16 +113,12 @@ export function TopicMap({ map, categories }: { map: TopicMapData; categories: S
       </figure>
 
       <p className={styles.coverage}>
-        {clustered.toLocaleString()} of the run&apos;s {map.messageCount.toLocaleString()} customer
-        messages fell into a topic of at least {map.minSize}; the remaining{" "}
-        {(map.messageCount - clustered).toLocaleString()} matched nothing else closely enough at
-        threshold {map.threshold} and are deliberately absent rather than pooled into an
-        &ldquo;other&rdquo; tile. A further {map.internalExcluded.toLocaleString()} were our own mail and
-        never entered the run.
+        {clustered.toLocaleString()} of {map.messageCount.toLocaleString()} customer messages fall into a topic of at
+        least {map.minSize}.
       </p>
 
       <ClusterTable clusters={clusters} clustered={clustered} />
-      <Resync />
+      <RebuildButton />
     </div>
   );
 }
@@ -349,43 +311,44 @@ function sortValue(cluster: ClusterNode, key: SortKey): number | null {
 
 // --- resync -----------------------------------------------------------------
 
-function Resync() {
-  const [copied, setCopied] = useState(false);
+/**
+ * Rebuild at the script's own defaults — the button takes no arguments, so the
+ * hand-tuned threshold cannot be nudged until the map looks nice. One run at a
+ * time on the server; the page re-reads the new run when it lands.
+ */
+function RebuildButton() {
+  const { refresh } = useInsightsFrame();
+  const [state, setState] = useState<{ busy: boolean; message: string | null; error: boolean }>({
+    busy: false,
+    message: null,
+    error: false,
+  });
 
-  useEffect(() => {
-    if (!copied) return;
-    const timer = setTimeout(() => setCopied(false), 2000);
-    return () => clearTimeout(timer);
-  }, [copied]);
-
-  const copy = async () => {
+  const rebuild = async () => {
+    setState({ busy: true, message: null, error: false });
     try {
-      await navigator.clipboard.writeText(RESYNC_COMMAND);
-      setCopied(true);
-    } catch {
-      // Clipboard access is refused outside a secure context and on some
-      // locked-down browsers. The command is rendered as selectable text beside
-      // the button for exactly this case, so a failed copy costs a manual
-      // selection rather than the ability to rebuild.
-      setCopied(false);
+      const response = await fetch("/api/insights/topic-map", { method: "POST" });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload.error || `HTTP ${response.status}`);
+      setState({
+        busy: false,
+        message: `Rebuilt in ${payload.seconds}s${payload.topics !== null ? ` — ${payload.topics} topics` : ""}`,
+        error: false,
+      });
+      refresh();
+    } catch (error) {
+      setState({ busy: false, message: error instanceof Error ? error.message : "The rebuild failed.", error: true });
     }
   };
 
   return (
     <div className={styles.resync}>
-      <div className={styles.resyncText}>
-        <span className={styles.resyncTitle}>Rebuilding the map</span>
-        <p className={styles.resyncBody}>
-          Run it from the repository root. It compares every embedded message against every other, so it
-          takes minutes and belongs in a terminal rather than behind a button on this page.
-        </p>
-      </div>
-      <div className={styles.resyncControl}>
-        <code className={styles.command}>{RESYNC_COMMAND}</code>
-        <button type="button" className={styles.copyButton} onClick={copy}>
-          {copied ? "Copied" : "Copy"}
-        </button>
-      </div>
+      <button type="button" className={styles.rebuildButton} onClick={rebuild} disabled={state.busy}>
+        {state.busy ? "Rebuilding…" : "Rebuild map"}
+      </button>
+      <span className={state.error ? styles.rebuildError : styles.rebuildNote} role="status">
+        {state.busy ? "Clustering every embedded customer message — about ten seconds." : state.message}
+      </span>
     </div>
   );
 }

@@ -1,50 +1,35 @@
 /**
- * The Agent panel's reads: how far tickets get, what stops them, and what it
- * all costs.
- *
- * THE EVIDENCE-GAP LEADERBOARD IS THE POINT OF THIS PANEL. It is the agent
- * reporting its own blockers, so a ranked list of unmet needs is a prioritised
- * build list rather than an opinion — and it is generated rather than curated,
- * so it cannot go stale the way a roadmap does.
+ * The AI agent panel's reads over the range in the URL: what it cost, how far
+ * tickets get, and what stops them.
  *
  * COST IS COMPUTED HERE, NEVER STORED. `llm_usage` holds token counts; the rate
- * lives in `scripts/lib/llm-rates.mjs` and is applied at read time. A euro
- * figure written into a row would be wrong the day the rate card moved, with no
- * way to restate the history behind it.
+ * lives in `scripts/lib/llm-rates.mjs` and is applied at read time, per model,
+ * so a changed rate card restates history rather than invalidating it.
  *
- * Server-only; see ./shared.ts for why nothing here reduces table-sized reads.
+ * Server-only; see ./shared.ts for why nothing here pages rows.
  */
 
-import { V } from "../../../../scripts/lib/tables.mjs";
+import { RPC } from "../../../../scripts/lib/tables.mjs";
 import { estimateCost, resolveModelRates } from "../../../../scripts/lib/llm-rates.mjs";
 import type {
   AgentPanel,
   EvidenceGapRow,
   InvestigationVerdict,
   PipelineFunnel,
-  UsageMonth,
   UsageSummary,
   VerdictRow,
 } from "../../types";
-import { count, num, readOne, readView } from "./shared";
+import { rangeArgs, type InsightsContext } from "./context";
+import { toSeries } from "./series";
+import { callRpc, callRpcOne, count, num } from "./shared";
 
 /**
- * `state` on an evidence gap is what happened to the need, and only two of the
- * three values are blockers.
- *
- * `satisfied` means the agent GOT the fact — it appears in the gaps array
- * because the array is the whole ledger of what a ticket required, not a list
- * of failures. Ranking without this filter puts "customer_identity: resolved"
- * near the top of a chart headed "what is blocking us", which is precisely
- * backwards.
+ * `satisfied` means the agent GOT the fact: the gaps array is the whole ledger
+ * of what a ticket required, not a list of failures.
  */
 const SATISFIED = "satisfied";
 
-/**
- * Readable names for the needs worth naming. Anything absent is title-cased
- * from its slug, so a need added to `evidence-rules.mjs` shows up legibly here
- * without a second registry to keep in sync.
- */
+/** Readable names for the needs worth naming; anything else is title-cased from its slug. */
 const NEED_LABELS: Record<string, string> = {
   order_identity: "Which order is this",
   order_state: "Where the order stands",
@@ -63,47 +48,109 @@ const NEED_LABELS: Record<string, string> = {
   other_fact: "Something else the reply needed",
 };
 
-export async function getAgentPanel(shopId: string): Promise<AgentPanel> {
-  const [funnelRow, gapRows, verdictRows, usageRow, usageMonthRows] = await Promise.all([
-    readOne<Record<string, unknown>>(V.AGENT_PIPELINE_FUNNEL, shopId),
-    readView<Record<string, unknown>>(V.INVESTIGATION_EVIDENCE_GAPS, shopId, {
-      order: "occurrences.desc",
-    }),
-    readView<Record<string, unknown>>(V.INVESTIGATION_VERDICTS, shopId, {
-      order: "investigations.desc",
-    }),
-    readOne<Record<string, unknown>>(V.LLM_USAGE_SUMMARY, shopId),
-    readView<Record<string, unknown>>(V.LLM_USAGE_BY_MONTH, shopId, { order: "month.asc" }),
-  ]);
+export async function getAgentPanel(ctx: InsightsContext): Promise<AgentPanel> {
+  const rates = resolveModelRates(process.env);
+  const args = rangeArgs(ctx);
+  const previousArgs = rangeArgs(ctx, ctx.range.previous);
+
+  const [usageNow, usageBefore, statsNow, statsBefore, seriesRows, funnelRow, verdictRows, gapRows] =
+    await Promise.all([
+      callRpc<Record<string, unknown>>(RPC.INSIGHTS_LLM_USAGE, args),
+      callRpc<Record<string, unknown>>(RPC.INSIGHTS_LLM_USAGE, previousArgs),
+      callRpcOne<Record<string, unknown>>(RPC.INSIGHTS_LLM_TICKET_STATS, args),
+      callRpcOne<Record<string, unknown>>(RPC.INSIGHTS_LLM_TICKET_STATS, previousArgs),
+      callRpc<Record<string, unknown>>(RPC.INSIGHTS_LLM_SERIES, { ...args, p_grain: ctx.range.grain }),
+      callRpcOne<Record<string, unknown>>(RPC.INSIGHTS_AGENT_FUNNEL, args),
+      callRpc<Record<string, unknown>>(RPC.INSIGHTS_AGENT_VERDICTS, args),
+      callRpc<Record<string, unknown>>(RPC.INSIGHTS_AGENT_BLOCKERS, args),
+    ]);
+
+  // Spend per bucket: each (bucket, model) row priced at its own model's rate,
+  // then summed — a mixed-model token total times any one rate means nothing.
+  const spendByBucket = new Map<string, { bucket: string; usd: number; unpriced: boolean }>();
+  for (const row of seriesRows) {
+    const bucket = String(row.bucket);
+    const cost = estimateCost({
+      model: String(row.model ?? "unknown"),
+      inputTokens: count(row.input_tokens),
+      outputTokens: count(row.output_tokens),
+      rates,
+    });
+    const entry = spendByBucket.get(bucket) ?? { bucket, usd: 0, unpriced: false };
+    if (cost.rated) entry.usd += cost.totalUsd;
+    else entry.unpriced = true;
+    spendByBucket.set(bucket, entry);
+  }
 
   const verdicts = verdictRows.map(mapVerdict);
-  const usageByMonth = mapUsageMonths(usageMonthRows);
+  const previousHasCalls = usageBefore.length > 0;
 
   return {
-    funnel: funnelRow ? mapFunnel(funnelRow) : null,
-    blockers: rankBlockers(gapRows),
+    usage: {
+      current: summarise(usageNow, statsNow, rates),
+      // No calls at all in the previous period means capture had not started
+      // (or the agent was idle), not that it was free; there is no change to show.
+      previous: previousHasCalls ? summarise(usageBefore, statsBefore, rates) : null,
+    },
+    spend: toSeries(
+      ctx.range,
+      [...spendByBucket.values()],
+      (row) => (row ? row.usd : 0),
+      { from: null, through: null }
+    ),
+    funnel: mapFunnel(funnelRow ?? {}),
     verdicts,
     automationCeiling: automationCeiling(verdicts),
-    usage: usageRow ? mapUsage(usageRow, usageByMonth) : null,
-    usageByMonth,
-    // Nothing has been recorded until the worker runs with the sink wired, and
-    // an empty cost section has to say "not recorded yet" rather than "$0.00".
-    hasUsageData: usageByMonth.length > 0,
+    blockers: rankBlockers(gapRows),
   };
 }
 
-/**
- * The share of case files the agent could have answered unaided.
- *
- * The honest automation ceiling, and a better weekly number than any accuracy
- * score: accuracy asks whether the labels were right, this asks whether the
- * work could have been finished.
- */
+function summarise(
+  rows: Record<string, unknown>[],
+  stats: Record<string, unknown> | null,
+  rates: ReturnType<typeof resolveModelRates>
+): UsageSummary {
+  const byModel = new Map<string, { model: string; calls: number; totalTokens: number; costUsd: number | null }>();
+  let costUsd = 0;
+  let hasUnpricedModels = false;
+
+  for (const row of rows) {
+    const model = String(row.model ?? "unknown");
+    const cost = estimateCost({
+      model,
+      inputTokens: count(row.input_tokens),
+      outputTokens: count(row.output_tokens),
+      rates,
+    });
+    const entry = byModel.get(model) ?? { model, calls: 0, totalTokens: 0, costUsd: 0 };
+    entry.calls += count(row.calls);
+    entry.totalTokens += count(row.total_tokens);
+    if (cost.rated && entry.costUsd !== null) entry.costUsd += cost.totalUsd;
+    if (!cost.rated) {
+      entry.costUsd = null;
+      hasUnpricedModels = true;
+    } else costUsd += cost.totalUsd;
+    byModel.set(model, entry);
+  }
+
+  return {
+    calls: rows.reduce((sum, row) => sum + count(row.calls), 0),
+    totalTokens: rows.reduce((sum, row) => sum + count(row.total_tokens), 0),
+    failedCalls: rows.reduce((sum, row) => sum + count(row.failed_calls), 0),
+    costUsd: rows.length === 0 ? 0 : costUsd,
+    hasUnpricedModels,
+    ticketsTouched: count(stats?.tickets_touched),
+    meanTokensPerTicket: num(stats?.mean_tokens_per_ticket),
+    maxTokensOnATicket: num(stats?.max_tokens_on_a_ticket),
+    byModel: [...byModel.values()].sort((a, b) => (b.costUsd ?? 0) - (a.costUsd ?? 0)),
+  };
+}
+
+/** The share of case files the agent could have answered unaided — the honest automation ceiling. */
 export function automationCeiling(verdicts: VerdictRow[]): number | null {
   const total = verdicts.reduce((sum, v) => sum + v.investigations, 0);
   if (!total) return null;
-  const answerable = verdicts.find((v) => v.verdict === "answerable")?.investigations ?? 0;
-  return answerable / total;
+  return (verdicts.find((v) => v.verdict === "answerable")?.investigations ?? 0) / total;
 }
 
 /** Unmet needs only, ranked by how many tickets they held up. */
@@ -149,68 +196,5 @@ function mapVerdict(row: Record<string, unknown>): VerdictRow {
     investigations: count(row.investigations),
     tickets: count(row.tickets),
     withHandoff: count(row.with_handoff),
-  };
-}
-
-/**
- * Rates are resolved once per render rather than per row: `resolveModelRates`
- * parses an env var, and doing that inside a map would parse it once per month
- * per model for no benefit.
- */
-function mapUsageMonths(rows: Record<string, unknown>[]): UsageMonth[] {
-  const rates = resolveModelRates(process.env);
-
-  return rows.map((row) => {
-    const inputTokens = count(row.input_tokens);
-    const outputTokens = count(row.output_tokens);
-    const model = String(row.model ?? "unknown");
-    const cost = estimateCost({ model, inputTokens, outputTokens, rates });
-
-    return {
-      month: String(row.month),
-      model,
-      pass: String(row.pass ?? "other"),
-      calls: count(row.calls),
-      inputTokens,
-      outputTokens,
-      totalTokens: count(row.total_tokens),
-      failedCalls: count(row.failed_calls),
-      // Null rather than 0 for an unpriced model: a new model reporting €0.00
-      // because nobody added its rate is worse than one that says it does not
-      // know. See `rated` in llm-rates.mjs.
-      costUsd: cost.rated ? cost.totalUsd : null,
-    };
-  });
-}
-
-/**
- * The cost tiles.
- *
- * Money is summed from the per-model monthly rows, NOT from the summary's
- * totals: the summary aggregates tokens across every model at once, and
- * multiplying a mixed-model token total by any single rate would be meaningless.
- */
-function mapUsage(row: Record<string, unknown>, byMonth: UsageMonth[]): UsageSummary {
-  const priced = byMonth.filter((m) => m.costUsd !== null);
-  const hasUnpricedModels = byMonth.some((m) => m.costUsd === null);
-  const costUsd = byMonth.length === 0 ? null : priced.reduce((sum, m) => sum + (m.costUsd ?? 0), 0);
-
-  const thisMonth = new Date().toISOString().slice(0, 7);
-  const mtd = byMonth.filter((m) => m.month.slice(0, 7) === thisMonth);
-
-  return {
-    totalTokens: count(row.total_tokens),
-    inputTokens: count(row.input_tokens),
-    outputTokens: count(row.output_tokens),
-    calls: count(row.calls),
-    ticketsTouched: count(row.tickets_touched),
-    meanTokensPerTicket: num(row.mean_tokens_per_ticket),
-    maxTokensOnATicket: num(row.max_tokens_on_a_ticket),
-    firstRecordedAt: (row.first_recorded_at as string) ?? null,
-    lastRecordedAt: (row.last_recorded_at as string) ?? null,
-    costUsd,
-    hasUnpricedModels,
-    monthToDateUsd: mtd.length === 0 ? null : mtd.reduce((sum, m) => sum + (m.costUsd ?? 0), 0),
-    monthToDateTokens: mtd.reduce((sum, m) => sum + m.totalTokens, 0),
   };
 }

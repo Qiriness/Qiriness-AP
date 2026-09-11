@@ -1,4 +1,3 @@
-import { isVipRfmGroup } from '../../../scripts/lib/customer-segments.mjs';
 
 import { TOOL_NAMES } from './investigation-rules.mjs';
 import { productFromKnowledge } from '../retrieval/product-from-knowledge.mjs';
@@ -892,8 +891,8 @@ function detailsFromPromotion(entries) {
  *
  * CROSS-FAMILY BY NATURE: this hangs off the ticket's customer link rather than
  * off the subject, so it renders on a promotions ticket exactly as on an order
- * one. VIP is derived at read time from `rfm_group` and never stored, so it is
- * carried here as the account reports it rather than recomputed.
+ * one. VIP is the shop's rule, answered by the customer lookup through the same
+ * SQL function the dashboard uses, and carried here as the lookup reported it.
  */
 function detailsFromCustomer(entries) {
   const entry = lastByTool(entries, TOOL_NAMES.LOOKUP_CUSTOMER);
@@ -904,10 +903,9 @@ function detailsFromCustomer(entries) {
   if (!account) return null;
   return {
     name: account.name ?? null,
-    // Derived through the SAME rule the dashboard badge uses, not stored and not
-    // reimplemented — `rfm_group` is the only source and VIP is a read-time
-    // question about it.
-    isVip: account.rfmGroup ? isVipRfmGroup(account.rfmGroup) : null,
+    // As the lookup answered it (vip-rule.mjs), not re-derived here: a second
+    // derivation is how the case file and the queue badge would disagree.
+    isVip: typeof account.isVip === 'boolean' ? account.isVip : null,
     ordersCount: account.ordersCount ?? null
   };
 }

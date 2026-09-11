@@ -21,7 +21,8 @@
  */
 
 import { loadConfig } from "../../../scripts/lib/sync-config.mjs";
-import { formatRfmGroup, isVipRfmGroup } from "../../../scripts/lib/customer-segments.mjs";
+import { formatRfmGroup } from "../../../scripts/lib/customer-segments.mjs";
+import { loadVipRule, loadVipTicketIds } from "../../../scripts/lib/vip-rule.mjs";
 import { priorityBand, scorePriority } from "../../../scripts/lib/ticket-priority.mjs";
 import {
   createSupabaseClient,
@@ -36,12 +37,17 @@ import { createTicketRecord } from "../../../scripts/lib/ticket-record.mjs";
 import { parseTrackingCandidates } from "../../../agent/src/resolution/tracking-number-parser.mjs";
 import { normaliseTrackingNumber } from "../../../scripts/lib/tracking-number.mjs";
 import { createDraftRecord } from "../../../scripts/lib/draft-record.mjs";
+import {
+  listTicketAttachments,
+  toPublicAttachments,
+} from "../../../scripts/lib/photo-evidence-rules.mjs";
 import { KnowledgeNotFoundError } from "./knowledge-errors";
 import { summariseFacts, summariseInvestigation, summariseOrderContext } from "../ticket-detail";
 import type {
   InvestigationVerdict,
   KnowledgeCategory,
   ResponsibleTeam,
+  TicketAttachments,
   TicketDetail,
   TicketDraft,
   TicketHappiness,
@@ -108,8 +114,8 @@ function getRecord(shopId: string) {
  * What mitigates it is `countOpenConversations`, which puts those three on the
  * sidebar so the page announces itself instead of waiting to be found.
  */
-function partitionBySender(rows: any[], directory: any) {
-  const mapped = rows.map((row) => mapTicketRow(row, directory)).sort(byPriorityThenLastActivityDesc);
+function partitionBySender(rows: any[], directory: any, vipTickets: Set<string>) {
+  const mapped = rows.map((row) => mapTicketRow(row, directory, vipTickets)).sort(byPriorityThenLastActivityDesc);
   return {
     tickets: mapped.filter((ticket) => !ticket.isOwnSide),
     conversations: mapped.filter((ticket) => ticket.isOwnSide)
@@ -117,20 +123,22 @@ function partitionBySender(rows: any[], directory: any) {
 }
 
 export async function listTickets(shopId: string): Promise<TicketListItem[]> {
-  const [rows, directory] = await Promise.all([
+  const [rows, directory, vipTickets] = await Promise.all([
     getRecord(shopId).queue(),
-    loadSenderDirectory(shopId)
+    loadSenderDirectory(shopId),
+    loadVipTickets(shopId)
   ]);
-  return partitionBySender(rows as any[], directory).tickets;
+  return partitionBySender(rows as any[], directory, vipTickets).tickets;
 }
 
 /** The other half: threads one of our own addresses opened. */
 export async function listConversations(shopId: string): Promise<TicketListItem[]> {
-  const [rows, directory] = await Promise.all([
+  const [rows, directory, vipTickets] = await Promise.all([
     getRecord(shopId).queue(),
-    loadSenderDirectory(shopId)
+    loadSenderDirectory(shopId),
+    loadVipTickets(shopId)
   ]);
-  return partitionBySender(rows as any[], directory).conversations;
+  return partitionBySender(rows as any[], directory, vipTickets).conversations;
 }
 
 /**
@@ -162,6 +170,27 @@ export async function countOpenConversations(shopId: string): Promise<number> {
  * Nine rows today, so this is a full read of a tiny table and not worth caching
  * — and a cache would be the thing that made a directory edit appear not to work.
  */
+/**
+ * Which tickets belong to a VIP, under the shop's own rule (vip-rule.mjs).
+ *
+ * ONE CALL PER READ, for every ticket at once — `vip_tickets()` applies the
+ * rule in SQL, where the windowed spend and order counts live. Read per request,
+ * never cached and never stored: the window rolls forward daily and the rule
+ * can be edited at any time on the Customers panel.
+ *
+ * A failure is an empty set, not an error: the queue must still load, and a
+ * missing gold border is a smaller harm than a queue that will not open.
+ */
+async function loadVipTickets(shopId: string, ticketIds: string[] | null = null): Promise<Set<string>> {
+  try {
+    const supabase = getSupabaseClient();
+    const rule = await loadVipRule(supabase, shopId);
+    return (await loadVipTicketIds(supabase, shopId, rule, ticketIds)) as Set<string>;
+  } catch {
+    return new Set();
+  }
+}
+
 async function loadSenderDirectory(shopId: string) {
   return createSenderDirectoryStore(getSupabaseClient()).load(shopId, {
     supportMailbox: process.env.SUPPORT_MAILBOX || undefined
@@ -186,14 +215,17 @@ async function loadSenderDirectory(shopId: string) {
  * lines exist for tickets the agent never investigated, and the case file exists
  * for tickets with no order at all, so neither read can stand in for the other.
  */
+
 export async function getTicketDetail(shopId: string, ticketId: string): Promise<TicketDetail> {
   const supabase = getSupabaseClient();
 
   // The ticket through the record; the case file directly, because
   // `ticket_investigations` is the investigation's contract and not the ticket
   // record's to own (see agent/src/investigation/case-file.mjs).
-  const [ticketRow, investigationRows] = await Promise.all([
-    getRecord(shopId).findForDetail(ticketId),
+  const record = getRecord(shopId);
+
+  const [ticketRow, investigationRows, attachmentRows] = await Promise.all([
+    record.findForDetail(ticketId),
     supabaseSelect(
       supabase,
       T.TICKET_INVESTIGATIONS,
@@ -201,6 +233,11 @@ export async function getTicketDetail(shopId: string, ticketId: string): Promise
       COLUMNS.investigationForDetail,
       { order: "investigated_at.desc", limit: 1 }
     ),
+    // Alongside the case file rather than behind it: what the customer attached
+    // is true of the TICKET, not of the investigation, so it has to be there for
+    // the 263 tickets that carry no case file at all — which include every
+    // uncategorised one a person is most likely to be opening by hand.
+    record.inboundMessages(ticketId, { columns: COLUMNS.messageForAttachments }),
   ]);
 
   if (!ticketRow) {
@@ -211,16 +248,25 @@ export async function getTicketDetail(shopId: string, ticketId: string): Promise
   // reads as "no order facts" rather than as a bundle full of nulls.
   const order = summariseOrderContext(ticketRow.resolved_context);
 
+  // `toPublicAttachments` is the boundary that strips the Exchange message id
+  // off every entry — see the shared module. It lives there rather than here
+  // because it is the security-relevant half and `web/` has no test runner.
+  const attachments: TicketAttachments = toPublicAttachments(
+    ticketId,
+    listTicketAttachments(Array.isArray(attachmentRows) ? attachmentRows : [])
+  );
+
   const row = Array.isArray(investigationRows) ? investigationRows[0] : null;
   if (!row) {
     // No case file: the order facts may still exist, because the resolution pass
     // writes them for tickets the agent never investigated. Facts cannot.
-    return { ticketId, results: null, order, facts: [] };
+    return { ticketId, results: null, order, facts: [], attachments };
   }
 
   return {
     ticketId,
     order,
+    attachments,
     facts: summariseFacts(row.evidence_gaps),
     results: summariseInvestigation({
       verdict: row.verdict as InvestigationVerdict,
@@ -426,12 +472,15 @@ export async function setTicketStatus(
   // back from `ticket_queue` — the SAME projection the list rendered. That is
   // what stops a close from silently stripping the VIP badge or the message
   // count off the row it replaces on screen.
-  const row = await getRecord(shopId).setStatus(ticketId, status);
+  const [row, vipTickets] = await Promise.all([
+    getRecord(shopId).setStatus(ticketId, status),
+    loadVipTickets(shopId, [ticketId]),
+  ]);
   if (!row) {
     throw new KnowledgeNotFoundError(`Ticket not found: ${ticketId}`);
   }
 
-  return mapTicketRow(row);
+  return mapTicketRow(row, undefined, vipTickets);
 }
 
 /**
@@ -449,15 +498,16 @@ export async function getTicketListItem(
   shopId: string,
   ticketId: string
 ): Promise<TicketListItem> {
-  const [row, directory] = await Promise.all([
+  const [row, directory, vipTickets] = await Promise.all([
     getRecord(shopId).queueRow(ticketId),
     loadSenderDirectory(shopId),
+    loadVipTickets(shopId, [ticketId]),
   ]);
   if (!row) {
     throw new KnowledgeNotFoundError(`Ticket not found: ${ticketId}`);
   }
 
-  return mapTicketRow(row, directory);
+  return mapTicketRow(row, directory, vipTickets);
 }
 
 /** Highest priority first, newest activity breaking ties. */
@@ -475,13 +525,14 @@ function byPriorityThenLastActivityDesc(a: TicketListItem, b: TicketListItem): n
  *
  * `ticket_queue` LEFT JOINs `customers`, so every one of these is null on an
  * unlinked ticket — which is most of them until the customer-resolution pass
- * runs. VIP is computed here from the live segment instead of being read from a
- * column: nothing stores it, deliberately (see customer-segments.mjs).
+ * runs. VIP comes from the shop's rule, answered for the whole list by
+ * `vip_tickets()` and passed in as a set: nothing stores it (see vip-rule.mjs).
+ * The Shopify segment is still carried, as Shopify's, for the context pane.
  *
  * `display_name` is Shopify's own composition and wins where it exists; the
  * first/last fallback covers rows synced before it was populated.
  */
-function mapCustomer(row: any) {
+function mapCustomer(row: any, vipTickets: Set<string>) {
   const name =
     row.customer_display_name ||
     [row.customer_first_name, row.customer_last_name].filter(Boolean).join(" ") ||
@@ -490,12 +541,16 @@ function mapCustomer(row: any) {
   return {
     customerName: name,
     rfmGroup: formatRfmGroup(row.customer_rfm_group),
-    isVip: isVipRfmGroup(row.customer_rfm_group),
+    isVip: vipTickets.has(row.id),
   };
 }
 
-function mapTicketRow(row: any, directory: any = emptySenderDirectory): TicketListItem {
-  const customer = mapCustomer(row);
+function mapTicketRow(
+  row: any,
+  directory: any = emptySenderDirectory,
+  vipTickets: Set<string> = new Set()
+): TicketListItem {
+  const customer = mapCustomer(row, vipTickets);
   // THE ADDRESS STOPS HERE. `requester_email` is read from the view so this
   // question can be asked, and only the resulting label continues to the
   // browser — the queue is a list of everyone who has written in, and shipping

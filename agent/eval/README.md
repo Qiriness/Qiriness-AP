@@ -39,7 +39,15 @@ Six sections, and they answer different questions:
 3. **MARGIN** — how far the winner beats the runner-up, which sets `minMargin`.
    A margin distribution that collapses toward zero is the corpus telling you two
    situations want merging, not a threshold that wants moving.
-4. **BY LANGUAGE** — where the French-only corpus costs you.
+4. **BY LANGUAGE** — where a French corpus costs you, and, since 2026-09-09,
+   how often a *translated* phrasing is the one that wins. The two are different
+   claims: adding rows lifts a best-of median whether or not any of them wins.
+
+   **Pair it with `--authored-only`, which drops the translations and scores the
+   authored library alone.** A median read against a figure from an older run is
+   measuring the corpus, not the library — the ticket count went 214 → 328
+   between the two, which moved the numbers more than the translations did. Run
+   it twice in one sitting or do not compare at all.
 5. **WHICH EXEMPLARS EARN THEIR PLACE** — win counts.
 6. **WHY THE SILENT ONES LOSE** — the diagnosis behind section 5, since "never
    wins" has causes that want opposite fixes:

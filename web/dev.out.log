@@ -10,57 +10,169 @@
     · outputFileTracingRoot
 
  ✓ Starting...
- ✓ Ready in 28.7s
- ○ Compiling / ...
- ✓ Compiled /tickets in 54.3s (788 modules)
- GET / 307 in 13473ms
- GET /agent-setup 200 in 1509ms
- GET /tickets 200 in 17648ms
- ○ Compiling /api/tickets/[id]/thread ...
- ✓ Compiled /api/tickets/[id]/thread in 553ms (425 modules)
- ✓ Compiled (427 modules)
- GET /api/tickets/dfba7140-18a9-4269-b303-b75239815296 200 in 6069ms
- GET /api/tickets/dfba7140-18a9-4269-b303-b75239815296/thread 200 in 6274ms
- ○ Compiling /api/recommendations ...
- ✓ Compiled /api/recommendations in 848ms (419 modules)
- GET /api/recommendations 200 in 4896ms
- ✓ Compiled /api/knowledge/articles in 466ms (421 modules)
- POST /api/knowledge/articles 201 in 2035ms
- ✓ Compiled /api/knowledge/articles/[id] in 404ms (419 modules)
- PATCH /api/knowledge/articles/790c8e35-fa8d-46f2-94f3-773d82cd5992 500 in 5432ms
- PATCH /api/knowledge/articles/790c8e35-fa8d-46f2-94f3-773d82cd5992 500 in 1636ms
- GET /agent-setup 200 in 1198ms
- ✓ Compiled /api/recommendations in 389ms (423 modules)
- GET /api/recommendations 200 in 1087ms
- POST /api/knowledge/articles 201 in 460ms
- PATCH /api/knowledge/articles/a2b414ab-b07c-49a7-bbbf-ba3598689596 500 in 1458ms
- POST /api/knowledge/articles 201 in 582ms
- ○ Compiling /agent-setup/rules ...
- ✓ Compiled /agent-setup/rules in 3.5s (816 modules)
- ○ Compiling /agent-setup/parameters ...
- ✓ Compiled /agent-setup/parameters in 5.9s (817 modules)
- ○ Compiling /agent-setup/promotions ...
- ✓ Compiled /agent-setup/promotions in 1331ms (827 modules)
- ○ Compiling /agent-setup/recommendations ...
- ✓ Compiled /agent-setup/recommendations in 1190ms (839 modules)
- ○ Compiling /conversations ...
- ✓ Compiled /conversations in 3.5s (911 modules)
+ ✓ Ready in 31.3s
+ ○ Compiling /tickets ...
+ ✓ Compiled /tickets in 46s (619 modules)
+ GET /tickets 200 in 13539ms
+ ✓ Compiled in 411ms
+ ○ Compiling /tickets ...
+ ✓ Compiled /tickets in 2.3s (349 modules)
+ GET /tickets 200 in 6219ms
+ GET /tickets 200 in 4749ms
  ○ Compiling /insights ...
- ✓ Compiled /insights in 1456ms (806 modules)
+ ✓ Compiled /insights in 2.3s (629 modules)
  ○ Compiling /insights/fulfilment ...
- ✓ Compiled /insights/fulfilment in 1941ms (855 modules)
+ ✓ Compiled /insights/fulfilment in 1240ms (650 modules)
  ○ Compiling /insights/support ...
- ✓ Compiled /insights/support in 3.1s (846 modules)
- ○ Compiling /api/insights/support/marketable-contacts ...
- ✓ Compiled /api/insights/support/marketable-contacts in 1530ms (412 modules)
- GET /api/insights/support/marketable-contacts 200 in 6040ms
+ ✓ Compiled /insights/support in 1804ms (674 modules)
  ○ Compiling /insights/customers ...
- ✓ Compiled /insights/customers in 2.4s (844 modules)
+ ✓ Compiled /insights/customers in 889ms (688 modules)
  ○ Compiling /insights/agent ...
- ✓ Compiled /insights/agent in 2.3s (840 modules)
- ○ Compiling / ...
- ✓ Compiled / in 1159ms (379 modules)
- GET / 307 in 1754ms
+ ✓ Compiled /insights/agent in 729ms (698 modules)
+ ✓ Compiled in 488ms (379 modules)
+ ✓ Compiled in 422ms (379 modules)
+ ✓ Compiled in 1064ms (676 modules)
+ ✓ Compiled in 425ms (379 modules)
+ ✓ Compiled in 433ms (384 modules)
+ ○ Compiling /_not-found ...
+ GET /insights/sales 404 in 238ms
+ GET /insights/sales 404 in 57ms
+ GET /insights/sales 404 in 211ms
+ GET /insights/sales 404 in 132ms
+ GET /insights/sales 404 in 147ms
+ GET /insights/sales 404 in 168ms
+ GET /insights/sales 404 in 184ms
+ GET /insights/sales 404 in 193ms
+ GET /insights/sales 404 in 142ms
+ GET /insights/sales 404 in 89ms
+ GET /insights/sales 404 in 58ms
+ GET /insights/sales 404 in 72ms
+ GET /insights/sales 404 in 243ms
+ GET /insights/sales 404 in 61ms
+ GET /insights/sales 404 in 83ms
+ GET /insights/sales 404 in 81ms
+ GET /insights/sales 404 in 149ms
+ GET /insights/sales 404 in 124ms
+ GET /insights/sales 404 in 70ms
+ GET /insights/sales 404 in 87ms
+ GET /insights/sales 404 in 49ms
+ ✓ Compiled /_not-found in 824ms (706 modules)
+ ✓ Compiled in 428ms (706 modules)
+ GET /insights/sales 404 in 105ms
+ ✓ Compiled in 669ms (706 modules)
+ GET /insights/sales 404 in 104ms
+ GET /insights/fulfilment 200 in 4996ms
+ GET /insights/sales 404 in 84ms
+ GET /insights 307 in 295ms
+ GET /insights/fulfilment 200 in 2251ms
+ GET /insights/fulfilment 200 in 2101ms
+ GET /insights/support 200 in 2262ms
+ GET /insights/agent 200 in 1344ms
+ GET /insights/customers 200 in 1377ms
+ GET /insights/fulfilment?range=24h 200 in 980ms
+ GET /insights/fulfilment?range=1y&platform=amazon 200 in 2102ms
+ GET /insights/support?range=6m 200 in 2670ms
+ GET /insights/agent?from=2026-08-01&to=2026-08-31 200 in 1502ms
+ GET /insights/sales 404 in 98ms
+ GET /insights 307 in 145ms
+ GET /insights/fulfilment 200 in 2637ms
+ GET /insights/fulfilment 200 in 1763ms
+ GET /insights/fulfilment 200 in 2358ms
+ GET /insights/support 200 in 5141ms
+ ✓ Compiled in 1484ms (703 modules)
+ ✓ Compiled in 1209ms (703 modules)
+ ✓ Compiled in 1009ms (400 modules)
+ ○ Compiling /insights/sales ...
+ ✓ Compiled /insights/sales in 1305ms (738 modules)
+ GET /insights/sales 200 in 3765ms
+ GET /insights/sales?platform=amazon&range=1y 200 in 1447ms
+ GET /insights/sales?range=24h 200 in 1119ms
+ GET /insights/sales?platform=yves_rocher 200 in 1167ms
+ GET /insights/sales 200 in 1419ms
+ GET /insights/sales 200 in 2844ms
+ ○ Compiling /conversations ...
+ ✓ Compiled /conversations in 2.7s (765 modules)
+ ○ Compiling /tickets ...
+ ✓ Compiled /tickets in 742ms (438 modules)
  ○ Compiling /agent-setup ...
- ✓ Compiled /agent-setup in 1987ms (454 modules)
- GET /agent-setup 200 in 7548ms
+ ✓ Compiled /agent-setup in 2.5s (902 modules)
+ ○ Compiling /api/recommendations ...
+ ✓ Compiled /api/recommendations in 692ms (495 modules)
+ GET /api/recommendations 200 in 3257ms
+ ○ Compiling /insights ...
+ ✓ Compiled /insights in 707ms (485 modules)
+ ○ Compiling /insights/customers ...
+ ✓ Compiled /insights/customers in 936ms (491 modules)
+ ✓ Compiled in 766ms (474 modules)
+ ✓ Compiled in 317ms (474 modules)
+ ✓ Compiled in 1045ms (887 modules)
+ ✓ Compiled in 718ms (887 modules)
+ ✓ Compiled in 685ms (887 modules)
+ ✓ Compiled in 1006ms (887 modules)
+ ○ Compiling /_error ...
+ GET /insights 500 in 11186ms
+ GET /insights 500 in 207ms
+ GET /insights 500 in 148ms
+ ✓ Compiled /_not-found in 3.5s (1116 modules)
+ GET /_next/static/webpack/dd48a0dd90a2a287.webpack.hot-update.json 404 in 3817ms
+ GET /insights 307 in 528ms
+ GET /insights/sales 500 in 3590ms
+ ✓ Compiled in 1120ms (1131 modules)
+ GET /insights/sales 200 in 2752ms
+ ✓ Compiled in 1238ms (1131 modules)
+ ✓ Compiled in 822ms (516 modules)
+ ✓ Compiled in 1934ms (1163 modules)
+ ✓ Compiled in 1631ms (1135 modules)
+ ✓ Compiled in 1205ms (1145 modules)
+ ✓ Compiled in 1388ms (1135 modules)
+ ✓ Compiled in 1309ms (1153 modules)
+ ✓ Compiled in 1016ms (1143 modules)
+ GET /insights/customers 200 in 2811ms
+ GET /insights/customers?range=1y 200 in 1795ms
+ GET /insights/customers?range=24h 200 in 1529ms
+ GET /insights/sales 200 in 1460ms
+ GET /insights/sales?range=6m&platform=shopify 200 in 2020ms
+ GET /insights/customers 200 in 2046ms
+ GET /insights/customers?range=1y 200 in 1795ms
+ ✓ Compiled in 1267ms (1143 modules)
+ ✓ Compiled in 944ms (1143 modules)
+ ✓ Compiled in 1826ms (1143 modules)
+ GET /insights/customers?range=1y 200 in 3792ms
+ ✓ Compiled in 1361ms (1143 modules)
+ GET /insights/sales 200 in 3950ms
+ ✓ Compiled in 2.6s (529 modules)
+ ✓ Compiled in 3.3s (1144 modules)
+ ✓ Compiled in 896ms (530 modules)
+ ✓ Compiled in 2.7s (1144 modules)
+ ✓ Compiled in 3.4s (1168 modules)
+ ✓ Compiled in 1880ms (532 modules)
+ ○ Compiling /api/insights/vip-rule ...
+ ✓ Compiled /api/insights/vip-rule in 1591ms (536 modules)
+ GET /api/insights/vip-rule 200 in 3530ms
+ GET /api/insights/vip-rule?minSpend=300&minOrders=2&windowMonths=12 200 in 462ms
+ PUT /api/insights/vip-rule 400 in 354ms
+ PUT /api/insights/vip-rule 200 in 606ms
+ GET /tickets 200 in 2560ms
+ GET /insights/customers 200 in 2256ms
+ PUT /api/insights/vip-rule 200 in 317ms
+ GET /api/insights/vip-rule?minSpend=80&minOrders=1&windowMonths=12 200 in 987ms
+ GET /api/insights/vip-rule?minSpend=80&minOrders=1&windowMonths=6 200 in 397ms
+ PUT /api/insights/vip-rule 200 in 906ms
+ ○ Compiling /insights/support ...
+ ✓ Compiled /insights/support in 3.1s (544 modules)
+ ○ Compiling /insights/fulfilment ...
+ ✓ Compiled /insights/fulfilment in 2s (538 modules)
+ ✓ Compiled in 2.5s (525 modules)
+ ✓ Compiled in 2.8s (1142 modules)
+ ✓ Compiled in 1442ms (526 modules)
+ ✓ Compiled in 1005ms (526 modules)
+ ✓ Compiled in 11s (1159 modules)
+ GET /insights/fulfilment?range=6m 200 in 4853ms
+ GET /insights/fulfilment 200 in 7993ms
+ ○ Compiling /api/insights/vip-rule ...
+ ✓ Compiled /api/insights/vip-rule in 2.5s (533 modules)
+ GET /api/insights/vip-rule 200 in 4711ms
+ ✓ Compiled in 5.1s (1153 modules)
+ GET /insights/fulfilment?platform=amazon 200 in 2151ms
+ ○ Compiling /insights/support ...
+ ✓ Compiled /insights/support in 3.1s (540 modules)

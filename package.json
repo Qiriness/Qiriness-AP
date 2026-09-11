@@ -35,6 +35,8 @@
     "eval:matching": "node scripts/eval-product-matching.mjs",
     "import:exemplars": "node scripts/import-exemplars.mjs",
     "import:exemplars:dry-run": "node scripts/import-exemplars.mjs --dry-run",
+    "translate:exemplars": "node scripts/translate-exemplars.mjs",
+    "translate:exemplars:dry-run": "node scripts/translate-exemplars.mjs --dry-run",
     "cluster:tickets": "node scripts/cluster-ticket-messages.mjs",
     "cluster:tickets:save": "node scripts/cluster-ticket-messages.mjs --save",
     "webhook:shopify:compliance": "node scripts/process-shopify-compliance-webhook.mjs"

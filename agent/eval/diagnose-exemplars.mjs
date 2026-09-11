@@ -31,8 +31,17 @@ import { MATCHED, NEAR } from '../src/retrieval/exemplar-rules.mjs';
 // the way a labelled set would.
 //
 //   npm run eval:exemplars
+//   npm run eval:exemplars -- --authored-only
+//
+// `--authored-only` drops the generated translations and scores the French
+// library alone. IT IS THE ONLY HONEST BEFORE/AFTER: the historical figures in
+// DECISIONS.md (fr 0.637, en 0.476) were taken over 214 tickets and the corpus
+// is now 328, so reading today's number against them measures the corpus rather
+// than the translations. Run this twice over the same tickets instead.
 
 const BUCKETS = [0.3, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 0.7, 0.8];
+
+const AUTHORED_ONLY = process.argv.includes('--authored-only');
 
 main().catch((error) => {
   console.error(error.message);
@@ -52,8 +61,9 @@ async function main() {
 
   const phrasings = exemplars.flatMap((e) => e.phrasings);
   console.log(
-    `${exemplars.length} exemplar(s), ${phrasings.length} phrasing(s) — embedding in memory ` +
-      '(nothing is written).\n'
+    `${exemplars.length} exemplar(s), ${phrasings.length} phrasing(s)` +
+      `${AUTHORED_ONLY ? ' (AUTHORED ONLY — translations excluded)' : ''}` +
+      ' — embedding in memory (nothing is written).\n'
   );
 
   const embeddingsClient = createEmbeddingsClient({
@@ -199,17 +209,23 @@ function reportLanguages(results) {
   for (const r of results) {
     const key = r.ticket.language || 'unknown';
     if (!byLanguage.has(key)) byLanguage.set(key, []);
-    byLanguage.get(key).push(r.top.similarity);
+    byLanguage.get(key).push(r);
   }
   if (byLanguage.size <= 1) return;
 
   console.log('='.repeat(72));
   console.log('BY LANGUAGE — the corpus is French; these are the ones that suffer\n');
-  for (const [language, scores] of [...byLanguage.entries()].sort((a, b) => b[1].length - a[1].length)) {
+  for (const [language, rows] of [...byLanguage.entries()].sort((a, b) => b[1].length - a[1].length)) {
+    const scores = rows.map((r) => r.top.similarity);
     const sorted = [...scores].sort((a, b) => a - b);
+    // WHICH KIND WON is the direct signal, and the medians hide it: adding rows
+    // can lift a best-of score without a translation ever winning, simply by
+    // there being more phrasings to be best of.
+    const won = rows.filter((r) => r.top.phrasing?.kind === 'translated').length;
     console.log(
       `  ${language.padEnd(8)} n=${String(scores.length).padStart(3)}  median ${f(q(sorted, 0.5))}  ` +
-        `clearing ${MATCHED}: ${scores.filter((s) => s >= MATCHED).length}`
+        `clearing ${MATCHED}: ${String(scores.filter((s) => s >= MATCHED).length).padStart(3)}  ` +
+        `won by a translation: ${won}`
     );
   }
   console.log();
@@ -360,10 +376,19 @@ function reportUnmatched(results) {
 // --- loading -----------------------------------------------------------------
 
 async function loadExemplars(supabase, shopId) {
+  // SOFT-DELETED EXEMPLARS ARE EXCLUDED, because `match_support_exemplars()`
+  // excludes them and this eval exists to predict what that function will do.
+  // It did not, and the gap was invisible until the library grew: O-11 was
+  // merged into O-09 and soft-deleted in the dashboard, but it is still in
+  // `Email-Example-Queries.md`, so the importer keeps re-creating it and the
+  // translator keeps translating it. It won 14 tickets in this eval and can
+  // win none in production — every absolute number here was measured against a
+  // library that does not exist. The embedding reconciler had it right all
+  // along: `deleted_at` is a state the vector must not outlive.
   const rows = await supabaseSelect(
     supabase,
     'support_exemplars',
-    { shop_id: shopId },
+    { shop_id: shopId, deleted_at: { operator: 'is', value: 'null' } },
     'id,exemplar_key,canonical_question,category'
   );
   const phrasings = await supabaseSelectAll(
@@ -375,6 +400,7 @@ async function loadExemplars(supabase, shopId) {
 
   const byExemplar = new Map(rows.map((r) => [r.id, []]));
   for (const p of phrasings) {
+    if (AUTHORED_ONLY && p.phrasing_kind === 'translated') continue;
     byExemplar.get(p.support_exemplar_id)?.push({ text: p.phrasing_text, kind: p.phrasing_kind });
   }
 

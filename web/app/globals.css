@@ -101,6 +101,22 @@
   --text-lg: 1.0625rem; /* 17 */
   --text-xl: 1.375rem; /* 22 */
   --text-2xl: 1.75rem; /* 28 */
+  --text-3xl: 2.25rem; /* 36 — a KPI figure */
+  --text-display: 2.875rem; /* 46 — the one headline figure a panel leads with */
+
+  /* Charts. Single-series marks use the brand teal. The categorical set is its
+     own validated order (dataviz validator, white surface: CVD ΔE ≥ 11,
+     normal-vision ΔE ≥ 27, all ≥ 3:1) — the brand teal itself reads grey beside
+     orange and violet, so slot 1 is one step more chromatic. Slot 4 is below 3:1
+     and is only used with a visible label beside it. */
+  --chart-line: var(--teal);
+  --chart-area: rgba(0, 128, 128, 0.1);
+  --chart-grid: #eef1f3;
+  --chart-axis: #d5dade;
+  --chart-1: #00918a;
+  --chart-2: #eb6834;
+  --chart-3: #4a3aa7;
+  --chart-4: #e87ba4;
 
   --weight-regular: 400;
   --weight-medium: 500;
@@ -115,8 +131,9 @@
 
   /* Layout */
   --container-max: 2400px;
-  --sidebar-w: 236px;
-  --sidebar-w-collapsed: 68px;
+  /* In rem, so the navigation grows with the root size on large screens. */
+  --sidebar-w: 16.5rem; /* 264px at the base size */
+  --sidebar-w-collapsed: 4.75rem;
 
   /* Motion */
   --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
@@ -163,6 +180,32 @@ body {
 
 html {
   -webkit-text-size-adjust: 100%;
+}
+
+/*
+ * LARGER SCREENS, LARGER UI. Nearly every size in the app is in rem — type,
+ * spacing, the sidebar, the cards — so stepping the root size up scales all of
+ * it together, in proportion, instead of leaving a desktop-sized layout
+ * floating in a wide window. Below 1600px nothing changes: the base 16px is
+ * what the smaller screens were designed at. Media queries read the initial
+ * size, never this one, so there is no feedback between the two.
+ */
+@media (min-width: 1600px) {
+  html {
+    font-size: 106.25%; /* 17px */
+  }
+}
+
+@media (min-width: 1920px) {
+  html {
+    font-size: 112.5%; /* 18px */
+  }
+}
+
+@media (min-width: 2400px) {
+  html {
+    font-size: 125%; /* 20px */
+  }
 }
 
 body {

@@ -285,6 +285,9 @@ export function createToolRegistry({
               ? {
                   name: result.customer.name ?? null,
                   rfmGroup: result.customer.rfmGroup ?? null,
+                  // The shop's VIP rule, answered by the lookup — never re-derived
+                  // from the Shopify segment beside it.
+                  isVip: typeof result.isVip === 'boolean' ? result.isVip : null,
                   ordersCount: result.customer.ordersCount ?? null
                 }
               : null

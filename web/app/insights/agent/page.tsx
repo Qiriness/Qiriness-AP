@@ -1,35 +1,19 @@
-import { AppShell } from "@/components/app-shell/AppShell";
-import { InsightsNav } from "@/components/insights/InsightsNav";
+import { InsightsPage } from "@/components/insights/InsightsPage";
 import { AgentView } from "@/components/insights/AgentView";
-import { PanelError } from "@/components/insights/InsightsKit";
-import { getShopId } from "@/lib/server/knowledge-service";
 import { getAgentPanel } from "@/lib/server/insights/agent-service";
-import type { AgentPanel } from "@/lib/types";
-import { openConversationCount } from "@/lib/server/conversation-badge";
+import type { SearchParams } from "@/lib/server/insights/context";
 
 export const dynamic = "force-dynamic";
 
-export const metadata = { title: "Agent · Insights · Qiriness Support OS" };
+export const metadata = { title: "AI agent · Insights · Qiriness Support OS" };
 
-export default async function AgentInsightsPage() {
-  const openConversations = await openConversationCount();
-  let panel: AgentPanel | null = null;
-  let loadError: string | null = null;
-
-  try {
-    panel = await getAgentPanel(await getShopId());
-  } catch (error) {
-    loadError = error instanceof Error ? error.message : "Failed to load agent insights.";
-  }
-
+export default function AgentInsightsPage({ searchParams }: { searchParams: SearchParams }) {
   return (
-    <AppShell activeHref="/insights" openConversations={openConversations}>
-      <InsightsNav active="agent" />
-      {loadError || !panel ? (
-        <PanelError message={loadError ?? "No data returned."} />
-      ) : (
-        <AgentView panel={panel} />
-      )}
-    </AppShell>
+    <InsightsPage
+      active="agent"
+      scope={{ range: true, platform: false }}
+      searchParams={searchParams}
+      render={async (ctx) => <AgentView panel={await getAgentPanel(ctx)} compareLabel={ctx.range.compareLabel} />}
+    />
   );
 }
