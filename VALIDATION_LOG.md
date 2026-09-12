@@ -1423,11 +1423,16 @@ and both subscription blocks in `shopify.app.toml`. 14 unit tests, `tsc` clean,
 and `fetchOrderByLegacyId` checked against the live shop (#1011 came back whole; a
 nonexistent id returned null).
 
-**Every signature it has ever verified was one we generated.** The HMAC path is
-the piece most likely to be subtly wrong in production — a body Next has touched,
-a secret that is the client secret rather than the webhook secret, an encoding
-difference — and no test here can tell the difference between correct and
-correct-looking.
+**AND IT WAS WRONG, exactly where this said it would be.** Probing the deployed
+endpoint with a correctly signed body returned 401. The cause was not the secret
+but the header reader: `request.headers` is a `Headers`, `Object.entries` on one
+is `[]`, so no signature was ever found and every delivery — real or forged — got
+the same 401. Fixed, and both suites now assert it with a real `Headers` rather
+than a plain object. The signed probe is the check to re-run after deploying.
+
+**What is still unproven is a delivery Shopify itself signed.** Our probe signs
+with the client secret because that is what app-config webhooks are signed with;
+if that assumption is wrong, the symptom is identical to the bug just fixed.
 
 **Blocked on two things only a person can do:** the deployed URL in place of
 `REPLACE-ME` in both `[[webhooks.subscriptions]]` blocks, and `shopify app deploy`.

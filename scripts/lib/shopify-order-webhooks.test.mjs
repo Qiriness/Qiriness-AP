@@ -133,6 +133,27 @@ test('a signed webhook re-reads the order and upserts it', async () => {
   assert.equal(row.name, '#6997');
 });
 
+test('the handler works when headers arrive as a Headers object, not a plain one', async () => {
+  // THE SHAPE PRODUCTION ACTUALLY SENDS. A Route Handler passes `request.headers`,
+  // a `Headers` instance with no own enumerable properties. Every test above uses
+  // a plain object, and that gap is exactly how a route that 401s every real
+  // delivery passed a green suite on 2026-09-12.
+  const { requests, restore } = stubWorld();
+  let result;
+  try {
+    result = await processOrderWebhook({
+      ...baseArgs({ headers: new Headers(headers()) }),
+      verifyHmac: () => true
+    });
+  } finally {
+    restore();
+  }
+
+  assert.equal(result.statusCode, 200);
+  assert.equal(result.body.status, 'ok', 'the topic and shop domain must be readable from a Headers');
+  assert.ok(requests.some((r) => r.url.includes('/orders?') && r.options.method === 'POST'));
+});
+
 test('an order we already hold a newer copy of is skipped, not overwritten', async () => {
   const { requests, restore } = stubWorld({ storedUpdatedAt: '2026-09-12T18:00:00Z' });
   let result;

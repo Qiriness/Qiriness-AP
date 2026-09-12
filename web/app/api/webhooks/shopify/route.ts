@@ -76,7 +76,30 @@ export async function POST(request: Request) {
 /**
  * A GET here is a person checking the URL is alive, never Shopify. Answering
  * something honest beats a 405 that reads like a broken deployment.
+ *
+ * IT REPORTS WHETHER A SIGNING SECRET EXISTS, because the failure it stands in
+ * front of is otherwise invisible. A missing secret makes
+ * `verifyShopifyWebhookHmac` return false before it compares anything, so every
+ * delivery gets the same 401 as a forged request — and `loadConfig` does not
+ * catch it, since the client pair is optional when an admin token is set. On
+ * 2026-09-12 that cost an afternoon: the endpoint was live, correct, and
+ * rejecting Shopify.
+ *
+ * A BOOLEAN, NEVER THE VALUE OR A FINGERPRINT OF IT. "Is one configured" is the
+ * question this answers; "which one" is a question an unauthenticated endpoint
+ * has no business answering.
  */
 export function GET() {
-  return NextResponse.json({ status: "ready", accepts: "POST from Shopify" });
+  let signingSecretConfigured = false;
+  try {
+    signingSecretConfigured = Boolean(loadConfig(process.env).shopifyWebhookSecret);
+  } catch {
+    // Left false: unconfigured is exactly what a config error means here.
+  }
+
+  return NextResponse.json({
+    status: "ready",
+    accepts: "POST from Shopify",
+    signingSecretConfigured,
+  });
 }

@@ -22,6 +22,23 @@ test('verifyShopifyWebhookHmac accepts valid raw body signatures', () => {
   );
 });
 
+test('verifyShopifyWebhookHmac reads the signature from a Headers object', () => {
+  // WHAT A ROUTE HANDLER ACTUALLY PASSES. `request.headers` is a `Headers`, whose
+  // entries are not own properties: `Object.entries(new Headers(...))` is `[]`.
+  // Read that way the signature is null and every real delivery is refused with
+  // the same 401 a forgery gets, for any secret. Plain-object tests cannot see it.
+  const rawBody = Buffer.from(JSON.stringify({ ok: true }));
+  const secret = 'webhook-secret';
+  const hmac = createHmac('sha256', secret).update(rawBody).digest('base64');
+
+  const headers = new Headers({ 'X-Shopify-Hmac-SHA256': hmac });
+  assert.equal(verifyShopifyWebhookHmac(rawBody, headers, secret), true);
+  assert.equal(
+    verifyShopifyWebhookHmac(rawBody, new Headers({ 'X-Shopify-Hmac-SHA256': 'wrong' }), secret),
+    false
+  );
+});
+
 test('processComplianceWebhook hard deletes matching customer rows idempotently', async () => {
   const rawBody = Buffer.from(JSON.stringify({
     shop_id: 123,

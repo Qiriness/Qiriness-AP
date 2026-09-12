@@ -285,6 +285,17 @@ function headerValue(headers, name) {
   if (!headers) {
     return null;
   }
+
+  // A `Headers` INSTANCE HAS NO OWN ENUMERABLE PROPERTIES. `Object.entries` on
+  // one returns `[]`, so the loop below silently found no signature and every
+  // delivery was refused with the same 401 a forged request gets — for any
+  // secret, correct or not. That is what a Route Handler passes: `request.headers`
+  // is a Headers, not the plain object the CLI path hands in. Cost an afternoon
+  // on 2026-09-12, chasing a secret that was right all along.
+  if (typeof headers.get === 'function') {
+    return headers.get(name) ?? null;
+  }
+
   const lowerName = name.toLowerCase();
   for (const [key, value] of Object.entries(headers)) {
     if (key.toLowerCase() === lowerName) {
