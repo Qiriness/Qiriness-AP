@@ -5,6 +5,7 @@ import { listTickets } from "@/lib/server/tickets-service";
 import { listDroppedMail } from "@/lib/server/dropped-mail-service";
 import type { DroppedMail, TicketListItem } from "@/lib/types";
 import { openConversationCount } from "@/lib/server/conversation-badge";
+import { logDashboardAccess } from "@/lib/server/access-log";
 
 export const dynamic = "force-dynamic";
 
@@ -40,6 +41,13 @@ export default async function TicketsPage() {
     // them open at L3 behind a nav item nobody opened. The sidebar badge is what
     // answers that now. See DECISIONS.md § Tickets dashboard.
     [tickets, droppedMail] = await Promise.all([listTickets(shopId), listDroppedMail(shopId)]);
+    await logDashboardAccess({
+      shopId,
+      action: "view",
+      resourceType: "tickets",
+      purpose: "support_queue",
+      metadata: { surface: "tickets", tickets: tickets.length, dropped: droppedMail.length },
+    });
   } catch (error) {
     loadError = error instanceof Error ? error.message : "Failed to load tickets.";
   }

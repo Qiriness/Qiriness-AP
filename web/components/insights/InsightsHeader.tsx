@@ -10,6 +10,7 @@ import styles from "./InsightsHeader.module.css";
  */
 export function InsightsHeader({
   active,
+  panels,
   scope,
   range,
   platform,
@@ -18,6 +19,8 @@ export function InsightsHeader({
   tzFallback,
 }: {
   active: InsightsPanel;
+  /** The panels this reader's role may open, and so the only tabs drawn. */
+  panels: InsightsPanel[];
   scope: InsightsScope;
   range: InsightsRange | null;
   platform: PlatformId;
@@ -31,7 +34,7 @@ export function InsightsHeader({
         <h1 className={styles.title}>Insights</h1>
         {renderedAt ? <LiveRefresh renderedAt={renderedAt} /> : null}
       </div>
-      <InsightsNav active={active} />
+      <InsightsNav active={active} panels={panels} />
       {range ? <FilterBar range={range} platform={platform} scope={scope} /> : null}
       {freshness && freshness.items.length > 0 ? (
         <ul className={styles.freshness} aria-label="How current each source is">

@@ -73,7 +73,8 @@ interface TicketWithCustomer {
   } | null;
 }
 
-export async function listMarketableContacts(shopId: string): Promise<MarketableContact[]> {
+/** `actorId` is the signed-in dashboard user — the audit row names who took the file. */
+export async function listMarketableContacts(shopId: string, actorId: string): Promise<MarketableContact[]> {
   const supabase = getSupabaseClient();
 
   const rows = (await supabaseSelect(
@@ -139,7 +140,7 @@ export async function listMarketableContacts(shopId: string): Promise<Marketable
   try {
     await recordDataAccessEvent(supabase, {
       actor_type: "user",
-      actor_id: "insights-dashboard",
+      actor_id: actorId,
       action: "export",
       resource_type: "customer",
       purpose: "marketing_outreach_list",

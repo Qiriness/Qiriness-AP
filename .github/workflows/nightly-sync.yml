@@ -53,10 +53,18 @@ permissions:
 jobs:
   sync:
     runs-on: ubuntu-latest
-    # Shopify pagination over thousands of orders is slow, and an indefinite
-    # retention window means no date bound at all on the order query. The default
-    # 360-minute cap would let a hung run burn six hours before anyone noticed.
-    timeout-minutes: 60
+    # MEASURED, NOT GUESSED, and the first value was wrong. The run of
+    # 2026-09-11 took 71 minutes end to end (11:51:09 -> 13:02:44 UTC) against a
+    # 60-minute cap, so the scheduled run of 2026-09-12 was killed mid-sync: the
+    # kill is a hard stop, the script's own catch never ran, and its
+    # `integration_events` row sat on `processing` with no error while the order
+    # table stayed a day behind. 180 gives the measured duration room to grow
+    # without letting a genuinely hung run burn the default six hours.
+    #
+    # Keep this in step with STALE_SYNC_MINUTES in scripts/lib/compliance-audit.mjs:
+    # that sweep closes rows this timeout orphans, so it must not fire while a
+    # run is still legitimately going.
+    timeout-minutes: 180
 
     steps:
       - uses: actions/checkout@v4

@@ -2,6 +2,12 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 export const DEFAULT_API_VERSION = '2026-07';
+// Small on purpose for one-off and interactive runs. THE NIGHTLY OVERRIDES IT to
+// 50 in package.json: at 10 the run is latency-bound, not cost-bound — measured
+// on 2026-09-12, one customer page took 378 ms at first:10 and 443 ms at
+// first:50, so five times the rows for a sixth more time. `parseArgs` caps it at
+// 100, and 100 was measured working too; 50 keeps headroom against Shopify's
+// per-query cost ceiling as the nested selections grow.
 export const DEFAULT_PAGE_SIZE = 10;
 
 export function parseArgs(argv) {

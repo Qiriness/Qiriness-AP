@@ -10,6 +10,51 @@ Three sibling files carry the other halves, and this one deliberately does not d
 
 ---
 
+## The nightly sync gets time to finish, and says so when it does not (2026-09-12)
+
+The nightly had not landed an order since 11 September. `timeout-minutes: 60` was shorter than the
+71-minute run it was capping, so GitHub killed the 12 September run part-way through; because a kill
+is not an exception, the script's `catch` never ran and its `integration_events` row was left on
+`processing` with no error, which the freshness strip reports as "running since 3 h ago".
+
+- `timeout-minutes` raised to **180**.
+- `failStaleIntegrationEvents` (`compliance-audit.mjs`) closes any `processing` row older than the
+  timeout, and the nightly calls it before opening its own. One server-side PATCH, so nothing can
+  slip between the decision and the write.
+- The nightly now runs at `--page-size=50` instead of the default 10.
+
+**Measured against the live shop** on 2026-09-12, one page at a time: customers 378 ms at `first:10`
+and 443 ms at `first:50`; orders 1054 ms and 1359 ms. `first:100` also answered on both connections.
+**Not yet proven:** the end-to-end run time at page size 50 under sustained throttling, and the sweep
+against real stuck rows — the two in the table are still `processing`, and the next nightly is what
+closes them. Full suite green (2235 tests).
+
+## A panel switch answers at once (2026-09-12)
+
+An Insights tab took a second or two to respond, because the URL only changed once the server had
+finished reading the database — so a click looked like a click that missed. The clicked tab is now
+underlined immediately, the old panel stays on screen dimmed, and a spinner over it reads
+"Loading sales…" until the new one lands. Tabs also have a visible hover background and a focus
+ring now. Modified clicks (new tab, middle click) are still left to the browser, so the tabs remain
+real links.
+
+**Verified in a browser** on the dev server with a throwaway account (deleted afterwards): clicking
+Sales from Fulfilment underlined Sales instantly while the old panel dimmed and the "Loading sales…"
+pill showed, then the Sales panel rendered; the hover highlight is visible on the tab under the
+cursor. `tsc` and `next lint` clean.
+
+## Sign-in through Supabase Auth, three roles, and who-looked logging (2026-09-11)
+
+The dashboard now needs an email and password. Accounts are **Supabase Auth users**, with the role in `app_metadata.dashboard_role`; every page and API goes through `web/middleware.ts`, and `/login` is the only open page. Three roles: **Developer** and **Management** see everything, **Contact team** sees everything except Insights → Sales (no tab, and the URL redirects to Fulfilment). The top bar shows who is signed in, with Sign out. Accounts are created with `npm run users -- add --email … --role …` (hidden password prompt).
+
+Each request checks the access token's ES256 signature locally, then confirms it with Supabase once a minute per token, so a disabled or re-roled account stops within a minute; the middleware refreshes the hour-long token, and a session ends twelve hours after the password was typed.
+
+Pages that name customers — the ticket list, a ticket's detail and thread, Conversations, Fulfilment's waiting orders, the Customers call list and the contacts CSV — now write a `data_access_events` row with the signed-in user's id and role, and counts only.
+
+This was built first on a `dashboard_users` table of our own with scrypt hashes and a home-made session cookie, and replaced with Supabase Auth before any real account existed — the reasoning is in DECISIONS.md. Migration `13_dashboard_users.sql` was withdrawn with it; the baseline is nine files again.
+
+**Verified over HTTP against the dev server** with throwaway accounts (random passwords, deleted afterwards): 26 checks — signed-out pages redirect and APIs 401; wrong password, unknown address and an account with no dashboard role all give the same 401 and no cookie; both cookies are HttpOnly and SameSite=Lax; the cookie is a real Supabase token (1 h) and the role is read from Supabase rather than from the token; an off-site `next` is refused; the contact role is redirected off Sales and its nav has no Sales tab while a developer's does; a tampered token is refused; disabling a user ends their open session and blocks sign-in; a role change reaches the open session; sign-out kills the session at Supabase (403 on the token afterwards); the sixth attempt after five failures gets 429. The access rows were read back from the table for Fulfilment, Customers and Tickets. `tsc`, `next lint` and the root suite (2232 tests) pass. **No real account exists yet** — see VALIDATION_LOG.md item 23.
+
 ## The dashboard fills large screens (2026-09-11)
 
 The sidebar is larger (16.5rem wide, 16px labels, 22px icons at the base size) and the whole app scales up a step above 1600px, 1920px and 2400px. Insights no longer stops at 1480px: it fills the window to the app-wide 2400px ceiling with a responsive gutter, and charts get taller as they get wider. Smaller screens are unchanged. **Measured in a browser** on a 2544px viewport — see DECISIONS.md, "Large screens get a larger UI". `tsc` and `next lint` clean.

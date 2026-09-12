@@ -84,33 +84,6 @@
   color: var(--text-strong);
 }
 
-.user {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-1) var(--space-2) var(--space-1) var(--space-1);
-  border-radius: var(--radius-pill);
-}
-
-.avatar {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 2.125rem;
-  height: 2.125rem;
-  border-radius: 50%;
-  background: var(--teal-050);
-  color: var(--teal-ink);
-  font-size: var(--text-caption);
-  font-weight: var(--weight-bold);
-  letter-spacing: 0.02em;
-}
-
-.userName {
-  font-size: var(--text-body);
-  font-weight: var(--weight-medium);
-  color: var(--text-strong);
-}
 
 .content {
   flex: 1;
@@ -149,9 +122,6 @@
   }
   .topbarBrand {
     display: inline;
-  }
-  .userName {
-    display: none;
   }
   .helpLabel {
     display: none;

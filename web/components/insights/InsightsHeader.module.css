@@ -98,12 +98,28 @@
   text-decoration: none;
   white-space: nowrap;
   border-bottom: 2px solid transparent;
+  border-radius: var(--radius) var(--radius) 0 0;
   margin-bottom: -1px;
+  transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-out);
 }
 
+/* A tab is a target before it is a label: the hover has to be visible from the
+   corner of the eye, not only under the cursor. */
 .tab:hover {
   color: var(--text-strong);
+  background: var(--mist-050);
+  border-bottom-color: var(--border-strong);
   text-decoration: none;
+}
+
+.tab:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus);
+}
+
+.tabActive:hover {
+  border-bottom-color: var(--teal);
 }
 
 .tabActive {
@@ -285,6 +301,59 @@
 .pending {
   opacity: 0.55;
   pointer-events: none;
+}
+
+.bodyWrap {
+  position: relative;
+}
+
+/* The spinner rides over the dimmed panel and follows the scroll, so it is on
+   screen wherever the reader was when they clicked. */
+.loadingLayer {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.loadingPill {
+  position: sticky;
+  top: 40vh;
+  height: fit-content;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: var(--space-6) 0 0;
+  padding: var(--space-2) var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--surface);
+  box-shadow: var(--shadow-md);
+  font-size: var(--text-body);
+  font-weight: var(--weight-medium);
+  color: var(--text-muted);
+}
+
+.spinner {
+  width: 1.125rem;
+  height: 1.125rem;
+  border-radius: 50%;
+  border: 2px solid var(--teal-100);
+  border-top-color: var(--teal);
+  animation: spin 0.7s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spinner {
+    animation-duration: 2.4s;
+  }
 }
 
 .srOnly {

@@ -3,8 +3,8 @@
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { Sidebar } from "./Sidebar";
+import { UserMenu } from "./UserMenu";
 import { HelpIcon } from "@/components/icons";
-import { TEAM_MEMBER } from "@/lib/demo-data";
 import styles from "./AppShell.module.css";
 
 interface AppShellProps {
@@ -70,10 +70,7 @@ export function AppShell({ activeHref, children, openConversations }: AppShellPr
               <HelpIcon size={17} />
               <span className={styles.helpLabel}>Help</span>
             </button>
-            <div className={styles.user} title={TEAM_MEMBER.name}>
-              <span className={styles.avatar}>{TEAM_MEMBER.initials}</span>
-              <span className={styles.userName}>{TEAM_MEMBER.name}</span>
-            </div>
+            <UserMenu />
           </div>
         </header>
 

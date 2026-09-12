@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { getShopId } from "@/lib/server/knowledge-service";
 import { getTicketDetail, setTicketStatus } from "@/lib/server/tickets-service";
+import { logDashboardAccess } from "@/lib/server/access-log";
 import { knowledgeErrorResponse, KnowledgeValidationError } from "@/lib/server/knowledge-errors";
 
 export const dynamic = "force-dynamic";
@@ -20,6 +21,7 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
   try {
     const shopId = await getShopId();
     const detail = await getTicketDetail(shopId, params.id);
+    await logDashboardAccess({ shopId, action: "view", resourceType: "ticket", resourceId: params.id, purpose: "support_case_review" });
     return NextResponse.json({ detail });
   } catch (error) {
     return knowledgeErrorResponse(error);

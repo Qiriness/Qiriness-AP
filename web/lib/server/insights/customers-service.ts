@@ -47,6 +47,7 @@ import type {
 } from "../../types";
 import { CLOSED_STATUSES } from "../../ticket-stats";
 import { count, getSupabaseClient, readView } from "./shared";
+import { logDashboardAccess } from "../access-log";
 
 /**
  * The hard cap on the one row-level read, and the point at which this panel
@@ -139,6 +140,18 @@ export async function getCustomersPanel(shopId: string): Promise<CustomerPanel> 
   const linkedIds = [...new Set(factRows.map((row) => row.customer_id))];
   const vipIds = await loadVipCustomers(supabase, shopId, rule, linkedIds);
   const vipFacts = factRows.filter((row) => vipIds.has(row.customer_id));
+  const atRisk = buildCallList(vipFacts);
+
+  // The call list names customers; everything else on the panel is a count.
+  if (atRisk.length) {
+    await logDashboardAccess({
+      shopId,
+      action: "view",
+      resourceType: "customers",
+      purpose: "insights_vip_call_list",
+      metadata: { panel: "customers", customers: atRisk.length },
+    });
+  }
 
   return {
     segments,
@@ -146,7 +159,7 @@ export async function getCustomersPanel(shopId: string): Promise<CustomerPanel> 
     vipRule: rule ? { ...rule, description: describeVipRule(rule) } : null,
     vip: rule && summary ? buildVip(summary, factRows, vipFacts) : null,
     vipByCategory: groupByCategory(vipFacts),
-    atRisk: buildCallList(vipFacts),
+    atRisk,
     spendExposed: spendExposedToComplaints(factRows),
   };
 }

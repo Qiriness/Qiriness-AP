@@ -21,7 +21,7 @@ A customer-support operating system for **Qiriness**, a French skincare and cosm
 
 Built: one-way Shopify → Supabase sync, a curated knowledge library for AI context, retrieval embeddings, email ingestion into conversation-threaded tickets, categorisation, customer and order resolution, the Phase 4 retrieval tools, the exemplar layer, the investigation agent that uses them, the **rules layer** — 108 approved answers that decide the route, the question to ask and the reply's skeleton per situation, including per-request rulebooks for emails that ask two things — team forwarding, four analytics panels, an agent test chat, and **reply drafting** — stored, checked and reviewable, with nothing able to send.
 
-Not built: the send path, dashboard authentication, deployed webhook routes.
+Not built: the send path, deployed webhook routes.
 
 ## Architecture
 
@@ -36,7 +36,7 @@ Not built: the send path, dashboard authentication, deployed webhook routes.
 
 Confirmed: Shopify · Supabase · PostgreSQL · Next.js (App Router) + TypeScript + React 18 in `web/` (CSS Modules and design tokens, no UI framework) · Node ESM scripts at the repo root · OpenAI for embeddings and classification · Microsoft Graph for the support mailbox.
 
-Pending: dashboard auth, ORM/DB client for app reads (scripts use `pg` + a Supabase REST client), webhook processing runtime, frontend test framework, deployment tooling. Job scheduling is covered for the nightly Shopify sync only — the agent worker and the embedding pipelines are still started by hand.
+Pending: ORM/DB client for app reads (scripts use `pg` + a Supabase REST client), webhook processing runtime, frontend test framework, deployment tooling. Job scheduling is covered for the nightly Shopify sync only — the agent worker and the embedding pipelines are still started by hand.
 
 ## Getting started
 
@@ -174,10 +174,11 @@ sink, `support_answers` being empty, and the first pass of the test chat.
 10. **Configure forwarding and run it once for real.** `ticket_forwards` holds 0 rows and no
     `category_forwarding` address is set, so the pass has never routed a message. Confirm a
     forwarded CV arrives as a CV — the one thing no test covers.
-11. **Add dashboard authentication, role policies, and personal-data access logging into
-    `data_access_events`.** `/insights/customers` names individual customers and their lifetime
-    spend; the panel says so, but a warning is not an access control. This is the blocking
-    compliance item. `SHOPIFY_PERSONAL_DATA_PROTECTION.md` also needs `spam_audit.body_text`
+11. ~~**Add dashboard authentication, role policies, and personal-data access logging.**~~
+    **Built 2026-09-11**: email + password sign-in through **Supabase Auth**, Developer / Management /
+    Contact roles (Contact cannot open Insights → Sales), and a `data_access_events` row per
+    named-customer view. Still open: create the real accounts (`npm run users -- add --email … --role …`,
+    VALIDATION_LOG.md item 23), turn off public sign-up in the Supabase dashboard, and `SHOPIFY_PERSONAL_DATA_PROTECTION.md` still needs `spam_audit.body_text`
     described as retained personal data with a 90-day life.
 12. **Set up separate Supabase development and production projects.** Pointing a worker at a
     fresh mailbox triggers a full unordered delta enumeration — decide before go-live whether

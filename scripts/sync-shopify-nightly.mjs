@@ -5,6 +5,7 @@ import { createShopifyClient, fetchShop } from './lib/shopify-admin-client.mjs';
 import { createSupabaseClient } from './lib/supabase-rest-client.mjs';
 import { syncShop } from './lib/shop-sync-service.mjs';
 import {
+  failStaleIntegrationEvents,
   finishIntegrationEvent,
   sanitizeError,
   startIntegrationEvent
@@ -36,6 +37,20 @@ async function main() {
     const counts = await runNightlySync({ args, config, shopify, supabase, shopRow, syncedAt });
     console.log(`Dry run nightly sync complete: ${JSON.stringify(counts)}`);
     return;
+  }
+
+  // BEFORE OPENING A NEW ROW, CLOSE THE ONES A KILLED RUN LEFT OPEN. A sync that
+  // is killed rather than thrown writes no ending at all, so `processing` is
+  // ambiguous between "running now" and "died in August" — and the freshness
+  // strip resolves that ambiguity the optimistic way. Here is the one moment the
+  // answer is certain: this process is the run, and the concurrency group means
+  // nothing else is.
+  const stale = await failStaleIntegrationEvents(supabase);
+  if (stale.length > 0) {
+    console.warn(
+      `Closed ${stale.length} integration event(s) left on 'processing' by a killed run: ` +
+      stale.map((row) => `${row.event_type} @ ${row.started_at}`).join(', ')
+    );
   }
 
   const event = await startIntegrationEvent(supabase, {

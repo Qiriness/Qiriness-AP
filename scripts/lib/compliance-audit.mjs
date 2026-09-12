@@ -106,6 +106,60 @@ export async function finishIntegrationEvent(supabase, eventId, row) {
   return rows[0] || null;
 }
 
+/**
+ * The job timeout this sweep assumes, in minutes. A run still `processing` past
+ * it cannot be alive: the GitHub job is capped at the same number, and the
+ * workflow's concurrency group forbids two runs at once.
+ *
+ * Keep in step with `timeout-minutes` in .github/workflows/nightly-sync.yml.
+ */
+export const STALE_SYNC_MINUTES = 180;
+
+/**
+ * Close the rows a killed run left open.
+ *
+ * WHY THIS EXISTS. `finishIntegrationEvent` is only ever reached by code that is
+ * still running — the `catch` in the nightly writes `failed`, so a sync that
+ * throws is honest about it. A sync that is KILLED writes nothing at all: the
+ * GitHub job hits `timeout-minutes`, the process dies where it stands, and the
+ * row stays on `processing` for ever. Two of them were sitting in the table on
+ * 2026-09-12, from 30 August and from that morning.
+ *
+ * That silence is the actual damage, not the lost run. `describeFreshness` reads
+ * the same row and prints `processing` as "running since 3 h ago" in a quiet
+ * `info` tone, so the dashboard spent the morning reporting a dead sync as one
+ * in progress. A run that failed should look failed.
+ *
+ * ONE PATCH, NOT A READ THEN A WRITE: PostgREST filters the UPDATE server-side,
+ * so there is no window between deciding a row is stale and closing it, and a
+ * second caller racing this one simply updates nothing.
+ */
+export async function failStaleIntegrationEvents(
+  supabase,
+  { olderThanMinutes = STALE_SYNC_MINUTES, now = new Date() } = {}
+) {
+  const cutoff = new Date(now.getTime() - olderThanMinutes * 60_000).toISOString();
+
+  const rows = await supabaseUpdate(
+    supabase,
+    'integration_events',
+    {
+      status: 'processing',
+      started_at: { operator: 'lt', value: cutoff }
+    },
+    {
+      status: 'failed',
+      finished_at: now.toISOString(),
+      // Said plainly, because the alternative reading — the job ran and the data
+      // was wrong — sends whoever finds this row looking in the wrong place.
+      error_summary: `No completion recorded within ${olderThanMinutes} minutes; the run was killed before it could close its own row.`
+    },
+    { select: 'id,event_type,started_at' }
+  );
+
+  return rows || [];
+}
+
 export async function recordDataAccessEvent(supabase, row) {
   const rows = await supabaseInsert(
     supabase,

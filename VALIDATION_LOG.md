@@ -40,6 +40,17 @@ these.
 as its own item: `llm_usage` (item 14), `categorisation_review` (item 15), and
 `category_forwarding` / `ticket_forwards` (item 1).
 
+## 23. Sign-in is built and tested with throwaway accounts only (2026-09-11)
+
+The flow was proven end to end over HTTP against Supabase Auth with scripted accounts that were deleted afterwards (CHANGELOG, "Sign-in through Supabase Auth…"). Not yet seen:
+
+- **A real account.** None exists in Supabase Auth; create them with `npm run users -- add --email … --role developer|management|contact` and sign in once per role in a browser.
+- **Public sign-up is still enabled** on the Supabase project (`disable_signup: false`, read from `/auth/v1/settings` on 2026-09-11). An account made that way gets no `dashboard_role` and is refused at sign-in — proven in the checks — but the setting should still be turned off in the Supabase dashboard, and the minimum password length raised to 12 to match `dashboard-passwords.mjs`.
+- **The twelve-hour session limit, and the token refresh at the hour mark.** The unit tests cover both from the clock's side; neither has been watched on a real day-long session.
+- **The `Secure` cookie flag.** Set only when `NODE_ENV=production`, i.e. under `next start` behind HTTPS. Dev runs over plain HTTP without it. Check the Set-Cookie header on the first deployed sign-in.
+- **The lockout across a restart.** Failed-attempt counts are in memory; a restart clears them. Expected, but not exercised.
+- **MFA.** Supabase supports TOTP factors; nothing in this app enrolls or checks them yet.
+
 ## 22. The VIP rule is built and unset (2026-09-11)
 
 Nobody is a VIP until the owner saves a rule on the Customers panel. Two checks once they do:
@@ -1359,3 +1370,30 @@ arithmetic on. See `AGENT_INTEGRATION_PLAN.md` § Open questions.
 is cheap; 565 tickets re-investigated on every customer reply is a different
 number, and nobody has looked at it. Check the OpenAI usage for these runs before
 the worker is left running unattended.
+
+## 10. The nightly's new timeout, page size and stale-row sweep have not run unattended
+
+Three changes went in on **2026-09-12** after the run of that morning was killed at
+the 60-minute cap: `timeout-minutes: 180`, `--page-size=50` on the nightly, and
+`failStaleIntegrationEvents` closing rows a killed run leaves on `processing`.
+Unit tests cover the sweep; the live behaviour is unproven.
+
+**What is measured.** Single pages against the live shop, 2026-09-12: customers
+378 ms at `first:10` / 443 ms at `first:50`; orders 1054 ms / 1359 ms; `first:100`
+answered on both connections without exceeding query cost.
+
+**What is not.** A single page does not fill Shopify's leaky bucket. The whole
+sync at page size 50 will throttle, `throttleWaitMs` will wait, and the end-to-end
+duration under that load is a guess. The only figure that means anything is a
+finished run.
+
+**The check.** After the next nightly, read `integration_events`:
+
+- the 06:42 row of 12 September and the 16:20 row of 30 August should have flipped
+  from `processing` to `failed`, with `finished_at` set — that is the sweep, and it
+  is the only evidence it works on real rows;
+- the new row should be `completed`, and `finished_at - started_at` is the number
+  that says whether 180 minutes is generous or merely enough;
+- `max(orders.shopify_created_at)` should reach the previous evening. It stopped at
+  **#6992, created 2026-09-11 09:52**, and until it moves nothing above is proven.
+

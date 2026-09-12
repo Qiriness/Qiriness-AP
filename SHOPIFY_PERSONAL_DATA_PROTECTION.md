@@ -36,7 +36,7 @@ This file is the project policy checklist for Shopify protected customer data ac
 
 13. Restrict employee access to customers' personal data.
 
-14. Maintain strict password security requirements for employees. Deferred for the current development phase because access is limited to a small internal group, but this must be revisited before wider production access.
+14. Maintain strict password security requirements for employees. Dashboard passwords are enforced since 2026-09-11 (see the status table); MFA and rotation are still to decide before wider production access.
 
 15. Maintain logs of access to personal data. Sync timestamps such as `created_at`, `updated_at`, and `synced_at` are data-change metadata only; they do not prove which human or service viewed customer data. A separate access audit log is still required once there is an application UI or user-facing data access path.
 
@@ -52,7 +52,7 @@ This file is the project policy checklist for Shopify protected customer data ac
 
 ## Current Development Scope Notes
 
-- Items 12, 14, 16, 17, 18, and 19 are deferred for the current development phase and should not block local Shopify development-store testing.
+- Items 12, 16, 17, 18, and 19 are deferred for the current development phase and should not block local Shopify development-store testing.
 - Deferred does not mean complete. Do not represent deferred controls as implemented in Shopify submissions, merchant-facing documentation, or production readiness notes.
 - Item 15 is not satisfied by database row timestamps. It requires an audit trail of personal-data access events when an app UI, API, or staff workflow can view customer data.
 
@@ -72,9 +72,9 @@ This file is the project policy checklist for Shopify protected customer data ac
 | 10 | Pending external | Backup encryption depends on Supabase/project backup configuration evidence. |
 | 11 | Partially implemented | `APP_ENV` and environment separation are documented; separate Supabase projects must be provisioned. |
 | 12 | Deferred | Deferred for current development phase. |
-| 13 | Partially implemented | RLS is enabled and service-role-only access is documented; final dashboard role policies are pending. |
-| 14 | Deferred | Deferred for current development phase. |
-| 15 | Partially implemented | Service-level sync access events are planned/implemented through `data_access_events`; human dashboard access logging is pending. |
+| 13 | Partially implemented | RLS is enabled and service-role-only access is documented. Since 2026-09-11 the dashboard requires a Supabase Auth sign-in (`web/middleware.ts`) and has three roles; the contact team cannot open Insights → Sales. Every signed-in role can still see ticket requesters and Fulfilment's waiting-order names — narrowing that further is a role-table change in `scripts/lib/dashboard-auth.mjs`. |
+| 14 | Partially implemented | Dashboard passwords are held by Supabase Auth (bcrypt), never by this app; this app adds a 12-character minimum and locks an address for 15 minutes after five failed attempts. Sessions last 12 hours, and a disabled account stops working within a minute. MFA is available in Supabase but not yet enrolled; public sign-up and the project password policy still need tightening in the Supabase dashboard. |
+| 15 | Implemented for the dashboard | Sync paths and the agent write `data_access_events`; since 2026-09-11 so does the dashboard — one row per view of a surface that names customers (tickets, conversations, waiting orders, the VIP call list, the contacts CSV), with the signed-in Supabase user's id and role and counts only. |
 | 16 | Deferred | Deferred for current development phase. |
 | 17 | Deferred | Deferred for current development phase. |
 | 18 | Deferred | Deferred for current development phase. |

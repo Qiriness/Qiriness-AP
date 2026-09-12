@@ -34,7 +34,12 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |   |   |                                 # customers · agent. Each reads ?range=
 |   |   |                                 # (24h|7d|30d|6m|1y) or ?from=&to=, and ?platform=
 |   |   |-- settings/page.tsx             # Server Component: forwarding address book
+|   |   |-- login/                        # page.tsx + LoginForm: the only page open
+|   |   |                                 # without a session
 |   |   `-- api/
+|   |       |-- auth/{login,logout,me}/route.ts  # Supabase Auth: sign in (throttled,
+|   |       |                                # one error for every failure) · sign out
+|   |       |                                # (revoked at Supabase too) · who am I
 |   |       |-- tickets/[id]/route.ts         # GET case file + order facts · PATCH status
 |   |       |-- tickets/[id]/draft/route.ts   # PATCH approve / edit / reject a draft
 |   |       |-- tickets/[id]/thread/route.ts  # GET the conversation (message bodies)
@@ -56,7 +61,8 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |   |                                         # runs · runs/[id] (ideal answer)
 |   |-- components/
 |   |   |-- icons.tsx                # inline SVG icon set
-|   |   |-- app-shell/               # AppShell (top bar + drawer) · Sidebar
+|   |   |-- app-shell/               # AppShell (top bar + drawer) · Sidebar ·
+|   |   |                            # UserMenu (who is signed in, Sign out)
 |   |   |-- ui/                      # Button · StatusChip · Dialog (modal shell) ·
 |   |   |                            # TrackingText (tracking numbers -> carrier links,
 |   |   |                            # used by every surface showing a number in prose)
@@ -89,6 +95,8 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |   |                                # WorkspaceHeader EditorFooter CategorySelect
 |   |                                # SourcePageSelect ChipList Toast (and friends)
 |   |-- lib/
+|   |   |-- session-cookies.ts   # writes/clears qos_at + qos_rt (the session
+|   |   |                        # outlives the hour-long access token)
 |   |   |-- types.ts             # UI types + label tables (categories, levels, VipRule, RFM)
 |   |   |-- knowledge-mapper.ts  # isomorphic: API JSON -> UI types
 |   |   |-- agent-test-types.ts  # isomorphic: the trace shapes the test chat renders,
@@ -105,7 +113,10 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |   |   |-- relative-time.ts demo-data.ts
 |   |   `-- server/              # knowledge-service · forwarding-service ·
 |   |       |                    # tickets-service (list + detail + thread + status) ·
-|   |       |                    # dropped-mail-service · knowledge-errors
+|   |       |                    # dropped-mail-service · knowledge-errors ·
+|   |       |                    # auth (getSession, re-checked not trusted) ·
+|   |       |                    # access-log (a data_access_events row per
+|   |       |                    # named-customer view, actor = the user)
 |   |       `-- insights/         # shared (readView + callRpc -- NO paging) ·
 |   |                             # context (shop, tz, range, platform, freshness
 |   |                             # from the URL) · series (sparse SQL -> points,
@@ -115,6 +126,9 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |   |                             # activity for the ranged rows) · agent ·
 |   |                             # marketable-contacts (CSV; consent is the
 |   |                             # query filter) · topic-map-rebuild
+|   |-- middleware.ts            # THE GATE: every page + API needs a Supabase
+|   |                            # session; refreshes the hour-old token; role
+|   |                            # rules from dashboard-auth.mjs
 |   |-- next.config.mjs          # loadEnv() from root .env.local; staleTimes 0
 |   `-- tsconfig.json            # allowJs, so services can import scripts/lib/*.mjs
 |-- scripts/                     # one sync orchestrator per Shopify resource
@@ -133,12 +147,15 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |   |                                    # cluster:tickets:save persists a run
 |   |-- apply-supabase-migration.mjs     # SQL runner
 |   |-- process-shopify-compliance-webhook.mjs
+|   |-- dashboard-users.mjs              # `npm run users -- list|add|set-password|
+|   |                                    # set-role|disable|enable` against Supabase
+|   |                                    # Auth. Passwords typed at a hidden prompt
 |   `-- lib/
 |       |-- shopify-{admin,knowledge,theme}-client.mjs
 |       |-- shopify-*-mapper.mjs         # shop/product/metaobject/customer/order/promotion
 |       |-- shopify-sync-mappers.mjs shop-sync-service.mjs
 |       |-- supabase-rest-client.mjs     # REST select/upsert/update/delete/rpc
-|       |-- tables.mjs                   # THE SCHEMA CONTRACT: 28 tables, 24 views,
+|       |-- tables.mjs                   # THE SCHEMA CONTRACT: 31 tables, 24 views,
 |       |                                # 32 rpcs, and the recurring projections.
 |       |                                # Asserted against the DDL by _shared.test
 |       |-- ticket-record.mjs            # THE ONLY WRITER OF `tickets`: pass protocol
@@ -161,6 +178,13 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |       |-- sender-patterns.mjs           # email/domain matching, shared by the
 |       |                                 # blocklist and the sender directory
 |       |-- compliance-audit.mjs shopify-compliance-webhooks.mjs
+|       |-- dashboard-auth.mjs           # isomorphic: ROLES, what each may open
+|       |                                # (canAccessPath), and the Supabase Auth
+|       |                                # client — ES256 check locally, then
+|       |                                # /auth/v1/user cached 60s
+|       |-- dashboard-passwords.mjs      # the 12-character minimum (Supabase hashes)
+|       |-- dashboard-user-admin.mjs     # the only writer of auth.users; secret key,
+|       |                                # CLI only — never imported by the web app
 |       |-- support-taxonomy.mjs         # THE vocabulary: 14 subjects · 4 kinds ·
 |       |                                # level + team derivation · signal enums
 |       |-- vip-rule.mjs                 # THE VIP RULE's reader: shops thresholds ->
@@ -383,7 +407,9 @@ rule owned by `customer-segments.mjs` and applied at read time.
 | --- | --- |
 | `integration_events` | metadata-only sync/webhook log, idempotent on `event_key` |
 | `privacy_requests` | Shopify compliance webhook lifecycle (hashed contacts, deletion counts) |
-| `data_access_events` | personal-data access audit trail. Sync paths and the agent's customer lookup write here |
+| `data_access_events` | personal-data access audit trail. Sync paths and the agent's customer lookup write here, and so does the dashboard: one row each time a signed-in user is shown customers by name (ticket list, ticket detail and thread, Conversations, Fulfilment's waiting orders, the Customers call list, the contacts CSV), with `actor_type = user` and `actor_id` the Supabase `auth.users.id` — counts in `metadata`, never names |
+
+Dashboard accounts are **not** in this schema: they are Supabase Auth users (`auth.users`), with the role in `app_metadata.dashboard_role`. See Surfaces → Sign-in and roles.
 
 ### Analytics
 
@@ -397,7 +423,7 @@ Written by the worker and the CLIs, read only by the Insights panels.
 
 ### Migration files
 
-**Eight files, by domain, run in order against an empty database.** The order is a plain dependency chain, and every table is created *complete* — there is no `alter table … add column` anywhere in the baseline, and a test asserts that.
+**Nine files, by domain, run in order against an empty database.** The order is a plain dependency chain, and every table is created *complete* — there is no `alter table … add column` anywhere in the baseline, and a test asserts that.
 
 | File | Creates | Depends on |
 | --- | --- | --- |
@@ -441,6 +467,22 @@ argued about rather than measured.
 ## Surfaces
 
 All Route Handlers are server-only and use the Supabase service-role key.
+
+### Sign-in and roles
+
+Accounts live in **Supabase Auth** (`auth.users`); the role is `app_metadata.dashboard_role`, which only the secret key can write. There is no sign-up page: `npm run users -- add --email … --role …` (hidden password prompt) is the only way to make one, and an account without a known role may open nothing.
+
+`web/middleware.ts` stands in front of every page and every API route. Without a usable session a page redirects to `/login?next=…` and an API call gets a 401; with one, the role is checked against `canAccessPath` in `scripts/lib/dashboard-auth.mjs` (a page redirects to the role's first allowed panel, an API call gets a 403). Only `/login`, `/api/auth/login` and `/api/auth/logout` are open.
+
+| Role | May open |
+| --- | --- |
+| `developer` | everything |
+| `management` | everything |
+| `contact` | everything except Insights → Sales (the tab is not drawn; the URL redirects to Fulfilment) |
+
+Two HttpOnly cookies carry the session: `qos_at` (the Supabase access token, one hour) and `qos_rt` (the refresh token). Each request checks the token's ES256 signature locally against the project's JWKS, then confirms it against `/auth/v1/user` — cached for a minute per token — so a ban, a role change or a sign-out takes effect within a minute rather than at the token's expiry. The middleware refreshes the pair when the hour is nearly up; both cookies expire twelve hours after the password was typed (`amr`), which is the longest a session can live without signing in again.
+
+Managing accounts: `npm run users -- list | add | set-password | set-role | disable | enable`. Disabling is a Supabase ban, not a delete, so an audit row still resolves to a person.
 
 ### `/agent-setup` — knowledge library
 

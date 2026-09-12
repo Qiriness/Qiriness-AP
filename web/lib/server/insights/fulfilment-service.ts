@@ -18,6 +18,7 @@ import { RPC } from "../../../../scripts/lib/tables.mjs";
 import type { FulfilmentBucket, FulfilmentCarrier, FulfilmentPanel, OrdersSummary } from "../../types";
 import { orderArgs, type InsightsContext } from "./context";
 import { getOpenOrders } from "./open-orders";
+import { logDashboardAccess } from "../access-log";
 import { getOrderSeries, getOrdersSummary, ordersCoverage } from "./orders";
 import { toSeries } from "./series";
 import { callRpc, count, num } from "./shared";
@@ -34,6 +35,17 @@ export async function getFulfilmentPanel(ctx: InsightsContext): Promise<Fulfilme
     callRpc<Record<string, unknown>>(RPC.INSIGHTS_FULFILMENT_CARRIERS, orderArgs(ctx)),
     getOpenOrders(ctx),
   ]);
+
+  // The waiting-orders list names customers and shows their addresses.
+  if (open.orders.length) {
+    await logDashboardAccess({
+      shopId: ctx.shopId,
+      action: "view",
+      resourceType: "orders",
+      purpose: "insights_open_orders",
+      metadata: { panel: "fulfilment", orders: open.orders.length, platform: ctx.platform },
+    });
+  }
 
   return {
     summary,

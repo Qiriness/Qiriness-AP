@@ -1,6 +1,7 @@
 import { getShopId } from "@/lib/server/knowledge-service";
 import { knowledgeErrorResponse } from "@/lib/server/knowledge-errors";
 import { listMarketableContacts, toCsv } from "@/lib/server/insights/marketable-contacts";
+import { getSession } from "@/lib/server/auth";
 
 export const dynamic = "force-dynamic";
 
@@ -19,8 +20,10 @@ export const dynamic = "force-dynamic";
  */
 export async function GET() {
   try {
+    const session = await getSession();
+    if (!session) return Response.json({ error: "Not signed in." }, { status: 401 });
     const shopId = await getShopId();
-    const contacts = await listMarketableContacts(shopId);
+    const contacts = await listMarketableContacts(shopId, session.sub);
     const date = new Date().toISOString().slice(0, 10);
 
     return new Response(toCsv(contacts), {
