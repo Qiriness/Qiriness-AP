@@ -2738,5 +2738,7 @@ Orders were only ever written by the nightly, so between runs the desk read a ta
 
 **The endpoint is public, and that is the stronger position.** `middleware.ts` lets the path through without a session because Shopify cannot hold a cookie. It proves itself with a signature over the body — a proof that covers the payload as well as the caller. Behind the gate every delivery would 401 for 48 hours and then be dropped.
 
+**The three privacy topics are declared under `compliance_topics`, not `topics`.** Put them where ordinary subscriptions go and `shopify app deploy` refuses the entire version — "The following topic is invalid: customers/data_request" — which reads as a typo and is not one. Shopify keys them separately because it treats them as a separate obligation: required of every app in the App Store, rather than subscribed to by choice. Same endpoint either way; the route dispatches on the topic header.
+
 **None of this replaces the nightly.** Deliveries are dropped, and one that arrives mid-deploy is simply gone. The nightly remains the reconciliation pass; this is the fast path, not the record.
 

@@ -39,6 +39,12 @@ uri = "https://qiriness-ap.vercel.app/api/webhooks/shopify"
 # MANDATORY FOR ANY APP THAT TOUCHES CUSTOMER DATA, and the handler for these has
 # existed since the compliance work without a URL to be reached at. Same endpoint:
 # the route dispatches on the topic header.
+#
+# `compliance_topics`, NOT `topics`, and the distinction is not cosmetic: put these
+# three under `topics` and the CLI refuses the whole version with "The following
+# topic is invalid: customers/data_request". They are a separate key because
+# Shopify treats them as a separate obligation — required of every app in the App
+# Store rather than subscribed to by choice.
 [[webhooks.subscriptions]]
-topics = [ "customers/data_request", "customers/redact", "shop/redact" ]
+compliance_topics = [ "customers/data_request", "customers/redact", "shop/redact" ]
 uri = "https://qiriness-ap.vercel.app/api/webhooks/shopify"
