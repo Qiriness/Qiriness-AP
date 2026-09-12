@@ -40,6 +40,12 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |   |       |-- auth/{login,logout,me}/route.ts  # Supabase Auth: sign in (throttled,
 |   |       |                                # one error for every failure) · sign out
 |   |       |                                # (revoked at Supabase too) · who am I
+|   |       |-- webhooks/shopify/route.ts     # PUBLIC (HMAC, not a session). One URL
+|   |       |                                # for every topic, dispatched on
+|   |       |                                # x-shopify-topic: orders -> order
+|   |       |                                # webhooks, the three privacy topics ->
+|   |       |                                # compliance. Reads request.text(), never
+|   |       |                                # .json() — the HMAC is over raw bytes
 |   |       |-- tickets/[id]/route.ts         # GET case file + order facts · PATCH status
 |   |       |-- tickets/[id]/draft/route.ts   # PATCH approve / edit / reject a draft
 |   |       |-- tickets/[id]/thread/route.ts  # GET the conversation (message bodies)
@@ -178,6 +184,10 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |       |-- sender-patterns.mjs           # email/domain matching, shared by the
 |       |                                 # blocklist and the sender directory
 |       |-- compliance-audit.mjs shopify-compliance-webhooks.mjs
+|       |-- shopify-order-webhooks.mjs   # one order webhook -> re-read that order
+|       |                                # through the nightly's own query and
+|       |                                # mapper, with a replay guard and an
+|       |                                # out-of-order guard
 |       |-- dashboard-auth.mjs           # isomorphic: ROLES, what each may open
 |       |                                # (canAccessPath), and the Supabase Auth
 |       |                                # client — ES256 check locally, then
@@ -473,7 +483,7 @@ All Route Handlers are server-only and use the Supabase service-role key.
 
 Accounts live in **Supabase Auth** (`auth.users`); the role is `app_metadata.dashboard_role`, which only the secret key can write. There is no sign-up page: `npm run users -- add --email … --role …` (hidden password prompt) is the only way to make one, and an account without a known role may open nothing.
 
-`web/middleware.ts` stands in front of every page and every API route. Without a usable session a page redirects to `/login?next=…` and an API call gets a 401; with one, the role is checked against `canAccessPath` in `scripts/lib/dashboard-auth.mjs` (a page redirects to the role's first allowed panel, an API call gets a 403). Only `/login`, `/api/auth/login` and `/api/auth/logout` are open.
+`web/middleware.ts` stands in front of every page and every API route. Without a usable session a page redirects to `/login?next=…` and an API call gets a 401; with one, the role is checked against `canAccessPath` in `scripts/lib/dashboard-auth.mjs` (a page redirects to the role's first allowed panel, an API call gets a 403). Only `/login`, `/api/auth/login`, `/api/auth/logout` and `/api/webhooks/shopify` are open — the last because Shopify authenticates with an HMAC over the body rather than a cookie, and the handler checks it before doing anything else.
 
 | Role | May open |
 | --- | --- |

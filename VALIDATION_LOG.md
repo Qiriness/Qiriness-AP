@@ -1394,13 +1394,18 @@ run died after orders, before products, promotions and the content catalogue. No
 clamped by `PRODUCT_MAX_PAGE_SIZE = 25` (measured live: 30 passes, 40 and 50 are
 refused) and re-run by hand — 116 products, 329 promotions, 35 content sources.
 
-**What is still unproven: a whole nightly, end to end, unattended.** Every pass has
-now run at page size 50, but never in one process, and never under the sustained
-throttling a full run produces. A single page does not fill Shopify's leaky bucket;
-`throttleWaitMs` will wait, and the duration under that load is still a guess. The
-only figure that means anything is a finished run.
+**AND THEN A WHOLE NIGHTLY RAN, END TO END: `completed` in 26.0 minutes**, against
+71 before the page size changed and a 180-minute cap. Counts carried all five
+sources — 58,360 customers, 5,998 orders, 116 products, 329 promotions, 35 content
+sources — and `orders` reached #6998. Sustained throttling is therefore priced in
+rather than guessed at, and 180 minutes is generous rather than merely enough.
 
-**The check, after the 02:00 UTC run of 2026-09-13:**
+It also ran with no stale rows to close, and printed no sweep line: the sweep fires
+on what actually died, not on every start.
+
+**What is left to prove is only the unattended part** — that GitHub's runner does
+this as well as this machine did, on the schedule rather than by hand. **The check,
+after the 02:00 UTC run of 2026-09-13:**
 
 - the new `integration_events` row should be `completed`, not `failed` and not left
   on `processing`. `finished_at - started_at` is the number that says whether 180
@@ -1410,4 +1415,36 @@ only figure that means anything is a finished run.
   at 116, promotions at 329 and the content catalogue at 35 are what a run that got
   past the cost ceiling looks like;
 - `max(orders.shopify_created_at)` should reach that night, from #6997 now.
+
+## 11. The order webhook endpoint has never been called by Shopify
+
+Built 2026-09-12: `/api/webhooks/shopify`, `scripts/lib/shopify-order-webhooks.mjs`,
+and both subscription blocks in `shopify.app.toml`. 14 unit tests, `tsc` clean,
+and `fetchOrderByLegacyId` checked against the live shop (#1011 came back whole; a
+nonexistent id returned null).
+
+**Every signature it has ever verified was one we generated.** The HMAC path is
+the piece most likely to be subtly wrong in production — a body Next has touched,
+a secret that is the client secret rather than the webhook secret, an encoding
+difference — and no test here can tell the difference between correct and
+correct-looking.
+
+**Blocked on two things only a person can do:** the deployed URL in place of
+`REPLACE-ME` in both `[[webhooks.subscriptions]]` blocks, and `shopify app deploy`.
+
+**The check, once a real delivery has been made** — place or edit a test order, then:
+
+- an `integration_events` row with `event_type = 'order_webhook'`, `status =
+  'completed'` and `counts = {"orders": 1}`. A row that says `failed` with an HMAC
+  error means the secret is wrong; NO row at all means the request never arrived,
+  which is Deployment Protection or the middleware, not the handler;
+- that order's `synced_at` in `orders` within seconds of the change, not at the
+  next nightly;
+- Shopify's own delivery log (Partners → the app → Webhooks) showing 200s. A 401
+  there with a row here is impossible; a 401 there with no row is the signature.
+
+**Then remove `SHOPIFY_ADMIN_API_ACCESS_TOKEN` from the question:** with it set,
+each webhook reuses the stored token; without it, `createShopifyClient` mints a
+fresh one per delivery, which is a second Shopify call on every webhook. Worth
+measuring before the volume matters.
 

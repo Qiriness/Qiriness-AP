@@ -29,7 +29,22 @@ import { clearSession, writeSession, type SupabaseSession } from "./lib/session-
  * a disabled account stops working within a minute.
  */
 
-const PUBLIC = new Set(["/login", "/api/auth/login", "/api/auth/logout"]);
+/**
+ * The only paths reachable without a session.
+ *
+ * `/api/webhooks/shopify` is public because Shopify cannot hold a session cookie
+ * — it proves itself with an HMAC over the request body, which the handler
+ * checks before it does anything else. That is a stronger proof than a cookie,
+ * not a weaker one: it covers the payload as well as the caller. Behind the gate
+ * it would simply 401 every delivery, and Shopify would retry for 48 hours and
+ * give up.
+ */
+const PUBLIC = new Set([
+  "/login",
+  "/api/auth/login",
+  "/api/auth/logout",
+  "/api/webhooks/shopify",
+]);
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;

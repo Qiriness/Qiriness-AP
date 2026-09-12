@@ -1104,6 +1104,58 @@ export async function fetchOrderPage(shopify, args, cursor, sinceMonths) {
   }
 }
 
+/**
+ * One order, in exactly the shape the nightly writes.
+ *
+ * WHY NOT MAP THE WEBHOOK PAYLOAD DIRECTLY. A webhook body is REST-shaped —
+ * `id: 6997`, `line_items`, `total_price` — while `mapOrder` reads the GraphQL
+ * shape: `gid://shopify/Order/…`, `lineItems.nodes`, `totalPriceSet.shopMoney`.
+ * A second mapper for the second shape is a second thing to keep correct, and
+ * the failure mode when it drifts is silent: half-populated rows that look
+ * synced. Re-reading the order costs one API call and makes a webhook-written
+ * row indistinguishable from a nightly-written one, because it IS the same
+ * query and the same mapper.
+ *
+ * THE SEARCH FILTER, NOT `node(id:)`, so the whole selection set is reused
+ * rather than restructured into a fragment. `first: 1` because an id matches at
+ * most one order.
+ *
+ * Returns null when the order cannot be read — deleted, or belonging to another
+ * shop. The caller decides what that means; for a webhook it is not an error.
+ */
+export async function fetchOrderByLegacyId(shopify, legacyId) {
+  const includeReturns = !shopify.orderReturnsAccessDenied;
+  const variables = {
+    first: 1,
+    after: null,
+    query: `id:${legacyId}`,
+    lineItemFirst: ORDER_LINE_ITEM_PAGE_SIZE,
+    fulfillmentFirst: ORDER_FULFILLMENT_PAGE_SIZE
+  };
+
+  if (includeReturns) {
+    variables.returnFirst = ORDER_RETURN_PAGE_SIZE;
+  }
+
+  try {
+    const data = await shopifyGraphql(
+      shopify,
+      includeReturns ? ORDERS_QUERY : ORDERS_WITHOUT_RETURN_LINKS_QUERY,
+      variables
+    );
+    return data.orders?.nodes?.[0] || null;
+  } catch (error) {
+    // Same fallback as the paged read: a shop without read_returns must still
+    // sync its orders rather than fail on every webhook.
+    if (!includeReturns || !/Access denied for returns field/i.test(error.message)) {
+      throw error;
+    }
+
+    shopify.orderReturnsAccessDenied = true;
+    return fetchOrderByLegacyId(shopify, legacyId);
+  }
+}
+
 export async function fetchDiscountPage(shopify, args, cursor) {
   return shopifyGraphql(shopify, DISCOUNTS_QUERY, {
     first: args.pageSize,

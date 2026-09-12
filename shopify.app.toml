@@ -16,3 +16,29 @@ redirect_urls = [ ]
 
 [webhooks]
 api_version = "2026-07"
+
+# ORDERS FIRST, AND ONLY ORDERS FOR NOW. Order freshness is the gap that actually
+# reaches the desk: between nightly runs the order table is up to a day behind,
+# and on 2026-09-12 it was two days behind with nobody able to tell. Customers and
+# products move slowly enough that the nightly is honest about them.
+#
+# `uri` IS THE DEPLOYED DASHBOARD, over HTTPS. Vercel Deployment Protection must be
+# off for production, or Shopify is answered with a login page and every delivery
+# fails — the failure looks like a broken handler and is not one.
+[[webhooks.subscriptions]]
+topics = [
+  "orders/create",
+  "orders/updated",
+  "orders/cancelled",
+  "orders/fulfilled",
+  "orders/paid",
+  "refunds/create"
+]
+uri = "https://qiriness-ap.vercel.app/api/webhooks/shopify"
+
+# MANDATORY FOR ANY APP THAT TOUCHES CUSTOMER DATA, and the handler for these has
+# existed since the compliance work without a URL to be reached at. Same endpoint:
+# the route dispatches on the topic header.
+[[webhooks.subscriptions]]
+topics = [ "customers/data_request", "customers/redact", "shop/redact" ]
+uri = "https://qiriness-ap.vercel.app/api/webhooks/shopify"

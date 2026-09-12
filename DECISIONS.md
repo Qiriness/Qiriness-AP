@@ -2721,3 +2721,22 @@ So `insights_fulfilment_buckets()` returns a seventh bucket, "Not shipped yet". 
 - **A chart that measures how long something took must also say how many have not finished.** Otherwise the slowest cases — the ones worth acting on — are exactly the ones it cannot draw, and the chart is most misleading when the news is worst.
 - **Where two cards on one panel describe the same orders, they are counted by the same condition, in SQL.** The waiting bucket uses `open_orders()`'s rule verbatim (not cancelled, not closed, nothing dispatched), and `14_fulfilment_waiting.test.mjs` asserts the two conditions stay word for word identical. A shared denominator that drifts is how a panel starts disagreeing with itself.
 - **It is not a duration, so it gets no percentage.** The six buckets carry a share of shipped orders; the seventh carries a count, because a share of a denominator it is not part of would be a third wrong number.
+
+### An order webhook re-reads the order rather than believing it (2026-09-12)
+
+Orders were only ever written by the nightly, so between runs the desk read a table up to a day old — and for two days in September, two days old. `/api/webhooks/shopify` closes that to seconds. Five decisions make it safe to point at production.
+
+**The raw body, never `request.json()`.** The HMAC covers the exact bytes Shopify sent; parsing and re-serialising changes them and every signature then fails in a way that looks like a wrong secret.
+
+**The payload is a notification, not data.** A webhook body is REST-shaped (`id: 6997`, `line_items`, `total_price`) while `mapOrder` reads the GraphQL shape. Rather than keep a second mapper honest for ever, the handler takes the id and **re-reads that one order through `ORDERS_QUERY`, the query the nightly uses**, then maps it with `mapOrder`. One extra API call buys a row that is indistinguishable from a nightly-written one, because it came from the same query and the same mapper. `fetchOrderByLegacyId` reuses the selection set through the search filter (`query: "id:…"`, `first: 1`) rather than restructuring it into a fragment.
+
+**A refund payload's `id` is the refund.** The order is `order_id`. Reading `id` for every topic would fetch a refund id as an order, find nothing and report a clean skip — a failure indistinguishable from success, which is why `orderIdFromPayload` is a named function with its own test rather than a property access.
+
+**The status code is a decision, not a formality.** Shopify reads any non-2xx as "retry for 48 hours". So everything a retry cannot fix answers **200** — an unknown shop, an order that no longer exists, a replay — and only what a retry genuinely can fix answers **500**. A bad signature answers 401 and writes nothing at all, audit rows included: a table anyone on the internet can fill is not an audit table.
+
+**Two guards, for two different races.** `integration_events.event_key` on the webhook id makes a redelivery a no-op, which matters because Shopify retries whenever it is unsure. Re-reading the order already defeats late delivery — we always fetch current state — so the remaining hazard is concurrency: two deliveries for one order, handled at once, can read in one order and write in the other. Comparing the read `updatedAt` against the stored `shopify_updated_at` closes that. Equal timestamps are deliberately NOT stale, or a redelivery could never repair a row that failed halfway.
+
+**The endpoint is public, and that is the stronger position.** `middleware.ts` lets the path through without a session because Shopify cannot hold a cookie. It proves itself with a signature over the body — a proof that covers the payload as well as the caller. Behind the gate every delivery would 401 for 48 hours and then be dropped.
+
+**None of this replaces the nightly.** Deliveries are dropped, and one that arrives mid-deploy is simply gone. The nightly remains the reconciliation pass; this is the fast path, not the record.
+

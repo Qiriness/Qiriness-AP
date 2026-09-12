@@ -10,6 +10,32 @@ Three sibling files carry the other halves, and this one deliberately does not d
 
 ---
 
+## Shopify order webhooks have a door (2026-09-12)
+
+`web/app/api/webhooks/shopify/route.ts` — one public endpoint, dispatched on `x-shopify-topic`. Order
+topics (`orders/create`, `updated`, `cancelled`, `fulfilled`, `paid`, `refunds/create`) go to the new
+`scripts/lib/shopify-order-webhooks.mjs`; the three mandatory privacy topics go to
+`processComplianceWebhook`, which had been written since the compliance work with no URL to be reached
+at.
+
+The handler does not trust the payload. It takes the order id, re-reads that order through
+`fetchOrderByLegacyId` — the nightly's own `ORDERS_QUERY` and `mapOrder` — and upserts the result, so
+a webhook-written row and a nightly-written row are the same shape by construction. A redelivery is
+absorbed by the `event_key` unique index; a concurrent delivery is caught by comparing `updatedAt`
+against the stored `shopify_updated_at`. Everything a retry cannot fix answers 200; only what it can
+answers 500.
+
+`middleware.ts` now lets `/api/webhooks/shopify` through without a session — Shopify authenticates
+with an HMAC over the body, which the handler checks first.
+
+**Proven:** 14 unit tests over the handler, `tsc --noEmit` clean, full suite green (2280 tests).
+`fetchOrderByLegacyId` was checked against the live shop — order #1011 came back with its line items,
+and a nonexistent id returned null rather than throwing.
+
+**Not yet proven, and it cannot be from here:** no real webhook has ever reached this route. That
+needs the deployed URL in `shopify.app.toml` (both subscription blocks say `REPLACE-ME`) and
+`shopify app deploy`. Until then the endpoint has never seen Shopify's own signature — only ours.
+
 ## The nightly sync gets time to finish, and says so when it does not (2026-09-12)
 
 The nightly had not landed an order since 11 September. `timeout-minutes: 60` was shorter than the
@@ -38,8 +64,9 @@ so the retry path could not save it. `PRODUCT_MAX_PAGE_SIZE = 25` now clamps tha
 (30 passed live, 40 and 50 were refused). Re-run at `--page-size=50`: 116 products, 329 promotions,
 35 content sources, all synced.
 
-**Still not proven:** a full nightly end to end at the new page size, and therefore its duration. The
-02:00 run is the first one that will show it.
+**Then the whole nightly ran end to end: `completed` in 26.0 minutes**, against 71 before, with all
+five sources in its counts and `orders` at #6998. What is left unproven is only the unattended run on
+GitHub's own runner, on the schedule rather than by hand.
 
 ## The dispatch histogram stops hiding the orders that never shipped (2026-09-12)
 
