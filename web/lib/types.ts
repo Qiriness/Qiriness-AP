@@ -1097,6 +1097,8 @@ export interface FulfilmentBucket {
   orders: number;
   /** Past the three-day line. */
   late: boolean;
+  /** Not a duration at all: orders placed in the range that have not shipped. */
+  waiting: boolean;
 }
 
 export interface FulfilmentCarrier {

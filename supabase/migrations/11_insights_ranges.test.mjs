@@ -3,13 +3,19 @@ import test from 'node:test';
 
 import { RPC } from '../../scripts/lib/tables.mjs';
 
-import { codeOnly, functionsIn, read } from './_shared.test.mjs';
+import { INCREMENTAL_FILES, codeOnly, functionsIn, read } from './_shared.test.mjs';
 
 const SQL = read('11_insights_ranges');
 const ANALYTICS = read('06_analytics');
 const FOUNDATION = read('01_foundation');
 
 const ranged = (sql) => functionsIn(sql).filter((name) => name.startsWith('insights_'));
+
+/** Incremental migrations after 11, which may replace a function it first carried. */
+const LATER = INCREMENTAL_FILES.filter((file) => Number(file.slice(0, 2)) > 11).map(read);
+
+const supersededLater = (name) =>
+  LATER.some((sql) => sql.includes(`create or replace function public.${name}(`));
 
 /** One function's `create ... $$;` statement, verbatim. */
 function statementOf(sql, name) {
@@ -28,8 +34,23 @@ test('11 copies each function from 06 rather than retyping it', () => {
   // The forward step is the definition, not a second version of it -- the rule
   // DECISIONS.md § Migrations set on the first departure. Byte-for-byte, so a
   // fix made in one file and not the other fails here.
+  //
+  // Unless a LATER migration has since replaced that function: 11 is then the
+  // historical step it always was, and the newer file is the one that has to
+  // match 06 (its own test asserts that). Editing 11 to match would be editing
+  // a migration that has already been applied.
   for (const name of ranged(ANALYTICS)) {
+    if (supersededLater(name)) continue;
     assert.equal(statementOf(SQL, name), statementOf(ANALYTICS, name), `${name} differs between 06 and 11`);
+  }
+});
+
+test('a function 11 no longer matches is superseded on purpose, not adrift', () => {
+  // The exemption above must not become a way for 11 to rot quietly: every
+  // function that differs has to be accounted for by a newer migration.
+  for (const name of ranged(ANALYTICS)) {
+    if (statementOf(SQL, name) === statementOf(ANALYTICS, name)) continue;
+    assert.ok(supersededLater(name), `${name} differs between 06 and 11 and no later migration carries it`);
   }
 });
 

@@ -109,9 +109,15 @@ export function FulfilmentView({ panel, compareLabel }: { panel: FulfilmentPanel
               key: b.bucket,
               label: b.bucket,
               value: b.orders,
-              emphasis: b.late,
-              display: `${b.orders.toLocaleString("en-GB")}  ·  ${percent(b.orders, current.measured, 0)}`,
-              title: `${b.orders} orders shipped in ${b.bucket}`,
+              emphasis: b.late || b.waiting,
+              // The waiting bar is a count of open orders, not a share of the
+              // shipped ones, so it carries no percentage of that denominator.
+              display: b.waiting
+                ? b.orders.toLocaleString("en-GB")
+                : `${b.orders.toLocaleString("en-GB")}  ·  ${percent(b.orders, current.measured, 0)}`,
+              title: b.waiting
+                ? `${b.orders} orders placed in this range have not shipped yet`
+                : `${b.orders} orders shipped in ${b.bucket}`,
             }))}
           />
         </Card>

@@ -15,6 +15,25 @@ export const PRODUCT_VARIANT_PAGE_SIZE = 25;
 // this ever being silent again if a store goes past it.
 export const PRODUCT_METAFIELD_PAGE_SIZE = 100;
 export const METAFIELD_REFERENCE_PAGE_SIZE = 10;
+
+/**
+ * The most products one page may ask for, whatever `--page-size` says.
+ *
+ * WHY A CAP HERE AND NOWHERE ELSE. Shopify prices a query before running it and
+ * refuses anything over 1000 points, and the price is the product of the `first`
+ * values, not of the data: each product carries 25 variants, 100 metafields and
+ * 10 references, so this connection costs roughly 33 points per node where a
+ * customer costs about 2. Raising the shared `--page-size` to 50 for the nightly
+ * therefore cost nothing on customers and orders and broke products outright —
+ * `Query cost is 1003, which exceeds the single query max cost limit (1000)`,
+ * which is a hard rejection, not a throttle, so no amount of waiting helps.
+ *
+ * MEASURED against the live shop on 2026-09-12: 30 passed, 40 and 50 were
+ * refused. 25 is the cap rather than 30 because the cost is driven by the three
+ * constants above — raise `PRODUCT_METAFIELD_PAGE_SIZE` again and 30 becomes the
+ * next 1003.
+ */
+export const PRODUCT_MAX_PAGE_SIZE = 25;
 export const ORDER_LINE_ITEM_PAGE_SIZE = 50;
 export const ORDER_FULFILLMENT_PAGE_SIZE = 10;
 export const ORDER_RETURN_PAGE_SIZE = 10;
@@ -989,7 +1008,10 @@ export async function fetchMetaobjectsByType(shopify, type) {
 
 export async function fetchProductPage(shopify, args, cursor) {
   return shopifyGraphql(shopify, PRODUCTS_QUERY, {
-    first: args.pageSize,
+    // Clamped, not validated: a caller asking for more is asking to go faster,
+    // and the honest answer to that is the largest page this query can afford,
+    // not a crash halfway through a nightly run.
+    first: Math.min(args.pageSize, PRODUCT_MAX_PAGE_SIZE),
     after: cursor,
     variantFirst: PRODUCT_VARIANT_PAGE_SIZE,
     metafieldFirst: PRODUCT_METAFIELD_PAGE_SIZE,

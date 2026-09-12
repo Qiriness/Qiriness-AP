@@ -1242,6 +1242,34 @@ as $$
     and (p_channels is null or t.channel = any(p_channels))
     and (p_not_channels is null or t.channel is null or not (t.channel = any(p_not_channels)))
   group by 1, 2
+
+  union all
+
+  -- THE ORDERS THAT HAVE NOT SHIPPED AT ALL, which the six duration buckets
+  -- cannot hold: an order still waiting has no duration to bucket, so without
+  -- this row a shop with nothing over 96h reads as "everything went out inside
+  -- four days" while an order sits unshipped on day ten. Same rule as
+  -- open_orders(): not cancelled, not closed, nothing dispatched yet -- so the
+  -- bar and the "Orders waiting to ship" list below it agree by construction.
+  select 'Not shipped yet', 7, count(*)
+  from public.orders o
+  join public.order_fulfilment_timing t on t.order_id = o.id
+  where o.shop_id = p_shop
+    and t.first_fulfilled_at is null
+    and o.cancelled_at is null
+    and o.closed_at is null
+    and o.fulfillment_status is not null
+    and o.fulfillment_status not in ('FULFILLED', 'RESTOCKED')
+    and o.processed_at >= (p_from at time zone p_tz)
+    and o.processed_at < (p_to at time zone p_tz)
+    and (p_channels is null or o.sales_channel_handle = any(p_channels))
+    and (
+      p_not_channels is null
+      or o.sales_channel_handle is null
+      or not (o.sales_channel_handle = any(p_not_channels))
+    )
+  having count(*) > 0
+
   order by 2;
 $$;
 
@@ -1249,7 +1277,7 @@ revoke all on function public.insights_fulfilment_buckets from public, anon, aut
 grant execute on function public.insights_fulfilment_buckets to service_role;
 
 comment on function public.insights_fulfilment_buckets is
-  'The dispatch-time histogram for a date range, in the same six buckets as fulfilment_by_bucket. Empty buckets are absent; the caller draws all six.';
+  'The dispatch-time histogram for a date range: the six duration buckets of fulfilment_by_bucket, plus "Not shipped yet" (bucket_order 7) for orders placed in the range that are still waiting, counted exactly as open_orders() counts them. Empty buckets are absent; the caller draws all seven.';
 
 -- ------------------------------------------------------ fulfilment: carriers
 

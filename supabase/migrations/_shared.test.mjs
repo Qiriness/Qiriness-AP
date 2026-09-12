@@ -38,7 +38,12 @@ export const FILES = [
  * Each is written to be idempotent, so applying one to a fresh baseline is a
  * no-op rather than an error. They are tested by their own files.
  */
-export const INCREMENTAL_FILES = ['10_order_retention', '11_insights_ranges', '12_vip_rule'];
+export const INCREMENTAL_FILES = [
+  '10_order_retention',
+  '11_insights_ranges',
+  '12_vip_rule',
+  '14_fulfilment_waiting'
+];
 
 export const read = (name) => readFileSync(new URL(`./${name}.sql`, import.meta.url), 'utf8');
 

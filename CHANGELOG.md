@@ -25,9 +25,40 @@ is not an exception, the script's `catch` never ran and its `integration_events`
 
 **Measured against the live shop** on 2026-09-12, one page at a time: customers 378 ms at `first:10`
 and 443 ms at `first:50`; orders 1054 ms and 1359 ms. `first:100` also answered on both connections.
-**Not yet proven:** the end-to-end run time at page size 50 under sustained throttling, and the sweep
-against real stuck rows — the two in the table are still `processing`, and the next nightly is what
-closes them. Full suite green (2235 tests).
+
+**Run the same afternoon, and two of the three are now proven.** The sweep closed both stuck rows on
+its first real outing — 30 August and 06:42 that morning — and the sync wrote **58,359 customers and
+5,997 orders**, bringing the order table up to **#6997**, twelve minutes old, after two days stuck at
+#6992.
+
+**The page size was wrong, and only for products.** Customers and orders were fine at 50; the product
+query priced at 1003 against Shopify's 1000-point ceiling and was refused, killing the run after
+orders and before products, promotions and the content catalogue. That rejection is not a throttle,
+so the retry path could not save it. `PRODUCT_MAX_PAGE_SIZE = 25` now clamps that connection alone
+(30 passed live, 40 and 50 were refused). Re-run at `--page-size=50`: 116 products, 329 promotions,
+35 content sources, all synced.
+
+**Still not proven:** a full nightly end to end at the new page size, and therefore its duration. The
+02:00 run is the first one that will show it.
+
+## The dispatch histogram stops hiding the orders that never shipped (2026-09-12)
+
+Reported from the dashboard: for 1–12 September the ">96h" bar read **0** while the list directly
+below it named a customer waiting **8 days**. Both cards were right about their own set — the six
+buckets measure a duration, which only a *shipped* order has, so five unshipped orders (one at
+eight days, one at ten) were counted nowhere at all.
+
+`insights_fulfilment_buckets()` now returns a seventh bucket, **"Not shipped yet"**, counted by the
+same rule as `open_orders()` — not cancelled, not closed, nothing dispatched — so the bar and the
+"Orders waiting to ship" list beneath it cannot disagree. It is drawn in the late colour and carries
+no percentage, because it is a count of open orders rather than a share of the shipped ones.
+Migration `14_fulfilment_waiting.sql`, applied to the live database.
+
+**Verified against the live database** for 1–12 September: 26 + 38 + 29 + 11 + 9 = 113 shipped,
+plus 5 waiting = the 118 orders placed in that window; the channel filter applies to the new bar as
+it does to the others. **Verified in a browser** over the panel's own range (1–12 September
+inclusive): the card reads 113 shipped and "Not shipped yet 7", matching the "All unfulfilled (7)"
+tab on the waiting list above it. Root suite 2266 tests, `tsc` and `next lint` clean.
 
 ## A panel switch answers at once (2026-09-12)
 

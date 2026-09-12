@@ -1382,18 +1382,32 @@ Unit tests cover the sweep; the live behaviour is unproven.
 378 ms at `first:10` / 443 ms at `first:50`; orders 1054 ms / 1359 ms; `first:100`
 answered on both connections without exceeding query cost.
 
-**What is not.** A single page does not fill Shopify's leaky bucket. The whole
-sync at page size 50 will throttle, `throttleWaitMs` will wait, and the end-to-end
-duration under that load is a guess. The only figure that means anything is a
-finished run.
+**PROVEN THE SAME AFTERNOON, by a run started by hand rather than by the schedule.**
+The sweep closed both stuck rows on its first outing (30 August and 06:42 that
+morning), each now `failed` and carrying its reason. The sync wrote 58,359
+customers and 5,997 orders, and `orders` reached **#6997, created 11:48** — the
+two-day gap is closed.
 
-**The check.** After the next nightly, read `integration_events`:
+**And it caught a mistake in the same change.** At `--page-size=50` the product
+query priced at 1003 against Shopify's 1000-point ceiling and was refused, so the
+run died after orders, before products, promotions and the content catalogue. Now
+clamped by `PRODUCT_MAX_PAGE_SIZE = 25` (measured live: 30 passes, 40 and 50 are
+refused) and re-run by hand — 116 products, 329 promotions, 35 content sources.
 
-- the 06:42 row of 12 September and the 16:20 row of 30 August should have flipped
-  from `processing` to `failed`, with `finished_at` set — that is the sweep, and it
-  is the only evidence it works on real rows;
-- the new row should be `completed`, and `finished_at - started_at` is the number
-  that says whether 180 minutes is generous or merely enough;
-- `max(orders.shopify_created_at)` should reach the previous evening. It stopped at
-  **#6992, created 2026-09-11 09:52**, and until it moves nothing above is proven.
+**What is still unproven: a whole nightly, end to end, unattended.** Every pass has
+now run at page size 50, but never in one process, and never under the sustained
+throttling a full run produces. A single page does not fill Shopify's leaky bucket;
+`throttleWaitMs` will wait, and the duration under that load is still a guess. The
+only figure that means anything is a finished run.
+
+**The check, after the 02:00 UTC run of 2026-09-13:**
+
+- the new `integration_events` row should be `completed`, not `failed` and not left
+  on `processing`. `finished_at - started_at` is the number that says whether 180
+  minutes is generous or merely enough — against the 71 minutes the old page size
+  took;
+- `counts` should carry all five sources, not just customers and orders. Products
+  at 116, promotions at 329 and the content catalogue at 35 are what a run that got
+  past the cost ceiling looks like;
+- `max(orders.shopify_created_at)` should reach that night, from #6997 now.
 

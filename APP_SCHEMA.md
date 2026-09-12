@@ -444,6 +444,7 @@ Written by the worker and the CLIs, read only by the Insights panels.
 | `10_order_retention.sql` | order retention becomes a shop setting: adds the `shops` switch, rewrites `retention_rule` to reason-only names (reconciling a live/repo drift), sets this shop to `indefinite` and clears its delete dates | 01, 02 |
 | `12_vip_rule.sql` | adds the `shops` VIP rule columns + check, and `vip_customers()` / `vip_tickets()` / `vip_summary()`, copied from 06 (its test asserts it, and that the rule is AND with strict comparisons). Sets no rule. Applied 2026-09-11 | 01, 02, 04, 06 |
 | `11_insights_ranges.sql` | adds `shops.iana_timezone` and the 18 ranged Insights functions, **copied byte-for-byte from 06** (its test asserts it). Applied to the live database 2026-09-11 | 01, 02, 04, 06 |
+| `14_fulfilment_waiting.sql` | replaces `insights_fulfilment_buckets()` with the version that also returns a `Not shipped yet` bucket, counted as `open_orders()` counts it — orders with no duration to bucket were previously drawn nowhere. Copied byte-for-byte from 06; supersedes 11's copy of that one function. Applied 2026-09-12 | 01, 02, 06 |
 
 `_shared.test.mjs` holds the cross-file invariants (no data statements, RLS on every table, every table and view documented, nothing referenced before it is created, every view `security_invoker` and revoked from the anon roles, every embedded table carrying the whole determinism quadruple, and `scripts/lib/tables.mjs` naming exactly what the baseline creates). Each file has a sibling test for its own contents.
 

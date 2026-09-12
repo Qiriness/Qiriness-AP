@@ -23,8 +23,18 @@ import { getOrderSeries, getOrdersSummary, ordersCoverage } from "./orders";
 import { toSeries } from "./series";
 import { callRpc, count, num } from "./shared";
 
-/** Every bucket the histogram draws, so an empty one is a visible zero rather than a missing bar. */
-const BUCKETS = ["<12h", "12-24h", "24-48h", "48-72h", "72-96h", ">96h"];
+/**
+ * Every bucket the histogram draws, so an empty one is a visible zero rather
+ * than a missing bar.
+ *
+ * THE LAST ONE IS NOT A DURATION. The six before it measure how long a shipped
+ * order took; an order that has not shipped has no such duration, and before
+ * this bar existed those orders were drawn nowhere — so ">96h: 0" could sit
+ * above a list naming a customer who had been waiting eight days. It is counted
+ * by the same rule as the list (SQL: insights_fulfilment_buckets).
+ */
+const BUCKETS = ["<12h", "12-24h", "24-48h", "48-72h", "72-96h", ">96h", "Not shipped yet"];
+const WAITING = "Not shipped yet";
 
 export async function getFulfilmentPanel(ctx: InsightsContext): Promise<FulfilmentPanel> {
   const coverage = ordersCoverage(ctx);
@@ -81,8 +91,10 @@ function mapBuckets(rows: Record<string, unknown>[]): FulfilmentBucket[] {
     bucket,
     order: i + 1,
     orders: byLabel.get(bucket) ?? 0,
-    // 72-96h and >96h: the two past the three-day mark.
-    late: i >= 4,
+    // 72-96h and >96h: the two past the three-day mark. "Not shipped yet" is
+    // worse than late, and is marked on its own.
+    late: i >= 4 && bucket !== WAITING,
+    waiting: bucket === WAITING,
   }));
 }
 
