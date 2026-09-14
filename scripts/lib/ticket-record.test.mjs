@@ -302,6 +302,12 @@ test('setStatus answers null for a ticket that is not this shop\'s', async () =>
   assert.equal(await record.setStatus('someone-elses', 'closed'), null);
 });
 
+test('unlinkCustomer clears the link and nothing else, keeping the resolution trail', async () => {
+  const { transport, record } = build();
+  await record.unlinkCustomer('t1');
+  assert.deepEqual(lastPatch(transport), { customer_id: null });
+});
+
 test('an empty message-arrival patch is not sent at all', async () => {
   const { transport, record } = build();
   assert.equal(await record.recordMessageArrival('t1', {}), null);

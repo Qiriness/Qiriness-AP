@@ -10,8 +10,19 @@ function emit(level, message, fields = {}) {
   // would otherwise overwrite the log SEVERITY, which is what a log viewer
   // filters on — and it fails silently, producing {"level":2} lines that no
   // longer match a severity filter. Reserved keys win; callers rename.
-  const { level: _level, message: _message, ts: _ts, ...safe } = fields;
-  const line = { level, message, ts: new Date().toISOString(), ...safe };
+  //
+  // EXCEPT `message`, which is kept as `detail`. Every catch block in the worker
+  // logs `{ message: error.message }`, and stripping it silently discarded the
+  // one field saying what went wrong — found 2026-09-14 when
+  // `ingest.known_message_lookup_failed` fired with no reason attached.
+  const { level: _level, message: detail, ts: _ts, ...safe } = fields;
+  const line = {
+    level,
+    message,
+    ts: new Date().toISOString(),
+    ...(detail === undefined ? {} : { detail }),
+    ...safe
+  };
   const text = JSON.stringify(line);
   if (level === 'error') {
     process.stderr.write(text + '\n');

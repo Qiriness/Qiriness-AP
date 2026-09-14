@@ -65,11 +65,17 @@ export function createGraphClient(config, { fetchImpl = fetch } = {}) {
   // Fetch one delta page. Pass the previous @odata.nextLink or @odata.deltaLink as
   // `url` to continue; pass null for the initial full read. `top` hints the page
   // size on the initial read (used to avoid over-fetching under a --limit).
+  //
+  // UNDER A LIMIT THE READ IS NEWEST FIRST, stated rather than inherited. Graph
+  // happened to enumerate this inbox newest-first without being asked (measured
+  // 2026-09-14: 400 of 400 in order, identical with and without the sort), but
+  // `--limit=400` means "the latest 400" only if that is requested. Unlimited
+  // reads are left exactly as they were, because their deltaLink is the stored
+  // cursor and a limited run never persists one.
   async function getDeltaPage(url = null, { top } = {}) {
     const token = await getToken();
-    const target =
-      url ||
-      `${GRAPH_BASE}/users/${encodeURIComponent(mailbox)}/mailFolders/inbox/messages/delta?$select=${DELTA_SELECT}`;
+    const initial = `${GRAPH_BASE}/users/${encodeURIComponent(mailbox)}/mailFolders/inbox/messages/delta?$select=${DELTA_SELECT}`;
+    const target = url || (top ? `${initial}&$orderby=receivedDateTime desc` : initial);
 
     const headers = { Authorization: `Bearer ${token}` };
     if (!url && top) {

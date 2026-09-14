@@ -54,7 +54,6 @@ export async function runDeltaPoll({
   // Decisions from both passes buffer here and are written once per poll; the
   // ticket writer records the LLM verdicts into the same collector.
   const audit = createAuditCollector();
-  let processed = 0; // emails pulled from Graph and considered this run
 
   async function flush() {
     if (recordSpamHits && hitCounts.size > 0) {
@@ -71,20 +70,10 @@ export async function runDeltaPoll({
     }
   }
 
-  let url = await cursorStore.getDeltaLink(shopId);
-  for (let page = 0; page < MAX_PAGES_PER_RUN; page += 1) {
-    const { messages, nextLink, deltaLink } = await graphClient.getDeltaPage(
-      url,
-      page === 0 && limit ? { top: limit } : undefined
-    );
-    totals.pages += 1;
-
-    // Under --limit, only consider up to the remaining budget from this page.
-    const pageMessages = limit ? messages.slice(0, limit - processed) : messages;
-    processed += pageMessages.length;
-
+  // Gate, fetch attachment metadata and write one batch of raw Graph messages.
+  async function processBatch(messages) {
     const kept = [];
-    for (const message of pageMessages) {
+    for (const message of messages) {
       const item = mapGraphMessage(message, { mailbox });
       // Our own replies skip the gate entirely: the blocklist matches on sender,
       // and blocking the support address would drop every reply the team sent.
@@ -131,14 +120,19 @@ export async function runDeltaPoll({
     totals.removed += counts.removed;
     totals.llmSpamFiltered += counts.llmSpamFiltered;
     totals.duplicatesLinked += counts.duplicatesLinked ?? 0;
+  }
 
-    if (limit && processed >= limit) {
-      // Hit the run budget mid-inbox: stop without advancing the cursor so this
-      // stays a repeatable partial test rather than a committed sync position.
-      totals.limitReached = true;
-      await flush();
-      return totals;
-    }
+  let url = await cursorStore.getDeltaLink(shopId);
+
+  if (limit) {
+    return runLimited();
+  }
+
+  for (let page = 0; page < MAX_PAGES_PER_RUN; page += 1) {
+    const { messages, nextLink, deltaLink } = await graphClient.getDeltaPage(url);
+    totals.pages += 1;
+
+    await processBatch(messages);
 
     if (deltaLink) {
       await cursorStore.setDeltaLink(shopId, deltaLink);
@@ -155,6 +149,78 @@ export async function runDeltaPoll({
   }
 
   throw new Error(`Delta poll exceeded ${MAX_PAGES_PER_RUN} pages; aborting to avoid a loop.`);
+
+  // UNDER --limit: COLLECT THE NEWEST N, THEN WRITE THEM OLDEST FIRST.
+  //
+  // The read is newest-first (graph-client.mjs), which is what makes the N the
+  // latest N. But every ingestion rule that fires "on the message that creates a
+  // ticket" — the sender label, the requester, the duplicate link — assumes
+  // that message opened the thread. Written newest-first, a thread's ticket was
+  // created from its latest message instead: measured on the 2026-09-14
+  // re-ingestion of 400 messages, 15 staff threads went unlabelled, 7 tickets
+  // took a colleague as requester (2 then linked to the wrong customer), and 4
+  // duplicates and 5 related links were missed. Buffering is affordable here
+  // because the limit bounds it; an unlimited read keeps writing page by page.
+  async function runLimited() {
+    const collected = [];
+    let deltaLink = null;
+    let limitReached = false;
+
+    for (let page = 0; ; page += 1) {
+      if (page >= MAX_PAGES_PER_RUN) {
+        throw new Error(`Delta poll exceeded ${MAX_PAGES_PER_RUN} pages; aborting to avoid a loop.`);
+      }
+      const result = await graphClient.getDeltaPage(url, page === 0 ? { top: limit } : undefined);
+      totals.pages += 1;
+      collected.push(...result.messages.slice(0, limit - collected.length));
+
+      if (collected.length >= limit) {
+        limitReached = true;
+        break;
+      }
+      if (result.deltaLink) {
+        deltaLink = result.deltaLink;
+        break;
+      }
+      if (!result.nextLink) {
+        logger?.warn?.('ingest.delta_page_without_links', { shopId });
+        break;
+      }
+      url = result.nextLink;
+    }
+
+    await processBatch(oldestFirst(collected));
+
+    if (limitReached) {
+      // Hit the run budget mid-inbox: stop without advancing the cursor so this
+      // stays a repeatable partial test rather than a committed sync position.
+      totals.limitReached = true;
+    } else if (deltaLink) {
+      await cursorStore.setDeltaLink(shopId, deltaLink);
+    }
+    await flush();
+    return totals;
+  }
+}
+
+/**
+ * Raw Graph messages sorted by when they arrived, oldest first.
+ *
+ * Stable, and undated entries (a delta `@removed` tombstone carries no dates)
+ * go last in their original order: they create no ticket, so where they fall
+ * cannot change which message opened a thread.
+ */
+export function oldestFirst(messages) {
+  const dateOf = (message) => message?.receivedDateTime ?? message?.sentDateTime ?? null;
+  return messages
+    .map((message, index) => ({ message, index, at: dateOf(message) }))
+    .sort((a, b) => {
+      if (a.at && b.at && a.at !== b.at) return a.at < b.at ? -1 : 1;
+      if (a.at && !b.at) return -1;
+      if (!a.at && b.at) return 1;
+      return a.index - b.index;
+    })
+    .map((entry) => entry.message);
 }
 
 /**

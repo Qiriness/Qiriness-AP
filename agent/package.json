@@ -48,6 +48,8 @@
     "sender-label:backfill": "node src/tools/run-sender-label-backfill.mjs",
     "sender-label:backfill:dry-run": "node src/tools/run-sender-label-backfill.mjs --dry-run",
     "requester:repair": "node src/tools/run-requester-repair.mjs",
-    "requester:repair:dry-run": "node src/tools/run-requester-repair.mjs --dry-run"
+    "requester:repair:dry-run": "node src/tools/run-requester-repair.mjs --dry-run",
+    "tickets:requeue": "node src/tools/run-requeue-tickets.mjs",
+    "tickets:requeue:dry-run": "node src/tools/run-requeue-tickets.mjs --dry-run"
   }
 }

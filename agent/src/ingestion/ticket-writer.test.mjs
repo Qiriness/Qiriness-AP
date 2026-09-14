@@ -636,6 +636,16 @@ test('a re-delivered message still repairs a missing requester', async () => {
   assert.equal(ticket.requester_name, 'Marie');
 });
 
+test('the known-id lookup stays under the URL length measured to fail', async () => {
+  // 100 real Graph ids failed every attempt and 75 succeeded (2026-09-14). A
+  // worst case of 152 characters, a third of them percent-encoded, must fit
+  // well inside what 75 proved.
+  const { KNOWN_ID_CHUNK } = await import('./ticket-writer.mjs');
+  const encoded = (n) => n * (152 + 2 * Math.ceil(152 / 3) + 3);
+  assert.ok(KNOWN_ID_CHUNK <= 50);
+  assert.ok(encoded(KNOWN_ID_CHUNK) < encoded(75));
+});
+
 test('a store with no knownMessageIds behaves exactly as before', async () => {
   // Backwards compatibility is the contract: the guard makes a re-sync safe and
   // its absence must never change ingestion.

@@ -1403,9 +1403,23 @@ rather than guessed at, and 180 minutes is generous rather than merely enough.
 It also ran with no stale rows to close, and printed no sweep line: the sweep fires
 on what actually died, not on every start.
 
-**What is left to prove is only the unattended part** — that GitHub's runner does
-this as well as this machine did, on the schedule rather than by hand. **The check,
-after the 02:00 UTC run of 2026-09-13:**
+**CLOSED 2026-09-13.** The unattended run on GitHub's own runner `completed` in
+**35.7 minutes** with all five sources in its counts (58,365 customers, 6,000
+orders, 116 products, 329 promotions, 35 content sources). Slower than the 26.0
+minutes this machine took — a shared runner is slower — and still a third of the
+180-minute cap, against the 60 that was killing it.
+
+**One thing the two unattended runs agree on and it is not good: the schedule is
+hours late, consistently.** `0 2 * * *` produced a 06:42 start on 12 September and
+06:59 on 13 September — about five hours adrift, twice, which is too consistent to
+read as random queueing. 02:00 UTC on the hour is one of the most contended cron
+slots on GitHub's shared runners. An uncommon minute off the hour (say `37 3 * * *`)
+is the cheap thing to try, and the next two runs are the measurement. It did not
+cause the failures, and now that webhooks carry order freshness it costs less than
+it did — but a reconciliation pass that lands at breakfast is not the one that was
+designed.
+
+**The check that closed this, run after the 02:00 UTC run of 2026-09-13:**
 
 - the new `integration_events` row should be `completed`, not `failed` and not left
   on `processing`. `finished_at - started_at` is the number that says whether 180
@@ -1430,9 +1444,29 @@ is `[]`, so no signature was ever found and every delivery — real or forged �
 the same 401. Fixed, and both suites now assert it with a real `Headers` rather
 than a plain object. The signed probe is the check to re-run after deploying.
 
-**What is still unproven is a delivery Shopify itself signed.** Our probe signs
-with the client secret because that is what app-config webhooks are signed with;
-if that assumption is wrong, the symptom is identical to the bug just fixed.
+**PROVEN END TO END at 15:41 UTC on 2026-09-12, by Shopify itself.** Two deliveries
+Shopify originated — identifiable by the `x-shopify-triggered-at` header, which
+only Shopify sets — both `completed` with `counts = {"orders": 1}`. Order #6919
+went from a copy a week old to current in seconds: `tags []` after the tag was
+removed, `shopify_updated_at 2026-09-12T15:41:12`. The assumption the probe baked
+in is therefore confirmed: **app-config webhooks are signed with the client
+secret**, and `SHOPIFY_WEBHOOK_SECRET` is correctly left unset.
+
+The retry backlog behaved as documented too: the delivery made while the endpoint
+was still returning 401 arrived on its own once the fix deployed, 10 minutes after
+it was first attempted.
+
+**This item is closed, and the stream has now run unattended overnight.** Twelve
+Shopify-originated `order_webhook` rows by the morning of 2026-09-13, **all
+`completed`, none failed**. Order **#7001** was created at 09:16 and synced within
+seconds — by the webhook, not the sync, which had finished at 07:35. That is the
+whole point of the feature, working on a real order nobody staged.
+
+`orders/create` and `orders/paid` both fired for the first time on that order,
+alongside `orders/updated`. **Still unexercised: `orders/cancelled`,
+`orders/fulfilled` and `refunds/create`.** `refunds/create` remains the one to
+watch, since it is the only topic whose payload needs `order_id` rather than `id`
+— covered by a unit test, never by a real delivery.
 
 **Blocked on two things only a person can do:** the deployed URL in place of
 `REPLACE-ME` in both `[[webhooks.subscriptions]]` blocks, and `shopify app deploy`.

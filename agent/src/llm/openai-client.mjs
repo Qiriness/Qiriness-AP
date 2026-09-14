@@ -23,6 +23,15 @@ import { noopUsageSink } from './usage-sink.mjs';
 const OPENAI_CHAT_URL = 'https://api.openai.com/v1/chat/completions';
 const MAX_RETRIES = 3;
 
+// A 429 IS A WINDOW, NOT A BLIP. gpt-4o on this account is capped at 30k tokens
+// per minute; the old 250 ms-doubling backoff gave up after under two seconds,
+// and on 2026-09-14 about half of some investigation batches failed that way.
+// A 429 now waits what OpenAI says (or 2 s doubling), up to a minute a time, and
+// gets more attempts than a 5xx — roughly two minutes before it gives up.
+const MAX_RATE_LIMIT_RETRIES = 6;
+const RATE_LIMIT_MAX_WAIT_MS = 60000;
+const RATE_LIMIT_MIN_WAIT_MS = 500;
+
 export function createOpenAIClient({
   apiKey,
   fetchImpl = fetch,
@@ -98,7 +107,12 @@ export function createOpenAIClient({
         return response.json();
       }
 
-      if ((response.status === 429 || response.status >= 500) && attempt <= MAX_RETRIES) {
+      if (response.status === 429 && attempt <= MAX_RATE_LIMIT_RETRIES) {
+        await sleepImpl(rateLimitWaitMs(response, attempt));
+        continue;
+      }
+
+      if (response.status >= 500 && attempt <= MAX_RETRIES) {
         await sleepImpl(backoffMs(attempt));
         continue;
       }
@@ -248,6 +262,47 @@ function kinded(error, errorKind) {
 
 function backoffMs(attempt) {
   return 250 * 2 ** (attempt - 1);
+}
+
+/**
+ * How long to wait after a 429, in ms.
+ *
+ * OpenAI's own hint wins when there is one: `retry-after-ms`, then
+ * `retry-after` (seconds), then the reset clocks (`x-ratelimit-reset-tokens`,
+ * `x-ratelimit-reset-requests`, written like `6m0s` or `120ms`). Without a hint,
+ * 2 s doubling. Clamped both ways — never a busy loop, never a stalled worker.
+ */
+export function rateLimitWaitMs(response, attempt) {
+  const header = (name) => response?.headers?.get?.(name) ?? null;
+  const hinted =
+    parseNumber(header('retry-after-ms')) ??
+    secondsToMs(parseNumber(header('retry-after'))) ??
+    parseDuration(header('x-ratelimit-reset-tokens')) ??
+    parseDuration(header('x-ratelimit-reset-requests'));
+  const wait = hinted ?? 2000 * 2 ** (attempt - 1);
+  return Math.min(Math.max(wait, RATE_LIMIT_MIN_WAIT_MS), RATE_LIMIT_MAX_WAIT_MS);
+}
+
+function parseNumber(value) {
+  if (value === null || value === undefined || value === '') return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
+}
+
+function secondsToMs(seconds) {
+  return seconds === null ? null : seconds * 1000;
+}
+
+function parseDuration(value) {
+  if (!value) return null;
+  const units = { ms: 1, s: 1000, m: 60000, h: 3600000 };
+  let total = 0;
+  let matched = false;
+  for (const [, amount, unit] of String(value).matchAll(/(\d+(?:\.\d+)?)(ms|s|m|h)/g)) {
+    total += Number(amount) * units[unit];
+    matched = true;
+  }
+  return matched ? total : null;
 }
 
 function defaultSleep(ms) {

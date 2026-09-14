@@ -4,7 +4,12 @@ import { T } from '../../../scripts/lib/tables.mjs';
 // How many Graph message ids go into one `in.(...)` filter. They are ~150
 // characters each and the filter travels in the URL, so this is a URL-length
 // bound rather than a row-count one.
-const KNOWN_ID_CHUNK = 100;
+//
+// MEASURED, NOT ESTIMATED (2026-09-14). 100 failed on every attempt
+// (`fetch failed`) — 399 of 400 real ids carry `+`, `/` or `=`, each encoded
+// to three characters — while 75 succeeded. So the guard failed open on every
+// full page, which is exactly the re-sync it exists for. 50 leaves margin.
+export const KNOWN_ID_CHUNK = 50;
 
 // Persists mapped Graph messages into tickets / ticket_messages.
 //
@@ -409,7 +414,7 @@ export function createSupabaseMessageStore(supabase) {
      * The reads are chunked because the filter goes into a URL: PostgREST takes
      * `in.(...)` as a query parameter, and a delta page of Graph ids — which run
      * to ~150 characters each — would otherwise build a URL long enough for the
-     * server to reject. One request per 100 ids, not one per message.
+     * server to reject. One request per KNOWN_ID_CHUNK ids, not one per message.
      */
     async knownMessageIds(shopId, graphMessageIds) {
       const known = new Set();

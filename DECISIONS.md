@@ -47,6 +47,12 @@ It never falls **across** re-categorisations either (`ratchetLevel`). A thread i
 
 ## Ingestion
 
+### `--limit=N` means the newest N, and it is asked for (2026-09-14)
+
+A limited initial delta read adds `$orderby=receivedDateTime desc`. Graph already enumerated this inbox newest-first without it — measured before the from-scratch re-ingestion, the first 400 messages came back in order (2026-09-13 back to 2026-07-10, no inversions) with and without the sort — but that is an observed default, and "re-run the latest 400" should not rest on one. **Unlimited reads are untouched**, because their `deltaLink` becomes the stored cursor, and a limited run never persists one (`delta-poller.mjs`).
+
+**Read newest first, written oldest first.** Every ingestion rule that fires on the message that *creates* a ticket — `sender_label`, the requester, the duplicate link — assumes that message opened the thread. The first limited run wrote in read order, so each thread's ticket was created from its latest message. Measured on that 400-message re-ingestion: **15** staff threads unlabelled, **7** tickets with a colleague as requester (**2** then linked to the wrong customer, which no pass can undo), **4** duplicates and **5** related links missed. So under `--limit` the poller now collects the newest N across pages and writes them in `receivedDateTime` order (`oldestFirst`). Buffering is bounded by the limit. **An unlimited full re-enumeration still writes page by page in Graph's order** and so still carries this risk; sorting it would mean holding the whole mailbox in memory, and it is left open rather than half-fixed.
+
 ### A Shopify sync never writes `sync_cursors` (2026-09-11)
 
 `mapShop` returned `sync_cursors: {}` and `app_settings: {}`, and every Shopify sync upserts the shop — so **every sync wiped the mail delta link**, and the next mail poll re-enumerated the whole mailbox. Found while building the Insights freshness strip: `shops.sync_cursors` read `{}` on a shop whose worker had run many times. It is the likely cause of the mail window moving back on re-enumeration, and with the nightly sync now scheduled it would have happened every night.
@@ -1204,6 +1210,20 @@ Three supporting reasons: a wrong match would inject a wrong situation's needs, 
 
 **And the verdict does not move a ticket it did not claim from the open queue.** 65% of verdicts map to `awaiting_human` or `awaiting_customer`; applied to a backfill that would resurrect dozens of settled threads into the live queue. The case file is a note about the thread, not a reason to reopen it — so `nextStatus` is computed only when the ticket was open. The status write had no test until this change went in beside it, which is why one was added in both directions.
 
+### A 429 waits out the window (2026-09-14)
+
+gpt-4o on this account is capped at **30,000 tokens per minute**. The transport retried a 429 three times at 250 / 500 / 1000 ms — under two seconds in all — so on the first from-scratch investigation run about half of some ten-ticket batches failed, each failure spending one of the ticket's three attempts before it is abandoned towards a human. A per-minute limit cannot be outlasted in two seconds.
+
+A 429 now waits OpenAI's own hint (`retry-after-ms`, `retry-after`, then the `x-ratelimit-reset-*` clocks), or 2 s doubling without one, clamped to 0.5–60 s, for up to **six** retries — about two minutes worst case. A 5xx and a transport error keep the short backoff and three retries: those are blips, and waiting a minute on them would stall the worker for nothing. The retries are still not `llm_usage` rows, for the reason in § Insights.
+
+### A repaired ticket is re-queued by name, and may be reopened (2026-09-14)
+
+`tickets:requeue` exists because the repair tools change what an investigation read — the requester, and through it the customer — without touching the case file already written from the old values. `investigate --backfill` re-raises the whole open queue, which is the wrong tool for five tickets.
+
+**`--unlink-customer`** calls `record.unlinkCustomer`, the first path that ever clears `customer_id`. Customer resolution only looks at unlinked tickets, so a link made from a colleague's address was permanent. The resolution trail is kept deliberately: it records the hash the old attempt used, and a changed requester is what lets the next pass try again.
+
+**`--reopen`** is the deliberate exception to "a widened run never moves a ticket" (§ The worker sees open tickets only). That rule protects a status somebody chose. A status written minutes earlier by a run against the wrong identity was chosen by nobody, and left in place it would outlive the corrected verdict. It is a flag a person passes per ticket, never a default.
+
 ### One investigation per inbound message
 
 `unique(shop_id, trigger_message_id)` is the idempotency key, so a reply produces a new reading instead of overwriting the previous one and the thread's trajectory survives as rows. `context_ref` **points at** `tickets.resolved_context` rather than copying it, so personal data is not duplicated per run. `customer_id` is denormalised and indexed: that is the seam Phase 7 memory hangs off.
@@ -1275,7 +1295,7 @@ The same non-idempotency re-raised `needs_categorisation` on **374 of 400** tick
 
 **It fails open, deliberately.** A failed lookup yields an empty set, so every message reads as new and the old behaviour returns. Reading an unknown as "already held" would do the opposite: silently drop the reopen for a real customer reply and strand a live ticket in `closed`. Noisy and recoverable beats silent and lost.
 
-**One query per page, not one per message.** A full enumeration is thousands of messages, and a guard against something that only bites on a re-sync must not cost a round trip per email. Chunked at 100 ids because the filter travels in the URL and Graph ids run to ~150 characters.
+**One query per page, not one per message.** A full enumeration is thousands of messages, and a guard against something that only bites on a re-sync must not cost a round trip per email. Chunked at 50 ids because the filter travels in the URL and Graph ids run to ~150 characters. **It was 100 until 2026-09-14, and 100 never worked**: against 400 real ids, 100 failed every attempt while 75 succeeded, because 399 of 400 ids carry `+`, `/` or `=` and each encodes to three characters. Every full page took the fail-open branch, so the guard was off on exactly the re-enumerations it was written for. Nobody saw it because the logger stripped the `message` field carrying the error; it now keeps it as `detail`. Verified after the change: all 400 ids looked up, 329 found.
 
 ### Any non-open status returns to open on an inbound reply — not just the terminal two
 

@@ -10,6 +10,57 @@ Three sibling files carry the other halves, and this one deliberately does not d
 
 ---
 
+## From-scratch re-run over the latest 400 messages (2026-09-14)
+
+The ticket corpus was wiped and re-ingested. Before: 400 tickets, 852 messages, 137 investigations,
+120 drafts (3 reviewed), 1 human edit, 175 `spam_audit` rows, one topic-map run of 46 tiles — mail
+dated 2026-02-27 to 2026-08-20, nothing ingested since. The 3 reviewed drafts and the edit were
+exported outside the repo first. Deleted: `tickets` (cascading), `spam_audit`, `cluster_runs`. Kept:
+`llm_usage` (ticket link nulled), `agent_test_runs`, knowledge, exemplars, rules, Shopify data.
+
+`graph-client.mjs` now requests newest-first under a `--limit` (see DECISIONS § Ingestion); new
+`graph-client.test.mjs`. Run as `ingest:reset`, then
+`ingest:once -- --limit=400 --stop-after=investigate` — stopping before auto-close, which would
+otherwise retire every ticket quiet for 28+ days before the 10-per-run investigation reached it.
+
+**Two bugs found during the run, fixed.** The re-delivery guard's known-id lookup was chunked at 100
+ids, which fails on real Graph ids (100 failed, 75 passed) — so on every full page it failed open and
+the guard never protected a re-sync. Now 50; verified on 400 real ids. The failure was invisible
+because `logger.mjs` stripped the caller's `message` field, the one every catch block uses for the
+error; it now survives as `detail`. The in-flight run started before both fixes; on an empty database
+failing open is the correct result anyway.
+
+**Limited ingestion now writes oldest first.** The run wrote newest-first, so tickets were created from
+a thread's latest message: 15 staff threads unlabelled, 7 wrong requesters, 4 duplicates and 5 related
+links missed — repaired afterwards with `sender-label:backfill`, `requester:repair`,
+`duplicate:backfill`, `related:backfill` and `customers:resolve`. Two tickets remain linked to the
+customer matched from the colleague's address (`e8903620`, `c5ec7404`); nothing can unlink them yet.
+`delta-poller.mjs` now buffers the newest N under `--limit` and writes them by `receivedDateTime`;
+three new tests. Unlimited re-enumeration is unchanged and still exposed (DECISIONS § Ingestion).
+
+**Investigation paused at 57 of ~161.** gpt-4o's 30k tokens/minute limit made about half of some
+batches fail with 429; the client's backoff (250 ms doubling) never outlasts a per-minute window. No
+ticket was abandoned; three carry failed attempts.
+
+**A 429 now waits out the window.** `openai-client.mjs` follows OpenAI's `retry-after` / reset headers
+(or 2 s doubling), clamped to 60 s, six retries; 5xx unchanged. Four new tests.
+
+**Tickets can be re-queued by name.** `record.unlinkCustomer` (the first writer that clears
+`customer_id`) and `npm run tickets:requeue -- --ticket <id> [--unlink-customer] [--reopen]`. Used on
+`e8903620` and `c5ec7404` (unlinked from the colleague-derived customer) and on `8236165a`, `ff5e4bd0`,
+`fcf4ca11`, `e8903620` (reopened from agent-set statuses and re-queued). Agent 1,311 and root 2,295
+tests pass.
+
+**Run outcome.** Investigation: 138 of 172 tickets, 0 pending, 0 abandoned, no 429 failures after the
+fix (restart: 389 calls, ~691k tokens). Drafting: 123 drafts, 15 skipped as `internal_sender`, 0
+failed (123 calls, ~348k tokens). 111 pass the checks; 12 fail — `no_invented_question` 6,
+`no_email_address` 2, `apologises_for_delay` 2, `signature` 1, `no_completed_action` 1. 34 are
+`auto_send_eligible` (nothing sends: `DRAFT_ONLY=true`, delivery `none`). 10 drafts offer `QIRINESS20`
+from the approved P-15 rule, all claiming "20%" and 8 marked auto-send eligible — which contradicts
+DECISIONS § "There is no welcome code"; unresolved. Auto-close not run: 45 tickets would close.
+
+---
+
 ## Shopify order webhooks have a door (2026-09-12)
 
 `web/app/api/webhooks/shopify/route.ts` — one public endpoint, dispatched on `x-shopify-topic`. Order
@@ -32,9 +83,19 @@ with an HMAC over the body, which the handler checks first.
 `fetchOrderByLegacyId` was checked against the live shop — order #1011 came back with its line items,
 and a nonexistent id returned null rather than throwing.
 
-**Not yet proven, and it cannot be from here:** no real webhook has ever reached this route. That
-needs the deployed URL in `shopify.app.toml` (both subscription blocks say `REPLACE-ME`) and
-`shopify app deploy`. Until then the endpoint has never seen Shopify's own signature — only ours.
+**Live and proven the same afternoon**, at `https://qiriness-ap.vercel.app/api/webhooks/shopify`.
+Two Shopify-originated deliveries completed with `counts = {"orders": 1}`, taking order #6919 from a
+week-old copy to current in seconds.
+
+**It took one bug to get there, and the test suite could not see it.** A Route Handler passes
+`request.headers` as a `Headers`, whose entries are not own properties — so `Object.entries(headers)`
+is `[]`, the shared `headerValue` found no signature, and every delivery got the same 401 a forgery
+gets, for any secret. All 14 tests passed throughout because every one passed a plain object. Both
+webhook paths now read through `.get`, and both suites assert it with a real `Headers`.
+
+Two things came out of that afternoon and stayed: `GET` on the endpoint reports
+`signingSecretConfigured` (a boolean, never the value), and the three privacy topics are declared
+under `compliance_topics`, not `topics` — the CLI rejects the entire version otherwise.
 
 ## The nightly sync gets time to finish, and says so when it does not (2026-09-12)
 

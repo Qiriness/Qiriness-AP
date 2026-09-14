@@ -312,6 +312,21 @@ export function createTicketRecord(supabase, { shopId, transport = REST_TRANSPOR
       return patch(ticketId, { requester_name: name ?? null, requester_email_hash: emailHash });
     },
 
+    /**
+     * Forgets which customer a ticket belongs to.
+     *
+     * The other half of `setRequester`, and for the same reconcile tool only.
+     * `customer_id` is otherwise never cleared, so a ticket linked from a wrong
+     * requester — measured 2026-09-14: two tickets linked from a colleague's
+     * address after a newest-first ingestion — kept that customer for ever,
+     * because customer resolution only looks at unlinked tickets. The
+     * `customer_resolution` trail is left alone: it names the hash the old link
+     * was made against, which is exactly what lets the next pass retry.
+     */
+    async unlinkCustomer(ticketId) {
+      return patch(ticketId, { customer_id: null });
+    },
+
     async clearRelated(ticketId) {
       return patch(ticketId, {
         related_ticket_id: null,

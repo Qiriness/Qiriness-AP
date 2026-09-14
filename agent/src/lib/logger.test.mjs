@@ -38,14 +38,22 @@ test('a caller field named `level` cannot overwrite the log severity', () => {
   assert.equal(line.ticketId, 't1');
 });
 
-test('`message` and `ts` are reserved too', () => {
+test('`message` and `ts` are reserved too, but a caller `message` survives as `detail`', () => {
+  // The bug this guards: `{ message: error.message }` is how every catch block
+  // logs, and the reason was being stripped along with the reserved key.
   const [line] = capture(() =>
     logger.warn('categorise.error', { message: 'boom', ts: 'not-a-time', ticketId: 't1' })
   );
   assert.equal(line.level, 'warn');
   assert.equal(line.message, 'categorise.error');
+  assert.equal(line.detail, 'boom');
   assert.ok(Date.parse(line.ts));
   assert.equal(line.ticketId, 't1');
+});
+
+test('no `detail` key when the caller passed no message', () => {
+  const [line] = capture(() => logger.info('ingest.poll', { shopId: 's1' }));
+  assert.equal('detail' in line, false);
 });
 
 test('errors go to stderr, everything else to stdout', () => {

@@ -49,6 +49,67 @@ test('retries on 429 then succeeds', async () => {
   assert.equal(calls, 2);
 });
 
+function rateLimited(headers = {}) {
+  return {
+    ok: false,
+    status: 429,
+    headers: new Headers(headers),
+    json: async () => ({ error: 'rate' }),
+    text: async () => 'rate'
+  };
+}
+
+test('a 429 waits what OpenAI asks for, not a fixed quarter second', async () => {
+  const waits = [];
+  let calls = 0;
+  const fetchImpl = async () => {
+    calls += 1;
+    if (calls === 1) return rateLimited({ 'retry-after': '7' });
+    if (calls === 2) return rateLimited({ 'x-ratelimit-reset-tokens': '1m0.5s' });
+    return jsonResponse(completion({ label: 'keep', reason: 'y' }));
+  };
+  const client = createOpenAIClient({ apiKey: 'k', fetchImpl, sleepImpl: async (ms) => waits.push(ms) });
+
+  await client.completeJson({ model: 'm', user: 'u', schema: {} });
+  // 60.5 s is clamped to the one-minute ceiling.
+  assert.deepEqual(waits, [7000, 60000]);
+});
+
+test('a 429 with no hint backs off from 2 s, and outlasts more attempts than a 5xx', async () => {
+  // The bug this guards: three retries at 250/500/1000 ms gave up long before a
+  // tokens-per-minute window reopened, so the ticket failed for nothing.
+  const waits = [];
+  let calls = 0;
+  const fetchImpl = async () => {
+    calls += 1;
+    if (calls <= 5) return rateLimited();
+    return jsonResponse(completion({ label: 'keep', reason: 'y' }));
+  };
+  const client = createOpenAIClient({ apiKey: 'k', fetchImpl, sleepImpl: async (ms) => waits.push(ms) });
+
+  const result = await client.completeJson({ model: 'm', user: 'u', schema: {} });
+  assert.equal(result.label, 'keep');
+  assert.deepEqual(waits, [2000, 4000, 8000, 16000, 32000]);
+});
+
+test('a 429 still gives up eventually', async () => {
+  let calls = 0;
+  const fetchImpl = async () => ((calls += 1), rateLimited());
+  const client = createOpenAIClient({ apiKey: 'k', fetchImpl, sleepImpl: async () => {} });
+  await assert.rejects(() => client.completeJson({ model: 'm', user: 'u', schema: {} }), /429/);
+  assert.equal(calls, 7);
+});
+
+test('a 5xx keeps the short backoff and three retries', async () => {
+  const waits = [];
+  let calls = 0;
+  const fetchImpl = async () => ((calls += 1), jsonResponse({ error: 'down' }, { ok: false, status: 503 }));
+  const client = createOpenAIClient({ apiKey: 'k', fetchImpl, sleepImpl: async (ms) => waits.push(ms) });
+  await assert.rejects(() => client.completeJson({ model: 'm', user: 'u', schema: {} }), /503/);
+  assert.equal(calls, 4);
+  assert.deepEqual(waits, [250, 500, 1000]);
+});
+
 test('throws on a non-retryable error', async () => {
   const fetchImpl = async () => jsonResponse({ error: 'bad' }, { ok: false, status: 400 });
   const client = createOpenAIClient({ apiKey: 'k', fetchImpl, sleepImpl: async () => {} });

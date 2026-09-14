@@ -224,6 +224,81 @@ test('respects --limit and does not advance the cursor when truncating mid-inbox
   assert.equal(cursorStore.saved(), null); // cursor intentionally not advanced
 });
 
+function dated(id, conversationId, receivedDateTime) {
+  return { ...graphMessage(id, conversationId), receivedDateTime };
+}
+
+test('under --limit a thread is written oldest first, so its ticket is created from the opening message', async () => {
+  // Graph serves newest first. The bug this guards: the ticket was created from
+  // the reply, so every creation-time rule read the wrong sender.
+  const graphClient = fakeGraphClient([
+    {
+      messages: [
+        dated('reply-2', 'c1', '2026-09-10T12:00:00Z'),
+        dated('reply-1', 'c1', '2026-09-10T11:00:00Z'),
+        dated('opening', 'c1', '2026-09-10T10:00:00Z')
+      ],
+      nextLink: null,
+      deltaLink: 'https://graph/delta-final'
+    }
+  ]);
+  const store = fakeStore();
+  const created = [];
+  const create = store.create;
+  store.create = async (row) => (created.push(row), create(row));
+
+  await runDeltaPoll({ graphClient, store, record: store, cursorStore: fakeCursorStore(null), shopId: 'shop-1', limit: 10 });
+
+  assert.deepEqual([...store.messages.values()].map((m) => m.graph_message_id), ['opening', 'reply-1', 'reply-2']);
+  // One ticket, and the opening message was the first thing written into it.
+  assert.equal(created.length, 1);
+});
+
+test('under --limit the newest N are kept across pages, then written oldest first', async () => {
+  const graphClient = fakeGraphClient([
+    {
+      messages: [dated('m4', 'c4', '2026-09-04T00:00:00Z'), dated('m3', 'c3', '2026-09-03T00:00:00Z')],
+      nextLink: 'https://graph/page2',
+      deltaLink: null
+    },
+    {
+      messages: [
+        dated('m2', 'c2', '2026-09-02T00:00:00Z'),
+        dated('m1', 'c1', '2026-09-01T00:00:00Z'),
+        dated('m0', 'c0', '2026-08-31T00:00:00Z')
+      ],
+      nextLink: 'https://graph/page3',
+      deltaLink: null
+    }
+  ]);
+  const store = fakeStore();
+  const cursorStore = fakeCursorStore(null);
+
+  const totals = await runDeltaPoll({ graphClient, store, record: store, cursorStore, shopId: 'shop-1', limit: 4 });
+
+  assert.deepEqual([...store.messages.values()].map((m) => m.graph_message_id), ['m1', 'm2', 'm3', 'm4']);
+  assert.equal(totals.limitReached, true);
+  assert.equal(totals.pages, 2);
+  assert.equal(cursorStore.saved(), null);
+});
+
+test('without --limit pages are written as Graph serves them, and the cursor advances', async () => {
+  const graphClient = fakeGraphClient([
+    {
+      messages: [dated('m2', 'c2', '2026-09-02T00:00:00Z'), dated('m1', 'c1', '2026-09-01T00:00:00Z')],
+      nextLink: null,
+      deltaLink: 'https://graph/delta-final'
+    }
+  ]);
+  const store = fakeStore();
+  const cursorStore = fakeCursorStore(null);
+
+  await runDeltaPoll({ graphClient, store, record: store, cursorStore, shopId: 'shop-1' });
+
+  assert.deepEqual([...store.messages.values()].map((m) => m.graph_message_id), ['m2', 'm1']);
+  assert.equal(cursorStore.saved(), 'https://graph/delta-final');
+});
+
 test('resumes from the stored deltaLink on the next run', async () => {
   const graphClient = fakeGraphClient([
     { messages: [], nextLink: null, deltaLink: 'https://graph/delta-next' }
