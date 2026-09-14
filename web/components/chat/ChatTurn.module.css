@@ -6,27 +6,23 @@
 /* The question sits right, like a sent message; the answer takes the width. */
 .question {
   justify-self: end;
-  max-width: min(42rem, 90%);
+  max-width: min(36rem, 85%);
   margin: 0;
   padding: var(--space-2) var(--space-4);
-  border-radius: var(--radius-lg);
-  background: var(--teal-050);
-  border: 1px solid var(--border-teal);
-  color: var(--teal-ink);
+  border-radius: 1rem 1rem 0.25rem 1rem;
+  background: var(--linen);
+  color: var(--text-strong);
   font-size: var(--text-md);
   line-height: 1.5;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
 
+/* The answer is the page's text, not a card: no border or shadow, so the
+   thread reads as a document with the questions set off beside it. */
 .answer {
   display: grid;
   gap: var(--space-3);
-  padding: var(--space-4) var(--space-5);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  background: var(--surface);
-  box-shadow: var(--shadow-xs);
   min-width: 0;
 }
 

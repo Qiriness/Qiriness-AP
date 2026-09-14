@@ -78,8 +78,9 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |   |   |-- app-shell/               # AppShell (top bar + drawer; fetches /api/auth/me
 |   |   |                            # once for both) · Sidebar (Home drawn by role) ·
 |   |   |                            # UserMenu (who is signed in, Sign out)
-|   |   |-- chat/                    # ChatView (conversation rail + thread + composer,
-|   |   |                            # reads the stream) · ChatTurn (answer + "How this
+|   |   |-- chat/                    # ChatView (conversation tabs + History menu, thread,
+|   |   |                            # composer + conversation cost; reads the stream;
+|   |   |                            # closing a tab only hides it) · ChatTurn (answer + "How this
 |   |   |                            # was answered": each query, its SQL and rows) ·
 |   |   |                            # ChatMarkdown (answers as React, never HTML)
 |   |   |-- ui/                      # Button · StatusChip · Dialog (modal shell) ·

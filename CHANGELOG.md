@@ -10,6 +10,12 @@ Three sibling files carry the other halves, and this one deliberately does not d
 
 ---
 
+## Home chat: a lighter layout (2026-09-14)
+
+The chat now fills the page in one framed panel. Conversations are **tabs** across the top — New chat, then up to four recent ones; × takes a tab off the strip without deleting anything, and a **History** menu lists every conversation. An empty conversation shows a centred prompt with suggested questions; answers read as plain text beside soft grey question bubbles; the composer is a rounded field that grows with the text, with the send button inside it and the conversation's cost beneath. `ChatView` + CSS and `ChatTurn.module.css` only; no API or data change. `tsc` and lint only — not looked at in the browser.
+
+---
+
 ## Home chat: what the conversation has cost (2026-09-14)
 
 Under the question box, the open conversation's running model cost: `This conversation: $0.042 · 3 questions`, in USD at list price, summed from each turn's tokens. `gpt-5.2` is now in `llm-rates.mjs` ($1.75 input, $0.175 cached input, $14.00 output per 1M, OpenAI Standard tier, read 2026-09-14), and `estimateCost` bills cached input at a model's `cachedInput` rate when it has one — no other model has one, so every existing figure is unchanged. Rates tests extended; not yet seen in the browser, and not yet reconciled with OpenAI's usage dashboard.

@@ -2,8 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 
-import { AlertIcon, PlusIcon, SparkleIcon } from "@/components/icons";
-import { Button } from "@/components/ui/Button";
+import { AlertIcon, ArrowRightIcon, ClockIcon, CloseIcon, PlusIcon, SparkleIcon } from "@/components/icons";
 import {
   MAX_QUESTION_CHARS,
   type ChatConversationSummary,
@@ -18,13 +17,17 @@ import styles from "./ChatView.module.css";
 
 /** Starting points, each answerable from the chat views. Clicking one asks it. */
 const EXAMPLES = [
-  "What was our revenue last month, by sales channel, compared with the month before?",
-  "Which 10 products sold the most units over the last 30 days?",
-  "How long did we take to ship orders each month this year (median hours)?",
-  "How many support tickets have we had per category since the mailbox sync started?",
+  "Revenue last month by sales channel, vs the month before",
+  "Top 10 products by units sold in the last 30 days",
+  "Median shipping time per month this year",
+  "Support tickets per category since the mailbox sync began",
 ];
 
 const TITLE_CHARS = 80;
+/** Conversations open as tabs when the page loads; the rest are in History. */
+const INITIAL_TABS = 4;
+/** The composer grows with its text up to this height, then scrolls. */
+const MAX_INPUT_HEIGHT = 200;
 
 interface Pending {
   question: string;
@@ -67,31 +70,70 @@ function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
 }
 
+function titleFrom(question: string) {
+  const firstLine = question.split("\n")[0].trim();
+  return firstLine.length > TITLE_CHARS ? `${firstLine.slice(0, TITLE_CHARS - 1)}…` : firstLine;
+}
+
 /**
- * Home's management chat: the conversation list, the thread, and the composer.
+ * Home's management chat: conversation tabs, the thread, and the composer.
  *
- * The run is streamed (POST /api/chat, NDJSON), so each query appears as it
- * finishes. Everything shown is also stored; reopening a conversation reads it
- * back from the server rather than from this component's memory.
+ * TABS ARE A VIEW, NOT A LIST. Closing a tab only takes it off the strip; every
+ * conversation stays in History and on the server. The run is streamed
+ * (POST /api/chat, NDJSON), so each query appears as it finishes, and reopening
+ * a conversation reads it back from the server rather than from memory here.
  */
 export function ChatView({ initialConversations, readiness, loadError }: ChatViewProps) {
   const [conversations, setConversations] = useState(initialConversations);
+  const [openIds, setOpenIds] = useState<string[]>(() =>
+    initialConversations.slice(0, INITIAL_TABS).map((conversation) => conversation.id)
+  );
   const [activeId, setActiveId] = useState<string | null>(null);
   const [turns, setTurns] = useState<ChatTurnView[]>([]);
   const [pending, setPending] = useState<Pending | null>(null);
   const [draft, setDraft] = useState("");
   const [error, setError] = useState<string | null>(loadError);
   const [loadingThread, setLoadingThread] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
   const bottom = useRef<HTMLDivElement>(null);
+  const input = useRef<HTMLTextAreaElement>(null);
+  const historyRoot = useRef<HTMLDivElement>(null);
 
   const busy = pending !== null;
+  const titles = new Map(conversations.map((conversation) => [conversation.id, conversation.title]));
+  const showEmpty = !loadingThread && turns.length === 0 && !pending;
 
   useEffect(() => {
     bottom.current?.scrollIntoView({ block: "end", behavior: "smooth" });
   }, [turns.length, pending?.queries.length, pending?.running]);
 
+  useEffect(() => {
+    const element = input.current;
+    if (!element) return;
+    element.style.height = "auto";
+    element.style.height = `${Math.min(element.scrollHeight, MAX_INPUT_HEIGHT)}px`;
+  }, [draft]);
+
+  useEffect(() => {
+    if (!historyOpen) return;
+    const onPointer = (event: PointerEvent) => {
+      if (!historyRoot.current?.contains(event.target as Node)) setHistoryOpen(false);
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setHistoryOpen(false);
+    };
+    document.addEventListener("pointerdown", onPointer);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("pointerdown", onPointer);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [historyOpen]);
+
   async function openConversation(id: string) {
+    setHistoryOpen(false);
     if (busy || id === activeId) return;
+    setOpenIds((ids) => (ids.includes(id) ? ids : [...ids, id]));
     setActiveId(id);
     setTurns([]);
     setError(null);
@@ -113,18 +155,23 @@ export function ChatView({ initialConversations, readiness, loadError }: ChatVie
     setActiveId(null);
     setTurns([]);
     setError(null);
+    input.current?.focus();
+  }
+
+  function closeTab(id: string) {
+    if (busy && id === activeId) return;
+    setOpenIds((ids) => ids.filter((open) => open !== id));
+    if (id === activeId) startNew();
   }
 
   function rememberConversation(id: string, question: string) {
     const now = new Date().toISOString();
     setConversations((list) => {
       const existing = list.find((conversation) => conversation.id === id);
-      const firstLine = question.split("\n")[0].trim();
-      const entry = existing
-        ? { ...existing, updatedAt: now }
-        : { id, title: firstLine.length > TITLE_CHARS ? `${firstLine.slice(0, TITLE_CHARS - 1)}…` : firstLine, updatedAt: now };
+      const entry = existing ? { ...existing, updatedAt: now } : { id, title: titleFrom(question), updatedAt: now };
       return [entry, ...list.filter((conversation) => conversation.id !== id)];
     });
+    setOpenIds((ids) => (ids.includes(id) ? ids : [id, ...ids]));
   }
 
   function applyStep(event: ChatStepEvent) {
@@ -197,137 +244,192 @@ export function ChatView({ initialConversations, readiness, loadError }: ChatVie
 
   return (
     <div className={styles.page}>
-      <aside className={styles.rail} aria-label="Your conversations">
-        <Button variant="primary" size="sm" block leadingIcon={<PlusIcon size={16} />} onClick={startNew} disabled={busy}>
-          New conversation
-        </Button>
-        <p className={styles.railLabel}>Your conversations</p>
-        {conversations.length === 0 ? (
-          <p className={styles.railEmpty}>Nothing yet. Your questions are kept here, visible only to you.</p>
-        ) : (
-          <ul className={styles.list}>
-            {conversations.map((conversation) => (
-              <li key={conversation.id}>
-                <button
-                  type="button"
-                  className={`${styles.item} ${conversation.id === activeId ? styles.itemActive : ""}`}
-                  onClick={() => openConversation(conversation.id)}
-                  disabled={busy}
-                  aria-current={conversation.id === activeId || undefined}
-                >
-                  <span className={styles.itemTitle}>{conversation.title}</span>
-                  <span className={styles.itemDate}>{formatDate(conversation.updatedAt)}</span>
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-      </aside>
+      <h1 className={styles.srOnly}>Ask the data</h1>
+      <div className={styles.panel}>
+        <div className={styles.tabBar}>
+          <div className={styles.tabs} role="tablist" aria-label="Conversations">
+            <div className={`${styles.tab} ${activeId === null ? styles.tabActive : ""}`}>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={activeId === null}
+                className={styles.tabButton}
+                onClick={startNew}
+                disabled={busy}
+              >
+                <PlusIcon size={14} />
+                <span className={styles.tabLabel}>New chat</span>
+              </button>
+            </div>
+            {openIds.map((id) => {
+              const title = titles.get(id) ?? "Conversation";
+              return (
+                <div key={id} className={`${styles.tab} ${id === activeId ? styles.tabActive : ""}`}>
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={id === activeId}
+                    className={styles.tabButton}
+                    onClick={() => openConversation(id)}
+                    disabled={busy && id !== activeId}
+                    title={title}
+                  >
+                    <span className={styles.tabLabel}>{title}</span>
+                  </button>
+                  <button
+                    type="button"
+                    className={styles.tabClose}
+                    onClick={() => closeTab(id)}
+                    disabled={busy && id === activeId}
+                    aria-label={`Close ${title}`}
+                  >
+                    <CloseIcon size={13} />
+                  </button>
+                </div>
+              );
+            })}
+          </div>
 
-      <section className={styles.main}>
-        <header className={styles.header}>
-          <h1 className={styles.title}>
-            Ask the data <span className={styles.beta}>Beta</span>
-          </h1>
-          <p className={styles.subtitle}>
-            Answers are worked out with SQL on the live database, from totals and counts only: no customer names,
-            addresses or messages. Before relying on a figure, open <em>How this was answered</em> under it to see
-            the queries.
-          </p>
-        </header>
-
-        {!readiness.ready && (
-          <div className={styles.notice} role="alert">
-            <AlertIcon size={16} />
-            <div>
-              <strong>The chat is not set up on this server yet.</strong>
-              <ul>
-                {readiness.problems.map((problem) => (
-                  <li key={problem}>{problem}</li>
-                ))}
-              </ul>
+          <div className={styles.tabBarEnd}>
+            <span className={styles.beta}>Beta</span>
+            <div className={styles.historyWrap} ref={historyRoot}>
+              <button
+                type="button"
+                className={styles.historyBtn}
+                aria-haspopup="menu"
+                aria-expanded={historyOpen}
+                onClick={() => setHistoryOpen((open) => !open)}
+                disabled={busy}
+              >
+                <ClockIcon size={15} />
+                <span className={styles.historyLabel}>History</span>
+              </button>
+              {historyOpen && (
+                <div className={styles.historyMenu} role="menu">
+                  {conversations.length === 0 ? (
+                    <p className={styles.historyEmpty}>No conversations yet. They are kept here, visible only to you.</p>
+                  ) : (
+                    conversations.map((conversation) => (
+                      <button
+                        key={conversation.id}
+                        type="button"
+                        role="menuitem"
+                        className={`${styles.historyItem} ${conversation.id === activeId ? styles.historyItemActive : ""}`}
+                        onClick={() => openConversation(conversation.id)}
+                      >
+                        <span className={styles.historyTitle}>{conversation.title}</span>
+                        <span className={styles.historyDate}>{formatDate(conversation.updatedAt)}</span>
+                      </button>
+                    ))
+                  )}
+                </div>
+              )}
             </div>
           </div>
-        )}
+        </div>
 
-        <div className={styles.thread}>
-          {loadingThread && <p className={styles.muted}>Loading the conversation…</p>}
-
-          {!loadingThread && turns.length === 0 && !pending && (
-            <div className={styles.empty}>
-              <span className={styles.emptyIcon}>
-                <SparkleIcon size={20} />
-              </span>
-              <p className={styles.emptyText}>
-                Ask about sales, orders, fulfilment, customers, products, promotions or support. Follow-up questions
-                keep the context.
-              </p>
-              <div className={styles.examples}>
-                {EXAMPLES.map((example) => (
-                  <button
-                    key={example}
-                    type="button"
-                    className={styles.example}
-                    onClick={() => ask(example)}
-                    disabled={!readiness.ready}
-                  >
-                    {example}
-                  </button>
-                ))}
+        <div className={styles.body}>
+          <div className={styles.column}>
+            {!readiness.ready && (
+              <div className={styles.notice} role="alert">
+                <AlertIcon size={16} />
+                <div>
+                  <strong>The chat is not set up on this server yet.</strong>
+                  <ul>
+                    {readiness.problems.map((problem) => (
+                      <li key={problem}>{problem}</li>
+                    ))}
+                  </ul>
+                </div>
               </div>
-            </div>
-          )}
+            )}
 
-          {turns.map((turn) => (
-            <ChatTurn key={turn.id} turn={turn} />
-          ))}
-          {pending && <PendingTurn {...pending} />}
+            {loadingThread && <p className={styles.muted}>Loading the conversation…</p>}
 
-          {error && (
-            <div className={styles.error} role="alert">
-              <AlertIcon size={16} />
-              <span>{error}</span>
-            </div>
-          )}
-          <div ref={bottom} />
+            {showEmpty && (
+              <div className={styles.empty}>
+                <span className={styles.emptyIcon}>
+                  <SparkleIcon size={22} />
+                </span>
+                <h2 className={styles.emptyTitle}>What would you like to know?</h2>
+                <p className={styles.emptyText}>
+                  Ask about sales, orders, fulfilment, customers, products, promotions or support. Answers are worked
+                  out with SQL on the live data, from totals only, and each one shows the queries behind it.
+                </p>
+                <p className={styles.promptsLabel}>Try these prompts:</p>
+                <div className={styles.prompts}>
+                  {EXAMPLES.map((example) => (
+                    <button
+                      key={example}
+                      type="button"
+                      className={styles.prompt}
+                      onClick={() => ask(example)}
+                      disabled={!readiness.ready}
+                    >
+                      {example}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {turns.map((turn) => (
+              <ChatTurn key={turn.id} turn={turn} />
+            ))}
+            {pending && <PendingTurn {...pending} />}
+
+            {error && (
+              <div className={styles.error} role="alert">
+                <AlertIcon size={16} />
+                <span>{error}</span>
+              </div>
+            )}
+            <div ref={bottom} />
+          </div>
         </div>
 
-        <form
-          className={styles.composer}
-          onSubmit={(event) => {
-            event.preventDefault();
-            ask(draft);
-          }}
-        >
-          <textarea
-            className={styles.input}
-            value={draft}
-            onChange={(event) => setDraft(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
-                event.preventDefault();
-                ask(draft);
-              }
+        <div className={styles.composerArea}>
+          <form
+            className={styles.composer}
+            onSubmit={(event) => {
+              event.preventDefault();
+              ask(draft);
             }}
-            placeholder={activeId ? "Ask a follow-up…" : "Ask a question…"}
-            rows={2}
-            maxLength={MAX_QUESTION_CHARS}
-            disabled={!readiness.ready || busy}
-            aria-label="Your question"
-          />
-          <Button type="submit" variant="primary" loading={busy} disabled={!readiness.ready || !draft.trim()}>
-            Ask
-          </Button>
-        </form>
-        <div className={styles.footnote}>
-          <span className={styles.spend} title="Model cost of this conversation, priced from llm-rates.mjs (USD, list prices)">
-            {spendLabel(turns)}
-          </span>
-          <span>
-            {readiness.model} · Enter to send, Shift+Enter for a new line · Every question and query is logged.
-          </span>
+          >
+            <textarea
+              ref={input}
+              className={styles.input}
+              value={draft}
+              onChange={(event) => setDraft(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
+                  event.preventDefault();
+                  ask(draft);
+                }
+              }}
+              placeholder={activeId ? "Ask a follow-up" : "Ask something"}
+              rows={1}
+              maxLength={MAX_QUESTION_CHARS}
+              disabled={!readiness.ready || busy}
+              aria-label="Your question"
+            />
+            <button
+              type="submit"
+              className={styles.send}
+              disabled={!readiness.ready || busy || !draft.trim()}
+              aria-label={busy ? "Answering…" : "Send"}
+            >
+              {busy ? <span className={styles.sendSpinner} aria-hidden="true" /> : <ArrowRightIcon size={16} />}
+            </button>
+          </form>
+          <div className={styles.footnote}>
+            <span className={styles.spend} title="Model cost of this conversation, priced from llm-rates.mjs (USD, list prices)">
+              {spendLabel(turns)}
+            </span>
+            <span>{readiness.model} · Enter to send, Shift+Enter for a new line</span>
+          </div>
         </div>
-      </section>
+      </div>
     </div>
   );
 }
