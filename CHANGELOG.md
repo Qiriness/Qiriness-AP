@@ -12,6 +12,8 @@ Three sibling files carry the other halves, and this one deliberately does not d
 
 ## Home: the management chat, Beta (2026-09-14)
 
+Deployment fix: `web/package.json` now declares `pg`, because Vercel builds from `web/` while `/api/chat` imports the SQL executor that uses `pg`. Proven by a clean `npm run build` from `web/`.
+
 The sidebar's "Home — Soon" is now **Home · Beta** (`/home`), for Management and Developer only: not drawn for the contact team, and refused to it by the middleware, the page and every `/api/chat` route. A manager asks a question and `gpt-5.2` (`CHAT_MODEL`) answers it by querying the database with one tool, `execute_sql`, for at most 8 steps. Under every answer, **How this was answered** shows each query's SQL, time and rows. Conversations belong to their user; follow-ups carry the earlier questions, answers and their SQL; every turn and query is logged with its errors, duration and token counts (`chat_conversations` / `chat_turns` / `chat_queries`).
 
 The model's SQL runs as a new login role, **`mgmt_chat_ro`**, over a new **`chat` schema of 13 views holding no personal data** — migration `17_management_chat.sql`, applied. Each query is checked (SELECT/WITH only, one statement, `chat` schema only, no settings or catalogue access), then run in a read-only transaction with a 10 s timeout and a 1,000-row cap, and rolled back. The model is shown at most 200 rows of a result. The OpenAI transport now sends reasoning models `max_completion_tokens` and no `temperature`.
