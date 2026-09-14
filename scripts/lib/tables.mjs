@@ -158,7 +158,10 @@ export const RPC = {
   VIP_TICKETS: 'vip_tickets',
   VIP_SUMMARY: 'vip_summary',
   // Orders waiting to ship, each marked VIP through vip_customers().
-  OPEN_ORDERS: 'open_orders'
+  OPEN_ORDERS: 'open_orders',
+  // The Orders page: one page of every order, and its filter options.
+  ORDERS_LIST: 'orders_list',
+  ORDERS_LIST_FACETS: 'orders_list_facets'
 };
 
 /**

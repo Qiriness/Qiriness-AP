@@ -9,7 +9,7 @@ import {
   ExternalLinkIcon,
   HomeIcon,
   InsightsIcon,
-  KnowledgeIcon,
+  OrdersIcon,
   SettingsIcon,
   StoreIcon,
   TicketIcon,
@@ -32,7 +32,8 @@ const NAV: NavItem[] = [
   // every page under /insights passes "/insights" as its activeHref and the
   // panel tabs inside handle the rest.
   { label: "Insights", href: "/insights", icon: InsightsIcon, available: true },
-  { label: "Knowledge", href: "#", icon: KnowledgeIcon, available: false },
+  // `/orders/[id]` passes "/orders" as its activeHref, as Insights does.
+  { label: "Orders", href: "/orders", icon: OrdersIcon, available: true },
   { label: "Agent Setup", href: "/agent-setup", icon: AgentIcon, available: true },
   { label: "Settings", href: "/settings", icon: SettingsIcon, available: true },
 ];

@@ -1149,6 +1149,134 @@ export interface OpenOrder {
   isVip: boolean;
 }
 
+// --- Orders page ---------------------------------------------------------------
+
+/** An order's open tickets, as the ring around its destination. */
+export interface OrderTicketMark {
+  /** The most urgent open ticket's queue band. */
+  band: TicketPriorityBand;
+  openTickets: number;
+}
+
+/** One filter option and how many orders it selects. */
+export interface OrderFacet {
+  value: string;
+  label: string;
+  orders: number;
+}
+
+/** The filters, as `parseOrderListQuery` reads them from the URL. */
+export interface OrderListQuery {
+  status: string | null;
+  /** A country code, `??` for no destination, or null for Global. */
+  country: string | null;
+  vip: boolean;
+  /** Order name, buyer name or email, or tracking number; null for none. */
+  search: string | null;
+  page: number;
+}
+
+export interface OrderListRow {
+  orderId: string;
+  name: string;
+  /** Shop clock: `14 Sep 2026, 10:22`. */
+  placedLabel: string;
+  cancelled: boolean;
+  customerName: string | null;
+  isVip: boolean;
+  totalLabel: string;
+  fulfillmentStatus: string | null;
+  fulfillmentLabel: string;
+  /** Whole days waiting to ship; null when the order is not waiting. */
+  delayDays: number | null;
+  /** Waiting three days or more — the line the dispatch figures use. */
+  late: boolean;
+  units: number;
+  carrier: string | null;
+  countryCode: string | null;
+  country: string | null;
+  city: string | null;
+  /** Null when no open ticket is confirmed against this order. */
+  ticket: OrderTicketMark | null;
+}
+
+export interface OrderListPage {
+  rows: OrderListRow[];
+  /** Orders matching the filters, across every page. */
+  total: number;
+  pageSize: number;
+  /** The query actually served — the page falls back to 1 past the end. */
+  query: OrderListQuery;
+  facets: { statuses: OrderFacet[]; countries: OrderFacet[] };
+  vipRuleSet: boolean;
+}
+
+export interface OrderLineItem {
+  id: string;
+  title: string;
+  variantTitle: string | null;
+  sku: string | null;
+  quantity: number;
+  /** After removals and refunds; below `quantity` when something came off. */
+  currentQuantity: number;
+  totalLabel: string | null;
+  /** Set only when a discount moved the price. */
+  originalTotalLabel: string | null;
+}
+
+export interface OrderFulfilment {
+  id: string;
+  name: string | null;
+  statusLabel: string;
+  createdLabel: string | null;
+  deliveredLabel: string | null;
+  tracking: { company: string | null; number: string | null; url: string | null }[];
+}
+
+export interface OrderLinkedTicket {
+  id: string;
+  subject: string | null;
+  statusLabel: string;
+  open: boolean;
+  band: TicketPriorityBand;
+  score: number;
+  level: TicketLevel | null;
+}
+
+export interface OrderDetail {
+  orderId: string;
+  name: string;
+  adminUrl: string | null;
+  placedLabel: string;
+  cancelledLabel: string | null;
+  cancelReason: string | null;
+  platformLabel: string;
+  channelLabel: string | null;
+  financialLabel: string | null;
+  fulfillmentStatus: string | null;
+  fulfillmentLabel: string;
+  returnLabel: string | null;
+  tags: string[];
+  units: number;
+  lineItems: OrderLineItem[];
+  fulfilments: OrderFulfilment[];
+  returns: { id: string; name: string | null; statusLabel: string; createdLabel: string | null }[];
+  refunds: { id: string; createdLabel: string | null; amountLabel: string | null }[];
+  money: { label: string; value: string; strong?: boolean }[];
+  destination: { city: string | null; province: string | null; country: string | null; countryCode: string | null } | null;
+  customer: {
+    name: string | null;
+    /** Null for a marketplace buyer, whose record holds a placeholder address. */
+    email: string | null;
+    isVip: boolean;
+    ordersCount: number | null;
+    spentLabel: string | null;
+  } | null;
+  /** `j***l@orange.fr` — shown where no customer record is linked. */
+  maskedEmail: string | null;
+  tickets: OrderLinkedTicket[];
+}
+
 export interface FulfilmentPanel {
   summary: Compared<OrdersSummary>;
   openOrders: OpenOrder[];

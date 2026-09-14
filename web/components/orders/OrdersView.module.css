@@ -1,0 +1,398 @@
+.page {
+  max-width: var(--container-max);
+  margin: 0 auto;
+  padding: var(--space-5) clamp(1rem, 2.4vw, 3rem) var(--space-8);
+}
+
+.header {
+  margin: 0 0 var(--space-5);
+}
+
+.title {
+  margin: 0;
+  font-size: var(--text-2xl);
+  font-weight: var(--weight-bold);
+  letter-spacing: -0.01em;
+  color: var(--text-strong);
+}
+
+.subtitle {
+  margin: var(--space-1) 0 0;
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+.error {
+  margin: 0 0 var(--space-4);
+  padding: var(--space-4);
+  border-radius: var(--radius-md);
+  background: var(--error-050);
+  color: var(--priority-high-ink);
+}
+
+/* --- filters --- */
+
+.filters {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  margin: 0 0 var(--space-4);
+}
+
+.filters[data-pending] {
+  opacity: 0.7;
+}
+
+.group {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.field {
+  display: inline-flex;
+}
+
+.select {
+  height: 2.25rem;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  font: inherit;
+  font-size: var(--text-sm);
+  color: var(--text-default);
+}
+
+/* --- table card --- */
+
+.card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-xs);
+  overflow: hidden;
+}
+
+.pending {
+  opacity: 0.55;
+  pointer-events: none;
+  transition: opacity var(--dur) var(--ease-out);
+}
+
+.tableWrap {
+  overflow-x: auto;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-body);
+}
+
+.table th,
+.table td {
+  padding: var(--space-3);
+  text-align: left;
+  border-bottom: 1px solid var(--mist-050);
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+.table th:first-child,
+.table td:first-child {
+  padding-left: var(--space-5);
+}
+
+.table th:last-child,
+.table td:last-child {
+  padding-right: var(--space-5);
+}
+
+.table thead th {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  color: var(--text-subtle);
+  border-bottom-color: var(--border);
+  background: var(--surface-sunken);
+}
+
+.row {
+  cursor: pointer;
+}
+
+.row:hover {
+  background: var(--surface-sunken);
+}
+
+.row th {
+  font-weight: var(--weight-semibold);
+}
+
+.orderLink {
+  color: var(--text-strong);
+  text-decoration: none;
+}
+
+.orderLink:hover {
+  text-decoration: underline;
+}
+
+.cancelled {
+  margin-left: var(--space-2);
+  font-size: var(--text-caption);
+  font-weight: var(--weight-medium);
+  color: var(--text-subtle);
+  text-decoration: line-through;
+}
+
+.date {
+  color: var(--text-muted);
+}
+
+.n {
+  text-align: right !important;
+  font-variant-numeric: tabular-nums;
+}
+
+.muted {
+  color: var(--text-subtle);
+  font-weight: var(--weight-regular);
+}
+
+/* The NAME truncates, the crown never does — as in the ticket queue. */
+.name {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  max-width: 16rem;
+}
+
+.nameText {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.crown {
+  display: inline-flex;
+  flex: none;
+  color: var(--gold-strong);
+}
+
+/* Fulfilment status: neutral on purpose. Colour on this page belongs to the
+   ticket ring, and a second coloured signal per row would compete with it. */
+.status {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 2px var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  font-size: var(--text-sm);
+  color: var(--text-default);
+}
+
+/* Light amber while an order is not fulfilled: warm enough to find by eye in a
+   column of grey, pale enough not to read as the orange ticket ring. Local
+   rather than a token — gold is VIP's, and --warning is the orange ramp. */
+.statusDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  border: 1.5px solid #e8a93a;
+  background: #ffd98a;
+}
+
+.status[data-status="FULFILLED"] {
+  background: var(--surface-sunken);
+  color: var(--text-muted);
+}
+
+.delay {
+  font-variant-numeric: tabular-nums;
+  color: var(--text-default);
+}
+
+/* Three days or more, as on the Fulfilment panel's waiting orders. Ink only, no
+   fill, so it does not compete with the ring on the name. */
+.late {
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--weight-semibold);
+  color: var(--priority-high-ink);
+}
+
+/* --- search --- */
+
+.search {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  flex: 1 1 18rem;
+  max-width: 26rem;
+}
+
+.searchIcon {
+  position: absolute;
+  left: var(--space-3);
+  color: var(--text-subtle);
+  pointer-events: none;
+}
+
+.searchInput {
+  width: 100%;
+  height: 2.25rem;
+  padding: 0 var(--space-3) 0 calc(var(--space-3) + 1.4rem);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  font: inherit;
+  font-size: var(--text-sm);
+  color: var(--text-default);
+}
+
+.searchInput:focus-visible {
+  outline: 2px solid var(--teal);
+  outline-offset: -1px;
+  /* The global :focus-visible rule paints a box-shadow too (DECISIONS § Tickets
+     dashboard, "One focus ring"); one ring is enough. */
+  box-shadow: none;
+}
+
+.status[data-status="FULFILLED"] .statusDot {
+  border-color: var(--text-muted);
+  background: var(--text-muted);
+}
+
+.destination {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+/* The ticket ring, around the customer's name. An inset shadow, not a border,
+   so a ringed cell keeps the height and alignment of its neighbours; the
+   padding is on every name so ringed and plain names line up. */
+.ring {
+  padding: 3px var(--space-2);
+  margin-left: calc(var(--space-2) * -1);
+  border-radius: var(--radius-sm);
+}
+
+.ring[data-band="high"] {
+  box-shadow: inset 0 0 0 2px var(--priority-high);
+}
+
+.ring[data-band="medium"] {
+  box-shadow: inset 0 0 0 2px var(--priority-medium);
+}
+
+.ring[data-band="low"] {
+  box-shadow: inset 0 0 0 2px var(--priority-low);
+}
+
+.place {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 18rem;
+}
+
+.empty {
+  margin: 0;
+  padding: var(--space-6) var(--space-5);
+  text-align: center;
+  color: var(--text-subtle);
+}
+
+/* --- footer --- */
+
+.footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-5);
+  border-top: 1px solid var(--border);
+}
+
+.legend {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+.legendSwatches {
+  display: inline-flex;
+  gap: 3px;
+}
+
+.legendSwatches .ring {
+  width: 1.1rem;
+  height: 0.8rem;
+  padding: 0;
+  margin: 0;
+}
+
+.pager {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+.range {
+  font-variant-numeric: tabular-nums;
+}
+
+.pageOf {
+  font-variant-numeric: tabular-nums;
+}
+
+.pageBtn {
+  height: 2rem;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  font: inherit;
+  color: var(--text-default);
+  cursor: pointer;
+}
+
+.pageBtn:hover:not(:disabled) {
+  background: var(--surface-sunken);
+}
+
+.pageBtn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+@media (max-width: 620px) {
+  .table th:first-child,
+  .table td:first-child {
+    padding-left: var(--space-4);
+  }
+
+  .footer {
+    padding: var(--space-3) var(--space-4);
+  }
+}

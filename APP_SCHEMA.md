@@ -29,6 +29,9 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |   |   |-- agent-setup/parameters/page.tsx  # Server Component: the numbers
 |   |   |-- tickets/page.tsx              # Server Component: the agent's queue --
 |   |   |                                 # EVERY ticket, staff-sent included
+|   |   |-- orders/page.tsx               # Server Component: every Shopify order, paged
+|   |   |                                 # in SQL; reads ?status= ?country= ?vip= ?page=
+|   |   |-- orders/[id]/page.tsx          # Server Component: one order on cards
 |   |   |-- insights/                     # -> /insights/sales, then one route
 |   |   |                                 # per panel: sales · fulfilment · support ·
 |   |   |                                 # customers · agent. Each reads ?range=
@@ -73,6 +76,11 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |   |   |                            # TrackingText (tracking numbers -> carrier links,
 |   |   |                            # used by every surface showing a number in prose)
 |   |   |-- settings/                # ForwardingSettings (saves per row on blur)
+|   |   |-- orders/                  # OrdersView (filters + table + pager, URL state;
+|   |   |                            # customer name ringed by open-ticket band) ·
+|   |   |                            # OrderDetailView (Articles · Fulfilment · Payment ·
+|   |   |                            # Tickets · Customer · Destination · Tags cards,
+|   |   |                            # reusing insights Card + Flag)
 |   |   |-- insights/                # InsightsPage (shell + header + one panel) ·
 |   |   |                            # InsightsFrame (URL navigation, pending dim) ·
 |   |   |                            # PinBoard (pin a row to the top, 2 max, per
@@ -82,7 +90,8 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |   |   |                            # Card KpiCard DeltaChip BlockedCard BarList) ·
 |   |   |                            # TimeSeriesChart · ColumnChart (stacked, negative,
 |   |   |                            # net line) · SplitBar · Segmented · Flag (inline SVG) ·
-|   |   |                            # tables.module.css · SalesView + BestProducts +
+|   |   |                            # tables.module.css · SalesView + BestProducts (searchable,
+|   |   |                            # accent-insensitive, rank kept) +
 |   |   |                            # CountrySales + ProductPairs · FulfilmentView ·
 |   |   |                            # OpenOrders · SupportView + TopicMap · CustomersView +
 |   |   |                            # VipRuleCard + CustomerActivityRows · AgentView
@@ -118,7 +127,9 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |   |   |                        # formatValue(unit) for the client charts
 |   |   |-- relative-time.ts demo-data.ts
 |   |   `-- server/              # knowledge-service · forwarding-service ·
-|   |       |                    # tickets-service (list + detail + thread + status) ·
+|   |       |                    # tickets-service (list + detail + thread + status,
+|   |       |                    # + listTicketsWithOrders for the Orders page) ·
+|   |       |                    # orders-service (orders_list page + one order) ·
 |   |       |                    # dropped-mail-service · knowledge-errors ·
 |   |       |                    # auth (getSession, re-checked not trusted) ·
 |   |       |                    # access-log (a data_access_events row per
@@ -162,7 +173,7 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |       |-- shopify-sync-mappers.mjs shop-sync-service.mjs
 |       |-- supabase-rest-client.mjs     # REST select/upsert/update/delete/rpc
 |       |-- tables.mjs                   # THE SCHEMA CONTRACT: 31 tables, 24 views,
-|       |                                # 32 rpcs, and the recurring projections.
+|       |                                # 34 rpcs, and the recurring projections.
 |       |                                # Asserted against the DDL by _shared.test
 |       |-- ticket-record.mjs            # THE ONLY WRITER OF `tickets`: pass protocol
 |       |                                # (claim/complete/skip/retry/abandon +
@@ -177,6 +188,10 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |       |-- ticket-priority.mjs          # pure read-time queue score + band:
 |       |                                # level, customer wait, inbound contacts,
 |       |                                # awaiting_human, VIP
+|       |-- order-list-query.mjs         # pure: the Orders page URL -> search + filters +
+|       |                                # page, normaliseSearch, delayDays,
+|       |                                # orderNumberKey (#7008 == 7008), and
+|       |                                # ticketMarksByOrder (most urgent open band)
 |       |-- sync-config.mjs              # CLI + env parsing, loadEnv
 |       |-- hash.mjs collections.mjs html-to-text.mjs text-cleaning.mjs
 |       |-- quoted-reply.mjs             # strips reply chains
@@ -402,6 +417,8 @@ only non-empty buckets; order functions take `p_channels` / `p_not_channels`.
 
 **The VIP rule** is three functions in `06_analytics.sql`: `vip_customers()` (the rule: net spend AND orders in the window, both strictly above the shop's thresholds; Shopify orders only), and `vip_tickets()` / `vip_summary()` built on it, plus `open_orders()` — orders not fulfilled, cancelled or closed, each buyer marked VIP through it.
 
+**The Orders page** is two functions in `06_analytics.sql`: `orders_list()` (one page of every live order, newest first, with buyer name, VIP through `vip_customers()`, units, normalised carrier, destination and `total_count` of the filtered set) and `orders_list_facets()` (each fulfilment status and country with its count, grouped on the same expressions the list filters on).
+
 They expose `rfm_group` and never `is_vip`: who counts as a VIP is a business
 rule owned by `customer-segments.mjs` and applied at read time.
 
@@ -455,6 +472,8 @@ Written by the worker and the CLIs, read only by the Insights panels.
 | `12_vip_rule.sql` | adds the `shops` VIP rule columns + check, and `vip_customers()` / `vip_tickets()` / `vip_summary()`, copied from 06 (its test asserts it, and that the rule is AND with strict comparisons). Sets no rule. Applied 2026-09-11 | 01, 02, 04, 06 |
 | `11_insights_ranges.sql` | adds `shops.iana_timezone` and the 18 ranged Insights functions, **copied byte-for-byte from 06** (its test asserts it). Applied to the live database 2026-09-11 | 01, 02, 04, 06 |
 | `14_fulfilment_waiting.sql` | replaces `insights_fulfilment_buckets()` with the version that also returns a `Not shipped yet` bucket, counted as `open_orders()` counts it — orders with no duration to bucket were previously drawn nowhere. Copied byte-for-byte from 06; supersedes 11's copy of that one function. Applied 2026-09-12 | 01, 02, 06 |
+| `15_orders_list.sql` | adds `orders_list()` + `orders_list_facets()` for the Orders page, copied byte-for-byte from 06 (its test asserts it). No table, no data. Applied 2026-09-14 | 01, 02, 06, 12 |
+| `16_orders_search.sql` | drops the 11-argument `orders_list()` and recreates it with `p_search` and an `awaiting_fulfilment` column (open_orders()'s waiting rule); copied byte-for-byte from 06, supersedes 15's copy of that one function | 01, 02, 06, 12, 15 |
 
 `_shared.test.mjs` holds the cross-file invariants (no data statements, RLS on every table, every table and view documented, nothing referenced before it is created, every view `security_invoker` and revoked from the anon roles, every embedded table carrying the whole determinism quadruple, and `scripts/lib/tables.mjs` naming exactly what the baseline creates). Each file has a sibling test for its own contents.
 
@@ -586,6 +605,14 @@ computed is a `BlockedCard` with a required reason, never `0`.
 The Support topic map reads the latest `cluster_runs` row and renders each
 `ticket_clusters` row as its own treemap tile; labels come from
 `clusterLabel()` in `web/lib/insights-support.ts`.
+
+### `/orders` — every Shopify order
+
+`web/app/orders/` → `web/components/orders/`, over `lib/server/orders-service.ts`. Replaced the "Knowledge — Soon" sidebar item. Open to every role.
+
+**List** (`OrdersView`): Order · Date · Name (+ crown when VIP) · Total · Fulfilment status (amber dot until fulfilled) · Delay (whole days waiting to ship, red at 3+, blank once not waiting) · Articles · Carrier · Destination. A search box (order name, buyer name or email, tracking number; debounced) plus filters for fulfilment status, Global / By country, and All customers / VIP only; with the page number they live in the query string (`?q= ?status= ?country= ?vip= ?page=`, parsed by `order-list-query.mjs`) and the server re-renders. 50 rows per page, paged and counted by `orders_list()`. **The customer name is ringed** red / orange / green when an open ticket is confirmed against that order (`tickets.shopify_order_number`), in the most urgent ticket's queue band — read off `listTicketsWithOrders`, folded by `ticketMarksByOrder`, never re-scored. A row opens `/orders/[id]`.
+
+**Detail** (`OrderDetailView`): Articles, Fulfilment (shipments, tracking links, returns), Payment (totals, refunds) on the left; Tickets, Customer (name, email unless marketplace, lifetime orders/spend, VIP), Destination (coarse — no street is stored), Tags on the right; "Open in Shopify" in the header. Both pages write a `data_access_events` row (`resourceType: orders`).
 
 ### `/settings` — forwarding address book
 

@@ -64,6 +64,14 @@ export const KnowledgeIcon = (p: IconProps) => (
   </Base>
 );
 
+export const OrdersIcon = (p: IconProps) => (
+  <Base {...p}>
+    <path d="M4 7.5 12 4l8 3.5v9L12 20l-8-3.5Z" />
+    <path d="M4 7.5 12 11l8-3.5" />
+    <path d="M12 11v9" />
+  </Base>
+);
+
 export const AgentIcon = (p: IconProps) => (
   <Base {...p}>
     <rect x="4.5" y="7.5" width="15" height="11" rx="2.5" />

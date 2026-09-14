@@ -88,7 +88,7 @@ export async function getOpenOrders(ctx: InsightsContext): Promise<{ orders: Ope
 }
 
 /** `https://<shop>.myshopify.com/admin/orders` — Shopify redirects it to the current admin. */
-function adminOrdersUrl(): string | null {
+export function adminOrdersUrl(): string | null {
   try {
     const { shopDomain } = loadConfig(process.env as Record<string, string | undefined>);
     return shopDomain ? `https://${shopDomain}/admin/orders` : null;

@@ -40,6 +40,12 @@ these.
 as its own item: `llm_usage` (item 14), `categorisation_review` (item 15), and
 `category_forwarding` / `ticket_forwards` (item 1).
 
+## 24. The Orders page's ticket ring: data present, colours not yet compared by eye (2026-09-14)
+
+The list, filters, pager and detail page run against the live table (CHANGELOG, Orders page). **Correction, same day:** this item first said 0 tickets carried `shopify_order_number`. That was a bug in the probe (a raw `not.is.null` string, which the REST client sends as `eq.not.is.null` and so matches nothing). Re-read correctly: **58 of 172 tickets carry one**, resolved 2026-09-13 23:23 — `confirmed 58 · no_candidate 96 · mismatch 11 · name_match 2 · not_found 2 · no trail 3`. Stored names are `#6892`-shaped, which is what `orderNumberKey` expects.
+
+**Check still open:** on an order with an open ticket, confirm (a) the customer name is ringed, (b) the colour matches the ticket's bar on `/tickets`, (c) closing the ticket removes the ring on reload, and (d) the order's detail page lists the ticket.
+
 ## 23. Sign-in is built and tested with throwaway accounts only (2026-09-11)
 
 The flow was proven end to end over HTTP against Supabase Auth with scripted accounts that were deleted afterwards (CHANGELOG, "Sign-in through Supabase Auth…"). Not yet seen:

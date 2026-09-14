@@ -142,6 +142,27 @@ export async function listConversations(shopId: string): Promise<TicketListItem[
 }
 
 /**
+ * Every ticket confirmed against an order, from BOTH halves of the partition —
+ * the Orders page rings an order whoever opened the thread about it.
+ *
+ * The list's own projection, so `priorityBand` is the exact band the queue
+ * shows; the Orders page folds these per order and never re-scores them.
+ */
+export async function listTicketsWithOrders(shopId: string): Promise<TicketListItem[]> {
+  const [rows, directory, vipTickets] = await Promise.all([
+    getRecord(shopId).queue(),
+    loadSenderDirectory(shopId),
+    loadVipTickets(shopId)
+  ]);
+  const { tickets, conversations } = partitionBySender(
+    (rows as any[]).filter((row) => row.shopify_order_number),
+    directory,
+    vipTickets
+  );
+  return [...tickets, ...conversations];
+}
+
+/**
  * How many routed threads still need somebody, for the sidebar badge.
  *
  * THE WHOLE MITIGATION FOR ROUTING THEM OUT. The failure this exists to prevent

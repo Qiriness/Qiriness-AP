@@ -2355,6 +2355,41 @@ This is what put the crash-safety rule in one place instead of five comments: **
 
 ---
 
+## Orders
+
+### An Orders page replaced the "Knowledge — Soon" placeholder (2026-09-14)
+
+Asked for by the owner: the Shopify admin's order list, inside the app, so looking an order up does not mean leaving it. The sidebar's Knowledge item never had a page; Orders takes its slot. Columns are the owner's: Order, Date, Name (crown when VIP), Total, Fulfilment status, Articles, Carrier, Destination. Filters: fulfilment status, Global / By country, VIP.
+
+- **Paged in SQL, 50 rows a page.** 6,008 orders is past PostgREST's 1,000-row cap, and paging an unordered read overlaps (§ Insights). `orders_list()` orders totally (`processed_at desc, id desc`) and counts the filtered set with `count(*) over ()` before the page is cut, so the pager and the rows come from one statement. Measured 2026-09-14: pages 1 and 2 share no order, ~300 ms a page warm.
+- **The URL is the state**, as on Insights: a filtered page is linkable and the server re-renders. A page past the end falls back to page 1 rather than an empty table with no count.
+- **Facets come from the data, grouped on the list's own filter expressions**, so each option's count is exactly what selecting it returns — all 17 checked against the live table. Today that is only `FULFILLED` (5,977) and `UNFULFILLED` (31), plus 14 countries and one order with no destination (`??`); a status Shopify adds later appears without a code change.
+- **VIP is `vip_customers()`**, never compared in TypeScript — the same rule as the queue, the Customers panel and `open_orders()`.
+- **The carrier is `order_fulfilment_timing`'s derivation** (lowest tracking company through `normalise_carrier()`), so a row and the Fulfilment carrier table cannot name different carriers. A test pins both.
+- **Fulfilment status was drawn neutral, then given a light amber dot at the owner's request (same day).** The first version kept colour for the ticket ring alone. Amber marks an order not yet fulfilled; it is pale (#ffd98a on #e8a93a) so it does not read as the orange ring, and local to the page because gold belongs to VIP and `--warning` is the orange ramp.
+
+### Delay and search (2026-09-14)
+
+**Delay is whole days since the order was placed, shown only while the order waits to ship**, and "waits" is `open_orders()`'s rule copied condition for condition into `orders_list().awaiting_fulfilment` — not fulfilled or restocked, not cancelled, **not closed**. The last condition is the one that matters: six orders read UNFULFILLED for ever because they were refunded instead of shipped (§ Insights, "Orders waiting to ship"), and a Delay column counting them would show them as the most delayed orders in the shop. A test asserts the two functions share the four conditions. SQL decides *whether*, JavaScript counts *how long* (`delayDays`, floored), because the count moves every minute and the rule does not. Three days or more is red ink, the same line the dispatch figures and the waiting-orders list use; ink rather than a filled pill so it does not compete with the ring.
+
+**Search runs in SQL over the whole table, not over the page on screen.** A filter over 50 rendered rows would report "no match" for an order on page 40. It matches the order name, the buyer's name and email (searched, never displayed on the list), and a tracking number compared in `orders.tracking_numbers`' stored normalised form, so `6C 2072 3002 488` finds `6C20723002488`. LIKE wildcards are stripped in `normaliseSearch` rather than escaped in SQL; nothing a person searches for contains them. The box debounces 350 ms and owns its text while typing, so a slow render for "mar" cannot overwrite "martin".
+
+**Migration 16 drops the old signature before creating the new one.** `create or replace` cannot add an argument or a return column, and adding `p_search` beside the old function would leave two overloads PostgREST refuses to choose between — the page would fail on its first read.
+
+### The destination ring is the queue's band, not a second score
+
+The customer's name is ringed red / orange / green when an **open** ticket is confirmed against the order. It first shipped on the Destination cell and was **moved to the name the same day at the owner's request**: the ticket is about the person who wrote, and the name is where a reader of the row looks for them — the same reason the queue's VIP crown sits beside the name rather than on the row. The colour is the `priorityBand` the ticket already carries on `/tickets` — read through `listTicketsWithOrders` (the list's own projection, both halves of the sender partition) and folded per order by `ticketMarksByOrder`, which only picks the most urgent open band. Re-scoring here would give one ticket two colours the first time either rule changed. The ring is an inset shadow so a ringed cell keeps its neighbours' height, the same reason the queue's bars are.
+
+**The join is `tickets.shopify_order_number`, and that makes the ring a floor.** Only a confirmed match is written there (§ Order resolution), so an order whose ticket never quoted a number stays unringed: a ring can be trusted when present and says nothing when absent. Keys compare through `orderNumberKey` (`#7008` == `7008`), and a non-Shopify reference (`Q00 26200111`) matches nothing rather than its digits. Measured 2026-09-14: **58 of 172 tickets** carry one (an earlier reading of 0 was a probe bug — VALIDATION_LOG 24).
+
+Closed tickets leave no ring: a mark for a finished conversation would say somebody is waiting when nobody is. The detail page still lists them, open first.
+
+### The detail page is cards, and names only what the list already did
+
+Articles, Fulfilment, Payment on the left; Tickets, Customer, Destination, Tags on the right — Shopify's order page shape, with Tickets leading the right column because they are why this page lives in a support app. Personal data matches the Fulfilment panel's waiting orders: name and email, with the email withheld for marketplace buyers (placeholder addresses), and the masked address where no customer is linked. No street address exists to show (§ Data handling). Both pages write a `data_access_events` row. Ticket entries link to `/tickets`, not to the ticket: that page has no deep link yet.
+
+---
+
 ## Agent test chat
 
 The rehearsal harness behind `/agent-setup`'s **Test the agent** button: a message an operator types, put through the real pipeline, with every decision shown. `agent/src/testing/`, `web/lib/server/agent-test-service.ts`, `web/components/agent-test/`.
@@ -2669,6 +2704,14 @@ It was all snapshot. It now carries three ranged figures under the snapshot row,
 **Sales by country** is net revenue per destination country with a flag, the reference card's layout; the first five show and a chevron opens the rest. **The flags are inline SVGs**, deliberately: Windows ships no flag emoji, so `🇫🇷` renders as the letters "FR" on the machine this is read on. Designs are simplified to what survives at 22 px; a country without one gets its code in a neutral badge rather than a wrong flag.
 
 **Bought together** ranks product pairs: every pair of distinct paid products in the same order counts once for that order, whatever else was in it. Revenue is what the two lines brought in together. Global and per-country come from one `GROUPING SETS` query, ranked both ways in SQL, so switching metric is a re-sort. **Free lines are excluded** for the same reason as the product ranking: samples ride along on most orders and would pair with everything.
+
+### Best products can be searched, and a match keeps its rank (2026-09-14)
+
+Asked for by the owner: a box on the Sales panel's Best products card to find one product. **It filters the ranking rather than re-ranking**: a match shows the position it holds in the full list and its bar keeps the leader's scale, so the answer to "find the Masque Repulpant" is "#23, €410", not a list of one that looks like #1. Up to 50 matches show; without a search the card still shows the top 10.
+
+**In the browser, not in SQL**, because the global list already arrives whole — one row per product sold in the range — so there is nothing more to fetch. Matching ignores case **and accents**: the catalogue is French, and "creme" must find "Crème".
+
+**By country, a miss is not proof the product did not sell there.** Country lists are ranked and cut in SQL (`insights_country_product_sales`, `p_limit`), so a search can only reach that country's loaded best sellers — **five**, `PER_COUNTRY` in `sales-service.ts` — and the empty state says exactly that, naming how many were loaded, rather than "no match". Raising the cap would make country search useful and costs rows per country per metric; not done without asking.
 
 ### Numbers a client component prints are formatted by hand (2026-09-11)
 

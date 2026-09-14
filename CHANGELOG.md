@@ -10,6 +10,30 @@ Three sibling files carry the other halves, and this one deliberately does not d
 
 ---
 
+## Insights → Sales: search on Best products (2026-09-14)
+
+A "Find a product" box on the Best products card. Filters the current ranking (Global or a country, by revenue or orders) as you type, case- and accent-insensitive; each match keeps its rank in the full list and its bar keeps the leader's scale; up to 50 matches. Client-side only — no query or schema change. By country it can only reach the best sellers loaded for that country, and the empty state says so. `BestProducts.tsx` only; `tsc` clean, not yet seen in the browser.
+
+---
+
+## Orders page: Delay column, amber status dot, search (2026-09-14)
+
+A **Delay** column after Fulfilment status: whole days since the order was placed, only while it waits to ship (open_orders()'s rule, so refunded-but-unfulfilled orders are excluded), red at 3 days or more. The fulfilment status dot is light amber until an order is fulfilled. A **search box** matches order name, buyer name or email, and tracking number across every order, debounced and kept in `?q=`.
+
+`orders_list()` gains `p_search` and `awaiting_fulfilment` — in `06_analytics.sql` and as migration `16_orders_search.sql`, which drops the old signature first. `order-list-query.mjs` gains `normaliseSearch` and `delayDays`. Tests: `16_orders_search.test.mjs`; `15_orders_list.test.mjs` exempts a function a later migration supersedes (as 11's does); `INCREMENTAL_FILES` in `_shared.test.mjs` now lists 15 and 16 — 15 had been left out of it when it shipped.
+
+---
+
+## Orders page (2026-09-14)
+
+The sidebar's "Knowledge — Soon" item is now **Orders** (`/orders`): every Shopify order, 50 a page, with Order, Date, Name (VIP crown), Total, Fulfilment status, Articles, Carrier and Destination; filters for fulfilment status, Global / By country and VIP, all in the URL. A row opens `/orders/[id]`: Articles, Fulfilment (tracking links, returns), Payment (totals, refunds), Tickets, Customer, Destination and Tags cards, plus a link to the order in Shopify. The customer's name is ringed in the queue colour of the most urgent open ticket confirmed against the order (first built on the Destination cell; moved to the name the same day).
+
+New: `orders_list()` + `orders_list_facets()` (in `06_analytics.sql`, and as migration `15_orders_list.sql`, **applied to the live database 2026-09-14**), `scripts/lib/order-list-query.mjs`, `web/lib/server/orders-service.ts`, `listTicketsWithOrders` in `tickets-service.ts`, `components/orders/`. Tests: `15_orders_list.test.mjs` (byte-for-byte copy of 06, VIP through `vip_customers()`, total page order, facet/filter expressions agree, carrier rule shared) and `order-list-query.test.mjs`; `npm test` 2,329 pass, `tsc` clean.
+
+**Proven against live data:** 6,008 orders, pages 1–2 disjoint, all 17 facet counts equal their filtered totals, VIP-only 778, ~300 ms a page warm (4.4 s on the first call after the schema reload). **Not proven:** the ring's colours against `/tickets` by eye. 58 of 172 tickets carry `shopify_order_number`; this entry first said 0, which was a bug in the probe query, not the data (VALIDATION_LOG 24).
+
+---
+
 ## From-scratch re-run over the latest 400 messages (2026-09-14)
 
 The ticket corpus was wiped and re-ingested. Before: 400 tickets, 852 messages, 137 investigations,
