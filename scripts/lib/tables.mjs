@@ -174,7 +174,9 @@ export const RPC = {
   OPEN_ORDERS: 'open_orders',
   // The Orders page: one page of every order, and its filter options.
   ORDERS_LIST: 'orders_list',
-  ORDERS_LIST_FACETS: 'orders_list_facets'
+  ORDERS_LIST_FACETS: 'orders_list_facets',
+  // The Customers panel's Segment Finder: OR-of-AND conditions over orders and spend.
+  CUSTOMER_SEGMENT_FIND: 'customer_segment_find'
 };
 
 /**

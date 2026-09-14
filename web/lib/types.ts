@@ -1353,6 +1353,54 @@ export interface ProductCustomerMix {
   notice: string | null;
 }
 
+// --- Segment Finder (Customers panel) -------------------------------------------
+
+export type SegmentMetric = "orders" | "spend" | "lifetime_spend";
+export type SegmentOperator = "gt" | "lt";
+export type SegmentConnector = "and" | "or";
+
+export interface SegmentCondition {
+  metric: SegmentMetric;
+  op: SegmentOperator;
+  value: number;
+}
+
+/** A checked segment, as `validateSegment` in scripts/lib/segment-finder.mjs returns it. */
+export interface SegmentDefinition {
+  windowMonths: number;
+  conditions: SegmentCondition[];
+  /** One fewer than the conditions: what sits in each gap. AND binds tighter than OR. */
+  connectors: SegmentConnector[];
+}
+
+export interface SegmentMember {
+  customerId: string;
+  name: string | null;
+  /** Orders and spend inside the window; lifetime spend over every order. */
+  orders: number;
+  spend: number;
+  lifetimeSpend: number;
+  lastOrderAt: string | null;
+  onMarketingList: boolean;
+}
+
+export interface SegmentFinderResult {
+  /** The segment as one bracketed line, e.g. `(Orders … > 2 AND Spent … > €100) OR …`. */
+  description: string;
+  windowMonths: number;
+  matched: number;
+  matchedOnMarketingList: number;
+  matchedSpend: number;
+  matchedLifetimeSpend: number;
+  /** Every Shopify customer on file, marketplace-synthetic records excluded. */
+  baseCustomers: number;
+  /** Of those, who ever placed a Shopify order. */
+  baseBuyers: number;
+  /** The highest lifetime spenders among the matches, capped at `memberLimit`. */
+  members: SegmentMember[];
+  memberLimit: number;
+}
+
 export interface SalesPanel {
   summary: Compared<OrdersSummary>;
   /** Days of the range elapsed so far — the divisor behind "per day". */

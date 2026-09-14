@@ -5,6 +5,7 @@ import type { CustomerPanel } from "@/lib/types";
 import { CATEGORY_LABELS, TICKET_HAPPINESS_MEANINGS, TICKET_LEVEL_LABELS } from "@/lib/types";
 import { AT_RISK_SORTS, formatWait, sortAtRisk, type AtRiskSort } from "@/lib/insights-customers";
 import { BarList, Card, EmptyState, Grid, KpiCard, SectionLabel, compactNumber, euros, percent } from "./InsightsKit";
+import { SegmentFinder } from "./SegmentFinder";
 import { VipRuleCard } from "./VipRuleCard";
 import t from "./tables.module.css";
 import styles from "./CustomersView.module.css";
@@ -76,6 +77,8 @@ export function CustomersView({ panel, ranged }: { panel: CustomerPanel; ranged?
           ]}
         />
       </Grid>
+
+      <SegmentFinder />
 
       {ranged ? (
         <>

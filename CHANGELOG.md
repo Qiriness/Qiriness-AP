@@ -48,6 +48,14 @@ Found on the way, not changed: `order_fulfilment_timing` in `06_analytics.sql` r
 
 ---
 
+## Insights → Customers: Segment Finder (2026-09-14)
+
+A **Segment finder** card under the four "Customer base today" cards. Up to six conditions — Orders or Spent over the last N months, or Lifetime spend — each with a **>** / **<** toggle and a number, joined by an **AND / OR** toggle in each gap (AND binds tighter; the sentence underneath shows the brackets). "Find customers" returns how many match (share of customers on file and of buyers), how many are on the newsletter, their spend in the window and lifetime, and the 25 highest lifetime spenders by name. Marketplace-synthetic customers are excluded; spend is net of refunds.
+
+New: `customer_segment_find()` in `06_analytics.sql` and migration `22_segment_finder.sql` (**applied to the live database 2026-09-14**), `scripts/lib/segment-finder.mjs`, `segment-finder-service.ts`, `POST /api/insights/segment-finder`, `SegmentFinder.tsx`. Each search that names customers writes a `data_access_events` row. Tests: `22_segment_finder.test.mjs`, `segment-finder.test.mjs` (validation, AND-before-OR grouping, brackets, and the JS vocabulary checked against the SQL); `npm test` 2,552 pass; `tsc` clean. **Proven live:** five segments match an independent recount from `orders` exactly; base 57,362 = 58,370 on file − 1,008 synthetic; malformed conditions match 0; 0.3–0.7 s per search. Not viewed in the browser.
+
+---
+
 ## Insights: "All time" range preset (2026-09-14)
 
 An **All time** button after "Last year" in the date bar on every Insights tab. It runs from the first synced order (17 May 2024) to today, at the grain that span needs — monthly on this shop, 29 bars — and draws no "vs previous" comparison, since there is no earlier period. Linkable as `?range=all`; a custom from/to still wins.

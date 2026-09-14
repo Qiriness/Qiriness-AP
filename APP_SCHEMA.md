@@ -64,6 +64,9 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |   |       |-- forwarding/route.ts           # GET 14 categories · PUT upsert one
 |   |       |-- insights/vip-rule/route.ts   # GET the rule / preview a draft count ·
 |   |       |                                  # PUT save or clear it (vip-rule.mjs)
+|   |       |-- insights/segment-finder/route.ts  # POST a segment -> matching customers
+|   |       |                                  # (validated by segment-finder.mjs; logs
+|   |       |                                  # access when it names anyone)
 |   |       |-- insights/topic-map/route.ts  # POST rebuild the topic map (no args;
 |   |       |                                  # one run at a time) — topic-map-rebuild.ts
 |   |       |-- insights/support/marketable-contacts/route.ts
@@ -105,7 +108,7 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |   |   |                            # accent-insensitive, rank kept) +
 |   |   |                            # CountrySales + ProductPairs · FulfilmentView ·
 |   |   |                            # OpenOrders · SupportView + TopicMap · CustomersView +
-|   |   |                            # VipRuleCard + CustomerActivityRows · AgentView
+|   |   |                            # VipRuleCard + SegmentFinder + CustomerActivityRows · AgentView
 |   |   |-- tickets/                 # TicketsView (orchestrator) · TicketSection ·
 |   |   |                            # TicketStatCards · TicketTable · TicketDetailPanel ·
 |   |   |                            # TicketThreadDialog · DroppedMailTable +
@@ -202,6 +205,9 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |       |-- ticket-priority.mjs          # pure read-time queue score + band:
 |       |                                # level, customer wait, inbound contacts,
 |       |                                # awaiting_human, VIP
+|       |-- segment-finder.mjs           # pure: Segment Finder vocabulary (orders / spend /
+|       |                                # lifetime_spend, gt / lt, AND / OR), validation,
+|       |                                # AND-before-OR grouping and the bracketed sentence
 |       |-- order-list-query.mjs         # pure: the Orders page URL -> search + filters +
 |       |                                # page, normaliseSearch, delayDays,
 |       |                                # orderNumberKey (#7008 == 7008), and
@@ -511,6 +517,7 @@ Written by the worker and the CLIs, read only by the Insights panels.
 | `18_product_customer_mix.sql` | drops the draft six-argument `insights_product_customer_mix()` and creates the one-product version (`p_product_id`): distinct Shopify customers who bought only it / with other products / not at all, plus its top 7 co-bought products; free lines ignored. Copied byte-for-byte from 06. Applied 2026-09-14 | 01, 02, 06 |
 | `19_product_mix_filters.sql` | drops 18's seven-argument `insights_product_customer_mix()` and recreates it with `p_country`, `p_vip_only` and the VIP rule arguments (through `vip_customers()`); both filters narrow the whole population. Copied byte-for-byte from 06, where the function now sits after `orders_list_facets()` because it calls `vip_customers()`. Supersedes 18's copy. Applied 2026-09-14 | 01, 02, 06, 12, 18 |
 | `20_best_products_vip.sql` | drops and recreates `insights_product_sales()` and `insights_country_product_sales()` with `p_vip_only` + the VIP rule arguments (through `vip_customers()`, off by default); both now sit below `vip_customers()` in 06. Copied byte-for-byte from 06, supersedes 11's copies. Applied 2026-09-14 | 01, 02, 06, 11, 12 |
+| `22_segment_finder.sql` | adds `customer_segment_find()`: customers matching OR-of-AND conditions over orders and net spend in the last N months and lifetime net spend, every customer on file except marketplace-synthetic records; always one totals row plus the top 25 by lifetime spend. Copied byte-for-byte from 06. Applied 2026-09-14 | 01, 02 |
 | `21_chat_vip.sql` | VIP status for the management chat: `chat.vip_customer_rows()` (security definer, no arguments, fixed `search_path`) applies `vip_customers()` with the shop's thresholds and the marketplace handles `vipArgs` excludes; `chat.vip_customers` reads it (ids, windowed orders + net spend), `SELECT` for `mgmt_chat_ro` only. Updates the `chat.shop` comment. Applied 2026-09-14 | 06, 12, 17 |
 
 `_shared.test.mjs` holds the cross-file invariants (no data statements, RLS on every table, every table and view documented, nothing referenced before it is created, every view `security_invoker` and revoked from the anon roles, every embedded table carrying the whole determinism quadruple, and `scripts/lib/tables.mjs` naming exactly what the baseline creates). Each file has a sibling test for its own contents.
@@ -643,7 +650,7 @@ across). The server re-renders; nothing is aggregated in the browser.
 | **Sales** | yes | yes | orders summary + series + by channel + by country, customer mix (marketplaces excluded), product sales, country product sales (re-read over VIP customers' orders with `?bestVip=1`), product pairs, and the "Who buys this product" card (`insights_product_customer_mix` for `?product=`, optionally `?mixCountry=` and `?mixVip=1`, marketplaces excluded; `ProductCustomerMixCard` with a searchable product picker) |
 | **Fulfilment** | yes (the open-orders list is "now") | yes | orders summary + series, fulfilment buckets + carriers, `open_orders()` (orders waiting to ship, VIP-marked, with name + email — `open-orders.ts`) |
 | **Support** | yes | no — tickets have none | support summary + series + categories, orders summary (contact-rate denominator), the latest `cluster_runs` for the topic map (all-time, with a Rebuild button) |
-| **Customers** | the activity rows only (the base is a snapshot) | no — people, so always Shopify | `customer_segment_totals` + `customer_ticket_facts` + `customer-segments.mjs`; orders per customer, marketing summary + series, capture series (`customer-activity-service.ts`) |
+| **Customers** | the activity rows only (the base is a snapshot) | no — people, so always Shopify | `customer_segment_totals` + `customer_ticket_facts` + `customer-segments.mjs`; orders per customer, marketing summary + series, capture series (`customer-activity-service.ts`); the Segment Finder under the base cards, on demand through `POST /api/insights/segment-finder` -> `segment-finder-service.ts` -> `customer_segment_find()` |
 | **AI agent** | yes | no | llm usage + series + ticket stats (priced by `llm-rates.mjs`), agent funnel + verdicts + blockers |
 
 **Every chart point carries a state** — `measured` / `partial` / `missing` from
