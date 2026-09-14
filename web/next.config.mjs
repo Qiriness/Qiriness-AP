@@ -3,6 +3,7 @@ import { fileURLToPath } from "node:url";
 import { loadEnv } from "../scripts/lib/sync-config.mjs";
 
 const repoRoot = fileURLToPath(new URL("..", import.meta.url));
+const webNodeModules = fileURLToPath(new URL("node_modules", import.meta.url));
 
 // Single source of truth for secrets: the repo-root .env.local — the same file
 // the Node sync scripts read. Next.js only auto-loads env files from this web/
@@ -24,6 +25,13 @@ function hydrateProcessEnv() {
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  webpack(config) {
+    // Some Route Handlers import shared modules from ../scripts. When Vercel's
+    // project root is web/, resolve those external imports against web's own
+    // installed dependencies too (not only ancestors of ../scripts).
+    config.resolve.modules = [...(config.resolve.modules ?? []), webNodeModules];
+    return config;
+  },
   experimental: {
     // web/app/api/knowledge/* Route Handlers import shared sync logic directly
     // from ../scripts/lib (outside this project root) instead of a duplicated
