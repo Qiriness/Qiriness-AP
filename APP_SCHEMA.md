@@ -37,7 +37,7 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |   |   |-- insights/                     # -> /insights/sales, then one route
 |   |   |                                 # per panel: sales · fulfilment · support ·
 |   |   |                                 # customers · agent. Each reads ?range=
-|   |   |                                 # (24h|7d|30d|6m|1y) or ?from=&to=, and ?platform=
+|   |   |                                 # (24h|7d|30d|6m|1y|all) or ?from=&to=, and ?platform=
 |   |   |-- settings/page.tsx             # Server Component: forwarding address book
 |   |   |-- login/                        # page.tsx + LoginForm: the only page open
 |   |   |                                 # without a session
@@ -456,7 +456,7 @@ Migration 17. Two halves, on two connections — see `DECISIONS.md § Management
 | Object | Holds |
 | --- | --- |
 | role `mgmt_chat_ro` | what the model's SQL runs as (`CHAT_DB_URL`). `USAGE` on `chat`, `SELECT` on its views, `EXECUTE` on `normalise_carrier` — nothing else. Read-only default, 10 s timeout, `search_path = chat`, 5 connections |
-| schema `chat` | 13 **owner-rights** views, one per thing management asks about: `shop` · `orders` · `order_lines` · `fulfilment_timing` · `customers` · `products` · `promotions` · `tickets` · `ticket_reply_times` · `ticket_message_counts` · `ticket_investigations` · `ticket_drafts` · `llm_usage`. **No names, emails, phones, addresses, subjects or message text.** Their `comment on` text is the schema description the model is given, read at request time |
+| schema `chat` | 13 **owner-rights** views, one per thing management asks about: `shop` · `orders` · `order_lines` · `fulfilment_timing` · `customers` · `products` · `promotions` · `tickets` · `ticket_reply_times` · `ticket_message_counts` · `ticket_investigations` · `ticket_drafts` · `llm_usage`; and `vip_customers` (migration 21), over the security-definer, argument-less `chat.vip_customer_rows()`, which applies `vip_customers()` with the shop's thresholds. **No names, emails, phones, addresses, subjects or message text.** Their `comment on` text is the schema description the model is given, read at request time |
 | `chat_conversations` | one thread, owned by one dashboard user (`user_id` = auth id); title = first question |
 | `chat_turns` | one question + answer: `status` (running / ok / step_limit / empty / error), `error`, `model`, `steps`, tokens, `duration_ms`. Spend here, **not** in `llm_usage` |
 | `chat_queries` | every query tried: `sql`, `ok`, `error` (a refusal or a Postgres error), `row_count`, `truncated`, `duration_ms`, `columns`, the first 50 rows |
@@ -510,6 +510,8 @@ Written by the worker and the CLIs, read only by the Insights panels.
 | `17_management_chat.sql` | the management chat: login role `mgmt_chat_ro` (no password in the file), the `chat` schema of 13 owner-rights views with no personal data, and the log tables `chat_conversations` / `chat_turns` / `chat_queries` (named in `CHAT_T`, not `T`). Applied 2026-09-14 | 01, 02, 04, 06, 07 |
 | `18_product_customer_mix.sql` | drops the draft six-argument `insights_product_customer_mix()` and creates the one-product version (`p_product_id`): distinct Shopify customers who bought only it / with other products / not at all, plus its top 7 co-bought products; free lines ignored. Copied byte-for-byte from 06. Applied 2026-09-14 | 01, 02, 06 |
 | `19_product_mix_filters.sql` | drops 18's seven-argument `insights_product_customer_mix()` and recreates it with `p_country`, `p_vip_only` and the VIP rule arguments (through `vip_customers()`); both filters narrow the whole population. Copied byte-for-byte from 06, where the function now sits after `orders_list_facets()` because it calls `vip_customers()`. Supersedes 18's copy. Applied 2026-09-14 | 01, 02, 06, 12, 18 |
+| `20_best_products_vip.sql` | drops and recreates `insights_product_sales()` and `insights_country_product_sales()` with `p_vip_only` + the VIP rule arguments (through `vip_customers()`, off by default); both now sit below `vip_customers()` in 06. Copied byte-for-byte from 06, supersedes 11's copies. Applied 2026-09-14 | 01, 02, 06, 11, 12 |
+| `21_chat_vip.sql` | VIP status for the management chat: `chat.vip_customer_rows()` (security definer, no arguments, fixed `search_path`) applies `vip_customers()` with the shop's thresholds and the marketplace handles `vipArgs` excludes; `chat.vip_customers` reads it (ids, windowed orders + net spend), `SELECT` for `mgmt_chat_ro` only. Updates the `chat.shop` comment. Applied 2026-09-14 | 06, 12, 17 |
 
 `_shared.test.mjs` holds the cross-file invariants (no data statements, RLS on every table, every table and view documented, nothing referenced before it is created, every view `security_invoker` and revoked from the anon roles, every embedded table carrying the whole determinism quadruple, and `scripts/lib/tables.mjs` naming exactly what the baseline creates). Each file has a sibling test for its own contents.
 
@@ -638,7 +640,7 @@ across). The server re-renders; nothing is aggregated in the browser.
 
 | Panel | Range | Platform | Reads |
 | --- | --- | --- | --- |
-| **Sales** | yes | yes | orders summary + series + by channel + by country, customer mix (marketplaces excluded), product sales, country product sales, product pairs, and the "Who buys this product" card (`insights_product_customer_mix` for `?product=`, optionally `?mixCountry=` and `?mixVip=1`, marketplaces excluded; `ProductCustomerMixCard` with a searchable product picker) |
+| **Sales** | yes | yes | orders summary + series + by channel + by country, customer mix (marketplaces excluded), product sales, country product sales (re-read over VIP customers' orders with `?bestVip=1`), product pairs, and the "Who buys this product" card (`insights_product_customer_mix` for `?product=`, optionally `?mixCountry=` and `?mixVip=1`, marketplaces excluded; `ProductCustomerMixCard` with a searchable product picker) |
 | **Fulfilment** | yes (the open-orders list is "now") | yes | orders summary + series, fulfilment buckets + carriers, `open_orders()` (orders waiting to ship, VIP-marked, with name + email — `open-orders.ts`) |
 | **Support** | yes | no — tickets have none | support summary + series + categories, orders summary (contact-rate denominator), the latest `cluster_runs` for the topic map (all-time, with a Rebuild button) |
 | **Customers** | the activity rows only (the base is a snapshot) | no — people, so always Shopify | `customer_segment_totals` + `customer_ticket_facts` + `customer-segments.mjs`; orders per customer, marketing summary + series, capture series (`customer-activity-service.ts`) |

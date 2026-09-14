@@ -47,6 +47,13 @@ export interface ProductMixRequest {
 
 const NO_PRODUCT_MIX_FILTERS: ProductMixRequest = { productId: null, country: null, vipOnly: false };
 
+/** What the Best products card was asked for: `?bestVip=1`. */
+export interface BestProductsRequest {
+  vipOnly: boolean;
+}
+
+type VipRule = Awaited<ReturnType<typeof loadVipRule>>;
+
 /** How many products each country list carries, and how many countries are offered. */
 const PER_COUNTRY = 5;
 const COUNTRIES = 12;
@@ -56,7 +63,8 @@ const PAIRS = 10;
 /** `productMix` is what the URL asks the "Who buys this product" card for. */
 export async function getSalesPanel(
   ctx: InsightsContext,
-  productMix: ProductMixRequest = NO_PRODUCT_MIX_FILTERS
+  productMix: ProductMixRequest = NO_PRODUCT_MIX_FILTERS,
+  bestProductsRequest: BestProductsRequest = { vipOnly: false }
 ): Promise<SalesPanel> {
   const coverage = ordersCoverage(ctx);
   const marketplace = isMarketplacePlatform(ctx.platform);
@@ -71,6 +79,7 @@ export async function getSalesPanel(
     countryByOrders,
     countryRows,
     pairRows,
+    vipRule,
   ] =
     await Promise.all([
     getOrdersSummary(ctx),
@@ -95,6 +104,8 @@ export async function getSalesPanel(
     }),
     callRpc<Record<string, unknown>>(RPC.INSIGHTS_ORDERS_BY_COUNTRY, orderArgs(ctx)),
     callRpc<Record<string, unknown>>(RPC.INSIGHTS_PRODUCT_PAIRS, { ...orderArgs(ctx), p_limit: PAIRS }),
+    // Read once for both cards that can filter to VIPs. A marketplace has none.
+    marketplace ? Promise.resolve(null) : loadVipRule(getSupabaseClient(), ctx.shopId),
   ]);
 
   const products = productRows.map(mapProduct);
@@ -102,7 +113,18 @@ export async function getSalesPanel(
   // After the batch, not in it: the default product is the range's best seller,
   // and the country filter only accepts countries the range shipped to — both
   // named by reads above.
-  const productCustomerMix = await getProductCustomerMix(ctx, products, countries, productMix, marketplace);
+  // The mix card keeps the unfiltered product list for its selector: "VIP only"
+  // on Best products must not change which products the other card offers.
+  const [productCustomerMix, bestProducts] = await Promise.all([
+    getProductCustomerMix(ctx, products, countries, productMix, vipRule, marketplace),
+    getBestProducts(
+      ctx,
+      { products, byRevenue: countryByRevenue, byOrders: countryByOrders },
+      bestProductsRequest,
+      vipRule,
+      marketplace
+    ),
+  ]);
 
   return {
     summary,
@@ -111,13 +133,7 @@ export async function getSalesPanel(
     orders: toSeries(ctx.range, seriesRows, (row) => row?.orders ?? 0, coverage),
     customerMix: mixRow ? mapMix(mixRow) : null,
     platforms: foldPlatforms(channelRows),
-    products: {
-      global: group("all", "All products", products),
-      byCountry: {
-        revenue: countryGroups(countryByRevenue),
-        orders: countryGroups(countryByOrders),
-      },
-    },
+    products: bestProducts,
     countries,
     pairs: pairGroups(pairRows),
     productCustomerMix,
@@ -182,6 +198,77 @@ function mapProduct(row: Record<string, unknown>): ProductSale {
 }
 
 /**
+ * Best products, optionally for VIP customers only (`?bestVip=1`).
+ *
+ * Unfiltered, it is the reads the panel already made. VIP only re-reads the
+ * global list and both country rankings with `p_vip_only`, so VIP comes from
+ * `vip_customers()` in SQL and never from a comparison here. With no rule set,
+ * or on a marketplace (whose buyers are never VIPs), the card gets a notice
+ * rather than empty lists — "no VIP bought anything" is a claim, and neither
+ * case supports it.
+ */
+async function getBestProducts(
+  ctx: InsightsContext,
+  unfiltered: { products: ProductSale[]; byRevenue: Record<string, unknown>[]; byOrders: Record<string, unknown>[] },
+  request: BestProductsRequest,
+  rule: VipRule,
+  marketplace: boolean
+): Promise<SalesPanel["products"]> {
+  const base = { vipOnly: request.vipOnly, vipRuleSet: Boolean(rule), notice: null as string | null };
+
+  if (!request.vipOnly) {
+    return {
+      ...base,
+      global: group("all", "All products", unfiltered.products),
+      byCountry: { revenue: countryGroups(unfiltered.byRevenue), orders: countryGroups(unfiltered.byOrders) },
+    };
+  }
+
+  const empty = { ...base, global: group("all", "All products", []), byCountry: { revenue: [], orders: [] } };
+  if (marketplace) {
+    return {
+      ...empty,
+      notice: "Marketplace buyers are never VIPs: Amazon and Yves Rocher create a new customer for every order.",
+    };
+  }
+  if (!rule) {
+    return {
+      ...empty,
+      notice: "No VIP rule is set, so nobody is a VIP yet. Set one on Insights → Customers, or show all customers.",
+    };
+  }
+
+  const vip = {
+    p_vip_only: true,
+    p_min_spend: rule.minSpend,
+    p_min_orders: rule.minOrders,
+    p_window_months: rule.windowMonths,
+    p_vip_not_channels: [...ALL_MARKETPLACE_HANDLES],
+  };
+  const [productRows, byRevenue, byOrders] = await Promise.all([
+    callRpc<Record<string, unknown>>(RPC.INSIGHTS_PRODUCT_SALES, { ...orderArgs(ctx), ...vip }),
+    callRpc<Record<string, unknown>>(RPC.INSIGHTS_COUNTRY_PRODUCT_SALES, {
+      ...orderArgs(ctx),
+      ...vip,
+      p_metric: "revenue",
+      p_limit: PER_COUNTRY,
+    }),
+    callRpc<Record<string, unknown>>(RPC.INSIGHTS_COUNTRY_PRODUCT_SALES, {
+      ...orderArgs(ctx),
+      ...vip,
+      p_metric: "orders",
+      p_limit: PER_COUNTRY,
+    }),
+  ]);
+
+  return {
+    ...base,
+    global: group("all", "All products", productRows.map(mapProduct)),
+    byCountry: { revenue: countryGroups(byRevenue), orders: countryGroups(byOrders) },
+  };
+}
+
+/**
  * The product card: one product's customer split (`insights_product_customer_mix`).
  *
  * The selector offers what had a paid line in the range — a product that did not
@@ -195,12 +282,12 @@ async function getProductCustomerMix(
   products: ProductSale[],
   countries: CountrySale[],
   request: ProductMixRequest,
+  rule: VipRule,
   marketplace: boolean
 ): Promise<ProductCustomerMix> {
   // Only a country the range actually shipped to; anything else is no filter,
   // rather than a filter that silently matches nobody.
   const country = countries.some((c) => c.code === request.country) ? request.country : null;
-  const rule = marketplace ? null : await loadVipRule(getSupabaseClient(), ctx.shopId);
 
   const empty: ProductCustomerMix = {
     options: [...products]

@@ -21,10 +21,17 @@ export const RANGE_PRESETS = Object.freeze([
   { id: '7d', label: 'Last 7 days', short: '7 days' },
   { id: '30d', label: 'Last 30 days', short: '30 days' },
   { id: '6m', label: 'Last 6 months', short: '6 months' },
-  { id: '1y', label: 'Last year', short: '12 months' }
+  { id: '1y', label: 'Last year', short: '12 months' },
+  { id: 'all', label: 'All time', short: 'all time' }
 ]);
 
 export const DEFAULT_PRESET = '30d';
+
+/**
+ * "All time" has no fixed length: it starts at the shop's first synced order, so
+ * it is resolved from that date rather than from PRESET_SHAPE.
+ */
+export const ALL_TIME = 'all';
 
 const PRESET_SHAPE = {
   '24h': { grain: 'hour', count: 24 },
@@ -205,11 +212,44 @@ const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
  *
  * Unknown or invalid input falls back to the default preset rather than
  * throwing: a mistyped URL should show the dashboard, not an error page.
+ *
+ * ALL TIME starts at `earliest` — the first synced order, an instant — at the
+ * grain its span calls for, so two years draw as months and a fortnight of
+ * history as days. It HAS NO COMPARISON: `previous` is the equal span before the
+ * first order, which every panel's coverage check already refuses, so no
+ * "vs previous" chip is drawn against a period nothing was measured in. With no
+ * orders yet, it is just the current bucket.
+ *
+ * @param {{ range?: string, from?: string, to?: string }} [query]
+ * @param {{ tz?: string, now?: Date, earliest?: string | Date | null }} [options]
  */
-export function resolveRange(query = {}, { tz = 'UTC', now = new Date() } = {}) {
+export function resolveRange(query = {}, { tz = 'UTC', now = new Date(), earliest = null } = {}) {
   const zone = isValidTimeZone(tz) ? tz : 'UTC';
   const nowWall = wallClock(now, zone);
   const today = truncate(nowWall, 'day');
+
+  if (query.range === ALL_TIME && !(query.from || query.to)) {
+    const earliestMs = earliest ? Date.parse(earliest instanceof Date ? earliest.toISOString() : earliest) : NaN;
+    const firstWall = Number.isFinite(earliestMs) ? wallClock(new Date(earliestMs), zone) : nowWall;
+    const first = firstWall < nowWall ? firstWall : nowWall;
+    const grain = grainForSpan(Math.max(1, Math.ceil((nowWall - first) / DAY_MS)));
+    const from = truncate(first, grain);
+    const to = step(truncate(nowWall, grain), grain);
+    const span = to - from;
+    const meta = RANGE_PRESETS.find((p) => p.id === ALL_TIME);
+    return finalise({
+      preset: ALL_TIME,
+      from,
+      to,
+      grain,
+      nowWall,
+      previousFrom: new Date(from.getTime() - span),
+      previousTo: from,
+      tz: zone,
+      label: meta.label,
+      compareLabel: 'no earlier period'
+    });
+  }
 
   const custom = parseCustom(query, today);
   if (custom) {

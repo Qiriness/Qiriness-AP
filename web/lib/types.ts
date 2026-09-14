@@ -1362,9 +1362,15 @@ export interface SalesPanel {
   /** Null on a marketplace platform, which mints one customer per order. */
   customerMix: CustomerMix | null;
   platforms: PlatformSplit[];
+  /** Best products. With `?bestVip=1`, every list counts VIP customers' orders only. */
   products: {
     global: ProductGroup;
     byCountry: { revenue: ProductGroup[]; orders: ProductGroup[] };
+    vipOnly: boolean;
+    /** False while the shop has no VIP rule. */
+    vipRuleSet: boolean;
+    /** Shown instead of the lists when VIP only cannot apply (no rule, or a marketplace). */
+    notice: string | null;
   };
   countries: CountrySale[];
   pairs: PairGroup[];

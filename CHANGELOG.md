@@ -10,6 +10,14 @@ Three sibling files carry the other halves, and this one deliberately does not d
 
 ---
 
+## Home chat: VIP status (2026-09-14)
+
+The management chat can now answer VIP questions — how many VIPs, what they spend, where they are, how many wrote to support. New view **`chat.vip_customers`**: each customer who is a VIP now under the shop's rule, with their orders and net spend inside the rule's window, joinable to `chat.customers`, `chat.orders` and `chat.tickets` by `customer_id`. It goes through the existing `vip_customers()` via a security-definer wrapper with no arguments (`chat.vip_customer_rows()`), so the chat and the dashboard share one definition of VIP. Migration `21_chat_vip.sql`, applied (numbered 21 because 19 and 20 were taken by the product-mix work the same day).
+
+**Proven** through the real `mgmt_chat_ro` login: 197 VIPs and €41,664.28 net spend in the window — identical to `vip_customers()` called with `vipArgs`, and to the 197 `vip_summary()` gives the Customers panel; every row has ≥ 2 orders and > €80, matching the rule (> 1 order, > €80, 6 months); the join to `chat.customers` works (183 Champions, 14 Loyal); the role still cannot call `public.vip_customers` itself. Not yet asked through the chat UI. Names stay out: a VIP is an id and its figures.
+
+---
+
 ## Home chat: a lighter layout (2026-09-14)
 
 The chat now fills the page in one framed panel. Conversations are **tabs** across the top — New chat, then up to four recent ones; × takes a tab off the strip without deleting anything, and a **History** menu lists every conversation. An empty conversation shows a centred prompt with suggested questions; answers read as plain text beside soft grey question bubbles; the composer is a rounded field that grows with the text, with the send button inside it and the conversation's cost beneath. `ChatView` + CSS and `ChatTurn.module.css` only; no API or data change. `tsc` and lint only — not looked at in the browser.
@@ -37,6 +45,24 @@ The model's SQL runs as a new login role, **`mgmt_chat_ro`**, over a new **`chat
 - **Not yet run:** the page in a browser, and the chat through a real `mgmt_chat_ro` login — the role has no password until one is set (`DECISIONS.md § Management chat`). See VALIDATION_LOG.
 
 Found on the way, not changed: `order_fulfilment_timing` in `06_analytics.sql` reads `shipping_destination ->> 'countryCode'`, a key no stored order has (the mapper writes `country_code`), so its `destination_country` is null on every row.
+
+---
+
+## Insights: "All time" range preset (2026-09-14)
+
+An **All time** button after "Last year" in the date bar on every Insights tab. It runs from the first synced order (17 May 2024) to today, at the grain that span needs — monthly on this shop, 29 bars — and draws no "vs previous" comparison, since there is no earlier period. Linkable as `?range=all`; a custom from/to still wins.
+
+`RANGE_PRESETS` gains `all` and `resolveRange` takes `earliest` (`scripts/lib/insights-range.mjs`); `context.ts` reads freshness before the range so it can pass `first_order_at`. No SQL or schema change. Tests: six new cases in `insights-range.test.mjs` (month grain for a long history, day grain for a short one, the previous window refused by coverage, no orders yet, an unreadable date, from/to winning); `npm test` 2,498 pass; `tsc` clean. **Checked live:** all twelve heaviest panel reads succeed over all time, slowest 1.7 s. Not viewed in the browser.
+
+---
+
+## Insights → Sales: VIP only on Best products (2026-09-14)
+
+An **All customers / VIP only** switch on the Best products card. VIP only re-ranks the global list and both country rankings over VIP customers' orders (the shop's rule, through `vip_customers()`), and search, Global/By country and Revenue/Orders all work on top of it. With no rule set, or a marketplace platform, the card shows a notice instead of empty lists. Kept in `?bestVip=1`; the "Who buys this product" selector is unaffected.
+
+`insights_product_sales()` and `insights_country_product_sales()` gain `p_vip_only` and the VIP rule arguments (off by default) — in `06_analytics.sql`, moved below `vip_customers()`, and as migration `20_best_products_vip.sql`, which drops both old signatures; **applied to the live database 2026-09-14**. `getBestProducts` in `sales-service.ts`; the VIP rule is now read once per Sales render for both cards. Tests: `20_best_products_vip.test.mjs`, including an ordering check for every caller of `vip_customers()`; `npm test` 2,492 pass including `_live.test.mjs`; `tsc` clean. **Proven live** (last 30 days): all customers 74 products / €16,422, VIP only 58 / €6,346, matching an independent recount from `orders` with 0 mismatches; no VIP figure exceeds the unfiltered one; 0.1–1.2 s per read. Not viewed in the browser.
+
+**Caught on the way:** the generator used `String.replace` with a replacement containing `$$`, which JavaScript turns into `$` — both functions briefly read `as $`. `_live.test.mjs` refused the baseline; fixed before anything was applied.
 
 ---
 

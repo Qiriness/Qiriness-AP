@@ -22,7 +22,7 @@ export default function SalesInsightsPage({ searchParams }: { searchParams: Sear
       scope={{ range: true, platform: true }}
       searchParams={searchParams}
       render={async (ctx) => (
-        <SalesView panel={await getSalesPanel(ctx, productMix)} compareLabel={ctx.range.compareLabel} />
+        <SalesView panel={await getSalesPanel(ctx, productMix, { vipOnly: first(searchParams.bestVip) === "1" })} compareLabel={ctx.range.compareLabel} />
       )}
     />
   );

@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import type { ProductGroup, SalesPanel } from "@/lib/types";
 import { SearchIcon } from "@/components/icons";
 import { euros, foldForSearch as fold } from "@/lib/insights-format";
+import { useInsightsFrame } from "./InsightsFrame";
 import { GroupSelect, Segmented } from "./Segmented";
 import styles from "./BestProducts.module.css";
 
@@ -18,6 +19,13 @@ const DIMENSIONS: { id: Dimension; label: string }[] = [
 const METRICS: { id: Metric; label: string }[] = [
   { id: "revenue", label: "Revenue" },
   { id: "orders", label: "Orders" },
+];
+
+type Who = "all" | "vip";
+
+const WHO: { id: Who; label: string }[] = [
+  { id: "all", label: "All customers" },
+  { id: "vip", label: "VIP only" },
 ];
 
 const TOP = 10;
@@ -38,12 +46,17 @@ const MAX_MATCHES = 50;
  * ignores case and accents: the catalogue is French, and "creme" must find
  * "Crème". The global list is complete, so a miss there is a real miss; a
  * country list holds only its top products, and the empty state says so.
+ *
+ * VIP ONLY IS A SERVER READ (`?bestVip=1`), unlike the other switches: VIP is
+ * the shop's rule in `vip_customers()`, so the lists are re-ranked in SQL over
+ * VIP customers' orders rather than filtered here.
  */
 export function BestProducts({ products }: { products: SalesPanel["products"] }) {
   const [dimension, setDimension] = useState<Dimension>("global");
   const [metric, setMetric] = useState<Metric>("revenue");
   const [countryKey, setCountryKey] = useState<string | null>(null);
   const [search, setSearch] = useState("");
+  const { navigate } = useInsightsFrame();
 
   const countries = products.byCountry[metric];
   const country = countries.find((g) => g.key === countryKey) ?? countries[0] ?? null;
@@ -76,6 +89,12 @@ export function BestProducts({ products }: { products: SalesPanel["products"] })
             groups={countries.map((g) => ({ key: g.key, label: g.label, hint: `${g.orders.toLocaleString("en-GB")} orders` }))}
           />
         ) : null}
+        <Segmented
+          options={WHO}
+          value={products.vipOnly ? "vip" : "all"}
+          label="Customers"
+          onChange={(next) => navigate({ bestVip: next === "vip" ? "1" : null })}
+        />
         <span className={styles.spacer} />
         <div className={styles.search} role="search">
           <SearchIcon size={15} className={styles.searchIcon} />
@@ -101,8 +120,14 @@ export function BestProducts({ products }: { products: SalesPanel["products"] })
         </p>
       ) : null}
 
-      {ranked.length === 0 ? (
-        <p className={styles.empty}>No paid product line in this range.</p>
+      {products.notice ? (
+        <p className={styles.empty} role="status">
+          {products.notice}
+        </p>
+      ) : ranked.length === 0 ? (
+        <p className={styles.empty}>
+          {products.vipOnly ? "No VIP customer bought a paid product in this range." : "No paid product line in this range."}
+        </p>
       ) : shown.length === 0 ? (
         <p className={styles.empty}>
           {dimension === "global"

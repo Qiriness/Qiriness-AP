@@ -47,7 +47,9 @@ export const INCREMENTAL_FILES = [
   '16_orders_search',
   '17_management_chat',
   '18_product_customer_mix',
-  '19_product_mix_filters'
+  '19_product_mix_filters',
+  '20_best_products_vip',
+  '21_chat_vip'
 ];
 
 export const read = (name) => readFileSync(new URL(`./${name}.sql`, import.meta.url), 'utf8');

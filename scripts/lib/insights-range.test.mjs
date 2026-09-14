@@ -12,9 +12,11 @@ import {
   grainForSpan,
   parsePlatform,
   platformOfChannel,
+  RANGE_PRESETS,
   resolveRange,
   truncate,
-  wallClock
+  wallClock,
+  windowCovered
 } from './insights-range.mjs';
 
 // 11 Sep 2026, 14:20 in Paris (UTC+2).
@@ -89,6 +91,53 @@ test('a custom range that ended in the past compares like with like and has no c
 test('a custom end in the future is cut at today', () => {
   const range = resolveRange({ from: '2026-09-01', to: '2027-01-01' }, PARIS);
   assert.equal(range.to, '2026-09-12T00:00:00');
+});
+
+test('all time is the last preset on the bar', () => {
+  assert.deepEqual(RANGE_PRESETS.at(-1), { id: 'all', label: 'All time', short: 'all time' });
+});
+
+test('all time starts at the first synced order, in months when the history is long', () => {
+  // First order 3 May 2024, 10:00 UTC = 12:00 in Paris.
+  const range = resolveRange({ range: 'all' }, { ...PARIS, earliest: '2024-05-03T10:00:00Z' });
+  assert.equal(range.preset, 'all');
+  assert.equal(range.label, 'All time');
+  assert.equal(range.grain, 'month');
+  assert.equal(range.from, '2024-05-01T00:00:00');
+  assert.equal(range.to, '2026-10-01T00:00:00');
+  assert.equal(range.keys.length, 29);
+  assert.equal(range.currentKey, '2026-09-01T00:00:00');
+  assert.deepEqual(range.query, { range: 'all' });
+});
+
+test('all time picks a finer grain when the history is short', () => {
+  const range = resolveRange({ range: 'all' }, { ...PARIS, earliest: '2026-08-30T08:00:00Z' });
+  assert.equal(range.grain, 'day');
+  assert.equal(range.from, '2026-08-30T00:00:00');
+  assert.equal(range.to, '2026-09-12T00:00:00');
+});
+
+test('all time has nothing to compare with, so coverage refuses its previous window', () => {
+  const earliest = '2024-05-03T10:00:00Z';
+  const range = resolveRange({ range: 'all' }, { ...PARIS, earliest });
+  assert.equal(range.previous.to, range.from);
+  assert.ok(range.previous.from < range.from);
+  assert.equal(windowCovered(range.previous, { from: earliest }, range.tz), false);
+  assert.equal(range.compareLabel, 'no earlier period');
+});
+
+test('all time with no orders yet, or an unreadable date, is just the current bucket', () => {
+  for (const earliest of [null, 'not a date']) {
+    const range = resolveRange({ range: 'all' }, { ...PARIS, earliest });
+    assert.equal(range.preset, 'all');
+    assert.equal(range.keys.length, 1, String(earliest));
+    assert.equal(range.currentKey, range.keys[0]);
+  }
+});
+
+test('an explicit from/to wins over range=all, as it does over every preset', () => {
+  const range = resolveRange({ range: 'all', from: '2026-08-13', to: '2026-09-11' }, { ...PARIS, earliest: '2024-05-03T10:00:00Z' });
+  assert.equal(range.preset, 'custom');
 });
 
 test('nonsense in the URL falls back to the default rather than failing', () => {

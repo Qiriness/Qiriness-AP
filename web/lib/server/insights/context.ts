@@ -55,14 +55,16 @@ export async function resolveInsightsContext(searchParams: SearchParams = {}): P
   const tz = tzFallback ? "UTC" : (shop.iana_timezone as string);
   const now = new Date();
 
-  const range = resolveRange(
-    { range: first(searchParams.range), from: first(searchParams.from), to: first(searchParams.to) },
-    { tz, now }
-  ) as unknown as InsightsRange;
-
+  // Freshness first: "All time" starts at the first synced order, which only
+  // this row knows. It needs nothing from the range, so the order costs nothing.
   const freshnessRow = await callRpcOne<Record<string, string | null>>(RPC.INSIGHTS_FRESHNESS, {
     p_shop: shop.id,
   });
+
+  const range = resolveRange(
+    { range: first(searchParams.range), from: first(searchParams.from), to: first(searchParams.to) },
+    { tz, now, earliest: freshnessRow?.first_order_at ?? null }
+  ) as unknown as InsightsRange;
 
   return {
     shopId: shop.id,
