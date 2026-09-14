@@ -40,6 +40,19 @@ these.
 as its own item: `llm_usage` (item 14), `categorisation_review` (item 15), and
 `category_forwarding` / `ticket_forwards` (item 1).
 
+## 25. The management chat has run on real data, but never through its own login (2026-09-14)
+
+**Proven:** the role's boundary (views read; `public`, `auth`, writes, DDL refused; timeout fires) and four end-to-end questions whose figures matched independent SQL exactly — all with `mgmt_chat_ro` *borrowed* from a `postgres` session inside rolled-back transactions, because the role has no password yet. See CHANGELOG and `DECISIONS.md § Management chat`.
+
+**Not proven, and the checks:**
+
+- ~~**A real login through the Supavisor session pooler.**~~ — PROVEN 2026-09-14. Password set and `CHAT_DB_URL` written by script (never printed); logged in as `mgmt_chat_ro` through the pooler: `session_user = mgmt_chat_ro`, `transaction_read_only = on`, `statement_timeout = 10s`, `chat.orders` reads 6,008 rows.
+- ~~**`set role postgres` is refused to that login.**~~ — PROVEN the same day: `permission denied to set role "postgres"`; `public.tickets` refused; `create table` refused as read-only.
+- **The page itself** — streaming steps, "How this was answered", reopening a conversation, a follow-up, the step-limit and error states — has not been used in a browser with the chat enabled.
+- **Role gating in the browser:** signed in as `contact`, Home is not in the sidebar and `/home` redirects.
+- **Answer quality beyond four questions.** Ask 10 real management questions whose answers are already on an Insights panel and compare. Watch for per-customer figures that did not exclude marketplace channels, and revenue definitions that silently change between turns.
+- **`gpt-5.2` cost** is unpriced (no rate in `llm-rates.mjs`); set `LLM_RATES` once the rate is confirmed, and check the 30k TPM key is not starved when the worker runs at the same time.
+
 ## 24. The Orders page's ticket ring: data present, colours not yet compared by eye (2026-09-14)
 
 The list, filters, pager and detail page run against the live table (CHANGELOG, Orders page). **Correction, same day:** this item first said 0 tickets carried `shopify_order_number`. That was a bug in the probe (a raw `not.is.null` string, which the REST client sends as `eq.not.is.null` and so matches nothing). Re-read correctly: **58 of 172 tickets carry one**, resolved 2026-09-13 23:23 — `confirmed 58 · no_candidate 96 · mismatch 11 · name_match 2 · not_found 2 · no trail 3`. Stored names are `#6892`-shaped, which is what `orderNumberKey` expects.

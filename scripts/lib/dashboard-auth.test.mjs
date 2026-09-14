@@ -9,6 +9,7 @@ import {
   SESSION_MAX_AGE_SECONDS,
   canAccessPath,
   canSeePanel,
+  canUseManagementChat,
   createAuthClient,
   dashboardRoleOf,
   decodeJwt,
@@ -136,6 +137,20 @@ test('a role lands on the first panel it may open', () => {
   assert.equal(fallbackPath('developer'), '/insights/sales');
   assert.equal(fallbackPath('management'), '/insights/sales');
   assert.equal(fallbackPath('contact'), '/insights/fulfilment');
+});
+
+test('the management chat, page and API, is closed to contact and open to the other two', () => {
+  for (const path of ['/home', '/api/chat', '/api/chat/conversations/abc']) {
+    assert.equal(canAccessPath('contact', path), false, `contact should not open ${path}`);
+    for (const role of ['developer', 'management']) {
+      assert.equal(canAccessPath(role, path), true, `${role} should open ${path}`);
+    }
+  }
+  assert.equal(canUseManagementChat('contact'), false);
+  assert.equal(canUseManagementChat('management'), true);
+  assert.equal(canUseManagementChat(null), false);
+  // A prefix of the word is not the page.
+  assert.equal(canAccessPath('contact', '/homepage'), true);
 });
 
 test('a "sales" path outside Insights is not caught by the rule', () => {

@@ -23,6 +23,8 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |   |-- app/
 |   |   |-- layout.tsx globals.css        # root layout · design tokens (teal, scale, radii)
 |   |   |-- page.tsx                      # / -> /agent-setup redirect
+|   |   |-- home/page.tsx                 # Server Component: the management chat (Beta);
+|   |   |                                 # developer + management only
 |   |   |-- agent-setup/page.tsx          # Server Component: article + source fetch
 |   |   |-- agent-setup/layout.tsx        # AppShell + the tab bar, shared by all three
 |   |   |-- agent-setup/rules/page.tsx    # Server Component: the rulebook
@@ -40,6 +42,9 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |   |   |-- login/                        # page.tsx + LoginForm: the only page open
 |   |   |                                 # without a session
 |   |   `-- api/
+|   |       |-- chat/route.ts                 # POST a question -> NDJSON stream (the
+|   |       |                                # management chat's agent loop) ·
+|   |       |                                # chat/conversations (+ /[id]): the user's own
 |   |       |-- auth/{login,logout,me}/route.ts  # Supabase Auth: sign in (throttled,
 |   |       |                                # one error for every failure) · sign out
 |   |       |                                # (revoked at Supabase too) · who am I
@@ -70,8 +75,13 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |   |                                         # runs · runs/[id] (ideal answer)
 |   |-- components/
 |   |   |-- icons.tsx                # inline SVG icon set
-|   |   |-- app-shell/               # AppShell (top bar + drawer) · Sidebar ·
+|   |   |-- app-shell/               # AppShell (top bar + drawer; fetches /api/auth/me
+|   |   |                            # once for both) · Sidebar (Home drawn by role) ·
 |   |   |                            # UserMenu (who is signed in, Sign out)
+|   |   |-- chat/                    # ChatView (conversation rail + thread + composer,
+|   |   |                            # reads the stream) · ChatTurn (answer + "How this
+|   |   |                            # was answered": each query, its SQL and rows) ·
+|   |   |                            # ChatMarkdown (answers as React, never HTML)
 |   |   |-- ui/                      # Button · StatusChip · Dialog (modal shell) ·
 |   |   |                            # TrackingText (tracking numbers -> carrier links,
 |   |   |                            # used by every surface showing a number in prose)
@@ -113,6 +123,7 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |   |   |-- session-cookies.ts   # writes/clears qos_at + qos_rt (the session
 |   |   |                        # outlives the hour-long access token)
 |   |   |-- types.ts             # UI types + label tables (categories, levels, VipRule, RFM)
+|   |   |-- chat-types.ts        # isomorphic: the management chat's API + stream shapes
 |   |   |-- knowledge-mapper.ts  # isomorphic: API JSON -> UI types
 |   |   |-- agent-test-types.ts  # isomorphic: the trace shapes the test chat renders,
 |   |   |                        # + parcelsFromTrace (the run's parcels, for links)
@@ -130,6 +141,8 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |   |       |                    # tickets-service (list + detail + thread + status,
 |   |       |                    # + listTicketsWithOrders for the Orders page) ·
 |   |       |                    # orders-service (orders_list page + one order) ·
+|   |       |                    # chat-service (Home's chat: wires the loop, writes
+|   |       |                    # the chat_* log, owner-only reads) ·
 |   |       |                    # dropped-mail-service · knowledge-errors ·
 |   |       |                    # auth (getSession, re-checked not trusted) ·
 |   |       |                    # access-log (a data_access_events row per
@@ -192,6 +205,13 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |       |                                # page, normaliseSearch, delayDays,
 |       |                                # orderNumberKey (#7008 == 7008), and
 |       |                                # ticketMarksByOrder (most urgent open band)
+|       |-- chat-sql-guard.mjs           # the management chat: SELECT/WITH only, one
+|       |                                # statement, chat schema only; the row-capped wrap
+|       |-- chat-sql-executor.mjs        # runs it as mgmt_chat_ro (read-only txn, 10 s,
+|       |                                # rolled back) + reads the chat schema's comments
+|       |-- chat-agent-loop.mjs          # execute_sql loop: 8 steps, last one forced to
+|       |                                # answer; what the model sees of a result; history
+|       |-- chat-system-prompt.mjs       # the rules + the data's known limits
 |       |-- sync-config.mjs              # CLI + env parsing, loadEnv
 |       |-- hash.mjs collections.mjs html-to-text.mjs text-cleaning.mjs
 |       |-- quoted-reply.mjs             # strips reply chains
@@ -428,6 +448,18 @@ rule owned by `customer-segments.mjs` and applied at read time.
 | --- | --- |
 | `agent_test_runs` | one run of the Agent Setup **test chat**: a message an operator typed, put through the real pipeline. References no ticket, message, investigation or draft — a rehearsal writes none of them (`agent/src/testing/`). `trace` jsonb is the record (every step, every tool's returned text, every model call's prompt and response); the flat columns beside it index it so a history list never parses one. Identity is `requester_email_masked` only — neither the address nor a hash. `ideal_body_text` is **the memory**: what the operator would have sent instead — the same capture `ticket_draft_edits` makes for real mail, except the situation can be invented. Cost is recorded here and deliberately not in `llm_usage` |
 
+### Management chat
+
+Migration 17. Two halves, on two connections — see `DECISIONS.md § Management chat`.
+
+| Object | Holds |
+| --- | --- |
+| role `mgmt_chat_ro` | what the model's SQL runs as (`CHAT_DB_URL`). `USAGE` on `chat`, `SELECT` on its views, `EXECUTE` on `normalise_carrier` — nothing else. Read-only default, 10 s timeout, `search_path = chat`, 5 connections |
+| schema `chat` | 13 **owner-rights** views, one per thing management asks about: `shop` · `orders` · `order_lines` · `fulfilment_timing` · `customers` · `products` · `promotions` · `tickets` · `ticket_reply_times` · `ticket_message_counts` · `ticket_investigations` · `ticket_drafts` · `llm_usage`. **No names, emails, phones, addresses, subjects or message text.** Their `comment on` text is the schema description the model is given, read at request time |
+| `chat_conversations` | one thread, owned by one dashboard user (`user_id` = auth id); title = first question |
+| `chat_turns` | one question + answer: `status` (running / ok / step_limit / empty / error), `error`, `model`, `steps`, tokens, `duration_ms`. Spend here, **not** in `llm_usage` |
+| `chat_queries` | every query tried: `sql`, `ok`, `error` (a refusal or a Postgres error), `row_count`, `truncated`, `duration_ms`, `columns`, the first 50 rows |
+
 ### Compliance and audit
 
 | Table | Holds |
@@ -474,6 +506,7 @@ Written by the worker and the CLIs, read only by the Insights panels.
 | `14_fulfilment_waiting.sql` | replaces `insights_fulfilment_buckets()` with the version that also returns a `Not shipped yet` bucket, counted as `open_orders()` counts it — orders with no duration to bucket were previously drawn nowhere. Copied byte-for-byte from 06; supersedes 11's copy of that one function. Applied 2026-09-12 | 01, 02, 06 |
 | `15_orders_list.sql` | adds `orders_list()` + `orders_list_facets()` for the Orders page, copied byte-for-byte from 06 (its test asserts it). No table, no data. Applied 2026-09-14 | 01, 02, 06, 12 |
 | `16_orders_search.sql` | drops the 11-argument `orders_list()` and recreates it with `p_search` and an `awaiting_fulfilment` column (open_orders()'s waiting rule); copied byte-for-byte from 06, supersedes 15's copy of that one function | 01, 02, 06, 12, 15 |
+| `17_management_chat.sql` | the management chat: login role `mgmt_chat_ro` (no password in the file), the `chat` schema of 13 owner-rights views with no personal data, and the log tables `chat_conversations` / `chat_turns` / `chat_queries` (named in `CHAT_T`, not `T`). Applied 2026-09-14 | 01, 02, 04, 06, 07 |
 
 `_shared.test.mjs` holds the cross-file invariants (no data statements, RLS on every table, every table and view documented, nothing referenced before it is created, every view `security_invoker` and revoked from the anon roles, every embedded table carrying the whole determinism quadruple, and `scripts/lib/tables.mjs` naming exactly what the baseline creates). Each file has a sibling test for its own contents.
 
@@ -508,11 +541,22 @@ Accounts live in **Supabase Auth** (`auth.users`); the role is `app_metadata.das
 | --- | --- |
 | `developer` | everything |
 | `management` | everything |
-| `contact` | everything except Insights → Sales (the tab is not drawn; the URL redirects to Fulfilment) |
+| `contact` | everything except Insights → Sales (the tab is not drawn; the URL redirects to Fulfilment) and Home — the management chat, page and `/api/chat` (not drawn in the sidebar) |
 
 Two HttpOnly cookies carry the session: `qos_at` (the Supabase access token, one hour) and `qos_rt` (the refresh token). Each request checks the token's ES256 signature locally against the project's JWKS, then confirms it against `/auth/v1/user` — cached for a minute per token — so a ban, a role change or a sign-out takes effect within a minute rather than at the token's expiry. The middleware refreshes the pair when the hour is nearly up; both cookies expire twelve hours after the password was typed (`amr`), which is the longest a session can live without signing in again.
 
 Managing accounts: `npm run users -- list | add | set-password | set-role | disable | enable`. Disabling is a Supabase ban, not a delete, so an audit row still resolves to a person.
+
+### `/home` — the management chat (Beta)
+
+`web/app/home/` → `components/chat/ChatView`, over `lib/server/chat-service.ts`. Developer and Management only (`canUseManagementChat`). A question goes to `POST /api/chat`, which streams NDJSON (`conversation` · `step` · `done` · `failed`) while `runChatTurn` (`scripts/lib/chat-agent-loop.mjs`) calls the model with one tool, `execute_sql`, for at most 8 steps.
+
+Each query: `checkSql` (guard) → `createSqlExecutor` (as `mgmt_chat_ro`, `begin read only`, `set local statement_timeout`, wrapped `limit 1001`, rolled back). The model sees ≤ 200 rows of a result; the screen shows it all (preview 200), the log keeps 50. The system prompt (`chat-system-prompt.mjs`) = rules + the data's known limits + the `chat` schema's comments, re-read every 10 minutes. Follow-ups replay earlier questions, answers and **their SQL**, never their rows.
+
+Env: `CHAT_DB_URL` (the role's pooler URL; unset = the page says so and nothing runs), `CHAT_MODEL` (default `gpt-5.2`; the OpenAI transport sends reasoning models `max_completion_tokens` and no `temperature`).
+
+- `POST chat` — `{question, conversationId?}` → NDJSON
+- `GET chat/conversations` · `GET chat/conversations/:id` — the signed-in user's own; another user's id is a 404
 
 ### `/agent-setup` — knowledge library
 

@@ -32,6 +32,13 @@ const MAX_RATE_LIMIT_RETRIES = 6;
 const RATE_LIMIT_MAX_WAIT_MS = 60000;
 const RATE_LIMIT_MIN_WAIT_MS = 500;
 
+/**
+ * @param {object} [options]
+ * @param {string} [options.apiKey]
+ * @param {typeof fetch} [options.fetchImpl]
+ * @param {(ms: number) => Promise<void>} [options.sleepImpl]
+ * @param {{record: (entry: object) => void}} [options.usageSink]
+ */
 export function createOpenAIClient({
   apiKey,
   fetchImpl = fetch,
@@ -145,8 +152,7 @@ export function createOpenAIClient({
     const payload = await request(
       {
         model,
-        temperature: 0,
-        max_tokens: maxTokens,
+        ...samplingParams(model, maxTokens),
         messages: [
           ...(system ? [{ role: 'system', content: system }] : []),
           { role: 'user', content: user }
@@ -199,8 +205,7 @@ export function createOpenAIClient({
     const payload = await request(
       {
         model,
-        temperature: 0,
-        max_tokens: maxTokens,
+        ...samplingParams(model, maxTokens),
         messages: [...(system ? [{ role: 'system', content: system }] : []), ...messages],
         ...(tools && tools.length > 0 ? { tools, tool_choice: toolChoice } : {}),
         ...(schema
@@ -226,6 +231,23 @@ export function createOpenAIClient({
   }
 
   return { completeJson, completeWithTools };
+}
+
+/**
+ * Reasoning models — the gpt-5 family and the o-series — refuse `temperature`
+ * and `max_tokens`. They take `max_completion_tokens` instead, and that budget
+ * also has to cover the reasoning they never show. Every model the worker calls
+ * is on the older shape, so this changes nothing for it; the management chat
+ * (web/lib/server/chat/) is the caller on a reasoning model.
+ */
+export function isReasoningModel(model) {
+  return /^(gpt-5|o\d)/.test(String(model ?? ''));
+}
+
+function samplingParams(model, maxTokens) {
+  return isReasoningModel(model)
+    ? { max_completion_tokens: maxTokens }
+    : { temperature: 0, max_tokens: maxTokens };
 }
 
 function parseToolCall(call) {

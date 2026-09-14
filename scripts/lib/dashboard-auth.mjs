@@ -43,15 +43,22 @@ export const ROLE_CLAIM = 'dashboard_role';
  * Paths a role may NOT open. Everything else is open to every signed-in role.
  *
  * The contact team handles customer mail and has no business with revenue, so
- * Insights → Sales is closed to it (the owner's rule, 2026-09-11). Developer and
- * Management are identical for now; they are separate roles so they can diverge
- * without a migration.
+ * Insights → Sales is closed to it (the owner's rule, 2026-09-11). The
+ * management chat on Home — the page and its API — is for Management and
+ * Developer only (2026-09-14): it answers revenue questions too, and more
+ * freely than any panel. Developer and Management are identical for now; they
+ * are separate roles so they can diverge without a migration.
  */
 const DENIED = Object.freeze({
   developer: [],
   management: [],
-  contact: ['/insights/sales']
+  contact: ['/insights/sales', '/home', '/api/chat']
 });
+
+/** May this role use the management chat? What the sidebar asks before drawing Home. */
+export function canUseManagementChat(role) {
+  return canAccessPath(role, '/home');
+}
 
 /** The Insights panels a role may see — what the nav renders. */
 export function canSeePanel(role, panel) {

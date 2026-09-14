@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import styles from "./UserMenu.module.css";
 
-interface Me {
+export interface Me {
   email: string;
   displayName: string | null;
   role: string;
@@ -17,36 +17,17 @@ function initials(me: Me): string {
   return letters.toUpperCase();
 }
 
-function toLogin() {
-  const next = `${window.location.pathname}${window.location.search}`;
-  window.location.assign(`/login?next=${encodeURIComponent(next)}`);
-}
-
 /**
  * The signed-in user, top right, with Sign out.
  *
- * It asks `/api/auth/me` on every page load — and that call is what ends a
- * session whose account was disabled or re-roled since sign-in: a 401 here
- * sends the browser to /login.
+ * `me` is fetched once by AppShell from `/api/auth/me` — that call is what ends
+ * a session whose account was disabled or re-roled since sign-in — and shared
+ * with the sidebar, which needs the role.
  */
-export function UserMenu() {
-  const [me, setMe] = useState<Me | null>(null);
+export function UserMenu({ me }: { me: Me | null }) {
   const [open, setOpen] = useState(false);
   const [leaving, setLeaving] = useState(false);
   const root = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    fetch("/api/auth/me", { cache: "no-store" })
-      .then(async (response) => {
-        if (response.status === 401) return toLogin();
-        if (response.ok && !cancelled) setMe(await response.json());
-      })
-      .catch(() => undefined);
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   useEffect(() => {
     if (!open) return;

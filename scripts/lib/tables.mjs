@@ -79,6 +79,18 @@ export const T = {
 };
 
 /**
+ * The management chat's log tables. Created by the INCREMENTAL migration
+ * `17_management_chat.sql`, not the baseline, so they are kept out of `T` —
+ * `_shared.test.mjs` asserts `T` names exactly what the baseline creates.
+ * `17_management_chat.test.mjs` asserts these instead.
+ */
+export const CHAT_T = {
+  CONVERSATIONS: 'chat_conversations',
+  TURNS: 'chat_turns',
+  QUERIES: 'chat_queries'
+};
+
+/**
  * Views. Selected from exactly like tables through PostgREST, and listed apart
  * because they are read-only: a write to one of these names is a mistake the
  * database will reject, and naming them separately makes that visible here.

@@ -30,6 +30,10 @@ const nextConfig = {
     // or separately-packaged copy. This makes sure a production build's file
     // tracing follows those imports too.
     outputFileTracingRoot: repoRoot,
+    // The management chat's executor (scripts/lib/chat-sql-executor.mjs) uses
+    // `pg`. Bundled, webpack trips over its optional `pg-native` require; left
+    // external, Node resolves it from the repo-root node_modules at runtime.
+    serverComponentsExternalPackages: ["pg"],
     // Route Handlers that cross-import scripts/lib/*.mjs (outside this
     // project) seem to crash Next's dev-mode jest-worker pool ("2 child
     // process exceptions" + EPIPE) under multi-worker parallelism on this

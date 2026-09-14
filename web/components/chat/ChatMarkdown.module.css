@@ -1,0 +1,91 @@
+.markdown {
+  font-size: var(--text-md);
+  line-height: 1.6;
+  color: var(--text-default);
+  overflow-wrap: anywhere;
+}
+
+.markdown > * + * {
+  margin-top: var(--space-3);
+}
+
+.markdown p,
+.markdown ul,
+.markdown ol,
+.markdown h3,
+.markdown pre {
+  margin-bottom: 0;
+}
+
+.markdown p:first-child,
+.markdown h3:first-child {
+  margin-top: 0;
+}
+
+.markdown h3 {
+  font-size: var(--text-md);
+  font-weight: var(--weight-semibold);
+  color: var(--text-strong);
+}
+
+.markdown ul,
+.markdown ol {
+  padding-inline-start: 1.25rem;
+}
+
+.markdown li + li {
+  margin-top: var(--space-1);
+}
+
+.markdown strong {
+  font-weight: var(--weight-semibold);
+  color: var(--text-strong);
+}
+
+.markdown code {
+  padding: 1px 4px;
+  border-radius: var(--radius-sm);
+  background: var(--mist-050);
+  font-size: 0.9em;
+}
+
+.markdown pre {
+  padding: var(--space-3);
+  border-radius: var(--radius);
+  background: var(--surface-sunken);
+  border: 1px solid var(--border);
+  font-size: var(--text-sm);
+  overflow-x: auto;
+  white-space: pre-wrap;
+}
+
+.tableWrap {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.tableWrap table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+.tableWrap th,
+.tableWrap td {
+  padding: var(--space-2) var(--space-3);
+  text-align: left;
+  border-bottom: 1px solid var(--mist-050);
+  white-space: nowrap;
+}
+
+.tableWrap th {
+  background: var(--surface-sunken);
+  font-weight: var(--weight-semibold);
+  color: var(--text-muted);
+}
+
+.tableWrap tr:last-child td {
+  border-bottom: none;
+}

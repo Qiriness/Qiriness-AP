@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { createOpenAIClient } from './openai-client.mjs';
+import { createOpenAIClient, isReasoningModel } from './openai-client.mjs';
 
 function jsonResponse(obj, { ok = true, status = 200 } = {}) {
   return { ok, status, json: async () => obj, text: async () => JSON.stringify(obj) };
@@ -206,6 +206,27 @@ test('completeWithTools retries a 429 like completeJson does', async () => {
   const turn = await client.completeWithTools({ model: 'm', messages: [] });
   assert.equal(turn.content, 'ok');
   assert.equal(calls, 2);
+});
+
+test('a reasoning model gets max_completion_tokens and no temperature', async () => {
+  // gpt-5 and the o-series answer 400 to `temperature` and `max_tokens`.
+  const bodies = [];
+  const fetchImpl = async (_url, opts) => {
+    bodies.push(JSON.parse(opts.body));
+    return jsonResponse({ choices: [{ message: { content: 'ok' } }] });
+  };
+  const client = createOpenAIClient({ apiKey: 'k', fetchImpl });
+
+  await client.completeWithTools({ model: 'gpt-5.2', messages: [], maxTokens: 900 });
+  await client.completeWithTools({ model: 'gpt-4o', messages: [], maxTokens: 900 });
+
+  assert.equal(bodies[0].max_completion_tokens, 900);
+  assert.equal(bodies[0].temperature, undefined);
+  assert.equal(bodies[0].max_tokens, undefined);
+  assert.equal(bodies[1].max_tokens, 900);
+  assert.equal(bodies[1].temperature, 0);
+  assert.equal(isReasoningModel('o3'), true);
+  assert.equal(isReasoningModel('gpt-4o-mini'), false);
 });
 
 test('no tools means no tools field at all', async () => {

@@ -15,6 +15,7 @@ import {
   TicketIcon,
 } from "@/components/icons";
 import { TEAM_MEMBER } from "@/lib/demo-data";
+import { canUseManagementChat } from "../../../scripts/lib/dashboard-auth.mjs";
 import styles from "./Sidebar.module.css";
 
 interface NavItem {
@@ -22,10 +23,23 @@ interface NavItem {
   href: string;
   icon: ComponentType<{ size?: number }>;
   available: boolean;
+  /** A chip beside the label, e.g. "Beta". */
+  chip?: string;
+  /** Drawn only for roles this admits. Absent means every role. */
+  visibleTo?: (role: string | null) => boolean;
 }
 
 const NAV: NavItem[] = [
-  { label: "Home", href: "#", icon: HomeIcon, available: false },
+  // The management chat. Hidden until the role is known, so the contact team
+  // never sees a link that would only redirect them.
+  {
+    label: "Home",
+    href: "/home",
+    icon: HomeIcon,
+    available: true,
+    chip: "Beta",
+    visibleTo: (role) => canUseManagementChat(role),
+  },
   { label: "Conversations", href: "/conversations", icon: ChatIcon, available: true },
   { label: "Tickets", href: "/tickets", icon: TicketIcon, available: true },
   // Points at the section, not at a panel. `isActive` is an exact match, so
@@ -54,6 +68,8 @@ interface SidebarProps {
    * is how the page asks to be opened. Zero renders nothing.
    */
   openConversations?: number;
+  /** The signed-in role, or null while it is still being fetched. */
+  role?: string | null;
 }
 
 export function Sidebar({
@@ -62,6 +78,7 @@ export function Sidebar({
   onToggleCollapse,
   onNavigate,
   openConversations = 0,
+  role = null,
 }: SidebarProps) {
   return (
     <nav
@@ -74,7 +91,7 @@ export function Sidebar({
       </div>
 
       <ul className={styles.navList}>
-        {NAV.map((item) => {
+        {NAV.filter((item) => !item.visibleTo || item.visibleTo(role)).map((item) => {
           const Icon = item.icon;
           const isActive = item.available && item.href === activeHref;
 
@@ -110,6 +127,7 @@ export function Sidebar({
               >
                 <Icon size={19} />
                 {!collapsed && <span className={styles.navLabel}>{item.label}</span>}
+                {!collapsed && item.chip && <span className={styles.chip}>{item.chip}</span>}
                 {item.href === "/conversations" && openConversations > 0 && (
                   <span
                     className={styles.badge}

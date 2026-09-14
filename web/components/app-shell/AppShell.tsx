@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { Sidebar } from "./Sidebar";
-import { UserMenu } from "./UserMenu";
+import { UserMenu, type Me } from "./UserMenu";
 import { HelpIcon } from "@/components/icons";
 import styles from "./AppShell.module.css";
 
@@ -14,9 +14,32 @@ interface AppShellProps {
   openConversations?: number;
 }
 
+function toLogin() {
+  const next = `${window.location.pathname}${window.location.search}`;
+  window.location.assign(`/login?next=${encodeURIComponent(next)}`);
+}
+
 export function AppShell({ activeHref, children, openConversations }: AppShellProps) {
   const [collapsed, setCollapsed] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [me, setMe] = useState<Me | null>(null);
+
+  // Who is signed in, asked once per page load and shared: the user menu shows
+  // it, and the sidebar needs the role to decide whether Home is drawn. A 401
+  // here is what ends a session whose account was disabled or re-roled since
+  // sign-in.
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/auth/me", { cache: "no-store" })
+      .then(async (response) => {
+        if (response.status === 401) return toLogin();
+        if (response.ok && !cancelled) setMe(await response.json());
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Close the mobile drawer on Escape.
   useEffect(() => {
@@ -37,6 +60,7 @@ export function AppShell({ activeHref, children, openConversations }: AppShellPr
           onToggleCollapse={() => setCollapsed((c) => !c)}
           onNavigate={() => setDrawerOpen(false)}
           openConversations={openConversations}
+          role={me?.role ?? null}
         />
       </aside>
 
@@ -70,7 +94,7 @@ export function AppShell({ activeHref, children, openConversations }: AppShellPr
               <HelpIcon size={17} />
               <span className={styles.helpLabel}>Help</span>
             </button>
-            <UserMenu />
+            <UserMenu me={me} />
           </div>
         </header>
 

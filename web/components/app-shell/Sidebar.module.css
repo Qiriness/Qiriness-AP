@@ -115,6 +115,20 @@
   padding: 2px 6px;
 }
 
+/* "Beta" on a live item: the same pill as "Soon", in the brand colour, because
+   the link works. */
+.chip {
+  font-size: 0.6875rem;
+  font-weight: var(--weight-semibold);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--teal-ink);
+  background: var(--teal-050);
+  border: 1px solid var(--border-teal);
+  border-radius: var(--radius-pill);
+  padding: 2px 6px;
+}
+
 /* The count of Conversations still needing somebody.
    LOUD ON PURPOSE, and the only loud thing in this nav. Those threads left the
    Tickets queue, and the documented way that fails is silently: three L3

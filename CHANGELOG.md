@@ -10,6 +10,22 @@ Three sibling files carry the other halves, and this one deliberately does not d
 
 ---
 
+## Home: the management chat, Beta (2026-09-14)
+
+The sidebar's "Home — Soon" is now **Home · Beta** (`/home`), for Management and Developer only: not drawn for the contact team, and refused to it by the middleware, the page and every `/api/chat` route. A manager asks a question and `gpt-5.2` (`CHAT_MODEL`) answers it by querying the database with one tool, `execute_sql`, for at most 8 steps. Under every answer, **How this was answered** shows each query's SQL, time and rows. Conversations belong to their user; follow-ups carry the earlier questions, answers and their SQL; every turn and query is logged with its errors, duration and token counts (`chat_conversations` / `chat_turns` / `chat_queries`).
+
+The model's SQL runs as a new login role, **`mgmt_chat_ro`**, over a new **`chat` schema of 13 views holding no personal data** — migration `17_management_chat.sql`, applied. Each query is checked (SELECT/WITH only, one statement, `chat` schema only, no settings or catalogue access), then run in a read-only transaction with a 10 s timeout and a 1,000-row cap, and rolled back. The model is shown at most 200 rows of a result. The OpenAI transport now sends reasoning models `max_completion_tokens` and no `temperature`.
+
+**How far it is proven.**
+- Unit tests: guard, loop, executor, system prompt, migration contents, auth rule and the transport change. Web `tsc` and lint clean.
+- On the live database, as the role: all 13 views read; `public` tables, `auth.users`, `vip_customers()`, writes, an update through a view, `create table` and a timed-out `pg_sleep` are refused. The first apply had three views built on baseline `security_invoker` views, which the role could not read; they were rebuilt on the tables and match the baseline views' rows and medians.
+- End to end on real data with `gpt-5.2`, the role borrowed inside rolled-back transactions, 4 questions: August vs July revenue by channel, and August median fulfilment hours by channel as a follow-up, matched an independent query **on every figure**; a request for customer names and emails was declined with an aggregate offered instead; "average delivery time" was answered as not measurable, with fulfilment time given. One query failed on a GROUP BY and the model corrected it. Roughly 4–28 s a question.
+- **Not yet run:** the page in a browser, and the chat through a real `mgmt_chat_ro` login — the role has no password until one is set (`DECISIONS.md § Management chat`). See VALIDATION_LOG.
+
+Found on the way, not changed: `order_fulfilment_timing` in `06_analytics.sql` reads `shipping_destination ->> 'countryCode'`, a key no stored order has (the mapper writes `country_code`), so its `destination_country` is null on every row.
+
+---
+
 ## Insights → Sales: search on Best products (2026-09-14)
 
 A "Find a product" box on the Best products card. Filters the current ranking (Global or a country, by revenue or orders) as you type, case- and accent-insensitive; each match keeps its rank in the full list and its bar keeps the leader's scale; up to 50 matches. Client-side only — no query or schema change. By country it can only reach the best sellers loaded for that country, and the empty state says so. `BestProducts.tsx` only; `tsc` clean, not yet seen in the browser.
