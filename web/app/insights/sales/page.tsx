@@ -8,12 +8,22 @@ export const dynamic = "force-dynamic";
 export const metadata = { title: "Sales · Insights · Qiriness Support OS" };
 
 export default function SalesInsightsPage({ searchParams }: { searchParams: SearchParams }) {
+  // The product card's selection and filters live in the URL like every other
+  // filter here. The service validates them against what the range holds.
+  const first = (value: string | string[] | undefined) => (Array.isArray(value) ? value[0] : value);
+  const productMix = {
+    productId: first(searchParams.product) ?? null,
+    country: first(searchParams.mixCountry)?.trim().toUpperCase() || null,
+    vipOnly: first(searchParams.mixVip) === "1",
+  };
   return (
     <InsightsPage
       active="sales"
       scope={{ range: true, platform: true }}
       searchParams={searchParams}
-      render={async (ctx) => <SalesView panel={await getSalesPanel(ctx)} compareLabel={ctx.range.compareLabel} />}
+      render={async (ctx) => (
+        <SalesView panel={await getSalesPanel(ctx, productMix)} compareLabel={ctx.range.compareLabel} />
+      )}
     />
   );
 }

@@ -113,16 +113,35 @@ test('a non-object entry inside a valid override is skipped, not fatal', () => {
   assert.deepEqual(resolved['gpt-4o-mini'], { input: 2, output: 3 });
 });
 
+test('cached input is billed at the cached rate, and only where the model has one', () => {
+  const custom = { cached: { input: 2, cachedInput: 0.2, output: 10 }, plain: { input: 2, output: 10 } };
+  const close = (actual, expected) => assert.ok(Math.abs(actual - expected) < 1e-12, `${actual} != ${expected}`);
+
+  // Half a million at 2, half a million at 0.2.
+  close(estimateCost({ model: 'cached', inputTokens: 1_000_000, cachedInputTokens: 500_000, rates: custom }).inputUsd, 1.1);
+  // No cachedInput rate: the old arithmetic, unchanged.
+  close(estimateCost({ model: 'plain', inputTokens: 1_000_000, cachedInputTokens: 500_000, rates: custom }).inputUsd, 2);
+  // Cached is a subset of input, so it cannot exceed it.
+  close(estimateCost({ model: 'cached', inputTokens: 100, cachedInputTokens: 1_000_000, rates: custom }).inputUsd, (100 * 0.2) / 1_000_000);
+});
+
+test('LLM_RATES carries a cached-input rate through when one is given', () => {
+  const resolved = resolveModelRates({ LLM_RATES: '{"m": {"input": 1, "cachedInput": 0.1, "output": 8}}' });
+  assert.deepEqual(resolved.m, { input: 1, output: 8, cachedInput: 0.1 });
+});
+
 test('the default table is frozen, so a caller cannot reprice it globally', () => {
   assert.ok(Object.isFrozen(DEFAULT_MODEL_RATES));
 });
 
 test('the defaults cover exactly the models the project calls', () => {
   // agent/src/config.mjs: triage + categoriser + decomposer on mini,
-  // investigator on gpt-4o, embeddings on text-embedding-3-small.
+  // investigator on gpt-4o, embeddings on text-embedding-3-small; and the
+  // management chat's default model (web/lib/server/chat-service.ts).
   assert.deepEqual(Object.keys(DEFAULT_MODEL_RATES).sort(), [
     'gpt-4o',
     'gpt-4o-mini',
+    'gpt-5.2',
     'text-embedding-3-small'
   ]);
 });

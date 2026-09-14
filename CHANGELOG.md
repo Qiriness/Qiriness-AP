@@ -10,6 +10,12 @@ Three sibling files carry the other halves, and this one deliberately does not d
 
 ---
 
+## Home chat: what the conversation has cost (2026-09-14)
+
+Under the question box, the open conversation's running model cost: `This conversation: $0.042 · 3 questions`, in USD at list price, summed from each turn's tokens. `gpt-5.2` is now in `llm-rates.mjs` ($1.75 input, $0.175 cached input, $14.00 output per 1M, OpenAI Standard tier, read 2026-09-14), and `estimateCost` bills cached input at a model's `cachedInput` rate when it has one — no other model has one, so every existing figure is unchanged. Rates tests extended; not yet seen in the browser, and not yet reconciled with OpenAI's usage dashboard.
+
+---
+
 ## Home: the management chat, Beta (2026-09-14)
 
 Deployment fix: `web/package.json` now declares `pg`, and `web/next.config.mjs` resolves shared `../scripts` imports against `web/node_modules`, because Vercel builds from `web/` while `/api/chat` imports the SQL executor that uses `pg`. Proven by a clean `npm run build` from `web/`.
@@ -25,6 +31,30 @@ The model's SQL runs as a new login role, **`mgmt_chat_ro`**, over a new **`chat
 - **Not yet run:** the page in a browser, and the chat through a real `mgmt_chat_ro` login — the role has no password until one is set (`DECISIONS.md § Management chat`). See VALIDATION_LOG.
 
 Found on the way, not changed: `order_fulfilment_timing` in `06_analytics.sql` reads `shipping_destination ->> 'countryCode'`, a key no stored order has (the mapper writes `country_code`), so its `destination_country` is null on every row.
+
+---
+
+## Insights → Sales: country and VIP filters on "Who buys this product" (2026-09-14)
+
+Two filters under the product picker: **Country** (all countries, or one the range shipped to) and **All customers / VIP only**. Both narrow the whole group the card counts — customer total, the three buckets and the ordered-with list — so the figures still sum. VIP follows the shop's rule over its own window; with no rule set the card says so instead of showing zeros. Kept in `?mixCountry=` and `?mixVip=1`.
+
+`insights_product_customer_mix()` gains `p_country`, `p_vip_only` and the VIP rule arguments — in `06_analytics.sql` (moved below `vip_customers()`, which it now calls) and as migration `19_product_mix_filters.sql`, which drops 18's signature; **applied to the live database 2026-09-14**. Tests: `19_product_mix_filters.test.mjs`; 18's test exempts the superseded copy; `npm test` 2,468 pass including `_live.test.mjs` (26), `tsc` clean. **Proven live** (30-day best seller): every filter combination sums; FR 179 = 5 + 3 + 171 and FR + VIP 57 = 4 + 0 + 53 match an independent recount from `orders`; an unknown country returns an empty group; 120–200 ms per call (1.4 s on the first VIP call after the reload). Not viewed in the browser.
+
+**Caught on the way:** the first placement called `vip_customers()` from a function created above it in 06, which a fresh install rejects — only `_live.test.mjs` saw it.
+
+---
+
+## Insights → Sales: searchable product picker on "Who buys this product" (2026-09-14)
+
+The card's product dropdown is now a searchable combobox: open it, type part of a name (case- and accent-insensitive), arrow and Enter to choose, Escape to close. `foldForSearch` moved from `BestProducts.tsx` into `web/lib/insights-format.ts` and both use it. No query or schema change.
+
+---
+
+## Insights → Sales: "Who buys this product" card (2026-09-14)
+
+A card at the bottom of Sales: choose a product (those sold in the range, A–Z; defaults to the best seller) and see distinct Shopify customers who bought only it, did not order it, or ordered it with other products — the three sum to the range's customers — plus the top 7 products its buyers also bought. Free lines (samples, promotional masques) are ignored throughout; marketplace orders are excluded, and a marketplace platform blocks the card. Selection is `?product=`.
+
+Picked up from an uncommitted draft and reworked: the draft returned every product's split in one read (up to ~8 rows per product, exposed to PostgREST's 1,000-row cap), counted marketplace orders as people, and offered unsold catalogue products. New: `insights_product_customer_mix(p_product_id)` in `06_analytics.sql` and migration `18_product_customer_mix.sql` (drops the draft signature; **applied to the live database 2026-09-14**), `getProductCustomerMix` in `sales-service.ts`, `ProductCustomerMixCard`. Tests: `18_product_customer_mix.test.mjs`; `npm test` 2,440 pass. **Proven live** (last 30 days): all figures sum for four products across the sales range, an independent JavaScript recount from `orders` matches exactly (209 = 6 + 3 + 200), ~160 ms per product.
 
 ---
 

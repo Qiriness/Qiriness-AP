@@ -24,6 +24,7 @@ import type {
   PairGroup,
   PlatformId,
   PlatformSplit,
+  ProductCustomerMix,
   ProductGroup,
   ProductSale,
   SalesPanel,
@@ -31,7 +32,20 @@ import type {
 import { orderArgs, type InsightsContext } from "./context";
 import { getOrderSeries, getOrdersSummary, ordersCoverage } from "./orders";
 import { toSeries } from "./series";
-import { callRpc, callRpcOne, count } from "./shared";
+import { loadVipRule } from "../../../../scripts/lib/vip-rule.mjs";
+import { callRpc, callRpcOne, count, getSupabaseClient } from "./shared";
+
+/** What the "Who buys this product" card was asked for, from the URL. */
+export interface ProductMixRequest {
+  /** `?product=` — absent or unknown falls back to the range's best seller. */
+  productId: string | null;
+  /** `?mixCountry=` — a country code the range's orders went to, or null for all. */
+  country: string | null;
+  /** `?mixVip=1` */
+  vipOnly: boolean;
+}
+
+const NO_PRODUCT_MIX_FILTERS: ProductMixRequest = { productId: null, country: null, vipOnly: false };
 
 /** How many products each country list carries, and how many countries are offered. */
 const PER_COUNTRY = 5;
@@ -39,11 +53,25 @@ const COUNTRIES = 12;
 /** How many pairs each list carries — global and per country, per metric. */
 const PAIRS = 10;
 
-export async function getSalesPanel(ctx: InsightsContext): Promise<SalesPanel> {
+/** `productMix` is what the URL asks the "Who buys this product" card for. */
+export async function getSalesPanel(
+  ctx: InsightsContext,
+  productMix: ProductMixRequest = NO_PRODUCT_MIX_FILTERS
+): Promise<SalesPanel> {
   const coverage = ordersCoverage(ctx);
   const marketplace = isMarketplacePlatform(ctx.platform);
 
-  const [summary, seriesRows, mixRow, channelRows, productRows, countryByRevenue, countryByOrders, countryRows, pairRows] =
+  const [
+    summary,
+    seriesRows,
+    mixRow,
+    channelRows,
+    productRows,
+    countryByRevenue,
+    countryByOrders,
+    countryRows,
+    pairRows,
+  ] =
     await Promise.all([
     getOrdersSummary(ctx),
     getOrderSeries(ctx),
@@ -69,6 +97,12 @@ export async function getSalesPanel(ctx: InsightsContext): Promise<SalesPanel> {
     callRpc<Record<string, unknown>>(RPC.INSIGHTS_PRODUCT_PAIRS, { ...orderArgs(ctx), p_limit: PAIRS }),
   ]);
 
+  const products = productRows.map(mapProduct);
+  const countries = countryRows.map(mapCountry);
+  // After the batch, not in it: the default product is the range's best seller,
+  // and the country filter only accepts countries the range shipped to — both
+  // named by reads above.
+  const productCustomerMix = await getProductCustomerMix(ctx, products, countries, productMix, marketplace);
 
   return {
     summary,
@@ -78,14 +112,15 @@ export async function getSalesPanel(ctx: InsightsContext): Promise<SalesPanel> {
     customerMix: mixRow ? mapMix(mixRow) : null,
     platforms: foldPlatforms(channelRows),
     products: {
-      global: group("all", "All products", productRows.map(mapProduct)),
+      global: group("all", "All products", products),
       byCountry: {
         revenue: countryGroups(countryByRevenue),
         orders: countryGroups(countryByOrders),
       },
     },
-    countries: countryRows.map(mapCountry),
+    countries,
     pairs: pairGroups(pairRows),
+    productCustomerMix,
   };
 }
 
@@ -143,6 +178,99 @@ function mapProduct(row: Record<string, unknown>): ProductSale {
     orders: count(row.orders),
     units: count(row.units),
     revenue: count(row.revenue),
+  };
+}
+
+/**
+ * The product card: one product's customer split (`insights_product_customer_mix`).
+ *
+ * The selector offers what had a paid line in the range — a product that did not
+ * sell has nothing to split. PEOPLE, SO NEVER OVER A MARKETPLACE: `mixArgs`
+ * removes Amazon and Yves Rocher from "all", and a marketplace platform blocks
+ * the card, for the reason the customer mix gives — one synthetic customer per
+ * order would make every buyer look like a single-product customer.
+ */
+async function getProductCustomerMix(
+  ctx: InsightsContext,
+  products: ProductSale[],
+  countries: CountrySale[],
+  request: ProductMixRequest,
+  marketplace: boolean
+): Promise<ProductCustomerMix> {
+  // Only a country the range actually shipped to; anything else is no filter,
+  // rather than a filter that silently matches nobody.
+  const country = countries.some((c) => c.code === request.country) ? request.country : null;
+  const rule = marketplace ? null : await loadVipRule(getSupabaseClient(), ctx.shopId);
+
+  const empty: ProductCustomerMix = {
+    options: [...products]
+      .sort((a, b) => a.title.localeCompare(b.title, "fr"))
+      .map((p) => ({ productId: p.productId, title: p.title })),
+    selected: null,
+    customers: 0,
+    onlyCustomers: 0,
+    withOtherCustomers: 0,
+    withoutCustomers: 0,
+    alsoBought: [],
+    blockedReason: null,
+    countries: countries.map((c) => ({ code: c.code, label: c.label })),
+    country,
+    vipOnly: request.vipOnly,
+    vipRuleSet: Boolean(rule),
+    notice: null,
+  };
+
+  if (marketplace) {
+    return {
+      ...empty,
+      blockedReason:
+        "Not measured on a marketplace: Amazon and Yves Rocher create a new customer for every order, so no buyer can be seen buying anything else.",
+    };
+  }
+
+  const selected =
+    products.find((p) => p.productId === request.productId) ??
+    [...products].sort((a, b) => b.revenue - a.revenue)[0] ??
+    null;
+  if (!selected) return empty;
+  const selectedRef = { productId: selected.productId, title: selected.title };
+
+  // "VIP only" with no rule would read as zero VIP buyers — a claim about
+  // customers, when the truth is that nobody has decided who a VIP is yet.
+  if (request.vipOnly && !rule) {
+    return {
+      ...empty,
+      selected: selectedRef,
+      notice: "No VIP rule is set, so nobody is a VIP yet. Set one on Insights → Customers, or show all customers.",
+    };
+  }
+
+  const rows = await callRpc<Record<string, unknown>>(RPC.INSIGHTS_PRODUCT_CUSTOMER_MIX, {
+    ...mixArgs(ctx),
+    p_product_id: selected.productId,
+    p_country: country,
+    p_vip_only: request.vipOnly,
+    p_min_spend: rule?.minSpend ?? null,
+    p_min_orders: rule?.minOrders ?? null,
+    p_window_months: rule?.windowMonths ?? null,
+    p_vip_not_channels: [...ALL_MARKETPLACE_HANDLES],
+  });
+  const head = rows[0] ?? {};
+
+  return {
+    ...empty,
+    selected: selectedRef,
+    customers: count(head.customers),
+    onlyCustomers: count(head.only_customers),
+    withOtherCustomers: count(head.with_other_customers),
+    withoutCustomers: count(head.without_customers),
+    alsoBought: rows
+      .filter((row) => row.other_product_id !== null && row.other_product_id !== undefined)
+      .map((row) => ({
+        productId: String(row.other_product_id),
+        title: String(row.other_title ?? "Unknown product"),
+        customers: count(row.other_customers),
+      })),
   };
 }
 

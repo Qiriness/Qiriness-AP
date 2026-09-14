@@ -507,6 +507,8 @@ Written by the worker and the CLIs, read only by the Insights panels.
 | `15_orders_list.sql` | adds `orders_list()` + `orders_list_facets()` for the Orders page, copied byte-for-byte from 06 (its test asserts it). No table, no data. Applied 2026-09-14 | 01, 02, 06, 12 |
 | `16_orders_search.sql` | drops the 11-argument `orders_list()` and recreates it with `p_search` and an `awaiting_fulfilment` column (open_orders()'s waiting rule); copied byte-for-byte from 06, supersedes 15's copy of that one function | 01, 02, 06, 12, 15 |
 | `17_management_chat.sql` | the management chat: login role `mgmt_chat_ro` (no password in the file), the `chat` schema of 13 owner-rights views with no personal data, and the log tables `chat_conversations` / `chat_turns` / `chat_queries` (named in `CHAT_T`, not `T`). Applied 2026-09-14 | 01, 02, 04, 06, 07 |
+| `18_product_customer_mix.sql` | drops the draft six-argument `insights_product_customer_mix()` and creates the one-product version (`p_product_id`): distinct Shopify customers who bought only it / with other products / not at all, plus its top 7 co-bought products; free lines ignored. Copied byte-for-byte from 06. Applied 2026-09-14 | 01, 02, 06 |
+| `19_product_mix_filters.sql` | drops 18's seven-argument `insights_product_customer_mix()` and recreates it with `p_country`, `p_vip_only` and the VIP rule arguments (through `vip_customers()`); both filters narrow the whole population. Copied byte-for-byte from 06, where the function now sits after `orders_list_facets()` because it calls `vip_customers()`. Supersedes 18's copy. Applied 2026-09-14 | 01, 02, 06, 12, 18 |
 
 `_shared.test.mjs` holds the cross-file invariants (no data statements, RLS on every table, every table and view documented, nothing referenced before it is created, every view `security_invoker` and revoked from the anon roles, every embedded table carrying the whole determinism quadruple, and `scripts/lib/tables.mjs` naming exactly what the baseline creates). Each file has a sibling test for its own contents.
 
@@ -635,7 +637,7 @@ across). The server re-renders; nothing is aggregated in the browser.
 
 | Panel | Range | Platform | Reads |
 | --- | --- | --- | --- |
-| **Sales** | yes | yes | orders summary + series + by channel + by country, customer mix (marketplaces excluded), product sales, country product sales, product pairs |
+| **Sales** | yes | yes | orders summary + series + by channel + by country, customer mix (marketplaces excluded), product sales, country product sales, product pairs, and the "Who buys this product" card (`insights_product_customer_mix` for `?product=`, optionally `?mixCountry=` and `?mixVip=1`, marketplaces excluded; `ProductCustomerMixCard` with a searchable product picker) |
 | **Fulfilment** | yes (the open-orders list is "now") | yes | orders summary + series, fulfilment buckets + carriers, `open_orders()` (orders waiting to ship, VIP-marked, with name + email — `open-orders.ts`) |
 | **Support** | yes | no — tickets have none | support summary + series + categories, orders summary (contact-rate denominator), the latest `cluster_runs` for the topic map (all-time, with a Rebuild button) |
 | **Customers** | the activity rows only (the base is a snapshot) | no — people, so always Shopify | `customer_segment_totals` + `customer_ticket_facts` + `customer-segments.mjs`; orders per customer, marketing summary + series, capture series (`customer-activity-service.ts`) |

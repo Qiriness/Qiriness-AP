@@ -43,6 +43,26 @@ function errorMessage(error: unknown, fallback: string) {
   return error instanceof Error && error.message ? error.message : fallback;
 }
 
+function formatUsd(value: number) {
+  // Cents hide most single questions, so small amounts keep a third decimal.
+  return `$${value < 1 ? value.toFixed(3) : value.toFixed(2)}`;
+}
+
+/**
+ * What the open conversation has cost so far: the sum of its turns, each priced
+ * on the server at read time. A turn whose model has no rate is counted apart
+ * rather than as free — the same rule `estimateCost` follows.
+ */
+function spendLabel(turns: ChatTurnView[]) {
+  if (turns.length === 0) return "This conversation: $0.000";
+  const priced = turns.filter((turn) => turn.costUsd !== null);
+  const total = priced.reduce((sum, turn) => sum + (turn.costUsd ?? 0), 0);
+  const questions = `${turns.length} question${turns.length === 1 ? "" : "s"}`;
+  const unpriced = turns.length - priced.length;
+  if (priced.length === 0) return `This conversation: cost not priced · ${questions}`;
+  return `This conversation: ${formatUsd(total)} · ${questions}${unpriced ? ` (${unpriced} not priced)` : ""}`;
+}
+
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
 }
@@ -299,9 +319,14 @@ export function ChatView({ initialConversations, readiness, loadError }: ChatVie
             Ask
           </Button>
         </form>
-        <p className={styles.footnote}>
-          {readiness.model} · Enter to send, Shift+Enter for a new line · Every question and query is logged.
-        </p>
+        <div className={styles.footnote}>
+          <span className={styles.spend} title="Model cost of this conversation, priced from llm-rates.mjs (USD, list prices)">
+            {spendLabel(turns)}
+          </span>
+          <span>
+            {readiness.model} · Enter to send, Shift+Enter for a new line · Every question and query is logged.
+          </span>
+        </div>
       </section>
     </div>
   );

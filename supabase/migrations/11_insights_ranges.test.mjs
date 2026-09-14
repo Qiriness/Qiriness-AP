@@ -25,8 +25,9 @@ function statementOf(sql, name) {
   return sql.slice(start, end + 4);
 }
 
-test('every ranged function in the baseline is brought forward by 11', () => {
-  assert.deepEqual(ranged(SQL).sort(), ranged(ANALYTICS).sort());
+test('every ranged function that existed by 11 is brought forward by 11', () => {
+  const expected = ranged(ANALYTICS).filter((name) => statementOf(SQL, name) || !supersededLater(name));
+  assert.deepEqual(ranged(SQL).sort(), expected.sort());
   assert.ok(ranged(SQL).length > 0);
 });
 

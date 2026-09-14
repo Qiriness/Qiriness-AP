@@ -33,6 +33,11 @@ export const DEFAULT_MODEL_RATES = Object.freeze({
   'gpt-4o': { input: 2.5, output: 10 },
   // Spam gate, categoriser, decomposer.
   'gpt-4o-mini': { input: 0.15, output: 0.6 },
+  // The management chat on Home (CHAT_MODEL's default). Standard tier, read from
+  // developers.openai.com/api/docs/pricing on 2026-09-14. The only entry with a
+  // cached rate: the chat's prompt is mostly cached, so pricing it at the full
+  // input rate would overstate a conversation several times over.
+  'gpt-5.2': { input: 1.75, cachedInput: 0.175, output: 14 },
   // Embeddings have no completion half, so `output` is 0 rather than absent —
   // an absent field would read as "unpriced" in `estimateCost`, which is a
   // different statement from "this model cannot produce output tokens".
@@ -76,7 +81,11 @@ export function resolveModelRates(env = process.env) {
     if (!rate || typeof rate !== 'object') {
       continue;
     }
-    rates[model] = { input: toRate(rate.input), output: toRate(rate.output) };
+    rates[model] = {
+      input: toRate(rate.input),
+      output: toRate(rate.output),
+      ...(rate.cachedInput !== undefined ? { cachedInput: toRate(rate.cachedInput) } : {})
+    };
   }
   return rates;
 }
@@ -104,16 +113,23 @@ export const MODEL_RATES = resolveModelRates();
  * @param {string} options.model
  * @param {number} [options.inputTokens]
  * @param {number} [options.outputTokens]
+ * @param {number} [options.cachedInputTokens]
+ *   The part of `inputTokens` served from the prompt cache — a subset, never an
+ *   addition. Billed at the model's `cachedInput` rate when it has one; a model
+ *   without one bills them at the full input rate, exactly as before.
  * @param {object} [options.rates]  defaults to the ambient table.
  * @returns {{inputUsd: number, outputUsd: number, totalUsd: number, rated: boolean}}
  */
-export function estimateCost({ model, inputTokens = 0, outputTokens = 0, rates = MODEL_RATES } = {}) {
+export function estimateCost({ model, inputTokens = 0, outputTokens = 0, cachedInputTokens = 0, rates = MODEL_RATES } = {}) {
   const rate = rates?.[model];
   if (!rate) {
     return { inputUsd: 0, outputUsd: 0, totalUsd: 0, rated: false };
   }
 
-  const inputUsd = (toTokens(inputTokens) * toRate(rate.input)) / RATE_UNIT_TOKENS;
+  const input = toTokens(inputTokens);
+  const cached = Math.min(toTokens(cachedInputTokens), input);
+  const cachedRate = rate.cachedInput === undefined ? toRate(rate.input) : toRate(rate.cachedInput);
+  const inputUsd = ((input - cached) * toRate(rate.input) + cached * cachedRate) / RATE_UNIT_TOKENS;
   const outputUsd = (toTokens(outputTokens) * toRate(rate.output)) / RATE_UNIT_TOKENS;
   return {
     inputUsd,

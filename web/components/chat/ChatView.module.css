@@ -283,9 +283,19 @@
 }
 
 .footnote {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: var(--space-1) var(--space-4);
   margin: calc(-1 * var(--space-2)) 0 0;
   font-size: var(--text-caption);
   color: var(--text-subtle);
+}
+
+.spend {
+  font-weight: var(--weight-semibold);
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
 }
 
 @media (max-width: 900px) {

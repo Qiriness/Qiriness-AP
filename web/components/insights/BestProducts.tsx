@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import type { ProductGroup, SalesPanel } from "@/lib/types";
 import { SearchIcon } from "@/components/icons";
-import { euros } from "@/lib/insights-format";
+import { euros, foldForSearch as fold } from "@/lib/insights-format";
 import { GroupSelect, Segmented } from "./Segmented";
 import styles from "./BestProducts.module.css";
 
@@ -137,14 +137,4 @@ export function BestProducts({ products }: { products: SalesPanel["products"] })
       )}
     </div>
   );
-}
-
-/** Lower case, accents removed, spaces collapsed: "  Crème  Légère" -> "creme legere". */
-function fold(text: string): string {
-  return text
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .replace(/\s+/g, " ")
-    .trim();
 }

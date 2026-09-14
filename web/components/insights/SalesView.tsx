@@ -1,6 +1,7 @@
 import type { SalesPanel } from "@/lib/types";
 import { BestProducts } from "./BestProducts";
 import { CountrySales } from "./CountrySales";
+import { ProductCustomerMixCard } from "./ProductCustomerMixCard";
 import { ProductPairs } from "./ProductPairs";
 import { Card, DeltaChip, Grid, KpiCard, euros } from "./InsightsKit";
 import { SplitBar } from "./SplitBar";
@@ -134,6 +135,12 @@ export function SalesView({ panel, compareLabel }: { panel: SalesPanel; compareL
         </Card>
         <Card title="Bought together" span={2}>
           <ProductPairs groups={panel.pairs} />
+        </Card>
+      </Grid>
+
+      <Grid min={100} pin="product-customer-mix" label="Who buys this product">
+        <Card title="Who buys this product">
+          <ProductCustomerMixCard mix={panel.productCustomerMix} />
         </Card>
       </Grid>
     </>

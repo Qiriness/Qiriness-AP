@@ -1322,6 +1322,37 @@ export interface CustomerMix {
   returningCustomerOrders: number;
 }
 
+/**
+ * The Sales panel's product card: one product, and how the range's Shopify
+ * customers split around it. `onlyCustomers + withOtherCustomers +
+ * withoutCustomers === customers`.
+ */
+export interface ProductCustomerMix {
+  /** Every product with a paid line in the range, A–Z — what the selector offers. */
+  options: { productId: string; title: string }[];
+  /** The product the figures describe; null when nothing sold in the range. */
+  selected: { productId: string; title: string } | null;
+  /** Distinct Shopify customers who ordered in the range, marketplaces excluded. */
+  customers: number;
+  onlyCustomers: number;
+  withOtherCustomers: number;
+  withoutCustomers: number;
+  /** Top 7 other paid products its buyers bought in the range, by distinct customer. */
+  alsoBought: { productId: string; title: string; customers: number }[];
+  /** Set when the split cannot be measured (a marketplace platform is selected). */
+  blockedReason: string | null;
+  /** Countries the range's orders went to, for the card's country filter. */
+  countries: { code: string; label: string }[];
+  /** The delivery country the figures are limited to (`?mixCountry=`), or null for all. */
+  country: string | null;
+  /** Limited to VIP customers under the shop's rule (`?mixVip=1`). */
+  vipOnly: boolean;
+  /** False while the shop has no VIP rule — "VIP only" then has nobody to count. */
+  vipRuleSet: boolean;
+  /** Shown instead of the figures when the filters cannot apply (VIP only, no rule). */
+  notice: string | null;
+}
+
 export interface SalesPanel {
   summary: Compared<OrdersSummary>;
   /** Days of the range elapsed so far — the divisor behind "per day". */
@@ -1337,6 +1368,8 @@ export interface SalesPanel {
   };
   countries: CountrySale[];
   pairs: PairGroup[];
+  /** The "Who buys this product" card, for the product in `?product=`. */
+  productCustomerMix: ProductCustomerMix;
 }
 
 export interface CountrySale {

@@ -61,6 +61,20 @@ function grouped(integer: number, separator: string): string {
   return String(Math.abs(Math.trunc(integer))).replace(/\B(?=(\d{3})+(?!\d))/g, separator);
 }
 
+/**
+ * Text folded for a search match: lower case, accents removed, spaces collapsed.
+ * `"  Crème  Légère"` -> `"creme legere"`. The catalogue is French, so a search
+ * box that is not accent-insensitive misses what people type.
+ */
+export function foldForSearch(text: string): string {
+  return text
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 /** Euros as a French merchant reads them: `16 375,77 €`. */
 export function euros(value: number | null, { cents = false }: { cents?: boolean } = {}): string {
   if (value === null || !Number.isFinite(value)) return "—";

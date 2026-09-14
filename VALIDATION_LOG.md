@@ -51,7 +51,7 @@ as its own item: `llm_usage` (item 14), `categorisation_review` (item 15), and
 - **The page itself** — streaming steps, "How this was answered", reopening a conversation, a follow-up, the step-limit and error states — has not been used in a browser with the chat enabled.
 - **Role gating in the browser:** signed in as `contact`, Home is not in the sidebar and `/home` redirects.
 - **Answer quality beyond four questions.** Ask 10 real management questions whose answers are already on an Insights panel and compare. Watch for per-customer figures that did not exclude marketplace channels, and revenue definitions that silently change between turns.
-- **`gpt-5.2` cost** is unpriced (no rate in `llm-rates.mjs`); set `LLM_RATES` once the rate is confirmed, and check the 30k TPM key is not starved when the worker runs at the same time.
+- **`gpt-5.2` cost** is now priced (list rates, cached input included) and totalled per conversation under the composer. Not yet compared with the OpenAI usage dashboard for the same day — do that once, since the figure is list price, not the invoice. Also check the 30k TPM key is not starved when the worker runs at the same time.
 
 ## 24. The Orders page's ticket ring: data present, colours not yet compared by eye (2026-09-14)
 

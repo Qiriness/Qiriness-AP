@@ -197,7 +197,12 @@ function queryRowToView(row: any): ChatQueryView {
 }
 
 function toTurnView(row: any, queries: ChatQueryView[]): ChatTurnView {
-  const cost = estimateCost({ model: row.model, inputTokens: row.input_tokens, outputTokens: row.output_tokens });
+  const cost = estimateCost({
+    model: row.model,
+    inputTokens: row.input_tokens,
+    cachedInputTokens: row.cached_input_tokens,
+    outputTokens: row.output_tokens,
+  });
   return {
     id: row.id,
     question: row.question,
