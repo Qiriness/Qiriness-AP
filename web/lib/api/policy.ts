@@ -44,6 +44,8 @@ export interface SaveRulePayload {
   /** A live code this rule hands the customer, chosen from the cleared list. */
   offerCode: string | null;
   knowledgeDocumentId: string | null;
+  /** Tone keys, in catalogue order. Empty means the Brand voice alone. */
+  tones: string[];
   priority: number;
   isFallback: boolean;
 }

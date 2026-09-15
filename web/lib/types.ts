@@ -1674,10 +1674,26 @@ export interface UsageSummary {
   byModel: { model: string; calls: number; totalTokens: number; costUsd: number | null }[];
 }
 
+/**
+ * How each ticket investigated in the range got its situation — latest run per
+ * ticket. The counts partition `tickets`.
+ */
+export interface SituationPicking {
+  tickets: number;
+  matched: number;
+  tieByRules: number;
+  chosenByModel: number;
+  nearChooserNone: number;
+  nearNotSettled: number;
+  noMatch: number;
+  notRecorded: number;
+}
+
 export interface AgentPanel {
   usage: Compared<UsageSummary>;
   spend: SeriesPoint[];
   funnel: PipelineFunnel;
+  situations: SituationPicking;
   verdicts: VerdictRow[];
   automationCeiling: number | null;
   /** Unsatisfied needs only, ranked. */
@@ -1780,6 +1796,8 @@ export interface PolicyRule {
   offerCode: string | null;
   /** The approved article an operator pinned to this rule, or null. */
   knowledgeDocumentId: string | null;
+  /** Tone keys from `scripts/lib/reply-tones.mjs`. Empty means the Brand voice alone. */
+  tones: string[];
   priority: number;
   isFallback: boolean;
   approvalStatus: string;
@@ -1807,6 +1825,8 @@ export interface PolicyVocabulary {
   offerableCodes: OfferableCode[];
   /** Approved articles a rule may answer from, for the same kind of picker. */
   articles: { id: string; title: string; category: string | null }[];
+  /** The tones a rule may set, in catalogue order, from `scripts/lib/reply-tones.mjs`. */
+  tones: { key: string; label: string; hint: string }[];
   /** For the skeleton box: the one place a rule names a parameter directly. */
   parameters: { key: string; label: string; set: boolean }[];
 }
@@ -1819,6 +1839,12 @@ export interface PolicySituation {
   answerSet: string | null;
   /** 'model' (today's behaviour) or 'rule_directed' (the rules may collect). */
   collectionMode: string;
+  /**
+   * The needs this situation's answer rests on (`support_exemplars.requirement_needs`).
+   * The rule editor opens its conditions on these, so a situation with no rules
+   * yet still shows the evidence it branches on rather than every need there is.
+   */
+  requirementNeeds: string[];
 }
 
 /**

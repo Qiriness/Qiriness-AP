@@ -23,7 +23,7 @@ export const dynamic = "force-dynamic";
 export default async function RuleBookPage() {
   let rules: PolicyRule[] = [];
   let situations: PolicySituation[] = [];
-  let vocabulary: PolicyVocabulary = { needs: [], routes: [], asks: [], parameters: [], offerableCodes: [], articles: [] };
+  let vocabulary: PolicyVocabulary = { needs: [], routes: [], asks: [], parameters: [], offerableCodes: [], articles: [], tones: [] };
   let loadError: string | null = null;
 
   try {

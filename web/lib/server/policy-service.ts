@@ -37,6 +37,7 @@ import {
 } from "../../../agent/src/investigation/evidence-rules.mjs";
 import { MISSING_FIELDS, VERDICTS } from "../../../agent/src/investigation/case-file.mjs";
 import { PARAMETERS } from "../../../scripts/lib/parameters.mjs";
+import { REPLY_TONES, TONE_KEYS } from "../../../scripts/lib/reply-tones.mjs";
 
 import { listPinnableArticles } from "./knowledge-service";
 import { listOfferableCodes } from "./promotions-service";
@@ -133,6 +134,13 @@ export async function policyVocabulary(shopId?: string): Promise<PolicyVocabular
     asks: ASKS,
     offerableCodes,
     articles,
+    // The tones the prompt can word, labelled for the editor. The French wording
+    // stays server-side: the editor offers the choice, the prompt owns the words.
+    tones: Object.entries(REPLY_TONES).map(([key, meta]) => ({
+      key,
+      label: (meta as { label: string }).label,
+      hint: (meta as { hint: string }).hint,
+    })),
     // For the skeleton box: a parameter is inserted as a placeholder, which is
     // the one place a rule names one directly.
     parameters: Object.entries(PARAMETERS).map(([key, meta]) => ({
@@ -164,7 +172,7 @@ export async function listRules(shopId: string, answerSet?: string): Promise<Pol
       ...(answerSet ? { answer_set: answerSet } : {}),
       deleted_at: { operator: "is", value: "null" },
     },
-    "id,answer_set,answer_key,situation_key,when_conditions,answer_skeleton,route,ask,offer_code,knowledge_document_id,priority,is_fallback,approval_status,updated_at",
+    "id,answer_set,answer_key,situation_key,when_conditions,answer_skeleton,route,ask,offer_code,knowledge_document_id,tones,priority,is_fallback,approval_status,updated_at",
   )) as Record<string, unknown>[];
 
   return rows.map(mapRule).sort(byAnswerSetThenKey);
@@ -174,13 +182,20 @@ export async function listRules(shopId: string, answerSet?: string): Promise<Pol
 export async function listSituations(
   shopId: string,
 ): Promise<
-  { key: string; question: string; category: string | null; answerSet: string | null; collectionMode: string }[]
+  {
+    key: string;
+    question: string;
+    category: string | null;
+    answerSet: string | null;
+    collectionMode: string;
+    requirementNeeds: string[];
+  }[]
 > {
   const rows = (await supabaseSelect(
     getSupabaseClient(),
     T.SUPPORT_EXEMPLARS,
     { shop_id: shopId, deleted_at: { operator: "is", value: "null" } },
-    "exemplar_key,canonical_question,category,answer_set,collection_mode",
+    "exemplar_key,canonical_question,category,answer_set,collection_mode,requirement_needs",
   )) as Record<string, unknown>[];
 
   return rows
@@ -190,6 +205,9 @@ export async function listSituations(
       category: (row.category as string) ?? null,
       answerSet: (row.answer_set as string) ?? null,
       collectionMode: (row.collection_mode as string) ?? "model",
+      requirementNeeds: Array.isArray(row.requirement_needs)
+        ? (row.requirement_needs as unknown[]).map(String)
+        : [],
     }))
     .sort((a, b) => a.key.localeCompare(b.key));
 }
@@ -207,6 +225,8 @@ export interface RuleInput {
   offerCode: string | null;
   /** The approved article this rule answers from, or null. */
   knowledgeDocumentId: string | null;
+  /** Tone keys from `reply-tones.mjs`. Empty means the Brand voice alone. */
+  tones: string[];
   priority: number;
   isFallback: boolean;
   approvalStatus: string;
@@ -260,6 +280,18 @@ export async function saveRule(shopId: string, input: RuleInput): Promise<Policy
       "A rule that asks the customer for something must also route to needs_customer_input.",
     );
   }
+  // Refused rather than dropped, like a bad condition: an unknown tone would save
+  // and change nothing. Stored in catalogue order, which is the order the prompt
+  // renders and the editor shows.
+  const toneKeys = TONE_KEYS as readonly string[];
+  const pickedTones = (input.tones ?? []).map((key) => String(key ?? "").trim()).filter(Boolean);
+  const unknownTones = pickedTones.filter((key) => !toneKeys.includes(key));
+  if (unknownTones.length > 0) {
+    throw new KnowledgeValidationError(
+      `There is no tone called ${unknownTones.map((k) => `“${k}”`).join(", ")}.`,
+    );
+  }
+  const tones = toneKeys.filter((key) => pickedTones.includes(key));
 
   const shaped = {
     answerKey,
@@ -292,6 +324,7 @@ export async function saveRule(shopId: string, input: RuleInput): Promise<Policy
         ask: shaped.ask,
         offer_code: shaped.offerCode,
         knowledge_document_id: shaped.knowledgeDocumentId,
+        tones,
         priority: shaped.priority,
         is_fallback: shaped.isFallback,
         approval_status: input.approvalStatus || "draft",
@@ -370,6 +403,7 @@ function mapRule(row: Record<string, unknown>): PolicyRule {
     ask: Array.isArray(row.ask) ? (row.ask as string[]) : row.ask ? [String(row.ask)] : [],
     offerCode: (row.offer_code as string) ?? null,
     knowledgeDocumentId: (row.knowledge_document_id as string) ?? null,
+    tones: Array.isArray(row.tones) ? (row.tones as unknown[]).map(String) : [],
     priority: Number(row.priority ?? 0),
     isFallback: Boolean(row.is_fallback),
     approvalStatus: String(row.approval_status ?? "draft"),

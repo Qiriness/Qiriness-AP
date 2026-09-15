@@ -407,6 +407,17 @@ create table public.support_answers (
   -- cited it. Approval is still re-checked at DRAFTING time, because a document
   -- can be unapproved without being deleted.
   knowledge_document_id uuid references public.knowledge_documents(id) on delete set null,
+  -- THE TONES THIS RULE'S REPLY SHOULD TAKE, as keys of
+  -- `scripts/lib/reply-tones.mjs`, which owns their wording.
+  --
+  -- PER RULE, NOT PER SITUATION, for the reason `knowledge_document_id` gives:
+  -- D-01 is either late (`d01_expedition_en_retard`, where an apology belongs) or
+  -- within the window (`d01_expedition_dans_le_delai`, whose skeleton forbids
+  -- one), and only the branch knows which. Several may be picked; an email
+  -- carrying two requests gets the union of both rules' tones.
+  --
+  -- `'{}'` means the Brand voice alone -- one representation, as `ask` has.
+  tones text[] not null default '{}'::text[],
   -- Ordering among rows that match equally deeply. Most-specific wins first;
   -- this only breaks the tie, so authoring order never becomes load-bearing by
   -- accident.
@@ -447,6 +458,13 @@ create table public.support_answers (
       'shopify_order_number', 'purchase_email', 'product_name',
       'purchase_channel', 'photo', 'promotion_code', 'order_date_or_amount',
       'reaction_product_name', 'lot_number', 'account_email'
+    ]::text[]
+  ),
+  -- Every tone `reply-tones.mjs` can word. A key outside it would be a choice
+  -- that saves and changes nothing.
+  constraint support_answers_tones_check check (
+    tones <@ array[
+      'reassuring', 'empathetic', 'factual', 'firm', 'apologetic', 'understanding'
     ]::text[]
   ),
   -- A rule that asks must say so in its route, or the drafting stage gets a
@@ -515,6 +533,9 @@ comment on column public.support_answers.knowledge_document_id is
   'The approved article that answers this rule''s position, or null. The second value a rule carries rather than a condition, alongside offer_code, and for the same reason: some situations have a canonical answer in one article and rediscovering it by semantic search per ticket makes the reply depend on retrieval. PER RULE, NOT PER SITUATION -- pinned to the situation it would also attach to the branch that fires when NO article answered, which is the branch that exists for exactly that case. A real FK, unlike offer_code, because these rows are ours and no sync rewrites them; set null on delete so removing an article never removes a rule. Approval is re-checked at drafting time and the article dropped if it is no longer approved, the same treatment offer_code gets.';
 comment on column public.support_answers.ask is
   'MISSING_FIELDS keys when the rule''s answer is to ask for something. Keys, never sentences: case-file.mjs owns the wording. A LIST because one reply can need two facts -- a reaction with no product named wants the product AND the batch number, and one slot would have made that two round trips. Empty rather than null for "asks nothing". A non-empty list requires route = needs_customer_input, or drafting would hold a question it is not permitted to ask.';
+
+comment on column public.support_answers.tones is
+  'The tones this rule''s reply should take, as keys of scripts/lib/reply-tones.mjs, which owns their wording. Empty means the Brand voice alone. PER RULE, NOT PER SITUATION: D-01 late wants an apology and D-01 within the window forbids one, and only the branch knows which. When an email carries two requests their rules'' tones are unioned. A tone adjusts the Brand voice in the drafting prompt and never overrides its structural rules.';
 
 -- ============================================================================
 -- EXEMPLAR RETRIEVAL

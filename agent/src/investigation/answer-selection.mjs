@@ -1,4 +1,5 @@
 import { NEED_KEYS, findingValues, isMoot, needRequires } from './evidence-rules.mjs';
+import { normaliseTones } from '../../../scripts/lib/reply-tones.mjs';
 
 // Which answer the evidence selects — and, because it is the same question,
 // which fact to go and establish next.
@@ -100,6 +101,8 @@ export function answerFromRow(row) {
     // is still approved are drafting-time questions.
     offerCode: row.offer_code ?? null,
     knowledgeDocumentId: row.knowledge_document_id ?? null,
+    // Catalogue keys in catalogue order; a row predating the column reads as none.
+    tones: normaliseTones(row.tones),
     priority: row.priority ?? 0,
     isFallback: Boolean(row.is_fallback)
   };

@@ -1,4 +1,4 @@
-import type { AgentPanel, PipelineFunnel } from "@/lib/types";
+import type { AgentPanel, PipelineFunnel, SituationPicking } from "@/lib/types";
 import { BarList, Card, DeltaChip, EmptyState, Grid, KpiCard, compactNumber, percent, usd } from "./InsightsKit";
 import { SplitBar } from "./SplitBar";
 import { TimeSeriesChart } from "./TimeSeriesChart";
@@ -30,6 +30,23 @@ function funnelStages(f: PipelineFunnel) {
   ];
 }
 
+/**
+ * How a situation was picked, one bar per outcome. The first three got a
+ * situation; the rest did not. Rarer outcomes are drawn only when they happened,
+ * so an empty bucket does not read as a stage the pipeline has.
+ */
+function situationStages(s: SituationPicking) {
+  return [
+    { key: "matched", label: "Matched a situation", value: s.matched, always: true },
+    { key: "rules", label: "Tie settled by the rules", value: s.tieByRules, always: false },
+    { key: "model", label: "Near miss — picked by the agent", value: s.chosenByModel, always: true },
+    { key: "none", label: "Near miss — agent found none", value: s.nearChooserNone, always: true },
+    { key: "unsettled", label: "Near miss — not settled", value: s.nearNotSettled, always: true },
+    { key: "no-match", label: "No situation close", value: s.noMatch, always: true },
+    { key: "unrecorded", label: "Not recorded", value: s.notRecorded, always: false },
+  ].filter((stage) => stage.always || stage.value > 0);
+}
+
 /** The AI agent over the chosen range: spend first, then how far it gets and what stops it. */
 export function AgentView({ panel, compareLabel }: { panel: AgentPanel; compareLabel: string }) {
   const { current, previous } = panel.usage;
@@ -41,7 +58,8 @@ export function AgentView({ panel, compareLabel }: { panel: AgentPanel; compareL
       ? previous.costUsd / previous.ticketsTouched
       : null;
   const investigations = panel.verdicts.reduce((sum, v) => sum + v.investigations, 0);
-  const { funnel } = panel;
+  const { funnel, situations } = panel;
+  const withSituation = situations.matched + situations.tieByRules + situations.chosenByModel;
 
   return (
     <>
@@ -105,6 +123,31 @@ export function AgentView({ panel, compareLabel }: { panel: AgentPanel; compareL
                 value: s.value,
                 display: `${s.value.toLocaleString("en-GB")}  ·  ${percent(s.value, funnel.tickets, 0)}`,
                 emphasis: s.key === "order" && s.value / Math.max(1, funnel.tickets) < 0.5,
+              }))}
+            />
+          )}
+        </Card>
+        <Card
+          title="How situations are picked"
+          aside={
+            situations.tickets > 0 ? (
+              <span>
+                {percent(withSituation, situations.tickets, 0)} got one
+              </span>
+            ) : null
+          }
+        >
+          {situations.tickets === 0 ? (
+            <EmptyState>No investigation ran in this range.</EmptyState>
+          ) : (
+            <BarList
+              ariaLabel="Investigated tickets by how their situation was picked"
+              data={situationStages(situations).map((s) => ({
+                key: s.key,
+                label: s.label,
+                value: s.value,
+                display: `${s.value.toLocaleString("en-GB")}  ·  ${percent(s.value, situations.tickets, 0)}`,
+                emphasis: s.key === "unsettled" && s.value > 0,
               }))}
             />
           )}

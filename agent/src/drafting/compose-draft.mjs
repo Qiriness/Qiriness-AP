@@ -1,5 +1,6 @@
 import { toDraftingPrompt } from '../investigation/case-file.mjs';
 import { fillParameters } from '../../../scripts/lib/parameters.mjs';
+import { normaliseTones, toneInstructions } from '../../../scripts/lib/reply-tones.mjs';
 import { toOrderContextText } from '../resolution/order-context.mjs';
 
 // The per-ticket half of the drafting call: what this customer wrote, what the
@@ -50,7 +51,10 @@ export function caseFileFromRow(row) {
     // The article the matched rule pinned, as an ID. Resolved below against the
     // documents still approved, for the same reason the code is: an operator can
     // unapprove an article between the investigation and the draft.
-    knowledgeDocumentId: pinnedArticleIdOf(row)
+    knowledgeDocumentId: pinnedArticleIdOf(row),
+    // The tones the matched rule set, read by name like everything above. Empty
+    // for the Brand voice alone, which is every rule saved before tones existed.
+    tones: tonesOf(row)
   };
 }
 
@@ -167,6 +171,11 @@ function pinnedArticleIdOf(row) {
   return trimmed.length > 0 ? trimmed : null;
 }
 
+/** The tones a matched rule set, as catalogue keys. Empty for the Brand voice alone. */
+function tonesOf(row) {
+  return normaliseTones(row?.exemplar_match?.policy?.tones);
+}
+
 /** The wording guidance a matched rule carried, or null. Nothing else. */
 function skeletonOf(row) {
   const value = row?.exemplar_match?.policy?.answer_skeleton;
@@ -247,6 +256,25 @@ export function composeDraftingMessage({
         `Ce n’est pas un texte à envoyer et il ne doit jamais être recopié tel quel : ` +
         `rédiger la réponse au client à partir des faits ci-dessus, en suivant cette consigne.\n\n` +
         skeleton
+    );
+  }
+
+  // THE TONE A PERSON CHOSE FOR THIS CASE. After the skeleton, because the
+  // skeleton says what the reply does and this says how it should land; before
+  // the code and the article, which are the material it does it with.
+  //
+  // FRAMED AS AN ADJUSTMENT, NOT A VOICE. The Brand voice in the system prompt is
+  // how Qiriness always sounds, and the structural rules there outrank anything
+  // here — a tone able to override « n'affirmer que ce qui est établi » would be
+  // an apology that promises a refund. No tone adds no section, so every rule
+  // saved before tones existed drafts exactly as it did.
+  const toneText = toneInstructions(caseFile?.tones);
+  if (toneText) {
+    parts.push(
+      `## Ton de cette réponse\n\n` +
+        `Ton choisi par l’équipe pour ce cas de figure. Il ajuste la voix de la marque sans la remplacer, ` +
+        `et ne change ni les faits, ni ce que la réponse doit faire, ni les règles prioritaires.\n\n` +
+        toneText
     );
   }
 
@@ -372,7 +400,9 @@ export function promptInputs({ caseFile, orderContext, investigationId, model })
     missing_fields: caseFile.missing.map((item) => item?.field).filter(Boolean),
     do_not_claim_count: caseFile.doNotClaim.length,
     knowledge_titles: caseFile.knowledge.map((chunk) => chunk?.title).filter(Boolean),
-    order_context: Boolean(orderContext && toOrderContextText(orderContext))
+    order_context: Boolean(orderContext && toOrderContextText(orderContext)),
+    // Keys, not the wording: which tones shaped this reply, readable a week later.
+    tones: array(caseFile.tones)
   };
 }
 

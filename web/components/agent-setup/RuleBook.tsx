@@ -130,6 +130,12 @@ export function RuleBook({
     [vocabulary.articles],
   );
 
+  // key -> label, so the inspector names a tone the way the editor offers it.
+  const toneLabels = useMemo(
+    () => new Map(vocabulary.tones.map((tone) => [tone.key, tone.label])),
+    [vocabulary.tones],
+  );
+
   const workflow = useMemo(
     () => buildWorkflow(visibleRules, vocabulary, selectedSituationKey),
     [visibleRules, vocabulary, selectedSituationKey],
@@ -480,6 +486,7 @@ export function RuleBook({
             {selectedRule ? (
               <RuleInspector
                 rule={selectedRule}
+                toneLabel={selectedRule.tones.map((key) => toneLabels.get(key) ?? key).join(", ")}
                 articleTitle={
                   selectedRule.knowledgeDocumentId
                     ? articleTitles.get(selectedRule.knowledgeDocumentId) ?? null
@@ -508,9 +515,10 @@ export function RuleBook({
         <RuleEditor
           rule={editing.rule}
           seed={editing.seed}
+          answerSets={answerSets}
           situations={situations}
+          rules={rules}
           vocabulary={vocabulary}
-          knownSets={answerSets}
           onClose={() => setEditing(null)}
           onSave={async (payload) => {
             const saved = await saveRule(payload);
@@ -529,6 +537,7 @@ export function RuleBook({
 
 function RuleInspector({
   rule,
+  toneLabel,
   articleTitle,
   busy,
   onEdit,
@@ -536,6 +545,8 @@ function RuleInspector({
   onDelete,
 }: {
   rule: PolicyRule;
+  /** The rule's tones as the editor labels them, or "" for the Brand voice alone. */
+  toneLabel: string;
   articleTitle: string | null;
   busy: boolean;
   onEdit: () => void;
@@ -567,6 +578,12 @@ function RuleInspector({
           <dt>Then</dt>
           <dd>{actionSummary(rule)}</dd>
         </div>
+        {toneLabel && (
+          <div>
+            <dt>Tone</dt>
+            <dd>{toneLabel}</dd>
+          </div>
+        )}
         {rule.offerCode && (
           <div>
             <dt>Code</dt>

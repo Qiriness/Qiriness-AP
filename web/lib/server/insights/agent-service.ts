@@ -16,6 +16,7 @@ import type {
   EvidenceGapRow,
   InvestigationVerdict,
   PipelineFunnel,
+  SituationPicking,
   UsageSummary,
   VerdictRow,
 } from "../../types";
@@ -53,7 +54,7 @@ export async function getAgentPanel(ctx: InsightsContext): Promise<AgentPanel> {
   const args = rangeArgs(ctx);
   const previousArgs = rangeArgs(ctx, ctx.range.previous);
 
-  const [usageNow, usageBefore, statsNow, statsBefore, seriesRows, funnelRow, verdictRows, gapRows] =
+  const [usageNow, usageBefore, statsNow, statsBefore, seriesRows, funnelRow, verdictRows, gapRows, situationRow] =
     await Promise.all([
       callRpc<Record<string, unknown>>(RPC.INSIGHTS_LLM_USAGE, args),
       callRpc<Record<string, unknown>>(RPC.INSIGHTS_LLM_USAGE, previousArgs),
@@ -63,6 +64,7 @@ export async function getAgentPanel(ctx: InsightsContext): Promise<AgentPanel> {
       callRpcOne<Record<string, unknown>>(RPC.INSIGHTS_AGENT_FUNNEL, args),
       callRpc<Record<string, unknown>>(RPC.INSIGHTS_AGENT_VERDICTS, args),
       callRpc<Record<string, unknown>>(RPC.INSIGHTS_AGENT_BLOCKERS, args),
+      callRpcOne<Record<string, unknown>>(RPC.INSIGHTS_AGENT_SITUATIONS, args),
     ]);
 
   // Spend per bucket: each (bucket, model) row priced at its own model's rate,
@@ -99,6 +101,7 @@ export async function getAgentPanel(ctx: InsightsContext): Promise<AgentPanel> {
       { from: null, through: null }
     ),
     funnel: mapFunnel(funnelRow ?? {}),
+    situations: mapSituations(situationRow ?? {}),
     verdicts,
     automationCeiling: automationCeiling(verdicts),
     blockers: rankBlockers(gapRows),
@@ -187,6 +190,19 @@ function mapFunnel(row: Record<string, unknown>): PipelineFunnel {
     lowConfidence: count(row.low_confidence),
     awaitingCategorisation: count(row.awaiting_categorisation),
     awaitingInvestigation: count(row.awaiting_investigation),
+  };
+}
+
+function mapSituations(row: Record<string, unknown>): SituationPicking {
+  return {
+    tickets: count(row.tickets),
+    matched: count(row.matched),
+    tieByRules: count(row.tie_by_rules),
+    chosenByModel: count(row.chosen_by_model),
+    nearChooserNone: count(row.near_chooser_none),
+    nearNotSettled: count(row.near_not_settled),
+    noMatch: count(row.no_match),
+    notRecorded: count(row.not_recorded),
   };
 }
 

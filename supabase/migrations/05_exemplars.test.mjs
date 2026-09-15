@@ -3,6 +3,7 @@ import test from 'node:test';
 
 import { NEED_KEYS } from '../../agent/src/investigation/evidence-rules.mjs';
 import { MISSING_FIELDS, VERDICTS } from '../../agent/src/investigation/case-file.mjs';
+import { TONE_KEYS } from '../../scripts/lib/reply-tones.mjs';
 import {
   REPLY_LANGUAGES,
   REQUEST_KINDS,
@@ -273,6 +274,19 @@ test('ask accepts exactly the facts MISSING_FIELDS owns a sentence for', () => {
   const clause = checkClause(SQL, 'support_answers_ask_check');
   assert.ok(clause, 'the constraint is missing');
   assert.deepEqual(literalsIn(clause), Object.keys(MISSING_FIELDS).sort());
+});
+
+test('tones accept exactly the tones the drafting prompt can word', () => {
+  // Same drift guard as `ask`. A key here that reply-tones.mjs cannot word would
+  // be a tone that saves and changes nothing.
+  const clause = checkClause(SQL, 'support_answers_tones_check');
+  assert.ok(clause, 'the constraint is missing');
+  assert.deepEqual(literalsIn(clause), [...TONE_KEYS].sort());
+});
+
+test('no tone has one representation, and it means the brand voice alone', () => {
+  const body = SQL.split('create table public.support_answers')[1].split('\n);')[0];
+  assert.match(body, /tones text\[\] not null default '\{\}'::text\[\]/);
 });
 
 test('a rule that asks must also route to the customer', () => {

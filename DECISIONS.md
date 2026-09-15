@@ -632,6 +632,34 @@ The canvas built its evidence decisions from every rule visible under a situatio
 
 **Listed, not hidden.** A situation-less rule still applies to the set, and dropping it from the screen would misrepresent that as surely as folding it into the decisions did. It gets its own lane saying what it is and why it loses.
 
+### The rule editor opens on the situation, and never hides what a rule depends on (2026-09-15)
+
+The editor was a modal from the flat-list rulebook: it asked again for the answer set and situation the rail had already chosen, and listed every need and finding the vocabulary has. It is now a slide-in panel over the canvas.
+
+**Conditions open on this situation's needs, not all of them** — its `requirement_needs`, the needs its other rules branch on, the needs this rule already names, and their prerequisites. **Narrowing is a view and never a filter**: a need this rule already names is always in the set, so a ticked finding cannot be hidden, and "show all" is one click away for a branch on something new. Where nothing narrows (a new shared rule in an empty set), every need is shown.
+
+**The scope is where it was opened.** Moving a rule to another situation is still possible, behind "Change", because it is rare and consequential — it changes which tickets the rule can ever reach.
+
+**Escape and a backdrop click do not discard edits.** They close a clean panel and ask on a dirty one; Cancel and Discard are the deliberate exits. A half-written skeleton is what an accidental close costs.
+
+**The "evidence says" section stayed, renamed "When the agent found".** The conditions are what separate one rule from another inside a situation — A-29 is four rules told apart by account state alone — so they cannot go; what went was the raw-key wording.
+
+### A rule may set the tone of its reply (2026-09-15)
+
+Until now tone was one global field — the Brand voice's « tone and voice » — and a skeleton that wanted a different register said so in prose: `connexion_aucun_compte` « le rassurer », `d05_suivi_bloque` « le confirmer plutôt que de le rassurer à vide ». `support_answers.tones` makes it a choice: Reassuring, Empathetic, Factual & brief, Firm, Apologetic, Understanding.
+
+**The catalogue is code** (`scripts/lib/reply-tones.mjs`), for the reason parameters are: the list is what the prompt can word. The check constraint holds the same keys and `05_exemplars.test.mjs` asserts they agree. The save path refuses an unknown key; the read path drops one, which only ever meets a row older than the catalogue.
+
+**Per rule, not per situation.** D-01 has `d01_expedition_en_retard`, where an apology belongs, and `d01_expedition_dans_le_delai`, whose skeleton says « ne pas s'excuser d'un retard qui n'en est pas un ». Per situation would force one register on both.
+
+**Several tones, and an email with two requests gets the union** — the same treatment as `ask`, and for the same reason: each request's rule chose how its half should land, and one reply carries both halves. Stored and rendered in catalogue order, so the union reads the same whichever request came first.
+
+**An adjustment, never a replacement.** The prompt section « Ton de cette réponse » sits after the skeleton (what the reply does) and before the code and article (what it does it with), and says in words that it changes neither the facts, nor what the reply must do, nor the structural rules. A tone able to override « n'affirmer que ce qui est établi » would be an apology that promises a refund.
+
+**Apologetic is regret, not fault.** Its wording draws the line the chase rule already draws: apologising for the inconvenience admits nothing. It was kept although it can contradict a skeleton; the editor warns when Apologetic is picked on guidance that forbids an apology, rather than refusing the save, because « nous sommes désolés pour la gêne » on an on-time order is a judgement a person may make.
+
+**No draft moves until somebody picks one.** Every existing rule takes `{}`, and a prompt with no tone is byte-identical to one written before tones existed — asserted in `compose-draft-tones.test.mjs`. **Tone is not mechanically checked**: no pattern proves a reply is « compréhensif ». The review queue is what stands behind it.
+
 ### A completeness gate needs to know who could close the gap, not just that it is open (2026-09-03)
 
 The gate refuses an `answerable` verdict while a declared need is still open. Run over the fresh corpus before enforcing anything, it would downgrade **12 of 91 runs — and on 4 of them every open gap is one nobody can ever close.**
@@ -1412,6 +1440,8 @@ It commits a situation on **35 tickets that had none, about 80% right**. The win
 **Recorded, not hidden.** `exemplar_match.verdict` keeps what the embedding said (`near`/`ambiguous`); `chosen_by: 'model'` and `chooser {model, choice, reason, candidates}` say who supplied the key — so coverage reports can still count the misses the corpus did not catch. `chooser.skipped` / `chooser.failed` distinguish not-asked from asked-and-failed. A failed call is no situation, never a failed investigation. The reason is shown in the test chat but is not evidence: one of 109 invented a detail.
 
 **Its spend is its own pass**, `situation` in `llm_usage`, so Settings → Agent settings shows it as a row. `AGENT_SITUATION_CHOOSER_MODEL` (default `gpt-4o-mini`, empty = off).
+
+**Seen on the AI agent panel** (owner's request, same day): "How situations are picked" counts each ticket investigated in the range once, on its latest run, from `exemplar_match` alone (`insights_agent_situations`, migration 23). Buckets partition the tickets, so the verdict is never overwritten to make the chart simpler: matched · tie settled by the rules · near miss picked by the agent (`chosen_by: 'model'`) · agent found none · **not settled** (no key and no "none" — chooser off, our own side, failed, or a run from before it shipped) · no situation close · not recorded. At ship time every stored run predates the chooser (54 near, 2 ambiguous, 53 matched, 29 none of 138), so "picked by the agent" reads 0 until tickets are investigated again.
 
 **What it cannot fix:** a right situation filed under another subject is not among the candidates (5 of the 56 — P-17 under `order`, D-08 under `order`, D-36 under `return_exchange`). That is categorisation, and phrasings.
 

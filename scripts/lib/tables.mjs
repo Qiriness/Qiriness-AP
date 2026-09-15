@@ -154,6 +154,7 @@ export const RPC = {
   INSIGHTS_AGENT_FUNNEL: 'insights_agent_funnel',
   INSIGHTS_AGENT_VERDICTS: 'insights_agent_verdicts',
   INSIGHTS_AGENT_BLOCKERS: 'insights_agent_blockers',
+  INSIGHTS_AGENT_SITUATIONS: 'insights_agent_situations',
   INSIGHTS_LLM_USAGE: 'insights_llm_usage',
   INSIGHTS_LLM_SERIES: 'insights_llm_series',
   INSIGHTS_LLM_TICKET_STATS: 'insights_llm_ticket_stats',

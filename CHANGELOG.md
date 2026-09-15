@@ -10,6 +10,24 @@ Three sibling files carry the other halves, and this one deliberately does not d
 
 ---
 
+## Rulebook: a rule may set the tone of its reply (2026-09-15)
+
+Phase 2 of the rule editor rework. Rules gain **tones** — Reassuring, Empathetic, Factual & brief, Firm, Apologetic, Understanding — picked as chips in the editor's Reply card, several at once. The catalogue and its French prompt wording are `scripts/lib/reply-tones.mjs`; the column is `support_answers.tones text[]` (default `{}`, meaning the Brand voice alone) with a check holding the same keys, in the 05 baseline and incremental `24_rule_tones.sql`. The matched rule's tones travel on the investigation's policy record (unioned across requests when an email asks two things), reach the drafting prompt as « Ton de cette réponse » after the guidance, and are recorded in the draft's `prompt_inputs`. The inspector and the test transcript show them. The editor warns when Apologetic is picked on guidance that forbids an apology. Existing rules and drafts are unchanged until a tone is picked.
+
+---
+
+## Rulebook: the rule editor becomes a slide-in panel (2026-09-15)
+
+Phase 1 of the rule editor rework, UI only — no migration, no change to what a rule is or how one is selected. `RuleEditor` is now a panel sliding over the rulebook canvas instead of a modal: the header shows the answer set, rule key, live/draft state and situation question; scope is taken from the rail and changed only behind "Change"; the form is three cards — **When the agent found** (findings as chips, opening on the situation's needs with "show all"), **Then** (Answer · Ask the customer · Hand to a person, with the asks shown only when asking), **Reply** (guidance with numbers inserted at the cursor, code and article pickers) — and a sticky footer. A collapsible **How a rule is chosen** recap sits at the top. Escape or a backdrop click no longer discards unsaved edits. `listSituations` now also returns `requirement_needs`. `tsc` and `next lint` clean; not checked in the browser. Tones and "click here" links are the next two phases.
+
+---
+
+## AI agent panel: how situations are picked (2026-09-15)
+
+A card beside "How far tickets get": each ticket investigated in the range, once (latest run), by how it got its situation — matched, near miss picked by the agent, near miss the agent found none for, near miss not settled, no situation close (plus tie settled by the rules and not recorded, drawn only when non-zero), with the share that got a situation. New function `insights_agent_situations()` in 06 and migration `23_agent_situations.sql`, reading `ticket_investigations.exemplar_match`; no table change.
+
+---
+
 ## Settings: My info and Agent settings; forwarding moves to Agent Setup (2026-09-15)
 
 **Email forwarding** is now a tab in Agent Setup (`/agent-setup/forwarding`); the component moved unchanged, the API is untouched. **Settings** has two tabs in the Insights style: **My info** (name, email, role, and which areas the role may open) and **Agent settings** — a table of every model-calling agent (spam filter, categoriser, decomposer, investigator, drafting, embeddings, management chat) with the model it ran on, calls, failed calls and estimated cost over the last 30 days, plus three totals. The model shown is the most-called one in `llm_usage` / `chat_turns`, falling back to the configured one when an agent did not run. Read-only; no migration. `tsc` only — not checked in the browser or against live data.

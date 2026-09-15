@@ -1,9 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 
+import { ChevronDownIcon, CloseIcon, HelpIcon } from "@/components/icons";
 import { Button } from "@/components/ui/Button";
-import { Dialog } from "@/components/ui/Dialog";
 import { knowledgeErrorMessage } from "@/lib/api/knowledge";
 import type { SaveRulePayload } from "@/lib/api/policy";
 import type { PolicyRule, PolicySituation, PolicyVocabulary } from "@/lib/types";
@@ -16,38 +16,92 @@ export interface RuleEditorSeed {
   conditions?: Record<string, string[]>;
 }
 
+/** What each route means to the person choosing it. The keys are the agent's. */
+const ROUTE_COPY: Record<string, { label: string; hint: string }> = {
+  "": {
+    label: "Answer",
+    hint: "Reply from the facts. The verdict stays as the investigation set it.",
+  },
+  needs_customer_input: {
+    label: "Ask the customer",
+    hint: "Reply with what is known, then ask for what is missing.",
+  },
+  needs_human: {
+    label: "Hand to a person",
+    hint: "Reply with what is known. A colleague finishes the rest.",
+  },
+};
+
 /**
- * Writing one rule.
+ * How a rule comes to be applied, in the order the agent does it. Kept beside
+ * the form because every one of these is a question somebody writing a rule
+ * gets wrong once: that a situation outranks condition depth, that priority only
+ * breaks ties, that saving is not going live.
+ */
+const RECAP_STEPS = [
+  "The opening message of a thread is matched to one situation. A near miss is settled by a small model choosing between the closest ones.",
+  "The investigation gathers evidence. Each need ends with one finding, such as an order that is not dispatched.",
+  "Among live rules in the answer set, one keyed to the situation beats a shared one; then the rule matching more conditions wins. Priority only breaks a tie.",
+  "The winning rule decides where the ticket goes and what to ask. It can hand a ticket to the customer or a person, never declare one safe to answer.",
+  "Its guidance, tone, code and article reach the drafting agent as instructions — never sent as written.",
+  "Saving keeps a rule as a draft. It touches real mail only once it is put live.",
+];
+
+/**
+ * Guidance that tells the reply NOT to apologise. Two live skeletons say « ne pas
+ * s'excuser d'un retard qui n'en est pas un »; picking Apologetic on one of them
+ * hands the drafting model both instructions, and it will follow one.
+ */
+const FORBIDS_APOLOGY = /\b(?:ne\s+(?:pas|jamais)|sans)\b[^.]{0,40}excus/i;
+
+/**
+ * Writing one rule, as a panel that slides over the rulebook.
+ *
+ * THE SCOPE COMES FROM WHERE IT WAS OPENED. The rail has already chosen the
+ * answer set and the situation, and the canvas branch has already chosen the
+ * condition, so the panel starts there and only offers to change scope behind a
+ * disclosure. Asking again was the old list editor's shape, not this screen's.
  *
  * EVERY CHOICE COMES FROM THE AGENT'S OWN VOCABULARY, passed in rather than
- * listed here: the states a condition may name, the routes it may take and the
- * questions it may ask are read out of `evidence-rules.mjs` and `case-file.mjs`
- * at request time. A dropdown that offered a state the agent cannot score would
- * let somebody write a rule that saves cleanly and can never fire, which is the
- * failure this whole layer is built to refuse.
+ * listed here: the states a condition may name, the routes it may take, the
+ * questions it may ask and the tones it may set are read out of the agent's
+ * modules at request time. A choice the agent cannot act on would let somebody
+ * write a rule that saves cleanly and does nothing.
  *
- * THE STATES ARE CHECKBOXES, NOT A SELECT, because a condition is a disjunction:
- * « the code is expired OR was never found » is one rule, not two. A single-select
- * would force authoring the same answer twice and then keeping the copies in step.
+ * THE CONDITIONS OPEN ON THIS SITUATION'S NEEDS — its `requirement_needs`, the
+ * needs its other rules branch on, whatever this rule already names, and their
+ * prerequisites — with every need one click away. Narrowing is a view, never a
+ * filter on the data: a ticked finding is always shown, so nothing a rule
+ * depends on can be hidden by it.
+ *
+ * THE STATES ARE MULTI-SELECT because a condition is a disjunction: « the code is
+ * expired OR was never found » is one rule, not two.
  */
 export function RuleEditor({
   rule,
   seed,
+  answerSets,
   situations,
+  rules,
   vocabulary,
-  knownSets,
   onClose,
   onSave,
 }: {
   rule: PolicyRule | null;
   seed?: RuleEditorSeed;
+  answerSets: string[];
   situations: PolicySituation[];
+  /** Every rule, so the conditions can open on what this situation branches on. */
+  rules: PolicyRule[];
   vocabulary: PolicyVocabulary;
-  knownSets: string[];
   onClose: () => void;
   onSave: (payload: SaveRulePayload) => Promise<void>;
 }) {
-  const [answerSet, setAnswerSet] = useState(rule?.answerSet ?? seed?.answerSet ?? knownSets[0] ?? "commande");
+  const titleId = useId();
+  const closeRef = useRef<HTMLButtonElement>(null);
+  const skeletonRef = useRef<HTMLTextAreaElement>(null);
+
+  const [answerSet, setAnswerSet] = useState(rule?.answerSet ?? seed?.answerSet ?? answerSets[0] ?? "");
   const [answerKey, setAnswerKey] = useState(rule?.answerKey ?? "");
   const [situationKey, setSituationKey] = useState(rule?.situationKey ?? seed?.situationKey ?? "");
   const [conditions, setConditions] = useState<Record<string, string[]>>(rule?.conditions ?? seed?.conditions ?? {});
@@ -56,8 +110,79 @@ export function RuleEditor({
   const [ask, setAsk] = useState<string[]>(rule?.ask ?? []);
   const [offerCode, setOfferCode] = useState(rule?.offerCode ?? "");
   const [knowledgeDocumentId, setKnowledgeDocumentId] = useState(rule?.knowledgeDocumentId ?? "");
+  const [tones, setTones] = useState<string[]>(rule?.tones ?? []);
+  const [scopeOpen, setScopeOpen] = useState(() => !(rule?.answerSet ?? seed?.answerSet ?? answerSets[0]));
+  const [showAllNeeds, setShowAllNeeds] = useState(false);
+  const [closeBlocked, setCloseBlocked] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const payload: SaveRulePayload = {
+    answerSet: answerSet.trim(),
+    answerKey: answerKey.trim(),
+    situationKey: situationKey || null,
+    conditions,
+    answerSkeleton: skeleton || null,
+    route: route || null,
+    ask,
+    offerCode: offerCode || null,
+    knowledgeDocumentId: knowledgeDocumentId || null,
+    tones,
+    priority: rule?.priority ?? 0,
+    isFallback: rule?.isFallback ?? false,
+  };
+  const snapshot = JSON.stringify(payload);
+  const [initialSnapshot] = useState(snapshot);
+  const dirty = snapshot !== initialSnapshot;
+
+  // CLOSING NEVER DISCARDS WORK SILENTLY. Escape and a backdrop click are the
+  // two ways a panel gets closed by accident, and a half-written skeleton is
+  // exactly what an accident costs. They close a clean panel and ask on a dirty
+  // one; Cancel and Discard are the deliberate ways out.
+  const requestCloseRef = useRef<() => void>(() => {});
+  useEffect(() => {
+    requestCloseRef.current = () => {
+      if (saving) return;
+      if (dirty) setCloseBlocked(true);
+      else onClose();
+    };
+  });
+
+  useEffect(() => {
+    closeRef.current?.focus();
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") requestCloseRef.current();
+    }
+    document.addEventListener("keydown", onKeyDown);
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      document.body.style.overflow = previous;
+    };
+  }, []);
+
+  const situation = situations.find((item) => item.key === situationKey) ?? null;
+
+  const siblings = useMemo(
+    () =>
+      rules.filter(
+        (item) =>
+          item.id !== rule?.id &&
+          item.answerSet === answerSet &&
+          (situationKey ? item.situationKey === situationKey : !item.situationKey),
+      ),
+    [rules, rule?.id, answerSet, situationKey],
+  );
+
+  const relevant = useMemo(
+    () => relevantNeeds(vocabulary, situation, siblings, conditions),
+    [vocabulary, situation, siblings, conditions],
+  );
+  const narrowed = relevant.size > 0 && relevant.size < vocabulary.needs.length;
+  const shownNeeds =
+    showAllNeeds || !narrowed ? vocabulary.needs : vocabulary.needs.filter(({ need }) => relevant.has(need));
+  const tickedCount = Object.values(conditions).reduce((sum, values) => sum + values.length, 0);
 
   const toggle = (need: string, finding: string) => {
     setConditions((prev) => {
@@ -75,285 +200,506 @@ export function RuleEditor({
   const toggleAsk = (key: string) =>
     setAsk((prev) => (prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]));
 
+  // Kept in catalogue order, which is the order the server stores and the prompt
+  // renders — so re-picking the same tones never reads as an unsaved change.
+  const toggleTone = (key: string) =>
+    setTones((prev) => {
+      const next = prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key];
+      return vocabulary.tones.map((tone) => tone.key).filter((k) => next.includes(k));
+    });
+
+  const chooseRoute = (next: string) => {
+    setRoute(next);
+    if (next !== "needs_customer_input") setAsk([]);
+  };
+
+  // Inserted at the cursor rather than appended: a number belongs mid-sentence.
+  const insertParameter = (key: string) => {
+    const token = `{${key}}`;
+    const element = skeletonRef.current;
+    const start = element?.selectionStart ?? skeleton.length;
+    const end = element?.selectionEnd ?? start;
+    setSkeleton(skeleton.slice(0, start) + token + skeleton.slice(end));
+    requestAnimationFrame(() => {
+      element?.focus();
+      element?.setSelectionRange(start + token.length, start + token.length);
+    });
+  };
+
   // Mirrors the constraint rather than only reporting it after a round trip.
   const askWithoutRoute = ask.length > 0 && route !== "needs_customer_input";
+  const apologyContradiction = tones.includes("apologetic") && FORBIDS_APOLOGY.test(skeleton);
+  const routeOptions = ["", ...vocabulary.routes];
+
+  async function save() {
+    setSaving(true);
+    setError(null);
+    try {
+      await onSave(payload);
+    } catch (caught) {
+      setError(knowledgeErrorMessage(caught));
+    } finally {
+      setSaving(false);
+    }
+  }
 
   return (
-    <Dialog
-      title={rule ? `Edit ${rule.answerKey}` : "New rule"}
-      closeLabel="Close the rule editor"
-      onClose={onClose}
-    >
-      <div className={styles.form}>
-        <div className={styles.row}>
-          <label className={styles.field}>
-            <span>Answer set</span>
-            <input value={answerSet} onChange={(e) => setAnswerSet(e.target.value)} list="answer-sets" />
-            <datalist id="answer-sets">
-              {knownSets.map((s) => (
-                <option key={s} value={s} />
-              ))}
-            </datalist>
-          </label>
-          <label className={styles.field}>
-            <span>Key</span>
-            <input
-              value={answerKey}
-              onChange={(e) => setAnswerKey(e.target.value)}
-              placeholder="annulation_possible"
-            />
-          </label>
-        </div>
-
-        <label className={styles.field}>
-          <span>Situation — leave blank to apply to every situation in the set</span>
-          <select value={situationKey} onChange={(e) => setSituationKey(e.target.value)}>
-            <option value="">any situation</option>
-            {situations.map((s) => (
-              <option key={s.key} value={s.key}>
-                {s.key} — {s.question.slice(0, 70)}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        <fieldset className={styles.conditions}>
-          <legend>When the evidence says</legend>
-          <p className={styles.hint}>
-            Tick every state this rule covers. Nothing ticked means the rule applies whatever the
-            evidence turned out to be.
-          </p>
-          {vocabulary.needs.map(({ need, findings, poweredBy }) => {
-            const unsetParameter =
-              poweredBy && !vocabulary.parameters.find((p) => p.key === poweredBy)?.set
-                ? poweredBy
-                : null;
-            return (
-            <div key={need} className={styles.need}>
-              <span className={styles.needName}>
-                {need}
-                {/* THE LINK MADE VISIBLE. A parameter is never selectable as a
-                    condition — you pick the state, not the number behind it —
-                    but a state computed from a number nobody has set can never
-                    resolve, and a rule branching on it would never fire. Saying
-                    so here is cheaper than finding out from a transcript. */}
-                {unsetParameter && (
-                  <span className={styles.blocked}>
-                    needs <b>{unsetParameter}</b>, which is not set — this rule cannot fire yet
-                  </span>
-                )}
+    <div className={styles.backdrop} onClick={() => requestCloseRef.current()}>
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        className={styles.panel}
+        onClick={(event) => event.stopPropagation()}
+      >
+        <header className={styles.header}>
+          <div className={styles.headerText}>
+            <p className={styles.kicker}>{answerSet || "No answer set"}</p>
+            <div className={styles.titleRow}>
+              <h2 id={titleId} className={styles.title}>
+                {rule ? rule.answerKey : "New rule"}
+              </h2>
+              <span className={styles.status} data-live={rule?.approvalStatus === "approved" || undefined}>
+                {rule ? (rule.approvalStatus === "approved" ? "live" : "draft") : "new"}
               </span>
-              <div className={styles.findings}>
-                {findings.map((finding) => (
-                  <label key={finding} className={styles.check}>
+            </div>
+            <p className={styles.meta}>
+              {situation ? (
+                <>
+                  <b>{situation.key}</b> — {situation.question}
+                </>
+              ) : (
+                "Any situation in the set"
+              )}
+            </p>
+          </div>
+          <button
+            ref={closeRef}
+            type="button"
+            className={styles.close}
+            onClick={() => requestCloseRef.current()}
+            aria-label="Close the rule editor"
+          >
+            <CloseIcon size={16} />
+          </button>
+        </header>
+
+        <div className={styles.body}>
+          <details className={styles.recap}>
+            <summary>
+              <HelpIcon size={15} />
+              How a rule is chosen
+              <span className={styles.recapChevron} aria-hidden="true">
+                <ChevronDownIcon size={15} />
+              </span>
+            </summary>
+            <ol className={styles.recapSteps}>
+              {RECAP_STEPS.map((step) => (
+                <li key={step}>{step}</li>
+              ))}
+            </ol>
+          </details>
+
+          <section className={styles.card}>
+            <label className={styles.field}>
+              <span className={styles.label}>Rule key</span>
+              <input
+                className={styles.input}
+                value={answerKey}
+                onChange={(e) => setAnswerKey(e.target.value)}
+                placeholder="annulation_possible"
+              />
+            </label>
+            <div className={styles.scopeRow}>
+              <span>
+                Applies to <b>{situation ? situation.key : "any situation"}</b> in <b>{answerSet || "—"}</b>
+              </span>
+              <button
+                type="button"
+                className={styles.linkButton}
+                aria-expanded={scopeOpen}
+                onClick={() => setScopeOpen((open) => !open)}
+              >
+                {scopeOpen ? "Done" : "Change"}
+              </button>
+            </div>
+            {scopeOpen && (
+              <div className={styles.grid2}>
+                <label className={styles.field}>
+                  <span className={styles.label}>Answer set</span>
+                  <input
+                    className={styles.input}
+                    value={answerSet}
+                    onChange={(e) => setAnswerSet(e.target.value)}
+                    list={`${titleId}-sets`}
+                  />
+                  <datalist id={`${titleId}-sets`}>
+                    {answerSets.map((s) => (
+                      <option key={s} value={s} />
+                    ))}
+                  </datalist>
+                </label>
+                <label className={styles.field}>
+                  <span className={styles.label}>Situation</span>
+                  <select
+                    className={styles.select}
+                    value={situationKey}
+                    onChange={(e) => setSituationKey(e.target.value)}
+                  >
+                    <option value="">Any situation in the set</option>
+                    {situations.map((s) => (
+                      <option key={s.key} value={s.key}>
+                        {s.key} — {s.question.slice(0, 70)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+            )}
+          </section>
+
+          <section className={styles.card} aria-labelledby={`${titleId}-when`}>
+            <header className={styles.cardHead}>
+              <span className={styles.step}>1</span>
+              <div>
+                <h3 id={`${titleId}-when`} className={styles.cardTitle}>
+                  When the agent found
+                </h3>
+                <p className={styles.cardHint}>
+                  Pick every finding this rule covers — several in one need mean <i>either</i>, across
+                  needs they must <i>all</i> hold. Nothing picked: the rule applies whatever was found.
+                </p>
+              </div>
+              <span className={styles.cardAside}>{tickedCount} picked</span>
+            </header>
+
+            <div className={styles.needs}>
+              {shownNeeds.map(({ need, findings, poweredBy }) => {
+                const picked = conditions[need] ?? [];
+                const unsetParameter =
+                  poweredBy && !vocabulary.parameters.find((p) => p.key === poweredBy)?.set
+                    ? poweredBy
+                    : null;
+                return (
+                  <div key={need} className={styles.need}>
+                    <div className={styles.needHead}>
+                      <span className={styles.needName} title={need}>
+                        {humanise(need)}
+                      </span>
+                      {picked.length > 0 && <span className={styles.needCount}>{picked.length} picked</span>}
+                      {/* A state computed from a number nobody has set can never
+                          resolve, and a rule branching on it would never fire.
+                          Saying so here is cheaper than finding out from a transcript. */}
+                      {unsetParameter && (
+                        <span className={styles.blocked}>
+                          needs <b>{unsetParameter}</b>, which is not set — cannot fire yet
+                        </span>
+                      )}
+                    </div>
+                    <div className={styles.chips}>
+                      {findings.map((finding) => {
+                        const on = picked.includes(finding);
+                        return (
+                          <label key={finding} className={styles.chip} data-on={on || undefined} title={finding}>
+                            <input
+                              type="checkbox"
+                              className={styles.srOnly}
+                              checked={on}
+                              onChange={() => toggle(need, finding)}
+                            />
+                            {humanise(finding)}
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {narrowed && (
+              <button type="button" className={styles.linkButton} onClick={() => setShowAllNeeds((all) => !all)}>
+                {showAllNeeds
+                  ? "Show only this situation's needs"
+                  : `Show all ${vocabulary.needs.length} needs`}
+              </button>
+            )}
+          </section>
+
+          <section className={styles.card} aria-labelledby={`${titleId}-then`}>
+            <header className={styles.cardHead}>
+              <span className={styles.step}>2</span>
+              <div>
+                <h3 id={`${titleId}-then`} className={styles.cardTitle}>
+                  Then
+                </h3>
+                <p className={styles.cardHint}>Where the ticket goes once this rule wins.</p>
+              </div>
+            </header>
+
+            <div className={styles.segmented} role="radiogroup" aria-labelledby={`${titleId}-then`}>
+              {routeOptions.map((option) => {
+                const copy = ROUTE_COPY[option];
+                const on = route === option;
+                return (
+                  <label key={option || "none"} className={styles.segment} data-on={on || undefined}>
                     <input
-                      type="checkbox"
-                      checked={(conditions[need] ?? []).includes(finding)}
-                      onChange={() => toggle(need, finding)}
+                      type="radio"
+                      name={`${titleId}-route`}
+                      className={styles.srOnly}
+                      checked={on}
+                      onChange={() => chooseRoute(option)}
                     />
-                    <span>{finding}</span>
+                    <span className={styles.segmentLabel}>{copy?.label ?? humanise(option)}</span>
+                    <span className={styles.segmentHint}>{copy?.hint ?? option}</span>
                   </label>
+                );
+              })}
+            </div>
+
+            {/* A LIST, since a rule may ask for more than one thing. A reaction
+                reported with no product named needs the product AND the batch
+                number, and one slot forced that into two round trips. */}
+            {route === "needs_customer_input" && (
+              <div className={styles.field}>
+                <span className={styles.label}>Ask the customer for</span>
+                <div className={styles.chips}>
+                  {vocabulary.asks.map((a) => {
+                    const on = ask.includes(a);
+                    return (
+                      <label key={a} className={styles.chip} data-on={on || undefined} title={a}>
+                        <input
+                          type="checkbox"
+                          className={styles.srOnly}
+                          checked={on}
+                          onChange={() => toggleAsk(a)}
+                        />
+                        {humanise(a)}
+                      </label>
+                    );
+                  })}
+                </div>
+                <p className={styles.hint}>
+                  The agent words each question itself, and skips any the dossier already answers.
+                </p>
+              </div>
+            )}
+          </section>
+
+          <section className={styles.card} aria-labelledby={`${titleId}-reply`}>
+            <header className={styles.cardHead}>
+              <span className={styles.step}>3</span>
+              <div>
+                <h3 id={`${titleId}-reply`} className={styles.cardTitle}>
+                  Reply
+                </h3>
+                <p className={styles.cardHint}>
+                  Guidance for the drafting agent — never sent as written.
+                </p>
+              </div>
+            </header>
+
+            <label className={styles.field}>
+              <span className={styles.label}>What the reply should do</span>
+              <textarea
+                ref={skeletonRef}
+                className={styles.textarea}
+                rows={5}
+                value={skeleton}
+                onChange={(e) => setSkeleton(e.target.value)}
+                placeholder="La commande n'est pas encore partie : l'annulation est encore possible…"
+              />
+            </label>
+
+            {/* THE ONE PLACE A RULE NAMES A PARAMETER DIRECTLY. A condition uses the
+                state a number computes; this quotes the number itself. Inserted as a
+                placeholder rather than typed, so changing 30 to 21 changes every
+                skeleton that says it — the whole reason the number is held once. */}
+            {vocabulary.parameters.length > 0 && (
+              <div className={styles.tokens}>
+                <span className={styles.tokensLabel}>Insert a number</span>
+                {vocabulary.parameters.map((p) => (
+                  <button
+                    key={p.key}
+                    type="button"
+                    className={styles.token}
+                    title={p.set ? p.label : `${p.label} — not set yet`}
+                    data-unset={!p.set || undefined}
+                    onClick={() => insertParameter(p.key)}
+                  >
+                    {p.key}
+                    {!p.set && <span className={styles.tokenWarn}>unset</span>}
+                  </button>
                 ))}
               </div>
-            </div>
-            );
-          })}
-        </fieldset>
+            )}
+            <p className={styles.hint}>
+              Describe what to do with facts the dossier holds, never a fact it may not. A skeleton
+              quoting a parameter nobody has set is dropped, and the reply is written from the facts
+              alone.
+            </p>
 
-        <div className={styles.row}>
-          <label className={styles.field}>
-            <span>Then send it to</span>
-            <select
-              value={route}
-              onChange={(e) => {
-                setRoute(e.target.value);
-                if (e.target.value !== "needs_customer_input") setAsk([]);
-              }}
-            >
-              <option value="">nobody — answer it, leave the verdict alone</option>
-              {vocabulary.routes.map((r) => (
-                <option key={r} value={r}>
-                  {r}
-                </option>
-              ))}
-            </select>
-          </label>
-          {/* CHECKBOXES, NOT A DROPDOWN, since a rule may ask for more than one
-              thing. A reaction reported with no product named needs the product
-              AND the batch number, and a single-select forced that into two
-              round trips with somebody waiting on an answer about their skin.
-              Same control as the conditions above, which is also a list. */}
-          <fieldset className={styles.field}>
-            <legend>
-              <span>Asking the customer for</span>
-            </legend>
-            <div className={styles.findings}>
-              {vocabulary.asks.map((a) => (
-                <label key={a} className={styles.check}>
-                  <input
-                    type="checkbox"
-                    checked={ask.includes(a)}
-                    onChange={() => toggleAsk(a)}
-                    disabled={route !== "needs_customer_input"}
-                  />
-                  <span>{a}</span>
+            {/* THE TONE, PER RULE. Several may be picked, and an email asking two
+                things gets the tones of both requests' rules. The catalogue and
+                its French wording live in `scripts/lib/reply-tones.mjs`. */}
+            {vocabulary.tones.length > 0 && (
+              <div className={styles.field}>
+                <span className={styles.label} id={`${titleId}-tone`}>
+                  Tone
+                </span>
+                <div className={styles.chips} role="group" aria-labelledby={`${titleId}-tone`}>
+                  {vocabulary.tones.map((tone) => {
+                    const on = tones.includes(tone.key);
+                    return (
+                      <label key={tone.key} className={styles.chip} data-on={on || undefined} title={tone.hint}>
+                        <input
+                          type="checkbox"
+                          className={styles.srOnly}
+                          checked={on}
+                          onChange={() => toggleTone(tone.key)}
+                        />
+                        {tone.label}
+                      </label>
+                    );
+                  })}
+                </div>
+                <p className={styles.hint}>
+                  {tones.length === 0
+                    ? "None picked: the reply takes the Brand voice alone."
+                    : "Adjusts the Brand voice for this case, never its rules. When an email asks two things, both rules' tones are combined."}
+                </p>
+                {apologyContradiction && (
+                  <p className={styles.warn}>
+                    The guidance says not to apologise, and Apologetic is picked — the drafting agent
+                    would be given both instructions.
+                  </p>
+                )}
+              </div>
+            )}
+
+            <div className={styles.grid2}>
+              {/* A PICKER, NEVER A TEXT BOX. A typed code is a key, and a mistyped one
+                  reaches a customer looking exactly like a real one. The list is what
+                  an operator cleared on the Promotions screen, so a partner's rate
+                  cannot be reached from here at all. */}
+              {vocabulary.offerableCodes.length > 0 && (
+                <label className={styles.field}>
+                  <span className={styles.label}>Give the customer a code</span>
+                  <select className={styles.select} value={offerCode} onChange={(e) => setOfferCode(e.target.value)}>
+                    <option value="">No code</option>
+                    {vocabulary.offerableCodes.map((code) => (
+                      <option key={code.code} value={code.code}>
+                        {code.code}
+                        {code.summary ? ` — ${code.summary}` : ""}
+                        {code.stacksWith ? ` · not combinable with ${code.stacksWith.join(", ")}` : ""}
+                        {code.oncePerCustomer ? " · once per customer" : ""}
+                      </option>
+                    ))}
+                  </select>
+                  <span className={styles.hint}>
+                    Reproduced exactly. Dropped from the reply if it stops being offerable.
+                  </span>
                 </label>
-              ))}
+              )}
+
+              {/* THE ARTICLE THIS RULE ANSWERS FROM. Only what is approved — a rule
+                  pinning a draft article would be dropped at drafting time and look,
+                  from here, as though it worked. */}
+              {vocabulary.articles.length > 0 && (
+                <label className={styles.field}>
+                  <span className={styles.label}>Answer from an article</span>
+                  <select
+                    className={styles.select}
+                    value={knowledgeDocumentId}
+                    onChange={(e) => setKnowledgeDocumentId(e.target.value)}
+                  >
+                    <option value="">Whatever retrieval finds</option>
+                    {vocabulary.articles.map((article) => (
+                      <option key={article.id} value={article.id}>
+                        {article.title}
+                        {article.category ? ` — ${article.category}` : ""}
+                      </option>
+                    ))}
+                  </select>
+                  <span className={styles.hint}>
+                    Dropped rather than quoted if it stops being approved.
+                  </span>
+                </label>
+              )}
             </div>
-          </fieldset>
+          </section>
         </div>
 
-        <label className={styles.field}>
-          <span>What the reply should do — guidance for the drafting agent, never sent as-is</span>
-          <textarea
-            rows={4}
-            value={skeleton}
-            onChange={(e) => setSkeleton(e.target.value)}
-            placeholder="La commande n'est pas encore partie : l'annulation est encore possible…"
-          />
-        </label>
-
-        {/* THE CODE THIS RULE HANDS OUT, and the second place a rule carries a
-            VALUE rather than a condition. A parameter is a number the shop runs
-            on; this is a commercial decision that changes with the season, so it
-            is chosen per rule rather than held once globally.
-
-            A PICKER, NEVER A TEXT BOX. A typed code is a key, and a mistyped one
-            reaches a customer looking exactly like a real one — they only find
-            out at checkout. The list is what an operator cleared on the
-            Promotions screen, so a partner's 50% rate cannot be reached from
-            here at all.
-
-            The conditions ride along with each option, because a code that
-            cannot be combined with a product discount is the commonest reason a
-            customer writes back saying it still does not work. */}
-        {vocabulary.offerableCodes.length > 0 && (
-          <label className={styles.field}>
-            <span>Give the customer a code</span>
-            <select value={offerCode} onChange={(e) => setOfferCode(e.target.value)}>
-              <option value="">no code — the reply offers nothing</option>
-              {vocabulary.offerableCodes.map((code) => (
-                <option key={code.code} value={code.code}>
-                  {code.code}
-                  {code.summary ? ` — ${code.summary}` : ""}
-                  {code.stacksWith ? ` · not combinable with ${code.stacksWith.join(", ")}` : ""}
-                  {code.oncePerCustomer ? " · once per customer" : ""}
-                </option>
-              ))}
-            </select>
-            <span className={styles.hint}>
-              Cleared on the Promotions screen. The agent is told to reproduce it exactly and never
-              to invent one — and if the code stops being offerable, the offer is dropped from the
-              reply rather than sent stale.
-            </span>
-          </label>
-        )}
-
-        {/* THE ARTICLE THIS RULE ANSWERS FROM, and the same argument as the code
-            above it: a picker, not an id typed by hand, and only what is
-            approved — a rule pinning a draft article would be dropped at
-            drafting time and look, from here, as though it worked.
-
-            WHY PIN AT ALL. Some situations have their answer in one article, and
-            leaving retrieval to rediscover it per ticket makes the reply depend
-            on which category the ticket landed in. « livrez-vous dans mon pays »
-            is the case: three approved articles answer it with three different
-            country lists. */}
-        {vocabulary.articles.length > 0 && (
-          <label className={styles.field}>
-            <span>Answer from a specific article</span>
-            <select
-              value={knowledgeDocumentId}
-              onChange={(e) => setKnowledgeDocumentId(e.target.value)}
+        <footer className={styles.footer}>
+          <div className={styles.footerText}>
+            {closeBlocked ? (
+              <div className={styles.discard} role="alert">
+                <span>You have unsaved changes.</span>
+                <Button variant="secondary" size="sm" onClick={onClose}>
+                  Discard
+                </Button>
+                <Button variant="secondary" size="sm" onClick={() => setCloseBlocked(false)}>
+                  Keep editing
+                </Button>
+              </div>
+            ) : (
+              <p className={styles.note}>
+                Saves as a <b>draft</b>. Real mail is untouched until you put it live.
+              </p>
+            )}
+            {askWithoutRoute && (
+              <p className={styles.warn}>A rule that asks for something must also send the ticket to the customer.</p>
+            )}
+            {error && (
+              <p className={styles.error} role="alert">
+                {error}
+              </p>
+            )}
+          </div>
+          <div className={styles.actions}>
+            <Button variant="secondary" size="sm" disabled={saving} onClick={onClose}>
+              Cancel
+            </Button>
+            <Button
+              variant="primary"
+              size="sm"
+              disabled={saving || !payload.answerKey || !payload.answerSet || askWithoutRoute}
+              onClick={save}
             >
-              <option value="">no article — the reply uses whatever retrieval found</option>
-              {vocabulary.articles.map((article) => (
-                <option key={article.id} value={article.id}>
-                  {article.title}
-                  {article.category ? ` — ${article.category}` : ""}
-                </option>
-              ))}
-            </select>
-            <span className={styles.hint}>
-              Travels with this rule into the drafting prompt, under its own heading and separate
-              from what retrieval found. Re-checked when the reply is written: if the article stops
-              being approved, it is dropped rather than quoted.
-            </span>
-          </label>
-        )}
-
-        {/* THE ONE PLACE A RULE NAMES A PARAMETER DIRECTLY. A condition uses the
-            state a number computes; this quotes the number itself. Inserted as a
-            placeholder rather than typed, so changing 30 to 21 changes every
-            skeleton that says it — the whole reason the number is held once. */}
-        <div className={styles.insert}>
-          <span className={styles.insertLabel}>Insert a number:</span>
-          {vocabulary.parameters.map((p) => (
-            <button
-              key={p.key}
-              type="button"
-              className={styles.chip}
-              title={p.set ? p.label : `${p.label} — not set yet`}
-              data-unset={!p.set || undefined}
-              onClick={() => setSkeleton((prev) => `${prev}{${p.key}}`)}
-            >
-              {p.key}
-              {!p.set && <span className={styles.chipWarn}>unset</span>}
-            </button>
-          ))}
-        </div>
-        <p className={styles.hint}>
-          A skeleton quoting a parameter nobody has set is dropped from the prompt, and the reply is
-          written from the facts alone.
-        </p>
-
-        {askWithoutRoute && (
-          <p className={styles.warn}>
-            A rule that asks for something must also send the ticket to the customer.
-          </p>
-        )}
-        {error && <p className={styles.error}>{error}</p>}
-
-        <p className={styles.note}>
-          Saving leaves the rule as a <b>draft</b>. It reaches real mail only once you put it live.
-        </p>
-
-        <div className={styles.actions}>
-          <Button variant="secondary" size="sm" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button
-            variant="primary"
-            size="sm"
-            disabled={saving || !answerKey.trim() || askWithoutRoute}
-            onClick={async () => {
-              setSaving(true);
-              setError(null);
-              try {
-                await onSave({
-                  answerSet,
-                  answerKey,
-                  situationKey: situationKey || null,
-                  conditions,
-                  answerSkeleton: skeleton || null,
-                  route: route || null,
-                  ask,
-                  offerCode: offerCode || null,
-                  knowledgeDocumentId: knowledgeDocumentId || null,
-                  priority: rule?.priority ?? 0,
-                  isFallback: rule?.isFallback ?? false,
-                });
-              } catch (caught) {
-                setError(knowledgeErrorMessage(caught));
-              } finally {
-                setSaving(false);
-              }
-            }}
-          >
-            {saving ? "Saving…" : "Save as draft"}
-          </Button>
-        </div>
+              {saving ? "Saving…" : "Save as draft"}
+            </Button>
+          </div>
+        </footer>
       </div>
-    </Dialog>
+    </div>
   );
+}
+
+/**
+ * The needs worth opening on: what the situation declares, what its other rules
+ * branch on, what this rule already names, and everything those require first.
+ */
+function relevantNeeds(
+  vocabulary: PolicyVocabulary,
+  situation: PolicySituation | null,
+  siblings: PolicyRule[],
+  conditions: Record<string, string[]>,
+): Set<string> {
+  const known = new Map(vocabulary.needs.map((need) => [need.need, need]));
+  const out = new Set<string>();
+  const visit = (need: string) => {
+    const meta = known.get(need);
+    if (!meta || out.has(need)) return;
+    out.add(need);
+    for (const prerequisite of meta.requires) visit(prerequisite);
+  };
+  for (const need of situation?.requirementNeeds ?? []) visit(need);
+  for (const sibling of siblings) for (const need of Object.keys(sibling.conditions)) visit(need);
+  for (const need of Object.keys(conditions)) visit(need);
+  return out;
+}
+
+function humanise(key: string): string {
+  const spaced = key.replace(/_/g, " ");
+  return spaced.charAt(0).toUpperCase() + spaced.slice(1);
 }

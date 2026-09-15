@@ -1,94 +1,565 @@
-.form {
-  display: grid;
-  gap: 1rem;
+/*
+ * The rule editor as a slide-in panel over the rulebook. Same layer as the
+ * shared Dialog — above the sticky bar and dropdowns, below toasts — with a
+ * lighter backdrop, because the canvas behind is context worth still seeing.
+ */
+.backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 300;
+  display: flex;
+  justify-content: flex-end;
+  background: rgba(15, 20, 27, 0.28);
+  animation: fadeIn var(--dur) var(--ease-out);
 }
 
-.row {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 1rem;
+.panel {
+  display: flex;
+  flex-direction: column;
+  width: min(46rem, 100%);
+  height: 100%;
+  background: var(--canvas);
+  border-left: 1px solid var(--border);
+  box-shadow: var(--shadow-md);
+  animation: slideIn 260ms var(--ease-out);
 }
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slideIn {
+  from {
+    transform: translateX(32px);
+    opacity: 0;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .backdrop,
+  .panel {
+    animation: none;
+  }
+}
+
+/* ---------------------------------------------------------------- header */
+
+.header {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-4);
+  padding: var(--space-4) var(--space-5);
+  padding-top: calc(var(--space-4) + env(safe-area-inset-top, 0px));
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+
+.headerText {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  gap: var(--space-1);
+}
+
+.kicker {
+  margin: 0;
+  font-size: var(--text-caption);
+  font-weight: var(--weight-semibold);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--teal-ink);
+}
+
+.titleRow {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.title {
+  margin: 0;
+  font-size: var(--text-lg);
+  font-weight: var(--weight-semibold);
+  color: var(--text-strong);
+  overflow-wrap: anywhere;
+}
+
+.status {
+  padding: 0.1rem 0.55rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--linen);
+  color: var(--text-muted);
+  font-size: var(--text-caption);
+  font-weight: var(--weight-medium);
+}
+
+.status[data-live] {
+  border-color: var(--success-100);
+  background: var(--success-050);
+  color: var(--priority-low-ink);
+}
+
+.meta {
+  margin: 0;
+  font-size: var(--text-sm);
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+
+.close {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.close:hover {
+  background: var(--linen);
+  color: var(--text-strong);
+}
+
+.close:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus);
+}
+
+/* ------------------------------------------------------------------ body */
+
+/* The one scroller — header and footer stay put. */
+.body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--space-5);
+  display: grid;
+  align-content: start;
+  gap: var(--space-4);
+}
+
+.recap {
+  border: 1px solid var(--border-teal);
+  border-radius: var(--radius-md);
+  background: var(--teal-050);
+}
+
+.recap summary {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  list-style: none;
+  cursor: pointer;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--teal-ink);
+  border-radius: var(--radius-md);
+}
+
+.recap summary::-webkit-details-marker {
+  display: none;
+}
+
+.recap summary:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus);
+}
+
+.recapChevron {
+  display: inline-flex;
+  margin-left: auto;
+  transition: transform var(--dur-fast) var(--ease-out);
+}
+
+.recap[open] .recapChevron {
+  transform: rotate(180deg);
+}
+
+.recapSteps {
+  margin: 0;
+  padding: 0 var(--space-4) var(--space-4) calc(var(--space-4) + 1.25rem);
+  display: grid;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+  color: var(--text-default);
+}
+
+.card {
+  display: grid;
+  gap: var(--space-4);
+  min-width: 0;
+  padding: var(--space-4) var(--space-5);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-xs);
+}
+
+.cardHead {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+}
+
+.step {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  border: 1px solid var(--border-teal);
+  border-radius: var(--radius-pill);
+  background: var(--teal-050);
+  color: var(--teal-ink);
+  font-size: var(--text-caption);
+  font-weight: var(--weight-semibold);
+}
+
+.cardTitle {
+  margin: 0;
+  font-size: var(--text-md);
+  font-weight: var(--weight-semibold);
+  color: var(--text-strong);
+}
+
+.cardHint {
+  margin: 0.15rem 0 0;
+  font-size: var(--text-sm);
+  line-height: 1.5;
+  color: var(--text-subtle);
+}
+
+.cardAside {
+  flex: none;
+  margin-left: auto;
+  font-size: var(--text-caption);
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+/* ---------------------------------------------------------------- fields */
 
 .field {
   display: grid;
-  gap: 0.3rem;
-  font-size: 0.9rem;
+  gap: 0.35rem;
+  min-width: 0;
 }
 
-.field > span {
-  color: var(--text-subtle);
-  font-size: var(--text-caption);
+.label {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  color: var(--text-default);
 }
 
-.field input,
-.field select,
-.field textarea {
-  font: inherit;
-  padding: 0.45rem 0.55rem;
-  border: 1px solid var(--border);
-  border-radius: 6px;
+.input,
+.select,
+.textarea {
+  width: 100%;
+  min-width: 0;
+  padding: 0.5rem 0.65rem;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
   background: var(--surface);
-  color: inherit;
+  color: var(--text-strong);
+  font: inherit;
+  font-size: var(--text-body);
+  transition:
+    border-color var(--dur-fast) var(--ease-out),
+    box-shadow var(--dur-fast) var(--ease-out);
 }
 
-.field textarea {
+.input:focus,
+.select:focus,
+.textarea:focus {
+  outline: none;
+  border-color: var(--teal);
+  box-shadow: 0 0 0 3px var(--teal-100);
+}
+
+.textarea {
+  min-height: 7rem;
   resize: vertical;
-  line-height: 1.5;
-}
-
-/*
- * The states, as checkboxes. A condition is a disjunction — "expired OR never
- * found" is one rule — so a single-select would force the same answer to be
- * written twice and then kept in step.
- */
-.conditions {
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 0.8rem 0.9rem;
-  margin: 0;
-  display: grid;
-  gap: 0.7rem;
-  max-height: 22rem;
-  overflow-y: auto;
-}
-
-.conditions legend {
-  font-size: var(--text-caption);
-  color: var(--text-subtle);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  padding: 0 0.3rem;
+  line-height: 1.55;
 }
 
 .hint {
   margin: 0;
   font-size: var(--text-caption);
-  color: var(--text-subtle);
   line-height: 1.5;
+  color: var(--text-subtle);
+}
+
+.grid2 {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  gap: var(--space-3);
+}
+
+.scopeRow {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+.linkButton {
+  justify-self: start;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--teal-ink);
+  font: inherit;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.linkButton:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus);
+  border-radius: var(--radius-sm);
+}
+
+/* The native control stays in the tree for keyboard and screen readers. */
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ------------------------------------------------------------ conditions */
+
+.needs {
+  display: grid;
+  gap: var(--space-3);
 }
 
 .need {
   display: grid;
-  gap: 0.3rem;
+  gap: var(--space-2);
+  padding-bottom: var(--space-3);
+  border-bottom: 1px solid var(--mist-050);
+}
+
+.need:last-child {
+  padding-bottom: 0;
+  border-bottom: none;
+}
+
+.needHead {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: var(--space-2);
 }
 
 .needName {
-  font-size: 0.85rem;
-  font-weight: 600;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--text-strong);
 }
 
-.findings {
+.needCount {
+  font-size: var(--text-caption);
+  color: var(--teal-ink);
+}
+
+/* A state whose parameter is unset can never resolve; say so where it is picked. */
+.blocked {
+  font-size: var(--text-caption);
+  color: var(--priority-medium-ink);
+}
+
+.chips {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.35rem 0.8rem;
+  gap: var(--space-2);
 }
 
-.check {
+.chip {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  padding: 0.3rem 0.75rem;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-pill);
+  background: var(--surface);
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+  cursor: pointer;
+  user-select: none;
+  transition:
+    background var(--dur-fast) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out);
+}
+
+.chip:hover {
+  border-color: var(--teal);
+  color: var(--text-strong);
+}
+
+.chip[data-on] {
+  border-color: var(--teal);
+  background: var(--teal);
+  color: var(--text-on-teal);
+}
+
+.chip[data-on]:hover {
+  background: var(--teal-strong);
+}
+
+.chip:has(input:focus-visible) {
+  box-shadow: var(--shadow-focus);
+}
+
+/* ----------------------------------------------------------------- route */
+
+.segmented {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+  gap: var(--space-2);
+}
+
+.segment {
+  position: relative;
+  display: grid;
+  align-content: start;
+  gap: 0.2rem;
+  padding: var(--space-3);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  cursor: pointer;
+  transition:
+    background var(--dur-fast) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-out);
+}
+
+.segment:hover {
+  border-color: var(--teal);
+}
+
+.segment[data-on] {
+  border-color: var(--teal);
+  background: var(--teal-050);
+  box-shadow: inset 0 0 0 1px var(--teal);
+}
+
+.segment:has(input:focus-visible) {
+  box-shadow: var(--shadow-focus);
+}
+
+.segmentLabel {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--text-strong);
+}
+
+.segmentHint {
+  font-size: var(--text-caption);
+  line-height: 1.45;
+  color: var(--text-subtle);
+}
+
+/* ------------------------------------------------------------- parameters */
+
+.tokens {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: calc(-1 * var(--space-2));
+}
+
+.tokensLabel {
+  font-size: var(--text-caption);
+  color: var(--text-subtle);
+}
+
+.token {
   display: inline-flex;
   align-items: center;
   gap: 0.3rem;
-  font-size: 0.82rem;
-  color: var(--text-subtle);
+  padding: 0.15rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--linen);
+  color: var(--text-default);
+  font: inherit;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: var(--text-caption);
+  cursor: pointer;
+}
+
+.token:hover {
+  border-color: var(--teal);
+  color: var(--teal-ink);
+}
+
+.token:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus);
+}
+
+.token[data-unset] {
+  border-style: dashed;
+  background: var(--surface);
+}
+
+.tokenWarn {
+  font-family: var(--font-sans);
+  color: var(--priority-medium-ink);
+}
+
+/* ---------------------------------------------------------------- footer */
+
+.footer {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-5);
+  padding-bottom: calc(var(--space-3) + env(safe-area-inset-bottom, 0px));
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+}
+
+.footerText {
+  flex: 1;
+  min-width: 12rem;
+  display: grid;
+  gap: 0.2rem;
 }
 
 .note {
@@ -97,69 +568,44 @@
   color: var(--text-subtle);
 }
 
-.warn,
+.discard {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+  color: var(--text-default);
+}
+
+.warn {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--priority-medium-ink);
+}
+
 .error {
   margin: 0;
-  font-size: 0.85rem;
-  color: var(--danger, #b4341f);
+  font-size: var(--text-sm);
+  color: var(--error);
 }
 
 .actions {
   display: flex;
-  justify-content: flex-end;
-  gap: 0.5rem;
+  gap: var(--space-2);
+  margin-left: auto;
 }
 
-/* A state whose parameter is unset can never resolve; say so where it is ticked. */
-.blocked {
-  margin-left: 0.5rem;
-  font-weight: 400;
-  font-size: var(--text-caption);
-  color: var(--warn, #a3541a);
-}
+@media (max-width: 640px) {
+  .header,
+  .footer {
+    padding-inline: var(--space-4);
+  }
 
-/*
- * Inserting a parameter into the wording. The one place a rule names a parameter
- * directly — a condition uses the state a number computes, this quotes the
- * number itself.
- */
-.insert {
-  display: flex;
-  align-items: center;
-  gap: 0.35rem;
-  flex-wrap: wrap;
-  margin-top: -0.4rem;
-}
+  .body {
+    padding: var(--space-4);
+  }
 
-.insertLabel {
-  font-size: var(--text-caption);
-  color: var(--text-subtle);
-}
-
-.chip {
-  font: inherit;
-  font-size: 0.78rem;
-  padding: 0.12rem 0.5rem;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  background: var(--surface);
-  color: var(--text-subtle);
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  gap: 0.3rem;
-}
-
-.chip:hover {
-  color: var(--text);
-  border-color: var(--teal);
-}
-
-.chip[data-unset] {
-  border-style: dashed;
-}
-
-.chipWarn {
-  color: var(--warn, #a3541a);
-  font-size: 0.7rem;
+  .card {
+    padding: var(--space-4);
+  }
 }

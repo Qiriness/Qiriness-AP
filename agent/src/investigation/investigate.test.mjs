@@ -1125,6 +1125,7 @@ function alwaysRule(answerSet, key, overrides = {}) {
         ask: overrides.ask ?? [],
         offerCode: overrides.offerCode ?? null,
         knowledgeDocumentId: null,
+        tones: overrides.tones ?? [],
         priority: 0,
         isFallback: false
       }
@@ -1223,6 +1224,41 @@ test('a second family whose rules do not load leaves the ticket as it was', asyn
 
   assert.ok(!('per_request' in caseFile.policy));
   assert.equal(caseFile.policy.answer_key, 'product_rule');
+});
+
+test('a single request carries its rule’s tones, and no tone is an empty list', async () => {
+  const toned = await twoRequestInvestigator(null).investigate({
+    ...PRODUCT_TICKET,
+    policy: alwaysRule('products', 'product_rule', { tones: ['firm'] })
+  });
+  assert.deepEqual(toned.policy.tones, ['firm']);
+
+  const plain = await twoRequestInvestigator(null).investigate({
+    ...PRODUCT_TICKET,
+    policy: alwaysRule('products', 'product_rule')
+  });
+  assert.deepEqual(plain.policy.tones, []);
+});
+
+test('tones from both requests are combined, in catalogue order', async () => {
+  // Each request's rule chose how its half should land, and one reply carries
+  // both halves — so the tones union, as `ask` does, rather than one winning.
+  const { investigate } = twoRequestInvestigator(
+    alwaysRule('promotions', 'promo_rule', { tones: ['apologetic', 'understanding'] })
+  );
+
+  const caseFile = await investigate({
+    ...PRODUCT_TICKET,
+    secondary_category: 'promotions',
+    policy: alwaysRule('products', 'product_rule', { tones: ['understanding', 'reassuring'] })
+  });
+
+  assert.deepEqual(caseFile.policy.tones, ['reassuring', 'apologetic', 'understanding']);
+  assert.deepEqual(
+    caseFile.policy.per_request.map((r) => r.tones),
+    [['understanding', 'reassuring'], ['apologetic', 'understanding']],
+    'and each request’s own choice stays readable'
+  );
 });
 
 test('a loader that throws never costs the investigation', async () => {

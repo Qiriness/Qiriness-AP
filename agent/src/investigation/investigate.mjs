@@ -20,6 +20,7 @@ import {
   responseComplete
 } from './evidence-rules.mjs';
 import { liveAnswers, needsNamedBy, selectAnswer } from './answer-selection.mjs';
+import { normaliseTones } from '../../../scripts/lib/reply-tones.mjs';
 import { collectableNeeds, collectedFindings, proposeCollection } from './collection-planner.mjs';
 import { TOOL_NAMES, answerSetFor, escalationTriggers } from './investigation-rules.mjs';
 
@@ -574,6 +575,10 @@ function selectPolicyForRequests(requests, ledger, toolNames) {
  * discount code is an authoring problem, not something to resolve by picking; the
  * first is taken and every selection is recorded in `per_request` so the clash is
  * visible rather than silently settled.
+ *
+ * TONES UNION, as `ask` does. Each request's rule chose how its half should land,
+ * and one reply carries both halves. Catalogue order, so the result reads the
+ * same whichever request came first.
  */
 function combinePolicies(selections) {
   const RANK = { answerable: 0, needs_customer_input: 1, needs_human: 2 };
@@ -587,6 +592,8 @@ function combinePolicies(selections) {
   for (const selection of selections) {
     for (const field of selection.ask || []) if (!ask.includes(field)) ask.push(field);
   }
+
+  const tones = normaliseTones(selections.flatMap((s) => s.tones || []));
 
   const skeleton = selections
     .filter((s) => s.answer_skeleton)
@@ -603,6 +610,7 @@ function combinePolicies(selections) {
     ask,
     offer_code: selections.find((s) => s.offer_code)?.offer_code ?? null,
     knowledge_document_id: selections.find((s) => s.knowledge_document_id)?.knowledge_document_id ?? null,
+    tones,
     answer_skeleton: skeleton || null,
     candidates: [...new Set(selections.flatMap((s) => s.candidates))],
     // The findings are one map for the whole ticket, so any selection’s copy is
@@ -615,7 +623,8 @@ function combinePolicies(selections) {
       answer_set: s.answer_set,
       situation_key: s.situation_key,
       answer_key: s.answer_key,
-      route: s.route
+      route: s.route,
+      tones: s.tones ?? []
     }))
   };
 }
@@ -662,6 +671,9 @@ function selectOnePolicy(policy, ledger, toolNames) {
     // above it: the drafting pass re-checks that the document is still approved
     // and drops it if not, and a stored run has to say which one was chosen.
     knowledge_document_id: result.answer?.knowledgeDocumentId ?? null,
+    // The tones the rule sets for its reply, read back by the drafting pass by
+    // name. Always a list; empty is the Brand voice alone.
+    tones: result.answer?.tones ?? [],
     // The wording guidance, carried so the drafting pass can read it back off
     // the stored row. It is the one field here that reaches a model.
     answer_skeleton: result.answer?.answerSkeleton ?? null,

@@ -619,6 +619,10 @@ function PolicyBlock({
   );
   const skeleton = str(p.answer_skeleton);
   const offerCode = str(p.offer_code);
+  // Absent on runs stored before tones existed, which reads as none.
+  const tones = Array.isArray(p.tones)
+    ? (p.tones as unknown[]).map(str).filter((tone): tone is string => Boolean(tone))
+    : [];
 
   return (
     <>
@@ -649,6 +653,11 @@ function PolicyBlock({
         {offerCode ? (
           <Field label="Offers code">
             {offerCode} — re-checked at drafting time, and dropped if it is no longer active
+          </Field>
+        ) : null}
+        {tones.length > 0 ? (
+          <Field label="Tone">
+            {tones.join(", ")} — added to the drafting prompt beside the Brand voice
           </Field>
         ) : null}
         {((p.candidates as unknown[]) ?? []).length > 1 ? (

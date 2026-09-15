@@ -58,6 +58,7 @@ export async function POST(request: NextRequest) {
           : [],
       offerCode: body.offerCode ? String(body.offerCode) : null,
       knowledgeDocumentId: body.knowledgeDocumentId ? String(body.knowledgeDocumentId) : null,
+      tones: Array.isArray(body.tones) ? body.tones.map((key: unknown) => String(key ?? "")) : [],
       priority: Number(body.priority ?? 0),
       isFallback: body.isFallback === true,
       // NEVER APPROVED BY A SAVE. A rule reaches live mail only through the
