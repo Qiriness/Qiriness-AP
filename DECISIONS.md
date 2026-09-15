@@ -2055,6 +2055,8 @@ Two things are different, and neither is that the objection went away.
 
 **The failure mode is answered rather than accepted.** What went wrong before was silence: three L3 threads behind a nav item nobody opened. `countOpenConversations` puts that number on the sidebar from **every** page in the shell, so the queue you are not looking at can still ask for you. It is the only loud thing in that nav, and `openConversationCount` swallows its own errors — a page must not fail to render because a decorative count could not be read.
 
+**Update (2026-09-15): the badge is no longer the only loud thing, nor on the collapsed rail.** Tickets now carries its own open count (not `closed`/`resolved`) in the warning colour, and the Conversations count is grey — an owner's call that the queue to work is Tickets. Both come from one `countOpenThreads` read via `navBadgeCounts`. Both badges are hidden when the sidebar is collapsed, with the labels and chips; the count reappears on expanding. This weakens the mitigation above on purpose: Conversations still announces itself, just more quietly.
+
 **One partition, not two queries.** `listTickets` and `listConversations` are both `partitionBySender` over one `queue()` read. Two independent filters could drift into a thread appearing on both pages or, far worse, on neither; a partition cannot. 234 = 220 + 14, asserted against the live view.
 
 **What is still true and is now a real cost:** one of the fourteen (`TR: Retour Colissimo`) names a consumer who has no ticket of their own, so that forward remains the only record of that customer's return — and it is no longer in the queue. The badge does not help once it is closed.
@@ -2102,6 +2104,14 @@ One box above four tables re-cut every section at once, and the row you were loo
 `.shell` pinning itself to `100dvh` with `overflow: hidden` is not enough on its own — it stops the shell spilling, not the document from acquiring its own scrollbar. So `html, body` are pinned too, in `dvh` so they cannot disagree with `.shell` by the height of a mobile browser's chrome. Every page renders inside `AppShell` (`/` only redirects), so every page already has a scroller and none needs the document's.
 
 **All four tables share one height** (`min(62vh, 50rem)`), replacing a 50vh queue and a 26rem default for the rest. The split existed to keep a collapsed "Closed" header on screen without scrolling; the page scroller already handles that, and the cost was making Backlog and Closed read as lesser tables when they are the same table with a different filter. Capped in rem as well as vh because a table past ~50rem stops being scannable.
+
+### The draft/conversation split is the reviewer's to move (2026-09-15)
+
+A handle sits between the conversation and the draft panel: dragging it up gives the draft room and takes it from the thread, dragging it down does the opposite; arrow keys step it, double-click or Enter resets to the default 35%. A fixed 35% with an 11rem cap on the draft text meant a long reply was read through a letterbox while the thread above had room to spare.
+
+- **The height is kept per browser in `localStorage`** (`tickets.draftPanelHeight`) and survives switching tickets — it is a reading preference, not data about a ticket, so it does not belong in the database.
+- **A dragged height may still shrink.** The conversation keeps an 80px floor, so a height saved on a tall screen cannot push the thread off a short one.
+- **Once sized, the draft text drops its cap** and uses the room it was given; the default split keeps the cap.
 
 ### The expanded row is three blocks and no more
 

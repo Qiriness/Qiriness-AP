@@ -497,7 +497,7 @@
 
 .conversationArea {
   flex: 1;
-  min-height: 0;
+  min-height: 80px;
   overflow: auto;
   padding: var(--space-4);
   background: var(--surface);
@@ -605,16 +605,64 @@
   overflow-wrap: anywhere;
 }
 
+/* The split between conversation and draft. Its own element rather than the
+   panel's top border, so it stays put while the panel scrolls under it. */
+.draftHandle {
+  flex: none;
+  position: relative;
+  height: 8px;
+  border-top: 1px solid var(--border);
+  background: var(--surface-sunken);
+  cursor: row-resize;
+  touch-action: none;
+}
+
+.draftHandle::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 50%;
+  width: 36px;
+  height: 3px;
+  margin-left: -18px;
+  border-radius: var(--radius-pill);
+  background: var(--border-strong);
+}
+
+.draftHandle:hover::after,
+.draftHandle:focus-visible::after,
+.draftHandle:active::after {
+  background: var(--teal);
+}
+
+.draftHandle:focus-visible {
+  outline: 2px solid var(--teal);
+  outline-offset: -2px;
+}
+
 .draftPanel {
   flex: none;
   max-height: 35%;
   min-height: 180px;
   display: grid;
+  align-content: start;
   gap: var(--space-2);
   padding: var(--space-3) var(--space-4);
-  border-top: 1px solid var(--border);
   background: var(--surface-sunken);
   overflow: auto;
+}
+
+/* A dragged height. It may still shrink, so a height saved on a tall screen
+   cannot push the conversation out of a short one. Once a reviewer has asked for
+   more room, the draft text uses it instead of stopping at its default cap. */
+.draftPanelSized {
+  flex: 0 1 auto;
+  min-height: 120px;
+}
+
+.draftPanelSized .draftBody,
+.draftPanelSized .editor {
+  max-height: none;
 }
 
 .draftHead {

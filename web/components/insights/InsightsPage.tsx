@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { canSeePanel, fallbackPath } from "../../../scripts/lib/dashboard-auth.mjs";
 import { AppShell } from "@/components/app-shell/AppShell";
 import { getSession } from "@/lib/server/auth";
-import { openConversationCount } from "@/lib/server/conversation-badge";
+import { navBadgeCounts } from "@/lib/server/conversation-badge";
 import { resolveInsightsContext, type InsightsContext, type SearchParams } from "@/lib/server/insights/context";
 import { INSIGHTS_PANELS, type InsightsPanel, type InsightsScope } from "@/lib/types";
 import { InsightsFrame } from "./InsightsFrame";
@@ -36,7 +36,7 @@ export async function InsightsPage({
   if (!canSeePanel(session.role, active)) redirect(fallbackPath(session.role));
   const panels = INSIGHTS_PANELS.filter((panel) => canSeePanel(session.role, panel.id)).map((panel) => panel.id);
 
-  const openConversations = await openConversationCount();
+  const badges = await navBadgeCounts();
   let ctx: InsightsContext | null = null;
   let body: ReactNode = null;
   let error: string | null = null;
@@ -49,7 +49,7 @@ export async function InsightsPage({
   }
 
   return (
-    <AppShell activeHref="/insights" openConversations={openConversations}>
+    <AppShell activeHref="/insights" {...badges}>
       <InsightsFrame
         panel={active}
         header={

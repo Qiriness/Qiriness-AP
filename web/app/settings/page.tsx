@@ -3,7 +3,7 @@ import { ForwardingSettings } from "@/components/settings/ForwardingSettings";
 import { getShopId } from "@/lib/server/knowledge-service";
 import { listForwarding } from "@/lib/server/forwarding-service";
 import type { CategoryForwarding } from "@/lib/types";
-import { openConversationCount } from "@/lib/server/conversation-badge";
+import { navBadgeCounts } from "@/lib/server/conversation-badge";
 
 export const dynamic = "force-dynamic";
 
@@ -16,7 +16,7 @@ export const dynamic = "force-dynamic";
  * through the Forwarding API client-side.
  */
 export default async function SettingsPage() {
-  const openConversations = await openConversationCount();
+  const badges = await navBadgeCounts();
   let initialForwarding: CategoryForwarding[] = [];
   let loadError: string | null = null;
 
@@ -28,7 +28,7 @@ export default async function SettingsPage() {
   }
 
   return (
-    <AppShell activeHref="/settings" openConversations={openConversations}>
+    <AppShell activeHref="/settings" {...badges}>
       <ForwardingSettings initialForwarding={initialForwarding} loadError={loadError} />
     </AppShell>
   );

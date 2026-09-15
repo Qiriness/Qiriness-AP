@@ -68,6 +68,8 @@ interface SidebarProps {
    * is how the page asks to be opened. Zero renders nothing.
    */
   openConversations?: number;
+  /** How many Tickets are not closed or resolved. Zero renders nothing. */
+  openTickets?: number;
   /** The signed-in role, or null while it is still being fetched. */
   role?: string | null;
 }
@@ -78,8 +80,16 @@ export function Sidebar({
   onToggleCollapse,
   onNavigate,
   openConversations = 0,
+  openTickets = 0,
   role = null,
 }: SidebarProps) {
+  // Tickets is the queue to work, so it gets the warning colour; Conversations is
+  // grey, present but not competing with it.
+  const badges: Record<string, { count: number; noun: string; muted: boolean }> = {
+    "/tickets": { count: openTickets, noun: "ticket", muted: false },
+    "/conversations": { count: openConversations, noun: "conversation", muted: true },
+  };
+
   return (
     <nav
       className={`${styles.sidebar} ${collapsed ? styles.collapsed : ""}`}
@@ -94,6 +104,7 @@ export function Sidebar({
         {NAV.filter((item) => !item.visibleTo || item.visibleTo(role)).map((item) => {
           const Icon = item.icon;
           const isActive = item.available && item.href === activeHref;
+          const badge = badges[item.href];
 
           if (!item.available) {
             return (
@@ -128,13 +139,14 @@ export function Sidebar({
                 <Icon size={19} />
                 {!collapsed && <span className={styles.navLabel}>{item.label}</span>}
                 {!collapsed && item.chip && <span className={styles.chip}>{item.chip}</span>}
-                {item.href === "/conversations" && openConversations > 0 && (
+                {/* Hidden on the collapsed rail, with the label and chip: the
+                    rail is icons only, and a number there crowds the icon. */}
+                {!collapsed && badge && badge.count > 0 && (
                   <span
-                    className={styles.badge}
-                    // Readable when collapsed too, where the number is all there is.
-                    title={`${openConversations} conversation${openConversations === 1 ? "" : "s"} still open`}
+                    className={`${styles.badge} ${badge.muted ? styles.badgeMuted : ""}`}
+                    title={`${badge.count} ${badge.noun}${badge.count === 1 ? "" : "s"} still open`}
                   >
-                    {openConversations}
+                    {badge.count}
                   </span>
                 )}
               </Link>

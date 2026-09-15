@@ -1,7 +1,8 @@
 import { AppShell } from "@/components/app-shell/AppShell";
 import { ConversationsView } from "@/components/tickets/ConversationsView";
 import { getShopId } from "@/lib/server/knowledge-service";
-import { countOpenConversations, listConversations } from "@/lib/server/tickets-service";
+import { listConversations } from "@/lib/server/tickets-service";
+import { navBadgeCounts, type NavBadgeCounts } from "@/lib/server/conversation-badge";
 import { logDashboardAccess } from "@/lib/server/access-log";
 import type { TicketListItem } from "@/lib/types";
 
@@ -26,7 +27,7 @@ export const metadata = { title: "Conversations · Qiriness Support OS" };
  */
 export default async function ConversationsPage() {
   let conversations: TicketListItem[] = [];
-  let openCount = 0;
+  let badges: NavBadgeCounts = { openTickets: 0, openConversations: 0 };
   let loadError: string | null = null;
 
   try {
@@ -39,13 +40,13 @@ export default async function ConversationsPage() {
       purpose: "support_queue",
       metadata: { surface: "conversations", tickets: conversations.length },
     });
-    openCount = await countOpenConversations(shopId);
+    badges = await navBadgeCounts();
   } catch (error) {
     loadError = error instanceof Error ? error.message : "Failed to load conversations.";
   }
 
   return (
-    <AppShell activeHref="/conversations" openConversations={openCount}>
+    <AppShell activeHref="/conversations" {...badges}>
       <ConversationsView conversations={conversations} loadError={loadError} />
     </AppShell>
   );

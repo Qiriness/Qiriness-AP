@@ -2,7 +2,7 @@ import { AppShell } from "@/components/app-shell/AppShell";
 import { OrdersView } from "@/components/orders/OrdersView";
 import { getShopId } from "@/lib/server/knowledge-service";
 import { listOrders } from "@/lib/server/orders-service";
-import { openConversationCount } from "@/lib/server/conversation-badge";
+import { navBadgeCounts } from "@/lib/server/conversation-badge";
 import { logDashboardAccess } from "@/lib/server/access-log";
 import type { OrderListPage } from "@/lib/types";
 import { parseOrderListQuery } from "../../../scripts/lib/order-list-query.mjs";
@@ -24,7 +24,7 @@ export default async function OrdersPage({
 }: {
   searchParams: Record<string, string | string[] | undefined>;
 }) {
-  const openConversations = await openConversationCount();
+  const badges = await navBadgeCounts();
   let page: OrderListPage | null = null;
   let loadError: string | null = null;
 
@@ -43,7 +43,7 @@ export default async function OrdersPage({
   }
 
   return (
-    <AppShell activeHref="/orders" openConversations={openConversations}>
+    <AppShell activeHref="/orders" {...badges}>
       <OrdersView page={page} loadError={loadError} />
     </AppShell>
   );

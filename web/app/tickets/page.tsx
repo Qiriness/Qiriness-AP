@@ -4,7 +4,7 @@ import { getShopId } from "@/lib/server/knowledge-service";
 import { listTickets } from "@/lib/server/tickets-service";
 import { listDroppedMail } from "@/lib/server/dropped-mail-service";
 import type { DroppedMail, TicketListItem } from "@/lib/types";
-import { openConversationCount } from "@/lib/server/conversation-badge";
+import { navBadgeCounts } from "@/lib/server/conversation-badge";
 import { logDashboardAccess } from "@/lib/server/access-log";
 
 export const dynamic = "force-dynamic";
@@ -25,7 +25,7 @@ export const metadata = { title: "Tickets · Qiriness Support OS" };
  * buy nothing.
  */
 export default async function TicketsPage() {
-  const openConversations = await openConversationCount();
+  const badges = await navBadgeCounts();
   let tickets: TicketListItem[] = [];
   let droppedMail: DroppedMail[] = [];
   let loadError: string | null = null;
@@ -53,7 +53,7 @@ export default async function TicketsPage() {
   }
 
   return (
-    <AppShell activeHref="/tickets" openConversations={openConversations}>
+    <AppShell activeHref="/tickets" {...badges}>
       <TicketsView initialTickets={tickets} droppedMail={droppedMail} loadError={loadError} />
     </AppShell>
   );

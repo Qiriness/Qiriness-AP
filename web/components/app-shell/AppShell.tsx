@@ -12,6 +12,8 @@ interface AppShellProps {
   children: ReactNode;
   /** Open-conversation count for the sidebar badge; pages that know it pass it. */
   openConversations?: number;
+  /** Open-ticket count for the sidebar badge. */
+  openTickets?: number;
 }
 
 function toLogin() {
@@ -19,7 +21,7 @@ function toLogin() {
   window.location.assign(`/login?next=${encodeURIComponent(next)}`);
 }
 
-export function AppShell({ activeHref, children, openConversations }: AppShellProps) {
+export function AppShell({ activeHref, children, openConversations, openTickets }: AppShellProps) {
   const [collapsed, setCollapsed] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [me, setMe] = useState<Me | null>(null);
@@ -60,6 +62,7 @@ export function AppShell({ activeHref, children, openConversations }: AppShellPr
           onToggleCollapse={() => setCollapsed((c) => !c)}
           onNavigate={() => setDrawerOpen(false)}
           openConversations={openConversations}
+          openTickets={openTickets}
           role={me?.role ?? null}
         />
       </aside>

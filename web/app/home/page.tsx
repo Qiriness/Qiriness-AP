@@ -4,7 +4,7 @@ import { AppShell } from "@/components/app-shell/AppShell";
 import { ChatView } from "@/components/chat/ChatView";
 import { getSession } from "@/lib/server/auth";
 import { chatReadiness, listConversations } from "@/lib/server/chat-service";
-import { openConversationCount } from "@/lib/server/conversation-badge";
+import { navBadgeCounts } from "@/lib/server/conversation-badge";
 import type { ChatConversationSummary } from "@/lib/chat-types";
 import { canUseManagementChat, fallbackPath } from "../../../scripts/lib/dashboard-auth.mjs";
 
@@ -23,7 +23,7 @@ export default async function HomePage() {
   if (!user) redirect("/login?next=/home");
   if (!canUseManagementChat(user.role)) redirect(fallbackPath(user.role));
 
-  const openConversations = await openConversationCount();
+  const badges = await navBadgeCounts();
   const readiness = chatReadiness();
   let conversations: ChatConversationSummary[] = [];
   let loadError: string | null = null;
@@ -34,7 +34,7 @@ export default async function HomePage() {
   }
 
   return (
-    <AppShell activeHref="/home" openConversations={openConversations}>
+    <AppShell activeHref="/home" {...badges}>
       <ChatView initialConversations={conversations} readiness={readiness} loadError={loadError} />
     </AppShell>
   );

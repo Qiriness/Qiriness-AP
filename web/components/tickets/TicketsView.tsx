@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import type { ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import type { KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent, ReactNode } from "react";
 import {
   AlertIcon,
   CheckCircleIcon,
@@ -79,6 +79,32 @@ const VERDICT_LABELS: Record<InvestigationVerdict, string> = {
 };
 
 const NEWLINE = String.fromCharCode(10);
+
+/* The draft/conversation split. `null` means the CSS default (35% of the pane);
+   a number is a height the reviewer dragged to, kept per browser. */
+const DRAFT_HEIGHT_KEY = "tickets.draftPanelHeight";
+const MIN_DRAFT_HEIGHT = 120;
+const MIN_CONVERSATION_HEIGHT = 80;
+const DRAFT_HANDLE_HEIGHT = 8;
+const DRAFT_KEY_STEP = 32;
+
+function readDraftHeight(): number | null {
+  try {
+    const stored = Number(window.localStorage.getItem(DRAFT_HEIGHT_KEY));
+    return Number.isFinite(stored) && stored >= MIN_DRAFT_HEIGHT ? stored : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeDraftHeight(height: number | null) {
+  try {
+    if (height === null) window.localStorage.removeItem(DRAFT_HEIGHT_KEY);
+    else window.localStorage.setItem(DRAFT_HEIGHT_KEY, String(height));
+  } catch {
+    // Storage blocked: the split still works, it just is not remembered.
+  }
+}
 
 function matches(query: string, fields: (string | null | undefined)[]): boolean {
   const needle = query.trim().toLowerCase();
@@ -725,10 +751,64 @@ function TicketDetailWorkspace({
   onBack: () => void;
 }) {
   const closed = isClosed(ticket);
+  const frameRef = useRef<HTMLDivElement>(null);
+  const headerRef = useRef<HTMLElement>(null);
+  const [draftHeight, setDraftHeight] = useState<number | null>(readDraftHeight);
+
+  // The panel may take everything except the header and a strip of conversation,
+  // so the thread can be squeezed but never pushed off screen entirely.
+  function clampDraftHeight(height: number): number {
+    const frame = frameRef.current;
+    const header = headerRef.current;
+    if (!frame) return height;
+    const max = frame.clientHeight - (header?.offsetHeight ?? 0) - MIN_CONVERSATION_HEIGHT - DRAFT_HANDLE_HEIGHT;
+    return Math.round(Math.max(MIN_DRAFT_HEIGHT, Math.min(height, max)));
+  }
+
+  function commitDraftHeight(height: number | null) {
+    setDraftHeight(height);
+    writeDraftHeight(height);
+  }
+
+  function startDrag(event: ReactPointerEvent<HTMLDivElement>) {
+    const frame = frameRef.current;
+    if (!frame || event.button !== 0) return;
+    event.preventDefault();
+    const handle = event.currentTarget;
+    handle.setPointerCapture(event.pointerId);
+    const bottom = frame.getBoundingClientRect().bottom;
+    let latest = draftHeight;
+
+    const move = (moveEvent: PointerEvent) => {
+      latest = clampDraftHeight(bottom - moveEvent.clientY - DRAFT_HANDLE_HEIGHT / 2);
+      setDraftHeight(latest);
+    };
+    const stop = () => {
+      handle.removeEventListener("pointermove", move);
+      handle.removeEventListener("pointerup", stop);
+      handle.removeEventListener("pointercancel", stop);
+      document.body.style.userSelect = "";
+      writeDraftHeight(latest);
+    };
+
+    document.body.style.userSelect = "none";
+    handle.addEventListener("pointermove", move);
+    handle.addEventListener("pointerup", stop);
+    handle.addEventListener("pointercancel", stop);
+  }
+
+  function nudgeDraftHeight(event: ReactKeyboardEvent<HTMLDivElement>) {
+    const current = draftHeight ?? frameRef.current?.querySelector<HTMLElement>(`.${styles.draftPanel}`)?.offsetHeight ?? MIN_DRAFT_HEIGHT;
+    if (event.key === "ArrowUp") commitDraftHeight(clampDraftHeight(current + DRAFT_KEY_STEP));
+    else if (event.key === "ArrowDown") commitDraftHeight(clampDraftHeight(current - DRAFT_KEY_STEP));
+    else if (event.key === "Home" || event.key === "Enter") commitDraftHeight(null);
+    else return;
+    event.preventDefault();
+  }
 
   return (
-    <div className={styles.detailFrame}>
-      <header className={styles.ticketHeader}>
+    <div className={styles.detailFrame} ref={frameRef}>
+      <header className={styles.ticketHeader} ref={headerRef}>
         <button type="button" className={styles.mobileBack} onClick={onBack}>
           <ChevronLeftIcon size={15} />
           Back to tickets
@@ -766,7 +846,23 @@ function TicketDetailWorkspace({
         <ConversationThread thread={thread} error={threadError} />
       </div>
 
+      {/* Drag up to read more of the draft, down to read more of the thread.
+          Double-click (or Enter) returns to the default split. */}
+      <div
+        className={styles.draftHandle}
+        role="separator"
+        aria-orientation="horizontal"
+        aria-label="Resize the draft panel"
+        aria-valuenow={draftHeight ?? undefined}
+        tabIndex={0}
+        title="Drag to resize · double-click to reset"
+        onPointerDown={startDrag}
+        onDoubleClick={() => commitDraftHeight(null)}
+        onKeyDown={nudgeDraftHeight}
+      />
+
       <DraftResponsePanel
+        height={draftHeight}
         ticket={ticket}
         thread={thread}
         error={threadError}
@@ -805,6 +901,7 @@ function ConversationThread({ thread, error }: { thread: TicketThread | null; er
 }
 
 function DraftResponsePanel({
+  height,
   ticket,
   thread,
   error,
@@ -812,6 +909,7 @@ function DraftResponsePanel({
   detail,
   detailError,
 }: {
+  height: number | null;
   ticket: TicketListItem;
   thread: TicketThread | null;
   error: string | null;
@@ -851,7 +949,11 @@ function DraftResponsePanel({
   }
 
   return (
-    <section className={styles.draftPanel} aria-label="AI draft">
+    <section
+      className={`${styles.draftPanel} ${height !== null ? styles.draftPanelSized : ""}`}
+      style={height !== null ? { height, maxHeight: "none" } : undefined}
+      aria-label="AI draft"
+    >
       <div className={styles.draftHead}>
         <div>
           <h3>{DRAFT_HEADINGS[draft?.sourceVerdict ?? "answerable"]}</h3>

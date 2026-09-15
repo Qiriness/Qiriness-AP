@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 
 import { AppShell } from "@/components/app-shell/AppShell";
 import { SetupTabs } from "@/components/agent-setup/SetupTabs";
-import { openConversationCount } from "@/lib/server/conversation-badge";
+import { navBadgeCounts } from "@/lib/server/conversation-badge";
 
 export const dynamic = "force-dynamic";
 
@@ -11,14 +11,14 @@ export const dynamic = "force-dynamic";
  *
  * A LAYOUT RATHER THAN A COMPONENT IN EACH PAGE, so the three cannot drift into
  * showing different navigation — which is the whole failure a tab bar exists to
- * prevent. It also means `openConversationCount()` is fetched once per
+ * prevent. It also means `navBadgeCounts()` is fetched once per
  * navigation between them instead of once per page.
  */
 export default async function AgentSetupLayout({ children }: { children: ReactNode }) {
-  const openConversations = await openConversationCount();
+  const badges = await navBadgeCounts();
 
   return (
-    <AppShell activeHref="/agent-setup" openConversations={openConversations}>
+    <AppShell activeHref="/agent-setup" {...badges}>
       <SetupTabs />
       {children}
     </AppShell>

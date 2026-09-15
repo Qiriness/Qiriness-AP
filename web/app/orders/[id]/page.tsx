@@ -3,7 +3,7 @@ import { AppShell } from "@/components/app-shell/AppShell";
 import { OrderDetailView } from "@/components/orders/OrderDetailView";
 import { getShopId } from "@/lib/server/knowledge-service";
 import { getOrderDetail } from "@/lib/server/orders-service";
-import { openConversationCount } from "@/lib/server/conversation-badge";
+import { navBadgeCounts } from "@/lib/server/conversation-badge";
 import { logDashboardAccess } from "@/lib/server/access-log";
 import type { OrderDetail } from "@/lib/types";
 
@@ -13,7 +13,7 @@ export const metadata = { title: "Order · Qiriness Support OS" };
 
 /** One order in full: what it holds, where it went, what was paid, and who wrote about it. */
 export default async function OrderPage({ params }: { params: { id: string } }) {
-  const openConversations = await openConversationCount();
+  const badges = await navBadgeCounts();
   let order: OrderDetail | null = null;
   let loadError: string | null = null;
 
@@ -38,7 +38,7 @@ export default async function OrderPage({ params }: { params: { id: string } }) 
   if (!order && !loadError) notFound();
 
   return (
-    <AppShell activeHref="/orders" openConversations={openConversations}>
+    <AppShell activeHref="/orders" {...badges}>
       <OrderDetailView order={order} loadError={loadError} />
     </AppShell>
   );

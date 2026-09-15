@@ -111,7 +111,7 @@ function getRecord(shopId: string) {
  * split was built and reverted the same day, because all 14 routed threads were
  * the back office working real customer returns and three were open at L3 behind
  * a nav item nobody opened. The routing is deliberate now; see DECISIONS.md.
- * What mitigates it is `countOpenConversations`, which puts those three on the
+ * What mitigates it is `countOpenThreads`, which puts those three on the
  * sidebar so the page announces itself instead of waiting to be found.
  */
 function partitionBySender(rows: any[], directory: any, vipTickets: Set<string>) {
@@ -170,10 +170,18 @@ export async function listTicketsWithOrders(shopId: string): Promise<TicketListI
  * behind a nav item last time. A count on the nav means the queue you are not
  * looking at can still ask for you.
  */
-export async function countOpenConversations(shopId: string): Promise<number> {
-  const conversations = await listConversations(shopId);
-  return conversations.filter((ticket) => ticket.status !== "closed" && ticket.status !== "resolved")
-    .length;
+export async function countOpenThreads(
+  shopId: string
+): Promise<{ openTickets: number; openConversations: number }> {
+  // One `queue()` read for both badges, over the same partition the two pages
+  // render — two separate counts would double the read on every page load.
+  const [rows, directory] = await Promise.all([getRecord(shopId).queue(), loadSenderDirectory(shopId)]);
+  const { tickets, conversations } = partitionBySender(rows as any[], directory, new Set());
+  const open = (ticket: TicketListItem) => ticket.status !== "closed" && ticket.status !== "resolved";
+  return {
+    openTickets: tickets.filter(open).length,
+    openConversations: conversations.filter(open).length
+  };
 }
 
 /**

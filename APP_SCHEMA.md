@@ -631,7 +631,7 @@ Layout: **three panes, selection-driven** (`TicketWorkspace`) — `TicketListPan
 
 Two sections over the same `TicketTable` the queue uses — **Open** (expanded, leads the page) and **Closed** (collapsed). No level tabs, category filter or stat cards: 14 rows where the only useful questions are what is still open and where a forward went.
 
-`countOpenConversations` feeds a sidebar badge rendered from **every** page in the shell via `lib/server/conversation-badge.ts`. That is the mitigation for routing these off the queue at all — the arrangement failed once by being silent. See DECISIONS.md § Tickets dashboard.
+`countOpenThreads` (one `queue()` read, both halves of the partition) feeds the sidebar's open-count badges — Tickets in the warning colour, Conversations grey, both hidden on the collapsed rail — rendered from **every** page in the shell via `navBadgeCounts` in `lib/server/conversation-badge.ts`. That is the mitigation for routing these off the queue at all — the arrangement failed once by being silent. See DECISIONS.md § Tickets dashboard.
 
 ### `/insights` — the five analytics panels
 
