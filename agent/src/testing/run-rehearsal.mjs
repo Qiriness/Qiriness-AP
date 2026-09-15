@@ -353,6 +353,7 @@ export async function runRehearsal({
     });
 
     let caseFile = null;
+    let situation = null;
     // Loaded once and shared by the investigation and the drafting pass — the
     // real numbers, like the real rules: a rehearsal using defaults would answer
     // a returns question the live agent could not.
@@ -369,14 +370,18 @@ export async function runRehearsal({
       senderDirectory,
       lastOrderLookup: stack.lastOrderLookup,
       retrieveExemplar: stack.retrieveExemplar,
+      // The same chooser the worker runs, through the same traced client, so a
+      // rehearsal of a near miss shows the situation the worker would pick.
+      chooseSituation: stack.chooseSituation,
       // The real rules from the real table. They are read-only reference data,
       // like products and knowledge, so a rehearsal wants the ones the worker
       // would use rather than a fixture — the transcript is worth nothing if the
       // policy it shows is not the policy.
       loadAnswers: stack.loadAnswers,
       parameters,
-      onResult: ({ caseFile: result }) => {
+      onResult: ({ caseFile: result, exemplarMatch }) => {
         caseFile = result;
+        situation = exemplarMatch ?? null;
       }
     });
 
@@ -421,6 +426,12 @@ export async function runRehearsal({
         // null before it knows — so the set is read here, from the same mapping
         // the runner used, and the transcript names it either way.
         answerSet: answerSetFor(categorised.category),
+        // WHICH SITUATION THE OPENING MESSAGE MATCHED, and how close the nearest
+        // came when none did. Most rules name a situation and are only candidates
+        // once it matched, so « why this rule » is unanswerable without it — and a
+        // near miss is a different fix from nothing close. `{}` means the matcher
+        // failed (logged as `investigate.exemplar_failed`) or was not wired.
+        situation: situation ?? {},
         calls: callsSince(investigationMark)
       });
     }

@@ -113,6 +113,7 @@ Referenced by the entries below so each state is written once.
 - « Ma commande 6669 n'a pas été livrée mais le montant bien débité de mon compte »
 - « Je suis toujours en attente de ma commande numéro 6275 qui devait être livrée hier »
 - « Je n'ai toujours pas reçu ma commande. »
+- « Ho fatto l'ordine il 27 luglio e mi segnava 5 giorni lavorativi ma controllando la spedizione mi dice ancora "in attesa di dettagli". Quando sarà in consegna? » _(it — near miss 0.634, 2026-09-15)_
 
 **needs** `order_identity`, `delivery_state`
 **exemplaires** → jeu `commande`
@@ -129,6 +130,7 @@ Referenced by the entries below so each state is written once.
 - « J'ai effectué une commande #5953 et je viens de recevoir mon colis. Il manque un article »
 - « J'ai reçu ce jour ma commande 6045 du 10/06/26. J'avais commandé 2x caressé source d'eau… »
 - « J'ai reçu ce jour ma commande numéro #6748. J'ai payé pour 4 produits mais je n'ai pas reçu la totalité. Il m'en manque un »
+- « je viens de recevoir mon colis, 2 boites de galets étaient ouvertes et il manque 1 galet dans chacune » _(near miss 0.644, 2026-09-15)_
 
 **needs** `order_identity`, `order_state`, `policy_answer`
 **exemplaires** → jeu `commande` (+ un état `article_manquant_confirme`)
@@ -145,6 +147,7 @@ Referenced by the entries below so each state is written once.
 - « Je viens de voir que mon colis a été livré dans ma boîte aux lettres mais il n'y a rien »
 - « Le livreur GLS a livré mon colis ailleurs que chez moi malgré mes précisions »
 - « Le livreur a déposé mon colis chez un voisin ou à une adresse qui n'est pas la mienne » _(authored — was D-04's canonical question)_
+- « J'ai passé une commande qui n'a jamais été livrée. Sur le site il est inscrit livré, je n'ai jamais reçu mes produits » _(near miss 0.636, matched D-01 instead, 2026-09-15)_
 
 **needs** `order_identity`, `delivery_state`
 **exemplaires** → jeu `commande`, état `livree_contestee`
@@ -317,6 +320,8 @@ commerciale, prise par une personne.
 - « Ma carte a été débitée mais ma commande est toujours indiquée en attente » _(authored — was O-10's canonical question)_
 - « Commande R4F8FH09J — J'ai passé une commande le 24 mai et ai reçu la confirmation à la fin… » _(was O-11)_
 - « J'ai reçu la confirmation de commande puis plus aucune nouvelle » _(authored — was O-11's canonical question)_
+- « Je n'ai pas de nouvelles de ma commande du 30 juillet dernier. Mon compte a été débité. » _(near miss 0.643, 2026-09-15)_
+- « Je me demande pourquoi ma dernière commande n'est pas traitée car c'est pour un cadeau semaine prochaine » _(near miss 0.635, 2026-09-15)_
 
 **needs** `order_identity`, `order_state`, `payment_state`, `policy_answer`
 **exemplaires** → jeu `commande`, état `non_expediee`
@@ -452,6 +457,7 @@ commerciale, prise par une personne.
 **Variantes réelles**
 - « on m'offre un masque gratuit lors de ma commande mais quand je clique sur "je le veux" »
 - « Je viens de passer commande et je devais avoir un masque offert mais quand je l'ajoutais… »
+- « j'ai validé cette commande et payé, et est apparu un autre montant : le masque qui était offert à partir de 65€ ne l'était plus… Pourquoi ? » _(near miss 0.645, 2026-09-15)_
 
 **needs** `promotion_validity`, `promotion_eligibility`, `checkout_state`
 **exemplaires** → jeu `promo`
@@ -644,6 +650,7 @@ commerciale, prise par une personne.
 **Variantes réelles**
 - « j'ai acheté un masque led fast masque qiriness, celui-ci ne se charge plus »
 - « je suis très déçue de la batterie qui tient… »
+- « une cliente de notre magasin a acheté un masque LED au mois de juin et n'arrive plus à recharger l'appareil » _(near miss 0.631 — written by a retailer on the customer's behalf, 2026-09-15)_
 
 **needs** `product_identity`, `product_property`, `policy_answer`
 **exemplaires** → jeu `produit` + `retour` (warranty path)

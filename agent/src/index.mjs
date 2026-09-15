@@ -347,6 +347,9 @@ async function main() {
         // table a minute ago is context on this poll rather than the next.
         senderDirectory,
         retrieveExemplar: investigation.retrieveExemplar,
+        // Null when AGENT_SITUATION_CHOOSER_MODEL is empty: near misses then keep
+        // no situation, as they did before the chooser existed.
+        chooseSituation: investigation.chooseSituation,
         loadAnswers: investigation.loadAnswers,
         loadCollectionMode: investigation.loadCollectionMode,
         parameters: await investigation.loadParameters(shopId),

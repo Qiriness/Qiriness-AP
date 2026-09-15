@@ -46,6 +46,8 @@ interface TicketsViewProps {
   initialTickets: TicketListItem[];
   droppedMail: DroppedMail[];
   loadError: string | null;
+  /** The page's query string: which tab, filters and ticket to open on. */
+  initialParams?: Record<string, string | string[] | undefined>;
 }
 
 type LevelFilter = "all" | "4" | "3" | "2" | "1" | "uncategorised";
@@ -120,6 +122,137 @@ function matchesDroppedMail(mail: DroppedMail, query: string): boolean {
   return matches(query, [mail.subject, mail.fromEmail, mail.reason]);
 }
 
+/* Where the reviewer was — tab, filters, search and the open ticket — kept in the
+   address so Back, refresh and a pasted link land on the same ticket, and in
+   sessionStorage so the sidebar's bare /tickets link does too. */
+const LEVEL_FILTERS: readonly LevelFilter[] = ["all", "4", "3", "2", "1", "uncategorised"];
+const SENDER_FILTERS = ["all", "consumer", "business"] as const;
+type SenderFilter = (typeof SENDER_FILTERS)[number];
+const TICKET_VIEWS = Object.keys(VIEW_LABELS) as TicketView[];
+const SORT_ORDERS = Object.keys(SORT_LABELS) as SortOrder[];
+const CATEGORY_FILTERS: readonly (KnowledgeCategory | "all")[] = ["all", ...TICKET_CATEGORIES];
+const STATE_PARAMS = ["view", "q", "level", "category", "sender", "sort", "ticket", "mail"];
+const LAST_TICKETS_SEARCH_KEY = "tickets.lastSearch";
+const EMPTY_QUERIES: Record<TicketView, string> = { queue: "", backlog: "", irrelevant: "", closed: "" };
+
+interface TicketsPageState {
+  view: TicketView;
+  query: string;
+  level: LevelFilter;
+  category: KnowledgeCategory | "all";
+  sender: SenderFilter;
+  sort: SortOrder;
+  ticketId: string | null;
+  mailId: string | null;
+}
+
+function pick<T extends string>(value: string | null, allowed: readonly T[], fallback: T): T {
+  return value !== null && (allowed as readonly string[]).includes(value) ? (value as T) : fallback;
+}
+
+function toSearchParams(record: Record<string, string | string[] | undefined> | undefined): URLSearchParams {
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(record ?? {})) {
+    const first = Array.isArray(value) ? value[0] : value;
+    if (first !== undefined) params.set(key, first);
+  }
+  return params;
+}
+
+function hasPageState(params: URLSearchParams): boolean {
+  return STATE_PARAMS.some((key) => params.has(key));
+}
+
+function parsePageState(params: URLSearchParams): TicketsPageState {
+  return {
+    view: pick(params.get("view"), TICKET_VIEWS, "queue"),
+    query: params.get("q") ?? "",
+    level: pick(params.get("level"), LEVEL_FILTERS, "all"),
+    category: pick(params.get("category"), CATEGORY_FILTERS, "all"),
+    sender: pick(params.get("sender"), SENDER_FILTERS, "all"),
+    sort: pick(params.get("sort"), SORT_ORDERS, "priority"),
+    ticketId: params.get("ticket") || null,
+    mailId: params.get("mail") || null,
+  };
+}
+
+/** Defaults are left out, so an untouched page is plain /tickets. */
+function serialisePageState(state: TicketsPageState): string {
+  const params = new URLSearchParams();
+  if (state.view !== "queue") params.set("view", state.view);
+  if (state.query.trim()) params.set("q", state.query);
+  if (state.level !== "all") params.set("level", state.level);
+  if (state.category !== "all") params.set("category", state.category);
+  if (state.sender !== "all") params.set("sender", state.sender);
+  if (state.sort !== "priority") params.set("sort", state.sort);
+  if (state.ticketId) params.set("ticket", state.ticketId);
+  if (state.mailId) params.set("mail", state.mailId);
+  const search = params.toString();
+  return search ? `?${search}` : "";
+}
+
+function passesFilters(
+  ticket: TicketListItem,
+  level: LevelFilter,
+  category: KnowledgeCategory | "all",
+  sender: SenderFilter
+): boolean {
+  if (level === "uncategorised" && ticket.level !== null) return false;
+  if (level !== "all" && level !== "uncategorised" && String(ticket.level) !== level) return false;
+  if (category !== "all" && ticket.category !== category) return false;
+  if (sender === "consumer" && ticket.senderLabel) return false;
+  if (sender === "business" && !ticket.senderLabel) return false;
+  return true;
+}
+
+function viewOfTicket(ticket: TicketListItem): TicketView {
+  if (isClosed(ticket)) return "closed";
+  return isBacklogTicket(ticket) ? "backlog" : "queue";
+}
+
+/**
+ * A saved ticket may have moved since it was saved: closed by someone, aged into
+ * Backlog, or hidden by the filters it was saved with. Follow it to the tab that
+ * holds it now and drop whichever filter would hide it, rather than restore an
+ * empty panel. A ticket that is gone from this page altogether is let go.
+ */
+function reconcilePageState(
+  state: TicketsPageState,
+  tickets: TicketListItem[],
+  dropped: DroppedMail[]
+): TicketsPageState {
+  const next = { ...state };
+
+  if (next.ticketId) {
+    const ticket = tickets.find((row) => row.id === next.ticketId);
+    if (ticket) {
+      next.view = viewOfTicket(ticket);
+      next.mailId = null;
+      // Level, category and sender filter Queue and Backlog only; Closed is unfiltered.
+      if (next.view !== "closed" && !passesFilters(ticket, next.level, next.category, next.sender)) {
+        next.level = "all";
+        next.category = "all";
+        next.sender = "all";
+      }
+      if (!matchesTicket(ticket, next.query)) next.query = "";
+      return next;
+    }
+    next.ticketId = null;
+  }
+
+  if (next.mailId) {
+    const mail = dropped.find((row) => row.id === next.mailId);
+    if (mail) {
+      next.view = "irrelevant";
+      if (!matchesDroppedMail(mail, next.query)) next.query = "";
+    } else {
+      next.mailId = null;
+    }
+  }
+
+  return next;
+}
+
 function formatPriorityScore(score: number): string {
   return Number.isInteger(score) ? String(score) : score.toFixed(1);
 }
@@ -149,22 +282,26 @@ function statusClass(ticket: TicketListItem): string {
   return styles.statusNeutral;
 }
 
-export function TicketsView({ initialTickets, droppedMail, loadError }: TicketsViewProps) {
+export function TicketsView({ initialTickets, droppedMail, loadError, initialParams }: TicketsViewProps) {
+  const [initialState] = useState(() =>
+    reconcilePageState(parsePageState(toSearchParams(initialParams)), initialTickets, droppedMail)
+  );
+  // False until a bare /tickets has had its chance to restore this tab's last
+  // address, so the defaults cannot overwrite what was saved before it is read.
+  const [restored, setRestored] = useState(() => hasPageState(toSearchParams(initialParams)));
   const [tickets, setTickets] = useState(initialTickets);
   const [dropped, setDropped] = useState(droppedMail);
-  const [activeView, setActiveView] = useState<TicketView>("queue");
-  const [selectedTicketId, setSelectedTicketId] = useState<string | null>(null);
-  const [selectedDroppedId, setSelectedDroppedId] = useState<string | null>(null);
+  const [activeView, setActiveView] = useState<TicketView>(initialState.view);
+  const [selectedTicketId, setSelectedTicketId] = useState<string | null>(initialState.ticketId);
+  const [selectedDroppedId, setSelectedDroppedId] = useState<string | null>(initialState.mailId);
   const [queryByView, setQueryByView] = useState<Record<TicketView, string>>({
-    queue: "",
-    backlog: "",
-    irrelevant: "",
-    closed: "",
+    ...EMPTY_QUERIES,
+    [initialState.view]: initialState.query,
   });
-  const [level, setLevel] = useState<LevelFilter>("all");
-  const [category, setCategory] = useState<KnowledgeCategory | "all">("all");
-  const [sender, setSender] = useState<"all" | "consumer" | "business">("all");
-  const [sort, setSort] = useState<SortOrder>("priority");
+  const [level, setLevel] = useState<LevelFilter>(initialState.level);
+  const [category, setCategory] = useState<KnowledgeCategory | "all">(initialState.category);
+  const [sender, setSender] = useState<SenderFilter>(initialState.sender);
+  const [sort, setSort] = useState<SortOrder>(initialState.sort);
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionNotice, setActionNotice] = useState<string | null>(null);
@@ -187,14 +324,7 @@ export function TicketsView({ initialTickets, droppedMail, loadError }: TicketsV
   }, [openTickets]);
 
   const filteredOpenTickets = useMemo(() => {
-    const filtered = openTickets.filter((ticket) => {
-      if (level === "uncategorised" && ticket.level !== null) return false;
-      if (level !== "all" && level !== "uncategorised" && String(ticket.level) !== level) return false;
-      if (category !== "all" && ticket.category !== category) return false;
-      if (sender === "consumer" && ticket.senderLabel) return false;
-      if (sender === "business" && !ticket.senderLabel) return false;
-      return true;
-    });
+    const filtered = openTickets.filter((ticket) => passesFilters(ticket, level, category, sender));
 
     return [...filtered].sort((a, b) => {
       if (sort === "priority" && a.priorityScore !== b.priorityScore) {
@@ -279,6 +409,60 @@ export function TicketsView({ initialTickets, droppedMail, loadError }: TicketsV
       live = false;
     };
   }, [selectedTicket]);
+
+  // A bare /tickets — which is what the sidebar link opens — picks up where this
+  // browser tab left off. Runs once: it answers how the page was opened.
+  useEffect(() => {
+    if (restored) return;
+    let saved: string | null = null;
+    try {
+      saved = window.sessionStorage.getItem(LAST_TICKETS_SEARCH_KEY);
+    } catch {
+      // Storage blocked: start from the defaults.
+    }
+    if (saved) {
+      const next = reconcilePageState(parsePageState(new URLSearchParams(saved)), initialTickets, droppedMail);
+      setActiveView(next.view);
+      setQueryByView({ ...EMPTY_QUERIES, [next.view]: next.query });
+      setLevel(next.level);
+      setCategory(next.category);
+      setSender(next.sender);
+      setSort(next.sort);
+      setSelectedTicketId(next.ticketId);
+      setSelectedDroppedId(next.mailId);
+    }
+    setRestored(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // The selection is written from what is actually shown, so a ticket a filter
+  // has since hidden does not linger in the address.
+  const pageSearch = restored
+    ? serialisePageState({
+        view: activeView,
+        query: queryByView[activeView],
+        level,
+        category,
+        sender,
+        sort,
+        ticketId: selectedTicket?.id ?? null,
+        mailId: selectedDropped?.id ?? null,
+      })
+    : null;
+
+  useEffect(() => {
+    if (pageSearch === null) return;
+    // replaceState, not a push: filtering should not fill the Back button.
+    if (window.location.search !== pageSearch) {
+      window.history.replaceState(null, "", `${window.location.pathname}${pageSearch}`);
+    }
+    try {
+      window.sessionStorage.setItem(LAST_TICKETS_SEARCH_KEY, pageSearch);
+    } catch {
+      // Storage blocked: the address still holds the state, it is just not
+      // restored from the sidebar link.
+    }
+  }, [pageSearch]);
 
   function updateQuery(value: string) {
     setQueryByView((current) => ({ ...current, [activeView]: value }));

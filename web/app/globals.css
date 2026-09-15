@@ -180,31 +180,32 @@ body {
 
 html {
   -webkit-text-size-adjust: 100%;
+  font-size: 80%; /* 12.8px */
 }
 
 /*
  * LARGER SCREENS, LARGER UI. Nearly every size in the app is in rem — type,
  * spacing, the sidebar, the cards — so stepping the root size up scales all of
  * it together, in proportion, instead of leaving a desktop-sized layout
- * floating in a wide window. Below 1600px nothing changes: the base 16px is
- * what the smaller screens were designed at. Media queries read the initial
+ * floating in a wide window. Every tier, the base included, sits at 80% of
+ * what the app was designed at (16px base), by the owner's choice of density. Media queries read the initial
  * size, never this one, so there is no feedback between the two.
  */
 @media (min-width: 1600px) {
   html {
-    font-size: 106.25%; /* 17px */
+    font-size: 82.5%; /* 13.2px */
   }
 }
 
 @media (min-width: 1920px) {
   html {
-    font-size: 112.5%; /* 18px */
+    font-size: 85%; /* 13.6px */
   }
 }
 
 @media (min-width: 2400px) {
   html {
-    font-size: 125%; /* 20px */
+    font-size: 95%; /* 15.2px */
   }
 }
 

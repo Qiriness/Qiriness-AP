@@ -126,6 +126,7 @@ async function main() {
     // Runs in a dry run too. It writes nothing itself, and leaving it out would
     // make the dry run stop reproducing the worker — the one thing it is for.
     retrieveExemplar: investigation.retrieveExemplar,
+    chooseSituation: investigation.chooseSituation,
     loadAnswers: investigation.loadAnswers,
     loadCollectionMode: investigation.loadCollectionMode,
     parameters: await investigation.loadParameters(shopId),

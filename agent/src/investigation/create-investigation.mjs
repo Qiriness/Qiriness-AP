@@ -10,6 +10,7 @@ import { createProductLookup } from '../retrieval/product-lookup.mjs';
 import { createPurchaseLookup } from '../retrieval/purchase-lookup.mjs';
 import { buildOrderContext } from '../resolution/order-context.mjs';
 import { createPromotionLookup } from '../retrieval/promotion-lookup.mjs';
+import { createSituationChooser, createVariantLoader } from '../retrieval/situation-chooser.mjs';
 
 import { answerFromRow } from './answer-selection.mjs';
 import { createDecomposer } from './decompose.mjs';
@@ -171,6 +172,38 @@ export function createInvestigationStack({
   const retrieveExemplar = createExemplarRetrieval({ supabase, embeddingsClient, logger });
 
   /**
+   * Settles a near miss or a tie by reading the message beside the candidates.
+   *
+   * NULL WHEN THE MODEL IS UNSET — the documented off switch — and the runner
+   * then keeps no situation for a near miss, exactly as before this existed.
+   * Its phrasings come from the table rather than the matcher's result, which
+   * carries only the one phrasing that scored best.
+   */
+  const chooseSituation = config.situationChooserModel
+    ? createSituationChooser(openai, {
+        model: config.situationChooserModel,
+        logger,
+        loadVariants: createVariantLoader({
+          selectExemplars: () =>
+            supabaseSelect(
+              supabase,
+              T.SUPPORT_EXEMPLARS,
+              { shop_id: shopId, deleted_at: { operator: 'is', value: 'null' } },
+              'id,exemplar_key,canonical_question'
+            ),
+          // Authored phrasings only: translations sit at 100 and above.
+          selectPhrasings: () =>
+            supabaseSelect(
+              supabase,
+              T.SUPPORT_EXEMPLAR_PHRASINGS,
+              { phrasing_index: { operator: 'lt', value: 100 } },
+              'support_exemplar_id,phrasing_index,phrasing_kind,phrasing_text'
+            )
+        })
+      })
+    : null;
+
+  /**
    * The customer's most recent order, as a bundle for a HUMAN to check first.
    *
    * ONE FETCH, OWNED BY THE MODULE THAT ALREADY HAD IT. `purchaseLookup` has
@@ -276,6 +309,7 @@ export function createInvestigationStack({
     store: createCaseFileStore(supabase),
     registry,
     retrieveExemplar,
+    chooseSituation,
     lastOrderLookup,
     loadAnswers,
     loadCollectionMode,

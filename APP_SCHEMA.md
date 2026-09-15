@@ -38,7 +38,7 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |   |   |                                 # per panel: sales · fulfilment · support ·
 |   |   |                                 # customers · agent. Each reads ?range=
 |   |   |                                 # (24h|7d|30d|6m|1y|all) or ?from=&to=, and ?platform=
-|   |   |-- settings/page.tsx             # Server Component: forwarding address book
+|   |   |-- settings/page.tsx             # Server Component: My info · Agent settings (?tab=agents)
 |   |   |-- login/                        # page.tsx + LoginForm: the only page open
 |   |   |                                 # without a session
 |   |   `-- api/
@@ -89,7 +89,7 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |   |   |-- ui/                      # Button · StatusChip · Dialog (modal shell) ·
 |   |   |                            # TrackingText (tracking numbers -> carrier links,
 |   |   |                            # used by every surface showing a number in prose)
-|   |   |-- settings/                # ForwardingSettings (saves per row on blur)
+|   |   |-- settings/                # SettingsView (Insights kit: tabs, cards, tables)
 |   |   |-- orders/                  # OrdersView (filters + table + pager, URL state;
 |   |   |                            # customer name ringed by open-ticket band) ·
 |   |   |                            # OrderDetailView (Articles · Fulfilment · Payment ·
@@ -293,6 +293,9 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |   |   |                        #   cross-subject) · knowledge-retrieval (dense 20
 |   |   |                        #   + lexical 20, fused by rank, banded three ways) ·
 |   |   |                        # exemplar-{rules,retrieval} (which situation is this) ·
+|   |   |                        # situation-chooser (a small model settles a near
+|   |   |                        #   miss / tie among the matcher's candidates, or
+|   |   |                        #   none; skips our own side; before the rules load) ·
 |   |   |                        # product-{matching,context,lookup} (four shapes:
 |   |   |                        #   one product / a range / ambiguous / nothing,
 |   |   |                        #   ranges derived from shared title bigrams;
@@ -483,7 +486,7 @@ Written by the worker and the CLIs, read only by the Insights panels.
 
 | Table | Holds |
 | --- | --- |
-| `llm_usage` | one row per model call: `pass`, `model`, token counts, `ticket_id`, `succeeded`. Append-only, written through one sink in the OpenAI transport. **Tokens are stored; money is computed at read time** from `scripts/lib/llm-rates.mjs` |
+| `llm_usage` | one row per model call: `pass` (`spam`, `categorise`, `decompose`, `situation`, `investigate`, `draft`, `embed`, `other` — `USAGE_PASSES`), `model`, token counts, `ticket_id`, `succeeded`. Append-only, written through one sink in the OpenAI transport. **Tokens are stored; money is computed at read time** from `scripts/lib/llm-rates.mjs` |
 | `cluster_runs` | one row per manual rebuild of the topic map: `built_at`, `threshold`, `min_size`, corpus counts. What the panel reads to state the map's age |
 | `ticket_clusters` | one row per topic in a run: subject, size, cohesion, excerpt, `member_message_ids uuid[]` (GIN) |
 
@@ -583,7 +586,9 @@ Env: `CHAT_DB_URL` (the role's pooler URL; unset = the page says so and nothing 
 
 - `GET|PUT parameters` — every parameter set or not · set one, or clear it with a null
 
-**Navigation is a tab bar** in `agent-setup/layout.tsx` — Knowledge · Rules · Parameters, three places of equal standing. Matched exactly rather than by prefix, since `/agent-setup` is a prefix of the other two.
+**Forwarding** (`/agent-setup/forwarding` → `components/agent-setup/ForwardingSettings`, saves per row on blur). `GET|PUT /api/forwarding` over `forwarding-service.ts`: all 14 ticket categories with their address (`null` where unset); `PUT` upserts one, an empty address clears it. Moved here from `/settings` 2026-09-15.
+
+**Navigation is a tab bar** in `agent-setup/layout.tsx` — Knowledge · Rules · Parameters · Promotions · Recommendations · Forwarding, places of equal standing. Matched exactly rather than by prefix, since `/agent-setup` is a prefix of the other two.
 
 **Which product an article is about** (`ProductAttachSelect` in the article workspace, over `PATCH /api/knowledge/articles/[id]`; the catalogue comes from the existing `/api/recommendations`). Writes `knowledge_documents.product_ids`, denormalised onto `knowledge_chunks` by `buildKnowledgeChunks` the same way `category` is, and returned by both retrieval RPCs. `agent/src/retrieval/product-from-knowledge.mjs` turns a retrieved chunk's tag into an identity, and `evidence-rules.mjs` reads it from one helper (`productFromArticles`) shared by `product_identity`'s `satisfiedBy` and its `derive`, so the need and the finding cannot disagree. Deliberately NOT in `content_hash`: retagging rewrites chunk rows without re-embedding a word.
 
@@ -611,6 +616,8 @@ Env: `CHAT_DB_URL` (the role's pooler URL; unset = the page says so and nothing 
 ### `/tickets` — the queue
 
 **Consumer threads only.** `listTickets` and `listConversations` are two halves of one partition on `tickets.sender_label` (`partitionBySender`), so a thread is on exactly one of the two pages and never on neither: 234 = 220 + 14.
+
+**The URL holds the reading state**: `?view=&q=&level=&category=&sender=&sort=&ticket=&mail=` (defaults omitted). `page.tsx` passes `searchParams` to `TicketsView` as `initialParams`; the view keeps the address in step with `replaceState` and mirrors it to `sessionStorage` (`tickets.lastSearch`), restoring from there when opened as a bare `/tickets`. `reconcilePageState` follows a saved ticket to its current tab. See DECISIONS.md § Tickets dashboard.
 
 `web/app/tickets/` → `web/components/tickets/`, over `tickets-service.ts` + `dropped-mail-service.ts`. `tickets-service.ts` does not touch `tickets` itself: every read and the one write go through `scripts/lib/ticket-record.mjs`, and the list reads the `ticket_queue` view. Queue priority is computed in `scripts/lib/ticket-priority.mjs`; the view supplies facts (`inbound_count`, `waiting_since`), JavaScript owns the tunable judgement. Four stacked collapsible sections, each scrolling inside a fixed height:
 
@@ -670,9 +677,12 @@ The Support topic map reads the latest `cluster_runs` row and renders each
 
 **Detail** (`OrderDetailView`): Articles, Fulfilment (shipments, tracking links, returns), Payment (totals, refunds) on the left; Tickets, Customer (name, email unless marketplace, lifetime orders/spend, VIP), Destination (coarse — no street is stored), Tags on the right; "Open in Shopify" in the header. Both pages write a `data_access_events` row (`resourceType: orders`).
 
-### `/settings` — forwarding address book
+### `/settings` — My info · Agent settings
 
-`web/app/api/forwarding/` over `forwarding-service.ts`. `GET` returns all 14 ticket categories with their address (`null` where unset); `PUT` upserts one. Saving an empty address clears it.
+`web/app/settings/page.tsx` → `components/settings/SettingsView` (the Insights page frame, tab bar, cards and tables). Tab in the URL: `/settings` or `?tab=agents`; only the open tab's data is read.
+
+- **My info** — the signed-in user from `getSession()`, and which areas the role may open (`canAccessPath` in `dashboard-auth.mjs`).
+- **Agent settings** — `lib/server/agent-settings-service.ts`: one row per agent (spam, categorise, situation chooser, decompose, investigate, draft, embed from `insights_llm_usage`; the management chat from `chat_turns`), last 30 days: model (most-called in the window, else the configured one from `loadAgentConfig` / `chatModel()`), calls, failed, cost via `llm-rates.mjs`. Read-only.
 
 ## Agent Worker
 

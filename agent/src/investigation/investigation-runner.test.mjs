@@ -324,6 +324,8 @@ test('the matched situation is stored beside the case file', async () => {
     verdict: 'matched',
     exemplar_key: 'PR-24',
     closest: 'PR-24',
+    // Null here because the fixture's candidates carry no question.
+    closest_question: null,
     // Rounded to three places: the fourth is noise at the precision cosine
     // similarity actually carries.
     similarity: 0.824,
@@ -331,6 +333,167 @@ test('the matched situation is stored beside the case file', async () => {
     runner_up: 'PR-27',
     requirement_needs: ['product_property']
   });
+});
+
+const NEAR_RESULT = {
+  matched: false,
+  verdict: 'near',
+  exemplar: null,
+  bestSimilarity: 0.6304,
+  margin: 0.0351,
+  candidates: [
+    { exemplarKey: 'D-36', question: 'Ma commande a beaucoup de retard', requirementNeeds: ['order_identity'] },
+    { exemplarKey: 'D-07', question: 'Quels sont vos délais ?', requirementNeeds: ['policy_answer'] }
+  ]
+};
+
+const OPENING = [
+  { id: 'm1', subject: 'Livraison', body_text: 'Sera-t-elle livrée samedi ?', from_email: 'client@example.fr', received_at: '2026-08-01T09:00:00Z' }
+];
+
+test('a near miss is settled by the chooser, and drives the needs and the stored key', async () => {
+  const store = buildStore({ messages: OPENING });
+  const asked = [];
+  await runInvestigation({
+    ...wire(store),
+    investigate: async () => caseFile(),
+    shopId: 's1',
+    retrieveExemplar: async () => NEAR_RESULT,
+    chooseSituation: async (input) => {
+      asked.push(input);
+      return { choice: 'D-07', reason: 'Délai de livraison.', model: 'gpt-4o-mini', candidates: ['D-36', 'D-07'] };
+    }
+  });
+
+  // Asked on the opening message, with the matcher's own candidates.
+  assert.equal(asked[0].body, 'Sera-t-elle livrée samedi ?');
+  assert.deepEqual(asked[0].candidates.map((c) => c.exemplarKey), ['D-36', 'D-07']);
+
+  const match = store.saved[0].exemplarMatch;
+  assert.equal(match.exemplar_key, 'D-07', 'the runner-up the model chose, not the top score');
+  assert.equal(match.verdict, 'near', 'the embedding verdict is kept as the record of what it could tell');
+  assert.equal(match.chosen_by, 'model');
+  assert.deepEqual(match.requirement_needs, ['policy_answer']);
+  assert.deepEqual(match.chooser, {
+    model: 'gpt-4o-mini',
+    choice: 'D-07',
+    reason: 'Délai de livraison.',
+    candidates: ['D-36', 'D-07']
+  });
+});
+
+test('the chosen situation is what the rules are selected against', async () => {
+  const store = buildStore({ messages: OPENING });
+  const seen = [];
+  await runInvestigation({
+    ...wire(store),
+    investigate: async (input) => {
+      seen.push(input);
+      return caseFile();
+    },
+    shopId: 's1',
+    retrieveExemplar: async () => NEAR_RESULT,
+    chooseSituation: async () => ({ choice: 'D-07', reason: 'x', model: 'm', candidates: ['D-36', 'D-07'] }),
+    loadAnswers: async () => [
+      { answer_key: 'd07_delais', situation_key: 'D-07', when_conditions: {}, answer_skeleton: 's', route: null, ask: [], priority: 0, is_fallback: false }
+    ]
+  });
+
+  assert.equal(JSON.stringify(seen[0]).includes('D-07'), true, 'the investigation was handed the chosen situation');
+});
+
+test('none keeps the near miss unmatched, and says the model was asked', async () => {
+  const store = buildStore({ messages: OPENING });
+  await runInvestigation({
+    ...wire(store),
+    investigate: async () => caseFile(),
+    shopId: 's1',
+    retrieveExemplar: async () => NEAR_RESULT,
+    chooseSituation: async () => ({ choice: null, reason: 'Aucune ne correspond.', model: 'm', candidates: ['D-36', 'D-07'] })
+  });
+
+  const match = store.saved[0].exemplarMatch;
+  assert.equal(match.exemplar_key, null);
+  assert.equal(match.chosen_by, undefined);
+  assert.equal(match.chooser.choice, 'none');
+});
+
+test('our own side is never sent to the chooser', async () => {
+  const store = buildStore({ messages: [{ ...OPENING[0], from_email: 'dounia@qiriness.com' }] });
+  let called = false;
+  await runInvestigation({
+    ...wire(store),
+    investigate: async () => caseFile(),
+    shopId: 's1',
+    retrieveExemplar: async () => NEAR_RESULT,
+    senderDirectory: { lookup: (email) => (email.endsWith('@qiriness.com') ? { label: 'internal' } : null) },
+    chooseSituation: async () => {
+      called = true;
+      return { choice: 'D-07', reason: 'x', model: 'm', candidates: [] };
+    }
+  });
+
+  assert.equal(called, false);
+  assert.equal(store.saved[0].exemplarMatch.exemplar_key, null);
+  assert.deepEqual(store.saved[0].exemplarMatch.chooser, { skipped: 'own_side' });
+});
+
+test('a failed chooser call leaves no situation and still investigates', async () => {
+  const store = buildStore({ messages: OPENING });
+  const counts = await runInvestigation({
+    ...wire(store),
+    investigate: async () => caseFile(),
+    shopId: 's1',
+    logger: { info() {}, warn() {} },
+    retrieveExemplar: async () => NEAR_RESULT,
+    chooseSituation: async () => {
+      throw new Error('429');
+    }
+  });
+
+  assert.equal(counts.answerable, 1);
+  assert.equal(store.saved[0].exemplarMatch.exemplar_key, null);
+  assert.deepEqual(store.saved[0].exemplarMatch.chooser, { failed: true });
+});
+
+test('a confident match never reaches the chooser', async () => {
+  const store = buildStore();
+  let called = false;
+  await runInvestigation({
+    ...wire(store),
+    investigate: async () => caseFile(),
+    shopId: 's1',
+    retrieveExemplar: async () => EXEMPLAR_RESULT,
+    chooseSituation: async () => {
+      called = true;
+      return { choice: null, reason: null, model: 'm', candidates: [] };
+    }
+  });
+
+  assert.equal(called, false);
+  assert.equal(store.saved[0].exemplarMatch.exemplar_key, 'PR-24');
+  assert.equal(store.saved[0].exemplarMatch.chooser, undefined);
+});
+
+test('the situation match is handed to onResult, for callers with no row to read', async () => {
+  // The test chat's store is in memory and discarded, so `onResult` is the only
+  // way its transcript can say which situation was matched.
+  const store = buildStore();
+  const results = [];
+  await runInvestigation({
+    ...wire(store),
+    investigate: async () => caseFile(),
+    shopId: 's1',
+    retrieveExemplar: async () => ({
+      ...EXEMPLAR_RESULT,
+      candidates: [{ exemplarKey: 'PR-24', question: 'Ce produit convient-il ?' }, { exemplarKey: 'PR-27' }]
+    }),
+    onResult: (result) => results.push(result)
+  });
+
+  assert.equal(results.length, 1);
+  assert.equal(results[0].exemplarMatch.exemplar_key, 'PR-24');
+  assert.equal(results[0].exemplarMatch.closest_question, 'Ce produit convient-il ?');
 });
 
 test('it is matched on the opening message, and reuses that message vector', async () => {

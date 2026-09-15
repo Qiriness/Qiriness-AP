@@ -1,0 +1,68 @@
+/* Only what Settings adds on top of the Insights kit and tables.module.css. */
+
+.facts {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: var(--space-3) var(--space-6);
+  margin: 0;
+}
+
+.facts dt {
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+.facts dd {
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-weight: var(--weight-medium);
+  color: var(--text-strong);
+}
+
+.role {
+  display: inline-block;
+  padding: 1px var(--space-3);
+  border: 1px solid var(--teal-100);
+  border-radius: var(--radius-pill);
+  background: var(--teal-050);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--teal-ink);
+}
+
+.access {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.access li {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.access li:last-child {
+  border-bottom: 0;
+}
+
+.allowed {
+  font-weight: var(--weight-medium);
+  color: var(--success);
+}
+
+.denied {
+  color: var(--text-subtle);
+}
+
+.model {
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  color: var(--text-strong);
+}

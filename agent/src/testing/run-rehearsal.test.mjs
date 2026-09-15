@@ -210,6 +210,19 @@ test('the case file names the answer set, even when no rule was consulted', asyn
   assert.equal(caseFile.answerSet, 'products');
 });
 
+test('the case file records the situation match, including a miss', async () => {
+  const { steps } = await rehearse();
+
+  const caseFile = steps.find((step) => step.type === 'case_file');
+  // Every PostgREST call answers empty here, so the matcher ran and found
+  // nothing. That is still a result with a verdict — the transcript must be able
+  // to say "no situation matched" rather than render nothing, which is what hid
+  // the reason a generic rule was chosen.
+  assert.ok(caseFile.situation, 'the situation should be on the step');
+  assert.equal(typeof caseFile.situation.verdict, 'string');
+  assert.equal(caseFile.situation.exemplar_key, null);
+});
+
 test('every pass ran through the traced client, so its prompts are on the run', async () => {
   const { openaiClient, steps } = await rehearse();
 

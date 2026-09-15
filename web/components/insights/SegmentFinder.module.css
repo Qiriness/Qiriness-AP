@@ -1,5 +1,6 @@
+/* Sits in a pinnable Grid, which owns the spacing below the row. */
 .card {
-  margin: 0 0 var(--space-4);
+  min-width: 0;
   padding: var(--space-5);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
@@ -14,6 +15,8 @@
   gap: var(--space-3);
   flex-wrap: wrap;
   margin: 0 0 var(--space-4);
+  /* Room for the row's pin button in the top-right corner. */
+  padding-right: 2rem;
 }
 
 .title {

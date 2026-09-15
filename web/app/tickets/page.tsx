@@ -24,7 +24,11 @@ export const metadata = { title: "Tickets · Qiriness Support OS" };
  * enough that paging it server-side would cost a round trip per keystroke and
  * buy nothing.
  */
-export default async function TicketsPage() {
+export default async function TicketsPage({
+  searchParams,
+}: {
+  searchParams: Record<string, string | string[] | undefined>;
+}) {
   const badges = await navBadgeCounts();
   let tickets: TicketListItem[] = [];
   let droppedMail: DroppedMail[] = [];
@@ -54,7 +58,12 @@ export default async function TicketsPage() {
 
   return (
     <AppShell activeHref="/tickets" {...badges}>
-      <TicketsView initialTickets={tickets} droppedMail={droppedMail} loadError={loadError} />
+      <TicketsView
+        initialTickets={tickets}
+        droppedMail={droppedMail}
+        loadError={loadError}
+        initialParams={searchParams}
+      />
     </AppShell>
   );
 }

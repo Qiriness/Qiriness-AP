@@ -25,6 +25,7 @@ export const USAGE_PASSES = Object.freeze([
   'spam',
   'categorise',
   'decompose',
+  'situation',
   'investigate',
   'draft',
   'embed',

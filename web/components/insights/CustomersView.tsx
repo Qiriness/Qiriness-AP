@@ -37,10 +37,6 @@ export function CustomersView({ panel, ranged }: { panel: CustomerPanel; ranged?
 
   return (
     <>
-      <p className={styles.privacy} role="note">
-        This panel names individual customers, and the dashboard has no sign-in yet — do not share screenshots of it.
-      </p>
-
       <VipRuleCard
         rule={vipRule}
         current={vip ? { vipCustomers: vip.customers, buyersInWindow: vip.buyersInWindow } : null}
@@ -78,7 +74,9 @@ export function CustomersView({ panel, ranged }: { panel: CustomerPanel; ranged?
         />
       </Grid>
 
-      <SegmentFinder />
+      <Grid min={100} pin="segment-finder" label="Segment finder">
+        <SegmentFinder />
+      </Grid>
 
       {ranged ? (
         <>

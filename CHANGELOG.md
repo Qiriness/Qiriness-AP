@@ -10,6 +10,12 @@ Three sibling files carry the other halves, and this one deliberately does not d
 
 ---
 
+## Settings: My info and Agent settings; forwarding moves to Agent Setup (2026-09-15)
+
+**Email forwarding** is now a tab in Agent Setup (`/agent-setup/forwarding`); the component moved unchanged, the API is untouched. **Settings** has two tabs in the Insights style: **My info** (name, email, role, and which areas the role may open) and **Agent settings** — a table of every model-calling agent (spam filter, categoriser, decomposer, investigator, drafting, embeddings, management chat) with the model it ran on, calls, failed calls and estimated cost over the last 30 days, plus three totals. The model shown is the most-called one in `llm_usage` / `chat_turns`, falling back to the configured one when an agent did not run. Read-only; no migration. `tsc` only — not checked in the browser or against live data.
+
+---
+
 ## Home chat: VIP status (2026-09-14)
 
 The management chat can now answer VIP questions — how many VIPs, what they spend, where they are, how many wrote to support. New view **`chat.vip_customers`**: each customer who is a VIP now under the shop's rule, with their orders and net spend inside the rule's window, joinable to `chat.customers`, `chat.orders` and `chat.tickets` by `customer_id`. It goes through the existing `vip_customers()` via a security-definer wrapper with no arguments (`chat.vip_customer_rows()`), so the chat and the dashboard share one definition of VIP. Migration `21_chat_vip.sql`, applied (numbered 21 because 19 and 20 were taken by the product-mix work the same day).

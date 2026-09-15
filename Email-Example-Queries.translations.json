@@ -1533,6 +1533,42 @@
         "sourceHash": "5572038afe9cb087e1db3353317072924fbee3d324fea46786a37c6149309c1e",
         "language": "de",
         "text": "Ich habe meine Bestellung immer noch nicht erhalten."
+      },
+      "6:fr": {
+        "index": 160,
+        "sourceIndex": 6,
+        "sourceLanguage": "it",
+        "sourceText": "Ho fatto l'ordine il 27 luglio e mi segnava 5 giorni lavorativi ma controllando la spedizione mi dice ancora \"in attesa di dettagli\". Quando sarà in consegna?",
+        "sourceHash": "130295fcafe844cefaabb1adfe2daee3c376c51f6bfd24cba3a00a34f6e4a3c9",
+        "language": "fr",
+        "text": "J'ai passé la commande le 27 juillet et ça indiquait 5 jours ouvrables mais en vérifiant l'expédition ça me dit encore \"en attente de détails\". Quand sera-t-elle livrée ?"
+      },
+      "6:en": {
+        "index": 161,
+        "sourceIndex": 6,
+        "sourceLanguage": "it",
+        "sourceText": "Ho fatto l'ordine il 27 luglio e mi segnava 5 giorni lavorativi ma controllando la spedizione mi dice ancora \"in attesa di dettagli\". Quando sarà in consegna?",
+        "sourceHash": "130295fcafe844cefaabb1adfe2daee3c376c51f6bfd24cba3a00a34f6e4a3c9",
+        "language": "en",
+        "text": "I placed the order on 27 July and it said 5 working days but checking the shipment it still says \"awaiting details\". When will it be delivered?"
+      },
+      "6:es": {
+        "index": 162,
+        "sourceIndex": 6,
+        "sourceLanguage": "it",
+        "sourceText": "Ho fatto l'ordine il 27 luglio e mi segnava 5 giorni lavorativi ma controllando la spedizione mi dice ancora \"in attesa di dettagli\". Quando sarà in consegna?",
+        "sourceHash": "130295fcafe844cefaabb1adfe2daee3c376c51f6bfd24cba3a00a34f6e4a3c9",
+        "language": "es",
+        "text": "Hice el pedido el 27 de julio y me indicaba 5 días laborables pero al revisar el envío todavía me dice \"en espera de detalles\". ¿Cuándo será entregado?"
+      },
+      "6:de": {
+        "index": 164,
+        "sourceIndex": 6,
+        "sourceLanguage": "it",
+        "sourceText": "Ho fatto l'ordine il 27 luglio e mi segnava 5 giorni lavorativi ma controllando la spedizione mi dice ancora \"in attesa di dettagli\". Quando sarà in consegna?",
+        "sourceHash": "130295fcafe844cefaabb1adfe2daee3c376c51f6bfd24cba3a00a34f6e4a3c9",
+        "language": "de",
+        "text": "Ich habe die Bestellung am 27. Juli gemacht und es zeigte mir 5 Werktage an, aber wenn ich die Sendung überprüfe, steht da immer noch \"in Erwartung von Details\". Wann wird es geliefert?"
       }
     },
     "D-02": {
@@ -1679,6 +1715,42 @@
         "sourceHash": "d870c2d84eba5a193080bd476002d7e8604273bff6df2a6c59635b54d2057b91",
         "language": "de",
         "text": "Ich habe heute meine Bestellung Nummer #6748 erhalten. Ich habe für 4 Produkte bezahlt, aber nicht alles bekommen. Mir fehlt eins"
+      },
+      "4:en": {
+        "index": 141,
+        "sourceIndex": 4,
+        "sourceLanguage": "fr",
+        "sourceText": "je viens de recevoir mon colis, 2 boites de galets étaient ouvertes et il manque 1 galet dans chacune",
+        "sourceHash": "5fe31ff088d965ef0d3225bc6b080525a50d800d0558cd8ae46bb6ba5de25743",
+        "language": "en",
+        "text": "I just received my package, 2 boxes of galets were open and 1 galet is missing in each"
+      },
+      "4:es": {
+        "index": 142,
+        "sourceIndex": 4,
+        "sourceLanguage": "fr",
+        "sourceText": "je viens de recevoir mon colis, 2 boites de galets étaient ouvertes et il manque 1 galet dans chacune",
+        "sourceHash": "5fe31ff088d965ef0d3225bc6b080525a50d800d0558cd8ae46bb6ba5de25743",
+        "language": "es",
+        "text": "acabo de recibir mi paquete, 2 cajas de galets estaban abiertas y falta 1 galet en cada una"
+      },
+      "4:it": {
+        "index": 143,
+        "sourceIndex": 4,
+        "sourceLanguage": "fr",
+        "sourceText": "je viens de recevoir mon colis, 2 boites de galets étaient ouvertes et il manque 1 galet dans chacune",
+        "sourceHash": "5fe31ff088d965ef0d3225bc6b080525a50d800d0558cd8ae46bb6ba5de25743",
+        "language": "it",
+        "text": "ho appena ricevuto il mio pacco, 2 scatole di galets erano aperte e manca 1 galet in ognuna"
+      },
+      "4:de": {
+        "index": 144,
+        "sourceIndex": 4,
+        "sourceLanguage": "fr",
+        "sourceText": "je viens de recevoir mon colis, 2 boites de galets étaient ouvertes et il manque 1 galet dans chacune",
+        "sourceHash": "5fe31ff088d965ef0d3225bc6b080525a50d800d0558cd8ae46bb6ba5de25743",
+        "language": "de",
+        "text": "ich habe gerade mein paket erhalten, 2 schachteln mit galets waren offen und in jeder fehlt 1 galet"
       }
     },
     "D-03": {
@@ -1825,6 +1897,42 @@
         "sourceHash": "547a76330d9e901c384af45e553a910a793cb7011b586ce33c40645fb9829d9f",
         "language": "de",
         "text": "Der Lieferant hat mein Paket bei einem Nachbarn oder an einer Adresse abgegeben, die nicht meine ist"
+      },
+      "4:en": {
+        "index": 141,
+        "sourceIndex": 4,
+        "sourceLanguage": "fr",
+        "sourceText": "J'ai passé une commande qui n'a jamais été livrée. Sur le site il est inscrit livré, je n'ai jamais reçu mes produits",
+        "sourceHash": "317ecac2fd3ee2ecf895d5c73781851846a5fc8e8d363c6cdce14afa3f16ea12",
+        "language": "en",
+        "text": "I placed an order that was never delivered. On the site it says delivered, I never received my products"
+      },
+      "4:es": {
+        "index": 142,
+        "sourceIndex": 4,
+        "sourceLanguage": "fr",
+        "sourceText": "J'ai passé une commande qui n'a jamais été livrée. Sur le site il est inscrit livré, je n'ai jamais reçu mes produits",
+        "sourceHash": "317ecac2fd3ee2ecf895d5c73781851846a5fc8e8d363c6cdce14afa3f16ea12",
+        "language": "es",
+        "text": "Hice un pedido que nunca fue entregado. En el sitio dice entregado, nunca recibí mis productos"
+      },
+      "4:it": {
+        "index": 143,
+        "sourceIndex": 4,
+        "sourceLanguage": "fr",
+        "sourceText": "J'ai passé une commande qui n'a jamais été livrée. Sur le site il est inscrit livré, je n'ai jamais reçu mes produits",
+        "sourceHash": "317ecac2fd3ee2ecf895d5c73781851846a5fc8e8d363c6cdce14afa3f16ea12",
+        "language": "it",
+        "text": "Ho fatto un ordine che non è mai stato consegnato. Sul sito è scritto consegnato, non ho mai ricevuto i miei prodotti"
+      },
+      "4:de": {
+        "index": 144,
+        "sourceIndex": 4,
+        "sourceLanguage": "fr",
+        "sourceText": "J'ai passé une commande qui n'a jamais été livrée. Sur le site il est inscrit livré, je n'ai jamais reçu mes produits",
+        "sourceHash": "317ecac2fd3ee2ecf895d5c73781851846a5fc8e8d363c6cdce14afa3f16ea12",
+        "language": "de",
+        "text": "Ich habe eine Bestellung aufgegeben, die nie geliefert wurde. Auf der Website steht geliefert, ich habe meine Produkte nie erhalten"
       }
     },
     "D-05": {
@@ -2811,6 +2919,78 @@
         "sourceHash": "3c52fdc3662f0152dfa7fe5a5b96aeeba0c4eccaef03e284eed6357a326b9971",
         "language": "de",
         "text": "Ich habe die Bestellbestätigung erhalten, dann nichts mehr"
+      },
+      "7:en": {
+        "index": 171,
+        "sourceIndex": 7,
+        "sourceLanguage": "fr",
+        "sourceText": "Je n'ai pas de nouvelles de ma commande du 30 juillet dernier. Mon compte a été débité.",
+        "sourceHash": "98d355a6c1af4db5d142480061114ca4f889a71d7e9ad0bf58a2c7220de18cac",
+        "language": "en",
+        "text": "I have no news about my order from last July 30. My account was debited."
+      },
+      "7:es": {
+        "index": 172,
+        "sourceIndex": 7,
+        "sourceLanguage": "fr",
+        "sourceText": "Je n'ai pas de nouvelles de ma commande du 30 juillet dernier. Mon compte a été débité.",
+        "sourceHash": "98d355a6c1af4db5d142480061114ca4f889a71d7e9ad0bf58a2c7220de18cac",
+        "language": "es",
+        "text": "No tengo noticias de mi pedido del 30 de julio pasado. Mi cuenta ha sido debitada."
+      },
+      "7:it": {
+        "index": 173,
+        "sourceIndex": 7,
+        "sourceLanguage": "fr",
+        "sourceText": "Je n'ai pas de nouvelles de ma commande du 30 juillet dernier. Mon compte a été débité.",
+        "sourceHash": "98d355a6c1af4db5d142480061114ca4f889a71d7e9ad0bf58a2c7220de18cac",
+        "language": "it",
+        "text": "Non ho notizie del mio ordine del 30 luglio scorso. Il mio conto è stato addebitato."
+      },
+      "7:de": {
+        "index": 174,
+        "sourceIndex": 7,
+        "sourceLanguage": "fr",
+        "sourceText": "Je n'ai pas de nouvelles de ma commande du 30 juillet dernier. Mon compte a été débité.",
+        "sourceHash": "98d355a6c1af4db5d142480061114ca4f889a71d7e9ad0bf58a2c7220de18cac",
+        "language": "de",
+        "text": "Ich habe keine Neuigkeiten zu meiner Bestellung vom 30. Juli. Mein Konto wurde belastet."
+      },
+      "8:en": {
+        "index": 181,
+        "sourceIndex": 8,
+        "sourceLanguage": "fr",
+        "sourceText": "Je me demande pourquoi ma dernière commande n'est pas traitée car c'est pour un cadeau semaine prochaine",
+        "sourceHash": "53e5261eeb8fcd7c7e78d74e4e7bdf3dbb9950fac2ebbd0320966276d3ef1dfc",
+        "language": "en",
+        "text": "I wonder why my last order isn't processed because it's for a gift next week"
+      },
+      "8:es": {
+        "index": 182,
+        "sourceIndex": 8,
+        "sourceLanguage": "fr",
+        "sourceText": "Je me demande pourquoi ma dernière commande n'est pas traitée car c'est pour un cadeau semaine prochaine",
+        "sourceHash": "53e5261eeb8fcd7c7e78d74e4e7bdf3dbb9950fac2ebbd0320966276d3ef1dfc",
+        "language": "es",
+        "text": "Me pregunto por qué mi último pedido no está procesado ya que es para un regalo la próxima semana"
+      },
+      "8:it": {
+        "index": 183,
+        "sourceIndex": 8,
+        "sourceLanguage": "fr",
+        "sourceText": "Je me demande pourquoi ma dernière commande n'est pas traitée car c'est pour un cadeau semaine prochaine",
+        "sourceHash": "53e5261eeb8fcd7c7e78d74e4e7bdf3dbb9950fac2ebbd0320966276d3ef1dfc",
+        "language": "it",
+        "text": "Mi chiedo perché il mio ultimo ordine non è trattato perché è per un regalo settimana prossima"
+      },
+      "8:de": {
+        "index": 184,
+        "sourceIndex": 8,
+        "sourceLanguage": "fr",
+        "sourceText": "Je me demande pourquoi ma dernière commande n'est pas traitée car c'est pour un cadeau semaine prochaine",
+        "sourceHash": "53e5261eeb8fcd7c7e78d74e4e7bdf3dbb9950fac2ebbd0320966276d3ef1dfc",
+        "language": "de",
+        "text": "Ich frage mich warum meine letzte Bestellung nicht bearbeitet wird da es für ein Geschenk nächste Woche ist"
       }
     },
     "O-11": {
@@ -3543,6 +3723,42 @@
         "sourceHash": "1505119490fa5ba198a0b9d7c405dd6c6148cd47a6af542009deb9c6618da4ee",
         "language": "de",
         "text": "Ich habe gerade bestellt und ich sollte eine Maske gratis bekommen aber als ich sie hinzufügte…"
+      },
+      "3:en": {
+        "index": 131,
+        "sourceIndex": 3,
+        "sourceLanguage": "fr",
+        "sourceText": "j'ai validé cette commande et payé, et est apparu un autre montant : le masque qui était offert à partir de 65€ ne l'était plus… Pourquoi ?",
+        "sourceHash": "cbcc2671b9139f13c855f5a9dd57f5756a0b49226b976cb53d38abe1475fa633",
+        "language": "en",
+        "text": "I confirmed this order and paid, and another amount appeared: the mask that was free from 65€ wasn't anymore… Why?"
+      },
+      "3:es": {
+        "index": 132,
+        "sourceIndex": 3,
+        "sourceLanguage": "fr",
+        "sourceText": "j'ai validé cette commande et payé, et est apparu un autre montant : le masque qui était offert à partir de 65€ ne l'était plus… Pourquoi ?",
+        "sourceHash": "cbcc2671b9139f13c855f5a9dd57f5756a0b49226b976cb53d38abe1475fa633",
+        "language": "es",
+        "text": "he validado este pedido y pagado, y apareció otro monto: la mascarilla que se ofrecía a partir de 65€ ya no lo estaba... ¿Por qué?"
+      },
+      "3:it": {
+        "index": 133,
+        "sourceIndex": 3,
+        "sourceLanguage": "fr",
+        "sourceText": "j'ai validé cette commande et payé, et est apparu un autre montant : le masque qui était offert à partir de 65€ ne l'était plus… Pourquoi ?",
+        "sourceHash": "cbcc2671b9139f13c855f5a9dd57f5756a0b49226b976cb53d38abe1475fa633",
+        "language": "it",
+        "text": "ho convalidato questo ordine e pagato, ed è apparso un altro importo: la maschera che era offerta a partire da 65€ non lo era più… Perché ?"
+      },
+      "3:de": {
+        "index": 134,
+        "sourceIndex": 3,
+        "sourceLanguage": "fr",
+        "sourceText": "j'ai validé cette commande et payé, et est apparu un autre montant : le masque qui était offert à partir de 65€ ne l'était plus… Pourquoi ?",
+        "sourceHash": "cbcc2671b9139f13c855f5a9dd57f5756a0b49226b976cb53d38abe1475fa633",
+        "language": "de",
+        "text": "ich habe diese Bestellung bestätigt und bezahlt, und es erschien ein anderer Betrag: die Maske, die ab 65€ angeboten wurde, war es nicht mehr… Warum?"
       }
     },
     "P-18": {
@@ -4587,6 +4803,42 @@
         "sourceHash": "1d132aab48a63184ab6a6aadc457b9a7453959f85116555b6712e72dd4c08bac",
         "language": "de",
         "text": "ich bin sehr enttäuscht von dem akku der hält…"
+      },
+      "3:en": {
+        "index": 131,
+        "sourceIndex": 3,
+        "sourceLanguage": "fr",
+        "sourceText": "une cliente de notre magasin a acheté un masque LED au mois de juin et n'arrive plus à recharger l'appareil",
+        "sourceHash": "5024c9312a97bb4553af1838e8a3d2f5aba4718e1fb991bbf2871f07d988cf36",
+        "language": "en",
+        "text": "a customer from our store bought a LED mask in June and can't recharge the device anymore"
+      },
+      "3:es": {
+        "index": 132,
+        "sourceIndex": 3,
+        "sourceLanguage": "fr",
+        "sourceText": "une cliente de notre magasin a acheté un masque LED au mois de juin et n'arrive plus à recharger l'appareil",
+        "sourceHash": "5024c9312a97bb4553af1838e8a3d2f5aba4718e1fb991bbf2871f07d988cf36",
+        "language": "es",
+        "text": "una cliente de nuestra tienda compró una máscara LED en junio y ya no puede cargar el aparato"
+      },
+      "3:it": {
+        "index": 133,
+        "sourceIndex": 3,
+        "sourceLanguage": "fr",
+        "sourceText": "une cliente de notre magasin a acheté un masque LED au mois de juin et n'arrive plus à recharger l'appareil",
+        "sourceHash": "5024c9312a97bb4553af1838e8a3d2f5aba4718e1fb991bbf2871f07d988cf36",
+        "language": "it",
+        "text": "una cliente del nostro negozio ha acquistato una maschera LED nel mese di giugno e non riesce più a ricaricare l'apparecchio"
+      },
+      "3:de": {
+        "index": 134,
+        "sourceIndex": 3,
+        "sourceLanguage": "fr",
+        "sourceText": "une cliente de notre magasin a acheté un masque LED au mois de juin et n'arrive plus à recharger l'appareil",
+        "sourceHash": "5024c9312a97bb4553af1838e8a3d2f5aba4718e1fb991bbf2871f07d988cf36",
+        "language": "de",
+        "text": "eine Kundin aus unserem Geschäft hat im Juni eine LED-Maske gekauft und kann das Gerät nicht mehr aufladen"
       }
     },
     "PR-27": {

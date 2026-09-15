@@ -267,13 +267,14 @@ test('the real corpus declares exactly the foreign phrasings it holds', async ()
     e.phrasings.filter((p) => p.language !== 'fr').map((p) => `${e.exemplarKey}:${p.language}`)
   );
 
-  // Eleven, and the count is the point: before the marker existed every one of
+  // Twelve, and the count is the point: before the marker existed every one of
   // these was written to the table as French, so the language column measured
-  // the opposite of what it was added to measure.
-  assert.equal(foreign.length, 11);
+  // the opposite of what it was added to measure. The twelfth is D-01's Italian
+  // near miss, added 2026-09-15.
+  assert.equal(foreign.length, 12);
   assert.deepEqual(
     [...new Set(foreign.map((f) => f.split(':')[1]))].sort(),
-    ['en', 'es', 'nl']
+    ['en', 'es', 'it', 'nl']
   );
   assert.ok(
     !warnings.some((w) => /language marker/.test(w)),

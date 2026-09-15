@@ -197,6 +197,7 @@ function Step({ event }: { event: TraceEvent }) {
           <ClaimList label="Unverified" items={(event.unverified as unknown[]) ?? []} />
           <ClaimList label="Missing — only the customer can supply these" items={(event.missing as unknown[]) ?? []} />
           <ClaimList label="Must not claim" items={(event.doNotClaim as unknown[]) ?? []} />
+          <SituationBlock situation={event.situation} />
           <PolicyBlock
             policy={event.policy}
             verdict={str(event.verdict)}
@@ -471,6 +472,92 @@ function TrackingParcelList({ parcels }: { parcels: TrackingParcel[] }) {
   );
 }
 
+const SITUATION_VERDICT_LABELS: Record<string, string> = {
+  matched: "matched",
+  ambiguous: "too close to call between the top two",
+  near: "the nearest was below the match threshold",
+  none: "nothing close",
+};
+
+/**
+ * Which recurring situation the opening message was matched to.
+ *
+ * SHOWN BECAUSE MOST RULES ARE BEHIND IT. A rule that names a situation is only
+ * a candidate once that situation matched, so a run that matched none reaches
+ * only the unconditional rules — and the policy block alone cannot say why.
+ *
+ * THE NEAREST SITUATION IS SHOWN ON A MISS TOO. A near miss wants more phrasings
+ * on that situation; nothing close wants a new one. « No situation » alone
+ * cannot tell them apart.
+ */
+function SituationBlock({ situation }: { situation: unknown }) {
+  // Runs saved before the match was traced carry no field at all.
+  if (situation === undefined) {
+    return (
+      <Fields>
+        <Field label="Situation">not recorded — this run predates situation tracing; run it again to see it</Field>
+      </Fields>
+    );
+  }
+  const s = (situation && typeof situation === "object" ? situation : {}) as Record<string, unknown>;
+  const verdict = str(s.verdict);
+  if (!verdict) {
+    return (
+      <Fields>
+        <Field label="Situation">unknown — the matcher returned no result (it failed, or was not run)</Field>
+      </Fields>
+    );
+  }
+
+  const key = str(s.exemplar_key);
+  const closest = str(s.closest);
+  const question = str(s.closest_question);
+  const runnerUp = str(s.runner_up);
+  const resolvedFrom = Array.isArray(s.resolved_from) ? (s.resolved_from as unknown[]).map(str).filter(Boolean) : [];
+  const needs = Array.isArray(s.requirement_needs) ? (s.requirement_needs as unknown[]).map(str).filter(Boolean) : [];
+  const chooser = (s.chooser && typeof s.chooser === "object" ? s.chooser : null) as Record<string, unknown> | null;
+  const byModel = s.chosen_by === "model";
+
+  return (
+    <Fields>
+      <Field label="Situation">
+        {key
+          ? byModel
+            ? `${key} — chosen by the model: the score alone was ${SITUATION_VERDICT_LABELS[verdict] ?? verdict}`
+            : resolvedFrom.length > 0
+              ? `${key} — a tie between ${resolvedFrom.join(" and ")}, settled because the rules treat them the same`
+              : key
+          : `none matched — ${SITUATION_VERDICT_LABELS[verdict] ?? verdict}`}
+      </Field>
+      {chooser ? (
+        <Field label="Situation chooser">
+          {chooser.skipped === "own_side"
+            ? "not asked — the message is from our own side"
+            : chooser.failed
+              ? "the call failed, so no situation was kept"
+              : `${str(chooser.choice) === "none" ? "answered none" : `picked ${str(chooser.choice)}`} from ${
+                  Array.isArray(chooser.candidates) ? (chooser.candidates as unknown[]).map(str).join(", ") : "—"
+                }${str(chooser.reason) ? ` — « ${str(chooser.reason)} »` : ""}${str(chooser.model) ? ` (${str(chooser.model)})` : ""}`}
+        </Field>
+      ) : null}
+      {closest ? (
+        <Field label={key ? "Its question" : "Nearest situation"}>
+          {question ? `${closest} — « ${question} »` : closest}
+        </Field>
+      ) : null}
+      {typeof s.similarity === "number" ? (
+        <Field label="Similarity">
+          {/* Three places, not `fmt`'s two: the margin threshold is 0.01, so a
+              rounded margin would hide exactly the tie it is there to show. */}
+          {s.similarity.toFixed(3)}
+          {typeof s.margin === "number" && runnerUp ? ` · ${s.margin.toFixed(3)} ahead of ${runnerUp}` : ""}
+        </Field>
+      ) : null}
+      {needs.length > 0 ? <Field label="Needs it declares">{needs.join(", ")}</Field> : null}
+    </Fields>
+  );
+}
+
 /**
  * The policy rule this evidence selected, and what it did.
  *
@@ -540,7 +627,6 @@ function PolicyBlock({
           {answerKey ?? `no rule matched (${str(p.verdict) ?? "none"})`}
         </Field>
         <Field label="Answer set">{answerSet ?? str(p.answer_set) ?? "—"}</Field>
-        {str(p.situation_key) ? <Field label="Situation">{str(p.situation_key)!}</Field> : null}
         <Field label="Routing">
           {route
             ? applied

@@ -1,35 +1,48 @@
 import { AppShell } from "@/components/app-shell/AppShell";
-import { ForwardingSettings } from "@/components/settings/ForwardingSettings";
-import { getShopId } from "@/lib/server/knowledge-service";
-import { listForwarding } from "@/lib/server/forwarding-service";
-import type { CategoryForwarding } from "@/lib/types";
+import { SettingsView, type SettingsMe, type SettingsTab } from "@/components/settings/SettingsView";
+import { getAgentRoster } from "@/lib/server/agent-settings-service";
+import { getSession } from "@/lib/server/auth";
 import { navBadgeCounts } from "@/lib/server/conversation-badge";
+import { ROLE_LABELS, canAccessPath } from "../../../scripts/lib/dashboard-auth.mjs";
 
 export const dynamic = "force-dynamic";
 
-/**
- * Settings. Today this is the forwarding address book; it is the first thing
- * that needed a home outside the knowledge workflow.
- *
- * Loads server-side for the same reason the Agent Setup page does: the list
- * renders with real values on first paint instead of flashing empty. Edits go
- * through the Forwarding API client-side.
- */
-export default async function SettingsPage() {
-  const badges = await navBadgeCounts();
-  let initialForwarding: CategoryForwarding[] = [];
-  let loadError: string | null = null;
+/** The areas "My info" reports access to, in sidebar order. */
+const AREAS = [
+  { label: "Home chat", path: "/home" },
+  { label: "Tickets", path: "/tickets" },
+  { label: "Conversations", path: "/conversations" },
+  { label: "Orders", path: "/orders" },
+  { label: "Insights — Sales", path: "/insights/sales" },
+  { label: "Insights — other panels", path: "/insights/fulfilment" },
+  { label: "Agent Setup", path: "/agent-setup" },
+];
 
-  try {
-    const shopId = await getShopId();
-    initialForwarding = await listForwarding(shopId);
-  } catch (error) {
-    loadError = error instanceof Error ? error.message : "Failed to load forwarding settings.";
-  }
+/**
+ * Settings: two tabs, held in the URL (`?tab=agents`) so each can be linked.
+ * Only the open tab's data is read — the agent table costs two queries that
+ * My info has no use for.
+ */
+export default async function SettingsPage({ searchParams }: { searchParams?: { tab?: string } }) {
+  const tab: SettingsTab = searchParams?.tab === "agents" ? "agents" : "me";
+  const [badges, user, roster] = await Promise.all([
+    navBadgeCounts(),
+    getSession(),
+    tab === "agents" ? getAgentRoster() : Promise.resolve(null),
+  ]);
+
+  const me: SettingsMe | null = user
+    ? {
+        name: user.displayName,
+        email: user.email,
+        roleLabel: ROLE_LABELS[user.role] ?? user.role,
+        access: AREAS.map((area) => ({ label: area.label, allowed: canAccessPath(user.role, area.path) })),
+      }
+    : null;
 
   return (
     <AppShell activeHref="/settings" {...badges}>
-      <ForwardingSettings initialForwarding={initialForwarding} loadError={loadError} />
+      <SettingsView tab={tab} me={me} roster={roster} />
     </AppShell>
   );
 }

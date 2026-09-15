@@ -62,6 +62,12 @@ export function loadAgentConfig(env = loadEnv(REPO_ROOT)) {
     // Categoriser: same cheap tier as triage — it picks 1-of-14 plus 1-of-4 with
     // the enums constrained by Structured Outputs, not free reasoning.
     categoriserModel: env.AGENT_CATEGORISER_MODEL || 'gpt-4o-mini',
+    // Settles a situation the matcher scored as a near miss or a tie, by reading
+    // the message beside the candidates — a constrained 1-of-3-or-none, the cheap
+    // tier's job. Set to an empty string to turn it off: near misses then keep no
+    // situation, which is what they did before it existed.
+    situationChooserModel:
+      env.AGENT_SITUATION_CHOOSER_MODEL === undefined ? 'gpt-4o-mini' : env.AGENT_SITUATION_CHOOSER_MODEL,
     // Investigation is the first stage that CHOOSES what to do, so it is the
     // first that needs reliable tool calling rather than a single constrained
     // answer — a mid tier, per the plan's model tiers. The budget below is what

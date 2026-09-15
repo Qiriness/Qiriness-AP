@@ -40,15 +40,15 @@ const NAV: NavItem[] = [
     chip: "Beta",
     visibleTo: (role) => canUseManagementChat(role),
   },
-  { label: "Conversations", href: "/conversations", icon: ChatIcon, available: true },
-  { label: "Tickets", href: "/tickets", icon: TicketIcon, available: true },
   // Points at the section, not at a panel. `isActive` is an exact match, so
   // every page under /insights passes "/insights" as its activeHref and the
   // panel tabs inside handle the rest.
   { label: "Insights", href: "/insights", icon: InsightsIcon, available: true },
+  { label: "Tickets", href: "/tickets", icon: TicketIcon, available: true },
   // `/orders/[id]` passes "/orders" as its activeHref, as Insights does.
   { label: "Orders", href: "/orders", icon: OrdersIcon, available: true },
   { label: "Agent Setup", href: "/agent-setup", icon: AgentIcon, available: true },
+  { label: "Conversations", href: "/conversations", icon: ChatIcon, available: true },
   { label: "Settings", href: "/settings", icon: SettingsIcon, available: true },
 ];
 

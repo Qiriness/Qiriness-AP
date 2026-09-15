@@ -1387,6 +1387,34 @@ The condition now compares what the rules **do**: identical conditions, route, a
 
 The verdict stays `ambiguous` and `resolved_from` records what was level, so a corpus review still sees the pair asking to be merged. Overwriting it with `matched` would erase the only evidence that the embeddings cannot separate them.
 
+### A near miss is settled by a model, and it went live without a shadow phase (2026-09-15)
+
+**This narrows « one exemplar or none, never a shortlist » above, and the reasoning there still holds.** That rule refused to hand a shortlist downstream because the choice would land « somewhere with less information ». A model reading the full opening message beside the candidates has *more* information than the embedding score, so the shortlist now goes to it — and nowhere else. The investigation still receives one situation or none.
+
+**Where it runs:** only when the matcher scored `near` (0.55–0.65) or `ambiguous`, only on the opening message, only among the matcher's own candidates (subject-filtered, top 3), and before the rules load — so the situation it picks drives the evidence collected and the rule selected, exactly as a mechanical match does. A score of 0.65+ stays mechanical; below 0.55 nothing is plausible enough to choose between.
+
+**Measured before it shipped**, on the 56 near misses and ties in `ticket_investigations` and the 53 existing matches as a control, every committed choice read by hand against the customer's message:
+
+| | tickets | read as right |
+|---|---|---|
+| near/tie — agreed with the top candidate | 26 | 22 |
+| near/tie — picked another candidate | 9 | 6 (2 wrong, 1 unclear) |
+| near/tie — answered none | 21 | 18 |
+| matched — agreed | 47 of 53 | — |
+
+It commits a situation on **35 tickets that had none, about 80% right**. The wins are the mechanism the embedding cannot see: a customer's one line above a quoted Colissimo or Shopify notification, an Italian message against French phrasings, the right situation sitting second (D-36 → D-07, D-36 → D-01, O-12 → P-17). **The owner chose to act on it immediately rather than record-only first**, with that 80% as the known price.
+
+**Three fixes from the measurement are in the shipped version:**
+- **Our own side is skipped** (`OWN_SIDE_LABELS` on the opening sender): four of the errors were colleague-to-warehouse threads worded like a customer situation.
+- **A request phrased as a question is still its situation.** Three control « none » answers were « comment bénéficier des 20 % ? » against P-15/P-18 — the prompt now says so.
+- **No confidence field.** It said `high` on all 109, so it could never gate anything.
+
+**Recorded, not hidden.** `exemplar_match.verdict` keeps what the embedding said (`near`/`ambiguous`); `chosen_by: 'model'` and `chooser {model, choice, reason, candidates}` say who supplied the key — so coverage reports can still count the misses the corpus did not catch. `chooser.skipped` / `chooser.failed` distinguish not-asked from asked-and-failed. A failed call is no situation, never a failed investigation. The reason is shown in the test chat but is not evidence: one of 109 invented a detail.
+
+**Its spend is its own pass**, `situation` in `llm_usage`, so Settings → Agent settings shows it as a row. `AGENT_SITUATION_CHOOSER_MODEL` (default `gpt-4o-mini`, empty = off).
+
+**What it cannot fix:** a right situation filed under another subject is not among the candidates (5 of the 56 — P-17 under `order`, D-08 under `order`, D-36 under `return_exchange`). That is categorisation, and phrasings.
+
 ### Answers are shared across exemplars, not nested inside them
 
 Nesting is the obvious shape and it multiplies: 32 situations × 3–5 branches ≈ 100–160 drafts, most of them duplicates — « votre commande n'est pas encore expédiée » answers both *where is my order* and *why has it not shipped*.
@@ -2097,6 +2125,16 @@ One box above four tables re-cut every section at once, and the row you were loo
 
 **One focus ring, painted on the wrapper.** The old box drew two on every click — the wrapper's teal ring, plus `--shadow-focus` from the global `:focus-visible` rule in `globals.css`, which lands on the inner `input` as well. `outline: none` never suppressed it because that global rule uses a **box-shadow**, not an outline; the input needs `box-shadow: none` under `:focus-visible` specifically. Anything else that puts a bare input inside a styled wrapper will hit this.
 
+### Where the reviewer was lives in the address (2026-09-15)
+
+Leaving `/tickets` used to throw away the open ticket, the tab and every filter, so checking an order mid-investigation meant finding the ticket again. **The tab, level, category, sender, sort, the active tab's search and the selected ticket (or dropped mail) are now query parameters**, as on Orders: Back, refresh and a pasted link all land on the same ticket. Defaults are omitted, so an untouched page is still plain `/tickets`.
+
+- **`replaceState`, never a push.** Each click would otherwise be a Back-button entry, and Back should leave the page, not undo a filter.
+- **The address alone does not survive the sidebar**, whose link is a bare `/tickets`. So the last address is also kept in `sessionStorage` (`tickets.lastSearch`), and a bare `/tickets` restores from it once on mount. **Session, not local**: it lasts for the browser tab, so the app opened days later does not start on a stale ticket. An address that carries its own state always wins over the saved one.
+- **A restored ticket is followed, not trusted.** It may have been closed, aged into Backlog, or be hidden by the filters it was saved with; `reconcilePageState` moves to the tab that holds it now and clears the filters or search that would hide it, because restoring the filters without the ticket renders an empty panel. A ticket no longer on this page is dropped.
+- **Only the active tab's search is kept.** The per-section boxes are separate state, but one `q` is enough to come back to what you were reading.
+- **Unsent draft edits are not part of it.** That is an unsaved-changes problem, not a navigation one.
+
 ### Two scrollers on the tickets page, and the document is not one of them
 
 **One per table, one for the page, and nothing above that.** The app is a fixed frame: the sidebar and topbar stay put while `AppShell`'s `.content` scrolls under them. A scrollbar on the document itself moves the whole frame, navigation included, which is the one thing the frame exists to prevent.
@@ -2514,6 +2552,14 @@ A rehearsal you cannot look at again answers only "does it work right now". The 
 
 The row keeps the MASK of the address and neither the plaintext nor a hash — nothing here matches on one, so a hash would be a bare identifier with no reader. Re-running an old test means typing the address again, which is the correct price.
 
+### The situation match is on the run (2026-09-15)
+
+49 of the 52 `orders` rules name a situation and are candidates only once it matched, so a run that matched none reaches the three unconditional rules. The first run this was checked on (« Retard Commande », an overdue unshipped order) matched no situation and got `non_expediee` instead of `d01_expedition_en_retard` — and the trace could not say why, because `exemplar_match` is written only by the case-file store, which a rehearsal holds in memory and discards.
+
+`runInvestigation` now passes `exemplarMatch` to `onResult`, and the rehearsal emits it on the `case_file` step as `situation`. The transcript shows the matched key, or on a miss the nearest situation with its canonical question, the similarity and the margin over the runner-up: a near miss wants more phrasings, nothing close wants a new situation. `{}` means the matcher threw or was not wired; a run saved before this has no field and says so.
+
+`closest_question` was added to the stored `exemplar_match` summary for the same reason, and is therefore also written on real investigations — additive to a jsonb nothing reads by shape.
+
 ### A rule the transcript cannot show is a rule nobody reviews
 
 The rehearsal has always run the REAL rules — `loadAnswers` reads the same table the worker does, because a transcript is worth nothing if the policy it shows is not the policy. What it showed of them was thinner than what it applied, in three ways, and each one hid the question a reviewer was there to ask.
@@ -2810,6 +2856,7 @@ Asked for by the owner, under the Customers panel's base cards: build a group of
 - **Spend is net of refunds, cancelled orders excluded,** the figure Sales and the VIP rule use. Lifetime is computed from our orders, not Shopify's `amount_spent`, so the windowed and lifetime figures cannot disagree about what a euro is; the order history starts at the shop's first order (#1001), so nothing is missing from it. Comparisons are strict, because the screen says "more than".
 - **Fails closed.** An unknown metric or operator makes its condition false, not true, and an empty group matches nobody — the route validates first, SQL is the second lock. One totals row always comes back, so zero matches is a figure.
 - **Nothing runs until "Find customers".** The result names people, and every search that names anyone writes a `data_access_events` row (counts, never names). A live preview on every keystroke would have written one per keystroke.
+- **Pinnable like any row** (`pin="segment-finder"`, owner's request 2026-09-15). Pinning moves it through a portal, which remounts it, so the conditions and the last result reset — acceptable for a one-off layout choice, and cheaper than lifting the form state out of the component.
 
 Checked live 2026-09-14: five segments, including both AND/OR orderings, match an independent recount from `orders` exactly (225, 186, 215, 233, 11); the base equals customers on file minus synthetic records; 0.3–0.7 s a search (4.4 s cold).
 
@@ -2849,11 +2896,19 @@ Every row on every panel carries a pin in the top-right corner of its rightmost 
 - **Per viewer, per panel, in the browser.** Which rows someone keeps at the top is a personal view, so it lives in `localStorage` under `qiriness.insights.pins.<panel>`, read after mount (the first render matches the server's, no pins) and guarded on every access. A pin whose row is not on the page today leaves no empty band.
 - **Every row needs a stable id** — `<Grid pin="…" label="…">`. Renaming an id forgets that pin for anyone who had it; the label is only the button's accessible name.
 
+### Settings shows the model that ran, not the one configured here (2026-09-15)
+
+Asked for by the owner: a Settings table of the agents with their model and key figures, and forwarding moved into Agent Setup (it decides where the agent sends mail).
+
+- **The model column leads with what `llm_usage` recorded.** The worker reads its own environment on another machine, so the dashboard's `AGENT_*_MODEL` can differ from what actually runs; the recorded model on every call cannot. The configured model shows only for an agent with no call in 30 days, marked "Not run", and a second model in the window is listed, so a mid-window change is visible.
+- **Read-only.** Changing a model is an env var and a worker restart; a dashboard switch would write a setting the worker does not read.
+- **The management chat is read from `chat_turns`**, since its tokens are deliberately kept out of `llm_usage`; test-chat runs are in neither and are not counted.
+
 ### Large screens get a larger UI, not wider margins (2026-09-11)
 
 On a wide monitor the dashboard sat in the middle at a laptop's size: Insights stopped at 1480px and centred, and everything was sized for 16px. Three changes, and smaller screens are untouched by all of them:
 
-- **The root size steps up above 1600px** (17px, 18px from 1920, 20px from 2400) in `globals.css`. Nearly every size in the app is in rem, so type, spacing, cards and the sidebar grow together, in proportion. The sidebar width moved from px to rem for that reason, and its icons are sized in CSS rather than by their `size` prop.
+- **The root size steps up above 1600px** (12.8px base, 13.2px from 1600, 13.6px from 1920, 15.2px from 2400) in `globals.css`. It first shipped at 16 / 17 / 18 / 20px; on 2026-09-15 the owner found that too zoomed, and after a first ~5% cut asked for 80% of that across every tier, small screens included. Nearly every size in the app is in rem, so type, spacing, cards and the sidebar grow together, in proportion. The sidebar width moved from px to rem for that reason, and its icons are sized in CSS rather than by their `size` prop.
 - **Insights fills the window** up to the same 2400px ceiling Tickets and Agent Setup use, with a gutter of `clamp(1rem, 2.4vw, 3rem)`. It had no padding of its own, so a narrow window used to put the cards flush against the sidebar.
 - **Charts grow taller with their width**, up to 1.6x their base height, because a chart stretched across 2000px at 280px tall reads as a flat line. Axis text is in rem and the room reserved for it follows the root size.
 

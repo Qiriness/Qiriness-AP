@@ -3,7 +3,7 @@ import { supabaseUpsert } from '../../../scripts/lib/supabase-rest-client.mjs';
 import { COLUMNS, T } from '../../../scripts/lib/tables.mjs';
 import { attemptsSoFar } from '../../../scripts/lib/ticket-record.mjs';
 
-import { emptySenderDirectory } from '../ingestion/sender-directory.mjs';
+import { OWN_SIDE_LABELS, emptySenderDirectory } from '../ingestion/sender-directory.mjs';
 
 import { TICKET_STATUS_BY_VERDICT } from './case-file.mjs';
 import { summariseNeeds } from './evidence-rules.mjs';
@@ -76,6 +76,12 @@ export async function runInvestigation({
   // on it, and the situation key is used only after the ledger is closed, to
   // pick a policy rule for the shadow record.
   retrieveExemplar = null,
+  // Settles a NEAR MISS OR A TIE by asking a small model which of the matcher's
+  // candidates the opening message describes, or none. OPTIONAL: absent, a near
+  // miss keeps no situation, as it did before. It runs before the rules load, so
+  // the situation it picks drives the evidence collected and the rule selected.
+  // See `situation-chooser.mjs`.
+  chooseSituation = null,
   // The policy rules for a ticket's answer set. OPTIONAL and absent by default,
   // so a caller that has not wired it runs exactly as it did before — the same
   // contract as `retrieveExemplar` and `lastOrderLookup`.
@@ -173,7 +179,7 @@ export async function runInvestigation({
     const openingMessage = messages[0];
 
     const exemplarMatch = await matchExemplar({
-      retrieveExemplar, ticket, message: openingMessage, shopId, logger
+      retrieveExemplar, chooseSituation, senderDirectory, ticket, message: openingMessage, shopId, logger
     });
 
     // WHICH RULES COULD APPLY, loaded before the run and read after it.
@@ -228,7 +234,9 @@ export async function runInvestigation({
     const level = ratchetLevel(ticket.level, caseFile.proposedLevel);
 
     counts[caseFile.verdict] += 1;
-    onResult?.({ ticket, caseFile, level });
+    // The match goes out with the case file because the test chat has no row to
+    // read it back from — its store is in memory and discarded with the run.
+    onResult?.({ ticket, caseFile, level, exemplarMatch });
 
     if (!dryRun) {
       // THE CASE FILE FIRST, THE TICKET SECOND, and the order matters: the
@@ -442,11 +450,13 @@ function buildInput(ticket, messages, senderDirectory, exemplarNeeds = [], polic
  * - `runner_up` because a persistent near-tie between the same two situations is
  *   the corpus asking to be merged, which is only visible across many rows.
  */
-async function matchExemplar({ retrieveExemplar, ticket, message, shopId, logger }) {
+async function matchExemplar({ retrieveExemplar, chooseSituation = null, senderDirectory = null, ticket, message, shopId, logger }) {
   if (!retrieveExemplar) return {};
 
+  let summary;
+  let result;
   try {
-    const result = await retrieveExemplar(
+    result = await retrieveExemplar(
       {
         subject: message.subject,
         body: message.body_text,
@@ -460,10 +470,13 @@ async function matchExemplar({ retrieveExemplar, ticket, message, shopId, logger
       { shopId }
     );
 
-    return {
+    summary = {
       verdict: result.verdict,
       exemplar_key: result.exemplar?.exemplarKey ?? null,
       closest: result.candidates?.[0]?.exemplarKey ?? null,
+      // The nearest situation's canonical question, so a reader of a miss sees
+      // WHAT it almost was without looking the key up.
+      closest_question: result.candidates?.[0]?.question ?? null,
       similarity: round3(result.bestSimilarity),
       margin: round3(result.margin),
       runner_up: result.candidates?.[1]?.exemplarKey ?? null,
@@ -485,6 +498,76 @@ async function matchExemplar({ retrieveExemplar, ticket, message, shopId, logger
     });
     return {};
   }
+
+  await settleWithChooser({ summary, result, chooseSituation, senderDirectory, ticket, message, logger });
+  return summary;
+}
+
+/**
+ * A near miss or a tie, settled by the chooser — or left unsettled, and recorded
+ * either way under `chooser`.
+ *
+ * THE VERDICT IS LEFT AS THE MATCHER GAVE IT. `near` or `ambiguous` stays the
+ * record of what the embedding could and could not tell, exactly as a settled
+ * tie keeps `ambiguous`; `chosen_by: 'model'` says who supplied the key. A
+ * report of how the corpus is covering tickets must still be able to count the
+ * misses the model rescued.
+ *
+ * OUR OWN SIDE IS SKIPPED. A colleague writing to the warehouse is not a customer
+ * describing a situation, and measured it was where the chooser went wrong: four
+ * internal threads, some given a situation they were only worded like.
+ *
+ * A FAILED CALL IS NO SITUATION, never a failed investigation — the same contract
+ * the matcher itself keeps.
+ */
+async function settleWithChooser({ summary, result, chooseSituation, senderDirectory, ticket, message, logger }) {
+  if (!chooseSituation || summary.exemplar_key) return;
+  if (summary.verdict !== 'near' && summary.verdict !== 'ambiguous') return;
+
+  const sender = senderDirectory?.lookup?.(message.from_email);
+  if (sender && OWN_SIDE_LABELS.includes(sender.label)) {
+    summary.chooser = { skipped: 'own_side' };
+    return;
+  }
+
+  let picked;
+  try {
+    picked = await chooseSituation({
+      subject: message.subject,
+      body: message.body_text,
+      candidates: result.candidates ?? [],
+      ticketId: ticket.id
+    });
+  } catch (error) {
+    logger?.warn?.('investigate.situation_chooser_failed', { ticketId: ticket.id, error: error.message });
+    summary.chooser = { failed: true };
+    return;
+  }
+
+  summary.chooser = {
+    model: picked.model,
+    choice: picked.choice ?? 'none',
+    reason: picked.reason,
+    candidates: picked.candidates
+  };
+
+  const chosen = picked.choice
+    ? (result.candidates ?? []).find((candidate) => candidate.exemplarKey === picked.choice)
+    : null;
+  if (!chosen) return;
+
+  summary.exemplar_key = chosen.exemplarKey;
+  summary.requirement_needs = chosen.requirementNeeds ?? [];
+  summary.chosen_by = 'model';
+  // Settled: a tie the model decided is not handed on for the rules to decide.
+  summary.tied = [];
+
+  logger?.info?.('investigate.situation_chosen', {
+    ticketId: ticket.id,
+    chosen: chosen.exemplarKey,
+    verdict: summary.verdict,
+    similarity: summary.similarity
+  });
 }
 
 function round3(value) {
@@ -643,7 +726,8 @@ function resolveTiedSituation({ exemplarMatch, policy, ticket, logger }) {
   const tied = exemplarMatch?.tied ?? [];
   delete exemplarMatch?.tied;
 
-  if (!policy || exemplarMatch?.verdict !== 'ambiguous') {
+  // A key already set means the chooser settled it; the rules are not asked again.
+  if (!policy || exemplarMatch?.verdict !== 'ambiguous' || exemplarMatch?.exemplar_key) {
     return;
   }
 

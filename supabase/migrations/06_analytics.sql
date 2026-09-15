@@ -106,7 +106,7 @@ create table public.llm_usage (
   -- a check constraint cannot import a module, so 06_analytics.test.mjs is what
   -- stops the two drifting apart.
   constraint llm_usage_pass_check check (
-    pass in ('spam', 'categorise', 'decompose', 'investigate', 'draft', 'embed', 'other')
+    pass in ('spam', 'categorise', 'decompose', 'situation', 'investigate', 'draft', 'embed', 'other')
   ),
   constraint llm_usage_input_tokens_check check (input_tokens >= 0),
   -- Deliberately NOT `<= input_tokens`. Usage is bookkeeping riding beside real
