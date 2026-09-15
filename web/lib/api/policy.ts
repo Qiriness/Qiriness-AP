@@ -46,6 +46,8 @@ export interface SaveRulePayload {
   knowledgeDocumentId: string | null;
   /** Tone keys, in catalogue order. Empty means the Brand voice alone. */
   tones: string[];
+  /** A page the reply offers and what it opens, or null. https only. */
+  link: { url: string; label: string } | null;
   priority: number;
   isFallback: boolean;
 }

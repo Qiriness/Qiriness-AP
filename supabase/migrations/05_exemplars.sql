@@ -418,6 +418,17 @@ create table public.support_answers (
   --
   -- `'{}'` means the Brand voice alone -- one representation, as `ask` has.
   tones text[] not null default '{}'::text[],
+  -- A LINK THIS RULE OFFERS THE CUSTOMER, and what it opens -- both, or neither.
+  --
+  -- THE MODEL NEVER SEES `link_url`. It is given `link_label` (« le guide
+  -- d'utilisation ») and writes a marker, `[[ici]]`, which code turns into the
+  -- link wherever the draft is shown. So `no_web_link` still holds: a URL in a
+  -- draft is still one the model invented. See `scripts/lib/reply-link.mjs`.
+  --
+  -- TYPED PER RULE and checked only for being https: which page a reply points
+  -- at is a person's decision, the same kind `offer_code` is.
+  link_url text,
+  link_label text,
   -- Ordering among rows that match equally deeply. Most-specific wins first;
   -- this only breaks the tie, so authoring order never becomes load-bearing by
   -- accident.
@@ -466,6 +477,17 @@ create table public.support_answers (
     tones <@ array[
       'reassuring', 'empathetic', 'factual', 'firm', 'apologetic', 'understanding'
     ]::text[]
+  ),
+  -- https only, and no whitespace: an address a customer can click, never a
+  -- `javascript:` or a half-pasted line.
+  constraint support_answers_link_url_check check (
+    link_url is null or link_url ~ '^https://[^[:space:]]+$'
+  ),
+  -- A link without a label gives the model nothing to write about; a label
+  -- without a link gives the screen nothing to link.
+  constraint support_answers_link_pair_check check (
+    (link_url is null) = (link_label is null)
+    and (link_label is null or length(btrim(link_label)) between 1 and 120)
   ),
   -- A rule that asks must say so in its route, or the drafting stage gets a
   -- question to ask and a verdict that does not permit asking it —
@@ -536,6 +558,12 @@ comment on column public.support_answers.ask is
 
 comment on column public.support_answers.tones is
   'The tones this rule''s reply should take, as keys of scripts/lib/reply-tones.mjs, which owns their wording. Empty means the Brand voice alone. PER RULE, NOT PER SITUATION: D-01 late wants an apology and D-01 within the window forbids one, and only the branch knows which. When an email carries two requests their rules'' tones are unioned. A tone adjusts the Brand voice in the drafting prompt and never overrides its structural rules.';
+
+comment on column public.support_answers.link_url is
+  'An https page this rule''s reply offers the customer, or null. Never shown to the drafting model: it is given link_label and writes a [[marker]], and code puts this address on the marked word wherever the draft is shown, so no_web_link still holds. Copied onto ticket_drafts.reply_link at drafting time, so editing the rule never re-points a draft already written.';
+
+comment on column public.support_answers.link_label is
+  'What link_url opens, in the words the reply uses (« le guide d''utilisation »). Present exactly when link_url is.';
 
 -- ============================================================================
 -- EXEMPLAR RETRIEVAL

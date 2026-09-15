@@ -150,7 +150,10 @@ export async function runDrafting({
         // was built from, so the check cannot ask for a number the model was
         // never given.
         parcels: orderContext?.order?.delivery?.tracking || [],
-        category: ticket.category
+        category: ticket.category,
+        // The link the prompt described, so the check cannot demand a marker the
+        // model was never told to write.
+        replyLink: caseFile.link
       });
       const passed = checksPassed(checks);
 
@@ -167,6 +170,8 @@ export async function runDrafting({
         language,
         subject: answer?.subject || null,
         bodyText: body,
+        // Copied now, so the [[marker]] keeps pointing where it was written to.
+        replyLink: caseFile.link ?? null,
         checks,
         checksPassed: passed,
         autoSendEligible: autoSendEligible({

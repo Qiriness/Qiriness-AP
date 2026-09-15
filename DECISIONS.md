@@ -660,6 +660,24 @@ Until now tone was one global field — the Brand voice's « tone and voice » �
 
 **No draft moves until somebody picks one.** Every existing rule takes `{}`, and a prompt with no tone is byte-identical to one written before tones existed — asserted in `compose-draft-tones.test.mjs`. **Tone is not mechanically checked**: no pattern proves a reply is « compréhensif ». The review queue is what stands behind it.
 
+### A rule may offer a link, and the model is given a marker, never the address (2026-09-15)
+
+**The demand was already in the live rules.** Four approved skeletons asked for a link nothing could supply: `masque_led_verifications` « donner le lien du guide d'utilisation », `connexion_compte_actif` and `connexion_aucun_compte` pointing at the login and sign-up pages, and `connexion_client_introuvable` claiming the login page's address « figure dans les faits établis » — which it cannot, since nothing in a case file is a URL. That last one is the skeleton-supplies-a-fact failure in its purest form.
+
+**This extends « The reply names the parcel; the number is the link », it does not reverse it.** That decision found that a model handed a URL pastes it — in full mid-sentence, or as markdown nothing renders. So the URL still never reaches the model. The rule carries `link_url` + `link_label`; the prompt section « Lien à proposer au client » gives only the label and asks for one `[[ici]]` marker (the word follows the reply's language); code puts the address on the marked word wherever the draft is shown. `no_web_link` is unchanged and still fails any address the model types.
+
+**« click here », not a bare link**, because that is what was asked for, and because the marked word is the one place a link can sit without the address appearing in the prose.
+
+**The draft keeps its own copy** (`ticket_drafts.reply_link`), taken at drafting time. The marker was written about that address; a rule edited afterwards must not re-point text a reviewer has already read. A column rather than a key of `prompt_inputs`, because the review projection reads it with the body and deliberately leaves `prompt_inputs` out.
+
+**Two checks, one per direction.** `link_placed`: with a link, exactly one marker — none means the customer gets no link, two means two anchors on one page. `no_orphan_link_marker`: without a link, no marker, because a marker nothing can link reaches the customer as « [[ici]] ». Both read the pattern in `scripts/lib/reply-link.mjs`, the same module the dashboard renders through, so a marker the check accepts is always one the screen links.
+
+**One link per reply.** When two requests' rules each carry one, the first is taken — the treatment `offer_code` gets, recorded in `per_request` so the clash is visible.
+
+**https only, and no host allowlist — pending.** The shop's public domain is not recorded anywhere in this codebase (`SHOPIFY_STORE_DOMAIN` is the admin domain), and inventing one would refuse the real addresses. Typed per rule by a person, like a code.
+
+**Not built: sending.** When a send path exists it must turn the marker into an anchor from `reply_link`; a plain-text send has no anchor to make and that choice is undecided. The four skeletons above still say what they said; rewriting them is the first thing to do once their addresses are entered, and saving one takes it off live mail until it is approved again.
+
 ### A completeness gate needs to know who could close the gap, not just that it is open (2026-09-03)
 
 The gate refuses an `answerable` verdict while a declared need is still open. Run over the fresh corpus before enforcing anything, it would downgrade **12 of 91 runs — and on 4 of them every open gap is one nobody can ever close.**

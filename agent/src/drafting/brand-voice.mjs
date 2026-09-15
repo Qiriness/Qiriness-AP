@@ -68,7 +68,8 @@ export const STRUCTURAL_RULES = [
   // ZERO contain a URL. Forbidding them outright costs nothing observed.
   'N’écrire aucune adresse web (http, www) et aucun lien : ni en toutes lettres, ni en markdown ' +
     '[texte](adresse), ni en HTML. Pour parler d’un colis, donner son numéro de suivi tel qu’il ' +
-    'figure dans le dossier — c’est le numéro qui est cliquable pour le lecteur.',
+    'figure dans le dossier — c’est le numéro qui est cliquable pour le lecteur. Lorsque le dossier ' +
+    'propose un lien (« Lien à proposer au client »), l’inclure uniquement par le marqueur [[…]] qui y est décrit.',
   // A GENERAL RULE, and it covers both signals. The prompt carries the fact
   // when we can prove the customer was left waiting (`## Historique de
   // l’échange`); this also catches the cases only their own words reveal —

@@ -1170,16 +1170,24 @@ function DraftResponsePanel({
           )}
 
           {editing ? (
-            <textarea
-              className={styles.editor}
-              value={edited}
-              onChange={(event) => setEdited(event.target.value)}
-              rows={Math.min(18, Math.max(7, edited.split(NEWLINE).length + 2))}
-              aria-label="Edit the drafted reply"
-            />
+            <>
+              <textarea
+                className={styles.editor}
+                value={edited}
+                onChange={(event) => setEdited(event.target.value)}
+                rows={Math.min(18, Math.max(7, edited.split(NEWLINE).length + 2))}
+                aria-label="Edit the drafted reply"
+              />
+              {draft.replyLink && (
+                <p className={styles.related}>
+                  Keep the word in [[double brackets]] where the link to {draft.replyLink.label} goes — it
+                  becomes the link.
+                </p>
+              )}
+            </>
           ) : (
             <pre className={styles.draftBody}>
-              <TrackingText text={draft.body} parcels={thread.parcels} />
+              <TrackingText text={draft.body} parcels={thread.parcels} link={draft.replyLink} />
             </pre>
           )}
 
@@ -1187,7 +1195,7 @@ function DraftResponsePanel({
             <div className={styles.reviewerVersion}>
               <h4>Reviewer version</h4>
               <pre className={styles.draftBody}>
-                <TrackingText text={draft.approvedBody} parcels={thread.parcels} />
+                <TrackingText text={draft.approvedBody} parcels={thread.parcels} link={draft.replyLink} />
               </pre>
             </div>
           )}

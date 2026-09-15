@@ -1,4 +1,5 @@
 import { CAVEATS, MISSING_FIELDS } from '../investigation/case-file.mjs';
+import { findLinkMarkers, normaliseReplyLink } from '../../../scripts/lib/reply-link.mjs';
 
 // What is checked against the drafted text, in code.
 //
@@ -267,7 +268,10 @@ export function runDraftChecks({
   parcels = [],
   // The ticket's subject. Read by one check, to know whether this reply is about
   // where a parcel is.
-  category = null
+  category = null,
+  // The `{ url, label }` the matched rule offered, or null. Read by the two link
+  // checks: one marker when there is a link, none when there is not.
+  replyLink = null
 } = {}) {
   const isHandover = verdict === 'needs_human';
   const text = String(body || '');
@@ -312,6 +316,33 @@ export function runDraftChecks({
       check,
       passed: !hit,
       detail: hit ? `${label} — « ${hit[0]} »` : label
+    });
+  }
+
+  // --- the link a rule offers ---------------------------------------------
+  //
+  // THE MARKER IS HOW THE LINK TRAVELS, so both directions are checked. With a
+  // link: exactly one marker — none leaves the customer without it, two puts two
+  // anchors on one page. Without one: no marker at all, because a marker nothing
+  // can link reaches the customer as « [[ici]] ».
+  const markers = findLinkMarkers(text);
+  const link = normaliseReplyLink(replyLink);
+  if (link) {
+    checks.push({
+      check: 'link_placed',
+      passed: markers.length === 1,
+      detail:
+        markers.length === 1
+          ? `propose le lien — « ${markers[0].anchor} »`
+          : markers.length === 0
+            ? `le dossier propose un lien (${link.label}) et la réponse ne l’inclut pas`
+            : `place le lien ${markers.length} fois au lieu d’une`
+    });
+  } else if (markers.length > 0) {
+    checks.push({
+      check: 'no_orphan_link_marker',
+      passed: false,
+      detail: `contient un marqueur de lien sans lien à y mettre — « [[${markers[0].anchor}]] »`
     });
   }
 

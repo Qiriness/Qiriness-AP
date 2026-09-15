@@ -135,6 +135,13 @@ create table public.ticket_drafts (
   -- draft is prose and gives no account of itself; this is what makes "why did
   -- it say that" answerable without re-running the pass.
   prompt_inputs jsonb not null default '{}'::jsonb,
+  -- THE LINK THIS REPLY OFFERS, as `{ url, label }` from the matched rule, or
+  -- null. Copied at drafting time rather than joined back to the rule: the
+  -- draft's `[[marker]]` was written about THIS address, and a rule edited
+  -- afterwards must not re-point text a reviewer already read. Its own column
+  -- rather than a key of `prompt_inputs`, because the review projection reads it
+  -- with the body and deliberately leaves that column out.
+  reply_link jsonb,
 
   model text,
   drafted_at timestamptz not null default now(),
@@ -154,6 +161,9 @@ create table public.ticket_drafts (
   ),
   constraint ticket_drafts_disposition_check check (
     disposition in ('terminal', 'intermediary')
+  ),
+  constraint ticket_drafts_reply_link_object_check check (
+    reply_link is null or jsonb_typeof(reply_link) = 'object'
   ),
   -- A reply that could not resolve anything cannot be the end of the exchange.
   -- The two columns are derived from the same case file, so this can only fail

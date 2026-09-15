@@ -485,6 +485,8 @@ export async function runRehearsal({
         failedChecks: drafted.failedChecks,
         autoSendEligible: drafted.autoSendEligible,
         promptInputs: drafted.promptInputs,
+        // So the transcript can put the link on the draft's [[marker]].
+        replyLink: drafted.replyLink ?? null,
         calls: callsSince(draftMark)
       });
     } else {

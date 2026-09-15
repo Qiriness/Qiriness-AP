@@ -1,5 +1,6 @@
 import { NEED_KEYS, findingValues, isMoot, needRequires } from './evidence-rules.mjs';
 import { normaliseTones } from '../../../scripts/lib/reply-tones.mjs';
+import { normaliseReplyLink } from '../../../scripts/lib/reply-link.mjs';
 
 // Which answer the evidence selects — and, because it is the same question,
 // which fact to go and establish next.
@@ -103,6 +104,8 @@ export function answerFromRow(row) {
     knowledgeDocumentId: row.knowledge_document_id ?? null,
     // Catalogue keys in catalogue order; a row predating the column reads as none.
     tones: normaliseTones(row.tones),
+    // `{ url, label }` or null; a malformed pair reads as no link.
+    link: normaliseReplyLink({ url: row.link_url, label: row.link_label }),
     priority: row.priority ?? 0,
     isFallback: Boolean(row.is_fallback)
   };

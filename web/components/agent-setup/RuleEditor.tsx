@@ -6,6 +6,7 @@ import { ChevronDownIcon, CloseIcon, HelpIcon } from "@/components/icons";
 import { Button } from "@/components/ui/Button";
 import { knowledgeErrorMessage } from "@/lib/api/knowledge";
 import type { SaveRulePayload } from "@/lib/api/policy";
+import { isReplyLinkUrl } from "@/lib/reply-links";
 import type { PolicyRule, PolicySituation, PolicyVocabulary } from "@/lib/types";
 
 import styles from "./RuleEditor.module.css";
@@ -43,7 +44,7 @@ const RECAP_STEPS = [
   "The investigation gathers evidence. Each need ends with one finding, such as an order that is not dispatched.",
   "Among live rules in the answer set, one keyed to the situation beats a shared one; then the rule matching more conditions wins. Priority only breaks a tie.",
   "The winning rule decides where the ticket goes and what to ask. It can hand a ticket to the customer or a person, never declare one safe to answer.",
-  "Its guidance, tone, code and article reach the drafting agent as instructions — never sent as written.",
+  "Its guidance, tone, link, code and article reach the drafting agent as instructions — never sent as written.",
   "Saving keeps a rule as a draft. It touches real mail only once it is put live.",
 ];
 
@@ -111,11 +112,16 @@ export function RuleEditor({
   const [offerCode, setOfferCode] = useState(rule?.offerCode ?? "");
   const [knowledgeDocumentId, setKnowledgeDocumentId] = useState(rule?.knowledgeDocumentId ?? "");
   const [tones, setTones] = useState<string[]>(rule?.tones ?? []);
+  const [linkUrl, setLinkUrl] = useState(rule?.link?.url ?? "");
+  const [linkLabel, setLinkLabel] = useState(rule?.link?.label ?? "");
   const [scopeOpen, setScopeOpen] = useState(() => !(rule?.answerSet ?? seed?.answerSet ?? answerSets[0]));
   const [showAllNeeds, setShowAllNeeds] = useState(false);
   const [closeBlocked, setCloseBlocked] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const trimmedLinkUrl = linkUrl.trim();
+  const trimmedLinkLabel = linkLabel.trim();
 
   const payload: SaveRulePayload = {
     answerSet: answerSet.trim(),
@@ -128,6 +134,7 @@ export function RuleEditor({
     offerCode: offerCode || null,
     knowledgeDocumentId: knowledgeDocumentId || null,
     tones,
+    link: trimmedLinkUrl || trimmedLinkLabel ? { url: trimmedLinkUrl, label: trimmedLinkLabel } : null,
     priority: rule?.priority ?? 0,
     isFallback: rule?.isFallback ?? false,
   };
@@ -229,6 +236,15 @@ export function RuleEditor({
   // Mirrors the constraint rather than only reporting it after a round trip.
   const askWithoutRoute = ask.length > 0 && route !== "needs_customer_input";
   const apologyContradiction = tones.includes("apologetic") && FORBIDS_APOLOGY.test(skeleton);
+  // Mirrors the table's two link checks, so the disabled save button explains itself.
+  const linkProblem =
+    !trimmedLinkUrl && !trimmedLinkLabel
+      ? null
+      : !isReplyLinkUrl(trimmedLinkUrl)
+        ? "Use a full https:// address, with no spaces."
+        : !trimmedLinkLabel
+          ? "Say what the link opens — the reply is written around it."
+          : null;
   const routeOptions = ["", ...vocabulary.routes];
 
   async function save() {
@@ -577,6 +593,52 @@ export function RuleEditor({
               </div>
             )}
 
+            {/* A LINK, AND THE MODEL NEVER SEES THE ADDRESS. It is given what the
+                link opens and writes « cliquez [[ici]] … »; the address is put on
+                the marked word wherever the draft is shown. Typed per rule, https
+                only — see `scripts/lib/reply-link.mjs`. */}
+            <div className={styles.field}>
+              <span className={styles.label}>Link</span>
+              <div className={styles.grid2}>
+                <label className={styles.field}>
+                  <span className={styles.hint}>Address</span>
+                  <input
+                    className={styles.input}
+                    type="url"
+                    inputMode="url"
+                    value={linkUrl}
+                    onChange={(e) => setLinkUrl(e.target.value)}
+                    placeholder="https://…"
+                  />
+                </label>
+                <label className={styles.field}>
+                  <span className={styles.hint}>What it opens</span>
+                  <input
+                    className={styles.input}
+                    value={linkLabel}
+                    onChange={(e) => setLinkLabel(e.target.value)}
+                    maxLength={120}
+                    placeholder="le guide d'utilisation"
+                  />
+                </label>
+              </div>
+              {!linkProblem && trimmedLinkUrl ? (
+                <p className={styles.linkPreview}>
+                  In the draft: « cliquez{" "}
+                  <a href={trimmedLinkUrl} target="_blank" rel="noreferrer">
+                    ici
+                  </a>{" "}
+                  pour consulter {trimmedLinkLabel} »
+                </p>
+              ) : (
+                <p className={styles.hint}>
+                  Optional. The drafting agent is given only what it opens and writes a « click here »
+                  sentence; the address goes on « here » wherever the draft is shown.
+                </p>
+              )}
+              {linkProblem && <p className={styles.warn}>{linkProblem}</p>}
+            </div>
+
             <div className={styles.grid2}>
               {/* A PICKER, NEVER A TEXT BOX. A typed code is a key, and a mistyped one
                   reaches a customer looking exactly like a real one. The list is what
@@ -663,7 +725,7 @@ export function RuleEditor({
             <Button
               variant="primary"
               size="sm"
-              disabled={saving || !payload.answerKey || !payload.answerSet || askWithoutRoute}
+              disabled={saving || !payload.answerKey || !payload.answerSet || askWithoutRoute || Boolean(linkProblem)}
               onClick={save}
             >
               {saving ? "Saving…" : "Save as draft"}

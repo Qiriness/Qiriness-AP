@@ -120,13 +120,22 @@ export function TranscriptParcels({
 }
 
 /** Verbatim text — a prompt, a tool's answer, a draft. Never re-wrapped. */
-export function Verbatim({ label, text }: { label?: string; text: string }) {
+export function Verbatim({
+  label,
+  text,
+  link = null,
+}: {
+  label?: string;
+  text: string;
+  /** On a draft only: the link its [[marker]] was written about. */
+  link?: { url: string; label: string } | null;
+}) {
   const parcels = useContext(TranscriptParcelsContext);
   return (
     <div className={styles.verbatim}>
       {label && <p className={styles.verbatimLabel}>{label}</p>}
       <pre className={styles.pre}>
-        <TrackingText text={text} parcels={parcels} />
+        <TrackingText text={text} parcels={parcels} link={link} />
       </pre>
     </div>
   );

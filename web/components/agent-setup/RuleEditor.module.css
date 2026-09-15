@@ -595,6 +595,23 @@
   margin-left: auto;
 }
 
+/* How the link will read in a draft, with « ici » as the real anchor. */
+.linkPreview {
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  border: 1px dashed var(--border-teal);
+  border-radius: var(--radius);
+  background: var(--teal-050);
+  font-size: var(--text-sm);
+  color: var(--text-default);
+}
+
+.linkPreview a {
+  color: var(--teal-ink);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
 @media (max-width: 640px) {
   .header,
   .footer {

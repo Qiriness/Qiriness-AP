@@ -10,6 +10,12 @@ Three sibling files carry the other halves, and this one deliberately does not d
 
 ---
 
+## Rulebook: a rule may offer a « click here » link (2026-09-15)
+
+Phase 3 of the rule editor rework. A rule may carry a **link** — an https address and what it opens — typed in the editor's Reply card, with a preview of « cliquez ici pour consulter … ». The drafting model is never given the address: the prompt section « Lien à proposer au client » gives the description and asks for one `[[ici]]` marker, and the address is put on the marked word in the ticket draft panel, the thread dialog and the test chat. New columns `support_answers.link_url` / `link_label` and `ticket_drafts.reply_link` (the link copied at drafting time), in the 05 and 07 baselines and incremental `25_rule_links.sql`. New draft checks `link_placed` (exactly one marker when a link was offered) and `no_orphan_link_marker`; `no_web_link` unchanged. Shared marker rules in `scripts/lib/reply-link.mjs`. No rule has a link yet, and the four skeletons that ask for one are unchanged until their addresses are entered.
+
+---
+
 ## Rulebook: a rule may set the tone of its reply (2026-09-15)
 
 Phase 2 of the rule editor rework. Rules gain **tones** — Reassuring, Empathetic, Factual & brief, Firm, Apologetic, Understanding — picked as chips in the editor's Reply card, several at once. The catalogue and its French prompt wording are `scripts/lib/reply-tones.mjs`; the column is `support_answers.tones text[]` (default `{}`, meaning the Brand voice alone) with a check holding the same keys, in the 05 baseline and incremental `24_rule_tones.sql`. The matched rule's tones travel on the investigation's policy record (unioned across requests when an email asks two things), reach the drafting prompt as « Ton de cette réponse » after the guidance, and are recorded in the draft's `prompt_inputs`. The inspector and the test transcript show them. The editor warns when Apologetic is picked on guidance that forbids an apology. Existing rules and drafts are unchanged until a tone is picked.

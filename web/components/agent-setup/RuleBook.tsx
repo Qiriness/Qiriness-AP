@@ -584,6 +584,16 @@ function RuleInspector({
             <dd>{toneLabel}</dd>
           </div>
         )}
+        {rule.link && (
+          <div>
+            <dt>Link</dt>
+            <dd>
+              <a href={rule.link.url} target="_blank" rel="noreferrer">
+                {rule.link.label}
+              </a>
+            </dd>
+          </div>
+        )}
         {rule.offerCode && (
           <div>
             <dt>Code</dt>

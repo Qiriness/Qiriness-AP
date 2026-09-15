@@ -165,8 +165,14 @@ export function TicketThreadDialog({ ticket, onClose }: TicketThreadDialogProps)
               />
             ) : (
               <pre className={styles.draft}>
-                <TrackingText text={thread.draft.body} parcels={thread.parcels} />
+                <TrackingText text={thread.draft.body} parcels={thread.parcels} link={thread.draft.replyLink} />
               </pre>
+            )}
+            {editing && thread.draft.replyLink && (
+              <p className={styles.stamp}>
+                Keep the word in [[double brackets]] where the link to {thread.draft.replyLink.label} goes — it
+                becomes the link.
+              </p>
             )}
             {/* The model's text stays above; a reviewer's rewrite is shown as a
                 second block rather than replacing it, because the difference
@@ -175,7 +181,11 @@ export function TicketThreadDialog({ ticket, onClose }: TicketThreadDialogProps)
               <>
                 <h3 className={styles.heading}>Reviewer&apos;s version</h3>
                 <pre className={styles.draft}>
-                  <TrackingText text={thread.draft.approvedBody} parcels={thread.parcels} />
+                  <TrackingText
+                    text={thread.draft.approvedBody}
+                    parcels={thread.parcels}
+                    link={thread.draft.replyLink}
+                  />
                 </pre>
               </>
             )}

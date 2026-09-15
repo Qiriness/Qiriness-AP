@@ -611,6 +611,8 @@ function combinePolicies(selections) {
     offer_code: selections.find((s) => s.offer_code)?.offer_code ?? null,
     knowledge_document_id: selections.find((s) => s.knowledge_document_id)?.knowledge_document_id ?? null,
     tones,
+    // One link per reply, like the code: the first is taken, per_request shows any clash.
+    link: selections.find((s) => s.link)?.link ?? null,
     answer_skeleton: skeleton || null,
     candidates: [...new Set(selections.flatMap((s) => s.candidates))],
     // The findings are one map for the whole ticket, so any selection’s copy is
@@ -624,7 +626,8 @@ function combinePolicies(selections) {
       situation_key: s.situation_key,
       answer_key: s.answer_key,
       route: s.route,
-      tones: s.tones ?? []
+      tones: s.tones ?? [],
+      link: s.link ?? null
     }))
   };
 }
@@ -674,6 +677,9 @@ function selectOnePolicy(policy, ledger, toolNames) {
     // The tones the rule sets for its reply, read back by the drafting pass by
     // name. Always a list; empty is the Brand voice alone.
     tones: result.answer?.tones ?? [],
+    // The link the rule offers, as { url, label }. Recorded whole so a stored run
+    // reads back which page was offered; drafting gives the model only the label.
+    link: result.answer?.link ?? null,
     // The wording guidance, carried so the drafting pass can read it back off
     // the stored row. It is the one field here that reaches a model.
     answer_skeleton: result.answer?.answerSkeleton ?? null,

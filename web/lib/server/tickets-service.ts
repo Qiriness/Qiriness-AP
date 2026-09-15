@@ -443,6 +443,11 @@ function mapDraftRow(row: any): TicketDraft {
     id: row.id,
     body: row.body_text ?? "",
     approvedBody: row.approved_body_text ?? null,
+    // The link the draft's [[marker]] was written about, copied at drafting time.
+    replyLink:
+      row.reply_link && typeof row.reply_link.url === "string" && typeof row.reply_link.label === "string"
+        ? { url: row.reply_link.url, label: row.reply_link.label }
+        : null,
     sourceVerdict: DRAFT_VERDICTS.includes(row.source_verdict) ? row.source_verdict : "answerable",
     // Defaults to the safe half of the pair: a draft whose disposition could not
     // be read must not be the one a send closes a ticket on.

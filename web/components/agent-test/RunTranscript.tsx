@@ -302,7 +302,16 @@ function Step({ event }: { event: TraceEvent }) {
             event.checksPassed ? "all checks passed" : `${((event.failedChecks as string[]) ?? []).length} check(s) failed`
           }`}
         >
-          <Verbatim text={str(event.body) ?? ""} />
+          <Verbatim
+            text={str(event.body) ?? ""}
+            link={
+              event.replyLink &&
+              typeof (event.replyLink as { url?: unknown }).url === "string" &&
+              typeof (event.replyLink as { label?: unknown }).label === "string"
+                ? (event.replyLink as { url: string; label: string })
+                : null
+            }
+          />
           <Fields>
             <Field label="From verdict">{str(event.sourceVerdict) ?? "—"}</Field>
             <Field label="Disposition">{str(event.disposition) ?? "—"}</Field>
@@ -653,6 +662,12 @@ function PolicyBlock({
         {offerCode ? (
           <Field label="Offers code">
             {offerCode} — re-checked at drafting time, and dropped if it is no longer active
+          </Field>
+        ) : null}
+        {p.link && typeof (p.link as { url?: unknown }).url === "string" ? (
+          <Field label="Link">
+            {String((p.link as { label?: unknown }).label ?? "")} — {String((p.link as { url: string }).url)}
+            {" "}· the drafting model sees only the description and places a [[marker]]
           </Field>
         ) : null}
         {tones.length > 0 ? (

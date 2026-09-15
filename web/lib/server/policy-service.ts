@@ -38,6 +38,7 @@ import {
 import { MISSING_FIELDS, VERDICTS } from "../../../agent/src/investigation/case-file.mjs";
 import { PARAMETERS } from "../../../scripts/lib/parameters.mjs";
 import { REPLY_TONES, TONE_KEYS } from "../../../scripts/lib/reply-tones.mjs";
+import { MAX_LINK_LABEL, isReplyLinkUrl } from "../../../scripts/lib/reply-link.mjs";
 
 import { listPinnableArticles } from "./knowledge-service";
 import { listOfferableCodes } from "./promotions-service";
@@ -172,7 +173,7 @@ export async function listRules(shopId: string, answerSet?: string): Promise<Pol
       ...(answerSet ? { answer_set: answerSet } : {}),
       deleted_at: { operator: "is", value: "null" },
     },
-    "id,answer_set,answer_key,situation_key,when_conditions,answer_skeleton,route,ask,offer_code,knowledge_document_id,tones,priority,is_fallback,approval_status,updated_at",
+    "id,answer_set,answer_key,situation_key,when_conditions,answer_skeleton,route,ask,offer_code,knowledge_document_id,tones,link_url,link_label,priority,is_fallback,approval_status,updated_at",
   )) as Record<string, unknown>[];
 
   return rows.map(mapRule).sort(byAnswerSetThenKey);
@@ -227,6 +228,8 @@ export interface RuleInput {
   knowledgeDocumentId: string | null;
   /** Tone keys from `reply-tones.mjs`. Empty means the Brand voice alone. */
   tones: string[];
+  /** A page the reply offers and what it opens, or null. Both halves, https only. */
+  link: { url: string; label: string } | null;
   priority: number;
   isFallback: boolean;
   approvalStatus: string;
@@ -293,6 +296,24 @@ export async function saveRule(shopId: string, input: RuleInput): Promise<Policy
   }
   const tones = toneKeys.filter((key) => pickedTones.includes(key));
 
+  // A link is both halves or neither, https only — the table's two checks, as
+  // sentences a person can act on.
+  const linkUrl = input.link?.url?.trim() ?? "";
+  const linkLabel = input.link?.label?.trim() ?? "";
+  let link: { url: string; label: string } | null = null;
+  if (linkUrl || linkLabel) {
+    if (!isReplyLinkUrl(linkUrl)) {
+      throw new KnowledgeValidationError("A link must be a full https:// address, with no spaces.");
+    }
+    if (!linkLabel) {
+      throw new KnowledgeValidationError("A link needs a short description of what it opens.");
+    }
+    if (linkLabel.length > MAX_LINK_LABEL) {
+      throw new KnowledgeValidationError(`A link's description is at most ${MAX_LINK_LABEL} characters.`);
+    }
+    link = { url: linkUrl, label: linkLabel };
+  }
+
   const shaped = {
     answerKey,
     situationKey: input.situationKey || null,
@@ -325,6 +346,8 @@ export async function saveRule(shopId: string, input: RuleInput): Promise<Policy
         offer_code: shaped.offerCode,
         knowledge_document_id: shaped.knowledgeDocumentId,
         tones,
+        link_url: link?.url ?? null,
+        link_label: link?.label ?? null,
         priority: shaped.priority,
         is_fallback: shaped.isFallback,
         approval_status: input.approvalStatus || "draft",
@@ -404,6 +427,10 @@ function mapRule(row: Record<string, unknown>): PolicyRule {
     offerCode: (row.offer_code as string) ?? null,
     knowledgeDocumentId: (row.knowledge_document_id as string) ?? null,
     tones: Array.isArray(row.tones) ? (row.tones as unknown[]).map(String) : [],
+    link:
+      typeof row.link_url === "string" && typeof row.link_label === "string"
+        ? { url: row.link_url, label: row.link_label }
+        : null,
     priority: Number(row.priority ?? 0),
     isFallback: Boolean(row.is_fallback),
     approvalStatus: String(row.approval_status ?? "draft"),

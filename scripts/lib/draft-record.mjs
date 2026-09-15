@@ -95,6 +95,8 @@ export function createDraftRecord(supabase, { shopId, transport = REST_TRANSPORT
       checksPassed = false,
       autoSendEligible = false,
       promptInputs = {},
+      // The `{ url, label }` the draft's [[marker]] was written about, or null.
+      replyLink = null,
       model = null,
       draftedAt = new Date().toISOString()
     }) {
@@ -119,6 +121,7 @@ export function createDraftRecord(supabase, { shopId, transport = REST_TRANSPORT
             checks_passed: Boolean(checksPassed),
             auto_send_eligible: Boolean(autoSendEligible),
             prompt_inputs: promptInputs,
+            reply_link: replyLink,
             model,
             drafted_at: draftedAt,
             // A revised draft has not been reviewed yet, whatever the previous

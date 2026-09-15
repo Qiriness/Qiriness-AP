@@ -874,6 +874,8 @@ export interface TicketDraft {
   id: string;
   body: string;
   approvedBody: string | null;
+  /** The link the draft's `[[marker]]` was written about, copied at drafting time. */
+  replyLink: { url: string; label: string } | null;
   /** Which kind of reply this is; decided by the case file, never by wording. */
   sourceVerdict: "answerable" | "needs_customer_input" | "needs_human";
   /**
@@ -1798,6 +1800,8 @@ export interface PolicyRule {
   knowledgeDocumentId: string | null;
   /** Tone keys from `scripts/lib/reply-tones.mjs`. Empty means the Brand voice alone. */
   tones: string[];
+  /** A page the reply offers, and what it opens. The model is only ever given the label. */
+  link: { url: string; label: string } | null;
   priority: number;
   isFallback: boolean;
   approvalStatus: string;

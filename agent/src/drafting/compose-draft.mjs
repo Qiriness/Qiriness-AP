@@ -1,6 +1,7 @@
 import { toDraftingPrompt } from '../investigation/case-file.mjs';
 import { fillParameters } from '../../../scripts/lib/parameters.mjs';
 import { normaliseTones, toneInstructions } from '../../../scripts/lib/reply-tones.mjs';
+import { normaliseReplyLink } from '../../../scripts/lib/reply-link.mjs';
 import { toOrderContextText } from '../resolution/order-context.mjs';
 
 // The per-ticket half of the drafting call: what this customer wrote, what the
@@ -54,7 +55,10 @@ export function caseFileFromRow(row) {
     knowledgeDocumentId: pinnedArticleIdOf(row),
     // The tones the matched rule set, read by name like everything above. Empty
     // for the Brand voice alone, which is every rule saved before tones existed.
-    tones: tonesOf(row)
+    tones: tonesOf(row),
+    // The link the matched rule offers, `{ url, label }`. The composed message
+    // uses only the label; the URL travels to the checks and onto the draft row.
+    link: normaliseReplyLink(row?.exemplar_match?.policy?.link ?? null)
   };
 }
 
@@ -331,6 +335,25 @@ Si la réponse ne se prête pas à transmettre un code, ne pas en parler — ` +
     );
   }
 
+  // THE LINK A PERSON CHOSE FOR THIS CASE — AND NEVER ITS ADDRESS. Handed a URL,
+  // a model pastes it: in full mid-sentence, or as markdown nothing renders (see
+  // `STRUCTURAL_RULES`). So it is told only what the link opens and asked for
+  // one marker; `reply_link` on the draft row carries the address, and the
+  // dashboard puts it on the marked word. `link_placed` checks the marker is
+  // there exactly once.
+  const link = caseFile?.link ?? null;
+  if (link) {
+    parts.push(
+      `## Lien à proposer au client\n\n` +
+        `L’équipe a prévu un lien pour ce cas de figure : ${link.label}.\n\n` +
+        `Pour le proposer, écrire une phrase qui invite le client à cliquer, en plaçant le mot cliquable ` +
+        `entre doubles crochets — par exemple : « cliquez [[ici]] pour consulter ${link.label} ». ` +
+        `Le mot entre crochets suit la langue de la réponse ([[here]], [[qui]], [[aquí]]). ` +
+        `Utiliser ce marqueur une seule fois, et n’écrire aucune adresse web : le lien est ajouté ` +
+        `automatiquement sur le mot marqué.`
+    );
+  }
+
   // WE LEFT THEM WAITING, stated as a fact rather than left to be inferred from
   // the customer's tone. Measured on the corpus: 12 threads hold an unanswered
   // chase and only 4 mention it in words, so a model reading the prose alone
@@ -402,7 +425,9 @@ export function promptInputs({ caseFile, orderContext, investigationId, model })
     knowledge_titles: caseFile.knowledge.map((chunk) => chunk?.title).filter(Boolean),
     order_context: Boolean(orderContext && toOrderContextText(orderContext)),
     // Keys, not the wording: which tones shaped this reply, readable a week later.
-    tones: array(caseFile.tones)
+    tones: array(caseFile.tones),
+    // Whether a link was offered. The address itself is on `reply_link`.
+    reply_link: Boolean(caseFile.link)
   };
 }
 

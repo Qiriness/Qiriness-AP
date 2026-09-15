@@ -52,7 +52,8 @@ export const INCREMENTAL_FILES = [
   '21_chat_vip',
   '22_segment_finder',
   '23_agent_situations',
-  '24_rule_tones'
+  '24_rule_tones',
+  '25_rule_links'
 ];
 
 export const read = (name) => readFileSync(new URL(`./${name}.sql`, import.meta.url), 'utf8');

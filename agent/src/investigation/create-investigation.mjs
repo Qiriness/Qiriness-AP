@@ -120,7 +120,7 @@ export function createInvestigationStack({
         approval_status: 'approved',
         deleted_at: { operator: 'is', value: 'null' }
       },
-      'answer_key,situation_key,when_conditions,answer_skeleton,route,ask,offer_code,knowledge_document_id,tones,priority,is_fallback'
+      'answer_key,situation_key,when_conditions,answer_skeleton,route,ask,offer_code,knowledge_document_id,tones,link_url,link_label,priority,is_fallback'
     );
     const answers = (rows || []).map(answerFromRow);
     if (answers.length === 0) return null;
@@ -249,7 +249,7 @@ export function createInvestigationStack({
         approval_status: 'approved',
         deleted_at: { operator: 'is', value: 'null' }
       },
-      'answer_key,situation_key,when_conditions,answer_skeleton,route,ask,offer_code,knowledge_document_id,tones,priority,is_fallback,approval_status'
+      'answer_key,situation_key,when_conditions,answer_skeleton,route,ask,offer_code,knowledge_document_id,tones,link_url,link_label,priority,is_fallback,approval_status'
     );
 
   /**

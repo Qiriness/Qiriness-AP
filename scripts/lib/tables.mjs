@@ -376,7 +376,8 @@ export const COLUMNS = {
   draftForReview:
     'id,ticket_id,trigger_message_id,source_verdict,disposition,level,language,subject,' +
     'body_text,approved_body_text,status,checks,checks_passed,auto_send_eligible,model,' +
-    'drafted_at,review_sent_at',
+    // `reply_link` IS read: the dashboard puts it on the draft's [[marker]].
+    'drafted_at,review_sent_at,reply_link',
 
   /**
    * The rehearsal history list, WITHOUT the trace.
