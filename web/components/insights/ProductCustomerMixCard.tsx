@@ -3,7 +3,8 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import type { ProductCustomerMix } from "@/lib/types";
 import { ChevronDownIcon, SearchIcon } from "@/components/icons";
-import { foldForSearch } from "@/lib/insights-format";
+import { foldForSearch, percent } from "@/lib/insights-format";
+import { ColumnChart } from "./ColumnChart";
 import { useInsightsFrame } from "./InsightsFrame";
 import { GroupSelect, Segmented } from "./Segmented";
 import styles from "./ProductCustomerMixCard.module.css";
@@ -39,6 +40,9 @@ export function ProductCustomerMixCard({ mix }: { mix: ProductCustomerMix }) {
   }
 
   const { selected, customers } = mix;
+  // Its buyers: the two buckets that bought it. The distribution describes them
+  // and nobody else, so it is their total the shares divide by.
+  const buyers = mix.onlyCustomers + mix.withOtherCustomers;
   const countryLabel = mix.countries.find((c) => c.code === mix.country)?.label ?? null;
   const group = [countryLabel ? `delivered to ${countryLabel}` : null, mix.vipOnly ? "VIP customers only" : null]
     .filter(Boolean)
@@ -89,6 +93,39 @@ export function ProductCustomerMixCard({ mix }: { mix: ProductCustomerMix }) {
         <Metric label="Ordered it with other products" value={mix.withOtherCustomers} total={customers} />
       </div>
 
+      <div className={styles.chartBlock}>
+        <div className={styles.chartHead}>
+          <h3>Buyers by number of orders carrying it</h3>
+          <span>
+            {buyers.toLocaleString("en-GB")} {buyers === 1 ? "buyer" : "buyers"}
+          </span>
+        </div>
+        {buyers > 0 ? (
+          <ColumnChart
+            unit="count"
+            ariaLabel={`Customers who bought ${selected.title} by how many of their orders carried it`}
+            xTitle="Orders carrying this product"
+            height={220}
+            series={[{ label: "Customers", color: "var(--chart-line)" }]}
+            data={mix.ordersPerBuyer.map((b) => ({
+              key: String(b.orders),
+              label: b.orMore ? `${b.orders}+` : String(b.orders),
+              title: b.orMore ? `${b.orders} or more orders` : `${b.orders} ${b.orders === 1 ? "order" : "orders"}`,
+              segments: [b.customers],
+              top:
+                b.customers === 0
+                  ? undefined
+                  : b.customers / buyers < 0.005
+                    ? "<1%"
+                    : percent(b.customers, buyers, 0),
+              note: `${percent(b.customers, buyers)} of its buyers`,
+            }))}
+          />
+        ) : (
+          <p className={styles.empty}>Nobody in this group bought it, so there is nothing to count orders over.</p>
+        )}
+      </div>
+
       <div className={styles.tableBlock}>
         <div className={styles.tableHead}>
           <h3>Ordered with</h3>
@@ -117,7 +154,9 @@ export function ProductCustomerMixCard({ mix }: { mix: ProductCustomerMix }) {
         {countryLabel ? ` Only orders delivered to ${countryLabel} are counted, including for “ordered with”.` : ""}
         {mix.vipOnly ? " VIP follows the shop’s rule over its own window, not this range." : ""} Free items (samples,
         promotional masques) are ignored, so a sample alongside the product still counts as buying only this product.
-        &ldquo;Ordered with&rdquo; covers the whole range, not just the same order.
+        &ldquo;Ordered with&rdquo; covers the whole range, not just the same order. The chart counts its buyers only
+        &mdash; everyone else is the &ldquo;did not order it&rdquo; figure above &mdash; and one order carrying two jars
+        is one order, as on Customers &rarr; Customers by number of orders.
       </p>
         </>
       )}

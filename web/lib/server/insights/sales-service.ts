@@ -30,6 +30,7 @@ import type {
   SalesPanel,
 } from "../../types";
 import { orderArgs, type InsightsContext } from "./context";
+import { foldOrdersPerCustomer } from "./order-frequency";
 import { getOrderSeries, getOrdersSummary, ordersCoverage } from "./orders";
 import { toSeries } from "./series";
 import { loadVipRule } from "../../../../scripts/lib/vip-rule.mjs";
@@ -299,6 +300,7 @@ async function getProductCustomerMix(
     withOtherCustomers: 0,
     withoutCustomers: 0,
     alsoBought: [],
+    ordersPerBuyer: [],
     blockedReason: null,
     countries: countries.map((c) => ({ code: c.code, label: c.label })),
     country,
@@ -332,7 +334,9 @@ async function getProductCustomerMix(
     };
   }
 
-  const rows = await callRpc<Record<string, unknown>>(RPC.INSIGHTS_PRODUCT_CUSTOMER_MIX, {
+  // One set of arguments for both reads, so the split and the distribution can
+  // never describe different people.
+  const args = {
     ...mixArgs(ctx),
     p_product_id: selected.productId,
     p_country: country,
@@ -341,7 +345,11 @@ async function getProductCustomerMix(
     p_min_orders: rule?.minOrders ?? null,
     p_window_months: rule?.windowMonths ?? null,
     p_vip_not_channels: [...ALL_MARKETPLACE_HANDLES],
-  });
+  };
+  const [rows, frequencyRows] = await Promise.all([
+    callRpc<Record<string, unknown>>(RPC.INSIGHTS_PRODUCT_CUSTOMER_MIX, args),
+    callRpc<Record<string, unknown>>(RPC.INSIGHTS_PRODUCT_ORDERS_PER_CUSTOMER, args),
+  ]);
   const head = rows[0] ?? {};
 
   return {
@@ -358,6 +366,7 @@ async function getProductCustomerMix(
         title: String(row.other_title ?? "Unknown product"),
         customers: count(row.other_customers),
       })),
+    ordersPerBuyer: foldOrdersPerCustomer(frequencyRows),
   };
 }
 

@@ -1341,6 +1341,12 @@ export interface ProductCustomerMix {
   withoutCustomers: number;
   /** Top 7 other paid products its buyers bought in the range, by distinct customer. */
   alsoBought: { productId: string; title: string; customers: number }[];
+  /**
+   * Its buyers by how many orders carried it, the Customers panel's chart for
+   * one product. Buyers only — "never bought it" is `withoutCustomers` above —
+   * so the columns start at 1 and sum to `onlyCustomers + withOtherCustomers`.
+   */
+  ordersPerBuyer: { orders: number; orMore: boolean; customers: number }[];
   /** Set when the split cannot be measured (a marketplace platform is selected). */
   blockedReason: string | null;
   /** Countries the range's orders went to, for the card's country filter. */

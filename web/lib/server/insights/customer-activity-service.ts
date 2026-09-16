@@ -25,15 +25,10 @@ import {
 } from "../../../../scripts/lib/insights-range.mjs";
 import type { BucketState, CapturePoint, CustomerActivity, MarketingSummary } from "../../types";
 import { orderArgs, rangeArgs, type InsightsContext } from "./context";
+import { foldOrdersPerCustomer } from "./order-frequency";
 import { ordersCoverage } from "./orders";
 import { toSeries } from "./series";
 import { callRpc, callRpcOne, count } from "./shared";
-
-/**
- * The last column of the orders-per-customer chart: this many orders or more.
- * Ten keeps a year's long tail on one axis without a dozen one-person columns.
- */
-const OR_MORE = 10;
 
 /**
  * A consent change this close to a customer's first order is a checkout opt-in
@@ -80,22 +75,6 @@ export async function getCustomerActivity(ctx: InsightsContext): Promise<Custome
     },
     capture: capturePoints(ctx, captureRows),
   };
-}
-
-function foldOrdersPerCustomer(rows: Record<string, unknown>[]): CustomerActivity["ordersPerCustomer"] {
-  const byCount = new Map<number, number>();
-  for (const row of rows) {
-    const n = Math.min(count(row.order_count), OR_MORE);
-    byCount.set(n, (byCount.get(n) ?? 0) + count(row.customers));
-  }
-  // Always 1 to 5, so a quiet range still reads as a distribution; beyond five
-  // only as far as someone actually got.
-  const highest = Math.max(5, ...byCount.keys());
-  return Array.from({ length: highest }, (_, i) => i + 1).map((orders) => ({
-    orders,
-    orMore: orders === OR_MORE,
-    customers: byCount.get(orders) ?? 0,
-  }));
 }
 
 function mapMarketing(row: Record<string, unknown> | null, rangeDays: number): MarketingSummary {

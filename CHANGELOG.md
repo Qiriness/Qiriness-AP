@@ -10,6 +10,18 @@ Three sibling files carry the other halves, and this one deliberately does not d
 
 ---
 
+## Insights → Sales: how often a product's buyers bought it (2026-09-16)
+
+The "Who buys this product" card now carries the Customers panel's **"Customers by number of orders"** chart, for the selected product: columns 1, 2, 3… `10+` of how many of a buyer's orders carried it, each with its share of that product's buyers. It sits between the three-way split and "Ordered with", and follows the card's country and VIP-only filters — one argument object feeds both reads, so the chart and the split always describe the same people.
+
+**Its buyers only.** Everyone who did not order it is already the split's third figure; drawn as a zero column it would be 683 against 61 and flatten the rest. The columns therefore sum to "bought only this" + "ordered it with other products", which the heading prints. **Orders carrying it, not units** — two jars in one order is one order, as on the chart this one is read against — and a free line is still not a purchase.
+
+New function `insights_product_orders_per_customer()` (migration `26_product_order_frequency.sql`, applied 2026-09-16, copied byte-for-byte from 06). The long-tail fold both charts use moved into `web/lib/server/insights/order-frequency.ts`, so they cannot cut it differently.
+
+**Checked live 2026-09-16**, last 90 days, best seller by revenue (*Soins Crèmes Anti-âge Duo Jour & Nuit Temps Sublime*, €6,927): 61 buyers bought it once, 3 twice, 1 three times — 65, matching an independent recount from `orders` exactly and matching the card's 37 + 28. FR: 47 + 3 + 1 = 51 = its FR buyers. VIP only: 22 + 3 + 1 = 26 = its VIP buyers, with no column above its unfiltered one. `npm test` (2,686 pass), `tsc` and lint clean. Not yet looked at in the browser.
+
+---
+
 ## D-02: asking for the order number wins the tie (2026-09-15)
 
 Rule data only. On D-02 « il manque un article », a ticket with no order number and any known photo state matched `d02_commande_non_identifiee` and `article_manquant_photo_recue` / `_demandee` equally — one condition each, priority 0 — so `selectAnswer` returned `ambiguous` and no rule applied, on 4 of the 5 photo states. `d02_commande_non_identifiee` now has **priority 1** (set directly, so it stayed live): with no order identified, the reply asks for the order number first. Re-simulated over every order bundle × photo state × product identity: no tie remains, and no D-02 ticket reaches a general rule, because the condition-less `article_manquant` catches everything else.

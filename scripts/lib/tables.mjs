@@ -147,6 +147,7 @@ export const RPC = {
   INSIGHTS_FULFILMENT_CARRIERS: 'insights_fulfilment_carriers',
   INSIGHTS_PRODUCT_SALES: 'insights_product_sales',
   INSIGHTS_PRODUCT_CUSTOMER_MIX: 'insights_product_customer_mix',
+  INSIGHTS_PRODUCT_ORDERS_PER_CUSTOMER: 'insights_product_orders_per_customer',
   INSIGHTS_COUNTRY_PRODUCT_SALES: 'insights_country_product_sales',
   INSIGHTS_SUPPORT_SUMMARY: 'insights_support_summary',
   INSIGHTS_SUPPORT_SERIES: 'insights_support_series',
