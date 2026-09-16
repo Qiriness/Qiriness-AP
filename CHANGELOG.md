@@ -10,6 +10,24 @@ Three sibling files carry the other halves, and this one deliberately does not d
 
 ---
 
+## D-02: asking for the order number wins the tie (2026-09-15)
+
+Rule data only. On D-02 « il manque un article », a ticket with no order number and any known photo state matched `d02_commande_non_identifiee` and `article_manquant_photo_recue` / `_demandee` equally — one condition each, priority 0 — so `selectAnswer` returned `ambiguous` and no rule applied, on 4 of the 5 photo states. `d02_commande_non_identifiee` now has **priority 1** (set directly, so it stayed live): with no order identified, the reply asks for the order number first. Re-simulated over every order bundle × photo state × product identity: no tie remains, and no D-02 ticket reaches a general rule, because the condition-less `article_manquant` catches everything else.
+
+---
+
+## Rulebook: deleting a rule asks first; `expediee_sans_scan` restored (2026-09-15)
+
+`expediee_sans_scan` — the general orders rule for a dispatched parcel with no carrier scan, 97% of shipped orders — was deleted from the rulebook today with one click on the inspector's Delete, which removes the row with no confirmation and no undo. While it was gone, no orders rule matched that state on D-01, D-05 or O-09. **Restored live** with the exact content 39 stored investigations had recorded (conditions, guidance, no route/ask/code/article/tone/link); priority 0, the one value the runs do not carry. **Delete now asks first**: the first click shows what will be removed and « Delete permanently » / « Keep », and a general rule's confirmation says every situation without its own rule for that case falls back to it. Nobody is recorded as having deleted it: `support_answers` has no audit trail.
+
+---
+
+## Rulebook: general rules shown where they apply, in English (2026-09-15)
+
+Frontend only. On a situation's canvas, a branch no rule of that situation answers but a live general rule does now reads **« General rule applies »** with the rule named, instead of a missing branch — e.g. D-01's *dispatched_no_scan* shows *Dispatched, no scan*. It no longer counts as a gap, and « Write a D-01 rule instead » remains. Every new situation rule — from « New rule », « Add branch » or a covered branch — offers a **« Use a general rule »** tick box with a dropdown of the set's live general rules, those covering the picked findings first, and says whether the chosen one applies to them; choosing one saves nothing and opens it in the inspector. (First shipped only on the covered-branch path, where it went unseen.) The General rules section of every situation canvas has a **« Create a general rule »** button: it opens the editor scoped to every situation in the set, with the conditions opening on that situation's needs. The « Use a general rule » dropdown now lists draft general rules too, marked as not used until put live, so a rule just created appears there. **Picking a rule there now marks the branch**: « Use general rule » records the pick per branch (the picked findings name the branches; the When card stays visible while ticked), in this browser only, and that branch reads « General rule applies » with the picked rule — with a note when the agent would not actually use it there, and « Unpick » to remove it. The seven shared rules show English names everywhere in the rulebook (keys unchanged, shown on hover), and « Any situation / shared » is now « General rules ». `tsc` and lint only — not checked in the browser.
+
+---
+
 ## Rulebook: a rule may offer a « click here » link (2026-09-15)
 
 Phase 3 of the rule editor rework. A rule may carry a **link** — an https address and what it opens — typed in the editor's Reply card, with a preview of « cliquez ici pour consulter … ». The drafting model is never given the address: the prompt section « Lien à proposer au client » gives the description and asks for one `[[ici]]` marker, and the address is put on the marked word in the ticket draft panel, the thread dialog and the test chat. New columns `support_answers.link_url` / `link_label` and `ticket_drafts.reply_link` (the link copied at drafting time), in the 05 and 07 baselines and incremental `25_rule_links.sql`. New draft checks `link_placed` (exactly one marker when a link was offered) and `no_orphan_link_marker`; `no_web_link` unchanged. Shared marker rules in `scripts/lib/reply-link.mjs`. No rule has a link yet, and the four skeletons that ask for one are unchanged until their addresses are entered.

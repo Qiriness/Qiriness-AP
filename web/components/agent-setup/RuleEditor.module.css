@@ -595,6 +595,22 @@
   margin-left: auto;
 }
 
+/* "Use a general rule": a real checkbox, since it is a yes/no about the whole form. */
+.checkRow {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+  line-height: 1.45;
+  color: var(--text-default);
+  cursor: pointer;
+}
+
+.checkRow input {
+  margin-top: 0.2rem;
+  accent-color: var(--teal);
+}
+
 /* How the link will read in a draft, with « ici » as the real anchor. */
 .linkPreview {
   margin: 0;

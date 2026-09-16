@@ -678,6 +678,16 @@ Until now tone was one global field — the Brand voice's « tone and voice » �
 
 **Not built: sending.** When a send path exists it must turn the marker into an anchor from `reply_link`; a plain-text send has no anchor to make and that choice is undecided. The four skeletons above still say what they said; rewriting them is the first thing to do once their addresses are entered, and saving one takes it off live mail until it is approved again.
 
+### A branch a general rule answers is not a gap, and the screen derives that rather than asking (2026-09-15)
+
+D-01's `delivery_state` decision showed `dispatched_no_scan` as a missing branch with « Add branch », while at runtime every such ticket is answered by the shared `expediee_sans_scan` — the most common D-01 case, drawn as a hole. The canvas now shows « General rule applies » there, naming the rule.
+
+**Two sources for the box, and only one of them is what the agent does.** A branch reads « General rule applies » when a live general rule's conditions cover it (`generalRulesCovering`: approved, no situation, not the fallback, conditions only this need with this finding or none) — which is exactly when `selectAnswer` would use it. It ALSO reads so when a person picked a general rule for it in the editor's « Use a general rule »: that was the point of the tick box, and a first version that ignored the pick left the dropdown doing nothing visible.
+
+**The pick is frontend only**, by request — kept per branch in the browser (`lib/general-rule-choices.ts`), keyed by rule key so a restored rule keeps its picks, never sent to the agent. Because the agent does not consult it, a pick the agent would not act on says so inside the box (« Picked here, but the agent only uses … when … », or « once it is put live » for a draft), and « Unpick » removes it. A box claiming coverage the runtime does not apply would be the canvas drawing a path the agent cannot take, which is what the situation-lane decision above removed. « Write a D-01 rule instead » stays, because a situation rule would override either.
+
+**English names for the seven shared rules are display only.** `answer_key` is recorded on every investigation that selected it; renaming it would orphan stored runs. The key stays one hover away.
+
 ### A completeness gate needs to know who could close the gap, not just that it is open (2026-09-03)
 
 The gate refuses an `answerable` verdict while a declared need is still open. Run over the fresh corpus before enforcing anything, it would downgrade **12 of 91 runs — and on 4 of them every open gap is one nobody can ever close.**

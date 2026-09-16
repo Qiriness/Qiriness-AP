@@ -6,6 +6,13 @@ import { AlertIcon, CheckCircleIcon, DotIcon, PlusIcon } from "@/components/icon
 import { Button } from "@/components/ui/Button";
 import { knowledgeErrorMessage } from "@/lib/api/knowledge";
 import { deleteRule, saveRule, setCollectionMode, setRuleApproval } from "@/lib/api/policy";
+import {
+  branchChoiceKey,
+  loadGeneralRuleChoices,
+  saveGeneralRuleChoices,
+} from "@/lib/general-rule-choices";
+import type { GeneralRuleChoices } from "@/lib/general-rule-choices";
+import { generalRulesCovering, ruleLabel } from "@/lib/rule-labels";
 import type { PolicyRule, PolicySituation, PolicyVocabulary } from "@/lib/types";
 
 import { RuleEditor } from "./RuleEditor";
@@ -14,11 +21,21 @@ import styles from "./RuleBook.module.css";
 
 const SHARED = "__shared__";
 
-type BranchStatus = "covered" | "missing" | "prerequisite";
+/**
+ * `general` is a branch no rule of this situation answers but a general rule
+ * does — either because its conditions cover it (what the agent uses) or because
+ * it was picked for it in the editor (shown, with a note when the agent would
+ * not use it there). Not a gap either way.
+ */
+type BranchStatus = "covered" | "general" | "missing" | "prerequisite";
 
 interface BranchValue {
   finding: string;
   rules: PolicyRule[];
+  /** The live general rules that answer this branch when no situation rule does. */
+  generalRules: PolicyRule[];
+  /** The general rule picked for this branch in « Use a general rule », if any. */
+  chosenRule: PolicyRule | null;
   status: BranchStatus;
   continues: boolean;
 }
@@ -34,6 +51,8 @@ interface WorkflowNeed {
 interface EditorState {
   rule: PolicyRule | null;
   seed?: RuleEditorSeed;
+  /** General rules already answering the branch this editor was opened from. */
+  generalRules?: PolicyRule[];
 }
 
 /**
@@ -69,6 +88,21 @@ export function RuleBook({
   const [answerSet, setAnswerSet] = useState(startingAnswerSet);
   const [activeSituation, setActiveSituation] = useState<string>(startingSituation);
   const [selectedRuleId, setSelectedRuleId] = useState<string | null>(initialRules[0]?.id ?? null);
+  // The general rule picked per branch in the editor, kept in this browser.
+  // Read after mount: storage does not exist during the server render.
+  const [generalChoices, setGeneralChoices] = useState<GeneralRuleChoices>({});
+  useEffect(() => {
+    setGeneralChoices(loadGeneralRuleChoices());
+  }, []);
+
+  function updateGeneralChoices(change: (next: GeneralRuleChoices) => void) {
+    setGeneralChoices((prev) => {
+      const next = { ...prev };
+      change(next);
+      saveGeneralRuleChoices(next);
+      return next;
+    });
+  }
 
   const ruleCountsBySet = useMemo(() => {
     const counts = new Map<string, number>();
@@ -137,8 +171,13 @@ export function RuleBook({
   );
 
   const workflow = useMemo(
-    () => buildWorkflow(visibleRules, vocabulary, selectedSituationKey),
-    [visibleRules, vocabulary, selectedSituationKey],
+    () =>
+      buildWorkflow(visibleRules, vocabulary, selectedSituationKey, (need, finding) =>
+        selectedSituationKey
+          ? generalChoices[branchChoiceKey(answerSet, selectedSituationKey, need, finding)] ?? null
+          : null,
+      ),
+    [visibleRules, vocabulary, selectedSituationKey, generalChoices, answerSet],
   );
 
   const selectedRule = selectedRuleId
@@ -162,7 +201,7 @@ export function RuleBook({
     }
   }
 
-  function openNewRule(seed: RuleEditorSeed = {}) {
+  function openNewRule(seed: RuleEditorSeed = {}, generalRules: PolicyRule[] = []) {
     setEditing({
       rule: null,
       seed: {
@@ -170,6 +209,7 @@ export function RuleBook({
         situationKey: selectedSituationKey,
         ...seed,
       },
+      generalRules,
     });
   }
 
@@ -196,6 +236,19 @@ export function RuleBook({
       setSelectedRuleId(null);
     });
   }
+
+  const ruleButton = (rule: PolicyRule) => (
+    <button
+      key={rule.id}
+      type="button"
+      className={selectedRuleId === rule.id ? styles.outcomeOn : styles.outcomeButton}
+      onClick={() => setSelectedRuleId(rule.id)}
+      title={rule.answerKey}
+    >
+      <span className={styles.outcomeKey}>{ruleLabel(rule)}</span>
+      <span className={styles.outcomeAction}>{actionSummary(rule)}</span>
+    </button>
+  );
 
   return (
     <section className={styles.wrap}>
@@ -262,8 +315,8 @@ export function RuleBook({
                   setSelectedRuleId(null);
                 }}
               >
-                <span className={styles.situationKey}>Any situation</span>
-                <span className={styles.situationQuestion}>Shared rules for the whole set</span>
+                <span className={styles.situationKey}>General rules</span>
+                <span className={styles.situationQuestion}>Apply to every situation in the set</span>
               </button>
               {situationsForSet.map((situation) => {
                 const count = rulesInSet.filter((rule) => rule.situationKey === situation.key).length;
@@ -293,15 +346,16 @@ export function RuleBook({
               <div>
                 <p className={styles.canvasKicker}>{answerSet || "No answer set"}</p>
                 <h3 className={styles.canvasTitle}>
-                  {activeSituationMeta ? activeSituationMeta.key : "Any situation"}
+                  {activeSituationMeta ? activeSituationMeta.key : "General rules"}
                 </h3>
                 <p className={styles.canvasMeta}>
-                  {activeSituationMeta?.question ?? "Shared rules that can apply when no specific situation wins."}
+                  {activeSituationMeta?.question ??
+                    "Rules for every situation in the set. They apply whenever no situation rule matches."}
                 </p>
               </div>
               <div className={styles.canvasStats} aria-label="Workflow summary">
                 <span>{specificRuleCount} situation rules</span>
-                <span>{sharedRuleCount} shared</span>
+                <span>{sharedRuleCount} general</span>
                 <span>{workflow.missingBranches} gaps</span>
                 {/* WHO DECIDES WHAT GETS COLLECTED for this situation. `model`
                     is today's behaviour: the deterministic opening moves run and
@@ -383,23 +437,59 @@ export function RuleBook({
                                 <BranchStatusIcon status={branch.status} />
                               </div>
                               {branch.rules.length > 0 ? (
-                                <div className={styles.outcomes}>
-                                  {branch.rules.map((rule) => (
-                                    <button
-                                      key={rule.id}
-                                      type="button"
-                                      className={
-                                        selectedRuleId === rule.id ? styles.outcomeOn : styles.outcomeButton
-                                      }
-                                      onClick={() => setSelectedRuleId(rule.id)}
-                                    >
-                                      <span className={styles.outcomeKey}>{rule.answerKey}</span>
-                                      <span className={styles.outcomeAction}>{actionSummary(rule)}</span>
-                                    </button>
-                                  ))}
-                                </div>
+                                <div className={styles.outcomes}>{branch.rules.map(ruleButton)}</div>
                               ) : branch.continues ? (
                                 <p className={styles.continues}>Continues to a deeper decision.</p>
+                              ) : branch.generalRules.length > 0 || branch.chosenRule ? (
+                                // NOT A GAP. No rule of this situation answers the
+                                // branch; a general rule does — because its
+                                // conditions cover it, or because it was picked for
+                                // it in the editor. A pick the agent would not act
+                                // on says so. Writing a situation rule is still
+                                // offered, because it would win.
+                                <div className={styles.generalBox}>
+                                  <span className={styles.generalLabel}>General rule applies</span>
+                                  <div className={styles.outcomes}>
+                                    {branch.generalRules.map(ruleButton)}
+                                    {branch.chosenRule &&
+                                      !branch.generalRules.includes(branch.chosenRule) &&
+                                      ruleButton(branch.chosenRule)}
+                                  </div>
+                                  {branch.chosenRule && chosenRuleNote(branch.chosenRule, need.need, branch.finding) && (
+                                    <p className={styles.generalWarn}>
+                                      {chosenRuleNote(branch.chosenRule, need.need, branch.finding)}
+                                    </p>
+                                  )}
+                                  <div className={styles.generalActions}>
+                                    <button
+                                      type="button"
+                                      className={styles.generalAdd}
+                                      onClick={() =>
+                                        openNewRule(
+                                          { conditions: { [need.need]: [branch.finding] } },
+                                          branch.generalRules,
+                                        )
+                                      }
+                                    >
+                                      Write a {activeSituationMeta?.key ?? "situation"} rule instead
+                                    </button>
+                                    {branch.chosenRule && (
+                                      <button
+                                        type="button"
+                                        className={styles.generalAdd}
+                                        onClick={() =>
+                                          updateGeneralChoices((next) => {
+                                            delete next[
+                                              branchChoiceKey(answerSet, selectedSituationKey ?? "", need.need, branch.finding)
+                                            ];
+                                          })
+                                        }
+                                      >
+                                        Unpick
+                                      </button>
+                                    )}
+                                  </div>
+                                </div>
                               ) : (
                                 <button
                                   type="button"
@@ -422,33 +512,38 @@ export function RuleBook({
                 ))
               )}
 
-              {workflow.sharedRules.length > 0 && (
+              {/* ALWAYS SHOWN ON A SITUATION, even with no general rule yet, since
+                  this is where one is created. A general rule has no situation —
+                  that is what makes it general — so the one written here applies
+                  to the whole set; the editor only opens its conditions on this
+                  situation's needs, because that is what it was started for. */}
+              {selectedSituationKey && (
                 <section className={styles.decisionStep}>
                   <div className={styles.connector} aria-hidden="true" />
                   <div className={styles.decisionNode}>
                     <header className={styles.nodeHeader}>
                       <div>
-                        <p className={styles.nodeLabel}>Shared across the set</p>
-                        <h4>Rules not keyed to this situation</h4>
+                        <p className={styles.nodeLabel}>General rules</p>
+                        <h4>Apply when no {activeSituationMeta?.key ?? "situation"} rule matches</h4>
                         <p className={styles.requires}>
-                          They apply to any situation, and lose to the rules above whenever one of
-                          those matches — a situation outranks condition depth.
+                          They cover every situation in the set, and lose to the rules above whenever one
+                          of those matches — a situation outranks condition depth.
                         </p>
                       </div>
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        leadingIcon={<PlusIcon size={14} />}
+                        onClick={() => openNewRule({ situationKey: null, contextSituationKey: selectedSituationKey })}
+                      >
+                        Create a general rule
+                      </Button>
                     </header>
-                    <div className={styles.outcomes}>
-                      {workflow.sharedRules.map((rule) => (
-                        <button
-                          key={rule.id}
-                          type="button"
-                          className={selectedRuleId === rule.id ? styles.outcomeOn : styles.outcomeButton}
-                          onClick={() => setSelectedRuleId(rule.id)}
-                        >
-                          <span className={styles.outcomeKey}>{rule.answerKey}</span>
-                          <span className={styles.outcomeAction}>{actionSummary(rule)}</span>
-                        </button>
-                      ))}
-                    </div>
+                    {workflow.sharedRules.length > 0 ? (
+                      <div className={styles.outcomes}>{workflow.sharedRules.map(ruleButton)}</div>
+                    ) : (
+                      <p className={styles.requires}>No general rules in {answerSet} yet.</p>
+                    )}
                   </div>
                 </section>
               )}
@@ -463,19 +558,7 @@ export function RuleBook({
                         <h4>Rules without evidence conditions</h4>
                       </div>
                     </header>
-                    <div className={styles.outcomes}>
-                      {workflow.conditionlessRules.map((rule) => (
-                        <button
-                          key={rule.id}
-                          type="button"
-                          className={selectedRuleId === rule.id ? styles.outcomeOn : styles.outcomeButton}
-                          onClick={() => setSelectedRuleId(rule.id)}
-                        >
-                          <span className={styles.outcomeKey}>{rule.answerKey}</span>
-                          <span className={styles.outcomeAction}>{actionSummary(rule)}</span>
-                        </button>
-                      ))}
-                    </div>
+                    <div className={styles.outcomes}>{workflow.conditionlessRules.map(ruleButton)}</div>
                   </div>
                 </section>
               )}
@@ -485,6 +568,9 @@ export function RuleBook({
           <aside className={styles.inspector} aria-label="Selected rule">
             {selectedRule ? (
               <RuleInspector
+                // Keyed by rule, so a half-open delete confirmation never carries
+                // over to the next rule selected.
+                key={selectedRule.id}
                 rule={selectedRule}
                 toneLabel={selectedRule.tones.map((key) => toneLabels.get(key) ?? key).join(", ")}
                 articleTitle={
@@ -519,6 +605,19 @@ export function RuleBook({
           situations={situations}
           rules={rules}
           vocabulary={vocabulary}
+          generalRules={editing.generalRules ?? []}
+          onUseGeneralRule={(rule, branches) => {
+            // Recorded for the canvas in this browser, never sent to the agent
+            // (lib/general-rule-choices.ts): each picked branch now reads
+            // « General rule applies » with this rule.
+            updateGeneralChoices((next) => {
+              for (const { need, finding } of branches) {
+                next[branchChoiceKey(answerSet, selectedSituationKey ?? "", need, finding)] = rule.answerKey;
+              }
+            });
+            setSelectedRuleId(rule.id);
+            setEditing(null);
+          }}
           onClose={() => setEditing(null)}
           onSave={async (payload) => {
             const saved = await saveRule(payload);
@@ -557,8 +656,8 @@ function RuleInspector({
     <div className={styles.inspectorBody}>
       <div className={styles.inspectorHead}>
         <div>
-          <p className={styles.inspectorLabel}>Selected rule</p>
-          <h3>{rule.answerKey}</h3>
+          <p className={styles.inspectorLabel}>{rule.situationKey ? "Selected rule" : "General rule"}</p>
+          <h3 title={rule.answerKey}>{ruleLabel(rule)}</h3>
         </div>
         <span className={rule.approvalStatus === "approved" ? styles.liveTag : styles.draftTag}>
           {rule.approvalStatus === "approved" ? "live" : "draft"}
@@ -568,7 +667,7 @@ function RuleInspector({
       <dl className={styles.ruleFacts}>
         <div>
           <dt>Situation</dt>
-          <dd>{rule.situationKey ?? "Any situation"}</dd>
+          <dd>{rule.situationKey ?? "Every situation in the set"}</dd>
         </div>
         <div>
           <dt>When</dt>
@@ -620,8 +719,55 @@ function RuleInspector({
         <Button variant="secondary" size="sm" disabled={busy} onClick={onApprove}>
           {rule.approvalStatus === "approved" ? "Take off live mail" : "Put live"}
         </Button>
-        <Button variant="secondary" size="sm" disabled={busy} onClick={onDelete}>
-          Delete
+        <DeleteRuleButton rule={rule} busy={busy} onDelete={onDelete} />
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Delete, asked twice.
+ *
+ * THE DELETE IS A HARD DELETE with no undo, and one click on it removed
+ * `expediee_sans_scan` — the general rule answering 97% of shipped orders — on
+ * 2026-09-15, found only because D-01's canvas showed a hole. So the first click
+ * says what goes and what depends on it, and only the second one deletes.
+ */
+function DeleteRuleButton({
+  rule,
+  busy,
+  onDelete,
+}: {
+  rule: PolicyRule;
+  busy: boolean;
+  onDelete: () => void;
+}) {
+  const [confirming, setConfirming] = useState(false);
+
+  if (!confirming) {
+    return (
+      <Button variant="secondary" size="sm" disabled={busy} onClick={() => setConfirming(true)}>
+        Delete
+      </Button>
+    );
+  }
+
+  return (
+    <div className={styles.deleteConfirm} role="alertdialog" aria-label={`Delete ${ruleLabel(rule)}`}>
+      <p>
+        <b>Delete {ruleLabel(rule)}?</b> It is removed permanently — there is no undo.{" "}
+        {!rule.situationKey
+          ? "It is a general rule: every situation in this set without its own rule for this case falls back to it, and would be left with none."
+          : rule.approvalStatus === "approved"
+            ? "It is live: the tickets it answers go to a person until another rule covers them."
+            : ""}
+      </p>
+      <div className={styles.inspectorActions}>
+        <Button variant="primary" size="sm" disabled={busy} onClick={onDelete}>
+          Delete permanently
+        </Button>
+        <Button variant="secondary" size="sm" disabled={busy} onClick={() => setConfirming(false)}>
+          Keep
         </Button>
       </div>
     </div>
@@ -636,6 +782,13 @@ function BranchStatusIcon({ status }: { status: BranchStatus }) {
       </span>
     );
   }
+  if (status === "general") {
+    return (
+      <span className={styles.branchGeneral} title="Covered by a general rule">
+        <CheckCircleIcon size={14} />
+      </span>
+    );
+  }
   if (status === "missing") {
     return (
       <span className={styles.branchMissing} title="Missing branch">
@@ -646,10 +799,27 @@ function BranchStatusIcon({ status }: { status: BranchStatus }) {
   return null;
 }
 
+/**
+ * What to say under a general rule PICKED for a branch that the agent would not
+ * use there, or null when it would. The pick drives the box; this keeps the box
+ * from claiming a coverage the runtime does not apply.
+ */
+function chosenRuleNote(rule: PolicyRule, need: string, finding: string): string | null {
+  const covers = Object.entries(rule.conditions).every(([key, values]) => key === need && values.includes(finding));
+  const live = rule.approvalStatus === "approved";
+  if (covers && live) return null;
+  if (covers) return "Picked here — the agent uses it once it is put live.";
+  return `Picked here, but the agent only uses ${ruleLabel(rule)} when ${conditionSummary(rule)}${
+    live ? "" : ", and only once it is live"
+  }.`;
+}
+
 function buildWorkflow(
   rules: PolicyRule[],
   vocabulary: PolicyVocabulary,
   situationKey: string | null = null,
+  // The rule KEY picked for a branch in « Use a general rule », or null.
+  chosenFor: (need: string, finding: string) => string | null = () => null,
 ) {
   // A SITUATION'S DECISIONS ARE ITS OWN. The set's situation-less rules still
   // apply at runtime, but they cannot win here: `selectAnswer` ranks situation
@@ -699,11 +869,27 @@ function buildWorkflow(
         const candidates = scoped.filter((rule) => rule.conditions[need]?.includes(finding));
         const matching = candidates.filter((rule) => deepestConditionNeed(rule, workflowOrder) === need);
         const continues = candidates.length > matching.length;
+        // Only where nothing of this situation's answers the branch — the case in
+        // which the agent falls back to a general rule.
+        const open = matching.length === 0 && !continues;
+        const generalRules = open ? generalRulesCovering(sharedRules, need, finding) : [];
+        // The picked rule, looked up among this set's general rules by key; a pick
+        // naming a rule since deleted simply finds nothing.
+        const chosenKey = open ? chosenFor(need, finding) : null;
+        const chosenRule = chosenKey ? sharedRules.find((rule) => rule.answerKey === chosenKey) ?? null : null;
         const status: BranchStatus =
-          matching.length > 0 || continues ? "covered" : isPrerequisiteOnly ? "prerequisite" : "missing";
+          matching.length > 0 || continues
+            ? "covered"
+            : generalRules.length > 0 || chosenRule
+              ? "general"
+              : isPrerequisiteOnly
+                ? "prerequisite"
+                : "missing";
         return {
           finding,
           rules: matching.sort(sortRuleForWorkflow),
+          generalRules,
+          chosenRule,
           status,
           continues,
         };
@@ -746,8 +932,9 @@ function dependencyDepth(
   return 1 + Math.max(...requires.map((prerequisite) => dependencyDepth(prerequisite, meta, seen)));
 }
 
+/** Branches that have an answer — by a rule of this situation or by a general rule. */
 function coveredCount(need: WorkflowNeed): number {
-  return need.branches.filter((branch) => branch.status === "covered").length;
+  return need.branches.filter((branch) => branch.status === "covered" || branch.status === "general").length;
 }
 
 function sortRuleForWorkflow(a: PolicyRule, b: PolicyRule): number {

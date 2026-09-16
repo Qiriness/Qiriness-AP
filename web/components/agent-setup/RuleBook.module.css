@@ -473,6 +473,63 @@
   border-color: var(--warning);
 }
 
+/* A branch no rule of this situation answers, but a live general rule does. */
+.branchGeneral {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  color: var(--info);
+}
+
+.generalBox {
+  display: grid;
+  gap: 0.4rem;
+  border: 1px solid var(--info-100);
+  border-radius: var(--radius);
+  background: var(--info-050);
+  padding: 0.45rem;
+}
+
+.generalLabel {
+  color: var(--info);
+  font-size: var(--text-caption);
+  font-weight: var(--weight-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.generalAdd {
+  justify-self: start;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: var(--text-caption);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.generalAdd:hover {
+  color: var(--text-strong);
+}
+
+/* A pick the agent would not act on, said inside the box that shows it. */
+.generalWarn {
+  margin: 0;
+  color: var(--priority-medium-ink);
+  font-size: var(--text-caption);
+  line-height: 1.4;
+}
+
+.generalActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.75rem;
+}
+
 .noBranches {
   display: flex;
   align-items: center;
@@ -565,6 +622,24 @@
   display: flex;
   gap: 0.5rem;
   flex-wrap: wrap;
+}
+
+/* The second step of Delete: a full-width warning under the other actions. */
+.deleteConfirm {
+  flex-basis: 100%;
+  display: grid;
+  gap: 0.6rem;
+  border: 1px solid var(--error-100);
+  border-radius: var(--radius);
+  background: var(--error-050);
+  padding: 0.7rem;
+}
+
+.deleteConfirm p {
+  margin: 0;
+  color: var(--text-default);
+  font-size: var(--text-sm);
+  line-height: 1.45;
 }
 
 .empty,
