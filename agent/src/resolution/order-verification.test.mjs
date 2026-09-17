@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
+  BY_MARKETPLACE_ORDER_NUMBER,
   BY_MESSAGE_EMAIL,
   BY_SENDER_EMAIL,
   CONFIRMED,
@@ -9,6 +10,7 @@ import {
   NAME_MATCH,
   NOT_FOUND,
   chooseResolution,
+  isAnonymousPlaceholder,
   isSafeToWrite,
   verifyOrder
 } from './order-verification.mjs';
@@ -174,4 +176,78 @@ test('a mismatch surfaces rather than being buried behind a not-found', () => {
 
 test('no candidates at all yields a clean verdict', () => {
   assert.equal(chooseResolution([]).status, 'no_candidate');
+});
+
+// --- marketplace orders with an anonymous buyer ------------------------------
+
+// The real shape of an Amazon order (#6059): Shopify's placeholder buyer, and an
+// email hash that can never be the customer's.
+const AMAZON_ORDER = { customer_email_hash: HASH_A, customer_id: 'c1', sales_channel_handle: 'amazon' };
+const ANONYMOUS = { display_name: 'Anonymous Customer', first_name: 'Anonymous', last_name: 'Customer', anonymous: true };
+const CUSTOMER_TICKET = { requester_email_hash: HASH_B, requester_name: 'Joachim Randt' };
+
+test('an anonymous Amazon order quoted as the only order number is confirmed, and labelled as such', () => {
+  const r = verifyOrder({ order: AMAZON_ORDER, ticket: CUSTOMER_TICKET, customer: ANONYMOUS, soleOrderNumber: true });
+  assert.equal(r.status, CONFIRMED);
+  assert.equal(r.verifiedBy, BY_MARKETPLACE_ORDER_NUMBER, 'ownership was not checked, and that stays visible');
+  assert.equal(r.suggestedAction, undefined, 'asking for the purchase email is pointless here');
+  assert.equal(isSafeToWrite(r.status), true);
+});
+
+test('the marketplace path is closed unless the caller says the number stands alone', () => {
+  // Default false: the tracking-number path and a message naming several orders
+  // both leave it closed, and so does any caller written before it existed.
+  const r = verifyOrder({ order: AMAZON_ORDER, ticket: CUSTOMER_TICKET, customer: ANONYMOUS });
+  assert.equal(r.status, MISMATCH);
+});
+
+test('a web order with a different email is still a mismatch, even with the flag set', () => {
+  const r = verifyOrder({
+    order: { ...AMAZON_ORDER, sales_channel_handle: 'online_store' },
+    ticket: CUSTOMER_TICKET,
+    customer: { ...ANONYMOUS },
+    soleOrderNumber: true
+  });
+  assert.equal(r.status, MISMATCH, 'the placeholder only counts on a marketplace channel');
+});
+
+test('a marketplace order with a real named buyer is not waved through', () => {
+  // Yves Rocher (Mirakl) orders carry the buyer's real name: the name check can
+  // work there, so the number alone is not enough.
+  const r = verifyOrder({
+    order: { customer_email_hash: null, customer_id: 'c1', sales_channel_handle: 'connect-dev-1' },
+    ticket: CUSTOMER_TICKET,
+    customer: { display_name: 'Audrey Regnier', anonymous: false },
+    soleOrderNumber: true
+  });
+  assert.equal(r.status, NOT_FOUND);
+});
+
+test('the sender’s own email still outranks the marketplace path', () => {
+  const r = verifyOrder({
+    order: AMAZON_ORDER,
+    ticket: { ...CUSTOMER_TICKET, requester_email_hash: HASH_A },
+    customer: ANONYMOUS,
+    soleOrderNumber: true
+  });
+  assert.equal(r.verifiedBy, BY_SENDER_EMAIL);
+});
+
+test('only the exact Amazon placeholder counts as anonymous', () => {
+  assert.equal(
+    isAnonymousPlaceholder({ first_name: 'Anonymous', last_name: 'Customer', email: 'anonymous-1036554851892@example.com' }),
+    true
+  );
+  assert.equal(
+    isAnonymousPlaceholder({ first_name: 'Anonymous', last_name: 'Customer', email: 'someone@gmail.com' }),
+    false,
+    'a real address is a real buyer'
+  );
+  assert.equal(
+    isAnonymousPlaceholder({ first_name: 'Virginie', last_name: 'Fernier', email: 'x@example.com' }),
+    false,
+    'a real name is a real buyer'
+  );
+  assert.equal(isAnonymousPlaceholder({}), false);
+  assert.equal(isAnonymousPlaceholder(), false);
 });

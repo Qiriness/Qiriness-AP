@@ -1594,6 +1594,11 @@ function OrderFactsBlock({ order, candidate }: { order: TicketOrderFacts; candid
   return (
     <div className={styles.orderFacts}>
       {candidate && <p className={styles.candidateNote}>Candidate last order only - not confirmed as the order they mean.</p>}
+      {!candidate && order.buyerUnverified && (
+        <p className={styles.candidateNote}>
+          {order.channel ?? "Marketplace"} order with an anonymous buyer: linked on the order number alone, the buyer could not be checked.
+        </p>
+      )}
       <InfoList
         rows={[
           [candidate ? "Last order" : "Order", order.orderName],

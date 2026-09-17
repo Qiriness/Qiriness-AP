@@ -261,7 +261,9 @@ export const COLUMNS = {
     'id,status,subject,first_message_at,last_message_at,requester_email_hash,requester_name',
 
   /** The dashboard's detail panel reads the bundle, not the whole row. */
-  ticketForDetail: 'id,resolved_context',
+  // How the order number was confirmed rides along, so the panel can say when
+  // the buyer behind it was never checked (a marketplace placeholder).
+  ticketForDetail: 'id,resolved_context,order_verified_by:metadata->order_resolution->>verified_by',
 
   /** The thread dialog: envelope and body, both directions. */
   messageForThread:

@@ -632,6 +632,12 @@ export interface TicketOrderFacts {
   items: string[];
   /** When the bundle was assembled; a stale one describes an older order state. */
   resolvedAt: string | null;
+  /**
+   * True when the order number was accepted on the number alone because the
+   * marketplace hid the buyer (`verified_by: marketplace_order_number`). The
+   * order is the right one; that it is this sender's was never checked.
+   */
+  buyerUnverified: boolean;
 }
 
 /**

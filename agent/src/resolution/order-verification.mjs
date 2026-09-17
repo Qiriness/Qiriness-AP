@@ -11,6 +11,8 @@
 // So a number is only accepted when the order's own contact hash matches the
 // ticket's, and everything weaker is labelled as such.
 
+import { ALL_MARKETPLACE_HANDLES } from '../../../scripts/lib/insights-range.mjs';
+
 export const CONFIRMED = 'confirmed';
 /** Name agrees, but the email is absent or different — corroboration, not proof. */
 export const NAME_MATCH = 'name_match';
@@ -25,6 +27,12 @@ export const BY_SENDER_EMAIL = 'email';
  * kind it was; this constant must not claim to know.
  */
 export const BY_MESSAGE_EMAIL = 'message_email';
+/**
+ * A marketplace order whose buyer Shopify only knows as a placeholder, accepted
+ * on the order number alone. Ownership was not — and cannot be — checked, and
+ * this value exists so that stays visible on the ticket and the dashboard.
+ */
+export const BY_MARKETPLACE_ORDER_NUMBER = 'marketplace_order_number';
 export const MISMATCH = 'mismatch';
 export const NOT_FOUND = 'not_found';
 export const NO_CANDIDATE = 'no_candidate';
@@ -39,8 +47,17 @@ export const ASK_PURCHASE_EMAIL = 'ask_purchase_email';
  * @param messageEmailHashes hashes of every address in the customer's own text,
  *   from confirmation-evidence.mjs. Empty when the caller does not supply them,
  *   which leaves the older behaviour exactly as it was.
+ * @param soleOrderNumber true only when the customer quoted this order by its
+ *   number and it is the only order number in the message. Defaults to false,
+ *   which keeps the marketplace path below closed for every other caller.
  */
-export function verifyOrder({ order, ticket, customer = null, messageEmailHashes = [] } = {}) {
+export function verifyOrder({
+  order,
+  ticket,
+  customer = null,
+  messageEmailHashes = [],
+  soleOrderNumber = false
+} = {}) {
   if (!order) {
     return { status: NOT_FOUND, verifiedBy: null, detail: 'No order with that number in this shop.' };
   }
@@ -113,6 +130,27 @@ export function verifyOrder({ order, ticket, customer = null, messageEmailHashes
     };
   }
 
+  // THE BUYER CANNOT BE CHECKED, SO THE NUMBER IS ALL THERE IS. Amazon hands
+  // Shopify an `Anonymous Customer` at an `@example.com` address for every
+  // order, so neither the email nor the name above can ever match the real
+  // buyer — and the ticket answered "which order?" to a customer who had just
+  // told us (`#6059`, 2026-09-17). Every earlier path has already failed by this
+  // point, so a ticket confirmed or name-matched today cannot reach it.
+  //
+  // Closed on every side: a marketplace channel from the fixed list, the
+  // placeholder buyer (a web order always has a real one), and exactly one order
+  // number quoted as such — a thread naming three orders is not about the one
+  // that happens to be anonymous, and a tracking number is not passed in.
+  if (soleOrderNumber && isAnonymousMarketplaceOrder(order, customer)) {
+    return {
+      status: CONFIRMED,
+      verifiedBy: BY_MARKETPLACE_ORDER_NUMBER,
+      detail:
+        'Marketplace order with an anonymous buyer on file; accepted on the order number ' +
+        'alone, since the buyer cannot be checked.'
+    };
+  }
+
   if (orderHash && ticketHash) {
     // Emails differ AND the names do not agree: the strongest negative available
     // short of the order not existing.
@@ -167,6 +205,24 @@ export function chooseResolution(results) {
 /** Only a confirmed match is safe to write onto the ticket automatically. */
 export function isSafeToWrite(status) {
   return status === CONFIRMED;
+}
+
+/**
+ * The placeholder identity Amazon orders arrive with. Called by the store, which
+ * holds the address, so only the resulting flag reaches `verifyOrder`.
+ */
+export function isAnonymousPlaceholder({ first_name, last_name, email } = {}) {
+  return (
+    first_name === 'Anonymous' &&
+    last_name === 'Customer' &&
+    /@example\.com$/i.test(String(email || '').trim())
+  );
+}
+
+function isAnonymousMarketplaceOrder(order, customer) {
+  return (
+    ALL_MARKETPLACE_HANDLES.includes(order?.sales_channel_handle) && customer?.anonymous === true
+  );
 }
 
 function joinName(customer) {

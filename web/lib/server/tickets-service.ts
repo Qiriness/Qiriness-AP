@@ -276,7 +276,10 @@ export async function getTicketDetail(shopId: string, ticketId: string): Promise
 
   // `{}` on every ticket without a confirmed order number, which the projection
   // reads as "no order facts" rather than as a bundle full of nulls.
-  const order = summariseOrderContext(ticketRow.resolved_context);
+  const summarised = summariseOrderContext(ticketRow.resolved_context);
+  const order = summarised
+    ? { ...summarised, buyerUnverified: ticketRow.order_verified_by === "marketplace_order_number" }
+    : null;
 
   // `toPublicAttachments` is the boundary that strips the Exchange message id
   // off every entry — see the shared module. It lives there rather than here

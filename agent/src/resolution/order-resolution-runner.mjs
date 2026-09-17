@@ -15,6 +15,7 @@ import {
   NOT_FOUND,
   NO_CANDIDATE,
   chooseResolution,
+  isAnonymousPlaceholder,
   isSafeToWrite,
   verifyOrder
 } from './order-verification.mjs';
@@ -75,7 +76,7 @@ export function createOrderResolutionStore(supabase) {
           order_number: { operator: 'in', value: `(${orderNumbers.join(',')})` },
           deleted_at: { operator: 'is', value: 'null' }
         },
-        'id,name,order_number,customer_id,customer_email_hash'
+        'id,name,order_number,customer_id,customer_email_hash,sales_channel_handle'
       );
 
       const customerIds = [...new Set(orders.map((o) => o.customer_id).filter(Boolean))];
@@ -84,13 +85,20 @@ export function createOrderResolutionStore(supabase) {
             supabase,
             T.CUSTOMERS,
             { id: { operator: 'in', value: `(${customerIds.join(',')})` } },
-            'id,display_name,first_name,last_name'
+            'id,display_name,first_name,last_name,email'
           )
         : [];
 
       return {
         byNumber: new Map(orders.map((o) => [o.order_number, o])),
-        customersById: new Map(customers.map((c) => [c.id, c]))
+        // The address is read only to recognise Amazon's placeholder buyer and is
+        // dropped here: what leaves the store is the flag, never the email.
+        customersById: new Map(
+          customers.map(({ email, ...c }) => [
+            c.id,
+            { ...c, anonymous: isAnonymousPlaceholder({ ...c, email }) }
+          ])
+        )
       };
     },
 
@@ -307,7 +315,15 @@ export async function runOrderResolution({ store, record, shopId, logger, dryRun
       const results = candidates.map((candidate) => {
         const order = byNumber.get(candidate.orderNumber) || null;
         const customer = order?.customer_id ? customersById.get(order.customer_id) : null;
-        const verdict = verifyOrder({ order, ticket, customer, messageEmailHashes: emailHashes });
+        const verdict = verifyOrder({
+          order,
+          ticket,
+          customer,
+          messageEmailHashes: emailHashes,
+          // The parser deduplicates by number, so a thread repeating `6059` in
+          // every quoted reply is still one order.
+          soleOrderNumber: candidates.length === 1
+        });
         return {
           ...verdict,
           detail: describeAgainstRange(verdict, candidate.orderNumber, order, range),

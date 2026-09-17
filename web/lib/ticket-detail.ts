@@ -205,6 +205,9 @@ export function summariseOrderContext(context: unknown): TicketOrderFacts | null
     tracking: readTracking(delivery.tracking),
     items: readItems(order.items),
     resolvedAt: nonEmpty((context as any)?.resolvedAt),
+    // Not in the bundle: how the number was confirmed is the ticket's, and the
+    // service sets it from `metadata.order_resolution`.
+    buyerUnverified: false,
   };
 
   // A bundle that carries none of these lines is the same as no bundle: the

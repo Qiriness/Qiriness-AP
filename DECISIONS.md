@@ -178,7 +178,7 @@ The customer-resolution pass links it from the requester's own address on any ti
 
 ## Order resolution
 
-`shopify_order_number` is written **only** by a confirmed resolution, and there are two ways to reach one: the order's `customer_email_hash` equals the ticket's `requester_email_hash` (`verified_by: email`), or it appears among the addresses in the customer's own message (`verified_by: message_email`, below). A name-only agreement, or an order belonging to someone else, is recorded in `metadata.order_resolution` and left off the column.
+`shopify_order_number` is written **only** by a confirmed resolution, and there are three ways to reach one: the order's `customer_email_hash` equals the ticket's `requester_email_hash` (`verified_by: email`), or it appears among the addresses in the customer's own message (`verified_by: message_email`, below), or the order is a marketplace order whose buyer Shopify only knows as a placeholder (`verified_by: marketplace_order_number`, below). A name-only agreement, or an order belonging to someone else, is recorded in `metadata.order_resolution` and left off the column.
 
 The parser recognises `#NNNN` / "commande n° NNNN" only, and classifies the `Q00` ERP references (911 in the corpus) as **not** Shopify order numbers.
 
@@ -195,6 +195,25 @@ Instead `confirmation-evidence.mjs` hashes **every** address in the text and ask
 It also catches more than it was built for, and that decided the naming. Of the 6 tickets it rescues, **only 3 carry a recognisable confirmation**; the other 3 quote the address some other way. A layout parser would have found 3 and called the rest mismatches. `verified_by` is therefore `message_email`, not `confirmation_email`, and `metadata.order_resolution.confirmation_markers` records how many template markers were present — diagnostic only, never a gate, so a human reviewing a number written against a non-matching sender can tell the two cases apart.
 
 **The order-status URL is the one strong identifier we still throw away.** `{{ order.order_status_url }}` renders to a per-order token whose shape is a platform invariant rather than a template choice — but `htmlToText` drops every `href`, and the raw body is not retained, so the token survives in **0 of 296** stored messages. Using it would need the href kept at map time *and* a token column on `orders`; neither exists, and the hash check does not need them.
+
+### An anonymous marketplace buyer is accepted on the order number (2026-09-17)
+
+Amazon hands Shopify the same placeholder for every buyer (`Anonymous Customer`, `anonymous-…@example.com`, on all 621 Amazon orders), so no email or name check can ever match the real person. **Found on a real ticket:** `RE: Commande 6059`. The customer quoted the number, the order existed, and resolution called it `mismatch` with `ask_purchase_email`. The draft then asked for the order number the customer had just given, plus an email Amazon never passed on.
+
+`verifyOrder` now confirms such an order, **after** every existing check has failed, only when all of these hold:
+
+- the order's `sales_channel_handle` is in `ALL_MARKETPLACE_HANDLES` (a closed list; an unknown channel does not qualify);
+- the customer is the placeholder (`isAnonymousPlaceholder`: that exact name and an `@example.com` address). The store reads the address only to compute that flag and drops it;
+- the number was quoted as an order number, not reached through a tracking number;
+- it is the **only** order number in the message.
+
+**Why only one order number.** `TR: Retour Colissimo` is a staff thread naming #6461, #6673 and #6059. Without this rule, the one anonymous order would be the one that confirms, and a thread about three orders would be linked to one.
+
+**Internal threads are not excluded.** They sit on `/conversations`, not Tickets, and get no draft, so a link there reaches no customer. Linking them is correct anyway: `RE: Retour commande Q0026204303` really is about Amazon order #6308.
+
+**Yves Rocher is not included.** Mirakl buyers carry their real name, so the name check can work there.
+
+`verified_by: marketplace_order_number` keeps the weaker provenance visible, and the ticket's Order block says the buyer could not be checked. Measured by dry run before and after: **2 of 111** unresolved tickets changed (#6059, #6308), and nothing else moved.
 
 ### The order passes run before the investigation, and nothing used to check that
 
