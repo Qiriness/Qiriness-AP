@@ -450,6 +450,10 @@ export function buildCaseFile({
   // like `candidateOrder` and for the same reason: this module imports nothing.
   // Read where a rule's `ask` is applied, below.
   answeredFields = [],
+  // `MISSING_FIELDS` keys no customer answer could help with, removed from
+  // `missing` whoever put them there — the model or a rule. Today only the two
+  // address questions, on an anonymous marketplace order.
+  unaskableFields = [],
   // What was established after each tool call, in call order, from
   // `traceFindings` in the investigation. A PASS-THROUGH and deliberately
   // nothing more: this module imports nothing and must not learn to derive a
@@ -525,6 +529,16 @@ export function buildCaseFile({
       if (!missing.some((entry) => entry.field === field)) {
         missing.push({ field });
       }
+    }
+  }
+
+  // After the rule's asks have joined, so neither source can put one back. The
+  // model is told as much in the lookup's result; this is the part that does not
+  // depend on it listening.
+  const unaskable = new Set(Array.isArray(unaskableFields) ? unaskableFields : []);
+  for (let i = missing.length - 1; i >= 0; i -= 1) {
+    if (unaskable.has(missing[i].field)) {
+      missing.splice(i, 1);
     }
   }
 

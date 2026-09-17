@@ -200,7 +200,11 @@ function passesFilters(
 ): boolean {
   if (level === "uncategorised" && ticket.level !== null) return false;
   if (level !== "all" && level !== "uncategorised" && String(ticket.level) !== level) return false;
-  if (category !== "all" && ticket.category !== category) return false;
+  // Either axis: a ticket that is also about B2B belongs under B2B, and hiding it
+  // there because the categoriser led with `order` is how it gets missed.
+  if (category !== "all" && ticket.category !== category && ticket.secondaryCategory !== category) {
+    return false;
+  }
   if (sender === "consumer" && ticket.senderLabel) return false;
   if (sender === "business" && !ticket.senderLabel) return false;
   return true;

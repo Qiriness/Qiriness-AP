@@ -453,6 +453,9 @@ export function createInvestigator(
       answeredFields: [
         ...fieldsAlreadyAnswered(findingsOf(resolveNeeds(declaredNeeds, run.ledger, names)))
       ],
+      // An anonymous marketplace buyer has no record under any address, so
+      // asking which one they used can only stall the reply.
+      unaskableFields: ticket.orderBuyerAnonymous ? ['purchase_email', 'account_email'] : [],
       // THE SAME REASON `policy` IS COMPUTED HERE: the ledger still carries each
       // tool's `data` at this point and the stored case file will not. Null on
       // every ticket where the reaction tool did not run, which is all of them

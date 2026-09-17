@@ -213,7 +213,9 @@ Amazon hands Shopify the same placeholder for every buyer (`Anonymous Customer`,
 
 **Yves Rocher is not included.** Mirakl buyers carry their real name, so the name check can work there.
 
-`verified_by: marketplace_order_number` keeps the weaker provenance visible, and the ticket's Order block says the buyer could not be checked. Measured by dry run before and after: **2 of 111** unresolved tickets changed (#6059, #6308), and nothing else moved.
+`verified_by: marketplace_order_number` keeps the weaker provenance visible, and the ticket's Order block says the buyer could not be checked.
+
+**The investigation stops asking for an address on these tickets.** Once #6059 was linked, the rerun still asked for the account email. `lookupCustomer` finds no record (none can exist), and its no-match text told the model « c'est la question à lui poser ». Two layers, both keyed on `verified_by` through `orderBuyerAnonymous` on the investigation's ticket input. The lookup's result tells the model the missing record is expected and not to ask. `buildCaseFile` removes `purchase_email` and `account_email` from `missing` whoever added them, so the fix does not depend on the model listening. It is the only confirmed path that skips ownership, so no other ticket carries the flag. Measured by dry run before and after: **2 of 111** unresolved tickets changed (#6059, #6308), and nothing else moved.
 
 ### The order passes run before the investigation, and nothing used to check that
 
@@ -254,6 +256,26 @@ This is the first stage that *chooses* what to do, and the first with a budget: 
 Scope is `ENABLED_SUBJECTS`, which since **2026-08-13** is every subject that has tools: product, product_stock, promotions, account, other, **order, delivery, payment, return_exchange**. The five absent ones — `cosmetovigilance`, `legal_privacy`, `b2b`, `partner_collaboration`, `careers` — are absent because their tool sets are deliberately empty (a confident-looking case file about a reported skin reaction is worse than none), so `isInvestigable` would refuse them anyway. Out-of-scope tickets are skipped *and their flag cleared*, so **enabling a subject means re-raising the flag** (`npm run investigate -- --backfill`), not only editing the array.
 
 A test now asserts that the enabled set and the tool table say exactly the same thing. Until this date they deliberately did not, and the gap was the mechanism; with the gap closed, the invariant worth protecting is the agreement — a subject given tools but never enabled is dormant code nobody notices, and one enabled without tools is a ticket routed nowhere.
+
+### Trade mail is out of scope on any axis, not only a primary `b2b` (2026-09-17)
+
+A primary `b2b` ticket is never investigated, so it is never drafted and waits for a person. Before this change, only the primary category counted. Two tickets show the gap:
+
+- **`7b95c755`**, a pharmacy's unreceived May order, filed `order` + secondary `b2b`. Investigated as a Shopify order, it got a draft asking for « le numéro de commande (au format #XXXX) » and the purchase email, a day after LAP's commercial director had already answered in the thread.
+- **`f091e971`**, Nocibé's « Relance commandes en retard » (PO n°3089694, €3,556.69), filed `delivery` with no `b2b` at all. It got the same draft.
+
+The categoriser labels by subject, correctly, so a secondary-category rule alone would miss the second ticket. So scope now refuses a ticket when **either**:
+
+- `secondary_category = 'b2b'` (in `isInvestigable`), or
+- the thread's **opening** sender is `retailer` in `sender_directory` (`isTradeSender`, checked in the runner once the messages are loaded, before the matcher spends an embedding). A domain entry covers its subdomains.
+
+**`retailer` only.** This is not the sender gate removed earlier in the runner: those 14 threads were our own side (`internal`, `contractor`) working a customer's problem, and they are still investigated. So are carriers (`logistics`, `courier`).
+
+**The opening message, not the latest.** A consumer thread a retailer is copied into later stays a consumer thread.
+
+Measured by running the scope check over all 169 categorised tickets before and after: **3 moved to out of scope**, and nothing else. The third was not predicted: `129fed9b`, a payment notice from `sap.nocibe.fr` (Nocibé accounting) filed `other`, which had a customer-voice draft addressed to an SAP robot. The three pending drafts were rejected the same way the dashboard does it, and the two tickets the agent had parked as `awaiting_customer` were reopened. Their old case files are still stored.
+
+Team routing and forwarding are unchanged: `responsible_team` still follows the primary category, and `category_forwarding` is empty.
 
 ### The order family was enabled before the mismatches were read, and that is a trade rather than an oversight
 

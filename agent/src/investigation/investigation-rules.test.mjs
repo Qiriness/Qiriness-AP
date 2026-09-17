@@ -10,6 +10,7 @@ import {
   allowedTools,
   escalationTriggers,
   isInvestigable,
+  isTradeSender,
   openingMoves,
   requiredEvidence,
   subjectsWithoutPolicy
@@ -315,4 +316,29 @@ test('cosmetovigilance is investigable, which is why it needs a rule', () => {
   assert.ok(isInvestigable({ category: 'cosmetovigilance', request_kind: 'problem', level: 2 }));
   assert.ok(ENABLED_SUBJECTS.includes('cosmetovigilance'));
   assert.equal(answerSetFor('cosmetovigilance'), 'cosmetovigilance');
+});
+
+test('a secondary b2b category takes the ticket out of scope, like a primary one', () => {
+  // Ticket 7b95c755: a pharmacy's trade order, filed `order` + `b2b`, was
+  // investigated as a Shopify order and drafted a request for a #XXXX number.
+  assert.equal(isInvestigable({ category: 'b2b', request_kind: 'problem', level: 3 }), false);
+  assert.equal(
+    isInvestigable({ category: 'order', secondary_category: 'b2b', request_kind: 'problem', level: 3 }),
+    false
+  );
+  assert.equal(
+    isInvestigable({ category: 'order', secondary_category: 'product_stock', request_kind: 'problem', level: 3 }),
+    true,
+    'any other secondary category leaves scope exactly as it was'
+  );
+  assert.equal(isInvestigable({ category: 'order', secondary_category: null, request_kind: 'problem', level: 3 }), true);
+});
+
+test('only a retailer entry makes a sender trade mail', () => {
+  assert.equal(isTradeSender({ label: 'retailer' }), true);
+  for (const label of ['internal', 'contractor', 'logistics', 'courier']) {
+    assert.equal(isTradeSender({ label }), false, label);
+  }
+  assert.equal(isTradeSender(null), false, 'an unlisted sender is a consumer');
+  assert.equal(isTradeSender(undefined), false);
 });

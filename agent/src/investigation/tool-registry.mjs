@@ -356,7 +356,15 @@ export function createToolRegistry({
         return {
           outcome: result.found ? 'found' : result.reason || 'no_match',
           caveats: result.found ? [] : ['customer_unknown'],
-          promptText: result.promptText,
+          // The no-match text tells the model to ask which address the customer
+          // is registered under. On an anonymous marketplace order that question
+          // has no answer we could use: the buyer is not in Shopify at all.
+          promptText:
+            !result.found && ticket.orderBuyerAnonymous
+              ? 'Aucune fiche client ne correspond à l’expéditeur, et c’est attendu : la commande ' +
+                'de ce ticket vient d’une place de marché qui ne nous transmet pas l’acheteur. ' +
+                'Ne demander aucune adresse e-mail au client.'
+              : result.promptText,
           data: {
             customerId: result.customerId ?? null,
             account: result.account ?? null,

@@ -161,6 +161,54 @@ test('WHO sent it does not gate the investigation: a colleague thread is investi
   assert.equal(store.saved.length, 1, 'the case file is built like any other');
 });
 
+test('a retailer thread is skipped whatever its subject, subdomains included', async () => {
+  // Nocibé's « Relance commandes en retard » was filed `delivery` and drafted a
+  // request for a #XXXX number; its accounting robot writes from sap.nocibe.fr.
+  const directory = buildSenderDirectory([
+    { pattern_type: 'domain', pattern: 'nocibe.fr', label: 'retailer', note: 'Retail partner.' }
+  ]);
+  for (const from of ['blanche.thibault@nocibe.fr', 'comptabilite@sap.nocibe.fr']) {
+    const store = buildStore({
+      tickets: [{ ...TICKET, category: 'delivery', request_kind: 'problem', level: 2 }],
+      messages: [{ id: 'm1', body_text: 'Commande n°3089694 en retard', from_email: from }]
+    });
+    let investigated = false;
+    const counts = await runInvestigation({
+      ...wire(store),
+      investigate: async () => {
+        investigated = true;
+        return caseFile();
+      },
+      shopId: 's1',
+      senderDirectory: directory
+    });
+    assert.equal(counts.skipped, 1, from);
+    assert.equal(investigated, false, from);
+    assert.deepEqual(store.updates[0].patch, { needs_investigation: false }, 'the flag is cleared, as for any skip');
+  }
+});
+
+test('the retailer skip reads the opening message, not a later reply', async () => {
+  // A consumer thread a retailer was copied into later stays a consumer thread.
+  const store = buildStore({
+    tickets: [{ ...TICKET, category: 'delivery', request_kind: 'problem', level: 2 }],
+    messages: [
+      { id: 'm1', body_text: 'où est mon colis ?', from_email: 'marie@gmail.com' },
+      { id: 'm2', body_text: 'transféré', from_email: 'service@nocibe.fr' }
+    ]
+  });
+  const counts = await runInvestigation({
+    ...wire(store),
+    investigate: async () => caseFile(),
+    shopId: 's1',
+    senderDirectory: buildSenderDirectory([
+      { pattern_type: 'domain', pattern: 'nocibe.fr', label: 'retailer', note: null }
+    ])
+  });
+  assert.equal(counts.skipped, 0);
+  assert.equal(store.saved.length, 1);
+});
+
 test('the sender reaches the model as context, so a colleague is not read as the customer', async () => {
   let seen;
   const store = buildStore({

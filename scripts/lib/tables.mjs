@@ -217,7 +217,7 @@ export const COLUMNS = {
   // ticket, and the runner cannot tell an open ticket from a closed one it was
   // handed unless the column comes back with it.
   ticketForInvestigation:
-    'id,subject,status,category,request_kind,level,customer_id,requester_email_hash,' +
+    'id,subject,status,category,secondary_category,request_kind,level,customer_id,requester_email_hash,' +
     'shopify_order_number,resolved_context,metadata,duplicate_of_ticket_id',
 
   /** Customer resolution: an address hash and somewhere to record the attempt. */
@@ -261,9 +261,9 @@ export const COLUMNS = {
     'id,status,subject,first_message_at,last_message_at,requester_email_hash,requester_name',
 
   /** The dashboard's detail panel reads the bundle, not the whole row. */
-  // How the order number was confirmed rides along, so the panel can say when
-  // the buyer behind it was never checked (a marketplace placeholder).
-  ticketForDetail: 'id,resolved_context,order_verified_by:metadata->order_resolution->>verified_by',
+  // `metadata` for `order_resolution.verified_by`: the panel says when the buyer
+  // behind the order was never checked (a marketplace placeholder).
+  ticketForDetail: 'id,resolved_context,metadata',
 
   /** The thread dialog: envelope and body, both directions. */
   messageForThread:

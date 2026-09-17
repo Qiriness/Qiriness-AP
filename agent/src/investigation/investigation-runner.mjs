@@ -11,7 +11,7 @@ import { summariseNeeds } from './evidence-rules.mjs';
 import { normaliseConditions, resolveSituationTie,
   answerFromRow
 } from './answer-selection.mjs';
-import { ENABLED_SUBJECTS, answerSetFor, isInvestigable } from './investigation-rules.mjs';
+import { ENABLED_SUBJECTS, answerSetFor, isInvestigable, isTradeSender } from './investigation-rules.mjs';
 import { summarisePhotoEvidence } from './photo-evidence.mjs';
 
 // The batch pass that investigates categorised tickets, mirroring
@@ -147,6 +147,19 @@ export async function runInvestigation({
     // `senderDirectory.lookup()` so the agent knows a colleague is writing and
     // does not mistake them for the customer. Context, not a gate. See
     // DECISIONS.md § Tickets dashboard.
+    //
+    // THE ONE EXCEPTION IS A RETAILER, and it is not the rule above reversed. Those
+    // 14 threads were our side working a customer's problem; a retailer's thread
+    // is a trade order that the consumer tools cannot see, handled like `b2b`.
+    // Checked on the opening message, before the matcher spends an embedding.
+    if (isTradeSender(senderDirectory?.lookup?.(messages[0]?.from_email))) {
+      if (!dryRun) {
+        await record.skip('investigation', ticket.id);
+      }
+      counts.skipped += 1;
+      continue;
+    }
+
     const triggerMessage = messages[messages.length - 1];
 
     // Before the investigation, so it cannot be influenced by it — and awaited
@@ -424,6 +437,12 @@ function buildInput(ticket, messages, senderDirectory, exemplarNeeds = [], polic
     customer_id: ticket.customer_id,
     requester_email_hash: ticket.requester_email_hash,
     shopify_order_number: ticket.shopify_order_number,
+    // The order was accepted on its number because the marketplace hides the
+    // buyer (order-verification.mjs). No customer record can match the sender,
+    // so no address is worth asking for — the lookup and the case file both
+    // read this to stop the question reaching the customer.
+    orderBuyerAnonymous:
+      ticket.metadata?.order_resolution?.verified_by === 'marketplace_order_number',
     // What this sender is to us, or null for an ordinary consumer. THE ADDRESS
     // IS NOT CARRIED — only the label, the note and the pattern that matched,
     // which is a company domain rather than personal data.

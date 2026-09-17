@@ -278,7 +278,7 @@ export async function getTicketDetail(shopId: string, ticketId: string): Promise
   // reads as "no order facts" rather than as a bundle full of nulls.
   const summarised = summariseOrderContext(ticketRow.resolved_context);
   const order = summarised
-    ? { ...summarised, buyerUnverified: ticketRow.order_verified_by === "marketplace_order_number" }
+    ? { ...summarised, buyerUnverified: ticketRow.metadata?.order_resolution?.verified_by === "marketplace_order_number" }
     : null;
 
   // `toPublicAttachments` is the boundary that strips the Exchange message id

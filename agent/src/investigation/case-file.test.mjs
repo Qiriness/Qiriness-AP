@@ -594,3 +594,40 @@ test('only the field actually held is suppressed', () => {
   });
   assert.deepEqual(caseFile.missing, [{ field: 'lot_number' }]);
 });
+
+test('an unaskable field is removed whether the model or a rule asked for it', () => {
+  const caseFile = buildCaseFile({
+    answer: {
+      verdict: 'needs_customer_input',
+      established: [],
+      unverified: [],
+      missing: [{ field: 'account_email' }, { field: 'photo' }]
+    },
+    policy: { situation_key: 'X', answer_key: 'x', route: 'needs_customer_input', ask: ['purchase_email'] },
+    unaskableFields: ['purchase_email', 'account_email'],
+    ledger: [],
+    model: 'test'
+  });
+  assert.deepEqual(caseFile.missing, [{ field: 'photo' }]);
+  assert.ok(!caseFile.doNotClaim.some((line) => line.includes('adresse e-mail')), 'nor is it named as a thing to ask');
+});
+
+test('when the only question was unaskable, the ticket goes to a person', () => {
+  const caseFile = buildCaseFile({
+    answer: { verdict: 'needs_customer_input', established: [], unverified: [], missing: [{ field: 'account_email' }] },
+    unaskableFields: ['purchase_email', 'account_email'],
+    ledger: [],
+    model: 'test'
+  });
+  assert.deepEqual(caseFile.missing, []);
+  assert.equal(caseFile.verdict, 'needs_human');
+});
+
+test('no unaskable fields leaves the questions exactly as they were', () => {
+  const caseFile = buildCaseFile({
+    answer: { verdict: 'needs_customer_input', established: [], unverified: [], missing: [{ field: 'account_email' }] },
+    ledger: [],
+    model: 'test'
+  });
+  assert.deepEqual(caseFile.missing, [{ field: 'account_email' }]);
+});

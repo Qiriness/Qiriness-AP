@@ -199,6 +199,35 @@ test('an unmatched customer raises the customer_unknown caveat', async () => {
   assert.equal(result.outcome, 'no_match');
 });
 
+test('on an anonymous marketplace order, an unmatched customer is not a question for the customer', async () => {
+  // Ticket #6059: the no-match text told the model to ask which address the
+  // account is under, and the case file asked an Amazon buyer for it.
+  const unmatched = {
+    customerLookup: {
+      async lookupCustomer() {
+        return {
+          found: false,
+          reason: 'no_match',
+          customerId: null,
+          promptText: 'Le client peut être enregistré sous une AUTRE adresse — c’est la question à lui poser.'
+        };
+      }
+    }
+  };
+  const ticket = { category: 'delivery', request_kind: 'problem', level: 3 };
+
+  const anonymous = buildRegistry(unmatched).toolsFor({ ...ticket, orderBuyerAnonymous: true });
+  const quiet = await anonymous.handlers.get(TOOL_NAMES.LOOKUP_CUSTOMER)({});
+  assert.equal(quiet.outcome, 'no_match', 'the finding itself is unchanged');
+  assert.deepEqual(quiet.caveats, ['customer_unknown']);
+  assert.ok(!quiet.promptText.includes('question à lui poser'));
+  assert.ok(quiet.promptText.includes('Ne demander aucune adresse'));
+
+  const ordinary = buildRegistry(unmatched).toolsFor(ticket);
+  const asks = await ordinary.handlers.get(TOOL_NAMES.LOOKUP_CUSTOMER)({});
+  assert.ok(asks.promptText.includes('question à lui poser'), 'every other ticket keeps the question');
+});
+
 test('an ambiguous product is a caveat, never a silent pick', async () => {
   const registry = buildRegistry({
     productLookup: {

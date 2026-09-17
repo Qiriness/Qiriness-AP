@@ -299,10 +299,35 @@ export function isInvestigable(ticket = {}) {
   if (ticket.duplicate_of_ticket_id) {
     return false;
   }
+  // B2B ON EITHER AXIS IS B2B. The tools answer a consumer about a Shopify order;
+  // a trade partner's order is not in Shopify, so the run can only conclude it
+  // needs a `#XXXX` number and a purchase email. Ticket `7b95c755` (a pharmacy's
+  // unreceived May order, `order` + `b2b`) got exactly that draft, a day after
+  // the commercial director had already answered her.
+  if (ticket.secondary_category === 'b2b') {
+    return false;
+  }
   if (!ENABLED_SUBJECTS.includes(ticket.category)) {
     return false;
   }
   return allowedTools(ticket.category, ticket.request_kind, ticket.level ?? 1).length > 0;
+}
+
+/**
+ * Sender-directory labels that make a thread trade correspondence whatever its
+ * subject. The categoriser labels by subject, so a retailer's late-order chase
+ * lands in `delivery` — Nocibé's « Relance commandes en retard » (`f091e971`)
+ * was drafted a request for a `#XXXX` number against its PO n°3089694.
+ *
+ * `retailer` only. The own-side labels (`internal`, `contractor`) and the
+ * carriers (`logistics`, `courier`) write about real customer work and are
+ * investigated — a gate on them was tried and removed (see the runner).
+ */
+export const TRADE_SENDER_LABELS = Object.freeze(['retailer']);
+
+/** Whether the directory entry for a thread's opening sender makes it trade mail. */
+export function isTradeSender(entry) {
+  return Boolean(entry && TRADE_SENDER_LABELS.includes(entry.label));
 }
 
 /**
