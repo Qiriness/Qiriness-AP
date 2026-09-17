@@ -30,7 +30,7 @@ test('loadConfig allows nightly schedule overrides', () => {
   assert.equal(config.syncTimezone, 'Europe/Paris');
 });
 
-test('runNightlySync runs customers, orders, products, promotions, then content catalog', async () => {
+test('runNightlySync runs customers, orders, products, promotions, content catalog, then collections', async () => {
   const order = [];
   const result = await runNightlySync({
     args: { dryRun: false },
@@ -60,11 +60,24 @@ test('runNightlySync runs customers, orders, products, promotions, then content 
       contentCatalog: async () => {
         order.push('contentCatalog');
         return { sources: 16, deletedSources: 1 };
+      },
+      collections: async () => {
+        order.push('collections');
+        return { total: 175, refreshed: 6, products: 60 };
       }
     }
   });
 
-  assert.deepEqual(order, ['customers', 'orders', 'products', 'promotions', 'contentCatalog']);
+  // Collections last, and after products: a collection's membership is checked
+  // against a catalogue the product pass has just refreshed.
+  assert.deepEqual(order, [
+    'customers',
+    'orders',
+    'products',
+    'promotions',
+    'contentCatalog',
+    'collections'
+  ]);
   assert.deepEqual(result, {
     customers: 10,
     deleted_customers: 1,
@@ -77,6 +90,9 @@ test('runNightlySync runs customers, orders, products, promotions, then content 
     promotions: 8,
     deleted_promotions: 1,
     shopify_content_sources: 16,
-    deleted_shopify_content_sources: 1
+    deleted_shopify_content_sources: 1,
+    collections: 175,
+    active_collections_refreshed: 6,
+    collection_memberships: 60
   });
 });

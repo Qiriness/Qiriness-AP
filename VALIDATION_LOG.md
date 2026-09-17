@@ -926,6 +926,24 @@ the basket from it ("état du …").
 
 **Still open from this area:**
 
+- **The lookup is now an agent tool, and no investigation has called it.**
+  Wired into the registry 2026-09-16 as `lookupAbandonedCheckout` (order and
+  promotions subjects) so that `checkout_state` can be branched on — P-17's
+  three rules turn on it. Everything above was measured through the retrieval
+  module directly; what has never run is the whole path: an investigation
+  resolving the customer from the ticket's hash, calling the tool, deriving
+  `retrieved` / `unavailable`, and selecting the rule. The unit tests cover each
+  link and `selectAnswer` was checked against the live rule set, which is not
+  the same thing. **To validate:** run `npm run investigate` over a real P-17 or
+  promotions ticket from a customer who abandoned a checkout in the last 30
+  days, and check three things — that the tool was offered and called, that the
+  finding matches what Shopify actually holds, and that the case file carries
+  neither the recovery URL nor the address. Until then the rules stay `draft`.
+- **What a miss costs on a busy day.** The lookup cannot filter on email, so it
+  walks a 30-day window at 50 a page, up to 6 pages, for every ticket that calls
+  it. Never measured against live volume. Item 2 above records that
+  `query:"<email>"` **does** filter, which would remove the walk entirely —
+  worth doing before this runs on the poll rather than by hand.
 - **Whether a *rejected* code appears in `discountCodes`.** The tested checkout
   had a *successfully applied* code, so this is untouched. The expectation
   remains that Shopify records applied codes only, and the tool already treats
@@ -939,6 +957,43 @@ the basket from it ("état du …").
   could have been trying a discount code, so the overlap with "why doesn't my
   code work?" is favourable. A shopper who never entered an email leaves no
   trace, and for them the basket stays invisible.
+
+## 2b. Advice from collections is built and has never answered a real ticket
+
+Shipped 2026-09-16: the collection sync, `advice_collections`, the intersection
+in `recommendProducts`, situation PR-29, the reply format and
+`/agent-setup/collections`. Everything below was measured by calling the pieces
+directly; **no investigation run has used any of it**, and no draft has been
+written from it.
+
+- **To validate:** run `npm run investigate` over ticket `b7b276f6` (Martine) and
+  check four things — that it matches PR-29, that `recommendProducts` is called
+  with requirements drawn from the activated titles, that the products proposed
+  are serums rather than the men's cream it produced on 14 September, and that
+  the draft names each with its description and skin fit. Then the same over a
+  ticket whose requirement nobody has curated, which should route to a person
+  with the *Nos soins visage* link rather than improvise.
+- **The PR-29 rules are drafts.** Verified to select correctly once approved
+  (`by_collection` → propose, `relaxed` → propose with the caveat, everything
+  else → a person). Nothing changes on real mail until somebody approves them.
+- ~~**Six collections were activated from SQL to test the sync.**~~ **Closed
+  2026-09-16**: the owner has curated **22** (10 `category`, 12 `concern`), all
+  with an axis and all with fresh membership. The six I guessed are a subset of
+  what they chose.
+- **The two new screens have not been opened in a browser.** `tsc` and lint are
+  clean and the data behind them was checked with SQL, which is not the same as
+  the page rendering. **To validate:** open both tabs and switch one collection
+  on and off.
+- **`cross_sell` has no PR-29 rule.** If a customer names a competitor product
+  that happens to resolve to one of ours, the situation matches and no rule
+  applies, so it routes to a person. Safe, and left rather than guessed at.
+- ~~**The membership refresh is manual.**~~ **Closed 2026-09-16**: the sync runs
+  last in the nightly, and `/agent-setup/collections` has a Sync button for the
+  cases that cannot wait. There is still no `collections/create` webhook, so a
+  collection made in Shopify is invisible for at most a day unless somebody
+  presses the button. The read re-checks `products.status`, so a stale
+  membership can only ever give a smaller answer, never a dead product in a
+  reply.
 
 ## 3. Promotion eligibility has never seen a real minimum requirement
 

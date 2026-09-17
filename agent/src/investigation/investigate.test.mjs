@@ -503,8 +503,8 @@ test('what the ticket needed is scored against what actually ran', async () => {
   });
   const decomposer = buildDecomposer({
     tasks: [{ question: 'Le masque convient-il ?', category: 'product', request_kind: 'question' }],
-    // Declared: one the run gets, one it looks for and misses, one nothing here
-    // can ever supply.
+    // Declared: one the run gets, one it looks for and misses, one this SUBJECT
+    // is not given the tool for (a product ticket gets no checkout lookup).
     needs: ['product_identity', 'policy_answer', 'checkout_state']
   });
   const openai = buildOpenAI([{ content: caseFileAnswer() }]);
@@ -515,7 +515,7 @@ test('what the ticket needed is scored against what actually ran', async () => {
 
   assert.equal(byNeed.product_identity, 'satisfied');
   assert.equal(byNeed.policy_answer, 'attempted', 'searched, found nothing');
-  assert.equal(byNeed.checkout_state, 'unavailable', 'no tool is wired for it');
+  assert.equal(byNeed.checkout_state, 'unavailable', 'this subject is not given the checkout tool');
 });
 
 test('a fact nobody looked for is distinguishable from one nothing could find', async () => {

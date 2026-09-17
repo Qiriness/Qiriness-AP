@@ -1,12 +1,16 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { read, tablesIn } from './_shared.test.mjs';
+import { checkClause, definitionOf, literalsIn, read, tablesIn } from './_shared.test.mjs';
 
 const sql = read('02_shopify');
 
-test('creates exactly the six snapshot tables it documents', () => {
+test('creates exactly the seven tables it documents', () => {
+  // Six snapshots, plus `advice_collections` — which is a snapshot of Shopify's
+  // collections AND the team's decisions about them, so it lives here with the
+  // rest of the Shopify mirror rather than in the analytics file.
   assert.deepEqual(tablesIn(sql).sort(), [
+    'advice_collections',
     'customers',
     'orders',
     'products',
@@ -14,6 +18,26 @@ test('creates exactly the six snapshot tables it documents', () => {
     'shopify_content_sources',
     'shopify_metaobjects'
   ]);
+});
+
+test('advice_collections keeps three columns out of the reach of the sync', () => {
+  // The whole mechanism: the mapper returns a fixed column set and the upsert
+  // merges duplicates, so a column absent from the payload is left alone. These
+  // three are the ones a sync must never carry — asserted again on the mapper
+  // itself, the way `recommended_for_concerns` already is.
+  const body = definitionOf(sql, 'advice_collections');
+  for (const column of ['is_active boolean not null default false', 'axis text', 'note text']) {
+    assert.ok(body.includes(column), `advice_collections is missing ${column}`);
+  }
+  assert.match(sql, /comment on column public\.advice_collections\.is_active is\s+'Local, never written by the sync/);
+});
+
+test('an axis is one of two things, or undecided', () => {
+  // « un sérum pour mes rides » is one requirement of each kind, and a tool that
+  // could not tell them apart could not relax the right one.
+  const clause = checkClause(sql, 'advice_collections_axis_check');
+  assert.ok(clause, 'no axis constraint');
+  assert.deepEqual(literalsIn(clause), ['category', 'concern']);
 });
 
 test('every snapshot is keyed to Shopify identity and scoped to a shop', () => {

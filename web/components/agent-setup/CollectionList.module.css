@@ -1,0 +1,247 @@
+.wrap {
+  padding: 1.5rem 1.75rem 4rem;
+  max-width: 58rem;
+}
+
+.head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1.5rem;
+  margin-bottom: 1.25rem;
+}
+
+.title {
+  margin: 0 0 0.35rem;
+  font-size: var(--text-h2, 1.35rem);
+}
+
+.lede {
+  margin: 0;
+  color: var(--text-subtle);
+  max-width: 42rem;
+  line-height: 1.55;
+}
+
+.headSide {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+
+.sync {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.4rem 0.8rem;
+  background: var(--surface);
+  color: inherit;
+  font: inherit;
+  font-size: var(--text-caption);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.sync:disabled {
+  cursor: progress;
+  opacity: 0.65;
+}
+
+.synced {
+  margin: 0 0 1rem;
+  color: var(--text-subtle);
+  font-size: var(--text-caption);
+  line-height: 1.5;
+}
+
+.count {
+  flex-shrink: 0;
+  font-size: var(--text-caption);
+  color: var(--text-subtle);
+  font-variant-numeric: tabular-nums;
+}
+
+.controls {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+  flex-wrap: wrap;
+}
+
+.search {
+  position: relative;
+  flex: 1 1 18rem;
+  min-width: 0;
+}
+
+.searchIcon {
+  position: absolute;
+  left: 0.65rem;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-subtle);
+  pointer-events: none;
+}
+
+.search input {
+  width: 100%;
+  padding: 0.5rem 0.7rem 0.5rem 2.1rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: inherit;
+  font: inherit;
+}
+
+.filter {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: var(--text-caption);
+  color: var(--text-subtle);
+  cursor: pointer;
+  user-select: none;
+}
+
+.filter input {
+  cursor: pointer;
+}
+
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.6rem;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 1.5rem;
+  align-items: center;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.85rem 1.1rem;
+  background: var(--surface);
+}
+
+/* A live collection is the exception on a list of 175, so it is the one that is
+   marked — the default state needs no emphasis. */
+.on {
+  border-left: 3px solid var(--accent, #2f7d5c);
+}
+
+.main {
+  min-width: 0;
+}
+
+.titleLine {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.name {
+  font-weight: 600;
+}
+
+.handle {
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: var(--text-caption);
+  color: var(--text-subtle);
+}
+
+.facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.15rem 0.9rem;
+  margin-top: 0.35rem;
+  font-size: var(--text-caption);
+}
+
+.muted {
+  color: var(--text-subtle);
+}
+
+/* Not an error — a condition worth reading before relying on this collection. */
+.warn {
+  color: var(--warn, #a3541a);
+}
+
+.note {
+  color: var(--text-subtle);
+  font-style: italic;
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-shrink: 0;
+}
+
+.axis {
+  display: flex;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.axisOff,
+.axisOn {
+  border: 0;
+  padding: 0.35rem 0.7rem;
+  font: inherit;
+  font-size: var(--text-caption);
+  cursor: pointer;
+  background: transparent;
+  color: var(--text-subtle);
+}
+
+.axisOff + .axisOff,
+.axisOff + .axisOn,
+.axisOn + .axisOff,
+.axisOn + .axisOn {
+  border-left: 1px solid var(--border);
+}
+
+.axisOn {
+  background: var(--surface-strong, rgba(47, 125, 92, 0.12));
+  color: inherit;
+  font-weight: 600;
+}
+
+.axisOff:disabled,
+.axisOn:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.switch {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  flex-shrink: 0;
+  font-size: var(--text-caption);
+  color: var(--text-subtle);
+  cursor: pointer;
+  user-select: none;
+}
+
+.switch input {
+  cursor: pointer;
+}
+
+.empty,
+.error {
+  color: var(--text-subtle);
+  line-height: 1.55;
+}
+
+.error {
+  color: var(--danger, #b3261e);
+}

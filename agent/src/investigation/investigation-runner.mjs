@@ -2,6 +2,7 @@ import { ratchetLevel } from '../../../scripts/lib/support-taxonomy.mjs';
 import { supabaseUpsert } from '../../../scripts/lib/supabase-rest-client.mjs';
 import { COLUMNS, T } from '../../../scripts/lib/tables.mjs';
 import { attemptsSoFar } from '../../../scripts/lib/ticket-record.mjs';
+import { splitQuotedReply } from '../../../scripts/lib/quoted-reply.mjs';
 
 import { OWN_SIDE_LABELS, emptySenderDirectory } from '../ingestion/sender-directory.mjs';
 
@@ -360,6 +361,32 @@ async function handleFailure({ record, ticket, error, counts, logger, dryRun }) 
  * originally asked (and is where a product name or a discount code is actually
  * written), the latest says where the customer stands now. The middle of a long
  * thread rarely changes either.
+ *
+ * QUOTED HISTORY IS SPLIT OFF, NOT DELETED, and until 2026-09-16 it was neither.
+ * `text` was the raw bodies joined, so every tool reading it — `lookupProduct`,
+ * `extractPromotionCodes`, `concernsInText`, the trade-signal amount reader —
+ * read whatever the customer happened to be replying on top of as if they had
+ * written it. The stripper existed and was already used for the embedding and
+ * the categoriser (`scripts/lib/quoted-reply.mjs`); this path simply never
+ * called it. 92 of the mailbox's 233 inbound messages carry a quote, 186,619
+ * characters of it.
+ *
+ * MEASURED ON THE TICKET THAT FOUND IT (`b7b276f6`, 4 Sep): Martine asked, in
+ * 278 characters, for our equivalent of a competitor's anti-wrinkle serum — on
+ * top of 2,086 characters of our own -30% newsletter advertising « Crème
+ * Hydratante Eclat Acide Hyaluronique & Niacinamide ». The matcher is
+ * IDF-weighted over the text, so the newsletter outvoted her and
+ * `lookupProduct` returned « Crème Anti-Âge Homme - Acide Hyaluronique &
+ * Niacinamide », a men's cream assembled out of our own marketing. On her words
+ * alone it returns « Crème anti-rides & anti-âge - Caresse d'Exception ».
+ *
+ * THE QUOTE IS KEPT, on `quotedText`, because it is evidence rather than noise:
+ * a forwarded order confirmation is the one place the order number and the
+ * address it is registered to both appear. Order resolution is an earlier,
+ * separate pass reading the whole body from its own query, so nothing there
+ * changes (`confirmation-evidence.mjs`) — this is carried so that "where does
+ * the quote begin" has one answer in this codebase rather than two. It is never
+ * shown to the model.
  */
 /**
  * @param senderDirectory  optional; `emptySenderDirectory` behaviour when absent.
@@ -373,15 +400,24 @@ async function handleFailure({ record, ticket, error, counts, logger, dryRun }) 
 function buildInput(ticket, messages, senderDirectory, exemplarNeeds = [], policy = null, parameters = new Map()) {
   const first = messages[0];
   const latest = messages.length > 1 ? messages[messages.length - 1] : null;
-  const text = [first?.body_text, latest?.body_text]
+  const parts = [first?.body_text, latest?.body_text].filter(Boolean).map(splitQuotedReply);
+  const text = parts
+    .map((part) => part.own)
     .filter(Boolean)
     .join('\n\n')
     .slice(0, MAX_TEXT_CHARS);
+  const quotedText =
+    parts
+      .map((part) => part.quoted)
+      .filter(Boolean)
+      .join('\n\n')
+      .slice(0, MAX_TEXT_CHARS) || null;
 
   return {
     id: ticket.id,
     subject: ticket.subject,
     text,
+    quotedText,
     category: ticket.category,
     request_kind: ticket.request_kind,
     level: ticket.level,

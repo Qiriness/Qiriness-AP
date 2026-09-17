@@ -225,6 +225,60 @@ export function createProductLookup({ supabase, shopId, logger }) {
     },
 
     /**
+     * The sellable details behind a list of Shopify product GIDs, in the order
+     * they were asked for.
+     *
+     * THE STATUS FILTER IS THE POINT, not a tidy-up. `advice_collections` stores
+     * only products Shopify reported ACTIVE at the last sync, and this asks
+     * again at read time — a product archived since then must not reach a reply,
+     * and a membership list is exactly the kind of thing that goes quietly stale
+     * between nightly runs.
+     *
+     * ORDER IS PRESERVED because the caller has already ranked: the intersection
+     * decided which products answer, and re-sorting them here by whatever the
+     * database returned would throw that away.
+     */
+    async detailsByShopifyIds(shopifyProductIds = []) {
+      const wanted = (Array.isArray(shopifyProductIds) ? shopifyProductIds : []).filter(Boolean);
+      if (wanted.length === 0) {
+        return [];
+      }
+      const rows = await supabaseSelectAll(
+        supabase,
+        'products',
+        {
+          shop_id: shopId,
+          status: 'active',
+          deleted_at: { operator: 'is', value: 'null' },
+          // Quoted, because a Shopify gid carries `/` and `:` and PostgREST's
+          // `in.()` list would otherwise split on them — the same quoting
+          // `crossSellFor` needs for the same reason.
+          shopify_product_id: { operator: 'in', value: `(${wanted.map((id) => `"${id}"`).join(',')})` }
+        },
+        'shopify_product_id,title,short_description,product_type,tags,recommended_for_concerns'
+      );
+      const byId = new Map((rows || []).map((row) => [String(row.shopify_product_id), row]));
+      return wanted
+        .map((id) => byId.get(id))
+        .filter(Boolean)
+        // A sample is not something a customer can go and buy, and eleven of
+        // them are `active` on this catalogue — the same exclusion the
+        // recommendation screen and the matcher both make.
+        .filter((row) => row.product_type !== 'SAMPLE PRODUCT')
+        .map((row) => ({
+          shopifyProductId: String(row.shopify_product_id),
+          title: row.title,
+          summary: row.short_description ?? null,
+          tags: Array.isArray(row.tags) ? row.tags : [],
+          // The ticks from `/agent-setup/recommendations`. They hold skin-concern
+          // keys and, since collections were curated, collection handles too —
+          // both vocabularies are valid in the same column, because both name a
+          // thing support chose to put a product forward for.
+          preferredFor: Array.isArray(row.recommended_for_concerns) ? row.recommended_for_concerns : []
+        }));
+    },
+
+    /**
      * The catalogue's token index, for a caller matching against a *different*
      * candidate set.
      *

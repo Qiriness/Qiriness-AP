@@ -674,6 +674,29 @@ commerciale, prise par une personne.
 
 ---
 
+### PR-29 · Avez-vous l'équivalent de ce produit d'une autre marque ?
+
+`product` · `question` · **1 msg** — pre-purchase · 🟢
+
+**Variantes réelles**
+- « Avez-vous l'équivalence de Wrinkle power - Serum anti rides ? Ce produit que j'ai acheté sur téléshopping de TF1 est vraiment merveilleux »
+- « J'utilisais une crème d'une autre marque qui n'est plus vendue, qu'est-ce qui s'en rapproche le plus chez vous ? »
+- « Je cherche un produit similaire à celui que j'avais avant, un sérum anti-taches, avez-vous ça ? »
+- « Quel serait l'équivalent chez vous de mon ancienne crème de nuit ? »
+- « Je connais une crème mains de chez Garnier, est-ce que vous en avez une adaptée aux peaux sensibles ? »
+
+**needs** `product_recommendation`, `product_identity`
+**exemplaires** → jeu `produit`
+
+**Contenu stable** _(à rédiger)_
+> Le client nomme un produit que NOUS NE VENDONS PAS et demande ce qui s'en rapproche.
+> Ne jamais faire comme si ce produit était le nôtre, et ne jamais comparer les formules :
+> nous ne connaissons pas celle de l'autre marque. Ce qui se répond, c'est ce que le client
+> CHERCHE — le type de soin et la préoccupation — repris depuis les collections que la
+> boutique a activées.
+
+---
+
 ### PR-28 · Quelles sont les caractéristiques du masque LED (longueurs d'onde, irradiance, durée de séance) ?
 `product` · `question` · **3 msgs** — pre-purchase · 🟢
 

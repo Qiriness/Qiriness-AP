@@ -389,3 +389,298 @@ test('a code the customer DID write is looked up, punctuation and case aside', a
   assert.deepEqual(seen, ['QIRINESS20']);
   assert.equal(result.outcome, 'eligible');
 });
+
+// --- the abandoned checkout, the only view we get of a basket -----------------
+
+const ORDER_TICKET = {
+  category: 'order',
+  request_kind: 'problem',
+  level: 2,
+  subject: 'Le masque offert',
+  text: 'le masque offert ne s’ajoute pas à mon panier'
+};
+
+const CHECKOUT = {
+  id: 'gid://shopify/AbandonedCheckout/1',
+  name: '#C1',
+  createdAt: '2026-09-12T08:00:00Z',
+  updatedAt: '2026-09-12T08:20:00Z',
+  recoveryUrl: 'https://qiriness.com/checkouts/abc/recover?key=secret',
+  email: 'marie@example.com',
+  customerId: 'gid://shopify/Customer/1',
+  discountCodes: ['QIRINESS20'],
+  subtotal: 219.87,
+  total: 219.87,
+  totalDiscount: 24.43,
+  subtotalBeforeDiscount: 244.3,
+  currency: 'EUR',
+  lineItems: [
+    { title: 'Masque LED', variantTitle: null, quantity: 1, productTitle: 'Masque LED' },
+    { title: 'Crème', variantTitle: '50 ml', quantity: 2, productTitle: 'Crème Source d’Eau' }
+  ]
+};
+
+/** A registry whose customer resolves to an address, with a stubbed basket. */
+function buildCheckoutRegistry({ checkout = CHECKOUT, found = true, reason = null, customerEmail = 'marie@example.com' } = {}) {
+  const calls = [];
+  const registry = buildRegistry({
+    customerLookup: {
+      async lookupCustomer() {
+        return customerEmail
+          ? { found: true, customerId: 'c1', customer: { name: 'Marie', email: customerEmail }, promptText: '# Client' }
+          : { found: false, reason: 'no_match', customer: null, promptText: '# Inconnu' };
+      }
+    },
+    async checkoutLookup(args) {
+      calls.push(args);
+      return found ? { found: true, checkout } : { found: false, reason, checkout: null };
+    }
+  });
+  return { registry, calls };
+}
+
+test('the order and promotions subjects can look in a basket; product cannot', () => {
+  const { registry } = buildCheckoutRegistry();
+  const namesFor = (ticket) => registry.toolsFor(ticket).names;
+
+  assert.ok(namesFor(ORDER_TICKET).includes(TOOL_NAMES.LOOKUP_ABANDONED_CHECKOUT));
+  assert.ok(
+    namesFor({ category: 'promotions', request_kind: 'problem', level: 2 }).includes(
+      TOOL_NAMES.LOOKUP_ABANDONED_CHECKOUT
+    )
+  );
+  // A product question has no basket in it, and the tool reads live Shopify.
+  assert.ok(!namesFor(PRODUCT_TICKET).includes(TOOL_NAMES.LOOKUP_ABANDONED_CHECKOUT));
+});
+
+test('without Shopify credentials the basket tool is not offered at all', () => {
+  // Rather than bound and throwing on call: the model must never be handed a
+  // function that fails for a reason about our wiring.
+  const registry = buildRegistry();
+  assert.ok(!registry.toolsFor(ORDER_TICKET).names.includes(TOOL_NAMES.LOOKUP_ABANDONED_CHECKOUT));
+});
+
+test('the model never chooses whose basket to open', () => {
+  // The ticket carries a hash, not an address. An `email` parameter would be the
+  // model naming a customer on a string it composed.
+  assert.deepEqual(TOOL_DEFINITIONS[TOOL_NAMES.LOOKUP_ABANDONED_CHECKOUT].parameters.properties, {});
+  assert.deepEqual(TOOL_DEFINITIONS[TOOL_NAMES.LOOKUP_ABANDONED_CHECKOUT].parameters.required, []);
+});
+
+test('a retrieved basket is dated, itemised, and still carries the basket caveat', async () => {
+  const { registry, calls } = buildCheckoutRegistry();
+  const { handlers } = registry.toolsFor(ORDER_TICKET);
+  const result = await handlers.get(TOOL_NAMES.LOOKUP_ABANDONED_CHECKOUT)();
+
+  assert.equal(result.outcome, 'found');
+  assert.equal(calls[0].email, 'marie@example.com', 'looked up by the resolved customer');
+  assert.ok(calls[0].since instanceof Date);
+
+  // Dated from `updatedAt`, which is when the basket was actually true.
+  assert.match(result.promptText, /2026-09-12/);
+  assert.match(result.promptText, /1 × Masque LED/);
+  assert.match(result.promptText, /2 × Crème Source d’Eau \(50 ml\)/);
+  // Before discount: the number a minimum requirement is measured against.
+  assert.match(result.promptText, /244\.3 EUR/);
+  assert.match(result.promptText, /QIRINESS20/);
+
+  // THE CAVEAT SURVIVES A HIT. What came back is the basket they LEFT, not the
+  // one they are looking at, and `draft-checks` flags « votre panier contient ».
+  assert.ok(result.caveats.includes('basket_unseeable'));
+});
+
+test('neither the recovery link nor the address reaches the model or the case file', async () => {
+  // `abandonedCheckoutUrl` opens that basket in the customer's own session.
+  const { registry } = buildCheckoutRegistry();
+  const { handlers } = registry.toolsFor(ORDER_TICKET);
+  const result = await handlers.get(TOOL_NAMES.LOOKUP_ABANDONED_CHECKOUT)();
+
+  const everything = JSON.stringify([result.promptText, result.data]);
+  assert.ok(!everything.includes('recover?key=secret'), 'recovery link leaked');
+  assert.ok(!everything.includes('marie@example.com'), 'address leaked');
+});
+
+test('a customer we could not identify is not a customer with no basket', async () => {
+  const { registry, calls } = buildCheckoutRegistry({ customerEmail: null });
+  const { handlers } = registry.toolsFor(ORDER_TICKET);
+  const result = await handlers.get(TOOL_NAMES.LOOKUP_ABANDONED_CHECKOUT)();
+
+  assert.equal(result.outcome, 'no_customer');
+  assert.equal(calls.length, 0, 'nothing was searched');
+  assert.ok(result.caveats.includes('customer_unknown'));
+});
+
+test('a miss keeps the reason, because the two misses are different facts', async () => {
+  for (const reason of ['none_in_window', 'no_match']) {
+    const { registry } = buildCheckoutRegistry({ found: false, reason });
+    const { handlers } = registry.toolsFor(ORDER_TICKET);
+    const result = await handlers.get(TOOL_NAMES.LOOKUP_ABANDONED_CHECKOUT)();
+    assert.equal(result.outcome, reason);
+    // Shopify only records a basket once an email was entered, so a miss is not
+    // proof the customer's basket was empty. The prompt has to say so.
+    assert.match(result.promptText, /ne pas en conclure/i);
+  }
+});
+
+// --- advice from activated collections -----------------------------------------
+
+const ADVICE_TICKET = {
+  category: 'product',
+  request_kind: 'question',
+  level: 1,
+  subject: 'conseil',
+  text: 'Avez-vous l’équivalence d’un sérum anti-rides ?'
+};
+
+const SERUMS = { handle: 'serums-visage', title: 'Sérums Visage', axis: 'category', productIds: ['gid/1', 'gid/2'] };
+const RIDES = {
+  handle: 'diag-rides-et-ridules',
+  title: 'Diag - Rides et ridules',
+  axis: 'concern',
+  productIds: ['gid/2', 'gid/3']
+};
+
+function buildAdviceRegistry(active = [SERUMS, RIDES]) {
+  return buildRegistry({
+    adviceCollections: {
+      async active() {
+        return active;
+      },
+      cached() {
+        return active;
+      }
+    },
+    productLookup: {
+      async lookupProduct() {
+        return { found: false, ambiguous: false, products: [], candidates: [] };
+      },
+      async crossSellFor() {
+        return { found: false, source: null, products: [] };
+      },
+      async recommendedFor() {
+        return [];
+      },
+      async detailsByShopifyIds(ids) {
+        const catalogue = {
+          'gid/1': { title: 'Sérum Éclat', summary: 'Ravive le teint.', tags: ['peaux ternes'] },
+          'gid/2': { title: 'Sérum Anti-âge Liftant', summary: 'Lisse les rides.', tags: ['peaux matures'] },
+          'gid/3': { title: 'Crème Anti-âge', summary: 'Nourrit.', tags: [] }
+        };
+        return ids.map((id) => ({ shopifyProductId: id, ...catalogue[id] })).filter((p) => p.title);
+      }
+    }
+  });
+}
+
+test('the model is shown the activated collections, and only those', () => {
+  // The guard that makes a model-supplied argument safe: it picks from a list it
+  // was given, rather than inventing a category the team never switched on.
+  const registry = buildAdviceRegistry();
+  const { definitions } = registry.toolsFor(ADVICE_TICKET);
+  const recommend = definitions.find((d) => d.function.name === TOOL_NAMES.RECOMMEND_PRODUCTS);
+
+  assert.match(recommend.function.description, /Valeurs autorisées pour requirements/);
+  assert.match(recommend.function.description, /Diag - Rides et ridules/);
+  assert.match(recommend.function.description, /Sérums Visage/);
+  assert.ok(recommend.function.parameters.properties.requirements, 'no requirements argument');
+});
+
+test('with nothing activated the tool reads exactly as it did before', () => {
+  // A shop that has curated nothing keeps the concern path it already had.
+  const registry = buildAdviceRegistry([]);
+  const { definitions } = registry.toolsFor(ADVICE_TICKET);
+  const recommend = definitions.find((d) => d.function.name === TOOL_NAMES.RECOMMEND_PRODUCTS);
+  assert.doesNotMatch(recommend.function.description, /Valeurs autorisées/);
+});
+
+test('products in every named collection come back as by_collection', async () => {
+  const registry = buildAdviceRegistry();
+  const { handlers } = registry.toolsFor(ADVICE_TICKET);
+  const result = await handlers.get(TOOL_NAMES.RECOMMEND_PRODUCTS)({
+    product: null,
+    requirements: ['Sérums Visage', 'Diag - Rides et ridules']
+  });
+
+  assert.equal(result.outcome, 'by_collection');
+  assert.deepEqual(result.data.titles, ['Sérum Anti-âge Liftant']);
+  assert.deepEqual(result.data.dropped, []);
+  // The reply shape: name, what it does, who it suits — not three bare names.
+  assert.match(result.promptText, /- Sérum Anti-âge Liftant — Lisse les rides\. Pour peau mature\./);
+});
+
+test('a requirement given up is its own outcome and is said out loud', async () => {
+  // `relaxed` rather than a flag inside `data`: a rule branches on the outcome,
+  // and « pour les rides, en sérum » is a different sentence from a full match.
+  const impossible = { handle: 'diag-taches', title: 'Diag - Taches', axis: 'concern', productIds: ['gid/9'] };
+  const registry = buildAdviceRegistry([SERUMS, RIDES, impossible]);
+  const { handlers } = registry.toolsFor(ADVICE_TICKET);
+  const result = await handlers.get(TOOL_NAMES.RECOMMEND_PRODUCTS)({
+    product: null,
+    requirements: ['Sérums Visage', 'Diag - Rides et ridules', 'Diag - Taches']
+  });
+
+  assert.equal(result.outcome, 'relaxed');
+  assert.deepEqual(result.data.dropped, ['diag-taches']);
+  assert.match(result.promptText, /NE PAS laisser entendre/);
+  assert.match(result.promptText, /Diag - Taches/);
+});
+
+test('a requirement nobody curated is reported, not silently answered', async () => {
+  const registry = buildAdviceRegistry();
+  const { handlers } = registry.toolsFor(ADVICE_TICKET);
+  const result = await handlers.get(TOOL_NAMES.RECOMMEND_PRODUCTS)({
+    product: null,
+    requirements: ['Sérums Visage', 'Soins Solaires']
+  });
+
+  assert.deepEqual(result.data.unknown, ['Soins Solaires']);
+  assert.match(result.promptText, /n'a rien de sélectionné pour : Soins Solaires/);
+});
+
+test('the type of care is read from the message even when the model forgets it', async () => {
+  // THE REGRESSION THIS EXISTS FOR, measured on a real run: « je voudrais un
+  // sérum … peau sensible … des rides » came back from the model as two
+  // concerns and no serum, and the reply offered a sunscreen, a cream and a
+  // mist. The word « sérum » is in the customer's own message; reading it is
+  // not a judgement.
+  const registry = buildAdviceRegistry();
+  const { handlers } = registry.toolsFor(ADVICE_TICKET);
+  const result = await handlers.get(TOOL_NAMES.RECOMMEND_PRODUCTS)({ product: null, requirements: [] });
+
+  assert.equal(result.outcome, 'by_collection');
+  assert.deepEqual(result.data.fromCues, ['serums-visage']);
+  assert.ok(result.data.titles.length > 0, 'nothing was put forward');
+});
+
+test('a message naming no type of care and no requirements has nothing to go on', async () => {
+  const registry = buildAdviceRegistry();
+  const { handlers } = registry.toolsFor({
+    ...ADVICE_TICKET,
+    text: 'Bonjour, auriez-vous un conseil pour moi ? Merci.'
+  });
+  const result = await handlers.get(TOOL_NAMES.RECOMMEND_PRODUCTS)({ product: null, requirements: [] });
+  assert.equal(result.outcome, 'nothing_to_go_on');
+});
+
+test('a misnamed collection is reconciled rather than reported uncurated', async () => {
+  // Measured: the model asked for « Diag - Peaux Sensibles », inventing the
+  // prefix off the collections that carry it, when the shop's is « Soins Peaux
+  // Sensibles ». Exact matching called that uncurated, and the reply told the
+  // customer the shop had no sensitive-skin selection — which was false. The
+  // candidate set is closed, so reconciling cannot reach anything unactivated.
+  const sensibles = {
+    handle: 'peaux-sensibles',
+    title: 'Soins Peaux Sensibles',
+    axis: 'concern',
+    productIds: ['gid/2']
+  };
+  const registry = buildAdviceRegistry([SERUMS, sensibles]);
+  const { handlers } = registry.toolsFor(ADVICE_TICKET);
+  const result = await handlers.get(TOOL_NAMES.RECOMMEND_PRODUCTS)({
+    product: null,
+    requirements: ['Diag - Peaux Sensibles']
+  });
+
+  assert.deepEqual(result.data.unknown, [], 'it was still reported as uncurated');
+  assert.ok(result.data.matchedOn.includes('peaux-sensibles'));
+});

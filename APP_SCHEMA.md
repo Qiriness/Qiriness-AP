@@ -179,6 +179,8 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |   |-- cluster-ticket-messages.mjs      # cluster:tickets -- recurring topics per
 |   |                                    # subject. Print-only by default;
 |   |                                    # cluster:tickets:save persists a run
+|   |-- sync-shopify-collections.mjs     # collections + membership of active ones;
+|   |                                   #   in the nightly, and behind the Sync button
 |   |-- apply-supabase-migration.mjs     # SQL runner
 |   |-- process-shopify-compliance-webhook.mjs
 |   |-- dashboard-users.mjs              # `npm run users -- list|add|set-password|
@@ -301,7 +303,16 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |   |   |                        #   ranges derived from shared title bigrams;
 |   |   |                        #   samples are never candidates) ·
 |   |   |                        # product-concerns (customer cues <-> catalogue tags) ·
-|   |   |                        # promotion-{rules,lookup} · abandoned-checkout ·
+|   |   |                        # advice-collections (activated collections,
+|   |   |                        #   requirement -> collection in 3 passes,
+|   |   |                        #   intersect + relax; a category never dropped) ·
+|   |   |                        # care-cues (the type of soin, read from the
+|   |   |                        #   message; cue -> token -> active category) ·
+|   |   |                        # product-lines (name - what it does - who it suits) ·
+|   |   |                        # promotion-{rules,lookup} ·
+|   |   |                        # abandoned-checkout (the ONLY view of a basket;
+|   |   |                        #   live Shopify Admin, never synced; a tool
+|   |   |                        #   since 2026-09-16, see checkout_state) ·
 |   |   |                        # customer-{context,lookup} ·
 |   |   |                        # purchase-{verification,lookup} (three-state
 |   |   |                        #   customer check + last-order product match)
@@ -313,7 +324,9 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |   |   |                        #   + findings = the value each took, + a
 |   |   |                        #   requires/moot DAG and orderNeeds) ·
 |   |   |                        # photo-evidence (re-exports scripts/lib/photo-evidence-rules) ·
-|   |   |                        # tool-registry · investigate (bounded loop) ·
+|   |   |                        # tool-registry (14 tools; the checkout lookup is
+|   |   |                        #   optional and unbound without Shopify creds) ·
+|   |   |                        # investigate (bounded loop) ·
 |   |   |                        # investigation-runner · create-investigation
 |   |   |-- resolution/          # customer-resolution-runner · order-number-parser ·
 |   |   |                        # tracking-number-parser (the second way into an
@@ -365,6 +378,7 @@ Every table has RLS on with no policies: **service-role access only**. Shopify s
 | `orders` | identity, links, channel, derived `order_status`, totals, line items, fulfillments, returns, refunds. Contacts hashed, plus `customer_email_masked` (`j***l@orange.fr`) for the one question a hash cannot answer; `tracking_numbers text[]` (GIN) lifted out of fulfillments so a ticket can be resolved from a parcel number; destination coarse; `retention_rule` names only WHY the clock started, `retention_delete_after` carries the period and is **null when kept indefinitely** |
 | `products` | snapshots + first-class metafields, `variants` jsonb, `available_stock` |
 | `promotions` | one row per redeem code (`code = null` for automatic); `rule_snapshot` carries values, not just type names |
+| `advice_collections` | every Shopify collection (175), plus the team's decision about each: `is_active` (may support answer from it), `axis` (`concern` / `category`), `note`. `product_ids` holds the LIVE products, refreshed for active collections only — see DECISIONS.md § advice from collections |
 | `shopify_metaobjects` | shared metaobjects (FAQ, ingredient lists) referenced by products |
 | `shopify_content_sources` | content-free catalog of live pages + policies. Feeds Agent Setup only; no FK to knowledge |
 
@@ -522,6 +536,7 @@ Written by the worker and the CLIs, read only by the Insights panels.
 | `20_best_products_vip.sql` | drops and recreates `insights_product_sales()` and `insights_country_product_sales()` with `p_vip_only` + the VIP rule arguments (through `vip_customers()`, off by default); both now sit below `vip_customers()` in 06. Copied byte-for-byte from 06, supersedes 11's copies. Applied 2026-09-14 | 01, 02, 06, 11, 12 |
 | `23_agent_situations.sql` | adds `insights_agent_situations()`: tickets investigated in a range (latest run each) split by how the situation was picked — matched, tie settled by rules, near miss chosen by the model, chooser said none, not settled, no match, not recorded — from `ticket_investigations.exemplar_match`. Always one row. Copied byte-for-byte from 06. Applied 2026-09-15 | 04, 06 |
 | `24_rule_tones.sql` | adds `support_answers.tones text[] not null default '{}'` and `support_answers_tones_check` (the keys of `scripts/lib/reply-tones.mjs`), with the column comment — all copied from 05, which its test asserts. Every existing rule takes `{}`. Applied 2026-09-15 | 05 |
+| `27_advice_collections.sql` | adds `advice_collections`: one row per Shopify collection (175 on this shop), with `is_active` / `axis` / `note` owned by the team and `product_ids` refreshed from Shopify for active ones only. Copied byte-for-byte from 02. No data. Applied 2026-09-16 | 01, 02 |
 | `26_product_order_frequency.sql` | adds `insights_product_orders_per_customer()`: for one product, how many of its buyers placed 1, 2, 3… orders carrying a paid line of it, on the same filters as `insights_product_customer_mix()`. Copied byte-for-byte from 06. No table, no data. Applied 2026-09-16 | 01, 02, 06, 12, 19 |
 | `25_rule_links.sql` | adds `support_answers.link_url` / `link_label` (checks: https only; both or neither, label ≤ 120) with their comments, and `ticket_drafts.reply_link jsonb` (object check) — copied from 05 and 07, which its test asserts. All null. Applied 2026-09-15 | 05, 07 |
 | `22_segment_finder.sql` | adds `customer_segment_find()`: customers matching OR-of-AND conditions over orders and net spend in the last N months and lifetime net spend, every customer on file except marketplace-synthetic records; always one totals row plus the top 25 by lifetime spend. Copied byte-for-byte from 06. Applied 2026-09-14 | 01, 02 |
@@ -598,7 +613,9 @@ Env: `CHAT_DB_URL` (the role's pooler URL; unset = the page says so and nothing 
 
 > `category` and `product_ids` answer different questions — the first decides **when** an article is searched (`categoriesToSearch` = the ticket's subject plus `faq`/`brand_story`/`other`), the second decides **what it resolves to** once found. Attaching a product does not make an article reachable from another subject.
 
-**What we suggest, by skin type** (`/agent-setup/recommendations` → `components/agent-setup/RecommendationList`, over `lib/server/recommendations-service.ts` and `/api/recommendations`). Writes `products.recommended_for_concerns` — the one column on that synced table this app owns. Curated rather than derived from the tags: `peaux sensibles` is on 52 of 90 sellable products and « tous les types de peaux » on 52 more, so a tag query answers "these 64", which is not a recommendation. The tag match is shown as a starting hint, and the list is searchable over title AND description (90 rows, and half these products are looked for by what they do rather than by the name on the box). `agent/src/retrieval/product-concerns.mjs` holds the closed concern vocabulary (catalogue `tags` ↔ customer `cues`) and `unclassifiedSkinTags` reports skin-family tags belonging to no concern after a product sync.
+**What we can advise on** (`/agent-setup/collections` → `components/agent-setup/CollectionList`, over `lib/server/collections-service.ts`, `/api/collections` and `/api/collections/[id]`). All 175 Shopify collections, searchable, with a switch and an axis (`concern` / `category`) per row writing `advice_collections.is_active` / `axis` / `note` — the three columns on that synced table this app owns. A **Sync from Shopify** button (`POST /api/collections/sync`) runs the collections sync on demand and returns the refreshed list — it cannot switch anything on. **Activation is its own endpoint** (`PATCH`), separate from the axis and note (`PUT`), the same split `setRuleApproval` keeps: switching a collection on is what lets its products reach a customer. **An axis is required to go live and cannot be cleared while live** — `chooseProducts` gives up a concern before a category, so a collection with no axis is one the intersection cannot reason about; refused from both directions. Nothing is active by default: a product sits in 18–30 collections, most of them seasonal (`Black Friday` 92 products) or diagnostic-quiz output.
+
+**What we suggest, by skin type** (`/agent-setup/recommendations` → `components/agent-setup/RecommendationList`, over `lib/server/recommendations-service.ts` and `/api/recommendations`). Writes `products.recommended_for_concerns` — the one column on that synced table this app owns. Curated rather than derived from the tags: `peaux sensibles` is on 52 of 90 sellable products and « tous les types de peaux » on 52 more, so a tag query answers "these 64", which is not a recommendation. The tag match is shown as a starting hint, and the list is searchable over title AND description (90 rows, and half these products are looked for by what they do rather than by the name on the box). `agent/src/retrieval/product-concerns.mjs` holds the closed concern vocabulary (catalogue `tags` ↔ customer `cues`) and `unclassifiedSkinTags` reports skin-family tags belonging to no concern after a product sync. **Since 2026-09-16 the tabs are the five skin concerns AND the live collections**, both valid in the same column: a concern's ticks ARE the answer (the agent reads the concern out of the message), where a collection's only reorder an answer the intersection already found — so an untouched collection is no preference rather than a gap. `tickableKeys` refuses anything outside the two vocabularies.
 
 **Codes support may offer** (`/agent-setup/promotions` → `components/agent-setup/PromotionList`, over `lib/server/promotions-service.ts` and `/api/promotions`). Every ACTIVE code discount from Shopify, with one switch per row writing `promotions.offerable_in_replies` — the only column on that synced table this app owns, and the only thing on the screen that is editable. `?offerable=true` is what the drafting screen fetches, so partner rates and the 100%-off product code never reach a reply surface.
 

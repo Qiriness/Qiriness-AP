@@ -124,6 +124,13 @@ export function createInvestigator(
    * @returns the case file (see case-file.mjs)
    */
   async function investigate(ticket) {
+    // Anything `toolsFor` needs synchronously, loaded once per run. Today that
+    // is the activated collections, which go INTO the recommendation tool's
+    // schema as the only values its `requirements` argument may take — so the
+    // model is told what it may name instead of guessing. Optional: a registry
+    // without them builds the same tools, minus that list.
+    await registry.ready?.();
+
     // The scope check runs on the TICKET, before any decomposition, so an email
     // that is out of scope costs nothing — not a decomposition call, not a
     // registry binding. Decomposing first would spend a model call on level 4

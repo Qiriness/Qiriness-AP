@@ -91,7 +91,19 @@ const NEEDS = {
   // subject, and a rule for « lequel me conseillez-vous » needs the second.
   product_recommendation: {
     label: 'ce que la boutique recommande à ce client',
-    satisfiedBy: [{ tool: TOOL_NAMES.RECOMMEND_PRODUCTS, outcomes: ['cross_sell', 'by_concern'] }],
+    // `by_collection` and `relaxed` joined the satisfying outcomes on
+    // 2026-09-16, and `by_concern` left the same day. Both of the new ones put
+    // real products forward, and `relaxed` is a narrower answer rather than a
+    // failed one — the tool reports which requirement it gave up so a rule can
+    // say so out loud. `by_concern` went because a concern IS a collection now:
+    // five hand-written cue lists were a second way of answering the same
+    // question, against the twenty-six collections the shop actually curates.
+    satisfiedBy: [
+      {
+        tool: TOOL_NAMES.RECOMMEND_PRODUCTS,
+        outcomes: ['cross_sell', 'by_collection', 'relaxed']
+      }
+    ],
     asksCustomer: null
   },
   // WHETHER AN OFFER COVERS THIS PRODUCT, and how narrowly.
@@ -288,16 +300,26 @@ const NEEDS = {
     asksCustomer: null
   },
 
-  // --- known to matter, deliberately unwired ---------------------------------
+  // --- the basket ------------------------------------------------------------
   checkout_state: {
     label: 'ce que contenait le panier abandonné',
-    // NO TOOL, ON PURPOSE. `abandoned-checkout.mjs` exists and is validated, but
-    // it is not in the investigation registry, so this need can never be
-    // satisfied today and always resolves `unavailable`. That is the point of
-    // listing it: « mon code n'a pas été appliqué au checkout » is one of the
-    // commonest promotions cases, and a report that counts how often it is
-    // needed is the argument for wiring the tool — or for not bothering.
-    satisfiedBy: [],
+    // WIRED 2026-09-16, and it was unwired on purpose until then. The reasoning
+    // recorded here was that `abandoned-checkout.mjs` existed and was validated
+    // but sat outside the registry, so the need always resolved `unavailable` —
+    // and that counting how often it was wanted was the argument for wiring it
+    // or for dropping it. P-17 (« le masque offert ne s'ajoute pas à mon
+    // panier ») is a situation whose whole answer turns on it, so it was wired.
+    //
+    // ONLY `found` SATISFIES. `no_match` and `none_in_window` are real answers —
+    // the shop recorded no basket for this customer — but they are the ABSENCE
+    // of the fact, not the fact. Recording them as satisfaction would let a case
+    // file read complete on a need nothing ever established, which is the
+    // laundering `promotion_eligibility: undetermined` is refused for.
+    satisfiedBy: [{ tool: TOOL_NAMES.LOOKUP_ABANDONED_CHECKOUT, outcomes: ['found'] }],
+    // The lookup resolves the sender itself, from the customer row the ticket's
+    // hash points at — so there is nothing to ask a customer for here. Asking
+    // « quelle adresse avez-vous utilisée » is `customer_identity`'s question,
+    // and this need declares it as a prerequisite instead.
     asksCustomer: null
   },
 
@@ -568,7 +590,7 @@ const FINDINGS = {
   // customer is the move. Collapsing them would send the wrong one of those two
   // replies about half the time.
   product_recommendation: {
-    values: ['cross_sell', 'by_concern', 'not_curated', 'nothing_to_go_on', 'unknown'],
+    values: ['cross_sell', 'by_collection', 'relaxed', 'not_curated', 'nothing_to_go_on', 'unknown'],
     derive(entries) {
       const entry = lastByTool(entries, TOOL_NAMES.RECOMMEND_PRODUCTS);
       if (!entry) return 'unknown';
@@ -737,12 +759,28 @@ const FINDINGS = {
     }
   },
 
-  // No tool, by design — so this can only ever be `unknown`, and listing it says
-  // so explicitly rather than leaving a reader to infer it from an empty
-  // `satisfiedBy`. Same argument as the need itself.
+  // THREE VALUES, AND THE MIDDLE ONE CARRIES THE WEIGHT. `retrieved` means we
+  // are holding a real basket; `unavailable` means we looked and the shop has
+  // none for this customer — which is a fact a reply may state, and NOT the same
+  // as `unknown`, where nothing looked at all (no tool for this subject, or the
+  // customer was never identified).
+  //
+  // A dated snapshot, never the current cart: Shopify mutates one record per
+  // checkout session, so `retrieved` licenses « le panier que vous aviez laissé
+  // le 12 septembre » and never « votre panier contient ». The tool keeps the
+  // `basket_unseeable` caveat on for exactly that reason.
   checkout_state: {
-    values: ['unknown'],
-    derive: () => 'unknown'
+    values: ['retrieved', 'unavailable', 'unknown'],
+    derive(entries) {
+      const entry = lastByTool(entries, TOOL_NAMES.LOOKUP_ABANDONED_CHECKOUT);
+      if (!entry) return 'unknown';
+      if (entry.outcome === 'found') return 'retrieved';
+      // The customer was never identified, so nothing was actually searched —
+      // reporting `unavailable` would claim the shop holds no basket for a
+      // person we never resolved.
+      if (entry.outcome === 'no_customer') return 'unknown';
+      return 'unavailable';
+    }
   }
 };
 
@@ -1042,6 +1080,11 @@ const DEPENDENCIES = {
   // knowing who they are first is what makes an unverified purchase mean « nous
   // ne trouvons pas d'achat » rather than « nous ne vous trouvons pas ».
   purchase_verified: { requires: ['customer_identity'] },
+
+  // The lookup matches on the customer's address, which lives on the customer
+  // row rather than on the ticket — so resolving who wrote in is genuinely the
+  // step before, not a preference about ordering.
+  checkout_state: { requires: ['customer_identity'] },
 
   promotion_validity: { requires: ['promotion_identity'] },
   promotion_eligibility: {
@@ -1472,8 +1515,8 @@ function resolveState({ need, allowed, attempted, satisfied }) {
     return 'attempted';
   }
   // No tool in this ticket's registry could ever have settled it. Not a failure
-  // of the run: either the subject is not allowed that tool, or (checkout_state)
-  // nothing is wired for it at all.
+  // of the run: the subject is not allowed that tool — or, for `other_fact`,
+  // nothing is wired for it at all and nothing ever will be.
   const reachable = need.satisfiedBy.some((source) => allowed.has(source.tool));
   return reachable ? 'not_attempted' : 'unavailable';
 }

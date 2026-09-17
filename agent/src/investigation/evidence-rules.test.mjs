@@ -43,9 +43,10 @@ test('every need is either reachable by a real tool or explicitly unwired', () =
   const unwired = resolveNeeds(NEED_KEYS, [], ALL_TOOLS)
     .filter((item) => item.state === 'unavailable')
     .map((item) => item.need);
-  // Exactly two, and both deliberate: the abandoned-checkout tool is not in the
-  // registry, and other_fact can never be closed by code.
-  assert.deepEqual(unwired.sort(), ['checkout_state', 'other_fact']);
+  // Exactly one now. `checkout_state` joined the wired needs on 2026-09-16 when
+  // `lookupAbandonedCheckout` entered the registry; `other_fact` stays, because
+  // it is the escape hatch and can never be closed by code.
+  assert.deepEqual(unwired.sort(), ['other_fact']);
 });
 
 test('unknown needs are dropped rather than carried', () => {
@@ -98,11 +99,52 @@ test('a need no allowed tool could settle is unavailable, not a failure of the r
   assert.equal(item.state, 'unavailable');
 });
 
-test('checkout_state can never be satisfied, because nothing is wired for it', () => {
-  // Deliberate: the abandoned-checkout module exists and is not in the registry.
-  // Counting how often it is needed is the argument for wiring it.
-  const [item] = resolveNeeds(['checkout_state'], [entry('t1', TOOL_NAMES.LOOKUP_PROMOTION, 'eligible')], ALL_TOOLS);
+test('checkout_state is satisfied by a retrieved basket and by nothing else', () => {
+  // Only `found`. A customer the shop has no recorded basket for is a real
+  // answer, but it is the ABSENCE of the fact — counting it as satisfaction
+  // would let a case file read complete on a need nothing established.
+  const found = resolveNeeds(
+    ['checkout_state'],
+    [entry('t1', TOOL_NAMES.LOOKUP_ABANDONED_CHECKOUT, 'found')],
+    ALL_TOOLS
+  );
+  assert.equal(found[0].state, 'satisfied');
+
+  for (const outcome of ['no_match', 'none_in_window', 'no_customer']) {
+    const [item] = resolveNeeds(
+      ['checkout_state'],
+      [entry('t1', TOOL_NAMES.LOOKUP_ABANDONED_CHECKOUT, outcome)],
+      ALL_TOOLS
+    );
+    assert.equal(item.state, 'attempted', outcome);
+  }
+});
+
+test('a subject without the checkout tool still reports checkout_state unavailable', () => {
+  // The state that used to be permanent is now a property of the ticket: an
+  // account ticket is not given the tool, so nothing there could ever settle it.
+  const [item] = resolveNeeds(['checkout_state'], [], [TOOL_NAMES.LOOKUP_CUSTOMER]);
   assert.equal(item.state, 'unavailable');
+});
+
+test('a basket we looked for and did not find is not the same as never looking', () => {
+  // `unavailable` is a fact a reply may state — the shop holds no basket for
+  // this customer. `unknown` is not, and the difference is whether the customer
+  // was ever identified: with no address there was nothing to search.
+  const finding = (outcome) =>
+    findingsOf(
+      resolveNeeds(
+        ['checkout_state'],
+        outcome ? [entry('t1', TOOL_NAMES.LOOKUP_ABANDONED_CHECKOUT, outcome)] : [],
+        ALL_TOOLS
+      )
+    ).checkout_state;
+
+  assert.equal(finding('found'), 'retrieved');
+  assert.equal(finding('no_match'), 'unavailable');
+  assert.equal(finding('none_in_window'), 'unavailable');
+  assert.equal(finding('no_customer'), 'unknown', 'nothing was searched');
+  assert.equal(finding(null), 'unknown', 'nothing ran');
 });
 
 // --- the distinctions that carry meaning -------------------------------------

@@ -134,21 +134,51 @@ export function RecommendationList({
       {loadError && <p className={styles.error}>{loadError}</p>}
       {error && <p className={styles.error}>{error}</p>}
 
+      {/* TWO GROUPS, LABELLED, because the ticks do different work in each. A
+          skin concern's ticks ARE the answer — the agent reads the concern out
+          of the message and puts forward what is ticked. A collection's only
+          REORDER an answer the intersection already found, so an untouched
+          collection is the shop having no preference rather than a gap, and
+          somebody looking at a zero should not read it as unfinished. */}
       <div className={styles.concerns} role="tablist" aria-label="Skin type">
-        {counts.map((option) => (
-          <button
-            key={option.key}
-            type="button"
-            role="tab"
-            aria-selected={option.key === concern}
-            className={option.key === concern ? styles.concernOn : styles.concernOff}
-            onClick={() => setConcern(option.key)}
-          >
-            {option.label}
-            <span className={styles.concernCount}>{option.curated}</span>
-          </button>
-        ))}
+        <span className={styles.groupLabel}>Skin type</span>
+        {counts
+          .filter((option) => option.kind === "concern")
+          .map((option) => (
+            <button
+              key={option.key}
+              type="button"
+              role="tab"
+              aria-selected={option.key === concern}
+              className={option.key === concern ? styles.concernOn : styles.concernOff}
+              onClick={() => setConcern(option.key)}
+            >
+              {option.label}
+              <span className={styles.concernCount}>{option.curated}</span>
+            </button>
+          ))}
       </div>
+
+      {counts.some((option) => option.kind === "collection") && (
+        <div className={styles.concerns} role="tablist" aria-label="Live collections">
+          <span className={styles.groupLabel}>Preferred in — live collections</span>
+          {counts
+            .filter((option) => option.kind === "collection")
+            .map((option) => (
+              <button
+                key={option.key}
+                type="button"
+                role="tab"
+                aria-selected={option.key === concern}
+                className={option.key === concern ? styles.concernOn : styles.concernOff}
+                onClick={() => setConcern(option.key)}
+              >
+                {option.label}
+                <span className={styles.concernCount}>{option.curated}</span>
+              </button>
+            ))}
+        </div>
+      )}
 
       <div className={styles.controls}>
         {/* THE CATALOGUE IS 90 ROWS, so curating one concern means scrolling past

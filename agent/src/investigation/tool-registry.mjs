@@ -5,9 +5,17 @@ import { orderStates, toOrderContextText } from '../resolution/order-context.mjs
 import { toPromptText as photoPromptText } from './photo-evidence.mjs';
 
 import { concernsInText } from '../retrieval/product-concerns.mjs';
+import { chooseProducts, resolveRequirements } from '../retrieval/advice-collections.mjs';
+import { careCollectionsInText } from '../retrieval/care-cues.mjs';
+import { productLines } from '../retrieval/product-lines.mjs';
 
 import { planToolNames } from './decompose-rules.mjs';
-import { STALE_TRANSIT_DAYS, TOOL_NAMES, allowedTools } from './investigation-rules.mjs';
+import {
+  CHECKOUT_WINDOW_DAYS,
+  STALE_TRANSIT_DAYS,
+  TOOL_NAMES,
+  allowedTools
+} from './investigation-rules.mjs';
 
 // Binds the Phase 4 retrieval tools into something the model can call, and
 // translates what they return into the case file's vocabulary.
@@ -135,6 +143,21 @@ const DEFINITIONS = {
       'remboursements. Disponible uniquement si la commande a été confirmée.',
     parameters: NO_ARGS
   },
+
+  // NO ARGUMENTS, AND THE EMAIL IS THE REASON. The ticket carries a HASH of the
+  // sender's address and nothing else; the plaintext lives on the customer row
+  // that hash resolves to. An `email` parameter would therefore be the model
+  // choosing whose basket to open, on a string it composed — the same mistake
+  // `lookupPromotion` had to be closed against, and worse here, because the
+  // answer is somebody's shopping.
+  [TOOL_NAMES.LOOKUP_ABANDONED_CHECKOUT]: {
+    description:
+      'Retrouve le dernier panier que le client a laissé au moment du paiement : articles, ' +
+      'sous-total et codes promo appliqués. C’est la SEULE vue que nous ayons d’un panier — ' +
+      'le panier en cours, lui, n’est jamais visible. Ne renvoie rien si le client n’est pas ' +
+      'identifié ou s’il n’a laissé aucun panier récemment.',
+    parameters: NO_ARGS
+  },
   [TOOL_NAMES.VERIFY_PURCHASE]: {
     description:
       'Vérifie si l’expéditeur est un client connu ayant déjà commandé en ligne, et compare ' +
@@ -208,13 +231,62 @@ const DEFINITIONS = {
           type: ['string', 'null'],
           description:
             'Le produit que le client dit déjà utiliser, dans ses mots. null s’il n’en cite aucun.'
+        },
+        requirements: {
+          type: 'array',
+          items: { type: 'string' },
+          description:
+            'Ce que le client demande, repris EXACTEMENT dans la liste ci-dessus (préoccupations ' +
+            'et types de soin). Liste vide si le message ne permet pas de le dire — ne jamais ' +
+            'inventer une entrée qui n’y figure pas.'
         }
       },
-      required: ['product'],
+      required: ['product', 'requirements'],
       additionalProperties: false
     }
   }
 };
+
+/**
+ * The tool description the model actually sees, given what the team activated.
+ *
+ * WHAT IT MAY NAME IS LISTED IN THE SCHEMA, and that is the guard that makes the
+ * model-supplied argument safe. `DECISIONS.md` records that a skin concern is
+ * read from the text rather than asked of the model, precisely so a model cannot
+ * invent one — and that reasoning holds only while the vocabulary is five cue
+ * lists this codebase wrote. It does not scale to the thirty-odd collections a
+ * shop curates across concerns AND product forms, which is why the argument
+ * exists at all (see DECISIONS § advice from collections).
+ *
+ * So the constraint moves rather than disappearing: the model picks from a list
+ * it is shown, `resolveRequirements` matches only against that same list, and
+ * anything it names that is not on it is reported as unmatched rather than
+ * quietly resolved to whatever shares a word. The model chooses WHICH; code
+ * still owns WHAT was found.
+ */
+function describeRecommendProducts(collections) {
+  const base = DEFINITIONS[TOOL_NAMES.RECOMMEND_PRODUCTS].description;
+  if (!collections || collections.length === 0) {
+    return base;
+  }
+  const concerns = collections.filter((c) => c.axis !== 'category').map((c) => c.title);
+  const categories = collections.filter((c) => c.axis === 'category').map((c) => c.title);
+  // TYPES OF CARE FIRST, and named as the thing to pick before the concern.
+  // MEASURED 2026-09-16 on « je voudrais un sérum ... peau sensible ... des rides »:
+  // the model returned ["Soins Peaux Sensibles", "Diag - Rides et ridules"] and no
+  // type of care at all, so the answer was a sunscreen, a cream and a mist. Both
+  // titles were quoted exactly — the matcher was never the problem. The schema
+  // listed the two groups without saying which one the customer's own words had
+  // already decided.
+  const lines = [base, '', 'Valeurs autorisées pour requirements (aucune autre) :'];
+  if (categories.length > 0) {
+    lines.push(`- types de soin (à citer EN PREMIER si le client en nomme un) : ${categories.join(' · ')}`);
+  }
+  if (concerns.length > 0) {
+    lines.push(`- préoccupations : ${concerns.join(' · ')}`);
+  }
+  return lines.join('\n');
+}
 
 /**
  * @param clients  the Phase 4 tools, already constructed once per process
@@ -226,6 +298,16 @@ export function createToolRegistry({
   promotionLookup,
   purchaseLookup,
   retrieveKnowledge,
+  // OPTIONAL, unlike the others, because it is the one tool that leaves our own
+  // database: it calls the Shopify Admin API live. A deployment without Shopify
+  // credentials simply does not bind it, `toolsFor` drops it with a warning, and
+  // `checkout_state` goes back to resolving `unavailable` — which is exactly
+  // what it resolved before this tool existed. No caller has to branch.
+  checkoutLookup = null,
+  // OPTIONAL, like the checkout lookup: a shop where nobody has activated a
+  // collection gets the concern path it already had, unchanged. Absent, the
+  // `requirements` argument simply resolves nothing.
+  adviceCollections = null,
   shopId,
   logger
 } = {}) {
@@ -558,6 +640,74 @@ export function createToolRegistry({
         };
       },
 
+      // The only tool here that leaves our own database — see `checkoutLookup`
+      // in the factory arguments for why it is optional.
+      async [TOOL_NAMES.LOOKUP_ABANDONED_CHECKOUT]() {
+        // RESOLVED HERE, NOT TAKEN FROM THE LEDGER. `checkout_state` requires
+        // `customer_identity`, but that ordering only says which need to collect
+        // first — it does not promise `lookupCustomer` ran, and a tool that
+        // silently returned nothing because it did would be a gap nobody could
+        // see. The second lookup is a cached map read, and it writes the
+        // `data_access_events` row this access genuinely warrants.
+        const identified = await customerLookup.lookupCustomer({ ticket });
+        const email = identified.found ? identified.customer?.email || null : null;
+
+        if (!email) {
+          return {
+            outcome: 'no_customer',
+            caveats: ['basket_unseeable', 'customer_unknown'],
+            promptText:
+              'Le client n’est pas identifié à partir de cette adresse, donc aucun panier ' +
+              'enregistré ne peut lui être rattaché.',
+            data: { found: false, reason: 'no_customer' }
+          };
+        }
+
+        const since = new Date(Date.now() - CHECKOUT_WINDOW_DAYS * 86_400_000);
+        const result = await checkoutLookup({ email, since });
+
+        if (!result?.found) {
+          return {
+            // The module's own reason, kept: `none_in_window` (the shop recorded
+            // no abandoned checkout at all) and `no_match` (it recorded some, none
+            // this customer's) are different facts, and a person reading the case
+            // file should not have to guess which.
+            outcome: result?.reason || 'no_match',
+            caveats: ['basket_unseeable'],
+            promptText:
+              `Aucun panier enregistré pour ce client sur les ${CHECKOUT_WINDOW_DAYS} derniers jours. ` +
+              'Shopify n’enregistre un panier que si le client est allé jusqu’à saisir son email ' +
+              'puis a quitté : ne pas en conclure qu’il n’a rien mis dans son panier.',
+            data: { found: false, reason: result?.reason || 'no_match' }
+          };
+        }
+
+        const checkout = result.checkout;
+        return {
+          outcome: 'found',
+          // KEPT EVEN ON `found`, and this is the distinction that matters. What
+          // came back is the last basket the customer ABANDONED, not the one they
+          // are looking at now — Shopify mutates the record in place, so it is a
+          // snapshot dated `updatedAt` and nothing more. « votre panier contient »
+          // would still be a claim about the present that we cannot make, and
+          // `draft-checks` flags exactly that sentence.
+          caveats: ['basket_unseeable'],
+          promptText: checkoutPromptText(checkout),
+          // NEITHER THE RECOVERY URL NOR THE EMAIL. `abandonedCheckoutUrl` is a
+          // live link that opens that basket in the customer's session; it has no
+          // business in a drafting prompt or in a stored diagnostic, and the
+          // address is already on the ticket for anyone entitled to it.
+          data: {
+            found: true,
+            at: checkout.updatedAt || null,
+            itemCount: checkout.lineItems?.length ?? 0,
+            discountCodes: checkout.discountCodes || [],
+            subtotalBeforeDiscount: checkout.subtotalBeforeDiscount ?? null,
+            currency: checkout.currency || null
+          }
+        };
+      },
+
       async [TOOL_NAMES.VERIFY_PURCHASE]() {
         const result = await purchaseLookup.verify({ ticket });
         // THE OUTCOME IS THE STATE ITSELF, all three of them, because
@@ -708,12 +858,21 @@ export function createToolRegistry({
        * like an answer and is not one. `not_curated` is the honest outcome and
        * it is a state a rule can act on by handing the ticket to a person.
        *
-       * NOTHING IS RANKED. The tool returns what the shop has decided, in the
-       * order the database gives; choosing three of them and writing a sentence
-       * around them is the drafting stage's job, under a rule.
+       * NOTHING IS RANKED BY JUDGEMENT. The intersection decides which products
+       * answer and the ticks decide which of those goes first; writing the
+       * sentence around them is the drafting stage's job, under a rule.
+       *
+       * THE SKIN-CUE PATH IS GONE (2026-09-16). It read five closed cue lists
+       * out of the message and returned whatever was ticked for them — a second
+       * way of answering the same question, with a vocabulary five entries wide
+       * against the shop's twenty-six curated collections. A concern IS a
+       * collection now, so « peau sensible » reaches `Soins Peaux Sensibles`
+       * like every other requirement, and `concernsInText` survives only as a
+       * diagnostic on the ledger.
        */
       async [TOOL_NAMES.RECOMMEND_PRODUCTS](args = {}) {
         const named = String(args.product ?? '').trim();
+        const requirements = Array.isArray(args.requirements) ? args.requirements : [];
         // READ FROM THE MESSAGE, NOT ASKED OF THE MODEL. A closed cue list over
         // the customer's own words cannot invent a concern the catalogue has
         // never heard of.
@@ -734,33 +893,93 @@ export function createToolRegistry({
           }
         }
 
-        const recommended = await productLookup.recommendedFor(concerns);
-        if (recommended.length > 0) {
-          return {
-            outcome: 'by_concern',
-            caveats: [],
-            promptText:
-              `Type de peau lu dans le message : ${concerns.join(', ')}. ` +
-              'Produits que la boutique recommande pour cela :\n' +
-              recommended.map((p) => `- ${p.title}${p.summary ? ` — ${p.summary}` : ''}`).join('\n'),
-            data: { concerns, titles: recommended.map((p) => p.title) }
-          };
+        // THE COLLECTION PATH. Two sources, unioned, and neither is enough alone.
+        //
+        // The MODEL names what the customer asked for out of the activated
+        // titles — that is the half needing judgement, because « ma peau
+        // tiraille » is a concern no word list holds.
+        //
+        // The MESSAGE names the type of care by itself, and `careCollectionsInText`
+        // reads it. That half is not left to the model because leaving it there
+        // lost it: measured 2026-09-16, « je voudrais un sérum … peau sensible …
+        // des rides » came back as two concerns and no serum, and the reply
+        // offered a sunscreen, a cream and a mist. The type of care is the one
+        // requirement the customer had already decided.
+        const active = adviceCollections ? await adviceCollections.active() : [];
+        const fromCues = careCollectionsInText(ticket.text, active);
+        if (adviceCollections && (requirements.length > 0 || fromCues.length > 0)) {
+          const asked = resolveRequirements(requirements, active);
+          const unknown = asked.unknown;
+          // Cues first: the type of care leads the intersection, and
+          // `chooseProducts` will not give a category up anyway.
+          const matched = [...fromCues, ...asked.matched.filter((c) => !fromCues.includes(c))];
+          // MORE ARE FETCHED THAN ARE SHOWN, so the ticks have something to
+          // reorder. The intersection decides WHICH products answer; the ticks
+          // decide which of them the shop would rather put first — which is the
+          // whole job of `/agent-setup/recommendations` once a collection has
+          // more members than a reply can name.
+          const chosen = chooseProducts(matched, { limit: ADVICE_CANDIDATES });
+          const found = await productLookup.detailsByShopifyIds(chosen.products);
+          const products = preferFirst(found, chosen.matchedOn).slice(0, ADVICE_SUGGESTIONS);
+
+          if (products.length > 0) {
+            const named = (handles) =>
+              handles.map((h) => active.find((c) => c.handle === h)?.title ?? h).join(', ');
+            return {
+              // `relaxed` is its own outcome, not a flag on `by_collection`: a
+              // rule that wants to say « pour les rides, en sérum » needs to
+              // know a requirement was given up, and a boolean buried in `data`
+              // is not something `when_conditions` can branch on.
+              outcome: chosen.relaxed ? 'relaxed' : 'by_collection',
+              caveats: [],
+              promptText:
+                `Ce que le client demande : ${named(chosen.matchedOn)}.` +
+                (chosen.dropped.length > 0
+                  ? ` Aucun produit ne réunit aussi ${named(chosen.dropped)} — NE PAS laisser entendre` +
+                    ' que ces produits répondent à ce point-là.'
+                  : '') +
+                (unknown.length > 0
+                  ? ` La boutique n'a rien de sélectionné pour : ${unknown.join(', ')}.`
+                  : '') +
+                '\nProduits retenus :\n' +
+                productLines(products),
+              data: {
+                concerns,
+                requirements,
+                // What the message said by itself, beside what the model asked
+                // for, so a run that only worked because of the cues is visible
+                // as such on the ledger.
+                fromCues: fromCues.map((c) => c.handle),
+                matchedOn: chosen.matchedOn,
+                dropped: chosen.dropped,
+                unknown,
+                titles: products.map((p) => p.title)
+              }
+            };
+          }
         }
 
         // Told apart because they need different replies: one is a question we
         // have not answered yet, the other is a question we could not read.
-        const outcome = concerns.length > 0 ? 'not_curated' : 'nothing_to_go_on';
+        //
+        // MEASURED AGAINST THE REQUIREMENTS, NOT THE CUES, since 2026-09-16.
+        // `not_curated` means the model read what the customer wants and no
+        // ACTIVE collection holds an answer for it — a gap in curation, and a
+        // colleague should advise. `nothing_to_go_on` means the message named
+        // nothing usable at all, where asking the customer is the move.
+        const outcome =
+          requirements.length > 0 || fromCues.length > 0 ? 'not_curated' : 'nothing_to_go_on';
         return {
           outcome,
           caveats: ['recommendation_uncurated'],
           promptText:
             outcome === 'not_curated'
-              ? `Type de peau lu dans le message : ${concerns.join(', ')}. ` +
-                'Aucune recommandation n’a été arrêtée par la boutique pour ce type de peau — ' +
-                'ne pas en improviser une.'
-              : 'Le message ne cite aucun produit et ne décrit aucun type de peau exploitable : ' +
+              ? `Ce que le client demande : ${requirements.join(', ')}. ` +
+                'La boutique n’a rien de sélectionné pour cela — ne pas improviser une ' +
+                'recommandation à partir du catalogue.'
+              : 'Le message ne dit pas quel type de soin ni quelle préoccupation : ' +
                 'il n’y a pas de quoi recommander quoi que ce soit.',
-          data: { concerns, titles: [] }
+          data: { concerns, requirements, titles: [] }
         };
       }
     };
@@ -772,6 +991,12 @@ export function createToolRegistry({
     // function that throws would spend a tool call to learn about our wiring.
     if (!purchaseLookup) {
       delete handlers[TOOL_NAMES.VERIFY_PURCHASE];
+    }
+    // Same rule, and the one case where it is expected rather than a wiring
+    // slip: a deployment with no Shopify Admin credentials has no basket to
+    // look in, and `checkout_state` goes back to resolving `unavailable`.
+    if (!checkoutLookup) {
+      delete handlers[TOOL_NAMES.LOOKUP_ABANDONED_CHECKOUT];
     }
 
     return handlers;
@@ -788,6 +1013,18 @@ export function createToolRegistry({
      * module — a task list can only ever name (category, kind) pairs, never a
      * tool, so no caller can widen the set by asking.
      */
+    /**
+     * Primes anything `toolsFor` needs synchronously.
+     *
+     * Only the activated collections today. Called by the runner before the tool
+     * set is built; skipping it costs the `requirements` list in the schema, not
+     * correctness — an unprimed snapshot is empty, so the model is simply not
+     * offered the argument's vocabulary and the concern path answers instead.
+     */
+    async ready() {
+      await adviceCollections?.active();
+    },
+
     toolsFor(ticket = {}, { tasks = null } = {}) {
       const names =
         Array.isArray(tasks) && tasks.length > 0
@@ -807,13 +1044,46 @@ export function createToolRegistry({
         handlers.set(name, bound[name]);
         definitions.push({
           type: 'function',
-          function: { name, description: DEFINITIONS[name].description, parameters: DEFINITIONS[name].parameters }
+          function: {
+            name,
+            description:
+              name === TOOL_NAMES.RECOMMEND_PRODUCTS
+                ? describeRecommendProducts(adviceCollections?.cached())
+                : DEFINITIONS[name].description,
+            parameters: DEFINITIONS[name].parameters
+          }
         });
       }
 
       return { names: [...handlers.keys()], definitions, handlers };
     }
   };
+}
+
+/**
+ * How many products a reply names, and how many are weighed to pick them.
+ *
+ * THREE IS A RECOMMENDATION; EIGHT IS A CATALOGUE PAGE, and a customer handed
+ * eight is back where they started. Twelve are fetched so the ticks have room to
+ * reorder — an intersection returning four when the shop has an opinion about
+ * two of them should lead with those two.
+ */
+const ADVICE_SUGGESTIONS = 3;
+const ADVICE_CANDIDATES = 12;
+
+/**
+ * Ticked products first, order otherwise untouched.
+ *
+ * A STABLE PARTITION, not a sort: the intersection already ranked these, and
+ * re-sorting would throw that away. A product the shop ticked for one of the
+ * collections this answer matched on moves to the front; everything else keeps
+ * its place behind it.
+ */
+function preferFirst(products, matchedOn) {
+  const wanted = new Set(matchedOn);
+  const preferred = products.filter((p) => (p.preferredFor || []).some((key) => wanted.has(key)));
+  const rest = products.filter((p) => !preferred.includes(p));
+  return [...preferred, ...rest];
 }
 
 /** Exported for the registry's own tests and for the wiring check in index.mjs. */
@@ -848,6 +1118,54 @@ function namedAmountOverCeiling(ticket) {
   const ceiling = amount(ticket?.parameters, 'consumer_order_ceiling');
   if (ceiling == null) return null;
   return amountAboveConsumerCeiling(ticket?.text ?? '', Number(ceiling));
+}
+
+/**
+ * What the model is shown of an abandoned checkout.
+ *
+ * WRITTEN AS A DATED SNAPSHOT, not as "your basket". Shopify mutates one record
+ * per checkout session, so what came back is true as of `updatedAt` and may have
+ * moved since — the date is in the first sentence for that reason, not as
+ * decoration. Everything else is the same withholding the other renderings do:
+ * titles, quantities, the pre-discount subtotal and the codes that were on it.
+ * No recovery link, no address, no email.
+ */
+function checkoutPromptText(checkout) {
+  const when = checkout.updatedAt ? new Date(checkout.updatedAt).toISOString().slice(0, 10) : null;
+  const lines = [
+    when
+      ? `Dernier panier enregistré pour ce client, tel qu'il était le ${when} :`
+      : 'Dernier panier enregistré pour ce client :'
+  ];
+
+  for (const item of checkout.lineItems || []) {
+    const quantity = item.quantity ?? 1;
+    const variant = item.variantTitle ? ` (${item.variantTitle})` : '';
+    lines.push(`- ${quantity} × ${item.productTitle || item.title}${variant}`);
+  }
+  if ((checkout.lineItems || []).length === 0) {
+    lines.push('- (aucun article : le panier avait été vidé)');
+  }
+
+  // BEFORE DISCOUNT, because that is the number a minimum requirement is
+  // measured against — see `subtotalBeforeDiscount` in abandoned-checkout.mjs
+  // for the measurement that settled it.
+  if (checkout.subtotalBeforeDiscount != null) {
+    const currency = checkout.currency || '';
+    lines.push(`Sous-total avant remise : ${checkout.subtotalBeforeDiscount} ${currency}`.trim());
+  }
+
+  lines.push(
+    (checkout.discountCodes || []).length > 0
+      ? `Codes appliqués à ce panier : ${checkout.discountCodes.join(', ')}`
+      : 'Aucun code n’était appliqué à ce panier.'
+  );
+
+  lines.push(
+    'Ce panier est celui que le client a laissé, pas celui qu’il a sous les yeux maintenant : ' +
+      'le décrire au passé et à cette date, jamais comme son panier actuel.'
+  );
+  return lines.join('\n');
 }
 
 function appearsAsToken(code, text) {

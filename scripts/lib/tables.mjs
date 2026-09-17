@@ -40,6 +40,7 @@ export const T = {
   CUSTOMERS: 'customers',
   ORDERS: 'orders',
   PRODUCTS: 'products',
+  ADVICE_COLLECTIONS: 'advice_collections',
   SHOPIFY_METAOBJECTS: 'shopify_metaobjects',
   PROMOTIONS: 'promotions',
   SHOPIFY_CONTENT_SOURCES: 'shopify_content_sources',

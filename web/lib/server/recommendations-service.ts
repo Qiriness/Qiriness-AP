@@ -28,8 +28,9 @@ import {
   productMatchesConcern,
 } from "../../../agent/src/retrieval/product-concerns.mjs";
 
+import { listCollections } from "./collections-service";
 import { KnowledgeNotFoundError, KnowledgeValidationError } from "./knowledge-errors";
-import type { ConcernOption, RecommendableProduct } from "../types";
+import type { AdviceCollection, ConcernOption, RecommendableProduct } from "../types";
 
 const TABLE = "products";
 const COLUMNS = "id,title,short_description,product_type,tags,recommended_for_concerns";
@@ -46,13 +47,53 @@ export async function getShopId(): Promise<string> {
   return String(id);
 }
 
-/** The concerns a rule can branch on, with how many products each can return. */
-export function concernOptions(products: RecommendableProduct[]): ConcernOption[] {
-  return (READABLE_CONCERNS as string[]).map((key) => ({
-    key,
-    label: (CONCERNS as Record<string, { label: string }>)[key].label,
-    curated: products.filter((p) => p.concerns.includes(key)).length,
-  }));
+/**
+ * What a product can be ticked for: the five skin concerns, and every collection
+ * the team has switched on.
+ *
+ * BOTH VOCABULARIES, IN ONE COLUMN, and that is deliberate rather than a
+ * migration left half-done. A tick says "support should put this product forward
+ * for X", and X is a skin concern when the agent read one out of the message
+ * (`concernsInText`, five closed cue lists) and a collection when the customer
+ * named something the shop curated. Dropping the concerns would break the
+ * `by_concern` path that answers today; dropping the collections would leave the
+ * ticks with no job now that the intersection chooses.
+ *
+ * A COLLECTION'S TICKS ONLY REORDER. The intersection decides which products
+ * answer; a tick moves one to the front of that list. So an untouched collection
+ * is not a gap — it is the shop having no preference, which is a real answer.
+ */
+export function concernOptions(
+  products: RecommendableProduct[],
+  collections: AdviceCollection[] = []
+): ConcernOption[] {
+  const count = (key: string) => products.filter((p) => p.concerns.includes(key)).length;
+
+  return [
+    ...(READABLE_CONCERNS as string[]).map((key) => ({
+      key,
+      label: (CONCERNS as Record<string, { label: string }>)[key].label,
+      curated: count(key),
+      kind: "concern" as const,
+    })),
+    ...collections
+      .filter((collection) => collection.active)
+      .map((collection) => ({
+        key: collection.handle,
+        label: collection.title,
+        curated: count(collection.handle),
+        kind: "collection" as const,
+      })),
+  ];
+}
+
+/** The keys a tick may name, refused rather than stored when it names anything else. */
+export async function tickableKeys(shopId: string): Promise<string[]> {
+  const collections = await listCollections(shopId);
+  return [
+    ...(READABLE_CONCERNS as string[]),
+    ...collections.filter((collection) => collection.active).map((collection) => collection.handle),
+  ];
 }
 
 /**
@@ -103,13 +144,16 @@ export async function setProductConcerns(
 ): Promise<RecommendableProduct> {
   if (!productId.trim()) throw new KnowledgeValidationError("A product id is required.");
 
-  // A concern outside the vocabulary is a rule that can never match it — refused
-  // here rather than stored and discovered from a transcript.
+  // A key outside the vocabulary is a tick that can never be read — refused here
+  // rather than stored and discovered from a transcript. The vocabulary is the
+  // five skin concerns plus the ACTIVE collections: ticking a product for a
+  // collection nobody switched on would be curating something unreachable.
   const wanted = [...new Set(concerns.map((c) => String(c ?? "").trim()).filter(Boolean))];
-  const unknown = wanted.filter((c) => !(READABLE_CONCERNS as string[]).includes(c));
+  const allowed = await tickableKeys(shopId);
+  const unknown = wanted.filter((c) => !allowed.includes(c));
   if (unknown.length > 0) {
     throw new KnowledgeValidationError(
-      `Not a skin concern the agent can read: ${unknown.join(", ")}.`
+      `Not a skin concern or a live collection: ${unknown.join(", ")}.`
     );
   }
 

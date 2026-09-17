@@ -94,3 +94,39 @@ export function findQuoteBoundary(body) {
 export function hasQuotedReply(body) {
   return findQuoteBoundary(body) !== null;
 }
+
+/**
+ * Both halves, rather than one of them.
+ *
+ * SPLIT, NOT STRIPPED, and the difference is the whole reason this exists
+ * beside `stripQuotedReply`. The quoted block is not noise to be thrown away —
+ * a forwarded order confirmation is the only place the order number and the
+ * address it is registered to appear, which is exactly what
+ * `confirmation-evidence.mjs` reads, and it reads the message whole.
+ *
+ * So a caller that must not let the history speak for the customer takes `own`,
+ * and a caller that wants the evidence takes `quoted` — instead of two
+ * different ideas of where a quote begins. `own` follows `stripQuotedReply`
+ * exactly, including its refusal to return empty: a bare forward keeps the
+ * original as `own` and reports `quoted: null`, because a blank question is
+ * worse than a noisy one.
+ */
+export function splitQuotedReply(body) {
+  if (typeof body !== 'string' || body.length === 0) {
+    return { own: body ?? null, quoted: null, hasQuote: false };
+  }
+
+  const boundary = findQuoteBoundary(body);
+  if (boundary === null) {
+    return { own: body, quoted: null, hasQuote: false };
+  }
+
+  const own = body.slice(0, boundary).trimEnd();
+  if (own.length === 0) {
+    // Wholly quoted. `stripQuotedReply` keeps the original here, so `own` must
+    // too — and then there is no remainder to report, or it would be the same
+    // text twice.
+    return { own: body, quoted: null, hasQuote: true };
+  }
+  return { own, quoted: body.slice(boundary).trim() || null, hasQuote: true };
+}

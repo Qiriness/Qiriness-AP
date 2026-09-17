@@ -10,6 +10,171 @@ Three sibling files carry the other halves, and this one deliberately does not d
 
 ---
 
+## The type of care is read from the message, and a misnamed collection is reconciled (2026-09-17)
+
+Found by running a real test email — « Je voudrais un sérum à utiliser sur mon visage car j'ai la peau sensible et des rides » — through `npm run investigate`. Two defects, both now fixed and both with the run that found them recorded in the code.
+
+**The model forgot the serum.** It called the tool with `["Soins Peaux Sensibles", "Diag - Rides et ridules"]` — two concerns, no type of care, both titles quoted *exactly*, so the matcher was never at fault. The relaxation dropped the broader concern and answered with the three sensitive-skin products: a sunscreen, a cream and a mist. **`careCollectionsInText`** now reads the type of care out of the customer's own words — a cue list of French skincare nouns (`sérum`, `crème pour les mains`, `spf`, `patch`, `masque`, `gommage`, `lotion`, `nettoyant`, `contour des yeux`…) unioned with what the model names. A cue resolves to a *token* looked up in the active category titles, never to a handle, so activating a collection is what makes a cue reachable rather than an edit to the list. **Ambiguity resolves to nothing**: « une crème » is three live collections here, and picking one would invent the half the customer did not say. The schema also now lists types of care first and says the customer's own word decides that one.
+
+**The model invented a collection.** It asked for « Diag - Peaux Sensibles », pattern-matching the prefix off the fourteen collections that carry it, when the shop's is « Soins Peaux Sensibles ». Exact matching called that uncurated and the reply told the customer the shop had **no sensitive-skin selection** — false. `resolveRequirements` now reconciles in three passes, each requiring a unique winner: exact, then the collection's distinctive words inside the requirement, then the requirement's words inside the title. Tolerance is safe here precisely because the candidate set is closed — only what the team activated — so a near miss can never reach something unactivated. Two candidates means unknown, never the first of them.
+
+**Third run of the same email**, nothing else changed:
+
+```
+recommendProducts -> relaxed
+   requirements: ["Sérums Visage","Diag - Peaux Sensibles","Diag - Rides et ridules"]
+
+ÉTABLI      Le client demande un sérum visage pour peau sensible et rides.
+            Produits recommandés : Sérum Anti-âge Liftant … , Sérum Anti-Âge
+            Global … , Sérum Booster Anti-âge Vitamine C …
+NON VÉRIFIÉ Un produit qui répond spécifiquement aux besoins de peau sensible
+            et rides — aucun produit ne réunit ces critères.
+rule        pr25_conseil_partiel
+```
+
+Three serums, for wrinkles, with the unmet requirement stated rather than the shop's catalogue misdescribed. Checked independently: the cues alone read `Sérums Visage` from that message, and the reconciliation alone turns the model's three names into three real collections with nothing left unknown.
+
+`npm test` 2,771 pass (22 new). The test ticket was created, run and deleted.
+
+---
+
+## A concern is a collection: the skin-cue path is removed (2026-09-16)
+
+The owner's correction, and it simplifies the tool rather than adding to it.
+
+**`by_concern` is gone** — the outcome, the branch, the need's satisfying entry and the finding value. It read five hand-written cue lists out of the message and returned whatever was ticked for them; the collection path reads what the model named against the **26 collections the shop has actually curated**, and « peau sensible » is one of them. Two ways of answering the same question, one of them five entries wide. `concernsInText` survives as a diagnostic on the ledger; nothing branches on it.
+
+`conseil_selection_retenue` was **narrowed to `["cross_sell"]`** rather than left naming a value the tool can no longer produce — `normaliseConditions` would have dropped it at load time, silently. `not_curated` and `nothing_to_go_on` are now measured against the requirements instead of the cues.
+
+**The type of care is never given up.** It was a tie-break and is now a rule: only concerns are droppable while a category stands. The old behaviour would drop « Crèmes Mains » to keep two concerns that overlap on a face serum — answering a hand-cream question with the wrong product. Now **every product put forward is in the form the customer asked for**, and a concern is what decides between them. Two categories that share nothing report nothing rather than picking one, because « un sérum ET une crème » is two answers.
+
+Every outcome is answered on both situations, and `auditAnswerSet` over the `products` set is clean:
+
+```
+PR-25  cross_sell -> conseil_selection_retenue   by_collection -> pr25_conseil_collections
+       relaxed    -> pr25_conseil_partiel        not_curated   -> conseil_aucune_selection
+PR-29  by_collection -> pr29_equivalent_propose  relaxed -> pr29_equivalent_partiel
+```
+
+No rule anywhere still names `by_concern`. `npm test` 2,759 pass (4 new, on the non-droppable category).
+
+---
+
+## PR-25 can answer from collections too (2026-09-16)
+
+A gap I left when the two new outcomes were added. `conseil_selection_retenue` — the approved rule that answers « quelle routine me conseillez-vous » — branches on `["by_concern","cross_sell"]` only, so a `by_collection` result on a PR-25 ticket matched **no rule at all**: verdict `none`, routed to a person, and the chosen products with their descriptions thrown away.
+
+Two new PR-25 rules rather than widening the live one, so nothing already approved changes meaning: **`pr25_conseil_collections`** (`by_collection`) and **`pr25_conseil_partiel`** (`relaxed`, carrying the « ne pas laisser entendre que ces produits répondent à ce point-là » caveat the existing skeleton has no reason to hold). Both drafts.
+
+Every outcome of `product_recommendation` is now answered on PR-25, and `auditAnswerSet` over the whole `products` set returns no problems:
+
+| finding | rule |
+| --- | --- |
+| `cross_sell` · `by_concern` | `conseil_selection_retenue` (approved) |
+| `by_collection` | `pr25_conseil_collections` (draft) |
+| `relaxed` | `pr25_conseil_partiel` (draft) |
+| `not_curated` | `conseil_aucune_selection` → a person |
+| `nothing_to_go_on` | `conseil_besoin_inconnu` → ask the customer |
+
+**No other rule needed changing.** Of the 22 rules in the `products` set, 8 branch on `product_recommendation`; the other 14 read `brand_answer`, `product_property`, `product_identity` or `product_availability` — different questions, untouched by this work and correctly so.
+
+`npm test` 2,755 pass.
+
+---
+
+## Collections join the nightly, and gain a Sync button (2026-09-16)
+
+`sync:shopify:collections` runs **last in `sync-shopify-nightly.mjs`**, after products so a collection's membership is checked against a catalogue just refreshed. Cheap: one request for the catalogue plus one per *activated* collection — 23 today against the hundreds the order and product passes make. Its three counts join the integration event.
+
+**`Sync from Shopify` on `/agent-setup/collections`** (`POST /api/collections/sync`) runs it now instead of waiting for 2am, and returns the refreshed list so the screen redraws from what was just written. A collection created in Shopify is otherwise invisible on that screen until the nightly, and there is no collections webhook — the door only handles the six order topics and the three mandatory privacy ones.
+
+**Neither can switch anything on.** `mapCollectionRow` never returns `is_active`, `axis` or `note`, and the upsert leaves absent columns alone, so a collection new to Shopify arrives **off**. The button says so under its result, because a sync button beside a list of switches invites the opposite reading.
+
+**Proved on the live shop the same day.** The run found **176 collections, up from 175** — « Masque LED », created in Shopify at 12:52, which arrived switched off exactly as designed — and refreshed the membership of the **22 collections the owner had activated in the meantime** (10 `category`, 12 `concern`) without disturbing a single one of those decisions. Every live collection has an axis and fresh membership. Advice re-checked against that curation: `Crèmes Hydratantes` + `Soins Peaux Sensibles` returns the Caresse Sensi Zen; `Nettoyants & démaquillants` + `Soins Peaux Sensibles` has nothing in both and correctly relaxes the concern, reporting the drop.
+
+`npm test` 2,755 pass, `tsc` and lint clean.
+
+---
+
+## Agent Setup gains a Collections screen, and the ticks get a job (2026-09-16)
+
+The last piece: the team can now do by hand what had to be done in SQL.
+
+**`/agent-setup/collections`** — a seventh setup tab, sitting before Recommendations because it is the wider and earlier decision. All 175 Shopify collections, searchable and accent-folded, with a **Live only** filter and a three-way empty state that says *which* filter is hiding a collection. Per row: a switch, and an axis of **Concern** or **Type of care**.
+
+- **Activation is its own endpoint.** `PATCH /api/collections/[id]` switches a collection on; `PUT` sets the axis and note. The same split `setRuleApproval` keeps — switching a collection on is what lets its products reach a customer, where a note is bookkeeping, and sharing a handler would let a typo fix silently switch something back on.
+- **An axis is required to go live, and cannot be cleared while live.** The agent gives up a concern before a type of care when nothing satisfies both, so a live collection with no axis is one the intersection cannot reason about. Refused from both directions rather than being reachable by going round.
+- **Two counts, two questions.** Shopify's count includes products that are not live and is what tells somebody whether a collection is worth switching on; the live count is what the agent can actually put forward, and it reads `—`, never `0`, until the membership has been fetched.
+- `is_active`, `axis` and `note` survive the sync by not being in `mapCollectionRow`, like `promotions.offerable_in_replies`.
+
+**The Recommendations screen now lists the live collections beside the five skin concerns**, both valid in the same `recommended_for_concerns` column. The two groups are labelled because the ticks do different work: a concern's ticks *are* the answer, where a collection's **reorder** an answer the intersection already found. So `recommendProducts` now fetches 12 candidates and shows 3, putting ticked products first — which is what makes "choose preferred products when there is not a lot of info" real. An untouched collection is no preference, not a gap.
+
+**Verified against the live database**: 175 rows listed active-first then by title; the six live collections show 16/6/18/5/8/7 live products against Shopify counts of 17/7/19/5/8/7; non-activated rows report `—` rather than 0; the axis check constraint refuses a bogus value; no live collection lacks an axis. `npm test` 2,755 pass, `tsc` and lint clean. The screens have not been opened in a browser.
+
+---
+
+## The agent chooses products from curated collections, and says why (2026-09-16)
+
+The rest of the advice rebuild, on top of the collection sync below.
+
+**`recommendProducts` gains a `requirements` argument.** The model names what the customer asked for — and the **activated collection titles are written into the tool's schema as the only values it may use**, so it picks from a list rather than inventing one. Code then maps them onto collections, intersects the membership, drops anything not live, and ranks. Two new outcomes, `by_collection` and `relaxed`, both satisfying `product_recommendation`; the existing `cross_sell` and `by_concern` paths are untouched, so a shop that has curated nothing keeps exactly the advice it had.
+
+**When nothing sits in every named collection, one requirement is given up — and the reply is told which.** The drop is chosen by what it buys rather than by position: « un sérum pour mes rides et mes taches » has nothing in all three, and dropping `rides` first would leave nothing and force a second drop, answering with plain serums and both concerns gone. Ties break concern-before-category, then broadest-first.
+
+**Suggestions now read as name — what it does — who it suits**, not three bare names: the shop's own `short_description`, cut to one sentence and never composed here, plus the skin the tags say it suits. A product carrying most of the vocabulary collapses to « convient à tous les types de peaux » — a cleanser here carries nine at once.
+
+**New situation PR-29, « Avez-vous l'équivalent de ce produit d'une autre marque ? »** — four French variants, translated to en/es/it/de and embedded. **Martine's own words now match it at 0.755** against a 0.65 bar, where before they matched nothing at 0.425. It steals nothing: PR-25, PR-24 and PR-28 still win their own questions at 0.723, 0.687 and 0.683, with PR-29 second at 0.46, 0.37 and 0.34. Its three rules **refuse to compare formulas** — we do not know the other brand's — and answer what the customer is looking for instead.
+
+**Measured live**, six collections activated: `Sérums Visage` + `Diag - Rides et ridules` → the three Élixir anti-âge serums, each with its description and skin fit; + `Diag - Taches` → the single Sérum Anti-Taches; all three → relaxes `rides` and says so; `Soins Contour des Yeux` + `Diag - Cernes et poches` → the three eye products; an uncurated « Soins Solaires » comes back unmatched rather than answered.
+
+`npm test` 2,755 pass (26 new). **The PR-29 rules are drafts** — verified to select correctly once approved. **Still to come**: the curation screen, so the team can do by hand what I did with SQL.
+
+---
+
+## Shopify collections become a curation surface for advice (2026-09-16)
+
+First piece of the advice rebuild that ticket `b7b276f6` prompted. The shop already groups products the way advice needs — by concern (`Diag - Rides et ridules`, `Diag - Taches`, `Diag - Cernes et poches`) and by category (`Sérums Visage`, `Crèmes de Jour`, `Soins Contour des Yeux`) — and nothing was syncing them.
+
+**New `advice_collections`** (migration `27_advice_collections.sql`, applied 2026-09-16): one row per Shopify collection, with `is_active`, `axis` and `note` owned by the team and never written by the sync, and `product_ids` refreshed from Shopify for active collections only. **New `npm run sync:shopify:collections`**, two passes — the catalogue (all 175, so the curation screen has something to search) and the membership of the activated ones.
+
+**175 collections, and most must never answer a customer**: 62 numbered diagnostic-quiz buckets, plus `Black Friday` (92 products), `Singles day` (84), `Offre spéciale sitewide` (102), `Smart Products Filter Index - Do not delete` (116). A product sits in 18–30 of them. The activation list is the feature, not an accessory.
+
+**Membership is read from the collection side, which is forced rather than chosen**: adding `collections(first: 50)` to the product query is not available — that query already sits at Shopify's 1000-point ceiling (30 products passed, 40 refused). Only live products are stored, and the read still joins `products.status`.
+
+**Measured with six collections activated**: `Sérums Visage` ∩ `Diag - Rides et ridules` = 5 anti-wrinkle serums — the answer Martine's ticket wanted, against the men's cream it got. `Sérums Visage` ∩ `Diag - Taches` = 1. The three-way `Sérums` ∩ `Rides` ∩ `Taches` = 0, which is what the relaxation step will handle.
+
+`npm test` 2,729 pass (30 new). **Still to come**: the tool that uses this, the new situation, the reply format, and the curation screen — the six collections above were activated by hand to prove the sync.
+
+---
+
+## The investigation stops reading our own newsletter as the customer's words (2026-09-16)
+
+**Found on ticket `b7b276f6`.** Martine asked, in 278 characters, for our equivalent of a competitor's anti-wrinkle serum — replying on top of 2,086 characters of our own -30% newsletter, which advertises « Crème Hydratante Eclat Acide Hyaluronique & Niacinamide ». `lookupProduct` is IDF-weighted over the text it is given, so the newsletter outvoted her and it returned **« Crème Anti-Âge Homme - Acide Hyaluronique & Niacinamide »** — a men's cream, assembled out of our own marketing. The draft then offered it to her as the equivalent. On her words alone the same matcher returns « Crème anti-rides & anti-âge - Caresse d'Exception ».
+
+The stripper already existed and was already used for the message embedding and the categoriser (`scripts/lib/quoted-reply.mjs`). **`buildInput` simply never called it**, so `ticket.text` was the raw bodies joined — and every tool that reads it (`lookupProduct`, `extractPromotionCodes`, `concernsInText`, the trade-signal amount reader) read the quoted history as if the customer had written it. **92 of the mailbox's 233 inbound messages carry a quote, 186,619 characters of it.**
+
+**Split, not stripped.** New `splitQuotedReply()` returns both halves off the one boundary `stripQuotedReply` already used, so the two cannot disagree. `buildInput` now puts the customer's own words in `text` and keeps the remainder on `quotedText`. The quote is evidence, not noise: a forwarded order confirmation is the one place the order number and the address it is registered to both appear. Order resolution is an earlier, separate pass that reads the whole body from its own query, so `confirmation-evidence.mjs` and the 6 tickets it rescues are untouched.
+
+`npm test` 2,699 pass (4 new). The matcher's two answers above were re-run against the live catalogue; the investigation has not been re-run end to end on the ticket.
+
+---
+
+## The agent can see a basket: `lookupAbandonedCheckout`, and P-17 branches on it (2026-09-16)
+
+Asked for as a branch on **P-17** (« le masque offert ne s'ajoute pas à mon panier ») turning on **whether we have the basket or not**. That branch could not be written: `checkout_state` was the vocabulary's listed-but-unwired need, so the condition would have been dropped at save time and the rule would have become a silent duplicate of P-17's catch-all. The tool is now wired.
+
+**`lookupAbandonedCheckout`** joins the registry over the existing, validated `abandoned-checkout.mjs`. It is **the only tool in the stack that leaves our own database** — a cart is not synced and cannot be, so it calls the Shopify Admin API live, with the client built on first use. Given to the **order** and **promotions** subjects (P-17 lands in both). **No arguments**: the ticket carries a hash of the sender's address, so the handler resolves the customer itself rather than letting the model name whose basket to open. **Without Shopify credentials the tool is not bound at all** and `checkout_state` resolves `unavailable`, exactly as before.
+
+**`checkout_state` now has three findings** — `retrieved` · `unavailable` (we looked; the shop holds none) · `unknown` (nothing looked) — and requires `customer_identity`. Only a retrieved basket satisfies it. **`basket_unseeable` stays on even on a hit**, deliberately: Shopify mutates one record per checkout session, so what comes back is a snapshot dated `updatedAt` and not the cart the customer is looking at. The rendering dates every basket and says to describe it in the past; neither the recovery link nor the address reaches the model, asserted in the tests.
+
+**Three P-17 rules, all drafts** — nothing changes what the desk sends until they are approved: `retrieved` → a person, with the dated basket in the brief; `unavailable` → ask which address the customer was signed in under; the existing `p17_panier_non_diagnosticable` stays as the everything-else branch.
+
+**Verified**: `npm test` 2,695 pass (7 new — the tool's outcomes, the leak assertions, the finding vocabulary), `tsc` and lint clean. Against the live rule set, each finding selects its own rule, `unknown` and no-findings both fall to the catch-all, and `auditAnswerSet` over the whole `orders` set returns no problems. **Not yet run against a real P-17 ticket** — no live investigation has called the tool.
+
+**Still open**: P-17's other two declared needs, `promotion_validity` and `promotion_eligibility`, remain always `unknown` on an `order` ticket, because `TOOLS_BY_SUBJECT.order` has no promotion tools. Giving it them changes what every order ticket can investigate, so it was not done unasked.
+
+---
+
 ## Insights → Sales: how often a product's buyers bought it (2026-09-16)
 
 The "Who buys this product" card now carries the Customers panel's **"Customers by number of orders"** chart, for the selected product: columns 1, 2, 3… `10+` of how many of a buyer's orders carried it, each with its share of that product's buyers. It sits between the three-way split and "Ordered with", and follows the card's country and VIP-only filters — one argument object feeds both reads, so the chart and the split always describe the same people.

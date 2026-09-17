@@ -35,6 +35,7 @@ export const TOOL_NAMES = {
   LOOKUP_PROMOTION: 'lookupPromotion',
   LIST_ACTIVE_PROMOTIONS: 'listActivePromotions',
   GET_ORDER_CONTEXT: 'getOrderContext',
+  LOOKUP_ABANDONED_CHECKOUT: 'lookupAbandonedCheckout',
   VERIFY_PURCHASE: 'verifyPurchase',
   CHECK_PHOTO_EVIDENCE: 'checkPhotoEvidence',
   IDENTIFY_REACTION_PRODUCT: 'identifyReactionProduct',
@@ -131,13 +132,29 @@ const TOOLS_BY_SUBJECT = {
     T.LIST_ACTIVE_PROMOTIONS,
     T.LOOKUP_PRODUCT_OFFER,
     T.LOOKUP_CUSTOMER,
-    T.SEARCH_KNOWLEDGE
+    T.SEARCH_KNOWLEDGE,
+    // THE ONE VIEW WE EVER GET OF A BASKET, added 2026-09-16. Every other tool
+    // in this list can say what the shop offers and never what the customer was
+    // actually holding, which is why `basket_unseeable` rides on all of them.
+    // An abandoned checkout is the exception: a real record of the line items,
+    // the subtotal and the codes that were applied.
+    T.LOOKUP_ABANDONED_CHECKOUT
   ],
   account: [T.LOOKUP_CUSTOMER, T.SEARCH_KNOWLEDGE],
   other: [T.SEARCH_KNOWLEDGE],
 
   // Defined and tested, dormant until ENABLED_SUBJECTS includes them.
-  order: [T.GET_ORDER_CONTEXT, T.LOOKUP_CUSTOMER, T.SEARCH_KNOWLEDGE, T.VERIFY_PURCHASE],
+  // `lookupAbandonedCheckout` ADDED 2026-09-16 for P-17 (« le masque offert ne
+  // s'ajoute pas à mon panier »), which is an order-category ticket about a
+  // basket. Without it the whole subject has no tool that can see one, so
+  // `checkout_state` resolved `unavailable` on every ticket that declared it.
+  order: [
+    T.GET_ORDER_CONTEXT,
+    T.LOOKUP_CUSTOMER,
+    T.SEARCH_KNOWLEDGE,
+    T.VERIFY_PURCHASE,
+    T.LOOKUP_ABANDONED_CHECKOUT
+  ],
   delivery: [
     T.GET_ORDER_CONTEXT,
     T.LOOKUP_CUSTOMER,
@@ -450,6 +467,21 @@ export function openingMoves(ticket = {}) {
  * arithmetic that settles it without a model judgement.
  */
 export const STALE_TRANSIT_DAYS = 10;
+
+/**
+ * How far back `lookupAbandonedCheckout` looks.
+ *
+ * BOUNDS THE PAGE WALK, which is the real reason for a number here: the lookup
+ * cannot filter on email (Shopify's `abandonedCheckouts(query:)` does not accept
+ * one), so it fetches a date window and matches in memory. A wide window on a
+ * busy store is a lot of pages for one support ticket.
+ *
+ * Thirty days because somebody writing in about a basket is writing about a
+ * recent attempt — and because Shopify only creates the record once a shopper
+ * has entered an email and left, so an older one belongs to a session they have
+ * long since abandoned for good.
+ */
+export const CHECKOUT_WINDOW_DAYS = 30;
 
 /**
  * Level escalations that follow from the evidence, computed rather than judged.

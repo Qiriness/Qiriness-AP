@@ -12,9 +12,14 @@ import styles from "./SetupTabs.module.css";
  * as an action taken from where you are, and these are places of equal standing.
  * Knowledge is what the agent knows, the rulebook is what it does, the
  * parameters are the numbers both of those quote, the promotions are which live
- * codes a reply may hand out, the recommendations are which products it may
- * put forward, and forwarding is who receives the mail it will not answer. None
- * is a detour from another.
+ * codes a reply may hand out, the collections are which groups of products the
+ * agent may advise from at all, the recommendations are which products it may
+ * put forward inside them, and forwarding is who receives the mail it will not
+ * answer. None is a detour from another.
+ *
+ * COLLECTIONS SITS BEFORE RECOMMENDATIONS because it is the wider decision and
+ * the earlier one: a collection nobody switched on cannot be advised from,
+ * whatever is ticked inside it.
  *
  * "Test the agent" stays a button on the knowledge screen, because it IS an
  * action — it opens a dialog and goes nowhere.
@@ -24,6 +29,7 @@ const TABS = [
   { href: "/agent-setup/rules", label: "Rules", hint: "what it does about it" },
   { href: "/agent-setup/parameters", label: "Parameters", hint: "the numbers both quote" },
   { href: "/agent-setup/promotions", label: "Promotions", hint: "codes a reply may offer" },
+  { href: "/agent-setup/collections", label: "Collections", hint: "what we can advise on" },
   { href: "/agent-setup/recommendations", label: "Recommendations", hint: "what we suggest, by skin type" },
   { href: "/agent-setup/forwarding", label: "Forwarding", hint: "who gets non-support mail" },
 ];

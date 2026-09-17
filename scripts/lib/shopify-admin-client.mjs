@@ -39,6 +39,25 @@ export const ORDER_FULFILLMENT_PAGE_SIZE = 10;
 export const ORDER_RETURN_PAGE_SIZE = 10;
 export const DISCOUNT_CODE_PAGE_SIZE = 100;
 
+/**
+ * Collections per page, and products per collection.
+ *
+ * BOTH LARGE, BECAUSE THIS CONNECTION IS CHEAP. Shopify prices a query before
+ * running it and refuses anything over 1000 points, and the price is the product
+ * of the `first` values rather than of the data. A collection node carries a
+ * handle, a title and a count, so 250 of them costs about what 8 products cost.
+ * Measured on the live shop 2026-09-16: 175 collections in one page.
+ *
+ * WHY MEMBERSHIP IS NOT ON THE PRODUCT QUERY. The obvious build is
+ * `products { collections(first: 50) }` — and it cannot be had. That query is
+ * already at the ceiling (`PRODUCT_MAX_PAGE_SIZE` above: 30 passed, 40 refused),
+ * and each product sits in 18-30+ collections, so asking for them would multiply
+ * a 33-point node by fifty. Read from the collection side instead, where one
+ * request answers one collection and only the ACTIVATED ones are ever asked for.
+ */
+export const COLLECTION_PAGE_SIZE = 250;
+export const COLLECTION_PRODUCT_PAGE_SIZE = 250;
+
 const METAOBJECT_DEFINITION_PAGE_SIZE = 50;
 const METAOBJECT_PAGE_SIZE = 50;
 
@@ -1154,6 +1173,70 @@ export async function fetchOrderByLegacyId(shopify, legacyId) {
     shopify.orderReturnsAccessDenied = true;
     return fetchOrderByLegacyId(shopify, legacyId);
   }
+}
+
+const COLLECTIONS_QUERY = `#graphql
+  query CollectionSyncPage($first: Int!, $after: String) {
+    collections(first: $first, after: $after, sortKey: TITLE) {
+      pageInfo {
+        hasNextPage
+        endCursor
+      }
+      nodes {
+        id
+        handle
+        title
+        updatedAt
+        productsCount {
+          count
+        }
+      }
+    }
+  }
+`;
+
+const COLLECTION_PRODUCTS_QUERY = `#graphql
+  query CollectionProducts($id: ID!, $first: Int!, $after: String) {
+    collection(id: $id) {
+      id
+      handle
+      title
+      products(first: $first, after: $after) {
+        pageInfo {
+          hasNextPage
+          endCursor
+        }
+        nodes {
+          id
+          status
+        }
+      }
+    }
+  }
+`;
+
+/** The catalogue of collections: what the curation screen offers to activate. */
+export async function fetchCollectionPage(shopify, cursor) {
+  return shopifyGraphql(shopify, COLLECTIONS_QUERY, {
+    first: COLLECTION_PAGE_SIZE,
+    after: cursor
+  });
+}
+
+/**
+ * One collection's products.
+ *
+ * `status` travels with each node so the caller can drop what is not live
+ * without a second read: a draft or archived product must never be put in front
+ * of a customer, and the collection happily contains them (measured: `Diag -
+ * Rides et ridules` holds 19, of which 18 are active).
+ */
+export async function fetchCollectionProducts(shopify, collectionId, cursor) {
+  return shopifyGraphql(shopify, COLLECTION_PRODUCTS_QUERY, {
+    id: collectionId,
+    first: COLLECTION_PRODUCT_PAGE_SIZE,
+    after: cursor
+  });
 }
 
 export async function fetchDiscountPage(shopify, args, cursor) {

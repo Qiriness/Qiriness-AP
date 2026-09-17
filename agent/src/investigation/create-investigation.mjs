@@ -1,8 +1,11 @@
 import { createEmbeddingsClient } from '../../../scripts/lib/embeddings/openai-embeddings-client.mjs';
+import { createShopifyClient } from '../../../scripts/lib/shopify-admin-client.mjs';
 import { supabaseSelect } from '../../../scripts/lib/supabase-rest-client.mjs';
 import { T } from '../../../scripts/lib/tables.mjs';
 import { toParameterMap } from '../../../scripts/lib/parameters.mjs';
 import { createOpenAIClient } from '../llm/openai-client.mjs';
+import { createAbandonedCheckoutLookup } from '../retrieval/abandoned-checkout.mjs';
+import { createAdviceCollections } from '../retrieval/advice-collections.mjs';
 import { createCustomerLookup } from '../retrieval/customer-lookup.mjs';
 import { createExemplarRetrieval } from '../retrieval/exemplar-retrieval.mjs';
 import { createKnowledgeRetrieval } from '../retrieval/knowledge-retrieval.mjs';
@@ -88,6 +91,8 @@ export function createInvestigationStack({
     purchaseLookup,
     promotionLookup: createPromotionLookup({ supabase, shopId, logger }),
     retrieveKnowledge: createKnowledgeRetrieval({ supabase, embeddingsClient, logger }),
+    checkoutLookup: buildCheckoutLookup(config, logger),
+    adviceCollections: createAdviceCollections({ supabase, shopId, logger }),
     shopId,
     logger
   });
@@ -314,5 +319,46 @@ export function createInvestigationStack({
     loadAnswers,
     loadCollectionMode,
     loadParameters
+  };
+}
+
+/**
+ * The abandoned-checkout lookup, or null.
+ *
+ * THE ONLY TOOL IN THE STACK THAT LEAVES OUR OWN DATABASE. Every other one reads
+ * Supabase; this one calls the Shopify Admin API live, because a cart is not
+ * synced and cannot be — abandoned checkouts are transient and carry a whole
+ * basket, so mirroring them would mean storing the shopping of everyone who ever
+ * bounced (see abandoned-checkout.mjs).
+ *
+ * NULL WHEN THE SHOP HAS NO ADMIN CREDENTIALS, and that is the safe direction:
+ * the registry then never binds the tool, `toolsFor` drops it with a warning,
+ * and `checkout_state` resolves `unavailable` — exactly what it resolved before
+ * the tool was wired. A half-configured deployment loses a branch rather than
+ * answering from a failed call.
+ *
+ * THE CLIENT IS BUILT ON FIRST USE. `createShopifyClient` is async (it can
+ * exchange client credentials for a token) and the stack is built synchronously
+ * by every caller, so constructing it eagerly would make the whole stack async
+ * for a tool most tickets never call. Built once and kept.
+ */
+function buildCheckoutLookup(config, logger) {
+  const configured =
+    Boolean(config?.shopDomain) &&
+    Boolean(config.shopifyToken || (config.shopifyClientId && config.shopifyClientSecret));
+  if (!configured) {
+    logger?.info?.('investigation.checkout_lookup_unconfigured');
+    return null;
+  }
+
+  let lookupPromise = null;
+  const build = async () => {
+    const shopify = await createShopifyClient(config);
+    return createAbandonedCheckoutLookup({ shopify, logger });
+  };
+
+  return async (args) => {
+    lookupPromise = lookupPromise || build();
+    return (await lookupPromise)(args);
   };
 }

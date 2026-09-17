@@ -177,3 +177,14 @@
 .error {
   color: var(--danger, #b3261e);
 }
+
+/* Two tab strips now, and a strip with no name would read as one long row of
+   unrelated things. */
+.groupLabel {
+  align-self: center;
+  margin-right: 0.35rem;
+  font-size: var(--text-caption);
+  color: var(--text-subtle);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}

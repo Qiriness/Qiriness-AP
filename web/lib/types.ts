@@ -1732,6 +1732,17 @@ export interface ConcernOption {
   key: string;
   label: string;
   curated: number;
+  /**
+   * Which vocabulary the key belongs to.
+   *
+   * `concern` is one of the five closed cue lists the agent reads out of a
+   * message itself; `collection` is one the team switched on. Both live in the
+   * same column because both say "support should put this product forward for
+   * X" — but they behave differently, and the screen says so: a concern's ticks
+   * ARE the answer, where a collection's only reorder an answer the intersection
+   * already found.
+   */
+  kind: "concern" | "collection";
 }
 
 /**
@@ -1760,6 +1771,43 @@ export interface PromotionChoice {
   stacksWith: string[] | null;
   usage: { used: number; limit: number | null };
   offerable: boolean;
+}
+
+/**
+ * Which kind of thing a collection names.
+ *
+ * `concern` is what is wrong (rides, taches, cernes et poches); `category` is
+ * what form the answer takes (sérum, crème de jour, contour des yeux). The two
+ * are relaxed differently when nothing sits in both — a concern is given up
+ * before a category, because the customer named the form they want and swapping
+ * it hands them a different product.
+ */
+export type CollectionAxis = "concern" | "category";
+
+/**
+ * One Shopify collection, and what the team has decided about it.
+ *
+ * The shop has 175 of these and a product sits in 18 to 30, most of them
+ * seasonal merchandising or the output of the site's diagnostic quiz — so
+ * `active` is the gate that makes the whole thing mean anything. Nothing is
+ * active until somebody switches it on.
+ */
+export interface AdviceCollection {
+  id: string;
+  handle: string;
+  title: string;
+  /** Shopify's count, INCLUDING products that are not live. Judge-by-eye only. */
+  productsCount: number | null;
+  /**
+   * What the agent can actually put forward — null, never zero, until the
+   * membership has been fetched, which happens for active collections only.
+   * Printing 0 for "never asked" would read as "this collection is empty".
+   */
+  liveProducts: number | null;
+  active: boolean;
+  axis: CollectionAxis | null;
+  note: string | null;
+  syncedAt: string | null;
 }
 
 /** The curated subset, as the reply screen sees it. Same shape, minus the flag. */

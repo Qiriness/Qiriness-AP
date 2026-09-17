@@ -1,7 +1,13 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { stripQuotedReply, findQuoteBoundary, hasQuotedReply, STRIPPER_VERSION } from './quoted-reply.mjs';
+import {
+  stripQuotedReply,
+  splitQuotedReply,
+  findQuoteBoundary,
+  hasQuotedReply,
+  STRIPPER_VERSION
+} from './quoted-reply.mjs';
 
 test('strips a Gmail-style French quote', () => {
   const body = `Bonjour,
@@ -107,4 +113,51 @@ test('the version is exported so the embedding hash can depend on it', () => {
   // Changing the stripper must invalidate stored vectors; mixing this into the
   // hash is what makes the reconciler re-embed.
   assert.match(STRIPPER_VERSION, /^quoted-reply\/\d+$/);
+});
+
+// --- splitQuotedReply: the half that is kept -----------------------------------
+
+test('split returns both halves, and `own` agrees with the stripper', () => {
+  const body = [
+    'Avez-vous l’équivalence de Wrinkle power - Serum anti rides',
+    '',
+    'De : Qiriness <contact@qiriness.com>',
+    'Envoyé : vendredi 4 septembre 2026 13:02',
+    '',
+    'Crème Hydratante Eclat Acide Hyaluronique & Niacinamide'
+  ].join('\n');
+
+  const { own, quoted, hasQuote } = splitQuotedReply(body);
+  assert.equal(hasQuote, true);
+  assert.equal(own, stripQuotedReply(body), 'the two must not disagree about the boundary');
+  assert.match(own, /Wrinkle power/);
+  assert.doesNotMatch(own, /Niacinamide/, 'our own newsletter is not what she wrote');
+  // KEPT, NOT DISCARDED: a forwarded confirmation is where the order number and
+  // the address it is registered to both live.
+  assert.match(quoted, /Niacinamide/);
+  assert.match(quoted, /contact@qiriness\.com/);
+});
+
+test('a message with no quote reports one half and no marker', () => {
+  const { own, quoted, hasQuote } = splitQuotedReply('Bonjour, où en est ma commande ?');
+  assert.equal(own, 'Bonjour, où en est ma commande ?');
+  assert.equal(quoted, null);
+  assert.equal(hasQuote, false);
+});
+
+test('a bare forward keeps the original as `own` and reports no remainder', () => {
+  // Same refusal `stripQuotedReply` makes: a blank question is worse than a
+  // noisy one, and reporting the text as both halves would duplicate it.
+  const body = '-----Message d’origine-----\nDe : jean@example.fr\n\nMa commande #4854 svp';
+  const { own, quoted, hasQuote } = splitQuotedReply(body);
+  assert.equal(own, body);
+  assert.equal(quoted, null);
+  assert.equal(hasQuote, true);
+  assert.equal(own, stripQuotedReply(body));
+});
+
+test('empty and missing bodies are handled like the stripper handles them', () => {
+  assert.deepEqual(splitQuotedReply(''), { own: '', quoted: null, hasQuote: false });
+  assert.deepEqual(splitQuotedReply(null), { own: null, quoted: null, hasQuote: false });
+  assert.deepEqual(splitQuotedReply(undefined), { own: null, quoted: null, hasQuote: false });
 });

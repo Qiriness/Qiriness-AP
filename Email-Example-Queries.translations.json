@@ -5025,6 +5025,224 @@
         "text": "Bevor ich mich entscheide, möchte ich einige technische Merkmale wissen, die nicht auf dem Produktblatt stehen: die Bestrahlungsstärke (oder Leistungsdichte), ausgedrückt in mW/cm²; die Fluenz, die während einer 10-minütigen Sitzung abgegeben wird"
       }
     },
+    "PR-29": {
+      "0:en": {
+        "index": 101,
+        "sourceIndex": 0,
+        "sourceLanguage": "fr",
+        "sourceText": "Avez-vous l'équivalent de ce produit d'une autre marque ?",
+        "sourceHash": "3958467cc9a4d3090a1433bc4dd87c8065a51e9a9d8a79da6f8ce52d87cc516b",
+        "language": "en",
+        "text": "Do you have the equivalent of this product from another brand?"
+      },
+      "0:es": {
+        "index": 102,
+        "sourceIndex": 0,
+        "sourceLanguage": "fr",
+        "sourceText": "Avez-vous l'équivalent de ce produit d'une autre marque ?",
+        "sourceHash": "3958467cc9a4d3090a1433bc4dd87c8065a51e9a9d8a79da6f8ce52d87cc516b",
+        "language": "es",
+        "text": "¿Tienen el equivalente de este producto de otra marca?"
+      },
+      "0:it": {
+        "index": 103,
+        "sourceIndex": 0,
+        "sourceLanguage": "fr",
+        "sourceText": "Avez-vous l'équivalent de ce produit d'une autre marque ?",
+        "sourceHash": "3958467cc9a4d3090a1433bc4dd87c8065a51e9a9d8a79da6f8ce52d87cc516b",
+        "language": "it",
+        "text": "Avete l'equivalente di questo prodotto di un'altra marca ?"
+      },
+      "0:de": {
+        "index": 104,
+        "sourceIndex": 0,
+        "sourceLanguage": "fr",
+        "sourceText": "Avez-vous l'équivalent de ce produit d'une autre marque ?",
+        "sourceHash": "3958467cc9a4d3090a1433bc4dd87c8065a51e9a9d8a79da6f8ce52d87cc516b",
+        "language": "de",
+        "text": "Haben Sie das Äquivalent dieses Produkts von einer anderen Marke?"
+      },
+      "1:en": {
+        "index": 111,
+        "sourceIndex": 1,
+        "sourceLanguage": "fr",
+        "sourceText": "Avez-vous l'équivalence de Wrinkle power - Serum anti rides ? Ce produit que j'ai acheté sur téléshopping de TF1 est vraiment merveilleux",
+        "sourceHash": "fc457ec31f24ffa57d3656d7082e583b3be6ed303ddb12a1828bf0d3859b7da0",
+        "language": "en",
+        "text": "Do you have the equivalent of Wrinkle power - Serum anti rides ? This product I bought on téléshopping from TF1 is really wonderful"
+      },
+      "1:es": {
+        "index": 112,
+        "sourceIndex": 1,
+        "sourceLanguage": "fr",
+        "sourceText": "Avez-vous l'équivalence de Wrinkle power - Serum anti rides ? Ce produit que j'ai acheté sur téléshopping de TF1 est vraiment merveilleux",
+        "sourceHash": "fc457ec31f24ffa57d3656d7082e583b3be6ed303ddb12a1828bf0d3859b7da0",
+        "language": "es",
+        "text": "¿Tienen el equivalente de Wrinkle power - Serum antiarrugas? Este producto que compré en telecompra de TF1 es realmente maravilloso"
+      },
+      "1:it": {
+        "index": 113,
+        "sourceIndex": 1,
+        "sourceLanguage": "fr",
+        "sourceText": "Avez-vous l'équivalence de Wrinkle power - Serum anti rides ? Ce produit que j'ai acheté sur téléshopping de TF1 est vraiment merveilleux",
+        "sourceHash": "fc457ec31f24ffa57d3656d7082e583b3be6ed303ddb12a1828bf0d3859b7da0",
+        "language": "it",
+        "text": "Avete l'equivalente di Wrinkle power - Serum anti rides? Questo prodotto che ho comprato su téléshopping di TF1 è davvero meraviglioso"
+      },
+      "1:de": {
+        "index": 114,
+        "sourceIndex": 1,
+        "sourceLanguage": "fr",
+        "sourceText": "Avez-vous l'équivalence de Wrinkle power - Serum anti rides ? Ce produit que j'ai acheté sur téléshopping de TF1 est vraiment merveilleux",
+        "sourceHash": "fc457ec31f24ffa57d3656d7082e583b3be6ed303ddb12a1828bf0d3859b7da0",
+        "language": "de",
+        "text": "Haben Sie das Äquivalent von Wrinkle power - Serum anti rides? Dieses Produkt, das ich bei téléshopping von TF1 gekauft habe, ist wirklich wunderbar"
+      },
+      "2:en": {
+        "index": 121,
+        "sourceIndex": 2,
+        "sourceLanguage": "fr",
+        "sourceText": "J'utilisais une crème d'une autre marque qui n'est plus vendue, qu'est-ce qui s'en rapproche le plus chez vous ?",
+        "sourceHash": "4fe001f28e32902cad9e58f259728145a7d202f42e0b2a816b38a4998ad647c5",
+        "language": "en",
+        "text": "I was using a cream from another brand that's no longer sold, what's the closest you have?"
+      },
+      "2:es": {
+        "index": 122,
+        "sourceIndex": 2,
+        "sourceLanguage": "fr",
+        "sourceText": "J'utilisais une crème d'une autre marque qui n'est plus vendue, qu'est-ce qui s'en rapproche le plus chez vous ?",
+        "sourceHash": "4fe001f28e32902cad9e58f259728145a7d202f42e0b2a816b38a4998ad647c5",
+        "language": "es",
+        "text": "Usaba una crema de otra marca que ya no se vende, ¿qué es lo más parecido que tienen?"
+      },
+      "2:it": {
+        "index": 123,
+        "sourceIndex": 2,
+        "sourceLanguage": "fr",
+        "sourceText": "J'utilisais une crème d'une autre marque qui n'est plus vendue, qu'est-ce qui s'en rapproche le plus chez vous ?",
+        "sourceHash": "4fe001f28e32902cad9e58f259728145a7d202f42e0b2a816b38a4998ad647c5",
+        "language": "it",
+        "text": "Usavo una crema di un'altra marca che non è più venduta, cosa avete di simile?"
+      },
+      "2:de": {
+        "index": 124,
+        "sourceIndex": 2,
+        "sourceLanguage": "fr",
+        "sourceText": "J'utilisais une crème d'une autre marque qui n'est plus vendue, qu'est-ce qui s'en rapproche le plus chez vous ?",
+        "sourceHash": "4fe001f28e32902cad9e58f259728145a7d202f42e0b2a816b38a4998ad647c5",
+        "language": "de",
+        "text": "Ich habe eine Creme von einer anderen Marke benutzt, die nicht mehr verkauft wird, was kommt dem bei Ihnen am nächsten?"
+      },
+      "3:en": {
+        "index": 131,
+        "sourceIndex": 3,
+        "sourceLanguage": "fr",
+        "sourceText": "Je cherche un produit similaire à celui que j'avais avant, un sérum anti-taches, avez-vous ça ?",
+        "sourceHash": "26b35a08164a830febb3dd8188d34ef1d99496c1da4ddd2293d14541e778096b",
+        "language": "en",
+        "text": "I'm looking for a product similar to what I had before, a dark spot serum, do you have that?"
+      },
+      "3:es": {
+        "index": 132,
+        "sourceIndex": 3,
+        "sourceLanguage": "fr",
+        "sourceText": "Je cherche un produit similaire à celui que j'avais avant, un sérum anti-taches, avez-vous ça ?",
+        "sourceHash": "26b35a08164a830febb3dd8188d34ef1d99496c1da4ddd2293d14541e778096b",
+        "language": "es",
+        "text": "Busco un producto similar al que tenía antes, un sérum anti-manchas, ¿tienen eso?"
+      },
+      "3:it": {
+        "index": 133,
+        "sourceIndex": 3,
+        "sourceLanguage": "fr",
+        "sourceText": "Je cherche un produit similaire à celui que j'avais avant, un sérum anti-taches, avez-vous ça ?",
+        "sourceHash": "26b35a08164a830febb3dd8188d34ef1d99496c1da4ddd2293d14541e778096b",
+        "language": "it",
+        "text": "Cerco un prodotto simile a quello che avevo prima, un siero anti-macchie, avete quello ?"
+      },
+      "3:de": {
+        "index": 134,
+        "sourceIndex": 3,
+        "sourceLanguage": "fr",
+        "sourceText": "Je cherche un produit similaire à celui que j'avais avant, un sérum anti-taches, avez-vous ça ?",
+        "sourceHash": "26b35a08164a830febb3dd8188d34ef1d99496c1da4ddd2293d14541e778096b",
+        "language": "de",
+        "text": "Ich suche ein ähnliches Produkt wie das, das ich vorher hatte, ein Anti-Flecken-Serum, haben Sie das?"
+      },
+      "4:en": {
+        "index": 141,
+        "sourceIndex": 4,
+        "sourceLanguage": "fr",
+        "sourceText": "Quel serait l'équivalent chez vous de mon ancienne crème de nuit ?",
+        "sourceHash": "e21cc047d46dd47212387712e64eedcd41713d2bb3241abe58be41c42b207a6d",
+        "language": "en",
+        "text": "What would be the equivalent at your place of my old night cream?"
+      },
+      "4:es": {
+        "index": 142,
+        "sourceIndex": 4,
+        "sourceLanguage": "fr",
+        "sourceText": "Quel serait l'équivalent chez vous de mon ancienne crème de nuit ?",
+        "sourceHash": "e21cc047d46dd47212387712e64eedcd41713d2bb3241abe58be41c42b207a6d",
+        "language": "es",
+        "text": "Cuál sería el equivalente en su marca de mi antigua crema de noche ?"
+      },
+      "4:it": {
+        "index": 143,
+        "sourceIndex": 4,
+        "sourceLanguage": "fr",
+        "sourceText": "Quel serait l'équivalent chez vous de mon ancienne crème de nuit ?",
+        "sourceHash": "e21cc047d46dd47212387712e64eedcd41713d2bb3241abe58be41c42b207a6d",
+        "language": "it",
+        "text": "Qual è l'equivalente da voi della mia vecchia crema notte?"
+      },
+      "4:de": {
+        "index": 144,
+        "sourceIndex": 4,
+        "sourceLanguage": "fr",
+        "sourceText": "Quel serait l'équivalent chez vous de mon ancienne crème de nuit ?",
+        "sourceHash": "e21cc047d46dd47212387712e64eedcd41713d2bb3241abe58be41c42b207a6d",
+        "language": "de",
+        "text": "Was wäre das Äquivalent bei Ihnen zu meiner alten Nachtcreme?"
+      },
+      "5:en": {
+        "index": 151,
+        "sourceIndex": 5,
+        "sourceLanguage": "fr",
+        "sourceText": "Je connais une crème mains de chez Garnier, est-ce que vous en avez une adaptée aux peaux sensibles ?",
+        "sourceHash": "c80e71ee00a57463d97e76382cb4ee9b8c4e8719e4507f4333d83eac43e680e3",
+        "language": "en",
+        "text": "I know a hand cream from Garnier, do you have one for sensitive skin?"
+      },
+      "5:es": {
+        "index": 152,
+        "sourceIndex": 5,
+        "sourceLanguage": "fr",
+        "sourceText": "Je connais une crème mains de chez Garnier, est-ce que vous en avez une adaptée aux peaux sensibles ?",
+        "sourceHash": "c80e71ee00a57463d97e76382cb4ee9b8c4e8719e4507f4333d83eac43e680e3",
+        "language": "es",
+        "text": "Conozco una crema de manos de Garnier, ¿tienen una adecuada para pieles sensibles?"
+      },
+      "5:it": {
+        "index": 153,
+        "sourceIndex": 5,
+        "sourceLanguage": "fr",
+        "sourceText": "Je connais une crème mains de chez Garnier, est-ce que vous en avez une adaptée aux peaux sensibles ?",
+        "sourceHash": "c80e71ee00a57463d97e76382cb4ee9b8c4e8719e4507f4333d83eac43e680e3",
+        "language": "it",
+        "text": "Conosco una crema mani di Garnier, ne avete una adatta alle pelli sensibili ?"
+      },
+      "5:de": {
+        "index": 154,
+        "sourceIndex": 5,
+        "sourceLanguage": "fr",
+        "sourceText": "Je connais une crème mains de chez Garnier, est-ce que vous en avez une adaptée aux peaux sensibles ?",
+        "sourceHash": "c80e71ee00a57463d97e76382cb4ee9b8c4e8719e4507f4333d83eac43e680e3",
+        "language": "de",
+        "text": "Ich kenne eine Handcreme von Garnier, haben Sie eine für empfindliche Haut?"
+      }
+    },
     "R-21": {
       "0:en": {
         "index": 101,

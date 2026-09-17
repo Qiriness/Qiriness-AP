@@ -15,6 +15,7 @@ import { runShopifyOrdersSync } from './sync-shopify-orders.mjs';
 import { runShopifyProductsSync } from './sync-shopify-products.mjs';
 import { runShopifyPromotionsSync } from './sync-shopify-promotions.mjs';
 import { runShopifyContentCatalogSync } from './sync-shopify-content-catalog.mjs';
+import { runShopifyCollectionsSync } from './sync-shopify-collections.mjs';
 
 if (isDirectRun()) {
   main().catch((error) => {
@@ -107,7 +108,8 @@ export async function runNightlySync({
     orders: runShopifyOrdersSync,
     products: runShopifyProductsSync,
     promotions: runShopifyPromotionsSync,
-    contentCatalog: runShopifyContentCatalogSync
+    contentCatalog: runShopifyContentCatalogSync,
+    collections: runShopifyCollectionsSync
   }
 }) {
   const customerCounts = await runners.customers({
@@ -149,6 +151,23 @@ export async function runNightlySync({
     shopRow,
     syncedAt
   });
+  // LAST, AND CHEAP. One request for the catalogue of collections plus one per
+  // ACTIVATED collection — seven in total today, against the hundreds the order
+  // and product passes make. It runs after products so a collection's membership
+  // is checked against a catalogue that has just been refreshed.
+  //
+  // IT NEVER SWITCHES ANYTHING ON. `is_active`, `axis` and `note` are the team's
+  // and are not in `mapCollectionRow`, so a collection created in Shopify arrives
+  // here switched OFF and stays that way until somebody curates it on
+  // /agent-setup/collections. A nightly that activated what it found would put
+  // the next Black Friday list into a skincare recommendation.
+  const collectionCounts = await runners.collections({
+    args,
+    shopify,
+    supabase,
+    shopRow,
+    syncedAt
+  });
 
   return {
     customers: customerCounts.customers,
@@ -162,7 +181,10 @@ export async function runNightlySync({
     promotions: promotionCounts.promotions,
     deleted_promotions: promotionCounts.deletedPromotions,
     shopify_content_sources: contentCatalogCounts.sources,
-    deleted_shopify_content_sources: contentCatalogCounts.deletedSources
+    deleted_shopify_content_sources: contentCatalogCounts.deletedSources,
+    collections: collectionCounts.total,
+    active_collections_refreshed: collectionCounts.refreshed,
+    collection_memberships: collectionCounts.products
   };
 }
 
