@@ -334,8 +334,12 @@ export const COLUMNS = {
   // to the tool call that resolved it; this column is the same information
   // without that verification step attached, and a drafting projection carrying
   // both would offer a model the unchecked copy beside the checked one.
+  // `exemplar_match` carries the situation the run settled on and the rule its
+  // findings selected. Read by the ticket panel so an operator can see WHY a
+  // case file says what it says — without it, a rule is a thing that happens to
+  // somebody's mail with no trace anywhere a person looks.
   investigationForDetail:
-    'verdict,established,unverified,missing,handoff,candidate_order,reaction_report,investigated_at,evidence_gaps',
+    'verdict,established,unverified,missing,handoff,candidate_order,reaction_report,investigated_at,evidence_gaps,exemplar_match',
 
   /**
    * The case file as the drafting pass reads it back.

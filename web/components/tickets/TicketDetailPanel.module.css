@@ -390,3 +390,37 @@
   line-height: 1.4;
   color: var(--text-subtle);
 }
+
+/* --- situation & rule, the last block ------------------------------------- */
+
+.policy {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 0.3rem 0.75rem;
+  margin: 0;
+  font-size: var(--text-caption);
+}
+
+.policy dt {
+  color: var(--text-subtle);
+  white-space: nowrap;
+}
+
+.policy dd {
+  margin: 0;
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.4rem;
+}
+
+/* The key as the rulebook spells it, so it can be searched for there. */
+.policyKey {
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  word-break: break-all;
+}
+
+.policyNote {
+  color: var(--text-subtle);
+}

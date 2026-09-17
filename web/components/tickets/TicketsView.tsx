@@ -20,6 +20,7 @@ import { isBacklogTicket, isClosed, summariseTickets } from "@/lib/ticket-stats"
 import type {
   DroppedMail,
   InvestigationVerdict,
+  TicketPolicy,
   KnowledgeCategory,
   TicketAttachmentFile,
   TicketDetail,
@@ -1344,11 +1345,93 @@ function TicketContextPane({
         )}
       </ContextSection>
 
-      {/* LAST, AND ABSENT ON MOST TICKETS. 310 of 400 carry no attachment and no
-          mention of one, so a permanent "Attachments — none" heading would push
-          the sections above it off a pane that already scrolls. */}
+      {/* ABSENT ON MOST TICKETS. 310 of 400 carry no attachment and no mention of
+          one, so a permanent "Attachments — none" heading would push the
+          sections above it off a pane that already scrolls. */}
       <AttachmentsSection detail={detail} error={error} />
+
+      {/* LAST, because it answers "why does this say what it says" rather than
+          "what does it say" — an operator reads the verdict and the action
+          first, and comes here when one of them surprises them. */}
+      <PolicySection policy={detail?.policy ?? null} />
     </div>
+  );
+}
+
+/** How the situation was reached, in the reader's words rather than a number. */
+const MATCH_WORDS: Record<string, (policy: TicketPolicy) => string> = {
+  matched: (policy) => `matched ${score(policy.similarity)}`,
+  near: (policy) => `near miss ${score(policy.similarity)}, chosen by the agent`,
+  ambiguous: (policy) => `two situations too close to call ${score(policy.similarity)}`,
+  none: (policy) => `nothing close enough ${score(policy.similarity)}`,
+};
+
+const score = (similarity: number | null) =>
+  similarity === null ? "" : `(${similarity.toFixed(2)})`;
+
+/**
+ * Which situation the run settled on, and which rule its findings selected.
+ *
+ * NOTHING SHOWED THIS BEFORE. `exemplar_match` is written on every run and was
+ * read by no screen a person opens, so a rule shaped somebody's mail with no
+ * trace anywhere — and "answerable because a rule said so" looked exactly like
+ * "answerable, and no rule matched at all".
+ *
+ * SHOWN EVEN WHEN NOTHING MATCHED, unlike the attachments block above it. A
+ * ticket no rule answered is precisely the case worth seeing: it is a gap in the
+ * rulebook, and it is otherwise invisible until somebody reads a transcript.
+ *
+ * THE KEYS ARE RAW (`PR-29`, `pr29_equivalent_partiel`) because they are what
+ * the rulebook screen is searched by; a prettified label would have to be
+ * translated back before anybody could act on it.
+ */
+function PolicySection({ policy }: { policy: TicketPolicy | null }) {
+  // No investigation ran: there is no decision to explain, and an empty heading
+  // would read as one that was made badly.
+  if (!policy) {
+    return null;
+  }
+  const matchWord = policy.match ? MATCH_WORDS[policy.match]?.(policy) : null;
+  const asked = [
+    policy.route ? `route to ${policy.route.replace(/_/g, " ")}` : null,
+    policy.asks.length > 0 ? `ask for ${policy.asks.join(", ").replace(/_/g, " ")}` : null,
+    policy.offerCode ? `offer ${policy.offerCode}` : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+
+  return (
+    <ContextSection title="Situation & rule">
+      <InfoList
+        rows={[
+          [
+            "Situation",
+            [
+              policy.situation ?? "None settled",
+              matchWord,
+              // The closest exemplar is worth seeing even when it lost: one that
+              // keeps coming second is the situation missing from the corpus.
+              !policy.situation && policy.closest ? `closest ${policy.closest}` : null,
+            ]
+              .filter(Boolean)
+              .join(" — "),
+          ],
+          [
+            "Rule",
+            policy.rule
+              ? [
+                  policy.rule,
+                  policy.changedVerdict ? "changed the verdict" : "verdict unchanged",
+                  policy.ruleVerdict && policy.ruleVerdict !== "selected" ? policy.ruleVerdict : null,
+                ]
+                  .filter(Boolean)
+                  .join(" — ")
+              : "No rule matched",
+          ],
+          ["It asked for", asked || null],
+        ]}
+      />
+    </ContextSection>
   );
 }
 

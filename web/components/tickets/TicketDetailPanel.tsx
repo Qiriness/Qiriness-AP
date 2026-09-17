@@ -10,6 +10,7 @@ import type {
   TicketAttachments,
   TicketDetail,
   TicketListItem,
+  TicketPolicy,
   TicketReactionReport,
   TicketTracking,
 } from "@/lib/types";
@@ -459,7 +460,101 @@ export function TicketDetailPanel({ ticket }: TicketDetailPanelProps) {
       </section>
 
       <AttachmentsBlock attachments={detail?.attachments ?? null} />
+      <PolicyBlock policy={detail?.policy ?? null} />
     </div>
+  );
+}
+
+/** How the situation was reached, in the reader's words rather than a number. */
+const MATCH_WORDS: Record<string, (p: TicketPolicy) => string> = {
+  matched: (p) => `matched ${score(p.similarity)}`,
+  near: (p) => `near miss ${score(p.similarity)}, chosen by the agent`,
+  ambiguous: (p) => `two situations too close to call ${score(p.similarity)}`,
+  none: (p) => `nothing close enough ${score(p.similarity)}`,
+};
+
+const score = (similarity: number | null) =>
+  similarity === null ? "" : `(${similarity.toFixed(2)})`;
+
+/**
+ * Which situation the run settled on, and which rule its findings selected.
+ *
+ * AT THE BOTTOM, AND LAST, because it answers "why does this say what it says"
+ * rather than "what does it say" — an operator reads the verdict and the action
+ * first, and comes here when one of them surprises them.
+ *
+ * SHOWN EVEN WHEN NOTHING MATCHED, unlike every other block on this panel. A
+ * ticket no rule answered is exactly the case somebody needs to see: the rest of
+ * the panel looks identical whether a rule shaped it or nothing did, and
+ * "answerable, no rule" is a gap in the rulebook that is otherwise invisible
+ * until it is read in a transcript.
+ *
+ * THE KEYS ARE SHOWN RAW (`PR-29`, `pr29_equivalent_partiel`) because they are
+ * what the rulebook screen is searched by — a prettified label would have to be
+ * translated back before anybody could act on it.
+ */
+function PolicyBlock({ policy }: { policy: TicketPolicy | null }) {
+  // No investigation ran at all: there is no decision to explain.
+  if (!policy) {
+    return null;
+  }
+  const matchWord = policy.match ? MATCH_WORDS[policy.match]?.(policy) : null;
+
+  return (
+    <section className={styles.block}>
+      <h3 className={styles.heading}>Situation &amp; rule</h3>
+
+      <dl className={styles.policy}>
+        <dt>Situation</dt>
+        <dd>
+          {policy.situation ? (
+            <code className={styles.policyKey}>{policy.situation}</code>
+          ) : (
+            <span className={styles.muted}>None settled</span>
+          )}
+          {/* The closest exemplar is worth seeing even when it lost: a situation
+              that keeps coming second is the one missing from the corpus. */}
+          {matchWord && (
+            <span className={styles.policyNote}>
+              {matchWord}
+              {!policy.situation && policy.closest ? ` — closest ${policy.closest}` : ""}
+            </span>
+          )}
+        </dd>
+
+        <dt>Rule</dt>
+        <dd>
+          {policy.rule ? (
+            <code className={styles.policyKey}>{policy.rule}</code>
+          ) : (
+            <span className={styles.muted}>No rule matched</span>
+          )}
+          {policy.rule && (
+            <span className={styles.policyNote}>
+              {policy.changedVerdict ? "changed the verdict" : "verdict unchanged"}
+              {policy.ruleVerdict && policy.ruleVerdict !== "selected"
+                ? ` · ${policy.ruleVerdict}`
+                : ""}
+            </span>
+          )}
+        </dd>
+
+        {(policy.route || policy.asks.length > 0 || policy.offerCode) && (
+          <>
+            <dt>It asked for</dt>
+            <dd>
+              {[
+                policy.route ? `route to ${policy.route.replace(/_/g, " ")}` : null,
+                policy.asks.length > 0 ? `ask for ${policy.asks.join(", ").replace(/_/g, " ")}` : null,
+                policy.offerCode ? `offer ${policy.offerCode}` : null,
+              ]
+                .filter(Boolean)
+                .join(" · ")}
+            </dd>
+          </>
+        )}
+      </dl>
+    </section>
   );
 }
 

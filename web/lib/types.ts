@@ -731,6 +731,40 @@ export interface TicketFact {
 }
 
 /** What `GET /api/tickets/:id` returns for the expanded row. */
+/**
+ * How the run reached its situation, and which rule its findings selected.
+ *
+ * TWO STEPS AND THEY CAN DISAGREE. `situation` is what the customer WANTS,
+ * settled by an embedding match or — below the bar — by the near-miss chooser.
+ * `rule` is what the evidence then selected inside that situation's set, and a
+ * rule naming no situation is a general one that applies across the set. Either
+ * can be absent: a ticket can match a situation no rule answers, and a general
+ * rule can fire on a ticket whose situation matched nothing.
+ *
+ * `changedVerdict` is the honest measure of whether the rule DID anything: a
+ * rule whose route agrees with the verdict the investigation already reached
+ * shaped the reply without moving it, which is the ordinary case.
+ */
+export interface TicketPolicy {
+  /** The situation the run used, or null when none was settled. */
+  situation: string | null;
+  /** `matched` · `near` · `ambiguous` · `none` — how the situation was reached. */
+  match: "matched" | "near" | "ambiguous" | "none" | null;
+  /** The closest exemplar and its score, whether or not it cleared the bar. */
+  closest: string | null;
+  similarity: number | null;
+  /** The rule the findings selected, or null when none matched. */
+  rule: string | null;
+  /** `selected` · `ambiguous` · `fallback` · `none`. */
+  ruleVerdict: string | null;
+  /** True when the rule's route tightened the verdict the investigation reached. */
+  changedVerdict: boolean;
+  /** What the rule asked the reply to do. Empty or null when it asked for nothing. */
+  route: string | null;
+  asks: string[];
+  offerCode: string | null;
+}
+
 export interface TicketDetail {
   ticketId: string;
   /**
@@ -762,6 +796,11 @@ export interface TicketDetail {
    * block at all.
    */
   attachments: TicketAttachments;
+  /**
+   * The situation and rule behind the case file — null when no investigation
+   * ran, and present with null fields when one ran and settled on neither.
+   */
+  policy: TicketPolicy | null;
 }
 
 /** One attached file, as Graph described it. Metadata only — never the bytes. */

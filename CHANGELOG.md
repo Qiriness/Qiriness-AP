@@ -10,6 +10,28 @@ Three sibling files carry the other halves, and this one deliberately does not d
 
 ---
 
+## The ticket panel says which situation and rule decided the case file (2026-09-17)
+
+It did not before. `exemplar_match` was written on every run and read by nothing a person opens — so a rule shaped somebody's mail with no trace on any screen, and "answerable, no rule" looked identical to "answerable, rule applied".
+
+**New `Situation & rule` section**, last in the right-hand context rail, because it answers *why does this say what it says* rather than *what does it say*. It is in **both** places a case file is read: `TicketContextPane` (the `/tickets` rail) and `TicketDetailPanel` (`/conversations`) — APP_SCHEMA records that those two are different components and that assuming otherwise has already cost a feature being built into the wrong one.
+
+```
+Situation   PR-29                matched (0.86)
+Rule        pr29_equivalent_partiel   verdict unchanged
+It asked for  route to needs human · ask for shopify order number
+```
+
+- **Shown even when nothing matched**, unlike every other block on that panel — a ticket no rule answered is exactly the case somebody needs to see, and it is otherwise invisible until read in a transcript. *« None settled — nothing close enough (0.49) — closest PR-27 »*.
+- **The near-miss chooser is visible as such.** Below the 0.65 bar the model picks a situation the embedding did not settle, so the line reads *« near miss (0.60), chosen by the agent »* rather than implying a match.
+- **`changedVerdict` is the honest measure** of whether the rule did anything: a rule whose route agrees with the verdict already reached shaped the reply without moving it, which is the ordinary case (53 of 138 stored runs selected a rule; 8 changed a verdict).
+- **The keys are shown raw** — `PR-29`, `pr29_equivalent_partiel` — because that is what the rulebook screen is searched by.
+- **Read by name, never spread.** `exemplar_match` also carries the findings, the candidate list and the answer skeleton; naming the eight fields is what stops the next field added to the case file appearing on a support screen by accident.
+
+Checked against the six most recent stored runs, covering `matched`, `near` and `none`, with and without a rule. `npm test` 2,771 pass, `tsc` and lint clean; the screen has not been opened in a browser.
+
+---
+
 ## The type of care is read from the message, and a misnamed collection is reconciled (2026-09-17)
 
 Found by running a real test email — « Je voudrais un sérum à utiliser sur mon visage car j'ai la peau sensible et des rides » — through `npm run investigate`. Two defects, both now fixed and both with the run that found them recorded in the code.

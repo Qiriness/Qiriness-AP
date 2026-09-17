@@ -49,6 +49,7 @@ import type {
   ResponsibleTeam,
   TicketAttachments,
   TicketDetail,
+  TicketPolicy,
   TicketDraft,
   TicketHappiness,
   TicketLevel,
@@ -289,7 +290,7 @@ export async function getTicketDetail(shopId: string, ticketId: string): Promise
   if (!row) {
     // No case file: the order facts may still exist, because the resolution pass
     // writes them for tickets the agent never investigated. Facts cannot.
-    return { ticketId, results: null, order, facts: [], attachments };
+    return { ticketId, results: null, order, facts: [], attachments, policy: null };
   }
 
   return {
@@ -310,6 +311,43 @@ export async function getTicketDetail(shopId: string, ticketId: string): Promise
       reactionReport: row.reaction_report ?? null,
       investigatedAt: row.investigated_at ?? null,
     }),
+    policy: summarisePolicy(row.exemplar_match),
+  };
+}
+
+/**
+ * The situation and the rule, off `ticket_investigations.exemplar_match`.
+ *
+ * READ BY NAME, NEVER SPREAD. That column also carries the run's findings, its
+ * candidate list and the answer skeleton — diagnostics that belong in the agent
+ * and not on a support screen. Naming the eight fields the panel shows is what
+ * stops the next field added to the case file appearing here by accident.
+ *
+ * THE SITUATION COMES FROM `policy.situation_key`, not from `exemplar_key`, and
+ * the difference is the near-miss chooser: below the match bar the model picks a
+ * situation the embedding did not settle, so `exemplar_key` is null while the
+ * run genuinely used one. `match` and `similarity` are shown beside it so the
+ * distinction is visible rather than implied.
+ */
+function summarisePolicy(exemplarMatch: unknown): TicketPolicy | null {
+  if (!exemplarMatch || typeof exemplarMatch !== "object") {
+    return null;
+  }
+  const match = exemplarMatch as Record<string, unknown>;
+  const policy = (match.policy ?? {}) as Record<string, unknown>;
+  const similarity = Number(match.similarity);
+
+  return {
+    situation: (policy.situation_key as string) ?? null,
+    match: (match.verdict as TicketPolicy["match"]) ?? null,
+    closest: (match.closest as string) ?? null,
+    similarity: Number.isFinite(similarity) ? similarity : null,
+    rule: (policy.answer_key as string) ?? null,
+    ruleVerdict: (policy.verdict as string) ?? null,
+    changedVerdict: policy.applied === true,
+    route: (policy.route as string) ?? null,
+    asks: Array.isArray(policy.ask) ? (policy.ask as string[]) : [],
+    offerCode: (policy.offer_code as string) ?? null,
   };
 }
 
