@@ -1272,7 +1272,11 @@ export interface OrderListRow {
   customerName: string | null;
   isVip: boolean;
   totalLabel: string;
-  fulfillmentStatus: string | null;
+  /**
+   * Shopify's fulfilment status, or `CANCELLED` / `REFUNDED` when nothing is
+   * left to ship (`fulfillmentDisplay`). The key the pill is styled on.
+   */
+  fulfillmentStatus: string;
   fulfillmentLabel: string;
   /** Whole days waiting to ship; null when the order is not waiting. */
   delayDays: number | null;
@@ -1340,7 +1344,8 @@ export interface OrderDetail {
   platformLabel: string;
   channelLabel: string | null;
   financialLabel: string | null;
-  fulfillmentStatus: string | null;
+  /** As on `OrderListRow`: Shopify's status, or `CANCELLED` / `REFUNDED`. */
+  fulfillmentStatus: string;
   fulfillmentLabel: string;
   returnLabel: string | null;
   tags: string[];

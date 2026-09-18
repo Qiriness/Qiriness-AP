@@ -18,7 +18,7 @@
  */
 
 import { RPC, T } from "../../../scripts/lib/tables.mjs";
-import { supabaseRpc, supabaseSelect } from "../../../scripts/lib/supabase-rest-client.mjs";
+import { supabaseHeaders, supabaseRpc, supabaseSelect } from "../../../scripts/lib/supabase-rest-client.mjs";
 import {
   ALL_MARKETPLACE_HANDLES,
   PLATFORMS,
@@ -33,6 +33,7 @@ import {
   ORDER_PAGE_SIZE,
   delayDays,
   enumLabel,
+  fulfillmentDisplay,
   fulfillmentStatusLabel,
   orderListArgs,
   orderNumberKey,
@@ -135,6 +136,41 @@ export async function listOrders(shopId: string, query: OrderListQuery): Promise
 }
 
 /** One order in full, or null when the id names no live order of this shop. */
+/**
+ * How many orders are waiting to ship, for the sidebar badge on Orders.
+ *
+ * `open_orders()`'s RULE, as a count: not fulfilled or restocked, not
+ * cancelled, not closed. So the badge, the Delay column and the Fulfilment
+ * panel's waiting list count the same orders, and the orders refunded instead
+ * of shipped (UNFULFILLED for ever, but closed) are not counted. `not.in` also
+ * drops a null status, as the SQL's `is not null` does.
+ *
+ * A `count=exact` HEAD, not a read of the rows. Throws on failure, and
+ * `navBadgeCounts` turns that into a hidden badge.
+ */
+export async function countOrdersAwaitingFulfilment(shopId: string): Promise<number> {
+  const client = getSupabaseClient();
+  const params = new URLSearchParams({
+    select: "id",
+    shop_id: `eq.${shopId}`,
+    deleted_at: "is.null",
+    cancelled_at: "is.null",
+    closed_at: "is.null",
+    fulfillment_status: "not.in.(FULFILLED,RESTOCKED)",
+  });
+  const response = await fetch(`${client.baseUrl}/${T.ORDERS}?${params.toString()}`, {
+    method: "HEAD",
+    // Load-bearing: Next caches Server Component fetches by URL otherwise.
+    cache: "no-store",
+    headers: supabaseHeaders(client, { Prefer: "count=exact" }),
+  });
+  const total = Number(response.headers.get("content-range")?.split("/")[1]);
+  if (!response.ok || !Number.isFinite(total)) {
+    throw new Error(`Counting orders awaiting fulfilment failed: HTTP ${response.status}`);
+  }
+  return total;
+}
+
 export async function getOrderDetail(shopId: string, orderId: string): Promise<OrderDetail | null> {
   if (!UUID.test(orderId)) return null;
   const supabase = getSupabaseClient();
@@ -160,6 +196,13 @@ export async function getOrderDetail(shopId: string, orderId: string): Promise<O
   const vips = customer && rule ? await loadVipCustomers(supabase, shopId, rule, [customer.id]) : new Map();
 
   const lineItems = list(order.line_items);
+  const units = lineItems.reduce((sum, li) => sum + quantityOf(li), 0);
+  const fulfilment = fulfillmentDisplay({
+    status: order.fulfillment_status,
+    units,
+    cancelled: Boolean(order.cancelled_at),
+    financialStatus: order.financial_status,
+  });
   const key = orderNumberKey(order.order_number) ?? orderNumberKey(order.name);
   const linked = key ? tickets.filter((t) => orderNumberKey(t.orderNumber) === key) : [];
 
@@ -173,11 +216,11 @@ export async function getOrderDetail(shopId: string, orderId: string): Promise<O
     platformLabel: PLATFORMS.find((p) => p.id === platform)?.label ?? platform,
     channelLabel: (order.sales_channel as string | null) ?? null,
     financialLabel: order.financial_status ? enumLabel(order.financial_status) : null,
-    fulfillmentStatus: (order.fulfillment_status as string | null) ?? null,
-    fulfillmentLabel: fulfillmentStatusLabel(order.fulfillment_status),
+    fulfillmentStatus: fulfilment.status,
+    fulfillmentLabel: fulfilment.label,
     returnLabel: order.return_status && order.return_status !== "NO_RETURN" ? enumLabel(order.return_status) : null,
     tags: Array.isArray(order.tags) ? order.tags.map(String) : [],
-    units: lineItems.reduce((sum, li) => sum + quantityOf(li), 0),
+    units,
     lineItems: lineItems.map((li, i) => {
       const total = money(li.discounted_total, li.currency_code ?? currency);
       const original = money(li.original_total, li.currency_code ?? currency);
@@ -257,6 +300,13 @@ function ticketFacts(ticket: TicketListItem) {
 function mapListRow(row: Row, tz: string, marks: Map<string, OrderTicketMark>): OrderListRow {
   const key = orderNumberKey(row.order_number) ?? orderNumberKey(row.order_name);
   const delay = delayDays(row.processed_at, row.awaiting_fulfilment === true) as number | null;
+  const units = Number(row.units ?? 0);
+  const fulfilment = fulfillmentDisplay({
+    status: row.fulfillment_status,
+    units,
+    cancelled: Boolean(row.cancelled_at),
+    financialStatus: row.financial_status,
+  });
   return {
     orderId: String(row.order_id),
     name: String(row.order_name ?? "—"),
@@ -265,11 +315,11 @@ function mapListRow(row: Row, tz: string, marks: Map<string, OrderTicketMark>): 
     customerName: (row.customer_name as string | null) ?? null,
     isVip: row.is_vip === true,
     totalLabel: money(row.total_price, row.currency_code) ?? "—",
-    fulfillmentStatus: (row.fulfillment_status as string | null) ?? null,
-    fulfillmentLabel: fulfillmentStatusLabel(row.fulfillment_status),
+    fulfillmentStatus: fulfilment.status,
+    fulfillmentLabel: fulfilment.label,
     delayDays: delay,
     late: delay !== null && delay >= LATE_AFTER_DAYS,
-    units: Number(row.units ?? 0),
+    units,
     carrier: (row.carrier as string | null) ?? null,
     countryCode: (row.country_code as string | null) ?? null,
     country: (row.country as string | null) ?? null,

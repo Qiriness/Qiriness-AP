@@ -2587,6 +2587,25 @@ Asked for by the owner: the Shopify admin's order list, inside the app, so looki
 - **The carrier is `order_fulfilment_timing`'s derivation** (lowest tracking company through `normalise_carrier()`), so a row and the Fulfilment carrier table cannot name different carriers. A test pins both.
 - **Fulfilment status was drawn neutral, then given a light amber dot at the owner's request (same day).** The first version kept colour for the ticket ring alone. Amber marks an order not yet fulfilled; it is pale (#ffd98a on #e8a93a) so it does not read as the orange ring, and local to the page because gold belongs to VIP and `--warning` is the orange ramp.
 
+### An order emptied before it shipped says Cancelled or Refunded, not Unfulfilled (2026-09-18)
+
+**Asked for by the owner: orders with 0 articles were reading "Unfulfilled".** Cancelling or refunding every line takes each `current_quantity` to 0 but leaves Shopify's fulfilment status at `UNFULFILLED` for ever. Measured 2026-09-18: **all 14 `UNFULFILLED` orders in the shop have 0 items left**, 7 cancelled and 7 refunded without a cancel. No order that still has items is `UNFULFILLED` today, so every amber pill on the page was one of these.
+
+- **The rule is `fulfillmentDisplay` in `scripts/lib/order-list-query.mjs`, one place for the list and the order page.** Not shipped (`FULFILLED`/`RESTOCKED` excluded) **and** 0 items left: cancelled → **Cancelled**, else `financial_status = REFUNDED` → **Refunded**, else Shopify's word stands.
+- **Zero items is the gate, not the refund.** A partly refunded order with something still to ship is still waiting. A shipped order that was then returned (18 more zero-item orders, all `FULFILLED`) keeps **Fulfilled**, because it was.
+- **Cancelled wins over Refunded** because it is the fuller answer (6 of the 7 cancelled were also refunded, the seventh voided).
+- **Grey with a hollow dot**, not amber: the order is finished, like Fulfilled, but nothing went out.
+- **The order page drops the pill from its header** for these, because the Cancelled chip or the Refunded payment chip beside it already says so. The Fulfilment card's aside carries the label.
+- **The status filter selects what the pill shows (migration 31, same day).** At first the filter kept Shopify's value, so "Unfulfilled" returned these 14 rows labelled Cancelled / Refunded. Now `order_fulfilment_display()` in SQL holds the same rule, `orders_list()` filters on it and `orders_list_facets()` groups on it, so the options read Fulfilled 6,013 / Cancelled 7 / Refunded 7, and Unfulfilled appears only when an order is really waiting. This was first checked in a transaction that was rolled back, then applied the same day and confirmed through PostgREST.
+- **The rule exists in two languages, pinned by a test.** The pill is labelled in JS (`fulfillmentDisplay`) and the filter runs in SQL. `31_orders_status_filter.test.mjs` asserts both carry the same branches in the same order and count items the way the `units` column does. Change one, change both.
+
+### Orders carries a badge for orders waiting to ship (2026-09-18)
+
+**Asked for by the owner, "like Tickets and Conversations".** The number is **`open_orders()`'s waiting rule** (not fulfilled or restocked, not cancelled, not closed), counted with a `count=exact` HEAD by `countOrdersAwaitingFulfilment`. So it counts the same orders as the Delay column and the Fulfilment panel's waiting list, and not the 14 orders that read `UNFULFILLED` only because they were cancelled or refunded (all are closed). Measured 2026-09-18: **0 orders waiting**, so the badge is hidden until one arrives. Without the closed condition the same count finds the 7 refunded orders, which confirms the filter reaches real rows.
+
+- **Grey, like Conversations.** The warning colour stays with Tickets, the queue that is worked. A late order has its own red on the page itself.
+- **Each badge fails on its own.** An orders count that cannot be read shows no Orders badge and leaves the ticket badges alone, and the other way round.
+
 ### Delay and search (2026-09-14)
 
 **Delay is whole days since the order was placed, shown only while the order waits to ship**, and "waits" is `open_orders()`'s rule copied condition for condition into `orders_list().awaiting_fulfilment` — not fulfilled or restocked, not cancelled, **not closed**. The last condition is the one that matters: six orders read UNFULFILLED for ever because they were refunded instead of shipped (§ Insights, "Orders waiting to ship"), and a Delay column counting them would show them as the most delayed orders in the shop. A test asserts the two functions share the four conditions. SQL decides *whether*, JavaScript counts *how long* (`delayDays`, floored), because the count moves every minute and the rule does not. Three days or more is red ink, the same line the dispatch figures and the waiting-orders list use; ink rather than a filled pill so it does not compete with the ring.

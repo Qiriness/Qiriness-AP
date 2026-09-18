@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { CrownIcon, SearchIcon } from "@/components/icons";
-import { normaliseSearch } from "../../../scripts/lib/order-list-query.mjs";
+import { fulfillmentStatusLabel, normaliseSearch } from "../../../scripts/lib/order-list-query.mjs";
 import { Flag } from "@/components/insights/Flag";
 import { GroupSelect, Segmented } from "@/components/insights/Segmented";
 import type { OrderListPage, OrderListRow } from "@/lib/types";
@@ -151,6 +151,15 @@ function Filters({
 }) {
   const { query, facets } = page;
   const scope: Scope = query.country ? "country" : "global";
+  // THE ACTIVE STATUS IS ALWAYS AN OPTION. Facets list only statuses some order
+  // has, so a link to one that has emptied (`?status=UNFULFILLED` once every
+  // such order read Cancelled or Refunded) left the select with no matching
+  // option: it displayed "All fulfilment statuses" over an empty list, and
+  // choosing "All" fired no change, because it already looked chosen.
+  const statuses =
+    query.status && !facets.statuses.some((f) => f.value === query.status)
+      ? [...facets.statuses, { value: query.status, label: fulfillmentStatusLabel(query.status), orders: 0 }]
+      : facets.statuses;
 
   return (
     <div className={styles.filters} data-pending={pending || undefined}>
@@ -164,7 +173,7 @@ function Filters({
           onChange={(event) => navigate({ status: event.target.value || null })}
         >
           <option value="">All fulfilment statuses</option>
-          {facets.statuses.map((f) => (
+          {statuses.map((f) => (
             <option key={f.value} value={f.value}>
               {f.label} — {f.orders.toLocaleString("en-GB")}
             </option>
@@ -296,7 +305,7 @@ function OrderRow({ row, onOpen }: { row: OrderListRow; onOpen: (orderId: string
       </td>
       <td className={styles.n}>{row.totalLabel}</td>
       <td>
-        <span className={styles.status} data-status={row.fulfillmentStatus ?? "UNKNOWN"}>
+        <span className={styles.status} data-status={row.fulfillmentStatus}>
           <span className={styles.statusDot} aria-hidden="true" />
           {row.fulfillmentLabel}
         </span>

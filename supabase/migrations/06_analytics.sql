@@ -2722,6 +2722,55 @@ grant execute on function public.customer_segment_find to service_role;
 comment on function public.customer_segment_find is
   'Segment Finder: customers matching OR-of-AND groups of {metric: orders | spend | lifetime_spend, op: gt | lt, value} conditions, with orders and spend counted over the last p_window_months and lifetime over all uncancelled Shopify orders (net of refunds). Every customer on file except marketplace-synthetic ones. Always one totals row; up to p_limit members by lifetime spend.';
 
+-- ---------------------------------------------------- order_fulfilment_display
+
+-- The Orders page's fulfilment status: Shopify's, unless the order has nothing
+-- left to ship. Cancelling or refunding every line takes each current_quantity
+-- to 0 but leaves fulfillment_status at UNFULFILLED for ever, so an order that
+-- is not fulfilled or restocked and has 0 items left reads CANCELLED (when it
+-- was cancelled) or REFUNDED (when financial_status says so) instead. Anything
+-- else keeps Shopify's status, with UNKNOWN for none.
+--
+-- THE SAME RULE AS fulfillmentDisplay() in scripts/lib/order-list-query.mjs,
+-- which labels the pill; orders_list() filters on this and orders_list_facets()
+-- groups on it, so a filter option selects exactly the rows its pill names.
+-- CANCELLED and REFUNDED are ours, never Shopify fulfilment values.
+--
+-- Items are counted as orders_list() counts its units column. The outer CASE
+-- keeps a fulfilled order (almost all of them) from unpacking its line items.
+create or replace function public.order_fulfilment_display(
+  p_fulfillment_status text,
+  p_line_items jsonb,
+  p_cancelled_at timestamptz,
+  p_financial_status text
+)
+returns text
+language sql
+immutable
+set search_path = public
+as $$
+  select case
+    when coalesce(p_fulfillment_status, 'UNKNOWN') in ('FULFILLED', 'RESTOCKED')
+      then p_fulfillment_status
+    when (
+      select coalesce(sum(coalesce((li.value ->> 'current_quantity')::int, (li.value ->> 'quantity')::int, 0)), 0)
+      from jsonb_array_elements(
+        case when jsonb_typeof(p_line_items) = 'array' then p_line_items else '[]'::jsonb end
+      ) as li
+    ) <> 0
+      then coalesce(p_fulfillment_status, 'UNKNOWN')
+    when p_cancelled_at is not null then 'CANCELLED'
+    when p_financial_status = 'REFUNDED' then 'REFUNDED'
+    else coalesce(p_fulfillment_status, 'UNKNOWN')
+  end;
+$$;
+
+revoke all on function public.order_fulfilment_display from public, anon, authenticated;
+grant execute on function public.order_fulfilment_display to service_role;
+
+comment on function public.order_fulfilment_display is
+  'The Orders page fulfilment status: Shopify''s, or CANCELLED / REFUNDED for an order not fulfilled or restocked with 0 items left. UNKNOWN when Shopify gave none. The rule fulfillmentDisplay() in scripts/lib/order-list-query.mjs labels the pill with.';
+
 -- ---------------------------------------------------------------- orders_list
 
 -- The Orders page: every order, newest first, one page at a time, with the
@@ -2738,6 +2787,8 @@ comment on function public.customer_segment_find is
 -- tracking company, normalised), so a row here and the carrier table on
 -- Fulfilment name the same carrier. The two filter expressions are the ones
 -- orders_list_facets() groups on, so a facet selects exactly what it counts.
+-- The status filter is order_fulfilment_display(), not the raw column, so
+-- "Refunded" selects the orders whose pill says Refunded.
 --
 -- `awaiting` is open_orders()'s rule, condition for condition -- not
 -- fulfilled or restocked, not cancelled, NOT CLOSED (a refunded order can read
@@ -2826,7 +2877,10 @@ as $$
     left join vip on vip.customer_id = c.id
     where o.shop_id = p_shop
       and o.deleted_at is null
-      and (p_fulfillment_status is null or coalesce(o.fulfillment_status, 'UNKNOWN') = p_fulfillment_status)
+      and (
+        p_fulfillment_status is null
+        or public.order_fulfilment_display(o.fulfillment_status, o.line_items, o.cancelled_at, o.financial_status) = p_fulfillment_status
+      )
       and (p_country is null or coalesce(o.shipping_destination ->> 'country_code', '??') = p_country)
       and (not coalesce(p_vip_only, false) or vip.customer_id is not null)
       and (
@@ -2887,14 +2941,15 @@ revoke all on function public.orders_list from public, anon, authenticated;
 grant execute on function public.orders_list to service_role;
 
 comment on function public.orders_list is
-  'The Orders page: every live order, newest first, one page at a time, with the buyer''s name, VIP under vip_customers(), units, normalised carrier and destination. total_count is the filtered set before the page is cut. awaiting_fulfilment is open_orders()''s waiting rule. Filters: fulfilment status, destination country, VIP only, order ids, and a search over order name, buyer name, buyer email and tracking number.';
+  'The Orders page: every live order, newest first, one page at a time, with the buyer''s name, VIP under vip_customers(), units, normalised carrier and destination. total_count is the filtered set before the page is cut. awaiting_fulfilment is open_orders()''s waiting rule. Filters: fulfilment status as order_fulfilment_display() derives it, destination country, VIP only, order ids, and a search over order name, buyer name, buyer email and tracking number.';
 
 -- --------------------------------------------------------- orders_list_facets
 
 -- The Orders page's filter options, each with how many orders it selects.
 -- Grouped on exactly the expressions orders_list() filters on, so a facet's
 -- count is the row count its selection returns. Values come from the data, not
--- a list: Shopify owns the status enum and can add to it.
+-- a list: Shopify owns the status enum and can add to it. The status is
+-- order_fulfilment_display(), as the list filters on it.
 create or replace function public.orders_list_facets(p_shop uuid)
 returns table (
   facet text,
@@ -2906,7 +2961,7 @@ language sql
 stable
 set search_path = public
 as $$
-  select 'fulfillment_status', coalesce(o.fulfillment_status, 'UNKNOWN'), null::text, count(*)
+  select 'fulfillment_status', public.order_fulfilment_display(o.fulfillment_status, o.line_items, o.cancelled_at, o.financial_status), null::text, count(*)
   from public.orders o
   where o.shop_id = p_shop
     and o.deleted_at is null
@@ -2924,7 +2979,7 @@ revoke all on function public.orders_list_facets from public, anon, authenticate
 grant execute on function public.orders_list_facets to service_role;
 
 comment on function public.orders_list_facets is
-  'Filter options for the Orders page: each fulfilment status and destination country among live orders, with its order count. Grouped on the same expressions orders_list() filters on.';
+  'Filter options for the Orders page: each fulfilment status (as order_fulfilment_display() derives it) and destination country among live orders, with its order count. Grouped on the same expressions orders_list() filters on.';
 
 -- --------------------------------------------------------- sales: products
 

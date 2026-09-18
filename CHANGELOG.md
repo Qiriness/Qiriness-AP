@@ -10,6 +10,24 @@ Three sibling files carry the other halves, and this one deliberately does not d
 
 ---
 
+## Orders has a badge for orders waiting to ship (2026-09-18)
+
+A grey count on the Orders nav item, beside Tickets' and Conversations'. It counts `open_orders()`'s waiting rule, so it matches the Delay column and the Fulfilment panel's waiting list and leaves out orders cancelled or refunded before shipping. Zero today, so the badge is hidden. Checked through the real `navBadgeCounts`: `{ openTickets: 82, openConversations: 15, unfulfilledOrders: 0 }`, and the filter without "not closed" finds the 7 refunded orders. `tsc` and lint clean. Not opened in a browser.
+
+---
+
+## Orders with nothing left to ship say Cancelled or Refunded (2026-09-18)
+
+The Orders page's Fulfilment status column showed "Unfulfilled" on orders whose every line had been cancelled or refunded (0 articles). Those now read **Cancelled** or **Refunded**, in grey with a hollow dot, and the order page stops repeating the status in its header. The rule is `fulfillmentDisplay` (`scripts/lib/order-list-query.mjs`); why it is shaped that way is in DECISIONS § Orders.
+
+Checked against every live order: 6,013 Fulfilled unchanged; the 14 `UNFULFILLED` now show 7 Cancelled and 7 Refunded. 2 new tests, lib suite 554 pass, `tsc` clean. Not opened in a browser.
+
+**The status filter now agrees with the pill (migration 31).** `orders_list()` filters and `orders_list_facets()` groups on a new SQL `order_fulfilment_display()`, the same rule as the JS helper. A dry run against the live database, inside a transaction that was rolled back, gave these options: Fulfilled 6,013 / Cancelled 7 / Refunded 7 (was Fulfilled / Unfulfilled 14). "Unfulfilled" then selects 0 rows and "Refunded" selects #7022, #6398, #4886 and the rest. Filtered page ~270 ms, facets ~110 ms. Migration tests 817 pass (7 new; 16's test now accepts that 31 supersedes it). **Applied 2026-09-18** and re-checked through PostgREST, the path the page itself uses: the facets read FULFILLED 6,013 / CANCELLED 7 / REFUNDED 7, "Unfulfilled" returns 0 rows, and Cancelled and Refunded return 7 each.
+
+**Follow-up the same day: the dropdown lied about a status that had emptied.** A page still on `?status=UNFULFILLED` had no matching option, so the select displayed "All fulfilment statuses" over an empty list, and choosing "All" changed nothing. The active status is now always an option (with 0 when no order has it). The unfiltered list was re-timed at 250–480 ms warm, unchanged from before migration 31.
+
+---
+
 ## Pages load faster, and a click says it is loading (2026-09-18)
 
 The owner's complaint: changing the Insights range (six months → a year) and moving between Tickets, Orders, Agent Setup and the Insights tabs each took a while. Measured first against the live database, then changed; nothing here can show older data than before — no cache that outlives a request was added.

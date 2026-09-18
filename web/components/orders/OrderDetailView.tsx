@@ -55,9 +55,13 @@ export function OrderDetailView({
             <div className={styles.titleRow}>
               <h1 className={styles.title}>{order.name}</h1>
               {order.financialLabel ? <span className={styles.chip}>{order.financialLabel}</span> : null}
-              <span className={styles.chip} data-status={order.fulfillmentStatus ?? "UNKNOWN"}>
-                {order.fulfillmentLabel}
-              </span>
+              {/* An emptied order's pill would only repeat the Cancelled chip or
+                  the Refunded payment chip beside it. */}
+              {order.fulfillmentStatus !== "CANCELLED" && order.fulfillmentStatus !== "REFUNDED" ? (
+                <span className={styles.chip} data-status={order.fulfillmentStatus}>
+                  {order.fulfillmentLabel}
+                </span>
+              ) : null}
               {order.cancelledLabel ? <span className={`${styles.chip} ${styles.chipAlert}`}>Cancelled</span> : null}
               {order.returnLabel ? <span className={styles.chip}>{order.returnLabel}</span> : null}
               {order.adminUrl ? (
@@ -221,7 +225,13 @@ function FulfilmentCard({ order }: { order: OrderDetail }) {
   return (
     <Card title="Fulfilment" aside={order.fulfillmentLabel}>
       {order.fulfilments.length === 0 ? (
-        <p className={styles.empty}>{order.cancelledLabel ? "Cancelled before it shipped." : "Not shipped yet."}</p>
+        <p className={styles.empty}>
+          {order.cancelledLabel
+            ? "Cancelled before it shipped."
+            : order.fulfillmentStatus === "REFUNDED"
+              ? "Refunded before it shipped."
+              : "Not shipped yet."}
+        </p>
       ) : (
         <ul className={styles.stack}>
           {order.fulfilments.map((f) => (

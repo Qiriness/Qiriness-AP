@@ -75,6 +75,11 @@ interface SidebarProps {
   openConversations?: number;
   /** How many Tickets are not closed or resolved. Zero renders nothing. */
   openTickets?: number;
+  /**
+   * How many orders are waiting to ship (`open_orders()`'s rule, so an order
+   * refunded instead of shipped is not one). Zero renders nothing.
+   */
+  unfulfilledOrders?: number;
   /** The signed-in role, or null while it is still being fetched. */
   role?: string | null;
 }
@@ -86,13 +91,15 @@ export function Sidebar({
   onNavigate,
   openConversations = 0,
   openTickets = 0,
+  unfulfilledOrders = 0,
   role = null,
 }: SidebarProps) {
-  // Tickets is the queue to work, so it gets the warning colour; Conversations is
-  // grey, present but not competing with it.
-  const badges: Record<string, { count: number; noun: string; muted: boolean }> = {
-    "/tickets": { count: openTickets, noun: "ticket", muted: false },
-    "/conversations": { count: openConversations, noun: "conversation", muted: true },
+  // Tickets is the queue to work, so it gets the warning colour; Conversations and
+  // Orders are grey, present but not competing with it.
+  const badges: Record<string, { count: number; noun: string; state: string; muted: boolean }> = {
+    "/tickets": { count: openTickets, noun: "ticket", state: "still open", muted: false },
+    "/conversations": { count: openConversations, noun: "conversation", state: "still open", muted: true },
+    "/orders": { count: unfulfilledOrders, noun: "order", state: "waiting to ship", muted: true },
   };
 
   return (
@@ -149,7 +156,7 @@ export function Sidebar({
                 {!collapsed && badge && badge.count > 0 && (
                   <span
                     className={`${styles.badge} ${badge.muted ? styles.badgeMuted : ""}`}
-                    title={`${badge.count} ${badge.noun}${badge.count === 1 ? "" : "s"} still open`}
+                    title={`${badge.count} ${badge.noun}${badge.count === 1 ? "" : "s"} ${badge.state}`}
                   >
                     {badge.count}
                   </span>

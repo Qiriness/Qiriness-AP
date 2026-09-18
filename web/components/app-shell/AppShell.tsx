@@ -15,6 +15,8 @@ interface AppShellProps {
   openConversations?: number;
   /** Open-ticket count for the sidebar badge. */
   openTickets?: number;
+  /** Orders waiting to ship, for the sidebar badge on Orders. */
+  unfulfilledOrders?: number;
 }
 
 function toLogin() {
@@ -22,7 +24,7 @@ function toLogin() {
   window.location.assign(`/login?next=${encodeURIComponent(next)}`);
 }
 
-export function AppShell({ activeHref, children, openConversations, openTickets }: AppShellProps) {
+export function AppShell({ activeHref, children, openConversations, openTickets, unfulfilledOrders }: AppShellProps) {
   const [collapsed, setCollapsed] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [me, setMe] = useState<Me | null>(null);
@@ -93,6 +95,7 @@ export function AppShell({ activeHref, children, openConversations, openTickets 
           onNavigate={navigate}
           openConversations={openConversations}
           openTickets={openTickets}
+          unfulfilledOrders={unfulfilledOrders}
           role={me?.role ?? null}
         />
       </aside>

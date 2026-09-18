@@ -7,6 +7,7 @@ import {
   delayDays,
   normaliseSearch,
   enumLabel,
+  fulfillmentDisplay,
   fulfillmentStatusLabel,
   orderListArgs,
   orderNumberKey,
@@ -116,4 +117,41 @@ test('Shopify enums read as words', () => {
   assert.equal(fulfillmentStatusLabel('UNFULFILLED'), 'Unfulfilled');
   assert.equal(fulfillmentStatusLabel('UNKNOWN'), 'No status');
   assert.equal(fulfillmentStatusLabel(null), 'No status');
+});
+
+test('an order with nothing left to ship says why, not "Unfulfilled"', () => {
+  // The two shapes all 14 UNFULFILLED orders took on 2026-09-18 (#4727, #4886).
+  assert.deepEqual(
+    fulfillmentDisplay({ status: 'UNFULFILLED', units: 0, cancelled: true, financialStatus: 'REFUNDED' }),
+    { status: 'CANCELLED', label: 'Cancelled' }
+  );
+  assert.deepEqual(
+    fulfillmentDisplay({ status: 'UNFULFILLED', units: 0, cancelled: true, financialStatus: 'VOIDED' }),
+    { status: 'CANCELLED', label: 'Cancelled' }
+  );
+  assert.deepEqual(
+    fulfillmentDisplay({ status: 'UNFULFILLED', units: 0, cancelled: false, financialStatus: 'REFUNDED' }),
+    { status: 'REFUNDED', label: 'Refunded' }
+  );
+});
+
+test('an order that still has items, or already shipped, keeps Shopify\'s status', () => {
+  assert.deepEqual(
+    fulfillmentDisplay({ status: 'UNFULFILLED', units: 2, cancelled: false, financialStatus: 'PARTIALLY_REFUNDED' }),
+    { status: 'UNFULFILLED', label: 'Unfulfilled' }
+  );
+  // Shipped, then returned and refunded: it was fulfilled, and still says so.
+  assert.deepEqual(
+    fulfillmentDisplay({ status: 'FULFILLED', units: 0, cancelled: false, financialStatus: 'REFUNDED' }),
+    { status: 'FULFILLED', label: 'Fulfilled' }
+  );
+  // Empty, but neither cancelled nor refunded: nothing better to say.
+  assert.deepEqual(
+    fulfillmentDisplay({ status: 'UNFULFILLED', units: 0, cancelled: false, financialStatus: 'PAID' }),
+    { status: 'UNFULFILLED', label: 'Unfulfilled' }
+  );
+  assert.deepEqual(fulfillmentDisplay({ status: null, units: 1, cancelled: false, financialStatus: null }), {
+    status: 'UNKNOWN',
+    label: 'No status'
+  });
 });

@@ -27,7 +27,7 @@ export const metadata = { title: "Conversations · Qiriness Support OS" };
  */
 export default async function ConversationsPage() {
   let conversations: TicketListItem[] = [];
-  let badges: NavBadgeCounts = { openTickets: 0, openConversations: 0 };
+  let badges: NavBadgeCounts = { openTickets: 0, openConversations: 0, unfulfilledOrders: 0 };
   let loadError: string | null = null;
 
   try {

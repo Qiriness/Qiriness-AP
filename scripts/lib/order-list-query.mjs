@@ -143,3 +143,30 @@ export function fulfillmentStatusLabel(status) {
   if (!status || status === 'UNKNOWN') return 'No status';
   return enumLabel(status);
 }
+
+/**
+ * The fulfilment pill: Shopify's status, unless the order has nothing left to ship.
+ *
+ * AN ORDER EMPTIED BEFORE IT SHIPPED STAYS `UNFULFILLED` FOR EVER. Cancelling
+ * or refunding every line takes each `current_quantity` to 0 but leaves the
+ * fulfilment status where it was. Measured 2026-09-18: all 14 `UNFULFILLED`
+ * orders in the shop have 0 items left, 7 of them cancelled and 7 refunded
+ * without a cancel, so the pill was calling finished orders "Unfulfilled".
+ *
+ * ZERO ITEMS IS THE GATE, not the refund alone: a partly refunded order that
+ * still has something to ship is still waiting. Cancelled wins over refunded
+ * because a cancel is the fuller answer (it is usually refunded too). An empty
+ * order that is neither keeps Shopify's word, since there is nothing to say
+ * instead.
+ *
+ * `status` is the key the pill is styled on; `CANCELLED` and `REFUNDED` are ours,
+ * never Shopify fulfilment values. The filter still selects on Shopify's status.
+ */
+export function fulfillmentDisplay({ status, units, cancelled, financialStatus }) {
+  const shipped = status === 'FULFILLED' || status === 'RESTOCKED';
+  if (!shipped && Number(units) === 0) {
+    if (cancelled) return { status: 'CANCELLED', label: 'Cancelled' };
+    if (financialStatus === 'REFUNDED') return { status: 'REFUNDED', label: 'Refunded' };
+  }
+  return { status: status || 'UNKNOWN', label: fulfillmentStatusLabel(status) };
+}

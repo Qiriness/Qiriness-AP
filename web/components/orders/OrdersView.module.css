@@ -265,6 +265,20 @@
   background: var(--text-muted);
 }
 
+/* Emptied before it shipped (fulfillmentDisplay): finished, like FULFILLED, so
+   grey rather than amber — but a hollow dot, because nothing went out. */
+.status[data-status="CANCELLED"],
+.status[data-status="REFUNDED"] {
+  background: var(--surface-sunken);
+  color: var(--text-muted);
+}
+
+.status[data-status="CANCELLED"] .statusDot,
+.status[data-status="REFUNDED"] .statusDot {
+  border-color: var(--text-muted);
+  background: transparent;
+}
+
 .destination {
   display: inline-flex;
   align-items: center;

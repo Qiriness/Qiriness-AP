@@ -129,7 +129,7 @@
   padding: 2px 6px;
 }
 
-/* Open counts on Tickets (warning colour) and Conversations (grey, `.badgeMuted`).
+/* Open counts on Tickets (warning colour), Conversations and Orders (grey, `.badgeMuted`).
    `margin-left:auto` pins it to the right edge so a long label cannot push it
    out. Not rendered on the collapsed rail. */
 .badge {
