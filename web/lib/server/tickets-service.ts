@@ -20,6 +20,7 @@
  * the service role can read. Never import this from a client component.
  */
 
+import { cache } from "react";
 import { loadConfig } from "../../../scripts/lib/sync-config.mjs";
 import { formatRfmGroup } from "../../../scripts/lib/customer-segments.mjs";
 import { loadVipRule, loadVipTicketIds } from "../../../scripts/lib/vip-rule.mjs";
@@ -138,8 +139,8 @@ function partitionBySender(rows: any[], directory: any, vipTickets: Set<string>)
 
 export async function listTickets(shopId: string): Promise<TicketListItem[]> {
   const [rows, directory, vipTickets] = await Promise.all([
-    getRecord(shopId).queue(),
-    loadSenderDirectory(shopId),
+    readQueue(shopId),
+    readSenderDirectory(shopId),
     loadVipTickets(shopId)
   ]);
   return partitionBySender(rows as any[], directory, vipTickets).tickets;
@@ -148,8 +149,8 @@ export async function listTickets(shopId: string): Promise<TicketListItem[]> {
 /** The other half: threads one of our own addresses opened. */
 export async function listConversations(shopId: string): Promise<TicketListItem[]> {
   const [rows, directory, vipTickets] = await Promise.all([
-    getRecord(shopId).queue(),
-    loadSenderDirectory(shopId),
+    readQueue(shopId),
+    readSenderDirectory(shopId),
     loadVipTickets(shopId)
   ]);
   return partitionBySender(rows as any[], directory, vipTickets).conversations;
@@ -164,8 +165,8 @@ export async function listConversations(shopId: string): Promise<TicketListItem[
  */
 export async function listTicketsWithOrders(shopId: string): Promise<TicketListItem[]> {
   const [rows, directory, vipTickets] = await Promise.all([
-    getRecord(shopId).queue(),
-    loadSenderDirectory(shopId),
+    readQueue(shopId),
+    readSenderDirectory(shopId),
     loadVipTickets(shopId)
   ]);
   const { tickets, conversations } = partitionBySender(
@@ -189,7 +190,7 @@ export async function countOpenThreads(
 ): Promise<{ openTickets: number; openConversations: number }> {
   // One `queue()` read for both badges, over the same partition the two pages
   // render — two separate counts would double the read on every page load.
-  const [rows, directory] = await Promise.all([getRecord(shopId).queue(), loadSenderDirectory(shopId)]);
+  const [rows, directory] = await Promise.all([readQueue(shopId), readSenderDirectory(shopId)]);
   const { tickets, conversations } = partitionBySender(rows as any[], directory, new Set());
   const open = (ticket: TicketListItem) => ticket.status !== "closed" && ticket.status !== "resolved";
   return {
@@ -233,6 +234,18 @@ async function loadVipTickets(shopId: string, ticketIds: string[] | null = null)
     return new Set();
   }
 }
+
+/**
+ * The queue and the sender directory, read once per request.
+ *
+ * Tickets and Orders read the queue twice per render — once for the sidebar
+ * badges (`countOpenThreads`) and once for their own list — so the two share
+ * one read, and a badge can no longer disagree with the list beside it.
+ * `cache` is scoped to a single server render: nothing outlives the request,
+ * so the queue is exactly as fresh as it was before.
+ */
+const readQueue = cache((shopId: string) => getRecord(shopId).queue());
+const readSenderDirectory = cache((shopId: string) => loadSenderDirectory(shopId));
 
 async function loadSenderDirectory(shopId: string) {
   return createSenderDirectoryStore(getSupabaseClient()).load(shopId, {

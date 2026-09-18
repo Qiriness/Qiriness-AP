@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import type { MouseEvent } from "react";
 import type { ComponentType } from "react";
 import {
   AgentIcon,
@@ -56,8 +57,12 @@ interface SidebarProps {
   activeHref: string;
   collapsed: boolean;
   onToggleCollapse: () => void;
-  /** On mobile the sidebar is a slide-over; this closes it after navigation. */
-  onNavigate?: () => void;
+  /**
+   * Called on a nav click, with the link's own event. The shell uses it to close
+   * the mobile slide-over and to run the navigation itself, so the page can say
+   * it is loading (see AppShell).
+   */
+  onNavigate?: (event: MouseEvent<HTMLAnchorElement>, href: string, label: string) => void;
   /**
    * How many Conversations still need somebody, rendered as a badge.
    *
@@ -134,7 +139,7 @@ export function Sidebar({
                   isActive ? styles.active : ""
                 }`}
                 aria-current={isActive ? "page" : undefined}
-                onClick={onNavigate}
+                onClick={(event) => onNavigate?.(event, item.href, item.label)}
               >
                 <Icon size={19} />
                 {!collapsed && <span className={styles.navLabel}>{item.label}</span>}

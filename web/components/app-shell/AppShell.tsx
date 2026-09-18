@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import type { ReactNode } from "react";
+import { useEffect, useState, useTransition } from "react";
+import type { MouseEvent, ReactNode } from "react";
+import { useRouter } from "next/navigation";
 import { Sidebar } from "./Sidebar";
 import { UserMenu, type Me } from "./UserMenu";
 import { HelpIcon } from "@/components/icons";
@@ -25,6 +26,35 @@ export function AppShell({ activeHref, children, openConversations, openTickets 
   const [collapsed, setCollapsed] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [me, setMe] = useState<Me | null>(null);
+  const router = useRouter();
+  const [pending, startTransition] = useTransition();
+  const [target, setTarget] = useState<{ href: string; label: string } | null>(null);
+
+  // The target belongs to one navigation; it goes when that navigation ends.
+  useEffect(() => {
+    if (!pending) setTarget(null);
+  }, [pending]);
+
+  /**
+   * A PAGE TAKES A MOMENT, SO THE CLICK SAYS SO — the Insights frame's rule,
+   * applied to the whole app. Every page reads the database before it can
+   * render, and a plain link shows nothing until the new page has arrived, so a
+   * click read as a click that missed. Run in a transition instead: the clicked
+   * item lights up at once, and the current page stays on screen, dimmed, under
+   * "Loading …" until the new one replaces it.
+   *
+   * Not a `loading.tsx`: each page draws this shell itself, so a route skeleton
+   * would drop the sidebar, and on Orders it would reset the search box on
+   * every filter change.
+   */
+  function navigate(event: MouseEvent<HTMLAnchorElement>, href: string, label: string) {
+    setDrawerOpen(false);
+    // A modified click (new tab, new window) belongs to the browser.
+    if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    event.preventDefault();
+    setTarget({ href, label });
+    startTransition(() => router.push(href));
+  }
 
   // Who is signed in, asked once per page load and shared: the user menu shows
   // it, and the sidebar needs the role to decide whether Home is drawn. A 401
@@ -57,10 +87,10 @@ export function AppShell({ activeHref, children, openConversations, openTickets 
     <div className={styles.shell}>
       <aside className={`${styles.sidebarSlot} ${drawerOpen ? styles.drawerOpen : ""}`}>
         <Sidebar
-          activeHref={activeHref}
+          activeHref={target?.href ?? activeHref}
           collapsed={collapsed}
           onToggleCollapse={() => setCollapsed((c) => !c)}
-          onNavigate={() => setDrawerOpen(false)}
+          onNavigate={navigate}
           openConversations={openConversations}
           openTickets={openTickets}
           role={me?.role ?? null}
@@ -101,7 +131,17 @@ export function AppShell({ activeHref, children, openConversations, openTickets 
           </div>
         </header>
 
-        <div className={styles.content}>{children}</div>
+        <div className={`${styles.content} ${pending ? styles.pending : ""}`} aria-busy={pending}>
+          {children}
+        </div>
+        {pending && target ? (
+          <div className={styles.loadingLayer}>
+            <p className={styles.loadingPill} role="status">
+              <span className={styles.spinner} aria-hidden="true" />
+              {`Loading ${target.label}…`}
+            </p>
+          </div>
+        ) : null}
       </div>
     </div>
   );

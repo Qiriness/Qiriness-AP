@@ -53,7 +53,7 @@ Pending: ORM/DB client for app reads (scripts use `pg` + a Supabase REST client)
 
 ### Dashboard (`web/`)
 
-`cd web && npm install`, then `npm run dev` and open `http://localhost:3000` (redirects to `/agent-setup`). `npm run build`, `npm run lint`, `npm run typecheck` for checks. Run the root sync scripts at least once first — the Knowledge API looks the shop up by domain and returns a clear 404 until a `shops` row and the `shopify_content_sources` catalog exist.
+`cd web && npm install`, then `npm run dev` and open `http://localhost:3000` (redirects to `/agent-setup`). `npm run build`, `npm run lint`, `npm run typecheck` for checks. Set `PAGE_TIMING=1` to print how long each page's reads take to the server console. `next dev` compiles each page on first visit, so measure page speed on `npm run build && npm run start` — and stop the dev server first, since both use `web/.next`. Run the root sync scripts at least once first — the Knowledge API looks the shop up by domain and returns a clear 404 until a `shops` row and the `shopify_content_sources` catalog exist.
 
 ### Agent worker (`agent/`)
 

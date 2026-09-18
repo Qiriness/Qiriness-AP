@@ -45,6 +45,7 @@ import {
   supabaseUpsert,
 } from "../../../scripts/lib/supabase-rest-client.mjs";
 import { KnowledgeImportError, KnowledgeNotFoundError, KnowledgeValidationError } from "./knowledge-errors";
+import { getShop } from "./shop";
 import type { VoiceProfile } from "../types";
 import {
   DEFAULT_CLOSING_LINE,
@@ -136,18 +137,15 @@ function getSupabaseClient() {
   return createSupabaseClient(getConfig());
 }
 
-/** Resolves the single shop row this dashboard operates against, by domain. */
+/** Resolves the single shop row this dashboard operates against, by domain (remembered briefly, see shop.ts). */
 export async function getShopId(): Promise<string> {
-  const config = getConfig();
-  const supabase = getSupabaseClient();
-  const rows = await supabaseSelect(supabase, "shops", { shop_domain: config.shopDomain }, "id");
-  const id = rows?.[0]?.id;
-  if (!id) {
+  const shop = await getShop();
+  if (!shop) {
     throw new KnowledgeNotFoundError(
-      `No shop record found for ${config.shopDomain}. Run a Shopify sync script (e.g. "npm run sync:shopify:products") at least once before using the Agent Setup API.`
+      `No shop record found for ${getConfig().shopDomain}. Run a Shopify sync script (e.g. "npm run sync:shopify:products") at least once before using the Agent Setup API.`
     );
   }
-  return id;
+  return shop.id;
 }
 
 export async function listShopifySources(shopId: string): Promise<ShopifySourceOption[]> {

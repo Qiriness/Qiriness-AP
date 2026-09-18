@@ -8,9 +8,8 @@
  * Server-only.
  */
 
-import { RPC, T } from "../../../../scripts/lib/tables.mjs";
+import { RPC } from "../../../../scripts/lib/tables.mjs";
 import { loadConfig } from "../../../../scripts/lib/sync-config.mjs";
-import { supabaseSelect } from "../../../../scripts/lib/supabase-rest-client.mjs";
 import {
   channelFilter,
   isValidTimeZone,
@@ -19,7 +18,8 @@ import {
 } from "../../../../scripts/lib/insights-range.mjs";
 import { describeFreshness } from "../../../../scripts/lib/insights-freshness.mjs";
 import type { Freshness, FreshnessItem, InsightsRange, PlatformId } from "../../types";
-import { callRpcOne, getSupabaseClient } from "./shared";
+import { getShop } from "../shop";
+import { callRpcOne } from "./shared";
 
 export interface InsightsContext {
   shopId: string;
@@ -38,21 +38,14 @@ export type SearchParams = Record<string, string | string[] | undefined>;
 const first = (value: string | string[] | undefined) => (Array.isArray(value) ? value[0] : value);
 
 export async function resolveInsightsContext(searchParams: SearchParams = {}): Promise<InsightsContext> {
-  const config = loadConfig(process.env as Record<string, string | undefined>);
-  const rows = (await supabaseSelect(
-    getSupabaseClient(),
-    T.SHOPS,
-    { shop_domain: config.shopDomain },
-    "id,iana_timezone"
-  )) as { id: string; iana_timezone: string | null }[];
-
-  const shop = rows?.[0];
-  if (!shop?.id) {
+  const shop = await getShop();
+  if (!shop) {
+    const config = loadConfig(process.env as Record<string, string | undefined>);
     throw new Error(`No shop record found for ${config.shopDomain}. Run a Shopify sync first.`);
   }
 
-  const tzFallback = !isValidTimeZone(shop.iana_timezone);
-  const tz = tzFallback ? "UTC" : (shop.iana_timezone as string);
+  const tzFallback = !isValidTimeZone(shop.ianaTimezone);
+  const tz = tzFallback ? "UTC" : (shop.ianaTimezone as string);
   const now = new Date();
 
   // Freshness first: "All time" starts at the first synced order, which only

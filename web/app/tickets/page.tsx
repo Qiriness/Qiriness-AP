@@ -5,6 +5,7 @@ import { listTickets } from "@/lib/server/tickets-service";
 import { listDroppedMail } from "@/lib/server/dropped-mail-service";
 import type { DroppedMail, TicketListItem } from "@/lib/types";
 import { navBadgeCounts } from "@/lib/server/conversation-badge";
+import { timed } from "@/lib/server/timing";
 import { logDashboardAccess } from "@/lib/server/access-log";
 
 export const dynamic = "force-dynamic";
@@ -29,7 +30,9 @@ export default async function TicketsPage({
 }: {
   searchParams: Record<string, string | string[] | undefined>;
 }) {
-  const badges = await navBadgeCounts();
+  // Started, not awaited: the badges are read beside this page's own data
+  // rather than before it. navBadgeCounts never throws.
+  const badgesRead = timed("badges", navBadgeCounts());
   let tickets: TicketListItem[] = [];
   let droppedMail: DroppedMail[] = [];
   let loadError: string | null = null;
@@ -44,7 +47,7 @@ export default async function TicketsPage({
     // routed threads were the back office working customer returns, three of
     // them open at L3 behind a nav item nobody opened. The sidebar badge is what
     // answers that now. See DECISIONS.md § Tickets dashboard.
-    [tickets, droppedMail] = await Promise.all([listTickets(shopId), listDroppedMail(shopId)]);
+    [tickets, droppedMail] = await timed("tickets list", Promise.all([listTickets(shopId), listDroppedMail(shopId)]));
     await logDashboardAccess({
       shopId,
       action: "view",
@@ -56,6 +59,7 @@ export default async function TicketsPage({
     loadError = error instanceof Error ? error.message : "Failed to load tickets.";
   }
 
+  const badges = await badgesRead;
   return (
     <AppShell activeHref="/tickets" {...badges}>
       <TicketsView

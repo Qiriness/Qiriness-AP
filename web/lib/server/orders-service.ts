@@ -51,6 +51,7 @@ import type {
 } from "../types";
 import { LATE_AFTER_DAYS, adminOrdersUrl } from "./insights/open-orders";
 import { getSupabaseClient } from "./insights/shared";
+import { getShop } from "./shop";
 import { listTicketsWithOrders } from "./tickets-service";
 import { buildPromotions } from "../../../agent/src/resolution/order-context.mjs";
 
@@ -381,6 +382,10 @@ async function loadCustomer(supabase: Supabase, shopId: string, shopifyCustomerI
 
 /** The shop's clock, or UTC while the shop has none — as the Insights panels do. */
 async function shopTimeZone(supabase: Supabase, shopId: string): Promise<string> {
+  // The remembered shop row (shop.ts) answers this for the shop every page
+  // reads; any other id is read directly rather than assumed to share its clock.
+  const shop = await getShop();
+  if (shop?.id === shopId) return isValidTimeZone(shop.ianaTimezone) ? String(shop.ianaTimezone) : "UTC";
   const rows = (await supabaseSelect(supabase, T.SHOPS, { id: shopId }, "iana_timezone", { limit: 1 })) as Row[];
   const tz = rows?.[0]?.iana_timezone;
   return isValidTimeZone(tz) ? String(tz) : "UTC";

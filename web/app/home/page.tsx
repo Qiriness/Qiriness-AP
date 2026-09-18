@@ -23,7 +23,9 @@ export default async function HomePage() {
   if (!user) redirect("/login?next=/home");
   if (!canUseManagementChat(user.role)) redirect(fallbackPath(user.role));
 
-  const badges = await navBadgeCounts();
+  // Started, not awaited: the badges are read beside this page's own data
+  // rather than before it. navBadgeCounts never throws.
+  const badgesRead = navBadgeCounts();
   const readiness = chatReadiness();
   let conversations: ChatConversationSummary[] = [];
   let loadError: string | null = null;
@@ -33,6 +35,7 @@ export default async function HomePage() {
     loadError = error instanceof Error ? error.message : "Could not load your conversations.";
   }
 
+  const badges = await badgesRead;
   return (
     <AppShell activeHref="/home" {...badges}>
       <ChatView initialConversations={conversations} readiness={readiness} loadError={loadError} />

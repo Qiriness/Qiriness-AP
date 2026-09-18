@@ -10,6 +10,21 @@ Three sibling files carry the other halves, and this one deliberately does not d
 
 ---
 
+## Pages load faster, and a click says it is loading (2026-09-18)
+
+The owner's complaint: changing the Insights range (six months → a year) and moving between Tickets, Orders, Agent Setup and the Insights tabs each took a while. Measured first against the live database, then changed; nothing here can show older data than before — no cache that outlives a request was added.
+
+- **Reads that waited on each other now run together.** Every page read the shop id, then the whole ticket queue (for the sidebar badges), then its own data. The shop row (id + timezone) is now remembered for five minutes (`lib/server/shop.ts`, failures never kept), the badges start beside the page's reads, and Tickets/Orders share one queue read per request with the badges (React `cache`). About 0.4–0.9 s off every page by the round trips removed; not yet re-measured end to end.
+- **`insights_customer_mix()` is ten times faster on long ranges** (`30_customer_mix_plan.sql`): 961 → 102 ms on a year, 1,589 → 118 ms on all time. It was the slowest read on Sales and the reason a wider range took longer. The old shape was planned as a nested loop of 10.1 million comparisons once inside a function; the new one cannot be. Compared against the live function over 60 range × platform combinations with 0 differences, then **applied 2026-09-18** and re-checked against a snapshot taken just before: 0 differences, 69 / 106 / 118 ms on the live function. The whole Sales query batch now takes ~1.0–1.2 s whatever the range (was 1.1 / 1.9 / 2.7 s for six months / one year / all time).
+- **A sidebar click shows at once.** The clicked item lights up and the current page dims under "Loading Orders…" until the new one arrives — the Insights frame's behaviour, now app-wide. No `loading.tsx`, for the reasons in DECISIONS § Page speed.
+- **`PAGE_TIMING=1`** prints each page read's duration to the server console (labels and milliseconds only).
+
+Not done, on purpose: starting `insights_freshness` beside the panel (≈0.2 s for a five-service refactor), a result cache, and the client router cache. The remaining Sales slowness is eleven queries queuing on the database at once (100–300 ms each alone, 0.8–1.4 s together); combining them is an open decision.
+
+`npm test` 2,872 pass (6 new, for migration 30), `tsc` and lint clean. The pages have not been opened in a browser since the change.
+
+---
+
 ## The ticket panel says which situation and rule decided the case file (2026-09-17)
 
 It did not before. `exemplar_match` was written on every run and read by nothing a person opens — so a rule shaped somebody's mail with no trace on any screen, and "answerable, no rule" looked identical to "answerable, rule applied".

@@ -1139,6 +1139,15 @@ comment on function public.insights_orders_by_channel is
 -- history does -- so on a range near that horizon some returning customers read
 -- as new. The caller must not pass marketplace channels: a marketplace mints a
 -- customer record per order, so every one of those buyers would read as new.
+--
+-- SHAPED FOR THE GENERIC PLAN (30_customer_mix_plan.sql). A SQL function's body
+-- is planned without the argument values, and the first shape -- the range's
+-- orders as a CTE, then joined back to every customer's first order -- was
+-- planned as a nested loop over both: 10.1 million comparisons and ~1 s on a
+-- one-year range, where the same query with the values known ran in 80 ms.
+-- Grouping the range by customer first, then looking up each customer's first
+-- order through orders_shopify_customer_id_idx, leaves no plan that bad to pick.
+-- Identical results, checked over every preset and platform before shipping.
 create or replace function public.insights_customer_mix(
   p_shop uuid,
   p_from timestamp,
@@ -1158,7 +1167,7 @@ stable
 set search_path = public
 as $$
   with ranged as (
-    select o.shopify_customer_id as customer
+    select o.shopify_customer_id as customer, count(*) as orders
     from public.orders o
     where o.shop_id = p_shop
       and o.deleted_at is null
@@ -1172,23 +1181,29 @@ as $$
         or o.sales_channel_handle is null
         or not (o.sales_channel_handle = any(p_not_channels))
       )
-  ),
-  firsts as (
-    select o.shopify_customer_id as customer, min(o.processed_at) as first_at
-    from public.orders o
-    where o.shop_id = p_shop
-      and o.deleted_at is null
-      and o.cancelled_at is null
-      and o.shopify_customer_id in (select r.customer from ranged r)
     group by 1
+  ),
+  classified as (
+    -- The first order is looked for on every channel, as before: "returning"
+    -- means any earlier order of ours, whatever the filter shows.
+    select
+      r.orders,
+      (
+        select min(o.processed_at)
+        from public.orders o
+        where o.shop_id = p_shop
+          and o.deleted_at is null
+          and o.cancelled_at is null
+          and o.shopify_customer_id = r.customer
+      ) >= (p_from at time zone p_tz) as is_new
+    from ranged r
   )
   select
-    count(distinct r.customer) filter (where f.first_at >= (p_from at time zone p_tz)),
-    count(distinct r.customer) filter (where f.first_at < (p_from at time zone p_tz)),
-    count(*) filter (where f.first_at >= (p_from at time zone p_tz)),
-    count(*) filter (where f.first_at < (p_from at time zone p_tz))
-  from ranged r
-  join firsts f on f.customer = r.customer;
+    count(*) filter (where c.is_new),
+    count(*) filter (where not c.is_new),
+    coalesce(sum(c.orders) filter (where c.is_new), 0)::bigint,
+    coalesce(sum(c.orders) filter (where not c.is_new), 0)::bigint
+  from classified c;
 $$;
 
 revoke all on function public.insights_customer_mix from public, anon, authenticated;

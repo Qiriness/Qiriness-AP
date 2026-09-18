@@ -3238,3 +3238,30 @@ Orders were only ever written by the nightly, so between runs the desk read a ta
 
 **None of this replaces the nightly.** Deliveries are dropped, and one that arrives mid-deploy is simply gone. The nightly remains the reconciliation pass; this is the fast path, not the record.
 
+## Page speed
+
+### Most of a slow page was reads waiting on each other, not the data (2026-09-18)
+
+Measured against the live database from the dev machine, one round trip costs ~76 ms at best and ~200 ms typically. The Sales panel at "Last year" ran, **one after another**: the shop id for the badges (~200 ms), the **whole ticket queue** for the badges (~490 ms), the shop row again for Insights (~200 ms), `insights_freshness`, and only then the panel's own reads (~1.9 s in parallel). Tickets and Orders read the whole queue twice, once for the badges and once for their list.
+
+Three changes, none of which can show older data than before:
+
+- **The shop row is remembered for five minutes** (`lib/server/shop.ts`). It is upserted on the domain, so a sync keeps the id; the timezone is the one field a sync could move, which is why the memory is five minutes and not the process's life. **A missing row or a failed read is never remembered**, so "run a sync first" clears as soon as the sync lands.
+- **The badges are started beside the page's reads, not before them.** `navBadgeCounts` never throws, so a started-and-awaited-later promise cannot fail the page.
+- **The queue and sender directory are read once per request** (React `cache` in `tickets-service.ts`), shared by the badge and the list. `cache` is scoped to one server render, so nothing outlives the request, and the badge can no longer disagree with the list beside it.
+
+**Not done, on measurement: starting `insights_freshness` beside the panel.** Warm, it takes 190–230 ms (the ~600 ms first measured was a cold call). It is not only a label: it decides whether the previous-window reads run at all (`previousCovered`, Support's `mailCurrent`), so running it in parallel would mean speculatively firing those reads and discarding them — five panel services refactored and more load on a database that is already the bottleneck (below), for ~0.2 s.
+
+### Sidebar navigation holds the old page rather than showing a skeleton (2026-09-18)
+
+A plain link to a server-rendered page shows nothing until the new page has arrived, so a click read as a click that missed. `AppShell` now runs sidebar clicks through `router.push` in a transition: the clicked item lights up at once and the current page stays, dimmed, under "Loading Orders…" — the Insights frame's rule, applied everywhere. Modified clicks (new tab, new window) are left to the browser.
+
+**`loading.tsx` was the obvious tool and is wrong here, twice.** Each page draws `AppShell` itself, so a route skeleton would render with no sidebar. And Orders changes its URL on every filter and page turn; a `loading.tsx` there would swap the table for a skeleton and remount the list on each one, wiping the search box that deliberately owns its text while typing (§ Orders).
+
+### A SQL function is planned without its arguments, and one shape did not survive that (2026-09-18)
+
+`insights_customer_mix()` took **961 ms on a year and 1,589 ms on all time**; its body, run as a plain query with the values filled in, took **80 ms**. A SQL-language function (with `set search_path`, so never inlined) is planned generically — Postgres does not know the range, guesses a handful of rows, and planned "the range's orders as a CTE, joined back to each customer's first order" as a nested loop across both: **10,122,837 row comparisons** on a year. Reproduced with `plan_cache_mode = force_generic_plan` on the plain query.
+
+`30_customer_mix_plan.sql` groups the range by customer first and looks each customer's first order up through `orders_shopify_customer_id_idx`, so there is no plan left that compares every row with every row: **68 / 102 / 118 ms** for six months / one year / all time, measured on the generic plan, and 69 / 106 / 118 ms on the live function once applied. Same name, arguments and columns. Before shipping, the live function and the new body were compared over every preset (current and previous window) and every platform filter — **60 combinations, 0 differences**.
+
+**The general lesson for the ranged functions: test a new one under `force_generic_plan`**, not only as a plain query, because the plain query is not what runs. The other Sales reads were measured the same way and are 100–300 ms alone; they are slow in the panel (800 ms–1.4 s) only because eleven run at once and the database queues them. Fewer, combined calls per panel — or more database compute — is what would move that, and it is an open decision, not a fix to make quietly: it reverses "each ranged figure is its own SQL function" (§ Insights).

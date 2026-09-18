@@ -24,7 +24,9 @@ export default async function OrderPage({
   // go straight back to the ticket they were reading rather than to the queue.
   searchParams?: { ticket?: string };
 }) {
-  const badges = await navBadgeCounts();
+  // Started, not awaited: the badges are read beside this page's own data
+  // rather than before it. navBadgeCounts never throws.
+  const badgesRead = navBadgeCounts();
   let order: OrderDetail | null = null;
   let loadError: string | null = null;
 
@@ -48,6 +50,7 @@ export default async function OrderPage({
   // Outside the try: notFound() throws, and the catch would turn it into an error message.
   if (!order && !loadError) notFound();
 
+  const badges = await badgesRead;
   return (
     <AppShell activeHref="/orders" {...badges}>
       <OrderDetailView

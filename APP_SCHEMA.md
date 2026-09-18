@@ -80,7 +80,9 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |   |-- components/
 |   |   |-- icons.tsx                # inline SVG icon set
 |   |   |-- app-shell/               # AppShell (top bar + drawer; fetches /api/auth/me
-|   |   |                            # once for both) · Sidebar (Home drawn by role) ·
+|   |   |                            # once for both; runs sidebar navigation in a
+|   |   |                            # transition: old page dimmed + "Loading …" pill,
+|   |   |                            # no loading.tsx) · Sidebar (Home drawn by role) ·
 |   |   |                            # UserMenu (who is signed in, Sign out)
 |   |   |-- chat/                    # ChatView (conversation tabs + History menu, thread,
 |   |   |                            # composer + conversation cost; reads the stream;
@@ -153,7 +155,10 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |   |       |                    # dropped-mail-service · knowledge-errors ·
 |   |       |                    # auth (getSession, re-checked not trusted) ·
 |   |       |                    # access-log (a data_access_events row per
-|   |       |                    # named-customer view, actor = the user)
+|   |       |                    # named-customer view, actor = the user) ·
+|   |       |                    # shop (the shop row: id + timezone, kept 5 min,
+|   |       |                    # failures never kept) · timing (PAGE_TIMING=1
+|   |       |                    # prints each page read's ms to the console)
 |   |       `-- insights/         # shared (readView + callRpc -- NO paging) ·
 |   |                             # context (shop, tz, range, platform, freshness
 |   |                             # from the URL) · series (sparse SQL -> points,
@@ -542,6 +547,7 @@ Written by the worker and the CLIs, read only by the Insights panels.
 | `18_product_customer_mix.sql` | drops the draft six-argument `insights_product_customer_mix()` and creates the one-product version (`p_product_id`): distinct Shopify customers who bought only it / with other products / not at all, plus its top 7 co-bought products; free lines ignored. Copied byte-for-byte from 06. Applied 2026-09-14 | 01, 02, 06 |
 | `19_product_mix_filters.sql` | drops 18's seven-argument `insights_product_customer_mix()` and recreates it with `p_country`, `p_vip_only` and the VIP rule arguments (through `vip_customers()`); both filters narrow the whole population. Copied byte-for-byte from 06, where the function now sits after `orders_list_facets()` because it calls `vip_customers()`. Supersedes 18's copy. Applied 2026-09-14 | 01, 02, 06, 12, 18 |
 | `20_best_products_vip.sql` | drops and recreates `insights_product_sales()` and `insights_country_product_sales()` with `p_vip_only` + the VIP rule arguments (through `vip_customers()`, off by default); both now sit below `vip_customers()` in 06. Copied byte-for-byte from 06, supersedes 11's copies. Applied 2026-09-14 | 01, 02, 06, 11, 12 |
+| `30_customer_mix_plan.sql` | replaces the body of `insights_customer_mix()` — same signature, same four numbers — grouping the range by customer before looking up each first order, because the old shape planned as a nested loop (~1 s on a year). Copied byte-for-byte from 06, supersedes 11's copy. Applied 2026-09-18 | 01, 02, 06, 11 |
 | `23_agent_situations.sql` | adds `insights_agent_situations()`: tickets investigated in a range (latest run each) split by how the situation was picked — matched, tie settled by rules, near miss chosen by the model, chooser said none, not settled, no match, not recorded — from `ticket_investigations.exemplar_match`. Always one row. Copied byte-for-byte from 06. Applied 2026-09-15 | 04, 06 |
 | `24_rule_tones.sql` | adds `support_answers.tones text[] not null default '{}'` and `support_answers_tones_check` (the keys of `scripts/lib/reply-tones.mjs`), with the column comment — all copied from 05, which its test asserts. Every existing rule takes `{}`. Applied 2026-09-15 | 05 |
 | `29_order_promotion_need.sql` | widens `support_exemplars.requirement_needs` by one value, `order_promotion`, so a situation can declare "was the promotion applied to this order?". Copied from 05. No data. Applied 2026-09-17 | 05 |
@@ -669,7 +675,7 @@ Layout: **three panes, selection-driven** (`TicketWorkspace`) — `TicketListPan
 
 Two sections over the same `TicketTable` the queue uses — **Open** (expanded, leads the page) and **Closed** (collapsed). No level tabs, category filter or stat cards: 14 rows where the only useful questions are what is still open and where a forward went.
 
-`countOpenThreads` (one `queue()` read, both halves of the partition) feeds the sidebar's open-count badges — Tickets in the warning colour, Conversations grey, both hidden on the collapsed rail — rendered from **every** page in the shell via `navBadgeCounts` in `lib/server/conversation-badge.ts`. That is the mitigation for routing these off the queue at all — the arrangement failed once by being silent. See DECISIONS.md § Tickets dashboard.
+`countOpenThreads` (one `queue()` read, both halves of the partition — shared per request with the page's own list through React `cache`, and started beside the page's reads rather than before them) feeds the sidebar's open-count badges — Tickets in the warning colour, Conversations grey, both hidden on the collapsed rail — rendered from **every** page in the shell via `navBadgeCounts` in `lib/server/conversation-badge.ts`. That is the mitigation for routing these off the queue at all — the arrangement failed once by being silent. See DECISIONS.md § Tickets dashboard.
 
 ### `/insights` — the five analytics panels
 

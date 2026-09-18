@@ -4,6 +4,7 @@ import { canSeePanel, fallbackPath } from "../../../scripts/lib/dashboard-auth.m
 import { AppShell } from "@/components/app-shell/AppShell";
 import { getSession } from "@/lib/server/auth";
 import { navBadgeCounts } from "@/lib/server/conversation-badge";
+import { timed } from "@/lib/server/timing";
 import { resolveInsightsContext, type InsightsContext, type SearchParams } from "@/lib/server/insights/context";
 import { INSIGHTS_PANELS, type InsightsPanel, type InsightsScope } from "@/lib/types";
 import { InsightsFrame } from "./InsightsFrame";
@@ -36,17 +37,20 @@ export async function InsightsPage({
   if (!canSeePanel(session.role, active)) redirect(fallbackPath(session.role));
   const panels = INSIGHTS_PANELS.filter((panel) => canSeePanel(session.role, panel.id)).map((panel) => panel.id);
 
-  const badges = await navBadgeCounts();
+  // Started, not awaited: the sidebar badges are read beside the panel rather
+  // than before it. navBadgeCounts never throws.
+  const badgesRead = timed("insights badges", navBadgeCounts());
   let ctx: InsightsContext | null = null;
   let body: ReactNode = null;
   let error: string | null = null;
 
   try {
-    ctx = await resolveInsightsContext(searchParams);
-    body = await render(ctx);
+    ctx = await timed(`insights ${active} context`, resolveInsightsContext(searchParams));
+    body = await timed(`insights ${active} panel (${ctx.range.preset})`, render(ctx));
   } catch (e) {
     error = e instanceof Error ? e.message : "Failed to load this panel.";
   }
+  const badges = await badgesRead;
 
   return (
     <AppShell activeHref="/insights" {...badges}>

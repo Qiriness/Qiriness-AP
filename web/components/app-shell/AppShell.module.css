@@ -12,6 +12,7 @@
 }
 
 .main {
+  position: relative;
   flex: 1;
   min-width: 0;
   display: flex;
@@ -125,5 +126,62 @@
   }
   .helpLabel {
     display: none;
+  }
+}
+
+/* A sidebar navigation in flight: the current page stays, dimmed, until the
+   next one lands — the same hold as the Insights frame (InsightsHeader.module.css). */
+.content {
+  transition: opacity var(--dur) var(--ease-out);
+}
+
+.pending {
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+.loadingLayer {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding-top: 40vh;
+  pointer-events: none;
+}
+
+.loadingPill {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  padding: var(--space-2) var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--surface);
+  box-shadow: var(--shadow-md);
+  font-size: var(--text-body);
+  font-weight: var(--weight-medium);
+  color: var(--text-muted);
+}
+
+.spinner {
+  width: 1.125rem;
+  height: 1.125rem;
+  border-radius: 50%;
+  border: 2px solid var(--teal-100);
+  border-top-color: var(--teal);
+  animation: spin 0.7s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spinner {
+    animation-duration: 2.4s;
   }
 }

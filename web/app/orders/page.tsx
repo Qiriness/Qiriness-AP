@@ -3,6 +3,7 @@ import { OrdersView } from "@/components/orders/OrdersView";
 import { getShopId } from "@/lib/server/knowledge-service";
 import { listOrders } from "@/lib/server/orders-service";
 import { navBadgeCounts } from "@/lib/server/conversation-badge";
+import { timed } from "@/lib/server/timing";
 import { logDashboardAccess } from "@/lib/server/access-log";
 import type { OrderListPage } from "@/lib/types";
 import { parseOrderListQuery } from "../../../scripts/lib/order-list-query.mjs";
@@ -24,13 +25,15 @@ export default async function OrdersPage({
 }: {
   searchParams: Record<string, string | string[] | undefined>;
 }) {
-  const badges = await navBadgeCounts();
+  // Started, not awaited: the badges are read beside this page's own data
+  // rather than before it. navBadgeCounts never throws.
+  const badgesRead = timed("badges", navBadgeCounts());
   let page: OrderListPage | null = null;
   let loadError: string | null = null;
 
   try {
     const shopId = await getShopId();
-    page = await listOrders(shopId, parseOrderListQuery(searchParams));
+    page = await timed("orders list", listOrders(shopId, parseOrderListQuery(searchParams)));
     await logDashboardAccess({
       shopId,
       action: "view",
@@ -42,6 +45,7 @@ export default async function OrdersPage({
     loadError = error instanceof Error ? error.message : "Failed to load orders.";
   }
 
+  const badges = await badgesRead;
   return (
     <AppShell activeHref="/orders" {...badges}>
       <OrdersView page={page} loadError={loadError} />

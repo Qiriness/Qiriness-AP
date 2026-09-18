@@ -150,6 +150,14 @@ library, not the query".
   has shifted under them. Worth re-reading the sweep in section 2 of
   `eval:exemplars` before trusting the bands on non-French mail.
 
+## 20. Page-speed changes are built and unit-tested, and not yet seen working — 2026-09-18
+
+See `CHANGELOG.md` (2026-09-18) and `DECISIONS.md` § Page speed. What was proven: `npm test` (2,872), `tsc`, lint; and, read-only against the live database, that the rewritten `insights_customer_mix` returns exactly what the live one does over 60 range × platform combinations and runs in 68–118 ms on a generic plan. What was not:
+
+- ~~**Migration 30 is not applied.**~~ **Applied and checked 2026-09-18**: a snapshot of the old function over all 60 range × platform combinations, taken just before applying, matched the new function exactly (0 differences); a direct call takes 69–76 / 103–108 / 116–125 ms for six months / one year / all time.
+- **Nothing has been opened in a browser.** Check: click Tickets → Orders → Agent Setup → Insights in the sidebar; each click should light the item at once and dim the page under "Loading …". Ctrl-click should still open a new tab. On Orders, type in the search box and change a filter: the text must survive.
+- **End-to-end timing is unmeasured.** Check: `PAGE_TIMING=1`, a production build (`npm run build && npm run start`, dev server stopped first), then Insights → Sales at 6 months, 1 year and all time, and Tickets → Orders. Record the `[timing]` lines here.
+
 ## 19. The Attachments block is rendered and seen; four of its states are not (built 2026-09-09)
 
 The detail panel's fourth block lists what the customer attached, warns when they
