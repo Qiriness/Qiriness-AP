@@ -46,6 +46,17 @@ export function mapOrder(
     presentment_currency_code: order.presentmentCurrencyCode,
     subtotal_price: moneyAmount(order.subtotalPriceSet?.shopMoney),
     total_discounts: moneyAmount(order.totalDiscountsSet?.shopMoney),
+    // WHAT was applied, beside how much came off. Support is asked "has my gift
+    // been applied?", and a number cannot answer it — the promotion's own name
+    // can. Empty on an order that had none, never null.
+    discount_applications: cleanJsonValue(
+      (order.discountApplications?.nodes || []).map(mapDiscountApplication)
+    ),
+    // Codes the customer typed. Empty on this shop's automatic promotions, which
+    // is why the name above is read from the application rather than from here.
+    discount_codes: cleanJsonValue(
+      (order.discountCodes || []).map((code) => cleanTextValue(code)).filter(Boolean)
+    ),
     total_shipping_price: moneyAmount(order.totalShippingPriceSet?.shopMoney),
     total_tax: moneyAmount(order.totalTaxSet?.shopMoney),
     total_price: moneyAmount(order.totalPriceSet?.shopMoney),
@@ -226,9 +237,67 @@ function mapLineItem(lineItem) {
     variant_id: lineItem.variant?.id,
     discounted_total: moneyAmount(lineItem.discountedTotalSet?.shopMoney),
     original_total: moneyAmount(lineItem.originalTotalSet?.shopMoney),
-    currency_code: lineItem.discountedTotalSet?.shopMoney?.currencyCode
+    currency_code: lineItem.discountedTotalSet?.shopMoney?.currencyCode,
+    // WHICH promotion took money off this line, and how much. A gift is a line
+    // whose price went to zero BECAUSE of one of these; a free sample has none,
+    // and telling the two apart is the whole point of carrying them.
+    discounts: (lineItem.discountAllocations || [])
+      .map((allocation) => ({
+        amount: moneyAmount(allocation.allocatedAmountSet?.shopMoney),
+        name: discountName(allocation.discountApplication)
+      }))
+      .filter((allocation) => Number(allocation.amount) > 0)
   });
 }
+
+/**
+ * The promotion's own name: a typed code where there is one, the promotion's
+ * title otherwise. This shop runs AUTOMATIC promotions, so `title` is the usual
+ * answer and `discountCodes` on the order is empty.
+ */
+function discountName(application) {
+  return cleanTextValue(application?.code || application?.title) || null;
+}
+
+/**
+ * One promotion applied to the order, flattened out of Shopify's union type.
+ *
+ * `kind` keeps the union's meaning without its GraphQL spelling: a code the
+ * customer typed, an automatic promotion, one a person applied by hand, or a
+ * script. `value` is either a percentage or an amount; both are carried as they
+ * came, because "-20%" and "-20,90 €" read differently to a customer.
+ */
+function mapDiscountApplication(application) {
+  const percentage = application?.value?.__typename === 'PricingPercentageValue'
+    ? percentageValue(application.value.percentage)
+    : null;
+
+  return stripUndefined({
+    kind: DISCOUNT_KINDS[application?.__typename] || 'unknown',
+    name: discountName(application),
+    percentage,
+    amount: percentage === null ? moneyAmount(application?.value) : null,
+    currency_code: percentage === null ? application?.value?.currencyCode : null,
+    // ENTITLED means the promotion only covers the lines it was set up for,
+    // which is what a "free product" promotion looks like; ALL means it covers
+    // the whole order.
+    target_type: application?.targetType || null,
+    target_selection: application?.targetSelection || null,
+    allocation_method: application?.allocationMethod || null
+  });
+}
+
+function percentageValue(value) {
+  const parsed = Number.parseFloat(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+const DISCOUNT_KINDS = {
+  DiscountCodeApplication: 'code',
+  AutomaticDiscountApplication: 'automatic',
+  ManualDiscountApplication: 'manual',
+  ScriptDiscountApplication: 'script'
+};
 
 function mapFulfillment(fulfillment) {
   return stripUndefined({
@@ -310,6 +379,8 @@ function buildOrderRawPayload(order) {
     updatedAt: order.updatedAt,
     customer: order.customer ? { id: order.customer.id } : null,
     shippingAddress: shippingDestination(order.shippingAddress),
+    discountCodes: order.discountCodes,
+    discountApplications: order.discountApplications,
     totals: {
       subtotalPriceSet: order.subtotalPriceSet,
       totalDiscountsSet: order.totalDiscountsSet,

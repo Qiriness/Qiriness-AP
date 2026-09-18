@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { runOrderResolution } from './order-resolution-runner.mjs';
+import { reinvestigationColumns, runOrderResolution } from './order-resolution-runner.mjs';
 
 const HASH_A = 'a'.repeat(64);
 const HASH_B = 'b'.repeat(64);
@@ -305,4 +305,29 @@ test('a tracking number we hold no order for is explained, not silently empty', 
 
   assert.equal(store.written[0].resolution.status, 'no_candidate');
   assert.match(store.written[0].resolution.detail, /matches no order we hold/);
+});
+
+// --- a confirmed order on a ticket already investigated -----------------------
+
+test('an order confirmed after the investigation queues it again and reopens an agent status', () => {
+  // Ticket fcf4ca11: refused against a colleague's address, repaired later,
+  // and left with a case file and draft that asked for the number.
+  const at = '2026-09-13T23:54:13Z';
+  assert.deepEqual(reinvestigationColumns({ status: 'awaiting_human', investigated_at: at }), {
+    needs_investigation: true,
+    status: 'open'
+  });
+  assert.deepEqual(reinvestigationColumns({ status: 'awaiting_customer', investigated_at: at }), {
+    needs_investigation: true,
+    status: 'open'
+  });
+  assert.deepEqual(reinvestigationColumns({ status: 'open', investigated_at: at }), { needs_investigation: true });
+});
+
+test('a person’s status is never reopened, and an uninvestigated ticket needs nothing', () => {
+  const at = '2026-09-13T23:54:13Z';
+  for (const status of ['resolved', 'closed', 'forwarded', 'spam']) {
+    assert.deepEqual(reinvestigationColumns({ status, investigated_at: at }), {}, status);
+  }
+  assert.deepEqual(reinvestigationColumns({ status: 'open', investigated_at: null }), {});
 });

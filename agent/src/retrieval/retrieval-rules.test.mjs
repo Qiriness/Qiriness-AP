@@ -208,3 +208,20 @@ test('items without a chunkId are dropped rather than colliding', () => {
   const fused = fuseByRank([[{ similarity: 0.9 }, { chunkId: 'a' }]]);
   assert.deepEqual(fused.map((f) => f.chunkId), ['a']);
 });
+
+test('our own subject is dropped from the query, a customer heading is not', () => {
+  // Ticket 809c9ae1: the FAQ answering the question ranked first and scored
+  // 0.577 with « Nouveau message de client le 12 septembre 2026 à 18:22 » in
+  // front of it, against a 0.60 bar. The same stripper the message embeddings
+  // already use (SHOP_NOTIFICATION_SUBJECTS).
+  const body = "Puis-je mettre les galets dans mon appareil à vapeur ?";
+
+  const ours = buildRetrievalQuery({ subject: 'Nouveau message de client le 12 septembre 2026 à 18:22', body });
+  assert.equal(ours, body);
+
+  const replied = buildRetrievalQuery({ subject: 'RE: Votre commande est confirmée', body });
+  assert.equal(replied, body, "a reply inherits the heading and it is still ours");
+
+  const theirs = buildRetrievalQuery({ subject: 'Galets dans un appareil à vapeur', body });
+  assert.equal(theirs, `Galets dans un appareil à vapeur ${body}`);
+});

@@ -25,6 +25,11 @@
   overflow: hidden;
 }
 
+/* A short form: an order number and what it points at. */
+.compact {
+  width: min(34rem, 100%);
+}
+
 .header {
   display: flex;
   align-items: flex-start;

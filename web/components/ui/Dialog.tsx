@@ -14,6 +14,8 @@ interface DialogProps {
   closeLabel: string;
   onClose: () => void;
   children: ReactNode;
+  /** `compact` for a short form; the default fits a conversation. */
+  size?: "default" | "compact";
 }
 
 /**
@@ -29,7 +31,7 @@ interface DialogProps {
  * conversation and a one-screen record can share it without either bending to
  * the other's shape.
  */
-export function Dialog({ title, meta, closeLabel, onClose, children }: DialogProps) {
+export function Dialog({ title, meta, closeLabel, onClose, children, size = "default" }: DialogProps) {
   const closeRef = useRef<HTMLButtonElement>(null);
 
   // Focus moves into the dialog on open, so the next Tab lands inside it rather
@@ -66,7 +68,7 @@ export function Dialog({ title, meta, closeLabel, onClose, children }: DialogPro
         role="dialog"
         aria-modal="true"
         aria-labelledby="app-dialog-title"
-        className={styles.dialog}
+        className={size === "compact" ? `${styles.dialog} ${styles.compact}` : styles.dialog}
         onClick={(event) => event.stopPropagation()}
       >
         <header className={styles.header}>

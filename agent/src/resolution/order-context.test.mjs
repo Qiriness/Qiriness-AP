@@ -451,3 +451,78 @@ test('the dispatch window is measured in working days, and only when the shop ha
     'unknown'
   );
 });
+
+// --- what was applied to the order ---------------------------------------------
+
+// Shaped on the real #6827: one gift (a line reduced to zero by a named
+// promotion), three samples that were never priced, and full-price lines.
+const PROMOTED_ORDER = {
+  ...ORDER,
+  total_discounts: '20.90',
+  discount_codes: [],
+  discount_applications: [
+    { kind: 'automatic', name: 'Sauna Visage offert', percentage: 100, amount: null, target_type: 'LINE_ITEM' }
+  ],
+  line_items: [
+    { title: 'Caresse Regard Sublime - échantillon', original_total: 0, discounted_total: 0, discounts: [] },
+    {
+      title: 'Sauna Visage/Bain Vapeur - 6 Galets Aromatiques',
+      original_total: 20.9,
+      discounted_total: 0,
+      discounts: [{ amount: 20.9, name: 'Sauna Visage offert' }]
+    },
+    { title: "Coffret Source d'Eau", original_total: 25.95, discounted_total: 25.95, discounts: [] }
+  ]
+};
+
+test('a gift is a line whose price went to zero, and it is named with its promotion', () => {
+  const { promotions } = buildOrderContext(PROMOTED_ORDER, CUSTOMER, { now: NOW }).order;
+
+  assert.deepEqual(promotions.gifts, [
+    {
+      title: 'Sauna Visage/Bain Vapeur - 6 Galets Aromatiques',
+      value: 20.9,
+      promotions: ['Sauna Visage offert']
+    }
+  ]);
+  assert.equal(promotions.total, 20.9);
+  assert.deepEqual(promotions.applied[0].name, 'Sauna Visage offert');
+});
+
+test('a sample is never a gift: it was never priced', () => {
+  const { promotions } = buildOrderContext(PROMOTED_ORDER, CUSTOMER, { now: NOW }).order;
+  assert.deepEqual(promotions.samples, [{ title: 'Caresse Regard Sublime - échantillon' }]);
+  assert.equal(
+    promotions.gifts.some((gift) => gift.title.includes('échantillon')),
+    false
+  );
+});
+
+test('a line that merely lost some of its price is a reduction, not a gift', () => {
+  const order = {
+    ...PROMOTED_ORDER,
+    total_discounts: '5.00',
+    discount_applications: [{ kind: 'code', name: 'BIENVENUE', percentage: null, amount: 5 }],
+    line_items: [
+      {
+        title: "Coffret Source d'Eau",
+        original_total: 25.95,
+        discounted_total: 20.95,
+        discounts: [{ amount: 5, name: 'BIENVENUE' }]
+      }
+    ]
+  };
+  const { promotions } = buildOrderContext(order, CUSTOMER, { now: NOW }).order;
+  assert.deepEqual(promotions.gifts, []);
+  assert.deepEqual(promotions.reductions, [
+    { title: "Coffret Source d'Eau", off: 5, promotions: ['BIENVENUE'] }
+  ]);
+});
+
+test('an order with nothing applied says so, and keeps its samples separate', () => {
+  const { promotions } = buildOrderContext(ORDER, CUSTOMER, { now: NOW }).order;
+  assert.deepEqual(promotions.applied, []);
+  assert.deepEqual(promotions.gifts, []);
+  assert.deepEqual(promotions.reductions, []);
+  assert.equal(promotions.total, 0);
+});

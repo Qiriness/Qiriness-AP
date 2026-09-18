@@ -196,6 +196,17 @@ export const CAVEATS = {
   customer_unknown:
     'Ne pas supposer que le client a un compte ou un historique : aucune fiche client ' +
     'ne correspond à cette adresse.',
+  // THE ABSENCE OF A LIMIT IS NOT AN OFFER. A code with no expiry and no usage
+  // cap is an operational fact; repeated to a customer it reads as "use it as
+  // often as you like, forever", which the shop never promised and can withdraw
+  // tomorrow. Raised by every tool that names a code, so it does not depend on
+  // which situation matched — see promotion-lookup.mjs, which no longer states
+  // the absence at all.
+  promotion_limits_internal:
+    'Ne jamais dire qu’un code est sans limite d’utilisation, sans date d’expiration, ' +
+    'valable indéfiniment ou utilisable plusieurs fois : ces informations sont internes. ' +
+    'Ne donner que les conditions qui s’appliquent réellement (date de fin, une seule ' +
+    'utilisation par client, produits concernés).',
   stock_unknown:
     'Ne pas annoncer de disponibilité ni de date de réassort : le stock n’a pas pu être établi.',
   // THE PROHIBITION IS AGAINST THE DENIAL, not against the doubt. A sale made in

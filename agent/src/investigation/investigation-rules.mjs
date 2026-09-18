@@ -35,6 +35,7 @@ export const TOOL_NAMES = {
   LOOKUP_PROMOTION: 'lookupPromotion',
   LIST_ACTIVE_PROMOTIONS: 'listActivePromotions',
   GET_ORDER_CONTEXT: 'getOrderContext',
+  CHECK_ORDER_PROMOTION: 'checkOrderPromotion',
   LOOKUP_ABANDONED_CHECKOUT: 'lookupAbandonedCheckout',
   VERIFY_PURCHASE: 'verifyPurchase',
   CHECK_PHOTO_EVIDENCE: 'checkPhotoEvidence',
@@ -150,6 +151,7 @@ const TOOLS_BY_SUBJECT = {
   // `checkout_state` resolved `unavailable` on every ticket that declared it.
   order: [
     T.GET_ORDER_CONTEXT,
+    T.CHECK_ORDER_PROMOTION,
     T.LOOKUP_CUSTOMER,
     T.SEARCH_KNOWLEDGE,
     T.VERIFY_PURCHASE,

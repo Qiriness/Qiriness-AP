@@ -51,6 +51,9 @@ export function buildOrderContext(order, customer = null, { now = new Date() } =
       // need it, and this is the only readable form of it that exists.
       contactEmailMasked: order.customer_email_masked || null,
       items: buildItems(order.line_items),
+      // WHAT WAS APPLIED TO THIS ORDER, so « mon cadeau a-t-il bien été
+      // appliqué ? » is a fact to read rather than an amount to interpret.
+      promotions: buildPromotions(order),
       shipTo: buildShipTo(order.shipping_destination),
       delivery: buildDelivery(order, now),
       refunds: buildRefunds(order),
@@ -88,8 +91,85 @@ function buildItems(lineItems) {
     title: item.title || item.name || null,
     sku: item.sku || null,
     quantity: item.quantity ?? null,
-    productId: item.product_id || null
+    productId: item.product_id || null,
+    // What the line cost before and after. Carried so a gift is legible as a
+    // gift: a price that went to zero, rather than a line that never had one.
+    price: amount(item.original_total),
+    paid: amount(item.discounted_total)
   }));
+}
+
+/**
+ * The promotions on this order: what was applied, what it gave, and what it
+ * merely came with.
+ *
+ * THE DISTINCTION THIS EXISTS FOR IS GIFT vs SAMPLE, and both are lines at
+ * 0,00 €. A GIFT is a line whose price was REDUCED to zero by a named promotion
+ * (order #6827: « Sauna Visage offert » took 20,90 € off one line). A SAMPLE was
+ * never priced, carries no allocation, and is what the shop adds to parcels
+ * routinely — counting one as the customer's gift would answer the wrong
+ * question with a straight face.
+ *
+ * NAMES, NOT ONLY AMOUNTS. `applied` carries each promotion as Shopify recorded
+ * it — the typed code, or the automatic promotion's title — because "une remise
+ * de 20,90 €" does not tell a customer whether the thing they were promised
+ * arrived, and "« Sauna Visage offert » a bien été appliqué" does.
+ *
+ * EMPTY IS AN ANSWER. `applied: []` with `total: 0` is "nothing was applied",
+ * which is the case that sends the ticket to a person (order #6913: the 20%
+ * first-order discount genuinely never landed).
+ */
+export function buildPromotions(order) {
+  const lineItems = Array.isArray(order.line_items) ? order.line_items : [];
+  const applied = (Array.isArray(order.discount_applications) ? order.discount_applications : [])
+    .map((application) => ({
+      name: application.name || null,
+      kind: application.kind || null,
+      percentage: application.percentage ?? null,
+      amount: amount(application.amount)
+    }));
+
+  const gifts = [];
+  const reductions = [];
+  const samples = [];
+
+  for (const item of lineItems) {
+    const title = item.title || item.name || null;
+    const was = Number(item.original_total);
+    const paid = Number(item.discounted_total);
+    const allocations = (Array.isArray(item.discounts) ? item.discounts : []).filter(
+      (allocation) => Number(allocation.amount) > 0
+    );
+    const names = allocations.map((allocation) => allocation.name).filter(Boolean);
+
+    if (was > 0 && paid === 0) {
+      gifts.push({ title, value: amount(was), promotions: names });
+    } else if (allocations.length > 0) {
+      reductions.push({
+        title,
+        off: amount(allocations.reduce((sum, allocation) => sum + Number(allocation.amount || 0), 0)),
+        promotions: names
+      });
+    } else if (was === 0 && paid === 0) {
+      samples.push({ title });
+    }
+  }
+
+  return {
+    applied,
+    codes: Array.isArray(order.discount_codes) ? order.discount_codes.filter(Boolean) : [],
+    total: amount(order.total_discounts) ?? 0,
+    gifts,
+    reductions,
+    // NEVER COUNTED AS A GIFT, and listed so a reply can say so plainly when a
+    // customer asks about "le cadeau" and is looking at these.
+    samples
+  };
+}
+
+function amount(value) {
+  const parsed = Number.parseFloat(value);
+  return Number.isFinite(parsed) ? parsed : null;
 }
 
 /** Coarse by design: the sync never stores a street address. */

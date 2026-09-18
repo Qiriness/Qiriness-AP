@@ -217,6 +217,78 @@ Amazon hands Shopify the same placeholder for every buyer (`Anonymous Customer`,
 
 **The investigation stops asking for an address on these tickets.** Once #6059 was linked, the rerun still asked for the account email. `lookupCustomer` finds no record (none can exist), and its no-match text told the model « c'est la question à lui poser ». Two layers, both keyed on `verified_by` through `orderBuyerAnonymous` on the investigation's ticket input. The lookup's result tells the model the missing record is expected and not to ask. `buildCaseFile` removes `purchase_email` and `account_email` from `missing` whoever added them, so the fix does not depend on the model listening. It is the only confirmed path that skips ownership, so no other ticket carries the flag. Measured by dry run before and after: **2 of 111** unresolved tickets changed (#6059, #6308), and nothing else moved.
 
+### An order confirmed after the investigation sends the ticket back through it (2026-09-17)
+
+**Found on `fcf4ca11`.** Florence quoted « ma commande 6669 », which is hers by email hash, yet her draft asked her to « confirmer le numéro de commande ». The newest-first re-import on 2026-09-13 created the ticket from its latest message, Taha's, so resolution at 23:23 compared #6669 against a colleague's address and said `mismatch`. `requester:repair` (run by hand; no repair tool is part of the worker or the nightly job) set Florence as requester minutes later. Nothing re-ran resolution, and nothing would have refreshed the case file or the draft if it had. #6746 and #6481 were in the same state.
+
+Two gaps, both closed:
+
+- **Resolution queues a new investigation.** `reinvestigationColumns` runs when a confirmed number is written to a ticket that already has `investigated_at`. It raises `needs_investigation`, and reopens `awaiting_customer` / `awaiting_human` to `open`, because the investigation only claims open tickets. Those two statuses are set only by the agent's verdict (the dashboard sets `open`, `resolved`, `closed`), so a person's decision is never reopened.
+- **Drafting redoes a stale pending draft.** The case file is rewritten in place (same row, same trigger message), and drafts are keyed on the trigger message, so a re-investigation used to count as already drafted. `needingDraft` now also returns a reading whose draft is **pending** and older than `investigated_at`. An approved, edited, rejected or sent draft is never redone. Measured before the change: **0 of 123** existing drafts were older than their case file, so it redraws nothing until a re-investigation happens.
+
+Checked end to end on the three tickets with neither `requeue` nor `--redraft`: resolution confirmed all three by email and reopened and queued them, then the investigation and drafting passes picked them up by themselves.
+
+**How often a ticket is investigated.** There is no fixed cap: once per new inbound message (through the categoriser), plus **at most once** more when an order is confirmed after the case file was built (once the number is written, the ticket is never resolved again), plus any manual `tickets:requeue` / `investigate --backfill`. A failed run retries up to 3 times, and those retries complete the same investigation. A new message and a late confirmation in the same poll raise the same flag, so they cost one investigation.
+
+#### TO DO — before drafting joins the worker poll
+
+Drafting is **not** in the poll today. It runs only through `npm run draft`, so a re-investigation updates the case file at once and the draft only at the next manual run. When drafting becomes automatic, both cases below have to hold:
+
+1. **An order confirmed before anyone drafts: re-investigate, then draft once.** This works today because `orders` runs before `investigate` in the same poll. Drafting must be added **after** `investigate`, never before it, or it drafts from the case file the order is about to replace. It should also skip a ticket whose `needs_investigation` is still raised: a re-investigation that failed and is waiting to retry leaves the old case file in place, and drafting would read it.
+2. **A draft that already exists: rewrite it from the new case file.** `needingDraft` redrafts a **pending** draft older than its case file, at one model call per ticket, and never touches one a person approved, edited, rejected or sent. Decide before switching on:
+   - **Rewrite or flag.** Keep the rewrite, or mark the stale draft outdated for the reviewer and save the call.
+   - **The review mail.** `save` clears `review_sent_at`, so a draft already mailed to a reviewer is mailed again once it is rewritten. Check that is wanted once review copies are automatic too.
+
+### A person can link a ticket's order, and the person is the proof (2026-09-17)
+
+Three cases the resolver cannot settle and a person can: no order was found (a number in a later reply, or a reference we do not parse), the order found is wrong, or the investigation's **candidate last order** is the right one. The ticket's Order block therefore has a pencil beside a confirmed number, **Add order number** when there is none, and **Confirm this order** on a candidate. All three end in one server action, `changeTicketOrder`, so there is one rule.
+
+**No ownership check.** A person linking an order has already judged it, so none of the resolver's paths apply and `verified_by` is `manual`, with `set_by` (the dashboard user), `matched_by` (which control) and `previous_order` in `metadata.order_resolution`. The popup shows how the order relates to the sender (same email, different email, anonymous marketplace buyer, nothing to compare) and **never blocks**: a gift or a second mailbox is the ordinary reason for a mismatch.
+
+**Two steps, because it costs a run.** Look up and preview, then a second screen saying the investigation runs again and the pending draft will be rewritten. Nothing is written before that confirmation.
+
+**What the change writes** (`manualOrderColumns` in `scripts/lib/order-link.mjs`):
+
+- the number;
+- the order bundle, rebuilt at once with the worker's own `buildOrderContext`, so the panel shows the new order immediately;
+- `customer_id`, only where the ticket had none (the same rule as the context pass);
+- the requeue.
+
+The requeue is the same `reinvestigationColumns` the resolver uses, moved to `scripts/lib` so the two cannot drift, with one difference: a person requeues any open ticket, investigated or not. `awaiting_customer` / `awaiting_human` reopen; `resolved`, `closed`, `forwarded` and `spam` get the order but no investigation, and the popup says so.
+
+**Queued, not run inline.** The worker picks the ticket up on its next poll, so the dashboard never waits on a model. The consequence: nothing is re-investigated while the worker is stopped.
+
+**Conditional on what the person saw.** The request carries the order the popup was opened on, and the write filters on it, so a change made meanwhile by another person or by the resolver makes the update match nothing. The person is told to reload, and nothing is overwritten. The resolver itself only reads tickets with no order number, so it never replaces a manual one.
+
+**`buyer_anonymous` became its own flag.** The investigation's "do not ask an anonymous marketplace buyer for an address" rule read `verified_by === 'marketplace_order_number'`, which a manually linked Amazon order would miss. Both writers now set `order_resolution.buyer_anonymous`, and the investigation reads the flag, or the old `verified_by` for rows written before it (#6059, #6308).
+
+**Not built: unlinking.** "This ticket has no order" is a fourth case, left out by decision for now.
+
+### An order remembers which promotion was applied, not only how much (2026-09-17)
+
+Two tickets asked the same unanswerable question. #6827: « j'avais vu qu'un cadeau exclusif était offert, mais je ne le trouve pas ». #6913: « je n'ai pas eu les 20% pour ma première commande ». Both were answered by `expediee_sans_scan` — the general "your parcel has shipped" rule — because nothing in the data could say whether a promotion had landed.
+
+**The order knew, and we were not storing it.** Shopify returns `discountApplications` per order and `discountAllocations` per line; the sync fetched neither, only `totalDiscountsSet`. So #6827 carried "20,90 € of discount" and no way to learn that this WAS the gift: « Sauna Visage offert », 100% off one line.
+
+**A gift and a sample are both lines at 0,00 €**, and telling them apart is the whole point. A GIFT is a line whose price was reduced to zero by a named promotion; a SAMPLE was never priced. Measured over 6,026 orders: 2,643 carry a zero-price line, only 1,126 carry a line reduced to zero. Answering "yes, your gift is on the order" by pointing at an échantillon would be the wrong answer delivered confidently.
+
+**What was extended** (one query, so the webhook path gets it for free — it re-reads each order through the same `ORDERS_QUERY`):
+
+- the order query: `discountCodes`, `discountApplications` (typename, allocation, target, value, code/title) and per-line `discountAllocations`;
+- the mapper: `discount_applications` and `discount_codes` on the row, `discounts: [{amount, name}]` on each line item;
+- migration 28 for the two columns, and 29 for the new need;
+- the order bundle: a `promotions` block — what was applied (by name), the gifts with their value and the promotion that gave them, plain reductions, and samples listed separately.
+
+**This shop's promotions are AUTOMATIC**, so `discountCodes` comes back empty and the name lives in the application's `title`; a code-based order carries the typed code in both. 3,363 of 6,026 orders carry a named promotion, 1,109 a code.
+
+**`checkOrderPromotion` reads the stored bundle**, like `getOrderContext` and for the same reason: one account of the order, not two. It reports everything applied rather than a verdict, because a reply that can say « le cadeau « Sauna Visage offert » a bien été appliqué » answers the customer, and « une remise de 20,90 € a été appliquée » invites the same question again. The finding `order_promotion` (`gift` / `discount` / `both` / `none` / `unknown`) is what rules branch on.
+
+**Situation P-22 and its three rules** (drafts, for the desk to approve): no order identified → ask for the number and the purchase email, worded after `d01_commande_non_identifiee`; something applied → say yes and name it, never counting a sample as the gift; nothing applied → say so plainly, promise nothing, and hand it to a person.
+
+**It cost a full re-sync** (`sync:shopify:orders -- --all-orders`, 6,026 orders, Shopify calls only) and a bundle rebuild (`context:build -- --refresh`, 65 tickets). Both are re-runnable and neither spends a model call.
+
+**The incident this work caused is in `VALIDATION_LOG.md` item 12**: the new situation was first written under `P-21`, a key that already existed in the database and not in the document, and the importer overwrote it. Recovered from the prose documents, moved to `P-22`; the importer still has no database-side duplicate check.
+
 ### The order passes run before the investigation, and nothing used to check that
 
 `getOrderContext` is a **reader**. It returns whatever the order passes stored on the ticket and never queries for itself — deliberately, so the agent is shown the one reviewable bundle rather than a second derivation of the same facts that could disagree with it. The consequence is that an order those passes have not yet confirmed does not exist as far as the agent is concerned.
@@ -247,7 +319,7 @@ The bundle carries the buyer's name and email (support cannot answer without kno
 
 ## Investigation
 
-Runs immediately after categorisation and consumes its output in the same poll — the categoriser raises `needs_investigation` in the same patch that clears its own flag, and is the **only** writer of it, so a thread is never investigated against labels describing an older conversation.
+Runs immediately after categorisation and consumes its output in the same poll — the categoriser raises `needs_investigation` in the same patch that clears its own flag, so a thread is never investigated against labels describing an older conversation. It is the only writer **that follows a new message**. Order resolution also raises the flag when it confirms an order on a ticket already investigated (§ An order confirmed after the investigation), a person linking an order on the dashboard raises it (§ A person can link a ticket's order), and `tickets:requeue` raises it by hand. Neither changes the labels.
 
 This is the first stage that *chooses* what to do, and the first with a budget: **6 tool calls, 4 model turns**, identical-args calls served from a per-run cache. Every bound resolves to an outcome (`needs_human`, budget exhausted), never an exception.
 
@@ -2533,7 +2605,11 @@ Closed tickets leave no ring: a mark for a finished conversation would say someb
 
 ### The detail page is cards, and names only what the list already did
 
-Articles, Fulfilment, Payment on the left; Tickets, Customer, Destination, Tags on the right — Shopify's order page shape, with Tickets leading the right column because they are why this page lives in a support app. Personal data matches the Fulfilment panel's waiting orders: name and email, with the email withheld for marketplace buyers (placeholder addresses), and the masked address where no customer is linked. No street address exists to show (§ Data handling). Both pages write a `data_access_events` row. Ticket entries link to `/tickets`, not to the ticket: that page has no deep link yet.
+Articles, Fulfilment, Payment on the left; Tickets, Customer, Destination, Tags on the right — Shopify's order page shape, with Tickets leading the right column because they are why this page lives in a support app. Personal data matches the Fulfilment panel's waiting orders: name and email, with the email withheld for marketplace buyers (placeholder addresses), and the masked address where no customer is linked. No street address exists to show (§ Data handling). Both pages write a `data_access_events` row. Ticket entries link to `/tickets`, not to the ticket: that page had no deep link when this was written, and it does now (`?ticket=`) — the Order block on a ticket uses it in the other direction.
+
+**The two pages now link both ways (2026-09-18).** A ticket's order number is a link to `/orders/[id]?ticket=<ticket>`, and the order page reads that parameter to offer **← Back to the ticket** rather than dropping the reader on the queue. The id is checked against a UUID pattern before it becomes a link, so the parameter can only ever name one of our own tickets. `TicketDetail.orderId` is one small read by order name — the bundle stores the NAME and the page is addressed by id.
+
+**The Promotions card reads the same builder as the agent** (`buildPromotions`, exported from `order-context.mjs`), so the page and the case file cannot disagree about whether a gift was given. It adds money labels and nothing else: the gift/sample judgement stays in one place.
 
 ---
 

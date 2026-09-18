@@ -113,7 +113,15 @@ export const ADVISORY_CAVEATS = [
   // a phrasing: any product name in a reply could be a recommendation or could
   // be the product the customer themselves named, and no pattern separates
   // those. Listed so a reviewer sees it was not examined.
-  'recommendation_uncurated'
+  'recommendation_uncurated',
+  // ADVISORY BY DECISION, NOT FOR WANT OF A PATTERN — the odd one out in this
+  // list. « sans limite d'utilisation », « pas de date d'expiration »,
+  // « illimité » are a short, catchable set, so a mechanical check is available
+  // whenever the desk wants one. It was deliberately not built (2026-09-18): the
+  // tool no longer states the absence of a limit at all, which removes the
+  // source rather than policing the wording. Listed here so a reviewer sees this
+  // prohibition was reported and not examined.
+  'promotion_limits_internal'
 ];
 
 /**

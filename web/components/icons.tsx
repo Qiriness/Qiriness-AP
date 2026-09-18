@@ -190,6 +190,13 @@ export const ExternalLinkIcon = (p: IconProps) => (
   </Base>
 );
 
+export const PencilIcon = (p: IconProps) => (
+  <Base {...p}>
+    <path d="M15.5 5.5 18.5 8.5" />
+    <path d="M5 19l1-4L16.5 4.5a2.1 2.1 0 0 1 3 3L9 18l-4 1Z" />
+  </Base>
+);
+
 export const RefreshIcon = (p: IconProps) => (
   <Base {...p}>
     <path d="M19 12a7 7 0 1 1-2-4.9" />

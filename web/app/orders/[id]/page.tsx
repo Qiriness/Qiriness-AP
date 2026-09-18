@@ -11,8 +11,19 @@ export const dynamic = "force-dynamic";
 
 export const metadata = { title: "Order · Qiriness Support OS" };
 
+/** Only our own ticket ids come back as a link, never an arbitrary destination. */
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 /** One order in full: what it holds, where it went, what was paid, and who wrote about it. */
-export default async function OrderPage({ params }: { params: { id: string } }) {
+export default async function OrderPage({
+  params,
+  searchParams,
+}: {
+  params: { id: string };
+  // Set when the page was opened from a ticket's Order block, so the reader can
+  // go straight back to the ticket they were reading rather than to the queue.
+  searchParams?: { ticket?: string };
+}) {
   const badges = await navBadgeCounts();
   let order: OrderDetail | null = null;
   let loadError: string | null = null;
@@ -39,7 +50,11 @@ export default async function OrderPage({ params }: { params: { id: string } }) 
 
   return (
     <AppShell activeHref="/orders" {...badges}>
-      <OrderDetailView order={order} loadError={loadError} />
+      <OrderDetailView
+        order={order}
+        loadError={loadError}
+        backToTicketId={searchParams?.ticket && UUID.test(searchParams.ticket) ? searchParams.ticket : null}
+      />
     </AppShell>
   );
 }

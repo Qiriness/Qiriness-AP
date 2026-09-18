@@ -63,9 +63,12 @@ import { COLUMNS, T, V } from './tables.mjs';
 export const PASSES = {
   categorisation: {
     flag: 'needs_categorisation',
-    // The ONLY writer of needs_investigation. Ingestion deliberately does not
-    // set it, so a thread is never investigated against labels describing an
-    // older conversation (04_support.sql).
+    // The only writer of needs_investigation that follows a NEW MESSAGE.
+    // Ingestion deliberately does not set it, so a thread is never investigated
+    // against labels describing an older conversation (04_support.sql). Order
+    // resolution also raises it when a late-confirmed order makes a case file
+    // stale (reinvestigationColumns), a person linking an order on the dashboard
+    // does (linkOrderManually), and `tickets:requeue` does by hand.
     raises: 'needs_investigation',
     stamp: 'categorised_at',
     trail: 'categorisation',
@@ -565,6 +568,35 @@ export function createTicketRecord(supabase, { shopId, transport = REST_TRANSPOR
      * reading it back from `ticket_queue` is what guarantees it is exactly the
      * shape the list renders, embed and message count included.
      */
+    /**
+     * A person linked, changed or confirmed this ticket's order.
+     *
+     * CONDITIONAL ON THE ORDER THEY SAW. The filter carries the number the
+     * dashboard showed, so a change made meanwhile — another person, or the
+     * worker confirming one — makes this match nothing and return null rather
+     * than overwrite it. `columns` come from `manualOrderColumns`; a reopen
+     * carries the lifecycle columns a status change always carries.
+     */
+    async linkOrderManually(ticketId, { expectedOrderNumber = null, columns }) {
+      const at = new Date().toISOString();
+      const updated = await update(
+        supabase,
+        T.TICKETS,
+        live({
+          id: ticketId,
+          shopify_order_number: expectedOrderNumber === null ? IS_NULL : expectedOrderNumber
+        }),
+        {
+          ...columns,
+          ...(columns.status ? lifecycleColumns(columns.status, at) : {}),
+          updated_at: at
+        },
+        { select: 'id' }
+      );
+      const row = Array.isArray(updated) ? updated[0] : updated;
+      return row ? queueRow(ticketId) : null;
+    },
+
     async setStatus(ticketId, status) {
       const at = new Date().toISOString();
       const updated = await update(
@@ -668,6 +700,18 @@ export function createTicketRecord(supabase, { shopId, transport = REST_TRANSPOR
     },
 
     queueRow,
+
+    /** What a person linking an order reads before the change. */
+    async findForOrderLink(ticketId) {
+      const rows = await select(
+        supabase,
+        T.TICKETS,
+        live({ id: ticketId }),
+        COLUMNS.ticketForOrderLink,
+        { limit: 1 }
+      );
+      return rows[0] || null;
+    },
 
     /** What the detail panel reads off the ticket itself. */
     async findForDetail(ticketId) {

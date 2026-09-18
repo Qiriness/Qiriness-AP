@@ -166,7 +166,35 @@ test('an eligible promotion drops the eligibility caveat but keeps the basket on
   const { handlers } = registry.toolsFor({ category: 'promotions', request_kind: 'problem', level: 2 });
 
   const result = await handlers.get(TOOL_NAMES.LOOKUP_PROMOTION)({ code: 'X' });
-  assert.deepEqual(result.caveats, ['basket_unseeable']);
+  // The limits prohibition rides on every promotion answer, eligible or not:
+  // "no expiry, no usage limit" is operational, and a reply that repeats it
+  // promises something the shop never offered (ticket 1f8b4f0a).
+  assert.deepEqual(result.caveats, ['basket_unseeable', 'promotion_limits_internal']);
+});
+
+test('a promotion answer never states the absence of a limit', async () => {
+  const registry = buildRegistry({
+    promotionLookup: {
+      async extractCodes() {
+        return [];
+      },
+      async lookupPromotion() {
+        return { found: true, code: 'X', eligibility: { verdict: 'eligible', blocking: [], unknowns: [] }, promptText: 'x' };
+      },
+      async offersForProduct() {
+        return { specific: [{ code: 'UKLED20', title: 'LED', summary: '20% off' }], general: [] };
+      },
+      async listActive() {
+        return { promotions: [{ code: 'BIENVENUE', title: 'Bienvenue', summary: '-20%' }], total: 1, truncated: false };
+      }
+    }
+  });
+  const { handlers } = registry.toolsFor({ category: 'promotions', request_kind: 'problem', level: 2 });
+
+  for (const tool of [TOOL_NAMES.LIST_ACTIVE_PROMOTIONS, TOOL_NAMES.LOOKUP_PROMOTION]) {
+    const result = await handlers.get(tool)(tool === TOOL_NAMES.LOOKUP_PROMOTION ? { code: 'X' } : {});
+    assert.ok(result.caveats.includes('promotion_limits_internal'), tool);
+  }
 });
 
 test('weak knowledge is reported but its text is withheld', async () => {
@@ -712,4 +740,76 @@ test('a misnamed collection is reconciled rather than reported uncurated', async
 
   assert.deepEqual(result.data.unknown, [], 'it was still reported as uncurated');
   assert.ok(result.data.matchedOn.includes('peaux-sensibles'));
+});
+
+// --- was the promotion applied to this order ------------------------------------
+
+const PROMOTED_TICKET = {
+  category: 'order',
+  request_kind: 'problem',
+  level: 2,
+  shopify_order_number: '#6827',
+  resolvedContext: {
+    order: {
+      name: '#6827',
+      promotions: {
+        applied: [{ name: 'Sauna Visage offert', kind: 'automatic', percentage: 100, amount: null }],
+        codes: [],
+        total: 20.9,
+        gifts: [
+          {
+            title: 'Sauna Visage/Bain Vapeur - 6 Galets Aromatiques',
+            value: 20.9,
+            promotions: ['Sauna Visage offert']
+          }
+        ],
+        reductions: [],
+        samples: [{ title: 'Caresse Regard Sublime - échantillon' }]
+      }
+    }
+  }
+};
+
+test('an applied gift is reported by name, with the promotion that gave it', async () => {
+  const registry = buildRegistry();
+  const { handlers } = registry.toolsFor(PROMOTED_TICKET);
+  const result = await handlers.get(TOOL_NAMES.CHECK_ORDER_PROMOTION)({});
+
+  assert.equal(result.outcome, 'applied');
+  assert.match(result.promptText, /Sauna Visage\/Bain Vapeur/);
+  assert.match(result.promptText, /Sauna Visage offert/);
+  assert.match(result.promptText, /20\.9/);
+  assert.equal(result.data.gifts, 1);
+  // The samples travel too, so a reply can say what they are instead of letting
+  // the customer read them as the gift.
+  assert.match(result.promptText, /échantillon/i);
+  assert.equal(result.data.samples, 1);
+});
+
+test('nothing applied is an answer, and samples are not counted as a gift', async () => {
+  const ticket = {
+    ...PROMOTED_TICKET,
+    shopify_order_number: '#6913',
+    resolvedContext: {
+      order: {
+        name: '#6913',
+        promotions: { applied: [], codes: [], total: 0, gifts: [], reductions: [], samples: [{ title: 'Mini soin' }] }
+      }
+    }
+  };
+  const { handlers } = buildRegistry().toolsFor(ticket);
+  const result = await handlers.get(TOOL_NAMES.CHECK_ORDER_PROMOTION)({});
+
+  assert.equal(result.outcome, 'none');
+  assert.match(result.promptText, /Aucune promotion/);
+  assert.equal(result.data.applied, false);
+  assert.equal(result.data.samples, 1);
+});
+
+test('no confirmed order means no claim about what was applied', async () => {
+  const { handlers } = buildRegistry().toolsFor({ category: 'order', request_kind: 'problem', level: 2 });
+  const result = await handlers.get(TOOL_NAMES.CHECK_ORDER_PROMOTION)({});
+
+  assert.equal(result.outcome, 'not_resolved');
+  assert.deepEqual(result.caveats, ['order_unconfirmed']);
 });

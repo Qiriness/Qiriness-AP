@@ -85,3 +85,17 @@ test('an implausibly long run of digits is still not swallowed', () => {
   // A sanity ceiling against phone numbers, not a claim about order sizes.
   assert.deepEqual(shopifyOrderCandidates('appelez le #33612345678901234'), []);
 });
+
+test('the word between order and its number is optional, in either language', () => {
+  // Ticket 29bbcb0c: « I made the order number 6792 from your website » parsed as
+  // nothing, while #6792 was registered to that sender. English writes the word out.
+  for (const text of ['I made the order number 6792 from your website', 'order no 6792', 'order numéro 6792', 'order nr 6792', 'commande numero 6792']) {
+    assert.deepEqual(shopifyOrderCandidates(text).map((c) => c.orderNumber), [6792], text);
+  }
+});
+
+test('a number that merely follows the word number is not an order', () => {
+  // The guard that keeps the looser pattern honest: intent to name an ORDER.
+  assert.deepEqual(shopifyOrderCandidates('order number of items: 4'), []);
+  assert.deepEqual(shopifyOrderCandidates('my order, number 12 in the list'), []);
+});

@@ -1561,3 +1561,41 @@ each webhook reuses the stored token; without it, `createShopifyClient` mints a
 fresh one per delivery, which is a second Shopify call on every webhook. Worth
 measuring before the volume matters.
 
+
+## 12. `import:exemplars` overwrote a dashboard-authored situation — INCIDENT, 2026-09-17
+
+**What happened.** A new situation was written into `Email-Example-Queries.md`
+under the key `P-21` and imported. `P-21` already existed in the database —
+authored in the dashboard on 2026-09-04, approved, answer set `promotions`, and
+absent from the document. The importer upserts on `(shop_id, exemplar_key)`, so
+it replaced that row's `canonical_question`, `category`, `request_kind`,
+`requirement_needs`, `demand_message_count` and `source_note`, and overwrote its
+four phrasings in place.
+
+**What it cost.** The old text. Nothing else: `approval_status`, `answer_set` and
+`collection_mode` are never written by the importer, both rules
+(`p21_offre_produit`, `p21_offre_en_cours`) live in another table and were
+untouched, and **no ticket was affected** — no investigation had ever matched
+P-21, so nothing was drafted or answered from it.
+
+**How it was repaired.** `CHANGELOG.md` (2026-09-04) and `DECISIONS.md` § "An
+empty offer dropdown says nothing" record the situation in prose, which is how
+the canonical question and two of the three variants were recovered verbatim:
+« Avez-vous une offre ou un code promotionnel en cours ? », the anchor ticket's
+« avez-vous une offre ou un code promotionnel dont je pourrais bénéficier ? »,
+and the product-scoped form the decomposer produced. The fourth phrasing ("a
+customer waiting for a promotion before ordering") was described but never
+quoted, so it is a REWRITE and `source_note` on the row says so. The new
+situation was moved to `P-22`.
+
+**The hole this leaves open.** `import-exemplars.mjs` only detects duplicate keys
+WITHIN the document (`parseExemplars` warns and keeps the first). It has no idea
+which keys exist in the database, so any key created in the dashboard can be
+silently replaced by a file import. The fix — refuse to write a key that exists
+in the database but not in the document, unless a flag says to adopt it — is NOT
+built. Until it is, check `select exemplar_key from support_exemplars` before
+adding a key to the document.
+
+**A second, smaller lesson.** The prose documents were the only backup. That they
+were enough is luck, not a system: a situation authored in the dashboard and
+never written about would have been unrecoverable.

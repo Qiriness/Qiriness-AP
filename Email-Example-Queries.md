@@ -537,6 +537,43 @@ commerciale, prise par une personne.
 
 ---
 
+### P-21 · Avez-vous une offre ou un code promotionnel en cours ?
+`promotions` · `question` · 🟢
+
+**Variantes réelles**
+- « avez-vous une offre ou un code promotionnel dont je pourrais bénéficier ? » _(ticket d'ancrage, 2026-09-04)_
+- « Avez-vous une offre ou un code promotionnel en cours pour le Masque LED visage ? » _(sous-question produite par le découpage)_
+- « J'attends une promotion avant de passer commande : en avez-vous une en ce moment ? » _(reformulée : le CHANGELOG décrit cette variante sans la citer — voir VALIDATION_LOG item 12)_
+
+**needs** `product_offer`
+**exemplaires** → jeu `promo`
+
+**Contenu stable** — `p21_offre_produit` (offre propre au produit) et
+`p21_offre_en_cours` (offre générale, sinon dire qu'il n'y en a pas)
+>
+
+---
+
+### P-22 · Ma promotion ou mon cadeau a-t-il bien été appliqué à ma commande ? Pouvez-vous vérifier ?
+`order` / `promotions` · `problem` · **2 msgs** · 🟢
+
+**Variantes réelles**
+- « J'avais vu qu'un cadeau exclusif était offert, mais je ne le trouve pas dans ma commande. » _(#6827, 2026-08-20)_
+- « Je n'ai pas eu les 20% de réduction annoncés pour ma première commande. » _(#6913, 2026-09-08)_
+- « Le code promo n'apparaît pas sur ma facture, a-t-il bien été pris en compte ? »
+- « J'ai commandé pendant l'offre, est-ce que la remise a bien été appliquée ? »
+
+**needs** `order_identity`, `order_promotion`
+**exemplaires** → jeu `promo`
+
+**Contenu stable** _(à rédiger)_
+> La commande dit ce qui a été appliqué : `checkOrderPromotion` nomme la
+> promotion, le produit offert et sa valeur, ou le montant retiré — et distingue
+> un cadeau (prix passé à zéro) d'un échantillon (jamais facturé). Rien appliqué
+> → l'équipe vérifie. Pas de commande rattachée → demander le numéro et l'adresse.
+
+---
+
 # Retours et remboursements — 3 questions · 16 messages
 
 ### R-21 · Comment retourner un produit ? Je ne trouve pas l'adresse de retour.

@@ -8,6 +8,8 @@ import {
   ChevronLeftIcon,
   ClockIcon,
   CrownIcon,
+  PencilIcon,
+  PlusIcon,
   SearchIcon,
 } from "@/components/icons";
 import { Button } from "@/components/ui/Button";
@@ -27,7 +29,9 @@ import type {
   TicketDraft,
   TicketListItem,
   TicketMessage,
+  TicketOrderChange,
   TicketOrderFacts,
+  TicketOrderLinkSource,
   TicketThread,
   TicketTracking,
 } from "@/lib/types";
@@ -40,6 +44,7 @@ import {
   TICKET_STATUS_LABELS,
 } from "@/lib/types";
 import { HappinessFace } from "./HappinessFace";
+import { OrderLinkDialog } from "./OrderLinkDialog";
 import { LevelChip } from "./LevelChip";
 import styles from "./TicketsView.module.css";
 
@@ -622,6 +627,10 @@ export function TicketsView({ initialTickets, droppedMail, loadError, initialPar
           contextOpen={contextOpen}
           onOpenContext={() => setContextOpen(true)}
           onCloseContext={() => setContextOpen(false)}
+          onOrderChanged={(change) => {
+            setTickets((current) => current.map((row) => (row.id === change.ticket.id ? change.ticket : row)));
+            setDetail(change.detail);
+          }}
         />
       )}
     </section>
@@ -779,6 +788,7 @@ interface TicketWorkspaceProps {
   contextOpen: boolean;
   onOpenContext: () => void;
   onCloseContext: () => void;
+  onOrderChanged: (change: TicketOrderChange) => void;
 }
 
 function TicketWorkspace({
@@ -797,6 +807,7 @@ function TicketWorkspace({
   contextOpen,
   onOpenContext,
   onCloseContext,
+  onOrderChanged,
 }: TicketWorkspaceProps) {
   return (
     <div className={`${styles.workspace} ${selectedTicket ? styles.hasSelection : ""}`}>
@@ -823,7 +834,7 @@ function TicketWorkspace({
 
       <aside className={styles.contextPane} aria-label="Ticket context">
         {selectedTicket ? (
-          <TicketContextPane ticket={selectedTicket} detail={detail} error={detailError} />
+          <TicketContextPane ticket={selectedTicket} detail={detail} error={detailError} onOrderChanged={onOrderChanged} />
         ) : (
           <EmptyDetail title="No ticket selected" body="Customer, ticket, order and investigation context appears here." />
         )}
@@ -837,7 +848,7 @@ function TicketWorkspace({
               <h2 id="ticket-context-title">Ticket context</h2>
               <Button size="sm" variant="tertiary" onClick={onCloseContext}>Close</Button>
             </header>
-            <TicketContextPane ticket={selectedTicket} detail={detail} error={detailError} />
+            <TicketContextPane ticket={selectedTicket} detail={detail} error={detailError} onOrderChanged={onOrderChanged} />
           </aside>
         </div>
       )}
@@ -1271,14 +1282,28 @@ function TicketContextPane({
   ticket,
   detail,
   error,
+  onOrderChanged,
 }: {
   ticket: TicketListItem;
   detail: TicketDetail | null;
   error: string | null;
+  onOrderChanged: (change: TicketOrderChange) => void;
 }) {
   const results = detail?.results ?? null;
   const order = detail?.order ?? results?.candidateOrder ?? null;
   const isCandidate = !detail?.order && Boolean(results?.candidateOrder);
+  // The stored number, which a change must still match. It can exist before its
+  // bundle does, so it is read off the ticket rather than off `order`.
+  const currentOrder = detail?.orderNumber ?? null;
+
+  // Which control opened the popup. Kept per pane: the rail and the mobile sheet
+  // each render one, and only the one clicked opens.
+  const [orderDialog, setOrderDialog] = useState<{ source: TicketOrderLinkSource; initialNumber: string | null } | null>(null);
+  // Tied to the ticket it describes, so moving to another ticket does not carry it over.
+  const [orderNotice, setOrderNotice] = useState<{ ticketId: string; text: string } | null>(null);
+
+  const openAdd = () => setOrderDialog({ source: "add", initialNumber: null });
+  const openEdit = () => setOrderDialog({ source: "edit", initialNumber: null });
 
   return (
     <div className={styles.contextScroll}>
@@ -1314,9 +1339,72 @@ function TicketContextPane({
         ) : !detail ? (
           <ContextSkeleton />
         ) : order ? (
-          <OrderFactsBlock order={order} candidate={isCandidate} />
+          <>
+            <OrderFactsBlock
+              order={order}
+              candidate={isCandidate}
+              onEdit={isCandidate ? undefined : openEdit}
+              // The order page opens with a way back to this ticket.
+              orderHref={!isCandidate && detail?.orderId ? `/orders/${detail.orderId}?ticket=${ticket.id}` : null}
+            />
+            {isCandidate && (
+              <div className={styles.orderActions}>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  disabled={!order.orderName}
+                  onClick={() => setOrderDialog({ source: "candidate", initialNumber: order.orderName })}
+                >
+                  Confirm this order
+                </Button>
+                <Button size="sm" variant="tertiary" leadingIcon={<PlusIcon size={14} />} onClick={openAdd}>
+                  Add order number
+                </Button>
+              </div>
+            )}
+          </>
         ) : (
-          <p className={styles.muted}>No order number confirmed for this ticket.</p>
+          <>
+            <p className={styles.muted}>
+              {currentOrder
+                ? `Order ${currentOrder} is linked; its details have not been read yet.`
+                : "No order number confirmed for this ticket."}
+            </p>
+            <div className={styles.orderActions}>
+              {currentOrder ? (
+                <Button size="sm" variant="secondary" leadingIcon={<PencilIcon size={14} />} onClick={openEdit}>
+                  Change order number
+                </Button>
+              ) : (
+                <Button size="sm" variant="secondary" leadingIcon={<PlusIcon size={14} />} onClick={openAdd}>
+                  Add order number
+                </Button>
+              )}
+            </div>
+          </>
+        )}
+        {orderNotice?.ticketId === ticket.id && (
+          <p className={styles.orderNotice} role="status">{orderNotice.text}</p>
+        )}
+        {orderDialog && (
+          <OrderLinkDialog
+            ticketId={ticket.id}
+            currentOrder={currentOrder}
+            source={orderDialog.source}
+            initialNumber={orderDialog.initialNumber}
+            onClose={() => setOrderDialog(null)}
+            onChanged={(change) => {
+              setOrderDialog(null);
+              setOrderNotice({
+                ticketId: ticket.id,
+                text:
+                  change.reinvestigation === "queued"
+                    ? `${change.detail.orderNumber ?? "The order"} is linked. The agent investigates this ticket again on its next poll.`
+                    : `${change.detail.orderNumber ?? "The order"} is linked. The ticket is resolved or closed, so it was not investigated again.`,
+              });
+              onOrderChanged(change);
+            }}
+          />
         )}
       </ContextSection>
 
@@ -1581,7 +1669,7 @@ function ContextSection({ title, children }: { title: string; children: ReactNod
   );
 }
 
-function InfoList({ rows }: { rows: [string, string | null | undefined][] }) {
+function InfoList({ rows }: { rows: [string, ReactNode][] }) {
   return (
     <dl className={styles.infoList}>
       {rows.filter(([, value]) => Boolean(value)).map(([label, value]) => (
@@ -1594,7 +1682,38 @@ function InfoList({ rows }: { rows: [string, string | null | undefined][] }) {
   );
 }
 
-function OrderFactsBlock({ order, candidate }: { order: TicketOrderFacts; candidate: boolean }) {
+function OrderFactsBlock({
+  order,
+  candidate,
+  onEdit,
+  orderHref = null,
+}: {
+  order: TicketOrderFacts;
+  candidate: boolean;
+  /** Present on a confirmed order: the pencil beside its number. */
+  onEdit?: () => void;
+  /** The order page, carrying this ticket so that page can offer the way back. */
+  orderHref?: string | null;
+}) {
+  const orderName = orderHref && order.orderName ? (
+    <a className={styles.orderLink} href={orderHref}>
+      {order.orderName}
+    </a>
+  ) : (
+    order.orderName
+  );
+  const orderValue =
+    onEdit && order.orderName ? (
+      <span className={styles.orderValue}>
+        {orderName}
+        <button type="button" className={styles.iconButton} aria-label="Change order number" title="Change order number" onClick={onEdit}>
+          <PencilIcon size={14} />
+        </button>
+      </span>
+    ) : (
+      orderName
+    );
+
   return (
     <div className={styles.orderFacts}>
       {candidate && <p className={styles.candidateNote}>Candidate last order only - not confirmed as the order they mean.</p>}
@@ -1603,9 +1722,12 @@ function OrderFactsBlock({ order, candidate }: { order: TicketOrderFacts; candid
           {order.channel ?? "Marketplace"} order with an anonymous buyer: linked on the order number alone, the buyer could not be checked.
         </p>
       )}
+      {!candidate && order.linkedByPerson && (
+        <p className={styles.candidateNote}>Linked by a person on the dashboard.</p>
+      )}
       <InfoList
         rows={[
-          [candidate ? "Last order" : "Order", order.orderName],
+          [candidate ? "Last order" : "Order", orderValue],
           // Named here as well as in the detail panel: this block is the one a
           // reviewer reads first, and a marketplace order changes how the
           // status and tracking lines under it should be read. Null on a web

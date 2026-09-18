@@ -1,3 +1,5 @@
+import { isShopNotificationSubject } from '../../../scripts/lib/embeddings/embedding-input.mjs';
+
 // What to search, what to send to the model, and what counts as an answer.
 //
 // Pure: no database, no OpenAI, no clock. The vector maths lives in Postgres and
@@ -226,7 +228,18 @@ export function fuseByRank(lists, { k = RRF_K, limit = 10 } = {}) {
  * has already removed the worst of it upstream.
  */
 export function buildRetrievalQuery({ subject, body } = {}, { maxChars = 2000 } = {}) {
-  const parts = [String(subject || '').trim(), String(body || '').trim()].filter(Boolean);
+  // OUR OWN SUBJECT IS NOT PART OF THE QUESTION. « Nouveau message de client le
+  // 12 septembre 2026 à 18:22 » is a timestamp the contact form wrote, and it is
+  // a large share of a short query: ticket 809c9ae1 asked whether the aromatic
+  // pebbles may go in a steam appliance, the FAQ answering exactly that ranked
+  // first, and the pair scored 0.577 against a 0.60 bar — 0.656 without the
+  // subject.
+  //
+  // THE SAME STRIPPER THE MESSAGE EMBEDDINGS ALREADY USE, on the one query side
+  // that never had it (see `SHOP_NOTIFICATION_SUBJECTS`). Measured here over the
+  // 77 tickets carrying one: 1 crossed into `answerable`, 0 fell out.
+  const heading = isShopNotificationSubject(subject) ? '' : String(subject || '').trim();
+  const parts = [heading, String(body || '').trim()].filter(Boolean);
   const text = parts.join('\n\n').replace(/\s+/g, ' ').trim();
   return text.length > maxChars ? text.slice(0, maxChars) : text;
 }

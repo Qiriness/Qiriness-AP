@@ -136,6 +136,15 @@ const NEEDS = {
     satisfiedBy: [{ tool: TOOL_NAMES.GET_ORDER_CONTEXT, outcomes: ['found'] }],
     asksCustomer: 'shopify_order_number'
   },
+  // WHETHER THE PROMOTION LANDED, which `payment_state` and `order_state` both
+  // leave unanswered: an order can be paid, dispatched and still be missing the
+  // gift the customer was promised (#6913), or carry it without anyone being
+  // able to say so (#6827).
+  order_promotion: {
+    label: 'si une promotion ou un cadeau a été appliqué à la commande',
+    satisfiedBy: [{ tool: TOOL_NAMES.CHECK_ORDER_PROMOTION, outcomes: ['applied', 'none'] }],
+    asksCustomer: 'shopify_order_number'
+  },
   order_state: {
     label: 'l’état de la commande',
     satisfiedBy: [{ tool: TOOL_NAMES.GET_ORDER_CONTEXT, outcomes: ['found'] }],
@@ -657,6 +666,26 @@ const FINDINGS = {
     }
   },
 
+  // `gift` and `discount` are separate values because the replies differ: one
+  // names a product the customer was given, the other an amount taken off. A
+  // sample is never either — see `buildPromotions` in order-context.mjs.
+  order_promotion: {
+    values: ['gift', 'discount', 'both', 'none', 'unknown'],
+    derive(entries) {
+      const entry = lastByTool(entries, TOOL_NAMES.CHECK_ORDER_PROMOTION);
+      if (!entry) return 'unknown';
+      if (entry.outcome === 'none') return 'none';
+      if (entry.outcome !== 'applied') return 'unknown';
+      const gifts = Number(entry.data?.gifts || 0);
+      const reductions = Number(entry.data?.reductions || 0);
+      if (gifts > 0 && reductions > 0) return 'both';
+      if (gifts > 0) return 'gift';
+      if (reductions > 0) return 'discount';
+      // An order-wide promotion with no line of its own is still a discount.
+      return 'discount';
+    }
+  },
+
   order_state: {
     values: ['not_dispatched', 'dispatched', 'delivered', 'cancelled', 'unknown'],
     derive: (entries) => stateFromOrderContext(entries, 'order_state')
@@ -1093,6 +1122,7 @@ const DEPENDENCIES = {
   },
 
   customer_account_state: { requires: ['customer_identity'] },
+  order_promotion: { requires: ['order_identity'] },
   customer_history: { requires: ['customer_identity'] },
 
   // Dormant with the order family, and correct for when it wakes up.

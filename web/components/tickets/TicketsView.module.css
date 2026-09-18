@@ -1336,3 +1336,61 @@
   color: var(--text-default);
   overflow-wrap: anywhere;
 }
+
+/* Linking an order by hand: the pencil beside a confirmed number, the buttons
+   under a missing or candidate one, and the line saying what happens next. */
+.orderValue {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.iconButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.iconButton:hover {
+  border-color: var(--border);
+  background: var(--linen);
+  color: var(--text-strong);
+}
+
+.iconButton:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus);
+}
+
+.orderActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+
+.orderNotice {
+  margin: var(--space-2) 0 0;
+  color: var(--text-subtle);
+  font-size: var(--text-caption);
+  line-height: 1.5;
+}
+
+/* The order number links to the order page, which comes back here. */
+.orderLink {
+  color: var(--text-strong);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.orderLink:hover {
+  color: var(--accent-700, var(--text-strong));
+}

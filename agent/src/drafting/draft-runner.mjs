@@ -224,6 +224,31 @@ export async function runDrafting({
  * `unique(shop_id, trigger_message_id)` would happily store every one of them.
  * Only the newest reading of each ticket is a candidate.
  */
+/**
+ * Which readings still need a draft: none yet, or only a pending one written
+ * before its case file.
+ *
+ * THE SECOND HALF IS A RE-INVESTIGATION OF THE SAME MESSAGE. The case file is
+ * rewritten in place — same row, same trigger — so keyed on the message alone
+ * the old draft counted as done and kept asking for an order number the new
+ * case file had (ticket `fcf4ca11`, #6669). An order confirmed after the
+ * investigation is what queues one (`reinvestigationColumns`).
+ *
+ * PENDING ONLY. A draft a person approved, edited, rejected or sent is theirs;
+ * `save` would keep its status but replace the text they decided on.
+ */
+export function needingDraft(investigations = [], drafts = []) {
+  const byMessage = new Map(drafts.map((row) => [row.trigger_message_id, row]));
+  return investigations.filter((row) => {
+    const draft = byMessage.get(row.trigger_message_id);
+    if (!draft) return true;
+    if (draft.status !== 'pending') return false;
+    const investigated = Date.parse(row.investigated_at || '');
+    const drafted = Date.parse(draft.drafted_at || '');
+    return Number.isFinite(investigated) && Number.isFinite(drafted) && investigated > drafted;
+  });
+}
+
 export function createDraftingStore(supabase) {
   return {
     async claimable({ shopId, limit, ticketId = null, redraft = false }) {
@@ -383,10 +408,9 @@ export function createDraftingStore(supabase) {
             value: `(${investigations.map((row) => row.trigger_message_id).join(',')})`
           }
         },
-        'trigger_message_id'
+        'trigger_message_id,status,drafted_at'
       );
-      const has = new Set(drafted.map((row) => row.trigger_message_id));
-      return investigations.filter((row) => !has.has(row.trigger_message_id));
+      return needingDraft(investigations, drafted);
     }
   };
 }

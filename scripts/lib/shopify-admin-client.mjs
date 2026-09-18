@@ -37,6 +37,8 @@ export const PRODUCT_MAX_PAGE_SIZE = 25;
 export const ORDER_LINE_ITEM_PAGE_SIZE = 50;
 export const ORDER_FULFILLMENT_PAGE_SIZE = 10;
 export const ORDER_RETURN_PAGE_SIZE = 10;
+/** Promotions on one order. Ten is far above anything this shop has ever run. */
+export const ORDER_DISCOUNT_PAGE_SIZE = 10;
 export const DISCOUNT_CODE_PAGE_SIZE = 100;
 
 /**
@@ -306,7 +308,8 @@ const ORDERS_QUERY = `#graphql
     $query: String,
     $lineItemFirst: Int!,
     $fulfillmentFirst: Int!,
-    $returnFirst: Int!
+    $returnFirst: Int!,
+    $discountFirst: Int!
   ) {
     orders(first: $first, after: $after, query: $query, sortKey: UPDATED_AT) {
       pageInfo {
@@ -358,6 +361,42 @@ const ORDERS_QUERY = `#graphql
           shopMoney {
             amount
             currencyCode
+          }
+        }
+        # WHAT the discount was, not only how much. The total is a
+        # number; support is asked "was my gift applied?", which needs the
+        # promotion's own name. This shop's promotions are AUTOMATIC, so the name
+        # is the application title, and discountCodes is empty; a code-based
+        # order carries the code instead, and both are mapped the same way.
+        discountCodes
+        discountApplications(first: $discountFirst) {
+          nodes {
+            __typename
+            allocationMethod
+            targetSelection
+            targetType
+            value {
+              __typename
+              ... on MoneyV2 {
+                amount
+                currencyCode
+              }
+              ... on PricingPercentageValue {
+                percentage
+              }
+            }
+            ... on DiscountCodeApplication {
+              code
+            }
+            ... on ManualDiscountApplication {
+              title
+            }
+            ... on ScriptDiscountApplication {
+              title
+            }
+            ... on AutomaticDiscountApplication {
+              title
+            }
           }
         }
         totalShippingPriceSet {
@@ -413,6 +452,33 @@ const ORDERS_QUERY = `#graphql
               shopMoney {
                 amount
                 currencyCode
+              }
+            }
+            # WHICH promotion took money off THIS line. A gift is a line whose
+            # price went to zero, and the allocation is what names the promotion
+            # that did it — without it a free sample and a gifted product look
+            # identical.
+            discountAllocations {
+              allocatedAmountSet {
+                shopMoney {
+                  amount
+                  currencyCode
+                }
+              }
+              discountApplication {
+                __typename
+                ... on DiscountCodeApplication {
+                  code
+                }
+                ... on ManualDiscountApplication {
+                  title
+                }
+                ... on ScriptDiscountApplication {
+                  title
+                }
+                ... on AutomaticDiscountApplication {
+                  title
+                }
               }
             }
             product {
@@ -1099,7 +1165,8 @@ export async function fetchOrderPage(shopify, args, cursor, sinceMonths) {
     // its orders indefinitely.
     query: orderSyncQuery(resolvedMonths),
     lineItemFirst: ORDER_LINE_ITEM_PAGE_SIZE,
-    fulfillmentFirst: ORDER_FULFILLMENT_PAGE_SIZE
+    fulfillmentFirst: ORDER_FULFILLMENT_PAGE_SIZE,
+    discountFirst: ORDER_DISCOUNT_PAGE_SIZE
   };
 
   if (includeReturns) {
@@ -1149,7 +1216,8 @@ export async function fetchOrderByLegacyId(shopify, legacyId) {
     after: null,
     query: `id:${legacyId}`,
     lineItemFirst: ORDER_LINE_ITEM_PAGE_SIZE,
-    fulfillmentFirst: ORDER_FULFILLMENT_PAGE_SIZE
+    fulfillmentFirst: ORDER_FULFILLMENT_PAGE_SIZE,
+    discountFirst: ORDER_DISCOUNT_PAGE_SIZE
   };
 
   if (includeReturns) {

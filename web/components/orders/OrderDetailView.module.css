@@ -391,3 +391,22 @@
   font-size: var(--text-sm);
   color: var(--text-default);
 }
+
+/* Opened from a ticket: the way back to it leads, with the orders list beside. */
+.backRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.backMuted {
+  color: var(--text-subtle);
+  font-size: var(--text-sm);
+  text-decoration: none;
+}
+
+.backMuted:hover {
+  color: var(--text-strong);
+  text-decoration: underline;
+}

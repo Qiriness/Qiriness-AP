@@ -437,11 +437,13 @@ function buildInput(ticket, messages, senderDirectory, exemplarNeeds = [], polic
     customer_id: ticket.customer_id,
     requester_email_hash: ticket.requester_email_hash,
     shopify_order_number: ticket.shopify_order_number,
-    // The order was accepted on its number because the marketplace hides the
-    // buyer (order-verification.mjs). No customer record can match the sender,
+    // The order's buyer is a marketplace placeholder — accepted on its number by
+    // the resolver, or linked by a person (order-link.mjs). No customer record can match the sender,
     // so no address is worth asking for — the lookup and the case file both
     // read this to stop the question reaching the customer.
     orderBuyerAnonymous:
+      ticket.metadata?.order_resolution?.buyer_anonymous === true ||
+      // Written before the flag existed (#6059, #6308).
       ticket.metadata?.order_resolution?.verified_by === 'marketplace_order_number',
     // What this sender is to us, or null for an ordinary consumer. THE ADDRESS
     // IS NOT CARRIED — only the label, the note and the pattern that matched,

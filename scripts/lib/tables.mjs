@@ -224,8 +224,10 @@ export const COLUMNS = {
   ticketForCustomerResolution: 'id,customer_id,requester_email_hash,metadata',
 
   /** Order resolution: the text is joined from `ticket_first_inbound` separately. */
+  // `status` and `investigated_at`: a ticket investigated before its order was
+  // confirmed is queued again (reinvestigationColumns).
   ticketForOrderResolution:
-    'id,subject,category,request_kind,requester_email_hash,requester_name,metadata',
+    'id,subject,status,category,request_kind,requester_email_hash,requester_name,metadata,investigated_at',
 
   /** Order context: which order to build a bundle for, and whether one exists. */
   ticketForOrderContext: 'id,subject,shopify_order_number,customer_id,context_resolved_at',
@@ -263,7 +265,14 @@ export const COLUMNS = {
   /** The dashboard's detail panel reads the bundle, not the whole row. */
   // `metadata` for `order_resolution.verified_by`: the panel says when the buyer
   // behind the order was never checked (a marketplace placeholder).
-  ticketForDetail: 'id,resolved_context,metadata',
+  ticketForDetail: 'id,resolved_context,metadata,shopify_order_number',
+
+  /** A person linking an order: what the change reads before writing. */
+  ticketForOrderLink:
+    'id,status,shopify_order_number,requester_email_hash,customer_id,investigated_at,metadata',
+
+  /** The order a person is about to link, beyond the bundle: ownership and channel. */
+  orderForLink: 'id,name,order_number,customer_id,customer_email_hash,sales_channel_handle,processed_at',
 
   /** The thread dialog: envelope and body, both directions. */
   messageForThread:
@@ -425,6 +434,9 @@ export const COLUMNS = {
     'currency_code,subtotal_price,total_discounts,total_shipping_price,' +
     'total_tax,total_price,total_refunded,total_outstanding,' +
     'line_items,fulfillments,refunds,returns,shipping_destination,' +
+    // Which promotions were applied, so the bundle can say whether the gift the
+    // customer is asking about is on the order, and name it.
+    'discount_applications,discount_codes,' +
     // Read for the dashboard's benefit, not the agent's — `toOrderContextText`
     // leaves it out of what the model is shown.
     'customer_email_masked,' +
@@ -464,6 +476,8 @@ export const PROJECTION_SOURCE = {
   ticketForAutoClose: T.TICKETS,
   ticketForConversation: T.TICKETS,
   ticketForDetail: T.TICKETS,
+  ticketForOrderLink: T.TICKETS,
+  orderForLink: T.ORDERS,
   orderForContext: T.ORDERS,
   ticketForDrafting: T.TICKETS,
   messageForThread: T.TICKET_MESSAGES,

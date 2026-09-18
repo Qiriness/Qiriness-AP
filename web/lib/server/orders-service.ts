@@ -52,6 +52,7 @@ import type {
 import { LATE_AFTER_DAYS, adminOrdersUrl } from "./insights/open-orders";
 import { getSupabaseClient } from "./insights/shared";
 import { listTicketsWithOrders } from "./tickets-service";
+import { buildPromotions } from "../../../agent/src/resolution/order-context.mjs";
 
 type Row = Record<string, any>;
 type Supabase = ReturnType<typeof getSupabaseClient>;
@@ -84,6 +85,8 @@ const DETAIL_COLUMNS = [
   "shopify_customer_id",
   "shipping_destination",
   "line_items",
+  "discount_applications",
+  "discount_codes",
   "fulfillments",
   "returns",
   "refunds",
@@ -211,6 +214,7 @@ export async function getOrderDetail(shopId: string, orderId: string): Promise<O
       createdLabel: dateTime(r.processed_at ?? r.created_at, tz),
       amountLabel: money(r.total_refunded, r.currency_code ?? currency),
     })),
+    promotions: promotionsOf(order, currency),
     money: moneyLines(order, currency),
     destination: destinationOf(order.shipping_destination),
     customer: customer
@@ -286,6 +290,43 @@ function mapFacets(rows: Row[]): OrderListPage["facets"] {
     }
   }
   return { statuses, countries };
+}
+
+/**
+ * What was applied to this order, for the Promotions card.
+ *
+ * SHARED WITH THE AGENT (`buildPromotions`), so the page and the case file
+ * cannot disagree about whether a gift was given. This adds the money labels and
+ * nothing else — a gift is a line whose price went to zero because of a named
+ * promotion, a sample was never priced, and that judgement lives in one place.
+ */
+function promotionsOf(order: Row, currency: string | null): OrderDetail["promotions"] {
+  const promotions = buildPromotions(order);
+  return {
+    applied: (promotions.applied ?? []).map((p: any) => ({
+      name: p.name ?? null,
+      kind: p.kind ?? null,
+      valueLabel:
+        p.percentage !== null && p.percentage !== undefined
+          ? `−${p.percentage} %`
+          : p.amount !== null && p.amount !== undefined
+            ? `−${money(p.amount, currency) ?? p.amount}`
+            : null,
+    })),
+    gifts: (promotions.gifts ?? []).map((g: any) => ({
+      title: g.title,
+      valueLabel: money(g.value, currency),
+      promotion: g.promotions?.[0] ?? null,
+    })),
+    reductions: (promotions.reductions ?? []).map((r: any) => ({
+      title: r.title,
+      offLabel: money(r.off, currency),
+      promotion: r.promotions?.[0] ?? null,
+    })),
+    samples: (promotions.samples ?? []).map((s: any) => s.title).filter(Boolean),
+    codes: promotions.codes ?? [],
+    totalLabel: promotions.total ? money(promotions.total, currency) : null,
+  };
 }
 
 function moneyLines(order: Row, currency: string | null): OrderDetail["money"] {

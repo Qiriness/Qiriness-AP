@@ -199,6 +199,15 @@ create table public.orders (
   total_refunded numeric(12, 2),
   total_outstanding numeric(12, 2),
   total_weight_grams integer,
+  -- WHAT was taken off, beside how much. `total_discounts` is one number, and
+  -- support is asked "has my gift been applied?" — a question only the
+  -- promotion's own name answers. One entry per promotion on the order:
+  -- `{ kind, name, percentage | amount, target_type, target_selection,
+  -- allocation_method }`. This shop runs AUTOMATIC promotions, so `name` is the
+  -- promotion's title and `discount_codes` below is empty; a code-based order
+  -- carries the typed code in both.
+  discount_applications jsonb not null default '[]'::jsonb,
+  discount_codes text[] not null default '{}',
   tags text[] not null default '{}',
   customer_email_hash text,
   -- The same address as the hash above, reduced to what a person can RECOGNISE:
@@ -307,6 +316,9 @@ create table public.orders (
   constraint orders_line_items_array_check check (
     jsonb_typeof(line_items) = 'array'
   ),
+  constraint orders_discount_applications_array_check check (
+    jsonb_typeof(discount_applications) = 'array'
+  ),
   constraint orders_fulfillments_array_check check (
     jsonb_typeof(fulfillments) = 'array'
   ),
@@ -408,7 +420,13 @@ comment on column public.orders.shipping_destination is
   'Coarse shipping destination only, such as city, province, country, and country code. Do not store street address or postcode here.';
 
 comment on column public.orders.line_items is
-  'Sanitized Shopify line item snapshots for support workflows, excluding customer personal data.';
+  'Sanitized Shopify line item snapshots for support workflows, excluding customer personal data. Each line carries original_total, discounted_total and discounts[{amount,name}]: a line whose price went to zero BECAUSE of a named promotion is a gift, while a line that was never priced is a sample.';
+
+comment on column public.orders.discount_applications is
+  'One entry per promotion applied to this order, from Shopify discountApplications: kind (code/automatic/manual/script), name (the typed code, or the promotion title), percentage or amount, and what it targeted. Empty where none applied. Read by the agent to answer "was my promotion or gift applied?" by name rather than by amount.';
+
+comment on column public.orders.discount_codes is
+  'Discount codes typed on this order. Empty on automatic promotions, which is what this shop runs — the name then lives in discount_applications.';
 
 comment on column public.orders.fulfillments is
   'Sanitized fulfillment and tracking summaries needed for order tracking support.';

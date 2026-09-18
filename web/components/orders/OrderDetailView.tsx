@@ -14,12 +14,34 @@ import styles from "./OrderDetailView.module.css";
  * Tickets lead the right-hand column because they are the reason this page
  * exists inside a support app rather than a link out to Shopify.
  */
-export function OrderDetailView({ order, loadError }: { order: OrderDetail | null; loadError: string | null }) {
+export function OrderDetailView({
+  order,
+  loadError,
+  backToTicketId = null,
+}: {
+  order: OrderDetail | null;
+  loadError: string | null;
+  /** Set when a ticket sent the reader here: the way back to that ticket. */
+  backToTicketId?: string | null;
+}) {
   return (
     <div className={styles.page}>
-      <Link href="/orders" className={styles.back}>
-        ← Orders
-      </Link>
+      {backToTicketId ? (
+        // The ticket first, because it is where the reader came from and where
+        // the work is. `/tickets?ticket=` reopens that ticket, not just the queue.
+        <span className={styles.backRow}>
+          <Link href={`/tickets?ticket=${backToTicketId}`} className={styles.back}>
+            ← Back to the ticket
+          </Link>
+          <Link href="/orders" className={styles.backMuted}>
+            Orders
+          </Link>
+        </span>
+      ) : (
+        <Link href="/orders" className={styles.back}>
+          ← Orders
+        </Link>
+      )}
 
       {loadError ? (
         <p className={styles.error} role="alert">
@@ -56,6 +78,7 @@ export function OrderDetailView({ order, loadError }: { order: OrderDetail | nul
           <div className={styles.layout}>
             <div className={styles.column}>
               <ArticlesCard order={order} />
+              <PromotionsCard order={order} />
               <FulfilmentCard order={order} />
               <PaymentCard order={order} />
             </div>
@@ -128,6 +151,68 @@ function ArticlesCard({ order }: { order: OrderDetail }) {
           </table>
         </div>
       )}
+    </Card>
+  );
+}
+
+/**
+ * What was applied to this order, and what merely came with it.
+ *
+ * SAMPLES ARE LISTED APART, never as gifts. Both are lines at 0,00 €, and the
+ * question this card exists to answer — « mon cadeau a-t-il été appliqué ? » —
+ * is answered wrongly by pointing at an échantillon. A gift is a line whose
+ * price went to zero because of a named promotion.
+ *
+ * "No promotion" is an answer too, so the card renders either way rather than
+ * disappearing: a support agent needs to see that nothing was applied.
+ */
+function PromotionsCard({ order }: { order: OrderDetail }) {
+  const { applied, gifts, reductions, samples, codes, totalLabel } = order.promotions;
+  const nothing = applied.length === 0 && gifts.length === 0 && reductions.length === 0;
+
+  return (
+    <Card title="Promotions" aside={totalLabel ? `${totalLabel} off` : undefined}>
+      {nothing ? (
+        <p className={styles.empty}>No promotion, discount or gift was applied to this order.</p>
+      ) : (
+        <ul className={styles.stack}>
+          {applied.map((promotion, index) => (
+            <li key={`applied-${index}`} className={styles.shipment}>
+              <div className={styles.shipmentHead}>
+                <strong>{promotion.name ?? "Promotion"}</strong>
+                {promotion.valueLabel ? <span className={styles.chip}>{promotion.valueLabel}</span> : null}
+                {promotion.kind ? <span className={styles.sub}>{promotion.kind}</span> : null}
+              </div>
+            </li>
+          ))}
+          {gifts.map((gift, index) => (
+            <li key={`gift-${index}`} className={styles.shipment}>
+              <div className={styles.shipmentHead}>
+                <strong>Gift · {gift.title}</strong>
+                {gift.valueLabel ? <span className={styles.chip}>worth {gift.valueLabel}</span> : null}
+              </div>
+              {gift.promotion ? <p className={styles.sub}>{gift.promotion}</p> : null}
+            </li>
+          ))}
+          {reductions.map((reduction, index) => (
+            <li key={`reduction-${index}`} className={styles.shipment}>
+              <div className={styles.shipmentHead}>
+                <strong>{reduction.title}</strong>
+                {reduction.offLabel ? <span className={styles.chip}>−{reduction.offLabel}</span> : null}
+              </div>
+              {reduction.promotion ? <p className={styles.sub}>{reduction.promotion}</p> : null}
+            </li>
+          ))}
+        </ul>
+      )}
+
+      <Facts
+        rows={[
+          ["Codes used", codes.length > 0 ? codes.join(", ") : null],
+          // Never counted as a gift: these were never priced.
+          ["Samples included", samples.length > 0 ? samples.join(", ") : null],
+        ]}
+      />
     </Card>
   );
 }

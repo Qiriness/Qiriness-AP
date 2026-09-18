@@ -219,6 +219,14 @@ export function isAnonymousPlaceholder({ first_name, last_name, email } = {}) {
   );
 }
 
+/**
+ * The same question for a caller holding the raw customer row rather than the
+ * store's flag — the dashboard, when a person links an order by hand.
+ */
+export function isAnonymousMarketplaceBuyer(order, customer) {
+  return isAnonymousMarketplaceOrder(order, { anonymous: isAnonymousPlaceholder(customer || {}) });
+}
+
 function isAnonymousMarketplaceOrder(order, customer) {
   return (
     ALL_MARKETPLACE_HANDLES.includes(order?.sales_channel_handle) && customer?.anonymous === true

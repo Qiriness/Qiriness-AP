@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { CAVEATS } from '../investigation/case-file.mjs';
-import { runDrafting } from './draft-runner.mjs';
+import { needingDraft, runDrafting } from './draft-runner.mjs';
 
 const SIGNATURE = 'Bien cordialement,\nService Client Qiriness';
 
@@ -308,4 +308,36 @@ test('a dry run calls the model and stores nothing', async () => {
   assert.equal(h.calls.length, 1);
   assert.equal(h.saved.length, 0);
   assert.equal(seen[0].bodyText, GOOD_BODY);
+});
+
+// --- which readings need a draft ---------------------------------------------
+
+const READING = { ticket_id: 't1', trigger_message_id: 'm1', investigated_at: '2026-09-17T12:00:00Z' };
+
+test('a reading with no draft needs one', () => {
+  assert.deepEqual(needingDraft([READING], []), [READING]);
+});
+
+test('a pending draft written after its case file is current', () => {
+  const drafts = [{ trigger_message_id: 'm1', status: 'pending', drafted_at: '2026-09-17T12:05:00Z' }];
+  assert.deepEqual(needingDraft([READING], drafts), []);
+});
+
+test('a pending draft older than a re-investigation is redrafted', () => {
+  // Ticket fcf4ca11: investigated without #6669, drafted a request for the
+  // number, then re-investigated with the order in hand.
+  const drafts = [{ trigger_message_id: 'm1', status: 'pending', drafted_at: '2026-09-14T00:28:47Z' }];
+  assert.deepEqual(needingDraft([READING], drafts), [READING]);
+});
+
+test('a draft a person has decided on is never redrafted, however stale', () => {
+  for (const status of ['approved', 'edited', 'rejected', 'sent']) {
+    const drafts = [{ trigger_message_id: 'm1', status, drafted_at: '2026-09-14T00:28:47Z' }];
+    assert.deepEqual(needingDraft([READING], drafts), [], status);
+  }
+});
+
+test('an unreadable timestamp keeps the existing draft', () => {
+  const drafts = [{ trigger_message_id: 'm1', status: 'pending', drafted_at: null }];
+  assert.deepEqual(needingDraft([READING], drafts), []);
 });

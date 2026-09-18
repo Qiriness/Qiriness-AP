@@ -4,7 +4,15 @@
  * this is for the status changes a user triggers.
  */
 
-import type { TicketDetail, TicketDraft, TicketListItem, TicketThread } from "@/lib/types";
+import type {
+  TicketDetail,
+  TicketDraft,
+  TicketListItem,
+  TicketOrderChange,
+  TicketOrderLinkSource,
+  TicketOrderPreview,
+  TicketThread,
+} from "@/lib/types";
 import { KnowledgeApiError } from "./knowledge";
 
 /**
@@ -84,4 +92,41 @@ export async function decideOnDraft(
     throw new KnowledgeApiError(body?.error || `Request failed (${response.status}).`, response.status);
   }
   return body.draft as TicketDraft;
+}
+
+/** The order a person typed, before they commit to linking it. */
+export async function previewTicketOrder(ticketId: string, number: string): Promise<TicketOrderPreview> {
+  const response = await fetch(
+    `/api/tickets/${ticketId}/order?number=${encodeURIComponent(number)}`,
+    { cache: "no-store" }
+  );
+
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new KnowledgeApiError(body?.error || `Request failed (${response.status}).`, response.status);
+  }
+  return body.preview as TicketOrderPreview;
+}
+
+/**
+ * Links the order and queues the investigation again.
+ *
+ * `expected` is the order the popup was opened on: the server refuses the change
+ * if the ticket moved on meanwhile, rather than overwrite what someone else set.
+ */
+export async function changeTicketOrder(
+  ticketId: string,
+  change: { number: string; expected: string | null; source: TicketOrderLinkSource },
+): Promise<TicketOrderChange> {
+  const response = await fetch(`/api/tickets/${ticketId}/order`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(change),
+  });
+
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new KnowledgeApiError(body?.error || `Request failed (${response.status}).`, response.status);
+  }
+  return body as TicketOrderChange;
 }

@@ -3,11 +3,13 @@ import {
   supabaseSelectAll
 } from '../../../scripts/lib/supabase-rest-client.mjs';
 import { RPC, T } from '../../../scripts/lib/tables.mjs';
+import { reinvestigationColumns } from '../../../scripts/lib/order-link.mjs';
 
 import { countConfirmationMarkers, messageEmailHashes } from './confirmation-evidence.mjs';
 import { shopifyOrderCandidates, parseOrderCandidates, toOrderName } from './order-number-parser.mjs';
 import { parseTrackingCandidates } from './tracking-number-parser.mjs';
 import {
+  BY_MARKETPLACE_ORDER_NUMBER,
   BY_MESSAGE_EMAIL,
   CONFIRMED,
   MISMATCH,
@@ -168,6 +170,9 @@ export function createOrderResolutionStore(supabase) {
           order_resolution: {
             status: resolution.status,
             verified_by: resolution.verifiedBy,
+            // Its own flag rather than read off `verified_by`, because a person
+            // linking an Amazon order by hand reaches the same buyer by another path.
+            buyer_anonymous: resolution.verifiedBy === BY_MARKETPLACE_ORDER_NUMBER,
             // Which reference found the order. Ownership is still decided by
             // `verified_by`; this says what the customer gave us to go on.
             matched_by: resolution.matchedBy || 'order_number',
@@ -184,11 +189,18 @@ export function createOrderResolutionStore(supabase) {
       };
       if (isSafeToWrite(resolution.status) && resolution.orderName) {
         columns.shopify_order_number = resolution.orderName;
+        Object.assign(columns, reinvestigationColumns(ticket));
       }
       return columns;
     }
   };
 }
+
+// What a newly confirmed order does to a ticket that was ALREADY investigated
+// — found on `fcf4ca11`, whose case file and draft kept asking for #6669 after
+// the number was hers. Shared with the dashboard's manual order link, so the
+// rule is in scripts/lib/order-link.mjs; re-exported for this module's callers.
+export { reinvestigationColumns };
 
 export async function runOrderResolution({ store, record, shopId, logger, dryRun = false, onResult } = {}) {
   // The tickets and the customer's opening words come from the ticket record

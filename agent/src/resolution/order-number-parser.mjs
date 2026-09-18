@@ -30,8 +30,17 @@
 const PATTERNS = [
   // `#4854`, `# 4854`. The hash prefix is the signal, not the length.
   { format: 'web', regex: /#\s?(\d{3,10})\b/g, take: 1 },
-  // `commande n° 3985`, `commande 5281`, `order 4687`.
-  { format: 'web', regex: /\b(?:commande|order)\s+(?:n[°ºo]\s*)?(\d{3,10})\b/gi, take: 1 },
+  // `commande n° 3985`, `commande 5281`, `order 4687`, `order number 6792`.
+  //
+  // THE WORD BETWEEN THEM IS OPTIONAL AND WRITTEN OUT IN ENGLISH. « I made the
+  // order number 6792 from your website » (ticket 29bbcb0c) parsed as nothing at
+  // all, while #6792 was registered to that very sender — `n°` covered the
+  // French forms and quietly missed every English one.
+  {
+    format: 'web',
+    regex: /\b(?:commande|order)\s+(?:(?:n[°ºo]|num[ée]ro|number|nr)\.?\s*)?(\d{3,10})\b/gi,
+    take: 1
+  },
   // `Q00 26200111`, `Q0026200111` — internal reference, never a Shopify order.
   { format: 'internal_erp', regex: /\bQ0{0,2}\s?(\d{6,})\b/gi, take: 0 },
   { format: 'internal_other', regex: /\b(?:CL|FA|DS|WW)\s?\d{4,}\b/gi, take: 0 }

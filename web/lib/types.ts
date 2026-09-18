@@ -638,6 +638,35 @@ export interface TicketOrderFacts {
    * order is the right one; that it is this sender's was never checked.
    */
   buyerUnverified: boolean;
+  /** True when a person linked this order on the dashboard (`verified_by: manual`). */
+  linkedByPerson: boolean;
+}
+
+/** How an order relates to whoever wrote in. Shown to the person linking it, never enforced. */
+export type TicketOrderMatch = "sender_email" | "different_email" | "anonymous_marketplace" | "unknown";
+
+/** Which control a person used: the add button, the edit icon, or confirming the candidate. */
+export type TicketOrderLinkSource = "add" | "edit" | "candidate";
+
+/** What `GET /api/tickets/:id/order?number=` returns: the order the popup is about to link. */
+export interface TicketOrderPreview {
+  orderName: string;
+  /** When the order was placed. */
+  placedAt: string | null;
+  /** The same lines the Order section shows, or null when the bundle carries none. */
+  facts: TicketOrderFacts | null;
+  match: TicketOrderMatch;
+  /** The ticket's order right now, which the change must still match. */
+  currentOrder: string | null;
+  sameAsCurrent: boolean;
+}
+
+/** What `PUT /api/tickets/:id/order` returns. */
+export interface TicketOrderChange {
+  ticket: TicketListItem;
+  detail: TicketDetail;
+  /** `not_queued` on a resolved or closed ticket: the order is linked, nothing is re-run. */
+  reinvestigation: "queued" | "not_queued";
 }
 
 /**
@@ -773,6 +802,17 @@ export interface TicketPolicy {
 
 export interface TicketDetail {
   ticketId: string;
+  /**
+   * `tickets.shopify_order_number` as stored, even when its bundle is not built
+   * yet: the value an order change has to match.
+   */
+  orderNumber: string | null;
+  /**
+   * The `orders` row behind `orderNumber`, when we hold it — what the Order
+   * block links to. Null when the number is confirmed but the order has since
+   * been deleted by retention.
+   */
+  orderId: string | null;
   /**
    * null when no case file exists: the ticket is uncategorised, its subject is
    * outside `ENABLED_SUBJECTS`, or the investigation pass has not reached it.
@@ -1310,6 +1350,19 @@ export interface OrderDetail {
   returns: { id: string; name: string | null; statusLabel: string; createdLabel: string | null }[];
   refunds: { id: string; createdLabel: string | null; amountLabel: string | null }[];
   money: { label: string; value: string; strong?: boolean }[];
+  /**
+   * What was applied to this order. A GIFT is a line whose price went to zero
+   * because of a named promotion; a SAMPLE was never priced and is listed apart,
+   * because a customer asking "was my gift applied?" must not be shown one.
+   */
+  promotions: {
+    applied: { name: string | null; kind: string | null; valueLabel: string | null }[];
+    gifts: { title: string; valueLabel: string | null; promotion: string | null }[];
+    reductions: { title: string; offLabel: string | null; promotion: string | null }[];
+    samples: string[];
+    codes: string[];
+    totalLabel: string | null;
+  };
   destination: { city: string | null; province: string | null; country: string | null; countryCode: string | null } | null;
   customer: {
     name: string | null;

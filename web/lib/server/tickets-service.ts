@@ -41,7 +41,17 @@ import {
   listTicketAttachments,
   toPublicAttachments,
 } from "../../../scripts/lib/photo-evidence-rules.mjs";
-import { KnowledgeNotFoundError } from "./knowledge-errors";
+import {
+  ORDER_LINK_SOURCES,
+  describeOrderMatch,
+  manualOrderColumns,
+  parseOrderNumber,
+  sameOrder,
+} from "../../../scripts/lib/order-link.mjs";
+import { buildOrderContext } from "../../../agent/src/resolution/order-context.mjs";
+import { createOrderContextStore } from "../../../agent/src/resolution/order-context-runner.mjs";
+import { isAnonymousMarketplaceBuyer } from "../../../agent/src/resolution/order-verification.mjs";
+import { KnowledgeNotFoundError, KnowledgeValidationError } from "./knowledge-errors";
 import { summariseFacts, summariseInvestigation, summariseOrderContext } from "../ticket-detail";
 import type {
   InvestigationVerdict,
@@ -56,6 +66,9 @@ import type {
   TicketListItem,
   TicketPriorityBand,
   TicketMessage,
+  TicketOrderChange,
+  TicketOrderLinkSource,
+  TicketOrderPreview,
   TicketStatus,
   TicketThread,
   TicketTracking,
@@ -278,8 +291,17 @@ export async function getTicketDetail(shopId: string, ticketId: string): Promise
   // reads as "no order facts" rather than as a bundle full of nulls.
   const summarised = summariseOrderContext(ticketRow.resolved_context);
   const order = summarised
-    ? { ...summarised, buyerUnverified: ticketRow.metadata?.order_resolution?.verified_by === "marketplace_order_number" }
+    ? {
+        ...summarised,
+        buyerUnverified: ticketRow.metadata?.order_resolution?.verified_by === "marketplace_order_number",
+        linkedByPerson: ticketRow.metadata?.order_resolution?.verified_by === "manual",
+      }
     : null;
+  const orderNumber: string | null = ticketRow.shopify_order_number ?? null;
+  // The id behind the number, for the link out to the order page. One small read
+  // rather than a join: the bundle stores the order's NAME, and the page is
+  // addressed by id.
+  const orderId = orderNumber ? await findOrderIdByName(shopId, orderNumber) : null;
 
   // `toPublicAttachments` is the boundary that strips the Exchange message id
   // off every entry — see the shared module. It lives there rather than here
@@ -293,11 +315,13 @@ export async function getTicketDetail(shopId: string, ticketId: string): Promise
   if (!row) {
     // No case file: the order facts may still exist, because the resolution pass
     // writes them for tickets the agent never investigated. Facts cannot.
-    return { ticketId, results: null, order, facts: [], attachments, policy: null };
+    return { ticketId, orderNumber, orderId, results: null, order, facts: [], attachments, policy: null };
   }
 
   return {
     ticketId,
+    orderNumber,
+    orderId,
     order,
     attachments,
     facts: summariseFacts(row.evidence_gaps),
@@ -464,6 +488,147 @@ export async function decideOnDraft(
 
   const updated = await record.forTicket(ticketId);
   return mapDraftRow(updated);
+}
+
+// --- linking an order by hand ---------------------------------------------------
+
+/**
+ * The order a person typed, with the bundle the Order section would show for it.
+ *
+ * Built with the worker's own `buildOrderContext`, so what the popup previews and
+ * what the ticket stores after the change are the same projection.
+ */
+async function loadOrderForLink(shopId: string, orderNumber: number) {
+  const supabase = getSupabaseClient();
+  const [order] = await supabaseSelect(
+    supabase,
+    T.ORDERS,
+    { shop_id: shopId, order_number: orderNumber, deleted_at: { operator: "is", value: "null" } },
+    COLUMNS.orderForLink,
+    { limit: 1 }
+  );
+  if (!order) return null;
+
+  const { byName, customersById } = await createOrderContextStore(supabase).loadOrders(shopId, [order.name]);
+  const full = byName.get(order.name) ?? null;
+  const customer = full?.customer_id ? customersById.get(full.customer_id) ?? null : null;
+  return {
+    order,
+    context: full ? buildOrderContext(full, customer) : null,
+    anonymous: isAnonymousMarketplaceBuyer(order, customer),
+  };
+}
+
+function requireOrderNumber(raw: unknown): number {
+  const orderNumber = parseOrderNumber(raw);
+  if (orderNumber === null) {
+    throw new KnowledgeValidationError("Enter an order number, for example 6669 or #6669.");
+  }
+  return orderNumber;
+}
+
+/** What the popup shows before a person commits to linking an order. */
+export async function previewTicketOrder(
+  shopId: string,
+  ticketId: string,
+  rawNumber: unknown
+): Promise<TicketOrderPreview> {
+  const orderNumber = requireOrderNumber(rawNumber);
+  const ticket = await getRecord(shopId).findForOrderLink(ticketId);
+  if (!ticket) throw new KnowledgeNotFoundError(`Ticket not found: ${ticketId}`);
+
+  const loaded = await loadOrderForLink(shopId, orderNumber);
+  if (!loaded) throw new KnowledgeNotFoundError(`There is no order #${orderNumber} in this shop.`);
+
+  return {
+    orderName: loaded.order.name,
+    placedAt: loaded.order.processed_at ?? null,
+    facts: summariseOrderContext(loaded.context),
+    match: describeOrderMatch({
+      orderEmailHash: loaded.order.customer_email_hash,
+      ticketEmailHash: ticket.requester_email_hash,
+      anonymous: loaded.anonymous,
+    }),
+    currentOrder: ticket.shopify_order_number ?? null,
+    sameAsCurrent: sameOrder(ticket.shopify_order_number, loaded.order.name),
+  };
+}
+
+/**
+ * A person adds, changes or confirms this ticket's order.
+ *
+ * THE PERSON IS THE PROOF. None of the resolver's ownership checks apply: the
+ * three cases this exists for are an order the resolver could not find, one it
+ * found wrongly, and the candidate it offered, all of which a person settles by
+ * knowing. The popup shows how the order relates to the sender; it never blocks.
+ *
+ * `expected` is the order the popup was opened on. A change made meanwhile
+ * (another person, or the worker confirming one) is refused rather than
+ * overwritten, here and again in the write itself.
+ */
+export async function changeTicketOrder(
+  shopId: string,
+  ticketId: string,
+  input: { number: unknown; expected: unknown; source: unknown },
+  actorId: string | null
+): Promise<TicketOrderChange> {
+  const orderNumber = requireOrderNumber(input.number);
+  const source = String(input.source ?? "");
+  if (!(ORDER_LINK_SOURCES as readonly string[]).includes(source)) {
+    throw new KnowledgeValidationError(`source must be one of ${ORDER_LINK_SOURCES.join(", ")}.`);
+  }
+  const expected = typeof input.expected === "string" && input.expected.trim() ? input.expected : null;
+
+  const record = getRecord(shopId);
+  const ticket = await record.findForOrderLink(ticketId);
+  if (!ticket) throw new KnowledgeNotFoundError(`Ticket not found: ${ticketId}`);
+
+  const changedMeanwhile = new KnowledgeValidationError(
+    "This ticket's order changed since you opened it. Reload the ticket and try again."
+  );
+  if (!sameOrder(ticket.shopify_order_number, expected)) throw changedMeanwhile;
+
+  const loaded = await loadOrderForLink(shopId, orderNumber);
+  if (!loaded) throw new KnowledgeNotFoundError(`There is no order #${orderNumber} in this shop.`);
+  if (sameOrder(ticket.shopify_order_number, loaded.order.name)) {
+    throw new KnowledgeValidationError(`${loaded.order.name} is already this ticket's order.`);
+  }
+
+  const columns = manualOrderColumns({
+    ticket,
+    order: loaded.order,
+    context: loaded.context,
+    source: source as TicketOrderLinkSource,
+    actorId,
+    anonymous: loaded.anonymous,
+  });
+  const row = await record.linkOrderManually(ticketId, {
+    expectedOrderNumber: ticket.shopify_order_number ?? null,
+    columns,
+  });
+  if (!row) throw changedMeanwhile;
+
+  const [vipTickets, detail] = await Promise.all([
+    loadVipTickets(shopId, [ticketId]),
+    getTicketDetail(shopId, ticketId),
+  ]);
+  return {
+    ticket: mapTicketRow(row, undefined, vipTickets),
+    detail,
+    reinvestigation: "needs_investigation" in columns ? "queued" : "not_queued",
+  };
+}
+
+/** The order behind a confirmed number, by id — null once retention has deleted it. */
+async function findOrderIdByName(shopId: string, orderName: string): Promise<string | null> {
+  const [row] = await supabaseSelect(
+    getSupabaseClient(),
+    T.ORDERS,
+    { shop_id: shopId, name: orderName, deleted_at: { operator: "is", value: "null" } },
+    "id",
+    { limit: 1 }
+  );
+  return row ? String(row.id) : null;
 }
 
 /** The draft row, scoped to this shop. Owned by scripts/lib/draft-record.mjs. */

@@ -120,7 +120,7 @@ create table public.support_exemplars (
     requirement_needs <@ array[
       'product_identity', 'product_property', 'product_availability', 'product_recommendation',
       'product_offer',
-      'order_identity', 'order_state', 'delivery_state', 'dispatch_state', 'payment_state',
+      'order_identity', 'order_state', 'order_promotion', 'delivery_state', 'dispatch_state', 'payment_state',
       'refund_state', 'return_eligibility', 'buyer_type',
       'promotion_identity', 'promotion_validity', 'promotion_eligibility',
       'customer_identity', 'customer_account_state', 'customer_history',

@@ -137,6 +137,15 @@ const DEFINITIONS = {
     description: 'Liste les promotions actuellement actives dans la boutique.',
     parameters: NO_ARGS
   },
+  [TOOL_NAMES.CHECK_ORDER_PROMOTION]: {
+    description:
+      'Dit si une promotion, une remise ou un cadeau a été appliqué à la commande rattachée ' +
+      'au ticket, et LESQUELS : le nom de la promotion, le produit offert et sa valeur, ou le ' +
+      'montant retiré. Distingue un cadeau (un article dont le prix est passé à zéro) d’un ' +
+      'échantillon (un article qui n’a jamais eu de prix). À utiliser dès que le client demande ' +
+      'si sa promotion, sa réduction ou son cadeau a bien été pris en compte.',
+    parameters: NO_ARGS
+  },
   [TOOL_NAMES.GET_ORDER_CONTEXT]: {
     description:
       'Renvoie le dossier de la commande rattachée à ce ticket : état, livraison, suivi, ' +
@@ -496,7 +505,11 @@ export function createToolRegistry({
           // The basket is structurally invisible — there are no cart tables and
           // the Admin API does not expose an in-progress cart — so every
           // promotion answer carries that prohibition, whatever the verdict.
-          caveats: ['basket_unseeable', ...(verdict === 'eligible' ? [] : ['eligibility_undetermined'])],
+          caveats: [
+            'basket_unseeable',
+            'promotion_limits_internal',
+            ...(verdict === 'eligible' ? [] : ['eligibility_undetermined'])
+          ],
           promptText: result.promptText,
           // `checks` travels as {id, status, reason} ONLY — never the `detail`
           // sentences. `evidence-rules.mjs` derives promotion_validity from the
@@ -531,7 +544,9 @@ export function createToolRegistry({
         if (specific.length > 0) {
           return {
             outcome: 'found',
-            caveats: ['basket_unseeable'],
+            // It puts a code in front of the model, so the limits prohibition
+            // rides with it — see `promotion_limits_internal`.
+            caveats: ['basket_unseeable', 'promotion_limits_internal'],
             promptText:
               `Offre propre à ${product.title} :\n` +
               specific.map((p) => `- ${p.code || p.title} : ${p.summary || p.title}`).join('\n'),
@@ -541,7 +556,7 @@ export function createToolRegistry({
         if (general.length > 0) {
           return {
             outcome: 'general',
-            caveats: ['basket_unseeable'],
+            caveats: ['basket_unseeable', 'promotion_limits_internal'],
             promptText: `Aucune offre propre à ${product.title}. Des remises générales existent.`,
             data: { product: product.title, specific: [], general }
           };
@@ -567,13 +582,102 @@ export function createToolRegistry({
 
         return {
           outcome: promotions.length > 0 ? 'found' : 'none',
-          caveats: ['basket_unseeable'],
+          caveats: ['basket_unseeable', 'promotion_limits_internal'],
           promptText:
             promotions.length > 0
               ? promotions.map(line).join('\n') +
                 (truncated ? `\n(…${total - promotions.length} autres offres actives non listées)` : '')
               : 'Aucune promotion active actuellement.',
           data: { count: promotions.length, total }
+        };
+      },
+
+      /**
+       * Was the promotion applied, and which one?
+       *
+       * READS THE STORED BUNDLE, like `getOrderContext` and for the same reason:
+       * the promotions block is built once by the order-context pass, so the
+       * agent and the dashboard cannot hold two accounts of the same order.
+       *
+       * IT REPORTS EVERYTHING APPLIED, not a verdict. A reply that can name
+       * « Sauna Visage offert » answers the customer; "une remise de 20,90 € a
+       * été appliquée" leaves them asking the same question again.
+       */
+      async [TOOL_NAMES.CHECK_ORDER_PROMOTION]() {
+        const promotions = ticket.resolvedContext?.order?.promotions || null;
+        if (!ticket.shopify_order_number || !promotions) {
+          return {
+            outcome: 'not_resolved',
+            caveats: ['order_unconfirmed'],
+            promptText:
+              'Aucune commande confirmée n’est rattachée à ce ticket : impossible de dire ce qui ' +
+              'a été appliqué.',
+            data: { applied: false }
+          };
+        }
+
+        const gifts = promotions.gifts || [];
+        const reductions = promotions.reductions || [];
+        const applied = promotions.applied || [];
+        const samples = promotions.samples || [];
+        const lines = [];
+
+        for (const gift of gifts) {
+          lines.push(
+            `Cadeau appliqué : ${gift.title}${gift.value ? ` (valeur ${gift.value} €)` : ''}` +
+              `${gift.promotions.length > 0 ? ` — promotion « ${gift.promotions.join(', ')} »` : ''}.`
+          );
+        }
+        for (const reduction of reductions) {
+          lines.push(
+            `Remise sur ${reduction.title} : -${reduction.off} €` +
+              `${reduction.promotions.length > 0 ? ` — promotion « ${reduction.promotions.join(', ')} »` : ''}.`
+          );
+        }
+        // Named even where no line carries them, which is what an order-wide
+        // promotion looks like.
+        for (const promotion of applied) {
+          const covered = [...gifts, ...reductions].some((line) => line.promotions.includes(promotion.name));
+          if (!covered) {
+            const value = promotion.percentage !== null && promotion.percentage !== undefined
+              ? `-${promotion.percentage} %`
+              : promotion.amount !== null && promotion.amount !== undefined
+                ? `-${promotion.amount} €`
+                : null;
+            lines.push(`Promotion appliquée : « ${promotion.name || 'sans nom'} »${value ? ` (${value})` : ''}.`);
+          }
+        }
+
+        if (lines.length === 0) {
+          return {
+            outcome: 'none',
+            caveats: [],
+            promptText:
+              'Aucune promotion, remise ou cadeau n’a été appliqué à cette commande.' +
+              (samples.length > 0
+                ? ` La commande contient ${samples.length} échantillon(s) — ce ne sont pas des cadeaux liés à une promotion : ${samples.map((sample) => sample.title).join(', ')}.`
+                : ''),
+            data: { applied: false, gifts: 0, reductions: 0, samples: samples.length }
+          };
+        }
+
+        if (samples.length > 0) {
+          lines.push(
+            `Échantillons inclus (jamais facturés, hors promotion) : ${samples.map((sample) => sample.title).join(', ')}.`
+          );
+        }
+
+        return {
+          outcome: 'applied',
+          caveats: [],
+          promptText: lines.join('\n'),
+          data: {
+            applied: true,
+            gifts: gifts.length,
+            reductions: reductions.length,
+            samples: samples.length,
+            names: applied.map((promotion) => promotion.name).filter(Boolean)
+          }
         };
       },
 

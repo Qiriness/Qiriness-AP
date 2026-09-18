@@ -4163,6 +4163,334 @@
         "text": "Ich habe vergessen, die drei Gratisproben zu bestellen…"
       }
     },
+    "P-21": {
+      "0:en": {
+        "index": 101,
+        "sourceIndex": 0,
+        "sourceLanguage": "fr",
+        "sourceText": "Avez-vous une offre ou un code promotionnel en cours ?",
+        "sourceHash": "37636dde9b775ffbbf7c12a6e26c5511eeb31d3381e58b7039f53bbb27255661",
+        "language": "en",
+        "text": "Do you have an offer or a promotional code right now ?"
+      },
+      "0:es": {
+        "index": 102,
+        "sourceIndex": 0,
+        "sourceLanguage": "fr",
+        "sourceText": "Avez-vous une offre ou un code promotionnel en cours ?",
+        "sourceHash": "37636dde9b775ffbbf7c12a6e26c5511eeb31d3381e58b7039f53bbb27255661",
+        "language": "es",
+        "text": "¿Tienen alguna oferta o código promocional vigente?"
+      },
+      "0:it": {
+        "index": 103,
+        "sourceIndex": 0,
+        "sourceLanguage": "fr",
+        "sourceText": "Avez-vous une offre ou un code promotionnel en cours ?",
+        "sourceHash": "37636dde9b775ffbbf7c12a6e26c5511eeb31d3381e58b7039f53bbb27255661",
+        "language": "it",
+        "text": "Avete un'offerta o un codice promozionale in corso ?"
+      },
+      "0:de": {
+        "index": 104,
+        "sourceIndex": 0,
+        "sourceLanguage": "fr",
+        "sourceText": "Avez-vous une offre ou un code promotionnel en cours ?",
+        "sourceHash": "37636dde9b775ffbbf7c12a6e26c5511eeb31d3381e58b7039f53bbb27255661",
+        "language": "de",
+        "text": "Haben Sie ein Angebot oder einen aktuellen Aktionscode?"
+      },
+      "1:en": {
+        "index": 111,
+        "sourceIndex": 1,
+        "sourceLanguage": "fr",
+        "sourceText": "avez-vous une offre ou un code promotionnel dont je pourrais bénéficier ?",
+        "sourceHash": "441e49a2d0056c8b3e49569913caf86d2da9dc90005bcb7c52ce8f7b5ceb95e5",
+        "language": "en",
+        "text": "do you have an offer or a promo code I could use ?"
+      },
+      "1:es": {
+        "index": 112,
+        "sourceIndex": 1,
+        "sourceLanguage": "fr",
+        "sourceText": "avez-vous une offre ou un code promotionnel dont je pourrais bénéficier ?",
+        "sourceHash": "441e49a2d0056c8b3e49569913caf86d2da9dc90005bcb7c52ce8f7b5ceb95e5",
+        "language": "es",
+        "text": "tienes una oferta o un código promocional del que podría beneficiarme ?"
+      },
+      "1:it": {
+        "index": 113,
+        "sourceIndex": 1,
+        "sourceLanguage": "fr",
+        "sourceText": "avez-vous une offre ou un code promotionnel dont je pourrais bénéficier ?",
+        "sourceHash": "441e49a2d0056c8b3e49569913caf86d2da9dc90005bcb7c52ce8f7b5ceb95e5",
+        "language": "it",
+        "text": "avete un'offerta o un codice promozionale di cui potrei beneficiare ?"
+      },
+      "1:de": {
+        "index": 114,
+        "sourceIndex": 1,
+        "sourceLanguage": "fr",
+        "sourceText": "avez-vous une offre ou un code promotionnel dont je pourrais bénéficier ?",
+        "sourceHash": "441e49a2d0056c8b3e49569913caf86d2da9dc90005bcb7c52ce8f7b5ceb95e5",
+        "language": "de",
+        "text": "haben Sie ein Angebot oder einen Aktionscode, von dem ich profitieren könnte ?"
+      },
+      "2:en": {
+        "index": 121,
+        "sourceIndex": 2,
+        "sourceLanguage": "fr",
+        "sourceText": "Avez-vous une offre ou un code promotionnel en cours pour le Masque LED visage ?",
+        "sourceHash": "d6a46cb284dda6032d0887c3c3f9df8d16cd769ffb9bab48607d1a6aa20c6f42",
+        "language": "en",
+        "text": "Do you have an offer or a promo code for the LED face Mask?"
+      },
+      "2:es": {
+        "index": 122,
+        "sourceIndex": 2,
+        "sourceLanguage": "fr",
+        "sourceText": "Avez-vous une offre ou un code promotionnel en cours pour le Masque LED visage ?",
+        "sourceHash": "d6a46cb284dda6032d0887c3c3f9df8d16cd769ffb9bab48607d1a6aa20c6f42",
+        "language": "es",
+        "text": "¿Tienen alguna oferta o código promocional vigente para la Masque LED visage?"
+      },
+      "2:it": {
+        "index": 123,
+        "sourceIndex": 2,
+        "sourceLanguage": "fr",
+        "sourceText": "Avez-vous une offre ou un code promotionnel en cours pour le Masque LED visage ?",
+        "sourceHash": "d6a46cb284dda6032d0887c3c3f9df8d16cd769ffb9bab48607d1a6aa20c6f42",
+        "language": "it",
+        "text": "Avete un'offerta o un codice promozionale in corso per la Maschera LED viso?"
+      },
+      "2:de": {
+        "index": 124,
+        "sourceIndex": 2,
+        "sourceLanguage": "fr",
+        "sourceText": "Avez-vous une offre ou un code promotionnel en cours pour le Masque LED visage ?",
+        "sourceHash": "d6a46cb284dda6032d0887c3c3f9df8d16cd769ffb9bab48607d1a6aa20c6f42",
+        "language": "de",
+        "text": "Haben Sie ein Angebot oder einen Aktionscode für die LED-Gesichtsmaske?"
+      },
+      "3:en": {
+        "index": 131,
+        "sourceIndex": 3,
+        "sourceLanguage": "fr",
+        "sourceText": "J'attends une promotion avant de passer commande : en avez-vous une en ce moment ?",
+        "sourceHash": "50d5f7f89b1d9e9b75b6db3cdc2a730bb28dc983f9610ddaf1cb7165398567d3",
+        "language": "en",
+        "text": "I'm waiting for a promotion before ordering: do you have one right now?"
+      },
+      "3:es": {
+        "index": 132,
+        "sourceIndex": 3,
+        "sourceLanguage": "fr",
+        "sourceText": "J'attends une promotion avant de passer commande : en avez-vous une en ce moment ?",
+        "sourceHash": "50d5f7f89b1d9e9b75b6db3cdc2a730bb28dc983f9610ddaf1cb7165398567d3",
+        "language": "es",
+        "text": "Estoy esperando una promoción antes de hacer un pedido: ¿tienen alguna en este momento?"
+      },
+      "3:it": {
+        "index": 133,
+        "sourceIndex": 3,
+        "sourceLanguage": "fr",
+        "sourceText": "J'attends une promotion avant de passer commande : en avez-vous une en ce moment ?",
+        "sourceHash": "50d5f7f89b1d9e9b75b6db3cdc2a730bb28dc983f9610ddaf1cb7165398567d3",
+        "language": "it",
+        "text": "Aspetto una promozione prima di fare un ordine: ne avete una al momento ?"
+      },
+      "3:de": {
+        "index": 134,
+        "sourceIndex": 3,
+        "sourceLanguage": "fr",
+        "sourceText": "J'attends une promotion avant de passer commande : en avez-vous une en ce moment ?",
+        "sourceHash": "50d5f7f89b1d9e9b75b6db3cdc2a730bb28dc983f9610ddaf1cb7165398567d3",
+        "language": "de",
+        "text": "Ich warte auf eine Aktion bevor ich bestelle: haben Sie gerade eine?"
+      }
+    },
+    "P-22": {
+      "0:en": {
+        "index": 101,
+        "sourceIndex": 0,
+        "sourceLanguage": "fr",
+        "sourceText": "Ma promotion ou mon cadeau a-t-il bien été appliqué à ma commande ? Pouvez-vous vérifier ?",
+        "sourceHash": "f37627953c74efd87352ba646aaa6c041f38a37a532fcce0f1472cc9fa4d0ce5",
+        "language": "en",
+        "text": "Was my promotion or gift applied to my order? Can you check?"
+      },
+      "0:es": {
+        "index": 102,
+        "sourceIndex": 0,
+        "sourceLanguage": "fr",
+        "sourceText": "Ma promotion ou mon cadeau a-t-il bien été appliqué à ma commande ? Pouvez-vous vérifier ?",
+        "sourceHash": "f37627953c74efd87352ba646aaa6c041f38a37a532fcce0f1472cc9fa4d0ce5",
+        "language": "es",
+        "text": "¿Se aplicó bien mi promoción o mi regalo a mi pedido? ¿Puede verificar?"
+      },
+      "0:it": {
+        "index": 103,
+        "sourceIndex": 0,
+        "sourceLanguage": "fr",
+        "sourceText": "Ma promotion ou mon cadeau a-t-il bien été appliqué à ma commande ? Pouvez-vous vérifier ?",
+        "sourceHash": "f37627953c74efd87352ba646aaa6c041f38a37a532fcce0f1472cc9fa4d0ce5",
+        "language": "it",
+        "text": "La mia promozione o il mio regalo è stato applicato al mio ordine? Puoi verificare?"
+      },
+      "0:de": {
+        "index": 104,
+        "sourceIndex": 0,
+        "sourceLanguage": "fr",
+        "sourceText": "Ma promotion ou mon cadeau a-t-il bien été appliqué à ma commande ? Pouvez-vous vérifier ?",
+        "sourceHash": "f37627953c74efd87352ba646aaa6c041f38a37a532fcce0f1472cc9fa4d0ce5",
+        "language": "de",
+        "text": "Wurde meine Promotion oder mein Geschenk auf meine Bestellung angewendet? Können Sie das überprüfen?"
+      },
+      "1:en": {
+        "index": 111,
+        "sourceIndex": 1,
+        "sourceLanguage": "fr",
+        "sourceText": "J'avais vu qu'un cadeau exclusif était offert, mais je ne le trouve pas dans ma commande.",
+        "sourceHash": "52cb8bb43dd963bb3d5ad88c83049571761b937d5b33377d8d1b123030ca4f71",
+        "language": "en",
+        "text": "I saw that an exclusive gift was offered, but I can't find it in my order."
+      },
+      "1:es": {
+        "index": 112,
+        "sourceIndex": 1,
+        "sourceLanguage": "fr",
+        "sourceText": "J'avais vu qu'un cadeau exclusif était offert, mais je ne le trouve pas dans ma commande.",
+        "sourceHash": "52cb8bb43dd963bb3d5ad88c83049571761b937d5b33377d8d1b123030ca4f71",
+        "language": "es",
+        "text": "Había visto que se ofrecía un regalo exclusivo, pero no lo encuentro en mi pedido."
+      },
+      "1:it": {
+        "index": 113,
+        "sourceIndex": 1,
+        "sourceLanguage": "fr",
+        "sourceText": "J'avais vu qu'un cadeau exclusif était offert, mais je ne le trouve pas dans ma commande.",
+        "sourceHash": "52cb8bb43dd963bb3d5ad88c83049571761b937d5b33377d8d1b123030ca4f71",
+        "language": "it",
+        "text": "Avevo visto che un regalo esclusivo era offerto, ma non lo trovo nel mio ordine."
+      },
+      "1:de": {
+        "index": 114,
+        "sourceIndex": 1,
+        "sourceLanguage": "fr",
+        "sourceText": "J'avais vu qu'un cadeau exclusif était offert, mais je ne le trouve pas dans ma commande.",
+        "sourceHash": "52cb8bb43dd963bb3d5ad88c83049571761b937d5b33377d8d1b123030ca4f71",
+        "language": "de",
+        "text": "Ich hatte gesehen, dass ein exklusives Geschenk angeboten wurde, aber ich finde es nicht in meiner Bestellung."
+      },
+      "2:en": {
+        "index": 121,
+        "sourceIndex": 2,
+        "sourceLanguage": "fr",
+        "sourceText": "Je n'ai pas eu les 20% de réduction annoncés pour ma première commande.",
+        "sourceHash": "69c45b909c79021adc6551c51bb9d43aadd0f7e2b42b0bcfac3ab8eb6564db59",
+        "language": "en",
+        "text": "I didn't get the 20% discount advertised for my first order."
+      },
+      "2:es": {
+        "index": 122,
+        "sourceIndex": 2,
+        "sourceLanguage": "fr",
+        "sourceText": "Je n'ai pas eu les 20% de réduction annoncés pour ma première commande.",
+        "sourceHash": "69c45b909c79021adc6551c51bb9d43aadd0f7e2b42b0bcfac3ab8eb6564db59",
+        "language": "es",
+        "text": "No tuve el 20% de descuento anunciado para mi primer pedido."
+      },
+      "2:it": {
+        "index": 123,
+        "sourceIndex": 2,
+        "sourceLanguage": "fr",
+        "sourceText": "Je n'ai pas eu les 20% de réduction annoncés pour ma première commande.",
+        "sourceHash": "69c45b909c79021adc6551c51bb9d43aadd0f7e2b42b0bcfac3ab8eb6564db59",
+        "language": "it",
+        "text": "Non ho avuto il 20% di sconto annunciato per il mio primo ordine."
+      },
+      "2:de": {
+        "index": 124,
+        "sourceIndex": 2,
+        "sourceLanguage": "fr",
+        "sourceText": "Je n'ai pas eu les 20% de réduction annoncés pour ma première commande.",
+        "sourceHash": "69c45b909c79021adc6551c51bb9d43aadd0f7e2b42b0bcfac3ab8eb6564db59",
+        "language": "de",
+        "text": "Ich habe die angekündigten 20% Rabatt für meine erste Bestellung nicht bekommen."
+      },
+      "3:en": {
+        "index": 131,
+        "sourceIndex": 3,
+        "sourceLanguage": "fr",
+        "sourceText": "Le code promo n'apparaît pas sur ma facture, a-t-il bien été pris en compte ?",
+        "sourceHash": "1ff326f0ecd519ab8ab71059bb86cb27fe1a9325c590d150f25fc6e4ea39d7bb",
+        "language": "en",
+        "text": "The promo code isn't on my invoice, was it applied?"
+      },
+      "3:es": {
+        "index": 132,
+        "sourceIndex": 3,
+        "sourceLanguage": "fr",
+        "sourceText": "Le code promo n'apparaît pas sur ma facture, a-t-il bien été pris en compte ?",
+        "sourceHash": "1ff326f0ecd519ab8ab71059bb86cb27fe1a9325c590d150f25fc6e4ea39d7bb",
+        "language": "es",
+        "text": "El código promocional no aparece en mi factura, ¿se ha tenido en cuenta?"
+      },
+      "3:it": {
+        "index": 133,
+        "sourceIndex": 3,
+        "sourceLanguage": "fr",
+        "sourceText": "Le code promo n'apparaît pas sur ma facture, a-t-il bien été pris en compte ?",
+        "sourceHash": "1ff326f0ecd519ab8ab71059bb86cb27fe1a9325c590d150f25fc6e4ea39d7bb",
+        "language": "it",
+        "text": "Il codice promo non appare sulla mia fattura, è stato preso in considerazione?"
+      },
+      "3:de": {
+        "index": 134,
+        "sourceIndex": 3,
+        "sourceLanguage": "fr",
+        "sourceText": "Le code promo n'apparaît pas sur ma facture, a-t-il bien été pris en compte ?",
+        "sourceHash": "1ff326f0ecd519ab8ab71059bb86cb27fe1a9325c590d150f25fc6e4ea39d7bb",
+        "language": "de",
+        "text": "Der Promo-Code erscheint nicht auf meiner Rechnung, wurde er berücksichtigt?"
+      },
+      "4:en": {
+        "index": 141,
+        "sourceIndex": 4,
+        "sourceLanguage": "fr",
+        "sourceText": "J'ai commandé pendant l'offre, est-ce que la remise a bien été appliquée ?",
+        "sourceHash": "f1c047867a06d0e380a166fc37d34b9bdf7fa2f144fe2a7830a67644f24a6b7d",
+        "language": "en",
+        "text": "I ordered during the offer, was the discount applied?"
+      },
+      "4:es": {
+        "index": 142,
+        "sourceIndex": 4,
+        "sourceLanguage": "fr",
+        "sourceText": "J'ai commandé pendant l'offre, est-ce que la remise a bien été appliquée ?",
+        "sourceHash": "f1c047867a06d0e380a166fc37d34b9bdf7fa2f144fe2a7830a67644f24a6b7d",
+        "language": "es",
+        "text": "Hice un pedido durante la oferta, ¿se aplicó el descuento?"
+      },
+      "4:it": {
+        "index": 143,
+        "sourceIndex": 4,
+        "sourceLanguage": "fr",
+        "sourceText": "J'ai commandé pendant l'offre, est-ce que la remise a bien été appliquée ?",
+        "sourceHash": "f1c047867a06d0e380a166fc37d34b9bdf7fa2f144fe2a7830a67644f24a6b7d",
+        "language": "it",
+        "text": "Ho ordinato durante l'offerta, lo sconto è stato applicato?"
+      },
+      "4:de": {
+        "index": 144,
+        "sourceIndex": 4,
+        "sourceLanguage": "fr",
+        "sourceText": "J'ai commandé pendant l'offre, est-ce que la remise a bien été appliquée ?",
+        "sourceHash": "f1c047867a06d0e380a166fc37d34b9bdf7fa2f144fe2a7830a67644f24a6b7d",
+        "language": "de",
+        "text": "Ich habe während des Angebots bestellt, wurde der Rabatt angewendet?"
+      }
+    },
     "PA-30": {
       "0:en": {
         "index": 101,

@@ -289,13 +289,20 @@ function renderPromotion({ promotion, suggestions, eligibility, code }) {
   const parts = [`# Code ${s.code || s.title}`];
   if (s.summary) parts.push(s.summary);
 
+  // ONLY THE LIMITS THAT BIND ARE STATED. "Pas de date d'expiration" and "Pas de
+  // limite d'utilisation" were facts here, and the model repeated them to a
+  // customer (ticket 1f8b4f0a): « ce code n'a pas de date d'expiration ni de
+  // limite d'utilisation » — an open invitation to pass the code around, and a
+  // promise the shop never made. The absence of a limit is operational, not
+  // customer-facing; what a reply legitimately needs is the date it ends, the
+  // one-per-customer rule, and how far a capped code has been used.
   const facts = [
     `Statut : ${s.status}`,
-    s.endsAt ? `Expire le : ${s.endsAt.slice(0, 10)}` : "Pas de date d'expiration",
-    s.usageLimit === null ? "Pas de limite d'utilisation" : `Utilisations : ${s.used}/${s.usageLimit}`,
-    s.oncePerCustomer ? 'Une seule utilisation par client' : 'Utilisable plusieurs fois',
+    s.endsAt ? `Expire le : ${s.endsAt.slice(0, 10)}` : null,
+    s.usageLimit === null ? null : `Utilisations : ${s.used}/${s.usageLimit}`,
+    s.oncePerCustomer ? 'Une seule utilisation par client' : null,
     `S'applique à : ${s.appliesTo.join(', ') || 'non précisé'}`
-  ];
+  ].filter(Boolean);
   parts.push(`## Détails\n${facts.map((f) => `- ${f}`).join('\n')}`);
 
   if (eligibility.blocking.length > 0) {

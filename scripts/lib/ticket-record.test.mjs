@@ -416,3 +416,36 @@ test('the thread read carries the duplicate link', () => {
     assert.match(call.columns, /duplicate_reason/);
   });
 });
+
+test('a manual order link is conditional on the order the person saw', async () => {
+  const { transport, record } = build();
+  await record.linkOrderManually('t1', {
+    expectedOrderNumber: '#6059',
+    columns: { shopify_order_number: '#6669', needs_investigation: true, status: 'open' }
+  });
+  const call = transport.calls.find((c) => c.kind === 'update');
+  assert.equal(call.table, T.TICKETS);
+  assert.equal(call.filters.id, 't1');
+  assert.equal(call.filters.shop_id, SHOP);
+  assert.equal(call.filters.shopify_order_number, '#6059', 'a change made meanwhile matches nothing');
+  assert.deepEqual(call.filters.deleted_at, { operator: 'is', value: 'null' });
+  assert.equal(call.columns.closed_at, null, 'a reopen clears the lifecycle stamps like any status change');
+  assert.equal(call.columns.resolved_at, null);
+});
+
+test('a ticket with no order is matched on a null order, and a lost race returns null', async () => {
+  const transport = recordingTransport();
+  transport.update = (_client, table, filters, columns, options) => {
+    transport.calls.push({ kind: 'update', table, filters, columns, options });
+    return Promise.resolve([]);
+  };
+  const record = createTicketRecord({}, { shopId: SHOP, transport });
+  const result = await record.linkOrderManually('t1', {
+    expectedOrderNumber: null,
+    columns: { shopify_order_number: '#6669' }
+  });
+  const call = transport.calls.find((c) => c.kind === 'update');
+  assert.deepEqual(call.filters.shopify_order_number, { operator: 'is', value: 'null' });
+  assert.equal('status' in call.columns, false, 'no status change unless the columns carry one');
+  assert.equal(result, null);
+});
