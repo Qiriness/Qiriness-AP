@@ -10,6 +10,14 @@ Three sibling files carry the other halves, and this one deliberately does not d
 
 ---
 
+## Dropped mail can be cleared out of the way (2026-09-20)
+
+The Irrelevant tab's list header gained **Select**: it turns every row into a checkbox, **Clear N** hides the ticked ones, **Cancel** leaves without touching anything. Cleared mail drops out of the list *and* the tab count, and **Restore N** in the same header brings it all back.
+
+**Nothing is written.** No route, no service, no migration — the ids sit in `localStorage` under `tickets.clearedMail` and are subtracted in `TicketsView`. `spam_audit` stays exactly what it was, the gate's own record; clearing is one reviewer's reading position, so it is kept where that fact belongs and the list says so in the notice it shows. Per browser, which is a real limit and is written down rather than smoothed over. Rationale in `DECISIONS.md` → *Clearing dropped mail is a browser fact, not a row*.
+
+Also in this change: `CheckIcon` (the bare tick) joins the icon set, and the confirmed order block in the `/tickets` context rail now shows **Items**, which was last-order-only until now.
+
 ## A dispatched parcel can now be late (2026-09-20)
 
 `expediee_sans_scan` answered every dispatched parcel with no carrier scan — 99% of shipped orders — so two days out and three weeks out got the same reply. A new state and one new rule split them.

@@ -2298,6 +2298,18 @@ Filtered on `outcome = 'blocked'`, not `label = 'irrelevant'`: the blocklist pas
 
 **No body, no promotion.** Never captured and captured-then-expired are one answer here, because the agent reads bodies: a ticket made from a subject line is one every pass downstream would skip. The button is disabled for the same reason the write would refuse, so the dashboard never offers an action that fails when used.
 
+### Clearing dropped mail is a browser fact, not a row (2026-09-20)
+
+**Asked for by the owner: a way to select several irrelevant emails and clear them.** Reviewing the Irrelevant tab is reading a run of obvious junk with the occasional real customer in it, and until now the only thing a reviewer could do with the junk was scroll past it again tomorrow.
+
+**It writes nothing.** No route, no service, no column, no row — `localStorage` under `tickets.clearedMail`, subtracted from the list and from the tab count in `TicketsView`. `spam_audit` records **what the gate decided**, which is the same sentence that kept `promoted_at` out of the table; clearing says less than promotion does — not "this decision was wrong" but "I have read this one" — so it has even less business editing the audit trail. The bodies expire on their own clock either way, so the list is hiding what is already on its way out.
+
+**The cost is per browser and is stated rather than hidden.** Another machine, another profile or cleared site data shows the full list again, and nothing about it is visible to the worker or to a colleague. That is the honest shape of the fact being recorded: one person's reading position, not a decision about the mail.
+
+**Select is a mode, not a button per row.** A control that hides things, sitting on every row of a list somebody scrolls fast, gets the mis-tap it is asking for. So the row click still previews until **Select** is pressed, then ticks; **Cancel** leaves without touching anything, and leaving the tab ends the mode rather than carrying ticks back into it.
+
+**Reversible, in the header where it happened.** **Restore N** brings every cleared row back, and an emptied list says which kind of empty it is. A hiding action with no way back would be a delete in everything but name, which is not what a UI-only clear is allowed to be.
+
 ### Search belongs to a table; level, category and sort belong to the page
 
 One box above four tables re-cut every section at once, and the row you were looking for was as likely to be in a collapsed one — so a search that found nothing looked like a search that matched nothing. Each section now searches only its own rows, from its own header, and the section count follows the filtered set.

@@ -147,6 +147,13 @@ export const CheckCircleIcon = (p: IconProps) => (
   </Base>
 );
 
+/** The tick alone — for a mark that already has a box or a chip around it. */
+export const CheckIcon = (p: IconProps) => (
+  <Base {...p}>
+    <path d="m5.5 12.5 4 4 9-9" />
+  </Base>
+);
+
 export const ClockIcon = (p: IconProps) => (
   <Base {...p}>
     <circle cx="12" cy="12" r="8.5" />

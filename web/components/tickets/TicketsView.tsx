@@ -5,6 +5,7 @@ import type { KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerE
 import {
   AlertIcon,
   CheckCircleIcon,
+  CheckIcon,
   ChevronLeftIcon,
   ClockIcon,
   CrownIcon,
@@ -139,6 +140,21 @@ const SORT_ORDERS = Object.keys(SORT_LABELS) as SortOrder[];
 const CATEGORY_FILTERS: readonly (KnowledgeCategory | "all")[] = ["all", ...TICKET_CATEGORIES];
 const STATE_PARAMS = ["view", "q", "level", "category", "sender", "sort", "ticket", "mail"];
 const LAST_TICKETS_SEARCH_KEY = "tickets.lastSearch";
+/**
+ * Dropped mail somebody has finished with, hidden from the Irrelevant list.
+ *
+ * IN THE BROWSER, NOT THE DATABASE. `spam_audit` records what the gate decided
+ * and is never written to from the dashboard — promotion is derived rather than
+ * stamped for that reason (see dropped-mail-service). Clearing is a weaker
+ * statement still: not "this decision was wrong" but "I have read this one", so
+ * it has no business editing the audit trail. The rows themselves age out on
+ * their own clock, so this list is hiding what is already on its way out.
+ *
+ * The cost is stated rather than hidden: this is per browser. Another machine,
+ * another profile, or cleared site data shows the full list again, and nothing
+ * here is visible to the worker or to anybody else.
+ */
+const CLEARED_MAIL_KEY = "tickets.clearedMail";
 const EMPTY_QUERIES: Record<TicketView, string> = { queue: "", backlog: "", irrelevant: "", closed: "" };
 
 interface TicketsPageState {
@@ -320,6 +336,13 @@ export function TicketsView({ initialTickets, droppedMail, loadError, initialPar
   const [detailError, setDetailError] = useState<string | null>(null);
   const [threadError, setThreadError] = useState<string | null>(null);
   const [contextOpen, setContextOpen] = useState(false);
+  // Irrelevant only: which dropped mail is hidden, and the select-and-clear
+  // mode that hides it. Starts empty on both the server and the first client
+  // render — `localStorage` is read in an effect below, because this component
+  // renders on the server too and reading storage there throws.
+  const [clearedMailIds, setClearedMailIds] = useState<string[]>([]);
+  const [selectingMail, setSelectingMail] = useState(false);
+  const [pickedMailIds, setPickedMailIds] = useState<string[]>([]);
 
   const stats = useMemo(() => summariseTickets(tickets), [tickets]);
   const openTickets = useMemo(() => tickets.filter((ticket) => !isClosed(ticket)), [tickets]);
@@ -360,7 +383,21 @@ export function TicketsView({ initialTickets, droppedMail, loadError, initialPar
     [filteredOpenTickets]
   );
   const closedBase = useMemo(() => tickets.filter(isClosed), [tickets]);
-  const droppedBase = dropped;
+  const clearedMail = useMemo(() => new Set(clearedMailIds), [clearedMailIds]);
+  const pickedMail = useMemo(() => new Set(pickedMailIds), [pickedMailIds]);
+  // Cleared mail is gone from the tab count as well as from the list: a count
+  // that keeps counting what it will not show reads as a bug.
+  const droppedBase = useMemo(
+    () => dropped.filter((mail) => !clearedMail.has(mail.id)),
+    [dropped, clearedMail]
+  );
+  // How many of the cleared ids are still rows we hold — the number the Restore
+  // button offers to bring back. A promoted mail leaves `dropped` for good, so
+  // its id can sit in storage for ever without meaning anything.
+  const clearedCount = useMemo(
+    () => dropped.reduce((total, mail) => total + (clearedMail.has(mail.id) ? 1 : 0), 0),
+    [dropped, clearedMail]
+  );
 
   const query = queryByView[activeView];
   const queue = useMemo(() => queueBase.filter((ticket) => matchesTicket(ticket, queryByView.queue)), [queueBase, queryByView.queue]);
@@ -445,6 +482,30 @@ export function TicketsView({ initialTickets, droppedMail, loadError, initialPar
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // What this browser has already cleared out of the Irrelevant list. Runs once,
+  // after mount, for the reason the state above starts empty. Storage is written
+  // by the two handlers rather than by an effect on this state: an effect would
+  // fire with the empty initial value and overwrite what it is about to read.
+  useEffect(() => {
+    let saved: string | null = null;
+    try {
+      saved = window.localStorage.getItem(CLEARED_MAIL_KEY);
+    } catch {
+      // Storage blocked: nothing is hidden, which is the right way to fail —
+      // the list showing too much is recoverable, hiding mail is not.
+    }
+    if (!saved) return;
+    try {
+      const ids = JSON.parse(saved);
+      if (Array.isArray(ids)) {
+        setClearedMailIds(ids.filter((id): id is string => typeof id === "string"));
+      }
+    } catch {
+      // Unparseable: treat it as nothing cleared rather than clearing the key,
+      // in case a later version of this page can read it.
+    }
+  }, []);
+
   // The selection is written from what is actually shown, so a ticket a filter
   // has since hidden does not linger in the address.
   const pageSearch = restored
@@ -476,6 +537,54 @@ export function TicketsView({ initialTickets, droppedMail, loadError, initialPar
 
   function updateQuery(value: string) {
     setQueryByView((current) => ({ ...current, [activeView]: value }));
+  }
+
+  /** The one writer of the cleared list: state and storage move together. */
+  function rememberCleared(ids: string[]) {
+    setClearedMailIds(ids);
+    try {
+      window.localStorage.setItem(CLEARED_MAIL_KEY, JSON.stringify(ids));
+    } catch {
+      // Storage blocked or full: the clear still holds for this page view, and
+      // the list comes back on the next load. Failing loudly here would put an
+      // error in front of somebody tidying a list.
+    }
+  }
+
+  function startSelectingMail() {
+    setSelectingMail(true);
+    setPickedMailIds([]);
+  }
+
+  function stopSelectingMail() {
+    setSelectingMail(false);
+    setPickedMailIds([]);
+  }
+
+  function toggleMailPick(id: string) {
+    setPickedMailIds((current) =>
+      current.includes(id) ? current.filter((row) => row !== id) : [...current, id]
+    );
+  }
+
+  function clearPickedMail() {
+    if (pickedMailIds.length === 0) return;
+    const picked = pickedMailIds;
+    rememberCleared([...clearedMailIds, ...picked.filter((id) => !clearedMail.has(id))]);
+    // The preview pane is looking at one of these if it was picked.
+    setSelectedDroppedId((current) => (current && picked.includes(current) ? null : current));
+    setActionError(null);
+    setActionNotice(
+      `${picked.length} dropped email${picked.length === 1 ? "" : "s"} cleared from this list. ` +
+        "The gate's record is untouched, and Restore brings them back."
+    );
+    stopSelectingMail();
+  }
+
+  function restoreClearedMail() {
+    rememberCleared([]);
+    setActionError(null);
+    setActionNotice("Cleared mail is back in the list.");
   }
 
   async function promote(mail: DroppedMail) {
@@ -571,6 +680,9 @@ export function TicketsView({ initialTickets, droppedMail, loadError, initialPar
                 setSelectedTicketId(null);
                 setSelectedDroppedId(null);
                 setContextOpen(false);
+                // Leaving the tab ends the select mode: coming back to a list
+                // still holding ticks from before would be a trap.
+                stopSelectingMail();
               }}
             >
               {VIEW_LABELS[view]}
@@ -609,6 +721,14 @@ export function TicketsView({ initialTickets, droppedMail, loadError, initialPar
           onSelect={setSelectedDroppedId}
           onPromote={promote}
           pendingId={pendingId}
+          selecting={selectingMail}
+          picked={pickedMail}
+          clearedCount={clearedCount}
+          onStartSelecting={startSelectingMail}
+          onCancelSelecting={stopSelectingMail}
+          onTogglePick={toggleMailPick}
+          onClearPicked={clearPickedMail}
+          onRestoreCleared={restoreClearedMail}
         />
       ) : (
         <TicketWorkspace
@@ -1859,6 +1979,22 @@ function senderIdentity(message: TicketMessage, outbound: boolean): { name: stri
   return { name, email: name.toLowerCase() === email.toLowerCase() ? null : email };
 }
 
+/**
+ * The Irrelevant tab: the gate's drops, one preview, and the verdict beside it.
+ *
+ * SELECT AND CLEAR IS A LIST OPERATION, so it lives in this pane's header and
+ * nowhere else. Reviewing dropped mail is reading a run of obvious junk with the
+ * occasional real customer in it, and the only action that existed — Add as
+ * ticket — is per email and sits three panes away in the context rail. Clearing
+ * is the opposite shape: many rows at once, no consequence beyond the list, and
+ * a mode you turn on rather than a button per row, because a delete-looking
+ * control on every row of a list somebody scrolls fast is asking for the mis-tap
+ * it would get.
+ *
+ * The mode is off by default and changes what a row click does — tick instead of
+ * preview — so the ticks are what a row shows while it is on, and Cancel leaves
+ * without touching anything.
+ */
 function IrrelevantWorkspace({
   mail,
   selectedMail,
@@ -1866,6 +2002,14 @@ function IrrelevantWorkspace({
   onSelect,
   onPromote,
   pendingId,
+  selecting,
+  picked,
+  clearedCount,
+  onStartSelecting,
+  onCancelSelecting,
+  onTogglePick,
+  onClearPicked,
+  onRestoreCleared,
 }: {
   mail: DroppedMail[];
   selectedMail: DroppedMail | null;
@@ -1873,6 +2017,16 @@ function IrrelevantWorkspace({
   onSelect: (id: string) => void;
   onPromote: (mail: DroppedMail) => void;
   pendingId: string | null;
+  /** Select mode: a row click ticks it rather than opening it. */
+  selecting: boolean;
+  picked: Set<string>;
+  /** Rows this browser is hiding — the number Restore offers to bring back. */
+  clearedCount: number;
+  onStartSelecting: () => void;
+  onCancelSelecting: () => void;
+  onTogglePick: (id: string) => void;
+  onClearPicked: () => void;
+  onRestoreCleared: () => void;
 }) {
   return (
     <div className={`${styles.workspace} ${styles.irrelevantWorkspace} ${selectedMail ? styles.hasSelection : ""}`}>
@@ -1880,23 +2034,77 @@ function IrrelevantWorkspace({
         <div className={styles.listHeader}>
           <div>
             <h2>Irrelevant</h2>
-            <p>{mail.length.toLocaleString()} dropped email{mail.length === 1 ? "" : "s"}</p>
+            <p>
+              {selecting
+                ? `${picked.size.toLocaleString()} selected`
+                : `${mail.length.toLocaleString()} dropped email${mail.length === 1 ? "" : "s"} · newest first`}
+            </p>
           </div>
-          <span>Most recent decision first</span>
+          <div className={styles.listActions}>
+            {selecting ? (
+              <>
+                <Button size="sm" variant="secondary" disabled={picked.size === 0} onClick={onClearPicked}>
+                  {picked.size > 0 ? `Clear ${picked.size}` : "Clear"}
+                </Button>
+                <Button size="sm" variant="tertiary" onClick={onCancelSelecting}>
+                  Cancel
+                </Button>
+              </>
+            ) : (
+              <>
+                {clearedCount > 0 && (
+                  <Button size="sm" variant="tertiary" onClick={onRestoreCleared}>
+                    Restore {clearedCount}
+                  </Button>
+                )}
+                <Button size="sm" variant="secondary" disabled={mail.length === 0} onClick={onStartSelecting}>
+                  Select
+                </Button>
+              </>
+            )}
+          </div>
         </div>
         {mail.length === 0 ? (
-          <CompactEmpty title="Nothing has been dropped" body="Mail blocked by the blocklist or classifier will appear here." />
+          /* An emptied list says which kind of empty it is: nothing was dropped,
+             or everything dropped has been cleared from this browser. */
+          clearedCount > 0 ? (
+            <CompactEmpty
+              title="Everything here has been cleared"
+              body="The gate's record is untouched. Restore brings the cleared mail back into this list."
+            />
+          ) : (
+            <CompactEmpty title="Nothing has been dropped" body="Mail blocked by the blocklist or classifier will appear here." />
+          )
         ) : (
-          <ol className={styles.ticketList} role="listbox" aria-label="Dropped emails">
+          /* A list of checkboxes is not a listbox: in select mode the rows stop
+             being options and the container stops claiming they are. */
+          <ol
+            className={styles.ticketList}
+            role={selecting ? "group" : "listbox"}
+            aria-label={selecting ? "Dropped emails to clear" : "Dropped emails"}
+          >
             {mail.map((item) => (
               <li key={item.id}>
                 <button
                   type="button"
-                  role="option"
-                  aria-selected={selectedId === item.id}
-                  className={`${styles.ticketItem} ${selectedId === item.id ? styles.ticketItemSelected : ""}`}
-                  onClick={() => onSelect(item.id)}
+                  role={selecting ? "checkbox" : "option"}
+                  aria-checked={selecting ? picked.has(item.id) : undefined}
+                  aria-selected={selecting ? undefined : selectedId === item.id}
+                  className={[
+                    styles.ticketItem,
+                    selecting ? styles.ticketItemPicking : "",
+                    !selecting && selectedId === item.id ? styles.ticketItemSelected : "",
+                    selecting && picked.has(item.id) ? styles.ticketItemPicked : "",
+                  ]
+                    .filter(Boolean)
+                    .join(" ")}
+                  onClick={() => (selecting ? onTogglePick(item.id) : onSelect(item.id))}
                 >
+                  {selecting && (
+                    <span className={styles.pickBox} aria-hidden="true">
+                      {picked.has(item.id) && <CheckIcon size={12} />}
+                    </span>
+                  )}
                   <span className={styles.itemTop}>
                     <span className={styles.priorityWord}>{item.label ?? "Blocklisted"}</span>
                     <time dateTime={item.decidedAt ?? undefined}>{formatRelativeTime(item.decidedAt) || "-"}</time>
