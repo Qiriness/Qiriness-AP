@@ -827,6 +827,42 @@ test('dispatch_state is read off the order bundle like the other order states', 
   );
 });
 
+test('delivery_delay_state is a second window, and it is not delivery_state', () => {
+  // The two are read off the SAME tool call and answer different questions: the
+  // parcel left and nothing has scanned it, and the wait has run long. A ticket
+  // can be the first without being the second, which is what the new rule needs.
+  const late = [
+    {
+      id: 't1',
+      tool: TOOL_NAMES.GET_ORDER_CONTEXT,
+      outcome: 'found',
+      data: { states: { delivery_state: 'dispatched_no_scan', delivery_delay_state: 'overdue' } }
+    }
+  ];
+  assert.equal(finding('delivery_state', late), 'dispatched_no_scan');
+  assert.equal(finding('delivery_delay_state', late), 'overdue');
+
+  // Neither window set, or a destination with only the other one — `unknown`,
+  // and the shared `expediee_sans_scan` keeps the ticket.
+  assert.equal(
+    finding('delivery_delay_state', [
+      {
+        id: 't1',
+        tool: TOOL_NAMES.GET_ORDER_CONTEXT,
+        outcome: 'found',
+        data: { states: { delivery_state: 'dispatched_no_scan' } }
+      }
+    ]),
+    'unknown'
+  );
+
+  // A tool that never ran says nothing about the delay.
+  assert.equal(finding('delivery_delay_state', []), 'unknown');
+
+  // It rests on knowing WHICH order, like every other state off this bundle.
+  assert.deepEqual(needRequires('delivery_delay_state'), ['order_identity']);
+});
+
 test('the product family orders identity before the facts that depend on it', () => {
   // Stock is a fact about one variant, so a planner walking this graph must not
   // propose a stock check before it knows which product.

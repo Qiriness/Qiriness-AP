@@ -71,8 +71,31 @@ export const PARAMETERS = {
       'can honestly say about a dispatched parcel: no carrier feeds scan events into ' +
       'Shopify for this store, so where a parcel actually is remains unknown.',
     usedBy:
-      'delivery replies about a parcel already dispatched. Nothing reads it yet — ' +
-      'setting it makes the number available to a rule, it does not by itself change a reply'
+      'the delivery_delay_state state for a parcel shipped to France, and any rule ' +
+      'that branches on it — today `dispatched_no_scan_delivery_late`'
+  },
+  // THE SAME QUESTION WITH A DIFFERENT ANSWER, and it has to be a second number
+  // rather than a margin on the first: a parcel that is late to Paris is still
+  // on time to Milan, and one window would make the rule wrong in one direction
+  // for 88% of orders or in the other for 12%.
+  //
+  // MEASURED OVER THE LAST 1 000 ORDERS (2026-09-20): 881 France, 119 abroad —
+  // Belgium 58, Italy 24, the Netherlands 14, then the United States, Switzerland,
+  // Monaco, Spain, Hong Kong, Portugal and Luxembourg. Not an edge case, and not
+  // a single country either, which is why it is one number for "not France"
+  // rather than a table: no destination outside France carries enough tickets to
+  // measure its own window.
+  abroad_delivery_days: {
+    kind: 'days',
+    label: 'Once dispatched, how long does delivery take outside France?',
+    description:
+      'Working days, counted from dispatch, for every destination that is not France. ' +
+      'Asked for 2026-09-20. Same honesty limit as the France number: it is the usual ' +
+      'case rather than a promise about one parcel, because no carrier feeds scan ' +
+      'events into Shopify for this store.',
+    usedBy:
+      'the delivery_delay_state state for a parcel shipped outside France, and any ' +
+      'rule that branches on it — today `dispatched_no_scan_delivery_late`'
   },
   free_shipping_threshold: {
     kind: 'amount',

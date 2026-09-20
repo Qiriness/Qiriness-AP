@@ -166,6 +166,16 @@ const NEEDS = {
     satisfiedBy: [{ tool: TOOL_NAMES.GET_ORDER_CONTEXT, outcomes: ['found'] }],
     asksCustomer: 'shopify_order_number'
   },
+  // THE SAME QUESTION ABOUT THE OTHER LEG, and `delivery_state` cannot answer
+  // it. That one says the parcel left and nothing has scanned it since — true
+  // of 99% of shipped orders, and just as true on day two as on day twenty.
+  // This says whether the wait has run past what delivery usually takes, which
+  // is the difference between a reassurance and a brush-off.
+  delivery_delay_state: {
+    label: 'si le délai de livraison habituel est dépassé',
+    satisfiedBy: [{ tool: TOOL_NAMES.GET_ORDER_CONTEXT, outcomes: ['found'] }],
+    asksCustomer: 'shopify_order_number'
+  },
   payment_state: {
     label: 'l’état du paiement',
     satisfiedBy: [{ tool: TOOL_NAMES.GET_ORDER_CONTEXT, outcomes: ['found'] }],
@@ -699,6 +709,16 @@ const FINDINGS = {
     derive: (entries) => stateFromOrderContext(entries, 'dispatch_state')
   },
 
+  // `unknown` IS THE FALL-THROUGH AND IT IS LOAD-BEARING: an unset
+  // `france_delivery_days` or `abroad_delivery_days`, an order with no shipping
+  // country, a parcel not yet dispatched or already delivered all resolve here,
+  // and each one leaves the ticket to `expediee_sans_scan`. See
+  // `deliveryDelayState` in order-context.mjs.
+  delivery_delay_state: {
+    values: ['within_window', 'overdue', 'unknown'],
+    derive: (entries) => stateFromOrderContext(entries, 'delivery_delay_state')
+  },
+
   delivery_state: {
     // `dispatched_no_scan` is its own value and not a flavour of `in_transit` —
     // see `deliveryState` in order-context.mjs. It is the shape of the largest
@@ -1129,6 +1149,7 @@ const DEPENDENCIES = {
   order_state: { requires: ['order_identity'] },
   dispatch_state: { requires: ['order_identity'] },
   delivery_state: { requires: ['order_identity'] },
+  delivery_delay_state: { requires: ['order_identity'] },
   payment_state: { requires: ['order_identity'] },
   refund_state: { requires: ['order_identity'] },
   return_eligibility: { requires: ['order_identity'] }

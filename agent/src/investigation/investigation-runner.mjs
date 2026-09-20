@@ -460,6 +460,20 @@ function buildInput(ticket, messages, senderDirectory, exemplarNeeds = [], polic
     resolvedContext: ticket.resolved_context && Object.keys(ticket.resolved_context).length > 0
       ? ticket.resolved_context
       : null,
+    // WHEN THE CUSTOMER LAST WROTE, and it is a CLOCK rather than a fact about
+    // the mail. Every order state that compares a date against "now" — is the
+    // dispatch window blown, has delivery run long, is the return still open —
+    // is really asking how things stood WHEN THEY WROTE, not how they stand at
+    // the moment the pass happens to run. The two agree on live mail and part
+    // company on everything else: re-running the corpus today would read every
+    // ticket in it as months late, because the orders are months old (p25 35
+    // days) and the complaints are not.
+    //
+    // The LATEST inbound rather than the first, because a thread that has run on
+    // for a week is asking about the week, and `received_at` is already loaded
+    // (`COLUMNS.messageForInvestigation`). Null when the column is empty, and the
+    // reader falls back to the wall clock rather than to no state at all.
+    latestInboundAt: (latest || first)?.received_at ?? null,
     // COMPUTED OVER EVERY INBOUND MESSAGE, not just the two that make up `text`.
     // A customer often writes "le flacon est cassé" and attaches the photo in a
     // second mail; taking only the first and latest would miss it whenever the

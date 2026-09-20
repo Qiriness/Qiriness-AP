@@ -35,6 +35,7 @@ const NEED_LABELS: Record<string, string> = {
   order_identity: "Which order is this",
   order_state: "Where the order stands",
   delivery_state: "Where the parcel is",
+  delivery_delay_state: "Whether delivery is running late",
   promotion_identity: "Which promotion is this",
   promotion_validity: "Whether the code is live",
   promotion_eligibility: "Whether this order qualifies",

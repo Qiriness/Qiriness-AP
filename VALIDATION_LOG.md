@@ -40,6 +40,19 @@ these.
 as its own item: `llm_usage` (item 14), `categorisation_review` (item 15), and
 `category_forwarding` / `ticket_forwards` (item 1).
 
+## 26. The late-delivery rule is a draft, and no customer has been answered by it (2026-09-20)
+
+**Proven:** `delivery_delay_state` resolves on real bundles — **23 overdue / 39 within window / 4 unknown** over the 66 tickets carrying a `resolved_context`, after `context:build --refresh` and with both windows set (`france_delivery_days` 3, `abroad_delivery_days` 6). `selectAnswer` picks `dispatched_no_scan_delivery_late` on O-09, D-01 and on no situation at all, and still picks `expediee_sans_scan` on the in-window and `unknown` cases; `auditAnswerSet` reports zero problems on the `orders` set. Unit tests cover both windows, Monaco, a missing country, a missing parameter per destination, a bundle with no `dispatchedAt`, and both ends of the journey.
+
+**Not proven, and the checks:**
+
+- **The rule is `draft`.** Nothing routes on it until somebody reads the French skeleton and puts it live in the rulebook. Until then every late parcel still gets `expediee_sans_scan`.
+- **The wording has never been read by the person who owns the voice.** The skeleton was written here, not by the operator — unlike `expedition_en_retard`, which it is modelled on. Read it before approving.
+- **Is 6 working days right for abroad?** It is the number that was asked for, not one measured: nothing in the database records when a parcel actually arrived, which is the whole reason this state exists. Belgium at 58 orders is the only destination with enough volume to ever check it, and only once a carrier feed exists.
+- **Monaco is on the abroad number** (4 orders). One line in `deliveryDelayState` if that is wrong.
+- **No live ticket has selected it.** Watch the first few: confirm the draft reply does not claim a scan, does not promise a date, and quotes a tracking number only when the dossier holds one.
+- **The clock change reaches more than this rule.** `dispatch_state`, `delivery_state` and `return_eligibility` are now derived against the ticket's latest inbound message too. `dispatch_state` read 44 overdue / 22 within window on that clock; nobody has checked a handful of those against the actual mail.
+
 ## 25. The management chat has run on real data, but never through its own login (2026-09-14)
 
 **Proven:** the role's boundary (views read; `public`, `auth`, writes, DDL refused; timeout fires) and four end-to-end questions whose figures matched independent SQL exactly — all with `mgmt_chat_ro` *borrowed* from a `postgres` session inside rolled-back transactions, because the role has no password yet. See CHANGELOG and `DECISIONS.md § Management chat`.

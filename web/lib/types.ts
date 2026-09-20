@@ -1975,11 +1975,14 @@ export interface PolicyRule {
  */
 export interface PolicyVocabulary {
   /**
-   * `poweredBy` names the parameter a state is computed from, when there is one.
-   * Not offered as a condition — you pick the state, not the number behind it —
-   * but shown so the editor can say a rule will never fire while it is unset.
+   * `poweredBy` names the parameters a state is computed from, when there are
+   * any. Not offered as conditions — you pick the state, not the numbers behind
+   * it — but shown so the editor can say a rule will never fire while one is
+   * unset. A LIST rather than a single key: `delivery_delay_state` is computed
+   * from two windows, one for France and one for everywhere else, and a state
+   * that can fire for half its destinations is not the same as a dead one.
    */
-  needs: { need: string; findings: string[]; poweredBy: string | null; requires: string[] }[];
+  needs: { need: string; findings: string[]; poweredBy: string[]; requires: string[] }[];
   routes: string[];
   asks: string[];
   /** Codes an operator has cleared for customers, for the rule editor's picker. */

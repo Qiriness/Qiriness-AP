@@ -735,7 +735,29 @@ export function createToolRegistry({
                   // Same contract as the returns window: the shop's number, or
                   // null and a finding of `unknown`. Never a default — a
                   // dispatch promise is the merchant's to make.
-                  dispatchDays: days(ticket.parameters, 'dispatch_days')
+                  dispatchDays: days(ticket.parameters, 'dispatch_days'),
+                  // TWO WINDOWS FOR THE SECOND LEG, picked on the shipping
+                  // country by `deliveryDelayState`. Same contract again: either
+                  // unset resolves `delivery_delay_state` to `unknown` for the
+                  // destinations it covers, and those tickets keep the answer
+                  // `expediee_sans_scan` gives them today.
+                  franceDeliveryDays: days(ticket.parameters, 'france_delivery_days'),
+                  abroadDeliveryDays: days(ticket.parameters, 'abroad_delivery_days'),
+                  // THE CLOCK IS THE CUSTOMER'S MESSAGE, NOT THE PASS.
+                  //
+                  // Every state below that compares a date against `now` is
+                  // answering "how did this stand when they wrote", and until
+                  // now it answered "how does this stand at the moment the
+                  // worker ran". Identical on live mail, and wrong on every
+                  // replay: re-running the corpus reads tickets whose orders are
+                  // months old as months overdue, which would have made
+                  // `delivery_delay_state` fire on almost all of them and made
+                  // the eval that measures it meaningless.
+                  //
+                  // Falls back to the wall clock when a message carries no
+                  // `received_at`, because a missing date must not silently turn
+                  // every order state into `unknown`.
+                  now: ticket.latestInboundAt ? new Date(ticket.latestInboundAt) : new Date()
                 })
               : null,
             // WHO IS ASKING, carried by this tool because confirming the order

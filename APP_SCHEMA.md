@@ -356,6 +356,11 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |   |   |                        # (checkOrderPromotion reads the bundle promotions
 |   |   |                        #  block: gifts, reductions, samples) ·
 |   |   |                        # order-context + order-context-runner
+|   |   |                        #   (orderStates: order_state, delivery_state,
+|   |   |                        #    delivery_delay_state, dispatch_state,
+|   |   |                        #    payment_state, refund_state,
+|   |   |                        #    return_eligibility — derived against the
+|   |   |                        #    ticket's latest inbound message, not `now`)
 |   |   |-- routing/             # forward-rules · forwarding-store · forward-runner
 |   |   |-- drafting/            # brand-voice (the Brand voice row -> the system
 |   |   |                        #   prompt + INTENT_RULES per verdict: answer /
@@ -627,7 +632,7 @@ Env: `CHAT_DB_URL` (the role's pooler URL; unset = the page says so and nothing 
 - `PATCH knowledge/articles/:id` — converts `source_type` to `manual`; demotes `approved` → `in_review` on a text change; re-embeds inline (best-effort)
 - `POST knowledge/articles/:id/resync` — 400 once `manual`. `DELETE` — hard delete, chunks cascade
 
-**Parameters** (`/agent-setup/parameters` → `components/agent-setup/ParameterList`, over `lib/server/parameters-service.ts`). One number held once, so a rule comparing against it, an article stating it and a skeleton quoting it cannot disagree — the failure that argued for it was live: two approved articles gave two different returns windows. **The catalogue is code** (`scripts/lib/parameters.mjs`) and only the values are data, so the screen offers exactly the parameters something reads; rows are created on demand. **Every value starts null**, which is a real state each reader handles. No approval step, unlike a rule: a parameter is a fact rather than a behaviour.
+**Parameters** (`/agent-setup/parameters` → `components/agent-setup/ParameterList`, over `lib/server/parameters-service.ts`). One number held once, so a rule comparing against it, an article stating it and a skeleton quoting it cannot disagree — the failure that argued for it was live: two approved articles gave two different returns windows. **The catalogue is code** (`scripts/lib/parameters.mjs`) and only the values are data, so the screen offers exactly the parameters something reads; rows are created on demand. **Every value starts null**, which is a real state each reader handles. No approval step, unlike a rule: a parameter is a fact rather than a behaviour. Two of them are a pair: `france_delivery_days` and `abroad_delivery_days` are the same window for different destinations, picked on the order's `country_code`, and either one unset leaves `delivery_delay_state` `unknown` for the destinations it covers rather than for all of them — which is why `POWERED_BY` in `policy-service.ts` maps a state to a LIST of parameters and the editor names which is missing.
 
 - `GET|PUT parameters` — every parameter set or not · set one, or clear it with a null
 

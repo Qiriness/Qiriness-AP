@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useId, useMemo, useRef, useState } from "react";
 
 import { ChevronDownIcon, CloseIcon, HelpIcon } from "@/components/icons";
 import { Button } from "@/components/ui/Button";
@@ -521,10 +521,14 @@ export function RuleEditor({
                 <div className={styles.needs}>
                   {shownNeeds.map(({ need, findings, poweredBy }) => {
                     const picked = conditions[need] ?? [];
-                    const unsetParameter =
-                      poweredBy && !vocabulary.parameters.find((p) => p.key === poweredBy)?.set
-                        ? poweredBy
-                        : null;
+                    // EVERY parameter behind the state, not just the first. A
+                    // state computed from two windows — France and abroad — is
+                    // half dead with one of them unset, and naming only one
+                    // would send somebody to set a number that was already set.
+                    const unsetParameters = poweredBy.filter(
+                      (key) => !vocabulary.parameters.find((p) => p.key === key)?.set,
+                    );
+                    const deadState = unsetParameters.length === poweredBy.length;
                     return (
                       <div key={need} className={styles.need}>
                         <div className={styles.needHead}>
@@ -535,9 +539,17 @@ export function RuleEditor({
                           {/* A state computed from a number nobody has set can never
                               resolve, and a rule branching on it would never fire.
                               Saying so here is cheaper than finding out from a transcript. */}
-                          {unsetParameter && (
+                          {unsetParameters.length > 0 && (
                             <span className={styles.blocked}>
-                              needs <b>{unsetParameter}</b>, which is not set — cannot fire yet
+                              needs{" "}
+                              {unsetParameters.map((key, i) => (
+                                <Fragment key={key}>
+                                  {i > 0 && " and "}
+                                  <b>{key}</b>
+                                </Fragment>
+                              ))}
+                              , {unsetParameters.length > 1 ? "which are" : "which is"} not set —{" "}
+                              {deadState ? "cannot fire yet" : "cannot fire for those destinations yet"}
                             </span>
                           )}
                         </div>

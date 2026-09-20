@@ -1,18 +1,27 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { checkClause, codeOnly, read } from './_shared.test.mjs';
+import { checkClause, codeOnly, literalsIn, read } from './_shared.test.mjs';
 
 const SQL = read('29_order_promotion_need');
 const EXEMPLARS = read('05_exemplars');
 
-const squash = (text) => String(text ?? '').replace(/\s+/g, ' ').trim();
 const CONSTRAINT = 'support_exemplars_requirement_needs_check';
 
-test('29 carries the baseline check, not a retyped one', () => {
+// 29 WAS EQUAL TO THE BASELINE AND IS NO LONGER, WHICH IS CORRECT. It was the
+// head of this constraint when it was written, so it asserted equality with
+// 05_exemplars.sql. 33_delivery_delay_need.sql is the head now and carries that
+// assertion; an applied migration is a historical step and must not be edited
+// to keep up, so what survives here is the claim that still holds: 29 copied the
+// baseline of its day rather than retyping one, and every value it names is
+// still a value the baseline allows.
+test('29 copied the baseline of its day: it names nothing the baseline lost', () => {
   const clause = checkClause(SQL, CONSTRAINT);
   assert.ok(clause, 'the check is missing from 29');
-  assert.equal(squash(clause), squash(checkClause(EXEMPLARS, CONSTRAINT)));
+  const baseline = literalsIn(checkClause(EXEMPLARS, CONSTRAINT));
+  for (const need of literalsIn(clause)) {
+    assert.ok(baseline.includes(need), `${need} is in 29 but no longer in the baseline`);
+  }
 });
 
 test('the baseline allows the new need, beside the ones it already had', () => {

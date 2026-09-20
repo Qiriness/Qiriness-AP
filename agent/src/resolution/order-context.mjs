@@ -232,6 +232,17 @@ function buildDelivery(order, now) {
     estimatedDeliveryAt,
     // Days since dispatch is what turns "dispatched" into "dispatched and late".
     daysSinceDispatch: daysBetween(firstFulfilledAt(fulfillments), now),
+    // THE TIMESTAMP, NOT ONLY THE COUNT, because the count is frozen against
+    // whatever clock `context:build` happened to run on and `daysSinceDispatch`
+    // therefore cannot be re-measured. `delivery_delay_state` has to compare
+    // dispatch against the date the CUSTOMER WROTE, which is a different clock
+    // and is not known in this pass — so the raw instant travels and the
+    // comparison happens where the message date is in hand.
+    //
+    // It also fills a reader that has been silently empty: `escalationTriggers`
+    // has read `delivery.dispatchedAt` since it was written, and nothing ever
+    // set it, so its stale-transit check has been measuring from `undefined`.
+    dispatchedAt: firstFulfilledAt(fulfillments),
     tracking
   };
 }
@@ -366,7 +377,14 @@ function num(value) {
  */
 export function orderStates(
   context,
-  { staleTransitDays = null, returnsWindowDays = null, dispatchDays = null, now = new Date() } = {}
+  {
+    staleTransitDays = null,
+    returnsWindowDays = null,
+    dispatchDays = null,
+    franceDeliveryDays = null,
+    abroadDeliveryDays = null,
+    now = new Date()
+  } = {}
 ) {
   const order = context?.order;
   if (!order) {
@@ -396,6 +414,16 @@ export function orderStates(
     // `order_state`, never alone: it is a statement about time since the order,
     // and says nothing about whether the parcel has since moved.
     dispatch_state: dispatchState(order, dispatchDays, now),
+    // THE SECOND LEG OF THE SAME JOURNEY. `dispatch_state` asks whether the
+    // warehouse is late; this asks whether the CARRIER is — and until now
+    // nothing did, so a parcel that left two days ago and one that left three
+    // weeks ago were the same state and got the same reply.
+    delivery_delay_state: deliveryDelayState(
+      order,
+      delivery,
+      { franceDeliveryDays, abroadDeliveryDays },
+      now
+    ),
     // REFUNDS BEFORE PAYMENT, and the order is the decision: a fully refunded
     // order is also `PAID` in Shopify, so testing `isPaid` first would report
     // money we have given back as money we are holding.
@@ -547,6 +575,68 @@ function dispatchState(order, dispatchDays, now) {
     return 'unknown';
   }
   return elapsed > dispatchDays ? 'overdue' : 'within_window';
+}
+
+/**
+ * Whether the parcel has been out longer than delivery usually takes.
+ *
+ * THE OTHER HALF OF `dispatchState`, AND IT WAS MISSING. That one splits the wait
+ * BEFORE the parcel leaves; nothing split the wait after it, so every dispatched
+ * order with no carrier scan — 99% of shipped orders on this store — resolved to
+ * one state and got one reply. Two days out and three weeks out were
+ * indistinguishable to a rule, which is what `dispatched_no_scan_delivery_late`
+ * exists to fix.
+ *
+ * TWO NUMBERS, BECAUSE ONE WOULD BE WRONG SOMEWHERE. `france_delivery_days`
+ * against `abroad_delivery_days`, chosen on the shipping country: 881 of the last
+ * 1 000 orders went to France and 119 did not, so a single window would either
+ * call Milan late or let Paris run over. `FR` alone is domestic — Monaco (`MC`,
+ * 4 orders) is deliberately on the abroad number, because this codebase does not
+ * get to decide La Poste's zoning on four rows.
+ *
+ * WORKING DAYS, because that is what both parameters say they are, through the
+ * same counter `dispatchState` uses. Holidays are unmodelled, so the count runs
+ * slightly HIGH — the safe direction, exactly as there: it can tip a parcel into
+ * `overdue` a day early, which routes to a person, and can never keep a late one
+ * looking on time.
+ *
+ * FOUR WAYS TO `unknown`, AND NONE OF THEM IS A DEFAULT. No parameter set, no
+ * country on the order, no fulfilment timestamp, or a parcel that has not left
+ * or has already arrived. Every one of them leaves the ticket to
+ * `expediee_sans_scan`, which is exactly today's behaviour — so this can only
+ * ever take tickets off that rule when the evidence is actually there. That
+ * includes every `resolved_context` stored before `dispatchedAt` existed, until
+ * `context:build --refresh` has run.
+ *
+ * `in_transit` IS INCLUDED AND IS UNREACHABLE TODAY, for the reason
+ * `deliveryState` gives above: no carrier feeds scans into Shopify for this
+ * store. It is written rather than left out so the state stays correct the day
+ * that changes, on the same discipline as the six dormant transit rules.
+ */
+function deliveryDelayState(order, delivery, { franceDeliveryDays, abroadDeliveryDays }, now) {
+  const state = delivery?.state || null;
+  // Nothing to be late about before it leaves, and nothing to measure once it
+  // has arrived — `not_dispatched` is `dispatch_state`'s question and
+  // `delivered` has already answered this one.
+  if (state !== 'dispatched' && state !== 'in_transit') {
+    return 'unknown';
+  }
+  if (!delivery.dispatchedAt) {
+    return 'unknown';
+  }
+  const country = order?.shipTo?.countryCode || null;
+  if (!country) {
+    return 'unknown';
+  }
+  const allowed = country === 'FR' ? franceDeliveryDays : abroadDeliveryDays;
+  if (!Number.isFinite(allowed)) {
+    return 'unknown';
+  }
+  const elapsed = workingDaysBetween(delivery.dispatchedAt, now);
+  if (elapsed === null) {
+    return 'unknown';
+  }
+  return elapsed > allowed ? 'overdue' : 'within_window';
 }
 
 /** Whole working days from `from` to `now`, Saturdays and Sundays excluded. */

@@ -10,6 +10,46 @@ Three sibling files carry the other halves, and this one deliberately does not d
 
 ---
 
+## A dispatched parcel can now be late (2026-09-20)
+
+`expediee_sans_scan` answered every dispatched parcel with no carrier scan — 99% of shipped orders — so two days out and three weeks out got the same reply. A new state and one new rule split them.
+
+**`delivery_delay_state`**, a need beside `dispatch_state` rather than a fourth `delivery_state` value. `dispatchedAt` now travels on the delivery block so the wait can be re-measured, the shipping `country_code` picks between `france_delivery_days` (3) and the new `abroad_delivery_days` (6), and the count is in working days through the counter `dispatchState` already uses.
+
+**`dispatched_no_scan_delivery_late`** — shared, no situation, `{delivery_state: dispatched_no_scan, delivery_delay_state: overdue}`, route `needs_human`, tone understanding. Two conditions beat `expediee_sans_scan`'s one, so it takes the late slice and the old rule keeps the rest. **Authored `draft`.**
+
+**Simulated across five order states × four situations**, `auditAnswerSet` reporting zero problems:
+
+| | O-09 | D-01 | no situation |
+| --- | --- | --- | --- |
+| dispatched, past the window | `dispatched_no_scan_delivery_late` | same | same |
+| dispatched, inside it | `expediee_sans_scan` | same | same |
+| no window set / no country | `expediee_sans_scan` | same | same |
+| not dispatched, dispatch overdue | `expedition_en_retard` | `d01_expedition_en_retard` | `non_expediee` |
+
+**D-05 keeps its own rule** and does not get the split: `D05_expediee_sans_scan` names the situation, which outranks a shared rule before depth is counted. Correct — D-05 is « le suivi n'a pas bougé », so the customer has already said it is late and that rule already apologises and already routes to a person.
+
+**The clock moved from `now` to the ticket's latest inbound message**, for every order state and not only the new one. This is what makes the state carry information: the corpus orders are 16–100 days old (median 55), so measured against `now` **all 62** dispatched-no-scan tickets read overdue. Measured against the message:
+
+```
+dispatched_no_scan tickets: 62
+    23  overdue        -> dispatched_no_scan_delivery_late
+    39  within_window  -> expediee_sans_scan
+     0  unknown
+```
+
+`eval:order-states` now reports that split plus the `dispatch_state` and `delivery_delay_state` axes, and names which clock it used.
+
+**Everything degrades to today's behaviour rather than to a guess** — no parameter, no country code, no dispatch timestamp, or a parcel not yet gone or already arrived all read `unknown` and stay with `expediee_sans_scan`. That included all 66 stored bundles until `context:build --refresh` was run (66 considered, 66 resolved, 0 missing).
+
+**A latent bug closed on the way past.** `escalationTriggers` has read `delivery.dispatchedAt` since it was written and nothing ever set it, so its stale-transit check was measuring from `undefined`.
+
+**`POWERED_BY` now maps a state to a LIST of parameters**, because `delivery_delay_state` reads two and either one unset kills it only for the destinations it covers. `dispatch_state: ['dispatch_days']` was added at the same time — it had been missing since the map was written, so a `dispatch_state` rule authored with `dispatch_days` unset was silently dead, which is exactly what that map exists to prevent.
+
+**Migration 33** widens `support_exemplars.requirement_needs` so a situation can declare the need. 29's equality-with-baseline test became a subset test: it was the head of that constraint when written, 33 is the head now, and an applied migration is not edited to keep up.
+
+2 981 root tests and 1 475 agent tests pass; `tsc --noEmit` clean.
+
 ## The collection mode is a switch, not a word (2026-09-20)
 
 The rulebook's collection control was a pill button whose only state was its own

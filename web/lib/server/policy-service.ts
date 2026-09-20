@@ -107,11 +107,11 @@ export async function policyVocabulary(shopId?: string): Promise<PolicyVocabular
     need,
     findings: (findingValues(need) as string[] | null) ?? [],
     requires: needRequires(need),
-    // Which parameter this state is computed from, when it is computed from one.
-    // The editor does not offer it as a CONDITION — you pick the state, not the
-    // number behind it — but it must say so when the number is missing, because
+    // Which parameters this state is computed from, when it is computed from any.
+    // The editor does not offer them as CONDITIONS — you pick the state, not the
+    // numbers behind it — but it must say so when one is missing, because
     // a rule branching on a state nothing can compute is a rule that never fires.
-    poweredBy: (POWERED_BY as Record<string, string | undefined>)[need] ?? null,
+    poweredBy: (POWERED_BY as Record<string, string[] | undefined>)[need] ?? [],
   })).filter((entry: { findings: string[] }) => entry.findings.length > 0);
 
   // Which of those parameters are actually set, so the editor can warn rather
@@ -153,15 +153,25 @@ export async function policyVocabulary(shopId?: string): Promise<PolicyVocabular
 }
 
 /**
- * State → the parameter it is computed from.
+ * State → the parameters it is computed from.
  *
  * DECLARED HERE RATHER THAN DERIVED, because the wiring lives inside a deriver
  * and nothing exposes it. Small and worth the duplication: without it the editor
  * cannot explain why a state it offers will never resolve, which is the one
  * question somebody writing a returns rule today would ask.
+ *
+ * A LIST, since `delivery_delay_state` reads two — one window for France and one
+ * for everywhere else. Either one unset makes the state unresolvable for the
+ * destinations it covers rather than for all of them, so the editor names which.
+ *
+ * `dispatch_state` WAS MISSING HERE and had been since the map was written: a
+ * rule on it authored while `dispatch_days` is unset resolves `unknown` and
+ * never fires, which is precisely what this map exists to say out loud.
  */
-const POWERED_BY: Record<string, string> = {
-  return_eligibility: "returns_window_days",
+const POWERED_BY: Record<string, string[]> = {
+  return_eligibility: ["returns_window_days"],
+  dispatch_state: ["dispatch_days"],
+  delivery_delay_state: ["france_delivery_days", "abroad_delivery_days"],
 };
 
 export async function listRules(shopId: string, answerSet?: string): Promise<PolicyRule[]> {

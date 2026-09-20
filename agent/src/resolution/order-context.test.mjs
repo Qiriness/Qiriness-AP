@@ -452,6 +452,106 @@ test('the dispatch window is measured in working days, and only when the shop ha
   );
 });
 
+test('the delivery window is two numbers, picked on the shipping country', () => {
+  // Dispatched Friday 3 July. Tuesday the 7th is three calendar days later and
+  // only TWO working days, so France's 3-day window has not run out.
+  const dispatched = (countryCode) => ({
+    order: {
+      delivery: { state: 'dispatched', dispatchedAt: '2026-07-03T10:00:00Z' },
+      shipTo: { countryCode }
+    },
+    signals: {}
+  });
+  const windows = { franceDeliveryDays: 3, abroadDeliveryDays: 6 };
+  const tuesday = new Date('2026-07-07T10:00:00Z');
+
+  assert.equal(
+    orderStates(dispatched('FR'), { ...windows, now: tuesday }).delivery_delay_state,
+    'within_window',
+    'the weekend does not count against the carrier either'
+  );
+
+  // Friday the 10th: five working days out. Past France's three, inside the
+  // abroad six — which is the whole reason there are two numbers.
+  const friday = new Date('2026-07-10T10:00:00Z');
+  assert.equal(orderStates(dispatched('FR'), { ...windows, now: friday }).delivery_delay_state, 'overdue');
+  assert.equal(orderStates(dispatched('BE'), { ...windows, now: friday }).delivery_delay_state, 'within_window');
+
+  // Far enough out and every destination is late.
+  const late = new Date('2026-07-20T10:00:00Z');
+  assert.equal(orderStates(dispatched('BE'), { ...windows, now: late }).delivery_delay_state, 'overdue');
+
+  // MONACO IS ABROAD, deliberately: 4 orders is not enough to decide La Poste's
+  // zoning in this codebase. Same day, opposite answers to France.
+  assert.equal(orderStates(dispatched('MC'), { ...windows, now: friday }).delivery_delay_state, 'within_window');
+});
+
+test('nothing about a delivery window is guessed', () => {
+  const base = {
+    order: {
+      delivery: { state: 'dispatched', dispatchedAt: '2026-07-03T10:00:00Z' },
+      shipTo: { countryCode: 'FR' }
+    },
+    signals: {}
+  };
+  const now = new Date('2026-07-20T10:00:00Z');
+  const windows = { franceDeliveryDays: 3, abroadDeliveryDays: 6 };
+
+  // NO PARAMETER, NO CLAIM — and it is per destination. An abroad parcel stays
+  // `unknown` while only the France number is set, which is why the editor names
+  // which of the two is missing rather than calling the whole state dead.
+  assert.equal(
+    orderStates(base, { franceDeliveryDays: 3, now }).delivery_delay_state,
+    'overdue',
+    'France resolves on the France number alone'
+  );
+  assert.equal(
+    orderStates(
+      { ...base, order: { ...base.order, shipTo: { countryCode: 'BE' } } },
+      { franceDeliveryDays: 3, now }
+    ).delivery_delay_state,
+    'unknown',
+    'and abroad does not, until somebody sets the second number'
+  );
+
+  // No country on the order, and there is no default destination to fall back on.
+  assert.equal(
+    orderStates({ ...base, order: { ...base.order, shipTo: {} } }, { ...windows, now }).delivery_delay_state,
+    'unknown'
+  );
+
+  // Written before `dispatchedAt` existed: every stored bundle looks like this
+  // until `context:build --refresh` has run, and each one keeps the answer
+  // `expediee_sans_scan` gives it today rather than becoming late by default.
+  assert.equal(
+    orderStates(
+      { ...base, order: { ...base.order, delivery: { state: 'dispatched' } } },
+      { ...windows, now }
+    ).delivery_delay_state,
+    'unknown'
+  );
+
+  // NOTHING TO BE LATE ABOUT either side of the journey: before it leaves is
+  // `dispatch_state`'s question, and once it has arrived this one is answered.
+  for (const state of ['not_dispatched', 'delivered']) {
+    assert.equal(
+      orderStates(
+        { ...base, order: { ...base.order, delivery: { state, dispatchedAt: '2026-07-03T10:00:00Z' } } },
+        { ...windows, now }
+      ).delivery_delay_state,
+      'unknown',
+      state
+    );
+  }
+});
+
+test('the dispatch timestamp travels, so the delay can be measured against another clock', () => {
+  const context = buildOrderContext(ORDER, CUSTOMER, { now: NOW });
+  // `daysSinceDispatch` is frozen against the pass clock; the instant is not, and
+  // `escalationTriggers` has been reading this field since before it was set.
+  assert.equal(context.order.delivery.dispatchedAt, '2026-07-15T11:53:16Z');
+});
+
 // --- what was applied to the order ---------------------------------------------
 
 // Shaped on the real #6827: one gift (a line reduced to zero by a named
