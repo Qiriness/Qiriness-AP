@@ -370,16 +370,31 @@ export function RuleBook({
                     `npm run report:collection-planner` to see what it would
                     collect here before switching it on. */}
                 {activeSituationMeta && (
-                  <button
-                    type="button"
-                    className={styles.modeToggle}
-                    disabled={busy === `mode:${activeSituationMeta.key}`}
-                    onClick={() => toggleCollectionMode(activeSituationMeta.key)}
-                  >
-                    {modes[activeSituationMeta.key] === "rule_directed"
-                      ? "rules collect"
-                      : "model collects"}
-                  </button>
+                  /* A SWITCH RATHER THAN A BUTTON, because this is a setting
+                     that stays where it is put rather than an action. Same
+                     label-and-checkbox shape the collection list uses for
+                     `Live` / `Off`: the input carries a name that never
+                     changes and the word beside the track reports which side is
+                     on, so the control is not renaming itself under a screen
+                     reader every time it is flipped. */
+                  <label className={styles.modeSwitch}>
+                    <input
+                      type="checkbox"
+                      className={styles.modeSwitchInput}
+                      checked={modes[activeSituationMeta.key] === "rule_directed"}
+                      disabled={busy === `mode:${activeSituationMeta.key}`}
+                      onChange={() => toggleCollectionMode(activeSituationMeta.key)}
+                      aria-label={`Let the rules for ${activeSituationMeta.key} direct collection`}
+                    />
+                    <span className={styles.modeSwitchTrack} aria-hidden="true">
+                      <span className={styles.modeSwitchKnob} />
+                    </span>
+                    <span className={styles.modeSwitchState}>
+                      {modes[activeSituationMeta.key] === "rule_directed"
+                        ? "rules collect"
+                        : "model collects"}
+                    </span>
+                  </label>
                 )}
               </div>
             </div>

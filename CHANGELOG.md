@@ -10,6 +10,27 @@ Three sibling files carry the other halves, and this one deliberately does not d
 
 ---
 
+## The collection mode is a switch, not a word (2026-09-20)
+
+The rulebook's collection control was a pill button whose only state was its own
+label — « model collects » / « rules collect » — so the setting looked like an
+action and read like a counter beside the three it sits next to. It is now a
+toggle switch: teal track when the rules collect, grey when the model does.
+
+- `RuleBook.tsx`: a `label` + hidden checkbox, the shape `CollectionList` already
+  uses for `Live` / `Off`. The input carries a name that does not change
+  (« Let the rules for D-02 direct collection ») and the word beside the track
+  reports the state, so the control does not rename itself under a screen reader
+  each time it is flipped.
+- `RuleBook.module.css`: `.canvasStats span` became `.canvasStats > span`. It was
+  styling every descendant span as a counter pill, which boxed the switch's own
+  track.
+
+Behaviour unchanged: same `setCollectionMode` call, same per-situation setting.
+`tsc` and `next lint` clean. Not yet looked at in the browser.
+
+---
+
 ## The product list stops being paraphrased twice (2026-09-20)
 
 `ticket_investigations.recommendations` (migration 32, applied) carries `recommendProducts`' own answer — one entry per type of care, with the product lines as the tool rendered them — and the drafting prompt prints it before the case file's summary. Same treatment `knowledge` chunks already get. Why: DECISIONS § « The product list reaches drafting as the tool wrote it ».
