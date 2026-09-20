@@ -32,7 +32,13 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
     const result = await getTicketPhoto(shopId, params.id, index);
 
     if (!result.ok) {
-      const status = result.reason === "too_large" ? 413 : 404;
+      // A 404 SAYS "THIS PHOTO IS NOT HERE", which is true of a message that has
+      // left the mailbox and false of a deployment with no Graph credentials —
+      // and the second is somebody's afternoon, not a lost mail. It gets a 503
+      // so the status alone separates "gone" from "broken" in a log, a network
+      // tab or an uptime check, none of which read the reason header.
+      const status =
+        result.reason === "too_large" ? 413 : result.reason === "graph_not_configured" ? 503 : 404;
       return new NextResponse(null, {
         status,
         headers: { "X-Attachment-Reason": result.reason },

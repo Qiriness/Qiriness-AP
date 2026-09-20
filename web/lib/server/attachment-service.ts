@@ -22,7 +22,7 @@
  * bottle, and only the second was asked for.
  */
 
-import { loadAgentConfig } from "../../../agent/src/config.mjs";
+import { assertGraphConfig, loadAgentConfig } from "../../../agent/src/config.mjs";
 import { createGraphClient } from "../../../agent/src/ingestion/graph-client.mjs";
 import { listTicketAttachments } from "../../../scripts/lib/photo-evidence-rules.mjs";
 import { createTicketRecord } from "../../../scripts/lib/ticket-record.mjs";
@@ -42,6 +42,7 @@ export type AttachmentFailure =
   | "message_gone"
   | "mailbox_mismatch"
   | "too_large"
+  | "graph_not_configured"
   | "graph_unavailable";
 
 export interface AttachmentResult {
@@ -116,7 +117,24 @@ export async function getTicketPhoto(
     return { ok: false, reason: "too_large" };
   }
 
-  const graph = createGraphClient(loadAgentConfig());
+  // CHECKED BEFORE THE CALL, because the call cannot tell you this. A deployment
+  // missing `MS_GRAPH_*` builds a client with undefined credentials, posts to
+  // `login.microsoftonline.com/undefined/...` and fails with `invalid_request` —
+  // which lands in the same `graph_unavailable` bucket as a genuine Graph
+  // outage, and reached the operator as « the message may have left the
+  // mailbox ». `loadAgentConfig` does not require these vars (the worker needs
+  // them, a sync script does not), so nothing upstream catches it either.
+  //
+  // Measured 2026-09-20: this is exactly what a Vercel deploy did, while the
+  // same code served every photo locally from the repo-root `.env.local`.
+  const config = loadAgentConfig();
+  try {
+    assertGraphConfig(config);
+  } catch (error: any) {
+    return { ok: false, reason: "graph_not_configured", detail: error?.message };
+  }
+
+  const graph = createGraphClient(config);
 
   let handles;
   try {

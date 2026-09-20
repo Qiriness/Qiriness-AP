@@ -15,6 +15,7 @@ import {
 } from "@/components/icons";
 import { Button } from "@/components/ui/Button";
 import { TrackingText } from "@/components/ui/TrackingText";
+import { ATTACHMENT_REASON_FALLBACK, fetchAttachmentReason } from "@/lib/attachment-reasons";
 import { promoteDroppedMail } from "@/lib/api/dropped-mail";
 import { knowledgeErrorMessage } from "@/lib/api/knowledge";
 import { decideOnDraft, fetchTicketDetail, fetchTicketThread, setTicketStatus } from "@/lib/api/tickets";
@@ -1742,12 +1743,11 @@ function AttachmentsSection({
  */
 function AttachmentPhoto({ file }: { file: TicketAttachmentFile }) {
   const [failed, setFailed] = useState(false);
+  const [reason, setReason] = useState<string | null>(null);
 
   if (!file.src || failed) {
     return (
-      <span className={styles.photoMissing}>
-        Not available — the message may have left the mailbox.
-      </span>
+      <span className={styles.photoMissing}>{reason ?? ATTACHMENT_REASON_FALLBACK}</span>
     );
   }
 
@@ -1759,7 +1759,15 @@ function AttachmentPhoto({ file }: { file: TicketAttachmentFile }) {
         src={file.src}
         alt={file.name ?? "Photo attached by the customer"}
         loading="lazy"
-        onError={() => setFailed(true)}
+        // The reason travels as a response header and an `<img>` cannot read
+        // one, so the failure path asks the route directly. Until it answers,
+        // the neutral sentence stands rather than a guess at the cause.
+        onError={() => {
+          setFailed(true);
+          if (file.src) {
+            void fetchAttachmentReason(file.src).then(setReason);
+          }
+        }}
       />
     </a>
   );

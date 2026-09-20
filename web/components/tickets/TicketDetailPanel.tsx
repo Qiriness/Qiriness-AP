@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { ATTACHMENT_REASON_FALLBACK, fetchAttachmentReason } from "@/lib/attachment-reasons";
 import { knowledgeErrorMessage } from "@/lib/api/knowledge";
 import { fetchTicketDetail } from "@/lib/api/tickets";
 import { formatRelativeTime } from "@/lib/relative-time";
@@ -663,12 +664,11 @@ function AttachmentsBlock({ attachments }: { attachments: TicketAttachments | nu
  */
 function Photo({ file }: { file: TicketAttachmentFile }) {
   const [failed, setFailed] = useState(false);
+  const [reason, setReason] = useState<string | null>(null);
 
   if (!file.src || failed) {
     return (
-      <span className={styles.photoMissing}>
-        Not available — the message may have left the mailbox. Open it in Outlook.
-      </span>
+      <span className={styles.photoMissing}>{reason ?? ATTACHMENT_REASON_FALLBACK}</span>
     );
   }
 
@@ -685,7 +685,15 @@ function Photo({ file }: { file: TicketAttachmentFile }) {
         src={file.src}
         alt={file.name ?? "Photo attached by the customer"}
         loading="lazy"
-        onError={() => setFailed(true)}
+        // The reason travels as a response header and an `<img>` cannot read
+        // one, so the failure path asks the route directly. Until it answers,
+        // the neutral sentence stands rather than a guess at the cause.
+        onError={() => {
+          setFailed(true);
+          if (file.src) {
+            void fetchAttachmentReason(file.src).then(setReason);
+          }
+        }}
       />
     </a>
   );
