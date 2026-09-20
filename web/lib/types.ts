@@ -624,10 +624,11 @@ export interface TicketOrderFacts {
   trackingStatus: string | null;
   tracking: TicketTracking[];
   /**
-   * Line-item titles. Read for the LAST-ORDER block, where "is this the order
-   * they mean" is the question a reviewer is actually answering and the items
-   * are what answers it. The confirmed block does not render them — there the
-   * order is already known to be the right one.
+   * Line-item titles. Rendered on BOTH order blocks in the context pane. On the
+   * last-order block they answer "is this the order they mean"; on a confirmed
+   * order that question is settled, but what was bought is still what a reviewer
+   * needs to answer the mail — which product the complaint names, how much is in
+   * the parcel that has not arrived.
    */
   items: string[];
   /** When the bundle was assembled; a stale one describes an older order state. */

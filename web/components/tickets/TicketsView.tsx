@@ -1737,7 +1737,12 @@ function OrderFactsBlock({
           ["Order contact", order.contactEmail],
           ["Order status", order.orderStatus],
           ["Tracking status", order.trackingStatus],
-          ["Items", candidate && order.items.length > 0 ? order.items.join(", ") : null],
+          // On BOTH blocks. It was candidate-only on the reasoning that a
+          // confirmed order is already the right one, but what was bought is
+          // the line a reviewer needs to answer the reply itself — which
+          // product the complaint is about, whether the parcel that is late
+          // holds one item or four.
+          ["Items", order.items.length > 0 ? order.items.join(", ") : null],
         ]}
       />
       {order.tracking.length > 0 && (
