@@ -39,6 +39,10 @@ export function caseFileFromRow(row) {
     missing: array(row?.missing),
     doNotClaim: array(row?.do_not_claim),
     knowledge: array(row?.knowledge),
+    // The shop's own product list, as the tool wrote it. Read by name like
+    // everything else here, and empty on every row stored before the column
+    // existed — which renders as no block rather than as a missing section.
+    recommendations: array(row?.recommendations),
     // ONE FIELD OUT OF `exemplar_match`, NAMED. That column also holds the
     // similarity, the margin, the runner-up and every finding the run resolved —
     // diagnostics for a person, none of which a customer's reply has any use

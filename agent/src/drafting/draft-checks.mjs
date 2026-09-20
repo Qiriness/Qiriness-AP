@@ -121,7 +121,13 @@ export const ADVISORY_CAVEATS = [
   // tool no longer states the absence of a limit at all, which removes the
   // source rather than policing the wording. Listed here so a reviewer sees this
   // prohibition was reported and not examined.
-  'promotion_limits_internal'
+  'promotion_limits_internal',
+  // ADVISORY BY DECISION, LIKE THE ONE ABOVE. The wording IS catchable, and it
+  // is caught — by `no_unsuitability_claim` in FORBIDDEN_PATTERNS, which runs on
+  // every reply rather than only on the tickets that raised this caveat. A
+  // per-caveat copy of the same pattern would flag one sentence twice, and a
+  // reviewer reading two lines for one problem learns to skim both.
+  'product_fit_unstated'
 ];
 
 /**
@@ -146,6 +152,46 @@ export const FORBIDDEN_PATTERNS = [
     // it — and a customer's is withheld by default, so there is no address a
     // correct draft has a reason to contain.
     pattern: /\b[\w.+-]+@[\w-]+\.[\w.]{2,}\b/
+  },
+  {
+    check: 'no_unsuitability_claim',
+    label: 'dit qu’un produit n’est pas adapté',
+    // NOT GATED ON THE CAVEAT, like the carrier-scan rule below and for the same
+    // reason: a product is presented for what it answers and never for what it
+    // does not, on every ticket, whatever the case file happened to raise
+    // (owner's rule, 2026-09-20). Measured: a reply told a customer with
+    // reactive skin that two cleansers « ne sont pas spécifiquement adaptés aux
+    // peaux sensibles » — a sentence that helps nobody and reads as a warning
+    // about products we had just recommended.
+    //
+    // IT WILL ALSO FIRE ON A SAFETY WARNING taken from an approved article
+    // (« déconseillé pendant la grossesse »). That is a reviewer flag rather
+    // than a wrong sentence, and a failed check sends the draft to a person
+    // instead of blocking it — which is the right cost for the one case where
+    // the negative is the answer.
+    pattern:
+      /\b(n['’](?:est|a)\s+pas\s+(?:spécifiquement\s+|vraiment\s+|particulièrement\s+)?(?:adapté|adaptée|conçu|conçue|formulé|formulée|recommandé|recommandée|indiqué|indiquée)|ne\s+sont\s+pas\s+(?:spécifiquement\s+|vraiment\s+|particulièrement\s+)?(?:adaptés|adaptées|conçus|conçues|formulés|formulées|recommandés|recommandées|indiqués|indiquées)|ne\s+convien(?:t|nent)\s+pas|déconseillé)/i
+  },
+  {
+    check: 'no_internal_selection_name',
+    label: 'cite une sélection interne ou une marque entre crochets',
+    // MEASURED on ticket 05c1b539 (2026-09-20): a reply went out with
+    // « **Crèmes Hydratantes, Soins Hydratants** » as a heading and « *Caresse
+    // Sensi Zen* [Soins Peaux Sensibles] » as a line. Both are the shop's own
+    // grouping, restated to a customer as if it were advice — the case file
+    // carried them as notation and both models copied them through.
+    //
+    // The tool no longer emits either (tool-registry `adviceText` names the
+    // group in the customer's own word and states the fit in prose). This is the
+    // check that says so, on every reply.
+    //
+    // THE LINK MARKER IS THE ONE BRACKET A REPLY MAY CARRY — « [[ici]] » is the
+    // approved placeholder, so it is removed before the rest is examined.
+    prepare: (body) => body.replace(/\[\[[^\]]*\]\]/g, ' '),
+    // Bracket notation of any kind, and the « Diag - » prefix the shop's quiz
+    // collections carry. No collection title is hard-coded: the titles are the
+    // shop's and change whenever somebody curates.
+    pattern: /(\[[^\]]{3,}\]|\bDiag\s*-\s)/
   },
   {
     check: 'no_carrier_scan_wording',
@@ -318,8 +364,10 @@ export function runDraftChecks({
   }
 
   // --- what no reply may contain -------------------------------------------
-  for (const { check, label, pattern } of FORBIDDEN_PATTERNS) {
-    const hit = text.match(pattern);
+  for (const { check, label, pattern, prepare } of FORBIDDEN_PATTERNS) {
+    // A check may exempt part of the reply before matching — the approved link
+    // marker « [[ici]] » is the one bracket a draft is allowed to carry.
+    const hit = (prepare ? prepare(text) : text).match(pattern);
     checks.push({
       check,
       passed: !hit,

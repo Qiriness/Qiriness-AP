@@ -3055,19 +3055,19 @@ Measured 2026-09-16 with six collections activated: `Sérums Visage` ∩ `Diag -
 
 Running a real ticket through the pass found both halves failing, differently.
 
-- **The type of care is read from the text, not asked of the model.** On « je voudrais un sérum … peau sensible … des rides » the model returned two concerns and no serum, and the answer was a sunscreen, a cream and a mist. It is the one requirement the customer has already decided — leaving it to the model to remember put the load-bearing part on judgement. `careCollectionsInText` reads it; the model still names the concerns, because « ma peau tiraille » is not in any word list. **A cue resolves to a token, never to a handle**: which collections exist is the shop's and changes with curation, so activating « Soins solaires et teintés » is what makes « spf » reachable. **Ambiguity resolves to nothing** — « une crème » is three live collections here.
+- **The type of care is read from the text, not asked of the model.** On « je voudrais un sérum … peau sensible … des rides » the model returned two concerns and no serum, and the answer was a sunscreen, a cream and a mist. It is the one requirement the customer has already decided — leaving it to the model to remember put the load-bearing part on judgement. `careCollectionsInText` reads it; the model still names the concerns, because « ma peau tiraille » is not in any word list. **A cue resolves to a token, never to a handle**: which collections exist is the shop's and changes with curation, so activating « Soins solaires et teintés » is what makes « spf » reachable. **Ambiguity resolves to nothing** — « une crème » is three live collections here. *(Superseded 2026-09-19 — see § « One group per type of care ».)*
 - **A near miss is reconciled, because the candidate set is closed.** The model asked for « Diag - Peaux Sensibles », inventing the prefix off the fourteen collections carrying it; the shop's is « Soins Peaux Sensibles ». Exact matching reported it uncurated and the reply then told the customer the shop had no sensitive-skin selection, which was false — a worse failure than the one strictness was guarding against. Three passes, each needing a unique winner: exact; the collection's distinctive words inside the requirement; the requirement's words inside the title. **Tolerance is only safe here because nothing outside the activated list is a candidate**, so no amount of looseness can reach Black Friday. Two candidates is unknown, never the first of them.
 
 The lesson worth keeping: the strict matcher was defended on the grounds that looseness could reach an unactivated collection. It cannot — `is_active` filters the candidates before any matching happens — so the strictness was buying nothing and costing a true statement about the catalogue.
 
-**A concern IS a collection: the skin-cue path is gone (owner's correction, same day).**
+**A concern IS a collection: the skin-cue path is gone (owner's correction, same day).** *(Partly superseded 2026-09-20 — see § « Both axes are read from the message »: a cue list for concerns is back as a backstop, still resolving to tokens rather than handles.)*
 
 The tool had two ways of answering the same question. `by_concern` read five hand-written cue lists out of the message (`concernsInText`) and returned whatever was ticked for them; `by_collection` reads what the model named against the collections the shop actually curates. Twenty-six of those are live against five cues, and « peau sensible » is a collection — `Soins Peaux Sensibles` — so the cue path was a narrower duplicate that could only ever answer a fraction of what the wider one does. **Removed**, along with the outcome, the need's satisfying entry and the finding value. `concernsInText` survives as a diagnostic on the ledger and nothing branches on it.
 
 - **`conseil_selection_retenue` was narrowed to `["cross_sell"]`** rather than left naming an outcome the tool can no longer produce. `normaliseConditions` would have dropped the dead value at load time, silently, which is the failure this codebase refuses everywhere else.
 - **`not_curated` and `nothing_to_go_on` are now measured against the requirements**, not the cues: the first means the model read what the customer wants and no active collection holds an answer — a gap in curation, and a colleague should advise; the second means the message named nothing usable, where asking is the move.
 
-**THE TYPE OF CARE IS NEVER GIVEN UP, and it is a rule rather than a tie-break.** It was a preference first, and that was wrong: the relaxation would happily drop « Crèmes Mains » to keep two concerns that overlap somewhere else in the catalogue, and answer a hand-cream question with a face serum that suits sensitive mature skin. Only concerns are droppable while any category stands, so **every product put forward is in the form the customer asked for**. A concern is a reason to prefer one hand cream over another; dropping it still answers the question. Two categories that share no product report nothing rather than picking — « un sérum ET une crème » is two answers, and this module has no way to say so.
+**THE TYPE OF CARE IS NEVER GIVEN UP, and it is a rule rather than a tie-break.** It was a preference first, and that was wrong: the relaxation would happily drop « Crèmes Mains » to keep two concerns that overlap somewhere else in the catalogue, and answer a hand-cream question with a face serum that suits sensitive mature skin. Only concerns are droppable while any category stands, so **every product put forward is in the form the customer asked for**. A concern is a reason to prefer one hand cream over another; dropping it still answers the question. Two categories that share no product report nothing rather than picking — « un sérum ET une crème » is two answers, and this module has no way to say so. *(Superseded 2026-09-19 — see § « One group per type of care »: the type of care is still never given up, but a concern no longer is either; it ranks.)*
 
 **The curation screen, and what a tick means now.**
 
@@ -3078,6 +3078,93 @@ The tool had two ways of answering the same question. `by_concern` read five han
 - **A collection's ticks only REORDER.** The intersection decides which products answer; a tick moves one to the front — so the tool fetches twelve candidates and shows three, ticked first. That is what makes an untouched collection "no preference" rather than a gap, and the screen labels the two groups so a zero is not read as unfinished work.
 
 Measured live the same day with six collections activated: `Sérums Visage` + `Diag - Rides et ridules` returns the three Élixir anti-âge serums, each with its own one-line description and skin fit; + `Diag - Taches` alone returns the single Sérum Anti-Taches; all three together relax `rides` (the broader concern, 18 products against 5) and say so; `Soins Contour des Yeux` + `Diag - Cernes et poches` returns the three eye products; and an uncurated « Soins Solaires » comes back as unmatched rather than answered.
+
+### The product list reaches drafting as the tool wrote it (2026-09-20)
+
+Three stages, each rewriting the last: a tool picks the products, the investigation model writes a case file about them, the drafting model writes the email. That is right for a verdict, which needs judgement, and wrong for a list a reply quotes almost verbatim. Measured on ticket `05c1b539`: the retellings flattened three groups into one sentence claiming all six products suited reactive skin (two are in no such selection), dropped every product's description, and the reply then invented one for each bare name — « idéale pour nettoyer en douceur », « pour une protection solaire optimale ».
+
+**`recommendations` is the fix, and it copies what `knowledge` already does.** An approved article reaches the drafting stage as written; so now does the shop's own product list. `run.recommendations()` reads it off the tool ledger, `buildCaseFile` carries it, migration 32 stores it, and `toDraftingPrompt` prints it **first, before `## Établi`**, saying in words that it is the exact one and that each description is to be reused as written.
+
+**ONE RENDERER FOR BOTH READERS.** `productLine` in `tool-registry.mjs` produces the string the investigation model reads in the tool result AND the string stored in the block. Two renderers would drift, and the point of storing it is that drafting reads what the tool actually said.
+
+**Two things were tried here and reverted; both are in the code as comments, because the measurement is the useful part.**
+
+- **Dropping the model's re-listing**, so the prompt held one list instead of two. The reply then invented « Élixir Temps Précieux » and « Crème Éclat Parfait » — products the shop does not sell.
+- **Pointing the facts line at the block** (« Les produits retenus ci-dessus ») instead of leaving it empty. The reply then named no product at all and offered « notre gamme de nettoyants doux » in general terms.
+
+**What that measures is worth more than either change: `established` is what the drafting model answers from**, and the reply imitates whatever shape that section has. A second, better copy printed ABOVE it did not win — three runs in a row, the reply mirrored the summary: a flat sentence of names produced a flat list with invented benefits, an empty section produced invented products, a grouped list of bare names produced grouped bare names.
+
+**So the tool's wording goes INTO that section, beside the model's summary rather than instead of it** (`recommendationFindings`): one code-written entry per type of care, each carrying the tool's own product lines and cited to the `recommendProducts` call like any other claim. Additive was chosen over substitution deliberately — a claim can cite a tool AND add something the tool never said, and the worst case of adding is a repetitive email, where the worst case of replacing is a lost fact.
+
+It is the rule the asking sentences already follow (§ MISSING_FIELDS): **the model picks WHICH fact matters; code owns the wording wherever code has an authoritative one.** Thin on purpose — one tool has a canonical rendering today; the order bundle and a promotion's conditions would be two more entries, not a mechanism.
+
+**Measured on the ticket after the change:** the reply names the six products under the customer's own three headings, each with the shop's own description, and the sensitive-skin fit on exactly the two products that carry it. No invented product, no invented benefit, no internal notation, checks pass. `establishedLines` survives as the guard that the facts section never reads « aucun fait » over a full block.
+
+**A block is evidence in its own right.** A model returning no established fact while the shop's selection stands has something to answer from, and is no longer downgraded to `needs_human` for having nothing to go on.
+
+**Where it stands after the change**, re-run on the ticket: the reply names the six real products under the customer's own three headings, with no invented product, no invented benefit, no internal notation and nothing about what a product is not for. It does NOT restate each product's description or its sensitive-skin fit, both of which are in the prompt — the remaining gap, and the case for a check that compares a drafted description against the block rather than another prompt line.
+
+### A product is presented for what it answers, never for what it is not (2026-09-20)
+
+Owner's rule, after the reply on ticket `05c1b539` told a customer with reactive, allergy-prone skin that two cleansers « ne sont pas spécifiquement adaptés aux peaux sensibles ». That sentence helps nobody: it is a warning about products we had just put forward, in a reply she asked for advice in. **Only the positive is ever stated — this holds for any product and any property, not just skin concerns.**
+
+**The source was a prohibition that stated the fact it forbids**, which is the second time this codebase has made that exact mistake. `adviceText` ended each group with « Aucun de ces produits ne figure dans : Soins Peaux Sensibles — NE PAS laisser entendre qu'ils répondent à ce point-là », and the model paraphrased it to the customer — the same failure as § « The absence of a carrier scan is a fact about us », where 8 of 81 drafts repeated a caveat's own explanation.
+
+Three changes, and the first is the one that matters:
+
+1. **The tool no longer states the gap at all** (`tool-registry.mjs`, `adviceText`). A product line carries the selections it IS in, in brackets; an untagged line carries nothing, and the instruction says a line without brackets is not to be commented on. The unmet concern stays in `data.missing` and in the `relaxed` outcome — read by the rules and by the ledger, never by the model.
+2. **`product_fit_unstated`** (`case-file.mjs`) forbids the class of sentence wherever else the model might reach for it, and **names nothing** — no concern, no product, no reason. Raised by every `recommendProducts` answer including `cross_sell`, because « ne convient pas » is as wrong beside a cross-sell as beside an advice answer.
+3. **`no_unsuitability_claim`** (`draft-checks.mjs`) is a FORBIDDEN_PATTERN, **not gated on the caveat**, exactly like `no_carrier_scan_wording`: the rule holds on every reply whatever the case file raised. It catches « n'est pas adapté / conçu / formulé / recommandé », « ne convient pas », « déconseillé ».
+
+**The caveat is listed as advisory rather than given its own pattern.** The wording IS catchable — it is caught, unconditionally, by the check above. A per-caveat copy would flag one sentence twice, and a reviewer reading two lines for one problem learns to skim both.
+
+**What the customer's request still says.** « Ce que le client demande : … préoccupations — Soins Peaux Sensibles » stays in the tool text, once, as a restatement of what was asked. The reply needs it to say a colleague will come back on the rest; what it may never appear in is a sentence about a product. Asserted by count in the tests.
+
+**A known false positive, accepted.** An approved article can say a product is not recommended during pregnancy or with a medical condition, and the check fires on that too. A failed check sends the draft to a person rather than blocking it, which is the right price for the one case where the negative IS the answer.
+
+### Both axes are read from the message, and neither source is trusted alone (2026-09-20)
+
+Ticket `05c1b539` run three times in two days named the requirements three different ways, and the model dropped one axis every time:
+
+| Run | What the model passed | What came back |
+|---|---|---|
+| 2026-09-19 | `["Soins Peaux Sensibles"]` — the concern, no type of care | the cleansers only, sensitive skin dropped by the intersection |
+| 2026-09-20 (after § « One group per type of care ») | the concern again, no type of care | correct: three groups, Sensi Zen and SPF 50 leading |
+| 2026-09-20 (after the tool description asked for every type of care) | `["Nettoyants & démaquillants", "Crèmes Hydratantes", "Soins Hydratants"]` — three types of care, **no concern** | six products, **a retinol cream to a customer who wrote « peau très réactive et sujette aux allergies »**, and a case file calling the whole list « adapté aux peaux très réactives » |
+
+Pushing the description towards one axis moved the omission to the other. So the concern now has the backstop the type of care already had: `concern-cues.mjs` reads it from the message, and the result is merged with whatever the model names.
+
+**This reverses § « A concern IS a collection: the skin-cue path is gone »**, which removed an earlier cue path because the model naming collections covers strictly more. It covers more only when it names them, and three runs say it does not reliably name both at once. What survives of that decision is the part that mattered: a cue resolves to a TOKEN looked up in the ACTIVATED collections, never to a hard-coded handle, so activating a collection is still what makes a word reachable.
+
+- **The model's reading wins over the cue's** when they cover the same collection: it named « Diag - Rides visibles » where the cue reads every wrinkle collection at once, and the narrower one is what the customer wrote.
+- **One entry is ONE concern however many collections it covers.** « rides » is five collections here; counting them separately would rank a product in three of them above one meeting both sensitive skin AND wrinkles, which is the ranking upside down. A multi-collection entry prints its own label on a product line, because five collection names in brackets is noise.
+- **Dry skin resolves to the HYDRATING GROUP, not to a concern** (owner's call). No concern collection describes dryness on this shop and the answer to « ma peau tiraille » is a moisturiser, so the dryness words sit on the `hydrat` care cue. A concern cue would have found nothing and lost the question.
+- **Redness and allergy words are IN this list** and deliberately absent from `product-concerns.mjs`. The two lists answer different questions: that one feeds tag reading on any subject, this one is only ever consulted by `recommendProducts`, and `cosmetovigilance` cannot call that tool at all (`TOOLS_BY_SUBJECT`) — its answer set routes every ticket to a person regardless. So the guard against pulling a reaction report into product advice lives upstream, in the subject split, not here. Measured over the corpus before adding them: « rougeur » and « couperose » in 0 tickets, « allergie » in 1 — a `product` advice ticket describing a skin type.
+- **`cue-matching.mjs` is shared** by both lists. Two ideas of what a whole word is was the drift worth one module to prevent. It also allows a PHRASE as a token, because « age » is three letters and would match « agenda » while « Diag - Anti-âge » has to be reachable.
+
+Verified by re-running the ticket: the model again named three types of care and no concern, the cue supplied sensitive skin, and the case file now separates the two cleansers (« ne sont pas spécifiquement adaptés aux peaux sensibles ») from Caresse Sensi Zen and UV Protect SPF 50 (« adaptés aux peaux sensibles »). The draft says the same, in those terms.
+
+### One group per type of care; concerns rank, they do not filter (2026-09-19)
+
+Owner's correction, after ticket `05c1b539`: « quels produits … (nettoyant, hydratant, protection, etc.) … peau très réactive et sujette aux allergies ». The answer was two cleansers, the case file recorded *« aucun produit du catalogue ne correspond aux peaux réactives »*, and the draft passed that on. It was false: `Soins Peaux Sensibles` holds Caresse Sensi Zen, Brume Sensi Zen and UV Protect SPF 50 — the moisturiser and the protection the customer asked for.
+
+**Three rules produced it, and each was defensible alone.**
+
+- « hydratant » had no cue, and adding one would not have helped: it lands on Crèmes Hydratantes, Soins Hydratants and Masques hydratants, and **a cue landing on more than one collection was dropped**.
+- Bare « protection » was not a cue — only « protection solaire ».
+- `chooseProducts` **intersected** everything asked for and **never gave up a category**, so with the cleanser as the only category left standing, sensitive skin was the requirement it dropped.
+
+**What replaced it** (`careGroups` / `rankGroup` / `bestTier` in `advice-collections.mjs`):
+
+- **A type of care is a GROUP, and a group may span several collections.** Picking one of three hydrating collections would be inventing; offering from all three is not, because the group is answered as a whole. Bare « crème » is still no cue — Jour, Hydratantes, Mains and Corps together is a catalogue page.
+- **Several types of care are several groups, each answered on its own**, in the order the customer wrote them. « Un sérum ET une crème » is two answers, which the intersection could not say. A product put forward by one group is not offered again by the next.
+- **Concerns RANK inside a group; they never remove one.** Products meeting the most concerns lead, then those in the narrowest selections. **Only the best tier goes out**: with two moisturisers in the sensitive-skin selection, a third that is not has no business beside them in a reply to somebody with allergies — it would be the one they bought. With nothing meeting a concern, plain members of the type are put forward and the concern is named as unmet.
+- **Three per answer for one type of care, two each for several** — three questions at three each is a catalogue page.
+- **Every product line carries the selections it is in**, in brackets, and the tool tells the model that bracket is the only licence to call a product suitable for a concern. The products in one reply now answer different parts of the request, so a sentence true of one line is false of the next.
+- **`relaxed` keeps its meaning for the rules**: some product put forward does not meet every concern asked for, and the case file names which. `by_collection` means every product meets every concern. Six approved rules branch on these and their skeletons read unchanged.
+- **The model is told to name every type of care**, not the first — the text cues are the backstop, not the only source.
+
+Verified on the ticket's own text against the live collections: « nettoyant » → Mousse Divine, Regard Velours, flagged as not in the sensitive-skin selection; « hydratant » → Caresse Sensi Zen, Brume Sensi Zen; « protection » → UV Protect SPF 50; outcome `relaxed`. Not yet re-run end to end through the investigation and drafting.
 
 ### Quoted history is split off, not deleted (2026-09-16)
 

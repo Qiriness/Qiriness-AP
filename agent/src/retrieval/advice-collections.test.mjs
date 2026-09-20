@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { chooseProducts, resolveRequirements } from './advice-collections.mjs';
+import { bestTier, careGroups, rankGroup, resolveRequirements } from './advice-collections.mjs';
 
 const SERUMS = { handle: 'serums-visage', title: 'Sérums Visage', axis: 'category', productIds: ['a', 'b', 'c'] };
 const RIDES = {
@@ -46,111 +46,103 @@ test('the same collection named twice counts once', () => {
   assert.equal(matched.length, 1);
 });
 
-// --- choosing ------------------------------------------------------------------
+// --- grouping ------------------------------------------------------------------
 
-test('it returns what sits in every named collection', () => {
-  const chosen = chooseProducts([SERUMS, RIDES]);
-  assert.deepEqual(chosen.products, ['b', 'c']);
-  assert.deepEqual(chosen.matchedOn, ['serums-visage', 'diag-rides-et-ridules']);
-  assert.deepEqual(chosen.dropped, []);
-  assert.equal(chosen.relaxed, false);
-});
-
-test('nothing in all three relaxes one, and says which', () => {
-  // The reply may then say « pour les rides, en sérum » without also claiming
-  // the product treats taches. Silence here would make a 2-of-3 product read
-  // exactly like a 3-of-3 one.
-  const chosen = chooseProducts([SERUMS, RIDES, TACHES]);
-  assert.equal(chosen.relaxed, true);
-  assert.deepEqual(chosen.dropped, ['diag-taches']);
-  assert.deepEqual(chosen.products, ['b', 'c']);
-  assert.deepEqual(chosen.matchedOn, ['serums-visage', 'diag-rides-et-ridules']);
-});
-
-test('the broadest concern goes before a narrower one', () => {
-  const broad = { handle: 'broad', title: 'Broad', axis: 'concern', productIds: ['p', 'q', 'r', 's'] };
-  const narrow = { handle: 'narrow', title: 'Narrow', axis: 'concern', productIds: ['z'] };
-  const chosen = chooseProducts([broad, narrow]);
-  assert.deepEqual(chosen.dropped, ['broad'], 'the one committing to least is dropped first');
-  assert.deepEqual(chosen.products, ['z']);
-});
-
-test('the category the customer named survives every concern', () => {
-  // « Un sérum pour mes rides » with no anti-wrinkle serum is better answered
-  // with a serum than with an anti-wrinkle cream: swapping the form is a
-  // different product, where a broader concern still answers the same question.
-  const impossible = { handle: 'impossible', title: 'Impossible', axis: 'concern', productIds: ['zz'] };
-  const chosen = chooseProducts([SERUMS, impossible]);
-  assert.deepEqual(chosen.dropped, ['impossible']);
-  assert.deepEqual(chosen.matchedOn, ['serums-visage']);
-  assert.deepEqual(chosen.products, ['a', 'b', 'c']);
-});
-
-test('one collection alone is not relaxed away into nothing', () => {
-  const empty = { handle: 'empty', title: 'Empty', axis: 'concern', productIds: [] };
-  const chosen = chooseProducts([empty]);
-  assert.deepEqual(chosen.products, []);
-  assert.equal(chosen.relaxed, false, 'there was nothing to relax');
-  assert.deepEqual(chosen.matchedOn, []);
-});
-
-test('no collections at all is an empty answer, not a crash', () => {
-  const chosen = chooseProducts([]);
-  assert.deepEqual(chosen, { products: [], matchedOn: [], dropped: [], relaxed: false });
-});
-
-test('the limit caps how many are put forward', () => {
-  // Three is a recommendation; eight is a catalogue page, and the customer is
-  // back where they started.
-  assert.equal(chooseProducts([RIDES]).products.length, 3);
-  assert.equal(chooseProducts([RIDES], { limit: 2 }).products.length, 2);
-});
-
-// --- the type of care is what the customer asked for ---------------------------
-
-test('a category is never given up to satisfy two concerns', () => {
-  // THE REGRESSION THIS EXISTS FOR. « Une crème pour les mains, j'ai la peau
-  // sensible et mature » — no hand cream is in both concerns, but the two
-  // concerns overlap on a face serum. Giving up the hand cream to keep them is
-  // not a narrower answer, it is the wrong product.
-  const mains = { handle: 'cremes-mains', title: 'Crèmes Mains', axis: 'category', productIds: ['h1', 'h2'] };
-  const sensible = { handle: 'peaux-sensibles', title: 'Peaux Sensibles', axis: 'concern', productIds: ['h1', 'serum'] };
-  const mature = { handle: 'anti-age', title: 'Anti-âge', axis: 'concern', productIds: ['h2', 'serum'] };
-
-  const chosen = chooseProducts([mains, sensible, mature]);
-  assert.ok(chosen.matchedOn.includes('cremes-mains'), 'the hand cream was given up');
-  assert.ok(!chosen.dropped.includes('cremes-mains'));
-  assert.ok(chosen.products.every((id) => mains.productIds.includes(id)), 'a non-hand-cream got through');
-});
-
-test('every product put forward is in the type of care that was named', () => {
-  const serums = { handle: 'serums', title: 'Sérums', axis: 'category', productIds: ['s1', 's2'] };
-  const impossible = { handle: 'impossible', title: 'Impossible', axis: 'concern', productIds: ['x'] };
-  const other = { handle: 'other', title: 'Other', axis: 'concern', productIds: ['x'] };
-
-  const chosen = chooseProducts([serums, impossible, other]);
-  assert.deepEqual(chosen.matchedOn, ['serums']);
-  assert.deepEqual(chosen.products, ['s1', 's2']);
-  assert.deepEqual(chosen.dropped.sort(), ['impossible', 'other']);
-});
-
-test('two types of care that share nothing is a failure, not a pick', () => {
-  // « Un sérum ET une crème » is two answers rather than one product, and this
-  // module has no way to say so — so it reports nothing instead of silently
-  // dropping one of the two things the customer asked for.
-  const serums = { handle: 'serums', title: 'Sérums', axis: 'category', productIds: ['s1'] };
+test('each type of care is its own group, and the concerns stay beside them', () => {
   const cremes = { handle: 'cremes', title: 'Crèmes', axis: 'category', productIds: ['c1'] };
-
-  const chosen = chooseProducts([serums, cremes]);
-  assert.deepEqual(chosen.products, []);
-  assert.deepEqual(chosen.matchedOn, []);
+  const { groups, concerns } = careGroups([{ label: 'sérum', collections: [SERUMS] }], [cremes, RIDES]);
+  assert.deepEqual(
+    groups.map((g) => [g.label, g.collections.map((c) => c.handle)]),
+    [
+      ['sérum', ['serums-visage']],
+      ['Crèmes', ['cremes']]
+    ]
+  );
+  assert.deepEqual(concerns.map((c) => c.handle), ['diag-rides-et-ridules']);
 });
 
-test('with no category at all, concerns relax against each other as before', () => {
-  const a = { handle: 'a', title: 'A', axis: 'concern', productIds: ['p', 'q', 'r'] };
-  const b = { handle: 'b', title: 'B', axis: 'concern', productIds: ['z'] };
-  const chosen = chooseProducts([a, b]);
-  assert.equal(chosen.relaxed, true);
-  assert.deepEqual(chosen.dropped, ['a'], 'the broadest went first');
-  assert.deepEqual(chosen.products, ['z']);
+test('a category the cues already hold is not a second group', () => {
+  const { groups } = careGroups([{ label: 'sérum', collections: [SERUMS] }], [SERUMS]);
+  assert.equal(groups.length, 1);
+});
+
+test('with no type of care, the concerns are the pool', () => {
+  // « Quoi pour mes rides ? » is still answerable: from the rides collection.
+  const { groups } = careGroups([], [RIDES]);
+  assert.deepEqual(groups, [{ label: null, collections: [RIDES] }]);
+});
+
+test('nothing named is nothing to group', () => {
+  assert.deepEqual(careGroups([], []), { groups: [], concerns: [] });
+});
+
+// --- ranking inside a group --------------------------------------------------------
+
+test('products meeting the concern come first; the rest are kept behind them', () => {
+  const ranked = rankGroup([SERUMS], [RIDES]);
+  assert.deepEqual(ranked.map((r) => r.id), ['b', 'c', 'a']);
+  assert.deepEqual(ranked[0].meets, ['diag-rides-et-ridules']);
+  assert.deepEqual(ranked[2].meets, []);
+});
+
+test('a concern nothing meets does not lose the group', () => {
+  // THE REGRESSION THIS EXISTS FOR. The intersection gave up whichever side
+  // stood in the way; now the type of care is always answered and the concern
+  // only orders it. The caller reports the concern as unmet.
+  const ranked = rankGroup([SERUMS], [TACHES]);
+  assert.deepEqual(ranked.map((r) => r.id), ['a', 'b', 'c']);
+  assert.ok(ranked.every((r) => r.meets.length === 0));
+});
+
+test('meeting more concerns beats meeting a narrower one', () => {
+  const pool = { handle: 'p', title: 'P', axis: 'category', productIds: ['one', 'both'] };
+  const x = { handle: 'x', title: 'X', axis: 'concern', productIds: ['one'] };
+  const y = { handle: 'y', title: 'Y', axis: 'concern', productIds: ['both', 'q', 'r'] };
+  const z = { handle: 'z', title: 'Z', axis: 'concern', productIds: ['both', 's', 't'] };
+  assert.deepEqual(rankGroup([pool], [x, y, z]).map((r) => r.id), ['both', 'one']);
+});
+
+test('at equal count the narrower selection leads', () => {
+  // A product in a 3-product selection says more than one in a 50-product one.
+  const pool = { handle: 'p', title: 'P', axis: 'category', productIds: ['broad', 'narrow'] };
+  const broad = { handle: 'broad', title: 'Broad', axis: 'concern', productIds: ['broad', 'q', 'r', 's'] };
+  const narrow = { handle: 'narrow', title: 'Narrow', axis: 'concern', productIds: ['narrow'] };
+  assert.deepEqual(rankGroup([pool], [broad, narrow]).map((r) => r.id), ['narrow', 'broad']);
+});
+
+test('a group spanning several collections is one pool, without duplicates', () => {
+  const cremes = { handle: 'cremes-hydratantes', title: 'Crèmes Hydratantes', axis: 'category', productIds: ['h1', 'h2'] };
+  const soins = { handle: 'soins-hydratants', title: 'Soins Hydratants', axis: 'category', productIds: ['h2', 'h3'] };
+  const sensible = { handle: 'peaux-sensibles', title: 'Soins Peaux Sensibles', axis: 'concern', productIds: ['h3'] };
+  assert.deepEqual(rankGroup([cremes, soins], [sensible]).map((r) => r.id), ['h3', 'h1', 'h2']);
+});
+
+test('what an earlier group put forward is not offered again', () => {
+  assert.deepEqual(rankGroup([SERUMS], [], { exclude: new Set(['a']) }).map((r) => r.id), ['b', 'c']);
+});
+
+// --- the best tier -------------------------------------------------------------------
+
+test('only the best tier is put forward', () => {
+  // Two moisturisers in the sensitive-skin selection: a third that is not has
+  // no business beside them in a reply to somebody with allergies.
+  const ranked = rankGroup([SERUMS], [RIDES]);
+  assert.deepEqual(bestTier(ranked).map((r) => r.id), ['b', 'c']);
+});
+
+test('with nothing meeting a concern, plain members of the type are the tier', () => {
+  const ranked = rankGroup([SERUMS], [TACHES]);
+  assert.deepEqual(bestTier(ranked, { limit: 2 }).map((r) => r.id), ['a', 'b']);
+});
+
+test('a tick reorders within the tier and never lifts a product into it', () => {
+  const ranked = rankGroup([SERUMS], [RIDES]);
+  const ticked = (id) => (entry) => entry.id === id;
+  assert.deepEqual(bestTier(ranked, { isPreferred: ticked('c') }).map((r) => r.id), ['c', 'b']);
+  assert.deepEqual(bestTier(ranked, { isPreferred: ticked('a') }).map((r) => r.id), ['b', 'c']);
+});
+
+test('an empty group is an empty answer, not a crash', () => {
+  assert.deepEqual(bestTier([]), []);
+  assert.deepEqual(rankGroup([], [RIDES]), []);
 });

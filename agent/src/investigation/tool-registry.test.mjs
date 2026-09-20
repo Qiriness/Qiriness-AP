@@ -665,7 +665,7 @@ test('products in every named collection come back as by_collection', async () =
   assert.match(result.promptText, /- Sérum Anti-âge Liftant — Lisse les rides\. Pour peau mature\./);
 });
 
-test('a requirement given up is its own outcome and is said out loud', async () => {
+test('a requirement given up is its own outcome, and is never said in words', async () => {
   // `relaxed` rather than a flag inside `data`: a rule branches on the outcome,
   // and « pour les rides, en sérum » is a different sentence from a full match.
   const impossible = { handle: 'diag-taches', title: 'Diag - Taches', axis: 'concern', productIds: ['gid/9'] };
@@ -678,8 +678,20 @@ test('a requirement given up is its own outcome and is said out loud', async () 
 
   assert.equal(result.outcome, 'relaxed');
   assert.deepEqual(result.data.dropped, ['diag-taches']);
-  assert.match(result.promptText, /NE PAS laisser entendre/);
-  assert.match(result.promptText, /Diag - Taches/);
+  // THE GAP IS DATA, NOT A SENTENCE (owner's rule, 2026-09-20). Naming it in the
+  // text is what produced « ces produits ne sont pas spécifiquement adaptés aux
+  // peaux sensibles » in a reply: a prohibition that states the fact it forbids
+  // is still stating it to the model. The prohibition travels as a caveat, which
+  // names nothing.
+  assert.doesNotMatch(result.promptText, /NE PAS laisser entendre/);
+  assert.doesNotMatch(result.promptText, /Aucun de ces produits/);
+  assert.doesNotMatch(result.promptText, /ne figure/i);
+  // « Diag - Taches » survives in ONE place only: the restatement of what the
+  // customer asked for, which the reply needs in order to say a colleague will
+  // come back on it. What it must never appear in is a sentence about a product.
+  assert.equal((result.promptText.match(/Diag - Taches/g) || []).length, 1);
+  assert.match(result.promptText, /Ce que le client demande :.*Diag - Taches/);
+  assert.ok(result.caveats.includes('product_fit_unstated'));
 });
 
 test('a requirement nobody curated is reported, not silently answered', async () => {
@@ -740,6 +752,120 @@ test('a misnamed collection is reconciled rather than reported uncurated', async
 
   assert.deepEqual(result.data.unknown, [], 'it was still reported as uncurated');
   assert.ok(result.data.matchedOn.includes('peaux-sensibles'));
+});
+
+test('a routine of three types of care is three groups, each ranked by the concern', async () => {
+  // THE TICKET THAT FOUND IT (05c1b539, 2026-09-19): « nettoyant, hydratant,
+  // protection … peau très réactive et sujette aux allergies ». The intersection
+  // kept the cleansers, dropped sensitive skin and never looked at the Sensi Zen
+  // cream in the moisturisers, and the case file then told the draft the shop
+  // had nothing for reactive skin.
+  const nettoyants = { handle: 'nettoyants', title: 'Nettoyants & démaquillants', axis: 'category', productIds: ['n1', 'n2', 'n3'] };
+  const cremes = { handle: 'cremes-hydratantes', title: 'Crèmes Hydratantes', axis: 'category', productIds: ['h1', 'h2'] };
+  const soins = { handle: 'soins-hydratants', title: 'Soins Hydratants', axis: 'category', productIds: ['h2', 'h3'] };
+  const solaires = { handle: 'solaires', title: 'Soins solaires et teintés', axis: 'category', productIds: ['s1', 's2'] };
+  const sensibles = { handle: 'peaux-sensibles', title: 'Soins Peaux Sensibles', axis: 'concern', productIds: ['h3', 's2'] };
+  const active = [nettoyants, cremes, soins, solaires, sensibles];
+  const registry = buildRegistry({
+    adviceCollections: { async active() { return active; }, cached() { return active; } },
+    productLookup: {
+      async lookupProduct() { return { found: false, ambiguous: false, products: [], candidates: [] }; },
+      async crossSellFor() { return { found: false, source: null, products: [] }; },
+      async detailsByShopifyIds(ids) {
+        return ids.map((id) => ({ shopifyProductId: id, title: `Produit ${id}`, summary: null, tags: [] }));
+      }
+    }
+  });
+  const { handlers } = registry.toolsFor({
+    ...ADVICE_TICKET,
+    text: 'Peau très réactive. Quels produits (nettoyant, hydratant, protection, etc.) me conseilleriez-vous ?'
+  });
+  const result = await handlers.get(TOOL_NAMES.RECOMMEND_PRODUCTS)({
+    product: null,
+    requirements: ['Soins Peaux Sensibles']
+  });
+
+  const byLabel = Object.fromEntries(result.data.groups.map((g) => [g.label, g]));
+  assert.deepEqual(Object.keys(byLabel), ['nettoyant', 'hydratant', 'protection']);
+  // The concern picks the product inside the group, and ONLY the best tier goes.
+  assert.deepEqual(byLabel.hydratant.titles, ['Produit h3']);
+  assert.deepEqual(byLabel.protection.titles, ['Produit s2']);
+  // No cleanser is in the selection: the group is still answered, the concern
+  // is reported as unmet for it, and the outcome says a point was not met.
+  assert.deepEqual(byLabel.nettoyant.titles, ['Produit n1', 'Produit n2']);
+  assert.deepEqual(byLabel.nettoyant.missing, ['peaux-sensibles']);
+  assert.equal(result.outcome, 'relaxed');
+  // The tag is what licenses « adapté aux peaux sensibles », line by line.
+  assert.match(result.promptText, /Produit h3.*Convient particulièrement à : peaux sensibles/);
+  // The cleanser carries no tag, and the text says nothing about what it is NOT
+  // for (owner's rule, 2026-09-20). The gap stays in `data.missing`, which the
+  // rules read and the model never sees.
+  assert.doesNotMatch(result.promptText, /Produit n1.*Convient particulièrement/);
+  // No bracket notation and no collection name anywhere: both leaked into a
+  // customer reply as a heading and a tag (2026-09-20).
+  assert.doesNotMatch(result.promptText, /\[Soins/);
+  assert.doesNotMatch(result.promptText, /Crèmes Hydratantes/);
+  assert.doesNotMatch(result.promptText, /Aucun de ces produits/);
+  assert.doesNotMatch(result.promptText, /NE PAS/);
+  assert.ok(result.caveats.includes('product_fit_unstated'));
+});
+
+test('the concern is read from the message even when the model forgets it', async () => {
+  // MEASURED ON THE SAME TICKET, RUN TWICE (2026-09-19/20). The model named the
+  // concern and no type of care, then three types of care and no concern — and
+  // the second run put a retinol cream in front of « peau très réactive ».
+  const sensibles = {
+    handle: 'peaux-sensibles',
+    title: 'Soins Peaux Sensibles',
+    axis: 'concern',
+    productIds: ['gid/3']
+  };
+  const registry = buildAdviceRegistry([SERUMS, sensibles]);
+  const { handlers } = registry.toolsFor({
+    ...ADVICE_TICKET,
+    text: 'Je voudrais un sérum, mais ma peau est très réactive.'
+  });
+  const result = await handlers.get(TOOL_NAMES.RECOMMEND_PRODUCTS)({ product: null, requirements: [] });
+
+  // gid/3 is the one in the sensitive selection; nothing named it.
+  assert.deepEqual(result.data.dropped, ['sensitive'], 'the concern was not read at all');
+  assert.match(result.promptText, /peau/i);
+});
+
+test('a concern the model named is not doubled by the cue that reads it', async () => {
+  const sensibles = {
+    handle: 'peaux-sensibles',
+    title: 'Soins Peaux Sensibles',
+    axis: 'concern',
+    productIds: ['gid/2']
+  };
+  const registry = buildAdviceRegistry([SERUMS, sensibles]);
+  const { handlers } = registry.toolsFor({ ...ADVICE_TICKET, text: 'un sérum, ma peau est sensible' });
+  const result = await handlers.get(TOOL_NAMES.RECOMMEND_PRODUCTS)({
+    product: null,
+    requirements: ['Soins Peaux Sensibles']
+  });
+
+  assert.equal(result.outcome, 'by_collection');
+  assert.deepEqual(result.data.titles, ['Sérum Anti-âge Liftant']);
+  // One tag, not the same concern twice.
+  // Once, in the restatement of what the customer asked for — never as a tag.
+  assert.equal((result.promptText.match(/Soins Peaux Sensibles/g) || []).length, 1, result.promptText);
+  assert.match(result.promptText, /Convient particulièrement à : peaux sensibles/);
+});
+
+test('every type of care answered in full is by_collection', async () => {
+  const cremes = { handle: 'cremes', title: 'Crèmes Hydratantes', axis: 'category', productIds: ['gid/3'] };
+  const registry = buildAdviceRegistry([SERUMS, cremes]);
+  const { handlers } = registry.toolsFor(ADVICE_TICKET);
+  const result = await handlers.get(TOOL_NAMES.RECOMMEND_PRODUCTS)({
+    product: null,
+    requirements: ['Sérums Visage', 'Crèmes Hydratantes']
+  });
+  // « un sérum ET une crème » used to be a failure; it is two answers.
+  assert.equal(result.outcome, 'by_collection');
+  assert.equal(result.data.groups.length, 2);
+  assert.ok(result.data.groups.every((g) => g.titles.length > 0 && g.titles.length <= 2));
 });
 
 // --- was the promotion applied to this order ------------------------------------

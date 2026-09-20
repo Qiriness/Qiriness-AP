@@ -426,6 +426,7 @@ export function createInvestigator(
       ledger: run.ledger,
       caveats: run.caveats(),
       knowledge: run.knowledge(),
+      recommendations: run.recommendations(),
       contextRef: buildContextRef(ticket),
       proposedLevel: escalation.level,
       escalationReasons: escalation.reasons,
@@ -843,6 +844,19 @@ function createRun({ ticket, handlers, maxToolCalls, logger, onToolCall = null }
       return ledger
         .filter((entry) => entry.tool === TOOL_NAMES.SEARCH_KNOWLEDGE)
         .flatMap((entry) => entry.data?.chunks || []);
+    },
+
+    // WHAT THE SHOP PUT FORWARD, AS THE TOOL WROTE IT — the same treatment
+    // `knowledge()` gives an approved article, and for the same reason. Every
+    // other fact in a case file is the model's restatement of a tool result;
+    // measured on ticket 05c1b539, three retellings of one product list lost
+    // which product suited which skin, then invented a benefit for each name it
+    // could no longer describe. A list a reply quotes almost verbatim has no
+    // business being paraphrased twice on the way there.
+    recommendations() {
+      return ledger
+        .filter((entry) => entry.tool === TOOL_NAMES.RECOMMEND_PRODUCTS)
+        .flatMap((entry) => entry.data?.groups || []);
     },
 
     render() {

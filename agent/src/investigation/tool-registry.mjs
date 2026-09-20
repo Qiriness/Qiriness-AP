@@ -5,8 +5,9 @@ import { orderStates, toOrderContextText } from '../resolution/order-context.mjs
 import { toPromptText as photoPromptText } from './photo-evidence.mjs';
 
 import { concernsInText } from '../retrieval/product-concerns.mjs';
-import { chooseProducts, resolveRequirements } from '../retrieval/advice-collections.mjs';
-import { careCollectionsInText } from '../retrieval/care-cues.mjs';
+import { bestTier, careGroups, rankGroup, resolveRequirements } from '../retrieval/advice-collections.mjs';
+import { careGroupsInText } from '../retrieval/care-cues.mjs';
+import { concernsFromText } from '../retrieval/concern-cues.mjs';
 import { productLines } from '../retrieval/product-lines.mjs';
 
 import { planToolNames } from './decompose-rules.mjs';
@@ -245,8 +246,8 @@ const DEFINITIONS = {
           type: 'array',
           items: { type: 'string' },
           description:
-            'Ce que le client demande, repris EXACTEMENT dans la liste ci-dessus (préoccupations ' +
-            'et types de soin). Liste vide si le message ne permet pas de le dire — ne jamais ' +
+            'TOUT ce que le client demande, repris EXACTEMENT dans la liste ci-dessus : chaque type ' +
+            'de soin (chacun reçoit ses propres produits) et chaque préoccupation. Liste vide si le message ne permet pas de le dire — ne jamais ' +
             'inventer une entrée qui n’y figure pas.'
         }
       },
@@ -289,7 +290,10 @@ function describeRecommendProducts(collections) {
   // already decided.
   const lines = [base, '', 'Valeurs autorisées pour requirements (aucune autre) :'];
   if (categories.length > 0) {
-    lines.push(`- types de soin (à citer EN PREMIER si le client en nomme un) : ${categories.join(' · ')}`);
+    lines.push(
+      `- types de soin (citer EN PREMIER et TOUS ceux que le client nomme — plusieurs types, ` +
+        `plusieurs groupes de produits) : ${categories.join(' · ')}`
+    );
   }
   if (concerns.length > 0) {
     lines.push(`- préoccupations : ${concerns.join(' · ')}`);
@@ -995,7 +999,10 @@ export function createToolRegistry({
           if (cross.found && cross.products.length > 0) {
             return {
               outcome: 'cross_sell',
-              caveats: [],
+              // Raised wherever a product is put in front of the model, not only
+              // where a concern went unmet: « ne convient pas » is as wrong on a
+              // cross-sell as on an advice answer.
+              caveats: ['product_fit_unstated'],
               promptText:
                 `Le client utilise « ${named} » (identifié : ${cross.source}). ` +
                 'La boutique associe ce produit aux suivants :\n' +
@@ -1011,61 +1018,114 @@ export function createToolRegistry({
         // titles — that is the half needing judgement, because « ma peau
         // tiraille » is a concern no word list holds.
         //
-        // The MESSAGE names the type of care by itself, and `careCollectionsInText`
-        // reads it. That half is not left to the model because leaving it there
+        // The MESSAGE names the types of care by itself, and `careGroupsInText`
+        // reads them. That half is not left to the model because leaving it there
         // lost it: measured 2026-09-16, « je voudrais un sérum … peau sensible …
         // des rides » came back as two concerns and no serum, and the reply
-        // offered a sunscreen, a cream and a mist. The type of care is the one
-        // requirement the customer had already decided.
+        // offered a sunscreen, a cream and a mist.
+        //
+        // ONE GROUP PER TYPE OF CARE, EACH ANSWERED ON ITS OWN. « nettoyant,
+        // hydratant, protection » is three questions; the concerns rank the
+        // products inside each group rather than deciding which group survives.
+        //
+        // BOTH AXES ARE READ FROM THE TEXT AND BOTH ARE ASKED OF THE MODEL, since
+        // 2026-09-20. On one ticket run twice the model named one axis and dropped
+        // the other, both ways round — and the run that dropped « peau très
+        // réactive » recommended a retinol cream. Neither source is trusted alone.
         const active = adviceCollections ? await adviceCollections.active() : [];
-        const fromCues = careCollectionsInText(ticket.text, active);
-        if (adviceCollections && (requirements.length > 0 || fromCues.length > 0)) {
-          const asked = resolveRequirements(requirements, active);
-          const unknown = asked.unknown;
-          // Cues first: the type of care leads the intersection, and
-          // `chooseProducts` will not give a category up anyway.
-          const matched = [...fromCues, ...asked.matched.filter((c) => !fromCues.includes(c))];
-          // MORE ARE FETCHED THAN ARE SHOWN, so the ticks have something to
-          // reorder. The intersection decides WHICH products answer; the ticks
-          // decide which of them the shop would rather put first — which is the
-          // whole job of `/agent-setup/recommendations` once a collection has
-          // more members than a reply can name.
-          const chosen = chooseProducts(matched, { limit: ADVICE_CANDIDATES });
-          const found = await productLookup.detailsByShopifyIds(chosen.products);
-          const products = preferFirst(found, chosen.matchedOn).slice(0, ADVICE_SUGGESTIONS);
+        const cueGroups = careGroupsInText(ticket.text, active);
+        const asked = resolveRequirements(requirements, active);
+        const unknown = asked.unknown;
+        // The model's reading is kept over a cue covering the same collection: it
+        // named « Diag - Rides visibles » where the cue reads every wrinkle
+        // collection at once, and the narrower one is what the customer wrote.
+        const namedConcerns = asked.matched.filter((collection) => collection.axis !== 'category');
+        const claimed = new Set(namedConcerns.map((c) => c.handle));
+        const wanted = [
+          ...namedConcerns,
+          ...concernsFromText(ticket.text, active).filter(
+            (concern) => !concern.collections.some((handle) => claimed.has(handle))
+          )
+        ];
+        const { groups } = careGroups(cueGroups, asked.matched, wanted);
 
-          if (products.length > 0) {
-            const named = (handles) =>
-              handles.map((h) => active.find((c) => c.handle === h)?.title ?? h).join(', ');
+        if (adviceCollections && groups.length > 0) {
+          // Two or three per group: three answers one question, but three
+          // questions at three each is a catalogue page.
+          const perGroup = groups.length > 1 ? ADVICE_SUGGESTIONS_PER_GROUP : ADVICE_SUGGESTIONS;
+          // A concern read from the text is not an activated collection but a set
+          // of them, so it carries its own title — « rides et anti-âge » rather
+          // than five collection names on one product line.
+          const titleOf = (handle) =>
+            wanted.find((c) => c.handle === handle)?.title ??
+            active.find((c) => c.handle === handle)?.title ??
+            handle;
+          const taken = new Set();
+          const answered = [];
+
+          for (const group of groups) {
+            const ranked = rankGroup(group.collections, wanted, { exclude: taken });
+            const pool = ranked.slice(0, ADVICE_CANDIDATES);
+            const details = await productLookup.detailsByShopifyIds(pool.map((entry) => entry.id));
+            const byId = new Map(details.map((p) => [p.shopifyProductId, p]));
+            const live = pool.filter((entry) => byId.has(entry.id));
+            // A tick for any collection this group is answered from moves a
+            // product to the front of its tier — see `/agent-setup/recommendations`.
+            const keys = new Set([...group.collections, ...wanted].map((c) => c.handle));
+            const picks = bestTier(live, {
+              limit: perGroup,
+              isPreferred: (entry) => (byId.get(entry.id).preferredFor || []).some((key) => keys.has(key))
+            });
+            for (const entry of picks) taken.add(entry.id);
+            const met = new Set(picks.flatMap((entry) => entry.meets));
+            answered.push({
+              group,
+              picks: picks.map((entry) => ({ product: byId.get(entry.id), meets: entry.meets })),
+              missing: wanted.filter((c) => !met.has(c.handle)).map((c) => c.handle),
+              // Complete only when every product put forward meets every concern.
+              complete: picks.length > 0 && picks.every((entry) => entry.meets.length === wanted.length)
+            });
+          }
+
+          const withProducts = answered.filter((a) => a.picks.length > 0);
+          if (withProducts.length > 0) {
+            const relaxed = answered.some((a) => !a.complete);
+            const dropped = [...new Set(answered.flatMap((a) => a.missing))];
             return {
               // `relaxed` is its own outcome, not a flag on `by_collection`: a
               // rule that wants to say « pour les rides, en sérum » needs to
-              // know a requirement was given up, and a boolean buried in `data`
+              // know a requirement went unmet, and a boolean buried in `data`
               // is not something `when_conditions` can branch on.
-              outcome: chosen.relaxed ? 'relaxed' : 'by_collection',
-              caveats: [],
-              promptText:
-                `Ce que le client demande : ${named(chosen.matchedOn)}.` +
-                (chosen.dropped.length > 0
-                  ? ` Aucun produit ne réunit aussi ${named(chosen.dropped)} — NE PAS laisser entendre` +
-                    ' que ces produits répondent à ce point-là.'
-                  : '') +
-                (unknown.length > 0
-                  ? ` La boutique n'a rien de sélectionné pour : ${unknown.join(', ')}.`
-                  : '') +
-                '\nProduits retenus :\n' +
-                productLines(products),
+              outcome: relaxed ? 'relaxed' : 'by_collection',
+              caveats: ['product_fit_unstated'],
+              promptText: adviceText({ answered, wanted, unknown, titleOf }),
               data: {
                 concerns,
                 requirements,
                 // What the message said by itself, beside what the model asked
                 // for, so a run that only worked because of the cues is visible
                 // as such on the ledger.
-                fromCues: fromCues.map((c) => c.handle),
-                matchedOn: chosen.matchedOn,
-                dropped: chosen.dropped,
+                fromCues: cueGroups.flatMap((g) => g.collections.map((c) => c.handle)),
+                matchedOn: [
+                  ...new Set([
+                    ...withProducts.flatMap((a) => a.group.collections.map((c) => c.handle)),
+                    ...wanted.map((c) => c.handle).filter((h) => !dropped.includes(h))
+                  ])
+                ],
+                dropped,
                 unknown,
-                titles: products.map((p) => p.title)
+                groups: answered.map((a) => ({
+                  label: a.group.label,
+                  collections: a.group.collections.map((c) => c.handle),
+                  titles: a.picks.map((p) => p.product.title),
+                  // THE LINES AS THE MODEL READ THEM, carried so the drafting
+                  // stage can be handed this list verbatim instead of the
+                  // investigation model's retelling of it (case-file
+                  // `recommendations`). Same text, one source.
+                  lines: a.picks.map((p) => productLine(p.product, p.meets.map((h) => readableTitle(titleOf(h))))),
+                  missing: a.missing
+                })),
+                titles: withProducts.flatMap((a) => a.picks.map((p) => p.product.title))
               }
             };
           }
@@ -1080,7 +1140,7 @@ export function createToolRegistry({
         // colleague should advise. `nothing_to_go_on` means the message named
         // nothing usable at all, where asking the customer is the move.
         const outcome =
-          requirements.length > 0 || fromCues.length > 0 ? 'not_curated' : 'nothing_to_go_on';
+          requirements.length > 0 || cueGroups.length > 0 ? 'not_curated' : 'nothing_to_go_on';
         return {
           outcome,
           caveats: ['recommendation_uncurated'],
@@ -1176,26 +1236,105 @@ export function createToolRegistry({
  * How many products a reply names, and how many are weighed to pick them.
  *
  * THREE IS A RECOMMENDATION; EIGHT IS A CATALOGUE PAGE, and a customer handed
- * eight is back where they started. Twelve are fetched so the ticks have room to
- * reorder — an intersection returning four when the shop has an opinion about
- * two of them should lead with those two.
+ * eight is back where they started. So one type of care gets three and several
+ * get two each. Twelve per group are fetched so the ticks have room to reorder —
+ * a tier of four when the shop has an opinion about two of them should lead
+ * with those two.
  */
 const ADVICE_SUGGESTIONS = 3;
+const ADVICE_SUGGESTIONS_PER_GROUP = 2;
 const ADVICE_CANDIDATES = 12;
 
 /**
- * Ticked products first, order otherwise untouched.
+ * What the model reads: one section per type of care, every product tagged with
+ * the concerns it actually meets.
  *
- * A STABLE PARTITION, not a sort: the intersection already ranked these, and
- * re-sorting would throw that away. A product the shop ticked for one of the
- * collections this answer matched on moves to the front; everything else keeps
- * its place behind it.
+ * THE TAG IS THE ONLY LICENCE. Products in one reply now answer different parts
+ * of the request, so « ces produits conviennent aux peaux sensibles » is true of
+ * some lines and false of others. Each line carries the selections it is in, and
+ * an untagged line says nothing at all.
+ *
+ * WHAT A PRODUCT IS NOT FOR IS NEVER STATED, and the first build got this wrong
+ * in the way this codebase has got it wrong before. It ended each group with
+ * « Aucun de ces produits ne figure dans : Soins Peaux Sensibles — NE PAS
+ * laisser entendre… », and the reply came back saying « ces produits ne sont pas
+ * spécifiquement adaptés aux peaux sensibles » to a customer with reactive skin.
+ * A prohibition that states the fact it forbids is still stating it to the
+ * model — exactly the `delivery_unscanned` lesson (DECISIONS § « The absence of
+ * a carrier scan »). The unmet concern stays in `data.missing` for the rules and
+ * the ledger; it is not in the text the model reads.
  */
-function preferFirst(products, matchedOn) {
-  const wanted = new Set(matchedOn);
-  const preferred = products.filter((p) => (p.preferredFor || []).some((key) => wanted.has(key)));
-  const rest = products.filter((p) => !preferred.includes(p));
-  return [...preferred, ...rest];
+/**
+ * One product as a reply would quote it: what it is, what it does, and the
+ * selections it is in — no bracket notation, nothing about what it is not for.
+ *
+ * ONE RENDERER FOR BOTH READERS. The same string goes to the investigation model
+ * in the tool result and into the case file's `recommendations` block for the
+ * drafting model. Two renderers would drift, and the whole point of storing the
+ * block is that the drafting stage reads what the tool actually said.
+ *
+ * Returned WITHOUT its bullet, so each reader lists it its own way.
+ */
+function productLine(product, fits = []) {
+  const tag = fits.length > 0 ? ` Convient particulièrement à : ${fits.join(', ')}.` : '';
+  return productLines([product]).replace(/^-\s*/, '') + tag;
+}
+
+/**
+ * A collection title, stripped of shop bookkeeping.
+ *
+ * « Soins Peaux Sensibles » and « Diag - Rides et ridules » are how the shop
+ * files things; what a reply can say is the skin they name.
+ */
+function readableTitle(title) {
+  return String(title)
+    .replace(/^(diag\s*-\s*|soins?\s+|cr[eè]mes?\s+)/i, '')
+    .toLowerCase();
+}
+
+function adviceText({ answered, wanted, unknown, titleOf }) {
+  const types = answered.map((a) => a.group.label).filter(Boolean);
+  const lines = [
+    'Ce que le client demande : ' +
+      [
+        types.length > 0 ? `types de soin — ${types.join(', ')}` : null,
+        wanted.length > 0 ? `préoccupations — ${wanted.map((c) => c.title).join(', ')}` : null
+      ]
+        .filter(Boolean)
+        .join(' ; ') +
+      '.'
+  ];
+  if (wanted.length > 0) {
+    lines.push(
+      'Un produit ne peut être présenté comme adapté à une préoccupation que si sa ligne le dit. ' +
+        'Une ligne qui ne le dit pas ne se commente pas : ne jamais écrire qu’un produit n’est pas ' +
+        'adapté, pas conçu ou pas recommandé pour quoi que ce soit.'
+    );
+  }
+  if (unknown.length > 0) {
+    lines.push(`La boutique n'a rien de sélectionné pour : ${unknown.join(', ')}.`);
+  }
+
+  for (const { group, picks } of answered) {
+    lines.push('');
+    // THE GROUP IS NAMED IN THE CUSTOMER'S OWN WORD, and the collections behind
+    // it are not named at all. Listing them put « Crèmes Hydratantes, Soins
+    // Hydratants » in a customer's inbox as a heading (2026-09-20) — the shop's
+    // internal grouping, restated as if it were advice. They stay in
+    // `data.groups` for the ledger.
+    lines.push(group.label ? `Pour « ${group.label} » :` : 'Produits retenus :');
+    if (picks.length === 0) {
+      lines.push('- Aucun produit sélectionné en ligne pour cela : un conseiller complétera.');
+      continue;
+    }
+    for (const { product, meets } of picks) {
+      // PROSE, NOT A MARKER. The first build tagged the line « [Soins Peaux
+      // Sensibles] » and both models copied the brackets through to the reply.
+      // A sentence the reply could say in its own words cannot leak as notation.
+      lines.push(`- ${productLine(product, meets.map((h) => readableTitle(titleOf(h))))}`);
+    }
+  }
+  return lines.join('\n');
 }
 
 /** Exported for the registry's own tests and for the wiring check in index.mjs. */

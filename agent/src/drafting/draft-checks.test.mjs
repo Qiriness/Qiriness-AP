@@ -536,6 +536,69 @@ test('courtesy inside the signature is approved text, not invented text', () => 
   assert.match(check(checks, 'empty_closer').detail, /aucune formule/);
 });
 
+// --- internal notation in a reply --------------------------------------------
+
+test('a selection tag or a collection heading is refused', () => {
+  // MEASURED on ticket 05c1b539 (2026-09-20): the reply carried « Crèmes
+  // Hydratantes, Soins Hydratants » as a heading and « Caresse Sensi Zen
+  // [Soins Peaux Sensibles] » as a line — the shop's own grouping, restated to
+  // a customer as advice. Both models had copied the case file's notation.
+  for (const middle of [
+    'La Caresse Sensi Zen [Soins Peaux Sensibles] vous conviendra.',
+    'Voici notre sélection Diag - Rides et ridules.'
+  ]) {
+    const checks = runDraftChecks({ body: wrap(middle), verdict: 'answerable', signature: SIGNATURE });
+    assert.equal(check(checks, 'no_internal_selection_name').passed, false, middle);
+  }
+});
+
+test('the approved link marker is not internal notation', () => {
+  // « [[ici]] » is the placeholder every reply with a link carries.
+  const checks = runDraftChecks({
+    body: wrap('Retrouvez notre gamme en cliquant [[ici]].'),
+    verdict: 'answerable',
+    signature: SIGNATURE
+  });
+  assert.equal(check(checks, 'no_internal_selection_name').passed, true);
+});
+
+// --- what a product is NOT for -----------------------------------------------
+
+test('saying a product is not suited is refused on every reply', () => {
+  // MEASURED on ticket 05c1b539: the reply told a customer with reactive skin
+  // that two cleansers « ne sont pas spécifiquement adaptés aux peaux
+  // sensibles » — useless to her, and a warning about products we had just put
+  // forward. A product is presented for what it answers and nothing else.
+  for (const middle of [
+    'Ces produits ne sont pas spécifiquement adaptés aux peaux sensibles.',
+    'Cette crème n’est pas adaptée aux peaux réactives.',
+    'Ce nettoyant ne convient pas aux peaux sensibles.',
+    'Ce soin est déconseillé pour votre type de peau.'
+  ]) {
+    const checks = runDraftChecks({ body: wrap(middle), verdict: 'answerable', signature: SIGNATURE });
+    assert.equal(check(checks, 'no_unsuitability_claim').passed, false, middle);
+  }
+});
+
+test('saying what a product IS for passes', () => {
+  // The positive half is the whole point: the tag on a case-file line is what
+  // licenses it, and nothing else in the reply is expected to change.
+  for (const middle of [
+    'La Caresse Sensi Zen est adaptée aux peaux sensibles.',
+    'Pour le nettoyage, nous vous proposons la Mousse Divine.'
+  ]) {
+    const checks = runDraftChecks({ body: wrap(middle), verdict: 'answerable', signature: SIGNATURE });
+    assert.equal(check(checks, 'no_unsuitability_claim').passed, true, middle);
+  }
+});
+
+test('the prohibition is raised without naming what was missed', () => {
+  // `product_fit_unstated` forbids the sentence and names no concern — the same
+  // reason `delivery_unscanned` does not explain itself.
+  assert.doesNotMatch(CAVEATS.product_fit_unstated, /sensible|préoccupation manquante|aucun produit/i);
+  assert.match(CAVEATS.product_fit_unstated, /Ne jamais écrire/);
+});
+
 // --- the carrier-scan leak ---------------------------------------------------
 
 test('the carrier-scan wording is refused on every reply', () => {

@@ -62,6 +62,18 @@ export const PARAMETERS = {
       'and the one an agent currently cannot answer without guessing.',
     usedBy: 'the non_expediee rule, which today says only that it has not shipped'
   },
+  france_delivery_days: {
+    kind: 'days',
+    label: 'Once dispatched, how long does delivery take in France?',
+    description:
+      'Working days, counted from dispatch to the parcel arriving — the usual case, ' +
+      'not a promise for one parcel. Asked for 2026-09-20. It is the only thing we ' +
+      'can honestly say about a dispatched parcel: no carrier feeds scan events into ' +
+      'Shopify for this store, so where a parcel actually is remains unknown.',
+    usedBy:
+      'delivery replies about a parcel already dispatched. Nothing reads it yet — ' +
+      'setting it makes the number available to a rule, it does not by itself change a reply'
+  },
   free_shipping_threshold: {
     kind: 'amount',
     label: 'Order total for free standard delivery',

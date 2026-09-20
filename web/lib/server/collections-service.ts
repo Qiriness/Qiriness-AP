@@ -89,10 +89,10 @@ export async function listCollections(shopId: string): Promise<AdviceCollection[
  * would mean correcting a typo in a note could silently switch a collection back
  * on after somebody had taken it off.
  *
- * AN AXIS IS REQUIRED TO GO LIVE. A collection with no axis cannot be relaxed
- * correctly — `chooseProducts` gives up a concern before a category — so
- * activating one without saying which it is would put a collection into the
- * intersection that the intersection cannot reason about.
+ * AN AXIS IS REQUIRED TO GO LIVE. A `category` is a group of products an answer
+ * offers and a `concern` ranks products inside those groups (`rankGroup`), so
+ * activating a collection without saying which it is would put one into the
+ * advice that the advice cannot place.
  */
 export async function setCollectionActive(
   shopId: string,

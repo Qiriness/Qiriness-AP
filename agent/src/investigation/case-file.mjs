@@ -209,6 +209,18 @@ export const CAVEATS = {
     'utilisation par client, produits concernés).',
   stock_unknown:
     'Ne pas annoncer de disponibilité ni de date de réassort : le stock n’a pas pu être établi.',
+  // A PRODUCT IS PRESENTED FOR WHAT IT ANSWERS, NEVER FOR WHAT IT DOES NOT.
+  // Owner's rule, 2026-09-20, after a reply told a customer with reactive skin
+  // that two cleansers « ne sont pas spécifiquement adaptés aux peaux
+  // sensibles ». That sentence is useless to her and reads as a warning about
+  // products we had just put forward. The tool no longer states the gap at all
+  // (tool-registry `adviceText`), which removes the source; this forbids the
+  // sentence wherever else the model might reach for it, and NAMES NOTHING —
+  // the same reason `delivery_unscanned` does not explain itself.
+  product_fit_unstated:
+    'Ne jamais écrire qu’un produit n’est pas adapté, pas conçu, pas formulé ou pas ' +
+    'recommandé pour un type de peau ou une préoccupation. Ne présenter chaque produit ' +
+    'que pour ce à quoi il répond, tel que le dossier l’indique, et se taire sur le reste.',
   // THE PROHIBITION IS AGAINST THE DENIAL, not against the doubt. A sale made in
   // a physical shop never reaches Shopify, so "aucune commande trouvée" is a
   // statement about our records and not about the customer — and telling someone
@@ -422,11 +434,76 @@ export function deriveDoNotClaim({ caveats = [], missing = [] } = {}) {
  * concluded, because a verdict of `answerable` resting on nothing is the single
  * most expensive output this stage could produce.
  */
+/**
+ * TRIED AND REVERTED, 2026-09-20 — kept as a record, not called.
+ *
+ * The idea was to drop a claim that merely re-lists products the block already
+ * carries verbatim, so the prompt held one list instead of two. Measured on
+ * ticket 05c1b539, twice: with the restatement gone the reply invented « Élixir
+ * Temps Précieux » and « Crème Éclat Parfait », products the shop does not
+ * sell; with the facts line then pointing at the block instead, the reply named
+ * no product at all and offered « notre gamme de nettoyants doux » in general
+ * terms.
+ *
+ * WHAT THAT MEASURES: `established` is what the drafting model answers from.
+ * The block above it corrects WHICH product suits what, and it does not replace
+ * the list as the thing being answered. The duplication is the price.
+ *
+ * Drops a claim that merely re-lists products the case file already carries
+ * verbatim.
+ *
+ * TWO OR MORE TITLES, so a claim ABOUT one product — « la Mousse Divine ne
+ * contient pas d'alcool » — is a fact and stays. Re-listing is the failure mode:
+ * a sentence naming several of the products we already hold, in the model's
+ * words, adds nothing the block does not say better.
+ *
+ * NOTHING IS LOST: every product, its description and its fit are in
+ * `recommendations`, which the drafting prompt prints first.
+ */
+function withoutRestatedProducts(established = [], recommendations = []) {
+  const titles = recommendations.flatMap((group) => group?.titles || []).filter(Boolean);
+  if (titles.length === 0) {
+    return established;
+  }
+  return established.filter((finding) => {
+    const claim = String(finding?.claim ?? '');
+    const named = titles.filter((title) => claim.includes(title)).length;
+    return named < 2;
+  });
+}
+
+/**
+ * The shop's product list as an established fact, written by code.
+ *
+ * ONE ENTRY PER TYPE OF CARE, each carrying the tool's own product lines —
+ * description and fit included. Cited to the `recommendProducts` call, so the
+ * claim points at the evidence like any other.
+ *
+ * Thin on purpose: one tool has a canonical rendering today. The order bundle
+ * and a promotion's conditions are the obvious next two, and they would be two
+ * more entries here rather than a mechanism.
+ */
+function recommendationFindings(recommendations = [], ledger = []) {
+  const call = ledger.find((entry) => entry.tool === 'recommendProducts');
+  return recommendations
+    .filter((group) => (group?.lines || []).length > 0)
+    .map((group) => ({
+      claim:
+        (group.label ? `Pour « ${group.label} », la boutique retient :` : 'La boutique retient :') +
+        '\n' +
+        group.lines.map((line) => `  · ${line}`).join('\n'),
+      evidence_ids: call ? [call.id] : []
+    }));
+}
+
 export function buildCaseFile({
   answer = {},
   ledger = [],
   caveats = [],
   knowledge = [],
+  // The products the shop put forward, exactly as `recommendProducts` rendered
+  // them. See `run.recommendations()` in investigate.mjs.
+  recommendations = [],
   contextRef = null,
   proposedLevel = null,
   escalationReasons = [],
@@ -474,14 +551,31 @@ export function buildCaseFile({
   model = null,
   now = new Date()
 } = {}) {
-  const { established, dropped } = verifyFindings(answer.established, ledger);
+  const { established: stated, dropped } = verifyFindings(answer.established, ledger);
+  // THE TOOL'S OWN WORDING, BESIDE THE MODEL'S — not instead of it. Measured
+  // three times on ticket 05c1b539: the reply imitates whatever is in
+  // `## Établi`, and the model's summary of a product list is a lossy copy of
+  // one we hold in full. Deleting the summary made the reply invent products;
+  // printing the full list ABOVE the section did not reach it. So the full list
+  // is added INTO the section the reply copies, and the summary stays — nothing
+  // the model added is lost, and the authoritative text is where it is read.
+  //
+  // The same rule the asking sentences already follow: the model picks WHICH
+  // fact matters, code owns the wording wherever code has an authoritative one.
+  const established = [...stated, ...recommendationFindings(recommendations, ledger)];
   const unverified = normaliseUnverified(answer.unverified);
   const missing = normaliseMissing(answer.missing);
 
   let verdict = VERDICTS.includes(answer.verdict) ? answer.verdict : 'needs_human';
   // Nothing survived verification: whatever was concluded, it was not concluded
   // from evidence.
-  if (established.length === 0 && verdict === 'answerable') {
+  //
+  // THE PRODUCT BLOCK COUNTS AS EVIDENCE HERE, and it has to: the claim it
+  // replaces was dropped for being a worse copy of it, not for being unfounded.
+  // Without this, a ticket whose whole answer is the shop's own selection would
+  // be sent to a person for having too little to go on while holding the list a
+  // reply is written from.
+  if (established.length === 0 && recommendations.length === 0 && verdict === 'answerable') {
     verdict = 'needs_human';
   }
 
@@ -577,6 +671,7 @@ export function buildCaseFile({
     // first; `outcome: 'not_attributed'` is the second.
     reactionReport: reactionReport || null,
     knowledge: Array.isArray(knowledge) ? knowledge : [],
+    recommendations: Array.isArray(recommendations) ? recommendations : [],
     // A POINTER, not a copy. The order/customer bundle already lives in
     // tickets.resolved_context: copying it here would duplicate personal data
     // across every investigation row and freeze a snapshot of a snapshot.
@@ -633,15 +728,56 @@ export function buildCaseFile({
  * cheaper guarantee than a sentence in a prompt asking the model not to repeat
  * what it was shown.
  */
+/**
+ * The facts line, which must never read as "there are none" while the case file
+ * holds a product block.
+ *
+ * MEASURED, AND IT IS THE WHOLE REASON THIS FUNCTION EXISTS (ticket 05c1b539,
+ * 2026-09-20). Dropping the model's re-listing of the products emptied
+ * `established`, the section printed « Aucun fait n'a pu être établi », and the
+ * reply invented two products the shop does not sell — « Élixir Temps
+ * Précieux », « Crème Éclat Parfait » — ignoring the real list printed above
+ * it. A model told it has no facts writes from its weights.
+ */
+function establishedLines(caseFile) {
+  if (caseFile.established.length > 0) {
+    return caseFile.established.map((f) => `- ${f.claim}`).join('\n');
+  }
+  if ((caseFile.recommendations || []).length > 0) {
+    return '- Les produits retenus ci-dessus, tels que la boutique les a sélectionnés.';
+  }
+  return '- Aucun fait n’a pu être établi.';
+}
+
 export function toDraftingPrompt(caseFile) {
   const parts = [`# Dossier — ${describeVerdict(caseFile.verdict)}`, describeIntent(caseFile)];
 
+  // FIRST, BEFORE THE MODEL'S OWN SUMMARY OF THE SAME LIST. `established`
+  // carries that summary and the two can disagree — on ticket 05c1b539 it
+  // flattened three groups into one sentence claiming all six products suited
+  // reactive skin, two of which are in no such selection. Printed after it the
+  // block read as an appendix and the reply followed the summary, so it is
+  // printed first AND says in words which of the two is exact.
+  if ((caseFile.recommendations || []).length > 0) {
+    parts.push(
+      '## Produits retenus par la boutique\n' +
+        'La liste ci-dessous fait foi : ne proposer aucun autre produit, et ne décrire ' +
+        'chacun qu’avec la phrase de description de sa ligne, reprise telle quelle — jamais ' +
+        'une formule inventée. Chaque ligne dit elle-même à quoi son produit convient. ' +
+        'Si un autre point du dossier résume cette liste autrement, c’est cette liste ' +
+        'qui est exacte.\n\n' +
+        caseFile.recommendations
+          .map((group) => {
+            const head = group.label ? `### Pour « ${group.label} »` : '### Produits retenus';
+            return [head, ...(group.lines || []).map((line) => `- ${line}`)].join('\n');
+          })
+          .join('\n\n')
+    );
+  }
+
   parts.push(
-    `## Établi\n${
-      caseFile.established.length > 0
-        ? caseFile.established.map((f) => `- ${f.claim}`).join('\n')
-        : '- Aucun fait n’a pu être établi.'
-    }`
+    `## Établi
+${establishedLines(caseFile)}`
   );
 
   if (caseFile.unverified.length > 0) {
@@ -661,6 +797,7 @@ export function toDraftingPrompt(caseFile) {
   if (caseFile.doNotClaim.length > 0) {
     parts.push('## Ne pas affirmer\n' + caseFile.doNotClaim.map((l) => `- ${l}`).join('\n'));
   }
+
 
   if (caseFile.knowledge.length > 0) {
     parts.push(

@@ -892,6 +892,13 @@ create table public.ticket_investigations (
   -- Approved knowledge chunks that cleared the answerable band. Weak matches are
   -- deliberately absent rather than included and flagged.
   knowledge jsonb not null default '[]'::jsonb,
+
+  -- What `recommendProducts` put forward, as the tool rendered it: one entry per
+  -- type of care the customer asked for, with the product lines a reply quotes.
+  -- Written by code from the tool ledger, never by the model — the same
+  -- treatment `knowledge` gets, because both are text a reply repeats closely
+  -- and a paraphrase of either loses the part that mattered (see 32).
+  recommendations jsonb not null default '[]'::jsonb,
   -- A POINTER to tickets.resolved_context, not a copy of it.
   context_ref jsonb not null default '{}'::jsonb,
 

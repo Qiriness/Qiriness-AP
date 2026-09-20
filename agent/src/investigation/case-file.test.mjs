@@ -631,3 +631,144 @@ test('no unaskable fields leaves the questions exactly as they were', () => {
   });
   assert.deepEqual(caseFile.missing, [{ field: 'account_email' }]);
 });
+
+// --- the shop's product list travels as written ------------------------------
+
+const GROUPS = [
+  {
+    label: 'hydratant',
+    collections: ['cremes-hydratantes'],
+    titles: ['Caresse Sensi Zen'],
+    lines: ['Caresse Sensi Zen — Hydrate et apaise. Convient particulièrement à : peaux sensibles.'],
+    missing: []
+  },
+  {
+    label: 'nettoyant',
+    collections: ['nettoyants'],
+    titles: ['Mousse Divine'],
+    lines: ['Mousse Divine — Nettoie et démaquille.'],
+    missing: ['peaux-sensibles']
+  }
+];
+
+test('the products reach the drafting prompt as the tool wrote them', () => {
+  // WHY THIS IS STORED AT ALL (ticket 05c1b539, 2026-09-20): every other fact in
+  // a case file is the model's restatement of a tool result, and a product list
+  // is the one thing a reply quotes almost verbatim. Three retellings lost which
+  // product suited which skin and invented a benefit for each bare name.
+  const caseFile = buildCaseFile({ answer: ANSWER, ledger: LEDGER, recommendations: GROUPS });
+  const prompt = toDraftingPrompt(caseFile);
+
+  for (const line of GROUPS.flatMap((group) => group.lines)) {
+    assert.ok(prompt.includes(line), line);
+  }
+  assert.ok(prompt.includes('Pour « hydratant »'));
+});
+
+test('the block comes before the summary of the same list', () => {
+  // Printed after it, the block read as an appendix and the reply followed the
+  // summary — measured on the ticket that produced it.
+  const prompt = toDraftingPrompt(
+    buildCaseFile({ answer: ANSWER, ledger: LEDGER, recommendations: GROUPS })
+  );
+  assert.ok(prompt.indexOf('Produits retenus par la boutique') < prompt.indexOf('## Établi'));
+});
+
+test('the block says it outranks the summary, and to keep the descriptions', () => {
+  // `established` holds the model's account of the same list and the two can
+  // disagree — it flattened three groups into one sentence claiming all six
+  // products suited reactive skin, two of which are in no such selection.
+  const prompt = toDraftingPrompt(
+    buildCaseFile({ answer: ANSWER, ledger: LEDGER, recommendations: GROUPS })
+  );
+  assert.match(prompt, /fait foi/);
+  assert.match(prompt, /ne proposer aucun autre produit/);
+  assert.match(prompt, /reprise telle quelle/);
+});
+
+test('what a product is NOT for never reaches the prompt', () => {
+  // `missing` rides along for the rules and the ledger; it is not rendered.
+  const prompt = toDraftingPrompt(
+    buildCaseFile({ answer: ANSWER, ledger: LEDGER, recommendations: GROUPS })
+  );
+  assert.doesNotMatch(prompt, /peaux-sensibles/);
+});
+
+test('a case file with no recommendations has no block', () => {
+  // Every investigation stored before the column existed, and every ticket that
+  // never called the tool.
+  const prompt = toDraftingPrompt(buildCaseFile({ answer: ANSWER, ledger: LEDGER }));
+  assert.doesNotMatch(prompt, /Produits retenus/);
+});
+
+test('the model’s re-listing of the products is KEPT, and why', () => {
+  // TRIED AND REVERTED (2026-09-20). Dropping it, so the prompt held one list
+  // instead of two, made the reply invent « Élixir Temps Précieux » and
+  // « Crème Éclat Parfait » — products the shop does not sell. Pointing the
+  // facts line at the block instead produced a reply naming no product at all.
+  // `established` is what the drafting model answers from; the block above it
+  // corrects which product suits what. The duplication is the price.
+  const caseFile = buildCaseFile({
+    answer: {
+      ...ANSWER,
+      established: [
+        { claim: 'Produits recommandés : Caresse Sensi Zen, Mousse Divine.', evidence_ids: ['t1'] }
+      ]
+    },
+    ledger: [...LEDGER, { id: 't9', tool: 'recommendProducts', argsHash: 'a9', outcome: 'relaxed' }],
+    recommendations: GROUPS
+  });
+
+  // The model's claim, plus one code-written entry per type of care.
+  assert.equal(caseFile.established.length, 1 + GROUPS.length);
+  assert.match(caseFile.established[0].claim, /Produits recommandés/);
+  assert.match(caseFile.established[1].claim, /Pour « hydratant », la boutique retient/);
+  // The tool's own line, description and all, is in the section the reply copies.
+  assert.match(caseFile.established[1].claim, /Hydrate/);
+  // Cited to the call it came from, like any other claim.
+  assert.deepEqual(caseFile.established[1].evidence_ids, ['t9']);
+});
+
+test('a block is evidence in its own right', () => {
+  // A model that returned no established fact while the shop's own selection
+  // stands has something to answer from, and must not be sent to a person for
+  // having nothing to go on.
+  const caseFile = buildCaseFile({
+    answer: { ...ANSWER, verdict: 'answerable', established: [] },
+    ledger: LEDGER,
+    recommendations: GROUPS
+  });
+  assert.equal(caseFile.verdict, 'answerable');
+});
+
+test('with no block, an empty established list still downgrades', () => {
+  const caseFile = buildCaseFile({
+    answer: { ...ANSWER, verdict: 'answerable', established: [] },
+    ledger: LEDGER
+  });
+  assert.equal(caseFile.verdict, 'needs_human');
+});
+
+test('an empty facts list points at the block instead of saying there are none', () => {
+  // MEASURED (ticket 05c1b539): with « Aucun fait n’a pu être établi » printed
+  // over a full product block, the reply invented « Élixir Temps Précieux » and
+  // « Crème Éclat Parfait » — products the shop does not sell. A model told it
+  // has no facts writes from its weights.
+  const prompt = toDraftingPrompt(
+    buildCaseFile({
+      answer: { ...ANSWER, established: [] },
+      ledger: LEDGER,
+      recommendations: GROUPS
+    })
+  );
+
+  assert.doesNotMatch(prompt, /Aucun fait n’a pu être établi/);
+  // The code-written entries fill the section, so it never reads « no facts »
+  // over a full block — which is what made a reply invent two products.
+  assert.match(prompt, /## Établi\n- Pour « hydratant », la boutique retient/);
+});
+
+test('with neither facts nor a block, it still says so', () => {
+  const prompt = toDraftingPrompt(buildCaseFile({ answer: { ...ANSWER, established: [] }, ledger: LEDGER }));
+  assert.match(prompt, /Aucun fait n’a pu être établi/);
+});

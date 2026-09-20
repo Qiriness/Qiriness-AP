@@ -681,6 +681,7 @@ export function createCaseFileStore(supabase, { transport = CASE_FILE_TRANSPORT 
             missing: caseFile.missing,
             do_not_claim: caseFile.doNotClaim,
             knowledge: caseFile.knowledge,
+            recommendations: caseFile.recommendations,
             context_ref: caseFile.contextRef || {},
             handoff: caseFile.handoff,
             candidate_order: caseFile.candidateOrder || {},

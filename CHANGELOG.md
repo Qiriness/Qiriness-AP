@@ -10,6 +10,79 @@ Three sibling files carry the other halves, and this one deliberately does not d
 
 ---
 
+## The product list stops being paraphrased twice (2026-09-20)
+
+`ticket_investigations.recommendations` (migration 32, applied) carries `recommendProducts`' own answer — one entry per type of care, with the product lines as the tool rendered them — and the drafting prompt prints it before the case file's summary. Same treatment `knowledge` chunks already get. Why: DECISIONS § « The product list reaches drafting as the tool wrote it ».
+
+- `investigate.mjs`: `run.recommendations()` beside `run.knowledge()`, read off the tool ledger.
+- `tool-registry.mjs`: `productLine` renders a product once, for the tool result and the stored block both.
+- `case-file.mjs`: the block is carried, printed first, and declared the exact one; `establishedLines` stops the facts section reading « aucun fait » over a full block; a block counts as evidence, so no verdict is downgraded for an empty facts list.
+- `compose-draft.mjs`, `investigation-runner.mjs`: read and stored by name. Rows written before the column default to `[]` and render no block.
+
+**Then the same wording was added INTO `## Établi`** (`recommendationFindings`), one entry per type of care, beside the model's summary rather than instead of it — because the reply imitates that section whatever else the prompt says.
+
+**Three experiments on the way, measured** (the first two kept as comments): dropping the model's re-listing made the reply invent two products the shop does not sell; pointing the facts line at the block made it name none; printing the block above the section left the reply mirroring the summary's bare names. Additive beat substitution on risk: the worst case is a repetitive email rather than a lost fact.
+
+Re-run on the ticket: the six real products under the customer's own three headings, **each with the shop's own description**, and the sensitive-skin fit on exactly the two products that carry it. No invented product or benefit, no internal notation, checks pass. `npm test`: 2,958 pass (10 new, 2 rewritten).
+
+---
+
+## A product is only ever presented for what it answers (2026-09-20)
+
+Owner's rule, after the reply said two cleansers « ne sont pas spécifiquement adaptés aux peaux sensibles » to a customer with reactive skin. The agent now states the positive and stays silent on the rest — for any product and any property. Why: DECISIONS § « A product is presented for what it answers ».
+
+- **`tool-registry.mjs` / `adviceText`**: the « Aucun de ces produits ne figure dans … » line is gone. Tags on a product line are the only statement of fit, and the instruction now says an untagged line is not to be commented on. `data.missing` and the `relaxed` outcome are unchanged, so the rules still branch as before.
+- **`case-file.mjs`**: new caveat `product_fit_unstated`, which forbids the sentence and names nothing. Raised by both `recommendProducts` answers, `cross_sell` included.
+- **`draft-checks.mjs`**: new `no_unsuitability_claim`, ungated like `no_carrier_scan_wording`, over « n'est pas adapté/conçu/formulé/recommandé », « ne convient pas », « déconseillé ». The caveat is listed advisory so one sentence is not flagged twice.
+
+Checked against the live collections on the ticket's own text: three groups, Caresse Sensi Zen and UV Protect tagged `[Soins Peaux Sensibles]`, the cleansers untagged, and no sentence anywhere about what a product is not for. `npm test`: 2,927 pass (3 new, 2 rewritten).
+
+**Left to the owner:** `pr25_conseil_partiel` and `pr29_equivalent_partiel` still tell the model « le dossier nomme le point qui n'a pas pu être satisfait ». The case file no longer names it, so that clause is stale.
+
+---
+
+## The concern is read from the message too (2026-09-20)
+
+Same ticket, third run: the model named three types of care and **no concern**, so a retinol cream was recommended to a customer who had written « peau très réactive et sujette aux allergies », and the case file called the list « adapté aux peaux très réactives ». Across three runs the model dropped one axis or the other every time. Why it is shaped this way: DECISIONS § « Both axes are read from the message ».
+
+- **New `concern-cues.mjs`**: seven entries (sensitive, redness, ageing, spots, blemishes, cernes/poches, tired), each resolving to a token looked up in the ACTIVATED concern collections. One entry is one concern however many collections it covers, and it carries its own label for the product tag.
+- **Merged with the model's own naming** in `recommendProducts`; the model's narrower reading wins where both cover a collection.
+- **Dry skin resolves to the hydrating group**, not to a concern — no concern collection describes dryness and the answer to « ma peau tiraille » is a moisturiser (owner's call).
+- **Redness and allergy words are included**, on the measurement that `cosmetovigilance` cannot call this tool at all and that « rougeur » / « couperose » appear in 0 tickets of the corpus, « allergie » in 1 (a product advice ticket).
+- **New `cue-matching.mjs`** shared by both cue lists, with phrase tokens so « anti age » can reach « Diag - Anti-âge ».
+
+Re-run on the ticket: the model again named only types of care, the cue supplied sensitive skin, and the case file now separates the two cleansers (« ne sont pas spécifiquement adaptés aux peaux sensibles ») from Caresse Sensi Zen and UV Protect SPF 50. The draft says the same. `npm test`: 2,924 pass (14 new).
+
+**Still open on this ticket:** the sample request is recorded as unverified and the reply does not mention it at all, with `handoff` null and the ticket back to `open`.
+
+---
+
+## A dead care cue, and the words customers actually use (2026-09-20)
+
+Follow-up to the entry below, from reading the cue list against the live collections.
+
+- **`gommage` reached nothing at all.** The token has to be a word of the shop's own collection title, and the shop calls it « Exfoliants & Lotions » — so « gommage », « exfoliant » and « exfolier » were dead cues, not near misses. The token is now `exfoliant`, with « gommer », « exfoliation » and « peeling » added.
+- **New cues** on existing entries: « eau micellaire » / « micellaire » and « nettoyer mon visage » (cleansers), « lotion tonique » / « tonique » (Exfoliants & Lotions), « mes mains » and bare « mains », bare « corps » and « sur le corps », « me démaquiller ».
+- **A new `yeux` entry** for « un soin pour les yeux », which is both eye collections and does not say contour. Deliberately NOT the bare « pour les yeux »: it qualifies another type of care, and « un patch pour les yeux » asks for patches.
+- **A test asserts no two entries share a token** — the second would be dropped as a duplicate group and its cues would silently stop mattering.
+- Not done: « Soins Éclat & Bonne Mine » is still unreachable by any cue (owner's call).
+
+Checked against the live collections: every entry now reaches at least one active collection, and « nuit » is live too since two night-cream collections were activated. `npm test`: 2,910 pass (5 new).
+
+---
+
+## Advice answers every type of care asked for (2026-09-19)
+
+`recommendProducts` now answers « nettoyant, hydratant, protection » as three groups of products instead of one. Before, it kept the cleansers and dropped the sensitive-skin requirement. Found on ticket `05c1b539`, where the case file then told the draft the shop had nothing for reactive skin, which was false. Why it is shaped this way: DECISIONS § « One group per type of care ».
+
+- `care-cues.mjs`: `careGroupsInText` replaces `careCollectionsInText`. A cue now reaches every active category its token matches (one group), not only a unique one. New cues: « hydratant / hydratante / hydratation / hydrater », and bare « protection » for sun care. Groups follow the customer's word order.
+- `advice-collections.mjs`: `careGroups`, `rankGroup` and `bestTier` replace `chooseProducts`. Concerns rank inside each group, only the best tier goes out, 3 products for one type of care and 2 each for several, and no product appears twice.
+- `tool-registry.mjs`: the handler loops over the groups. The prompt has one section per group, each product tagged with the selections it is in, and an unmet concern is named per group. `data.groups` has been added. The outcomes and the other `data` fields are unchanged. The tool description asks the model to name every type of care.
+
+Checked on the ticket's own text against the live collections: cleansers (flagged as not in the sensitive-skin selection), Caresse Sensi Zen and Brume Sensi Zen, UV Protect SPF 50. Outcome `relaxed`. `npm test`: 2,905 pass. **Not yet re-run through the investigation and drafting passes.**
+
+---
+
 ## Orders has a badge for orders waiting to ship (2026-09-18)
 
 A grey count on the Orders nav item, beside Tickets' and Conversations'. It counts `open_orders()`'s waiting rule, so it matches the Delay column and the Fulfilment panel's waiting list and leaves out orders cancelled or refunded before shipping. Zero today, so the badge is hidden. Checked through the real `navBadgeCounts`: `{ openTickets: 82, openConversations: 15, unfulfilledOrders: 0 }`, and the filter without "not closed" finds the 7 refunded orders. `tsc` and lint clean. Not opened in a browser.

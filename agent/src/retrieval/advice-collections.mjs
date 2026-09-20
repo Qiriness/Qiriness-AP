@@ -13,8 +13,9 @@ import { T } from '../../../scripts/lib/tables.mjs';
 //
 // TWO AXES. A `concern` says what is wrong (rides, taches, cernes et poches); a
 // `category` says what form the answer takes (sérum, crème de jour, contour des
-// yeux). « un sérum pour mes rides » is one of each, and telling them apart is
-// what lets `chooseProducts` relax the right one when nothing sits in both.
+// yeux). « un sérum pour mes rides » is one of each. The categories decide WHICH
+// GROUPS of products the answer has — one per type of care asked for — and the
+// concerns decide which products lead inside each group (`rankGroup`).
 //
 // NOTHING HERE ASKS A MODEL ANYTHING. The model names requirements; this module
 // maps them onto activated collections, intersects, filters to live products and
@@ -145,107 +146,97 @@ function reconcile(needle, collections) {
 }
 
 /**
- * The products that satisfy every named collection, relaxing one at a time.
+ * One group per type of care asked for, merging the model's names into the cues.
  *
- * THE DROP IS REPORTED, ALWAYS. Without that, a product matching one of three
- * requirements reads in a reply exactly like a product matching all three, and
- * the reply claims something nobody checked.
+ * A GROUP IS ONE THING THE CUSTOMER ASKED FOR, and it may span several
+ * collections: « hydratant » is Crèmes Hydratantes, Soins Hydratants and
+ * Masques hydratants on this shop, and all three are a fair answer to it. The
+ * cue groups come first, in the order the customer's words were read; a
+ * category the model named that no cue group already holds becomes a group of
+ * its own.
  *
- * THE TYPE OF CARE IS NEVER GIVEN UP while a concern is still standing, and this
- * is a rule rather than a preference. It is the thing the customer actually
- * asked for: « une crème pour les mains » answered with a serum is not a
- * narrower answer, it is the wrong product. A concern is a reason to prefer one
- * hand cream over another, so dropping it still answers the question asked.
+ * With no type of care at all, the concerns themselves are the pool — « quoi
+ * pour mes rides ? » is answered from the rides collection, ranked the same way.
  *
- * Only concerns are therefore candidates while any category remains. Ordering
- * within them: each is tried and the first whose removal leaves something
- * standing is the one dropped, so a requirement is never given up while it was
- * not the thing in the way; ties go to the broadest, the collection holding the
- * most products, because it is the one committing to least.
+ * @param cueGroups  `[{ label, collections }]` from `careGroupsInText`
+ * @param named      collections the model named, already resolved
+ * @param concerns   every concern in play, when the caller has merged the
+ *                   model's with the ones read from the text; the model's alone
+ *                   otherwise
+ * @returns `{ groups: [{ label, collections }], concerns }`
  */
-export function chooseProducts(collections, { limit = 3 } = {}) {
-  if (collections.length === 0) {
-    return { products: [], matchedOn: [], dropped: [], relaxed: false };
+export function careGroups(cueGroups = [], named = [], concerns = null) {
+  const groups = cueGroups.map((group) => ({ label: group.label, collections: [...group.collections] }));
+  const held = new Set(groups.flatMap((group) => group.collections.map((c) => c.handle)));
+  for (const collection of named) {
+    if (collection.axis !== 'category' || held.has(collection.handle)) continue;
+    groups.push({ label: collection.title, collections: [collection] });
+    held.add(collection.handle);
   }
-
-  let kept = [...collections];
-  const dropped = [];
-
-  for (;;) {
-    const ids = intersect(kept.map((c) => c.productIds));
-    if (ids.length > 0) {
-      return {
-        products: ids.slice(0, limit),
-        matchedOn: kept.map((c) => c.handle),
-        dropped: dropped.map((c) => c.handle),
-        relaxed: dropped.length > 0
-      };
-    }
-    if (kept.length <= 1) {
-      return {
-        products: [],
-        matchedOn: [],
-        dropped: dropped.map((c) => c.handle),
-        relaxed: dropped.length > 0
-      };
-    }
-
-    // THE DROP THAT ACTUALLY UNBLOCKS, not simply the next one in order. Dropping
-    // blindly loses requirements it never needed to: « un sérum pour mes rides et
-    // mes taches » has no product in all three, but removing `taches` leaves two
-    // anti-wrinkle serums while removing `rides` leaves nothing and forces a
-    // second drop — answering with plain serums, both concerns gone. So each
-    // candidate is tried, in relaxation order, and the first that leaves
-    // something standing is the one that goes.
-    // ONLY CONCERNS ARE DROPPABLE while a category is standing. Without this the
-    // search would happily give up « Crèmes Mains » to satisfy two concerns that
-    // overlap somewhere else in the catalogue, and answer a hand-cream question
-    // with a face serum that happens to suit sensitive mature skin.
-    const order = relaxationOrder(kept);
-    const candidates = order.some((c) => c.axis === 'category')
-      ? order.filter((c) => c.axis !== 'category')
-      : order;
-    if (candidates.length === 0) {
-      // Every remaining requirement is a category and they do not overlap —
-      // « un sérum ET une crème » is two answers, not one product, and this
-      // module has no way to say so. Report the failure rather than pick.
-      return {
-        products: [],
-        matchedOn: [],
-        dropped: dropped.map((c) => c.handle),
-        relaxed: dropped.length > 0
-      };
-    }
-    const unblocks = candidates.find((candidate) => {
-      const rest = kept.filter((c) => c !== candidate);
-      return intersect(rest.map((c) => c.productIds)).length > 0;
-    });
-    const next = unblocks ?? candidates[0];
-    kept = kept.filter((c) => c !== next);
-    dropped.push(next);
+  const inPlay = concerns ?? named.filter((collection) => collection.axis !== 'category');
+  if (groups.length === 0 && inPlay.length > 0) {
+    groups.push({ label: null, collections: inPlay });
   }
+  return { groups, concerns: inPlay };
 }
 
-/** Concerns first, broadest within each axis — see `chooseProducts`. */
-function relaxationOrder(collections) {
-  return [...collections].sort((a, b) => {
-    const axis = rank(a.axis) - rank(b.axis);
-    if (axis !== 0) return axis;
-    return b.productIds.length - a.productIds.length;
+/**
+ * Every product in a group, best answer first.
+ *
+ * OVERLAP, NOT INTERSECTION. The first build intersected the type of care with
+ * every concern and gave a requirement up when nothing sat in all of them. That
+ * forced a winner where none was needed: « nettoyant, hydratant, protection …
+ * peau très réactive » kept the cleansers, dropped sensitive skin, and never
+ * looked at the Sensi Zen cream sitting in the moisturisers. A concern is now a
+ * reason to put a product FIRST, never a reason to lose the group.
+ *
+ * Ranked by how many concerns a product meets, then by how narrow those
+ * concerns are (a product in a 3-product selection says more than one in a
+ * 50-product one), then by collection order. `exclude` holds what an earlier
+ * group already put forward, so one product never answers two questions.
+ *
+ * @returns `[{ id, meets: [concern handle] }]`
+ */
+export function rankGroup(collections, concerns = [], { exclude = new Set() } = {}) {
+  const seen = new Set();
+  const pool = [];
+  for (const collection of collections) {
+    for (const id of collection.productIds) {
+      if (seen.has(id) || exclude.has(id)) continue;
+      seen.add(id);
+      pool.push(id);
+    }
+  }
+  const scored = pool.map((id, position) => {
+    const met = concerns.filter((concern) => concern.productIds.includes(id));
+    const narrowness = met.reduce((sum, concern) => sum + 1 / Math.max(concern.productIds.length, 1), 0);
+    return { id, meets: met.map((concern) => concern.handle), narrowness, position };
   });
+  scored.sort(
+    (a, b) => b.meets.length - a.meets.length || b.narrowness - a.narrowness || a.position - b.position
+  );
+  return scored.map(({ id, meets }) => ({ id, meets }));
 }
 
-/** A concern is dropped before a category — see `chooseProducts`. */
-function rank(axis) {
-  return axis === 'category' ? 1 : 0;
-}
-
-function intersect(lists) {
-  if (lists.length === 0) return [];
-  return lists.reduce((kept, list) => {
-    const set = new Set(list);
-    return kept.filter((id) => set.has(id));
-  });
+/**
+ * The products a group puts forward: the best tier only, ticked first.
+ *
+ * THE BEST TIER ONLY. When two moisturisers are in the sensitive-skin selection,
+ * a third that is not has no business beside them in a reply to somebody with
+ * allergies — it would be the one they bought. Only when nothing meets a concern
+ * does the group fall back to plain members of the type of care, and the caller
+ * then says so.
+ *
+ * `ranked` must already be the LIVE products, in `rankGroup` order. A tick
+ * reorders within the tier and never lifts a product into it.
+ */
+export function bestTier(ranked, { limit = 3, isPreferred = () => false } = {}) {
+  if (ranked.length === 0) return [];
+  const top = ranked[0].meets.length;
+  const tier = ranked.filter((entry) => entry.meets.length === top);
+  const preferred = tier.filter((entry) => isPreferred(entry));
+  const rest = tier.filter((entry) => !preferred.includes(entry));
+  return [...preferred, ...rest].slice(0, limit);
 }
 
 /** Case- and accent-insensitive, like every other product search in this codebase. */
