@@ -3,6 +3,7 @@ import test from 'node:test';
 
 import {
   classifyAttachments,
+  detectPhotoMention,
   listTicketAttachments,
   summarisePhotoEvidence,
   toPublicAttachments
@@ -205,6 +206,40 @@ test('a flagged message with no metadata is unknown, not empty', () => {
   assert.equal(result.known, false);
   assert.equal(result.outcome, 'attachment_type_unknown');
   assert.equal(result.images.length, 0);
+});
+
+test('a non-French mention of a photo is still a mention', () => {
+  // 119 of the last 1 000 orders shipped outside France. « les adjunto foto »
+  // (ticket d48f1c08) scored `mentioned: false` against a French-only term list,
+  // which removed the last backstop under a photo that was also invisible to the
+  // attachment check.
+  const cases = [
+    ['les adjunto foto de la caja y del contenido', 'foto'],
+    ['Le envio una fotografia del producto', 'fotografia'],
+    ['vi invio in allegato le immagini del prodotto', 'immagini'],
+    // `foto` wins over `anexo` here, by the same "strongest term in the
+    // sentence" rule the French cases above pin.
+    ['Segue em anexo a foto da encomenda', 'foto'],
+    ['Segue em anexo o comprovativo da encomenda', 'anexo']
+  ];
+  for (const [body, expected] of cases) {
+    const result = detectPhotoMention(body);
+    assert.equal(result.mentioned, true, body);
+    assert.equal(result.term, expected);
+  }
+});
+
+test('the widened terms do not fire on ordinary prose', () => {
+  // `adjunt` and `allegat` are stems, so the guard against over-matching is
+  // worth pinning: a term list that fires on everything reports every ticket as
+  // carrying evidence.
+  for (const body of [
+    'Je souhaite adjuger ce dossier',
+    'Votre imagination est la bienvenue',
+    'ma commande n a pas ete livree'
+  ]) {
+    assert.equal(detectPhotoMention(body).mentioned, false, body);
+  }
 });
 
 test('arrival order is preserved across messages', () => {

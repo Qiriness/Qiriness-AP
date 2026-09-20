@@ -1620,3 +1620,40 @@ adding a key to the document.
 **A second, smaller lesson.** The prose documents were the only backup. That they
 were enough is luck, not a system: a situation authored in the dashboard and
 never written about would have been unrecoverable.
+
+## 13. The attachment repair has run; what it uncovers has not been judged — 2026-09-20
+
+**The fix is proven, the consequences are not.** `hasAttachments` is false for an
+inline-only message, and three readers treated that as "nothing attached" (see
+`CHANGELOG.md` → *A customer's inline photo was invisible to everything* and
+`DECISIONS.md` → *`hasAttachments` is not evidence of absence*). The backfill has
+since run over the whole corpus: **292 of 292 rows filled, 0 failed, 0 gone, 25
+carry a photo**, and `ticket_messages.attachments` is now non-null everywhere.
+
+**What is proven.** That the rows can be filled, and that `d48f1c08`'s 3.6 MB July
+photo is on the record. Verified by query, not inference.
+
+**What is not.**
+
+1. **The photo counts in `DECISIONS.md` are stale.** « 7 carry a real photo, 36
+   mention one and attached nothing, 160 neither » was measured over 203 tickets
+   from the *flagged* rows only. 25 messages now carry a photo. **Check:**
+   re-measure the three-way split across tickets and correct that paragraph.
+2. **The furniture rule has not been re-judged against inline images it never
+   saw.** The 50 KB floor plus name pattern was calibrated on the old set. The
+   backfill's own output already shows one marketing banner —
+   `bannières mails (16 × 3 cm) (3).png`, 87 KB — counted as a photo. **Check:**
+   list the 25 and confirm each is customer evidence rather than furniture.
+3. **One case file has been rebuilt on the new data: `d48f1c08`'s, and it now
+   works.** `order` gained `checkPhotoEvidence`, `checkPhotoEvidence → attached`,
+   and « Le client a joint une photo à son message » is an established fact where
+   the dossier used to say the photo was not available. **Every other ticket whose
+   messages now carry a photo is still reading a case file built before the
+   repair. Check:** find them and re-investigate —
+   `select distinct ticket_id from ticket_messages where jsonb_array_length(attachments) > 0`,
+   intersected with `ticket_investigations.investigated_at < 2026-09-20`.
+4. **`not_checked` has never been produced by a real run.** Post-backfill it can
+   only appear where mail has left the mailbox, which is currently zero rows.
+   Its behaviour — absent from `ASK_ANSWERED_BY`, so the ask still happens — is
+   covered by unit tests and nothing else. **Check:** confirm on the first run
+   that produces one.

@@ -224,13 +224,25 @@ export function oldestFirst(messages) {
 }
 
 /**
- * Fills `attachments` on the messages that have any, in place.
+ * Fills `attachments` on every kept message, in place.
+ *
+ * IT ASKS ABOUT EVERY MESSAGE, NOT ONLY THE FLAGGED ONES, and that is the whole
+ * point of the function. `hasAttachments` is false for a message whose only
+ * attachments are inline: Gmail embeds a pasted photo in the HTML body with a
+ * content-id rather than as a separate MIME part, and Exchange does not count
+ * those. Measured 2026-09-20 on ticket d48f1c08, where the customer wrote « les
+ * adjunto foto de la caja y del contenido » and Graph holds a 3.6 MB inline PNG
+ * on a message whose flag reads false. Gating the fetch on the flag left that
+ * row at `attachments: null` for two months, and the photo check reported it as
+ * « aucune photo » — the one reading the null exists to prevent.
+ *
+ * THE FLAG IS STILL STORED, because `has_attachments` is what Graph said and
+ * the column records that. It is simply not evidence of absence, so nothing
+ * decides whether to look based on it.
  *
  * RUNS AFTER THE BLOCKLIST GATE, deliberately. This is one extra Graph request
- * per message with an attachment, and blocked mail is dropped before it — a
- * newsletter with a banner image should not cost a round trip on its way to
- * being discarded. On the stored corpus 38 of 296 inbound messages carry an
- * attachment, so this is roughly one extra call in eight, on the kept set only.
+ * per kept message, and blocked mail is dropped before it — a newsletter with a
+ * banner image should not cost a round trip on its way to being discarded.
  *
  * BEST-EFFORT, LIKE THE AUDIT FLUSH. A ticket whose attachment metadata could
  * not be fetched is still a ticket, and failing the poll would re-drive the
@@ -249,7 +261,7 @@ async function fetchAttachmentMetadata(graphClient, items, logger) {
 
   let fetched = 0;
   for (const item of items) {
-    if (item?.removed || !item?.message?.has_attachments || !item.graphMessageId) {
+    if (item?.removed || !item.graphMessageId) {
       continue;
     }
     try {

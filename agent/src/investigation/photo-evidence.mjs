@@ -43,6 +43,14 @@ export function toPromptText(evidence) {
         'Preuve photo : le message porte une pièce jointe, mais son type n’a pas été ' +
         'enregistré à l’ingestion. Impossible de dire s’il s’agit d’une photo.'
       );
+    // DIFFERENT FROM THE CASE ABOVE, and the difference is what may be assumed.
+    // There, something is known to be attached; here nothing is known at all,
+    // so the line must not imply the message came empty.
+    case 'not_checked':
+      return (
+        'Preuve photo : les pièces jointes de ce message n’ont jamais été relevées. ' +
+        'Ne rien conclure — ni qu’une photo est jointe, ni qu’il n’y en a pas.'
+      );
     default:
       return 'Preuve photo : aucune image jointe et aucune mention de photo.';
   }

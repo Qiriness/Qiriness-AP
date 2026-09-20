@@ -10,6 +10,59 @@ Three sibling files carry the other halves, and this one deliberately does not d
 
 ---
 
+## A customer's inline photo was invisible to everything (2026-09-20)
+
+Exchange reports `hasAttachments: false` when a message's only attachment is
+inline, which is how Gmail sends a pasted photo. Three readers each treated that
+flag as "nothing to fetch", so those rows kept `attachments = null` forever and
+the photo check read the null as "no photo attached".
+
+**Found on ticket `d48f1c08`**, parked at `awaiting_human` since July over a
+3.6 MB PNG that was in the mailbox the whole time. **199 of 234 inbound messages
+were in the same state**; of the 7 whose text claimed an attachment, 6 carried
+inline images.
+
+- **`delta-poller`** asks Graph about every kept message, not only flagged ones.
+- **`attachment-backfill`** selects on `attachments is null` alone.
+- **`summarisePhotoEvidence`** tracks `attachmentsChecked` beside
+  `attachmentsKnown`, and reports the new outcome **`not_checked`** — *we never
+  asked* — where it used to report `none`. It is deliberately **not** in
+  `ASK_ANSWERED_BY`: unlike `attachment_type_unknown` it is no evidence that
+  anything arrived, so it must not silence the photo request.
+- **`PHOTO_TERMS`** covers Spanish, Italian and Portuguese. « les adjunto foto »
+  matched nothing before, which removed the last backstop under this message.
+
+**The repair has run: 292 of 292 rows filled, 0 failed, 0 gone; 25 carry a
+photo.** Every message in the corpus now has real attachment metadata, and
+`d48f1c08`'s July photo is on the record.
+
+**Covered by 28 new assertions**, including the first tests `attachment-backfill`
+and the poller's attachment fetch have ever had — the absence of any is why this
+survived. One pins that `has_attachments` appears nowhere in the backfill's query.
+
+**`order` gained `checkPhotoEvidence`,** which is what made the repair reach the
+ticket that exposed it. `order/problem` is where a wrong or missing item lands and
+it was the only breakage variant without the tool, while still raising
+`photo_evidence` at runtime — so the need resolved `unavailable` before any data
+was consulted, and the backfill changed nothing for `d48f1c08`. Re-investigated
+after both changes:
+
+| | before | after |
+|---|---|---|
+| tools called | 2 | 3 (`checkPhotoEvidence → attached`) |
+| `photo_evidence` | `unavailable` | **satisfied** |
+| established facts | 3 | 5 — « Le client a joint une photo à son message » |
+| unverified | « la photo n'est pas vérifiable par les outils disponibles » | *gone* |
+
+The verdict stays `needs_human`, which is right: somebody has to look at the photo
+and decide. What changed is that the dossier no longer tells them the photo does
+not exist. Rationale in `DECISIONS.md` → *`hasAttachments` is not evidence of
+absence*.
+
+**Still open:** `product_identity` reports « aucune recherche faite alors qu'un
+outil était disponible » on this ticket — a separate, pre-existing gap in what the
+model chooses to call, not in what it is offered.
+
 ## Dropped mail can be cleared out of the way (2026-09-20)
 
 The Irrelevant tab's list header gained **Select**: it turns every row into a checkbox, **Clear N** hides the ticked ones, **Cancel** leaves without touching anything. Cleared mail drops out of the list *and* the tab count, and **Restore N** in the same header brings it all back.

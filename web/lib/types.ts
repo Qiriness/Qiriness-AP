@@ -891,7 +891,7 @@ export interface TicketAttachments {
   mentioned: boolean;
   /** The French term that matched, shown to explain why we think one is missing. */
   matchedTerm: string | null;
-  outcome: "attached" | "mentioned_not_attached" | "attachment_type_unknown" | "none";
+  outcome: "attached" | "mentioned_not_attached" | "attachment_type_unknown" | "not_checked" | "none";
 }
 
 /* ------------------------------------------------------- ticket thread */

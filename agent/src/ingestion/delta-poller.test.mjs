@@ -84,6 +84,62 @@ test('follows nextLink pages to the deltaLink and persists the cursor', async ()
   assert.deepEqual(graphClient.requestedUrls, [null, 'https://graph/page2']);
 });
 
+test('asks Graph about every kept message, not only the flagged ones', async () => {
+  // THE INLINE-PHOTO REGRESSION. Exchange reports `hasAttachments: false` when a
+  // message's only attachment is embedded in the body, which is how Gmail sends
+  // a pasted photo. Gating the fetch on that flag left those rows at
+  // `attachments: null` forever — the backfill filtered the same way — and the
+  // photo check then read the null as "nothing attached". Ticket d48f1c08 sat on
+  // a 3.6 MB inline PNG from July until 2026-09-20 because of it.
+  const unflagged = graphMessage('m1', 'c1');
+  unflagged.hasAttachments = false;
+
+  const asked = [];
+  const graphClient = {
+    ...fakeGraphClient([{ messages: [unflagged], nextLink: null, deltaLink: 'https://graph/delta-final' }]),
+    async getAttachmentMetadata(id) {
+      asked.push(id);
+      return [{ name: 'gmail_image.png', contentType: 'image/png', size: 3_623_198, isInline: true }];
+    }
+  };
+  const store = fakeStore();
+
+  await runDeltaPoll({
+    graphClient,
+    store,
+    record: store,
+    cursorStore: fakeCursorStore(null),
+    shopId: 'shop-1'
+  });
+
+  assert.deepEqual(asked, ['m1']);
+  assert.equal(store.messages.get('shop-1|m1').attachments.length, 1);
+});
+
+test('a message Graph knows nothing about keeps its null rather than an empty array', async () => {
+  // The distinction the column exists for: `[]` means we asked and there was
+  // nothing, `null` means we never learned. A failed lookup must not claim the
+  // first — see `summarisePhotoEvidence`, which reads the two differently.
+  const message = graphMessage('m1', 'c1');
+  const graphClient = {
+    ...fakeGraphClient([{ messages: [message], nextLink: null, deltaLink: 'https://graph/delta-final' }]),
+    async getAttachmentMetadata() {
+      return null;
+    }
+  };
+  const store = fakeStore();
+
+  await runDeltaPoll({
+    graphClient,
+    store,
+    record: store,
+    cursorStore: fakeCursorStore(null),
+    shopId: 'shop-1'
+  });
+
+  assert.equal(store.messages.get('shop-1|m1').attachments ?? null, null);
+});
+
 test('drops blocklisted senders before writing and records rule hits', async () => {
   const graphClient = fakeGraphClient([
     {

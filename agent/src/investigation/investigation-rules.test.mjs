@@ -88,6 +88,31 @@ test('a promotions ticket never gets the product tools, and vice versa', () => {
   assert.ok(!product.includes(TOOL_NAMES.LOOKUP_CUSTOMER), 'a product question needs no customer record');
 });
 
+test('every subject where an item can arrive broken can look at a photo', () => {
+  // `order` was the hole, and it was invisible because the need is raised at
+  // runtime rather than declared in `requiredEvidence` — so no static check
+  // could catch it and `photo_evidence` simply resolved `unavailable`. Ticket
+  // d48f1c08 (« en el interior venia otra crema ») sat behind it while its photo
+  // was on the record.
+  for (const subject of ['order', 'delivery', 'return_exchange', 'product']) {
+    assert.ok(
+      allowedTools(subject, 'problem', 3).includes(TOOL_NAMES.CHECK_PHOTO_EVIDENCE),
+      `${subject}/problem must be able to check a photo`
+    );
+  }
+});
+
+test('the photo tool stays out of subjects where nothing can be photographed', () => {
+  // The other half of least privilege: a tool the model can spend a call on is a
+  // tool it can then reason from.
+  for (const subject of ['payment', 'account', 'promotions', 'other']) {
+    assert.ok(
+      !allowedTools(subject, 'problem', 3).includes(TOOL_NAMES.CHECK_PHOTO_EVIDENCE),
+      `${subject}/problem has no photo case`
+    );
+  }
+});
+
 test('the whole 14 x 4 matrix is decidable and never throws', () => {
   for (const subject of TICKET_SUBJECTS) {
     for (const kind of REQUEST_KINDS) {

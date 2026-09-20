@@ -108,6 +108,55 @@ test('unknown beats mentioned — never tell a customer to resend what they may 
   assert.equal(evidence.outcome, 'attachment_type_unknown');
 });
 
+test('an UNFLAGGED message with no metadata is not_checked, never "no photo"', () => {
+  // THE REGRESSION THIS FILE EXISTS FOR. Exchange reports `hasAttachments:
+  // false` when the only attachment is inline, so an unflagged row with a null
+  // `attachments` is not an empty message — it is a message nobody asked about.
+  // Measured 2026-09-20 on ticket d48f1c08, whose 3.6 MB inline PNG this
+  // function called `none` with `attachmentsKnown: true` for two months.
+  const evidence = summarisePhotoEvidence([
+    {
+      direction: 'inbound',
+      body_text: 'Buenas tardes, les adjunto foto de la caja y del contenido',
+      has_attachments: false,
+      attachments: null
+    }
+  ]);
+  assert.equal(evidence.outcome, 'not_checked');
+  assert.equal(evidence.attachmentsChecked, false);
+});
+
+test('not_checked outranks a mention: we cannot say a photo failed to arrive', () => {
+  const evidence = summarisePhotoEvidence([
+    { direction: 'inbound', body_text: 'voici la photo', has_attachments: false, attachments: null }
+  ]);
+  assert.equal(evidence.outcome, 'not_checked');
+});
+
+test('the two ignorances stay distinct — a flagged row is still type_unknown', () => {
+  // Same null, different claim: the flag says something IS attached, so a person
+  // is looking for a type we failed to record, not for whether anything came.
+  const flagged = summarisePhotoEvidence([
+    { direction: 'inbound', body_text: 'voir le fichier', has_attachments: true, attachments: null }
+  ]);
+  const unflagged = summarisePhotoEvidence([
+    { direction: 'inbound', body_text: 'voir le fichier', has_attachments: false, attachments: null }
+  ]);
+  assert.equal(flagged.outcome, 'attachment_type_unknown');
+  assert.equal(unflagged.outcome, 'not_checked');
+  assert.notEqual(flagged.outcome, unflagged.outcome);
+});
+
+test('an empty array is a real answer: we asked, nothing was attached', () => {
+  // The other half of the null's meaning. `[]` must keep resolving to `none`,
+  // or the backfill could never close a row.
+  const evidence = summarisePhotoEvidence([
+    { direction: 'inbound', body_text: 'ma commande est en retard', has_attachments: false, attachments: [] }
+  ]);
+  assert.equal(evidence.outcome, 'none');
+  assert.equal(evidence.attachmentsChecked, true);
+});
+
 test('a CV alone is not a photo and not an unknown', () => {
   const evidence = summarisePhotoEvidence([
     {
@@ -145,7 +194,7 @@ test('no messages at all is "none", not a crash', () => {
 // --- what the model is shown -------------------------------------------------
 
 test('the prompt line never invents an instruction to ask for a photo', () => {
-  for (const outcome of ['attached', 'mentioned_not_attached', 'attachment_type_unknown', 'none']) {
+  for (const outcome of ['attached', 'mentioned_not_attached', 'attachment_type_unknown', 'not_checked', 'none']) {
     const text = toPromptText({ outcome, images: 1, nonImages: 0, matchedTerm: 'photo' });
     assert.match(text, /^Preuve photo/);
     assert.doesNotMatch(text, /demande|demandez/i);
@@ -155,4 +204,12 @@ test('the prompt line never invents an instruction to ask for a photo', () => {
 test('the unknown case says so in words, rather than reporting zero', () => {
   const text = toPromptText({ outcome: 'attachment_type_unknown' });
   assert.match(text, /type n’a pas été enregistré/);
+});
+
+test('the not_checked line forbids the conclusion in both directions', () => {
+  // It is shown to a model that will otherwise fill the gap itself. Saying only
+  // "not verified" invites "no photo was received"; the line has to close both.
+  const text = toPromptText({ outcome: 'not_checked' });
+  assert.match(text, /jamais été relevées/);
+  assert.match(text, /Ne rien conclure/);
 });

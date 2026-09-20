@@ -53,7 +53,25 @@ const PHOTO_TERMS = [
   // letter does the same job and survives the accents this mailbox is full of.
   /\bclich[ée]s?(?![a-zà-ÿ])/i,
   /\b(?:jpe?g|png|heic|webp)\b/i,
-  /\bimages?\b/i
+  /\bimages?\b/i,
+  // NOT A FRENCH MAILBOX. 119 of the last 1 000 orders shipped outside France —
+  // Belgium, Italy, the Netherlands, Spain, Portugal, Switzerland — and a
+  // customer writes in their own language. « les adjunto foto de la caja »
+  // (ticket d48f1c08) matched nothing above: `photos?` does not match "foto",
+  // and the mention check is the backstop for exactly that message, whose
+  // attachment was inline and therefore invisible to every other signal.
+  //
+  // Kept to the words that mean a picture in Spanish, Italian and Portuguese,
+  // plus the two ways of saying "attached". `adjunt` and `allegat` inflect
+  // (adjunto/adjunta/adjuntos, allegato/allegata), and every inflection means
+  // the same thing here.
+  /\bfotos?\b/i,
+  /\bfotograf[íi]as?\b/i,
+  /\bimagens?\b/i,
+  /\bimm[aá]gini?\b/i,
+  /\badjunt[oa]s?\b/i,
+  /\ballegat[oaie]\b/i,
+  /\banexos?\b/i
 ];
 
 /**
@@ -137,17 +155,22 @@ export function classifyAttachments(attachments) {
 /**
  * The verdict, over every inbound message on the ticket.
  *
- * `attachmentsKnown` is the honest half of this. Attachment metadata is fetched
- * from Graph at ingestion, so mail stored before that existed carries
- * `has_attachments` and nothing else. For those rows the answer to "is it a
- * photo" is genuinely unknown, and `attachment_type_unknown` says so instead of
- * guessing either way — the same rule the Insights panels follow, where an
- * unmeasured figure is a dash and never a zero.
+ * TWO DIFFERENT IGNORANCES, AND THEY ARE NOT INTERCHANGEABLE. `attachmentsKnown`
+ * is false when a message SAYS it carries something we never identified — a
+ * person should look. `attachmentsChecked` is false when we never asked Graph at
+ * all, which until 2026-09-20 was silently folded into "nothing attached": the
+ * `null` the column keeps precisely to record "not learned" was coerced to `[]`
+ * one frame later. Collapsing them cost ticket d48f1c08 two months parked on a
+ * 3.6 MB inline photo the customer sent in July.
+ *
+ * Neither is a dash for the sake of it — the same rule the Insights panels
+ * follow, where an unmeasured figure is never a zero.
  *
  * Outcomes, and what a drafting step would do with each:
  *   `attached`                 — a photo is here. Proceed.
  *   `mentioned_not_attached`   — they meant to. Ask them to resend it.
  *   `attachment_type_unknown`  — something is attached, type unrecorded. A person looks.
+ *   `not_checked`              — we never asked the mailbox. Nothing may be concluded.
  *   `none`                     — nothing said, nothing sent. Ask for a photo.
  */
 export function summarisePhotoEvidence(messages = []) {
@@ -159,6 +182,7 @@ export function summarisePhotoEvidence(messages = []) {
   let matchedTerm = null;
   let flaggedAttachments = false;
   let attachmentsKnown = true;
+  let attachmentsChecked = true;
   const totals = { images: 0, nonImages: 0, furniture: 0 };
   const names = [];
 
@@ -173,10 +197,16 @@ export function summarisePhotoEvidence(messages = []) {
     if (flagged) flaggedAttachments = true;
 
     const raw = message.attachments ?? message.attachmentMetadata ?? null;
-    // A flagged message with no metadata array is a row from before the fetch
-    // existed. An unflagged message needs no metadata to be complete.
-    if (flagged && !Array.isArray(raw)) {
-      attachmentsKnown = false;
+    // NO METADATA MEANS WE NEVER LOOKED, WHATEVER THE FLAG SAYS. The stronger
+    // claim — something IS attached and we could not identify it — still needs
+    // the flag. The weaker one does not, and used to require it: an unflagged
+    // row with no metadata fell through to `classifyAttachments(null)`, which
+    // coerces null to `[]` and reports zero images as fact. Exchange sets
+    // `hasAttachments: false` when the only attachment is inline, so that path
+    // was exactly the one a customer's pasted photo took.
+    if (!Array.isArray(raw)) {
+      attachmentsChecked = false;
+      if (flagged) attachmentsKnown = false;
       continue;
     }
 
@@ -187,7 +217,13 @@ export function summarisePhotoEvidence(messages = []) {
     names.push(...summary.names);
   }
 
-  const outcome = decide({ images: totals.images, mentioned, flaggedAttachments, attachmentsKnown });
+  const outcome = decide({
+    images: totals.images,
+    mentioned,
+    flaggedAttachments,
+    attachmentsKnown,
+    attachmentsChecked
+  });
 
   return {
     outcome,
@@ -195,6 +231,7 @@ export function summarisePhotoEvidence(messages = []) {
     matchedTerm,
     attachmentsFlagged: flaggedAttachments,
     attachmentsKnown,
+    attachmentsChecked,
     images: totals.images,
     nonImages: totals.nonImages,
     furniture: totals.furniture,
@@ -202,12 +239,16 @@ export function summarisePhotoEvidence(messages = []) {
   };
 }
 
-function decide({ images, mentioned, flaggedAttachments, attachmentsKnown }) {
+function decide({ images, mentioned, flaggedAttachments, attachmentsKnown, attachmentsChecked }) {
   if (images > 0) return 'attached';
   // Unknown beats "not attached": claiming nothing came through when the
   // metadata was never fetched would tell a customer to resend a photo they
   // already sent, which is worse than admitting the gap.
   if (!attachmentsKnown) return 'attachment_type_unknown';
+  // AHEAD OF `mentioned`, because it is the stronger statement. "They mentioned
+  // a photo and none arrived" is a claim about what arrived; here we do not know
+  // what arrived, and a mention does not make the gap smaller.
+  if (!attachmentsChecked) return 'not_checked';
   if (mentioned) return 'mentioned_not_attached';
   if (flaggedAttachments) return 'none';
   return 'none';

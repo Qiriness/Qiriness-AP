@@ -6,16 +6,21 @@ import { classifyAttachments } from '../investigation/photo-evidence.mjs';
 // existed, by asking Graph what was attached.
 //
 // WHY THERE IS ANYTHING TO BACKFILL. Ingestion now fetches attachment metadata
-// for every kept message that reports one, but the stored corpus predates that:
-// 38 of 296 inbound messages carry `has_attachments = true` and no metadata at
-// all. Those are exactly the messages a damage claim would need, and until this
-// runs the photo check answers `attachment_type_unknown` for every one of them —
-// honest, and useless.
+// for every kept message, but the stored corpus predates that, and for most of
+// its life ingestion asked only about messages whose `has_attachments` was true.
+// Until 2026-09-20 this backfill filtered the same way, so the rows it could
+// never reach were exactly the ones most worth reaching: an inline photo sets
+// `hasAttachments` false (see `fetchAttachmentMetadata` in delta-poller), so a
+// customer's photo pasted from Gmail left no trace the repair could find.
+// Measured that day: 199 of 234 inbound messages sat at `has_attachments =
+// false` with no metadata, and of the 7 whose text claims an attachment, 6
+// carried inline images — 4 of them customer evidence at 1.8-3.9 MB.
 //
-// IT SELECTS ON `attachments is null`, NOT ON A DATE. Null means "never
-// fetched", which is the real condition; a cutoff timestamp would be a second,
-// weaker way of asking the same question and would silently skip any row a
-// failed poll left unfilled.
+// IT SELECTS ON `attachments is null` AND NOTHING ELSE. Null means "never
+// fetched", which is the real condition. A date cutoff would be a second,
+// weaker way of asking the same question; `has_attachments = true` was worse
+// than weaker, because it asked Graph's flag to stand in for the answer the
+// call itself returns.
 //
 // A MESSAGE THAT HAS LEFT THE MAILBOX STAYS NULL. Graph returns 404, the row
 // keeps its null, and the count reports it. Writing `[]` there would be a claim
@@ -29,14 +34,13 @@ const DEFAULT_LIMIT = 25;
 
 export function createAttachmentBackfillStore(supabase) {
   return {
-    /** Inbound messages that say they have attachments and have no metadata. */
+    /** Messages whose attachments were never fetched, whatever the flag says. */
     async pending(shopId, limit) {
       return supabaseSelect(
         supabase,
         'ticket_messages',
         {
           shop_id: shopId,
-          has_attachments: true,
           attachments: { operator: 'is', value: 'null' },
           deleted_at: { operator: 'is', value: 'null' }
         },

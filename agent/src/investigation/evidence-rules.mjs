@@ -799,7 +799,7 @@ const FINDINGS = {
     // with nothing attached is a customer who believes they sent one, and the
     // metadata never having been fetched is our gap rather than theirs. Asking
     // all three to resend reads as not having looked.
-    values: ['attached', 'mentioned_not_attached', 'attachment_type_unknown', 'none', 'unknown'],
+    values: ['attached', 'mentioned_not_attached', 'attachment_type_unknown', 'not_checked', 'none', 'unknown'],
     derive(entries) {
       const entry = lastByTool(entries, TOOL_NAMES.CHECK_PHOTO_EVIDENCE);
       if (!entry) return 'unknown';
@@ -1180,6 +1180,12 @@ const ASK_ANSWERED_BY = {
   customer_account_state: ['enabled', 'never_activated', 'known_no_account'],
   // Both mean something arrived. `attachment_type_unknown` is an attachment we
   // could not identify, which is still not a customer who sent nothing.
+  //
+  // `not_checked` IS DELIBERATELY ABSENT. It means we never asked the mailbox,
+  // so it is not evidence that anything arrived and must not silence the ask.
+  // After the attachment backfill it survives only where the mail has left the
+  // mailbox altogether — and a photo we can no longer see is better answered by
+  // asking for it again than by a ticket that stalls.
   photo_evidence: ['attached', 'attachment_type_unknown'],
   reaction_product: ['identified']
 };

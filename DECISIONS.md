@@ -1272,6 +1272,61 @@ The cost is stated rather than hidden: someone writing about a product from thre
 
 **`attachments` is nullable and the null is load-bearing.** `[]` means we asked Graph and there was nothing; NULL means we never asked. A `not null default '[]'` would make those identical and let the check report "no photo attached" about a message whose own flag says otherwise — so a flagged message with no metadata reports `attachment_type_unknown`, which beats `mentioned_not_attached` precisely so nobody is asked to resend a photo they already sent.
 
+### `hasAttachments` is not evidence of absence
+
+**Everything above was right about the null and wrong about who gets one.** The
+rule was "a *flagged* message with no metadata reports `attachment_type_unknown`",
+and the flag was trusted to decide which rows deserved the doubt. Exchange sets
+`hasAttachments: false` when a message's only attachment is inline — which is how
+Gmail sends a photo pasted into the compose window — so the rows that most needed
+the doubt were the only ones that never got it.
+
+**Measured 2026-09-20 on ticket d48f1c08.** The customer wrote « les adjunto foto
+de la caja y del contenido » on 16 July; Graph held `gmail_images20260716_160612.png`,
+3.6 MB, `isInline: true`; the row read `has_attachments = false`,
+`attachments = null`. Three independent readers each took that as "nothing
+attached": the delta poller skipped the fetch, the backfill's filter could not
+select the row, and `summarisePhotoEvidence` fell through to
+`classifyAttachments(null)` — whose `Array.isArray(x) ? x : []` is where the
+third state dies. The ticket sat at `awaiting_human` for two months on a photo
+that was in the mailbox the whole time. Corpus-wide: **199 of 234 inbound
+messages were in that state**, and of the 7 whose text claimed an attachment, 6
+carried inline images.
+
+**Nothing decides whether to look based on the flag any more.** The poller asks
+about every kept message and the backfill selects on `attachments is null` alone.
+The cost is one Graph metadata call per attachment-free message, which returns
+`[]` — a real answer that closes the row for good. The flag is still stored,
+because it is what Graph said; it is simply not a reason to skip a question the
+call itself answers.
+
+**`not_checked` is a fourth outcome, not a widening of `attachment_type_unknown`,**
+because the two support opposite conclusions. `attachment_type_unknown` means
+something IS attached and we failed to identify it, so `ASK_ANSWERED_BY` counts it
+as "the customer sent something" and suppresses the ask. `not_checked` means we
+never asked the mailbox, which is not evidence that anything arrived, so it is
+deliberately absent from that table and the ask still happens. Folding the new
+case into the old value would have silenced the photo request on every
+un-backfilled row in the corpus.
+
+**`order` gained `checkPhotoEvidence`, because the repair alone reached nothing.**
+The need is raised at runtime rather than declared in `requiredEvidence`, so no
+static check could see that `order/problem` — where a wrong or missing item lands
+— was the only breakage variant without the tool. It resolved `unavailable`, which
+means "no tool here can settle this", and a need answered that way never looks at
+the data. Filling the row changed nothing until the tool was offered; with both,
+`checkPhotoEvidence` returns `attached` and the photo becomes an established fact
+instead of an unverified claim. The same shape as `lookupAbandonedCheckout` in
+2026-09-16, and the second time this subject has been short a tool its own needs
+asked for — which is the argument for a check that reads runtime needs against
+`allowedTools`, not just the static table.
+
+**The mention check is not a French-only backstop any more.** `« les adjunto foto »`
+matched none of the terms, because `photos?` does not match "foto" — so the one
+signal that could still have caught this message scored `mentioned: false`. 119 of
+the last 1 000 orders shipped outside France, so Spanish, Italian and Portuguese
+terms are in the list now, as stems where the words inflect.
+
 ### The photo is shown, and still not stored
 
 **The panel renders the customer's photo, fetched from the mailbox when a browser asks and kept nowhere.** No bucket, no `bytea`, no file on disk. `web/lib/server/attachment-service.ts` resolves the part, `GET /api/tickets/[id]/attachments/[index]` streams it, and the bytes exist only in that response.

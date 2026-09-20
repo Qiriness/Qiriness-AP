@@ -149,13 +149,22 @@ const TOOLS_BY_SUBJECT = {
   // s'ajoute pas à mon panier »), which is an order-category ticket about a
   // basket. Without it the whole subject has no tool that can see one, so
   // `checkout_state` resolved `unavailable` on every ticket that declared it.
+  //
+  // `checkPhotoEvidence` ADDED 2026-09-20, for the same reason and after the same
+  // symptom. `order/problem` is where a wrong or missing item lands — « en el
+  // interior venia otra crema » (d48f1c08) — and it was the only breakage variant
+  // without the tool, while still raising `photo_evidence` at runtime. The need
+  // therefore resolved `unavailable` before any data was consulted, so the
+  // attachment repair that put that customer's photo back on the record changed
+  // nothing for the ticket that exposed it.
   order: [
     T.GET_ORDER_CONTEXT,
     T.CHECK_ORDER_PROMOTION,
     T.LOOKUP_CUSTOMER,
     T.SEARCH_KNOWLEDGE,
     T.VERIFY_PURCHASE,
-    T.LOOKUP_ABANDONED_CHECKOUT
+    T.LOOKUP_ABANDONED_CHECKOUT,
+    T.CHECK_PHOTO_EVIDENCE
   ],
   delivery: [
     T.GET_ORDER_CONTEXT,
