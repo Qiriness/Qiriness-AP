@@ -917,6 +917,43 @@ Without the carrier feed nothing ever reports a scan, so every dispatched parcel
 
 This is also why three proposed condition-only parcel rules were NOT written: two would have been dead on arrival and the third would have fired on one order in two thousand.
 
+### A declared loss is a different situation from a suspected one (2026-09-21)
+
+D-37 exists because the reply was already wrong and nobody could see it. A
+carrier that has searched, failed and written to the customer is not a delivery
+question any more — the search is over — and the two tickets carrying such a
+letter (`bb82f4f1`, `de880691`) matched nothing at 0.581 and 0.594, fell to the
+shared `expediee_sans_scan`, and one of them came out **`answerable`**.
+
+**The line is who declares the loss, not whether it is lost.** « je pars de
+l'idée que mon colis s'est perdu » (`b52f3e4c`) and « je pense qu'elle s'est
+perdue pendant l'été » (`9454eaa2`) are D-36: a customer's hypothesis after a
+delay, answered with a state. D-37 is the carrier's own finding, in writing,
+after a claim — answered with a decision. Same words, opposite evidence, and the
+reply differs by more than tone.
+
+**The loss itself stays `unverified`, and the exemplar does not pretend
+otherwise.** `perdue_reclamation` remains 🔒: nothing we hold can confirm a
+carrier's declaration. What the rules branch on is our half of the story — which
+order, dispatched when, scanned or not — which is enough to route and enough to
+avoid claiming the parcel is moving. Both real tickets already recorded the loss
+as `unverified` and that is where it belongs.
+
+**No `policy_answer`.** There is no approved article on a lost parcel, and what
+one would have to say — refund, reship, on what terms — is a commercial decision
+per ticket, not a constant. Declaring the need would run `searchKnowledge` to
+report a hole. The same call P-15 made about the welcome code.
+
+**`delivered` is no longer a one-in-two-thousand state.** The section above
+records `delivered` at 1 of 2 006 orders on 2026-09-03. Re-measured 2026-09-21
+over 6 043 orders: **131 carry a `DELIVERED` fulfilment**, the latest on
+2026-07-30. So `d37_perte_colis_avec_scan` is not written for a future — its
+`delivered` branch is reachable today. `in_transit` and `stale_in_transit` are
+still not: 130 fulfilments carry an `in_transit_at`, **every one of them also
+carries a `delivered_at`**, and the newest scan of any kind is 2026-01-20. Those
+two values are in the rule on the same discipline as the six dormant transit
+rules — correct, and early.
+
 ### A dispatched parcel can be late, and until now nothing could say so (2026-09-20)
 
 `expediee_sans_scan` answered every dispatched parcel with no carrier scan — 99% of shipped orders, per the section above — so a parcel two days out and a parcel three weeks out were the same state and got the same reply. `dispatch_days` had already drawn exactly this line on the other leg of the journey: quoting the window is useful on day one and an insult on day eight. Nothing drew it once the parcel had left.

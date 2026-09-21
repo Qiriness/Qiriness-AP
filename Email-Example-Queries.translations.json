@@ -2667,6 +2667,224 @@
         "text": "Ich habe eine Creme bestellt, die am 10. Juli geliefert werden sollte, aber ich habe sie immer noch nicht erhalten. Wenn sie nicht geliefert werden kann, könnten Sie einfach eine neue an die angegebene Adresse schicken?"
       }
     },
+    "D-37": {
+      "0:en": {
+        "index": 101,
+        "sourceIndex": 0,
+        "sourceLanguage": "fr",
+        "sourceText": "Le transporteur a déclaré mon colis perdu et me renvoie vers vous.",
+        "sourceHash": "3ac754a0915356b95256f2dd1af8074b823b9150e0b6fa73fb2f9e337dccd783",
+        "language": "en",
+        "text": "The carrier said my package is lost and is sending me to you"
+      },
+      "0:es": {
+        "index": 102,
+        "sourceIndex": 0,
+        "sourceLanguage": "fr",
+        "sourceText": "Le transporteur a déclaré mon colis perdu et me renvoie vers vous.",
+        "sourceHash": "3ac754a0915356b95256f2dd1af8074b823b9150e0b6fa73fb2f9e337dccd783",
+        "language": "es",
+        "text": "El transportista declaró mi paquete perdido y me remite a ustedes."
+      },
+      "0:it": {
+        "index": 103,
+        "sourceIndex": 0,
+        "sourceLanguage": "fr",
+        "sourceText": "Le transporteur a déclaré mon colis perdu et me renvoie vers vous.",
+        "sourceHash": "3ac754a0915356b95256f2dd1af8074b823b9150e0b6fa73fb2f9e337dccd783",
+        "language": "it",
+        "text": "Il corriere ha dichiarato il mio pacco perso e mi rimanda a voi."
+      },
+      "0:de": {
+        "index": 104,
+        "sourceIndex": 0,
+        "sourceLanguage": "fr",
+        "sourceText": "Le transporteur a déclaré mon colis perdu et me renvoie vers vous.",
+        "sourceHash": "3ac754a0915356b95256f2dd1af8074b823b9150e0b6fa73fb2f9e337dccd783",
+        "language": "de",
+        "text": "Der Spediteur hat mein Paket als verloren gemeldet und verweist mich an Sie."
+      },
+      "1:en": {
+        "index": 111,
+        "sourceIndex": 1,
+        "sourceLanguage": "fr",
+        "sourceText": "Colissimo a perdu mon colis, ci joins leurs message après réclamation",
+        "sourceHash": "4eeb1dfd1624d92e1dca2e0e36229c2f87e980eec994759023d24dbe488c59c2",
+        "language": "en",
+        "text": "Colissimo lost my package, here is their message after complaint"
+      },
+      "1:es": {
+        "index": 112,
+        "sourceIndex": 1,
+        "sourceLanguage": "fr",
+        "sourceText": "Colissimo a perdu mon colis, ci joins leurs message après réclamation",
+        "sourceHash": "4eeb1dfd1624d92e1dca2e0e36229c2f87e980eec994759023d24dbe488c59c2",
+        "language": "es",
+        "text": "Colissimo perdió mi paquete, adjunto su mensaje después de la reclamación"
+      },
+      "1:it": {
+        "index": 113,
+        "sourceIndex": 1,
+        "sourceLanguage": "fr",
+        "sourceText": "Colissimo a perdu mon colis, ci joins leurs message après réclamation",
+        "sourceHash": "4eeb1dfd1624d92e1dca2e0e36229c2f87e980eec994759023d24dbe488c59c2",
+        "language": "it",
+        "text": "Colissimo ha perso il mio pacco, allego il loro messaggio dopo il reclamo"
+      },
+      "1:de": {
+        "index": 114,
+        "sourceIndex": 1,
+        "sourceLanguage": "fr",
+        "sourceText": "Colissimo a perdu mon colis, ci joins leurs message après réclamation",
+        "sourceHash": "4eeb1dfd1624d92e1dca2e0e36229c2f87e980eec994759023d24dbe488c59c2",
+        "language": "de",
+        "text": "Colissimo hat mein Paket verloren, hier ist ihre Nachricht nach der Reklamation"
+      },
+      "2:en": {
+        "index": 121,
+        "sourceIndex": 2,
+        "sourceLanguage": "fr",
+        "sourceText": "Malgré tous les moyens mis en œuvre par nos services, nous ne sommes pas parvenus à le localiser et nous en sommes désolés. Nous en reconnaissons donc la perte. Aussi, nous vous invitons à en informer votre expéditeur afin de convenir avec lui des modalités de réparation",
+        "sourceHash": "9e5116142211671355d2a41683d2186be23295e73e90a85af66b40797fb74409",
+        "language": "en",
+        "text": "Despite all the means implemented by our services, we have not been able to locate it and we are sorry. We therefore acknowledge the loss. Also, we invite you to inform your sender to agree with them on the repair terms"
+      },
+      "2:es": {
+        "index": 122,
+        "sourceIndex": 2,
+        "sourceLanguage": "fr",
+        "sourceText": "Malgré tous les moyens mis en œuvre par nos services, nous ne sommes pas parvenus à le localiser et nous en sommes désolés. Nous en reconnaissons donc la perte. Aussi, nous vous invitons à en informer votre expéditeur afin de convenir avec lui des modalités de réparation",
+        "sourceHash": "9e5116142211671355d2a41683d2186be23295e73e90a85af66b40797fb74409",
+        "language": "es",
+        "text": "A pesar de todos los medios implementados por nuestros servicios, no logramos localizarlo y lo lamentamos. Por lo tanto, reconocemos la pérdida. También, le invitamos a informar a su remitente para acordar con él las modalidades de reparación"
+      },
+      "2:it": {
+        "index": 123,
+        "sourceIndex": 2,
+        "sourceLanguage": "fr",
+        "sourceText": "Malgré tous les moyens mis en œuvre par nos services, nous ne sommes pas parvenus à le localiser et nous en sommes désolés. Nous en reconnaissons donc la perte. Aussi, nous vous invitons à en informer votre expéditeur afin de convenir avec lui des modalités de réparation",
+        "sourceHash": "9e5116142211671355d2a41683d2186be23295e73e90a85af66b40797fb74409",
+        "language": "it",
+        "text": "Nonostante tutti i mezzi messi in atto dai nostri servizi, non siamo riusciti a localizzarlo e ce ne dispiace. Riconosciamo quindi la perdita. Vi invitiamo quindi a informare il vostro mittente per concordare con lui le modalità di riparazione"
+      },
+      "2:de": {
+        "index": 124,
+        "sourceIndex": 2,
+        "sourceLanguage": "fr",
+        "sourceText": "Malgré tous les moyens mis en œuvre par nos services, nous ne sommes pas parvenus à le localiser et nous en sommes désolés. Nous en reconnaissons donc la perte. Aussi, nous vous invitons à en informer votre expéditeur afin de convenir avec lui des modalités de réparation",
+        "sourceHash": "9e5116142211671355d2a41683d2186be23295e73e90a85af66b40797fb74409",
+        "language": "de",
+        "text": "Trotz aller von unseren Diensten ergriffenen Maßnahmen konnten wir es nicht lokalisieren und es tut uns leid. Wir erkennen daher den Verlust an. Bitte informieren Sie Ihren Absender, um mit ihm die Reparaturmodalitäten zu vereinbaren"
+      },
+      "3:en": {
+        "index": 131,
+        "sourceIndex": 3,
+        "sourceLanguage": "fr",
+        "sourceText": "J'ai été informé par La Poste Colissimo que ce colis est désormais officiellement considéré comme perdu, après leurs recherches. Ils m'ont invité à prendre directement contact avec vous afin de convenir des modalités de remboursement ou de remplacement",
+        "sourceHash": "ffd9555a58cec3106a143b4ad6bfd1ff429bb91a1823afd1da3018bac6c58e2f",
+        "language": "en",
+        "text": "I was informed by La Poste Colissimo that this package is now officially considered lost, after their investigations. They invited me to contact you directly to arrange for a refund or replacement"
+      },
+      "3:es": {
+        "index": 132,
+        "sourceIndex": 3,
+        "sourceLanguage": "fr",
+        "sourceText": "J'ai été informé par La Poste Colissimo que ce colis est désormais officiellement considéré comme perdu, après leurs recherches. Ils m'ont invité à prendre directement contact avec vous afin de convenir des modalités de remboursement ou de remplacement",
+        "sourceHash": "ffd9555a58cec3106a143b4ad6bfd1ff429bb91a1823afd1da3018bac6c58e2f",
+        "language": "es",
+        "text": "Me informó La Poste Colissimo que este paquete ahora se considera oficialmente perdido, después de sus investigaciones. Me invitaron a ponerme en contacto directamente con ustedes para acordar las modalidades de reembolso o reemplazo"
+      },
+      "3:it": {
+        "index": 133,
+        "sourceIndex": 3,
+        "sourceLanguage": "fr",
+        "sourceText": "J'ai été informé par La Poste Colissimo que ce colis est désormais officiellement considéré comme perdu, après leurs recherches. Ils m'ont invité à prendre directement contact avec vous afin de convenir des modalités de remboursement ou de remplacement",
+        "sourceHash": "ffd9555a58cec3106a143b4ad6bfd1ff429bb91a1823afd1da3018bac6c58e2f",
+        "language": "it",
+        "text": "Sono stato informato da La Poste Colissimo che questo pacco è ora ufficialmente considerato perso, dopo le loro ricerche. Mi hanno invitato a contattarvi direttamente per concordare le modalità di rimborso o sostituzione"
+      },
+      "3:de": {
+        "index": 134,
+        "sourceIndex": 3,
+        "sourceLanguage": "fr",
+        "sourceText": "J'ai été informé par La Poste Colissimo que ce colis est désormais officiellement considéré comme perdu, après leurs recherches. Ils m'ont invité à prendre directement contact avec vous afin de convenir des modalités de remboursement ou de remplacement",
+        "sourceHash": "ffd9555a58cec3106a143b4ad6bfd1ff429bb91a1823afd1da3018bac6c58e2f",
+        "language": "de",
+        "text": "Ich wurde von La Poste Colissimo informiert, dass dieses Paket nach deren Nachforschungen nun offiziell als verloren gilt. Sie haben mich eingeladen, direkt mit Ihnen Kontakt aufzunehmen, um die Modalitäten der Rückerstattung oder des Ersatzes zu vereinbaren."
+      },
+      "4:en": {
+        "index": 141,
+        "sourceIndex": 4,
+        "sourceLanguage": "fr",
+        "sourceText": "Vous trouverez en pièce jointe le courrier officiel de Colissimo attestant de la perte du colis",
+        "sourceHash": "a3ee8b2b7c33b288370f4a8eb8e5cd192b3b3b2f3dfb66f5e481b5e446f79bea",
+        "language": "en",
+        "text": "Attached you will find the official letter from Colissimo confirming the loss of the package"
+      },
+      "4:es": {
+        "index": 142,
+        "sourceIndex": 4,
+        "sourceLanguage": "fr",
+        "sourceText": "Vous trouverez en pièce jointe le courrier officiel de Colissimo attestant de la perte du colis",
+        "sourceHash": "a3ee8b2b7c33b288370f4a8eb8e5cd192b3b3b2f3dfb66f5e481b5e446f79bea",
+        "language": "es",
+        "text": "Adjunto encontrará la carta oficial de Colissimo que certifica la pérdida del paquete"
+      },
+      "4:it": {
+        "index": 143,
+        "sourceIndex": 4,
+        "sourceLanguage": "fr",
+        "sourceText": "Vous trouverez en pièce jointe le courrier officiel de Colissimo attestant de la perte du colis",
+        "sourceHash": "a3ee8b2b7c33b288370f4a8eb8e5cd192b3b3b2f3dfb66f5e481b5e446f79bea",
+        "language": "it",
+        "text": "Troverete in allegato la lettera ufficiale di Colissimo che attesta la perdita del pacco"
+      },
+      "4:de": {
+        "index": 144,
+        "sourceIndex": 4,
+        "sourceLanguage": "fr",
+        "sourceText": "Vous trouverez en pièce jointe le courrier officiel de Colissimo attestant de la perte du colis",
+        "sourceHash": "a3ee8b2b7c33b288370f4a8eb8e5cd192b3b3b2f3dfb66f5e481b5e446f79bea",
+        "language": "de",
+        "text": "Anbei finden Sie das offizielle Schreiben von Colissimo, das den Verlust des Pakets bestätigt"
+      },
+      "5:en": {
+        "index": 151,
+        "sourceIndex": 5,
+        "sourceLanguage": "fr",
+        "sourceText": "Suite à ma réclamation, GLS a clôturé le dossier et déclare le colis perdu. Que proposez-vous pour ma commande ?",
+        "sourceHash": "3e0eb7889352fe0c6375a31f014fb94d7cf4fccbbba938cd75e6240bf5550879",
+        "language": "en",
+        "text": "Following my complaint, GLS closed the case and says the package is lost. What do you propose for my order?"
+      },
+      "5:es": {
+        "index": 152,
+        "sourceIndex": 5,
+        "sourceLanguage": "fr",
+        "sourceText": "Suite à ma réclamation, GLS a clôturé le dossier et déclare le colis perdu. Que proposez-vous pour ma commande ?",
+        "sourceHash": "3e0eb7889352fe0c6375a31f014fb94d7cf4fccbbba938cd75e6240bf5550879",
+        "language": "es",
+        "text": "Tras mi reclamación, GLS ha cerrado el expediente y declara el paquete perdido. ¿Qué proponen para mi pedido?"
+      },
+      "5:it": {
+        "index": 153,
+        "sourceIndex": 5,
+        "sourceLanguage": "fr",
+        "sourceText": "Suite à ma réclamation, GLS a clôturé le dossier et déclare le colis perdu. Que proposez-vous pour ma commande ?",
+        "sourceHash": "3e0eb7889352fe0c6375a31f014fb94d7cf4fccbbba938cd75e6240bf5550879",
+        "language": "it",
+        "text": "A seguito del mio reclamo, GLS ha chiuso il caso e dichiara il pacco perso. Cosa proponete per il mio ordine ?"
+      },
+      "5:de": {
+        "index": 154,
+        "sourceIndex": 5,
+        "sourceLanguage": "fr",
+        "sourceText": "Suite à ma réclamation, GLS a clôturé le dossier et déclare le colis perdu. Que proposez-vous pour ma commande ?",
+        "sourceHash": "3e0eb7889352fe0c6375a31f014fb94d7cf4fccbbba938cd75e6240bf5550879",
+        "language": "de",
+        "text": "Nach meiner Reklamation hat GLS den Fall geschlossen und erklärt das Paket für verloren. Was schlagen Sie für meine Bestellung vor?"
+      }
+    },
     "O-09": {
       "0:en": {
         "index": 101,

@@ -10,6 +10,66 @@ Three sibling files carry the other halves, and this one deliberately does not d
 
 ---
 
+## D-37: the carrier says it lost the parcel (2026-09-21)
+
+Two tickets in the corpus carry a carrier's written admission that a parcel is
+gone — `bb82f4f1` (2026-07-31, commande #6500) and `de880691` (2026-08-03, the
+same parcel, the same order). **Neither matched a situation**: 0.581 and 0.594
+against D-36, under the 0.65 floor. With no situation, the shared rule
+`expediee_sans_scan` took both — *« La commande est partie… le suivi ne montrera
+rien tant qu'il n'a pas été scanné »* — and on `bb82f4f1` the verdict was
+**`answerable`**. The customer holding Colissimo's loss notice was one release
+away from being told his parcel was on its way.
+
+- **`D-37` in `Email-Example-Queries.md`**, `delivery` · `problem`, 2 msgs,
+  `order_identity` + `delivery_state` + `refund_state`. Four real phrasings —
+  including the carrier's own boilerplate (« Nous en reconnaissons donc la
+  perte… nous vous invitons à en informer votre expéditeur »), which the customer
+  recopies and which is the most constant signal the situation has — and one
+  authored GLS variant, because both real losses are Colissimo and no customer
+  in the corpus has written a GLS loss.
+- **Three rules in `orders`, all `draft`.** `d37_commande_non_identifiee`
+  (`order_identity: none` → `needs_customer_input`, asks for the order number and
+  the purchase e-mail, and says the carrier's parcel number will do — the
+  tracking parser already resolves one, which is how `de880691` found #6500 from
+  a parcel number alone). `d37_perte_colis_sans_scan`
+  (`+ delivery_state: dispatched_no_scan` → `needs_human`): nothing in our record
+  contradicts the loss, say so, and never say the parcel is moving.
+  `d37_perte_colis_avec_scan` (`+ in_transit | stale_in_transit | delivered` →
+  `needs_human`): our record and the carrier's letter disagree, so state what the
+  dossier holds and arbitrate nothing.
+- **Measured before approval.** The six phrasings were embedded and scored
+  against all 43 `delivery` tickets in the corpus, against the same stored
+  message vectors retrieval uses. **Exactly two clear 0.65 and they are the right
+  two** — `bb82f4f1` at 0.777 (0.581 before) and `de880691` at 0.694 (0.594) —
+  with the next ticket at 0.630. The two « I assume it is lost » tickets score
+  0.642 and 0.563 and are `return_exchange` anyway, which retrieval never
+  compares against a `delivery` situation.
+- **Enumerated rather than read.** All 18 evidence positions (six delivery states
+  × three delay states) were run through `selectAnswer` with D-37 matched. The
+  three rules take the positions they were written for; D-01, D-03, D-05, D-36
+  and the situation-less lane are unchanged.
+- **The enumeration also found a hole, left open deliberately.**
+  `delivery_state: not_dispatched` under D-37 falls to the shared `non_expediee`
+  rule, which routes nowhere and answers « la commande n'est pas encore
+  expédiée » — to someone holding a loss notice. A fourth rule is proposed and
+  not written; `delivery_state: unknown` selects nothing and goes to a person,
+  which is the safe direction.
+
+**Live the same day.** Translated into `en es it de` (24 calls, `gpt-4o`, the
+only rows in the corpus that were stale), approved — exemplar and all three rules
+— and embedded: 30 phrasings vectorised. Re-running `match_support_exemplars`
+over the stored vectors of all **169 tickets that carry one**, exactly two match
+D-37: the two it was written for, at 0.777 and 0.694, with margins of 0.197 and
+0.099 over the runner-up. **No other ticket changed situation.** `DRAFT_ONLY` is
+unset, so nothing sends itself; a person still releases every draft.
+
+**What went live unread**, recorded because it is the gate that was skipped: the
+three French skeletons and the 24 machine translations were approved without the
+operator reading them. `VALIDATION_LOG.md` item 27 carries both as open checks.
+
+---
+
 ## A customer's inline photo was invisible to everything (2026-09-20)
 
 Exchange reports `hasAttachments: false` when a message's only attachment is

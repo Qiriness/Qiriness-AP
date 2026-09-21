@@ -102,7 +102,7 @@ Referenced by the entries below so each state is written once.
 
 ---
 
-# Livraison — 8 questions · 70 messages
+# Livraison — 9 questions · 70 messages
 
 ### D-01 · Où en est ma commande ? Je l'ai passée il y a plusieurs semaines et je ne l'ai toujours pas reçue.
 `delivery` · `problem` · **19 msgs** — largest single cluster · 🟢 partial
@@ -180,6 +180,83 @@ Referenced by the entries below so each state is written once.
 
 **needs** `order_identity`, `delivery_state`
 **exemplaires** → jeu `commande`, état `expediee_hors_delai`
+
+**Contenu stable** _(à rédiger)_
+>
+
+---
+
+### D-37 · Le transporteur a déclaré mon colis perdu et me renvoie vers vous.
+`delivery` · `problem` · **2 msgs** — un seul incident, deux tickets · 🟢 partial
+
+**Variantes réelles**
+- « Colissimo a perdu mon colis, ci joins leurs message après réclamation »
+- « Malgré tous les moyens mis en œuvre par nos services, nous ne sommes pas parvenus à le localiser et nous en sommes désolés. Nous en reconnaissons donc la perte. Aussi, nous vous invitons à en informer votre expéditeur afin de convenir avec lui des modalités de réparation » _(le courrier type du transporteur, recopié par le client — le signal le plus constant de la situation)_
+- « J'ai été informé par La Poste Colissimo que ce colis est désormais officiellement considéré comme perdu, après leurs recherches. Ils m'ont invité à prendre directement contact avec vous afin de convenir des modalités de remboursement ou de remplacement »
+- « Vous trouverez en pièce jointe le courrier officiel de Colissimo attestant de la perte du colis » _(extrait du même message)_
+- « Suite à ma réclamation, GLS a clôturé le dossier et déclare le colis perdu. Que proposez-vous pour ma commande ? » _(authored — aucune perte GLS écrite par un client dans le corpus, voir la note)_
+
+**needs** `order_identity`, `delivery_state`, `refund_state`
+**exemplaires** → jeu `commande`, état `perdue_reclamation`
+
+> **Écrit sur une réponse qui serait partie, 2026-09-21.** Les deux messages sont
+> les tickets `bb82f4f1` (2026-07-31, commande #6500) et `de880691` (2026-08-03,
+> même colis, même commande). Aucun des deux n'a matché : 0.581 et 0.594 contre
+> D-36, sous le plancher de 0.65. Faute de situation, la règle générale
+> `expediee_sans_scan` a été sélectionnée sur les deux — *« La commande est
+> partie… le suivi ne montrera rien tant qu'il n'a pas été scanné »* — et sur
+> `bb82f4f1` le verdict était **`answerable`** : le client qui tenait la lettre
+> de Colissimo reconnaissant la perte allait s'entendre répondre que son colis
+> était en route. C'est la situation, pas la règle, qui manquait.
+>
+> **Mesuré avant approbation, 2026-09-21.** Les six phrasings ci-dessus ont été
+> vectorisés et comparés aux 43 tickets `delivery` du corpus, contre les mêmes
+> vecteurs de message que la recherche utilise. **Deux dépassent 0.65 et ce sont
+> les deux bons** — `bb82f4f1` à **0.777** (0.581 avant) et `de880691` à
+> **0.694** (0.594) — le suivant est à 0.630. Les deux tickets « je suppose que
+> c'est perdu » restent en dessous (0.642 et 0.563) et sont de toute façon hors
+> d'atteinte : ils sont classés `return_exchange`, et la recherche ne compare
+> qu'à l'intérieur du sujet du ticket.
+>
+> **Ce n'est pas D-01 ni D-05.** Là le client demande *où* est son colis et la
+> recherche est ouverte. Ici elle est close : le transporteur a répondu, il a
+> perdu, et il a écrit au client d'aller voir l'expéditeur. Il ne reste aucune
+> question de suivi — il reste une décision commerciale.
+>
+> **Ce n'est pas D-03.** Les deux opposent notre dossier au transporteur, mais
+> dans des sens inverses : D-03, c'est le transporteur qui dit *livré* et le
+> client qui dit *rien reçu*, donc deux versions à ne pas départager. Ici le
+> transporteur et le client disent la même chose, et c'est nous qui devons
+> quelque chose.
+>
+> **Ce n'est pas D-36, et la frontière est nette.** D-36, c'est le client qui
+> *suppose* la perte après un retard — « je pars de l'idée que mon colis s'est
+> perdu (ça peut arriver) » (`b52f3e4c`), « je pense qu'elle s'est perdue pendant
+> l'été » (`9454eaa2`). Ces deux-là restent sur D-36. D-37, c'est le
+> **transporteur** qui la déclare, par écrit, après réclamation. Le premier est
+> une hypothèse à laquelle on répond avec un état ; le second est un fait acquis
+> côté transporteur auquel on répond avec une décision.
+>
+> **🟢 partial, et la moitié manquante est toujours la même.** Ce que le dossier
+> établit — quelle commande, partie quand, sous quel numéro, scannée ou non,
+> remboursement déjà ouvert ou non — suffit à répondre et à router. La perte
+> elle-même ne se vérifie pas : sur les deux tickets elle est restée en
+> `unverified`, et elle doit y rester. L'état `perdue_reclamation` reste 🔒 —
+> D-37 ne le résout pas, il décrit le cas où le client nous l'apporte.
+>
+> **La variante GLS est authored, délibérément.** Les deux pertes du corpus sont
+> Colissimo. GLS perd aussi — mais dans le fil interne Deret (« entre les colis
+> endommagés et ceux qui disparaissent »), jamais sous la plume d'un client.
+> 84 % des envois partent en Colissimo et 12 % en GLS, donc la phrase GLS est
+> écrite plutôt qu'attendue : elle coûte une ligne et évite que la situation ne
+> matche que le vocabulaire de La Poste.
+>
+> **Aucun `policy_answer`.** Il n'existe aucun article approuvé sur la perte d'un
+> colis, et ce qu'il faudrait y lire — rembourse-t-on, réexpédie-t-on, sous
+> quelles conditions — est une décision commerciale par dossier, pas une
+> constante. Déclarer le besoin ferait tourner `searchKnowledge` pour rapporter
+> un trou. La demande du client est reprise par la règle ; l'arbitrage reste à
+> une personne.
 
 **Contenu stable** _(à rédiger)_
 >
