@@ -39,9 +39,28 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
       // tab or an uptime check, none of which read the reason header.
       const status =
         result.reason === "too_large" ? 413 : result.reason === "graph_not_configured" ? 503 : 404;
-      return new NextResponse(null, {
+      // THE REASON IS ALSO THE BODY, and `detail` still never is. The slug is a
+      // closed enum naming a class of failure; `detail` is Graph's own text and
+      // carries the mailbox address and the Exchange item id, which is why it
+      // stays server-side. Splitting them is what makes this safe to show.
+      //
+      // An empty body was the original choice and it cost three days on
+      // 2026-09-20: opening the URL directly to find out why a photo would not
+      // load gave `net::ERR_HTTP_RESPONSE_CODE_FAILURE`, which is Chrome's way
+      // of saying "an error status with nothing in it" and names no cause. The
+      // header was always there and a browser address bar cannot show one.
+      return new NextResponse(result.reason, {
         status,
-        headers: { "X-Attachment-Reason": result.reason },
+        headers: {
+          "X-Attachment-Reason": result.reason,
+          // Explicit, with `nosniff`: this is the one response on this route
+          // that is deliberately not an image, and nothing should guess at it.
+          "Content-Type": "text/plain; charset=utf-8",
+          "X-Content-Type-Options": "nosniff",
+          "Cache-Control": "private, no-store, max-age=0",
+          "Referrer-Policy": "no-referrer",
+          "Content-Security-Policy": "default-src 'none'; sandbox",
+        },
       });
     }
 

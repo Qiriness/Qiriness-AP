@@ -75,6 +75,17 @@ test('an unknown or missing reason falls back rather than inventing one', async 
   assert.equal(await fetchAttachmentReason('/x'), ATTACHMENT_REASON_FALLBACK);
 });
 
+test('the reason slug carries no mailbox address or Exchange id', () => {
+  // The route now sends the slug as the body so it is readable from an address
+  // bar. That is only safe because the slug is a closed enum: `detail` holds
+  // Graph's own text, which names the mailbox and the item id, and never leaves
+  // the server. If a reason key ever starts carrying data, this catches it.
+  for (const reason of Object.keys(ATTACHMENT_REASONS)) {
+    assert.match(reason, /^[a-z_]+$/, `${reason} is not a plain slug`);
+    assert.doesNotMatch(reason, /@/);
+  }
+});
+
 test('a network failure on the reason lookup does not throw at the component', async (t) => {
   const original = globalThis.fetch;
   t.after(() => { globalThis.fetch = original; });
