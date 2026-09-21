@@ -3,6 +3,43 @@
 // Graph credentials (validated by assertGraphConfig before the worker polls).
 
 const GRAPH_BASE = 'https://graph.microsoft.com/v1.0';
+
+/**
+ * Graph errors that mean "wrong mailbox", not "missing mail".
+ *
+ * `ErrorInvalidMailboxItemId` is the one this client knew about: a syntactically
+ * valid Exchange id belonging to another mailbox. `ErrorInvalidUser` is the other
+ * half and was missed, because it arrives as a **404** — the same status a
+ * genuinely deleted message uses — so it fell through to `return null` and was
+ * reported to operators as « the message has left the mailbox ».
+ *
+ * MEASURED 2026-09-20 against the live API. A `SUPPORT_MAILBOX` naming another
+ * address in the same domain, and one in an entirely different tenant, BOTH
+ * answer `HTTP 404 ErrorInvalidUser`. A message truly absent from the right
+ * mailbox answers `ErrorItemNotFound`, and an id that was never real answers
+ * `ErrorInvalidIdMalformed` (400). The status cannot separate these; the code
+ * can, which is why the check is on the code and the status is only a fallback.
+ *
+ * It cost a deployment three days: every photo reported lost mail while the mail
+ * sat in the mailbox, because the variable named a different one.
+ */
+const WRONG_MAILBOX_CODES = new Set(['ErrorInvalidMailboxItemId', 'ErrorInvalidUser']);
+
+/** The shared refusal, so all three readers describe this identically. */
+function mailboxMismatchError(code, mailbox) {
+  const error = new Error(
+    code === 'ErrorInvalidUser'
+      ? `Graph does not know the mailbox ${mailbox}. Check SUPPORT_MAILBOX on this ` +
+        'deployment: the credentials work and the token is valid, so the mailbox ' +
+        'it names is simply not the one holding this mail.'
+      : `Graph rejected the message id as invalid for ${mailbox}. Exchange ids are ` +
+        'mailbox-scoped, so these rows were almost certainly ingested while ' +
+        'SUPPORT_MAILBOX pointed at a different mailbox.'
+  );
+  error.code = code;
+  error.mailboxMismatch = true;
+  return error;
+}
 const DELTA_SELECT = [
   'id',
   'conversationId',
@@ -132,15 +169,8 @@ export function createGraphClient(config, { fetchImpl = fetch } = {}) {
     const payload = await response.json().catch(() => null);
     const code = payload?.error?.code || '';
 
-    if (code === 'ErrorInvalidMailboxItemId') {
-      const error = new Error(
-        `Graph rejected the message id as invalid for ${mailbox}. Exchange ids are ` +
-          'mailbox-scoped, so these rows were almost certainly ingested while ' +
-          'SUPPORT_MAILBOX pointed at a different mailbox.'
-      );
-      error.code = code;
-      error.mailboxMismatch = true;
-      throw error;
+    if (WRONG_MAILBOX_CODES.has(code)) {
+      throw mailboxMismatchError(code, mailbox);
     }
 
     if (response.status === 404) {
@@ -187,15 +217,8 @@ export function createGraphClient(config, { fetchImpl = fetch } = {}) {
     const payload = await response.json().catch(() => null);
     const code = payload?.error?.code || '';
 
-    if (code === 'ErrorInvalidMailboxItemId') {
-      const error = new Error(
-        `Graph rejected the message id as invalid for ${mailbox}. Exchange ids are ` +
-          'mailbox-scoped, so these rows were almost certainly ingested while ' +
-          'SUPPORT_MAILBOX pointed at a different mailbox.'
-      );
-      error.code = code;
-      error.mailboxMismatch = true;
-      throw error;
+    if (WRONG_MAILBOX_CODES.has(code)) {
+      throw mailboxMismatchError(code, mailbox);
     }
 
     if (response.status === 404) {
@@ -288,15 +311,8 @@ export function createGraphClient(config, { fetchImpl = fetch } = {}) {
     const payload = await response.json().catch(() => null);
     const code = payload?.error?.code || '';
 
-    if (code === 'ErrorInvalidMailboxItemId') {
-      const error = new Error(
-        `Graph rejected the message id as invalid for ${mailbox}. Exchange ids are ` +
-          'mailbox-scoped, so these rows were almost certainly ingested while ' +
-          'SUPPORT_MAILBOX pointed at a different mailbox.'
-      );
-      error.code = code;
-      error.mailboxMismatch = true;
-      throw error;
+    if (WRONG_MAILBOX_CODES.has(code)) {
+      throw mailboxMismatchError(code, mailbox);
     }
 
     if (response.status === 404) {
