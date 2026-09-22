@@ -50,9 +50,13 @@ export async function runCategorisation({
   categorise,
   logger,
   limit = DEFAULT_BATCH_LIMIT,
-  ticketId = null
+  ticketId = null,
+  // Answers « did the Case Manager read this thread as a continuation? ». Absent
+  // by default, and absent means every ticket is re-categorised exactly as it
+  // was before this layer existed.
+  labelsStillValid = null
 }) {
-  const counts = { categorised: 0, recategorised: 0, skipped: 0, failed: 0, fallbacks: 0 };
+  const counts = { categorised: 0, recategorised: 0, kept: 0, skipped: 0, failed: 0, fallbacks: 0 };
   const pending = await record.claim('categorisation', { limit, ticketId });
 
   for (const ticket of pending) {
@@ -70,6 +74,37 @@ export async function runCategorisation({
       // only event that makes this ticket classifiable.
       await record.skip('categorisation', ticket.id);
       counts.skipped += 1;
+      continue;
+    }
+
+    // THE CASE MANAGER MAY HAVE SETTLED THIS ALREADY. On a `continuation` the
+    // labels still describe the thread — the same request, moved along — so the
+    // call is skipped and the EXISTING labels are re-completed.
+    //
+    // SKIPPED, NOT BYPASSED, and the difference matters. `complete` is what
+    // clears `needs_categorisation` and raises `needs_investigation` in the same
+    // patch; a pass that jumped over it would leave the ticket uninvestigated.
+    // So the pass runs exactly as before and only the model call goes.
+    //
+    // RE-CATEGORISATION IS BLIND BY DESIGN, which is what makes this worth
+    // doing rather than merely cheap: on a courtesy follow-up a blind re-read
+    // can only ratchet the level or rewrite a subject that was already right.
+    if (labelsStillValid?.(ticket)) {
+      await record.complete('categorisation', ticket, {
+        columns: {
+          category: ticket.category,
+          request_kind: ticket.request_kind,
+          secondary_category: ticket.secondary_category,
+          secondary_request_kind: ticket.secondary_request_kind,
+          level: ticket.level,
+          responsible_team: ticket.responsible_team,
+          categorisation_confidence: ticket.categorisation_confidence ?? null,
+          language: ticket.language,
+          happiness: ticket.happiness
+        },
+        trail: { kept: true, reason: 'continuation' }
+      });
+      counts.kept += 1;
       continue;
     }
 

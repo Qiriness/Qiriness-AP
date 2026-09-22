@@ -379,7 +379,14 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |   |   |                        #   answer schema) ·
 |   |   |                        # draft-checks (the prohibitions, in code) ·
 |   |   |                        # draft-runner (+ the derived queue). NO Graph call
-|   |   |-- casework/            # closure (does the customer's last message end
+|   |   |-- casework/            # case-manager (what a new message changed: a
+|   |   |                        #   closed relationship, which of OUR questions it
+|   |   |                        #   answered, what we promised) · case-manager-rules
+|   |   |                        #   (pure: whether the categoriser re-runs, which
+|   |   |                        #   situation the case is in, which prior evidence
+|   |   |                        #   may be reused) · case-runner (the pass; derived
+|   |   |                        #   queue, no third flag) ·
+|   |   |                        # closure (does the customer's last message end
 |   |   |                        #   their request? code gate first -- nothing
 |   |   |                        #   outstanding in the dossier -- then one cheap
 |   |   |                        #   call on the message) ·
@@ -774,7 +781,8 @@ Run `npm run ingest:once` or `npm start` from `agent/`. One poll runs every pass
 | 6 | **Gate 2** (LLM, new conversations only): drops `spam` **and** `irrelevant`; fails open | `ingestion/spam-classifier.mjs` |
 | 7 | flush gate decisions (with body on a block) to `spam_audit` | `ingestion/spam-audit.mjs` |
 | 8 | **Customer resolution** — needs no category, order number or LLM key | `resolution/customer-resolution-runner.mjs` |
-| 9 | **Categorisation** (LLM) — 25/poll, oldest first, selects on the pending flag | `pipeline/categorise-runner.mjs` |
+| 8a | **Casework** (LLM, existing cases only) — what the newest message changed. Claims only a ticket that ALREADY has a case file and whose newest inbound message has no reading, so a genuinely new case matches nothing. Writes `ticket_case_state` | `casework/case-runner.mjs` |
+| 9 | **Categorisation** (LLM) — 25/poll, oldest first, selects on the pending flag. **Skips the call on a `continuation`** and re-completes the existing labels, so the pass still clears the flag and raises `needs_investigation` | `pipeline/categorise-runner.mjs` |
 | 10 | **Order resolution** then **order context** — no LLM, no category needed. **Before the investigation, and that is load-bearing**: `getOrderContext` READS `tickets.resolved_context` rather than querying, so an investigation that ran first could not see an order however clearly the customer quoted it | `resolution/order-*-runner.mjs` |
 | 11 | **Investigation** (LLM + tools) — decompose (every investigated ticket — the structural gate was removed 2026-08-09), then 6 tool calls +2 per extra task, 4 turns, `ENABLED_SUBJECTS` only. Reads the thread **both directions** since 2026-09-21 and renders it as a labelled transcript; a one-message ticket still renders bare | `investigation/investigation-runner.mjs` |
 | 12 | **Forwarding** — `contact` kind + a configured address; needs `Mail.Send` | `routing/forward-runner.mjs` |

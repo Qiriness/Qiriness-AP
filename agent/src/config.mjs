@@ -94,6 +94,14 @@ export function loadAgentConfig(env = loadEnv(REPO_ROOT)) {
     // be told apart — not a constrained 1-of-N. One call per thread, and only on
     // threads that ran to more than one customer message, so it is affordable.
     reconstructionModel: env.AGENT_RECONSTRUCTION_MODEL || 'gpt-4o',
+    // Reads what a new message changed about a case already open: a closed
+    // relationship, which of OUR questions it answered, what it added. A
+    // constrained extraction over one message and its thread — the cheap tier's
+    // job, and it runs only on tickets that already have a case file. Set to an
+    // empty string to turn the pass off: every message is then categorised and
+    // investigated exactly as it was before this layer existed.
+    caseworkModel:
+      env.AGENT_CASEWORK_MODEL === undefined ? 'gpt-4o-mini' : env.AGENT_CASEWORK_MODEL,
     // « Ce message clôt-il la demande ? » — one constrained boolean over one
     // short message, which is the cheap tier's job. It only runs where the case
     // file already says nothing is outstanding, so it is a minority of tickets.

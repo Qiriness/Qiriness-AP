@@ -1,4 +1,4 @@
-import { toDraftingPrompt } from '../investigation/case-file.mjs';
+import { MISSING_FIELDS, toDraftingPrompt } from '../investigation/case-file.mjs';
 import { fillParameters } from '../../../scripts/lib/parameters.mjs';
 import { normaliseTones, toneInstructions } from '../../../scripts/lib/reply-tones.mjs';
 import { normaliseReplyLink } from '../../../scripts/lib/reply-link.mjs';
@@ -92,6 +92,65 @@ export function caseFileFromRow(row) {
  * recorded rather than silent: an unset parameter is a decision outstanding, and
  * the log line is how it stops being invisible.
  */
+/**
+ * The case as the last reading left it: asked, answered, promised.
+ *
+ * WHY THIS IS NOT THE HISTORY BLOCK AGAIN. That block is prose — our own
+ * replies, for tone and for what was explained. This is the structured residue:
+ * which of our questions are still outstanding, which the customer has now
+ * answered, and what we committed to. A model reading 1,700 characters of our
+ * own reply may or may not notice that the order number was asked for and
+ * given; a list saying so cannot be missed.
+ *
+ * `DO NOT ASK AGAIN` IS CODE-DERIVED, NOT MODEL-DERIVED. The keys come from
+ * `resolved_inputs`, which the Case Manager could only fill from the questions
+ * we actually asked — so this section can never forbid a question nobody posed.
+ * That is the difference between this and the regex that was removed: the
+ * question is recorded when it is asked rather than recovered from prose
+ * afterwards (DECISIONS § A re-ask guardrail was built, measured, and removed).
+ *
+ * COMMITMENTS ARE SHOWN AS OURS TO HONOUR, never as facts to restate. « nous
+ * revenons vers vous dès que le transporteur répond » is a thing we said we
+ * would do, and the reply must not contradict it; it is not evidence that the
+ * carrier has replied.
+ */
+function renderCaseState(caseState) {
+  if (!caseState) return null;
+
+  const answered = (caseState.resolved_inputs ?? [])
+    .filter((field) => Object.hasOwn(MISSING_FIELDS, field))
+    .map((field) => `- ${MISSING_FIELDS[field].label}`);
+  const pending = (caseState.pending_customer_inputs ?? [])
+    .filter((field) => Object.hasOwn(MISSING_FIELDS, field))
+    .map((field) => `- ${MISSING_FIELDS[field].label}`);
+  const open = (caseState.commitments ?? [])
+    .filter((row) => row?.what && row.status !== 'done')
+    .map((row) => `- ${row.what}`);
+
+  if (answered.length === 0 && pending.length === 0 && open.length === 0) {
+    return null;
+  }
+
+  const blocks = [`## Où en est ce dossier`];
+  if (answered.length > 0) {
+    blocks.push(
+      `Le client nous a DÉJÀ donné ces éléments. Ne pas les redemander, ` +
+        `et ne pas le remercier de les avoir envoyés comme s'ils venaient d'arriver :\n` +
+        answered.join('\n')
+    );
+  }
+  if (pending.length > 0) {
+    blocks.push(`Toujours en attente de sa part :\n${pending.join('\n')}`);
+  }
+  if (open.length > 0) {
+    blocks.push(
+      `Ce que nous lui avons promis et qui reste dû. Ne jamais le contredire, ` +
+        `ne jamais annoncer que c'est fait :\n` + open.join('\n')
+    );
+  }
+  return blocks.join('\n\n');
+}
+
 /**
  * The thread so far, as two labelled blocks: what we said, and what they said
  * before the message being answered.
@@ -375,6 +434,10 @@ export function composeDraftingMessage({
   // Resolves each message's sender to a role. Absent means every inbound
   // message renders as « client », which is exactly what it did before.
   senderDirectory = null,
+  // The last reading of this case: what we asked, what came back, what we
+  // promised. Null on a first message and on any thread the casework pass has
+  // not read, which renders no block at all.
+  caseState = null,
   logger = null
 } = {}) {
   const parts = [];
@@ -402,6 +465,11 @@ export function composeDraftingMessage({
   );
 
   parts.push(toDraftingPrompt(caseFile));
+
+  const packet = renderCaseState(caseState);
+  if (packet) {
+    parts.push(packet);
+  }
 
   // Only when a bundle was built. `toOrderContextText` returns null for a
   // ticket with no confirmed order, which is 138 of the 214 — the absence is

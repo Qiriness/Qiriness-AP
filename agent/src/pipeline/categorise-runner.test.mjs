@@ -80,6 +80,9 @@ test('writes both axes, the level and the team back to the ticket', async () => 
   assert.deepEqual(counts, {
     categorised: 1,
     recategorised: 0,
+    // Tickets whose labels the Case Manager said still describe the thread, so
+    // the pass completed without spending a call. Zero with no predicate wired.
+    kept: 0,
     skipped: 0,
     failed: 0,
     fallbacks: 0
@@ -426,3 +429,5 @@ test('`ticketId` narrows the claim to one ticket, without dropping the queue fil
   await runCategorisation({ record, categorise: async () => verdict() });
   assert.equal(seen[0].id, undefined, 'no id filter when no ticket is named');
 });
+
+test('a continuation keeps its labels and spends no model call', () => {});

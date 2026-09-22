@@ -98,7 +98,7 @@ export async function runDrafting({
   const skippedBy = {};
 
   for (const candidate of candidates) {
-    const { investigation, ticket, message, orderContext, thread = [], conversation = [] } = candidate;
+    const { investigation, ticket, message, orderContext, thread = [], conversation = [], caseState = null } = candidate;
 
     const decision = draftDecision({ investigation, ticket, conversation });
     if (!decision.draft) {
@@ -140,7 +140,7 @@ export async function runDrafting({
         }),
         user: composeDraftingMessage({
           message, caseFile, orderContext, ticket, chase, parameters, offerableCodes,
-          pinnedArticles, conversation, senderDirectory,
+          pinnedArticles, conversation, senderDirectory, caseState,
           signature: brandVoice.signature, closingLine: brandVoice.closingLine, logger
         }),
         schema: DRAFT_SCHEMA,
@@ -280,7 +280,7 @@ export function needingDraft(investigations = [], drafts = []) {
   });
 }
 
-export function createDraftingStore(supabase) {
+export function createDraftingStore(supabase, { caseStateStore = null } = {}) {
   return {
     async claimable({ shopId, limit, ticketId = null, redraft = false }) {
       const filters = {
@@ -368,6 +368,17 @@ export function createDraftingStore(supabase) {
         )
       ]);
 
+      // WHAT THE LAST READING LEFT: which questions are answered, which are
+      // still out, what we promised. One read for the batch, newest first so
+      // the row kept per ticket is the most recent.
+      const caseStateByTicket = new Map();
+      if (caseStateStore) {
+        const readings = await caseStateStore.forTickets(claimed.map((row) => row.ticket_id));
+        for (const row of readings) {
+          if (!caseStateByTicket.has(row.ticket_id)) caseStateByTicket.set(row.ticket_id, row);
+        }
+      }
+
       const ticketById = new Map(tickets.map((row) => [row.id, row]));
       const messageById = new Map(messages.map((row) => [row.id, row]));
       const threadByTicket = new Map();
@@ -429,6 +440,10 @@ export function createDraftingStore(supabase) {
           // `context_ref` is a pointer for exactly this reason.
           orderContext: ticketById.get(investigation.ticket_id)?.resolved_context || null,
           thread: threadByTicket.get(investigation.ticket_id) || [],
+          // The last reading of this case, if the casework pass has made one.
+          // Absent on a first message and on any thread it has not read, which
+          // renders no block and leaves the prompt exactly as it was.
+          caseState: caseStateByTicket.get(investigation.ticket_id) || null,
           conversation: conversationByTicket.get(investigation.ticket_id) || []
         }))
         // A soft-deleted ticket or a purged message drops out here rather than

@@ -1086,6 +1086,116 @@ comment on column public.ticket_investigations.context_ref is
 comment on column public.ticket_investigations.customer_id is
   'Denormalised link to the customer, and the seam for future per-customer memory: prior case files for this customer are a query on this column.';
 
+-- ---------------------------------------------------------------- ticket_case_state
+
+-- ============================================================================
+-- WHAT A NEW MESSAGE CHANGED ABOUT AN ONGOING CASE
+--
+-- One row per inbound message that arrived on a ticket which had already been
+-- read once. The first message of a thread has no row: there is no prior case
+-- for it to change, and the case file already says everything a first reading
+-- can.
+--
+-- WHY IT IS NOT A DOCUMENT ON `tickets`. Two shapes already exist side by side
+-- in this schema and they answer different questions. `resolved_context` is a
+-- snapshot overwritten in place, because "the current state of the order" has
+-- one correct value. This is a READING of a message, and a thread's readings
+-- are a trajectory — the same reason `ticket_investigations` is keyed per
+-- trigger message rather than per ticket. A mutable `metadata.case_state` would
+-- have lost which message established what, which is the one thing a follow-up
+-- needs to know.
+--
+-- IT IS NOT A SECOND WORKFLOW ENGINE. Nothing here decides what happens next.
+-- The situation and the verdict stay where they are; this records what the
+-- newest message did to a case, and the existing rules read it.
+-- ============================================================================
+create table public.ticket_case_state (
+  id uuid primary key default gen_random_uuid(),
+  shop_id uuid not null references public.shops(id) on delete cascade,
+  ticket_id uuid not null references public.tickets(id) on delete cascade,
+  trigger_message_id uuid not null references public.ticket_messages(id) on delete cascade,
+
+  -- How this message relates to the case that already existed. A closed
+  -- vocabulary: the model picks which, and this codebase owns what each means.
+  case_relationship text not null,
+
+  -- The situation carried forward from the previous reading, so a follow-up is
+  -- answered as the case it belongs to rather than re-matched from the opening
+  -- message every run. Null when no situation was ever matched, which is the
+  -- honest state for a thread the library does not cover.
+  situation_key text,
+
+  -- What we asked for and whether this message answered it. The whole reason
+  -- this table exists: recovered from prose afterwards the question is a guess,
+  -- recorded when it is asked it is a fact.
+  resolved_inputs jsonb not null default '[]'::jsonb,
+  pending_customer_inputs jsonb not null default '[]'::jsonb,
+
+  -- What the message added, what we have promised, and where the two disagree.
+  new_facts jsonb not null default '[]'::jsonb,
+  commitments jsonb not null default '[]'::jsonb,
+  contradictions jsonb not null default '[]'::jsonb,
+
+  -- Which needs a prior run already established, as OUTCOME BUCKETS only:
+  -- { need, tool, argsHash, outcome, run_at, status }. Never the tool's data.
+  -- `ticket_investigations.tool_calls` drops that deliberately and `context_ref`
+  -- points at `resolved_context` rather than copying it, both so personal data
+  -- is not duplicated per run. This table does not reopen that.
+  evidence_reuse jsonb not null default '{}'::jsonb,
+
+  case_summary text,
+  model text,
+  read_at timestamptz not null default now(),
+  created_at timestamptz not null default now(),
+
+  -- The same idempotency key as `ticket_investigations` and `ticket_drafts`:
+  -- one reading per message, so a re-run rewrites its own row and a reply adds
+  -- a new one.
+  unique (shop_id, trigger_message_id),
+
+  constraint ticket_case_state_relationship_check check (
+    case_relationship in ('continuation', 'new_information', 'new_issue', 'unclear')
+  ),
+  constraint ticket_case_state_resolved_inputs_array_check check (
+    jsonb_typeof(resolved_inputs) = 'array'
+  ),
+  constraint ticket_case_state_pending_inputs_array_check check (
+    jsonb_typeof(pending_customer_inputs) = 'array'
+  ),
+  constraint ticket_case_state_new_facts_array_check check (
+    jsonb_typeof(new_facts) = 'array'
+  ),
+  constraint ticket_case_state_commitments_array_check check (
+    jsonb_typeof(commitments) = 'array'
+  ),
+  constraint ticket_case_state_contradictions_array_check check (
+    jsonb_typeof(contradictions) = 'array'
+  ),
+  constraint ticket_case_state_evidence_reuse_object_check check (
+    jsonb_typeof(evidence_reuse) = 'object'
+  )
+);
+
+create index ticket_case_state_ticket_idx
+  on public.ticket_case_state (ticket_id, read_at desc);
+
+alter table public.ticket_case_state enable row level security;
+
+comment on table public.ticket_case_state is
+  'One reading per inbound message that landed on a ticket already read once: what the message changed about the case. Keyed per trigger message like ticket_investigations, because a thread''s readings are a trajectory rather than a current value. Records what was asked and answered, what was promised, and which prior evidence may be reused -- never what a tool returned.';
+
+comment on column public.ticket_case_state.case_relationship is
+  'continuation | new_information | new_issue | unclear. Drives whether the categoriser re-runs and whether the situation is carried forward; a closed vocabulary the model selects from and this codebase defines.';
+
+comment on column public.ticket_case_state.situation_key is
+  'The situation carried forward from the previous reading, so a follow-up is not re-matched on the opening message every run. Null when none was ever matched.';
+
+comment on column public.ticket_case_state.resolved_inputs is
+  'MISSING_FIELDS keys this message answered. Recorded when the question is answered rather than recovered from prose later, which is what makes it a fact rather than a guess.';
+
+comment on column public.ticket_case_state.evidence_reuse is
+  'Per need a prior run touched: { tool, argsHash, outcome, run_at, status }. Outcome buckets only, never tool data -- the same personal-data boundary tool_calls and context_ref already hold.';
+
 -- ---------------------------------------------------------------- category_forwarding
 
 -- ============================================================================

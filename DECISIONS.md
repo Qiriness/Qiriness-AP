@@ -1501,6 +1501,48 @@ A 429 now waits OpenAI's own hint (`retry-after-ms`, `retry-after`, then the `x-
 
 **`--reopen`** is the deliberate exception to "a widened run never moves a ticket" (§ The worker sees open tickets only). That rule protects a status somebody chose. A status written minutes earlier by a run against the wrong identity was chosen by nobody, and left in place it would outlive the corrected verdict. It is a flag a person passes per ticket, never a default.
 
+### The Case Manager records what a message changed; it decides nothing else (2026-09-22)
+
+`ticket_case_state`: one reading per inbound message that lands on a ticket already read once. What it is FOR is one thing the pipeline could not do — **record a question when it is asked, and strike it off when it is answered.** A regex reading our own sent replies to recover the same fact measured 2.4 false hits per thread, and 0.3 after narrowing, with half of those still wrong (§ *A re-ask guardrail was built, measured, and removed*). A fact recorded at the time is not a guess.
+
+**A TABLE, NOT A DOCUMENT ON `tickets`.** Two shapes already sit side by side in this schema. `resolved_context` is a snapshot overwritten in place, because "the current state of the order" has one correct value. This is a READING of a message, and a thread's readings are a trajectory — the same argument that keys `ticket_investigations` per trigger message. A mutable `metadata.case_state` would have lost which message established what, which is the one thing a follow-up needs.
+
+**IT IS NOT A SECOND WORKFLOW ENGINE**, and the split is enforced by where the code lives. The model reads prose and picks from a closed vocabulary: which relationship, which of OUR questions this message answered, what we promised. What any of that MEANS is decided in `case-manager-rules.mjs`, in pure functions — the same split `evidence-rules.mjs` draws, for the same reason: a model asked both questions is marking its own homework.
+
+**IT CANNOT NAME A SITUATION.** The library is never in its prompt and the schema has no field for one. The situation is carried forward in code, or dropped on `new_issue` and re-matched by the machinery that already does it. A Case Manager minting situation names would be a second classifier with no calibration behind it.
+
+**THE QUEUE IS DERIVED, with no third `needs_*` flag.** A ticket is due a reading when it has a prior case file and its newest inbound message has none — two reads and a set subtraction, against a column on a populated table. `draft-record.withoutDrafts` made the same trade. **A genuinely new case matches nothing**, which is the brief's own requirement: there is nothing for a first message to change.
+
+**IT RUNS BEFORE THE CATEGORISER, and that moves `--stop-after=categorise`.** The one decision it feeds is whether the labels need re-reading, which has to be known before the categoriser claims its batch. The backlog run is unaffected in practice: freshly ingested mail has no case file, so the stage claims an empty queue and the command costs what it did.
+
+**RE-CATEGORISATION IS SUPPRESSED ON ONE RELATIONSHIP ONLY.** `continuation` — the same request, moved along. `new_information` may have changed what the thread is about, `new_issue` certainly has, and `unclear` is where nothing should be skipped on the strength of a reading that failed. The saving is not the point: one `gpt-4o-mini` call is the cheapest thing in the poll. What it buys is the labels not moving under a case that has not changed, since a blind re-read can only ratchet the level or rewrite a subject that was right.
+
+**AND IT IS SKIPPED, NOT BYPASSED.** `complete('categorisation')` is what clears the flag and raises `needs_investigation` in one patch; a pass that jumped over it would leave the ticket uninvestigated. The casework pass hands the categoriser a predicate and the categoriser completes its own pass, so no second writer of `needs_categorisation` comes into existence.
+
+**A FAILURE READS AS `unclear`**, which is the value that changes nothing: the categoriser runs, the situation is re-matched, the pipeline behaves as it did before this layer existed. The dangerous direction is a rate limit silently suppressing a re-categorisation or striking a question off a list, and `unclear` takes neither decision.
+
+### The situation is carried forward until a second request appears (2026-09-22)
+
+§ *The situation is matched on the opening message* closed with « what a later message should do to a situation already matched is undecided ». This decides it: **carry it**.
+
+Re-matching per run is the alternative and it is worse — the matcher reads the OPENING message, so on a follow-up it re-derives the same answer at the cost of an embedding and, on a near miss, a chooser call. And scoring the newest message instead is what the 2026-09-03 measurement already rejected: a courtesy note would redefine what a ticket is about.
+
+**`new_issue` DROPS IT.** A second request inside a thread is what the classifier exists for, and carrying the old situation into it would answer the new question from the old case's rules.
+
+**A STICKY MATCH THAT WAS WRONG STAYS WRONG**, and that is the cost, stated rather than hidden. It is bounded: the rulebook is editable, and the next `new_issue` re-matches.
+
+### Evidence reuse carries outcome buckets, and the ledger cannot say which need a call served (2026-09-22)
+
+`evidence_reuse` holds `{need, tool, argsHash, outcome, finding, run_at, status}` per need a prior run settled — and **never what the tool returned.** `tool_calls` drops `data` on purpose and `context_ref` points at `resolved_context` rather than copying it; reusing the knowledge that a call ran does not reopen either, and reusing its content would.
+
+**THE FIRST VERSION JOINED ON A FIELD THAT DOES NOT EXIST**, and four real tickets showed it: every need read `missing`, because a stored ledger entry is `{id, tool, argsHash, outcome}` and carries no need. The mapping belongs to the evidence vocabulary — `needsSatisfiedBy` already knows which tools settle which need — so it is derived there, and a tool added to a need cannot be forgotten here. On `1e4890dd`: `order_identity`, `customer_identity`, `refund_state`, `payment_state` and `buyer_type` read `valid`; `order_state`, `delivery_state` and `dispatch_state` read `stale`.
+
+**`unknown` IS NOT CARRIED.** The run looked and could not settle it. Inheriting that as though it were a finding would stop the next run looking again.
+
+**REPORTED, NOT ENFORCED**, like the evidence needs before it. Nothing skips a tool call and no budget changed. Suppression is a separate decision with its own replay (`report:collection-replay`), and taking it here would mean acting on a signal nothing has measured.
+
+**`stale` IS NARROW AND THERE IS NO TTL TABLE.** Measured across all 2,006 orders: `dispatched_no_scan` **1,992 (99%)**, `in_transit` **0**, `stale_in_transit` **0**. With no carrier feed, a freshness policy on tracking re-asks a question whose answer cannot have changed.
+
 ### One investigation per inbound message
 
 `unique(shop_id, trigger_message_id)` is the idempotency key, so a reply produces a new reading instead of overwriting the previous one and the thread's trajectory survives as rows. `context_ref` **points at** `tickets.resolved_context` rather than copying it, so personal data is not duplicated per run. `customer_id` is denormalised and indexed: that is the seam Phase 7 memory hangs off.

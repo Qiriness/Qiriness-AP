@@ -88,7 +88,26 @@ test('`--stop-after=categorise` still means what the corpus-building run needs',
   // ingests and labels a backlog without spending the mid tier on it. Moving the
   // order passes ahead of `categorise` would have quietly added two more stages
   // to that command, which is why they went after it instead.
+  //
+  // `casework` JOINED IT ON 2026-09-22, and this line is the deliberate change
+  // rather than a test bending to fit. It has to run before the categoriser,
+  // because the one decision it feeds is whether the labels need re-reading at
+  // all — after it, the categoriser has already spent the call.
+  //
+  // WHAT IT COSTS THE BACKLOG RUN IS NOTHING, which is what makes the move
+  // affordable. Casework claims only tickets that ALREADY have a case file, and
+  // a corpus-building run over freshly ingested mail has none — so the stage is
+  // present, claims an empty queue, and the command still ingests and labels for
+  // exactly the price it did before.
   const declared = declaredStages();
   const throughCategorise = declared.slice(0, declared.indexOf('categorise') + 1);
-  assert.deepEqual(throughCategorise, ['ingest', 'customers', 'categorise']);
+  assert.deepEqual(throughCategorise, ['ingest', 'customers', 'casework', 'categorise']);
+});
+
+test('casework runs before the categoriser, which is the whole point of its position', () => {
+  const declared = declaredStages();
+  assert.ok(declared.indexOf('casework') < declared.indexOf('categorise'));
+  // And after customer resolution, which needs no model key and identifies the
+  // sender the reading is about.
+  assert.ok(declared.indexOf('customers') < declared.indexOf('casework'));
 });

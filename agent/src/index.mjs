@@ -1,5 +1,6 @@
 import { createSupabaseClient, supabaseSelect } from '../../scripts/lib/supabase-rest-client.mjs';
 import { createTicketRecord } from '../../scripts/lib/ticket-record.mjs';
+import { createCaseStateRecord } from '../../scripts/lib/case-state-record.mjs';
 
 import { loadAgentConfig, assertGraphConfig } from './config.mjs';
 import { logger } from './lib/logger.mjs';
@@ -20,6 +21,8 @@ import { createEmbeddingsClient } from '../../scripts/lib/embeddings/openai-embe
 import { createMessageEmbedder } from './ingestion/message-embedder.mjs';
 import { createCategoriser } from './pipeline/categorise.mjs';
 import { runCategorisation } from './pipeline/categorise-runner.mjs';
+import { createCaseworkStore, runCasework } from './casework/case-runner.mjs';
+import { shouldRecategorise } from './casework/case-manager-rules.mjs';
 import { createCustomerLookup } from './retrieval/customer-lookup.mjs';
 import {
   runCustomerResolution
@@ -66,6 +69,7 @@ import { resolveInternalDomains } from '../../scripts/lib/message-audience.mjs';
 const PIPELINE_STAGES = [
   'ingest',
   'customers',
+  'casework',
   'categorise',
   'orders',
   'context',
@@ -94,6 +98,7 @@ async function main() {
   // owns the flags, the filters, the lifecycle timestamps and the metadata
   // trail. See scripts/lib/ticket-record.mjs.
   const record = createTicketRecord(supabase, { shopId });
+  const caseStateRecord = createCaseStateRecord(supabase, { shopId });
   const store = createSupabaseMessageStore(supabase);
   const cursorStore = createSupabaseCursorStore(supabase);
   // The narrow candidate pool duplicate detection decides against: one sender's
@@ -116,6 +121,10 @@ async function main() {
   let categorise;
   let embedMessage;
   let investigation;
+  // Built only when an OpenAI key is present, like every other model-backed
+  // pass. Null means the casework stage is skipped entirely and the pipeline
+  // behaves exactly as it did before this layer existed.
+  let readCaseFor = null;
   // ONE buffer for the whole process, drained at the end of every poll. It is
   // created here, outside the `openaiApiKey` branch, so the flush at the end of
   // the poll can be unconditional: with no key there are no model calls, the
@@ -135,6 +144,9 @@ async function main() {
     const openai = createOpenAIClient({ apiKey: config.openaiApiKey, usageSink: usage.sink });
     triage = createSpamClassifier(openai, { model: config.triageModel, logger }).triage;
     categorise = createCategoriser(openai, { model: config.categoriserModel }).categorise;
+    // `AGENT_CASEWORK_MODEL=` (empty) leaves this null, which turns the stage
+    // off — the switch is the absence of the reader, not a flag inside it.
+    readCaseFor = config.caseworkModel ? { openai, model: config.caseworkModel } : null;
     // Embeds each stored message inline, best-effort. `npm run embed:tickets`
     // is the reconciler behind it and the better path for any bulk backfill.
     embedMessage = createMessageEmbedder(
@@ -268,6 +280,34 @@ async function main() {
       }
     }
 
+    // WHAT THE NEW MESSAGE CHANGED, read BEFORE the categoriser — because the
+    // one decision it feeds is whether the labels need re-reading at all, and
+    // that has to be known before the categoriser claims its batch.
+    //
+    // It only ever claims a ticket that ALREADY has a case file, so a
+    // genuinely new case costs nothing here and reaches the classifier
+    // exactly as it did before.
+    const continuations = new Set();
+    if (readCaseFor && runsThrough('casework')) {
+      const casework = await runCasework({
+        store: createCaseworkStore(supabase, { caseStateRecord }),
+        record,
+        caseStateRecord,
+        openai: readCaseFor.openai,
+        model: readCaseFor.model,
+        shopId,
+        senderDirectory,
+        logger,
+        limit,
+        onReading: ({ ticket, reading }) => {
+          if (!shouldRecategorise(reading.caseRelationship)) continuations.add(ticket.id);
+        }
+      });
+      if (casework.considered > 0) {
+        logger.info('casework.pass', { shopId, ...casework });
+      }
+    }
+
     // Categorisation runs after ingestion but selects on the pending flag rather
     // than on what this poll just wrote, so a ticket missed by a crashed or
     // key-less earlier poll is caught up here.
@@ -276,7 +316,10 @@ async function main() {
         record,
         categorise,
         logger,
-        limit
+        limit,
+        // A continuation's labels still describe the thread, so the pass
+        // completes without spending a call. Empty unless casework ran.
+        labelsStillValid: (ticket) => continuations.has(ticket.id)
       });
       logger.info('categorise.pass', { shopId, ...categorised });
     }

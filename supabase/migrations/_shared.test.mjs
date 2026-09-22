@@ -95,7 +95,11 @@ export function functionsIn(sql) {
  * early.
  */
 export function definitionOf(sql, name) {
-  const start = sql.search(new RegExp(`create (?:table|view) public\\.${name}\\b`));
+  // `if not exists` is optional here and cannot appear in the baseline — the
+  // test below forbids it there. An INCREMENTAL migration must use it to be
+  // idempotent, and comparing its table against the baseline's is how the two
+  // are kept from drifting, so this parser has to read both.
+  const start = sql.search(new RegExp(`create (?:table|view) (?:if not exists )?public\\.${name}\\b`));
   if (start < 0) return undefined;
   return codeOnly(sql.slice(start)).split(';')[0];
 }

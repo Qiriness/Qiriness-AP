@@ -449,3 +449,52 @@ test('a quoted reply chain inside our own mail is stripped, not shown back', () 
   assert.ok(prompt.includes('confirmer votre adresse'));
   assert.ok(!prompt.includes('> ma commande n’arrive pas'));
 });
+
+// --- where the case stands ----------------------------------------------------
+
+test('with no case state the prompt is exactly what it was', () => {
+  const withNull = composeDraftingMessage({ message: TRIGGER, caseFile: caseFileFromRow(ROW), caseState: null });
+  const without = composeDraftingMessage({ message: TRIGGER, caseFile: caseFileFromRow(ROW) });
+  assert.equal(withNull, without);
+  assert.ok(!withNull.includes('Où en est ce dossier'));
+});
+
+test('a reading with nothing outstanding renders no block', () => {
+  const prompt = composeDraftingMessage({
+    message: TRIGGER,
+    caseFile: caseFileFromRow(ROW),
+    caseState: { resolved_inputs: [], pending_customer_inputs: [], commitments: [] }
+  });
+  assert.ok(!prompt.includes('Où en est ce dossier'));
+});
+
+test('what the customer already supplied is named, so it cannot be asked for twice', () => {
+  const prompt = composeDraftingMessage({
+    message: TRIGGER,
+    caseFile: caseFileFromRow(ROW),
+    caseState: {
+      resolved_inputs: ['shopify_order_number'],
+      pending_customer_inputs: ['photo'],
+      commitments: [
+        { what: 'relancer le transporteur', status: 'pending' },
+        { what: 'envoyer le remplacement', status: 'done' }
+      ]
+    }
+  });
+
+  assert.ok(prompt.includes('Où en est ce dossier'));
+  assert.ok(prompt.includes(MISSING_FIELDS.shopify_order_number.label));
+  assert.ok(prompt.includes(MISSING_FIELDS.photo.label));
+  // An open promise travels; one already honoured is not a thing to restate.
+  assert.ok(prompt.includes('relancer le transporteur'));
+  assert.ok(!prompt.includes('envoyer le remplacement'));
+});
+
+test('a key nothing recognises never reaches the prompt', () => {
+  const prompt = composeDraftingMessage({
+    message: TRIGGER,
+    caseFile: caseFileFromRow(ROW),
+    caseState: { resolved_inputs: ['invented_key'], pending_customer_inputs: [], commitments: [] }
+  });
+  assert.ok(!prompt.includes('invented_key'));
+});

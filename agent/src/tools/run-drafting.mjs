@@ -12,6 +12,7 @@ import { createBrandVoiceStore } from '../drafting/brand-voice.mjs';
 import { createDraftingStore, runDrafting } from '../drafting/draft-runner.mjs';
 import { readsAsClosure } from '../casework/closure.mjs';
 import { createSenderDirectoryStore } from '../ingestion/sender-directory.mjs';
+import { createCaseStateRecord } from '../../../scripts/lib/case-state-record.mjs';
 
 // Runs the drafting pass on its own.
 //
@@ -82,7 +83,7 @@ async function main() {
   );
 
   const totals = await runDrafting({
-    store: createDraftingStore(supabase),
+    store: createDraftingStore(supabase, { caseStateStore: createCaseStateRecord(supabase, { shopId }) }),
     draftRecord: createDraftRecord(supabase, { shopId }),
     openai,
     brandVoice,

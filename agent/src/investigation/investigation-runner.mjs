@@ -48,6 +48,10 @@ const TRUNCATION_MARKER = '\n… (message tronqué)';
 const DROPPED_LINE_RESERVE = 64;
 
 export async function runInvestigation({
+  // Answers « which situation did the last reading leave this case in? ».
+  // Absent by default, and absent means the matcher runs on every ticket
+  // exactly as it did before the case state existed.
+  carriedSituation = null,
   // The case-file store owns `ticket_investigations` and nothing else; the
   // ticket record owns the row this pass moves through the queue. They were one
   // object before, which is how a ticket patch ended up being written here, in
@@ -211,17 +215,29 @@ export async function runInvestigation({
     // tickets, so scoring the last one applied a threshold to a distribution it
     // had never been measured against.
     //
-    // FOLLOW-UPS ARE A SEPARATE PROBLEM AND THIS DOES NOT SOLVE IT. A thread
-    // that opens « où est ma commande » and becomes « finalement je veux être
-    // remboursé » still matches the first intent. What a later message should do
-    // to a situation already matched is undecided: it is additive to the thread
-    // rather than a new request, and treating it as a fresh match would let a
-    // courtesy note redefine what a ticket is about.
+    // FOLLOW-UPS ARE ANSWERED BY THE CASE STATE SINCE 2026-09-22, and this
+    // paragraph used to say the question was undecided. A thread that opens
+    // « où est ma commande » and becomes « finalement je veux être remboursé »
+    // would still match the first intent here, because the matcher reads the
+    // opening message — so the answer is not to re-match, which would let a
+    // courtesy note redefine what a ticket is about. It is to CARRY THE
+    // SITUATION FORWARD until the Case Manager says the thread has a second
+    // request in it, at which point the situation is dropped and re-matched.
     const openingMessage = messages[0];
 
-    const exemplarMatch = await matchExemplar({
-      retrieveExemplar, chooseSituation, senderDirectory, ticket, message: openingMessage, shopId, logger
-    });
+    // THE STICKY SITUATION, and the saving is real: reusing it skips an
+    // embedding and, on a near miss, a `gpt-4o-mini` chooser call — roughly
+    // what the casework reading costs, so the layer pays for itself on any
+    // thread that runs to a second message.
+    //
+    // Null when no reading exists or the reading dropped it, which is every
+    // first message and every `new_issue`. Then the matcher runs as before.
+    const carried = carriedSituation?.(ticket.id) ?? null;
+    const exemplarMatch = carried
+      ? { ...carried, resolved_from: 'case_state' }
+      : await matchExemplar({
+          retrieveExemplar, chooseSituation, senderDirectory, ticket, message: openingMessage, shopId, logger
+        });
 
     // WHICH RULES COULD APPLY, loaded before the run and read after it.
     //

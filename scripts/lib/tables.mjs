@@ -56,6 +56,7 @@ export const T = {
   SENDER_DIRECTORY: 'sender_directory',
   SPAM_AUDIT: 'spam_audit',
   TICKET_INVESTIGATIONS: 'ticket_investigations',
+  TICKET_CASE_STATE: 'ticket_case_state',
   CATEGORY_FORWARDING: 'category_forwarding',
   TICKET_FORWARDS: 'ticket_forwards',
   CATEGORISATION_REVIEW: 'categorisation_review',
@@ -276,7 +277,7 @@ export const COLUMNS = {
 
   /** The thread dialog: envelope and body, both directions. */
   messageForThread:
-    'id,direction,from_name,from_email,subject,body_text,has_attachments,received_at,sent_at',
+    'id,direction,from_name,from_email,to_emails,cc_emails,subject,body_text,has_attachments,received_at,sent_at',
 
   /** The categoriser reads the customer's words and nothing else. */
   messageForCategorisation: 'subject,body_text,received_at',
@@ -386,6 +387,33 @@ export const COLUMNS = {
   threadForInvestigation:
     'id,subject,body_text,direction,received_at,sent_at,from_email,embedding,has_attachments,attachments',
 
+  /**
+   * The previous reading of a thread, as the casework pass builds the next one.
+   *
+   * NO `case_summary` AND NO `new_facts`: both are prose about a message that
+   * has already been read, and the pass reads the messages themselves. What it
+   * needs from the last reading is the STATE it left behind — which situation
+   * the case is in, what is still outstanding, what we promised, and which
+   * evidence may be reused.
+   */
+  /**
+   * The last case file, as the casework pass reads it.
+   *
+   * `missing` is what we asked for on a thread with no case state yet — the
+   * first follow-up. `tool_calls` and `findings_trace` are what `evidence_reuse`
+   * is built from, and both are already free of tool data. `exemplar_match`
+   * supplies the situation the first time one is carried forward.
+   *
+   * No claims and no handoff: this pass does not read the dossier's
+   * conclusions, only what it asked and what it looked at.
+   */
+  investigationForCasework:
+    'id,ticket_id,trigger_message_id,missing,tool_calls,findings_trace,exemplar_match,investigated_at',
+
+  caseStateForCasework:
+    'id,ticket_id,trigger_message_id,case_relationship,situation_key,resolved_inputs,' +
+    'pending_customer_inputs,commitments,evidence_reuse,read_at',
+
   /** The case file, latest run, as the detail panel reads it. */
   // `candidate_order` travels HERE and deliberately not in
   // `investigationForDrafting`: it is the order a human should check first, and
@@ -401,7 +429,7 @@ export const COLUMNS = {
   // case file says what it says — without it, a rule is a thing that happens to
   // somebody's mail with no trace anywhere a person looks.
   investigationForDetail:
-    'verdict,established,unverified,missing,handoff,candidate_order,reaction_report,investigated_at,evidence_gaps,exemplar_match',
+    'verdict,established,unverified,missing,handoff,candidate_order,reaction_report,investigated_at,evidence_gaps,exemplar_match,tool_calls',
 
   /**
    * The case file as the drafting pass reads it back.
@@ -539,6 +567,8 @@ export const PROJECTION_SOURCE = {
   messageForDrafting: T.TICKET_MESSAGES,
   messageEnvelopesForDrafting: T.TICKET_MESSAGES,
   threadForDrafting: T.TICKET_MESSAGES,
+  caseStateForCasework: T.TICKET_CASE_STATE,
+  investigationForCasework: T.TICKET_INVESTIGATIONS,
   investigationForDetail: T.TICKET_INVESTIGATIONS,
   investigationForDrafting: T.TICKET_INVESTIGATIONS,
   draftForReview: T.TICKET_DRAFTS,

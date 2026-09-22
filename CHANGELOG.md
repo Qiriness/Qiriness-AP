@@ -10,6 +10,55 @@ Three sibling files carry the other halves, and this one deliberately does not d
 
 ---
 
+## The Case Manager layer (2026-09-22)
+
+A follow-up is now processed as *what does this message change about the case*
+rather than *how would I answer this email if I saw it for the first time*.
+
+- **`ticket_case_state`** (migration `34_case_state.sql`, and in the `04_support`
+  baseline for fresh installs) — one reading per inbound message landing on a
+  ticket already read once. Keyed `unique(shop_id, trigger_message_id)`, the key
+  `ticket_investigations` and `ticket_drafts` both use.
+- **`scripts/lib/case-state-record.mjs`** — its only writer, beside the other two
+  single-writer modules so `web/` can read it through `allowJs`.
+- **`agent/src/casework/`** — `case-manager` (the call), `case-manager-rules`
+  (pure: whether the categoriser re-runs, which situation the case is in, which
+  evidence may be reused), `case-runner` (the pass).
+- **In the poll after `customers`, before `categorise`** — the one decision it
+  feeds is whether the labels need re-reading, which has to be known before the
+  categoriser claims its batch.
+- **Drafting reads the packet**: what the customer already supplied (so it is not
+  asked for twice), what is still outstanding, and which promises are still open.
+- **The situation is carried forward** until the reading says the thread has a
+  second request in it — closing a question `DECISIONS.md` had left open since
+  2026-09-03.
+
+**Verified on four real threads.** `d6d0d1c3` and `1e4890dd` read as
+`continuation` (courtesy closures, labels kept); `5836ab80` as `new_information`
+(the link we sent leads to an empty basket); `8236165a` as `new_information` from
+the **prestataire logistique**, with the commitment « Informer le client que la
+commande a bien été retournée, puis réexpédiée » captured as `pending`. Re-drafted
+against that packet, the reply now says « Nous examinons actuellement la
+réexpédition de votre colis. Je reviendrai vers vous » instead of restarting.
+
+**One bug found by running it.** `evidence_reuse` read `missing` on every need,
+because the first version joined ledger entries on a `need` field that does not
+exist — a stored entry is `{id, tool, argsHash, outcome}`. The mapping belongs to
+the evidence vocabulary (`needsSatisfiedBy`), and now comes from there. On
+`1e4890dd`: identity, refund, payment and buyer facts `valid`; the three delivery
+states `stale`.
+
+**Deliberately not done: suppression.** Reuse is reported and nothing skips a
+tool call. Acting on it needs its own replay, and `stale` covers a narrow set
+because with no carrier feed 1,992 of 2,006 orders sit in `dispatched_no_scan`
+permanently.
+
+**`AGENT_CASEWORK_MODEL=`** (empty) turns the pass off — the switch is the
+absence of the reader, so there is no half-wired state. 1,569 agent and 3,121
+root tests green.
+
+---
+
 ## Every message now says who sent it (2026-09-21)
 
 Three prompts had been told separately, in prose, that an inbound message might
