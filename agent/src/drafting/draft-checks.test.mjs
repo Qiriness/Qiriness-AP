@@ -874,3 +874,22 @@ test('the parcel check stays out of subjects the parcel is not the question in',
   const none = runDraftChecks({ body: clean, signature: SIGNATURE, category: 'delivery', parcels: [] });
   assert.equal(none.some((c) => c.check === 'tracking_number_given'), false);
 });
+
+test('a closing reply is not failed for skipping the delay apology', () => {
+  // `1e4890dd`: the thread proves a chase, and the message being answered is
+  // « Je vous remercie d'avoir répondu à mes messages ». Reported, not dropped.
+  const checks = runDraftChecks({
+    body: 'Bonjour, merci de nous avoir informés. Nous sommes ravis que tout soit réglé.',
+    chased: true,
+    closing: true
+  });
+  const apology = checks.find((c) => c.check === 'apologises_for_delay');
+  assert.equal(apology.passed, null);
+  assert.match(apology.detail, /clôture/);
+  assert.equal(failedChecks(checks).some((c) => c.check === 'apologises_for_delay'), false);
+});
+
+test('an ordinary chased reply still has to apologise', () => {
+  const checks = runDraftChecks({ body: 'Bonjour, voici votre réponse.', chased: true });
+  assert.equal(checks.find((c) => c.check === 'apologises_for_delay').passed, false);
+});

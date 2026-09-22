@@ -4,7 +4,7 @@ import { COLUMNS, T } from '../../../scripts/lib/tables.mjs';
 import { attemptsSoFar } from '../../../scripts/lib/ticket-record.mjs';
 import { splitQuotedReply } from '../../../scripts/lib/quoted-reply.mjs';
 
-import { OWN_SIDE_LABELS, emptySenderDirectory } from '../ingestion/sender-directory.mjs';
+import { OWN_SIDE_LABELS, emptySenderDirectory, senderRoleName } from '../ingestion/sender-directory.mjs';
 
 import { TICKET_STATUS_BY_VERDICT } from './case-file.mjs';
 import { summariseNeeds } from './evidence-rules.mjs';
@@ -35,7 +35,17 @@ import { summarisePhotoEvidence } from './photo-evidence.mjs';
 const DEFAULT_BATCH_LIMIT = 10;
 const MAX_ATTEMPTS = 3;
 const MESSAGES_PER_TICKET = 10;
-const MAX_TEXT_CHARS = 4000;
+// The budget for the whole rendered transcript, not for one message. It was
+// 4,000 when the read was two inbound bodies; a thread carries our replies too,
+// and an outbound body is 1,758 characters on average against 3.2 KB per ticket
+// inbound. 12,000 covers the longest thread in the corpus (9 messages) whole,
+// and the truncation below decides what goes when a thread outgrows it.
+const MAX_TEXT_CHARS = 12000;
+const SEPARATOR = '\n\n';
+const TRUNCATION_MARKER = '\n… (message tronqué)';
+// Room held back for `[… N message(s) plus ancien(s) non inclus]` and its
+// separator, so the line that reports the overflow cannot itself cause one.
+const DROPPED_LINE_RESERVE = 64;
 
 export async function runInvestigation({
   // The case-file store owns `ticket_investigations` and nothing else; the
@@ -124,10 +134,27 @@ export async function runInvestigation({
       continue;
     }
 
-    const messages = await record.inboundMessages(ticket.id, {
+    // THE WHOLE CONVERSATION, BOTH DIRECTIONS. This pass read inbound mail only
+    // until 2026-09-21, so a follow-up was investigated against the customer's
+    // words with our own answers missing — « oui, j'ai vérifié les deux » with
+    // no record of what they had been asked to verify. 95 outbound bodies were
+    // stored and no pass in the pipeline had ever read one.
+    //
+    // EVERYTHING CALIBRATED ON INBOUND MAIL STILL RUNS ON THE INBOUND SUBSET,
+    // filtered immediately below: the sender check, the situation match, the
+    // trigger message, the photo sweep and the clock. Only the text the model
+    // reads widened.
+    const conversation = await record.conversation(ticket.id, {
       limit: MESSAGES_PER_TICKET,
-      columns: COLUMNS.messageForInvestigation
+      columns: COLUMNS.threadForInvestigation
     });
+    // `!== 'outbound'` rather than `=== 'inbound'`, because of how the two fail.
+    // A row whose direction did not travel — a projection that lost the column,
+    // a caller wiring its own read — stays in the inbound set, and the pass
+    // degrades to exactly the behaviour it had before it could see our replies.
+    // The strict test would empty the set instead and skip the ticket, which is
+    // a customer's mail disappearing to fix a column.
+    const messages = conversation.filter((message) => message.direction !== 'outbound');
     if (messages.length === 0) {
       if (!dryRun) {
         await record.skip('investigation', ticket.id);
@@ -221,7 +248,7 @@ export async function runInvestigation({
     let caseFile;
     try {
       caseFile = await investigate(
-        buildInput(ticket, messages, senderDirectory, exemplarMatch.requirement_needs, policy, parameters)
+        buildInput(ticket, messages, senderDirectory, exemplarMatch.requirement_needs, policy, parameters, conversation)
       );
     } catch (error) {
       await handleFailure({ record, ticket, error, counts, logger, dryRun });
@@ -401,6 +428,98 @@ async function handleFailure({ record, ticket, error, counts, logger, dryRun }) 
  * the quote begin" has one answer in this codebase rather than two. It is never
  * shown to the model.
  */
+/** `2026-07-15`, and deliberately not a French long date. */
+function transcriptDate(message) {
+  const at = message?.received_at || message?.sent_at;
+  if (!at) return null;
+  const date = new Date(at);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString().slice(0, 10);
+}
+
+// WHO SPOKE, from the directory rather than from the direction. Rendering every
+// inbound message as « client » put a colleague's note and the 3PL's status
+// update in the customer's mouth — 38 inbound messages from `lap-groupe.com` and
+// 14 from Deret in this corpus, most of them on threads a customer opened.
+//
+// The address is used to resolve the role and never rendered, which is the rule
+// this file already follows for `sender`.
+function transcriptLabel(message, senderDirectory) {
+  const who = senderRoleName(message, senderDirectory);
+  const date = transcriptDate(message);
+  return date ? `[${who} — ${date}]` : `[${who}]`;
+}
+
+/**
+ * The thread as the model reads it: who said what, in order.
+ *
+ * ONE MESSAGE RENDERS BARE, with no label and no date — byte for byte what this
+ * function's two-body predecessor produced. 133 of 172 tickets have exactly one
+ * inbound message and no reply, and leaving their prompt untouched is what makes
+ * this change measurable on the 39 threads it is for rather than on all of them.
+ * A test pins it.
+ *
+ * THE BUDGET IS SPENT NEWEST FIRST. An ascending render that ran out of budget
+ * would truncate the message the pass was woken up for, which is the one part of
+ * a thread that can never be dropped. So the walk is backwards, older messages
+ * take what is left, and a thread that outgrows the budget says so rather than
+ * ending mid-sentence.
+ *
+ * THE QUOTE IS INBOUND-ONLY, unchanged. `quotedText` exists because a forwarded
+ * order confirmation carries the number and the address together; quoted history
+ * inside OUR replies is our own text coming back, which is the noise the split
+ * exists to remove.
+ */
+function renderConversation(conversation, inbound, senderDirectory) {
+  const rows = conversation?.length > 0 ? conversation : inbound;
+  const parts = rows.map((message) => ({ message, ...splitQuotedReply(message?.body_text || '') }));
+
+  const quotedText =
+    parts
+      .filter((part) => part.message?.direction !== 'outbound')
+      .map((part) => part.quoted)
+      .filter(Boolean)
+      .join('\n\n')
+      .slice(0, MAX_TEXT_CHARS) || null;
+
+  const spoken = parts.filter((part) => part.own);
+  if (spoken.length <= 1) {
+    return { text: (spoken[0]?.own || '').slice(0, MAX_TEXT_CHARS), quotedText };
+  }
+
+  const rendered = [];
+  // The budget is charged for everything that ends up in the string, not just
+  // for bodies: the separators between messages, the truncation marker, and the
+  // line announcing what was dropped. Counted loosely, the render overshot
+  // MAX_TEXT_CHARS by the overhead it had not paid for — small here, and the
+  // kind of cap that is wrong by more the longer the thread gets.
+  let remaining = MAX_TEXT_CHARS - DROPPED_LINE_RESERVE;
+  let dropped = 0;
+
+  for (let index = spoken.length - 1; index >= 0; index -= 1) {
+    const part = spoken[index];
+    const head = `${transcriptLabel(part.message)}\n`;
+    const overhead = head.length + (rendered.length > 0 ? SEPARATOR.length : 0);
+    // A label with nothing under it tells the model less than an honest count of
+    // what it cannot see, so a message that cannot fit its own header is dropped
+    // rather than rendered empty.
+    if (remaining - overhead <= 0) {
+      dropped = index + 1;
+      break;
+    }
+    const room = remaining - overhead;
+    const truncated = part.own.length > room;
+    const body = truncated ? part.own.slice(0, Math.max(0, room - TRUNCATION_MARKER.length)) : part.own;
+    rendered.unshift(`${head}${body}${truncated ? TRUNCATION_MARKER : ''}`);
+    remaining -= overhead + body.length + (truncated ? TRUNCATION_MARKER.length : 0);
+  }
+
+  if (dropped > 0) {
+    rendered.unshift(`[… ${dropped} message(s) plus ancien(s) non inclus]`);
+  }
+
+  return { text: rendered.join(SEPARATOR), quotedText };
+}
+
 /**
  * @param senderDirectory  optional; `emptySenderDirectory` behaviour when absent.
  *
@@ -410,21 +529,18 @@ async function handleFailure({ record, ticket, error, counts, logger, dryRun }) 
  * question that was already answered, and the model would only ask when it
  * thought to.
  */
-function buildInput(ticket, messages, senderDirectory, exemplarNeeds = [], policy = null, parameters = new Map()) {
+function buildInput(
+  ticket,
+  messages,
+  senderDirectory,
+  exemplarNeeds = [],
+  policy = null,
+  parameters = new Map(),
+  conversation = messages
+) {
   const first = messages[0];
   const latest = messages.length > 1 ? messages[messages.length - 1] : null;
-  const parts = [first?.body_text, latest?.body_text].filter(Boolean).map(splitQuotedReply);
-  const text = parts
-    .map((part) => part.own)
-    .filter(Boolean)
-    .join('\n\n')
-    .slice(0, MAX_TEXT_CHARS);
-  const quotedText =
-    parts
-      .map((part) => part.quoted)
-      .filter(Boolean)
-      .join('\n\n')
-      .slice(0, MAX_TEXT_CHARS) || null;
+  const { text, quotedText } = renderConversation(conversation, messages, senderDirectory);
 
   return {
     id: ticket.id,
@@ -481,6 +597,15 @@ function buildInput(ticket, messages, senderDirectory, exemplarNeeds = [], polic
     // it is derived once here rather than inside a tool handler that would
     // recompute the same answer on every call.
     photoEvidence: summarisePhotoEvidence(messages),
+    // THE SHAPE OF THE THREAD, so a reader can branch on "this is a reply to us"
+    // without loading the messages again. `lastDirection` is the load-bearing
+    // one: it separates a fresh request from an answer to a question we asked,
+    // which is the distinction every symptom of the follow-up problem turns on.
+    threadShape: {
+      inboundCount: messages.length,
+      outboundCount: conversation.filter((message) => message.direction === 'outbound').length,
+      lastDirection: conversation[conversation.length - 1]?.direction ?? 'inbound'
+    },
     // THE POLICY RULES FOR THIS TICKET, and the situation they may be keyed to.
     //
     // READ AFTER THE RUN, NEVER BEFORE IT. `investigate` uses this only once the

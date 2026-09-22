@@ -17,6 +17,7 @@ hand-labelled set; two score against a *proxy* and can only ever show you shape.
 | `npm run eval:order-states` | `diagnose-order-states.mjs` | Which order/delivery/payment states real tickets reach | Live bundles, **no labels and no API calls** | nothing |
 | `npm run eval:exemplar-needs` | `compare-exemplar-needs.mjs` | Does the corpus describe what tickets require? | Live rows, **independence** — excludes any row where the exemplar supplied the needs | nothing |
 | `npm run eval:knowledge-gaps` | `knowledge-gaps.mjs` | Which questions the library keeps failing | Live rows — a demand report, not a quality one | nothing |
+| `npm run eval:closure` | `run-closure-eval.mjs` | Does a customer's last message close their request? | **Labelled** — `closure-cases.mjs`, ids and booleans only; the bodies are read live | nothing |
 | `npm run eval:audit-phrasings` | `audit-phrasings.mjs` | Phrasings filed under the wrong situation | Stored vectors against each other — **no API calls** | nothing |
 | `npm run cluster:tickets` _(repo root)_ | `scripts/cluster-ticket-messages.mjs` | What customers actually write about | Nothing — it is the source of demand | nothing |
 
@@ -96,3 +97,35 @@ mis-filed phrasing still wins the ticket it was lifted from, so the win counts
 look healthy. Two passes: **MISFILED** (a phrasing that retrieves a situation
 that is not its own — mostly adjacency, read the margin) and **MULTI-INTENT** (one
 phrasing carrying two questions, which can only ever be filed half-wrongly).
+
+## Closure: the labels are the author's own, and the failure modes are not symmetric
+
+`eval:closure` scores every thread where a customer wrote after our reply — all
+16 as of 2026-09-21, the whole population rather than a sample, because that is
+the only population a closure can occur in.
+
+**It is the one eval whose corpus is real mail.** `closure-cases.mjs` holds ticket
+ids and booleans; the message bodies are read from the database at run time. Ids
+and labels are not personal data, and the alternative — inventing sixteen
+closing emails — would measure the invention rather than the corpus.
+`diagnose-exemplars.mjs` already scores live tickets the same way.
+
+**The labels were written by the author of the check they score**, which is the
+weakest kind of labelled set there is. Read a score as a regression signal, not
+as an accuracy claim, and disagree with `closure-cases.mjs` in a diff.
+
+**Two layers are scored separately.** `closureAllowed` is pure code and stops 11
+of the 16 before any model call; only the remaining 5 reach the model. A case
+where the message alone reads as a closure but the dossier is still open —
+`d6d0d1c3` — is expected to produce NO closing reply, because what is being
+scored is what production does, not what a model reading one message would say.
+
+**`--repeat N` asks each open case N times**, and the worst answer is the one
+reported rather than the majority: a false closure that fires one run in seven
+still reaches a customer one time in seven. Measured 2026-09-21 at `--repeat 8`,
+0 of 5 open cases were unstable — after one flip observed earlier on
+`fcf4ca11` that 45 subsequent calls did not reproduce.
+
+**A false closure fails the command; a missed one does not.** A missed closure
+sends a full reply to somebody who wanted a line, and the reviewer sees it. A
+false closure sends three lines to somebody who needed help.

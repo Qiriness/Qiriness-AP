@@ -325,7 +325,10 @@ export function runDraftChecks({
   category = null,
   // The `{ url, label }` the matched rule offered, or null. Read by the two link
   // checks: one marker when there is a link, none when there is not.
-  replyLink = null
+  replyLink = null,
+  // True when this draft is the short reply that closes the case. Read by one
+  // check, which stands down rather than failing a reply for not apologising.
+  closing = false
 } = {}) {
   const isHandover = verdict === 'needs_human';
   const text = String(body || '');
@@ -531,7 +534,23 @@ export function runDraftChecks({
   // covers a customer who says they have been waiting — but a check has to rest
   // on something checkable, and "they wrote again before we replied" is a fact
   // about the envelopes. The stated-only cases stay the prompt's job.
-  if (chased) {
+  // A CLOSING REPLY IS EXEMPT, and `1e4890dd` is why. The thread proves a chase —
+  // consecutive inbound messages with nothing back — so the check fires; but the
+  // message being answered is « Je vous remercie d'avoir répondu à mes messages ».
+  // The customer is telling us the wait ended. An apology for our delay, in the
+  // three-line reply that closes the case, answers a complaint they have just
+  // withdrawn.
+  //
+  // REPORTED, NOT DROPPED. `passed: null` keeps the line visible with the reason,
+  // the same treatment every other unexaminable check gets, so a reviewer sees
+  // the chase was noticed and deliberately not apologised for.
+  if (chased && closing) {
+    checks.push({
+      check: 'apologises_for_delay',
+      passed: null,
+      detail: 'réponse de clôture — le client a confirmé avoir reçu nos réponses'
+    });
+  } else if (chased) {
     // ALL FOUR LANGUAGES THE CORPUS ACTUALLY DRAFTS IN (fr 77 · it 2 · es 1 ·
     // en 1). The first version matched French only and failed an Italian draft
     // that opened « Ci scusiamo per il ritardo nella risposta » — a correct reply
@@ -675,6 +694,32 @@ export const ASK_TERMS = {
   reaction_product_name: ['produit'],
   lot_number: ['lot']
 };
+
+// WHAT WE ALREADY ASKED FOR IS NOT DETECTABLE FROM `ASK_TERMS`, AND IT WAS TRIED.
+//
+// The obvious check on top of the thread history is: read our own sent replies
+// through this same vocabulary, and flag a draft that asks again. It was built
+// and measured over the 25 threads that carry both a customer reply and one of
+// ours, and it does not work.
+//
+// MEASURED 2026-09-21. Whole-body matching claimed 2.4 fields per thread —
+// `product_name` and `reaction_product_name` fired on 10 threads each, always
+// together, because they share the single term « produit », which any reply
+// mentioning a product contains. Narrowed to sentences carrying a request cue
+// (« pourriez-vous », a question mark) it fell to 0.3 per thread and about half
+// of what was left was still wrong: « Avez-vous effectué un retour de produit ? »
+// is not a request for the product's name.
+//
+// THE DIRECTION IS WHAT BREAKS IT. `ASK_TERMS` exists to check that a draft DOES
+// ask for something, where a false positive costs a reviewer a minute. Read
+// backwards the failure inverts: a wrong hit suppresses a question the case file
+// licensed, and the customer is never asked for the one fact that would let us
+// help them. A check that fires on correct drafts is ignored within a week.
+//
+// So nothing is checked here, and the fix is the prompt instead: drafting is now
+// shown our own replies and told not to repeat what they ask. Turning that into
+// a guardrail needs the question recorded when it is ASKED rather than recovered
+// from prose afterwards — which is the case state, not a regex.
 
 /** « e-mail » and « é-mail » are the same word to a reader and must be here too. */
 function foldAccents(value) {

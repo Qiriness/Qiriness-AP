@@ -100,7 +100,84 @@ export const AUTO_SEND_MAX_UNHAPPINESS = 2;
  * Every verdict the investigation issues now produces a draft, so the reasons
  * are all about the ticket or the row — never about what was concluded.
  */
-export function draftDecision({ investigation, ticket } = {}) {
+/**
+ * Has somebody already replied to the message this case file was written from?
+ *
+ * MEASURED 2026-09-21: **59 of 138 investigations** sit on a thread where an
+ * outbound message is newer than the trigger, and **every one of them produced a
+ * draft.** Nearly half the drafting queue was writing a reply to mail a person
+ * had already answered — which is exactly what it looks like from the review
+ * side: the last message in the thread is ours, and the draft says the same
+ * thing again.
+ *
+ * STRICTLY NEWER THAN THE TRIGGER, not "the thread ends with our reply". The
+ * difference is the ordinary case: a customer who writes, gets answered, then
+ * writes again has an outbound message in the thread and is owed a reply. What
+ * disqualifies a draft is a reply that came AFTER the message being answered.
+ *
+ * ENVELOPES ONLY — direction and time. No body is read, and none is needed.
+ *
+ * ON THE CORPUS THIS IS MOSTLY HISTORY, and it is not only history. The mail was
+ * imported after a person had worked it, so the human reply is older than the
+ * agent's first look. On live mail the same shape appears whenever somebody
+ * answers in Outlook before the draft is reviewed — which, with drafting
+ * operator-triggered and 120 drafts unread, is the normal case rather than the
+ * edge one.
+ *
+ * ONE INTERACTION TO REMEMBER. `direction` is derived at ingestion from the
+ * sender being `SUPPORT_MAILBOX`, so a forward sent from that mailbox would also
+ * be outbound. Forwarding has never sent (`ticket_forwards` is empty) and a
+ * forward to a colleague is unlikely to land in the customer's conversation, so
+ * this is a note rather than a known bug.
+ */
+export function answeredSince({ conversation = [], triggerMessageId = null } = {}) {
+  if (!triggerMessageId) return false;
+  const trigger = conversation.find((message) => message?.id === triggerMessageId);
+  const triggerAt = stampOf(trigger);
+  if (triggerAt === null) return false;
+
+  return conversation.some(
+    (message) => message?.direction === 'outbound' && stampOf(message) !== null && stampOf(message) > triggerAt
+  );
+}
+
+// NOT `timeOf` below, and the difference is load-bearing. That one returns 0 for
+// a message with no timestamp, which is right where it is used — ordering a
+// thread, where an undated message sorting first is harmless. Here 0 would mean
+// an undated TRIGGER compares as older than every reply in the thread, and the
+// draft would be suppressed on a ticket nobody has answered.
+function stampOf(message) {
+  const at = message?.received_at || message?.sent_at;
+  if (!at) return null;
+  const value = new Date(at).getTime();
+  return Number.isNaN(value) ? null : value;
+}
+
+/**
+ * Is there anything outstanding on OUR side of this case?
+ *
+ * The code half of closure detection, and it runs first so the model half is
+ * never asked a question whose answer could not be acted on. A case with a named
+ * question or a point handed to a colleague cannot be closed by the customer
+ * saying thank you, however plainly they say it.
+ *
+ * `d6d0d1c3` IS THE CASE THIS EXISTS FOR. « J'ai bien réceptionné le colis.
+ * Merci encore » closes the delivery question; the free mask is still missing
+ * and the case file reads `needs_human`. Read on the message alone it is a
+ * closure. Read against the dossier it is a customer being gracious about half
+ * of their problem.
+ *
+ * `needs_human` is refused whatever else is true — a handoff means a colleague
+ * owes them something — and a `missing` entry means we still asked for a fact.
+ */
+export function closureAllowed(investigation) {
+  if (!investigation) return false;
+  if (investigation.verdict !== 'answerable') return false;
+  if (investigation.missing?.length > 0) return false;
+  return !investigation.handoff;
+}
+
+export function draftDecision({ investigation, ticket, conversation = [] } = {}) {
   if (!investigation) {
     return { draft: false, reason: 'no_case_file' };
   }
@@ -124,6 +201,13 @@ export function draftDecision({ investigation, ticket } = {}) {
   // and closing with the signature, is never the right thing to put in front of
   // them. The investigation still runs: whoever picks this up wants the order
   // facts gathered, they just do not want a drafted customer email.
+  // ALREADY ANSWERED, and checked before the rest because it outranks them: a
+  // reply that has been sent cannot be improved by deciding what a second one
+  // should have said. Counted like every other skip, because the rate is the
+  // thing worth watching — it says how often the queue is behind the people.
+  if (answeredSince({ conversation, triggerMessageId: investigation.trigger_message_id })) {
+    return { draft: false, reason: 'already_answered' };
+  }
   if (ticket?.sender_label) {
     return { draft: false, reason: 'internal_sender' };
   }

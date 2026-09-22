@@ -5,6 +5,7 @@ import { brandVoiceProblem, composeSystemPrompt } from './brand-voice.mjs';
 import { checksPassed, failedChecks, runDraftChecks } from './draft-checks.mjs';
 import {
   autoSendEligible,
+  closureAllowed,
   describesChase,
   draftDecision,
   replyLanguage
@@ -76,6 +77,15 @@ export async function runDrafting({
   // Empty by default and safe: a pin whose document is missing here is dropped,
   // which is exactly what an unapproved or deleted article looks like.
   pinnedArticles = new Map(),
+  // Reads whether the customer's latest message closes their request.
+  // ABSENT BY DEFAULT, and absence means no closure: a caller that has not
+  // wired it — the rehearsal harness, every existing test — writes exactly the
+  // replies it wrote before, rather than quietly shortening one.
+  closureReader = null,
+  // Resolves each message's sender to a role, so a colleague's note is not
+  // rendered as the customer speaking. Absent means every inbound message
+  // reads as « client », which is what it did before.
+  senderDirectory = null,
   onDraft
 } = {}) {
   const problem = brandVoiceProblem(brandVoice);
@@ -88,9 +98,9 @@ export async function runDrafting({
   const skippedBy = {};
 
   for (const candidate of candidates) {
-    const { investigation, ticket, message, orderContext, thread = [] } = candidate;
+    const { investigation, ticket, message, orderContext, thread = [], conversation = [] } = candidate;
 
-    const decision = draftDecision({ investigation, ticket });
+    const decision = draftDecision({ investigation, ticket, conversation });
     if (!decision.draft) {
       totals.skipped += 1;
       skippedBy[decision.reason] = (skippedBy[decision.reason] || 0) + 1;
@@ -99,6 +109,15 @@ export async function runDrafting({
 
     const caseFile = caseFileFromRow(investigation);
     const language = replyLanguage(ticket);
+    // DOES THIS MESSAGE CLOSE THE CASE? The code gate runs first and costs
+    // nothing: with a question outstanding or a point sitting with a colleague,
+    // a customer's thanks cannot end the case, and the model is never asked.
+    // Only when the dossier is clear is the message itself read — a small
+    // minority of tickets, on the cheap tier.
+    const closure =
+      closureReader && closureAllowed(investigation)
+        ? await closureReader({ message, ticketId: ticket.id, senderDirectory })
+        : { closes: false, why: 'dossier non clos' };
     // Did we leave them waiting? A fact about our own conduct, computed from the
     // thread rather than inferred from the customer's tone.
     const chase = describesChase(thread);
@@ -109,10 +128,20 @@ export async function runDrafting({
         // The verdict picks which INTENT_RULES set travels: answer, ask, or
         // only acknowledge. Sending all three would hand the model a prompt
         // that contradicts itself and let it choose.
-        system: composeSystemPrompt(brandVoice, { language, verdict: investigation.verdict }),
+        //
+        // `closing` is the one intent the verdict does not choose, because it is
+        // not a property of the dossier: the case file is `answerable` either
+        // way, and what makes the reply three lines is the customer having said
+        // they need nothing more.
+        system: composeSystemPrompt(brandVoice, {
+          language,
+          verdict: investigation.verdict,
+          intent: closure.closes ? 'closing' : null
+        }),
         user: composeDraftingMessage({
           message, caseFile, orderContext, ticket, chase, parameters, offerableCodes,
-          pinnedArticles, logger
+          pinnedArticles, conversation, senderDirectory,
+          signature: brandVoice.signature, closingLine: brandVoice.closingLine, logger
         }),
         schema: DRAFT_SCHEMA,
         schemaName: 'draft',
@@ -153,7 +182,8 @@ export async function runDrafting({
         category: ticket.category,
         // The link the prompt described, so the check cannot demand a marker the
         // model was never told to write.
-        replyLink: caseFile.link
+        replyLink: caseFile.link,
+        closing: closure.closes
       });
       const passed = checksPassed(checks);
 
@@ -183,6 +213,7 @@ export async function runDrafting({
           cosmetovigilanceDraftOnly
         }),
         promptInputs: promptInputs({
+          closure,
           caseFile,
           orderContext,
           investigationId: investigation.id,
@@ -317,9 +348,13 @@ export function createDraftingStore(supabase) {
           },
           COLUMNS.messageForDrafting
         ),
-        // The whole thread's envelopes — directions and timestamps, no bodies.
-        // Answers one question: was the customer left waiting (see
-        // `describesChase`).
+        // THE WHOLE THREAD, BOTH DIRECTIONS, WITH BODIES.
+        //
+        // This read was envelopes only — directions and timestamps — and
+        // answered one question: was the customer left waiting
+        // (`describesChase`). It still answers it; the extra columns cost that
+        // question nothing and buy the one nothing in this pipeline could
+        // answer before, which is what we have already told this customer.
         supabaseSelect(
           supabase,
           T.TICKET_MESSAGES,
@@ -329,7 +364,7 @@ export function createDraftingStore(supabase) {
               value: `(${claimed.map((row) => row.ticket_id).join(',')})`
             }
           },
-          COLUMNS.messageEnvelopesForDrafting
+          COLUMNS.threadForDrafting
         )
       ]);
 
@@ -341,6 +376,13 @@ export function createDraftingStore(supabase) {
         thread.push(envelope);
         threadByTicket.set(envelope.ticket_id, thread);
       }
+      // THE TICKET'S OWN MAIL, kept aside before the related-ticket merge below.
+      // `thread` exists to answer whether the customer was left waiting, and for
+      // that question a sibling ticket's envelopes belong in it. The transcript
+      // is a different question — what did WE say on THIS thread — and a second
+      // conversation spliced into it would read as one. The merge rebuilds the
+      // array rather than mutating it, so this map keeps the unmerged rows.
+      const conversationByTicket = new Map(threadByTicket);
 
       // THE CHASE THAT SPANS TWO TICKETS. `describesChase` finds the longest run
       // of consecutive inbound messages, which is exactly the right question and
@@ -386,7 +428,8 @@ export function createDraftingStore(supabase) {
           // The bundle lives on the ticket, never copied onto the case file —
           // `context_ref` is a pointer for exactly this reason.
           orderContext: ticketById.get(investigation.ticket_id)?.resolved_context || null,
-          thread: threadByTicket.get(investigation.ticket_id) || []
+          thread: threadByTicket.get(investigation.ticket_id) || [],
+          conversation: conversationByTicket.get(investigation.ticket_id) || []
         }))
         // A soft-deleted ticket or a purged message drops out here rather than
         // reaching the model as an undefined.

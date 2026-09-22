@@ -2,6 +2,8 @@ import { toDraftingPrompt } from '../investigation/case-file.mjs';
 import { fillParameters } from '../../../scripts/lib/parameters.mjs';
 import { normaliseTones, toneInstructions } from '../../../scripts/lib/reply-tones.mjs';
 import { normaliseReplyLink } from '../../../scripts/lib/reply-link.mjs';
+import { splitQuotedReply } from '../../../scripts/lib/quoted-reply.mjs';
+import { senderRoleName } from '../ingestion/sender-directory.mjs';
 import { toOrderContextText } from '../resolution/order-context.mjs';
 
 // The per-ticket half of the drafting call: what this customer wrote, what the
@@ -30,6 +32,11 @@ import { toOrderContextText } from '../resolution/order-context.mjs';
 // is 18k characters against a 2.5k median, and one article that dwarfs the case
 // file is an article the reply gets written from instead of the evidence.
 const MAX_PINNED_ARTICLE_CHARS = 6000;
+// Per block — our replies and their earlier messages are budgeted separately, so
+// a long complaint cannot crowd out the answer we gave it. The longest thread in
+// the corpus is 9 messages and an outbound body averages 1,758 characters, so
+// this holds every real thread whole and exists for the one that is not.
+const MAX_HISTORY_CHARS = 8000;
 
 export function caseFileFromRow(row) {
   return {
@@ -85,6 +92,133 @@ export function caseFileFromRow(row) {
  * recorded rather than silent: an unset parameter is a decision outstanding, and
  * the log line is how it stops being invisible.
  */
+/**
+ * The thread so far, as two labelled blocks: what we said, and what they said
+ * before the message being answered.
+ *
+ * THE TRIGGER MESSAGE IS EXCLUDED, because it is rendered whole and first-class
+ * under `# Message du client` immediately below. Printing it twice would make
+ * the newest thing the customer said look like the oldest.
+ *
+ * OUR REPLIES ARE NEVER TRUNCATED AT THE TOP. An outbound body averages 1,758
+ * characters and the commitment — « nous revenons vers vous dès que le
+ * transporteur répond » — is usually in its last paragraph, which is exactly
+ * what a head-slice would drop. Older ones give way whole instead.
+ *
+ * QUOTED CHAINS ARE STRIPPED, using the same splitter ingestion and the
+ * investigation use, so the model is not shown its own prompt coming back
+ * inside a reply.
+ */
+function renderHistory(conversation, triggerMessage, { signature = '', closingLine = '', senderDirectory = null } = {}) {
+  const triggerId = triggerMessage?.id ?? null;
+  const earlier = (conversation || [])
+    .filter((row) => row?.id !== triggerId)
+    .map((row) => ({
+      row,
+      own: stripSignOff(splitQuotedReply(row?.body_text || '').own || '', { signature, closingLine })
+    }))
+    .filter((entry) => entry.own);
+
+  if (earlier.length === 0) {
+    return null;
+  }
+
+  const sent = earlier.filter((entry) => entry.row.direction === 'outbound');
+  const received = earlier.filter((entry) => entry.row.direction !== 'outbound');
+  const blocks = [];
+
+  if (sent.length > 0) {
+    blocks.push(
+      `# Ce que nous avons déjà répondu sur ce fil\n\n` +
+        `Historique de nos propres messages, du plus ancien au plus récent. ` +
+        `C’est un RAPPEL DE CE QUI A DÉJÀ ÉTÉ DIT, jamais un modèle à recopier : ` +
+        `aucune phrase ci-dessous ne doit être reprise telle quelle, et ce qui y figure ` +
+        `n’est pas autorisé pour autant — une question, un délai ou un engagement ` +
+        `qui y apparaît a été écrit à ce moment-là, et seules les consignes plus bas ` +
+        `disent ce que cette réponse-ci a le droit de faire.\n\n` +
+        `À en tirer : ne pas redemander ce qui y est déjà demandé, ne pas réexpliquer ` +
+        `ce qui y est déjà expliqué, et ne jamais contredire ce qui y est promis.\n\n` +
+        withinBudget(sent, senderDirectory).join('\n\n')
+    );
+  }
+
+  if (received.length > 0) {
+    blocks.push(
+      `# Messages précédents reçus sur ce fil\n\n` +
+        `Ce qui est arrivé dans la boîte avant le message ci-dessous. Chaque message ` +
+        `est précédé de son émetteur : la réponse s’adresse au CLIENT, et un message ` +
+        `d’un collègue ou d’un prestataire n’est là que pour le contexte.\n\n` +
+        withinBudget(received, senderDirectory).join('\n\n')
+    );
+  }
+
+  return blocks.join('\n\n');
+}
+
+/**
+ * The approved sign-off, removed from a message the model is only meant to read.
+ *
+ * MEASURED, NOT PRECAUTIONARY. Ticket `718086fd` is a Spanish thread whose
+ * middle two replies are French and end « Bien cordialement, Service Client
+ * Qiriness ». Shown those, the model ended its Spanish reply with the French
+ * signature and failed the `signature` check — which requires the approved
+ * wording TRANSLATED outside French. Framing did not fix it: the instruction not
+ * to recopy was already in the block, and the draft copied it anyway.
+ *
+ * The signature and the closing line are approved, stored fields reproduced from
+ * the system prompt on every reply. In the history they carry no information at
+ * all — every one of our messages ends with them — and the only thing they can
+ * do is be imitated. Same removal `draft-checks` performs before looking for an
+ * invented closer, for the same reason.
+ *
+ * THE REST OF THE MESSAGE IS UNTOUCHED. What we said is why this block exists;
+ * only how we signed it goes.
+ */
+function stripSignOff(body, { signature = '', closingLine = '' } = {}) {
+  let text = String(body || '');
+  for (const block of [signature, closingLine]) {
+    const trimmed = String(block || '').trim();
+    if (trimmed) {
+      text = text.split(trimmed).join('');
+    }
+  }
+  // A sign-off the brand voice does not know about — these are historical human
+  // replies, written before any of this existed, and they close a dozen ways.
+  return text.replace(/\n\s*(bien\s+)?cordialement\s*,?[\s\S]{0,120}$/i, '').trim();
+}
+
+/** Newest first until the budget runs out; anything older is named, not cut. */
+function withinBudget(entries, senderDirectory) {
+  const rendered = [];
+  let remaining = MAX_HISTORY_CHARS;
+  let dropped = 0;
+
+  for (let index = entries.length - 1; index >= 0; index -= 1) {
+    const { row, own } = entries[index];
+    // WHO, then when. A date alone left a colleague's note and the 3PL's status
+    // update indistinguishable from the customer's own words.
+    const head = `**${senderRoleName(row, senderDirectory)} — ${historyDate(row) || 'date inconnue'}**\n`;
+    if (remaining - head.length - own.length <= 0) {
+      dropped = index + 1;
+      break;
+    }
+    rendered.unshift(`${head}${own}`);
+    remaining -= head.length + own.length;
+  }
+
+  if (dropped > 0) {
+    rendered.unshift(`_(${dropped} message(s) plus ancien(s) non repris ici)_`);
+  }
+  return rendered;
+}
+
+function historyDate(row) {
+  const at = row?.received_at || row?.sent_at;
+  if (!at) return null;
+  const date = new Date(at);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString().slice(0, 10);
+}
+
 function resolveSkeleton(skeleton, parameters, logger) {
   if (!skeleton) {
     return null;
@@ -229,9 +363,38 @@ export function composeDraftingMessage({
   // Empty is safe: a pin whose document is not in here is dropped, which is what
   // an unapproved or deleted article looks like from here.
   pinnedArticles = new Map(),
+  // THIS TICKET'S MAIL, both directions, oldest first. Empty is safe and is the
+  // normal case: 133 of 172 tickets are one message with no reply, and their
+  // prompt is byte for byte what it was before this existed.
+  conversation = [],
+  // The approved sign-off, so it can be removed from the history block. It is
+  // reproduced from the system prompt on every reply, carries no information in
+  // a message the model is only meant to read, and was measurably imitated.
+  signature = '',
+  closingLine = '',
+  // Resolves each message's sender to a role. Absent means every inbound
+  // message renders as « client », which is exactly what it did before.
+  senderDirectory = null,
   logger = null
 } = {}) {
   const parts = [];
+
+  // WHAT WE HAVE ALREADY SAID, ABOVE THE NEW MESSAGE.
+  //
+  // Until 2026-09-21 no pass in this pipeline read a word we sent: drafting saw
+  // the trigger message and the thread's ENVELOPES — directions and timestamps —
+  // so a reply could re-ask a question our previous mail had already asked, and
+  // contradict what we had promised, with nothing able to notice. 95 outbound
+  // bodies were stored and nothing loaded one.
+  //
+  // ABOVE the new message rather than below, on the same argument that puts the
+  // customer's words before the case file: the model should read what they wrote
+  // already knowing what it answers. Placed after, our own reply arrives as a
+  // footnote to a question the model has finished interpreting.
+  const history = renderHistory(conversation, message, { signature, closingLine, senderDirectory });
+  if (history) {
+    parts.push(history);
+  }
 
   parts.push(
     `# Message du client\n\n` +
@@ -418,7 +581,7 @@ export const DRAFT_SCHEMA = {
  * Ids and counts rather than the content — the content is still in the rows
  * these point at, and copying it here would duplicate the case file per draft.
  */
-export function promptInputs({ caseFile, orderContext, investigationId, model }) {
+export function promptInputs({ caseFile, orderContext, investigationId, model, closure = null }) {
   return {
     investigation_id: investigationId || null,
     model: model || null,
@@ -431,7 +594,14 @@ export function promptInputs({ caseFile, orderContext, investigationId, model })
     // Keys, not the wording: which tones shaped this reply, readable a week later.
     tones: array(caseFile.tones),
     // Whether a link was offered. The address itself is on `reply_link`.
-    reply_link: Boolean(caseFile.link)
+    reply_link: Boolean(caseFile.link),
+    // WHY THIS REPLY IS THREE LINES. A reviewer opening a closing draft sees a
+    // short answer to a case file full of facts, and without this the only
+    // reading available is that the model went lazy. The sentence is the
+    // model's own, kept because « le client confirme avoir reçu sa commande »
+    // is what makes the decision arguable.
+    closes_case: closure?.closes === true,
+    closure_reason: closure?.closes ? closure.why || null : null
   };
 }
 

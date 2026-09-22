@@ -209,7 +209,9 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |       |                                # (claim/complete/skip/retry/abandon +
 |       |                                # descriptors), the needs_* flags, the
 |       |                                # lifecycle timestamps, the metadata trail,
-|       |                                # the queue + thread reads. Shop-scoped
+|       |                                # the queue + thread reads (`inboundMessages`
+|       |                                # the customer's half, `conversation` both
+|       |                                # directions). Shop-scoped
 |       |-- draft-record.mjs             # THE ONLY WRITER OF `ticket_drafts` +
 |       |                                # `ticket_draft_edits`:
 |       |                                # the upsert key, the two bodies, the human
@@ -290,7 +292,11 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |   |   |                        # spam-gate + blocklist-store + spam-classifier ·
 |   |   |                        # sender-directory (who a sender is: context for
 |   |   |                        # the case file, filter for the demand report,
-|   |   |                        # and the gate on related-rules) ·
+|   |   |                        # and the gate on related-rules; `senderRole`
+|   |   |                        # resolves a role PER MESSAGE -- client /
+|   |   |                        # collègue (LAP Groupe) / prestataire logistique
+|   |   |                        # -- for every renderer that shows a thread to a
+|   |   |                        # model, and the address never travels with it) ·
 |   |   |                        # duplicate-rules (same message twice -> silence) ·
 |   |   |                        # related-rules (same conversation again -> context
 |   |   |                        # + apology; consumers only, never suppresses) ·
@@ -368,9 +374,21 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |   |   |                        #   approval gates it) · draft-rules (verdict +
 |   |   |                        #   level gates and terminal/intermediary, pure) ·
 |   |   |                        # compose-draft
-|   |   |                        #   (per-ticket message + the answer schema) ·
+|   |   |                        #   (per-ticket message, the thread so far — ours
+|   |   |                        #   and theirs, above the new message — and the
+|   |   |                        #   answer schema) ·
 |   |   |                        # draft-checks (the prohibitions, in code) ·
 |   |   |                        # draft-runner (+ the derived queue). NO Graph call
+|   |   |-- casework/            # closure (does the customer's last message end
+|   |   |                        #   their request? code gate first -- nothing
+|   |   |                        #   outstanding in the dossier -- then one cheap
+|   |   |                        #   call on the message) ·
+|   |   |                        # reconstruct (a finished thread -> where the case
+|   |   |                        #   stands: situation from the shop's own library or
+|   |   |                        #   none, what we asked, what we promised, what is
+|   |   |                        #   still open; the model reads the PROSE and
+|   |   |                        #   `backendPosition` reads `resolved_context`, and
+|   |   |                        #   the two are never merged). READ ONLY
 |   |   |-- lifecycle/           # auto-close (28d idle, level 4 exempt)
 |   |   |-- tools/              # one CLI per pass -- see Agent CLIs below
 |   |   `-- testing/            # THE REHEARSAL HARNESS behind /agent-setup's test
@@ -758,7 +776,7 @@ Run `npm run ingest:once` or `npm start` from `agent/`. One poll runs every pass
 | 8 | **Customer resolution** — needs no category, order number or LLM key | `resolution/customer-resolution-runner.mjs` |
 | 9 | **Categorisation** (LLM) — 25/poll, oldest first, selects on the pending flag | `pipeline/categorise-runner.mjs` |
 | 10 | **Order resolution** then **order context** — no LLM, no category needed. **Before the investigation, and that is load-bearing**: `getOrderContext` READS `tickets.resolved_context` rather than querying, so an investigation that ran first could not see an order however clearly the customer quoted it | `resolution/order-*-runner.mjs` |
-| 11 | **Investigation** (LLM + tools) — decompose (every investigated ticket — the structural gate was removed 2026-08-09), then 6 tool calls +2 per extra task, 4 turns, `ENABLED_SUBJECTS` only | `investigation/investigation-runner.mjs` |
+| 11 | **Investigation** (LLM + tools) — decompose (every investigated ticket — the structural gate was removed 2026-08-09), then 6 tool calls +2 per extra task, 4 turns, `ENABLED_SUBJECTS` only. Reads the thread **both directions** since 2026-09-21 and renders it as a labelled transcript; a one-message ticket still renders bare | `investigation/investigation-runner.mjs` |
 | 12 | **Forwarding** — `contact` kind + a configured address; needs `Mail.Send` | `routing/forward-runner.mjs` |
 | 13 | **Auto-close** — 28d idle, level 4 exempt; last so it sees this poll's timestamps | `lifecycle/auto-close.mjs` |
 | 14 | **Retention purge** — nulls expired `spam_audit` bodies; best-effort | `ingestion/spam-audit.mjs` |
@@ -783,9 +801,12 @@ From `agent/`. Every pass has a standalone runner, most with `:dry-run`.
 | `context:build[:dry-run] [--refresh]` | fill `tickets.resolved_context` |
 | `investigate[:dry-run] [--show/--brief] [--backfill] [--include-closed] [--ticket <id>]` | run + render case files. `--backfill` re-queues **open** categorised tickets; `--include-closed` widens the claim to threads the queue has moved past, leaving their status untouched. Both print what the run cost. `--ticket` narrows the queue to one ticket without bypassing its flag |
 | `draft[:dry-run] [--show] [--ticket <id>] [--limit N] [--redraft]` | the drafting pass. Reads case files, writes `ticket_drafts`; **no Graph call**. Refuses unless the Brand voice article is `approved`. `--redraft` overwrites an existing draft — the queue is derived, so a ticket leaves it once one exists |
+| `cases:reconstruct [--ticket <id>] [--limit N] [--min-inbound N] [--json <path>]` | reads finished threads and reports where each case stands. **Writes no ticket, no case file and no draft** — it is built with a reader and no record module. Defaults to threads with 2+ customer messages, because a one-message thread has no trajectory to reconstruct. The output is a review artefact nothing downstream reads: correct it by hand and it becomes the labelled set a regression suite can rest on |
+| `cases:review -- --in <json> --out <name>-review.html` | the reconstruction JSON plus each thread, as a page to disagree with. No model call, no write. `*-review.html` is a gitignored name because these quote real customer mail in full |
 | `tickets:requeue[:dry-run] -- --ticket <id> [--unlink-customer] [--reopen]` | put named tickets back in the investigation queue after a repair; optionally clear `customer_id` (then run `customers:resolve`) and reopen an agent-set status |
 | `forward:once` / `forward:dry-run` | the forwarding pass |
 | `tickets:autoclose[:dry-run]` | the lifecycle pass |
+| `eval:closure [-- --repeat N] [--show]` | closure detection over every thread where a customer wrote after our reply — the whole population, 16 threads. The one eval whose corpus is real mail: ids and labels are checked in, bodies are read live. A false closure fails the command; a missed one does not |
 | `eval:categorise` · `eval:retrieval` · `eval:diagnose` · `eval:exemplars` (`-- --authored-only` drops the translations, for a same-corpus A/B) · `review:sample` · `review:compare` | every measurement — indexed in **`agent/eval/README.md`**, which says what each is judged against (three labelled sets, two proxies) |
 
 ## Read Order

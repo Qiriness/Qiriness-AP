@@ -88,6 +88,19 @@ export function loadAgentConfig(env = loadEnv(REPO_ROOT)) {
     // sized for picking 1-of-14, not for writing French a person will judge the
     // brand by — and it is one call per ticket, so the difference is affordable.
     draftingModel: env.AGENT_DRAFTING_MODEL || 'gpt-4o',
+    // Reading a finished thread and saying where the case stands. The mid tier,
+    // for the same reason the investigation is: it is the whole conversation in
+    // one pass, with what was asked, what was promised and what is still open to
+    // be told apart — not a constrained 1-of-N. One call per thread, and only on
+    // threads that ran to more than one customer message, so it is affordable.
+    reconstructionModel: env.AGENT_RECONSTRUCTION_MODEL || 'gpt-4o',
+    // « Ce message clôt-il la demande ? » — one constrained boolean over one
+    // short message, which is the cheap tier's job. It only runs where the case
+    // file already says nothing is outstanding, so it is a minority of tickets.
+    // Set to an empty string to turn it off: every reply is then written the way
+    // it was before closures were detected at all.
+    closureModel:
+      env.AGENT_CLOSURE_MODEL === undefined ? 'gpt-4o-mini' : env.AGENT_CLOSURE_MODEL,
     // WHERE A DRAFT GOES TO BE READ, and `none` is the default so a fresh
     // checkout cannot email anything at all. `review-mail` sends a copy to
     // DRAFT_REVIEW_MAILBOX — the reviewer's own inbox, never a customer, and

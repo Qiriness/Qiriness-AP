@@ -3,6 +3,7 @@ import test from 'node:test';
 
 import { VERDICTS } from '../investigation/case-file.mjs';
 import {
+  answeredSince,
   AUTO_SEND_LEVELS,
   DISPOSITIONS,
   DRAFTABLE_VERDICTS,
@@ -307,6 +308,65 @@ test('turning the subject flag off is deliberate, and only affects that subject'
       verdict: 'needs_human',
       category: 'cosmetovigilance',
       cosmetovigilanceDraftOnly: false
+    }),
+    false
+  );
+});
+
+// --- a reply that has already been sent --------------------------------------
+
+const TRIGGER_AT = '2026-08-03T09:00:00Z';
+const CASE_FILE = { verdict: 'answerable', trigger_message_id: 'm2' };
+const THREAD = [
+  { id: 'm1', direction: 'inbound', received_at: '2026-08-01T09:00:00Z' },
+  { id: 'm2', direction: 'inbound', received_at: TRIGGER_AT }
+];
+
+test('a reply sent after the trigger message stops the draft', () => {
+  // MEASURED: 59 of 138 investigations sit on a thread already answered, and
+  // every one produced a draft — nearly half the queue replying to mail a
+  // person had handled.
+  const decision = draftDecision({
+    investigation: CASE_FILE,
+    ticket: {},
+    conversation: [...THREAD, { id: 'm3', direction: 'outbound', received_at: '2026-08-04T09:00:00Z' }]
+  });
+  assert.equal(decision.draft, false);
+  assert.equal(decision.reason, 'already_answered');
+});
+
+test('a reply sent BEFORE the trigger is the ordinary case, and is drafted', () => {
+  // Customer writes, we answer, customer writes again. There is an outbound
+  // message in the thread and they are owed a reply.
+  const decision = draftDecision({
+    investigation: CASE_FILE,
+    ticket: {},
+    conversation: [
+      { id: 'm1', direction: 'inbound', received_at: '2026-08-01T09:00:00Z' },
+      { id: 'mx', direction: 'outbound', received_at: '2026-08-02T09:00:00Z' },
+      { id: 'm2', direction: 'inbound', received_at: TRIGGER_AT }
+    ]
+  });
+  assert.equal(decision.draft, true);
+});
+
+test('with no thread loaded nothing is suppressed', () => {
+  // The rehearsal harness and any caller that has not wired the read must
+  // behave exactly as before.
+  assert.equal(draftDecision({ investigation: CASE_FILE, ticket: {} }).draft, true);
+  assert.equal(draftDecision({ investigation: CASE_FILE, ticket: {}, conversation: [] }).draft, true);
+});
+
+test('answeredSince needs a trigger it can actually find', () => {
+  assert.equal(answeredSince({ conversation: THREAD, triggerMessageId: null }), false);
+  // A trigger id that is not in the thread cannot be compared against anything,
+  // and guessing would suppress a real reply.
+  assert.equal(answeredSince({ conversation: THREAD, triggerMessageId: 'gone' }), false);
+  // A message with no timestamp is not evidence that we answered.
+  assert.equal(
+    answeredSince({
+      conversation: [...THREAD, { id: 'm3', direction: 'outbound', received_at: null }],
+      triggerMessageId: 'm2'
     }),
     false
   );

@@ -50,6 +50,9 @@
     "requester:repair": "node src/tools/run-requester-repair.mjs",
     "requester:repair:dry-run": "node src/tools/run-requester-repair.mjs --dry-run",
     "tickets:requeue": "node src/tools/run-requeue-tickets.mjs",
-    "tickets:requeue:dry-run": "node src/tools/run-requeue-tickets.mjs --dry-run"
+    "tickets:requeue:dry-run": "node src/tools/run-requeue-tickets.mjs --dry-run",
+    "cases:reconstruct": "node src/tools/run-reconstruct-cases.mjs",
+    "cases:review": "node src/tools/render-reconstruction-review.mjs",
+    "eval:closure": "node eval/run-closure-eval.mjs"
   }
 }

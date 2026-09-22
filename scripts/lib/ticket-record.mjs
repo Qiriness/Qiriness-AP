@@ -776,6 +776,40 @@ export function createTicketRecord(supabase, { shopId, transport = REST_TRANSPOR
     },
 
     /**
+     * The conversation a pass reasons over: both directions, oldest first.
+     *
+     * Separate from `inboundMessages` rather than a flag on it, because the two
+     * answer different questions and the older one is still right for its own.
+     * The categoriser labels what the customer asked; the situation matcher
+     * scores the request that opened the thread. Neither wants our replies in
+     * its query, and both were calibrated without them. The investigation does
+     * want them — a reply saying « oui, c'est fait » is unreadable without the
+     * question it answers.
+     *
+     * `received_at` is populated on BOTH directions (verified 2026-09-21: 329 of
+     * 329 rows), so one ordering interleaves the thread correctly and the reader
+     * does not have to coalesce two clocks.
+     *
+     * THE CAP IS APPLIED AFTER THE READ, and that is deliberate. Pushed into the
+     * query it would have to invert the ordering to keep the newest messages —
+     * a cap on an ascending read drops the most recent, which on a long thread
+     * is precisely the part the pass was woken up for — and the reader would
+     * then depend on the transport honouring `order` to be correct at all. The
+     * longest thread in the corpus is 9 messages against a cap of 10, so the
+     * saving was never real and the fragility would have been.
+     */
+    async conversation(ticketId, { limit, columns = COLUMNS.threadForInvestigation } = {}) {
+      const rows = await select(
+        supabase,
+        T.TICKET_MESSAGES,
+        { ticket_id: ticketId, shop_id: shopId, deleted_at: IS_NULL },
+        columns,
+        { order: 'received_at.asc' }
+      );
+      return limit && rows.length > limit ? rows.slice(-limit) : rows;
+    },
+
+    /**
      * The opening inbound message of every ticket, from `ticket_first_inbound`.
      *
      * Quoted history is where stale order numbers from previous threads live, so

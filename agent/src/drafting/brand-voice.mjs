@@ -175,6 +175,33 @@ export const INTENT_RULES = {
       'aucun résultat de vérification, aucun délai ni aucune date.',
     'N’employer aucun vocabulaire interne : ni « escalade », ni « traitement manuel », ni « niveau 3 », ni « agent ».',
     'Ne demander une information au client que si le dossier en nomme une explicitement.'
+  ],
+  // NOT A VERDICT. Every other key here is one; this is selected when the case
+  // file says nothing is outstanding AND the customer's last message says they
+  // need nothing more. It is the shortest reply this codebase writes.
+  //
+  // THE FAILURE IT FIXES, in the customer's own words: « La commande a
+  // effectivement été livrée. Mes inquiétudes n'étaient pas fondées. Je vous
+  // remercie d'avoir répondu à mes messages. » — answered with a full reply that
+  // re-stated the dispatch date and the parcel number, then invited them to get
+  // in touch again. Nothing in it was wrong and none of it was wanted.
+  //
+  // FACTS ARE FORBIDDEN HERE, and that is the inversion worth noticing. Every
+  // other intent set obliges the reply to pass on the established facts, because
+  // a useful fact withheld is one the customer must ask for again. Once they
+  // have said they need nothing, the same fact is padding — so this is the one
+  // place the obligation reverses, and it says so rather than staying silent and
+  // letting the structural rules pull the other way.
+  closing: [
+    'Objectif : accuser réception et clore l’échange, chaleureusement et brièvement.',
+    'Deux à trois phrases au maximum, signature comprise.',
+    'Remercier le client de nous avoir tenus informés, et se réjouir que ce soit réglé.',
+    'N’apporter AUCUN fait nouveau : ni numéro de commande, ni numéro de suivi, ni date, ' +
+      'ni rappel de ce qui a déjà été expliqué. Le client a dit que tout était réglé ; ' +
+      'lui redonner ces éléments revient à ne pas l’avoir lu.',
+    'Ne poser aucune question et ne rien demander.',
+    'Ne pas résumer l’historique de l’échange.',
+    'Ne pas s’excuser à nouveau si le problème est résolu.'
   ]
 };
 
@@ -262,7 +289,13 @@ export function brandVoiceProblem(voice) {
  * written as a prompt, not as a field, and re-wrapping it in our own structure
  * would fight whoever wrote it.
  */
-export function composeSystemPrompt(voice, { language = 'fr', verdict = 'answerable' } = {}) {
+// `intent` OVERRIDES `verdict` FOR THE INTENT SET, and only for that. Every
+// other key here is a verdict, because until now what a reply should do was a
+// property of the case file alone. A closure is not: the case file can be
+// perfectly `answerable` and the right reply still be three lines, because the
+// customer has said they need nothing. Passing the verdict through as the
+// default keeps every existing caller byte for byte.
+export function composeSystemPrompt(voice, { language = 'fr', verdict = 'answerable', intent = null } = {}) {
   const problem = brandVoiceProblem(voice);
   if (problem) {
     throw new Error(`Cannot compose a drafting prompt: ${problem}`);
@@ -349,7 +382,7 @@ ${voice.closingLine}`
 
   // Before the language and the structural rules, because it is the instruction
   // most specific to this ticket and the two below it are the same on every one.
-  const intentRules = INTENT_RULES[verdict];
+  const intentRules = INTENT_RULES[intent || verdict];
   if (intentRules) {
     parts.push(section('Objet de cette réponse', bullets(intentRules)));
   }

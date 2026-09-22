@@ -314,14 +314,49 @@ export const COLUMNS = {
   messageEnvelopesForDrafting: 'ticket_id,direction,received_at,sent_at',
 
   /**
+   * THE CONVERSATION AS DRAFTING NOW READS IT — both directions, with bodies.
+   *
+   * `messageEnvelopesForDrafting` above answers one question and answers it
+   * well, and for a year it was the only thread read drafting had. That left a
+   * reply composed from the trigger message alone: nothing in the pipeline had
+   * ever read a word we sent, so a draft could re-ask a question our previous
+   * reply already asked, and contradict what we had promised, without anything
+   * being able to notice.
+   *
+   * `from_email` TRAVELS AND IS NEVER RENDERED, which reverses the narrowing on
+   * `messageForDrafting` in letter and keeps it in spirit. `direction` alone
+   * says our side from theirs and nothing more — so a colleague's note and the
+   * 3PL's status update rendered exactly like the customer's own words, and
+   * were read as the customer's. The corpus carries **38 inbound messages from
+   * `lap-groupe.com` across 22 tickets** and **14 from Deret across 10**, most
+   * of them on threads a customer opened.
+   *
+   * The address is resolved to a ROLE by `senderRole` and discarded; what
+   * reaches the prompt is « client », « collègue (LAP Groupe) », « prestataire
+   * logistique ». That is the rule `messageForInvestigation` already follows for
+   * the sender-directory lookup, and the reason the narrowing existed — an
+   * address a model can quote back to a customer — is untouched.
+   *
+   * Still no `from_name`: a person's name is not a role, and nothing here reads
+   * it.
+   */
+  threadForDrafting: 'id,ticket_id,direction,subject,body_text,received_at,sent_at,from_email',
+
+  /**
    * Drafting reads the message it is replying to, and nothing about who sent it.
    *
    * No `from_email` and no `from_name`: the reply is composed from the case
    * file, and the one piece of identity it needs to open properly
    * (`requester_name`) already travels on the ticket. An address in the prompt
    * is an address the model can quote back.
+   *
+   * `from_email` IS THE ONE EXCEPTION, added 2026-09-21, and it is not rendered.
+   * The closure check has to know whether the message it is reading is from the
+   * customer at all: on `fcf4ca11` it read a colleague's note to another
+   * colleague as « le client confirme que la commande a été traitée ». The
+   * address resolves to a role and is dropped; no address reaches a prompt.
    */
-  messageForDrafting: 'id,subject,body_text',
+  messageForDrafting: 'id,subject,body_text,direction,from_email',
 
   /**
    * The investigation additionally reads `from_email` for the sender-directory
@@ -334,6 +369,22 @@ export const COLUMNS = {
   // "nothing attached". The photo-evidence check needs to tell those apart.
   messageForInvestigation:
     'id,subject,body_text,received_at,from_email,embedding,has_attachments,attachments',
+
+  /**
+   * The same read, widened to OUR side of the thread.
+   *
+   * `direction` is the only column added, and it is what makes the rest usable:
+   * the investigation used to read inbound messages only, so a follow-up was
+   * investigated against the customer's words with our own answers missing —
+   * « oui, j'ai vérifié » with no record of what they were asked to verify.
+   *
+   * Every derivation that was calibrated on inbound mail still runs on the
+   * inbound subset, filtered by the runner: the opening message the situation
+   * matcher reads, the trigger message the case file is keyed to, the photo
+   * sweep and the clock. Only the TEXT handed to the model widened.
+   */
+  threadForInvestigation:
+    'id,subject,body_text,direction,received_at,sent_at,from_email,embedding,has_attachments,attachments',
 
   /** The case file, latest run, as the detail panel reads it. */
   // `candidate_order` travels HERE and deliberately not in
@@ -484,8 +535,10 @@ export const PROJECTION_SOURCE = {
   messageForCategorisation: T.TICKET_MESSAGES,
   messageForAttachments: T.TICKET_MESSAGES,
   messageForInvestigation: T.TICKET_MESSAGES,
+  threadForInvestigation: T.TICKET_MESSAGES,
   messageForDrafting: T.TICKET_MESSAGES,
   messageEnvelopesForDrafting: T.TICKET_MESSAGES,
+  threadForDrafting: T.TICKET_MESSAGES,
   investigationForDetail: T.TICKET_INVESTIGATIONS,
   investigationForDrafting: T.TICKET_INVESTIGATIONS,
   draftForReview: T.TICKET_DRAFTS,

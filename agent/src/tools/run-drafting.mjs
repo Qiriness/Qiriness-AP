@@ -10,6 +10,8 @@ import { createOpenAIClient } from '../llm/openai-client.mjs';
 import { createShopUsageRecording } from '../llm/usage-store.mjs';
 import { createBrandVoiceStore } from '../drafting/brand-voice.mjs';
 import { createDraftingStore, runDrafting } from '../drafting/draft-runner.mjs';
+import { readsAsClosure } from '../casework/closure.mjs';
+import { createSenderDirectoryStore } from '../ingestion/sender-directory.mjs';
 
 // Runs the drafting pass on its own.
 //
@@ -63,6 +65,12 @@ async function main() {
   // replies written in a voice nobody signed off.
   const brandVoice = await createBrandVoiceStore(supabase).load(shopId);
 
+  // WHO EACH SENDER IS, loaded once for the run. The same table the ingestion
+  // gates read; here it decides whether a message renders as the customer.
+  const senderDirectory = await createSenderDirectoryStore(supabase).load(shopId, {
+    supportMailbox: config.graph.mailbox
+  });
+
   const usage = createShopUsageRecording({ supabase, shopId, logger });
   const openai = createOpenAIClient({ apiKey: config.openaiApiKey, usageSink: usage.sink });
 
@@ -83,6 +91,13 @@ async function main() {
     parameters: await loadParametersFor(supabase, shopId, logger),
     offerableCodes: await loadOfferableCodesFor(supabase, shopId, logger),
     pinnedArticles: await loadPinnedArticlesFor(supabase, shopId, logger),
+    // Null when AGENT_CLOSURE_MODEL is blank, and null means no closure is ever
+    // detected — the switch is the absence of the reader, not a flag inside it.
+    senderDirectory,
+    closureReader: config.closureModel
+      ? ({ message, ticketId, senderDirectory: directory }) =>
+          readsAsClosure({ openai, model: config.closureModel, message, senderDirectory: directory, ticketId, logger })
+      : null,
     cosmetovigilanceDraftOnly: config.draftOnlyCosmetovigilance,
     logger,
     limit,

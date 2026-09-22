@@ -1,7 +1,15 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { NON_DEMAND_LABELS, OWN_SIDE_LABELS, buildSenderDirectory, emptySenderDirectory } from './sender-directory.mjs';
+import {
+  NON_DEMAND_LABELS,
+  OWN_SIDE_LABELS,
+  SENDER_ROLES,
+  buildSenderDirectory,
+  emptySenderDirectory,
+  senderRole,
+  senderRoleName
+} from './sender-directory.mjs';
 
 const rows = [
   { pattern_type: 'domain', pattern: 'lap-groupe.com', label: 'internal', note: null },
@@ -109,4 +117,46 @@ test('own-side and non-demand answer different questions and must not be swapped
   assert.notDeepEqual(OWN_SIDE_LABELS, NON_DEMAND_LABELS);
   assert.ok(NON_DEMAND_LABELS.includes('courier'));
   assert.ok(!OWN_SIDE_LABELS.includes('courier'));
+});
+
+// --- who a message is from, as a reply-writing model must read it -----------
+
+test('a role is resolved per MESSAGE, not per thread', () => {
+  // `tickets.sender_label` describes the thread from the address that opened
+  // it. The corpus carries 38 inbound messages from `lap-groupe.com` across 22
+  // tickets and 14 from Deret across 10, most of them on threads a customer
+  // opened — so the thread's label cannot speak for them.
+  const directory = buildSenderDirectory([
+    { pattern_type: 'domain', pattern: 'lap-groupe.com', label: 'internal', note: null },
+    { pattern_type: 'domain', pattern: 'deret.fr', label: 'logistics', note: null },
+    { pattern_type: 'domain', pattern: 'nocibe.fr', label: 'retailer', note: null }
+  ]);
+
+  assert.equal(senderRole({ direction: 'inbound', from_email: 'x@gmail.com' }, directory), 'customer');
+  assert.equal(senderRole({ direction: 'inbound', from_email: 'x@lap-groupe.com' }, directory), 'internal');
+  assert.equal(senderRole({ direction: 'inbound', from_email: 'x@deret.fr' }, directory), 'logistics');
+  assert.equal(senderRole({ direction: 'inbound', from_email: 'x@nocibe.fr' }, directory), 'retailer');
+});
+
+test('our own side is read from the direction, whatever the address says', () => {
+  const directory = buildSenderDirectory([]);
+  assert.equal(senderRole({ direction: 'outbound', from_email: 'x@gmail.com' }, directory), 'qiriness');
+  assert.equal(senderRoleName({ direction: 'outbound' }, directory), 'Qiriness');
+});
+
+test('an unclassified sender is a member of the public, which is the safe direction', () => {
+  // A domain nobody has filed is read as demand rather than quietly discounted.
+  assert.equal(senderRole({ direction: 'inbound', from_email: 'x@unknown.example' }, buildSenderDirectory([])), 'customer');
+  assert.equal(senderRole({ direction: 'inbound', from_email: null }), 'customer');
+  assert.equal(senderRoleName({ direction: 'inbound' }), 'client');
+});
+
+test('a label with no display name falls back to customer rather than rendering a key', () => {
+  // `SENDER_ROLES` is the vocabulary a prompt may show. A label added to the
+  // table without a name here must not leak « spam » or a raw key into a reply.
+  const directory = buildSenderDirectory([
+    { pattern_type: 'domain', pattern: 'weird.example', label: 'not_a_display_role', note: null }
+  ]);
+  assert.equal(senderRole({ direction: 'inbound', from_email: 'x@weird.example' }, directory), 'customer');
+  assert.ok(Object.values(SENDER_ROLES).every((name) => typeof name === 'string' && name.length > 0));
 });

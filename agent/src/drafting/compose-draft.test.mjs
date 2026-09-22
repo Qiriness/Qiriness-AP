@@ -397,3 +397,55 @@ test('the pinned id is read by name, never spread from the diagnostics beside it
   assert.equal(caseFile.knowledgeDocumentId, 'doc-1');
   assert.equal(caseFileFromRow(ROW).knowledgeDocumentId, null);
 });
+
+// --- the thread the reply continues ------------------------------------------
+
+const TRIGGER = { id: 'm3', subject: 'Où est ma commande ?', body_text: 'toujours rien reçu' };
+
+test('with no earlier mail the prompt is exactly what it was before history existed', () => {
+  // 133 of 172 tickets are one message with no reply. Their prompt must not move
+  // to fix the 39 that are not.
+  const withEmpty = composeDraftingMessage({ message: TRIGGER, caseFile: caseFileFromRow(ROW), conversation: [] });
+  const without = composeDraftingMessage({ message: TRIGGER, caseFile: caseFileFromRow(ROW) });
+
+  assert.equal(withEmpty, without);
+  assert.ok(!withEmpty.includes('Ce que nous avons déjà répondu'));
+});
+
+test('our own earlier replies reach the prompt, above the new message', () => {
+  const prompt = composeDraftingMessage({
+    message: TRIGGER,
+    caseFile: caseFileFromRow(ROW),
+    conversation: [
+      { id: 'm1', direction: 'inbound', body_text: 'ma commande n’arrive pas', received_at: '2026-08-01T09:00:00Z' },
+      { id: 'm2', direction: 'outbound', body_text: 'Nous relançons le transporteur et revenons vers vous.', received_at: '2026-08-02T09:00:00Z' },
+      TRIGGER
+    ]
+  });
+
+  assert.ok(prompt.includes('Nous relançons le transporteur'));
+  assert.ok(prompt.includes('ma commande n’arrive pas'));
+  // Read before the new message, so it is interpreted as an answer to us.
+  assert.ok(prompt.indexOf('Nous relançons le transporteur') < prompt.indexOf('# Message du client'));
+  // And the trigger is printed once, whole, in its own section.
+  assert.equal(prompt.split('toujours rien reçu').length - 1, 1);
+});
+
+test('a quoted reply chain inside our own mail is stripped, not shown back', () => {
+  const prompt = composeDraftingMessage({
+    message: TRIGGER,
+    caseFile: caseFileFromRow(ROW),
+    conversation: [
+      {
+        id: 'm2',
+        direction: 'outbound',
+        body_text: 'Pouvez-vous nous confirmer votre adresse ?\n\nLe 1 août 2026, client a écrit :\n> ma commande n’arrive pas',
+        received_at: '2026-08-02T09:00:00Z'
+      },
+      TRIGGER
+    ]
+  });
+
+  assert.ok(prompt.includes('confirmer votre adresse'));
+  assert.ok(!prompt.includes('> ma commande n’arrive pas'));
+});

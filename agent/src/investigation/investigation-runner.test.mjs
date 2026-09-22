@@ -128,6 +128,116 @@ test('the agent is given the first and the latest inbound message', async () => 
   assert.equal(seen.category, 'product');
 });
 
+test('a single-message ticket reads exactly as it did before the thread was loaded', async () => {
+  // THE SAFETY PROPERTY FOR THE OTHER 79%. 133 of 172 tickets have one inbound
+  // message and no reply; rendering them as a labelled transcript would change
+  // every one of their prompts to fix the 39 this work is for. Bare body, no
+  // label, no date — byte for byte what the two-body assembly produced.
+  let seen;
+  const store = buildStore({
+    messages: [{ id: 'm1', direction: 'inbound', body_text: 'le masque LED convient-il ?', received_at: '2026-08-01T09:00:00Z' }]
+  });
+  await runInvestigation({
+    ...wire(store),
+    investigate: async (input) => {
+      seen = input;
+      return caseFile();
+    },
+    shopId: 's1'
+  });
+
+  assert.equal(seen.text, 'le masque LED convient-il ?');
+  assert.deepEqual(seen.threadShape, { inboundCount: 1, outboundCount: 0, lastDirection: 'inbound' });
+});
+
+test('our own replies reach the model, labelled and in order', async () => {
+  // The whole point. The pass read inbound mail only until 2026-09-21, so « oui,
+  // j'ai vérifié » arrived with no record of what had been asked.
+  let seen;
+  const store = buildStore({
+    messages: [
+      { id: 'm1', direction: 'inbound', body_text: 'colis non reçu', received_at: '2026-08-01T09:00:00Z' },
+      { id: 'm2', direction: 'outbound', body_text: 'avez-vous vu vos voisins ?', received_at: '2026-08-02T09:00:00Z' },
+      { id: 'm3', direction: 'inbound', body_text: 'oui, rien chez eux', received_at: '2026-08-03T09:00:00Z' }
+    ]
+  });
+  await runInvestigation({
+    ...wire(store),
+    investigate: async (input) => {
+      seen = input;
+      return caseFile();
+    },
+    shopId: 's1'
+  });
+
+  assert.equal(
+    seen.text,
+    '[client — 2026-08-01]\ncolis non reçu\n\n' +
+      '[Qiriness — 2026-08-02]\navez-vous vu vos voisins ?\n\n' +
+      '[client — 2026-08-03]\noui, rien chez eux'
+  );
+  // The case file is still keyed to the customer's latest word, never ours.
+  assert.equal(store.saved[0].triggerMessageId, 'm3');
+  assert.deepEqual(seen.threadShape, { inboundCount: 2, outboundCount: 1, lastDirection: 'inbound' });
+});
+
+test('an unlabelled row stays in the inbound set rather than vanishing', async () => {
+  // How the direction filter fails matters: a projection that lost the column
+  // degrades to the old behaviour, it does not empty the thread and skip a
+  // customer's mail.
+  const store = buildStore({
+    messages: [{ id: 'm1', body_text: 'le masque LED convient-il ?', received_at: '2026-08-01T09:00:00Z' }]
+  });
+  const counts = await runInvestigation({ ...wire(store), investigate: async () => caseFile(), shopId: 's1' });
+
+  assert.equal(counts.skipped, 0);
+  assert.equal(store.saved.length, 1);
+});
+
+async function renderedText(messages) {
+  let seen;
+  const store = buildStore({ messages });
+  await runInvestigation({
+    ...wire(store),
+    investigate: async (input) => {
+      seen = input;
+      return caseFile();
+    },
+    shopId: 's1'
+  });
+  return seen.text;
+}
+
+test('the budget is spent newest first, so the oldest message gives way', async () => {
+  // An ascending render that ran out of budget would truncate the message the
+  // pass was woken up for, which is the one part of a thread that can never go.
+  const text = await renderedText([
+    { id: 'm1', direction: 'inbound', body_text: `ancien ${'a'.repeat(7000)}`, received_at: '2026-08-01T09:00:00Z' },
+    { id: 'm2', direction: 'outbound', body_text: `réponse ${'b'.repeat(7000)}`, received_at: '2026-08-02T09:00:00Z' },
+    { id: 'm3', direction: 'inbound', body_text: 'toujours rien', received_at: '2026-08-03T09:00:00Z' }
+  ]);
+
+  assert.match(text, /toujours rien$/);
+  // The newest reply survives whole; the opening message is the one cut.
+  assert.ok(text.includes('… (message tronqué)'));
+  assert.ok(text.indexOf('… (message tronqué)') < text.indexOf('[Qiriness'));
+  assert.ok(text.length <= 12000);
+});
+
+test('a message that cannot fit its own header is dropped, and counted', async () => {
+  // A label with nothing under it says less than an honest count of what the
+  // model cannot see.
+  const text = await renderedText([
+    { id: 'm1', direction: 'inbound', body_text: 'la toute première demande', received_at: '2026-08-01T09:00:00Z' },
+    { id: 'm2', direction: 'outbound', body_text: 'a'.repeat(6000), received_at: '2026-08-02T09:00:00Z' },
+    { id: 'm3', direction: 'inbound', body_text: 'b'.repeat(6000), received_at: '2026-08-03T09:00:00Z' }
+  ]);
+
+  assert.match(text, /^\[… 1 message\(s\) plus ancien\(s\) non inclus\]/);
+  assert.ok(!text.includes('la toute première demande'));
+  assert.ok(text.length <= 12000);
+});
+
 test('an out-of-scope subject is skipped and its flag cleared', async () => {
   // `legal_privacy` is left to a person by policy: its tool set is empty, so
   // `isInvestigable` refuses it. Leaving the flag set would park it at the front

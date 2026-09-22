@@ -52,6 +52,60 @@ export const NON_DEMAND_LABELS = ['internal', 'contractor', 'logistics', 'courie
 export const OWN_SIDE_LABELS = ['internal', 'contractor', 'logistics'];
 
 /**
+ * WHO A MESSAGE IS FROM, as a reply-writing model must read it.
+ *
+ * WHY THIS EXISTS. `tickets.sender_label` is stamped from the address that
+ * OPENED a thread and describes the thread. A conversation is not made of one
+ * sender: the corpus carries **38 inbound messages from `lap-groupe.com` across
+ * 22 tickets** and **14 from Deret across 10**, most of them arriving on threads
+ * a customer opened. Rendered as « reçu » beside the customer's own words, a
+ * colleague's note and the 3PL's status update read as the customer speaking —
+ * and they were read that way: a draft asked the customer for a screenshot on
+ * `c5ec7404`, and the closure check reported « le client confirme » about
+ * `fcf4ca11`, which is one colleague writing to another.
+ *
+ * THE FIX IS IN THE DATA, NOT IN FOUR PROMPTS. Three prompts had been told
+ * separately that an inbound message is not necessarily the customer, which is a
+ * correction the renderer should not need to make in prose. A message that says
+ * who sent it needs no such warning.
+ *
+ * THE ADDRESS NEVER TRAVELS, only what it resolves to — the rule `buildInput`
+ * already follows, and the reason `from_email` is absent from the drafting
+ * projections. A label is a fact about a company; an address in a prompt is an
+ * address a model can quote back to a customer.
+ *
+ * FALLING BACK TO `customer` IS THE SAFE DIRECTION. An unknown domain is a
+ * member of the public until the directory says otherwise, so a sender nobody
+ * has classified is read as demand rather than quietly discounted.
+ */
+export const SENDER_ROLES = {
+  qiriness: 'Qiriness',
+  customer: 'client',
+  internal: 'collègue (LAP Groupe)',
+  logistics: 'prestataire logistique',
+  courier: 'transporteur',
+  contractor: 'prestataire',
+  retailer: 'revendeur'
+};
+
+// `directory` defaults to null rather than to `emptySenderDirectory`, which is
+// declared further down this file. A default parameter is evaluated at call
+// time so either works today; a null that the optional chaining below already
+// handles cannot stop working if the declarations are ever reordered.
+export function senderRole(message, directory = null) {
+  if (message?.direction === 'outbound') {
+    return 'qiriness';
+  }
+  const label = directory?.lookup?.(message?.from_email)?.label ?? null;
+  return label && SENDER_ROLES[label] ? label : 'customer';
+}
+
+/** The role as a reader sees it: « client », « collègue (LAP Groupe) », … */
+export function senderRoleName(message, directory = null) {
+  return SENDER_ROLES[senderRole(message, directory)];
+}
+
+/**
  * @param rows  sender_directory rows: { pattern_type, pattern, label, note }
  * @param supportMailbox  the support address, whose own domain is internal by
  *   definition. Derived rather than required as a row, so a fresh install is

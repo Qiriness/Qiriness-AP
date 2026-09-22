@@ -1505,6 +1505,50 @@ A 429 now waits OpenAI's own hint (`retry-after-ms`, `retry-after`, then the `x-
 
 `unique(shop_id, trigger_message_id)` is the idempotency key, so a reply produces a new reading instead of overwriting the previous one and the thread's trajectory survives as rows. `context_ref` **points at** `tickets.resolved_context` rather than copying it, so personal data is not duplicated per run. `customer_id` is denormalised and indexed: that is the seam Phase 7 memory hangs off.
 
+### The investigation reads the thread, not the customer's half of it (2026-09-21)
+
+`record.inboundMessages` filters `direction = 'inbound'`, and every pass that read a thread used it. So a follow-up was investigated against the customer's words with our own answers missing: « oui, j'ai vérifié les deux » arrived with no record of what they had been asked to verify. **95 outbound bodies were stored and no pass in this pipeline had ever read one.**
+
+**The reader is new, not widened.** `record.conversation` sits beside `inboundMessages` rather than replacing it, because the two answer different questions and the older one is still right for its own. The categoriser labels what the customer asked; the situation matcher scores the request that opened the thread. Neither wants our replies in its query, and **both were calibrated without them** — the 0.65 band was derived over first inbound messages.
+
+**Everything calibrated on inbound mail still runs on the inbound subset**, filtered in the runner: the trade-sender check, the opening message the matcher reads, the trigger message the case file is keyed to, `summarisePhotoEvidence` and `latestInboundAt`. Only the text handed to the model moved.
+
+**The filter is `!== 'outbound'`, and how it fails is the reason.** A row whose direction did not travel — a projection that lost the column, a caller wiring its own read — stays in the inbound set and the pass degrades to the behaviour it had before it could see our replies. The strict test would empty the set and skip the ticket, which is a customer's mail disappearing to fix a column.
+
+**One message renders bare, with no label and no date.** 133 of 172 tickets are a single inbound message with no reply; rendering them as a labelled transcript would change every one of their prompts to fix the 39 this is for. A test pins the single-message output byte for byte, and that is the safety property for the other 79%.
+
+**The budget is spent newest first**, and charged for the separators and markers rather than only the bodies. An ascending render that ran out of budget would truncate the message the pass was woken up for. It was 4,000 characters for two bodies and is 12,000 for a thread — the longest in the corpus is 9 messages, and an outbound body averages 1,758 characters.
+
+**`quotedText` stays inbound-only.** It exists because a forwarded order confirmation carries the number and the address together; quoted history inside our own replies is our own text coming back, which is the noise the split exists to remove.
+
+### A finished thread is reconstructed in one reading, not replayed (2026-09-21)
+
+The corpus predates all of this: 36 threads carry two or more customer messages and every one of them was read by the pipeline exactly once, at the end, as if the whole conversation had arrived at once. To get a starting state for them there were two options, and replaying the pipeline message by message is the wrong one. It would spend a categorisation, an investigation and a draft **per message** to rebuild a state the finished thread states plainly, and it would spend them against tools whose answers have since moved — an order that was `dispatched_no_scan` in July reads as months late today.
+
+**So `cases:reconstruct` reads the whole thread once**, the way a person picking up a case file would, and reports where it stands.
+
+**It writes nothing, structurally rather than by policy.** The runner is built with a reader and no record module, so there is no write path to forget to guard. The read-only requirement in the brief was mostly free already — every Shopify scope is `read_*`, drafting makes no Graph call, nothing issues refunds — so the only real exposure was writing rows, and the way to not write rows is to hold nothing that can. The one row it does leave is the `llm_usage` line, because the call was billed either way, and the header says READ ONLY rather than "writes nothing" for exactly that reason.
+
+**The model reads prose; code reads the backend; the two are never merged.** It is asked what the conversation *claims* about a refund — `not_mentioned` / `promised` / `stated_done` — and never whether a refund happened. `backendPosition` derives that from `tickets.resolved_context`, read and not re-derived. A customer told « votre remboursement est parti » has been told that, which is a fact about the conversation and evidence of nothing else; the contradiction between the two is the finding worth a person's time, and it only exists while they are kept apart. The order bundle is deliberately absent from the prompt, so the model cannot report a refund as established because Shopify shows one.
+
+**`replacement` is `not_representable`, permanently.** Nothing in the order bundle records "we sent one of these again for free" — a replacement leaves as a fulfilment on another order or on none. The honest value says the question cannot be answered here; the alternative is a field reading `no` that means « nous n'avons pas regardé », which is the `categorisation_confidence` mistake again.
+
+**The situation comes from the shop's own library or is null**, checked in code against the 40 approved `exemplar_key`s. A key the model invents is dropped **and reported**, because that is a fact about the library as much as about the model. Null is a real answer: the library was never written against this corpus.
+
+**Nothing downstream reads the output, and that is the point.** Judging a reconstruction against a reconstruction is circular — the brief's own regression format asks for a `case_state_before_test_message` that only this could produce. It breaks the way `categorisation_review` broke it: the rows are corrected by a person and the corrected set is what a suite rests on.
+
+### The reconstruction's situation choice is not stable, and that is what makes the review load-bearing (2026-09-21)
+
+Run over the same 36 threads twice, with the prompt differing only by an instruction to write in French, the situation tally moved: `(aucune)` **4 → 2**, D-06 5 → 6, D-07 1 → 2, D-36 1 → 0, R-23 0 → 1. **At least three of 36 threads changed situation between runs** on a change that had nothing to do with situations — roughly 8%.
+
+**So the output is a draft reading, never a label.** Correcting it by hand was already the plan, for the circularity reason; this makes it load-bearing rather than tidy. A regression suite built on an uncorrected run would be pinned to whichever way the coin landed that afternoon, and the first unrelated prompt edit would look like a regression.
+
+**It also bounds what the situation half of this is worth.** 34 of 36 threads matched something, which reads well until the instability is priced in — the honest claim is that reconstruction narrows 40 candidates to one plausible answer, not that it identifies the situation.
+
+**Language follows the thread unless it is told not to, and mostly obeys when it is.** The first run summarised several French threads in English; with the instruction, 1 of 36 still came back in English — `d9f5fa74`, the Italian thread. Left as is: it is a review artefact a person is correcting anyway, and chasing the last one is tuning a prompt against a single row.
+
+**Threads with one customer message are skipped by default.** They have no trajectory to reconstruct and their case file already says everything this could; 133 of 172 tickets are exactly that, so the default spends 36 calls instead of 172 to learn the same thing.
+
 ---
 
 ## Forwarding
@@ -2197,6 +2241,104 @@ It also resolved a contradiction the first version carried. `toDraftingPrompt` r
 ### The handoff stays withheld, and the intent rules are why it can
 
 "What requires attention" is derivable from `unverified` — what could not be confirmed, and why — which is factual and proposes no remedy. The handoff's `action` proposes one: measured 2026-08-19, **10 of 49 name a refund or a replacement**, and a commercial gesture is a merchant decision the model may never invent. So the model is told to describe what needs checking, from evidence it already has, and is never shown what we might do about it. The column is read only to reduce it to a boolean for `disposition`.
+
+### A reply is now written knowing what we already said (2026-09-21)
+
+Drafting read the trigger message and the thread's **envelopes** — `'ticket_id,direction,received_at,sent_at'`, no bodies — and that read answered one question, `describesChase`. So a draft could re-ask a question our previous mail had already asked, re-explain what it had already explained, and contradict what it had promised, with nothing in the pipeline able to notice.
+
+**The envelope read was right for its question and became the whole view by default.** It was written to answer "did they write again before we answered", and pulling bodies for that would have shipped every email in the thread to a pass that reads one. It is now `threadForDrafting`, and `describesChase` takes exactly the same rows it always did.
+
+**Our replies go ABOVE the new message**, on the same argument that puts the customer's words before the case file: the model should read what they wrote already knowing what it answers. Placed after, our own reply arrives as a footnote to a question the model has finished interpreting.
+
+**Two blocks with separate budgets**, ours and their earlier messages, so a long complaint cannot crowd out the answer we gave it. Older messages give way **whole** rather than being head-sliced: the commitment — « nous revenons vers vous dès que le transporteur répond » — is usually in a reply's last paragraph, which is exactly what a head-slice drops.
+
+**The related ticket's mail is deliberately not in the transcript.** `thread` merges a sibling ticket's envelopes because the chase spans both, and that is right for the chase. The transcript is a different question — what did we say on *this* thread — and a second conversation spliced into it would read as one.
+
+**This widens the prompt's personal-data surface, deliberately.** An outbound body averages 1,758 characters and carries the customer's name and order numbers. The existing narrowing holds: still no `from_email`, still no `from_name`, because the reply is composed from the case file and an address in the prompt is an address the model can quote back.
+
+**The sign-off is removed from every history message, and that is measured rather than tidy.** Ticket `718086fd` is a Spanish thread whose middle replies are French and end « Bien cordialement, Service Client Qiriness ». Shown those, the model ended its Spanish reply with the French signature and failed the `signature` check, which requires the approved wording *translated* outside French. **Framing did not fix it** — the block already said not to recopy, and the draft recopied anyway. The signature and closing line are approved, stored fields reproduced from the system prompt on every reply, so in the history they carry no information at all and the only thing they can do is be imitated. Same removal `draft-checks` performs before looking for an invented closer.
+
+**The inbound block is « reçus sur ce fil », never « du client ».** It said `du client` for one run, which is wrong for the reason § *Direction: the Inbox is not only inbound* and § *A colleague is not a customer* already give. `c5ec7404` is the case: **four of its five inbound messages are internal staff and Deret coordination**, and the trigger message is a colleague's. Labelling that as the customer writing invites a reply to the wrong person, and the block now says so in as many words.
+
+### What the thread in the prompt is actually worth, measured (2026-09-21)
+
+Re-drafted the 19 threads that carry both a customer reply and one of ours. **All 19 drafts changed.** The result is a real improvement in continuity and a narrow imitation risk, and the honest summary is that the mechanical checks cannot see either.
+
+**The check count is not a usable signal at this size.** `checks_passed` went **14 → 12 of 19**, and `718086fd` passed on one run and failed on the next **with identical code**. A two-point move over 19 samples is inside the model's own variance; anyone quoting it as a regression is quoting noise.
+
+**Register drift is narrow, not general.** Across all 19: the French closer appears in a non-French reply on **1** (`718086fd`), and the title salutation is lost on **1** (`d6d0d1c3`, where our own earlier reply used the first name). Average length 500 → 529 characters.
+
+**What the reading shows.** `8236165a` now says « Je vous confirme que votre commande nous est bien revenue » in the first person our previous reply established, where it used to open as though nothing had been said. `d6d0d1c3` newly acknowledges the mask that is still missing *and* the replacement already sent. `1e4890dd` volunteers the dispatch date and parcel number.
+
+**The one clear content regression is a thread that was already broken.** `c5ec7404` now asks for a screenshot and a photo — a question the case file does not license — on a ticket whose case file was written from a colleague's message and does not know we had already shipped the replacement with a tracking number. The history made an existing data problem visible rather than causing it.
+
+### A re-ask guardrail was built, measured, and removed (2026-09-21)
+
+The obvious check on top of the history block: read our own sent replies through `ASK_TERMS` and flag a draft that asks again. It does not work, and the numbers are why rather than an opinion.
+
+**Measured over the 25 threads carrying both a customer reply and one of ours.** Whole-body matching claimed **2.4 fields per thread** — `product_name` and `reaction_product_name` each fired on 10, always together, because they share the single term « produit », which any reply mentioning a product contains. Narrowed to sentences carrying a request cue it fell to **0.3 per thread**, and about half of what survived was still wrong: « Avez-vous effectué un retour de produit ? » is not a request for the product's name.
+
+**The direction is what breaks it.** `ASK_TERMS` exists to check that a draft DOES ask for something, where a false positive costs a reviewer a minute. Read backwards the failure inverts — a wrong hit suppresses a question the case file licensed, and the customer is never asked for the one fact that would let us help them.
+
+**Not kept as an advisory counter either.** A count nobody can trust is the `categorisation_confidence` mistake: a field that reads like information and is not. The prompt carries the instruction instead, and a real guardrail needs the question recorded when it is **asked** rather than recovered from prose afterwards — which is the case state, not a regex.
+
+### An inbound message is not a customer, and the renderer now says which (2026-09-21)
+
+Three prompts had been told, separately and in prose, that an inbound message might not be from the customer — the drafting history block, the closure check, the reconstruction. A correction repeated in three places is a correction the DATA should have been making.
+
+**`tickets.sender_label` describes the THREAD, from the address that opened it.** A conversation is not made of one sender. Measured: **38 inbound messages from `lap-groupe.com` across 22 tickets**, **14 from Deret across 10**, and **10 from Nocibé** — most of them arriving on threads a customer opened, where the ticket's own label says nothing about them.
+
+**Rendered as « client » or « reçu », they were read as the customer speaking, and three times they were.** A draft asked the customer for a screenshot on `c5ec7404`, whose trigger message is a colleague's. The closure check reported « le client confirme que la commande a été traitée » about `fcf4ca11` — `tlamzouki@lap-groupe.com` writing to another colleague. And `e8903620`, which I had labelled a genuine customer closure, turns out to be `dnouali@lap-groupe.com`: the customer wrote once, at the start, and never closed anything.
+
+**So `senderRole` resolves a role per MESSAGE**, from the directory that already exists, and every renderer uses it: the investigation transcript, the drafting history, the closure prompt, the reconstruction. The vocabulary is the one a reader needs — « client », « collègue (LAP Groupe) », « prestataire logistique », « transporteur », « revendeur », « prestataire » — not the table's internal labels.
+
+**The address travels and is never rendered**, which reverses the narrowing on `messageForDrafting` in letter and keeps it in spirit. That column excluded `from_email` because *an address in a prompt is an address a model can quote back to a customer*; it is now selected, resolved to a role, and dropped. `messageForInvestigation` has always worked this way for the sender-directory lookup.
+
+**An unclassified domain is a customer**, deliberately. A sender nobody has filed is read as demand rather than quietly discounted, and a label with no display name falls back the same way rather than leaking a raw key into a reply.
+
+**The closure check refuses a non-customer in CODE, not in the prompt.** The instruction is the belt and `senderRole !== 'customer'` is the braces — the half that cannot be talked out of it, and the half that costs no model call. It took the code gate from 11 of 16 to **13 of 16** settled before any call, and the eval from 15/16 with one unstable case to **16/16 stable over 5 repeats**.
+
+**This does not fix the underlying problem, and should not be read as doing so.** Internal and 3PL mail is still landing on customer tickets — `45c0a2b7` is internal coordination about three different customers, reconstructed as one case. Naming the sender stops the agent mistaking it for the customer; keeping it off the ticket in the first place is `requester-repair`'s problem and is not solved here.
+
+### A reply that has already been sent is not drafted again (2026-09-21)
+
+`draftDecision` refused a duplicate link, an internal sender, a level 4 and a question with nothing to ask. It had no opinion on whether the message had **already been answered**, because nothing in drafting could see our own side of a thread.
+
+**Measured once it could: 59 of 138 investigations sit on a thread carrying an outbound message newer than the trigger, and every one of them produced a draft.** The queue went 138 → 63 when the check went in. Nearly half of drafting was writing a reply to mail a person had already handled, which is exactly what it looks like from the review side — the last message in the thread is ours, and the draft says the same thing again.
+
+**Strictly newer than the trigger, not "the thread ends with our reply".** The difference is the ordinary case: a customer who writes, is answered, and writes again has an outbound message in the thread and is owed a reply. What disqualifies a draft is a reply that came *after* the message being answered.
+
+**Envelopes only, and no model call.** Direction and timestamp. This is a guardrail, so it is code — a question with one right answer, asked of data already loaded.
+
+**It gets its own helper rather than reusing `timeOf`.** That one returns 0 for a message with no timestamp, which is right where it is used — ordering a thread, where an undated message sorting first is harmless. Here 0 would make an undated *trigger* older than every reply in the thread and suppress a draft on a ticket nobody had answered.
+
+**On this corpus it is mostly history, and not only history.** The mail was imported after a person had worked it, so the human reply predates the agent's first look. On live mail the same shape appears whenever somebody answers in Outlook before a draft is reviewed — which, with drafting operator-triggered and 120 drafts unread, is the normal case rather than the edge one.
+
+**Counted, not filtered in the query.** `skippedBy.already_answered` is how anybody finds out how far behind the queue is running, and a skip that leaves no number behind cannot be argued with later.
+
+**A consequence for the review queue as it stands: 59 of the 123 stored drafts are on already-answered threads.** They were written before this check existed and are still there. Reading them is reading replies to settled mail.
+
+### A case the customer has closed gets a closing reply, not a full one (2026-09-21)
+
+« La commande a effectivement été livrée. Mes inquiétudes n'étaient pas fondées. Je vous remercie d'avoir répondu à mes messages. » was answered with a reply restating the dispatch date and the parcel number, and inviting the customer to get in touch again. Nothing in it was wrong. None of it was wanted.
+
+**5 of the 16 threads where a customer wrote after our reply are closures** — about a third of exactly the population multi-turn work is for.
+
+**The decision is made in two halves, and the order is the design.** `closureAllowed` asks in **code** whether anything is outstanding on our side: a `missing` entry, a handoff, any verdict but `answerable`. Only when the dossier is clear is the message itself read, by one constrained boolean on the cheap tier.
+
+**`d6d0d1c3` is the case that fixes the order.** « J'ai bien réceptionné le colis. Merci encore » closes the delivery question — and the free mask is still missing, so the case file reads `needs_human`. Asked first, a model reading that message alone says the case is closed, and closes a case that owes the customer something. The code gate never lets the question be asked there. Two more of the seven shortest replies in that set, `5836ab80` and `bdc3f08c`, are short, follow our reply, contain no question mark and carry **new information** — so a structural heuristic would have wrongly closed 2 of 7 as well.
+
+**A closure is not a verdict, and that is why `intent` overrides it rather than joining it.** Every other key in `INTENT_RULES` is a verdict, because until now what a reply should do was a property of the case file alone. Here the case file is `answerable` either way; what makes the reply three lines is the customer having said they need nothing more.
+
+**The facts obligation inverts here, uniquely.** Every other intent set obliges the reply to pass established facts on, because a useful fact withheld is one the customer must ask for again (§ *Every verdict gets a reply*). Once they have said they need nothing, the same fact is padding — so `closing` forbids facts outright and says so, rather than leaving the structural rules to pull the other way.
+
+**Nothing is sent silently and no ticket is closed by this.** A closing reply is still a reply, which is what the § above requires; `draftDisposition` already returns `terminal` for an `answerable` with no handoff, so the status behaviour is unchanged.
+
+**A failure is never a closure.** A throw or a rate limit resolves to `closes: false` and the ordinary reply gets written. The other direction — a 429 quietly shortening a reply to a customer still waiting on us — is the one worth engineering against.
+
+**The delay apology stands down on a closing reply, and is reported rather than dropped.** On `1e4890dd` the thread proves a chase, so the check fires; the message being answered thanks us for replying. An apology for our delay, in the reply that closes the case, answers a complaint the customer has just withdrawn. `passed: null` keeps the line and the reason visible.
+
+**Off by one empty env var.** `AGENT_CLOSURE_MODEL=` leaves the reader unbuilt, and an absent reader means no closure is ever detected — the switch is the absence of the reader rather than a flag inside it, so there is no half-wired state.
 
 ### The closing line is approved, not forbidden
 

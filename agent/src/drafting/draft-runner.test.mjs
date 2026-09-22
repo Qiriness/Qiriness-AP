@@ -341,3 +341,34 @@ test('an unreadable timestamp keeps the existing draft', () => {
   const drafts = [{ trigger_message_id: 'm1', status: 'pending', drafted_at: null }];
   assert.deepEqual(needingDraft([READING], drafts), []);
 });
+
+test('a closing reply is written when the dossier is clear and the customer says so', async () => {
+  const h = harness();
+  await runDrafting({
+    ...h.args,
+    closureReader: async () => ({ closes: true, why: 'le client confirme la réception' })
+  });
+
+  // The `closing` intent travelled instead of the verdict's own.
+  assert.match(h.calls[0].system, /accuser réception et clore/);
+  assert.ok(!/Objectif : résoudre entièrement la demande/.test(h.calls[0].system));
+  assert.equal(h.saved[0].promptInputs.closes_case, true);
+  assert.equal(h.saved[0].promptInputs.closure_reason, 'le client confirme la réception');
+});
+
+test('with no closure reader wired the reply is exactly what it was before', async () => {
+  const h = harness();
+  await runDrafting({ ...h.args });
+
+  assert.match(h.calls[0].system, /Objectif : résoudre entièrement la demande/);
+  assert.equal(h.saved[0].promptInputs.closes_case, false);
+  assert.equal(h.saved[0].promptInputs.closure_reason, null);
+});
+
+test('a reader that says the case is not closed changes nothing', async () => {
+  const h = harness();
+  await runDrafting({ ...h.args, closureReader: async () => ({ closes: false, why: 'pose une question' }) });
+
+  assert.match(h.calls[0].system, /Objectif : résoudre entièrement la demande/);
+  assert.equal(h.saved[0].promptInputs.closes_case, false);
+});

@@ -40,6 +40,93 @@ these.
 as its own item: `llm_usage` (item 14), `categorisation_review` (item 15), and
 `category_forwarding` / `ticket_forwards` (item 1).
 
+## 28. The agent reads the whole thread now, and no draft has been re-read since — 2026-09-21
+
+`record.conversation` and the two widened projections ship today: the
+investigation renders both directions as a labelled transcript, and drafting is
+shown our own previous replies above the new message. Unit tests pin the
+behaviour (1,501 agent, 3,016 root, all green) and the reads were verified
+against the live database — ticket `8236165a`, 8 messages, both directions, the
+prompt's sections in the right order and the trigger message printed once.
+
+**What is proven:** the rows arrive, the transcript renders, and a
+single-message ticket's prompt is byte-for-byte what it was before.
+
+**What is not proven is the only thing that matters: whether the drafts get
+better.** Nothing has been re-investigated or re-drafted. The comparison is
+cheap and it has not been run.
+
+**The set.** 25 tickets carry ≥2 inbound messages **and** ≥1 outbound; 24 have a
+case file and 19 have a draft. Their pre-change state — verdict, checks, draft
+body — is snapshotted, because `ticket_drafts` upserts on
+`(shop_id, trigger_message_id)` and a re-draft **overwrites `body_text` in
+place**. Snapshot taken 2026-09-21, 25 rows, in the session scratchpad; it is
+not in the repo because it is real customer mail.
+
+**The drafting half HAS been re-run and read.** All 19 drafts changed;
+`checks_passed` went 14 → 12 of 19, and that number is **noise** — `718086fd`
+passed on one run and failed on the next with identical code. Register drift is
+1 of 19 for a French closer in a Spanish reply and 1 of 19 for a lost title
+salutation. Continuity improved on the threads read by hand. Full account in
+`DECISIONS.md` § *What the thread in the prompt is actually worth, measured*.
+
+**Reviewed 2026-09-21 and judged good**, from `phase1-drafts-review.html` — the
+19 pairs side by side with each thread and its failing checks. The verdict was
+given as an overall reading rather than a per-symptom tally, **so no counts are
+recorded here and none should be quoted.** What that closes is the question
+"does the thread in the prompt make the replies better"; what it does not close
+is the two known slips below, which were accepted rather than fixed.
+
+**Accepted, not resolved — carry these into the next phase:**
+
+1. **A promise we made that the rules forbid repeating.** `5232645f` restates
+   « sous 2 à 3 jours ouvrés » because our reply of 2 September promised it, and
+   fails `no_promised_deadline`. « Do not contradict what we promised » and
+   « never announce a delivery deadline » genuinely conflict on a thread where
+   the promise is ours. Unresolved, and it is a policy question, not a bug.
+2. **Language and register follow the history.** `718086fd` ends a Spanish reply
+   with the French closer. Stripping the approved sign-off fixed it on one run
+   and not on the next, so the residue is the prose itself.
+
+**The investigation half has NOT been re-run**, and could not be — see below.
+
+### The blocker: `--backfill` cannot reach a closed ticket, and `--include-closed` does not help
+
+`raiseFor` hard-codes `status: 'open'` in its filter
+(`scripts/lib/ticket-record.mjs`), so **no CLI path raises
+`needs_investigation` on a closed thread.** `investigate --include-closed`
+widens the *claim* — for tickets whose flag is already up, which is the case
+auto-close leaves behind — but it cannot widen the *raise*. `tickets:requeue`
+refuses outright: « not queued: ticket is not open (pass --reopen) ».
+
+So the two documented halves do not compose for the case here: a thread that is
+closed **and** unflagged. Of the 25, **0 are open**, and every one was dry-run
+requeued and refused.
+
+`--reopen` would do it and is the wrong tool: it moves 25 settled threads into
+the live queue, against « a widened run never moves a ticket ».
+
+**What this leaves unmeasured:** the labelled transcript reaching the
+investigation. Verified structurally against the live database (ticket
+`8236165a`, 8 messages both directions, correct order, trigger once) and by unit
+test, but no case file has been rebuilt from it.
+
+**Options, for whoever picks this up:** give `raiseFor` the `anyStatus` escape
+`claim` already has, reachable only by pairing `--backfill` with
+`--include-closed` — which is arguably the bug, since the CLI header documents
+those two as "the other half" of each other; or accept `--reopen` on a named
+list and set the statuses back afterwards.
+
+**That count is what decides the next phase**, and it is the reason the Case
+Manager, the persistent case state and the sticky situation were NOT built at
+the same time as this. If the thread in the prompt closes most of these, the
+remaining layer is much smaller than the one originally specified.
+
+**Cost, stated because it is the reason this has not been run yet:** roughly 25
+× (1 decompose + 2 investigation + 1 drafting) model calls, against an account
+capped at 30,000 tokens/minute — expect the run to be paced by 429 backoff
+rather than by the work.
+
 ## 27. D-37 and its three rules are drafts, and nothing has matched them live (2026-09-21)
 
 **Proven:** D-37 is **approved, translated and embedded** (2026-09-21), and the live matcher picks it: re-running `match_support_exemplars` over the stored message vectors of all **169 tickets that carry one**, exactly two match D-37 — `bb82f4f1` at **0.777** (margin 0.197 over D-36) and `de880691` at **0.694** (margin 0.099), both previously `near` and matching nothing. **No other ticket changed situation.** The exemplar imports clean (41 parsed, 41 usable, 0 skipped, 0 stale phrasings) and its six phrasings separate the situation exactly — scored against the stored message vectors of all 43 `delivery` tickets, **only `bb82f4f1` (0.777) and `de880691` (0.694) clear the 0.65 floor**, and the next ticket is 0.630. All 18 evidence positions were run through `selectAnswer` with `D-37` matched: the three rules take the positions they were written for, `auditAnswerSet` reports nothing on the `orders` set, and D-01, D-03, D-05, D-36 and the situation-less lane are unchanged. 3008 tests pass.
