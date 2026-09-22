@@ -2342,6 +2342,18 @@ Three prompts had been told, separately and in prose, that an inbound message mi
 
 **This does not fix the underlying problem, and should not be read as doing so.** Internal and 3PL mail is still landing on customer tickets — `45c0a2b7` is internal coordination about three different customers, reconstructed as one case. Naming the sender stops the agent mistaking it for the customer; keeping it off the ticket in the first place is `requester-repair`'s problem and is not solved here.
 
+### A delivery date is what should happen, never what will (2026-09-22)
+
+**Decided by the business, 2026-09-22: never promise a deadline, and a date is given only as an expectation** — « vous devriez le recevoir sous 2 à 3 jours ouvrés », never « vous le recevrez » or « il arrivera le 12 ». The carrier decides when a parcel arrives; we can only say what is usual.
+
+This closes the conflict `5232645f` exposed, where « never contradict what we promised » and « never announce a deadline » appeared to disagree. They do not: our 2 September reply had promised « vous devriez le recevoir sous 2 à 3 jours ouvrés » — already hedged — and restating it hedged honours both.
+
+**THE MODEL WAS RIGHT AND THE CHECK WAS NOT.** Measured over all 123 stored drafts: 29 sentences carry a date or a delay, **27 are past facts** (« a été expédiée le 13 août »), and the **one** future estimate was already hedged. `no_promised_deadline` failed it anyway, because its `sous \d+ à \d+` pattern cannot tell a carrier window from a promise about our own conduct.
+
+**So the fix is a carve-out, not a loosening.** `no_promised_deadline` exists for « nous revenons vers vous sous 24 heures » — a commitment about us that nobody in the building agreed to — and it still catches every one. It now removes a HEDGED DELIVERY sentence before matching, through the `prepare` hook `FORBIDDEN_PATTERNS` already had. Sentence-scoped, so a hedge excuses its own sentence and not a response deadline in the next one.
+
+**The other half is a new check on every verdict.** `no_certain_delivery` fails the future indicative — « arrivera », « sera livrée », « vous le recevrez », « parviendra ». Past forms are not matched, so « a été livrée » stays a fact. **It has never fired on a real draft (0 of 123)**, and is kept for that reason rather than despite it: the pattern is narrow enough that a hit means what it says. After the change, both checks fail **0 of 123** stored drafts.
+
 ### A reply that has already been sent is not drafted again (2026-09-21)
 
 `draftDecision` refused a duplicate link, an internal sender, a level 4 and a question with nothing to ask. It had no opinion on whether the message had **already been answered**, because nothing in drafting could see our own side of a thread.

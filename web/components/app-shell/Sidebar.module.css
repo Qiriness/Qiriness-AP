@@ -15,16 +15,22 @@
 
 .brand {
   display: flex;
-  align-items: baseline;
+  /* Centre, not baseline: the mark is an image now, and an image sits on the
+     text baseline by its bottom edge, which floats it above « Support OS ». */
+  align-items: center;
   gap: var(--space-2);
   padding: var(--space-2) var(--space-2) var(--space-5);
 }
 
-.wordmark {
-  font-size: 1.6rem;
-  font-weight: var(--weight-bold);
-  letter-spacing: -0.02em;
-  color: var(--teal);
+.mark {
+  display: block;
+  flex: none;
+  width: 32px;
+  height: 32px;
+  /* The PNG has an opaque white background and the sidebar is #fbfcfd. Multiply
+     turns the white into whatever surface it sits on, so there is never a box
+     around the mark — and it keeps working if the surface colour changes. */
+  mix-blend-mode: multiply;
 }
 
 .brandSub {
@@ -37,9 +43,6 @@
 .collapsed .brand {
   padding-inline: 0;
   justify-content: center;
-}
-.collapsed .wordmark {
-  font-size: 1.25rem;
 }
 
 .navList {

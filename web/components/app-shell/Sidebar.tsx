@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import type { MouseEvent } from "react";
 import type { ComponentType } from "react";
@@ -108,7 +109,17 @@ export function Sidebar({
       aria-label="Primary"
     >
       <div className={styles.brand}>
-        <span className={styles.wordmark}>Qiriness</span>
+        <Image
+          src="/brand/q-qiriness.png"
+          alt="Qiriness"
+          width={32}
+          height={32}
+          className={styles.mark}
+          // 530 bytes and already the size it is shown at: the optimiser would
+          // re-encode it for nothing and add a request through /_next/image.
+          unoptimized
+          priority
+        />
         {!collapsed && <span className={styles.brandSub}>Support&nbsp;OS</span>}
       </div>
 

@@ -141,6 +141,22 @@ export const ADVISORY_CAVEATS = [
  */
 export const FORBIDDEN_PATTERNS = [
   {
+    // A DELIVERY STATED AS CERTAIN, on every reply whatever its verdict. The
+    // other half of the rule `withoutHedgedDelivery` states: « devrait arriver »
+    // is what a reply may say, « arrivera » is a promise about a carrier we do
+    // not control. Future indicative only — « a été livrée » is a past fact and
+    // is not matched.
+    //
+    // NEVER OBSERVED YET, and kept for that reason rather than despite it:
+    // measured 2026-09-22, 0 of 123 stored drafts contain one. The pattern is
+    // narrow enough that a hit means what it says, which is the bar every check
+    // in this file is held to.
+    check: 'no_certain_delivery',
+    label: 'annonce une livraison comme certaine',
+    pattern:
+      /\b(arrivera|arriveront|sera (?:livrée?|distribuée?|chez vous)|seront (?:livrée?s|distribuée?s)|vous (?:le|la|les) recevrez|recevrez (?:votre|vos|le|la|les)|parviendra|parviendront)\b/i
+  },
+  {
     check: 'no_internal_identifier',
     label: 'cite un identifiant technique',
     pattern: /(gid:\/\/shopify|\bSKU\b|\bvariant[_ ]?id\b|\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b)/i
@@ -250,12 +266,46 @@ export const FORBIDDEN_PATTERNS = [
  * ASKING IS THE OTHER. The case file named nothing to ask for; a question in an
  * acknowledgement is one the model invented, and the customer will answer it.
  */
+/**
+ * A delivery estimate stated as an expectation, never as a certainty.
+ *
+ * THE RULE, decided 2026-09-22: never promise a deadline, and a date may be
+ * given only as what SHOULD happen — « vous devriez le recevoir sous 2 à 3
+ * jours ouvrés », never « vous le recevrez » or « il arrivera le 12 ». The
+ * carrier decides when a parcel arrives; we can only say what is usual.
+ *
+ * WHY THIS IS A CARVE-OUT FROM `no_promised_deadline` AND NOT A LOOSENING OF
+ * IT. That check exists for a promise about OUR conduct — « nous revenons vers
+ * vous sous 24 heures », which nobody in the building agreed to. Its pattern
+ * also caught `sous 2 à 3`, so on `5232645f` it failed a correctly hedged
+ * DELIVERY estimate the customer had already been given by a person. Measured
+ * over all 123 stored drafts: 29 sentences carry a date or a delay, 27 are past
+ * facts (« a été expédiée le 13 août »), and the one future estimate was
+ * already hedged. The model was right and the check was not.
+ *
+ * Sentence-scoped, so a hedge in one sentence cannot excuse a response deadline
+ * in the next.
+ */
+const HEDGED_DELIVERY =
+  /\b(?:devr(?:ait|aient|iez|ez)|normalement)\b[^.!?\n]{0,80}\b(?:recevoir|arriver|être (?:livrée?s?|distribuée?s?)|parvenir)\b/i;
+
+export function withoutHedgedDelivery(text) {
+  return String(text || '')
+    .split(/(?<=[.!?])\s+|\n+/)
+    .filter((sentence) => !HEDGED_DELIVERY.test(sentence))
+    .join('\n');
+}
+
 export const ACKNOWLEDGEMENT_PROHIBITIONS = [
   {
     check: 'no_promised_deadline',
     label: 'annonce un délai de réponse',
     pattern:
-      /\b(sous \d+\s*(?:h|heures?|jours?|semaines?)|d[’']ici (?:demain|lundi|mardi|mercredi|jeudi|vendredi|la fin|le)|dans les (?:\d+|prochaines?|prochains?)\s*(?:\d+\s*)?(?:h|heures?|jours?)|sous \d+\s*à\s*\d+|avant (?:demain|la fin de (?:la journée|la semaine)))/i
+      /\b(sous \d+\s*(?:h|heures?|jours?|semaines?)|d[’']ici (?:demain|lundi|mardi|mercredi|jeudi|vendredi|la fin|le)|dans les (?:\d+|prochaines?|prochains?)\s*(?:\d+\s*)?(?:h|heures?|jours?)|sous \d+\s*à\s*\d+|avant (?:demain|la fin de (?:la journée|la semaine)))/i,
+    // A hedged DELIVERY estimate is not a response deadline — see
+    // `withoutHedgedDelivery`. Everything else this pattern caught, it still
+    // catches.
+    prepare: withoutHedgedDelivery
   },
   {
     check: 'no_promise',
@@ -522,8 +572,10 @@ export function runDraftChecks({
 
   // --- what only a handover reply is forbidden -----------------------------
   if (isHandover) {
-    for (const { check, label, pattern } of ACKNOWLEDGEMENT_PROHIBITIONS) {
-      const hit = text.match(pattern);
+    for (const { check, label, pattern, prepare } of ACKNOWLEDGEMENT_PROHIBITIONS) {
+      // The same `prepare` hook `FORBIDDEN_PATTERNS` already honours: a check
+      // may exempt part of the reply before matching.
+      const hit = (prepare ? prepare(text) : text).match(pattern);
       checks.push({ check, passed: !hit, detail: hit ? `${label} — « ${hit[0]} »` : label });
     }
   }

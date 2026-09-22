@@ -52,10 +52,12 @@
 
 .topbarBrand {
   display: none;
-  font-weight: var(--weight-bold);
-  font-size: 1.1rem;
-  letter-spacing: -0.02em;
-  color: var(--teal);
+  flex: none;
+  width: 28px;
+  height: 28px;
+  /* Same reason as the sidebar mark: the image's white background takes the
+     bar's colour instead of drawing a box. */
+  mix-blend-mode: multiply;
 }
 
 .topbarActions {

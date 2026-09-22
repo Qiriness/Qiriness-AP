@@ -79,11 +79,11 @@ is the two known slips below, which were accepted rather than fixed.
 
 **Accepted, not resolved — carry these into the next phase:**
 
-1. **A promise we made that the rules forbid repeating.** `5232645f` restates
-   « sous 2 à 3 jours ouvrés » because our reply of 2 September promised it, and
-   fails `no_promised_deadline`. « Do not contradict what we promised » and
-   « never announce a delivery deadline » genuinely conflict on a thread where
-   the promise is ours. Unresolved, and it is a policy question, not a bug.
+1. ~~**A promise we made that the rules forbid repeating.**~~ **RESOLVED
+   2026-09-22** by a business decision: a delivery date is given only as an
+   expectation (« devrait arriver »), never as a certainty. The draft on
+   `5232645f` was already hedged; the check was wrong, not the draft. See
+   `DECISIONS.md` § *A delivery date is what should happen, never what will*.
 2. **Language and register follow the history.** `718086fd` ends a Spanish reply
    with the French closer. Stripping the approved sign-off fixed it on one run
    and not on the next, so the residue is the prose itself.

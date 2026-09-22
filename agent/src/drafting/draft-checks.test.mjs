@@ -10,7 +10,8 @@ import {
   SIGNATURE_LANGUAGE,
   checksPassed,
   failedChecks,
-  runDraftChecks
+  runDraftChecks,
+  withoutHedgedDelivery
 } from './draft-checks.mjs';
 
 const SIGNATURE = 'Bien cordialement,\nService Client Qiriness';
@@ -892,4 +893,57 @@ test('a closing reply is not failed for skipping the delay apology', () => {
 test('an ordinary chased reply still has to apologise', () => {
   const checks = runDraftChecks({ body: 'Bonjour, voici votre réponse.', chased: true });
   assert.equal(checks.find((c) => c.check === 'apologises_for_delay').passed, false);
+});
+
+// --- a date is an expectation, never a promise --------------------------------
+
+test('a hedged delivery estimate is not a response deadline', () => {
+  // `5232645f`: the one future estimate in 123 stored drafts, already hedged,
+  // and failed by a pattern that could not tell a carrier window from a promise
+  // about our own conduct.
+  const checks = runDraftChecks({
+    body: 'Votre nouveau colis a été expédié et vous devriez le recevoir sous 2 à 3 jours ouvrés.',
+    verdict: 'needs_human'
+  });
+  assert.equal(checks.find((c) => c.check === 'no_promised_deadline').passed, true);
+  assert.equal(checks.find((c) => c.check === 'no_certain_delivery').passed, true);
+});
+
+test('a response deadline still fails, hedged delivery or not', () => {
+  const checks = runDraftChecks({
+    body: 'Vous devriez le recevoir sous 2 à 3 jours ouvrés. Nous revenons vers vous sous 48 heures.',
+    verdict: 'needs_human'
+  });
+  // The hedge excuses its own sentence and nothing else.
+  assert.equal(checks.find((c) => c.check === 'no_promised_deadline').passed, false);
+});
+
+test('a delivery stated as certain fails, on every verdict', () => {
+  for (const body of [
+    'Votre colis arrivera le 12 septembre.',
+    'Vous le recevrez sous 3 jours.',
+    'Votre commande sera livrée demain.'
+  ]) {
+    for (const verdict of ['answerable', 'needs_customer_input', 'needs_human']) {
+      const check = runDraftChecks({ body, verdict }).find((c) => c.check === 'no_certain_delivery');
+      assert.equal(check.passed, false, `${verdict}: ${body}`);
+    }
+  }
+});
+
+test('a past delivery is a fact, not a promise', () => {
+  // 27 of the 29 dated sentences in the stored drafts are exactly this.
+  for (const body of [
+    'Votre commande a été expédiée le 13 août 2026.',
+    'Le colis a été déclaré livré par le transporteur le 30 juillet.'
+  ]) {
+    const check = runDraftChecks({ body }).find((c) => c.check === 'no_certain_delivery');
+    assert.equal(check.passed, true, body);
+  }
+});
+
+test('withoutHedgedDelivery removes only the hedged sentence', () => {
+  const kept = withoutHedgedDelivery('Vous devriez le recevoir sous 3 jours. Nous vous répondons sous 24 h.');
+  assert.ok(!kept.includes('devriez'));
+  assert.ok(kept.includes('sous 24 h'));
 });

@@ -92,6 +92,14 @@ export const STRUCTURAL_RULES = [
     'approuvée, lorsqu’elle est fournie, est la seule autorisée : telle quelle si la réponse est ' +
     'en français, et sa traduction si elle est dans une autre langue — jamais une autre formule, ' +
     'et jamais du français dans une réponse qui ne l’est pas.',
+  // DECIDED 2026-09-22. The carrier decides when a parcel arrives, so a date is
+  // what SHOULD happen and never what WILL. Measured over 123 drafts, the one
+  // future estimate already read « vous devriez le recevoir » — this states the
+  // rule so it stays that way, and `no_certain_delivery` checks it.
+  'Ne jamais promettre de délai. Une date ou un délai de livraison, lorsque le dossier en ' +
+    'donne un, s’annonce comme une estimation : « devrait arriver », « vous devriez le ' +
+    'recevoir sous… », jamais « arrivera », « sera livré » ni « vous le recevrez ». Et ' +
+    'aucun délai de réponse de notre part : ni « sous 24 heures », ni « d’ici demain ».',
   'Écrire uniquement le corps de l’e-mail. Aucun objet, aucun commentaire, aucune note sur la démarche.'
 ];
 

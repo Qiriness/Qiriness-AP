@@ -10,6 +10,31 @@ Three sibling files carry the other halves, and this one deliberately does not d
 
 ---
 
+## Delivery dates are expectations; reconstructions can be corrected in the page (2026-09-22)
+
+**The delivery-date rule, decided by the business:** never promise a deadline,
+and a date is given only as what *should* happen. Measured over all 123 stored
+drafts, the one future estimate already read « vous devriez le recevoir » — the
+model was right and `no_promised_deadline` was wrong, because it could not tell a
+carrier window from a promise about our own conduct.
+
+- `no_promised_deadline` now removes a **hedged delivery** sentence before
+  matching, and still catches every response deadline it caught before.
+- New `no_certain_delivery`, on every verdict: fails « arrivera », « sera
+  livrée », « vous le recevrez ». Never fired on a real draft.
+- A structural rule in the brand voice states it for the model.
+- Both checks now fail **0 of 123** stored drafts.
+
+**`cases:review` now takes corrections.** Each card has two pre-filled answers —
+the situation (from the 40 approved keys, or none) and whether anything is still
+open — plus an optional note and a « vérifié » box. Answers autosave in the
+browser; « Exporter les corrections » downloads `case-labels.json` holding ticket
+ids, the answers and the model's original beside them, and **no message text**, so
+it can be checked in as the labelled set a regression suite needs. The page makes
+no network call.
+
+---
+
 ## The Case Manager layer (2026-09-22)
 
 A follow-up is now processed as *what does this message change about the case*

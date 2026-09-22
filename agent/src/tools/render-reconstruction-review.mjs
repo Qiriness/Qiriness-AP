@@ -1,7 +1,7 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 
-import { createSupabaseClient } from '../../../scripts/lib/supabase-rest-client.mjs';
-import { COLUMNS } from '../../../scripts/lib/tables.mjs';
+import { createSupabaseClient, supabaseSelect } from '../../../scripts/lib/supabase-rest-client.mjs';
+import { COLUMNS, T } from '../../../scripts/lib/tables.mjs';
 import { createTicketRecord } from '../../../scripts/lib/ticket-record.mjs';
 
 import { loadAgentConfig } from '../config.mjs';
@@ -44,12 +44,23 @@ async function main() {
     supportMailbox: config.graph.mailbox
   });
 
+  // THE LIBRARY THE DROPDOWN OFFERS — the same approved keys the reconstruction
+  // was allowed to choose from, so a correction can only name a situation the
+  // rules layer can act on.
+  const situations = await supabaseSelect(
+    supabase,
+    T.SUPPORT_EXEMPLARS,
+    { shop_id: shopId, approval_status: 'approved', deleted_at: { operator: 'is', value: 'null' } },
+    'exemplar_key,canonical_question',
+    { order: 'exemplar_key.asc' }
+  );
+
   const cards = [];
   for (const [index, row] of rows.entries()) {
     const conversation = row.ticketId
       ? await record.conversation(row.ticketId, { columns: COLUMNS.threadForDrafting })
       : [];
-    cards.push(card(row, index + 1, conversation, senderDirectory));
+    cards.push(card(row, index + 1, conversation, senderDirectory, situations));
   }
 
   const done = rows.filter((row) => !row.error);
@@ -57,7 +68,7 @@ async function main() {
   console.log(`${rows.length} fil(s) → ${outPath}`);
 }
 
-function card(row, n, conversation, senderDirectory) {
+function card(row, n, conversation, senderDirectory, situations = []) {
   if (row.error) {
     return `<section class="card"><header><span class="key">${n}. ${esc(row.ticketId?.slice(0, 8))}</span>
       <span class="flip down">ÉCHEC — ${esc(row.error)}</span></header></section>`;
@@ -98,7 +109,41 @@ function card(row, n, conversation, senderDirectory) {
     </div>
     <details><summary>Le fil (${conversation.length} messages)</summary>
       <pre class="thread">${esc(renderThread(conversation, senderDirectory))}</pre></details>
+    ${correctionForm(row, situations)}
   </section>`;
+}
+
+/**
+ * The two answers a person gives per thread, pre-filled with the model's.
+ *
+ * TWO, AND NOT MORE, ON PURPOSE. Situation and "still open" are what a
+ * regression suite can actually score; everything else on the card is context
+ * for judging those two. A form asking a reviewer to re-type every fact would be
+ * a form nobody finishes, and 36 half-finished cards are worth less than 36
+ * finished ones.
+ *
+ * PRE-FILLED, so a correct reading costs one click — « vérifié » — and only a
+ * wrong one costs more.
+ */
+function correctionForm(row, situations) {
+  const options = [
+    `<option value=""${row.situationKey ? '' : ' selected'}>aucune situation</option>`,
+    ...situations.map(
+      (s) =>
+        `<option value="${esc(s.exemplar_key)}"${s.exemplar_key === row.situationKey ? ' selected' : ''}>` +
+        `${esc(s.exemplar_key)} — ${esc(s.canonical_question).slice(0, 70)}</option>`
+    )
+  ].join('');
+  const open = Boolean(row.openIssue);
+  return `<form class="fix" data-ticket="${esc(row.ticketId)}"
+      data-model-situation="${esc(row.situationKey || '')}" data-model-open="${open}">
+    <label>Situation <select name="situation">${options}</select></label>
+    <label>Encore quelque chose en suspens ?
+      <select name="open"><option value="true"${open ? ' selected' : ''}>oui</option>
+      <option value="false"${open ? '' : ' selected'}>non</option></select></label>
+    <label class="wide">Remarque <input name="note" type="text" placeholder="facultatif — ce qui est faux"></label>
+    <label class="check"><input name="verified" type="checkbox"> vérifié</label>
+  </form>`;
 }
 
 function page(rows, done, cards) {
@@ -143,6 +188,23 @@ function page(rows, done, cards) {
   .ok { color:var(--teal); } .warn { color:var(--red); }
   .dim { color:var(--sub); }
   details { margin-top:.9rem; } summary { cursor:pointer; color:var(--sub); font-size:.9rem; }
+  .bar { position:sticky; top:0; z-index:2; display:flex; gap:1rem; align-items:center; flex-wrap:wrap;
+         background:var(--bg); padding:.7rem 0; margin:0 0 1rem; border-bottom:1px solid var(--line); }
+  .bar .count { font-weight:700; color:var(--teal); }
+  .bar button { font:inherit; font-weight:600; background:var(--teal); color:#fff; border:0; border-radius:8px;
+               padding:.5rem 1rem; cursor:pointer; }
+  .bar .hint { color:var(--sub); font-size:.85rem; }
+  form.fix { display:flex; flex-wrap:wrap; gap:.6rem 1.2rem; align-items:center; margin-top:1rem;
+             padding-top:.9rem; border-top:1px dashed var(--line); font-size:.9rem; }
+  form.fix select, form.fix input[type=text] { font:inherit; padding:.3rem .4rem; border:1px solid var(--line);
+             border-radius:6px; background:#fff; max-width:100%; }
+  form.fix select[name=situation] { max-width:32rem; }
+  form.fix .wide { flex:1 1 16rem; display:flex; gap:.4rem; align-items:center; }
+  form.fix .wide input { flex:1; }
+  form.fix .check { font-weight:600; }
+  form.fix.changed { background:#fff8ec; margin-left:-1.2rem; margin-right:-1.2rem; padding-left:1.2rem;
+             padding-right:1.2rem; }
+  .card.done { border-color:#9fd3c4; box-shadow:inset 4px 0 0 var(--teal); }
   pre.thread { white-space:pre-wrap; font:13.5px/1.55 inherit; background:#fbfcfb; border:1px solid var(--line); border-radius:8px; padding:.8rem; margin:.5rem 0 0; }
 </style></head><body><div class="wrap">
 <h1>Reconstruction des dossiers — à corriger</h1>
@@ -157,8 +219,78 @@ référence à une suite de tests.</p>
   <li>${done.filter((r) => r.rejectedSituationKey).length} <span>clés inventées</span></li>
 </ul>
 <ul class="tally">${situations}</ul>
+<div class="bar">
+  <span><span class="count" id="progress">0</span> / ${rows.length} vérifiés</span>
+  <button type="button" id="export">Exporter les corrections</button>
+  <span class="hint">Enregistré automatiquement dans ce navigateur. L’export ne contient que des
+  identifiants et vos réponses — aucun message.</span>
+</div>
 ${cards}
-</div></body></html>`;
+</div>
+<script>
+// Everything stays on this machine: the page is a local file quoting real mail,
+// and it makes no network call. Answers are kept in localStorage so closing the
+// tab loses nothing, and the export carries ids and answers only.
+(() => {
+  const KEY = 'cases-review:' + document.title;
+  const forms = [...document.querySelectorAll('form.fix')];
+  let saved = {};
+  try { saved = JSON.parse(localStorage.getItem(KEY) || '{}'); } catch { saved = {}; }
+
+  const read = (f) => ({
+    ticketId: f.dataset.ticket,
+    situationKey: f.situation.value || null,
+    stillOpen: f.open.value === 'true',
+    note: f.note.value.trim(),
+    verified: f.verified.checked,
+    // What the model said, beside the answer, so the export also records
+    // WHERE the reconstruction was wrong — the number worth tracking.
+    modelSituationKey: f.dataset.modelSituation || null,
+    modelStillOpen: f.dataset.modelOpen === 'true'
+  });
+
+  const paint = (f) => {
+    const a = read(f);
+    f.classList.toggle('changed', a.situationKey !== a.modelSituationKey || a.stillOpen !== a.modelStillOpen);
+    f.closest('.card').classList.toggle('done', a.verified);
+  };
+  const progress = () => {
+    document.getElementById('progress').textContent = forms.filter((f) => f.verified.checked).length;
+  };
+
+  for (const f of forms) {
+    const s = saved[f.dataset.ticket];
+    if (s) {
+      f.situation.value = s.situationKey || '';
+      f.open.value = String(s.stillOpen);
+      f.note.value = s.note || '';
+      f.verified.checked = Boolean(s.verified);
+    }
+    const update = () => {
+      saved[f.dataset.ticket] = read(f);
+      try { localStorage.setItem(KEY, JSON.stringify(saved)); } catch {}
+      paint(f); progress();
+    };
+    // Both: 'input' is what a text field fires as you type, 'change' is what
+    // a checkbox and a select fire in every browser.
+    f.addEventListener('input', update);
+    f.addEventListener('change', update);
+    paint(f);
+  }
+  progress();
+
+  document.getElementById('export').addEventListener('click', () => {
+    const labels = forms.map(read);
+    const blob = new Blob([JSON.stringify(labels, null, 2)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'case-labels.json';
+    a.click();
+    URL.revokeObjectURL(a.href);
+  });
+})();
+</script>
+</body></html>`;
 }
 
 function bullets(items) {

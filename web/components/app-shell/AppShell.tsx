@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useTransition } from "react";
 import type { MouseEvent, ReactNode } from "react";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { Sidebar } from "./Sidebar";
 import { UserMenu, type Me } from "./UserMenu";
@@ -123,7 +124,14 @@ export function AppShell({ activeHref, children, openConversations, openTickets,
             <span />
           </button>
 
-          <span className={styles.topbarBrand}>Qiriness</span>
+          <Image
+            src="/brand/q-qiriness.png"
+            alt="Qiriness"
+            width={28}
+            height={28}
+            className={styles.topbarBrand}
+            unoptimized
+          />
 
           <div className={styles.topbarActions}>
             <button type="button" className={styles.helpBtn}>
