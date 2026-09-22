@@ -478,14 +478,38 @@
   flex-direction: column;
 }
 
-.ticketHeader {
+.ticketHeaderBlock {
   flex: none;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.ticketHeader {
   display: flex;
   align-items: center;
   gap: var(--space-3);
-  padding: var(--space-3) var(--space-4);
-  border-bottom: 1px solid var(--border);
-  background: var(--surface);
+  padding: var(--space-3) var(--space-4) 0;
+}
+
+/* The investigation's next step, on one line under the subject. The draft
+   panel repeats it in full; here it is orientation, so it truncates. */
+.nextAction {
+  margin: var(--space-2) var(--space-4) 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-default);
+  font-size: var(--text-caption);
+}
+
+.nextAction span {
+  margin-right: var(--space-2);
+  padding: 1px 6px;
+  border-radius: var(--radius-pill);
+  background: var(--warning-050);
+  color: #81500b;
+  font-size: 11px;
+  font-weight: var(--weight-semibold);
 }
 
 .ticketHeaderText {
@@ -537,13 +561,83 @@
   flex: 1;
   min-height: 80px;
   overflow: auto;
-  padding: var(--space-4);
+  padding: 0 var(--space-4) var(--space-5);
   background: var(--surface);
+  scroll-behavior: smooth;
+}
+
+.middleTabs {
+  flex: none;
+  display: flex;
+  align-items: stretch;
+  gap: var(--space-4);
+  min-height: 38px;
+  margin-top: var(--space-2);
+  padding: 0 var(--space-4);
+}
+
+.middleTabs button {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 2px;
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  cursor: pointer;
+}
+
+/* A mouse click must not leave a box around the tab; keyboard focus still shows. */
+.middleTabs button:focus {
+  outline: none;
+}
+
+.middleTabs button:focus-visible {
+  outline: 2px solid var(--teal);
+  outline-offset: -2px;
+  border-radius: var(--radius);
+}
+
+.middleTabs button:hover {
+  color: var(--text-strong);
+}
+
+.middleTabs button::after {
+  content: "";
+  position: absolute;
+  inset: auto 0 -1px;
+  height: 2px;
+  background: transparent;
+}
+
+.middleTabs .middleTabActive {
+  color: var(--text-strong);
+  font-weight: var(--weight-semibold);
+}
+
+.middleTabs .middleTabActive::after {
+  background: var(--teal);
+}
+
+.middleTabs button span {
+  min-width: 19px;
+  padding: 0 5px;
+  border-radius: var(--radius-pill);
+  background: var(--mist-050);
+  color: var(--text-subtle);
+  font-size: 11px;
+  line-height: 19px;
+  text-align: center;
 }
 
 .threadSection {
   display: grid;
   gap: var(--space-3);
+  padding-top: var(--space-4);
 }
 
 .sectionHead {
@@ -571,40 +665,121 @@
   font-size: var(--text-caption);
 }
 
+.jumpLatest {
+  border: 0;
+  background: transparent;
+  color: var(--teal-ink);
+  font: inherit;
+  font-size: var(--text-caption);
+  font-weight: var(--weight-medium);
+  cursor: pointer;
+}
+
+.jumpLatest:hover {
+  text-decoration: underline;
+}
+
+.dateGroups {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.dateGroup {
+  min-width: 0;
+}
+
+.dateDivider {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-bottom: var(--space-3);
+}
+
+.dateDivider::after {
+  content: "";
+  height: 1px;
+  flex: 1;
+  background: var(--mist-050);
+}
+
+.dateDivider time {
+  flex: none;
+  color: var(--text-subtle);
+  font-size: 11px;
+  font-weight: var(--weight-semibold);
+  letter-spacing: 0.05em;
+}
+
 .messages {
   margin: 0;
   padding: 0;
   display: grid;
-  gap: var(--space-3);
+  gap: 0;
   list-style: none;
 }
 
 .message {
-  padding: var(--space-3) 0;
-  border-top: 1px solid var(--mist-050);
+  position: relative;
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  gap: var(--space-3);
+  padding: 0 0 var(--space-5);
 }
 
-.message:first-child {
-  border-top: 0;
-  padding-top: 0;
+.message::before {
+  content: "";
+  position: absolute;
+  top: 32px;
+  bottom: 0;
+  left: 16px;
+  width: 1px;
+  background: var(--border);
 }
 
-.inbound {
+.message:last-child {
+  padding-bottom: var(--space-2);
+}
+
+.message:last-child::before {
+  display: none;
+}
+
+.timelineAvatar {
+  position: relative;
+  z-index: 1;
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--border-strong);
+  border-radius: 50%;
   background: var(--surface);
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: var(--weight-bold);
+  letter-spacing: 0.02em;
 }
 
-.outbound {
-  padding-inline: var(--space-3);
-  border-radius: var(--radius);
-  background: var(--surface-sunken);
+.messageContent {
+  min-width: 0;
+  padding-top: 1px;
 }
 
 .messageHead {
   display: flex;
-  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
   align-items: baseline;
   gap: var(--space-2);
   margin-bottom: var(--space-2);
+}
+
+.senderLine {
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
 }
 
 .sender {
@@ -614,16 +789,10 @@
   overflow-wrap: anywhere;
 }
 
-.senderEmail,
-.direction,
 .when,
 .attachment {
   color: var(--text-subtle);
   font-size: var(--text-caption);
-}
-
-.senderEmail {
-  overflow-wrap: anywhere;
 }
 
 .attachment {
@@ -632,15 +801,239 @@
   border-radius: var(--radius-pill);
 }
 
+.roleBadge,
+.aiDraftLabel {
+  display: inline-flex;
+  align-items: center;
+  min-height: 19px;
+  padding: 0 6px;
+  border-radius: var(--radius-pill);
+  background: var(--mist-050);
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: var(--weight-semibold);
+  letter-spacing: 0.035em;
+  text-transform: uppercase;
+}
+
+.role_customer {
+  border-color: var(--border-teal);
+  background: var(--teal-050);
+  color: var(--teal-ink);
+}
+
+.role_qiriness {
+  border-color: var(--border-strong);
+  background: var(--surface-sunken);
+  color: var(--text-strong);
+}
+
+.role_internal {
+  border-color: var(--info-100);
+  background: #f5f7fb;
+  color: #405471;
+}
+
+.role_logistics,
+.role_partner {
+  border-color: #e5dfd4;
+  background: #f8f7f4;
+  color: #665f54;
+}
+
+.messageRoute,
+.forwardLabel {
+  margin: -2px 0 var(--space-2);
+  color: var(--text-subtle);
+  font-size: var(--text-caption);
+}
+
 .messageBody,
 .draftBody {
   margin: 0;
   color: var(--text-default);
   font-family: inherit;
-  font-size: var(--text-body);
+  font-size: var(--text-md);
   line-height: 1.62;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+  text-wrap: pretty;
+}
+
+.entityList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: var(--space-3);
+}
+
+.entityChip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 2px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--surface-sunken);
+  color: var(--text-muted);
+  font-size: var(--text-caption);
+  font-weight: var(--weight-medium);
+}
+
+.messageDisclosures {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px var(--space-3);
+  margin-top: var(--space-3);
+}
+
+.messageDisclosures details {
+  max-width: 100%;
+}
+
+.messageDisclosures summary,
+.draftExplanation summary {
+  color: var(--teal-ink);
+  font-size: var(--text-caption);
+  font-weight: var(--weight-medium);
+  cursor: pointer;
+}
+
+.messageDisclosures pre {
+  width: min(660px, 100%);
+  max-height: 260px;
+  margin: var(--space-2) 0 0;
+  padding: var(--space-3);
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-sunken);
+  color: var(--text-muted);
+  font: inherit;
+  font-size: var(--text-sm);
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.activitySection {
+  padding-top: var(--space-4);
+}
+
+.activitySection .sectionHead {
+  align-items: flex-start;
+}
+
+.activitySection .sectionHead p {
+  margin-top: 3px;
+  color: var(--text-subtle);
+  font-size: var(--text-caption);
+}
+
+.activityList {
+  margin: var(--space-5) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.activityList li {
+  position: relative;
+  display: grid;
+  grid-template-columns: 84px 26px minmax(0, 1fr);
+  gap: var(--space-3);
+  padding-bottom: var(--space-4);
+}
+
+/* The rail runs through the centre of the icon column. */
+.activityList li::before {
+  content: "";
+  position: absolute;
+  top: 26px;
+  bottom: 0;
+  left: calc(84px + var(--space-3) + 12.5px);
+  width: 1px;
+  background: var(--border);
+}
+
+.activityList li:last-child::before {
+  display: none;
+}
+
+.activityList time {
+  padding-top: 5px;
+  color: var(--text-subtle);
+  font-size: var(--text-caption);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.activityIcon {
+  z-index: 1;
+  display: inline-grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border: 1px solid var(--border-strong);
+  border-radius: 50%;
+  background: var(--surface);
+  color: var(--text-muted);
+}
+
+/* One colour per kind, matching the conversation's role colours where they
+   overlap: the customer's mail is teal there and here. */
+.activity_inbound .activityIcon {
+  border-color: var(--border-teal);
+  background: var(--teal-050);
+  color: var(--teal-ink);
+}
+
+.activity_outbound .activityIcon {
+  border-color: var(--border-strong);
+  background: var(--surface-sunken);
+  color: var(--text-strong);
+}
+
+.activity_lookup .activityIcon {
+  border-color: var(--info-100);
+  background: var(--info-050);
+  color: var(--info);
+}
+
+.activity_investigation .activityIcon {
+  border-color: var(--info);
+  background: var(--info);
+  color: #fff;
+}
+
+.activity_draft .activityIcon {
+  border-color: var(--teal);
+  background: var(--teal);
+  color: #fff;
+}
+
+.activityText {
+  min-width: 0;
+  padding-top: 4px;
+}
+
+/* Agent steps are the scaffolding between emails: quieter than the mail. */
+.activity_lookup .activityText strong {
+  font-weight: var(--weight-medium);
+  color: var(--text-default);
+}
+
+.activityList strong {
+  display: block;
+  color: var(--text-strong);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+}
+
+.activityList p {
+  margin-top: 2px;
+  color: var(--text-muted);
+  font-size: var(--text-caption);
 }
 
 /* The split between conversation and draft. Its own element rather than the
@@ -686,7 +1079,7 @@
   align-content: start;
   gap: var(--space-2);
   padding: var(--space-3) var(--space-4);
-  background: var(--surface-sunken);
+  background: var(--surface);
   overflow: auto;
 }
 
@@ -710,6 +1103,25 @@
   gap: var(--space-3);
 }
 
+.draftHead h3 {
+  color: var(--text-strong);
+  font-size: var(--text-body);
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.draftLabels {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.aiDraftLabel {
+  border: 1px solid var(--border-teal);
+  background: var(--teal-050);
+  color: var(--teal-ink);
+}
+
 .draftStatus {
   padding: 1px 7px;
   border: 1px solid var(--border);
@@ -724,11 +1136,37 @@
 .draftBody {
   max-height: 11rem;
   overflow: auto;
-  padding: var(--space-3);
-  border: 1px solid var(--border-teal);
-  border-radius: var(--radius);
+  padding: var(--space-3) 0;
+  border-top: 1px solid var(--mist-050);
+  border-bottom: 1px solid var(--mist-050);
   background: var(--surface);
   color: var(--text-strong);
+}
+
+.requiredAction {
+  display: grid;
+  gap: 3px;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--warning-100);
+  border-radius: var(--radius);
+  background: var(--warning-050);
+}
+
+.requiredAction > span {
+  color: #81500b;
+  font-size: 11px;
+  font-weight: var(--weight-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.035em;
+}
+
+.requiredAction p {
+  color: #6f460d;
+  font-size: var(--text-caption);
+}
+
+.requiredAction p span {
+  color: var(--warning);
 }
 
 .editor {
@@ -755,10 +1193,52 @@
 }
 
 .draftActions {
+  flex: 1;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
+  justify-content: space-between;
   gap: var(--space-2);
+}
+
+.draftActionsStart,
+.draftActionsEnd {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.draftExplanation {
+  border-top: 1px solid var(--mist-050);
+  padding-top: var(--space-2);
+}
+
+.draftExplanation dl {
+  margin: var(--space-2) 0 0;
+  display: grid;
+  gap: 6px;
+}
+
+.draftExplanation dl div {
+  display: grid;
+  grid-template-columns: 92px minmax(0, 1fr);
+  gap: var(--space-2);
+}
+
+.draftExplanation dt,
+.draftExplanation dd {
+  margin: 0;
+  font-size: var(--text-caption);
+  line-height: 1.45;
+}
+
+.draftExplanation dt {
+  color: var(--text-subtle);
+  font-weight: var(--weight-medium);
+}
+
+.draftExplanation dd {
+  color: var(--text-default);
 }
 
 .reviewerVersion {
@@ -1287,6 +1767,55 @@
 
   .ticketHeaderActions {
     align-items: stretch;
+  }
+
+  .conversationArea {
+    padding-inline: var(--space-3);
+  }
+
+  .middleTabs {
+    padding-inline: var(--space-3);
+  }
+
+  .nextAction {
+    margin-inline: var(--space-3);
+  }
+
+  .message {
+    grid-template-columns: 30px minmax(0, 1fr);
+    gap: var(--space-2);
+  }
+
+  .timelineAvatar {
+    width: 28px;
+    height: 28px;
+  }
+
+  .message::before {
+    top: 28px;
+    left: 14px;
+  }
+
+  .messageBody {
+    font-size: var(--text-body);
+  }
+
+  .activityList li {
+    grid-template-columns: 62px 10px minmax(0, 1fr);
+    gap: var(--space-2);
+  }
+
+  .activityList li::before {
+    left: 75px;
+  }
+
+  .draftActions {
+    align-items: stretch;
+  }
+
+  .draftActionsStart,
+  .draftActionsEnd {
+    flex: 1 1 auto;
   }
 }
 

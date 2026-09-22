@@ -848,6 +848,8 @@ export interface TicketDetail {
    * ran, and present with null fields when one ran and settled on neither.
    */
   policy: TicketPolicy | null;
+  /** Latest investigation and its persisted tool-call ledger, newest first. */
+  activity: TicketActivityEvent[];
 }
 
 /** One attached file, as Graph described it. Metadata only — never the bytes. */
@@ -904,10 +906,33 @@ export interface TicketMessage {
   fromName: string | null;
   fromEmail: string | null;
   subject: string | null;
-  /** The cleaned plain-text body (`ticket_messages.body_text`). */
+  /** The stored plain-text body (`ticket_messages.body_text`), kept for original view. */
   body: string | null;
+  /** New content before deterministic quote and signature boundaries. */
+  bodyClean: string | null;
+  /** Previous replies carried under this message, hidden by default. */
+  quotedBody: string | null;
+  /** Conventional sign-off / boilerplate, hidden by default. */
+  signature: string | null;
+  /** Transported email thread for a forward, hidden by default. */
+  forwardedContent: string | null;
+  quotedMessageCount: number;
+  isForward: boolean;
+  /** Participant class derived from direction + sender directory, never an address. */
+  role: "customer" | "qiriness" | "internal" | "logistics" | "partner";
+  /** Human-readable recipient classes, with addresses discarded server-side. */
+  routeTo: string[];
   hasAttachments: boolean;
   at: string | null;
+}
+
+/** A persisted agent action projected for the middle panel's Activity tab. */
+export interface TicketActivityEvent {
+  id: string;
+  at: string | null;
+  title: string;
+  detail: string | null;
+  kind: "investigation" | "lookup";
 }
 
 /**

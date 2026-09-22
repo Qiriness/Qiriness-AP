@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent, ReactNode } from "react";
+import type { KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent, ReactNode, RefObject } from "react";
 import {
   AlertIcon,
   CheckCircleIcon,
@@ -9,9 +9,12 @@ import {
   ChevronLeftIcon,
   ClockIcon,
   CrownIcon,
+  MailInIcon,
   PencilIcon,
   PlusIcon,
   SearchIcon,
+  SendIcon,
+  SparkleIcon,
 } from "@/components/icons";
 import { Button } from "@/components/ui/Button";
 import { TrackingText } from "@/components/ui/TrackingText";
@@ -74,12 +77,6 @@ const VIEW_LABELS: Record<TicketView, string> = {
   backlog: "Backlog",
   irrelevant: "Irrelevant",
   closed: "Closed",
-};
-
-const DRAFT_HEADINGS: Record<string, string> = {
-  answerable: "AI draft",
-  needs_customer_input: "AI draft question",
-  needs_human: "AI draft acknowledgement",
 };
 
 const VERDICT_LABELS: Record<InvestigationVerdict, string> = {
@@ -1075,6 +1072,11 @@ function TicketDetailWorkspace({
   const frameRef = useRef<HTMLDivElement>(null);
   const headerRef = useRef<HTMLElement>(null);
   const [draftHeight, setDraftHeight] = useState<number | null>(readDraftHeight);
+  const [middleTab, setMiddleTab] = useState<"conversation" | "activity">("conversation");
+
+  useEffect(() => {
+    setMiddleTab("conversation");
+  }, [ticket.id]);
 
   // The panel may take everything except the header and a strip of conversation,
   // so the thread can be squeezed but never pushed off screen entirely.
@@ -1129,7 +1131,10 @@ function TicketDetailWorkspace({
 
   return (
     <div className={styles.detailFrame} ref={frameRef}>
-      <header className={styles.ticketHeader} ref={headerRef}>
+      {/* One block: title row, what has to happen next, and the tabs as its
+          bottom edge — three stacked bands read as three unrelated things. */}
+      <header className={styles.ticketHeaderBlock} ref={headerRef}>
+      <div className={styles.ticketHeader}>
         <button type="button" className={styles.mobileBack} onClick={onBack}>
           <ChevronLeftIcon size={15} />
           Back to tickets
@@ -1161,10 +1166,45 @@ function TicketDetailWorkspace({
             {closed ? "Reopen ticket" : "Close ticket"}
           </Button>
         </div>
+      </div>
+
+      {detail?.results?.action && (
+        <p className={styles.nextAction} title={detail.results.action}>
+          <span>Next action</span>
+          {detail.results.action}
+        </p>
+      )}
+
+      <div className={styles.middleTabs} role="tablist" aria-label="Ticket history">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={middleTab === "conversation"}
+          className={middleTab === "conversation" ? styles.middleTabActive : undefined}
+          onClick={() => setMiddleTab("conversation")}
+        >
+          Conversation
+          {thread && <span>{thread.messages.length}</span>}
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={middleTab === "activity"}
+          className={middleTab === "activity" ? styles.middleTabActive : undefined}
+          onClick={() => setMiddleTab("activity")}
+        >
+          Activity
+          {detail && thread && <span>{activityItems(detail, thread).length}</span>}
+        </button>
+      </div>
       </header>
 
       <div className={styles.conversationArea}>
-        <ConversationThread thread={thread} error={threadError} />
+        {middleTab === "conversation" ? (
+          <ConversationThread thread={thread} error={threadError} />
+        ) : (
+          <ActivityTimeline detail={detail} thread={thread} error={detailError || threadError} />
+        )}
       </div>
 
       {/* Drag up to read more of the draft, down to read more of the thread.
@@ -1196,6 +1236,7 @@ function TicketDetailWorkspace({
 }
 
 function ConversationThread({ thread, error }: { thread: TicketThread | null; error: string | null }) {
+  const latestRef = useRef<HTMLLIElement>(null);
   if (error) {
     return <p className={styles.inlineError} role="alert">{error}</p>;
   }
@@ -1209,16 +1250,151 @@ function ConversationThread({ thread, error }: { thread: TicketThread | null; er
   return (
     <section className={styles.threadSection} aria-label="Conversation thread">
       <div className={styles.sectionHead}>
-        <h3>Conversation thread</h3>
-        <span>{thread.messages.length} message{thread.messages.length === 1 ? "" : "s"}</span>
+        <h3>Conversation</h3>
+        <button type="button" className={styles.jumpLatest} onClick={() => latestRef.current?.scrollIntoView({ behavior: "smooth", block: "end" })}>
+          Jump to latest
+        </button>
       </div>
-      <ol className={styles.messages}>
-        {thread.messages.map((message) => (
-          <MessageBlock key={message.id} message={message} parcels={thread.parcels} />
+      <div className={styles.dateGroups}>
+        {groupMessagesByDate(thread.messages).map((group) => (
+          <section className={styles.dateGroup} key={group.key} aria-label={group.label}>
+            <div className={styles.dateDivider}>
+              <time dateTime={group.key}>{group.label}</time>
+            </div>
+            <ol className={styles.messages}>
+              {group.messages.map((message, index) => (
+                <MessageBlock
+                  key={message.id}
+                  message={message}
+                  parcels={thread.parcels}
+                  itemRef={group.isLast && index === group.messages.length - 1 ? latestRef : undefined}
+                />
+              ))}
+            </ol>
+          </section>
         ))}
+      </div>
+    </section>
+  );
+}
+
+type ActivityKind = "inbound" | "outbound" | "lookup" | "investigation" | "draft";
+
+type ActivityItem = {
+  id: string;
+  at: string | null;
+  title: string;
+  detail: string | null;
+  kind: ActivityKind;
+};
+
+const ACTIVITY_ICONS: Record<ActivityKind, (props: { size?: number }) => ReactNode> = {
+  inbound: MailInIcon,
+  outbound: SendIcon,
+  lookup: SearchIcon,
+  investigation: SparkleIcon,
+  draft: PencilIcon,
+};
+
+const ACTIVITY_KIND_LABELS: Record<ActivityKind, string> = {
+  inbound: "Email received",
+  outbound: "Email sent",
+  lookup: "Agent lookup",
+  investigation: "Agent analysis",
+  draft: "AI draft",
+};
+
+function ActivityTimeline({
+  detail,
+  thread,
+  error,
+}: {
+  detail: TicketDetail | null;
+  thread: TicketThread | null;
+  error: string | null;
+}) {
+  if (error) return <p className={styles.inlineError} role="alert">{error}</p>;
+  if (!detail || !thread) return <ThreadSkeleton />;
+
+  const events = activityItems(detail, thread);
+
+  if (events.length === 0) {
+    return <CompactEmpty title="No activity yet" body="Emails in and out, agent lookups, case analysis and draft generation will appear here." />;
+  }
+
+  return (
+    <section className={styles.activitySection} aria-label="Ticket activity">
+      <div className={styles.sectionHead}>
+        <div>
+          <h3>Activity</h3>
+          <p>Every email in and out, and what the agent did in between, oldest first.</p>
+        </div>
+      </div>
+      <ol className={styles.activityList}>
+        {events.map((event) => {
+          const Icon = ACTIVITY_ICONS[event.kind];
+          return (
+            <li key={event.id} className={styles[`activity_${event.kind}`]}>
+              <time dateTime={event.at ?? undefined}>{formatEventTime(event.at)}</time>
+              <span className={styles.activityIcon} title={ACTIVITY_KIND_LABELS[event.kind]}>
+                <Icon size={14} />
+                <span className="sr-only">{ACTIVITY_KIND_LABELS[event.kind]}</span>
+              </span>
+              <div className={styles.activityText}>
+                <strong>{event.title}</strong>
+                {event.detail && <p>{event.detail}</p>}
+              </div>
+            </li>
+          );
+        })}
       </ol>
     </section>
   );
+}
+
+/**
+ * The conversation's emails and the agent's persisted actions on one clock,
+ * oldest first. The sort is stable, and the server lists the lookups before
+ * the analysis that used them — they share the investigation's timestamp, as
+ * the tool-call ledger keeps no time of its own.
+ */
+function activityItems(detail: TicketDetail, thread: TicketThread): ActivityItem[] {
+  const messages: ActivityItem[] = thread.messages.map((message) => {
+    const inbound = message.direction === "inbound";
+    const name = senderDisplayName(message);
+    const role = MESSAGE_ROLE_LABELS[message.role];
+    const who = inbound && message.role !== "customer" ? `${name} (${role})` : name;
+    return {
+      id: `message-${message.id}`,
+      at: message.at,
+      title: inbound
+        ? `${message.isForward ? "Forwarded email" : "Email"} received from ${who}`
+        : `Email sent by ${who}`,
+      detail: messageSnippet(message),
+      kind: inbound ? "inbound" : "outbound",
+    };
+  });
+
+  const draft: ActivityItem[] = thread.draft
+    ? [{
+        id: `draft-${thread.draft.id}`,
+        at: thread.draft.draftedAt,
+        title: "AI draft generated",
+        detail: draftStatusText(thread.draft),
+        kind: "draft",
+      }]
+    : [];
+
+  return [...messages, ...detail.activity, ...draft].sort(
+    (a, b) => (Date.parse(a.at ?? "") || 0) - (Date.parse(b.at ?? "") || 0)
+  );
+}
+
+function messageSnippet(message: TicketMessage): string | null {
+  const text = (message.bodyClean ?? "").replace(/\s+/g, " ").trim();
+  const attachment = message.hasAttachments ? " · Attachment" : "";
+  if (!text) return message.hasAttachments ? "Attachment" : null;
+  return `${text.length > 140 ? `${text.slice(0, 140).trimEnd()}…` : text}${attachment}`;
 }
 
 function DraftResponsePanel({
@@ -1277,10 +1453,15 @@ function DraftResponsePanel({
     >
       <div className={styles.draftHead}>
         <div>
-          <h3>{DRAFT_HEADINGS[draft?.sourceVerdict ?? "answerable"]}</h3>
+          <h3>Reply to {requesterName(ticket)}</h3>
           {draft && <p>{draftStatusText(draft)}</p>}
         </div>
-        {draft && <span className={styles.draftStatus}>{draft.status}</span>}
+        {draft && (
+          <div className={styles.draftLabels}>
+            <span className={styles.aiDraftLabel}>AI draft</span>
+            <span className={styles.draftStatus}>{draft.status}</span>
+          </div>
+        )}
       </div>
 
       {thread?.duplicateOf && (
@@ -1299,6 +1480,13 @@ function DraftResponsePanel({
         <DraftSkeleton />
       ) : draft ? (
         <>
+          {detail?.results?.action && (
+            <div className={styles.requiredAction}>
+              <span>Required before sending</span>
+              <p><span aria-hidden="true">●</span> {detail.results.action}</p>
+            </div>
+          )}
+
           {!draft.checksPassed && (
             <p className={styles.blocked} role="alert">
               Not sendable - {draft.failedChecks.length || "some"} mechanical {draft.failedChecks.length === 1 ? "check" : "checks"} failed:{" "}
@@ -1350,23 +1538,27 @@ function DraftResponsePanel({
                 </>
               ) : (
                 <>
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    disabled={saving !== null}
-                    onClick={() => {
-                      setEdited(draft.approvedBody ?? draft.body);
-                      setEditing(true);
-                    }}
-                  >
-                    Edit draft
-                  </Button>
-                  <Button size="sm" variant="secondary" loading={saving === "rejected"} disabled={saving !== null} onClick={() => decide("rejected")}>
-                    Reject
-                  </Button>
-                  <Button size="sm" variant="primary" loading={saving === "approved"} disabled={saving !== null} onClick={() => decide("approved")}>
-                    Approve
-                  </Button>
+                  <span className={styles.draftActionsStart}>
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      disabled={saving !== null}
+                      onClick={() => {
+                        setEdited(draft.approvedBody ?? draft.body);
+                        setEditing(true);
+                      }}
+                    >
+                      Edit
+                    </Button>
+                  </span>
+                  <span className={styles.draftActionsEnd}>
+                    <Button size="sm" variant="secondary" loading={saving === "rejected"} disabled={saving !== null} onClick={() => decide("rejected")}>
+                      Reject
+                    </Button>
+                    <Button size="sm" variant="primary" loading={saving === "approved"} disabled={saving !== null} onClick={() => decide("approved")}>
+                      Approve
+                    </Button>
+                  </span>
                 </>
               )}
             </div>
@@ -1377,6 +1569,8 @@ function DraftResponsePanel({
             )}
           </div>
 
+          <DraftExplanation detail={detail} draft={draft} />
+
           {decideError && <p className={styles.inlineError} role="alert">{decideError}</p>}
         </>
       ) : (
@@ -1386,10 +1580,43 @@ function DraftResponsePanel({
       )}
 
       {detailError && <p className={styles.inlineError} role="alert">{detailError}</p>}
-      {!detailError && detail?.results?.action && (
-        <p className={styles.draftContext}>Required action: {detail.results.action}</p>
-      )}
     </section>
+  );
+}
+
+function DraftExplanation({ detail, draft }: { detail: TicketDetail | null; draft: TicketDraft }) {
+  const sources = [
+    detail?.order?.orderName ? `Order ${detail.order.orderName}` : null,
+    ...(detail?.order?.tracking ?? []).map((parcel) => `Tracking ${parcel.number}`),
+    detail?.results ? "Case investigation" : null,
+  ].filter((value): value is string => Boolean(value));
+
+  return (
+    <details className={styles.draftExplanation}>
+      <summary>ⓘ Why this response?</summary>
+      <dl>
+        <div>
+          <dt>Situation</dt>
+          <dd>{detail?.results?.headline ?? "No case analysis yet"}</dd>
+        </div>
+        <div>
+          <dt>State</dt>
+          <dd>{VERDICT_LABELS[draft.sourceVerdict]}</dd>
+        </div>
+        {detail?.results?.action && (
+          <div>
+            <dt>Missing action</dt>
+            <dd>{detail.results.action}</dd>
+          </div>
+        )}
+        {sources.length > 0 && (
+          <div>
+            <dt>Sources used</dt>
+            <dd>{sources.join(" · ")}</dd>
+          </div>
+        )}
+      </dl>
+    </details>
   );
 }
 
@@ -1953,28 +2180,172 @@ function TicketLevelBadge({ ticket }: { ticket: TicketListItem }) {
   );
 }
 
-function MessageBlock({ message, parcels }: { message: TicketMessage; parcels: TicketTracking[] }) {
-  const outbound = message.direction === "outbound";
-  const sender = senderIdentity(message, outbound);
+function MessageBlock({
+  message,
+  parcels,
+  itemRef,
+}: {
+  message: TicketMessage;
+  parcels: TicketTracking[];
+  itemRef?: RefObject<HTMLLIElement>;
+}) {
+  const role = MESSAGE_ROLE_LABELS[message.role];
+  const route = message.routeTo.length > 0 ? `${role} → ${message.routeTo.join(" + ")}` : null;
+  const entities = messageEntities(message, parcels);
 
   return (
-    <li className={`${styles.message} ${outbound ? styles.outbound : styles.inbound}`}>
-      <div className={styles.messageHead}>
-        <span className={styles.sender}>{sender.name}</span>
-        {sender.email && <span className={styles.senderEmail}>{sender.email}</span>}
-        <span className={styles.direction}>{outbound ? "Sent" : "Received"}</span>
-        {message.at && <time className={styles.when} dateTime={message.at}>{formatRelativeTime(message.at)}</time>}
-        {message.hasAttachments && <span className={styles.attachment}>Has attachments</span>}
-      </div>
-      {message.body?.trim() ? (
-        <pre className={styles.messageBody}>
-          <TrackingText text={message.body} parcels={parcels} />
-        </pre>
-      ) : (
-        <p className={styles.placeholder}>No body stored for this message.</p>
-      )}
+    <li className={styles.message} ref={itemRef}>
+      <span className={`${styles.timelineAvatar} ${styles[`role_${message.role}`]}`} aria-hidden="true">
+        {senderInitials(message)}
+      </span>
+      <article className={styles.messageContent}>
+        <header className={styles.messageHead}>
+          <div className={styles.senderLine}>
+            <span className={styles.sender}>{senderDisplayName(message)}</span>
+            <span className={`${styles.roleBadge} ${styles[`role_${message.role}`]}`}>{role}</span>
+            {message.hasAttachments && <span className={styles.attachment}>Attachment</span>}
+          </div>
+          {message.at && <time className={styles.when} dateTime={message.at}>{formatExactTime(message.at)}</time>}
+        </header>
+
+        {route && <p className={styles.messageRoute}>{message.isForward ? `Forwarded message · ${route}` : route}</p>}
+
+        {message.bodyClean?.trim() ? (
+          <pre className={styles.messageBody}>
+            <TrackingText text={message.bodyClean} parcels={parcels} />
+          </pre>
+        ) : message.isForward ? (
+          <p className={styles.forwardLabel}>Forwarded email</p>
+        ) : (
+          <p className={styles.placeholder}>No body stored for this message.</p>
+        )}
+
+        {entities.length > 0 && (
+          <div className={styles.entityList} aria-label="Operational references">
+            {entities.map((entity) => (
+              <span className={styles.entityChip} key={`${entity.kind}-${entity.value}`}>
+                {entity.kind === "tracking" ? (
+                  <TrackingText text={`Tracking ${entity.value}`} parcels={parcels} />
+                ) : (
+                  `${entity.label} ${entity.value}`
+                )}
+              </span>
+            ))}
+          </div>
+        )}
+
+        <div className={styles.messageDisclosures}>
+          {message.quotedBody && (
+            <details>
+              <summary>↳ Show {message.quotedMessageCount} quoted message{message.quotedMessageCount === 1 ? "" : "s"}</summary>
+              <pre><TrackingText text={message.quotedBody} parcels={parcels} /></pre>
+            </details>
+          )}
+          {message.forwardedContent && (
+            <details>
+              <summary>View forwarded content</summary>
+              <pre><TrackingText text={message.forwardedContent} parcels={parcels} /></pre>
+            </details>
+          )}
+          {message.signature && (
+            <details>
+              <summary>Show signature</summary>
+              <pre>{message.signature}</pre>
+            </details>
+          )}
+          {message.body && (
+            <details>
+              <summary>View original email</summary>
+              <pre><TrackingText text={message.body} parcels={parcels} /></pre>
+            </details>
+          )}
+        </div>
+      </article>
     </li>
   );
+}
+
+const MESSAGE_ROLE_LABELS: Record<TicketMessage["role"], string> = {
+  customer: "Customer",
+  qiriness: "Qiriness",
+  internal: "Internal",
+  logistics: "Logistics",
+  partner: "Partner",
+};
+
+function senderDisplayName(message: TicketMessage): string {
+  if (message.role === "qiriness") {
+    const stored = message.fromName?.trim().toLowerCase() ?? "";
+    if (!stored || stored === "contact" || stored.includes("service client") || stored.includes("support")) {
+      return "Qiriness";
+    }
+  }
+  return senderIdentity(message, message.direction === "outbound").name;
+}
+
+function senderInitials(message: TicketMessage): string {
+  const name = senderDisplayName(message).replace(/[^\p{L}\p{N} ]/gu, " ").trim();
+  const parts = name.split(/\s+/).filter(Boolean);
+  return (parts.length > 1 ? `${parts[0][0]}${parts[parts.length - 1][0]}` : parts[0]?.slice(0, 2) || "?").toUpperCase();
+}
+
+function groupMessagesByDate(messages: TicketMessage[]) {
+  const groups: { key: string; label: string; messages: TicketMessage[]; isLast: boolean }[] = [];
+  for (const message of messages) {
+    const date = message.at ? new Date(message.at) : null;
+    const valid = date && !Number.isNaN(date.getTime());
+    // The local day, matching the label: a UTC key splits a 00:30 Paris message
+    // off from the rest of its day under a duplicate divider.
+    const key = valid
+      ? `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`
+      : "undated";
+    const label = valid
+      ? new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: date.getFullYear() === new Date().getFullYear() ? undefined : "numeric" }).format(date).toUpperCase()
+      : "DATE UNKNOWN";
+    const previous = groups[groups.length - 1];
+    if (previous?.key === key) previous.messages.push(message);
+    else groups.push({ key, label, messages: [message], isLast: false });
+  }
+  if (groups.length > 0) groups[groups.length - 1].isLast = true;
+  return groups;
+}
+
+function formatExactTime(value: string): string {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? "" : new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit", hour12: false }).format(date);
+}
+
+function formatEventTime(value: string | null): string {
+  if (!value) return "—";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "—";
+  return new Intl.DateTimeFormat("en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", hour12: false }).format(date);
+}
+
+
+function messageEntities(message: TicketMessage, parcels: TicketTracking[]) {
+  const text = message.bodyClean ?? "";
+  const entities: { kind: "order" | "reference" | "tracking" | "carrier"; label: string; value: string }[] = [];
+  const seen = new Set<string>();
+  const add = (kind: "order" | "reference" | "tracking" | "carrier", label: string, value: string) => {
+    const key = `${kind}:${value.toLowerCase()}`;
+    if (!seen.has(key)) {
+      seen.add(key);
+      entities.push({ kind, label, value });
+    }
+  };
+
+  for (const match of text.matchAll(/(?:commande|order)\s*(?:n[°ºo.]?\s*)?#?\s*(\d{4,})|#(\d{4,})/gi)) {
+    add("order", "Order", `#${match[1] ?? match[2]}`);
+  }
+  for (const match of text.matchAll(/\b(Q\d{2}\s?\d{6,})\b/gi)) add("reference", "Reference", match[1]);
+  for (const parcel of parcels) {
+    if (text.toLowerCase().includes(parcel.number.toLowerCase())) {
+      add("tracking", "Tracking", parcel.number);
+      if (parcel.carrier) add("carrier", "Carrier", parcel.carrier);
+    }
+  }
+  return entities.slice(0, 5);
 }
 
 function senderIdentity(message: TicketMessage, outbound: boolean): { name: string; email: string | null } {

@@ -37,6 +37,7 @@ import {
 import { createTicketRecord } from "../../../scripts/lib/ticket-record.mjs";
 import { parseTrackingCandidates } from "../../../agent/src/resolution/tracking-number-parser.mjs";
 import { normaliseTrackingNumber } from "../../../scripts/lib/tracking-number.mjs";
+import { parseEmailForDisplay } from "../../../scripts/lib/email-display.mjs";
 import { createDraftRecord } from "../../../scripts/lib/draft-record.mjs";
 import {
   listTicketAttachments,
@@ -59,6 +60,7 @@ import type {
   KnowledgeCategory,
   ResponsibleTeam,
   TicketAttachments,
+  TicketActivityEvent,
   TicketDetail,
   TicketPolicy,
   TicketDraft,
@@ -328,7 +330,7 @@ export async function getTicketDetail(shopId: string, ticketId: string): Promise
   if (!row) {
     // No case file: the order facts may still exist, because the resolution pass
     // writes them for tickets the agent never investigated. Facts cannot.
-    return { ticketId, orderNumber, orderId, results: null, order, facts: [], attachments, policy: null };
+    return { ticketId, orderNumber, orderId, results: null, order, facts: [], attachments, policy: null, activity: [] };
   }
 
   return {
@@ -352,7 +354,56 @@ export async function getTicketDetail(shopId: string, ticketId: string): Promise
       investigatedAt: row.investigated_at ?? null,
     }),
     policy: summarisePolicy(row.exemplar_match),
+    activity: summariseActivity(row),
   };
+}
+
+function summariseActivity(row: any): TicketActivityEvent[] {
+  const at = row.investigated_at ?? null;
+  const calls = Array.isArray(row.tool_calls) ? row.tool_calls : [];
+  const lookups = calls.map((call: any, index: number) => ({
+    id: `lookup-${String(call?.id ?? index)}`,
+    at,
+    title: `${toolLabel(call?.tool)} completed`,
+    detail: call?.outcome ? String(call.outcome).replace(/_/g, " ") : null,
+    kind: "lookup" as const,
+  }));
+  return [
+    ...lookups,
+    {
+      id: `investigation-${at ?? "latest"}`,
+      at,
+      title: "Case analysis completed",
+      detail: row.verdict ? VERDICT_ACTIVITY_LABELS[String(row.verdict)] ?? String(row.verdict) : null,
+      kind: "investigation" as const,
+    },
+  ];
+}
+
+const VERDICT_ACTIVITY_LABELS: Record<string, string> = {
+  answerable: "Ready for a reply",
+  needs_customer_input: "Waiting for customer information",
+  needs_human: "Human action required",
+};
+
+const TOOL_ACTIVITY_LABELS: Record<string, string> = {
+  getOrderContext: "Order lookup",
+  lookupOrder: "Order lookup",
+  lookupShipment: "Shipment lookup",
+  lookupTracking: "Shipment lookup",
+  lookupCustomer: "Customer lookup",
+  lookupPromotion: "Promotion lookup",
+  lookupProduct: "Product lookup",
+  searchKnowledge: "Knowledge lookup",
+  recommendProducts: "Product recommendation lookup",
+  lookupAbandonedCheckout: "Checkout lookup",
+  checkPhotoEvidence: "Photo evidence check",
+};
+
+function toolLabel(value: unknown): string {
+  const key = String(value ?? "").trim();
+  if (!key) return "Tool lookup";
+  return TOOL_ACTIVITY_LABELS[key] ?? key.replace(/([a-z0-9])([A-Z])/g, "$1 $2").replace(/_/g, " ");
 }
 
 /**
@@ -410,20 +461,21 @@ function summarisePolicy(exemplarMatch: unknown): TicketPolicy | null {
 export async function getTicketThread(shopId: string, ticketId: string): Promise<TicketThread> {
   const record = getRecord(shopId);
 
-  const [ticketRow, messageRows, draftRow] = await Promise.all([
+  const [ticketRow, messageRows, draftRow, directory] = await Promise.all([
     record.findForThread(ticketId),
     record.thread(ticketId),
     // Read alongside the thread rather than in the panel: the draft is what an
     // operator is deciding about, and a dialog that renders the conversation
     // first and the draft a moment later reads as the draft being missing.
     getDraftRecord(shopId).forTicket(ticketId),
+    readSenderDirectory(shopId),
   ]);
 
   if (!ticketRow) {
     throw new KnowledgeNotFoundError(`Ticket not found: ${ticketId}`);
   }
 
-  const messages = (messageRows as any[]).map(mapMessageRow).sort(byTimeAsc);
+  const messages = (messageRows as any[]).map((row) => mapMessageRow(row, directory)).sort(byTimeAsc);
   const draft = draftRow ? mapDraftRow(draftRow) : null;
 
   // The confirmed order's parcels come through the same projection the detail
@@ -690,7 +742,13 @@ function byTimeAsc(a: TicketMessage, b: TicketMessage): number {
   return (Date.parse(a.at ?? "") || 0) - (Date.parse(b.at ?? "") || 0);
 }
 
-function mapMessageRow(row: any): TicketMessage {
+function mapMessageRow(row: any, directory: any): TicketMessage {
+  const display = parseEmailForDisplay(row.body_text ?? null);
+  const role = messageRole(row, directory);
+  const recipients = [
+    ...(Array.isArray(row.to_emails) ? row.to_emails : []),
+    ...(Array.isArray(row.cc_emails) ? row.cc_emails : []),
+  ];
   return {
     id: row.id,
     direction: row.direction === "outbound" ? "outbound" : "inbound",
@@ -698,11 +756,46 @@ function mapMessageRow(row: any): TicketMessage {
     fromEmail: row.from_email ?? null,
     subject: row.subject ?? null,
     body: row.body_text ?? null,
+    bodyClean: display.bodyClean,
+    quotedBody: display.quotedBody,
+    signature: display.signature,
+    forwardedContent: display.forwardedContent,
+    quotedMessageCount: display.quotedMessageCount,
+    isForward: display.isForward,
+    role,
+    routeTo: [
+      ...new Set(
+        recipients
+          .map((email) => recipientRole(String(email ?? ""), directory))
+          .filter((label): label is string => Boolean(label))
+      ),
+    ].filter((label) => !(role === "qiriness" && label === "Qiriness")),
     hasAttachments: Boolean(row.has_attachments),
     // Our own replies carry `sent_at` and nothing else; inbound carries
     // `received_at`. One column would leave half the thread undated.
     at: row.received_at ?? row.sent_at ?? null,
   };
+}
+
+function messageRole(row: any, directory: any): TicketMessage["role"] {
+  if (row.direction === "outbound") return "qiriness";
+  const label = directory.lookup(row.from_email ?? null)?.label ?? null;
+  if (label === "internal" || label === "contractor") return "internal";
+  if (label === "logistics" || label === "courier") return "logistics";
+  if (["retailer", "distributor", "supplier", "partner"].includes(label)) return "partner";
+  return "customer";
+}
+
+function recipientRole(email: string, directory: any): string | null {
+  const normalised = email.trim().toLowerCase();
+  if (!normalised) return null;
+  const mailbox = String(process.env.SUPPORT_MAILBOX ?? "").trim().toLowerCase();
+  if (mailbox && normalised === mailbox) return "Qiriness";
+  const label = directory.lookup(normalised)?.label ?? null;
+  if (label === "internal" || label === "contractor") return "Internal";
+  if (label === "logistics" || label === "courier") return "Logistics";
+  if (["retailer", "distributor", "supplier", "partner"].includes(label)) return "Partner";
+  return "Customer";
 }
 
 /**

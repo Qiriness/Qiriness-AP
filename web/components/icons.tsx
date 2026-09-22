@@ -182,6 +182,24 @@ export const SparkleIcon = (p: IconProps) => (
   </Base>
 );
 
+/** An envelope with an arrow coming in: mail received. */
+export const MailInIcon = (p: IconProps) => (
+  <Base {...p}>
+    <path d="M20 12.5V17a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 17V7a1.5 1.5 0 0 1 1.5-1.5H12" />
+    <path d="m4.5 7 7.5 5.5 3-2.2" />
+    <path d="M20.5 3.5 16 8" />
+    <path d="M16 4.5V8h3.5" />
+  </Base>
+);
+
+/** A paper plane: mail sent. */
+export const SendIcon = (p: IconProps) => (
+  <Base {...p}>
+    <path d="M20.5 3.5 3.5 10.5l7 3 3 7 7-17Z" />
+    <path d="M20.5 3.5 10.5 13.5" />
+  </Base>
+);
+
 export const PageIcon = (p: IconProps) => (
   <Base {...p}>
     <path d="M6.5 3.5h7l4 4V19a1.5 1.5 0 0 1-1.5 1.5H6.5A1.5 1.5 0 0 1 5 19V5A1.5 1.5 0 0 1 6.5 3.5Z" />
