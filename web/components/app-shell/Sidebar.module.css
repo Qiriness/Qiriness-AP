@@ -242,3 +242,12 @@
 .flip {
   transform: scaleX(-1);
 }
+
+/* In the drawer the menu is always full width (AppShell passes `collapsed` as
+   false while the drawer is open), so the toggle would do nothing visible there.
+   860px is the breakpoint AppShell.module.css turns the sidebar into a drawer at. */
+@media (max-width: 860px) {
+  .collapseBtn {
+    display: none;
+  }
+}

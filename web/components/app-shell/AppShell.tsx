@@ -26,7 +26,10 @@ function toLogin() {
 }
 
 export function AppShell({ activeHref, children, openConversations, openTickets, unfulfilledOrders }: AppShellProps) {
-  const [collapsed, setCollapsed] = useState(false);
+  // Collapsed to the icon rail by default, so the page gets the width. Not read
+  // from storage, so the server and the first client render agree and there is
+  // no flash of the expanded menu.
+  const [collapsed, setCollapsed] = useState(true);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [me, setMe] = useState<Me | null>(null);
   const router = useRouter();
@@ -91,7 +94,12 @@ export function AppShell({ activeHref, children, openConversations, openTickets,
       <aside className={`${styles.sidebarSlot} ${drawerOpen ? styles.drawerOpen : ""}`}>
         <Sidebar
           activeHref={target?.href ?? activeHref}
-          collapsed={collapsed}
+          // THE DRAWER IS ALWAYS FULL WIDTH. On a narrow screen the sidebar only
+          // appears as a slide-over drawer, and a rail of unlabelled icons there
+          // would be the collapsed default leaking into the one place it is
+          // wrong. `drawerOpen` is never true on desktop, so this changes nothing
+          // there.
+          collapsed={collapsed && !drawerOpen}
           onToggleCollapse={() => setCollapsed((c) => !c)}
           onNavigate={navigate}
           openConversations={openConversations}
