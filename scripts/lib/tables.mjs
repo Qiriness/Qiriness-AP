@@ -168,6 +168,9 @@ export const RPC = {
   INSIGHTS_MARKETING_SERIES: 'insights_marketing_series',
   INSIGHTS_MARKETING_SUMMARY: 'insights_marketing_summary',
   INSIGHTS_CAPTURE_SERIES: 'insights_capture_series',
+  INSIGHTS_SALES_OVERVIEW: 'insights_sales_overview',
+  INSIGHTS_PROMOTIONS: 'insights_promotions',
+  INSIGHTS_INVENTORY_EXCEPTIONS: 'insights_inventory_exceptions',
 
   // 06_analytics — THE VIP RULE. vip_customers() is the one place it is written;
   // the thresholds come from shops via scripts/lib/vip-rule.mjs.
