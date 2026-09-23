@@ -43,13 +43,9 @@ import { INVENTORY_STATUS_LABELS, averageOrderValue, revenueBridge, revenueDrive
  *
  * @typedef {{
  *   month: string, label: string, inProgress: boolean, generatedAt: string, timezone: string,
- *   compare: { mom: string, yoy: string, six: string, sixLabel: string },
- *   periods: { current: ReportPeriod, mom: ReportPeriod | null, yoy: ReportPeriod | null, six: ReportPeriod | null, sixPrevious: ReportPeriod | null },
- *   collections: { collectionId: string | null, title: string, products: number, orders: number, revenue: number, previousRevenue: number | null }[],
- *   productRevenue: number,
+ *   modes: { mom: ReportMode, yoy: ReportMode, six: ReportMode },
  *   trend: { key: string, label: string, revenue: number | null, orders: number | null }[],
  *   platforms: { label: string, revenue: number, orders: number }[],
- *   products: { title: string, revenue: number, orders: number, units: number, previousRevenue: number | null }[],
  *   promotions: { name: string | null, kind: string | null, target: string | null, orders: number, revenue: number, discount: number, newCustomerOrders: number | null }[],
  *   funnel: { key: string, label: string, value: number | null, ofEntry: number | null, ofPrevious: number | null }[],
  *   channels: { channel: string, sessions: number | null, revenue: number | null, orders: number | null, conversionRate: number | null, revenuePerSession: number | null }[],
@@ -58,6 +54,15 @@ import { INVENTORY_STATUS_LABELS, averageOrderValue, revenueBridge, revenueDrive
  *   carriers: { carrier: string, shipments: number, p50Hours: number | null, over72h: number }[],
  *   signals: { tone: string, title: string, detail: string }[]
  * }} SalesReportData
+ *
+ * @typedef {{
+ *   label: string, currentLabel: string, comparisonLabel: string, offset: number,
+ *   period: ReportPeriod | null, comparison: ReportPeriod | null,
+ *   products: null | { comparable: boolean, revenue: ReportProduct[], growth: ReportProduct[], decline: ReportProduct[], productRevenue: number },
+ *   collections: null | { collectionId: string | null, title: string, products: number, orders: number, revenue: number, previousRevenue: number | null }[]
+ * }} ReportMode
+ *
+ * @typedef {{ title: string, revenue: number, orders: number, units: number, previousRevenue: number | null }} ReportProduct
  */
 
 // --- formatting -----------------------------------------------------------------
@@ -115,31 +120,34 @@ function deltaChip(value, { points = false, absolute = false, polarity = 'up' } 
 }
 
 /**
- * The same chip against each comparison; CSS shows the one the switch selects.
+ * The change between two figures of the same kind, as a chip.
  *
- * MoM AND YoY COMPARE THE MONTH. 6M compares the six months ending with it
- * against the six before, so its FIGURE differs too — `values()` below renders
- * that, and the two must be switched together or the card would show a month's
- * revenue against a half-year's change.
+ * EVERY SECTION IS RENDERED ONCE PER COMPARISON (see `perMode`), so nothing
+ * here needs to know which switch is showing — it is handed the period and the
+ * period it is compared with. A missing comparison says "no comparison" rather
+ * than printing a dash that could be read as zero.
  */
-function deltas(current, mom, yoy, options = {}, six = undefined, sixPrevious = undefined) {
-  const diff = (value, other) =>
-    value === null || value === undefined || other === null || other === undefined
-      ? null
-      : options.points || options.absolute
-        ? value - other
-        : rel(value, other);
-  const sixChip = six === undefined ? deltaChip(null, options) : deltaChip(diff(six, sixPrevious), options);
-  return [
-    `<span data-cmp="mom">${deltaChip(diff(current, mom), options)}</span>`,
-    `<span data-cmp="yoy">${deltaChip(diff(current, yoy), options)}</span>`,
-    `<span data-cmp="six">${sixChip}</span>`
-  ].join('');
+function chip(current, previous, options = {}) {
+  if (current === null || current === undefined || previous === null || previous === undefined) {
+    return deltaChip(null, options);
+  }
+  const value = options.points || options.absolute ? current - previous : rel(current, previous);
+  return deltaChip(value, options);
 }
 
-/** A figure that changes with the switch: the month's, and the six months'. */
-function values(month, six) {
-  return `<span data-cmp="mom">${month}</span><span data-cmp="yoy">${month}</span><span data-cmp="six">${six}</span>`;
+/** The three comparisons, in the order the switch offers them. */
+const MODES = ['mom', 'yoy', 'six'];
+
+/**
+ * One block per comparison, each wrapped so CSS can show the selected one.
+ *
+ * The whole block is repeated rather than just its chips, because the
+ * six-month view reports a different PERIOD — a half-year's figures, not the
+ * month's — and a card showing the month's revenue above a half-year's change
+ * would be the most confident wrong thing on the page.
+ */
+function perMode(data, render) {
+  return MODES.map((key) => `<div data-cmp="${key}">${render(data.modes[key], data)}</div>`).join('');
 }
 
 // --- derived figures ------------------------------------------------------------
@@ -166,58 +174,62 @@ function kpiCard(label, value, deltaHtml, blocked) {
   return `<article class="card kpi"><div class="kpi-label">${escapeHtml(label)}</div><div class="kpi-value">${value}</div>${deltaHtml}</article>`;
 }
 
-function kpis(data) {
-  const { current: c, mom: m, yoy: y, six: s6, sixPrevious: p6 } = data.periods;
+function kpis(mode) {
+  const c = mode.period;
+  const p = mode.comparison;
+  if (!c) {
+    return `<div class="notice"><span><b>No ${escapeHtml(mode.label)} figures:</b> the order history does not reach ${escapeHtml(mode.currentLabel)}.</span></div>`;
+  }
   const cards = [
-    // SHOPIFY'S OWN TOTAL where it answered. Our `revenue` is the same figure —
-    // both are total sales — but ours subtracts a refund from the order it was
-    // issued against while Shopify dates it to the refund, so a month with
-    // returns differs by a few euros (August 2025: 17,598.78 against 17,656).
-    // The report is read beside the admin, so the admin's number wins here, and
-    // it keeps the card consistent with the bridge below it.
-    kpiCard(
-      'Total sales',
-      values(money(totalOf(c)), money(totalOf(s6))),
-      deltas(totalOf(c), totalOf(m), totalOf(y), {}, totalOf(s6), totalOf(p6))
-    ),
+    kpiCard('Total sales', money(totalOf(c)), chip(totalOf(c), totalOf(p))),
     kpiCard(
       'Net sales',
-      values(money(c.netSales), money(s6?.netSales)),
-      deltas(c.netSales, m?.netSales, y?.netSales, {}, s6?.netSales, p6?.netSales),
+      money(c.netSales),
+      chip(c.netSales, p?.netSales),
       c.netSales === null ? 'Shopify Analytics could not be read' : undefined
     ),
-    kpiCard('Orders', values(num(c.paidOrders), num(s6?.paidOrders)), deltas(c.paidOrders, m?.paidOrders, y?.paidOrders, {}, s6?.paidOrders, p6?.paidOrders)),
-    kpiCard('Units sold', values(num(c.units), num(s6?.units)), deltas(c.units, m?.units, y?.units, {}, s6?.units, p6?.units)),
-    kpiCard('AOV', values(money(aovOf(c), true), money(aovOf(s6), true)), deltas(aovOf(c), aovOf(m), aovOf(y), {}, aovOf(s6), aovOf(p6))),
-    kpiCard(
-      'Refund rate',
-      values(pct(refundRateOf(c)), pct(refundRateOf(s6))),
-      deltas(refundRateOf(c), refundRateOf(m), refundRateOf(y), { points: true, polarity: 'down' }, refundRateOf(s6), refundRateOf(p6))
-    ),
+    kpiCard('Orders', num(c.paidOrders), chip(c.paidOrders, p?.paidOrders)),
+    kpiCard('Units sold', num(c.units), chip(c.units, p?.units)),
+    kpiCard('AOV', money(aovOf(c), true), chip(aovOf(c), aovOf(p))),
+    kpiCard('Refund rate', pct(refundRateOf(c)), chip(refundRateOf(c), refundRateOf(p), { points: true, polarity: 'down' })),
     kpiCard(
       'Sessions',
-      values(num(c.sessions), num(s6?.sessions)),
-      deltas(c.sessions, m?.sessions, y?.sessions, {}, s6?.sessions, p6?.sessions),
+      num(c.sessions),
+      chip(c.sessions, p?.sessions),
       c.sessions === null ? 'Shopify Analytics could not be read' : undefined
     ),
     kpiCard(
       'Conversion',
-      values(pct(c.conversionRate, 2), pct(s6?.conversionRate, 2)),
-      deltas(c.conversionRate, m?.conversionRate, y?.conversionRate, { points: true }, s6?.conversionRate, p6?.conversionRate),
+      pct(c.conversionRate, 2),
+      chip(c.conversionRate, p?.conversionRate, { points: true }),
       c.conversionRate === null ? 'Shopify Analytics could not be read' : undefined
     )
   ];
   return `<div class="kpis">${cards.join('')}</div>`;
 }
 
-/** A 12-month line, drawn as inline SVG so it survives any mail client that shows images. */
-function trendSvg(points, metric) {
+/**
+ * The trend, drawn as inline SVG so it survives any mail client that shows
+ * images: the last `drawn` months solid, and the same months one comparison
+ * earlier UNDER THEM AS A DOTTED LINE.
+ *
+ * `offset` is how far back that line sits — one month for MoM, twelve for both
+ * year-on-year views — which is why the data carries two years of buckets for a
+ * twelve-month chart. Both series share one scale, or the comparison would look
+ * level with a year that dwarfs it.
+ */
+function trendSvg(months, metric, { drawn = 12, offset = 0, comparisonLabel = '' } = {}) {
   const w = 700;
   const h = 215;
   const p = { l: 52, r: 14, t: 12, b: 28 };
-  const values = points.map((x) => x[metric]);
-  const measured = values.filter((v) => v !== null && Number.isFinite(v));
-  if (measured.length === 0) return '<p class="muted">No orders in these twelve months.</p>';
+  const points = months.slice(-drawn);
+  const start = months.length - drawn - offset;
+  const compare = offset > 0 && start >= 0 ? months.slice(start, start + drawn) : [];
+  const valuesOf = (rows) => rows.map((x) => x[metric]);
+  const values = valuesOf(points);
+  const compareValues = valuesOf(compare);
+  const measured = [...values, ...compareValues].filter((v) => v !== null && Number.isFinite(v));
+  if (measured.length === 0) return '<p class="muted">No orders in these months.</p>';
   const hi = Math.max(...measured) * 1.06 || 1;
   const x = (i) => p.l + (i * (w - p.l - p.r)) / Math.max(1, points.length - 1);
   const y = (v) => p.t + ((hi - v) * (h - p.t - p.b)) / hi;
@@ -225,20 +237,25 @@ function trendSvg(points, metric) {
   for (let i = 0; i < 4; i += 1) {
     const yy = p.t + (i * (h - p.t - p.b)) / 3;
     const v = hi - (i * hi) / 3;
-    const label = metric === 'revenue' ? `€${GROUPED.format(Math.round(v / 1000))}k` : GROUPED.format(Math.round(v));
+    // The bottom gridline lands on a rounding error, not on zero, and printed
+    // as "-0k" in a month with no orders.
+    const rounded = metric === 'revenue' ? Math.round(v / 1000) : Math.round(v);
+    const label = metric === 'revenue' ? `€${GROUPED.format(rounded === 0 ? 0 : rounded)}k` : GROUPED.format(rounded === 0 ? 0 : rounded);
     grid += `<line class="axis" x1="${p.l}" y1="${yy.toFixed(1)}" x2="${w - p.r}" y2="${yy.toFixed(1)}"/><text class="axis-label" x="${p.l - 7}" y="${(yy + 3).toFixed(1)}" text-anchor="end">${label}</text>`;
   }
   // A month with no data breaks the line rather than dropping it to zero.
-  const segments = [];
-  let run = [];
-  values.forEach((v, i) => {
-    if (v === null || !Number.isFinite(v)) {
-      if (run.length) segments.push(run);
-      run = [];
-    } else run.push(`${x(i).toFixed(1)},${y(v).toFixed(1)}`);
-  });
-  if (run.length) segments.push(run);
-  const lines = segments.map((s) => `<polyline class="line" points="${s.join(' ')}"/>`).join('');
+  const polyline = (vals, cls) => {
+    const segments = [];
+    let run = [];
+    vals.forEach((v, i) => {
+      if (v === null || !Number.isFinite(v)) {
+        if (run.length) segments.push(run);
+        run = [];
+      } else run.push(`${x(i).toFixed(1)},${y(v).toFixed(1)}`);
+    });
+    if (run.length) segments.push(run);
+    return segments.map((seg) => `<polyline class="${cls}" points="${seg.join(' ')}"/>`).join('');
+  };
   const dots = values
     .map((v, i) =>
       v === null || !Number.isFinite(v)
@@ -249,7 +266,10 @@ function trendSvg(points, metric) {
   const labels = points
     .map((pt, i) => `<text class="axis-label" x="${x(i).toFixed(1)}" y="${h - 7}" text-anchor="middle">${escapeHtml(pt.label)}</text>`)
     .join('');
-  return `<svg viewBox="0 0 ${w} ${h}" role="img" aria-label="${metric === 'revenue' ? 'Revenue' : 'Orders'}, twelve months">${grid}${lines}${dots}${labels}</svg>`;
+  const legend = compare.length
+    ? `<div class="legend"><span><i class="dash solid"></i>${escapeHtml(points[0].label)} – ${escapeHtml(points[points.length - 1].label)}</span><span><i class="dash dotted"></i>${escapeHtml(compare[0].label)} – ${escapeHtml(compare[compare.length - 1].label)}${comparisonLabel ? ` (${escapeHtml(comparisonLabel)})` : ''}</span></div>`
+    : '<div class="legend"><span>No earlier period to lay underneath.</span></div>';
+  return `<svg viewBox="0 0 ${w} ${h}" role="img" aria-label="${metric === 'revenue' ? 'Revenue' : 'Orders'} over ${points.length} months, with the comparison period">${grid}${polyline(compareValues, 'line compare')}${polyline(values, 'line')}${dots}${labels}</svg>${legend}`;
 }
 
 function driverRow(label, hint, value, blocked) {
@@ -264,11 +284,16 @@ function driverRow(label, hint, value, blocked) {
 }
 
 function driversFor(current, other, label) {
+  // THE SAME TOP LINE AS THE KPI ABOVE IT. The decomposition splits whatever
+  // the report calls total sales, so it reads Shopify's figure wherever Shopify
+  // answered — otherwise this card reported a different change from the card
+  // beside it, off by the shipping and VAT that our order records carry.
+  //
   // `other` carries the storefront figures too, so the traffic rows compare
   // against the same period as the money rows.
   const d = revenueDrivers(
-    { revenue: current.revenue, paidOrders: current.paidOrders },
-    other ? { revenue: other.revenue, paidOrders: other.paidOrders } : null
+    { revenue: totalOf(current), paidOrders: current.paidOrders },
+    other ? { revenue: totalOf(other), paidOrders: other.paidOrders } : null
   );
   const f = (v) => (v === null ? null : v * 100);
   const total = f(d.total);
@@ -332,101 +357,154 @@ function hbars(rows, total) {
     .join('');
 }
 
+/** Where one comparison's revenue came from. A window nobody measured says so. */
+function salesMix(mode) {
+  const rows = mode.platforms;
+  if (!rows || rows.length === 0) {
+    return `<p class="muted">No comparison: ${escapeHtml(mode.currentLabel)} is outside the synced order history.</p>`;
+  }
+  const total = rows.reduce((sum, x) => sum + x.revenue, 0);
+  return hbars(rows.map((x) => ({ label: x.label, value: x.revenue })), total);
+}
+
 function overview(data) {
-  const c = data.periods.current;
-  const platformTotal = data.platforms.reduce((s, p) => s + p.revenue, 0);
   return `<section class="view active" id="view-overview">
-${kpis(data)}
+${perMode(data, (mode) => kpis(mode))}
 <div class="grid2">
-  <article class="card panel"><div class="panel-head"><div><h2>Performance trend</h2><div class="hint">12 months ending ${escapeHtml(data.label)}</div></div><div class="metric-tabs" data-tabs="trend"><button class="active" data-show="trend-revenue">Revenue</button><button data-show="trend-orders">Orders</button></div></div>
-    <div class="chart" data-pane="trend" id="trend-revenue">${trendSvg(data.trend, 'revenue')}</div>
-    <div class="chart" data-pane="trend" id="trend-orders">${trendSvg(data.trend, 'orders')}</div>
+  <article class="card panel"><div class="panel-head"><div><h2>Performance trend</h2><div class="hint">${data.trendMonths ?? 12} months ending ${escapeHtml(data.label)}, with the compared period dotted</div></div><div class="metric-tabs" data-tabs="trend"><button class="active" data-show="trend-revenue">Revenue</button><button data-show="trend-orders">Orders</button></div></div>
+    <div data-pane="trend" id="trend-revenue">${perMode(data, (mode) =>
+      `<div class="chart">${trendSvg(data.trend, 'revenue', { drawn: data.trendMonths ?? 12, offset: mode.offset, comparisonLabel: mode.label })}</div>`
+    )}</div>
+    <div data-pane="trend" id="trend-orders">${perMode(data, (mode) =>
+      `<div class="chart">${trendSvg(data.trend, 'orders', { drawn: data.trendMonths ?? 12, offset: mode.offset, comparisonLabel: mode.label })}</div>`
+    )}</div>
   </article>
-  <article class="card panel"><div class="panel-head"><div><h2>What moved revenue?</h2><div class="hint">Revenue = orders × AOV</div></div></div>
-    <div data-cmp="mom">${driversFor(c, data.periods.mom, data.compare.mom)}</div>
-    <div data-cmp="yoy">${driversFor(c, data.periods.yoy, data.compare.yoy)}</div>
-    <div data-cmp="six">${data.periods.six ? driversFor(data.periods.six, data.periods.sixPrevious, data.compare.six) : '<p class="muted">Not enough history for a six-month comparison.</p>'}</div>
+  <article class="card panel"><div class="panel-head"><div><h2>What moved revenue?</h2><div class="hint">Total sales = orders × basket</div></div></div>
+${perMode(data, (mode) =>
+  mode.period
+    ? driversFor(mode.period, mode.comparison, mode.comparisonLabel)
+    : '<p class="muted">Not enough order history for this comparison.</p>'
+)}
   </article>
 </div>
 <div class="grid3">
-  <article class="card panel"><div class="panel-head"><div><h2>Sales bridge</h2><div class="hint">Shopify's own figures, top line to bottom line</div></div></div>${bridge(c)}</article>
-  <article class="card panel"><div class="panel-head"><div><h2>Management signals</h2><div class="hint">Rule-based exceptions vs ${escapeHtml(data.compare.mom)}, not AI</div></div></div>${signals(data.signals)}</article>
-  <article class="card panel"><div class="panel-head"><div><h2>Sales mix</h2><div class="hint">Where the month's revenue came from</div></div></div>${hbars(
-    data.platforms.map((p) => ({ label: p.label, value: p.revenue })),
-    platformTotal
+  <article class="card panel"><div class="panel-head"><div><h2>Sales bridge</h2><div class="hint">Shopify's own figures, top line to bottom line</div></div></div>${perMode(data, (mode) =>
+    mode.period ? bridge(mode.period) : '<p class="muted">Not enough order history for this comparison.</p>'
   )}</article>
+  <article class="card panel"><div class="panel-head"><div><h2>Management signals</h2><div class="hint">Rule-based exceptions, not AI · always ${escapeHtml(data.label)} against ${escapeHtml(data.modes.mom.comparisonLabel)}, whichever comparison is selected</div></div></div>${signals(data.signals)}</article>
+  <article class="card panel"><div class="panel-head"><div><h2>Sales mix</h2><div class="hint">Where the revenue came from</div></div></div>${perMode(data, (mode) => salesMix(mode))}</article>
 </div>
 </section>`;
 }
 
-function newsletterCard(data) {
-  const { current: c, mom: m, yoy: y } = data.periods;
-  if (!c.newsletter) {
-    return `<article class="card panel"><div class="panel-head"><div><h2>Newsletter subscribers</h2><div class="hint">Gained and lost in the month</div></div></div><p class="muted">Not measurable for this month: Shopify's consent record holds no unsubscribe this early, so losses would read as zero.</p></article>`;
+function newsletterCard(mode, data) {
+  const c = mode.period;
+  if (!c || !c.newsletter) {
+    return `<article class="card panel"><div class="panel-head"><div><h2>Newsletter subscribers</h2><div class="hint">Gained and lost</div></div></div><p class="muted">Not measurable for this period: Shopify's consent record holds no unsubscribe this early, so losses would read as zero.</p></article>`;
   }
   const n = c.newsletter;
+  const before = mode.comparison?.newsletter ?? null;
   const net = n.subscribed - n.unsubscribed;
-  // Gained and lost compare as percentages; net can be negative, so it compares in people.
-  const row = (label, value, mv, yv, polarity, absolute = false) => {
-    const d = ([a, b]) => (b === null || b === undefined ? null : absolute ? a - b : rel(a, b));
-    return `<tr><td><b>${label}</b></td><td>${value}</td><td>${deltaChip(d(mv), { polarity, absolute })}</td><td>${deltaChip(d(yv), { polarity, absolute })}</td></tr>`;
-  };
-  const mn = m?.newsletter ?? null;
-  const yn = y?.newsletter ?? null;
   const total = n.subscribed + n.unsubscribed;
-  return `<article class="card panel"><div class="panel-head"><div><h2>Newsletter subscribers</h2><div class="hint">Gained and lost in the month · Shopify customers</div></div><span class="pill ${net >= 0 ? '' : 'negative'}">Net ${net >= 0 ? '+' : '−'}${num(Math.abs(net))}</span></div>
+  // Gained and lost compare as percentages; net can be negative, so a
+  // percentage of it reads backwards and it compares in people instead.
+  const row = (label, value, current, previous, polarity, absolute = false) =>
+    `<tr><td><b>${label}</b></td><td>${value}</td><td>${chip(current, previous, { polarity, absolute })}</td></tr>`;
+  return `<article class="card panel"><div class="panel-head"><div><h2>Newsletter subscribers</h2><div class="hint">Gained and lost in ${escapeHtml(mode.currentLabel)} · Shopify customers</div></div><span class="pill ${net >= 0 ? '' : 'negative'}">Net ${net >= 0 ? '+' : '−'}${num(Math.abs(net))}</span></div>
 <div class="splitbar"><i style="width:${total > 0 ? ((n.subscribed / total) * 100).toFixed(1) : 50}%;background:var(--green2)"></i><i style="width:${total > 0 ? ((n.unsubscribed / total) * 100).toFixed(1) : 50}%;background:var(--rose)"></i></div>
-<table><thead><tr><th></th><th>${escapeHtml(data.label)}</th><th>vs ${escapeHtml(data.compare.mom)}</th><th>vs ${escapeHtml(data.compare.yoy)}</th></tr></thead><tbody>
-${row('Gained', `+${num(n.subscribed)}`, [n.subscribed, mn?.subscribed], [n.subscribed, yn?.subscribed], 'up')}
-${row('Lost', `−${num(n.unsubscribed)}`, [n.unsubscribed, mn?.unsubscribed], [n.unsubscribed, yn?.unsubscribed], 'down')}
-${row('Net', `${net >= 0 ? '+' : '−'}${num(Math.abs(net))}`, [net, mn ? mn.subscribed - mn.unsubscribed : null], [net, yn ? yn.subscribed - yn.unsubscribed : null], 'up', true)}
+<table><thead><tr><th></th><th>${escapeHtml(mode.currentLabel)}</th><th>vs ${escapeHtml(mode.comparisonLabel)}</th></tr></thead><tbody>
+${row('Gained', `+${num(n.subscribed)}`, n.subscribed, before?.subscribed, 'up')}
+${row('Lost', `−${num(n.unsubscribed)}`, n.unsubscribed, before?.unsubscribed, 'down')}
+${row('Net', `${net >= 0 ? '+' : '−'}${num(Math.abs(net))}`, net, before ? before.subscribed - before.unsubscribed : null, 'up', true)}
 </tbody></table>
-<div class="footer-note">${num(n.subscribersNow)} on the list at generation. Read from each customer's current consent and when it last changed, so both figures are floors: someone who joined and left in the same month counts once, as a loss.</div></article>`;
+<div class="footer-note">${num(n.subscribersNow)} on the list at generation. Read from each customer's current consent and when it last changed, so both figures are floors: someone who joined and left inside the period counts once, as a loss.</div></article>`;
 }
 
 function customersAndProducts(data) {
-  const { current: c, mom: m } = data.periods;
+  return `<section class="view" id="view-customers">
+${perMode(data, (mode) => customerBlock(mode, data))}
+</section>`;
+}
+
+/** The customer strip, the mix, the newsletter and the product tables, for one comparison. */
+function customerBlock(mode, data) {
+  const c = mode.period;
+  if (!c) {
+    return `<div class="notice"><span><b>No figures for ${escapeHtml(mode.currentLabel)}:</b> the order history does not reach it.</span></div>`;
+  }
   const mix = c.customers;
+  const before = mode.comparison?.customers ?? null;
+  const orders = mix ? mix.newCustomerOrders + mix.returningCustomerOrders : 0;
+  const people = mix ? mix.newCustomers + mix.returningCustomers : 0;
   const mixHtml = mix
-    ? (() => {
-        const orders = mix.newCustomerOrders + mix.returningCustomerOrders;
-        const people = mix.newCustomers + mix.returningCustomers;
-        const newShare = share(mix.newCustomerOrders, orders) ?? 50;
-        return `<div class="splitbar"><i style="width:${newShare.toFixed(1)}%"></i><i style="width:${(100 - newShare).toFixed(1)}%"></i></div>
-<table><thead><tr><th>Segment</th><th>Customers</th><th>Orders</th><th>Share of orders</th></tr></thead><tbody>
-<tr><td><b>New</b></td><td>${num(mix.newCustomers)}</td><td>${num(mix.newCustomerOrders)}</td><td>${pct(share(mix.newCustomerOrders, orders), 0)}</td></tr>
-<tr><td><b>Returning</b></td><td>${num(mix.returningCustomers)}</td><td>${num(mix.returningCustomerOrders)}</td><td>${pct(share(mix.returningCustomerOrders, orders), 0)}</td></tr>
-</tbody></table><div class="legend"><span><i class="swatch gold"></i>New</span><span><i class="swatch green"></i>Returning</span><span>${num(people)} Shopify customers ordered</span></div>`;
-      })()
-    : '<p class="muted">No Shopify customer ordered this month.</p>';
+    ? `<div class="splitbar"><i style="width:${(share(mix.newCustomerOrders, orders) ?? 50).toFixed(1)}%"></i><i style="width:${(100 - (share(mix.newCustomerOrders, orders) ?? 50)).toFixed(1)}%"></i></div>
+<table><thead><tr><th>Segment</th><th>Customers</th><th>Orders</th><th>Share of orders</th><th>vs ${escapeHtml(mode.comparisonLabel)}</th></tr></thead><tbody>
+<tr><td><b>New</b></td><td>${num(mix.newCustomers)}</td><td>${num(mix.newCustomerOrders)}</td><td>${pct(share(mix.newCustomerOrders, orders), 0)}</td><td>${chip(mix.newCustomers, before?.newCustomers)}</td></tr>
+<tr><td><b>Returning</b></td><td>${num(mix.returningCustomers)}</td><td>${num(mix.returningCustomerOrders)}</td><td>${pct(share(mix.returningCustomerOrders, orders), 0)}</td><td>${chip(mix.returningCustomers, before?.returningCustomers)}</td></tr>
+</tbody></table><div class="legend"><span><i class="swatch gold"></i>New</span><span><i class="swatch green"></i>Returning</span><span>${num(people)} Shopify customers ordered</span></div>`
+    : '<p class="muted">No Shopify customer ordered in this period.</p>';
+
+  const repeatShare = mix ? share(mix.returningCustomerOrders, orders) : null;
+  const beforeRepeat = before ? share(before.returningCustomerOrders, before.newCustomerOrders + before.returningCustomerOrders) : null;
+  const perCustomer = mix && people > 0 ? orders / people : null;
+  const beforePerCustomer =
+    before && before.newCustomers + before.returningCustomers > 0
+      ? (before.newCustomerOrders + before.returningCustomerOrders) / (before.newCustomers + before.returningCustomers)
+      : null;
   const strip = mix
     ? [
-        ['New customers', num(mix.newCustomers), m?.customers ? deltaChip(rel(mix.newCustomers, m.customers.newCustomers)) : ''],
-        ['Returning customers', num(mix.returningCustomers), m?.customers ? deltaChip(rel(mix.returningCustomers, m.customers.returningCustomers)) : ''],
-        ['Returning share of orders', pct(share(mix.returningCustomerOrders, mix.newCustomerOrders + mix.returningCustomerOrders)), ''],
-        ['Orders per customer', (mix.newCustomers + mix.returningCustomers) > 0 ? `${((mix.newCustomerOrders + mix.returningCustomerOrders) / (mix.newCustomers + mix.returningCustomers)).toFixed(2)}×` : '—', '']
+        ['New customers', num(mix.newCustomers), chip(mix.newCustomers, before?.newCustomers)],
+        ['Returning customers', num(mix.returningCustomers), chip(mix.returningCustomers, before?.returningCustomers)],
+        ['Returning share of orders', pct(repeatShare), chip(repeatShare, beforeRepeat, { points: true })],
+        ['Orders per customer', perCustomer === null ? '—' : `${perCustomer.toFixed(2)}×`, chip(perCustomer, beforePerCustomer)]
       ]
     : [];
-  const products = data.products
-    .map((p, i) => {
-      const diff = p.previousRevenue === null ? null : p.revenue - p.previousRevenue;
-      const change = rel(p.revenue, p.previousRevenue);
-      return `<tr><td><span class="rank">${i + 1}</span><b>${escapeHtml(p.title)}</b></td><td>${money(p.revenue)}</td><td class="${diff === null ? 'flat' : diff >= 0 ? 'up' : 'down'}">${diff === null ? '—' : `${diff >= 0 ? '+' : '−'}${money(Math.abs(diff))}`}</td><td>${change === null ? '<span class="pill">new</span>' : `<span class="pill ${change < 0 ? 'negative' : ''}">${change >= 0 ? '+' : '−'}${Math.abs(change).toFixed(1)}%</span>`}</td><td>${num(p.orders)}</td><td>${num(p.units)}</td></tr>`;
-    })
-    .join('');
-  return `<section class="view" id="view-customers">
-${strip.length ? `<div class="stat-strip">${strip.map(([l, v, d]) => `<div class="mini"><span>${l}</span><strong>${v}</strong>${d ? `<em>${d} vs ${escapeHtml(data.compare.mom)}</em>` : ''}</div>`).join('')}</div>` : ''}
+
+  return `${strip.length ? `<div class="stat-strip">${strip
+    .map(([label, value, delta]) => `<div class="mini"><span>${label}</span><strong>${value}</strong><em>${delta} vs ${escapeHtml(mode.comparisonLabel)}</em></div>`)
+    .join('')}</div>` : ''}
 <div class="grid2 equal">
   <article class="card panel"><div class="panel-head"><div><h2>New vs returning customers</h2><div class="hint">Shopify customers; marketplaces create a customer per order and are left out</div></div></div>${mixHtml}</article>
-  ${newsletterCard(data)}
+  ${newsletterCard(mode, data)}
 </div>
 <div class="grid-wide">
-<article class="card panel"><div class="panel-head"><div><h2>Product performance</h2><div class="hint">Top products by net line revenue, vs ${escapeHtml(data.compare.mom)} · samples and gifts excluded</div></div></div>
-${data.products.length ? `<table><thead><tr><th>Product</th><th>Revenue</th><th>Δ €</th><th>Δ %</th><th>Orders</th><th>Units</th></tr></thead><tbody>${products}</tbody></table>` : '<p class="muted">No product sold this month.</p>'}
-</article>
-${collectionMix(data)}
-</div>
-</section>`;
+${productCard(mode)}
+${collectionMix(mode)}
+</div>`;
+}
+
+/**
+ * The product tables for one comparison: the largest, the biggest gains and the
+ * biggest falls, switched by the tabs above them.
+ *
+ * GROWTH AND DECLINES ARE RANKED IN EUROS, not per cent: a product that went
+ * from 4 to 40 euros is not the period's story. Without a comparable period
+ * both tables say so rather than showing an arbitrary ten rows.
+ */
+function productCard(mode) {
+  const tables = mode.products;
+  const id = (name) => `products-${mode.label.replace(/[^a-z0-9]+/gi, '').toLowerCase()}-${name}`;
+  if (!tables || tables.revenue.length === 0) {
+    return `<article class="card panel"><div class="panel-head"><div><h2>Product performance</h2><div class="hint">Top products by net line revenue</div></div></div><p class="muted">No product sold in this period.</p></article>`;
+  }
+  const rows = (list, empty) =>
+    list.length === 0
+      ? `<p class="muted">${empty}</p>`
+      : `<table><thead><tr><th>Product</th><th>Revenue</th><th>Δ €</th><th>Δ %</th><th>Orders</th><th>Units</th></tr></thead><tbody>${list
+          .map((product, i) => {
+            const diff = product.previousRevenue === null ? null : product.revenue - product.previousRevenue;
+            const change = rel(product.revenue, product.previousRevenue);
+            return `<tr><td><span class="rank">${i + 1}</span><b>${escapeHtml(product.title)}</b></td><td>${money(product.revenue)}</td><td class="${diff === null ? 'flat' : diff >= 0 ? 'up' : 'down'}">${diff === null ? '—' : `${diff >= 0 ? '+' : '−'}${money(Math.abs(diff))}`}</td><td>${change === null ? (product.previousRevenue === null ? '<span class="muted">—</span>' : '<span class="pill">new</span>') : `<span class="pill ${change < 0 ? 'negative' : ''}">${change >= 0 ? '+' : '−'}${Math.abs(change).toFixed(1)}%</span>`}</td><td>${num(product.orders)}</td><td>${num(product.units)}</td></tr>`;
+          })
+          .join('')}</tbody></table>`;
+  const none = tables.comparable
+    ? null
+    : `No comparison with ${escapeHtml(mode.comparisonLabel)}: the order history does not reach it.`;
+  return `<article class="card panel"><div class="panel-head"><div><h2>Product performance</h2><div class="hint">Top ten by net line revenue, vs ${escapeHtml(mode.comparisonLabel)} · samples and gifts excluded</div></div><div class="metric-tabs" data-tabs="${id('tabs')}"><button class="active" data-show="${id('revenue')}">Revenue</button><button data-show="${id('growth')}">Growth</button><button data-show="${id('decline')}">Declines</button></div></div>
+<div data-pane="${id('tabs')}" id="${id('revenue')}">${rows(tables.revenue, 'No product sold in this period.')}</div>
+<div data-pane="${id('tabs')}" id="${id('growth')}">${rows(tables.growth, none ?? `No product sold more than it did in ${escapeHtml(mode.comparisonLabel)}.`)}</div>
+<div data-pane="${id('tabs')}" id="${id('decline')}">${rows(tables.decline, none ?? `No product sold less than it did in ${escapeHtml(mode.comparisonLabel)}.`)}</div>
+</article>`;
 }
 
 /**
@@ -434,32 +512,37 @@ ${collectionMix(data)}
  * A product counts in every range that carries it, so the shares overlap and
  * never sum to 100% — the note says so, and nothing here adds them up.
  */
-function collectionMix(data) {
-  const rows = data.collections ?? [];
-  if (rows.length === 0) return '';
+function collectionMix(mode) {
+  const rows = mode.collections ?? [];
+  if (rows.length === 0) {
+    return `<article class="card panel"><div class="panel-head"><div><h2>Collection mix</h2><div class="hint">The ranges the catalogue is managed by</div></div></div><p class="muted">No paid product line in this period.</p></article>`;
+  }
   // Share is of ALL paid product revenue in the period. Summing the rows would
   // be wrong twice over: they overlap, and the last row is what they exclude.
-  const denominator = data.productRevenue ?? 0;
+  const denominator = mode.products?.productRevenue ?? 0;
   const named = rows.filter((r) => r.collectionId !== null);
   const widest = Math.max(1, ...named.map((r) => r.revenue));
   const line = (r) => {
-    const share = denominator > 0 ? pct((r.revenue / denominator) * 100) : '—';
+    const portion = denominator > 0 ? pct((r.revenue / denominator) * 100) : '—';
     const change =
       r.previousRevenue === null
-        ? '<span class="muted">—</span>'
+        ? '<span class="muted">no comparison</span>'
         : r.previousRevenue === 0
           ? '<span class="pill">new</span>'
-          : deltaChip(rel(r.revenue, r.previousRevenue));
-    return `<tr${r.collectionId === null ? ' class="muted"' : ''}><td><b>${escapeHtml(r.title)}</b></td><td>${money(r.revenue)}</td><td>${share}</td><td>${change}</td></tr>`;
+          : chip(r.revenue, r.previousRevenue);
+    return `<tr${r.collectionId === null ? ' class="muted"' : ''}><td><b>${escapeHtml(r.title)}</b></td><td>${money(r.revenue)}</td><td>${portion}</td><td>${change}</td></tr>`;
   };
-  return `<article class="card panel"><div class="panel-head"><div><h2>Collection mix</h2><div class="hint">The ranges the catalogue is managed by</div></div></div>
+  return `<article class="card panel"><div class="panel-head"><div><h2>Collection mix</h2><div class="hint">The ranges the catalogue is managed by · vs ${escapeHtml(mode.comparisonLabel)}</div></div></div>
 <table><thead><tr><th>Collection</th><th>Revenue</th><th>Share</th><th>Δ</th></tr></thead><tbody>${rows.map(line).join('')}</tbody></table>
 <div class="concentration">${named.map((r) => `<i style="width:${Math.max(2, (r.revenue / widest) * 100).toFixed(1)}%"></i>`).join('')}</div>
 <div class="footer-note">A product counts in every range that carries it, so the shares overlap and never add up to 100%. Share is of the period's paid product revenue; anything in none of the ranges is the last row.</div></article>`;
 }
 
 function marketing(data) {
-  const c = data.periods.current;
+  // The funnel, the channels and the promotions are the MONTH's, whatever the
+  // switch says: they are not compared with an earlier period anywhere on this
+  // page, and the cards say what they are rather than implying a comparison.
+  const c = data.modes.mom.period;
   const funnel = (data.funnel ?? [])
     .map((step, i) => {
       const under =
@@ -470,7 +553,10 @@ function marketing(data) {
             : `${step.ofPrevious === null ? '—' : pct(step.ofPrevious)} from prior step`;
       return `<div class="funnel-row"><label>${escapeHtml(step.label)}<small>${under}</small></label><div class="funnel-bar${step.chained === false ? ' aside' : ''}"><i style="--w:${step.ofEntry === null ? 0 : Math.max(2, step.ofEntry).toFixed(1)}%"></i></div><div class="funnel-val"><b>${num(step.value)}</b><small>${step.ofEntry === null ? 'not measured' : `${pct(step.ofEntry)} of entry`}</small></div></div>`;
     })
-    .join('');
+    .join('') +
+    // The one step Shopify keeps no metric for, kept in the funnel so its
+    // absence is visible rather than silently missing.
+    '<div class="funnel-row"><label>Product viewers<small>no such metric</small></label><div class="funnel-bar blocked"></div><div class="funnel-val"><b>—</b><small>not measured</small></div></div>';
   const promos = data.promotions
     .map(
       (p) =>
@@ -480,16 +566,16 @@ function marketing(data) {
   const fullPriceOrders = c.paidOrders - c.discountedOrders;
   return `<section class="view" id="view-marketing">
 <div class="grid2 equal">
-  <article class="card panel"><div class="panel-head"><div><h2>E-commerce funnel</h2><div class="hint">Stage conversion and largest leakage</div></div><span class="pill${c.conversionRate === null ? ' warn' : ''}">CVR ${c.conversionRate === null ? '—' : pct(c.conversionRate, 2)}</span></div>
+  <article class="card panel"><div class="panel-head"><div><h2>E-commerce funnel</h2><div class="hint">Stage conversion and largest leakage · ${escapeHtml(data.label)} only</div></div><span class="pill${c.conversionRate === null ? ' warn' : ''}">CVR ${c.conversionRate === null ? '—' : pct(c.conversionRate, 2)}</span></div>
     <div class="funnel">${funnel}</div>
     <div class="callout"><b>Every step counts sessions, not orders.</b> The last step over the first is Shopify's conversion rate. Our own ${num(c.paidOrders)} paid orders is a larger number because it counts every platform, including marketplace orders that never had a session. <b>Product views are not measurable</b> — Shopify keeps no such metric — so the product row counts sessions that <i>arrived</i> on a product page; it sits outside the chain, and the cart step below is measured against sessions, not against it.</div></article>
-  <article class="card panel"><div class="panel-head"><div><h2>Acquisition channels</h2><div class="hint">Shopify's own attribution, both sides on referring_channel</div></div></div>${channelTable(data)}</article>
+  <article class="card panel"><div class="panel-head"><div><h2>Acquisition channels</h2><div class="hint">Shopify's own attribution, both sides on referring_channel · ${escapeHtml(data.label)} only</div></div></div>${channelTable(data)}</article>
 </div>
 <div class="grid2">
   <article class="card panel"><div class="panel-head"><div><h2>Marketing performance</h2><div class="hint">Owned, paid and organic demand</div></div></div>
     <div class="marketing-summary"><div class="ms"><span>Klaviyo revenue</span><strong>—</strong></div><div class="ms"><span>Ad spend</span><strong>—</strong></div><div class="ms"><span>ROAS</span><strong>—</strong></div><div class="ms"><span>Social reach</span><strong>—</strong></div></div>
     ${blockedTable(['Source', 'Spend', 'Revenue', 'ROAS', 'Conversion'], 'Klaviyo, Google Ads, Meta Ads, Instagram and TikTok are not connected yet.')}</article>
-  <article class="card panel"><div class="panel-head"><div><h2>Promotions &amp; discounting</h2><div class="hint">What each promotion recorded on its orders</div></div></div>
+  <article class="card panel"><div class="panel-head"><div><h2>Promotions &amp; discounting</h2><div class="hint">What each promotion recorded on its orders · ${escapeHtml(data.label)} only</div></div></div>
     ${data.promotions.length ? `<table><thead><tr><th>Promotion</th><th>Revenue</th><th>Orders</th><th>AOV</th><th>Discount</th><th>New cust.</th></tr></thead><tbody>${promos}</tbody></table>` : '<p class="muted">No order this month.</p>'}
     <div class="callout"><b>Full-price revenue:</b> ${money(c.fullPriceRevenue)} · <b>Discounted-order AOV:</b> ${money(c.discountedOrders > 0 ? c.discountedRevenue / c.discountedOrders : null, true)} · <b>Full-price AOV:</b> ${money(fullPriceOrders > 0 ? c.fullPriceRevenue / fullPriceOrders : null, true)}</div>
     <div class="footer-note">An order with two promotions counts in both rows. Gifts are valued at list price; discounts &amp; gifts were ${pct(discountShareOf(c))} of gross sales.</div></article>
@@ -520,19 +606,28 @@ function channelTable(data) {
 }
 
 function operations(data) {
-  const { current: c, mom: m, yoy: y } = data.periods;
   const inv = data.inventory;
-  const carrierTotal = data.carriers.reduce((s, x) => s + x.shipments, 0);
-  const cards = [
-    ['Median time to ship', hoursText(c.p50Hours), deltas(c.p50Hours, m?.p50Hours, y?.p50Hours, { polarity: 'down' })],
-    ['Shipped after 3 days', pct(lateShareOf(c)), deltas(lateShareOf(c), lateShareOf(m), lateShareOf(y), { points: true, polarity: 'down' })],
-    ['Refunded orders', num(c.refundedOrders), `<span class="delta flat">${money(c.refundedAmount)} refunded</span>`],
-    ['Cancelled orders', num(c.cancelledOrders), deltas(c.cancelledOrders, m?.cancelledOrders, y?.cancelledOrders, { polarity: 'down' })]
-  ];
-  const statusClass = (s) => (s === 'out' || s === 'critical' ? 'negative' : s === 'low' ? 'warn' : '');
+  const carrierTotal = data.carriers.reduce((sum, x) => sum + x.shipments, 0);
+  const statusClass = (x) => (x === 'out' || x === 'critical' ? 'negative' : x === 'low' ? 'warn' : '');
   const synced = inv.syncedAt ? inv.syncedAt.slice(0, 10) : 'never';
+  const opsCards = (mode) => {
+    const c = mode.period;
+    const p = mode.comparison;
+    if (!c) return `<div class="notice"><span><b>No figures for ${escapeHtml(mode.currentLabel)}:</b> the order history does not reach it.</span></div>`;
+    const cards = [
+      ['Median time to ship', hoursText(c.p50Hours), chip(c.p50Hours, p?.p50Hours, { polarity: 'down' })],
+      ['Shipped after 3 days', pct(lateShareOf(c)), chip(lateShareOf(c), lateShareOf(p), { points: true, polarity: 'down' })],
+      ['Refunded orders', num(c.refundedOrders), `<span class="delta flat">${money(c.refundedAmount)} refunded</span>`],
+      ['Cancelled orders', num(c.cancelledOrders), chip(c.cancelledOrders, p?.cancelledOrders, { polarity: 'down' })]
+    ];
+    return `<div class="ops-cards">${cards
+      .map(([label, value, delta]) => `<article class="card op-card"><span>${label}</span><strong>${value}</strong>${delta}</article>`)
+      .join('')}</div>`;
+  };
+  const c = data.modes.mom.period;
+
   return `<section class="view" id="view-operations">
-<div class="ops-cards">${cards.map(([l, v, d]) => `<article class="card op-card"><span>${l}</span><strong>${v}</strong>${d}</article>`).join('')}</div>
+${perMode(data, (mode) => opsCards(mode))}
 <div class="grid3">
   <article class="card panel"><div class="panel-head"><div><h2>Inventory exceptions</h2><div class="hint">Active products, stock as of ${escapeHtml(synced)} · cover at the last ${inv.windowDays} days' rate</div></div></div>
     ${inv.items.length ? `<table><thead><tr><th>Product</th><th>Stock</th><th>Days</th><th>Status</th></tr></thead><tbody>${inv.items
@@ -580,7 +675,7 @@ body[data-compare="yoy"] [data-cmp="mom"],body[data-compare="six"] [data-cmp="mo
 .grid-wide{display:grid;grid-template-columns:1.35fr .9fr;gap:13px;margin-bottom:13px}.grid-wide .panel{margin-bottom:0}
 .grid2{display:grid;grid-template-columns:1.58fr 1fr;gap:13px;margin-bottom:13px}.grid2.equal{grid-template-columns:1fr 1fr}.grid3{display:grid;grid-template-columns:1fr 1.25fr 1fr;gap:13px;margin-bottom:13px}
 .metric-tabs{display:flex;gap:3px;background:#f1efe9;padding:3px;border-radius:9px}.metric-tabs button{border:0;background:transparent;padding:6px 8px;border-radius:7px;color:var(--muted);font-size:10px;cursor:pointer;white-space:nowrap}.metric-tabs button.active{background:white;color:var(--ink);box-shadow:0 1px 5px rgba(0,0,0,.08)}.metric-tabs{display:none}.js .metric-tabs{display:flex}
-.chart{height:225px}.chart+.chart{margin-top:10px}.js .chart+.chart{margin-top:0}.chart svg{width:100%;height:100%;overflow:visible}.axis{stroke:#ebe7df;stroke-width:1}.axis-label{fill:#8a8f8b;font-size:9px}.line{fill:none;stroke:var(--green);stroke-width:3;stroke-linecap:round;stroke-linejoin:round}.point{fill:#fff;stroke:var(--green);stroke-width:2}
+.chart{height:225px}.chart+.chart{margin-top:10px}.js .chart+.chart{margin-top:0}.chart svg{width:100%;height:100%;overflow:visible}.axis{stroke:#ebe7df;stroke-width:1}.axis-label{fill:#8a8f8b;font-size:9px}.line{fill:none;stroke:var(--green);stroke-width:3;stroke-linecap:round;stroke-linejoin:round}.line.compare{stroke:#9fb3ab;stroke-width:2;stroke-dasharray:5 4}.dash{display:inline-block;width:14px;height:0;border-top:3px solid var(--green);margin-right:5px;vertical-align:middle}.dash.dotted{border-top:2px dashed #9fb3ab}.point{fill:#fff;stroke:var(--green);stroke-width:2}
 .driver-total{display:flex;align-items:baseline;justify-content:space-between;border-bottom:1px solid var(--line);padding-bottom:11px;margin-bottom:12px}.driver-total strong{font-size:24px}.drivers{display:grid;gap:12px}.driver-row{display:grid;grid-template-columns:82px 1fr 48px;align-items:center;gap:8px}.driver-label b{display:block;font-size:11px}.driver-label span{font-size:9px;color:var(--muted)}.bar{height:7px;background:#eeeae3;border-radius:20px;overflow:hidden}.bar.blocked{background:repeating-linear-gradient(45deg,#eeeae3 0 4px,#fff 4px 8px)}.bar i{display:block;height:100%;border-radius:20px;background:var(--green2)}.bar i.neg{background:var(--rose)}.driver-val{text-align:right;font-size:11px;font-weight:800}.callout{background:var(--soft);border-radius:10px;padding:10px 11px;margin-top:13px;font-size:11px;color:#5f655f}.callout b{color:var(--ink)}
 .bridge{display:grid;gap:9px}.bridge-row{display:grid;grid-template-columns:96px 1fr 84px;align-items:center;gap:9px}.bridge-label{font-size:10px;color:var(--muted)}.bridge-track{height:14px;background:#eeeae3;border-radius:20px;overflow:hidden}.bridge-track i{display:block;height:100%;border-radius:20px;background:var(--green)}.bridge-row.neg .bridge-track i{background:var(--rose)}.bridge-row.gold .bridge-track i{background:var(--gold)}.bridge-row.add .bridge-track i{background:var(--green2)}.bridge-row b{text-align:right;font-size:11px;font-variant-numeric:tabular-nums}
 .insights{display:grid;gap:8px}.insight{display:grid;grid-template-columns:24px 1fr;gap:8px;padding:9px;background:var(--soft);border-radius:10px}.insight i{display:grid;place-items:center;width:24px;height:24px;border-radius:8px;background:#e7efe9;color:var(--green2);font-style:normal;font-weight:850;font-size:10px}.insight.warn i{background:#f7e9e7;color:var(--rose)}.insight.neutral i{background:#eeeae3;color:var(--muted)}.insight b{display:block;font-size:11px}.insight span{display:block;color:var(--muted);font-size:10px;margin-top:1px}
@@ -614,10 +709,12 @@ export function renderSalesReport(data) {
   const stamp = Number.isNaN(generated.getTime())
     ? ''
     : generated.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: data.timezone || 'UTC' });
-  const momLabel = `vs ${data.compare.mom}`;
-  const yoyLabel = `vs ${data.compare.yoy}`;
-  // 6M changes the figures as well as the chip, so its label names the window.
-  const sixLabel = `${data.compare.sixLabel ?? '6 months'} vs ${data.compare.six ?? 'the six before'}`;
+  // Each switch names the window it reports and the window it compares with,
+  // because two of the three change the figures and not just the chips.
+  const label = (mode) => `${escapeHtml(mode.currentLabel)} vs ${escapeHtml(mode.comparisonLabel)}`;
+  const momLabel = label(data.modes.mom);
+  const yoyLabel = label(data.modes.yoy);
+  const sixLabel = label(data.modes.six);
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -631,11 +728,11 @@ export function renderSalesReport(data) {
   <header class="topbar">
     <div><div class="eyebrow">Qiriness · E-commerce</div><h1>Sales Performance</h1><div class="subtitle">${escapeHtml(data.label)}${data.inProgress ? ' (in progress)' : ''} · monthly management report</div></div>
     <div class="controls">
-      <div class="segmented" id="compareControls"><button class="active" data-mode="mom" data-label="${escapeHtml(momLabel)}">MoM</button><button data-mode="yoy" data-label="${escapeHtml(yoyLabel)}">YoY</button><button data-mode="six" data-label="${escapeHtml(sixLabel)}">6M vs 6M</button></div>
+      <div class="segmented" id="compareControls"><button class="active" data-mode="mom" data-label="${momLabel}">MoM</button><button data-mode="yoy" data-label="${yoyLabel}">YoY</button><button data-mode="six" data-label="${sixLabel}">6M on 6M</button></div>
       <span class="stamp">Generated ${escapeHtml(stamp)}</span>
     </div>
   </header>
-  <div class="notice"><span><span class="dot"></span><b>Live data</b> from Shopify: all platforms, net revenue after refunds, cancelled orders excluded. A dash means the figure has no source yet — never zero.</span><span id="comparisonLabel">${escapeHtml(momLabel)}</span></div>
+  <div class="notice"><span><span class="dot"></span><b>Live data</b> from Shopify: all platforms, net revenue after refunds, cancelled orders excluded. A dash means the figure has no source yet — never zero.</span><span id="comparisonLabel">${momLabel}</span></div>
   <nav class="report-nav" id="reportNav"><button class="active" data-view="overview">Overview</button><button data-view="customers">Customers &amp; Products</button><button data-view="marketing">Marketing &amp; Funnel</button><button data-view="operations">Operations</button></nav>
 ${overview(data)}
 ${customersAndProducts(data)}

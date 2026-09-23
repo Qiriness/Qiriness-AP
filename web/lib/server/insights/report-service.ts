@@ -47,8 +47,67 @@ const REPORT_PRODUCTS = 10;
 /** The six ranges; the row after them is everything outside them. */
 const REPORT_COLLECTIONS = 10;
 
-/** One collection row for the report, with its change on the previous month. */
-function mapReportCollection(row: Record<string, unknown>, previousRows: Record<string, unknown>[] | null) {
+/**
+ * Two years of monthly buckets: twelve drawn, and twelve behind them so the
+ * chart can lay the comparison period underneath as a dotted line.
+ */
+const TREND_MONTHS = 24;
+
+/** How many rows each product table carries. */
+const TABLE_ROWS = 10;
+
+/** The collection read, for one window. */
+function collectionsFor(ctx: InsightsContext, window: { from: string; to: string }) {
+  return callRpc<Record<string, unknown>>(RPC.INSIGHTS_COLLECTION_SALES, {
+    ...orderArgs(ctx, window),
+    p_limit: REPORT_COLLECTIONS,
+    p_handles: [...SALES_COLLECTION_HANDLES],
+  });
+}
+
+/** Product revenue by product id, for the comparison column. */
+function revenueByProduct(rows: Record<string, unknown>[] | null) {
+  return rows ? new Map(rows.map((row) => [String(row.product_id), count(row.revenue)])) : null;
+}
+
+/**
+ * One comparison's product tables: the ten largest, the ten that grew most and
+ * the ten that fell most, all in euros rather than per cent — a product that
+ * went from 4 to 40 euros is not the month's story.
+ *
+ * A product missing from the comparison window sold nothing then, which is a
+ * real zero; a missing window entirely means no comparison, and the growth and
+ * decline tables are then empty with the card saying why.
+ */
+function productTables(rows: Record<string, unknown>[], previousRows: Record<string, unknown>[] | null) {
+  const previous = revenueByProduct(previousRows);
+  const products = rows.map((row) => ({
+    title: String(row.title ?? "Unknown product"),
+    revenue: count(row.revenue),
+    orders: count(row.orders),
+    units: count(row.units),
+    previousRevenue: previous ? previous.get(String(row.product_id)) ?? 0 : null,
+  }));
+  const moved = products.filter((p) => p.previousRevenue !== null);
+  const delta = (p: (typeof products)[number]) => p.revenue - (p.previousRevenue ?? 0);
+  return {
+    comparable: previous !== null,
+    revenue: [...products].sort((a, b) => b.revenue - a.revenue).slice(0, TABLE_ROWS),
+    growth: moved.filter((p) => delta(p) > 0).sort((a, b) => delta(b) - delta(a)).slice(0, TABLE_ROWS),
+    decline: moved.filter((p) => delta(p) < 0).sort((a, b) => delta(a) - delta(b)).slice(0, TABLE_ROWS),
+    productRevenue: products.reduce((sum, p) => sum + p.revenue, 0),
+  };
+}
+
+/** The platform split of one window's revenue, for the sales mix. */
+function platformsOf(rows: Record<string, unknown>[] | null) {
+  return rows
+    ? foldPlatforms(rows).map((p: PlatformSplit) => ({ label: p.label, revenue: p.revenue, orders: p.orders }))
+    : null;
+}
+
+/** One collection row for the report, with its change on the compared window. */
+export function mapReportCollection(row: Record<string, unknown>, previousRows: Record<string, unknown>[] | null) {
   const key = (r: Record<string, unknown>) =>
     r.collection_id === null || r.collection_id === undefined ? "__outside" : String(r.collection_id);
   const previous = previousRows ? new Map(previousRows.map((r) => [key(r), count(r.revenue)])) : null;
@@ -75,18 +134,23 @@ export async function buildSalesReport(month: string) {
   }
   const range = ctx.range;
   const yoyWindow = yearEarlier(range) as Window;
-  // SIX MONTHS ENDING WITH THIS ONE, against the six before: the trend
-  // comparison, where a single month is too small to read. The month itself is
-  // included, so "6M" always ends where the report does.
+  // SIX MONTHS ENDING WITH THIS ONE, against THE SAME SIX MONTHS A YEAR
+  // EARLIER (the owner's rule, 2026-09-23). March-August 2026 reads against
+  // March-August 2025, not against September 2025-February 2026: a half-year
+  // compared with the half-year before it is mostly a reading of the seasons,
+  // and this shop's are pronounced — November is five times August.
   const sixWindow: Window = { from: toKey(step(fromKey(range.from), "month", -5)), to: range.to };
-  const sixPreviousWindow: Window = { from: toKey(step(fromKey(range.from), "month", -11)), to: sixWindow.from };
+  const sixPreviousWindow: Window = {
+    from: toKey(step(fromKey(sixWindow.from), "month", -12)),
+    to: toKey(step(fromKey(sixWindow.to), "month", -12)),
+  };
   const coverage = ordersCoverage(ctx);
   const momCovered = windowCovered(range.previous, coverage, range.tz);
   const yoyCovered = windowCovered(yoyWindow, coverage, range.tz);
   const sixCovered = windowCovered(sixWindow, coverage, range.tz);
   const sixPreviousCovered = windowCovered(sixPreviousWindow, coverage, range.tz);
 
-  const trendRange = twelveMonths(ctx);
+  const trendRange = monthsBack(ctx, TREND_MONTHS);
   const [
     current,
     mom,
@@ -95,13 +159,20 @@ export async function buildSalesReport(month: string) {
     sixPrevious,
     trendRows,
     channelRows,
+    sixChannelRows,
     productRows,
     previousProductRows,
+    yoyProductRows,
+    sixProductRows,
+    sixPreviousProductRows,
     promotions,
     inventory,
     carrierRows,
     collectionRows,
     previousCollectionRows,
+    yoyCollectionRows,
+    sixCollectionRows,
+    sixPreviousCollectionRows,
   ] =
     await Promise.all([
       readPeriod(ctx, range),
@@ -114,25 +185,26 @@ export async function buildSalesReport(month: string) {
         p_grain: "month",
       }),
       callRpc<Record<string, unknown>>(RPC.INSIGHTS_ORDERS_BY_CHANNEL, rangeArgs(ctx)),
+      sixCovered
+        ? callRpc<Record<string, unknown>>(RPC.INSIGHTS_ORDERS_BY_CHANNEL, rangeArgs(ctx, sixWindow))
+        : Promise.resolve(null),
       callRpc<Record<string, unknown>>(RPC.INSIGHTS_PRODUCT_SALES, orderArgs(ctx)),
       momCovered
         ? callRpc<Record<string, unknown>>(RPC.INSIGHTS_PRODUCT_SALES, orderArgs(ctx, range.previous))
         : Promise.resolve(null),
+      yoyCovered ? callRpc<Record<string, unknown>>(RPC.INSIGHTS_PRODUCT_SALES, orderArgs(ctx, yoyWindow)) : Promise.resolve(null),
+      sixCovered ? callRpc<Record<string, unknown>>(RPC.INSIGHTS_PRODUCT_SALES, orderArgs(ctx, sixWindow)) : Promise.resolve(null),
+      sixPreviousCovered
+        ? callRpc<Record<string, unknown>>(RPC.INSIGHTS_PRODUCT_SALES, orderArgs(ctx, sixPreviousWindow))
+        : Promise.resolve(null),
       getPromotions(ctx),
       getInventoryExceptions(ctx),
       callRpc<Record<string, unknown>>(RPC.INSIGHTS_FULFILMENT_CARRIERS, orderArgs(ctx)),
-      callRpc<Record<string, unknown>>(RPC.INSIGHTS_COLLECTION_SALES, {
-        ...orderArgs(ctx),
-        p_limit: REPORT_COLLECTIONS,
-        p_handles: [...SALES_COLLECTION_HANDLES],
-      }),
-      momCovered
-        ? callRpc<Record<string, unknown>>(RPC.INSIGHTS_COLLECTION_SALES, {
-            ...orderArgs(ctx, range.previous),
-            p_limit: REPORT_COLLECTIONS,
-            p_handles: [...SALES_COLLECTION_HANDLES],
-          })
-        : Promise.resolve(null),
+      collectionsFor(ctx, range),
+      momCovered ? collectionsFor(ctx, range.previous) : Promise.resolve(null),
+      yoyCovered ? collectionsFor(ctx, yoyWindow) : Promise.resolve(null),
+      sixCovered ? collectionsFor(ctx, sixWindow) : Promise.resolve(null),
+      sixPreviousCovered ? collectionsFor(ctx, sixPreviousWindow) : Promise.resolve(null),
     ]);
 
   // Storefront traffic, live from Shopify: the three windows' totals in one
@@ -210,45 +282,74 @@ export async function buildSalesReport(month: string) {
     sixPrevious: sixPrevious ? withStorefront(keepNewsletter(sixPrevious, sixPreviousWindow), 4) : null,
   };
 
+  /**
+   * ONE BUNDLE PER COMPARISON, so every figure on the page moves with the
+   * switch rather than only the headline chips. Month on month and year on year
+   * report the MONTH and differ only in what they compare it with; the
+   * six-month view reports the half-year itself.
+   *
+   * `offset` is how far back the trend's dotted line is drawn: one month, or
+   * twelve for both of the year-on-year comparisons.
+   */
+  const modes = {
+    mom: {
+      label: "MoM",
+      currentLabel: range.label,
+      comparisonLabel: range.compareLabel,
+      offset: 1,
+      period: periods.current,
+      comparison: periods.mom,
+      products: productTables(productRows, previousProductRows),
+      collections: collectionRows.map((row) => mapReportCollection(row, previousCollectionRows)),
+      platforms: platformsOf(channelRows),
+    },
+    yoy: {
+      label: "YoY",
+      currentLabel: range.label,
+      comparisonLabel:
+        range.currentKey !== null ? `same days of ${monthLabel(yoyWindow.from)}` : monthLabel(yoyWindow.from),
+      offset: 12,
+      period: periods.current,
+      comparison: periods.yoy,
+      products: productTables(productRows, yoyProductRows),
+      collections: collectionRows.map((row) => mapReportCollection(row, yoyCollectionRows)),
+      platforms: platformsOf(channelRows),
+    },
+    six: {
+      label: "6M on 6M",
+      currentLabel: `${monthLabel(sixWindow.from)} – ${range.label}`,
+      comparisonLabel: `${monthLabel(sixPreviousWindow.from)} – ${monthLabel(step(fromKey(sixPreviousWindow.to), "month", -1))}`,
+      offset: 12,
+      period: periods.six,
+      comparison: periods.sixPrevious,
+      products: sixProductRows ? productTables(sixProductRows, sixPreviousProductRows) : null,
+      collections: sixCollectionRows
+        ? sixCollectionRows.map((row) => mapReportCollection(row, sixPreviousCollectionRows))
+        : null,
+      platforms: platformsOf(sixChannelRows),
+    },
+  };
+
   return {
     month,
     label: range.label,
     inProgress: range.currentKey !== null,
     generatedAt: ctx.renderedAt,
     timezone: ctx.tz,
-    compare: {
-      mom: range.compareLabel,
-      yoy: range.currentKey !== null ? `same days of ${monthLabel(yoyWindow.from)}` : monthLabel(yoyWindow.from),
-      // The last month INSIDE the earlier window, not the exclusive end: Sep 2025
-      // to Feb 2026 reads "to February 2026", not "to March".
-      six: `the 6 months to ${monthLabel(step(fromKey(sixPreviousWindow.to), "month", -1))}`,
-      sixLabel: `6 months to ${range.label}`,
-    },
+    modes,
     periods,
+    // TWO YEARS of monthly buckets. The chart draws the last twelve and lays
+    // the comparison period under them as a dotted line, which needs the twelve
+    // before that.
     trend: trend.map((point, i) => ({
       key: point.key.slice(0, 7),
       label: bucketLabel(point.key, "month"),
       revenue: point.value,
       orders: trendOrders[i].value,
     })),
-    platforms: foldPlatforms(channelRows).map((p: PlatformSplit) => ({ label: p.label, revenue: p.revenue, orders: p.orders })),
-    products: productRows
-      .map((row) => mapProduct(row))
-      .slice(0, REPORT_PRODUCTS)
-      .map((p) => ({
-        title: p.title,
-        revenue: p.revenue,
-        orders: p.orders,
-        units: p.units,
-        // Absent last month means it sold nothing then — unless last month is
-        // outside the order history, where nothing is known.
-        previousRevenue: previousProductRows ? previousRevenue.get(p.productId) ?? 0 : null,
-      })),
+    trendMonths: 12,
+    platforms: platformsOf(channelRows) ?? [],
     promotions,
-    collections: collectionRows.map((row) => mapReportCollection(row, previousCollectionRows)),
-    // The denominator a collection's share is taken of: every paid product line
-    // in the month, not the collections summed — they overlap.
-    productRevenue: productRows.reduce((sum, row) => sum + count(row.revenue), 0),
     funnel: storefront.available ? storefront.funnel : [],
     channels: storefront.available ? storefront.channels : [],
     channelsBlockedReason: storefront.blockedReason,
@@ -342,16 +443,16 @@ function strip(period: Period) {
   return rest;
 }
 
-/** The twelve months ending with the report's month, as a month-grain range. */
-function twelveMonths(ctx: InsightsContext): InsightsRange {
-  const first = step(fromKey(ctx.range.from), "month", -11);
+/** The `months` months ending with the report's month, as a month-grain range. */
+function monthsBack(ctx: InsightsContext, months: number): InsightsRange {
+  const first = step(fromKey(ctx.range.from), "month", -(months - 1));
   const lastDay = toKey(step(fromKey(ctx.range.to), "day", -1)).slice(0, 10);
   const range = resolveRange(
     { from: toKey(first).slice(0, 10), to: lastDay },
     { tz: ctx.tz, now: new Date(ctx.renderedAt) }
   ) as unknown as InsightsRange;
-  // A twelve-month custom span always resolves to months; asserted so a change
-  // to grainForSpan cannot quietly turn the report's trend into weeks.
+  // A span this long always resolves to months; asserted so a change to
+  // grainForSpan cannot quietly turn the report's trend into weeks.
   if (range.grain !== "month") throw new Error(`Report trend resolved to ${range.grain}, expected month.`);
   return range;
 }
