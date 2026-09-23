@@ -23,7 +23,7 @@ import {
   fillSeries,
   windowCovered,
 } from "../../../../scripts/lib/insights-range.mjs";
-import type { BucketState, CapturePoint, CustomerActivity, MarketingSummary } from "../../types";
+import type { BucketState, CapturePoint, Compared, CustomerActivity, MarketingSummary, NewsletterActivity } from "../../types";
 import { orderArgs, rangeArgs, type InsightsContext } from "./context";
 import { foldOrdersPerCustomer } from "./order-frequency";
 import { ordersCoverage } from "./orders";
@@ -38,9 +38,23 @@ import { callRpc, callRpcOne, count } from "./shared";
 const CHECKOUT_MINUTES = 60;
 
 export async function getCustomerActivity(ctx: InsightsContext): Promise<CustomerActivity> {
+  const rows = await callRpc<Record<string, unknown>>(
+    RPC.INSIGHTS_ORDERS_PER_CUSTOMER,
+    orderArgs(ctx, ctx.range, "shopify")
+  );
+  return { ordersPerCustomer: foldOrdersPerCustomer(rows) };
+}
+
+/**
+ * The newsletter's movement and what it captured, for the Marketing panel.
+ *
+ * Split out of `getCustomerActivity` when the newsletter moved to Marketing &
+ * funnel: the Customers panel reads orders per customer and nothing else here,
+ * so neither panel pays for the other's queries.
+ */
+export async function getNewsletterActivity(ctx: InsightsContext): Promise<NewsletterActivity> {
   const people = orderArgs(ctx, ctx.range, "shopify");
-  const [perCustomerRows, marketingNow, marketingBefore, marketingRows, captureRows] = await Promise.all([
-    callRpc<Record<string, unknown>>(RPC.INSIGHTS_ORDERS_PER_CUSTOMER, people),
+  const [marketingNow, marketingBefore, marketingRows, captureRows] = await Promise.all([
     callRpcOne<Record<string, unknown>>(RPC.INSIGHTS_MARKETING_SUMMARY, rangeArgs(ctx)),
     callRpcOne<Record<string, unknown>>(RPC.INSIGHTS_MARKETING_SUMMARY, rangeArgs(ctx, ctx.range.previous)),
     callRpc<Record<string, unknown>>(RPC.INSIGHTS_MARKETING_SERIES, { ...rangeArgs(ctx), p_grain: ctx.range.grain }),
@@ -62,7 +76,6 @@ export async function getCustomerActivity(ctx: InsightsContext): Promise<Custome
   const marketingSeries = marketingRows.map((row) => ({ ...row, bucket: String(row.bucket) }) as Record<string, unknown> & { bucket: string });
 
   return {
-    ordersPerCustomer: foldOrdersPerCustomer(perCustomerRows),
     marketing: {
       current: mapMarketing(marketingNow, days(ctx.range.from, ctx.range.to, ctx.range.now)),
       previous: marketingBefore && previousCovered
@@ -74,6 +87,39 @@ export async function getCustomerActivity(ctx: InsightsContext): Promise<Custome
       covered,
     },
     capture: capturePoints(ctx, captureRows),
+  };
+}
+
+/**
+ * Newsletter movement over the range beside the previous one, without the
+ * series: what the Marketing panel and the monthly report print. The same
+ * reads and the same coverage rule as the Customers panel's card, so the three
+ * cannot disagree. `covered` is false when the range starts before the
+ * earliest recorded unsubscribe — unsubscribes there are unmeasured, not few.
+ */
+export async function getNewsletterMovement(
+  ctx: InsightsContext,
+  windows: { current: { from: string; to: string }; previous: { from: string; to: string } } = {
+    current: ctx.range,
+    previous: ctx.range.previous,
+  }
+):Promise<Compared<MarketingSummary> & { covered: boolean }> {
+  const [now, before] = await Promise.all([
+    callRpcOne<Record<string, unknown>>(RPC.INSIGHTS_MARKETING_SUMMARY, rangeArgs(ctx, windows.current)),
+    callRpcOne<Record<string, unknown>>(RPC.INSIGHTS_MARKETING_SUMMARY, rangeArgs(ctx, windows.previous)),
+  ]);
+  const coverage = {
+    from: (now?.unsubscribes_from as string | null) ?? null,
+    through: (now?.consent_through as string | null) ?? null,
+  };
+  const end = (w: { from: string; to: string }) => (w.to < ctx.range.now ? w.to : ctx.range.now);
+  return {
+    current: mapMarketing(now, days(windows.current.from, windows.current.to, ctx.range.now)),
+    previous:
+      before && windowCovered(windows.previous, coverage, ctx.tz)
+        ? mapMarketing(before, days(windows.previous.from, windows.previous.to, end(windows.previous)))
+        : null,
+    covered: windowCovered(windows.current, coverage, ctx.tz),
   };
 }
 

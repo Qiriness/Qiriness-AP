@@ -6,6 +6,32 @@
   margin: 0 0 var(--space-4);
 }
 
+/*
+ * A fixed row of eight tiles that HALVES RATHER THAN UNRAVELS. With auto-fit the
+ * eight KPI cards dropped one at a time as the window narrowed, leaving 7+1 then
+ * 6+2 — a ragged last row that reads as a layout fault. These steps keep whole
+ * blocks: 8 across, then two rows of 4, then four rows of 2.
+ *
+ * The breakpoints are in px on purpose: a media query measures rem against the
+ * browser's default, not against the root size globals.css steps up on large
+ * screens, so rem here would not mean what it means everywhere else in this file.
+ */
+.grid8 {
+  grid-template-columns: repeat(8, minmax(0, 1fr));
+}
+
+@media (max-width: 1500px) {
+  .grid8 {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 820px) {
+  .grid8 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
 .card {
   position: relative;
   min-width: 0;

@@ -27,22 +27,32 @@ export function Grid({
   min = 15,
   pin,
   label,
+  columns,
 }: {
   children: ReactNode;
   min?: number;
   pin?: string;
   label?: string;
+  /**
+   * A fixed column count instead of `min`-based reflow. `8` steps 8 -> 4 -> 2,
+   * so a row of eight tiles halves as a block rather than dropping one tile at
+   * a time and leaving a ragged last row.
+   */
+  columns?: 8;
 }) {
-  const style = { gridTemplateColumns: `repeat(auto-fit, minmax(min(100%, ${min}rem), 1fr))` };
+  const style = columns
+    ? undefined
+    : { gridTemplateColumns: `repeat(auto-fit, minmax(min(100%, ${min}rem), 1fr))` };
+  const className = columns ? `${styles.grid} ${styles[`grid${columns}`]}` : styles.grid;
   if (pin) {
     return (
-      <PinnableRow id={pin} label={label ?? pin} style={style}>
+      <PinnableRow id={pin} label={label ?? pin} style={style} className={className}>
         {children}
       </PinnableRow>
     );
   }
   return (
-    <div className={styles.grid} style={style}>
+    <div className={className} style={style}>
       {children}
     </div>
   );

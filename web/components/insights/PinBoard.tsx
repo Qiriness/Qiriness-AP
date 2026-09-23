@@ -144,11 +144,14 @@ export function PinnableRow({
   id,
   label,
   style,
+  className,
   children,
 }: {
   id: string;
   label: string;
-  style: CSSProperties;
+  style?: CSSProperties;
+  /** The grid class the row is laid out with, so a fixed-column row keeps its steps when pinned. */
+  className?: string;
   children: ReactNode;
 }) {
   const api = useContext(PinContext);
@@ -158,7 +161,7 @@ export function PinnableRow({
 
   if (!api) {
     return (
-      <div className={styles.grid} style={style}>
+      <div className={className ?? styles.grid} style={style}>
         {children}
       </div>
     );
@@ -167,7 +170,7 @@ export function PinnableRow({
   const pinned = api.pins.includes(id);
   const full = !pinned && api.pins.length >= MAX_PINS;
   const row = (
-    <div className={`${styles.grid} ${styles.pinRow} ${pinned ? styles.isPinned : ""}`} style={style}>
+    <div className={`${className ?? styles.grid} ${styles.pinRow} ${pinned ? styles.isPinned : ""}`} style={style}>
       {children}
       <button
         type="button"

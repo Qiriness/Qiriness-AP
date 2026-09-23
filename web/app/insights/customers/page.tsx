@@ -11,7 +11,7 @@ export const metadata = { title: "Customers · Insights · Qiriness Support OS" 
 
 /**
  * The customer base today (a snapshot), plus what customers did in the selected
- * range. The platform control stays disabled: every per-person figure leaves out
+ * range. The newsletter rows moved to Marketing & funnel on 2026-09-23. The platform control stays disabled: every per-person figure leaves out
  * marketplaces, which create one customer per order. The view is a client
  * component (the call list re-sorts); the ranged rows are rendered here and
  * handed in as a slot, so nothing server-only crosses the boundary.
@@ -32,7 +32,7 @@ export default function CustomersInsightsPage({ searchParams }: { searchParams: 
           <CustomersView
             panel={panel}
             ranged={
-              <CustomerActivityRows activity={activity} grain={ctx.range.grain} compareLabel={ctx.range.compareLabel} />
+              <CustomerActivityRows activity={activity} />
             }
           />
         );
