@@ -17,6 +17,7 @@
 import { RPC } from "../../../../scripts/lib/tables.mjs";
 import type { FulfilmentBucket, FulfilmentCarrier, FulfilmentPanel, OrdersSummary } from "../../types";
 import { orderArgs, type InsightsContext } from "./context";
+import { getInventoryExceptions } from "./inventory";
 import { getOpenOrders } from "./open-orders";
 import { logDashboardAccess } from "../access-log";
 import { getOrderSeries, getOrdersSummary, ordersCoverage } from "./orders";
@@ -38,12 +39,13 @@ const WAITING = "Not shipped yet";
 
 export async function getFulfilmentPanel(ctx: InsightsContext): Promise<FulfilmentPanel> {
   const coverage = ordersCoverage(ctx);
-  const [summary, seriesRows, bucketRows, carrierRows, open] = await Promise.all([
+  const [summary, seriesRows, bucketRows, carrierRows, open, inventory] = await Promise.all([
     getOrdersSummary(ctx),
     getOrderSeries(ctx),
     callRpc<Record<string, unknown>>(RPC.INSIGHTS_FULFILMENT_BUCKETS, orderArgs(ctx)),
     callRpc<Record<string, unknown>>(RPC.INSIGHTS_FULFILMENT_CARRIERS, orderArgs(ctx)),
     getOpenOrders(ctx),
+    getInventoryExceptions(ctx),
   ]);
 
   // The waiting-orders list names customers and shows their addresses.
@@ -73,6 +75,7 @@ export async function getFulfilmentPanel(ctx: InsightsContext): Promise<Fulfilme
     buckets: mapBuckets(bucketRows),
     carriers: carrierRows.map(mapCarrier),
     hasDeliveryData: hasUsableDeliveryData(summary.current),
+    inventory,
   };
 }
 

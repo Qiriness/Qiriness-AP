@@ -116,6 +116,17 @@ test('contact cannot open Sales; the other two roles can', () => {
   }
 });
 
+test('contact cannot open the revenue-led panels or download the sales report', () => {
+  for (const panel of ['overview', 'marketing']) {
+    assert.equal(canSeePanel('contact', panel), false, panel);
+    for (const role of ['developer', 'management']) assert.equal(canSeePanel(role, panel), true, `${role} ${panel}`);
+  }
+  assert.equal(canAccessPath('contact', '/api/insights/report'), false);
+  assert.equal(canAccessPath('management', '/api/insights/report'), true);
+  // The rest of /api/insights stays open, as before.
+  assert.equal(canAccessPath('contact', '/api/insights/topic-map'), true);
+});
+
 test('every role may open the other panels, and the rest of the app', () => {
   for (const role of ROLES) {
     for (const panel of ['fulfilment', 'support', 'customers', 'agent']) {
@@ -134,8 +145,8 @@ test('an unknown or missing role may open nothing', () => {
 });
 
 test('a role lands on the first panel it may open', () => {
-  assert.equal(fallbackPath('developer'), '/insights/sales');
-  assert.equal(fallbackPath('management'), '/insights/sales');
+  assert.equal(fallbackPath('developer'), '/insights/overview');
+  assert.equal(fallbackPath('management'), '/insights/overview');
   assert.equal(fallbackPath('contact'), '/insights/fulfilment');
 });
 

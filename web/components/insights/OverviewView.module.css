@@ -1,0 +1,370 @@
+/* The Overview panel's own pieces, and the small parts the Marketing panel and
+   the stock card share with it (pills, tracks, the blocked chart). */
+
+.muted {
+  margin: 0;
+  font-size: var(--text-body);
+  color: var(--text-subtle);
+}
+
+.up {
+  color: var(--priority-low-ink);
+}
+
+.down {
+  color: var(--priority-high-ink);
+}
+
+.flat {
+  color: var(--text-subtle);
+}
+
+/* --- trend ------------------------------------------------------------- */
+
+.trendTabs {
+  display: flex;
+  justify-content: flex-end;
+  margin: calc(var(--space-2) * -1) 0 var(--space-3);
+}
+
+.chartBlocked {
+  display: grid;
+  place-items: center;
+  min-height: 14rem;
+  margin: 0;
+  padding: var(--space-5);
+  text-align: center;
+  font-size: var(--text-body);
+  color: var(--text-subtle);
+  border-radius: var(--radius-md);
+  background: repeating-linear-gradient(45deg, transparent 0 6px, var(--mist-050) 6px 12px);
+}
+
+/* --- drivers ----------------------------------------------------------- */
+
+.driverTotal {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding-bottom: var(--space-3);
+  margin-bottom: var(--space-3);
+  border-bottom: 1px solid var(--border);
+  font-size: var(--text-body);
+  color: var(--text-subtle);
+}
+
+.driverTotal strong {
+  font-size: var(--text-2xl);
+  font-weight: var(--weight-bold);
+  font-variant-numeric: tabular-nums;
+}
+
+.drivers {
+  display: grid;
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.driver {
+  display: grid;
+  grid-template-columns: 6.5rem 1fr 4.5rem;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.driverLabel b {
+  display: block;
+  font-size: var(--text-body);
+  color: var(--text-strong);
+}
+
+.driverLabel span {
+  font-size: var(--text-sm);
+  color: var(--text-subtle);
+}
+
+.driverValue {
+  text-align: right;
+  font-size: var(--text-body);
+  font-weight: var(--weight-semibold);
+  font-variant-numeric: tabular-nums;
+}
+
+.track {
+  display: block;
+  height: 0.5rem;
+  border-radius: var(--radius-pill);
+  background: var(--mist-050);
+  overflow: hidden;
+}
+
+.trackBlocked {
+  background: repeating-linear-gradient(45deg, transparent 0 4px, var(--mist-050) 4px 8px);
+}
+
+.fill,
+.fillNeg {
+  display: block;
+  height: 100%;
+  border-radius: var(--radius-pill);
+  background: var(--chart-1);
+}
+
+.fillNeg {
+  background: var(--error);
+}
+
+.callout {
+  margin: var(--space-4) 0 0;
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--surface-sunken);
+  font-size: var(--text-sm);
+  color: var(--text-subtle);
+}
+
+.callout b {
+  color: var(--text-strong);
+}
+
+/* --- bridge ------------------------------------------------------------ */
+
+.bridge {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: var(--space-2);
+  align-items: end;
+}
+
+.bridgeItem {
+  text-align: center;
+  min-width: 0;
+}
+
+.bridgeBarWrap {
+  display: flex;
+  align-items: flex-end;
+  height: 8rem;
+}
+
+.bridgeBar {
+  width: 100%;
+  border-radius: var(--radius-sm) var(--radius-sm) 2px 2px;
+  background: var(--chart-1);
+}
+
+.bridge_gross .bridgeBar {
+  background: var(--gold-strong);
+}
+
+.bridge_cost .bridgeBar {
+  background: var(--error);
+}
+
+.bridge_add .bridgeBar {
+  background: var(--chart-3);
+}
+
+.bridgeItem strong {
+  display: block;
+  margin-top: var(--space-2);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-strong);
+}
+
+.bridgeItem span {
+  font-size: var(--text-caption);
+  color: var(--text-subtle);
+}
+
+/* --- signals ----------------------------------------------------------- */
+
+.signals {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.signal {
+  display: grid;
+  grid-template-columns: 1.75rem 1fr;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--surface-sunken);
+}
+
+.signal i {
+  display: grid;
+  place-items: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: var(--radius-sm);
+  font-style: normal;
+  font-size: var(--text-caption);
+  font-weight: var(--weight-bold);
+  background: var(--mist-050);
+  color: var(--text-subtle);
+}
+
+.signal_good i {
+  background: var(--success-050);
+  color: var(--priority-low-ink);
+}
+
+.signal_warn i {
+  background: var(--error-050);
+  color: var(--priority-high-ink);
+}
+
+.signal b {
+  display: block;
+  font-size: var(--text-body);
+  color: var(--text-strong);
+}
+
+.signal span {
+  display: block;
+  margin-top: 2px;
+  font-size: var(--text-sm);
+  color: var(--text-subtle);
+}
+
+/* --- mix --------------------------------------------------------------- */
+
+.mix + .mix {
+  margin-top: var(--space-4);
+}
+
+.mix h3 {
+  margin: 0 0 var(--space-2);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  color: var(--text-subtle);
+}
+
+.mixRow {
+  display: grid;
+  grid-template-columns: minmax(0, 9rem) 1fr 2.5rem;
+  gap: var(--space-3);
+  align-items: center;
+  margin: var(--space-2) 0;
+  font-size: var(--text-sm);
+}
+
+.mixLabel,
+.productCell {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.productCell {
+  max-width: 22rem;
+}
+
+.mixRow b {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* --- pills ------------------------------------------------------------- */
+
+.pill {
+  display: inline-block;
+  padding: 2px var(--space-2);
+  border-radius: var(--radius-pill);
+  font-size: var(--text-caption);
+  font-weight: var(--weight-semibold);
+  white-space: nowrap;
+}
+
+.pillBad {
+  background: var(--error-050);
+  color: var(--priority-high-ink);
+}
+
+.pillWarn {
+  background: var(--warning-050);
+  color: var(--priority-medium-ink);
+}
+
+.pillNeutral {
+  background: var(--mist-050);
+  color: var(--text-subtle);
+}
+
+.pillGood {
+  background: var(--success-050);
+  color: var(--priority-low-ink);
+}
+
+/* --- report ------------------------------------------------------------ */
+
+.report {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--space-3);
+  margin-top: var(--space-4);
+}
+
+.reportLabel {
+  display: grid;
+  gap: var(--space-1);
+  font-size: var(--text-sm);
+  color: var(--text-subtle);
+}
+
+.reportSelect {
+  min-height: 2.25rem;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: var(--text-strong);
+  font: inherit;
+}
+
+.reportButton {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2.25rem;
+  padding: 0 var(--space-4);
+  border-radius: var(--radius-md);
+  background: var(--teal);
+  color: var(--text-on-teal);
+  font-size: var(--text-body);
+  font-weight: var(--weight-semibold);
+  text-decoration: none;
+}
+
+.reportButton:hover {
+  background: var(--teal-strong);
+}
+
+.reportButton:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus);
+}
+
+@media (max-width: 900px) {
+  .bridge {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (max-width: 640px) {
+  .bridge {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .driver {
+    grid-template-columns: 5.5rem 1fr 4rem;
+  }
+}

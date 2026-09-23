@@ -1,0 +1,118 @@
+/* Marketing & funnel: the funnel rows, the marketing summary tiles. */
+
+.funnel {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.funnelRow {
+  display: grid;
+  grid-template-columns: 9rem 1fr 5.5rem;
+  gap: var(--space-3);
+  align-items: center;
+}
+
+.funnelRow label {
+  font-size: var(--text-body);
+  font-weight: var(--weight-semibold);
+  color: var(--text-strong);
+}
+
+.funnelRow label small {
+  display: block;
+  font-weight: var(--weight-regular);
+  font-size: var(--text-sm);
+  color: var(--text-subtle);
+}
+
+.funnelBar {
+  height: 1.25rem;
+  border-radius: var(--radius-sm);
+  background: var(--mist-050);
+  overflow: hidden;
+}
+
+.funnelBar i {
+  display: block;
+  height: 100%;
+  border-radius: var(--radius-sm);
+  background: var(--chart-1);
+}
+
+.funnelAside i {
+  background: var(--chart-3);
+  opacity: 0.75;
+}
+
+.funnelBlocked {
+  background: repeating-linear-gradient(45deg, transparent 0 5px, var(--mist-050) 5px 10px);
+}
+
+.funnelValue {
+  text-align: right;
+  font-size: var(--text-body);
+  font-variant-numeric: tabular-nums;
+}
+
+.funnelValue b {
+  display: block;
+  color: var(--text-strong);
+}
+
+.funnelValue small {
+  color: var(--text-subtle);
+}
+
+.tabs {
+  display: flex;
+  justify-content: flex-end;
+  margin: calc(var(--space-2) * -1) 0 var(--space-3);
+}
+
+.summary {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+}
+
+.summaryTile {
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--surface-sunken);
+}
+
+.summaryTile span {
+  font-size: var(--text-sm);
+  color: var(--text-subtle);
+}
+
+.summaryTile strong {
+  display: block;
+  margin-top: 2px;
+  font-size: var(--text-lg);
+  color: var(--text-subtle);
+}
+
+.promoName {
+  max-width: 22rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.kind {
+  margin-left: var(--space-2);
+  font-size: var(--text-caption);
+  font-weight: var(--weight-regular);
+  color: var(--text-subtle);
+}
+
+@media (max-width: 640px) {
+  .summary {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .funnelRow {
+    grid-template-columns: 6.5rem 1fr 4.5rem;
+  }
+}

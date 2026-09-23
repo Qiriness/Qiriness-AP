@@ -46,13 +46,15 @@ export const ROLE_CLAIM = 'dashboard_role';
  * Insights → Sales is closed to it (the owner's rule, 2026-09-11). The
  * management chat on Home — the page and its API — is for Management and
  * Developer only (2026-09-14): it answers revenue questions too, and more
- * freely than any panel. Developer and Management are identical for now; they
+ * freely than any panel. Overview, Marketing & funnel and the monthly sales
+ * report (2026-09-22) lead with revenue, so they are closed to it for the same
+ * reason as Sales. Developer and Management are identical for now; they
  * are separate roles so they can diverge without a migration.
  */
 const DENIED = Object.freeze({
   developer: [],
   management: [],
-  contact: ['/insights/sales', '/home', '/api/chat']
+  contact: ['/insights/overview', '/insights/sales', '/insights/marketing', '/api/insights/report', '/home', '/api/chat']
 });
 
 /** May this role use the management chat? What the sidebar asks before drawing Home. */
@@ -78,7 +80,7 @@ export function canAccessPath(role, pathname) {
 
 /** Where a role lands when it asks for a page it may not open. */
 export function fallbackPath(role) {
-  return canAccessPath(role, '/insights/sales') ? '/insights/sales' : '/insights/fulfilment';
+  return canAccessPath(role, '/insights/overview') ? '/insights/overview' : '/insights/fulfilment';
 }
 
 /**

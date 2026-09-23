@@ -6,7 +6,7 @@
  */
 
 import { RPC } from "../../../../scripts/lib/tables.mjs";
-import type { Compared, OrdersSummary, PlatformId } from "../../types";
+import type { Compared, OrdersSummary, PlatformId, SalesOverviewFigures } from "../../types";
 import { orderArgs, type InsightsContext } from "./context";
 import { previousCovered, type Coverage } from "./series";
 import { callRpc, callRpcOne, count, num } from "./shared";
@@ -81,5 +81,35 @@ export function mapSummary(row: Record<string, unknown>): OrdersSummary {
     fullyRefundedOrders: count(row.fully_refunded_orders),
     returnsOpened: count(row.returns_opened),
     refundedAmount: count(row.refunded_amount),
+  };
+}
+
+/**
+ * The basket beside the summary (insights_sales_overview): paid orders, paid
+ * units, discounts, and revenue with and without a promotion — this range and
+ * the previous one, withheld on the same coverage rule as the summary.
+ */
+export async function getSalesOverviewFigures(
+  ctx: InsightsContext,
+  platform: PlatformId = ctx.platform
+): Promise<Compared<SalesOverviewFigures>> {
+  const comparable = previousCovered(ctx.range, ordersCoverage(ctx));
+  const [current, previous] = await Promise.all([
+    callRpcOne<Record<string, unknown>>(RPC.INSIGHTS_SALES_OVERVIEW, orderArgs(ctx, ctx.range, platform)),
+    comparable
+      ? callRpcOne<Record<string, unknown>>(RPC.INSIGHTS_SALES_OVERVIEW, orderArgs(ctx, ctx.range.previous, platform))
+      : Promise.resolve(null),
+  ]);
+  return { current: mapFigures(current ?? {}), previous: previous ? mapFigures(previous) : null };
+}
+
+export function mapFigures(row: Record<string, unknown>): SalesOverviewFigures {
+  return {
+    paidOrders: count(row.paid_orders),
+    units: count(row.units),
+    discounts: count(row.discounts),
+    discountedOrders: count(row.discounted_orders),
+    discountedRevenue: count(row.discounted_revenue),
+    fullPriceRevenue: count(row.full_price_revenue),
   };
 }

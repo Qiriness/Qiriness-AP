@@ -1096,10 +1096,12 @@ export interface TicketStats {
 // the way to the component — which is what `BucketState` carries.
 
 /** Which panel is on screen. Real routes, so a panel can be linked to. */
-export type InsightsPanel = "sales" | "fulfilment" | "support" | "customers" | "agent";
+export type InsightsPanel = "overview" | "sales" | "marketing" | "fulfilment" | "support" | "customers" | "agent";
 
 export const INSIGHTS_PANELS: { id: InsightsPanel; label: string; href: string }[] = [
+  { id: "overview", label: "Overview", href: "/insights/overview" },
   { id: "sales", label: "Sales", href: "/insights/sales" },
+  { id: "marketing", label: "Marketing & funnel", href: "/insights/marketing" },
   { id: "fulfilment", label: "Fulfilment", href: "/insights/fulfilment" },
   { id: "support", label: "Support", href: "/insights/support" },
   { id: "customers", label: "Customers", href: "/insights/customers" },
@@ -1420,6 +1422,198 @@ export interface FulfilmentPanel {
   carriers: FulfilmentCarrier[];
   /** False while no carrier feeds delivery events back — the state today. */
   hasDeliveryData: boolean;
+  /** Stock at risk, now — not cut by the range. */
+  inventory: InventoryExceptions;
+}
+
+// --- Storefront analytics (live from Shopify, never stored) ------------------
+
+/** The sessions dataset for one window. Null where unmeasured, never zero. */
+export interface StorefrontTotals {
+  sessions: number | null;
+  visitors: number | null;
+  /** Shopify's own: completed-checkout sessions over sessions, as a percentage. */
+  conversionRate: number | null;
+  pageviews: number | null;
+  bounceRate: number | null;
+  cartSessions: number | null;
+  checkoutSessions: number | null;
+  convertedSessions: number | null;
+}
+
+/** One step of the storefront funnel, with its share of the step above. */
+export interface FunnelStep {
+  key: string;
+  label: string;
+  value: number | null;
+  /**
+   * False for a step that is measured but does not nest with its neighbours —
+   * product page ENTRIES. The chain's percentages skip it.
+   */
+  chained: boolean;
+  /** Share of the first step. */
+  ofEntry: number | null;
+  /** Share of the step above; null on the first and on an unchained step. */
+  ofPrevious: number | null;
+}
+
+/**
+ * Shopify's money ladder for one window, as the admin's Sales report prints it.
+ * `netSales` and `averageOrderValue` cannot be derived from our own columns —
+ * see scripts/lib/storefront-analytics.mjs.
+ */
+export interface StorefrontSales {
+  grossSales: number;
+  /** A positive magnitude, though ShopifyQL returns it negative. */
+  discounts: number;
+  returns: number;
+  netSales: number;
+  taxes: number;
+  shipping: number;
+  totalSales: number;
+  orders: number;
+  /** (gross − discounts) ÷ orders: Shopify's formula, net-based. */
+  averageOrderValue: number | null;
+}
+
+export interface StorefrontChannel {
+  /** The traffic source, lowercased: `direct`, `google`, `klaviyo`. */
+  channel: string;
+  sessions: number | null;
+  /** Shopify-attributed revenue for that channel, its own figure, not ours. */
+  revenue: number | null;
+  orders: number | null;
+  conversionRate: number | null;
+  revenuePerSession: number | null;
+}
+
+/** Where sessions came in: one row per kind of landing page. */
+export interface LandingType {
+  /** `Product`, `Homepage`, `Collection`, … as Shopify types them. */
+  type: string;
+  sessions: number | null;
+  visitors: number | null;
+  cartSessions: number | null;
+  convertedSessions: number | null;
+  cartRate: number | null;
+  conversionRate: number | null;
+}
+
+/**
+ * One product page sessions ARRIVED on. Entries, not views: Shopify keeps no
+ * product-view metric, so a session that landed elsewhere and then browsed to
+ * this product is not counted. A floor per page, and not a funnel stage.
+ */
+export interface ProductPage {
+  path: string;
+  /** The Shopify handle out of the path, for naming it from our catalogue. */
+  handle: string | null;
+  /** The product's title once matched on handle; the path is shown when it is not. */
+  title: string | null;
+  sessions: number | null;
+  visitors: number | null;
+  cartSessions: number | null;
+  cartRate: number | null;
+}
+
+export interface StorefrontAnalytics {
+  /** False when Shopify could not be read, or the figure does not apply. */
+  available: boolean;
+  /** Why not — required whenever `available` is false, and rendered as the dash's reason. */
+  blockedReason: string | null;
+  totals: Compared<StorefrontTotals>;
+  /** The money ladder, null when Shopify could not be read or the platform has no sales. */
+  sales: Compared<StorefrontSales | null>;
+  sessions: SeriesPoint[];
+  funnel: FunnelStep[];
+  channels: StorefrontChannel[];
+  landingTypes: LandingType[];
+  /** Busiest first; titles are filled in by the Marketing service. */
+  productPages: ProductPage[];
+}
+
+// --- Overview, Marketing & funnel, the monthly report ------------------------
+
+export type InventoryStatus = "out" | "critical" | "low" | "watch";
+
+export interface InventoryException {
+  productId: string;
+  title: string;
+  productType: string | null;
+  stock: number;
+  /** Units that left over the window, free lines included. */
+  unitsOut: number;
+  /** Days of stock at that rate; null when nothing left in the window. */
+  coverDays: number | null;
+  status: InventoryStatus;
+}
+
+export interface InventoryExceptions {
+  items: InventoryException[];
+  /** The window the rate is read over, in days. */
+  windowDays: number;
+  /** When the products were last synced — how current "stock" is. */
+  syncedAt: string | null;
+}
+
+/** insights_sales_overview: the basket beside the orders summary. */
+export interface SalesOverviewFigures {
+  paidOrders: number;
+  units: number;
+  /** Shopify total_discounts: gifts and free shipping included. */
+  discounts: number;
+  discountedOrders: number;
+  discountedRevenue: number;
+  fullPriceRevenue: number;
+}
+
+export interface ManagementSignal {
+  tone: "good" | "warn" | "neutral";
+  title: string;
+  detail: string;
+}
+
+export interface OverviewPanel {
+  summary: Compared<OrdersSummary>;
+  /** Live from Shopify Analytics; blocked with a reason when it cannot be read. */
+  storefront: StorefrontAnalytics;
+  /** Revenue on the storefront only — the numerator revenue-per-session needs. */
+  storefrontRevenue: Compared<number>;
+  figures: Compared<SalesOverviewFigures>;
+  revenue: SeriesPoint[];
+  orders: SeriesPoint[];
+  aov: SeriesPoint[];
+  platforms: PlatformSplit[];
+  topProducts: ProductSale[];
+  /** Paid revenue across every product, the share's denominator. */
+  productRevenue: number;
+  inventory: InventoryExceptions;
+  signals: ManagementSignal[];
+  /** The months the report can be downloaded for, newest first, and the default one. */
+  reportMonths: { id: string; label: string }[];
+  reportMonth: string;
+}
+
+export interface PromotionRow {
+  /** Null for the orders that carried no promotion: full price. */
+  name: string | null;
+  kind: string | null;
+  /** LINE_ITEM or SHIPPING_LINE; a shipping promotion takes nothing off a line. */
+  target: string | null;
+  orders: number;
+  revenue: number;
+  discount: number;
+  /** Null on a marketplace, where every buyer is a new customer record. */
+  newCustomerOrders: number | null;
+}
+
+export interface MarketingPanel {
+  summary: Compared<OrdersSummary>;
+  storefront: StorefrontAnalytics;
+  figures: Compared<SalesOverviewFigures>;
+  promotions: PromotionRow[];
+  /** The list's movement and what it captured — moved here from Customers. */
+  newsletter: NewsletterActivity;
 }
 
 export interface PlatformSplit {
@@ -1435,6 +1629,30 @@ export interface ProductSale {
   orders: number;
   units: number;
   revenue: number;
+  /**
+   * The same product's revenue one period earlier, for growth and declines.
+   * Null when the previous period is outside the order history (no honest
+   * comparison) — 0 means it genuinely sold nothing then.
+   */
+  previousRevenue: number | null;
+}
+
+/**
+ * One collection's sales in the range. `collectionId` is null on the row for
+ * products in no synced collection.
+ *
+ * COLLECTIONS OVERLAP: a product counts in every collection that carries it, so
+ * these never sum to the range's revenue and `share` can exceed 100% in total.
+ */
+export interface CollectionSale {
+  collectionId: string | null;
+  title: string;
+  handle: string | null;
+  products: number;
+  orders: number;
+  units: number;
+  revenue: number;
+  previousRevenue: number | null;
 }
 
 export interface ProductGroup {
@@ -1558,6 +1776,10 @@ export interface SalesPanel {
     notice: string | null;
   };
   countries: CountrySale[];
+  /** Collection mix for the range, busiest first, with the uncollected row last. */
+  collections: CollectionSale[];
+  /** Paid product revenue in the range — the denominator a collection's share uses. */
+  productRevenue: number;
   pairs: PairGroup[];
   /** The "Who buys this product" card, for the product in `?product=`. */
   productCustomerMix: ProductCustomerMix;
@@ -1734,6 +1956,14 @@ export interface CustomerPanel {
 export interface CustomerActivity {
   /** Customers by how many orders they placed in the range; the last bucket is "N or more". */
   ordersPerCustomer: { orders: number; orMore: boolean; customers: number }[];
+}
+
+/**
+ * The newsletter, in the selected range. It lives on Marketing & funnel rather
+ * than Customers (2026-09-23): the list is a marketing channel, and the reader
+ * asking about it is the one reading acquisition and promotions.
+ */
+export interface NewsletterActivity {
   marketing: {
     current: MarketingSummary;
     previous: MarketingSummary | null;

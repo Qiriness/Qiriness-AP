@@ -10,6 +10,7 @@ import {
   hours,
   percent,
 } from "./InsightsKit";
+import { InventoryTable, inventoryAside } from "./InventoryCard";
 import { OpenOrders } from "./OpenOrders";
 import { TimeSeriesChart } from "./TimeSeriesChart";
 import { perGrain } from "./grain";
@@ -77,6 +78,12 @@ export function FulfilmentView({ panel, compareLabel }: { panel: FulfilmentPanel
           aside={<span>Now, as of the last order sync — not cut by the date range · names and emails, do not share</span>}
         >
           <OpenOrders orders={panel.openOrders} vipRuleSet={panel.vipRuleSet} />
+        </Card>
+      </Grid>
+
+      <Grid min={100} pin="inventory" label="Inventory exceptions">
+        <Card title="Inventory exceptions" aside={<span>{inventoryAside(panel.inventory)}</span>}>
+          <InventoryTable inventory={panel.inventory} />
         </Card>
       </Grid>
 

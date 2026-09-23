@@ -13,7 +13,7 @@ const AREAS = [
   { label: "Tickets", path: "/tickets" },
   { label: "Conversations", path: "/conversations" },
   { label: "Orders", path: "/orders" },
-  { label: "Insights — Sales", path: "/insights/sales" },
+  { label: "Insights — Overview, Sales, Marketing & sales report", path: "/insights/sales" },
   { label: "Insights — other panels", path: "/insights/fulfilment" },
   { label: "Agent Setup", path: "/agent-setup" },
 ];
