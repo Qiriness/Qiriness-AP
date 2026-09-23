@@ -10,6 +10,53 @@ Three sibling files carry the other halves, and this one deliberately does not d
 
 ---
 
+## The report's switch now moves every card, and 6M reads on 6M (2026-09-23)
+
+Four things the owner asked for, after reading the first build.
+
+**6M on 6M.** The six-month view compares against **the same six months a year
+earlier**, not the half-year immediately before: August 2026 means March–August
+2026 against March–August 2025. On the old basis those six months read −26.3%;
+on this one, **+48.3%** (€133,966 against €90,128). A half-year against the
+half-year before it was mostly reading the seasons.
+
+**The compared period is drawn under the trend, dotted** — one month back for
+MoM, twelve for both year-on-year views, both lines on one scale. The series
+carries 24 monthly buckets so a 12-month chart has something to lay underneath.
+
+**Growth and declines in the report too**, ten each, ranked in euros rather than
+per cent. August MoM: Soin Bonne Mine Homme +€211, Duo Jour & Nuit Temps Sublime
+−€3,132.
+
+**Every card follows the switch.** Previously only the chips changed: on 6M the
+product table, collection mix, customer counts and platform mix still showed the
+*month's* figures under a half-year headline. All of them are now rendered once
+per comparison. Cards that genuinely cannot follow it — management signals, the
+funnel, the channel table, promotions — say which window they do cover, and a
+window outside the synced history says so in words rather than printing a dash.
+The drivers card now decomposes the same top line the KPI above it reports; the
+two used to disagree by 0.1pt.
+
+**ShopifyQL turned out to have its own rate limit**, separate from the GraphQL
+point budget: ten aliased analytics queries returned `THROTTLED` with the
+analytics bucket at 0/1000 while the document's own budget read 1,990/2,000 —
+so net sales and sessions were blank in every mode while the rest of the report
+looked healthy. The five windows are now answered by **two monthly series** that
+each window sums, asking for counts rather than rates (a rate cannot be summed;
+conversion is rebuilt as completed checkouts ÷ sessions, Shopify's own
+definition). Windows that are not whole months — an in-progress month, or a
+report filtered to one platform — still go one query per window.
+
+**Checked live against August 2026, all three selections:** MoM €10,242.28 /
+152 orders against July €31,331.51 / 451; YoY against August 2025 €17,598.78 /
+263; 6M on 6M €133,893.09 / 2,010 against €90,127.96 / 1,325. Net sales
+€8,189.73, AOV €53.88, 4,164 human sessions at 2.04% — all matching Shopify.
+Sales mix on 6M reads 88% Shopify / 12% Amazon where the month reads 97% / 3%,
+which is the error the per-comparison rendering fixed. Build 10 s, 93 KB.
+October 2024 checked as the empty case: YoY and 6M both state the absence.
+
+---
+
 ## Product performance, collection mix, and a 6M view in the report (2026-09-23)
 
 **Sales panel.** `Best products` is now **Product performance**: a table

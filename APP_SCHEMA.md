@@ -187,7 +187,10 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |   |                             # + AOV, folded per platform by sales_channel;
 |   |                             # one request, 5-min cache, failure = blocked) ·
 |   |                             # report-service
-|   |                             # (one month vs MoM + YoY, for the report) ·
+|   |                             # (the month rendered three ways: MoM, YoY and
+|   |                             # 6M on the same 6M a year earlier — each mode
+|   |                             # carries its own period, products, collections
+|   |                             # and platform mix) ·
 |   |                             # marketable-contacts (CSV; consent is the
 |   |                             # query filter) · topic-map-rebuild
 |   |-- middleware.ts            # THE GATE: every page + API needs a Supabase
@@ -290,7 +293,10 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |       |                                # platform -> channel handles
 |       |-- storefront-analytics.mjs     # pure: the ShopifyQL queries behind sessions,
 |       |                                # conversion and traffic by channel, and how
-|       |                                # their rows fold into our buckets
+|       |                                # their rows fold into our buckets; also the
+|       |                                # monthly-series pair the report sums per
+|       |                                # window (ShopifyQL throttles on its own
+|       |                                # bucket, so 5 windows = 2 queries, not 10)
 |       |-- analytics-probe.mjs          # pure: the ShopifyQL probe's queries, how a
 |       |                                # refusal is read (the catalogue is discovered
 |       |                                # by being refused), and the selection built
