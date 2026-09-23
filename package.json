@@ -35,6 +35,7 @@
     "report:collection-replay": "node scripts/report-collection-replay.mjs",
     "report:prompt-cache": "node scripts/report-prompt-cache.mjs",
     "probe:prompt-cache": "node scripts/probe-prompt-cache.mjs",
+    "probe:analytics": "node scripts/probe-shopify-analytics.mjs",
     "eval:matching": "node scripts/eval-product-matching.mjs",
     "import:exemplars": "node scripts/import-exemplars.mjs",
     "import:exemplars:dry-run": "node scripts/import-exemplars.mjs --dry-run",
