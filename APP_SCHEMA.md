@@ -17,6 +17,7 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |                    # report:knowledge-gaps · report:investigation-calls
 |                    # report:evidence-vocabulary · report:completeness-gate
 |                    # report:collection-planner · report:collection-replay
+|                    # probe:analytics (what ShopifyQL will answer)
 |                    # db:apply:migration · test
 |-- shopify.app.toml # Shopify app scopes (all read_*)
 |-- web/
@@ -34,10 +35,11 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |   |   |-- orders/page.tsx               # Server Component: every Shopify order, paged
 |   |   |                                 # in SQL; reads ?status= ?country= ?vip= ?page=
 |   |   |-- orders/[id]/page.tsx          # Server Component: one order on cards
-|   |   |-- insights/                     # -> /insights/sales, then one route
-|   |   |                                 # per panel: sales · fulfilment · support ·
-|   |   |                                 # customers · agent. Each reads ?range=
-|   |   |                                 # (24h|7d|30d|6m|1y|all) or ?from=&to=, and ?platform=
+|   |   |-- insights/                     # -> /insights/overview, then one route
+|   |   |                                 # per panel: overview · sales · marketing ·
+|   |   |                                 # fulfilment · support · customers · agent.
+|   |   |                                 # Each reads ?range= (24h|7d|30d|6m|1y|all),
+|   |   |                                 # ?month=YYYY-MM or ?from=&to=, and ?platform=
 |   |   |-- settings/page.tsx             # Server Component: My info · Agent settings (?tab=agents)
 |   |   |-- login/                        # page.tsx + LoginForm: the only page open
 |   |   |                                 # without a session
@@ -73,6 +75,10 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |   |       |-- insights/support/marketable-contacts/route.ts
 |   |       |                                  # GET the consented outreach list as CSV
 |   |       |                                  # (the ONLY bulk personal-data export)
+|   |       |-- insights/report/route.ts     # GET ?month=YYYY-MM -> the monthly sales
+|   |       |                                  # report as an HTML download (default: last
+|   |       |                                  # complete month). report-service.ts +
+|   |       |                                  # sales-report.mjs; aggregates only
 |   |       |-- knowledge/                   # shopify-sources · articles · articles/[id]
 |   |       |                                 # · articles/[id]/resync
 |   |       `-- agent-test/                   # run (NDJSON stream, writes no ticket) ·
@@ -109,7 +115,14 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |   |   |                            # net line) · SplitBar · Segmented · Flag (inline SVG) ·
 |   |   |                            # tables.module.css · SalesView + BestProducts (searchable,
 |   |   |                            # accent-insensitive, rank kept) +
-|   |   |                            # CountrySales + ProductPairs · FulfilmentView ·
+|   |   |                            # CountrySales + ProductPairs · ProductPerformance
+|   |   |                            # (table: revenue, deltas, growth/declines,
+|   |   |                            # search, country, VIP) + CollectionMix (the six
+|   |   |                            # ranges + what falls outside) · OverviewView +
+|   |   |                            # OverviewTrend (metric switch) + ReportDownload ·
+|   |   |                            # MarketingView + MarketingChannels (blocked
+|   |   |                            # Klaviyo/Paid/Social) · InventoryCard (stock
+|   |   |                            # table, Overview + Fulfilment) · FulfilmentView ·
 |   |   |                            # OpenOrders · SupportView + TopicMap · CustomersView +
 |   |   |                            # VipRuleCard + SegmentFinder + CustomerActivityRows · AgentView
 |   |   |-- tickets/                 # TicketsView (orchestrator) · TicketSection ·
@@ -165,7 +178,16 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |   |                             # with coverage) · orders (shared by sales +
 |   |                             # fulfilment) · one service per panel: sales ·
 |   |                             # fulfilment · support · customers (+ customer-
-|   |                             # activity for the ranged rows) · agent ·
+|   |                             # activity for the ranged rows, + newsletter
+|   |                             # movement) · agent · overview · marketing ·
+|   |                             # inventory (stock at risk, now) · analytics
+|   |                             # (LIVE ShopifyQL: human sessions, conversion,
+|   |                             # the 4-step funnel, channels, and Shopify's money
+|   |                             # ladder — gross/discounts/returns/net/taxes/total
+|   |                             # + AOV, folded per platform by sales_channel;
+|   |                             # one request, 5-min cache, failure = blocked) ·
+|   |                             # report-service
+|   |                             # (one month vs MoM + YoY, for the report) ·
 |   |                             # marketable-contacts (CSV; consent is the
 |   |                             # query filter) · topic-map-rebuild
 |   |-- middleware.ts            # THE GATE: every page + API needs a Supabase
@@ -266,6 +288,21 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |       |                                # the shop tz, like-for-like comparison,
 |       |                                # coverage (measured/partial/missing), and
 |       |                                # platform -> channel handles
+|       |-- storefront-analytics.mjs     # pure: the ShopifyQL queries behind sessions,
+|       |                                # conversion and traffic by channel, and how
+|       |                                # their rows fold into our buckets
+|       |-- analytics-probe.mjs          # pure: the ShopifyQL probe's queries, how a
+|       |                                # refusal is read (the catalogue is discovered
+|       |                                # by being refused), and the selection built
+|       |                                # from introspection
+|       |-- sales-collections.mjs        # pure: the six product RANGES the sales cards
+|       |                                # report, by handle (a business judgement, as
+|       |                                # the platform channel lists are)
+|       |-- sales-overview.mjs           # pure: stock status + thresholds, AOV, the
+|       |                                # gross-to-net bridge, revenue drivers, the
+|       |                                # management signals. Overview + report share it
+|       |-- sales-report.mjs             # pure: the monthly report data -> one static
+|       |                                # HTML file (the download; later the email)
 |       |-- insights-freshness.mjs       # pure: how current each source is, and when
 |       |                                # that is a warning (the thresholds)
 |       |-- photo-evidence-rules.mjs     # what counts as a photo vs signature
@@ -499,7 +536,7 @@ overlapping slices — see `DECISIONS.md § Insights`.
 | Customers | `customer_ticket_facts` · `customer_segment_totals` |
 | Agent | `agent_pipeline_funnel` · `investigation_evidence_gaps` · `investigation_verdicts` · `llm_usage_by_month` · `llm_usage_summary` |
 
-**The 24 ranged functions (`RANGED READS`, `06_analytics.sql`).** Every Insights
+**The 28 ranged functions (`RANGED READS`, `06_analytics.sql`).** Every Insights
 figure is now read over a date range: `insights_orders_summary` / `_series` /
 `_by_channel`, `insights_customer_mix`, `insights_fulfilment_buckets` /
 `_carriers`, `insights_product_sales`, `insights_country_product_sales`,
@@ -507,7 +544,12 @@ figure is now read over a date range: `insights_orders_summary` / `_series` /
 `insights_marketing_summary` / `_series`, `insights_capture_series`,
 `insights_support_summary` / `_series` / `_categories`, `insights_agent_funnel` /
 `_verdicts` / `_blockers`, `insights_llm_usage` / `_series` / `_ticket_stats`, and
-`insights_freshness` (when each source last moved). One convention: the range as
+`insights_freshness` (when each source last moved), and — for Overview, Marketing
+and the report — `insights_sales_overview` (paid units, discounts, discounted vs
+full-price revenue), `insights_promotions` (per promotion name, plus full price)
+`insights_inventory_exceptions` (active products out of stock or low; stock
+now, rate over a window) and `insights_collection_sales` (per collection, or
+just the ranges `p_handles` names). One convention: the range as
 wall-clock `timestamp`s plus `p_tz`, half-open; series take `p_grain` and return
 only non-empty buckets; order functions take `p_channels` / `p_not_channels`.
 
@@ -568,7 +610,7 @@ Written by the worker and the CLIs, read only by the Insights panels.
 | `04_support.sql` | `tickets`, `ticket_messages`, `email_blocklist`, `sender_directory`, `spam_audit`, `ticket_investigations`, `category_forwarding`, `ticket_forwards`, `categorisation_review`, the three views | 01, 02 |
 | `05_exemplars.sql` | `support_exemplars`, `support_exemplar_phrasings`, `support_answers`, `match_support_exemplars()` | 01, 03 (`french_unaccent`) |
 | `09_parameters.sql` | `support_parameters` | 01 |
-| `06_analytics.sql` | `normalise_carrier()`, `llm_usage`, `cluster_runs`, `ticket_clusters`, the **21 Insights views**, and the **24 ranged functions** | 01, 02, 04 |
+| `06_analytics.sql` | `normalise_carrier()`, `llm_usage`, `cluster_runs`, `ticket_clusters`, the **21 Insights views**, and the **28 ranged functions** | 01, 02, 04 |
 | `07_drafting.sql` | `ticket_drafts`, `ticket_draft_edits` | 01, 04 |
 | `08_testing.sql` | `agent_test_runs` | 01, 03 |
 
@@ -588,6 +630,9 @@ Written by the worker and the CLIs, read only by the Insights panels.
 | `20_best_products_vip.sql` | drops and recreates `insights_product_sales()` and `insights_country_product_sales()` with `p_vip_only` + the VIP rule arguments (through `vip_customers()`, off by default); both now sit below `vip_customers()` in 06. Copied byte-for-byte from 06, supersedes 11's copies. Applied 2026-09-14 | 01, 02, 06, 11, 12 |
 | `30_customer_mix_plan.sql` | replaces the body of `insights_customer_mix()` — same signature, same four numbers — grouping the range by customer before looking up each first order, because the old shape planned as a nested loop (~1 s on a year). Copied byte-for-byte from 06, supersedes 11's copy. Applied 2026-09-18 | 01, 02, 06, 11 |
 | `31_orders_status_filter.sql` | adds `order_fulfilment_display()` and re-creates `orders_list()` + `orders_list_facets()` to filter and group on it, so the status filter selects what the pill shows (Cancelled / Refunded instead of Unfulfilled for emptied orders). Same signatures: `create or replace`, nothing dropped. Copied byte-for-byte from 06, supersedes 16's `orders_list` and 15's `orders_list_facets`. Applied 2026-09-18 | 01, 02, 06, 15, 16 |
+| `37_collection_handles.sql` | drops 36's seven-argument `insights_collection_sales()` and recreates it with `p_handles`, so the Collection mix card reports the six ranges rather than all 176 collections. Copied byte-for-byte from 06 (its test asserts it); supersedes 36. Applied 2026-09-23 | 01, 02, 06, 27, 36 |
+| `36_collection_sales.sql` | adds `insights_collection_sales()`: per collection for a range, on `insights_product_sales` line rules, plus a null-id row for paid lines in no reported collection. Superseded by 37. Applied 2026-09-23 | 01, 02, 06, 27 |
+| `35_sales_overview.sql` | adds `insights_sales_overview()`, `insights_promotions()` and `insights_inventory_exceptions()` for Overview, Marketing & funnel, the stock card and the monthly report, copied byte-for-byte from 06 (its test asserts it). No table, no data. Applied 2026-09-22 | 01, 02, 06 |
 | `32_investigation_recommendations.sql` | adds `ticket_investigations.recommendations jsonb` — the shop's own product list, carried verbatim so the drafting stage reads what the tool said rather than a paraphrase of it. Idempotent, no data written. Applied 2026-09-20 | 04 |
 | `23_agent_situations.sql` | adds `insights_agent_situations()`: tickets investigated in a range (latest run each) split by how the situation was picked — matched, tie settled by rules, near miss chosen by the model, chooser said none, not settled, no match, not recorded — from `ticket_investigations.exemplar_match`. Always one row. Copied byte-for-byte from 06. Applied 2026-09-15 | 04, 06 |
 | `24_rule_tones.sql` | adds `support_answers.tones text[] not null default '{}'` and `support_answers_tones_check` (the keys of `scripts/lib/reply-tones.mjs`), with the column comment — all copied from 05, which its test asserts. Every existing rule takes `{}`. Applied 2026-09-15 | 05 |
@@ -632,7 +677,7 @@ Accounts live in **Supabase Auth** (`auth.users`); the role is `app_metadata.das
 | --- | --- |
 | `developer` | everything |
 | `management` | everything |
-| `contact` | everything except Insights → Sales (the tab is not drawn; the URL redirects to Fulfilment) and Home — the management chat, page and `/api/chat` (not drawn in the sidebar) |
+| `contact` | everything except Insights → Overview, Sales and Marketing & funnel and the sales report download (the tabs are not drawn; the URLs redirect to Fulfilment) and Home — the management chat, page and `/api/chat` (not drawn in the sidebar) |
 
 Two HttpOnly cookies carry the session: `qos_at` (the Supabase access token, one hour) and `qos_rt` (the refresh token). Each request checks the token's ES256 signature locally against the project's JWKS, then confirms it against `/auth/v1/user` — cached for a minute per token — so a ban, a role change or a sign-out takes effect within a minute rather than at the token's expiry. The middleware refreshes the pair when the hour is nearly up; both cookies expire twelve hours after the password was typed (`amr`), which is the longest a session can live without signing in again.
 
@@ -720,25 +765,36 @@ Two sections over the same `TicketTable` the queue uses — **Open** (expanded, 
 
 `countOpenThreads` (one `queue()` read, both halves of the partition — shared per request with the page's own list through React `cache`, and started beside the page's reads rather than before them) feeds the sidebar's open-count badges — Tickets in the warning colour, Conversations grey, both hidden on the collapsed rail — rendered from **every** page in the shell via `navBadgeCounts` in `lib/server/conversation-badge.ts`. The same call also returns `unfulfilledOrders` (`countOrdersAwaitingFulfilment` in `orders-service.ts`, a `count=exact` HEAD using `open_orders()`'s rule) for a grey badge on Orders; each count fails on its own. That is the mitigation for routing these off the queue at all — the arrangement failed once by being silent. See DECISIONS.md § Tickets dashboard.
 
-### `/insights` — the five analytics panels
+### `/insights` — the seven analytics panels
 
-`web/app/insights/{sales,fulfilment,support,customers,agent}/page.tsx` → `InsightsPage`
+`web/app/insights/{overview,sales,marketing,fulfilment,support,customers,agent}/page.tsx` → `InsightsPage`
 → one view in `web/components/insights/`, over `web/lib/server/insights/*-service.ts`.
-`/insights` redirects to `/insights/sales`.
+`/insights` redirects to `/insights/overview` (Fulfilment for the contact role).
 
 **The URL is the state.** `context.ts` resolves shop, timezone, range
-(`resolveRange` in `scripts/lib/insights-range.mjs`), platform and freshness from
+(`resolveRange` in `scripts/lib/insights-range.mjs` — a preset, `?month=` or from/to),
+the month picker's options, platform and freshness from
 the query string; `FilterBar` and `InsightsNav` write it (tabs carry the range
 across). The server re-renders; nothing is aggregated in the browser.
 `LiveRefresh` re-renders every 5 minutes while visible.
 
 | Panel | Range | Platform | Reads |
 | --- | --- | --- | --- |
+| **Overview** | yes (the stock card is "now") | yes | orders summary + series (revenue, orders, AOV), `insights_sales_overview` (units, discounts), orders by channel, product sales (top 5), `insights_inventory_exceptions`; **sessions, conversion and bounce live from ShopifyQL** (`analytics.ts`) with revenue per session over storefront revenue; signals + bridge + drivers from `sales-overview.mjs`; the report download (`ReportDownload`, months that have ended) |
+| **Marketing & funnel** | yes | yes (newsletter always Shopify) | orders summary, `insights_sales_overview`, `insights_promotions`, the newsletter rows (churn, movement, capture — moved here from Customers), and **live ShopifyQL** (`analytics.ts`): the four-step funnel, acquisition channels, landing-page types and the busiest product pages (named from `products.handle`). Product VIEWS stay blocked — no metric; Klaviyo / Paid / Social blocked — not connected |
 | **Sales** | yes | yes | orders summary + series + by channel + by country, customer mix (marketplaces excluded), product sales, country product sales (re-read over VIP customers' orders with `?bestVip=1`), product pairs, and the "Who buys this product" card (`insights_product_customer_mix` + `insights_product_orders_per_customer` for `?product=`, both on the same arguments, optionally `?mixCountry=` and `?mixVip=1`, marketplaces excluded; `ProductCustomerMixCard` with a searchable product picker and its buyers-by-order-count chart) |
-| **Fulfilment** | yes (the open-orders list is "now") | yes | orders summary + series, fulfilment buckets + carriers, `open_orders()` (orders waiting to ship, VIP-marked, with name + email — `open-orders.ts`) |
+| **Fulfilment** | yes (the open-orders list and the stock card are "now") | yes | orders summary + series, fulfilment buckets + carriers, `open_orders()` (orders waiting to ship, VIP-marked, with name + email — `open-orders.ts`), `insights_inventory_exceptions` (`inventory.ts`) |
 | **Support** | yes | no — tickets have none | support summary + series + categories, orders summary (contact-rate denominator), the latest `cluster_runs` for the topic map (all-time, with a Rebuild button) |
-| **Customers** | the activity rows only (the base is a snapshot) | no — people, so always Shopify | `customer_segment_totals` + `customer_ticket_facts` + `customer-segments.mjs`; orders per customer, marketing summary + series, capture series (`customer-activity-service.ts`; the order-count columns are folded by `order-frequency.ts`, shared with the Sales product card so both charts cut the tail at 10+ the same way); the Segment Finder under the base cards, on demand through `POST /api/insights/segment-finder` -> `segment-finder-service.ts` -> `customer_segment_find()` |
+| **Customers** | the activity rows only (the base is a snapshot) | no — people, so always Shopify | `customer_segment_totals` + `customer_ticket_facts` + `customer-segments.mjs`; orders per customer (`customer-activity-service.ts`; the newsletter and capture rows moved to Marketing & funnel on 2026-09-23 — the order-count columns are folded by `order-frequency.ts`, shared with the Sales product card so both charts cut the tail at 10+ the same way); the Segment Finder under the base cards, on demand through `POST /api/insights/segment-finder` -> `segment-finder-service.ts` -> `customer_segment_find()` |
 | **AI agent** | yes | no | llm usage + series + ticket stats (priced by `llm-rates.mjs`), agent funnel + situation picking (`insights_agent_situations`) + verdicts + blockers |
+
+**One panel read is not from our database.** `analytics.ts` calls Shopify
+(ShopifyQL) while rendering, because a conversion rate cannot be summed out of
+stored daily rows, and because **net sales and AOV cannot be derived from the
+columns we store at all** — see `DECISIONS.md` § Insights. Our own revenue is
+Shopify's *Total sales* (VAT and shipping included); Shopify's AOV is net-based. It is one request, cached for
+five minutes, with an 8-second timeout, and it never throws: a failure becomes a
+`blockedReason` the cards render as a dash.
 
 **Every chart point carries a state** — `measured` / `partial` / `missing` from
 `bucketCoverage` against the freshness edges — and `TimeSeriesChart` hatches

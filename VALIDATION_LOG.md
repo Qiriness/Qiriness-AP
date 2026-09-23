@@ -1758,3 +1758,81 @@ photo is on the record. Verified by query, not inference.
    Its behaviour — absent from `ASK_ANSWERED_BY`, so the ask still happens — is
    covered by unit tests and nothing else. **Check:** confirm on the first run
    that produces one.
+
+## 14. The new Insights panels and the sales report have not been looked at — 2026-09-22
+
+Overview, Marketing & funnel, the stock card, the month picker and the monthly
+report are type-checked, linted, unit-tested, and every service was run against
+the live database (August 2026, September in progress, 30 days, all time,
+Amazon). What that cannot prove:
+
+1. **Layout.** No page was opened in a browser. **Check:** open
+   `/insights/overview?month=2026-08` and `/insights/marketing`, narrow the window
+   to phone width, and download the August report from Overview; open the file
+   with scripts on (tabs, MoM / YoY) and as an email attachment preview (all
+   sections, MoM deltas).
+2. **Stock that is not tracked reads as out of stock.** Five active products are
+   listed out of stock, including two samples; a product Shopify does not track
+   inventory for would read 0 as well. **Check:** confirm each of the five in
+   Shopify admin, and whether any should be excluded.
+3. **Amazon units look low** — 2 paid units over 9 Amazon orders in August 2026,
+   because most Amazon lines carry no `product_id`. The Sales panel counts them
+   the same way. **Check:** read three Amazon orders' `line_items` and decide
+   whether units should fall back to the line quantity.
+4. **The report takes ~8 s to build** (14 reads over 3 periods, 12 months and
+   products). Fine for a download; revisit if it is ever built inside a request
+   with a timeout.
+
+## 15. The storefront figures are live on the panels, and unverified against the admin — 2026-09-23
+
+`npm run probe:analytics` settled what ShopifyQL answers; the panels, the report
+and `web/lib/server/insights/analytics.ts` now read it live at render time
+(sessions, conversion, pageviews, bounce, channels). Measured against the live
+store across every range and both marketplaces. What is **not** settled:
+
+0. **The admin check has now found THREE errors, which is the argument for
+   doing it on every new figure.** Bot traffic in the denominator (below), an
+   AOV built on Total sales rather than net sales, and a funnel this repo
+   declared impossible while it was a column name away. None was findable by a
+   test: each figure was internally consistent and agreed with every other
+   figure on the page. **Check:** before any new Shopify-sourced metric ships,
+   read the same window in Analytics → Reports and compare.
+
+1. **CLOSED 2026-09-23, and it found a real error.** The owner read 25 Aug –
+   23 Sep in the admin: 5,076 human sessions, 125 completed checkouts, 2.46%.
+   The panels read 6,839 at 1.89% — because `sessions` counts bots and the admin
+   counts humans. Every sessions query now carries
+   `WHERE human_or_bot_session = 'human'`, and the same window reads **5,148 at
+   2.43%** against the admin's 5,076 at 2.46%; the residual is the current day
+   moving between the two readings. **What remains:** re-check one CLOSED month
+   (nothing moving) and confirm it lands within a whisker, and check whether the
+   bot share is stable — it was 25% over this window, and a month where it
+   swings is a month where a trend read from it misleads.
+2. **The clock is reasoned about, not proven.** An hour series for this shop
+   starts at 22:00Z, which is 00:00 Paris, so ShopifyQL days look like shop-clock
+   days and are treated as such. **Check:** compare one day either side of a
+   month boundary against `insights_orders_series`, and a DST weekend.
+3. **Session history starts before the storefront was busy.** Monthly sessions
+   exist from Sep 2024 (0, then 7, 71, 13, 15) and only reach thousands from
+   March 2025 — the same ramp the orders show. **Check:** confirm those early
+   months are real rather than a partial rollout, or the report's YoY divides by
+   a number nobody trusts.
+4. **Nothing yet proves the failure path in a browser.** The timeout, the
+   refusal and the marketplace block are unit-tested and were exercised by the
+   Amazon filter; a real Shopify outage has not been seen. **Check:** point
+   `SHOPIFY_STORE_DOMAIN` at an unreachable host once and confirm the panel
+   renders with blocked cards rather than an error page.
+5. **AOV and net sales now depend on a live read.** When Shopify cannot be
+   reached the AOV card falls back to Total sales ÷ orders and says which
+   formula it used; net sales and the bridge render blocked. Seen twice in
+   testing through transient local network failures. **Check:** confirm the
+   fallback label is visible enough that nobody quotes the fallback as Shopify's
+   figure.
+6. **The line-revenue caption is untested against a reader.** Product, country
+   and promotion revenue are VAT-inclusive line totals (€9,608.95 for August)
+   and will not sum to either headline. **Check:** ask someone who did not build
+   it whether the caption makes that obvious.
+7. **The five-minute cache is per process.** Serverless means several instances,
+   each with its own copy, so two readers can see figures minutes apart while
+   both are within TTL. Acceptable for traffic figures; worth knowing before
+   anyone reports a discrepancy as a bug.

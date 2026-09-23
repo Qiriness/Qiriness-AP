@@ -207,6 +207,21 @@ sink, `support_answers` being empty, and the first pass of the test chat.
       panel hatches every day after the last manual run and blocks the contact rate.
     - **Run the order sync more than nightly** if "Last 24 hours" is to mean anything for
       orders: with one run a night, most of any 24-hour window is not synced yet.
+20. **Check the storefront figures against the Shopify admin, then decide about the
+    funnel's middle.** Sessions, conversion, bounce and traffic by channel now render on
+    Overview, Marketing and the monthly report, read live from ShopifyQL (2026-09-23,
+    `DECISIONS.md` § Insights). Two things are open:
+    - **Nobody has compared them with Analytics → Reports.** Do one week and one month
+      before anyone acts on them (`VALIDATION_LOG.md` item 15).
+    - **The funnel is measured** (sessions → cart → checkout → purchase). An earlier note
+      here said it was impossible without a web pixel; that was wrong, and the mistake is
+      recorded in `DECISIONS.md` § Insights. Only **product views** has no metric.
+    Klaviyo, Google/Meta Ads and social remain unchosen integrations, though Shopify's own
+    attribution already credits revenue per channel (klaviyo, google, direct) without them.
+21. **Send the monthly sales report automatically.** It is downloadable today
+    (`/api/insights/report`, Overview → Monthly sales report) and rendered by a pure function
+    a job can call, but nothing emails it: the CEOs' addresses, the sender and the schedule
+    (1st of the month, shop clock) are undecided.
 
 The target is unchanged: **auto-resolve level 1 and 2, and for level 3 assemble everything a
 human needs to act.** On the 383 categorised tickets that splits L1 32 (8%) · L2 188 (49%) ·

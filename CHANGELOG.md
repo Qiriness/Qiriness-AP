@@ -10,6 +10,204 @@ Three sibling files carry the other halves, and this one deliberately does not d
 
 ---
 
+## Product performance, collection mix, and a 6M view in the report (2026-09-23)
+
+**Sales panel.** `Best products` is now **Product performance**: a table
+(revenue, Δ €, Δ %, orders, units) with **Growth** and **Declines** beside
+Revenue and Orders, keeping the search, the Global / By country switch and the
+VIP filter. Growth and declines are global only — a country list is a different
+set of products one period earlier — and a product with no sales last period
+reads `new` rather than +∞.
+
+**Collection mix**, beside it: the six ranges the owner named — Temps Sublime,
+Source d'Eau, Exception, Active Énergie, Eclat Parfait, Rituel Spa — with share
+and change, and a row for everything outside them (August: 37.5% of product
+revenue). Their memberships had never been synced, because the collections sync
+only fetched products for collections switched on for ADVICE; it now fetches
+both sets without writing either flag from the other. Migration 36 adds
+`insights_collection_sales()`, 37 gives it `p_handles`; both applied 2026-09-23.
+
+**The monthly report** gains **6M vs 6M** (which swaps the figures, not just the
+chips), the collection mix card beside the product table, a **horizontal** sales
+bridge, and loses the newsletter KPI from the overview row — it keeps its card
+in Customers & Products. The headline now takes Shopify's own `total_sales`
+where it answered, so the card and the bridge agree exactly.
+
+**Checked against August 2026 on every period selection:** total €10,242.28 and
+net €8,189.73 (both matching Shopify), 152 orders, AOV €53.88, 4,164 human
+sessions at 2.04%; MoM July €31,331.51, YoY August 2025 €17,598.78, 6M
+€133,966 against €181,983; twelve trend months; ten products with their previous
+revenue; six ranges plus the outside row.
+
+---
+
+## Where sessions land, and the product pages they arrive on (2026-09-23)
+
+Marketing & funnel gains two cards, both from the sessions dataset:
+
+- **Where sessions land** — by `landing_page_type`, with each type's add-to-cart
+  and conversion rate. August: Product 2,006 sessions converting at 1.2%,
+  Homepage 746 at 3.6%, Collection 605 at 2.8%, Blog Article 265 at 0%.
+- **Product pages** — the busiest product pages with sessions, visitors and
+  cart rate, **named from our own catalogue** by matching the handle in the
+  path (all 116 products have one; 12 of 12 matched, no fallbacks). No Admin
+  API round trip needed for the titles.
+
+**Entries, not views.** Shopify keeps no product-view metric, so these count
+sessions whose FIRST page was that product. The funnel now draws the figure
+(August: 2,006, 48.2% of sessions) as a row **outside the chain** — no "from
+prior step", and the cart step still measures against sessions — because cart
+sessions are not a subset of product entries. `FROM products SHOW view_sessions`
+was re-checked and is refused at the dataset level. Both tables filter to human
+sessions.
+
+Also: the newsletter rows (churn, movement, capture) moved from Customers to
+Marketing & funnel, and the Overview's eight KPI tiles now reflow 8 -> 4 -> 2 as
+blocks instead of dropping one at a time.
+
+---
+
+## The funnel exists after all, and AOV was wrong (2026-09-23)
+
+Two corrections from the owner checking the dashboard against the Shopify admin.
+
+**The funnel is measurable, and this repo wrongly said it was not.** The first
+probe mixed one invalid column name (`sessions_with_cart_addition`, singular)
+with valid ones; ShopifyQL names only the invalid columns in `parseErrors`, and
+the whole-query failure was read as "no cart or checkout dataset exists". That
+claim reached DECISIONS, CHANGELOG, README, three cards and the report. August
+2026 actually reads **4,164 sessions → 339 added to cart → 252 reached checkout
+→ 85 completed checkout**, and the last over the first is exactly Shopify's
+conversion rate. Marketing and the report now draw all four steps with each
+step's share of the one above; only `product_views` is genuinely missing.
+
+**AOV was Total sales ÷ orders; Shopify's is (gross − discounts) ÷ orders.**
+August read €67.38 against the admin's €53.88. Our revenue figure turns out to
+be Shopify's **Total sales** exactly (€10,242.28), VAT and shipping included —
+so the headline is now labelled Total sales and carries Net sales beside it, and
+AOV comes from Shopify's own ladder. The revenue bridge, previously invented
+from `total_discounts`, is now that ladder: gross → discounts → returns → net →
+VAT and shipping → total. Product, country and promotion revenue keep their line
+totals (VAT-inclusive) and now say so.
+
+A marketplace platform keeps its money ladder — Amazon reads net €259.95, AOV
+€28.88 — while its sessions and funnel stay blocked, because those orders never
+touched the storefront.
+
+---
+
+## Sessions are filtered to humans, which is what the admin reports (2026-09-23)
+
+Checking the dashboard against Analytics → Reports for 25 Aug – 23 Sep found the
+panels reading **6,839 sessions at 1.89%** where the admin read **5,076 human
+sessions at 2.46%**. `sessions` counts automated traffic; the admin does not.
+The split is the `human_or_bot_session` dimension — 1,707 bot sessions
+converting at 0.23% — and every sessions query (totals, series, channels, the
+report's three windows) now filters on it. The same window now reads **5,148 at
+2.43%**.
+
+It changes sessions, conversion, revenue per session, the sessions trend and the
+per-channel table. `sales` is untouched: an order is not made by a bot.
+`npm run probe:analytics` keeps a bot-split query so a re-run states the
+filter's effect. See `DECISIONS.md` § Insights and `VALIDATION_LOG.md` item 15 —
+the check that caught it was a person reading the admin, not a test.
+
+---
+
+## Sessions, conversion and traffic by channel are live on the panels (2026-09-23)
+
+The blocked cards are measured. Read from ShopifyQL at render time rather than
+synced — a rate cannot be summed out of daily rows, so the panel asks Shopify
+for the exact range the reader picked (`DECISIONS.md` § Insights, "Storefront
+analytics are read live").
+
+- **Overview**: Sessions (with pageviews), Conversion (with bounce rate) and
+  Revenue per session are now figures; the trend's Sessions tab draws a real
+  series; "what moved revenue" carries storefront sessions and conversion beside
+  orders and AOV.
+- **Marketing & funnel**: the funnel's first step is measured and its CVR pill
+  is Shopify's conversion rate; **Acquisition channels** is a real table —
+  sessions, revenue, orders, CVR and revenue per session per channel, both sides
+  grouped on `referring_channel`. The three steps between a session and a
+  purchase stay blocked: ShopifyQL has no cart or checkout dataset.
+- **The monthly report** carries all of it, for the month, MoM and YoY.
+- One HTTP request per panel (five queries aliased), a five-minute cache, an
+  8-second timeout, and every failure renders as a blocked card with its reason.
+- Revenue per session divides **storefront** revenue: marketplace buyers never
+  had a session.
+
+Measured on the live store: August 2026 had 5,756 sessions at 1.48% conversion
+(€1.72 per session), against 7,015 at 3.35% in July. Overview renders in
+~1.6–1.8 s including the Shopify call. **Still not opened in a browser** —
+`VALIDATION_LOG.md` items 14 and 15.
+
+---
+
+## Shopify Analytics: measured what the API will give us (2026-09-23)
+
+`npm run probe:analytics` (`scripts/probe-shopify-analytics.mjs` + the pure
+`scripts/lib/analytics-probe.mjs`) asks this store which of the blocked figures
+ShopifyQL will answer, and prints what it refuses. Read-only, no model call.
+
+- **Answered:** sessions (1,624 over 7 days), `conversion_rate` (1.60%),
+  `pageviews`, `bounce_rate`, sessions by `referrer_source` / `referrer_name` /
+  UTM, monthly sessions back to Sep 2024, and `total_sales` + `orders` per
+  `referring_channel`.
+- **Refused:** `cart_additions`, `reached_checkouts`, `view_sessions`, and the
+  `products` / `orders` / `marketing` / `carts` / `checkouts` datasets. The six
+  that exist are sales, sessions, customers, inventory, payments, discounts.
+- **`read_reports` was already granted** on the live install (27 scopes against
+  the 26 in `shopify.app.toml`); the file now declares it, so a reinstall cannot
+  drop it.
+- The probe introspects the response type rather than trusting the documented
+  shape — on 2026-07 `parseErrors` is a list of strings and the rows are `rows`,
+  and the documented selection fails on every query.
+
+Nothing is ingested yet: see `VALIDATION_LOG.md` item 15 and `DECISIONS.md`
+§ Insights, "Shopify Analytics answers, and what it will not answer".
+
+---
+
+## Insights: Overview, Marketing & funnel, stock, a month picker and the monthly sales report (2026-09-22)
+
+Built from the owner's example report (mock data), with every figure re-sourced
+from the live database or drawn blocked with its reason. Profitability left out,
+as asked.
+
+- **Month picker** beside the presets: `?month=YYYY-MM`, drawn by day, compared
+  with the previous calendar month (the same elapsed days while the month is in
+  progress). A preset, a month and a custom from/to each clear the other two;
+  the tabs carry `month` across.
+- **Overview** (new first tab, the landing panel): net revenue, orders, units,
+  **AOV** (new: net revenue over paid orders), refund rate, and sessions /
+  conversion / revenue per session blocked; the trend with a Revenue / Orders /
+  AOV / Sessions switch; what moved revenue (orders × AOV); the gross-to-net
+  bridge; four rule-based signals; sales mix; stock; the report download.
+- **Marketing & funnel** (new tab): discounts & gifts, orders with a promotion,
+  full-price revenue, newsletter net; the funnel (purchase measured, the four
+  steps above it blocked); acquisition channels and Klaviyo / Paid / Social
+  blocked; **promotions & discounting** from `orders.discount_applications`.
+- **Inventory exceptions** on Fulfilment (and in Overview and the report):
+  active products out of stock or under 30 days of cover.
+- **Monthly sales report**: `GET /api/insights/report?month=` downloads one
+  self-contained HTML file in the example's layout — Overview, Customers &
+  Products (with the new **newsletter subscribers** card: gained, lost, net, vs
+  last month and last year), Marketing & Funnel, Operations — with a MoM / YoY
+  switch. Renders fully without script, for mail clients.
+- Migration **35** adds `insights_sales_overview()`, `insights_promotions()`,
+  `insights_inventory_exceptions()`; applied to the live database 2026-09-22.
+- Contact role: Overview, Marketing & funnel and the report are closed to it,
+  like Sales.
+
+**Proven how far.** Unit tests (range, signals, renderer, migration, auth); `tsc`
+and `next lint` clean; every service run against the live database through Node
+for August 2026, September (in progress), last 30 days, all time and Amazon.
+August 2026 reconciles: discounted €6,346.79 + full price €3,895.49 = the
+€10,242.28 net revenue Sales prints. **Not yet seen in a browser** — see
+`VALIDATION_LOG.md` item 14.
+
+---
+
 ## Delivery dates are expectations; reconstructions can be corrected in the page (2026-09-22)
 
 **The delivery-date rule, decided by the business:** never promise a deadline,
