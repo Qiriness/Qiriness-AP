@@ -32,11 +32,16 @@ import { bucketCoverage, isMarketplacePlatform } from "../../../../scripts/lib/i
 import {
   channelSalesQuery,
   channelSessionsQuery,
+  foldMonthlyLadder,
+  foldMonthlySessions,
   foldSalesLadder,
   foldSeries,
   funnelSteps,
   joinChannels,
+  isMonthAligned,
   landingTypesQuery,
+  monthlyLadderQuery,
+  monthlySessionsQuery,
   productPagesQuery,
   readLandingTypes,
   readProductPages,
@@ -125,8 +130,20 @@ export function getStorefrontAnalytics(ctx: InsightsContext): Promise<Storefront
 }
 
 /**
- * The sessions totals for several windows at once — what the monthly report
- * needs for the month, the month before and the same month a year earlier.
+ * The sessions totals and the money ladder for several windows at once — what
+ * the monthly report needs for the month, the month before, the same month a
+ * year earlier and the two half-years.
+ *
+ * TWO QUERIES, NOT TWO PER WINDOW. ShopifyQL is throttled on a bucket of its
+ * own, separate from the GraphQL point budget, and asking for five windows of
+ * both datasets came back THROTTLED with that bucket at zero while the
+ * top-level budget still read 1,990 of 2,000. Every window a monthly report
+ * asks for is whole months, so the span is read once as monthly buckets and
+ * each window sums the months inside it.
+ *
+ * A window that is NOT month-aligned — an in-progress month compares the same
+ * DAYS of the month before — cannot be summed from months without inventing a
+ * fall, so those windows are still asked for directly.
  *
  * Uncached and one request: a report is built once, and its windows are not the
  * ones a panel asks for. A failure is null per window, never a zero.
@@ -136,22 +153,53 @@ export async function getStorefrontTotalsFor(
   windows: { from: string; to: string }[]
 ): Promise<{ totals: StorefrontTotals | null; sales: StorefrontSales | null }[]> {
   const nothing = windows.map(() => ({ totals: null, sales: null }));
+  if (windows.length === 0) return nothing;
+  const marketplace = isMarketplacePlatform(ctx.platform);
+  // The monthly ladder has no sales channel to fold on, so a report filtered to
+  // one platform still asks per window.
+  const monthly = ctx.platform === "all" && windows.every(isMonthAligned);
+
   const queries: Record<string, string> = {};
-  for (const [i, window] of windows.entries()) {
-    const range = { ...ctx.range, from: window.from, to: window.to };
-    if (!isMarketplacePlatform(ctx.platform)) queries[`s${i}`] = totalsQuery(range);
-    queries[`m${i}`] = salesLadderQuery(range);
+  if (monthly) {
+    const span = {
+      ...ctx.range,
+      from: windows.reduce((min, w) => (w.from < min ? w.from : min), windows[0].from),
+      to: windows.reduce((max, w) => (w.to > max ? w.to : max), windows[0].to),
+    };
+    if (!marketplace) queries.months = monthlySessionsQuery(span);
+    queries.ladderMonths = monthlyLadderQuery(span);
+  } else {
+    for (const [i, window] of windows.entries()) {
+      const range = { ...ctx.range, from: window.from, to: window.to };
+      if (!marketplace) queries[`s${i}`] = totalsQuery(range);
+      queries[`m${i}`] = salesLadderQuery(range);
+    }
   }
+
   try {
     const answers = await withTimeout(runAll(queries), TIMEOUT_MS);
+    const ok = (key: string) => {
+      const answer = answers[key];
+      return answer && answer.parseErrors.length === 0 ? answer.rows : null;
+    };
+    if (monthly) {
+      const sessionMonths = ok("months");
+      const ladderMonths = ok("ladderMonths");
+      return windows.map((window) => {
+        const totals = sessionMonths ? (foldMonthlySessions(sessionMonths, window) as StorefrontTotals | null) : null;
+        return {
+          totals: totals && totals.sessions !== null ? totals : null,
+          sales: ladderMonths ? (foldMonthlyLadder(ladderMonths, window) as StorefrontSales | null) : null,
+        };
+      });
+    }
     return windows.map((_, i) => {
-      const sessions = answers[`s${i}`];
-      const money = answers[`m${i}`];
-      const totals =
-        sessions && sessions.parseErrors.length === 0 ? (readTotals(sessions.rows) as StorefrontTotals) : null;
+      const sessions = ok(`s${i}`);
+      const money = ok(`m${i}`);
+      const totals = sessions ? (readTotals(sessions) as StorefrontTotals) : null;
       return {
         totals: totals && totals.sessions !== null ? totals : null,
-        sales: money && money.parseErrors.length === 0 ? (foldSalesLadder(money.rows, ctx.platform) as StorefrontSales | null) : null,
+        sales: money ? (foldSalesLadder(money, ctx.platform) as StorefrontSales | null) : null,
       };
     });
   } catch {

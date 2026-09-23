@@ -301,6 +301,86 @@ export function foldSalesLadder(rows = [], platform = 'all') {
   };
 }
 
+/**
+ * The same figures as monthly buckets, for a caller that needs SEVERAL windows.
+ *
+ * WHY THIS EXISTS: ShopifyQL is rate-limited on its own bucket, separately from
+ * the GraphQL point budget, and the monthly report needs five windows of both
+ * datasets — ten queries, which came back `THROTTLED` with the analytics bucket
+ * at zero. Every window the report asks for is whole months, so two monthly
+ * series answer all of them and the caller sums the months it wants.
+ *
+ * ONLY COUNTS AND MONEY ARE SUMMABLE, which is why the sessions series asks for
+ * the funnel counts rather than `conversion_rate`: a rate cannot be added, but
+ * completed checkouts over sessions IS the conversion rate, exactly as Shopify
+ * computes it. `bounce_rate` has no count behind it here and is left out — no
+ * report card reads it.
+ */
+export function monthlySessionsQuery(window) {
+  return `FROM sessions SHOW sessions, online_store_visitors, pageviews, sessions_with_cart_additions, sessions_that_reached_checkout, sessions_that_completed_checkout ${HUMAN_ONLY} TIMESERIES month ${rangeClause(window)}`;
+}
+
+export function monthlyLadderQuery(window) {
+  return `FROM sales SHOW ${SALES_LADDER.filter((c) => c !== 'average_order_value').join(', ')} TIMESERIES month ${rangeClause(window)}`;
+}
+
+/** True when a window starts and ends on a month boundary, so months can serve it. */
+export function isMonthAligned(window) {
+  return /^\d{4}-\d{2}-01T00:00:00$/.test(String(window.from ?? '')) && /^\d{4}-\d{2}-01T00:00:00$/.test(String(window.to ?? ''));
+}
+
+/** The monthly rows that fall inside a window, by their bucket key. */
+function monthsIn(rows, window) {
+  return rows.filter((row) => {
+    const key = String(row.month ?? row.bucket ?? '').slice(0, 10);
+    if (!key) return false;
+    const at = `${key}T00:00:00`;
+    return at >= window.from && at < window.to;
+  });
+}
+
+/** Sessions totals for one window, summed from months. A window with no month is null. */
+export function foldMonthlySessions(rows = [], window) {
+  const months = monthsIn(rows, window);
+  if (months.length === 0) return null;
+  const sum = (key) => months.reduce((total, row) => total + (toNumber(row[key]) ?? 0), 0);
+  const sessions = sum('sessions');
+  const converted = sum('sessions_that_completed_checkout');
+  return {
+    sessions,
+    visitors: sum('online_store_visitors'),
+    // Shopify's own rate, rebuilt from its own counts.
+    conversionRate: sessions > 0 ? (converted / sessions) * 100 : null,
+    pageviews: sum('pageviews'),
+    // Not summable from counts, and no report card reads it.
+    bounceRate: null,
+    cartSessions: sum('sessions_with_cart_additions'),
+    checkoutSessions: sum('sessions_that_reached_checkout'),
+    convertedSessions: converted
+  };
+}
+
+/** The money ladder for one window, summed from months; AOV is recomputed, never summed. */
+export function foldMonthlyLadder(rows = [], window) {
+  const months = monthsIn(rows, window);
+  if (months.length === 0) return null;
+  const sum = (key) => months.reduce((total, row) => total + (toNumber(row[key]) ?? 0), 0);
+  const grossSales = sum('gross_sales');
+  const discounts = Math.abs(sum('discounts'));
+  const orders = sum('orders');
+  return {
+    grossSales,
+    discounts,
+    returns: Math.abs(sum('returns')),
+    netSales: sum('net_sales'),
+    taxes: sum('taxes'),
+    totalSales: sum('total_sales'),
+    shipping: sum('total_sales') - sum('net_sales') - sum('taxes'),
+    orders,
+    averageOrderValue: orders > 0 ? (grossSales - discounts) / orders : null
+  };
+}
+
 /** Postgres-style numerics arrive as strings; a missing metric stays null. */
 export function toNumber(value) {
   if (value === null || value === undefined || value === '') return null;

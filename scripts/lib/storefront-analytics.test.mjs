@@ -9,8 +9,13 @@ import {
   productPagesQuery,
   readLandingTypes,
   readProductPages,
+  foldMonthlyLadder,
+  foldMonthlySessions,
   foldSalesLadder,
   funnelSteps,
+  isMonthAligned,
+  monthlyLadderQuery,
+  monthlySessionsQuery,
   platformOfSalesChannel,
   salesLadderQuery,
   channelSalesQuery,
@@ -307,4 +312,78 @@ test('a product page carries its handle and waits for its title', () => {
   assert.equal(pages[0].title, null);
   assert.equal(pages[0].sessions, 115);
   assert.ok(Math.abs(pages[0].cartRate - 19.13) < 0.01);
+});
+
+test('monthly buckets answer several windows without several queries', () => {
+  // Five report windows once cost ten ShopifyQL queries and came back THROTTLED
+  // on the analytics bucket; two monthly series answer all of them.
+  const ladderRows = [
+    { month: '2026-06-01', gross_sales: '100', discounts: '-10', returns: '-5', net_sales: '85', taxes: '17', total_sales: '107', orders: '4' },
+    { month: '2026-07-01', gross_sales: '200', discounts: '-20', returns: '0', net_sales: '180', taxes: '36', total_sales: '220', orders: '6' },
+    { month: '2026-08-01', gross_sales: '300', discounts: '-40', returns: '-10', net_sales: '250', taxes: '50', total_sales: '305', orders: '10' }
+  ];
+  const august = { from: '2026-08-01T00:00:00', to: '2026-09-01T00:00:00' };
+  const quarter = { from: '2026-06-01T00:00:00', to: '2026-09-01T00:00:00' };
+
+  const one = foldMonthlyLadder(ladderRows, august);
+  assert.equal(one.totalSales, 305);
+  assert.equal(one.orders, 10);
+  // Discounts and returns keep arriving negative and are kept as magnitudes.
+  assert.equal(one.discounts, 40);
+  assert.equal(one.returns, 10);
+  // AOV is Shopify's formula recomputed on the summed months, never an average
+  // of monthly averages.
+  assert.equal(one.averageOrderValue, 26);
+
+  const three = foldMonthlyLadder(ladderRows, quarter);
+  assert.equal(three.totalSales, 632);
+  assert.equal(three.orders, 20);
+  assert.equal(three.averageOrderValue, (600 - 70) / 20);
+  // The same fold as the per-window query would have returned.
+  const direct = foldSalesLadder([{ sales_channel: 'Online Store', gross_sales: '300', discounts: '-40', returns: '-10', net_sales: '250', taxes: '50', total_sales: '305', orders: '10' }], 'all');
+  assert.deepEqual({ ...one }, { ...direct });
+
+  // A window with no month at all is null, never a ladder of zeros.
+  assert.equal(foldMonthlyLadder(ladderRows, { from: '2025-01-01T00:00:00', to: '2025-02-01T00:00:00' }), null);
+});
+
+test('a conversion rate is rebuilt from counts, because a rate cannot be summed', () => {
+  const rows = [
+    { month: '2026-07-01', sessions: '1000', online_store_visitors: '800', pageviews: '3000', sessions_with_cart_additions: '100', sessions_that_reached_checkout: '60', sessions_that_completed_checkout: '40' },
+    { month: '2026-08-01', sessions: '3000', online_store_visitors: '2400', pageviews: '9000', sessions_with_cart_additions: '300', sessions_that_reached_checkout: '200', sessions_that_completed_checkout: '20' }
+  ];
+  const both = foldMonthlySessions(rows, { from: '2026-07-01T00:00:00', to: '2026-09-01T00:00:00' });
+  assert.equal(both.sessions, 4000);
+  assert.equal(both.convertedSessions, 60);
+  // 1.5%, the share of all sessions -- not the mean of 4% and 0.67%.
+  assert.equal(both.conversionRate, 1.5);
+  // No count stands behind a bounce rate here, and no report card reads one.
+  assert.equal(both.bounceRate, null);
+  assert.equal(foldMonthlySessions(rows, { from: '2024-01-01T00:00:00', to: '2024-02-01T00:00:00' }), null);
+});
+
+test('only whole months may be summed from months', () => {
+  assert.equal(isMonthAligned({ from: '2026-08-01T00:00:00', to: '2026-09-01T00:00:00' }), true);
+  // An in-progress month compares the same DAYS of the month before; summing
+  // whole months there would invent a fall.
+  assert.equal(isMonthAligned({ from: '2026-08-01T00:00:00', to: '2026-08-23T00:00:00' }), false);
+  assert.equal(isMonthAligned({ from: '2026-08-05T00:00:00', to: '2026-09-01T00:00:00' }), false);
+});
+
+test('the monthly queries ask for counts and keep the human filter', () => {
+  const window = { from: '2026-03-01T00:00:00', to: '2026-09-01T00:00:00' };
+  const sessions = monthlySessionsQuery(window);
+  assert.match(sessions, /FROM sessions SHOW /);
+  assert.match(sessions, /sessions_that_completed_checkout/);
+  // Bots were once a third of the denominator; the filter travels with every
+  // sessions query, this one included.
+  assert.match(sessions, /human_or_bot_session = 'human'/);
+  assert.match(sessions, /TIMESERIES month SINCE 2026-03-01 UNTIL 2026-08-31/);
+  // A rate cannot be summed, so none is asked for.
+  assert.doesNotMatch(sessions, /conversion_rate|bounce_rate/);
+
+  const ladder = monthlyLadderQuery(window);
+  assert.match(ladder, /FROM sales SHOW gross_sales/);
+  assert.doesNotMatch(ladder, /average_order_value/);
+  assert.match(ladder, /TIMESERIES month SINCE 2026-03-01 UNTIL 2026-08-31/);
 });
