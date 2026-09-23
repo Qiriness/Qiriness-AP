@@ -19,6 +19,7 @@ import {
   platformOfChannel,
 } from "../../../../scripts/lib/insights-range.mjs";
 import type {
+  CollectionSale,
   CountrySale,
   CustomerMix,
   PairGroup,
@@ -32,8 +33,10 @@ import type {
 import { orderArgs, type InsightsContext } from "./context";
 import { foldOrdersPerCustomer } from "./order-frequency";
 import { getOrderSeries, getOrdersSummary, ordersCoverage } from "./orders";
+import { previousCovered } from "./series";
 import { toSeries } from "./series";
 import { loadVipRule } from "../../../../scripts/lib/vip-rule.mjs";
+import { SALES_COLLECTION_HANDLES } from "../../../../scripts/lib/sales-collections.mjs";
 import { callRpc, callRpcOne, count, getSupabaseClient } from "./shared";
 
 /** What the "Who buys this product" card was asked for, from the URL. */
@@ -55,6 +58,15 @@ export interface BestProductsRequest {
 
 type VipRule = Awaited<ReturnType<typeof loadVipRule>>;
 
+/**
+ * How many collections the mix card lists, before the "outside these" row. Six
+ * ranges are reported, so this only caps a future list.
+ */
+const COLLECTIONS = 10;
+
+/** The six ranges the business reads by; which ones is a judgement in sales-collections.mjs. */
+const COLLECTION_HANDLES = [...SALES_COLLECTION_HANDLES];
+
 /** How many products each country list carries, and how many countries are offered. */
 const PER_COUNTRY = 5;
 const COUNTRIES = 12;
@@ -69,6 +81,7 @@ export async function getSalesPanel(
 ): Promise<SalesPanel> {
   const coverage = ordersCoverage(ctx);
   const marketplace = isMarketplacePlatform(ctx.platform);
+  const comparable = previousCovered(ctx.range, coverage);
 
   const [
     summary,
@@ -80,6 +93,9 @@ export async function getSalesPanel(
     countryByOrders,
     countryRows,
     pairRows,
+    previousProductRows,
+    collectionRows,
+    previousCollectionRows,
     vipRule,
   ] =
     await Promise.all([
@@ -105,11 +121,37 @@ export async function getSalesPanel(
     }),
     callRpc<Record<string, unknown>>(RPC.INSIGHTS_ORDERS_BY_COUNTRY, orderArgs(ctx)),
     callRpc<Record<string, unknown>>(RPC.INSIGHTS_PRODUCT_PAIRS, { ...orderArgs(ctx), p_limit: PAIRS }),
+    // The previous period, for the growth and decline rankings and the
+    // collection deltas. Withheld — and so are those rankings — when the
+    // previous window starts before the first synced order.
+    comparable ? callRpc<Record<string, unknown>>(RPC.INSIGHTS_PRODUCT_SALES, orderArgs(ctx, ctx.range.previous)) : Promise.resolve(null),
+    callRpc<Record<string, unknown>>(RPC.INSIGHTS_COLLECTION_SALES, {
+      ...orderArgs(ctx),
+      p_limit: COLLECTIONS,
+      p_handles: COLLECTION_HANDLES,
+    }),
+    comparable
+      ? callRpc<Record<string, unknown>>(RPC.INSIGHTS_COLLECTION_SALES, {
+          ...orderArgs(ctx, ctx.range.previous),
+          p_limit: COLLECTIONS,
+          p_handles: COLLECTION_HANDLES,
+        })
+      : Promise.resolve(null),
     // Read once for both cards that can filter to VIPs. A marketplace has none.
     marketplace ? Promise.resolve(null) : loadVipRule(getSupabaseClient(), ctx.shopId),
   ]);
 
-  const products = productRows.map(mapProduct);
+  // Last period's revenue per product and per collection, keyed for the lookups
+  // below. Absent from the map means it sold nothing then, which is a real 0;
+  // a null map means there is no comparable period at all.
+  const previousProduct = previousProductRows
+    ? new Map(previousProductRows.map((row) => [String(row.product_id), count(row.revenue)]))
+    : null;
+  const previousCollection = previousCollectionRows
+    ? new Map(previousCollectionRows.map((row) => [collectionKey(row), count(row.revenue)]))
+    : null;
+
+  const products = productRows.map((row) => mapProduct(row, previousProduct));
   const countries = countryRows.map(mapCountry);
   // After the batch, not in it: the default product is the range's best seller,
   // and the country filter only accepts countries the range shipped to — both
@@ -136,6 +178,8 @@ export async function getSalesPanel(
     platforms: foldPlatforms(channelRows),
     products: bestProducts,
     countries,
+    collections: collectionRows.map((row) => mapCollection(row, previousCollection)),
+    productRevenue: products.reduce((sum, p) => sum + p.revenue, 0),
     pairs: pairGroups(pairRows),
     productCustomerMix,
   };
@@ -171,7 +215,7 @@ function mapMix(row: Record<string, unknown>): CustomerMix {
 }
 
 /** Channel handles -> the three platforms, in a fixed order so a colour always means one platform. */
-function foldPlatforms(rows: Record<string, unknown>[]): PlatformSplit[] {
+export function foldPlatforms(rows: Record<string, unknown>[]): PlatformSplit[] {
   const totals = new Map<PlatformId, { orders: number; revenue: number }>();
   for (const row of rows) {
     const platform = platformOfChannel(String(row.channel ?? "")) as PlatformId;
@@ -188,13 +232,34 @@ function foldPlatforms(rows: Record<string, unknown>[]): PlatformSplit[] {
   }));
 }
 
-function mapProduct(row: Record<string, unknown>): ProductSale {
+export function mapProduct(row: Record<string, unknown>, previous: Map<string, number> | null = null): ProductSale {
+  const productId = String(row.product_id);
   return {
-    productId: String(row.product_id),
+    productId,
     title: String(row.title ?? "Unknown product"),
     orders: count(row.orders),
     units: count(row.units),
     revenue: count(row.revenue),
+    previousRevenue: previous ? previous.get(productId) ?? 0 : null,
+  };
+}
+
+/** The key a collection is compared on: its id, or the one uncollected row. */
+function collectionKey(row: Record<string, unknown>): string {
+  return row.collection_id === null || row.collection_id === undefined ? "__uncollected" : String(row.collection_id);
+}
+
+function mapCollection(row: Record<string, unknown>, previous: Map<string, number> | null): CollectionSale {
+  const collectionId = row.collection_id === null || row.collection_id === undefined ? null : String(row.collection_id);
+  return {
+    collectionId,
+    title: collectionId === null ? "Outside these ranges" : String(row.title ?? "Untitled collection"),
+    handle: (row.handle as string | null) ?? null,
+    products: count(row.products),
+    orders: count(row.orders),
+    units: count(row.units),
+    revenue: count(row.revenue),
+    previousRevenue: previous ? previous.get(collectionKey(row)) ?? 0 : null,
   };
 }
 
@@ -264,7 +329,9 @@ async function getBestProducts(
 
   return {
     ...base,
-    global: group("all", "All products", productRows.map(mapProduct)),
+    // VIP lists have no previous-period twin, so growth and declines are not
+    // offered over them: `previousRevenue` stays null and the view says why.
+    global: group("all", "All products", productRows.map((row) => mapProduct(row))),
     byCountry: { revenue: countryGroups(byRevenue), orders: countryGroups(byOrders) },
   };
 }

@@ -55,22 +55,7 @@
   color: var(--text-muted);
 }
 
-.list {
-  display: flex;
-  flex-direction: column;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
 
-.row {
-  display: grid;
-  grid-template-columns: 2rem minmax(0, 1fr) auto;
-  align-items: center;
-  gap: var(--space-3);
-  padding: var(--space-3) 0;
-  border-bottom: 1px solid var(--mist-050);
-}
 
 .row:last-child {
   border-bottom: 0;
@@ -84,12 +69,6 @@
   font-variant-numeric: tabular-nums;
 }
 
-.main {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  min-width: 0;
-}
 
 .title {
   font-size: var(--text-md);
@@ -100,40 +79,10 @@
   text-overflow: ellipsis;
 }
 
-.track {
-  display: block;
-  height: 6px;
-  border-radius: var(--radius-pill);
-  background: var(--mist-050);
-  overflow: hidden;
-}
 
-.fill {
-  display: block;
-  height: 100%;
-  border-radius: var(--radius-pill);
-  background: var(--chart-line);
-}
 
-.figures {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 2px;
-  white-space: nowrap;
-  font-variant-numeric: tabular-nums;
-}
 
-.lead {
-  font-size: var(--text-md);
-  font-weight: var(--weight-semibold);
-  color: var(--text-strong);
-}
 
-.second {
-  font-size: var(--text-sm);
-  color: var(--text-subtle);
-}
 
 .empty {
   margin: 0;
@@ -142,4 +91,44 @@
   color: var(--text-subtle);
   background: var(--surface-sunken);
   border-radius: var(--radius-md);
+}
+
+.rank {
+  display: inline-grid;
+  place-items: center;
+  width: 1.3rem;
+  height: 1.3rem;
+  margin-right: var(--space-2);
+  border-radius: var(--radius-sm);
+  background: var(--surface-sunken);
+  color: var(--text-subtle);
+  font-size: var(--text-caption);
+  font-weight: var(--weight-semibold);
+}
+
+.title {
+  display: inline-block;
+  max-width: 24rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+.up {
+  color: var(--priority-low-ink);
+}
+
+.down {
+  color: var(--priority-high-ink);
+}
+
+.badge {
+  display: inline-block;
+  padding: 1px var(--space-2);
+  border-radius: var(--radius-pill);
+  background: var(--teal-050);
+  color: var(--teal-ink);
+  font-size: var(--text-caption);
+  font-weight: var(--weight-semibold);
 }

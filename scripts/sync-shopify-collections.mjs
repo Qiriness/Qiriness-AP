@@ -1,6 +1,7 @@
 import { pathToFileURL } from 'node:url';
 
 import { parseArgs, loadConfig, loadEnv } from './lib/sync-config.mjs';
+import { SALES_COLLECTION_HANDLES } from './lib/sales-collections.mjs';
 import {
   createShopifyClient,
   fetchCollectionPage,
@@ -100,7 +101,13 @@ async function syncCatalogue({ args, shopify, supabase, shopRow, syncedAt }) {
 }
 
 /**
- * The products of each ACTIVE collection.
+ * The products of each ACTIVE collection, and of the six SALES RANGES.
+ *
+ * TWO REASONS A COLLECTION NEEDS ITS MEMBERSHIP, and they are not the same
+ * reason. `is_active` means the team switched it on for ADVICE; the ranges in
+ * `sales-collections.mjs` are what the business reads its revenue by. Both sets
+ * are fetched and neither flag is written from the other — flipping `is_active`
+ * to get a sales figure would have changed what the agent recommends.
  *
  * `status` travels with every node, and a product that is not `ACTIVE` is
  * dropped here rather than stored and filtered later: an archived product has no
@@ -119,11 +126,25 @@ async function syncMembership({ args, shopify, supabase, shopRow, syncedAt }) {
     { shop_id: shopRow.id, is_active: true, deleted_at: { operator: 'is', value: 'null' } },
     'id,shopify_collection_id,handle,title'
   );
+  const ranges = await supabaseSelectAll(
+    supabase,
+    T.ADVICE_COLLECTIONS,
+    {
+      shop_id: shopRow.id,
+      handle: { operator: 'in', value: `(${SALES_COLLECTION_HANDLES.join(',')})` },
+      deleted_at: { operator: 'is', value: 'null' }
+    },
+    'id,shopify_collection_id,handle,title'
+  );
+
+  // One pass per collection, whichever list it came from.
+  const wanted = new Map();
+  for (const collection of [...(active || []), ...(ranges || [])]) wanted.set(collection.id, collection);
 
   let refreshed = 0;
   let products = 0;
 
-  for (const collection of active || []) {
+  for (const collection of wanted.values()) {
     const ids = await collectionProductIds(shopify, collection.shopify_collection_id, collection.handle);
     refreshed += 1;
     products += ids.length;

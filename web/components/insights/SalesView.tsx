@@ -1,8 +1,9 @@
 import type { SalesPanel } from "@/lib/types";
-import { BestProducts } from "./BestProducts";
+import { CollectionMix } from "./CollectionMix";
 import { CountrySales } from "./CountrySales";
 import { ProductCustomerMixCard } from "./ProductCustomerMixCard";
 import { ProductPairs } from "./ProductPairs";
+import { ProductPerformance } from "./ProductPerformance";
 import { Card, DeltaChip, Grid, KpiCard, euros } from "./InsightsKit";
 import { SplitBar } from "./SplitBar";
 import { TimeSeriesChart } from "./TimeSeriesChart";
@@ -41,7 +42,10 @@ export function SalesView({ panel, compareLabel }: { panel: SalesPanel; compareL
           delta={<DeltaChip current={current.revenue} previous={previous?.revenue} polarity="up" compareLabel={compareLabel} />}
           sub={[
             { label: "Average per day", value: euros(current.revenue / panel.days, { cents: true }) },
-            { label: "Average basket", value: euros(basket, { cents: true }) },
+            // NOT Shopify's AOV, which is net sales over orders: this revenue
+            // is Shopify's TOTAL sales, VAT and shipping included. Overview
+            // carries the comparable figure.
+            { label: "Total sales ÷ orders", value: euros(basket, { cents: true }) },
             {
               label: "Refunded",
               value: current.refundedAmount > 0 ? euros(current.refundedAmount, { cents: true }) : "0 €",
@@ -123,9 +127,18 @@ export function SalesView({ panel, compareLabel }: { panel: SalesPanel; compareL
         </Card>
       </Grid>
 
-      <Grid min={100} pin="best-products" label="Best products">
-        <Card title="Best products">
-          <BestProducts products={panel.products} />
+      {/* The pin id stays `best-products` through the rename: changing it would
+          forget the pin for anyone who had set one (PinBoard.tsx). */}
+      <Grid min={30} pin="best-products" label="Product performance and collection mix">
+        <Card title="Product performance" span={2} aside={<span>vs {compareLabel}</span>}>
+          <ProductPerformance products={panel.products} compareLabel={compareLabel} />
+        </Card>
+        <Card title="Collection mix" aside={<span>Collections overlap</span>}>
+          <CollectionMix
+            collections={panel.collections}
+            productRevenue={panel.productRevenue}
+            compareLabel={compareLabel}
+          />
         </Card>
       </Grid>
 

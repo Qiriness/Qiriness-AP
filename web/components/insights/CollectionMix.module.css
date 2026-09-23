@@ -1,0 +1,53 @@
+/* The Collection mix card on the Sales panel. */
+
+.name {
+  max-width: 14rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.uncollected th,
+.uncollected td {
+  color: var(--text-subtle);
+}
+
+/* One band per collection, widest first — how concentrated the range is. */
+.concentration {
+  display: flex;
+  gap: 2px;
+  height: 0.75rem;
+  margin-top: var(--space-4);
+  border-radius: var(--radius-pill);
+  overflow: hidden;
+}
+
+.concentration i {
+  display: block;
+  height: 100%;
+  background: var(--chart-1);
+}
+
+.concentration i:nth-child(2) {
+  background: var(--chart-2);
+}
+
+.concentration i:nth-child(3) {
+  background: var(--chart-3);
+}
+
+.concentration i:nth-child(4) {
+  background: var(--chart-4);
+}
+
+.concentration i:nth-child(n + 5) {
+  background: var(--mist);
+}
+
+.up {
+  color: var(--priority-low-ink);
+}
+
+.down {
+  color: var(--priority-high-ink);
+}

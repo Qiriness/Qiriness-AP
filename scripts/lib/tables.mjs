@@ -170,6 +170,7 @@ export const RPC = {
   INSIGHTS_CAPTURE_SERIES: 'insights_capture_series',
   INSIGHTS_SALES_OVERVIEW: 'insights_sales_overview',
   INSIGHTS_PROMOTIONS: 'insights_promotions',
+  INSIGHTS_COLLECTION_SALES: 'insights_collection_sales',
   INSIGHTS_INVENTORY_EXCEPTIONS: 'insights_inventory_exceptions',
 
   // 06_analytics — THE VIP RULE. vip_customers() is the one place it is written;
