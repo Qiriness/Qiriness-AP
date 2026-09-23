@@ -17,6 +17,7 @@ export function InsightsHeader({
   freshness,
   renderedAt,
   tzFallback,
+  months,
 }: {
   active: InsightsPanel;
   /** The panels this reader's role may open, and so the only tabs drawn. */
@@ -27,6 +28,8 @@ export function InsightsHeader({
   freshness: Freshness | null;
   renderedAt: string | null;
   tzFallback: boolean;
+  /** What the month picker offers. */
+  months: { id: string; label: string }[];
 }) {
   return (
     <header className={styles.header}>
@@ -35,7 +38,7 @@ export function InsightsHeader({
         {renderedAt ? <LiveRefresh renderedAt={renderedAt} /> : null}
       </div>
       <InsightsNav active={active} panels={panels} />
-      {range ? <FilterBar range={range} platform={platform} scope={scope} /> : null}
+      {range ? <FilterBar range={range} platform={platform} scope={scope} months={months} /> : null}
       {freshness && freshness.items.length > 0 ? (
         <ul className={styles.freshness} aria-label="How current each source is">
           {freshness.items.map((item) => (

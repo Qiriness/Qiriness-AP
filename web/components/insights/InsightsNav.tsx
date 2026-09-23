@@ -9,7 +9,7 @@ import { useInsightsFrame } from "./InsightsFrame";
 import styles from "./InsightsHeader.module.css";
 
 /** The query keys a panel switch carries over, so the range survives a tab change. */
-const KEPT = ["range", "from", "to", "platform"];
+const KEPT = ["range", "from", "to", "month", "platform"];
 
 /**
  * The bar that switches panels. Real links, so each panel can be bookmarked and

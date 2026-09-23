@@ -220,13 +220,20 @@ const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
  * "vs previous" chip is drawn against a period nothing was measured in. With no
  * orders yet, it is just the current bucket.
  *
- * @param {{ range?: string, from?: string, to?: string }} [query]
+ * A MONTH (`?month=YYYY-MM`) is the calendar month by day, compared with the
+ * month before (see resolveMonth). It wins over a preset; an explicit from/to
+ * wins over it, as over everything.
+ *
+ * @param {{ range?: string, from?: string, to?: string, month?: string }} [query]
  * @param {{ tz?: string, now?: Date, earliest?: string | Date | null }} [options]
  */
 export function resolveRange(query = {}, { tz = 'UTC', now = new Date(), earliest = null } = {}) {
   const zone = isValidTimeZone(tz) ? tz : 'UTC';
   const nowWall = wallClock(now, zone);
   const today = truncate(nowWall, 'day');
+
+  const month = !(query.from || query.to) ? parseMonth(query.month, nowWall) : null;
+  if (month) return resolveMonth(month, nowWall, zone);
 
   if (query.range === ALL_TIME && !(query.from || query.to)) {
     const earliestMs = earliest ? Date.parse(earliest instanceof Date ? earliest.toISOString() : earliest) : NaN;
@@ -298,6 +305,105 @@ export function resolveRange(query = {}, { tz = 'UTC', now = new Date(), earlies
   });
 }
 
+// --- calendar months ------------------------------------------------------------
+
+const ISO_MONTH = /^(\d{4})-(\d{2})$/;
+
+/** `YYYY-MM` -> the wall-clock first of that month, or null if invalid or in the future. */
+function parseMonth(value, nowWall) {
+  const match = ISO_MONTH.exec(value ?? '');
+  if (!match) return null;
+  const index = Number(match[2]) - 1;
+  if (index < 0 || index > 11) return null;
+  const first = new Date(Date.UTC(Number(match[1]), index, 1));
+  return first <= nowWall ? first : null;
+}
+
+/**
+ * One calendar month, `?month=2026-08`, drawn by day.
+ *
+ * THE COMPARISON IS THE PREVIOUS CALENDAR MONTH, not the previous 31 days: a
+ * month is what the monthly report and the CEOs read, and "August against July"
+ * is the question. A month still in progress is set against the same elapsed
+ * time of the month before — 11 days and 14 hours of September against the
+ * first 11 days and 14 hours of August — capped at that month's end, so the
+ * 31st of a long month never compares against a day the shorter one lacks.
+ */
+function resolveMonth(first, nowWall, tz) {
+  const from = first;
+  const to = step(first, 'month');
+  const previousFrom = step(first, 'month', -1);
+  const elapsed = nowWall < to ? nowWall - from : to - from;
+  const previousTo = new Date(Math.min(previousFrom.getTime() + elapsed, from.getTime()));
+  return finalise({
+    preset: 'month',
+    from,
+    to,
+    grain: 'day',
+    nowWall,
+    previousFrom,
+    previousTo,
+    tz,
+    label: monthLabel(from),
+    compareLabel: nowWall < to ? `same days of ${monthLabel(previousFrom)}` : monthLabel(previousFrom)
+  });
+}
+
+/** `2026-08-01T00:00:00` or a Date -> `August 2026`. */
+export function monthLabel(value) {
+  const d = value instanceof Date ? value : fromKey(value);
+  return `${MONTH_NAMES[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
+}
+
+/**
+ * The months the month picker offers, newest first: from the month of the
+ * first synced order to the current one. With no orders yet, just this month.
+ * Each id is what `?month=` takes.
+ *
+ * @param {{ tz?: string, now?: Date, earliest?: string | Date | null }} [options]
+ * @returns {{ id: string, label: string }[]}
+ */
+export function monthOptions({ tz = 'UTC', now = new Date(), earliest = null } = {}) {
+  const zone = isValidTimeZone(tz) ? tz : 'UTC';
+  const nowWall = wallClock(now, zone);
+  const earliestMs = earliest ? Date.parse(earliest instanceof Date ? earliest.toISOString() : earliest) : NaN;
+  const firstWall = Number.isFinite(earliestMs) ? wallClock(new Date(earliestMs), zone) : nowWall;
+  const options = [];
+  for (let d = truncate(nowWall, 'month'); d >= truncate(firstWall < nowWall ? firstWall : nowWall, 'month'); d = step(d, 'month', -1)) {
+    options.push({ id: toKey(d).slice(0, 7), label: monthLabel(d) });
+  }
+  return options;
+}
+
+/**
+ * The same window one year earlier, like for like: the whole month for a month
+ * that has ended, the same elapsed time for one still in progress — the YoY
+ * comparison the monthly report prints beside month on month.
+ *
+ * @param {{ from: string, to: string, now: string }} range
+ * @returns {{ from: string, to: string }}
+ */
+export function yearEarlier(range) {
+  const from = fromKey(range.from);
+  const to = fromKey(range.to);
+  const now = fromKey(range.now);
+  const earlierFrom = step(from, 'month', -12);
+  const earlierEnd = step(to, 'month', -12);
+  const elapsed = (now < to ? now : to) - from;
+  const earlierTo = new Date(Math.min(earlierFrom.getTime() + elapsed, earlierEnd.getTime()));
+  return { from: toKey(earlierFrom), to: toKey(earlierTo) };
+}
+
+/**
+ * The last month that has fully ended on the shop clock — what a monthly report covers.
+ *
+ * @param {{ tz?: string, now?: Date }} [options]
+ */
+export function lastCompleteMonth({ tz = 'UTC', now = new Date() } = {}) {
+  const zone = isValidTimeZone(tz) ? tz : 'UTC';
+  return toKey(step(truncate(wallClock(now, zone), 'month'), 'month', -1)).slice(0, 7);
+}
+
 function parseCustom(query, today) {
   const { from, to } = query;
   if (!ISO_DATE.test(from ?? '') || !ISO_DATE.test(to ?? '')) return null;
@@ -331,7 +437,12 @@ function finalise({ preset, from, to, grain, nowWall, previousFrom, previousTo, 
       return start <= nowWall && nowWall < end;
     }) ?? null,
     // The query that reproduces this range, for links that must keep it.
-    query: preset === 'custom' ? { from: toKey(from).slice(0, 10), to: toKey(step(to, 'day', -1)).slice(0, 10) } : { range: preset }
+    query:
+      preset === 'custom'
+        ? { from: toKey(from).slice(0, 10), to: toKey(step(to, 'day', -1)).slice(0, 10) }
+        : preset === 'month'
+          ? { month: toKey(from).slice(0, 7) }
+          : { range: preset }
   };
 }
 

@@ -7,8 +7,12 @@ import { useInsightsFrame } from "./InsightsFrame";
 import styles from "./InsightsHeader.module.css";
 
 /**
- * The one row of filters above every panel: range first, then platform, then a
- * custom from/to on the browser's own date picker.
+ * The one row of filters above every panel: range first, then a calendar month,
+ * then platform, then a custom from/to on the browser's own date picker.
+ *
+ * THE FOUR WAYS TO PICK A PERIOD ARE ONE CHOICE. A preset, a month and a
+ * custom from/to each clear the other two in the URL, so the address never
+ * holds two answers and the bar never shows two selections.
  *
  * The date inputs always show the dates the current range resolves to, so
  * picking a preset and reading "13/08/2026 – 11/09/2026" beside it are the same
@@ -22,10 +26,13 @@ export function FilterBar({
   range,
   platform,
   scope,
+  months,
 }: {
   range: InsightsRange;
   platform: PlatformId;
   scope: InsightsScope;
+  /** The months the picker offers, newest first (`monthOptions`). */
+  months: { id: string; label: string }[];
 }) {
   const { navigate, pending } = useInsightsFrame();
   const fromDay = range.from.slice(0, 10);
@@ -42,7 +49,7 @@ export function FilterBar({
 
   const applyDates = (nextFrom: string, nextTo: string) => {
     if (!nextFrom || !nextTo || nextFrom > nextTo) return;
-    navigate({ range: null, from: nextFrom, to: nextTo });
+    navigate({ range: null, month: null, from: nextFrom, to: nextTo });
   };
 
   const rangeTitle = scope.range ? undefined : scope.rangeReason ?? "This panel is a snapshot as of the last sync";
@@ -60,7 +67,7 @@ export function FilterBar({
               className={`${styles.preset} ${active ? styles.presetActive : ""}`}
               aria-pressed={active}
               disabled={!scope.range}
-              onClick={() => navigate({ range: preset.id, from: null, to: null })}
+              onClick={() => navigate({ range: preset.id, month: null, from: null, to: null })}
             >
               {preset.label}
             </button>
@@ -69,6 +76,25 @@ export function FilterBar({
       </div>
 
       <div className={styles.filterRight}>
+        <label className={styles.selectWrap} title={rangeTitle}>
+          <span className={styles.srOnly}>Month</span>
+          <select
+            className={styles.select}
+            value={scope.range && range.preset === "month" ? range.query.month ?? "" : ""}
+            disabled={!scope.range}
+            onChange={(event) =>
+              navigate({ month: event.target.value || null, range: null, from: null, to: null })
+            }
+          >
+            <option value="">Month…</option>
+            {months.map((m) => (
+              <option key={m.id} value={m.id}>
+                {m.label}
+              </option>
+            ))}
+          </select>
+        </label>
+
         <label className={styles.selectWrap} title={platformTitle}>
           <span className={styles.srOnly}>Platform</span>
           <select

@@ -66,6 +66,7 @@ export async function InsightsPage({
             freshness={ctx?.freshness ?? null}
             renderedAt={ctx?.renderedAt ?? null}
             tzFallback={ctx?.tzFallback ?? false}
+            months={ctx?.months ?? []}
           />
         }
       >

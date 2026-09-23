@@ -13,6 +13,7 @@ import { loadConfig } from "../../../../scripts/lib/sync-config.mjs";
 import {
   channelFilter,
   isValidTimeZone,
+  monthOptions,
   parsePlatform,
   resolveRange,
 } from "../../../../scripts/lib/insights-range.mjs";
@@ -31,6 +32,8 @@ export interface InsightsContext {
   freshness: Freshness;
   /** When this render read the database — what "Updated" on the page means. */
   renderedAt: string;
+  /** The calendar months a reader can pick, newest first: first order month to now. */
+  months: { id: string; label: string }[];
 }
 
 export type SearchParams = Record<string, string | string[] | undefined>;
@@ -55,7 +58,12 @@ export async function resolveInsightsContext(searchParams: SearchParams = {}): P
   });
 
   const range = resolveRange(
-    { range: first(searchParams.range), from: first(searchParams.from), to: first(searchParams.to) },
+    {
+      range: first(searchParams.range),
+      from: first(searchParams.from),
+      to: first(searchParams.to),
+      month: first(searchParams.month),
+    },
     { tz, now, earliest: freshnessRow?.first_order_at ?? null }
   ) as unknown as InsightsRange;
 
@@ -74,6 +82,7 @@ export async function resolveInsightsContext(searchParams: SearchParams = {}): P
       topicMapBuiltAt: freshnessRow?.topic_map_built_at ?? null,
     },
     renderedAt: now.toISOString(),
+    months: monthOptions({ tz, now, earliest: freshnessRow?.first_order_at ?? null }),
   };
 }
 

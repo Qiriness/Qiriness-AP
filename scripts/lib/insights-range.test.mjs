@@ -10,6 +10,9 @@ import {
   fillSeries,
   fromKey,
   grainForSpan,
+  lastCompleteMonth,
+  monthOptions,
+  yearEarlier,
   parsePlatform,
   platformOfChannel,
   RANGE_PRESETS,
@@ -225,4 +228,67 @@ test('axis labels suit the grain', () => {
   assert.equal(bucketLabel('2026-09-11T14:00:00', 'hour'), '14:00');
   assert.equal(bucketLabel('2026-09-11T00:00:00', 'day'), '11 Sep');
   assert.equal(bucketLabel('2026-09-01T00:00:00', 'month'), 'Sep 26');
+});
+
+test('a month is one calendar month by day, compared with the whole month before', () => {
+  const range = resolveRange({ month: '2026-08' }, PARIS);
+  assert.equal(range.preset, 'month');
+  assert.equal(range.grain, 'day');
+  assert.equal(range.from, '2026-08-01T00:00:00');
+  assert.equal(range.to, '2026-09-01T00:00:00');
+  assert.equal(range.keys.length, 31);
+  assert.equal(range.currentKey, null);
+  assert.deepEqual(range.previous, { from: '2026-07-01T00:00:00', to: '2026-08-01T00:00:00' });
+  assert.equal(range.label, 'August 2026');
+  assert.equal(range.compareLabel, 'July 2026');
+  assert.deepEqual(range.query, { month: '2026-08' });
+});
+
+test('the month in progress is set against the same elapsed time of the month before', () => {
+  const range = resolveRange({ month: '2026-09' }, PARIS);
+  assert.equal(range.currentKey, '2026-09-11T00:00:00');
+  assert.deepEqual(range.previous, { from: '2026-08-01T00:00:00', to: '2026-08-11T14:20:00' });
+  assert.equal(range.compareLabel, 'same days of August 2026');
+});
+
+test('a long month never compares past the end of the shorter one before it', () => {
+  // 31 March 2026, 18:00 in Paris: 30 days and 18 hours into March, more than February has.
+  const range = resolveRange({ month: '2026-03' }, { tz: 'Europe/Paris', now: new Date('2026-03-31T16:00:00Z') });
+  assert.deepEqual(range.previous, { from: '2026-02-01T00:00:00', to: '2026-03-01T00:00:00' });
+});
+
+test('a month wins over a preset, a custom from/to wins over a month, and a bad month is ignored', () => {
+  assert.equal(resolveRange({ month: '2026-08', range: '7d' }, PARIS).preset, 'month');
+  assert.equal(resolveRange({ month: '2026-08', from: '2026-09-01', to: '2026-09-05' }, PARIS).preset, 'custom');
+  for (const month of ['2026-13', '2026-8', 'August', '2026-10']) {
+    assert.equal(resolveRange({ month }, PARIS).preset, '30d', month);
+  }
+});
+
+test('the month picker runs from the first order month to this one, newest first', () => {
+  const options = monthOptions({ ...PARIS, earliest: '2026-06-15T10:00:00Z' });
+  assert.deepEqual(options.map((o) => o.id), ['2026-09', '2026-08', '2026-07', '2026-06']);
+  assert.equal(options[1].label, 'August 2026');
+  assert.deepEqual(monthOptions({ ...PARIS, earliest: null }).map((o) => o.id), ['2026-09']);
+});
+
+test('the monthly report covers the last month that has ended on the shop clock', () => {
+  assert.equal(lastCompleteMonth(PARIS), '2026-08');
+  // 00:30 on 1 October in Paris is still 30 September in UTC.
+  assert.equal(lastCompleteMonth({ tz: 'Europe/Paris', now: new Date('2026-09-30T22:30:00Z') }), '2026-09');
+  assert.equal(lastCompleteMonth({ tz: 'Europe/Paris', now: new Date('2027-01-05T10:00:00Z') }), '2026-12');
+});
+
+test('a year earlier is the same month, or the same elapsed days of it', () => {
+  assert.deepEqual(yearEarlier(resolveRange({ month: '2026-08' }, PARIS)), {
+    from: '2025-08-01T00:00:00',
+    to: '2025-09-01T00:00:00'
+  });
+  assert.deepEqual(yearEarlier(resolveRange({ month: '2026-09' }, PARIS)), {
+    from: '2025-09-01T00:00:00',
+    to: '2025-09-11T14:20:00'
+  });
+  // 29 February has no twin: the window ends with the shorter month.
+  const leap = resolveRange({ month: '2028-02' }, { tz: 'UTC', now: new Date('2028-03-10T00:00:00Z') });
+  assert.deepEqual(yearEarlier(leap), { from: '2027-02-01T00:00:00', to: '2027-03-01T00:00:00' });
 });
