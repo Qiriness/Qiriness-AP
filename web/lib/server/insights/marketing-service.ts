@@ -22,7 +22,7 @@ import { supabaseSelect } from "../../../../scripts/lib/supabase-rest-client.mjs
 import { ALL_MARKETPLACE_HANDLES, isMarketplacePlatform } from "../../../../scripts/lib/insights-range.mjs";
 import type { MarketingPanel, PromotionRow } from "../../types";
 import { orderArgs, type InsightsContext } from "./context";
-import { getStorefrontAnalytics } from "./analytics";
+import { liveChannels, liveFunnel, liveLandingTypes, liveProductPages, liveTotals } from "./analytics";
 import { getNewsletterActivity } from "./customer-activity-service";
 import { getOrdersSummary, getSalesOverviewFigures } from "./orders";
 import { callRpc, count, getSupabaseClient } from "./shared";
@@ -31,24 +31,33 @@ import { callRpc, count, getSupabaseClient } from "./shared";
 const PROMOTIONS = 12;
 
 export async function getMarketingPanel(ctx: InsightsContext): Promise<MarketingPanel> {
-  const [summary, figures, promotions, newsletter, storefront, titles] = await Promise.all([
+  // Shopify's cards, started first and awaited card by card by the view. The
+  // panel shows no comparison for traffic, so the earlier period is not asked.
+  const totals = liveTotals(ctx, { compare: false });
+  const landingTypes = liveLandingTypes(ctx);
+  const titles = productTitlesByHandle(ctx.shopId).catch(() => new Map<string, string>());
+  const live = {
+    totals,
+    funnel: liveFunnel(totals, landingTypes),
+    channels: liveChannels(ctx),
+    landingTypes,
+    // The traffic rows name a URL; the catalogue names the product. Matching on
+    // handle is exact — every one of this shop's 116 products has one — and a
+    // page whose handle no longer exists keeps its path rather than going blank.
+    productPages: Promise.all([liveProductPages(ctx), titles]).then(([pages, byHandle]) => ({
+      ...pages,
+      value: pages.value.map((page) => ({ ...page, title: page.handle ? byHandle.get(page.handle) ?? null : null })),
+    })),
+  };
+
+  const [summary, figures, promotions, newsletter] = await Promise.all([
     getOrdersSummary(ctx),
     getSalesOverviewFigures(ctx),
     getPromotions(ctx),
     getNewsletterActivity(ctx),
-    getStorefrontAnalytics(ctx),
-    productTitlesByHandle(ctx.shopId),
   ]);
 
-  // The traffic rows name a URL; the catalogue names the product. Matching on
-  // handle is exact — every one of this shop's 116 products has one — and a
-  // page whose handle no longer exists keeps its path rather than going blank.
-  const productPages = storefront.productPages.map((page) => ({
-    ...page,
-    title: page.handle ? titles.get(page.handle) ?? null : null,
-  }));
-
-  return { summary, storefront: { ...storefront, productPages }, figures, promotions, newsletter };
+  return { summary, live, figures, promotions, newsletter };
 }
 
 /**

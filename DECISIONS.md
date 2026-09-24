@@ -3614,6 +3614,7 @@ The owner checked the dashboard against the admin and asked whether our revenue 
 
 That was survivable as a headline, because Total sales is what the admin's own home screen leads with. What was not survivable is what it did to the **average order value**: dividing Total sales by orders gave **€67.38** where Shopify shows **€53.88**, about 25% high, and the error was invisible because every card agreed with every other card.
 
+- **Superseded 2026-09-24: AOV is now Shopify's own `average_order_value`, weighted by orders** — the formula below differs from it in some months (see "Closed months of sessions are stored").
 - **AOV is `(gross_sales − discounts) ÷ orders`**, confirmed twice against this store: August, 8,189.73/152 = 53.88; the 30 days to 23 September, (15,874.86 − 2,450.36)/213 = 63.03, which is the figure the admin shows. It is net of discounts and **excludes VAT and shipping**.
 - **Net sales cannot be re-derived from what we store.** `total_price − total_tax − total_shipping_price` gives 8,048.91 against Shopify's 8,189.73, because `total_shipping_price` is the shipping *before* the free-shipping promotions. The 140.82 gap is exactly those shipping discounts. So the ladder is read from ShopifyQL rather than computed, and folded onto the platform filter by `sales_channel` — a split that reproduces our own exactly (Online Store 9,900.44, Marketplace Connect 311.94, Mirakl Connect 29.90).
 - **The bridge is now Shopify's ladder** — gross → discounts → returns → net → VAT and shipping → total — replacing one this file had invented from `total_discounts`, which reconciled to nothing the admin prints.
@@ -3621,6 +3622,8 @@ That was survivable as a headline, because Total sales is what the admin's own h
 - **Over a window with returns the two drift ~0.05%** (16,651.06 against 16,577.71 for 25 Aug – 23 Sep), because Shopify dates a return to the refund and we subtract it from the original order. Order counts match exactly.
 
 ### Storefront analytics are read live, and that is a considered choice (2026-09-23)
+
+> **Revised 2026-09-24:** closed months of session COUNTS are now stored and summed, which answers the objection below (counts add up; rates are rebuilt from them), and money stays live. See "Closed months of sessions are stored; money is always live".
 
 Sessions, conversion, pageviews, bounce rate and traffic by channel are fetched from ShopifyQL **when a panel renders**, not synced into a table. The owner asked which cadence a daily sync should use; the answer is that a sync is the wrong shape here.
 
@@ -3671,15 +3674,62 @@ Asked for by the owner, from the reference report. `Best products` becomes **Pro
 - **A window nobody measured states it in words.** "No comparison: March 2024 – August 2024 is outside the synced order history" rather than a dash, which reads as zero — the rule `BlockedCard` already enforces on the dashboard.
 - **The drivers card splits the same top line as the KPI above it.** It decomposed our order revenue while the card beside it reported Shopify's `total_sales`; the two printed −67.3% and −67.4% for the same month. It now decomposes whatever the headline says, so orders × basket multiplies back out to the number the reader just saw.
 
-**The trend lays the compared period underneath, dotted (2026-09-23).** Asked for by the owner. Twelve months solid, and the same twelve months one comparison earlier as a dotted line under them — one month back for MoM, twelve for both year-on-year views, which is why the series carries **24 buckets for a 12-month chart**. Both lines share one scale, or the comparison would look level with a year that dwarfs it, and a month with no data breaks the line rather than dropping it to zero.
+**The trend lays the compared period underneath, dotted (2026-09-23).** Asked for by the owner. Twelve months solid, and the same twelve months one comparison earlier as a dotted line under them — twelve months back for both year-on-year views, and **no line for MoM** (revised 2026-09-24 at the owner's request: a line one month behind is the solid line shifted by a point and says nothing new). **Each month has a hover label** — its value, the compared month's and the change — drawn inside the SVG and shown by CSS `:hover`, with no script, because the file is emailed and opened offline; which is why the series carries **24 buckets for a 12-month chart**. Both lines share one scale, or the comparison would look level with a year that dwarfs it, and a month with no data breaks the line rather than dropping it to zero.
 
 **Growth and declines are ranked in euros, ten each (2026-09-23).** The report's product table gains the same Growth and Declines tabs the dashboard card has: a product that went from €4 to €40 is a 900% rise and not the month's story. A product absent from the compared window sold nothing then, which is a real zero; a missing window entirely leaves both tables empty and the card says why.
 
 **ShopifyQL is throttled on a bucket of its own (2026-09-23).** The report needs five windows of sessions and five of the money ladder. Sent as ten aliased queries in one document they came back `THROTTLED` — `"Rate limited. Please retry later."`, with the error's own cost reading `maximumAvailable: 1000, currentlyAvailable: 0` while the document's `throttleStatus` still read 1,990 of 2,000. **The GraphQL point budget is not the analytics budget.** Net sales and sessions were `—` in every mode and the report otherwise looked fine, which is the dangerous shape.
 
-- **Two queries now answer all five windows.** Every window a monthly report asks for is whole months, so the whole span is read once as `TIMESERIES month` and each window sums the months inside it. Build time for August fell from ~19 s to ~10 s.
+- **Superseded 2026-09-24:** the report now reads each window's ladder live and exact through the priority queue, and sessions from stored months; the monthly-fold helpers below were removed.
+- **Two queries now answered all five windows.** Every window a monthly report asks for is whole months, so the whole span is read once as `TIMESERIES month` and each window sums the months inside it. Build time for August fell from ~19 s to ~10 s.
 - **Counts are asked for, never rates.** A conversion rate cannot be summed, so the monthly sessions query fetches `sessions_that_completed_checkout` and the fold divides — which is Shopify's own definition, not a sessions-weighted approximation of it. `bounce_rate` has no count behind it and is left out; no report card reads one. AOV is recomputed as (gross − discounts) ÷ orders over the summed months, never averaged from monthly averages.
 - **A window that is not month-aligned is still asked for directly.** An in-progress month compares the same *days* of the month before; summing whole months there would invent a fall. So would a report filtered to one platform, because the monthly ladder has no `sales_channel` to fold on — both fall back to a query per window.
+
+### Closed months of sessions are stored; money is always live (2026-09-24)
+
+The owner reported the session cards blank on 24 hours, 7 days, 6 months, 1 year and some months, often within five seconds of loading, under a 12-second timeout. **The cause was ShopifyQL's own rate limit, measured, not the timeout.**
+
+- **The bucket is 1,000 points a minute, resetting on the minute**, reported per response in `extensions.shopifyqlCost` (and in a `THROTTLED` error's `extensions.cost.windowResetAt`). It is separate from the GraphQL point bucket, which never dropped below 1,980 of 2,000 on this Standard-plan store.
+- **Cost is per ~30-day slice of the range, per column.** A human-filtered one-column sessions query costs 6 per slice; the full Overview + Marketing document cost 167 for any range up to 30 days, **1,118 for 6 months and 2,120 for a year**. A 6-month or 1-year panel could never be answered in one minute. A single query's cost is capped at 1,000 (45 months of totals cost exactly 1,000), so every query fits an empty minute.
+- **Short ranges failed as collateral.** Measured in sequence: 7 days answered 9 of 9, then 6 months, then 7 days again answered 2 of 9, then 24 hours 0 of 9. The old document was retried whole, so every retry re-spent the queries that had already been answered.
+- **Splitting a range into monthly queries does not help**: six 1-month queries cost 108 against 126 for one 6-month query, same 30,195 sessions. Cost follows the span, however it is asked.
+
+**What changed.**
+
+1. **Sessions for closed months are stored** in `storefront_session_months` (migration 38): sessions, pageviews and the three funnel counts, per month on the shop's clock. The nightly sync rewrites **every** stored month (36, Aug 2023 onwards; one query, since cost caps at 1,000) and logs any month Shopify restated. A run on the 1st would have added a month; rewriting all of them heals a missed night and makes restatement visible.
+2. **The last two months are always live**, and so is any part of a range that does not cover a whole stored month: "6 months" from Monday 30 March reads 30–31 March live, April–July stored, August onwards live. A missing month is read live, so a failed night costs speed, never a figure.
+3. **Conversion is Shopify's definition rebuilt from counts**, completed checkouts ÷ sessions, not orders ÷ sessions: our orders include Amazon and Yves Rocher, whose buyers had no session. Unique visitors and bounce rate do not add up across months, so a range assembled from pieces shows them as "—"; a range that is one live piece is Shopify's answer untouched.
+4. **Net sales and AOV are never stored** (the owner's rule). The ladder is asked live for the exact window at every length, first in the queue; a year and its comparison year cost 425 points, which fits a minute on its own.
+5. **One query per request, through a priority queue** (`web/lib/server/insights/shopifyql.ts`): money, then headline sessions, then the trend, then the detail tables. A throttled query waits for the reset Shopify names and goes again alone; nothing answered is re-asked; each query is cached five minutes by its text, so Overview and Marketing share, and flipping back to a range is free.
+6. **Each Shopify card streams in on its own** (Suspense): the page renders its database figures at once and each Shopify card shows "Loading from Shopify Analytics…" until its queries answer, instead of the whole panel waiting and blanking on one failure.
+
+**Two errors the verification found in figures that were already shipping.**
+
+- **To-date comparisons dropped their last partial day.** `rangeClause` stated windows as dates, so the 7 days before a to-date 7-day range ran 11–16 September instead of to 10:30 on the 17th, and "last 24 hours" was yesterday's whole day. **ShopifyQL takes `SINCE 2026-09-11T00:00:00 UNTIL 2026-09-17T10:29:59` on the shop clock** — an order at 08:xx Paris is inside `UNTIL 08:59:59` and outside `07:59:59`, and 00:00–11:59:59 plus 12:00–23:59:59 is the day exactly (57 + 92 = 149). Windows that are not whole days are now stated to the second. The previous-7-days net sales moved from €2,087.03 to €2,135.91 — the €48.88 order on the morning of the 17th.
+- **AOV is Shopify's column, not our formula.** `(gross − discounts) ÷ orders` matches in most months but read 76.52 against Shopify's 76.41 for November 2025, and 64.02 against 64.00 for the year to September 2026. The orders-weighted mean of Shopify's per-channel (or per-month) `average_order_value` reproduces its total to a tenth of a cent, so the fold now weights Shopify's own figure by orders; the formula is the fallback only for rows without the column. This supersedes the AOV formula in "Revenue is Shopify's TOTAL sales, and AOV is its NET one".
+
+**Verified 2026-09-24**, the new path against one direct ShopifyQL query for the same window, on 12 windows — 7 days, 30 days, 6 months, 1 year, March 2026 (stored) and August 2026 (live), each with its comparison — including 6 months as 4 stored + 2 live pieces and the year before as 11 stored + 1 live: **sessions, conversion, net sales, AOV and orders identical on all 12.** Every money column, orders included, also sums from months to the cent (Mar–Aug 2026, Sep 2025–Aug 2026, Nov 2024–Feb 2025).
+
+**What can still go wrong, and what catches it.**
+
+- **Shopify restates a closed month.** Money cannot drift — it is never stored. Sessions can (late bot reclassification); the two live months absorb the usual case, and the nightly rewrites and logs the rest (`storefront_months_restated`). If a month keeps moving after it leaves the live window, widen `LIVE_MONTHS`.
+- **The shop's timezone.** Months are cut on the shop clock, as ShopifyQL cuts them. With the timezone unknown the dashboard falls back to UTC and then uses no stored month at all. If the shop ever changes timezone, the stored months are on the old clock until the next nightly rewrites them.
+- **Missing or partial months** are never read from the store: only a whole month, older than the live window, with a row, is.
+- **An all-time range** can still need three minutes of the bucket for its live parts; its cards stream in, and one that waits past 150 s says so rather than hanging.
+
+### Every money figure on the Overview is Shopify's (2026-09-24)
+
+The owner saw the bridge's Total sales disagree with the trend's Revenue, and the bridge's Returns disagree with the refund rate, and asked for one basis. Measured before choosing:
+
+- **Revenue (ours) and Total sales (Shopify) differ only by WHEN a refund counts.** Ours subtracts a refund from the order it belongs to; Shopify books it in the period it was made. Months with no refunds agree to the cent (June and August 2026). #6711, placed 30 July and refunded €73.35 on 2 September, is −€73.35 in July and +€73.35 in September. A year differs by €143.42 (0.04%); 30 days by €73.35 (0.44%).
+- **Refunds differ three ways.** Timing, as above; CONTENT — Shopify's Returns is the goods' value before VAT, so #7022's €19.43 refund is €11.61 of returns, its €5.50 shipping and €2.32 VAT sitting in other ladder lines (30 days: 73.35 + 11.61 = €84.96, to the cent); and CANCELLATIONS — our revenue drops a cancelled order, Shopify books it and returns it. November 2025 is the one month where Shopify's Returns (€705.39) exceeds every refund we hold (€662.94); an order edit or exchange counted as a return without a refund is the likely reason, unconfirmed.
+- **Orders differ by cancellations**: Shopify's count includes orders later cancelled (4,574 against our 4,571 paid for the year), and its AOV divides by that count.
+- **Discounts differ by gifts**: ours carry gifts at list value (€31,703 against Shopify's €31,059 for the year).
+- **During the day ours also lags**: the database has orders only as of the last sync; Shopify is live.
+
+**The rule.** The Overview's money reads ONE live ladder per window, so the cards cannot disagree: net sales, orders, AOV, refund rate (**returns ÷ gross sales**), the trend (**net sales, orders and AOV per bucket**, `salesSeriesQuery`, grouped by sales channel so the platform filter folds it), the drivers (**net sales change; orders; Shopify's AOV**), the signals (**net sales; Shopify's discounts over its gross sales**), **net sales per session** (the ladder folded onto the Shopify platform — it replaces revenue per session, which divided our storefront revenue) and the platform mix (**net sales per platform**). Checked 2026-09-24 on 24 h, 7 d, 30 d, 6 m and 1 y: card, chart sum, mix sum and a plain ShopifyQL query agree to the cent on net sales, and exactly on orders and AOV.
+
+**What stays ours, and says so.** Units sold and the top products — Shopify Analytics has no per-product line revenue here, and the top-products bars are labelled "line revenue". Stock and dispatch in the signals. When Shopify cannot be read, each money card falls back to our synced orders and names the fallback rather than going blank. **Not yet moved:** the Sales panel and the monthly report still print our order revenue beside Shopify's ladder.
 
 ### Numbers a client component prints are formatted by hand (2026-09-11)
 

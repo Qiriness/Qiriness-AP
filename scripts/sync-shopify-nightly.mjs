@@ -16,6 +16,7 @@ import { runShopifyProductsSync } from './sync-shopify-products.mjs';
 import { runShopifyPromotionsSync } from './sync-shopify-promotions.mjs';
 import { runShopifyContentCatalogSync } from './sync-shopify-content-catalog.mjs';
 import { runShopifyCollectionsSync } from './sync-shopify-collections.mjs';
+import { runStorefrontMonthsSync } from './lib/storefront-months-sync.mjs';
 
 if (isDirectRun()) {
   main().catch((error) => {
@@ -109,7 +110,8 @@ export async function runNightlySync({
     products: runShopifyProductsSync,
     promotions: runShopifyPromotionsSync,
     contentCatalog: runShopifyContentCatalogSync,
-    collections: runShopifyCollectionsSync
+    collections: runShopifyCollectionsSync,
+    storefrontMonths: runStorefrontMonthsSync
   }
 }) {
   const customerCounts = await runners.customers({
@@ -169,6 +171,18 @@ export async function runNightlySync({
     syncedAt
   });
 
+  // AFTER EVERYTHING, AND IT CANNOT FAIL THE NIGHT. Closed months of storefront
+  // sessions, so a long Insights range is not asked of ShopifyQL live. A
+  // month missing from the table is read live instead, so a failure here
+  // costs speed on the dashboard, never a wrong figure — which is why it is
+  // recorded rather than thrown past the orders it follows.
+  let storefrontMonths;
+  try {
+    storefrontMonths = await runners.storefrontMonths({ shopify, supabase, shopRow, dryRun: Boolean(args.dryRun) });
+  } catch (error) {
+    storefrontMonths = { error: error instanceof Error ? error.message : String(error) };
+  }
+
   return {
     customers: customerCounts.customers,
     deleted_customers: customerCounts.deletedCustomers,
@@ -184,7 +198,10 @@ export async function runNightlySync({
     deleted_shopify_content_sources: contentCatalogCounts.deletedSources,
     collections: collectionCounts.total,
     active_collections_refreshed: collectionCounts.refreshed,
-    collection_memberships: collectionCounts.products
+    collection_memberships: collectionCounts.products,
+    storefront_session_months: storefrontMonths.months ?? null,
+    storefront_months_restated: storefrontMonths.restated ?? null,
+    storefront_months_error: storefrontMonths.error ?? null
   };
 }
 

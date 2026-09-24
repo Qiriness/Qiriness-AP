@@ -222,6 +222,45 @@ export function BlockedCard({ label, reason }: { label: string; reason: string }
   );
 }
 
+/**
+ * A KPI tile whose Shopify figure is still on its way. Not a blocked card and
+ * not a zero: the figure has not failed, it has not arrived. Long ranges can
+ * wait up to a minute behind Shopify Analytics' rate limit, which resets every
+ * minute, so the wait is named rather than left as a spinner.
+ */
+export function LoadingCard({ label }: { label: string }) {
+  return (
+    <section className={`${styles.card} ${styles.kpi}`} aria-busy="true">
+      <header className={styles.kpiHead}>
+        <h2 className={styles.kpiLabel}>{label}</h2>
+      </header>
+      <p className={styles.kpiFigure}>
+        <span className={`${styles.kpiValue} ${styles.loadingBar}`} aria-hidden="true" />
+        <span className={styles.srOnly}>Loading</span>
+      </p>
+      <p className={styles.blockedReason}>Loading from Shopify Analytics…</p>
+    </section>
+  );
+}
+
+/** The body of a card whose Shopify rows are still on their way. */
+export function LoadingNote() {
+  return (
+    <p className={`${styles.blockedReason} ${styles.loadingNote}`} aria-busy="true">
+      Loading from Shopify Analytics… a long range can take up to a minute while Shopify&apos;s rate limit resets.
+    </p>
+  );
+}
+
+/**
+ * Render once a promise settles. A server component, used inside `<Suspense>`
+ * so a card streams in when its own Shopify queries answer and nothing else
+ * waits for it.
+ */
+export async function Await<T>({ promise, children }: { promise: Promise<T>; children: (value: T) => ReactNode }) {
+  return <>{children(await promise)}</>;
+}
+
 // --- bars -----------------------------------------------------------------
 
 export interface BarDatum {

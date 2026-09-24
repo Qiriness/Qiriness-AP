@@ -92,10 +92,12 @@ export function revenueDrivers(current, previous) {
   if (!previous) return { total: null, orders: null, aov: null, lead: null };
   const total = rel(current.revenue, previous.revenue);
   const orders = rel(current.paidOrders, previous.paidOrders);
-  const aov = rel(
-    averageOrderValue(current.revenue, current.paidOrders),
-    averageOrderValue(previous.revenue, previous.paidOrders)
-  );
+  // Shopify's own AOV when the caller has it, so the driver moves with the AOV
+  // card rather than with revenue ÷ orders, which is a different figure.
+  const aov =
+    current.aov !== undefined && previous.aov !== undefined
+      ? rel(current.aov, previous.aov)
+      : rel(averageOrderValue(current.revenue, current.paidOrders), averageOrderValue(previous.revenue, previous.paidOrders));
   const candidates = [
     ['orders', orders],
     ['aov', aov]
@@ -122,21 +124,22 @@ export const LATE_DISPATCH_WARN = 10;
  *
  * @param {{
  *   compareLabel: string,
- *   current: { revenue: number, paidOrders: number, grossRevenue: number, discounts: number, measured: number, over72h: number },
- *   previous: null | { revenue: number, paidOrders: number, grossRevenue: number, discounts: number, measured: number, over72h: number },
+ *   current: { revenue: number, paidOrders: number, aov?: number | null, grossRevenue: number, discounts: number, measured: number, over72h: number },
+ *   previous: null | { revenue: number, paidOrders: number, aov?: number | null, grossRevenue: number, discounts: number, measured: number, over72h: number },
  *   inventory: { status: string }[] | null,
+ *   revenueLabel?: string,
  * }} input
  * @returns {{ tone: 'good' | 'warn' | 'neutral', title: string, detail: string }[]}
  */
-export function managementSignals({ compareLabel, current, previous, inventory }) {
+export function managementSignals({ compareLabel, current, previous, inventory, revenueLabel = 'Revenue' }) {
   const signals = [];
   const drivers = revenueDrivers(current, previous);
 
   if (drivers.total === null) {
     signals.push({
       tone: 'neutral',
-      title: 'No earlier period to compare revenue with',
-      detail: `${current.paidOrders.toLocaleString('en-GB')} paid orders in the period.`
+      title: `No earlier period to compare ${revenueLabel.toLowerCase()} with`,
+      detail: `${current.paidOrders.toLocaleString('en-GB')} orders in the period.`
     });
   } else {
     const up = drivers.total >= 0;
@@ -148,7 +151,7 @@ export function managementSignals({ compareLabel, current, previous, inventory }
           : '';
     signals.push({
       tone: up ? 'good' : 'warn',
-      title: `Revenue ${up ? 'grew' : 'fell'} ${pct(drivers.total)} vs ${compareLabel}`,
+      title: `${revenueLabel} ${up ? 'grew' : 'fell'} ${pct(drivers.total)} vs ${compareLabel}`,
       detail: lead
     });
   }

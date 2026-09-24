@@ -30,7 +30,7 @@ test('loadConfig allows nightly schedule overrides', () => {
   assert.equal(config.syncTimezone, 'Europe/Paris');
 });
 
-test('runNightlySync runs customers, orders, products, promotions, content catalog, then collections', async () => {
+test('runNightlySync runs customers, orders, products, promotions, content catalog, collections, then storefront months', async () => {
   const order = [];
   const result = await runNightlySync({
     args: { dryRun: false },
@@ -64,6 +64,10 @@ test('runNightlySync runs customers, orders, products, promotions, content catal
       collections: async () => {
         order.push('collections');
         return { total: 175, refreshed: 6, products: 60 };
+      },
+      storefrontMonths: async () => {
+        order.push('storefrontMonths');
+        return { months: 36, restated: 0 };
       }
     }
   });
@@ -76,7 +80,8 @@ test('runNightlySync runs customers, orders, products, promotions, content catal
     'products',
     'promotions',
     'contentCatalog',
-    'collections'
+    'collections',
+    'storefrontMonths'
   ]);
   assert.deepEqual(result, {
     customers: 10,
@@ -93,6 +98,34 @@ test('runNightlySync runs customers, orders, products, promotions, content catal
     deleted_shopify_content_sources: 1,
     collections: 175,
     active_collections_refreshed: 6,
-    collection_memberships: 60
+    collection_memberships: 60,
+    storefront_session_months: 36,
+    storefront_months_restated: 0,
+    storefront_months_error: null
   });
+});
+
+test('a failed storefront-months step is recorded, and does not fail the night', async () => {
+  const ok = async () => ({});
+  const result = await runNightlySync({
+    args: { dryRun: false },
+    config: {},
+    shopify: {},
+    supabase: {},
+    shopRow: { id: 'shop-id' },
+    syncedAt: '2026-07-20T02:00:00Z',
+    runners: {
+      customers: ok,
+      orders: ok,
+      products: ok,
+      promotions: ok,
+      contentCatalog: ok,
+      collections: ok,
+      storefrontMonths: async () => {
+        throw new Error('ShopifyQL did not answer within 300s');
+      }
+    }
+  });
+  assert.equal(result.storefront_months_error, 'ShopifyQL did not answer within 300s');
+  assert.equal(result.storefront_session_months, null);
 });

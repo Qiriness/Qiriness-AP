@@ -192,6 +192,32 @@
   color: var(--text-muted);
 }
 
+/* A figure on its way from Shopify: a quiet placeholder bar, not a dash. */
+.loadingBar {
+  display: inline-block;
+  width: 5ch;
+  height: 0.8em;
+  border-radius: 4px;
+  background: var(--surface-sunken);
+  animation: loadingPulse 1.4s ease-in-out infinite;
+}
+
+.loadingNote {
+  animation: loadingPulse 1.4s ease-in-out infinite;
+}
+
+@keyframes loadingPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .loadingBar,
+  .loadingNote {
+    animation: none;
+  }
+}
+
 /* --- delta chip --- */
 
 .deltaRow {

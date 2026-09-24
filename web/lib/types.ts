@@ -1101,10 +1101,10 @@ export type InsightsPanel = "overview" | "sales" | "marketing" | "fulfilment" | 
 export const INSIGHTS_PANELS: { id: InsightsPanel; label: string; href: string }[] = [
   { id: "overview", label: "Overview", href: "/insights/overview" },
   { id: "sales", label: "Sales", href: "/insights/sales" },
+  { id: "customers", label: "Customers", href: "/insights/customers" },
   { id: "marketing", label: "Marketing & funnel", href: "/insights/marketing" },
   { id: "fulfilment", label: "Fulfilment", href: "/insights/fulfilment" },
   { id: "support", label: "Support", href: "/insights/support" },
-  { id: "customers", label: "Customers", href: "/insights/customers" },
   { id: "agent", label: "AI agent", href: "/insights/agent" },
 ];
 
@@ -1516,20 +1516,58 @@ export interface ProductPage {
   cartRate: number | null;
 }
 
-export interface StorefrontAnalytics {
-  /** False when Shopify could not be read, or the figure does not apply. */
-  available: boolean;
-  /** Why not — required whenever `available` is false, and rendered as the dash's reason. */
+/**
+ * One Shopify-backed part of a panel, resolved on its own so a card waiting on
+ * the rate limit holds up nothing else. `value` is always present — empty when
+ * blocked — and `blockedReason` is what the card prints instead of a figure.
+ */
+export interface LivePart<T> {
   blockedReason: string | null;
-  totals: Compared<StorefrontTotals>;
-  /** The money ladder, null when Shopify could not be read or the platform has no sales. */
-  sales: Compared<StorefrontSales | null>;
-  sessions: SeriesPoint[];
-  funnel: FunnelStep[];
-  channels: StorefrontChannel[];
-  landingTypes: LandingType[];
-  /** Busiest first; titles are filled in by the Marketing service. */
-  productPages: ProductPage[];
+  value: T;
+}
+
+/**
+ * The Overview's Shopify cards, each a promise of its own. Server components
+ * await them inside Suspense, so the page renders at once and each card
+ * streams in when its queries answer.
+ */
+export interface OverviewLive {
+  /** Net sales, orders, AOV, refunds, the bridge and the platform mix — always live, first in the queue. */
+  sales: Promise<LivePart<StorefrontMoney>>;
+  /** Net sales, orders and AOV per bucket, on the same basis. Null when Shopify could not be read. */
+  series: Promise<LivePart<SalesSeries | null>>;
+  totals: Promise<LivePart<Compared<StorefrontTotals>>>;
+  sessions: Promise<LivePart<SeriesPoint[] | null>>;
+  /** Built from Shopify's money when it answered, from our orders when it did not. */
+  signals: Promise<{ signals: ManagementSignal[]; basis: "shopify" | "orders" }>;
+}
+
+/**
+ * Every money figure the Overview prints, from ONE live ShopifyQL ladder per
+ * window, so the cards cannot disagree: net sales, orders, AOV, refunds, the
+ * bridge and the platform mix are all Shopify's for the exact range.
+ */
+export interface StorefrontMoney extends Compared<StorefrontSales | null> {
+  /** The Shopify platform alone — the numerator revenue per session needs. */
+  storefront: Compared<StorefrontSales | null>;
+  /** Net sales per platform over the current window, every platform. */
+  platforms: { platform: PlatformId; label: string; netSales: number; orders: number }[];
+}
+
+export interface SalesSeries {
+  netSales: SeriesPoint[];
+  orders: SeriesPoint[];
+  aov: SeriesPoint[];
+}
+
+/** The Marketing panel's Shopify cards, each a promise of its own. */
+export interface MarketingLive {
+  totals: Promise<LivePart<Compared<StorefrontTotals>>>;
+  funnel: Promise<LivePart<FunnelStep[]>>;
+  channels: Promise<LivePart<StorefrontChannel[]>>;
+  landingTypes: Promise<LivePart<LandingType[]>>;
+  /** Busiest first, named from our catalogue by handle. */
+  productPages: Promise<LivePart<ProductPage[]>>;
 }
 
 // --- Overview, Marketing & funnel, the monthly report ------------------------
@@ -1575,10 +1613,8 @@ export interface ManagementSignal {
 
 export interface OverviewPanel {
   summary: Compared<OrdersSummary>;
-  /** Live from Shopify Analytics; blocked with a reason when it cannot be read. */
-  storefront: StorefrontAnalytics;
-  /** Revenue on the storefront only — the numerator revenue-per-session needs. */
-  storefrontRevenue: Compared<number>;
+  /** Live from Shopify Analytics, card by card; see OverviewLive. */
+  live: OverviewLive;
   figures: Compared<SalesOverviewFigures>;
   revenue: SeriesPoint[];
   orders: SeriesPoint[];
@@ -1609,7 +1645,7 @@ export interface PromotionRow {
 
 export interface MarketingPanel {
   summary: Compared<OrdersSummary>;
-  storefront: StorefrontAnalytics;
+  live: MarketingLive;
   figures: Compared<SalesOverviewFigures>;
   promotions: PromotionRow[];
   /** The list's movement and what it captured — moved here from Customers. */

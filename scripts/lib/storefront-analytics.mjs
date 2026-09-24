@@ -30,7 +30,7 @@
  * Pure: query strings in, rows out. The I/O is web/lib/server/insights/analytics.ts.
  */
 
-import { fromKey, toKey, truncate, wallClock } from './insights-range.mjs';
+import { PLATFORMS, fromKey, toKey, truncate, wallClock } from './insights-range.mjs';
 
 /**
  * The sessions columns this store answers, measured rather than assumed.
@@ -138,11 +138,24 @@ const day = (key) => key.slice(0, 10);
 
 /**
  * The range as ShopifyQL states it. Our ranges are half-open [from, to);
- * `UNTIL` is inclusive, so it names the last day INSIDE the range.
+ * `UNTIL` is inclusive, so it names the last moment INSIDE the range.
+ *
+ * WHOLE DAYS ARE STATED AS DATES; ANYTHING ELSE TO THE SECOND. ShopifyQL takes
+ * `SINCE 2026-09-11T00:00:00 UNTIL 2026-09-17T10:29:59` on the shop's clock —
+ * measured 2026-09-24: an order at 08:xx Paris is inside `UNTIL 08:59:59` and
+ * outside `UNTIL 07:59:59`, and 00:00-11:59:59 plus 12:00-23:59:59 is the day
+ * exactly (57 + 92 = 149 sessions). Stated as dates, a to-date comparison
+ * lost its last partial day: "the 7 days before" ran 11-16 September instead
+ * of to 10:30 on the 17th, and "last 24 hours" was yesterday's whole day.
  */
 export function rangeClause(range) {
-  const lastDay = toKey(new Date(fromKey(range.to).getTime() - 86_400_000));
-  return `SINCE ${day(range.from)} UNTIL ${day(lastDay)}`;
+  const midnight = (key) => String(key).slice(11, 19) === '00:00:00' || String(key).length === 10;
+  if (midnight(range.from) && midnight(range.to)) {
+    const lastDay = toKey(new Date(fromKey(range.to).getTime() - 86_400_000));
+    return `SINCE ${day(range.from)} UNTIL ${day(lastDay)}`;
+  }
+  const last = toKey(new Date(fromKey(range.to).getTime() - 1000));
+  return `SINCE ${toKey(fromKey(range.from))} UNTIL ${last}`;
 }
 
 /** The one-row totals for a window: what the KPI tiles show. */
@@ -260,6 +273,50 @@ export function salesLadderQuery(range) {
   return `FROM sales SHOW ${SALES_LADDER.join(', ')} GROUP BY sales_channel ${rangeClause(range)}`;
 }
 
+/**
+ * Net sales, orders and AOV per bucket, per sales channel — the Overview's
+ * trend, on the same basis as the headline and the bridge. Grouped by channel
+ * so the platform filter folds it exactly as it folds the ladder. Weeks are
+ * fetched as days, as every series here is. Measured 2026-09-24: a year of
+ * months costs 91 points; 24 hours by hour, 7.
+ */
+export function salesSeriesQuery(range) {
+  return `FROM sales SHOW net_sales, orders, average_order_value GROUP BY sales_channel TIMESERIES ${queryGrain(range.grain)} ${rangeClause(range)}`;
+}
+
+/**
+ * The sales series rows -> three maps keyed by our bucket, for one platform.
+ * Net sales and orders sum; AOV is Shopify's per row, weighted by its orders —
+ * the same rule as the ladder, so a bucket's AOV is the AOV card's definition.
+ */
+export function foldSalesSeries(rows = [], range, platform = 'all') {
+  const kept = rows
+    .filter((row) => platform === 'all' || platformOfSalesChannel(row.sales_channel) === platform)
+    .map((row) => {
+      const orders = toNumber(row.orders) ?? 0;
+      const aov = toNumber(row.average_order_value);
+      return { ...row, aov_weight: orders > 0 && aov !== null ? aov * orders : 0 };
+    });
+  const netSales = foldSeries(kept, range, 'net_sales');
+  const orders = foldSeries(kept, range, 'orders');
+  const weight = foldSeries(kept, range, 'aov_weight');
+  const aov = new Map();
+  for (const [key, n] of orders) if (n > 0) aov.set(key, (weight.get(key) ?? 0) / n);
+  return { netSales, orders, aov };
+}
+
+/**
+ * Where net sales came from, per platform, from the ladder's per-channel rows:
+ * every platform, whatever the filter, as the platform mix card has always
+ * shown. Shopify's own figures, so the shares sum to the Net sales card.
+ */
+export function platformMix(rows = []) {
+  return PLATFORMS.filter((p) => p.id !== 'all').map((p) => {
+    const ladder = foldSalesLadder(rows, p.id);
+    return { platform: p.id, label: p.label, netSales: ladder?.netSales ?? 0, orders: ladder?.orders ?? 0 };
+  });
+}
+
 /** Which platform a ShopifyQL sales channel belongs to. */
 export function platformOfSalesChannel(channel) {
   const name = String(channel ?? '').trim().toLowerCase();
@@ -272,10 +329,16 @@ export function platformOfSalesChannel(channel) {
 /**
  * The ladder rows folded onto one platform (or all of them).
  *
- * Money adds up across channels; AOV does not, so it is recomputed from the
- * parts — `(gross - discounts) / orders`, Shopify's own formula. Discounts and
- * returns come back NEGATIVE from ShopifyQL and are kept as positive magnitudes
- * here, because every card renders them as deductions.
+ * Money adds up across channels. AOV IS SHOPIFY'S OWN COLUMN, weighted by each
+ * channel's orders — never an unweighted mean, and no longer our formula.
+ * `(gross - discounts) / orders` agrees in most months but not all: measured
+ * 2026-09-24, November 2025 read 76.52 against Shopify's 76.41, and the year
+ * to September 2026 64.02 against 64.00. The orders-weighted mean of Shopify's
+ * per-channel (or per-month) AOV reproduces its own total to a tenth of a
+ * cent, so that is what is shown; the formula is only the fallback for rows
+ * that carry no AOV. Discounts and returns come back NEGATIVE from ShopifyQL
+ * and are kept as positive magnitudes here, because every card renders them as
+ * deductions.
  */
 export function foldSalesLadder(rows = [], platform = 'all') {
   const wanted = (row) => platform === 'all' || platformOfSalesChannel(row.sales_channel) === platform;
@@ -297,88 +360,21 @@ export function foldSalesLadder(rows = [], platform = 'all') {
     // What the ladder leaves unaccounted between net sales and total sales.
     shipping: sum('total_sales') - sum('net_sales') - sum('taxes'),
     orders,
-    averageOrderValue: orders > 0 ? (grossSales - discounts) / orders : null
+    averageOrderValue: orders > 0 ? shopifyAov(kept, orders) ?? (grossSales - discounts) / orders : null
   };
 }
 
-/**
- * The same figures as monthly buckets, for a caller that needs SEVERAL windows.
- *
- * WHY THIS EXISTS: ShopifyQL is rate-limited on its own bucket, separately from
- * the GraphQL point budget, and the monthly report needs five windows of both
- * datasets — ten queries, which came back `THROTTLED` with the analytics bucket
- * at zero. Every window the report asks for is whole months, so two monthly
- * series answer all of them and the caller sums the months it wants.
- *
- * ONLY COUNTS AND MONEY ARE SUMMABLE, which is why the sessions series asks for
- * the funnel counts rather than `conversion_rate`: a rate cannot be added, but
- * completed checkouts over sessions IS the conversion rate, exactly as Shopify
- * computes it. `bounce_rate` has no count behind it here and is left out — no
- * report card reads it.
- */
-export function monthlySessionsQuery(window) {
-  return `FROM sessions SHOW sessions, online_store_visitors, pageviews, sessions_with_cart_additions, sessions_that_reached_checkout, sessions_that_completed_checkout ${HUMAN_ONLY} TIMESERIES month ${rangeClause(window)}`;
-}
-
-export function monthlyLadderQuery(window) {
-  return `FROM sales SHOW ${SALES_LADDER.filter((c) => c !== 'average_order_value').join(', ')} TIMESERIES month ${rangeClause(window)}`;
-}
-
-/** True when a window starts and ends on a month boundary, so months can serve it. */
-export function isMonthAligned(window) {
-  return /^\d{4}-\d{2}-01T00:00:00$/.test(String(window.from ?? '')) && /^\d{4}-\d{2}-01T00:00:00$/.test(String(window.to ?? ''));
-}
-
-/** The monthly rows that fall inside a window, by their bucket key. */
-function monthsIn(rows, window) {
-  return rows.filter((row) => {
-    const key = String(row.month ?? row.bucket ?? '').slice(0, 10);
-    if (!key) return false;
-    const at = `${key}T00:00:00`;
-    return at >= window.from && at < window.to;
-  });
-}
-
-/** Sessions totals for one window, summed from months. A window with no month is null. */
-export function foldMonthlySessions(rows = [], window) {
-  const months = monthsIn(rows, window);
-  if (months.length === 0) return null;
-  const sum = (key) => months.reduce((total, row) => total + (toNumber(row[key]) ?? 0), 0);
-  const sessions = sum('sessions');
-  const converted = sum('sessions_that_completed_checkout');
-  return {
-    sessions,
-    visitors: sum('online_store_visitors'),
-    // Shopify's own rate, rebuilt from its own counts.
-    conversionRate: sessions > 0 ? (converted / sessions) * 100 : null,
-    pageviews: sum('pageviews'),
-    // Not summable from counts, and no report card reads it.
-    bounceRate: null,
-    cartSessions: sum('sessions_with_cart_additions'),
-    checkoutSessions: sum('sessions_that_reached_checkout'),
-    convertedSessions: converted
-  };
-}
-
-/** The money ladder for one window, summed from months; AOV is recomputed, never summed. */
-export function foldMonthlyLadder(rows = [], window) {
-  const months = monthsIn(rows, window);
-  if (months.length === 0) return null;
-  const sum = (key) => months.reduce((total, row) => total + (toNumber(row[key]) ?? 0), 0);
-  const grossSales = sum('gross_sales');
-  const discounts = Math.abs(sum('discounts'));
-  const orders = sum('orders');
-  return {
-    grossSales,
-    discounts,
-    returns: Math.abs(sum('returns')),
-    netSales: sum('net_sales'),
-    taxes: sum('taxes'),
-    totalSales: sum('total_sales'),
-    shipping: sum('total_sales') - sum('net_sales') - sum('taxes'),
-    orders,
-    averageOrderValue: orders > 0 ? (grossSales - discounts) / orders : null
-  };
+/** Shopify's AOV over several rows: each row's AOV weighted by its orders. Null if any row with orders lacks one. */
+function shopifyAov(rows, orders) {
+  let weighted = 0;
+  for (const row of rows) {
+    const n = toNumber(row.orders) ?? 0;
+    if (n === 0) continue;
+    const aov = toNumber(row.average_order_value);
+    if (aov === null) return null;
+    weighted += aov * n;
+  }
+  return weighted / orders;
 }
 
 /** Postgres-style numerics arrive as strings; a missing metric stays null. */

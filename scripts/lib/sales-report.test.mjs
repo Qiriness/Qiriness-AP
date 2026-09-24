@@ -85,7 +85,7 @@ function report(overrides = {}) {
         label: 'MoM',
         currentLabel: 'August 2026',
         comparisonLabel: 'July 2026',
-        offset: 1,
+        offset: 0,
         period: month,
         // 12,200 against 9,760 is +25%.
         comparison: period({ revenue: 8000, totalSales: 9760, paidOrders: 90 }),
@@ -322,4 +322,29 @@ test('the drivers card splits the same top line the KPI card reports', () => {
   assert.ok(kpi && driver);
   assert.equal(kpi[2], driver[2]);
   assert.equal(kpi[1] === '↑', driver[1] === '+');
+});
+
+test('month on month draws no dotted line; the year-on-year views do', () => {
+  const data = report();
+  const html = renderSalesReport(data);
+  const block = (mode) => {
+    const blocks = [...html.matchAll(new RegExp(`<div data-cmp="${mode}"><div class="chart">([\\s\\S]*?)</div></div>`, 'g'))];
+    return blocks.map((m) => m[1]).join('');
+  };
+  assert.ok(block('mom').length > 0);
+  assert.doesNotMatch(block('mom'), /line compare/);
+  assert.doesNotMatch(block('mom'), /dash dotted/);
+  assert.doesNotMatch(block('mom'), /No earlier period/);
+  assert.match(block('yoy'), /<polyline class="line compare"/);
+});
+
+test('every month carries a hover label with its value, and the compared month and change where there is one', () => {
+  const html = renderSalesReport(report());
+  assert.match(html, /<g class="hover"><rect class="hit"/);
+  // The label box names the month and its figure, then the compared month and the change.
+  assert.match(html, /<text [^>]*class="tip-text strong">M24: [^<]+<\/text>/);
+  assert.match(html, /class="tip-text (up|down)">[+−]\d+\.\d%<\/text>/);
+  assert.match(html, /\.hover:hover \.tip\{opacity:1\}/);
+  // No script is involved: the report is opened offline and in mail clients.
+  assert.doesNotMatch(html, /mousemove|mouseover/);
 });

@@ -9,13 +9,8 @@ import {
   productPagesQuery,
   readLandingTypes,
   readProductPages,
-  foldMonthlyLadder,
-  foldMonthlySessions,
   foldSalesLadder,
   funnelSteps,
-  isMonthAligned,
-  monthlyLadderQuery,
-  monthlySessionsQuery,
   platformOfSalesChannel,
   salesLadderQuery,
   channelSalesQuery,
@@ -26,7 +21,10 @@ import {
   rangeClause,
   readTotals,
   seriesQuery,
-  totalsQuery
+  totalsQuery,
+  foldSalesSeries,
+  platformMix,
+  salesSeriesQuery
 } from './storefront-analytics.mjs';
 
 // 11 Sep 2026, 14:20 in Paris (UTC+2), the clock the range tests use.
@@ -237,8 +235,8 @@ test('the money ladder folds onto the platform filter, and AOV is recomputed not
   const all = foldSalesLadder(rows, 'all');
   assert.equal(Math.round(all.totalSales * 100) / 100, 10242.28);
   assert.equal(all.orders, 152);
-  // Shopify's formula: (gross - discounts) / orders, not total sales / orders.
-  assert.ok(Math.abs(all.averageOrderValue - 53.87) < 0.02);
+  // Shopify's own AOV, weighted by each channel's orders — 53.88 in the admin.
+  assert.equal(all.averageOrderValue.toFixed(2), '53.88');
   // Discounts and returns arrive negative and are kept as magnitudes.
   assert.ok(all.discounts > 0);
 
@@ -250,6 +248,34 @@ test('the money ladder folds onto the platform filter, and AOV is recomputed not
   assert.equal(foldSalesLadder(rows, 'yves_rocher').totalSales, 29.9);
   // Nothing on that platform is null, never a ladder of zeros.
   assert.equal(foldSalesLadder([], 'all'), null);
+});
+
+test("AOV is Shopify's column weighted by orders, which is not always (gross - discounts) / orders", () => {
+  // November 2025 as measured 2026-09-24: Shopify 76.41, the formula 76.52.
+  const rows = [
+    { sales_channel: 'Online Store', gross_sales: '1000', discounts: '-100', orders: '10', average_order_value: '89' },
+    { sales_channel: 'Mirakl Connect', gross_sales: '50', discounts: '0', orders: '2', average_order_value: '25' }
+  ];
+  assert.equal(foldSalesLadder(rows, 'all').averageOrderValue, (89 * 10 + 25 * 2) / 12);
+  assert.equal(foldSalesLadder(rows, 'shopify').averageOrderValue, 89);
+  // Without the column, the formula is the fallback.
+  const bare = rows.map(({ average_order_value, ...rest }) => rest);
+  assert.equal(foldSalesLadder(bare, 'all').averageOrderValue, (1050 - 100) / 12);
+});
+
+test('a window that is not whole days is stated to the second, on the shop clock', () => {
+  // The "7 days before" a to-date 7-day range ends at the same hour a week ago.
+  assert.equal(
+    rangeClause({ from: '2026-09-11T00:00:00', to: '2026-09-17T10:30:00' }),
+    'SINCE 2026-09-11T00:00:00 UNTIL 2026-09-17T10:29:59'
+  );
+  // Last 24 hours, not yesterday's whole day.
+  assert.equal(
+    rangeClause({ from: '2026-09-23T11:00:00', to: '2026-09-24T11:00:00' }),
+    'SINCE 2026-09-23T11:00:00 UNTIL 2026-09-24T10:59:59'
+  );
+  // Whole days keep the date form.
+  assert.equal(rangeClause({ from: '2026-09-18T00:00:00', to: '2026-09-25T00:00:00' }), 'SINCE 2026-09-18 UNTIL 2026-09-24');
 });
 
 test('a channel nobody has mapped counts as Shopify, as the handle rule does', () => {
@@ -314,76 +340,44 @@ test('a product page carries its handle and waits for its title', () => {
   assert.ok(Math.abs(pages[0].cartRate - 19.13) < 0.01);
 });
 
-test('monthly buckets answer several windows without several queries', () => {
-  // Five report windows once cost ten ShopifyQL queries and came back THROTTLED
-  // on the analytics bucket; two monthly series answer all of them.
-  const ladderRows = [
-    { month: '2026-06-01', gross_sales: '100', discounts: '-10', returns: '-5', net_sales: '85', taxes: '17', total_sales: '107', orders: '4' },
-    { month: '2026-07-01', gross_sales: '200', discounts: '-20', returns: '0', net_sales: '180', taxes: '36', total_sales: '220', orders: '6' },
-    { month: '2026-08-01', gross_sales: '300', discounts: '-40', returns: '-10', net_sales: '250', taxes: '50', total_sales: '305', orders: '10' }
-  ];
-  const august = { from: '2026-08-01T00:00:00', to: '2026-09-01T00:00:00' };
-  const quarter = { from: '2026-06-01T00:00:00', to: '2026-09-01T00:00:00' };
 
-  const one = foldMonthlyLadder(ladderRows, august);
-  assert.equal(one.totalSales, 305);
-  assert.equal(one.orders, 10);
-  // Discounts and returns keep arriving negative and are kept as magnitudes.
-  assert.equal(one.discounts, 40);
-  assert.equal(one.returns, 10);
-  // AOV is Shopify's formula recomputed on the summed months, never an average
-  // of monthly averages.
-  assert.equal(one.averageOrderValue, 26);
-
-  const three = foldMonthlyLadder(ladderRows, quarter);
-  assert.equal(three.totalSales, 632);
-  assert.equal(three.orders, 20);
-  assert.equal(three.averageOrderValue, (600 - 70) / 20);
-  // The same fold as the per-window query would have returned.
-  const direct = foldSalesLadder([{ sales_channel: 'Online Store', gross_sales: '300', discounts: '-40', returns: '-10', net_sales: '250', taxes: '50', total_sales: '305', orders: '10' }], 'all');
-  assert.deepEqual({ ...one }, { ...direct });
-
-  // A window with no month at all is null, never a ladder of zeros.
-  assert.equal(foldMonthlyLadder(ladderRows, { from: '2025-01-01T00:00:00', to: '2025-02-01T00:00:00' }), null);
+test('the sales series is net sales, orders and AOV per channel and bucket, weeks fetched as days', () => {
+  const week = { from: '2026-09-14T00:00:00', to: '2026-09-28T00:00:00', grain: 'week', tz: 'Europe/Paris', keys: [] };
+  assert.equal(
+    salesSeriesQuery(week),
+    'FROM sales SHOW net_sales, orders, average_order_value GROUP BY sales_channel TIMESERIES day SINCE 2026-09-14 UNTIL 2026-09-27'
+  );
 });
 
-test('a conversion rate is rebuilt from counts, because a rate cannot be summed', () => {
+test("the sales series folds onto the platform, and a bucket's AOV is Shopify's weighted by orders", () => {
+  const range = { from: '2026-09-18T00:00:00', to: '2026-09-20T00:00:00', grain: 'day', tz: 'Europe/Paris' };
   const rows = [
-    { month: '2026-07-01', sessions: '1000', online_store_visitors: '800', pageviews: '3000', sessions_with_cart_additions: '100', sessions_that_reached_checkout: '60', sessions_that_completed_checkout: '40' },
-    { month: '2026-08-01', sessions: '3000', online_store_visitors: '2400', pageviews: '9000', sessions_with_cart_additions: '300', sessions_that_reached_checkout: '200', sessions_that_completed_checkout: '20' }
+    { day: '2026-09-18', sales_channel: 'Online Store', net_sales: '379.54', orders: '4', average_order_value: '94.885' },
+    { day: '2026-09-18', sales_channel: 'Mirakl Connect', net_sales: '29.9', orders: '1', average_order_value: '29.9' },
+    // An empty bucket comes back with a null channel and a null AOV.
+    { day: '2026-09-19', sales_channel: null, net_sales: '0', orders: '0', average_order_value: null }
   ];
-  const both = foldMonthlySessions(rows, { from: '2026-07-01T00:00:00', to: '2026-09-01T00:00:00' });
-  assert.equal(both.sessions, 4000);
-  assert.equal(both.convertedSessions, 60);
-  // 1.5%, the share of all sessions -- not the mean of 4% and 0.67%.
-  assert.equal(both.conversionRate, 1.5);
-  // No count stands behind a bounce rate here, and no report card reads one.
-  assert.equal(both.bounceRate, null);
-  assert.equal(foldMonthlySessions(rows, { from: '2024-01-01T00:00:00', to: '2024-02-01T00:00:00' }), null);
+  const all = foldSalesSeries(rows, range, 'all');
+  assert.equal(all.netSales.get('2026-09-18T00:00:00'), 379.54 + 29.9);
+  assert.equal(all.orders.get('2026-09-18T00:00:00'), 5);
+  assert.equal(all.aov.get('2026-09-18T00:00:00'), (94.885 * 4 + 29.9) / 5);
+  // No order, no average — absent, not zero.
+  assert.equal(all.aov.has('2026-09-19T00:00:00'), false);
+  assert.equal(all.netSales.get('2026-09-19T00:00:00'), 0);
+
+  const shopify = foldSalesSeries(rows, range, 'shopify');
+  assert.equal(shopify.netSales.get('2026-09-18T00:00:00'), 379.54);
+  assert.equal(shopify.aov.get('2026-09-18T00:00:00'), 94.885);
 });
 
-test('only whole months may be summed from months', () => {
-  assert.equal(isMonthAligned({ from: '2026-08-01T00:00:00', to: '2026-09-01T00:00:00' }), true);
-  // An in-progress month compares the same DAYS of the month before; summing
-  // whole months there would invent a fall.
-  assert.equal(isMonthAligned({ from: '2026-08-01T00:00:00', to: '2026-08-23T00:00:00' }), false);
-  assert.equal(isMonthAligned({ from: '2026-08-05T00:00:00', to: '2026-09-01T00:00:00' }), false);
-});
-
-test('the monthly queries ask for counts and keep the human filter', () => {
-  const window = { from: '2026-03-01T00:00:00', to: '2026-09-01T00:00:00' };
-  const sessions = monthlySessionsQuery(window);
-  assert.match(sessions, /FROM sessions SHOW /);
-  assert.match(sessions, /sessions_that_completed_checkout/);
-  // Bots were once a third of the denominator; the filter travels with every
-  // sessions query, this one included.
-  assert.match(sessions, /human_or_bot_session = 'human'/);
-  assert.match(sessions, /TIMESERIES month SINCE 2026-03-01 UNTIL 2026-08-31/);
-  // A rate cannot be summed, so none is asked for.
-  assert.doesNotMatch(sessions, /conversion_rate|bounce_rate/);
-
-  const ladder = monthlyLadderQuery(window);
-  assert.match(ladder, /FROM sales SHOW gross_sales/);
-  assert.doesNotMatch(ladder, /average_order_value/);
-  assert.match(ladder, /TIMESERIES month SINCE 2026-03-01 UNTIL 2026-08-31/);
+test('the platform mix is Shopify net sales per platform, every platform whatever the filter', () => {
+  const rows = [
+    { sales_channel: 'Online Store', gross_sales: '100', discounts: '-10', returns: '0', net_sales: '90', taxes: '0', total_sales: '90', orders: '2', average_order_value: '45' },
+    { sales_channel: 'Marketplace Connect', gross_sales: '40', discounts: '0', returns: '0', net_sales: '40', taxes: '0', total_sales: '40', orders: '1', average_order_value: '40' }
+  ];
+  assert.deepEqual(platformMix(rows), [
+    { platform: 'shopify', label: 'Shopify', netSales: 90, orders: 2 },
+    { platform: 'amazon', label: 'Amazon', netSales: 40, orders: 1 },
+    { platform: 'yves_rocher', label: 'Yves Rocher', netSales: 0, orders: 0 }
+  ]);
 });

@@ -213,10 +213,18 @@ function kpis(mode) {
  * images: the last `drawn` months solid, and the same months one comparison
  * earlier UNDER THEM AS A DOTTED LINE.
  *
- * `offset` is how far back that line sits — one month for MoM, twelve for both
- * year-on-year views — which is why the data carries two years of buckets for a
- * twelve-month chart. Both series share one scale, or the comparison would look
- * level with a year that dwarfs it.
+ * `offset` is how far back that line sits — twelve for both year-on-year
+ * views — which is why the data carries two years of buckets for a twelve-month
+ * chart. An offset of 0 draws no comparison by design (month on month: a line
+ * one month behind is the same line shifted by a point). Both series share one
+ * scale, or the comparison would look level with a year that dwarfs it.
+ *
+ * HOVER WITHOUT SCRIPT. The file is emailed and opened offline, so each month
+ * carries its own tooltip inside the SVG — a guide line, the markers and a
+ * label box with the month's value, the compared month's and the change —
+ * shown by CSS `:hover`. Nothing is computed in the browser, so what the
+ * tooltip says is exactly what the report was built with; the circles keep a
+ * <title> for readers whose client ignores CSS.
  */
 function trendSvg(months, metric, { drawn = 12, offset = 0, comparisonLabel = '' } = {}) {
   const w = 700;
@@ -266,10 +274,43 @@ function trendSvg(months, metric, { drawn = 12, offset = 0, comparisonLabel = ''
   const labels = points
     .map((pt, i) => `<text class="axis-label" x="${x(i).toFixed(1)}" y="${h - 7}" text-anchor="middle">${escapeHtml(pt.label)}</text>`)
     .join('');
-  const legend = compare.length
-    ? `<div class="legend"><span><i class="dash solid"></i>${escapeHtml(points[0].label)} – ${escapeHtml(points[points.length - 1].label)}</span><span><i class="dash dotted"></i>${escapeHtml(compare[0].label)} – ${escapeHtml(compare[compare.length - 1].label)}${comparisonLabel ? ` (${escapeHtml(comparisonLabel)})` : ''}</span></div>`
-    : '<div class="legend"><span>No earlier period to lay underneath.</span></div>';
-  return `<svg viewBox="0 0 ${w} ${h}" role="img" aria-label="${metric === 'revenue' ? 'Revenue' : 'Orders'} over ${points.length} months, with the comparison period">${grid}${polyline(compareValues, 'line compare')}${polyline(values, 'line')}${dots}${labels}</svg>${legend}`;
+  const hovers = points.map((pt, i) => hoverZone(i)).join('');
+  const solid = `<span><i class="dash solid"></i>${escapeHtml(points[0].label)} – ${escapeHtml(points[points.length - 1].label)}</span>`;
+  const legend =
+    offset === 0
+      ? `<div class="legend">${solid}</div>`
+      : compare.length
+        ? `<div class="legend">${solid}<span><i class="dash dotted"></i>${escapeHtml(compare[0].label)} – ${escapeHtml(compare[compare.length - 1].label)}${comparisonLabel ? ` (${escapeHtml(comparisonLabel)})` : ''}</span></div>`
+        : '<div class="legend"><span>No earlier period to lay underneath.</span></div>';
+  const described = compare.length ? ', with the comparison period' : '';
+  return `<svg viewBox="0 0 ${w} ${h}" role="img" aria-label="${metric === 'revenue' ? 'Revenue' : 'Orders'} over ${points.length} months${described}">${grid}${polyline(compareValues, 'line compare')}${polyline(values, 'line')}${dots}${labels}${hovers}</svg>${legend}`;
+
+  /** One month's hover column: an invisible hit area, a guide line, the markers and the label box. */
+  function hoverZone(i) {
+    const fmt = (v) => (metric === 'revenue' ? money(v) : num(v));
+    const v = values[i];
+    const cv = compare.length ? compareValues[i] : undefined;
+    const lines = [{ text: `${points[i].label}: ${v === null || !Number.isFinite(v) ? '—' : fmt(v)}`, strong: true }];
+    if (cv !== undefined) {
+      lines.push({ text: `${compare[i].label}: ${cv === null || !Number.isFinite(cv) ? '—' : fmt(cv)}` });
+      const change = v !== null && cv !== null && Number.isFinite(v) && Number.isFinite(cv) && cv !== 0 ? (v - cv) / Math.abs(cv) : null;
+      if (change !== null) lines.push({ text: `${change >= 0 ? '+' : '−'}${Math.abs(change * 100).toFixed(1)}%`, tone: change >= 0 ? 'up' : 'down' });
+    }
+    const step = (w - p.l - p.r) / Math.max(1, points.length - 1);
+    const left = i === 0 ? p.l : x(i) - step / 2;
+    const right = i === points.length - 1 ? w - p.r : x(i) + step / 2;
+    // The box sits beside the point, on whichever side has room.
+    const boxW = Math.max(...lines.map((l) => l.text.length)) * 5.6 + 16;
+    const boxH = lines.length * 13 + 9;
+    const boxX = x(i) + 10 + boxW > w - p.r ? x(i) - 10 - boxW : x(i) + 10;
+    const boxY = p.t + 2;
+    const marker = (val, cls) =>
+      val === null || val === undefined || !Number.isFinite(val) ? '' : `<circle class="${cls}" cx="${x(i).toFixed(1)}" cy="${y(val).toFixed(1)}" r="4.5"/>`;
+    const text = lines
+      .map((l, k) => `<text x="${(boxX + 8).toFixed(1)}" y="${(boxY + 15 + k * 13).toFixed(1)}" class="tip-text${l.strong ? ' strong' : ''}${l.tone ? ` ${l.tone}` : ''}">${escapeHtml(l.text)}</text>`)
+      .join('');
+    return `<g class="hover"><rect class="hit" x="${left.toFixed(1)}" y="${p.t}" width="${(right - left).toFixed(1)}" height="${h - p.t - p.b}"/><g class="tip"><line class="guide" x1="${x(i).toFixed(1)}" y1="${p.t}" x2="${x(i).toFixed(1)}" y2="${h - p.b}"/>${marker(cv, 'mark compare')}${marker(v, 'mark')}<rect class="tip-box" x="${boxX.toFixed(1)}" y="${boxY}" width="${boxW.toFixed(1)}" height="${boxH}" rx="6"/>${text}</g></g>`;
+  }
 }
 
 function driverRow(label, hint, value, blocked) {
@@ -371,7 +412,7 @@ function overview(data) {
   return `<section class="view active" id="view-overview">
 ${perMode(data, (mode) => kpis(mode))}
 <div class="grid2">
-  <article class="card panel"><div class="panel-head"><div><h2>Performance trend</h2><div class="hint">${data.trendMonths ?? 12} months ending ${escapeHtml(data.label)}, with the compared period dotted</div></div><div class="metric-tabs" data-tabs="trend"><button class="active" data-show="trend-revenue">Revenue</button><button data-show="trend-orders">Orders</button></div></div>
+  <article class="card panel"><div class="panel-head"><div><h2>Performance trend</h2><div class="hint">${data.trendMonths ?? 12} months ending ${escapeHtml(data.label)}<span data-cmp="yoy">, with the same months a year earlier dotted</span><span data-cmp="six">, with the same months a year earlier dotted</span> · hover a month for its figures</div></div><div class="metric-tabs" data-tabs="trend"><button class="active" data-show="trend-revenue">Revenue</button><button data-show="trend-orders">Orders</button></div></div>
     <div data-pane="trend" id="trend-revenue">${perMode(data, (mode) =>
       `<div class="chart">${trendSvg(data.trend, 'revenue', { drawn: data.trendMonths ?? 12, offset: mode.offset, comparisonLabel: mode.label })}</div>`
     )}</div>
@@ -675,7 +716,7 @@ body[data-compare="yoy"] [data-cmp="mom"],body[data-compare="six"] [data-cmp="mo
 .grid-wide{display:grid;grid-template-columns:1.35fr .9fr;gap:13px;margin-bottom:13px}.grid-wide .panel{margin-bottom:0}
 .grid2{display:grid;grid-template-columns:1.58fr 1fr;gap:13px;margin-bottom:13px}.grid2.equal{grid-template-columns:1fr 1fr}.grid3{display:grid;grid-template-columns:1fr 1.25fr 1fr;gap:13px;margin-bottom:13px}
 .metric-tabs{display:flex;gap:3px;background:#f1efe9;padding:3px;border-radius:9px}.metric-tabs button{border:0;background:transparent;padding:6px 8px;border-radius:7px;color:var(--muted);font-size:10px;cursor:pointer;white-space:nowrap}.metric-tabs button.active{background:white;color:var(--ink);box-shadow:0 1px 5px rgba(0,0,0,.08)}.metric-tabs{display:none}.js .metric-tabs{display:flex}
-.chart{height:225px}.chart+.chart{margin-top:10px}.js .chart+.chart{margin-top:0}.chart svg{width:100%;height:100%;overflow:visible}.axis{stroke:#ebe7df;stroke-width:1}.axis-label{fill:#8a8f8b;font-size:9px}.line{fill:none;stroke:var(--green);stroke-width:3;stroke-linecap:round;stroke-linejoin:round}.line.compare{stroke:#9fb3ab;stroke-width:2;stroke-dasharray:5 4}.dash{display:inline-block;width:14px;height:0;border-top:3px solid var(--green);margin-right:5px;vertical-align:middle}.dash.dotted{border-top:2px dashed #9fb3ab}.point{fill:#fff;stroke:var(--green);stroke-width:2}
+.chart{height:225px}.chart+.chart{margin-top:10px}.js .chart+.chart{margin-top:0}.chart svg{width:100%;height:100%;overflow:visible}.axis{stroke:#ebe7df;stroke-width:1}.axis-label{fill:#8a8f8b;font-size:9px}.line{fill:none;stroke:var(--green);stroke-width:3;stroke-linecap:round;stroke-linejoin:round}.line.compare{stroke:#9fb3ab;stroke-width:2;stroke-dasharray:5 4}.dash{display:inline-block;width:14px;height:0;border-top:3px solid var(--green);margin-right:5px;vertical-align:middle}.dash.dotted{border-top:2px dashed #9fb3ab}.point{fill:#fff;stroke:var(--green);stroke-width:2}.hover .hit{fill:transparent;pointer-events:all}.hover .tip{opacity:0;pointer-events:none;transition:opacity .12s}.hover:hover .tip{opacity:1}.guide{stroke:#cfc9bd;stroke-width:1;stroke-dasharray:2 3}.mark{fill:var(--green);stroke:#fff;stroke-width:2}.mark.compare{fill:#9fb3ab}.tip-box{fill:#fff;stroke:#e2ddd3;filter:drop-shadow(0 2px 4px rgba(0,0,0,.08))}.tip-text{font-size:10px;fill:#5d625e}.tip-text.strong{fill:#1f2a24;font-weight:700}.tip-text.up{fill:#2f7a55;font-weight:600}.tip-text.down{fill:#b0473b;font-weight:600}@media(prefers-reduced-motion:reduce){.hover .tip{transition:none}}
 .driver-total{display:flex;align-items:baseline;justify-content:space-between;border-bottom:1px solid var(--line);padding-bottom:11px;margin-bottom:12px}.driver-total strong{font-size:24px}.drivers{display:grid;gap:12px}.driver-row{display:grid;grid-template-columns:82px 1fr 48px;align-items:center;gap:8px}.driver-label b{display:block;font-size:11px}.driver-label span{font-size:9px;color:var(--muted)}.bar{height:7px;background:#eeeae3;border-radius:20px;overflow:hidden}.bar.blocked{background:repeating-linear-gradient(45deg,#eeeae3 0 4px,#fff 4px 8px)}.bar i{display:block;height:100%;border-radius:20px;background:var(--green2)}.bar i.neg{background:var(--rose)}.driver-val{text-align:right;font-size:11px;font-weight:800}.callout{background:var(--soft);border-radius:10px;padding:10px 11px;margin-top:13px;font-size:11px;color:#5f655f}.callout b{color:var(--ink)}
 .bridge{display:grid;gap:9px}.bridge-row{display:grid;grid-template-columns:96px 1fr 84px;align-items:center;gap:9px}.bridge-label{font-size:10px;color:var(--muted)}.bridge-track{height:14px;background:#eeeae3;border-radius:20px;overflow:hidden}.bridge-track i{display:block;height:100%;border-radius:20px;background:var(--green)}.bridge-row.neg .bridge-track i{background:var(--rose)}.bridge-row.gold .bridge-track i{background:var(--gold)}.bridge-row.add .bridge-track i{background:var(--green2)}.bridge-row b{text-align:right;font-size:11px;font-variant-numeric:tabular-nums}
 .insights{display:grid;gap:8px}.insight{display:grid;grid-template-columns:24px 1fr;gap:8px;padding:9px;background:var(--soft);border-radius:10px}.insight i{display:grid;place-items:center;width:24px;height:24px;border-radius:8px;background:#e7efe9;color:var(--green2);font-style:normal;font-weight:850;font-size:10px}.insight.warn i{background:#f7e9e7;color:var(--rose)}.insight.neutral i{background:#eeeae3;color:var(--muted)}.insight b{display:block;font-size:11px}.insight span{display:block;color:var(--muted);font-size:10px;margin-top:1px}

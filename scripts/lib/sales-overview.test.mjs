@@ -77,3 +77,12 @@ test('with nothing to compare, a signal says so instead of inventing a direction
   assert.equal(signals[1].tone, 'neutral');
   assert.equal(signals[2].title, 'No active product is out of stock');
 });
+
+test("the AOV driver follows Shopify's AOV when it is given, not revenue ÷ orders", () => {
+  const d = revenueDrivers({ revenue: 1200, paidOrders: 10, aov: 60 }, { revenue: 1000, paidOrders: 10, aov: 50 });
+  assert.equal(d.aov, 0.2);
+  assert.equal(d.orders, 0);
+  assert.equal(d.lead, 'aov');
+  // Without it, the old definition.
+  assert.equal(revenueDrivers({ revenue: 1200, paidOrders: 10 }, { revenue: 1000, paidOrders: 10 }).aov, 0.2);
+});

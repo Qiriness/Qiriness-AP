@@ -10,6 +10,27 @@ Three sibling files carry the other halves, and this one deliberately does not d
 
 ---
 
+## Report trend: no dotted line for MoM, and a hover label per month (2026-09-24)
+
+At the owner's request the monthly report's trend drops the comparison line in MoM (it was the solid line shifted by one month) and keeps it for YoY and 6M on 6M. Every month now shows its value on hover — and, where there is a comparison, the compared month's value and the change — as SVG + CSS with no script, so it works in the downloaded file offline. Tests pass; not yet looked at in a browser.
+
+## The Overview's money is on one basis: Shopify's (2026-09-24)
+
+The bridge's Total sales and the trend's Revenue disagreed, and so did the bridge's Returns and the refund rate. Measured: our figures count a refund against the order's month and include VAT and shipping; Shopify's count it when it was made, at the goods' value before VAT (30 days: €84.96 of returns = #6711's €73.35 + #7022's €11.61, to the cent). At the owner's request every money figure on the Overview now reads Shopify's ladder: net sales, orders, AOV, refund rate (returns ÷ gross sales), the trend (net sales / orders / AOV per bucket), the drivers, the signals, net sales per session and the platform mix. Verified on 24 h, 7 d, 30 d, 6 m and 1 y: card, chart total, mix total and a plain ShopifyQL query agree to the cent. Units and top products stay ours; our orders are the labelled fallback when Shopify is down. The Sales panel and the monthly report are not moved yet.
+
+## Session cards load on every range; closed months of sessions are stored; money stays live (2026-09-24)
+
+The owner reported session cards blank on 24 h, 7 days, 6 months, 1 year and some months. Measured cause: ShopifyQL's own rate limit (1,000 points a minute, charged per ~30-day slice), which a 6-month (1,118) or 1-year (2,120) panel could never fit, and which left the next range throttled.
+
+- **`storefront_session_months`** (migration 38, applied and backfilled: 36 months, Aug 2023 – Jul 2026). Sessions and the funnel counts per closed month; rewritten by the nightly sync every night, with restated months logged. `npm run sync:storefront-months` runs it alone.
+- **Sessions = stored closed months + live** for the last two months and a range's edge days; a missing month is read live. Conversion rebuilt as converted ÷ sessions.
+- **Net sales and AOV are always live**, for the exact window, first in the queue.
+- **A priority queue for every live ShopifyQL query** (`web/lib/server/insights/shopifyql.ts`): one query per request, waits for the reset Shopify names, never re-asks an answered query, 5-min cache per query.
+- **Overview and Marketing stream each Shopify card in on its own** (Suspense), with a loading state; database cards render at once.
+- **Fixed, found while verifying:** to-date comparisons dropped their last partial day, and "last 24 hours" read yesterday's whole day — windows that are not whole days are now stated to the second. **AOV is now Shopify's own column**, weighted by orders; the formula it replaced read 64.02 against 64.00 for the year.
+- **Verified** against a direct ShopifyQL query on 12 windows (7 d, 30 d, 6 m, 1 y, March and August 2026, each with its comparison): sessions, conversion, net sales, AOV and orders identical on all 12.
+- **Not yet seen in a browser**; see VALIDATION_LOG item 16.
+
 ## The report's switch now moves every card, and 6M reads on 6M (2026-09-23)
 
 Four things the owner asked for, after reading the first build.

@@ -93,6 +93,15 @@ export const CHAT_T = {
 };
 
 /**
+ * Closed months of Shopify Analytics sessions. Created by the INCREMENTAL
+ * migration `38_storefront_months.sql`, not the baseline, so kept out of `T`.
+ * Money is never stored here: net sales and AOV are always read live.
+ */
+export const STOREFRONT_T = {
+  SESSION_MONTHS: 'storefront_session_months'
+};
+
+/**
  * Views. Selected from exactly like tables through PostgREST, and listed apart
  * because they are read-only: a write to one of these names is a mistake the
  * database will reject, and naming them separately makes that visible here.

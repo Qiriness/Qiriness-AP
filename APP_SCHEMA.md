@@ -181,11 +181,13 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |   |                             # activity for the ranged rows, + newsletter
 |   |                             # movement) · agent · overview · marketing ·
 |   |                             # inventory (stock at risk, now) · analytics
-|   |                             # (LIVE ShopifyQL: human sessions, conversion,
-|   |                             # the 4-step funnel, channels, and Shopify's money
-|   |                             # ladder — gross/discounts/returns/net/taxes/total
-|   |                             # + AOV, folded per platform by sales_channel;
-|   |                             # one request, 5-min cache, failure = blocked) ·
+|   |                             # (ShopifyQL, one promise per card group: the
+|   |                             # money ladder LIVE for the exact window, first;
+|   |                             # sessions = stored closed months + live rest;
+|   |                             # trend, channels, landing, product pages live;
+|   |                             # failure = blocked) · shopifyql (the priority
+|   |                             # queue: one query per request, waits out the
+|   |                             # analytics bucket, 5-min cache per query) ·
 |   |                             # report-service
 |   |                             # (the month rendered three ways: MoM, YoY and
 |   |                             # 6M on the same 6M a year earlier — each mode
@@ -200,7 +202,8 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |   `-- tsconfig.json            # allowJs, so services can import scripts/lib/*.mjs
 |-- scripts/                     # one sync orchestrator per Shopify resource
 |   |-- sync-shopify-{products,customers,orders,promotions,content-catalog}.mjs
-|   |-- sync-shopify-nightly.mjs         # runs them all in order
+|   |-- sync-shopify-nightly.mjs         # runs them all in order, storefront months last
+|   |-- sync-storefront-months.mjs       # closed months of sessions -> Supabase (backfill / button)
 |   |-- embed-{knowledge-chunks,ticket-messages,exemplars}.mjs  # embedding reconcilers
 |   |-- import-exemplars.mjs             # Email-Example-Queries.md -> exemplar rows
 |   |                                    # (drafts only; lib/exemplar-import.mjs parses)
@@ -292,11 +295,14 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |       |                                # coverage (measured/partial/missing), and
 |       |                                # platform -> channel handles
 |       |-- storefront-analytics.mjs     # pure: the ShopifyQL queries behind sessions,
-|       |                                # conversion and traffic by channel, and how
-|       |                                # their rows fold into our buckets; also the
-|       |                                # monthly-series pair the report sums per
-|       |                                # window (ShopifyQL throttles on its own
-|       |                                # bucket, so 5 windows = 2 queries, not 10)
+|       |                                # conversion, the money ladder and traffic by
+|       |                                # channel, and how their rows fold into our
+|       |                                # buckets (ranges to the second when not whole days)
+|       |-- storefront-months.mjs        # pure: which months are stored vs live, the
+|       |                                # plan for a window, combining the pieces
+|       |-- storefront-months-sync.mjs   # the nightly writer of storefront_session_months
+|       |-- shopifyql-client.mjs         # one ShopifyQL query per request; reads THROTTLED
+|       |                                # and its reset time
 |       |-- analytics-probe.mjs          # pure: the ShopifyQL probe's queries, how a
 |       |                                # refusal is read (the catalogue is discovered
 |       |                                # by being refused), and the selection built
@@ -580,6 +586,7 @@ Migration 17. Two halves, on two connections — see `DECISIONS.md § Management
 | --- | --- |
 | role `mgmt_chat_ro` | what the model's SQL runs as (`CHAT_DB_URL`). `USAGE` on `chat`, `SELECT` on its views, `EXECUTE` on `normalise_carrier` — nothing else. Read-only default, 10 s timeout, `search_path = chat`, 5 connections |
 | schema `chat` | 13 **owner-rights** views, one per thing management asks about: `shop` · `orders` · `order_lines` · `fulfilment_timing` · `customers` · `products` · `promotions` · `tickets` · `ticket_reply_times` · `ticket_message_counts` · `ticket_investigations` · `ticket_drafts` · `llm_usage`; and `vip_customers` (migration 21), over the security-definer, argument-less `chat.vip_customer_rows()`, which applies `vip_customers()` with the shop's thresholds. **No names, emails, phones, addresses, subjects or message text.** Their `comment on` text is the schema description the model is given, read at request time |
+| `storefront_session_months` | per shop and CLOSED month (shop clock): human sessions, pageviews, cart / checkout / converted sessions from ShopifyQL. Written nightly (every month rewritten), read by `analytics.ts`; the last two months are never read from here. No money — net sales and AOV are always live. Named in `STOREFRONT_T` |
 | `chat_conversations` | one thread, owned by one dashboard user (`user_id` = auth id); title = first question |
 | `chat_turns` | one question + answer: `status` (running / ok / step_limit / empty / error), `error`, `model`, `steps`, tokens, `duration_ms`. Spend here, **not** in `llm_usage` |
 | `chat_queries` | every query tried: `sql`, `ok`, `error` (a refusal or a Postgres error), `row_count`, `truncated`, `duration_ms`, `columns`, the first 50 rows |
@@ -636,6 +643,7 @@ Written by the worker and the CLIs, read only by the Insights panels.
 | `20_best_products_vip.sql` | drops and recreates `insights_product_sales()` and `insights_country_product_sales()` with `p_vip_only` + the VIP rule arguments (through `vip_customers()`, off by default); both now sit below `vip_customers()` in 06. Copied byte-for-byte from 06, supersedes 11's copies. Applied 2026-09-14 | 01, 02, 06, 11, 12 |
 | `30_customer_mix_plan.sql` | replaces the body of `insights_customer_mix()` — same signature, same four numbers — grouping the range by customer before looking up each first order, because the old shape planned as a nested loop (~1 s on a year). Copied byte-for-byte from 06, supersedes 11's copy. Applied 2026-09-18 | 01, 02, 06, 11 |
 | `31_orders_status_filter.sql` | adds `order_fulfilment_display()` and re-creates `orders_list()` + `orders_list_facets()` to filter and group on it, so the status filter selects what the pill shows (Cancelled / Refunded instead of Unfulfilled for emptied orders). Same signatures: `create or replace`, nothing dropped. Copied byte-for-byte from 06, supersedes 16's `orders_list` and 15's `orders_list_facets`. Applied 2026-09-18 | 01, 02, 06, 15, 16 |
+| `38_storefront_months.sql` | the `storefront_session_months` table (named in `STOREFRONT_T`, not `T`). Applied 2026-09-24 and backfilled (36 months) | 01 |
 | `37_collection_handles.sql` | drops 36's seven-argument `insights_collection_sales()` and recreates it with `p_handles`, so the Collection mix card reports the six ranges rather than all 176 collections. Copied byte-for-byte from 06 (its test asserts it); supersedes 36. Applied 2026-09-23 | 01, 02, 06, 27, 36 |
 | `36_collection_sales.sql` | adds `insights_collection_sales()`: per collection for a range, on `insights_product_sales` line rules, plus a null-id row for paid lines in no reported collection. Superseded by 37. Applied 2026-09-23 | 01, 02, 06, 27 |
 | `35_sales_overview.sql` | adds `insights_sales_overview()`, `insights_promotions()` and `insights_inventory_exceptions()` for Overview, Marketing & funnel, the stock card and the monthly report, copied byte-for-byte from 06 (its test asserts it). No table, no data. Applied 2026-09-22 | 01, 02, 06 |
@@ -773,7 +781,7 @@ Two sections over the same `TicketTable` the queue uses — **Open** (expanded, 
 
 ### `/insights` — the seven analytics panels
 
-`web/app/insights/{overview,sales,marketing,fulfilment,support,customers,agent}/page.tsx` → `InsightsPage`
+`web/app/insights/{overview,sales,customers,marketing,fulfilment,support,agent}/page.tsx` → `InsightsPage` (tabs in that order, from `INSIGHTS_PANELS` in `web/lib/types.ts`)
 → one view in `web/components/insights/`, over `web/lib/server/insights/*-service.ts`.
 `/insights` redirects to `/insights/overview` (Fulfilment for the contact role).
 
@@ -786,8 +794,8 @@ across). The server re-renders; nothing is aggregated in the browser.
 
 | Panel | Range | Platform | Reads |
 | --- | --- | --- | --- |
-| **Overview** | yes (the stock card is "now") | yes | orders summary + series (revenue, orders, AOV), `insights_sales_overview` (units, discounts), orders by channel, product sales (top 5), `insights_inventory_exceptions`; **sessions, conversion and bounce live from ShopifyQL** (`analytics.ts`) with revenue per session over storefront revenue; signals + bridge + drivers from `sales-overview.mjs`; the report download (`ReportDownload`, months that have ended) |
-| **Marketing & funnel** | yes | yes (newsletter always Shopify) | orders summary, `insights_sales_overview`, `insights_promotions`, the newsletter rows (churn, movement, capture — moved here from Customers), and **live ShopifyQL** (`analytics.ts`): the four-step funnel, acquisition channels, landing-page types and the busiest product pages (named from `products.handle`). Product VIEWS stay blocked — no metric; Klaviyo / Paid / Social blocked — not connected |
+| **Overview** | yes (the stock card is "now") | yes | orders summary + series (revenue, orders, AOV), `insights_sales_overview` (units, discounts), orders by channel, product sales (top 5), `insights_inventory_exceptions`; **every money figure from one live ShopifyQL ladder** (`liveSales` / `liveSalesSeries` in `analytics.ts`: net sales, orders, AOV, refund rate = returns ÷ gross sales, the trend, the drivers, the signals, net sales per session, the platform mix; our orders only as a labelled fallback); **sessions and conversion from stored months + live**; each card streamed in on its own (Suspense); units and top products from our orders; signals + bridge + drivers from `sales-overview.mjs`; the report download (`ReportDownload`, months that have ended) |
+| **Marketing & funnel** | yes | yes (newsletter always Shopify) | orders summary, `insights_sales_overview`, `insights_promotions`, the newsletter rows (churn, movement, capture — moved here from Customers), and **ShopifyQL** (`analytics.ts`, each card streamed in on its own): the four-step funnel, acquisition channels, landing-page types and the busiest product pages (named from `products.handle`). Product VIEWS stay blocked — no metric; Klaviyo / Paid / Social blocked — not connected |
 | **Sales** | yes | yes | orders summary + series + by channel + by country, customer mix (marketplaces excluded), product sales, country product sales (re-read over VIP customers' orders with `?bestVip=1`), product pairs, and the "Who buys this product" card (`insights_product_customer_mix` + `insights_product_orders_per_customer` for `?product=`, both on the same arguments, optionally `?mixCountry=` and `?mixVip=1`, marketplaces excluded; `ProductCustomerMixCard` with a searchable product picker and its buyers-by-order-count chart) |
 | **Fulfilment** | yes (the open-orders list and the stock card are "now") | yes | orders summary + series, fulfilment buckets + carriers, `open_orders()` (orders waiting to ship, VIP-marked, with name + email — `open-orders.ts`), `insights_inventory_exceptions` (`inventory.ts`) |
 | **Support** | yes | no — tickets have none | support summary + series + categories, orders summary (contact-rate denominator), the latest `cluster_runs` for the topic map (all-time, with a Rebuild button) |
@@ -795,12 +803,15 @@ across). The server re-renders; nothing is aggregated in the browser.
 | **AI agent** | yes | no | llm usage + series + ticket stats (priced by `llm-rates.mjs`), agent funnel + situation picking (`insights_agent_situations`) + verdicts + blockers |
 
 **One panel read is not from our database.** `analytics.ts` calls Shopify
-(ShopifyQL) while rendering, because a conversion rate cannot be summed out of
-stored daily rows, and because **net sales and AOV cannot be derived from the
-columns we store at all** — see `DECISIONS.md` § Insights. Our own revenue is
-Shopify's *Total sales* (VAT and shipping included); Shopify's AOV is net-based. It is one request, cached for
-five minutes, with an 8-second timeout, and it never throws: a failure becomes a
-`blockedReason` the cards render as a dash.
+(ShopifyQL): **net sales and AOV live for the exact window at every range
+length** (they cannot be derived from our columns), and sessions from
+`storefront_session_months` for closed months plus live for the last two months
+and a range's edges — see `DECISIONS.md` § "Closed months of sessions are
+stored". Every live query goes through `shopifyql.ts` (one per request,
+priority queue, waits for the analytics bucket's reset, 5-min cache per
+query). Each part is its own promise; the views await them inside Suspense, so
+database cards render at once and each Shopify card streams in. Nothing throws:
+a failure becomes a `blockedReason` the card renders as a dash.
 
 **Every chart point carries a state** — `measured` / `partial` / `missing` from
 `bucketCoverage` against the freshness edges — and `TimeSeriesChart` hatches

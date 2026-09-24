@@ -1,5 +1,6 @@
-import type { Grain, MarketingPanel, PromotionRow } from "@/lib/types";
-import { BlockedCard, Caption, Card, DeltaChip, Grid, KpiCard, euros, percent } from "./InsightsKit";
+import { Suspense } from "react";
+import type { Compared, FunnelStep, Grain, LandingType, LivePart, MarketingPanel, ProductPage, PromotionRow, StorefrontChannel, StorefrontTotals } from "@/lib/types";
+import { Await, BlockedCard, Caption, Card, DeltaChip, Grid, KpiCard, LoadingNote, euros, percent } from "./InsightsKit";
 import { MarketingChannels } from "./MarketingChannels";
 import { NewsletterRows } from "./NewsletterRows";
 import t from "./tables.module.css";
@@ -31,7 +32,6 @@ export function MarketingView({
   /** The range's grain, for the newsletter charts' "per day" / "per month" wording. */
   grain: Grain;
 }) {
-  const store = panel.storefront.totals.current;
   const f = panel.figures.current;
   const fb = panel.figures.previous;
   const gross = panel.summary.current.grossRevenue + f.discounts;
@@ -94,47 +94,21 @@ export function MarketingView({
       </Grid>
 
       <Grid min={26} pin="funnel-channels" label="Funnel and acquisition channels">
-        <Card
-          title="E-commerce funnel"
-          aside={
-            <span className={`${o.pill} ${store.conversionRate === null ? o.pillNeutral : o.pillGood}`}>
-              CVR {store.conversionRate === null ? "—" : `${store.conversionRate.toFixed(2)}%`}
-            </span>
+        <Suspense
+          fallback={
+            <Card title="E-commerce funnel">
+              <LoadingNote />
+            </Card>
           }
         >
-          <div className={styles.funnel}>
-            {panel.storefront.funnel.map((step, i) => (
-              <div key={step.key} className={styles.funnelRow}>
-                <label>
-                  {step.label}
-                  <small>
-                    {i === 0
-                      ? "entry · human sessions"
-                      : step.chained
-                        ? `${step.ofPrevious === null ? "—" : `${step.ofPrevious.toFixed(1)}%`} from prior step`
-                        : "entries, not views · outside the chain"}
-                  </small>
-                </label>
-                <div className={`${styles.funnelBar} ${step.chained ? "" : styles.funnelAside}`}>
-                  <i style={{ width: step.ofEntry === null ? "0%" : `${Math.max(2, step.ofEntry).toFixed(1)}%` }} />
-                </div>
-                <div className={styles.funnelValue}>
-                  <b>{step.value === null ? "—" : step.value.toLocaleString("en-GB")}</b>
-                  <small>{step.ofEntry === null ? "not measured" : `${step.ofEntry.toFixed(1)}% of entry`}</small>
-                </div>
-              </div>
-            ))}
-          </div>
-          <p className={o.callout}>
-            <b>Every step counts sessions, not orders.</b> The last step over the first is Shopify&apos;s conversion rate.
-            Our own {f.paidOrders.toLocaleString("en-GB")} paid orders is a larger number because it counts every
-            platform, including marketplace orders that never had a session. <b>{NO_PRODUCT_VIEWS} is not measurable</b>
-            — Shopify keeps no product-view metric — so the product row counts sessions that <i>arrived</i> on a product
-            page; it sits outside the chain, and the cart step below is measured against sessions, not against it.
-          </p>
-        </Card>
+          <Await promise={Promise.all([panel.live.funnel, panel.live.totals])}>
+            {([funnel, totals]) => <FunnelCard funnel={funnel} totals={totals} paidOrders={f.paidOrders} />}
+          </Await>
+        </Suspense>
         <Card title="Acquisition channels" aside={<span>Shopify&apos;s own attribution</span>}>
-          <ChannelTable panel={panel} />
+          <Suspense fallback={<LoadingNote />}>
+            <Await promise={panel.live.channels}>{(channels) => <ChannelTable channels={channels} />}</Await>
+          </Suspense>
         </Card>
       </Grid>
 
@@ -149,15 +123,78 @@ export function MarketingView({
 
       <Grid min={26} pin="landing-pages" label="Where sessions land">
         <Card title="Where sessions land" aside={<span>The page a session arrived on</span>}>
-          <LandingTypeTable panel={panel} />
+          <Suspense fallback={<LoadingNote />}>
+            <Await promise={panel.live.landingTypes}>{(rows) => <LandingTypeTable rows={rows} />}</Await>
+          </Suspense>
         </Card>
         <Card title="Product pages" span={2} aside={<span>Sessions that ARRIVED on the product — entries, not views</span>}>
-          <ProductPageTable panel={panel} />
+          <Suspense fallback={<LoadingNote />}>
+            <Await promise={panel.live.productPages}>{(pages) => <ProductPageTable pages={pages} />}</Await>
+          </Suspense>
         </Card>
       </Grid>
 
       <NewsletterRows newsletter={panel.newsletter} grain={grain} compareLabel={compareLabel} />
     </>
+  );
+}
+
+/**
+ * The four session steps with product-page entries beside them. Rendered once
+ * the totals and the landing types have answered; blocked with the reason if
+ * the totals could not be read.
+ */
+function FunnelCard({
+  funnel,
+  totals,
+  paidOrders,
+}: {
+  funnel: LivePart<FunnelStep[]>;
+  totals: LivePart<Compared<StorefrontTotals>>;
+  paidOrders: number;
+}) {
+  const store = totals.value.current;
+  return (
+    <Card
+      title="E-commerce funnel"
+      aside={
+        <span className={`${o.pill} ${store.conversionRate === null ? o.pillNeutral : o.pillGood}`}>
+          CVR {store.conversionRate === null ? "—" : `${store.conversionRate.toFixed(2)}%`}
+        </span>
+      }
+    >
+      {funnel.blockedReason ? <p className={t.muted}>{funnel.blockedReason}</p> : null}
+      <div className={styles.funnel}>
+        {funnel.value.map((step, i) => (
+          <div key={step.key} className={styles.funnelRow}>
+            <label>
+              {step.label}
+              <small>
+                {i === 0
+                  ? "entry · human sessions"
+                  : step.chained
+                    ? `${step.ofPrevious === null ? "—" : `${step.ofPrevious.toFixed(1)}%`} from prior step`
+                    : "entries, not views · outside the chain"}
+              </small>
+            </label>
+            <div className={`${styles.funnelBar} ${step.chained ? "" : styles.funnelAside}`}>
+              <i style={{ width: step.ofEntry === null ? "0%" : `${Math.max(2, step.ofEntry).toFixed(1)}%` }} />
+            </div>
+            <div className={styles.funnelValue}>
+              <b>{step.value === null ? "—" : step.value.toLocaleString("en-GB")}</b>
+              <small>{step.ofEntry === null ? "not measured" : `${step.ofEntry.toFixed(1)}% of entry`}</small>
+            </div>
+          </div>
+        ))}
+      </div>
+      <p className={o.callout}>
+        <b>Every step counts sessions, not orders.</b> The last step over the first is Shopify&apos;s conversion rate.
+        Our own {paidOrders.toLocaleString("en-GB")} paid orders is a larger number because it counts every
+        platform, including marketplace orders that never had a session. <b>{NO_PRODUCT_VIEWS} is not measurable</b>
+        — Shopify keeps no product-view metric — so the product row counts sessions that <i>arrived</i> on a product
+        page; it sits outside the chain, and the cart step below is measured against sessions, not against it.
+      </p>
+    </Card>
   );
 }
 
@@ -168,9 +205,9 @@ export function MarketingView({
  * The conversion column is the interesting one: an entry type can carry most of
  * the traffic and little of the buying.
  */
-function LandingTypeTable({ panel }: { panel: MarketingPanel }) {
-  if (!panel.storefront.available) return <p className={t.muted}>{panel.storefront.blockedReason}</p>;
-  if (panel.storefront.landingTypes.length === 0) {
+function LandingTypeTable({ rows }: { rows: LivePart<LandingType[]> }) {
+  if (rows.blockedReason) return <p className={t.muted}>{rows.blockedReason}</p>;
+  if (rows.value.length === 0) {
     return <p className={t.muted}>Shopify Analytics reported no traffic in this range.</p>;
   }
   return (
@@ -185,7 +222,7 @@ function LandingTypeTable({ panel }: { panel: MarketingPanel }) {
           </tr>
         </thead>
         <tbody>
-          {panel.storefront.landingTypes.map((row) => (
+          {rows.value.map((row) => (
             <tr key={row.type}>
               <th scope="row">{row.type}</th>
               <td className={t.n}>{row.sessions === null ? "—" : row.sessions.toLocaleString("en-GB")}</td>
@@ -207,9 +244,9 @@ function LandingTypeTable({ panel }: { panel: MarketingPanel }) {
  * product-view metric, so a session that landed on the homepage and then
  * browsed to this product is not counted here. Every figure is a floor.
  */
-function ProductPageTable({ panel }: { panel: MarketingPanel }) {
-  if (!panel.storefront.available) return <p className={t.muted}>{panel.storefront.blockedReason}</p>;
-  if (panel.storefront.productPages.length === 0) {
+function ProductPageTable({ pages }: { pages: LivePart<ProductPage[]> }) {
+  if (pages.blockedReason) return <p className={t.muted}>{pages.blockedReason}</p>;
+  if (pages.value.length === 0) {
     return <p className={t.muted}>No session arrived on a product page in this range.</p>;
   }
   return (
@@ -225,7 +262,7 @@ function ProductPageTable({ panel }: { panel: MarketingPanel }) {
             </tr>
           </thead>
           <tbody>
-            {panel.storefront.productPages.map((page) => (
+            {pages.value.map((page) => (
               <tr key={page.path}>
                 <th scope="row" className={styles.promoName} title={page.path}>
                   {page.title ?? page.path}
@@ -262,11 +299,11 @@ function signedCount(value: number): string {
  * channel the session data never saw, are both real findings — filling either
  * with a zero would bury them.
  */
-function ChannelTable({ panel }: { panel: MarketingPanel }) {
-  if (!panel.storefront.available) {
-    return <p className={t.muted}>{panel.storefront.blockedReason}</p>;
+function ChannelTable({ channels }: { channels: LivePart<StorefrontChannel[]> }) {
+  if (channels.blockedReason) {
+    return <p className={t.muted}>{channels.blockedReason}</p>;
   }
-  if (panel.storefront.channels.length === 0) {
+  if (channels.value.length === 0) {
     return <p className={t.muted}>Shopify Analytics reported no traffic in this range.</p>;
   }
   return (
@@ -284,7 +321,7 @@ function ChannelTable({ panel }: { panel: MarketingPanel }) {
             </tr>
           </thead>
           <tbody>
-            {panel.storefront.channels.map((channel) => (
+            {channels.value.map((channel) => (
               <tr key={channel.channel}>
                 <th scope="row">{channel.channel}</th>
                 <td className={t.n}>{channel.sessions === null ? <span className={t.muted}>—</span> : channel.sessions.toLocaleString("en-GB")}</td>

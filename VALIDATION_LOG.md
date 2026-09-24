@@ -1836,3 +1836,13 @@ store across every range and both marketplaces. What is **not** settled:
    each with its own copy, so two readers can see figures minutes apart while
    both are within TTL. Acceptable for traffic figures; worth knowing before
    anyone reports a discrepancy as a bug.
+
+## 16. Stored session months and the streamed Shopify cards — 2026-09-24
+
+The numbers are verified (12 windows, new path vs. a direct ShopifyQL query, identical on sessions, conversion, net sales, AOV and orders — see `DECISIONS.md` § "Closed months of sessions are stored"). What is **not**:
+
+1. **Nobody has watched the panels stream.** Types, lint and tests pass; the Suspense boundaries have not been rendered in a browser. **Check:** open Overview on 6 months and 1 year with the cache cold: database cards at once, Net sales and AOV first, sessions next, no card blank and no "could not be read".
+2. **Switching ranges quickly.** **Check:** 1 year → 7 days → 24 hours → 6 months within one minute; every card fills (some after waiting for the minute to reset), none blocks.
+3. **The nightly step has not run unattended.** **Check:** after the next scheduled run, `storefront_session_months.fetched_at` is that night and the run's counts carry `storefront_session_months: 36` with no `storefront_months_error`.
+4. **Restatement is unmeasured.** **Check:** watch `storefront_months_restated` for a month; a closed month outside the live window that keeps changing means `LIVE_MONTHS` should grow.
+5. **The to-the-second windows against the admin.** **Check:** read "last 7 days" and its comparison in Shopify Analytics and compare net sales both ways.

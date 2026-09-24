@@ -32,7 +32,7 @@ import {
 } from "../../../../scripts/lib/insights-range.mjs";
 import type { InsightsRange, PlatformSplit } from "../../types";
 import { orderArgs, rangeArgs, resolveInsightsContext, type InsightsContext } from "./context";
-import { getStorefrontAnalytics, getStorefrontTotalsFor } from "./analytics";
+import { liveChannels, liveFunnel, liveLandingTypes, liveTotals, salesFor, sessionTotalsForWindows } from "./analytics";
 import { getInventoryExceptions } from "./inventory";
 import { getPromotions } from "./marketing-service";
 import { mapFigures, mapSummary, ordersCoverage } from "./orders";
@@ -207,11 +207,16 @@ export async function buildSalesReport(month: string) {
       sixPreviousCovered ? collectionsFor(ctx, sixPreviousWindow) : Promise.resolve(null),
     ]);
 
-  // Storefront traffic, live from Shopify: the three windows' totals in one
-  // request, and the channel table for the month itself.
-  const [storefrontTotals, storefront, storefrontRevenue] = await Promise.all([
-    getStorefrontTotalsFor(ctx, [range, range.previous, yoyWindow, sixWindow, sixPreviousWindow]),
-    getStorefrontAnalytics(ctx),
+  // Shopify for the five windows: the money ladder LIVE for each exact window,
+  // sessions from stored closed months plus live (analytics.ts), and the
+  // funnel and channel table for the month itself.
+  const storefrontWindows = [range, range.previous, yoyWindow, sixWindow, sixPreviousWindow];
+  const monthTotals = liveTotals(ctx, { compare: false });
+  const [sessionTotals, ladders, funnel, channels, storefrontRevenue] = await Promise.all([
+    sessionTotalsForWindows(ctx, storefrontWindows),
+    salesFor(ctx, storefrontWindows),
+    liveFunnel(monthTotals, liveLandingTypes(ctx)),
+    liveChannels(ctx),
     // Revenue per session divides storefront revenue, not the headline revenue
     // — marketplace buyers never had a session. Same rule as Overview.
     Promise.all([
@@ -249,7 +254,8 @@ export async function buildSalesReport(month: string) {
   // database, so the renderer reads one object per period.
   const withStorefront = (period: Period | null, i: number) => {
     if (!period) return null;
-    const { totals, sales } = storefrontTotals[i];
+    const totals = sessionTotals[i];
+    const sales = ladders[i];
     const summaryRow = storefrontRevenue[i];
     return {
       ...strip(period),
@@ -288,15 +294,17 @@ export async function buildSalesReport(month: string) {
    * report the MONTH and differ only in what they compare it with; the
    * six-month view reports the half-year itself.
    *
-   * `offset` is how far back the trend's dotted line is drawn: one month, or
-   * twelve for both of the year-on-year comparisons.
+   * `offset` is how far back the trend's dotted line is drawn: twelve months
+   * for both year-on-year comparisons, and NONE for month on month — a line
+   * one month behind is the solid line shifted by one point, which says
+   * nothing the solid line does not (the owner's call, 2026-09-24).
    */
   const modes = {
     mom: {
       label: "MoM",
       currentLabel: range.label,
       comparisonLabel: range.compareLabel,
-      offset: 1,
+      offset: 0,
       period: periods.current,
       comparison: periods.mom,
       products: productTables(productRows, previousProductRows),
@@ -350,9 +358,9 @@ export async function buildSalesReport(month: string) {
     trendMonths: 12,
     platforms: platformsOf(channelRows) ?? [],
     promotions,
-    funnel: storefront.available ? storefront.funnel : [],
-    channels: storefront.available ? storefront.channels : [],
-    channelsBlockedReason: storefront.blockedReason,
+    funnel: funnel.blockedReason ? [] : funnel.value,
+    channels: channels.blockedReason ? [] : channels.value,
+    channelsBlockedReason: channels.blockedReason,
     inventory: {
       items: inventory.items.map((i) => ({
         title: i.title,
