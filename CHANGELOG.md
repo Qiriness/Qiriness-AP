@@ -10,6 +10,14 @@ Three sibling files carry the other halves, and this one deliberately does not d
 
 ---
 
+## Klaviyo connected: a key on Settings, a nightly sync, and the Marketing card filled (2026-09-25)
+
+- **Settings → Integrations** (developer and management only): paste the Klaviyo private key; it is checked against Klaviyo, stored encrypted in Supabase Vault, and shown again only as its last four characters. Replace and remove are there too.
+- **Migration 39** (applied 2026-09-25): `klaviyo_connections`, `klaviyo_flow_days`, `klaviyo_campaigns`, the three Vault key functions and `insights_klaviyo_messages`. Vault round-trip verified through PostgREST with a dummy key (saved, replaced, read back, cleared, nothing left in `vault.secrets`).
+- **Sync** (`scripts/lib/klaviyo-sync.mjs`, `npm run sync:klaviyo`, and last in the nightly): a year of flow days on the first run, then the last 59 days nightly; every campaign sent in the last year. A failure never fails the night.
+- **Insights → Marketing → Marketing performance → Klaviyo**: revenue, recipients, click rate and revenue per recipient for the range, and every flow and campaign **with at least one click**, by revenue.
+- Tests: client, report folding, sync and migration suites pass; tsc and lint clean. **Not yet run against the real Klaviyo account** — no key had been saved when this was built.
+
 ## Report trend: no dotted line for MoM, and a hover label per month (2026-09-24)
 
 At the owner's request the monthly report's trend drops the comparison line in MoM (it was the solid line shifted by one month) and keeps it for YoY and 6M on 6M. Every month now shows its value on hover — and, where there is a comparison, the compared month's value and the change — as SVG + CSS with no script, so it works in the downloaded file offline. Tests pass; not yet looked at in a browser.

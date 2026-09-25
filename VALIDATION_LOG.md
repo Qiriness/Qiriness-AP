@@ -1846,3 +1846,12 @@ The numbers are verified (12 windows, new path vs. a direct ShopifyQL query, ide
 3. **The nightly step has not run unattended.** **Check:** after the next scheduled run, `storefront_session_months.fetched_at` is that night and the run's counts carry `storefront_session_months: 36` with no `storefront_months_error`.
 4. **Restatement is unmeasured.** **Check:** watch `storefront_months_restated` for a month; a closed month outside the live window that keeps changing means `LIVE_MONTHS` should grow.
 5. **The to-the-second windows against the admin.** **Check:** read "last 7 days" and its comparison in Shopify Analytics and compare net sales both ways.
+
+## 17. Klaviyo — 2026-09-25
+
+Built and unit-tested against Klaviyo's documented shapes, never against the account.
+
+1. ~~**The first real sync.**~~ **Closed 2026-09-25.** `npm run sync:klaviyo` → `{"flow_days":1227,"campaigns":366,"backfill":true}`, ~3 minutes, waiting out Klaviyo's rate limit six times. Stored: 4 flows over 2025-09-26 – 2026-09-25 (295 clicks, €12,916.61), 366 email campaigns all named and dated (360 with a click, €120,330.55). Last 30 days on the card: 27 of 28 listed, €10,616.21. Found and fixed: campaign dates were cut in UTC, so a 00:00 Paris send showed the day before.
+2. **Figures against Klaviyo's own dashboard.** **Check:** one campaign's recipients, unique clicks and revenue on the card against its Klaviyo report; one flow's last-30-days revenue against Klaviyo's flow analytics (same conversion metric).
+3. **Campaign timeframe semantics.** Assumed: the values report's timeframe selects campaigns by send date and returns their whole performance. **Check:** a campaign sent ~11 months ago appears with its full revenue, not only recent days.
+4. **The nightly step unattended.** **Check:** after the next scheduled run, `klaviyo_connections.last_sync_at` is that night, and the run's counts carry `klaviyo_error: null`.

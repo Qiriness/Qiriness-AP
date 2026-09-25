@@ -216,8 +216,9 @@ sink, `support_answers` being empty, and the first pass of the test chat.
     - **The funnel is measured** (sessions → cart → checkout → purchase). An earlier note
       here said it was impossible without a web pixel; that was wrong, and the mistake is
       recorded in `DECISIONS.md` § Insights. Only **product views** has no metric.
-    Klaviyo, Google/Meta Ads and social remain unchosen integrations, though Shopify's own
-    attribution already credits revenue per channel (klaviyo, google, direct) without them.
+    Klaviyo is connected (2026-09-25: key on Settings → Integrations, nightly sync, the
+    Marketing card) and needs its first real sync checked (`VALIDATION_LOG.md` item 17).
+    Google/Meta Ads and social remain unchosen integrations.
 21. **Send the monthly sales report automatically.** It is downloadable today
     (`/api/insights/report`, Overview → Monthly sales report) and rendered by a pure function
     a job can call, but nothing emails it: the CEOs' addresses, the sender and the schedule

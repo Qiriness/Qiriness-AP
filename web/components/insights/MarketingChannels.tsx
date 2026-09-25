@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import type { KlaviyoMessageRow, KlaviyoPerformance } from "@/lib/types";
+import { euros } from "@/lib/insights-format";
 import { Segmented } from "./Segmented";
 import t from "./tables.module.css";
 import styles from "./MarketingView.module.css";
@@ -8,16 +10,16 @@ import styles from "./MarketingView.module.css";
 type Source = "email" | "paid" | "social";
 
 /**
- * Klaviyo, paid and social, laid out as they will be once connected: the
- * summary tiles and the table's columns are the agreed shape, the cells are
- * dashes, and the reason says which integration fills them. Nothing here is
- * read yet, so nothing here is a number.
+ * Klaviyo, paid and social. Klaviyo is read (the nightly sync, through
+ * insights_klaviyo_messages); paid and social are laid out as they will be once
+ * connected: the summary tiles and the table's columns are the agreed shape,
+ * the cells are dashes, and the reason says which integration fills them.
  */
 const SOURCES: Record<Source, { label: string; summary: string[]; head: string[]; reason: string }> = {
   email: {
     label: "Klaviyo",
-    summary: ["Revenue", "Recipients", "Click rate", "Rev / recipient"],
-    head: ["Flow / campaign", "Revenue", "Click", "Conversion", "Rev / recipient"],
+    summary: ["Open rate", "Click rate", "Recipients", "Revenue"],
+    head: ["Flow / campaign", "Open rate", "Click rate", "Recipients", "Revenue"],
     reason: "Needs the Klaviyo integration — flows and campaigns are not read yet.",
   },
   paid: {
@@ -34,9 +36,22 @@ const SOURCES: Record<Source, { label: string; summary: string[]; head: string[]
   },
 };
 
-export function MarketingChannels() {
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+/** `3 Sep 2026`, built by hand so server and browser print the same characters. */
+function day(iso: string): string {
+  const [y, m, d] = iso.slice(0, 10).split("-").map(Number);
+  return `${d} ${MONTHS[m - 1]} ${y}`;
+}
+
+function rate(value: number | null): string {
+  return value === null ? "—" : `${(value * 100).toFixed(1)}%`;
+}
+
+export function MarketingChannels({ klaviyo }: { klaviyo: KlaviyoPerformance }) {
   const [source, setSource] = useState<Source>("email");
   const current = SOURCES[source];
+  const live = source === "email" && !klaviyo.blockedReason && klaviyo.summary;
   return (
     <>
       <div className={styles.tabs}>
@@ -47,6 +62,90 @@ export function MarketingChannels() {
           label="Marketing source"
         />
       </div>
+      {live ? (
+        <KlaviyoTable klaviyo={klaviyo} />
+      ) : (
+        <Pending current={current} reason={source === "email" && klaviyo.blockedReason ? klaviyo.blockedReason : current.reason} />
+      )}
+    </>
+  );
+}
+
+function KlaviyoTable({ klaviyo }: { klaviyo: KlaviyoPerformance }) {
+  const s = klaviyo.summary!;
+  const tiles = [
+    { label: "Open rate", value: rate(s.openRate) },
+    { label: "Click rate", value: rate(s.clickRate) },
+    { label: "Recipients", value: s.recipients.toLocaleString("en-GB") },
+    { label: "Revenue", value: euros(s.revenue) },
+  ];
+  return (
+    <>
+      <div className={styles.summary}>
+        {tiles.map((tile) => (
+          <div key={tile.label} className={styles.summaryTile}>
+            <span>{tile.label}</span>
+            <strong>{tile.value}</strong>
+          </div>
+        ))}
+      </div>
+      <div className={`${t.wrap} ${styles.scroll}`}>
+        <table className={t.table}>
+          <caption className={t.srOnly}>Klaviyo flows and campaigns with at least one click in the range, by open rate</caption>
+          <thead>
+            <tr>
+              {SOURCES.email.head.map((h, i) => (
+                <th key={h} scope="col" className={i ? t.n : undefined}>
+                  {h}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {klaviyo.rows.length === 0 ? (
+              <tr>
+                <td colSpan={SOURCES.email.head.length} className={t.muted}>
+                  No flow or campaign was clicked in this range.
+                </td>
+              </tr>
+            ) : (
+              klaviyo.rows.map((row) => <KlaviyoRow key={`${row.kind}:${row.id}`} row={row} />)
+            )}
+          </tbody>
+        </table>
+      </div>
+      <p className={styles.note}>
+        Open and click rates are unique opens and clicks over delivered, as Klaviyo counts them — Apple Mail Privacy Protection counts some opens that were not read. Revenue is Klaviyo&apos;s attribution on Placed Order. Flows sum the days in the range; a campaign counts in the range it was sent.
+        {klaviyo.hiddenWithoutClicks > 0
+          ? ` ${klaviyo.hiddenWithoutClicks} with no click are counted above but not listed.`
+          : ""}
+        {klaviyo.lastSyncAt ? ` Synced ${day(klaviyo.lastSyncAt)}.` : ""}
+      </p>
+    </>
+  );
+}
+
+function KlaviyoRow({ row }: { row: KlaviyoMessageRow }) {
+  return (
+    <tr>
+      <th scope="row">
+        {row.name ?? <span className={t.muted}>Unnamed {row.kind}</span>}
+        <span className={t.sub}>
+          {row.kind === "flow" ? "Flow" : `Campaign${row.sentAt ? ` · ${day(row.sentAt)}` : ""}`} ·{" "}
+          {row.clicks.toLocaleString("en-GB")} clicks
+        </span>
+      </th>
+      <td className={t.n}>{rate(row.openRate)}</td>
+      <td className={t.n}>{rate(row.clickRate)}</td>
+      <td className={t.n}>{row.recipients.toLocaleString("en-GB")}</td>
+      <td className={t.n}>{euros(row.revenue)}</td>
+    </tr>
+  );
+}
+
+function Pending({ current, reason }: { current: (typeof SOURCES)[Source]; reason: string }) {
+  return (
+    <>
       <div className={styles.summary}>
         {current.summary.map((label) => (
           <div key={label} className={styles.summaryTile}>
@@ -69,7 +168,7 @@ export function MarketingChannels() {
           <tbody>
             <tr>
               <td colSpan={current.head.length} className={t.pending}>
-                {current.reason}
+                {reason}
               </td>
             </tr>
           </tbody>

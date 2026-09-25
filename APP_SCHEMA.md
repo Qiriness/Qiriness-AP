@@ -18,6 +18,7 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |                    # report:evidence-vocabulary · report:completeness-gate
 |                    # report:collection-planner · report:collection-replay
 |                    # probe:analytics (what ShopifyQL will answer)
+|                    # sync:klaviyo (flows + campaigns; key from Vault)
 |                    # db:apply:migration · test
 |-- shopify.app.toml # Shopify app scopes (all read_*)
 |-- web/
@@ -41,6 +42,7 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |   |   |                                 # Each reads ?range= (24h|7d|30d|6m|1y|all),
 |   |   |                                 # ?month=YYYY-MM or ?from=&to=, and ?platform=
 |   |   |-- settings/page.tsx             # Server Component: My info · Agent settings (?tab=agents)
+|   |   |                                 # · Integrations (?tab=integrations; not contact)
 |   |   |-- login/                        # page.tsx + LoginForm: the only page open
 |   |   |                                 # without a session
 |   |   `-- api/
@@ -65,6 +67,9 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |   |       |                                # The only binary response in this API;
 |   |       |                                # nothing is stored. attachment-service.ts
 |   |       |-- forwarding/route.ts           # GET 14 categories · PUT upsert one
+|   |       |-- settings/integrations/klaviyo/route.ts  # GET status · PUT {key} (checked
+|   |       |                                  # with Klaviyo, then Vault) · DELETE. Never
+|   |       |                                  # returns the key. Closed to contact
 |   |       |-- insights/vip-rule/route.ts   # GET the rule / preview a draft count ·
 |   |       |                                  # PUT save or clear it (vip-rule.mjs)
 |   |       |-- insights/segment-finder/route.ts  # POST a segment -> matching customers
@@ -98,7 +103,8 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |   |   |-- ui/                      # Button · StatusChip · Dialog (modal shell) ·
 |   |   |                            # TrackingText (tracking numbers -> carrier links,
 |   |   |                            # used by every surface showing a number in prose)
-|   |   |-- settings/                # SettingsView (Insights kit: tabs, cards, tables)
+|   |   |-- settings/                # SettingsView (Insights kit: tabs, cards, tables) ·
+|   |   |                            # KlaviyoKeyCard (write-only key field, last sync)
 |   |   |-- orders/                  # OrdersView (filters + table + pager, URL state;
 |   |   |                            # customer name ringed by open-ticket band) ·
 |   |   |                            # OrderDetailView (Articles · Fulfilment · Payment ·
@@ -120,8 +126,8 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |   |   |                            # search, country, VIP) + CollectionMix (the six
 |   |   |                            # ranges + what falls outside) · OverviewView +
 |   |   |                            # OverviewTrend (metric switch) + ReportDownload ·
-|   |   |                            # MarketingView + MarketingChannels (blocked
-|   |   |                            # Klaviyo/Paid/Social) · InventoryCard (stock
+|   |   |                            # MarketingView + MarketingChannels (Klaviyo
+|   |   |                            # read; Paid/Social blocked) · InventoryCard (stock
 |   |   |                            # table, Overview + Fulfilment) · FulfilmentView ·
 |   |   |                            # OpenOrders · SupportView + TopicMap · CustomersView +
 |   |   |                            # VipRuleCard + SegmentFinder + CustomerActivityRows · AgentView
@@ -166,6 +172,7 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |   |       |                    # chat-service (Home's chat: wires the loop, writes
 |   |       |                    # the chat_* log, owner-only reads) ·
 |   |       |                    # dropped-mail-service · knowledge-errors ·
+|   |       |                    # integrations-service (Klaviyo status/save/remove) ·
 |   |       |                    # auth (getSession, re-checked not trusted) ·
 |   |       |                    # access-log (a data_access_events row per
 |   |       |                    # named-customer view, actor = the user) ·
@@ -180,7 +187,8 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |   |                             # fulfilment · support · customers (+ customer-
 |   |                             # activity for the ranged rows, + newsletter
 |   |                             # movement) · agent · overview · marketing ·
-|   |                             # inventory (stock at risk, now) · analytics
+|   |                             # inventory (stock at risk, now) · marketing
+|   |                             # also reads Klaviyo (insights_klaviyo_messages) · analytics
 |   |                             # (ShopifyQL, one promise per card group: the
 |   |                             # money ladder LIVE for the exact window, first;
 |   |                             # sessions = stored closed months + live rest;
@@ -204,6 +212,7 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |   |-- sync-shopify-{products,customers,orders,promotions,content-catalog}.mjs
 |   |-- sync-shopify-nightly.mjs         # runs them all in order, storefront months last
 |   |-- sync-storefront-months.mjs       # closed months of sessions -> Supabase (backfill / button)
+|   |-- sync-klaviyo.mjs                 # Klaviyo flows + campaigns -> Supabase (also last in the nightly)
 |   |-- embed-{knowledge-chunks,ticket-messages,exemplars}.mjs  # embedding reconcilers
 |   |-- import-exemplars.mjs             # Email-Example-Queries.md -> exemplar rows
 |   |                                    # (drafts only; lib/exemplar-import.mjs parses)
@@ -229,6 +238,7 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |       |-- supabase-rest-client.mjs     # REST select/upsert/update/delete/rpc
 |       |-- tables.mjs                   # THE SCHEMA CONTRACT: 31 tables, 24 views,
 |       |                                # 34 rpcs, and the recurring projections.
+|                                # + CHAT_T, STOREFRONT_T, KLAVIYO_T/_RPC (incremental)
 |       |                                # Asserted against the DDL by _shared.test
 |       |-- order-link.mjs               # what linking an order does to a ticket:
 |       |                                # reinvestigationColumns (worker + dashboard),
@@ -301,6 +311,13 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |       |-- storefront-months.mjs        # pure: which months are stored vs live, the
 |       |                                # plan for a window, combining the pieces
 |       |-- storefront-months-sync.mjs   # the nightly writer of storefront_session_months
+|       |-- klaviyo-client.mjs           # Klaviyo REST (private key, revision header,
+|       |                                # waits out 429s); the key never leaves it
+|       |-- klaviyo-reports.mjs          # pure: key shape, Placed Order metric, report
+|       |                                # bodies + 59-day windows, folding answers into
+|       |                                # rows, the card's summary (clicked rows only)
+|       |-- klaviyo-sync.mjs             # connect (check, then Vault) · disconnect ·
+|       |                                # runKlaviyoSync (backfill a year, then 59 days)
 |       |-- shopifyql-client.mjs         # one ShopifyQL query per request; reads THROTTLED
 |       |                                # and its reset time
 |       |-- analytics-probe.mjs          # pure: the ShopifyQL probe's queries, how a
@@ -596,6 +613,18 @@ Migration 17. Two halves, on two connections — see `DECISIONS.md § Management
 | Table | Holds |
 | --- | --- |
 | `integration_events` | metadata-only sync/webhook log, idempotent on `event_key` |
+### Klaviyo
+
+Migration 39. Named in `KLAVIYO_T` / `KLAVIYO_RPC`, not `T` / `RPC`. See `DECISIONS.md § Insights → Klaviyo`.
+
+| Object | Holds |
+| --- | --- |
+| `klaviyo_connections` | one row per shop: `secret_id` (the key, in **`vault.secrets`**), `key_hint` (last 4), `conversion_metric_id` (Placed Order), `saved_at` / `saved_by`, `last_sync_at` / `_status` / `_error` |
+| `klaviyo_flow_days` | per shop, flow and day (Klaviyo account clock): recipients, delivered, opens_unique, clicks_unique, conversions, conversion_value — counts only. Last 59 days rewritten nightly |
+| `klaviyo_campaigns` | per shop and campaign: name, channel, `send_time`, the same counts, for the campaign as a whole |
+| `klaviyo_save_key` / `_read_key` / `_clear_key` | security definer, `search_path ''`, **service_role only** — the only way to touch the key |
+| `insights_klaviyo_messages(p_shop, p_from, p_to, p_tz)` | flows summed over their days + campaigns by send time, in the Insights range convention |
+
 | `privacy_requests` | Shopify compliance webhook lifecycle (hashed contacts, deletion counts) |
 | `data_access_events` | personal-data access audit trail. Sync paths and the agent's customer lookup write here, and so does the dashboard: one row each time a signed-in user is shown customers by name (ticket list, ticket detail and thread, Conversations, Fulfilment's waiting orders, the Customers call list, the contacts CSV), with `actor_type = user` and `actor_id` the Supabase `auth.users.id` — counts in `metadata`, never names |
 
@@ -648,6 +677,7 @@ Written by the worker and the CLIs, read only by the Insights panels.
 | `36_collection_sales.sql` | adds `insights_collection_sales()`: per collection for a range, on `insights_product_sales` line rules, plus a null-id row for paid lines in no reported collection. Superseded by 37. Applied 2026-09-23 | 01, 02, 06, 27 |
 | `35_sales_overview.sql` | adds `insights_sales_overview()`, `insights_promotions()` and `insights_inventory_exceptions()` for Overview, Marketing & funnel, the stock card and the monthly report, copied byte-for-byte from 06 (its test asserts it). No table, no data. Applied 2026-09-22 | 01, 02, 06 |
 | `32_investigation_recommendations.sql` | adds `ticket_investigations.recommendations jsonb` — the shop's own product list, carried verbatim so the drafting stage reads what the tool said rather than a paraphrase of it. Idempotent, no data written. Applied 2026-09-20 | 04 |
+| `39_klaviyo.sql` | the three Klaviyo tables (`KLAVIYO_T`), the Vault key functions and `insights_klaviyo_messages()` (`KLAVIYO_RPC`). No data. Applied 2026-09-25 | 01 |
 | `23_agent_situations.sql` | adds `insights_agent_situations()`: tickets investigated in a range (latest run each) split by how the situation was picked — matched, tie settled by rules, near miss chosen by the model, chooser said none, not settled, no match, not recorded — from `ticket_investigations.exemplar_match`. Always one row. Copied byte-for-byte from 06. Applied 2026-09-15 | 04, 06 |
 | `24_rule_tones.sql` | adds `support_answers.tones text[] not null default '{}'` and `support_answers_tones_check` (the keys of `scripts/lib/reply-tones.mjs`), with the column comment — all copied from 05, which its test asserts. Every existing rule takes `{}`. Applied 2026-09-15 | 05 |
 | `29_order_promotion_need.sql` | widens `support_exemplars.requirement_needs` by one value, `order_promotion`, so a situation can declare "was the promotion applied to this order?". Copied from 05. No data. Applied 2026-09-17 | 05 |
@@ -795,7 +825,7 @@ across). The server re-renders; nothing is aggregated in the browser.
 | Panel | Range | Platform | Reads |
 | --- | --- | --- | --- |
 | **Overview** | yes (the stock card is "now") | yes | orders summary + series (revenue, orders, AOV), `insights_sales_overview` (units, discounts), orders by channel, product sales (top 5), `insights_inventory_exceptions`; **every money figure from one live ShopifyQL ladder** (`liveSales` / `liveSalesSeries` in `analytics.ts`: net sales, orders, AOV, refund rate = returns ÷ gross sales, the trend, the drivers, the signals, net sales per session, the platform mix; our orders only as a labelled fallback); **sessions and conversion from stored months + live**; each card streamed in on its own (Suspense); units and top products from our orders; signals + bridge + drivers from `sales-overview.mjs`; the report download (`ReportDownload`, months that have ended) |
-| **Marketing & funnel** | yes | yes (newsletter always Shopify) | orders summary, `insights_sales_overview`, `insights_promotions`, the newsletter rows (churn, movement, capture — moved here from Customers), and **ShopifyQL** (`analytics.ts`, each card streamed in on its own): the four-step funnel, acquisition channels, landing-page types and the busiest product pages (named from `products.handle`). Product VIEWS stay blocked — no metric; Klaviyo / Paid / Social blocked — not connected |
+| **Marketing & funnel** | yes | yes (newsletter always Shopify) | orders summary, `insights_sales_overview`, `insights_promotions`, the newsletter rows (churn, movement, capture — moved here from Customers), and **ShopifyQL** (`analytics.ts`, each card streamed in on its own): the four-step funnel, acquisition channels, landing-page types and the busiest product pages (named from `products.handle`); **Klaviyo** from `insights_klaviyo_messages` (open rate first: tiles over every flow and campaign in the range, table of those with ≥ 1 click sorted by open rate; blocked when not connected, not yet synced, or on a marketplace). Product VIEWS stay blocked — no metric; Paid / Social blocked — not connected |
 | **Sales** | yes | yes | orders summary + series + by channel + by country, customer mix (marketplaces excluded), product sales, country product sales (re-read over VIP customers' orders with `?bestVip=1`), product pairs, and the "Who buys this product" card (`insights_product_customer_mix` + `insights_product_orders_per_customer` for `?product=`, both on the same arguments, optionally `?mixCountry=` and `?mixVip=1`, marketplaces excluded; `ProductCustomerMixCard` with a searchable product picker and its buyers-by-order-count chart) |
 | **Fulfilment** | yes (the open-orders list and the stock card are "now") | yes | orders summary + series, fulfilment buckets + carriers, `open_orders()` (orders waiting to ship, VIP-marked, with name + email — `open-orders.ts`), `insights_inventory_exceptions` (`inventory.ts`) |
 | **Support** | yes | no — tickets have none | support summary + series + categories, orders summary (contact-rate denominator), the latest `cluster_runs` for the topic map (all-time, with a Rebuild button) |
@@ -830,9 +860,11 @@ The Support topic map reads the latest `cluster_runs` row and renders each
 
 **Detail** (`OrderDetailView`): Articles, **Promotions**, Fulfilment (shipments, tracking links, returns), Payment (totals, refunds) on the left; Tickets, Customer (name, email unless marketplace, lifetime orders/spend, VIP), Destination (coarse — no street is stored), Tags on the right; "Open in Shopify" in the header. Both pages write a `data_access_events` row (`resourceType: orders`). **Promotions** lists what was applied by name (from `orders.discount_applications`), the gifts with their value and the promotion that gave them, plain reductions, the codes used and — listed apart, never as gifts — the samples; "no promotion was applied" is rendered rather than hidden. Opened as `/orders/[id]?ticket=<uuid>` (the link on a ticket's order number), the page leads with **← Back to the ticket** to `/tickets?ticket=<uuid>`, with Orders beside it.
 
-### `/settings` — My info · Agent settings
+### `/settings` — My info · Agent settings · Integrations
 
-`web/app/settings/page.tsx` → `components/settings/SettingsView` (the Insights page frame, tab bar, cards and tables). Tab in the URL: `/settings` or `?tab=agents`; only the open tab's data is read.
+`web/app/settings/page.tsx` → `components/settings/SettingsView` (the Insights page frame, tab bar, cards and tables). Tab in the URL: `/settings`, `?tab=agents` or `?tab=integrations`; only the open tab's data is read.
+
+- **Integrations** — developer and management only (`canManageIntegrations`; the tab is not drawn for contact and `/api/settings/integrations` is denied in `dashboard-auth.mjs`). `KlaviyoKeyCard` over `lib/server/integrations-service.ts` and `PUT|DELETE /api/settings/integrations/klaviyo`: the key is checked with Klaviyo (`connectKlaviyo`), then stored in Vault; the card shows `pk_…` + last 4 and the last sync.
 
 - **My info** — the signed-in user from `getSession()`, and which areas the role may open (`canAccessPath` in `dashboard-auth.mjs`).
 - **Agent settings** — `lib/server/agent-settings-service.ts`: one row per agent (spam, categorise, situation chooser, decompose, investigate, draft, embed from `insights_llm_usage`; the management chat from `chat_turns`), last 30 days: model (most-called in the window, else the configured one from `loadAgentConfig` / `chatModel()`), calls, failed, cost via `llm-rates.mjs`. Read-only.

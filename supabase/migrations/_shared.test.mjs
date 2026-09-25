@@ -63,7 +63,8 @@ export const INCREMENTAL_FILES = [
   '35_sales_overview',
   '36_collection_sales',
   '37_collection_handles',
-  '38_storefront_months'
+  '38_storefront_months',
+  '39_klaviyo'
 ];
 
 export const read = (name) => readFileSync(new URL(`./${name}.sql`, import.meta.url), 'utf8');

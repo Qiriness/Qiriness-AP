@@ -1650,6 +1650,49 @@ export interface MarketingPanel {
   promotions: PromotionRow[];
   /** The list's movement and what it captured — moved here from Customers. */
   newsletter: NewsletterActivity;
+  /** Klaviyo flows and campaigns in the range, from the nightly sync. */
+  klaviyo: KlaviyoPerformance;
+}
+
+/** One flow or campaign on the Marketing card. Rates are null when their denominator is 0. */
+export interface KlaviyoMessageRow {
+  kind: "flow" | "campaign";
+  id: string;
+  name: string | null;
+  /** A campaign's send date (YYYY-MM-DD, shop clock); null for a flow. */
+  sentAt: string | null;
+  recipients: number;
+  opens: number;
+  clicks: number;
+  conversions: number;
+  revenue: number;
+  /** Unique opens over delivered, as Klaviyo computes it. */
+  openRate: number | null;
+  clickRate: number | null;
+  conversionRate: number | null;
+  revenuePerRecipient: number | null;
+}
+
+/**
+ * The Klaviyo side of Marketing performance. `blockedReason` is set when there
+ * is nothing to show and why: not connected, a marketplace platform, or a read
+ * that failed.
+ */
+export interface KlaviyoPerformance {
+  blockedReason: string | null;
+  /** The last sync's date (YYYY-MM-DD, shop clock). */
+  lastSyncAt: string | null;
+  summary: {
+    revenue: number;
+    recipients: number;
+    openRate: number | null;
+    clickRate: number | null;
+    revenuePerRecipient: number | null;
+  } | null;
+  /** Only flows and campaigns with at least one click, by open rate. */
+  rows: KlaviyoMessageRow[];
+  /** Flows and campaigns in the range with no click, counted in the summary but not listed. */
+  hiddenWithoutClicks: number;
 }
 
 export interface PlatformSplit {

@@ -8,6 +8,7 @@ import {
   ROLE_LABELS,
   SESSION_MAX_AGE_SECONDS,
   canAccessPath,
+  canManageIntegrations,
   canSeePanel,
   canUseManagementChat,
   createAuthClient,
@@ -148,6 +149,15 @@ test('a role lands on the first panel it may open', () => {
   assert.equal(fallbackPath('developer'), '/insights/overview');
   assert.equal(fallbackPath('management'), '/insights/overview');
   assert.equal(fallbackPath('contact'), '/insights/fulfilment');
+});
+
+test('the integrations key is closed to contact and open to the other two', () => {
+  assert.equal(canAccessPath('contact', '/api/settings/integrations/klaviyo'), false);
+  assert.equal(canManageIntegrations('contact'), false);
+  assert.equal(canManageIntegrations('management'), true);
+  assert.equal(canManageIntegrations('developer'), true);
+  // The rest of Settings stays open to every role.
+  assert.equal(canAccessPath('contact', '/settings'), true);
 });
 
 test('the management chat, page and API, is closed to contact and open to the other two', () => {

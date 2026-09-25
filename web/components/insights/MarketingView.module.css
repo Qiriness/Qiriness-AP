@@ -116,3 +116,15 @@
     grid-template-columns: 6.5rem 1fr 4.5rem;
   }
 }
+
+/* The Klaviyo table: every clicked flow and campaign, scrolled in place. */
+.scroll {
+  max-height: 24rem;
+  overflow-y: auto;
+}
+
+.note {
+  margin: var(--space-2) 0 0;
+  font-size: var(--text-sm);
+  color: var(--text-subtle);
+}

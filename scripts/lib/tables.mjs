@@ -102,6 +102,24 @@ export const STOREFRONT_T = {
 };
 
 /**
+ * Klaviyo: the connection (the key itself is in Vault) and what each flow and
+ * campaign earned. Created by the INCREMENTAL migration `39_klaviyo.sql`, so
+ * kept out of `T` and `RPC`; `39_klaviyo.test.mjs` asserts these instead.
+ */
+export const KLAVIYO_T = {
+  CONNECTIONS: 'klaviyo_connections',
+  FLOW_DAYS: 'klaviyo_flow_days',
+  CAMPAIGNS: 'klaviyo_campaigns'
+};
+
+export const KLAVIYO_RPC = {
+  SAVE_KEY: 'klaviyo_save_key',
+  READ_KEY: 'klaviyo_read_key',
+  CLEAR_KEY: 'klaviyo_clear_key',
+  MESSAGES: 'insights_klaviyo_messages'
+};
+
+/**
  * Views. Selected from exactly like tables through PostgREST, and listed apart
  * because they are read-only: a write to one of these names is a mistake the
  * database will reject, and naming them separately makes that visible here.

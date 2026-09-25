@@ -21,6 +21,7 @@
     "sync:shopify:content-catalog:dry-run": "node scripts/sync-shopify-content-catalog.mjs --dry-run --limit=10 --page-size=10",
     "sync:shopify:nightly": "node scripts/sync-shopify-nightly.mjs --page-size=50",
     "sync:storefront-months": "node scripts/sync-storefront-months.mjs",
+    "sync:klaviyo": "node scripts/sync-klaviyo.mjs",
     "sync:shopify:nightly:dry-run": "node scripts/sync-shopify-nightly.mjs --dry-run --limit=5 --page-size=5",
     "embed:knowledge": "node scripts/embed-knowledge-chunks.mjs",
     "embed:knowledge:dry-run": "node scripts/embed-knowledge-chunks.mjs --dry-run",

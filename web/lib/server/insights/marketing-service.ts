@@ -11,17 +11,21 @@
  * a purchase — product views, add to cart, reached checkout. ShopifyQL has no
  * cart or checkout dataset (measured 2026-09-23; see DECISIONS.md § Insights),
  * so those steps stay blocked with the reason rather than drawn as zeros.
- * Klaviyo, the ad platforms and social are unchosen integrations; the revenue
- * each channel is credited with comes from Shopify's own attribution instead.
+ * Klaviyo is read from the nightly sync's tables (klaviyo_flow_days,
+ * klaviyo_campaigns) through insights_klaviyo_messages. The ad platforms and
+ * social are unchosen integrations; the revenue each channel is credited with
+ * comes from Shopify's own attribution instead.
  *
  * Server-only; see ./shared.ts for why nothing here pages rows.
  */
 
-import { RPC, T } from "../../../../scripts/lib/tables.mjs";
+import { KLAVIYO_RPC, RPC, T } from "../../../../scripts/lib/tables.mjs";
+import { readKlaviyoConnection } from "../../../../scripts/lib/klaviyo-sync.mjs";
+import { summariseKlaviyoMessages } from "../../../../scripts/lib/klaviyo-reports.mjs";
 import { supabaseSelect } from "../../../../scripts/lib/supabase-rest-client.mjs";
 import { ALL_MARKETPLACE_HANDLES, isMarketplacePlatform } from "../../../../scripts/lib/insights-range.mjs";
-import type { MarketingPanel, PromotionRow } from "../../types";
-import { orderArgs, type InsightsContext } from "./context";
+import type { KlaviyoMessageRow, KlaviyoPerformance, MarketingPanel, PromotionRow } from "../../types";
+import { orderArgs, rangeArgs, type InsightsContext } from "./context";
 import { liveChannels, liveFunnel, liveLandingTypes, liveProductPages, liveTotals } from "./analytics";
 import { getNewsletterActivity } from "./customer-activity-service";
 import { getOrdersSummary, getSalesOverviewFigures } from "./orders";
@@ -50,14 +54,15 @@ export async function getMarketingPanel(ctx: InsightsContext): Promise<Marketing
     })),
   };
 
-  const [summary, figures, promotions, newsletter] = await Promise.all([
+  const [summary, figures, promotions, newsletter, klaviyo] = await Promise.all([
     getOrdersSummary(ctx),
     getSalesOverviewFigures(ctx),
     getPromotions(ctx),
     getNewsletterActivity(ctx),
+    getKlaviyoPerformance(ctx),
   ]);
 
-  return { summary, live, figures, promotions, newsletter };
+  return { summary, live, figures, promotions, newsletter, klaviyo };
 }
 
 /**
@@ -100,4 +105,45 @@ export async function getPromotions(ctx: InsightsContext, window = ctx.range): P
   );
   // SQL returns full price last already; kept explicit so a reorder there cannot move it.
   return [...mapped.filter((p) => p.name !== null), ...mapped.filter((p) => p.name === null)];
+}
+
+function klaviyoBlocked(blockedReason: string, lastSyncAt: string | null = null): KlaviyoPerformance {
+  return { blockedReason, lastSyncAt, summary: null, rows: [], hiddenWithoutClicks: 0 };
+}
+
+/**
+ * Flows and campaigns in the range. Klaviyo credits its messages with Shopify
+ * online-store orders only, so on a marketplace platform there is nothing of
+ * Klaviyo's to show. A failed read blocks this card alone, never the panel.
+ */
+async function getKlaviyoPerformance(ctx: InsightsContext): Promise<KlaviyoPerformance> {
+  if (isMarketplacePlatform(ctx.platform)) {
+    return klaviyoBlocked("Klaviyo credits online-store orders only — not this marketplace.");
+  }
+  try {
+    const connection = await readKlaviyoConnection(getSupabaseClient(), ctx.shopId);
+    if (!connection) return klaviyoBlocked("Klaviyo is not connected — add the private key in Settings → Integrations.");
+    const lastSyncAt: string | null = connection.last_sync_at ?? null;
+    if (!lastSyncAt) return klaviyoBlocked("Klaviyo is connected; flows and campaigns arrive with the next nightly sync.");
+
+    const rows = await callRpc<Record<string, unknown>>(KLAVIYO_RPC.MESSAGES, rangeArgs(ctx));
+    const { summary, rows: clicked, hiddenWithoutClicks } = summariseKlaviyoMessages(rows);
+    // Dates leave here as YYYY-MM-DD on the SHOP's clock: a campaign sent at
+    // 00:00 Paris is 22:00 UTC the day before, and the card slices the date.
+    const local = (iso: string | null) => (iso ? shopDate(iso, ctx.tz) : null);
+    return {
+      blockedReason: null,
+      lastSyncAt: local(lastSyncAt),
+      summary,
+      rows: clicked.map((row: KlaviyoMessageRow) => ({ ...row, sentAt: local(row.sentAt) })),
+      hiddenWithoutClicks,
+    };
+  } catch (error) {
+    return klaviyoBlocked(`Klaviyo figures could not be read: ${error instanceof Error ? error.message : "unknown error"}`);
+  }
+}
+
+/** YYYY-MM-DD of an instant on the shop's clock. */
+function shopDate(iso: string, tz: string): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(iso));
 }

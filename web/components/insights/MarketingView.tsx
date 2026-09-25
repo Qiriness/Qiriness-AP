@@ -19,8 +19,8 @@ const NO_PRODUCT_VIEWS = "Product viewers";
 /**
  * Marketing & funnel. Laid out as the report is, with every card present:
  * what the orders record — promotions, discounting, purchases, the newsletter —
- * is measured; traffic, the funnel above the purchase and the ad and email
- * platforms have no source yet and stay empty with the reason.
+ * is measured, and so is Klaviyo (nightly); traffic above the purchase and the
+ * ad and social platforms have no source yet and stay empty with the reason.
  */
 export function MarketingView({
   panel,
@@ -114,7 +114,7 @@ export function MarketingView({
 
       <Grid min={26} pin="marketing-promotions" label="Marketing performance and promotions">
         <Card title="Marketing performance" aside={<span>Owned, paid and organic demand</span>}>
-          <MarketingChannels />
+          <MarketingChannels klaviyo={panel.klaviyo} />
         </Card>
         <Card title="Promotions & discounting" span={2} aside={<span>What each promotion recorded on its orders</span>}>
           <PromotionTable rows={panel.promotions} />

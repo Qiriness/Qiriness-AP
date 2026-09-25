@@ -48,18 +48,32 @@ export const ROLE_CLAIM = 'dashboard_role';
  * Developer only (2026-09-14): it answers revenue questions too, and more
  * freely than any panel. Overview, Marketing & funnel and the monthly sales
  * report (2026-09-22) lead with revenue, so they are closed to it for the same
- * reason as Sales. Developer and Management are identical for now; they
+ * reason as Sales. The Klaviyo key (Settings → Integrations, 2026-09-25)
+ * unlocks revenue data too, so setting or removing it is closed as well. Developer and Management are identical for now; they
  * are separate roles so they can diverge without a migration.
  */
 const DENIED = Object.freeze({
   developer: [],
   management: [],
-  contact: ['/insights/overview', '/insights/sales', '/insights/marketing', '/api/insights/report', '/home', '/api/chat']
+  contact: [
+    '/insights/overview',
+    '/insights/sales',
+    '/insights/marketing',
+    '/api/insights/report',
+    '/home',
+    '/api/chat',
+    '/api/settings/integrations'
+  ]
 });
 
 /** May this role use the management chat? What the sidebar asks before drawing Home. */
 export function canUseManagementChat(role) {
   return canAccessPath(role, '/home');
+}
+
+/** May this role see and change the Klaviyo key? What Settings asks before drawing the tab. */
+export function canManageIntegrations(role) {
+  return canAccessPath(role, '/api/settings/integrations');
 }
 
 /** The Insights panels a role may see — what the nav renders. */

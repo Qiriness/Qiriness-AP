@@ -1,11 +1,13 @@
 import Link from "next/link";
 import type { AgentRoster, AgentRosterRow } from "@/lib/server/agent-settings-service";
+import type { KlaviyoStatus } from "@/lib/server/integrations-service";
 import { Caption, Card, EmptyState, Grid, KpiCard, PanelError, compactNumber, percent } from "../insights/InsightsKit";
 import header from "../insights/InsightsHeader.module.css";
 import t from "../insights/tables.module.css";
+import { KlaviyoKeyCard } from "./KlaviyoKeyCard";
 import styles from "./SettingsView.module.css";
 
-export type SettingsTab = "me" | "agents";
+export type SettingsTab = "me" | "agents" | "integrations";
 
 export interface SettingsMe {
   name: string | null;
@@ -17,6 +19,7 @@ export interface SettingsMe {
 const TABS: { id: SettingsTab; label: string; href: string }[] = [
   { id: "me", label: "My info", href: "/settings" },
   { id: "agents", label: "Agent settings", href: "/settings?tab=agents" },
+  { id: "integrations", label: "Integrations", href: "/settings?tab=integrations" },
 ];
 
 /**
@@ -24,7 +27,20 @@ const TABS: { id: SettingsTab; label: string; href: string }[] = [
  * and tables — so it reads as part of the dashboard rather than a form page.
  * Server-rendered: the tabs are plain links and nothing here holds state.
  */
-export function SettingsView({ tab, me, roster }: { tab: SettingsTab; me: SettingsMe | null; roster: AgentRoster | null }) {
+export function SettingsView({
+  tab,
+  me,
+  roster,
+  klaviyo,
+  canManageIntegrations,
+}: {
+  tab: SettingsTab;
+  me: SettingsMe | null;
+  roster: AgentRoster | null;
+  klaviyo: KlaviyoStatus | { error: string } | null;
+  /** The contact team is not shown the Integrations tab (dashboard-auth.mjs). */
+  canManageIntegrations: boolean;
+}) {
   return (
     <div className={header.page}>
       <header className={header.header}>
@@ -33,7 +49,7 @@ export function SettingsView({ tab, me, roster }: { tab: SettingsTab; me: Settin
         </div>
         <nav className={header.nav} aria-label="Settings sections">
           <ul className={header.tabs}>
-            {TABS.map((item) => (
+            {TABS.filter((item) => item.id !== "integrations" || canManageIntegrations).map((item) => (
               <li key={item.id}>
                 <Link
                   href={item.href}
@@ -48,7 +64,7 @@ export function SettingsView({ tab, me, roster }: { tab: SettingsTab; me: Settin
         </nav>
       </header>
 
-      {tab === "me" ? <MyInfo me={me} /> : <AgentSettings roster={roster} />}
+      {tab === "me" ? <MyInfo me={me} /> : tab === "agents" ? <AgentSettings roster={roster} /> : <Integrations klaviyo={klaviyo} />}
     </div>
   );
 }
@@ -81,6 +97,23 @@ function MyInfo({ me }: { me: SettingsMe | null }) {
         </ul>
       </Card>
     </Grid>
+  );
+}
+
+function Integrations({ klaviyo }: { klaviyo: KlaviyoStatus | { error: string } | null }) {
+  if (!klaviyo) return null;
+  if ("error" in klaviyo) return <PanelError message={klaviyo.error} />;
+  return (
+    <>
+      <Grid min={30}>
+        <Card title="Klaviyo" aside={<span>Flows and campaigns, into Insights → Marketing</span>}>
+          <KlaviyoKeyCard status={klaviyo} />
+        </Card>
+      </Grid>
+      <Caption>
+        The nightly sync reads flow and campaign performance with this key (<code>npm run sync:klaviyo</code> runs it on demand). Revenue is what Klaviyo attributes to its own messages on Shopify&apos;s &ldquo;Placed Order&rdquo; — Klaviyo&apos;s attribution window, not the Acquisition channels card&apos;s.
+      </Caption>
+    </>
   );
 }
 

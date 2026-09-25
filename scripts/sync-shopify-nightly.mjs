@@ -17,6 +17,7 @@ import { runShopifyPromotionsSync } from './sync-shopify-promotions.mjs';
 import { runShopifyContentCatalogSync } from './sync-shopify-content-catalog.mjs';
 import { runShopifyCollectionsSync } from './sync-shopify-collections.mjs';
 import { runStorefrontMonthsSync } from './lib/storefront-months-sync.mjs';
+import { runKlaviyoSync } from './lib/klaviyo-sync.mjs';
 
 if (isDirectRun()) {
   main().catch((error) => {
@@ -111,7 +112,8 @@ export async function runNightlySync({
     promotions: runShopifyPromotionsSync,
     contentCatalog: runShopifyContentCatalogSync,
     collections: runShopifyCollectionsSync,
-    storefrontMonths: runStorefrontMonthsSync
+    storefrontMonths: runStorefrontMonthsSync,
+    klaviyo: runKlaviyoSync
   }
 }) {
   const customerCounts = await runners.customers({
@@ -183,6 +185,18 @@ export async function runNightlySync({
     storefrontMonths = { error: error instanceof Error ? error.message : String(error) };
   }
 
+  // KLAVIYO, LAST, AND IT CANNOT FAIL THE NIGHT EITHER. It reads another
+  // company's API with a key somebody typed on /settings; a revoked key or a
+  // rate limit must not mark the Shopify sync failed. A shop with no key is
+  // skipped. The failure is also written on klaviyo_connections, which is
+  // what Settings -> Integrations shows.
+  let klaviyo;
+  try {
+    klaviyo = await runners.klaviyo({ supabase, shopRow, dryRun: Boolean(args.dryRun) });
+  } catch (error) {
+    klaviyo = { error: error instanceof Error ? error.message : String(error) };
+  }
+
   return {
     customers: customerCounts.customers,
     deleted_customers: customerCounts.deletedCustomers,
@@ -201,7 +215,11 @@ export async function runNightlySync({
     collection_memberships: collectionCounts.products,
     storefront_session_months: storefrontMonths.months ?? null,
     storefront_months_restated: storefrontMonths.restated ?? null,
-    storefront_months_error: storefrontMonths.error ?? null
+    storefront_months_error: storefrontMonths.error ?? null,
+    klaviyo_flow_days: klaviyo.flow_days ?? null,
+    klaviyo_campaigns: klaviyo.campaigns ?? null,
+    klaviyo_skipped: klaviyo.skipped ?? null,
+    klaviyo_error: klaviyo.error ?? null
   };
 }
 
