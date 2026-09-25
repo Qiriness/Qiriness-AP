@@ -119,6 +119,7 @@ test('the card: summary over everything, table only what was clicked, by open ra
   assert.equal(out.rows[0].openRate, 95 / 190);
   assert.equal(out.summary.openRate, 291 / 1200);
   assert.equal(out.hiddenWithoutClicks, 1);
+  assert.equal(out.hiddenTooSmall, 0);
   assert.equal(out.summary.revenue, 420.5);
   assert.equal(out.summary.recipients, 1250);
   assert.equal(out.summary.clickRate, 49 / 1200);
@@ -126,6 +127,19 @@ test('the card: summary over everything, table only what was clicked, by open ra
   assert.equal(out.rows[0].conversionRate, 4 / 200);
   assert.equal(out.rows[1].revenuePerRecipient, 0.3);
   assert.equal('delivered' in out.rows[0], false);
+});
+
+test('sends under 50 recipients are counted in the tiles but not listed', () => {
+  const out = summariseKlaviyoMessages([
+    { kind: 'campaign', id: 'TEST', name: 'TEST TFWA', recipients: 3, delivered: 3, opens_unique: 3, clicks_unique: 1, conversions: 0, conversion_value: 0 },
+    { kind: 'campaign', id: 'EDGE', name: 'Exactly 50', recipients: 50, delivered: 50, opens_unique: 10, clicks_unique: 1, conversions: 0, conversion_value: 0 },
+    { kind: 'flow', id: 'BIG', name: 'Welcome', recipients: 200, delivered: 200, opens_unique: 60, clicks_unique: 5, conversions: 0, conversion_value: 0 }
+  ]);
+  assert.deepEqual(out.rows.map((r) => r.id), ['BIG', 'EDGE']);
+  assert.equal(out.hiddenTooSmall, 1);
+  assert.equal(out.hiddenWithoutClicks, 0);
+  assert.equal(out.summary.recipients, 253);
+  assert.equal(out.summary.openRate, 73 / 253);
 });
 
 test('an empty range has no rates rather than zero ones', () => {

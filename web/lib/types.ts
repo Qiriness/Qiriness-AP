@@ -1693,6 +1693,8 @@ export interface KlaviyoPerformance {
   rows: KlaviyoMessageRow[];
   /** Flows and campaigns in the range with no click, counted in the summary but not listed. */
   hiddenWithoutClicks: number;
+  /** Clicked sends under 50 recipients, counted in the summary but not listed. */
+  hiddenTooSmall: number;
 }
 
 export interface PlatformSplit {

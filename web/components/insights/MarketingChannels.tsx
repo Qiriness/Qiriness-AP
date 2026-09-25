@@ -105,7 +105,7 @@ function KlaviyoTable({ klaviyo }: { klaviyo: KlaviyoPerformance }) {
             {klaviyo.rows.length === 0 ? (
               <tr>
                 <td colSpan={SOURCES.email.head.length} className={t.muted}>
-                  No flow or campaign was clicked in this range.
+                  No flow or campaign with 50 or more recipients was clicked in this range.
                 </td>
               </tr>
             ) : (
@@ -116,13 +116,20 @@ function KlaviyoTable({ klaviyo }: { klaviyo: KlaviyoPerformance }) {
       </div>
       <p className={styles.note}>
         Open and click rates are unique opens and clicks over delivered, as Klaviyo counts them — Apple Mail Privacy Protection counts some opens that were not read. Revenue is Klaviyo&apos;s attribution on Placed Order. Flows sum the days in the range; a campaign counts in the range it was sent.
-        {klaviyo.hiddenWithoutClicks > 0
-          ? ` ${klaviyo.hiddenWithoutClicks} with no click are counted above but not listed.`
-          : ""}
+        {hiddenNote(klaviyo)}
         {klaviyo.lastSyncAt ? ` Synced ${day(klaviyo.lastSyncAt)}.` : ""}
       </p>
     </>
   );
+}
+
+/** Which sends the tiles count but the table leaves out, and why. */
+function hiddenNote(klaviyo: KlaviyoPerformance): string {
+  const parts = [
+    klaviyo.hiddenWithoutClicks > 0 ? `${klaviyo.hiddenWithoutClicks} with no click` : null,
+    klaviyo.hiddenTooSmall > 0 ? `${klaviyo.hiddenTooSmall} sent to fewer than 50 people` : null,
+  ].filter(Boolean);
+  return parts.length ? ` ${parts.join(" and ")} are counted above but not listed.` : "";
 }
 
 function KlaviyoRow({ row }: { row: KlaviyoMessageRow }) {

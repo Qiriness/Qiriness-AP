@@ -108,7 +108,7 @@ export async function getPromotions(ctx: InsightsContext, window = ctx.range): P
 }
 
 function klaviyoBlocked(blockedReason: string, lastSyncAt: string | null = null): KlaviyoPerformance {
-  return { blockedReason, lastSyncAt, summary: null, rows: [], hiddenWithoutClicks: 0 };
+  return { blockedReason, lastSyncAt, summary: null, rows: [], hiddenWithoutClicks: 0, hiddenTooSmall: 0 };
 }
 
 /**
@@ -127,7 +127,7 @@ async function getKlaviyoPerformance(ctx: InsightsContext): Promise<KlaviyoPerfo
     if (!lastSyncAt) return klaviyoBlocked("Klaviyo is connected; flows and campaigns arrive with the next nightly sync.");
 
     const rows = await callRpc<Record<string, unknown>>(KLAVIYO_RPC.MESSAGES, rangeArgs(ctx));
-    const { summary, rows: clicked, hiddenWithoutClicks } = summariseKlaviyoMessages(rows);
+    const { summary, rows: clicked, hiddenWithoutClicks, hiddenTooSmall } = summariseKlaviyoMessages(rows);
     // Dates leave here as YYYY-MM-DD on the SHOP's clock: a campaign sent at
     // 00:00 Paris is 22:00 UTC the day before, and the card slices the date.
     const local = (iso: string | null) => (iso ? shopDate(iso, ctx.tz) : null);
@@ -137,6 +137,7 @@ async function getKlaviyoPerformance(ctx: InsightsContext): Promise<KlaviyoPerfo
       summary,
       rows: clicked.map((row: KlaviyoMessageRow) => ({ ...row, sentAt: local(row.sentAt) })),
       hiddenWithoutClicks,
+      hiddenTooSmall,
     };
   } catch (error) {
     return klaviyoBlocked(`Klaviyo figures could not be read: ${error instanceof Error ? error.message : "unknown error"}`);

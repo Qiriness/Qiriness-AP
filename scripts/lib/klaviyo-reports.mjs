@@ -25,6 +25,13 @@ export const KLAVIYO_STATISTICS = Object.freeze([
   'conversion_value'
 ]);
 
+/**
+ * Sends to fewer recipients than this are not listed: at that size a rate is
+ * noise — a 3-recipient test send opened once reads 100% and tops a table
+ * sorted by open rate (the owner's rule, 2026-09-25). Still counted in the tiles.
+ */
+export const MIN_LISTED_RECIPIENTS = 50;
+
 /** Klaviyo caps a daily series at 60 days; one day short, so a boundary never trips it. */
 export const FLOW_WINDOW_DAYS = 59;
 /** First sync: a year of flow days. Afterwards the nightly rewrites one window. */
@@ -226,7 +233,8 @@ function ratio(numerator, denominator) {
 /**
  * The card's summary and table from `insights_klaviyo_messages` rows. The
  * summary is every flow and campaign in the range; the table lists only those
- * with at least one click (the owner's rule, 2026-09-25), by open rate —
+ * with at least one click and MIN_LISTED_RECIPIENTS (the owner's rules,
+ * 2026-09-25), by open rate —
  * what the owner reads first (2026-09-25); revenue stays as a column.
  */
 export function summariseKlaviyoMessages(rows) {
@@ -266,8 +274,10 @@ export function summariseKlaviyoMessages(rows) {
     { recipients: 0, delivered: 0, opens: 0, clicks: 0, revenue: 0 }
   );
 
-  const clicked = all
-    .filter((row) => row.clicks > 0)
+  const withoutClicks = all.filter((row) => row.clicks === 0).length;
+  const tooSmall = all.filter((row) => row.clicks > 0 && row.recipients < MIN_LISTED_RECIPIENTS).length;
+  const listed = all
+    .filter((row) => row.clicks > 0 && row.recipients >= MIN_LISTED_RECIPIENTS)
     .sort((a, b) => (b.openRate ?? -1) - (a.openRate ?? -1) || b.recipients - a.recipients)
     .map(({ delivered, ...row }) => row);
 
@@ -279,7 +289,8 @@ export function summariseKlaviyoMessages(rows) {
       clickRate: ratio(total.clicks, total.delivered),
       revenuePerRecipient: ratio(total.revenue, total.recipients)
     },
-    rows: clicked,
-    hiddenWithoutClicks: all.length - clicked.length
+    rows: listed,
+    hiddenWithoutClicks: withoutClicks,
+    hiddenTooSmall: tooSmall
   };
 }
