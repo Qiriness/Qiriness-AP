@@ -966,3 +966,90 @@ test('the situation is matched on the opening message, not the latest one', asyn
   // message: changing what the matcher reads must not move where the row lands.
   assert.equal(store.saved[0].triggerMessageId, 'm2');
 });
+
+// --- the situation plan, from the case state ----------------------------------
+
+const THREAD = [
+  { id: 'm1', subject: 'Commande', body_text: 'Où est ma commande ?', from_email: 'client@example.fr', received_at: '2026-08-01T09:00:00Z' },
+  { id: 'm2', subject: 'Commande', body_text: 'Finalement je veux être remboursée.', from_email: 'client@example.fr', received_at: '2026-08-03T09:00:00Z' }
+];
+
+test('a carried situation skips the matcher and is stored as carried', async () => {
+  const store = buildStore({ messages: THREAD });
+  let matched = 0;
+  await runInvestigation({
+    ...wire(store),
+    investigate: async () => caseFile(),
+    shopId: 's1',
+    retrieveExemplar: async () => { matched += 1; return EXEMPLAR_RESULT; },
+    planSituation: async () => ({ carry: { verdict: 'matched', exemplar_key: 'D-36', requirement_needs: ['order_identity'] } })
+  });
+
+  assert.equal(matched, 0);
+  assert.equal(store.saved[0].exemplarMatch.exemplar_key, 'D-36');
+  assert.equal(store.saved[0].exemplarMatch.resolved_from, 'case_state');
+});
+
+test('a second request is matched on the message that made it, not the opening one', async () => {
+  const store = buildStore({ messages: THREAD });
+  const bodies = [];
+  await runInvestigation({
+    ...wire(store),
+    investigate: async () => caseFile(),
+    shopId: 's1',
+    retrieveExemplar: async (query) => { bodies.push(query.body); return EXEMPLAR_RESULT; },
+    planSituation: async ({ triggerMessage }) => {
+      assert.equal(triggerMessage.id, 'm2');
+      return { match: 'trigger' };
+    }
+  });
+
+  assert.deepEqual(bodies, ['Finalement je veux être remboursée.']);
+  assert.equal(store.saved[0].exemplarMatch.matched_on, 'trigger');
+});
+
+test('no plan, or a planner that returns null, matches the opening message as before', async () => {
+  for (const planSituation of [null, async () => null]) {
+    const store = buildStore({ messages: THREAD });
+    const bodies = [];
+    await runInvestigation({
+      ...wire(store),
+      investigate: async () => caseFile(),
+      shopId: 's1',
+      retrieveExemplar: async (query) => { bodies.push(query.body); return EXEMPLAR_RESULT; },
+      planSituation
+    });
+    assert.deepEqual(bodies, ['Où est ma commande ?']);
+    assert.equal(store.saved[0].exemplarMatch.matched_on, undefined);
+  }
+});
+
+test('a follow-up read by the Case Manager reaches the investigation as its case delta', async () => {
+  const store = buildStore({ messages: THREAD });
+  const seen = [];
+  const reading = {
+    trigger_message_id: 'm2',
+    case_relationship: 'new_information',
+    new_facts: ['Le client demande un remboursement.'],
+    evidence_reuse: {}
+  };
+  await runInvestigation({
+    ...wire(store),
+    investigate: async (input) => { seen.push(input.caseDelta); return caseFile(); },
+    shopId: 's1',
+    planSituation: async () => ({ match: 'opening', reading })
+  });
+  assert.deepEqual(seen[0].newFacts, ['Le client demande un remboursement.']);
+});
+
+test('without a reading about this message there is no case delta', async () => {
+  const store = buildStore({ messages: THREAD });
+  const seen = [];
+  await runInvestigation({
+    ...wire(store),
+    investigate: async (input) => { seen.push(input.caseDelta); return caseFile(); },
+    shopId: 's1',
+    planSituation: async () => ({ match: 'opening', reading: { trigger_message_id: 'm1', case_relationship: 'continuation', new_facts: ['x'] } })
+  });
+  assert.equal(seen[0], null);
+});

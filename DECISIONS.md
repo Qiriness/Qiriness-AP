@@ -1531,6 +1531,10 @@ Re-matching per run is the alternative and it is worse — the matcher reads the
 
 **A STICKY MATCH THAT WAS WRONG STAYS WRONG**, and that is the cost, stated rather than hidden. It is bounded: the rulebook is editable, and the next `new_issue` re-matches.
 
+**NONE OF THIS RAN UNTIL 2026-09-25.** The Case Manager stored the situation and `runInvestigation` took a `carriedSituation` parameter, but nothing passed it: every follow-up was re-matched on its opening message, and the paragraphs above described a design, not the worker. It is now `planSituation`, built by `createSituationPlanner` from the latest case state and wired in the poll and in `investigate`; a planner that fails returns null and the opening message is matched as before.
+
+**A `new_issue` IS MATCHED ON THE MESSAGE THAT RAISED IT**, which narrows § *The situation is matched on the opening message*. That rule exists because a courtesy note must not redefine a thread; a second request is the one message that should, and matching the opening message again would answer it from the first case's rules. It applies only when the `new_issue` reading is about the trigger message itself (`situationPlan`), and the stored match says `matched_on: 'trigger'`. The 0.65 band was calibrated on opening messages, so these matches run on a distribution it was not measured against — a known gap, small because `new_issue` is rare.
+
 ### Evidence reuse carries outcome buckets, and the ledger cannot say which need a call served (2026-09-22)
 
 `evidence_reuse` holds `{need, tool, argsHash, outcome, finding, run_at, status}` per need a prior run settled — and **never what the tool returned.** `tool_calls` drops `data` on purpose and `context_ref` points at `resolved_context` rather than copying it; reusing the knowledge that a call ran does not reopen either, and reusing its content would.
@@ -1541,7 +1545,21 @@ Re-matching per run is the alternative and it is worse — the matcher reads the
 
 **REPORTED, NOT ENFORCED**, like the evidence needs before it. Nothing skips a tool call and no budget changed. Suppression is a separate decision with its own replay (`report:collection-replay`), and taking it here would mean acting on a signal nothing has measured.
 
+**`invalidated` NEVER FIRED UNTIL 2026-09-25**: the runner passed `orderChanged: false`. It is now `orderChangedSince` — the confirmed order on the ticket against `context_ref.orderName`, the order the last run used — so a corrected number or an order confirmed after the run invalidates the order-derived findings. **`evidence_reuse` is still read by nothing**; the investigation delta is what will read it.
+
 **`stale` IS NARROW AND THERE IS NO TTL TABLE.** Measured across all 2,006 orders: `dispatched_no_scan` **1,992 (99%)**, `in_transit` **0**, `stale_in_transit` **0**. With no carrier feed, a freshness policy on tracking re-asks a question whose answer cannot have changed.
+
+### A follow-up investigation is told what is already known, and nothing is skipped yet (2026-09-25)
+
+The brief: for a follow-up, investigate only « the information required for the next decision minus the valid information already known ». Until today the second half never reached the run — `evidence_reuse` was written and read by nothing. `case-delta.mjs` now renders it as a « Dossier connu » section, after the customer's message and before the gathered evidence: what earlier runs established and may stand (`valid`), what moves on its own and must be looked at again (`stale`), what belonged to another order (`invalidated`), what this message brought (`new_facts`), what the customer just gave us and what we still wait for, and what we promised.
+
+**A PROMPT, NOT A GATE.** Every tool stays offered and the opening moves still run. The section asks the model not to look up what is established; whether it obeys, and whether cutting calls costs a refresh, is `eval:delta`'s question. Skipping a call on the strength of an instruction nobody has measured would be the enforcement this layer has refused twice already (§ *Evidence reuse carries outcome buckets*).
+
+**ONLY WHEN THE READING IS ABOUT THIS MESSAGE.** A case state written for an older message describes reuse against an older run; a stale account of what is known is worse than none. Then there is no section, and the run is byte-for-byte the one before. **No section on `new_issue` either**: the evidence was gathered for the first request, and presenting it as known invites answering the new one from it.
+
+**`tool_calls` NOW CARRY \`source\`** — `opening_move`, `planner`, `model`. The ledger always knew and the stored row dropped it, so « the model re-fetched an established fact » could not be told apart from « an opening move ran, as it always does ». Only the model read the section, so only its calls count as re-fetches; a refresh counts from any source.
+
+**THERE IS NO BASELINE YET, AND THAT IS THE FINDING.** On 2026-09-25 no ticket had a second investigation: the imported corpus was read once, at the end of each thread. The first numbers come from live follow-ups.
 
 ### One investigation per inbound message
 
@@ -1673,6 +1691,14 @@ This reverses the earlier rule that only `closed`/`resolved` were rewritten, on 
 This distinction could not be drawn when auto-close was written: the investigation set no status, so `level` was the only signal and level 3 was made closable on queue-hygiene grounds. Measured before the change, **67 level-3 tickets** would have closed that way.
 
 The cost is counted rather than hidden: `runAutoClose` reports `awaitingHuman` separately from `exempt`, because level-4s being spared is the rule working while unactioned work piling up is the thing to look at. Emptying `AUTO_CLOSE_EXEMPT_STATUSES` restores the old behaviour in one line.
+
+### A customer's thanks closes the ticket only when nobody owes anything (2026-09-25)
+
+**Decided by the business:** when a customer thanks us and there is no pending action on **either** side — nothing we are waiting for from them, nothing a colleague, the 3PL or the carrier still owes — the ticket may close. If any action is still unresolved, it is closed by a person, never automatically.
+
+**Either side is the load-bearing word.** `closureAllowed` already refuses a case file with `missing` or a handoff, but the case file is written once per investigation and goes stale: `d6d0d1c3` still read "mask missing" after the replacement had been sent. The rule needs the pending list kept current as messages arrive — the customer's questions (`pending_customer_inputs`, which exists) and the checks owed by our side (which does not exist yet). Until the second list exists, an automatic close can only be as good as the case file.
+
+**Labelled first, 2026-09-25.** On the first batch of the multi-turn set (`eval/casework-cases.mjs`), a thanks after we had answered and closed was labelled « no reply » three times (`b781cfba`, `1d38908b`, `d6d0d1c3`); today's pipeline writes a closing reply on all three. A thanks that arrives while we were still asking (`cffa55ff`) or on a complaint (`9454eaa2`) was labelled a short closing reply.
 
 ---
 
@@ -3784,7 +3810,7 @@ The dashboard was open to anyone who could reach the port, and it names customer
 - **Fails closed.** No Supabase configuration means nothing verifies and nobody gets in, rather than everybody.
 - **One error for every failed sign-in** — wrong address, wrong password, disabled, or no role — so the reply never says which addresses have accounts. Five failures per address per fifteen minutes on top of Supabase's own limits, which see this server's address rather than the visitor's and so cannot tell one guesser from the whole team. In memory, which a restart resets: fine for one internal server, and the thing to replace with a shared store if the dashboard ever runs on several.
 - **Signing out is told to Supabase**, so the refresh token is dead server-side and not merely dropped by one browser.
-- **Roles are code.** `DENIED` in `dashboard-auth.mjs` is the one table of what each role may not open; the middleware, the Insights tabs and the panel guard all read it. Developer and Management are identical today — two roles so they can diverge without a migration. **Contact may not open Insights → Sales** (the owner's rule): the tab is not drawn, the URL redirects to Fulfilment, and `/insights` lands the contact team there instead of on Sales.
+- **Roles are code.** `DENIED` in `dashboard-auth.mjs` is the one table of what each role may not open; the middleware, the Insights tabs and the panel guard all read it. Developer and Management are identical today — two roles so they can diverge without a migration. **Overview and Sales are for Developer and Management only; Contact may not open either** (the owner's rule — Sales from 2026-09-11, Overview and Marketing & funnel from 2026-09-22, since all three lead with revenue): the tabs are not drawn, the URLs redirect to Fulfilment, and `/insights` lands the contact team there instead of on Overview.
 - **Who looked is logged, not what they saw.** Each surface that names customers writes one `data_access_events` row with the Supabase user id and role, and counts — never a name or an address. The trail must not become a second customer list. A panel left open writes a row per 5-minute refresh; that is the honest count of how often the data was on screen.
 
 ### The nightly is given more time than it needs, and a killed run must look killed (2026-09-12)
@@ -3833,6 +3859,24 @@ Orders were only ever written by the nightly, so between runs the desk read a ta
 
 **None of this replaces the nightly.** Deliveries are dropped, and one that arrives mid-deploy is simply gone. The nightly remains the reconciliation pass; this is the fast path, not the record.
 
+### Klaviyo: the key in Vault, counts per day, clicked rows only (2026-09-25)
+
+**The key is typed on /settings and lives in Supabase Vault, not in `.env.local`.** The nightly sync runs on GitHub Actions, which reads repository secrets and not a local file; a key in the environment would have needed a repository secret *and* a local copy, and nobody on the team could change it without a developer. Vault encrypts it at rest, and the three functions that touch it (`klaviyo_save_key` / `_read_key` / `_clear_key`) are security definer with an empty `search_path`, executable by `service_role` only — `anon` and `authenticated` were checked to have no execute right. The table holds the secret's id and the last four characters; nothing returns the key to a browser. Setting it is closed to the contact team, because it unlocks revenue data, for the same reason Marketing is.
+
+**A key is checked against Klaviyo before it is saved.** `connectKlaviyo` lists the account's metrics and refuses a key that is rejected, lacks the scope, or cannot see a "Placed Order" metric — without that metric there is no revenue to attribute, and a saved-but-useless key would only surface as a failed night. Shopify's Placed Order is preferred when several integrations define one.
+
+**Counts are stored, rates are computed.** Recipients, delivered, unique opens, unique clicks, unique conversions and conversion value add up across days and messages; a click rate does not. The card rebuilds click rate over delivered, conversion rate and revenue per recipient over recipients — Klaviyo's own denominators — from the summed counts, as `storefront_session_months` does with conversion.
+
+**Flows per day, campaigns whole.** A flow sends every day and the Insights range is arbitrary, so flows come from the flow *series* report at a daily interval, summed per flow and day. Klaviyo caps a daily series at 60 days a request and its reporting endpoints at 2 requests a minute and 225 a day (reference read 2026-09-25), so the first sync backfills a year in seven 59-day windows and every night after rewrites one window — the one late conversions still land in. A campaign is sent once, so it is read whole from the campaign *values* report (one request for every campaign sent in the last year) and placed in a range by its send time. Days are Klaviyo's account clock, so a 24-hour range reads the whole days it touches.
+
+**The card leads with open rate, not revenue** (the owner's call, 2026-09-25): the tiles are open rate, click rate, recipients, revenue, and the table is sorted by open rate (ties by recipients). Open rate is unique opens over delivered — Klaviyo's definition — and is inflated by Apple Mail Privacy Protection, which the card's note says. A small flow with a high rate can sit above a large campaign; that is the ordering asked for.
+
+**The table lists only flows and campaigns with at least one click** (the owner's rule, 2026-09-25); the four tiles above it still count everything in the range, and the note under the table says how many were left out, so the tiles and the rows never appear to disagree silently.
+
+**Klaviyo's revenue is Klaviyo's attribution, not Shopify's.** It is the value of Placed Order events Klaviyo credits to its messages inside its own attribution window, so it will not equal the `klaviyo` row of Acquisition channels (Shopify's last-click referrer). On a marketplace platform the card is blocked: Klaviyo only ever sees online-store orders.
+
+**It cannot fail the night.** The nightly runs Klaviyo last and records an error in its counts instead of throwing, like storefront months; the failure is also written on `klaviyo_connections`, which is what Settings → Integrations shows.
+
 ## Page speed
 
 ### Most of a slow page was reads waiting on each other, not the data (2026-09-18)
@@ -3858,23 +3902,5 @@ A plain link to a server-rendered page shows nothing until the new page has arri
 `insights_customer_mix()` took **961 ms on a year and 1,589 ms on all time**; its body, run as a plain query with the values filled in, took **80 ms**. A SQL-language function (with `set search_path`, so never inlined) is planned generically — Postgres does not know the range, guesses a handful of rows, and planned "the range's orders as a CTE, joined back to each customer's first order" as a nested loop across both: **10,122,837 row comparisons** on a year. Reproduced with `plan_cache_mode = force_generic_plan` on the plain query.
 
 `30_customer_mix_plan.sql` groups the range by customer first and looks each customer's first order up through `orders_shopify_customer_id_idx`, so there is no plan left that compares every row with every row: **68 / 102 / 118 ms** for six months / one year / all time, measured on the generic plan, and 69 / 106 / 118 ms on the live function once applied. Same name, arguments and columns. Before shipping, the live function and the new body were compared over every preset (current and previous window) and every platform filter — **60 combinations, 0 differences**.
-
-### Klaviyo: the key in Vault, counts per day, clicked rows only (2026-09-25)
-
-**The key is typed on /settings and lives in Supabase Vault, not in `.env.local`.** The nightly sync runs on GitHub Actions, which reads repository secrets and not a local file; a key in the environment would have needed a repository secret *and* a local copy, and nobody on the team could change it without a developer. Vault encrypts it at rest, and the three functions that touch it (`klaviyo_save_key` / `_read_key` / `_clear_key`) are security definer with an empty `search_path`, executable by `service_role` only — `anon` and `authenticated` were checked to have no execute right. The table holds the secret's id and the last four characters; nothing returns the key to a browser. Setting it is closed to the contact team, because it unlocks revenue data, for the same reason Marketing is.
-
-**A key is checked against Klaviyo before it is saved.** `connectKlaviyo` lists the account's metrics and refuses a key that is rejected, lacks the scope, or cannot see a "Placed Order" metric — without that metric there is no revenue to attribute, and a saved-but-useless key would only surface as a failed night. Shopify's Placed Order is preferred when several integrations define one.
-
-**Counts are stored, rates are computed.** Recipients, delivered, unique opens, unique clicks, unique conversions and conversion value add up across days and messages; a click rate does not. The card rebuilds click rate over delivered, conversion rate and revenue per recipient over recipients — Klaviyo's own denominators — from the summed counts, as `storefront_session_months` does with conversion.
-
-**Flows per day, campaigns whole.** A flow sends every day and the Insights range is arbitrary, so flows come from the flow *series* report at a daily interval, summed per flow and day. Klaviyo caps a daily series at 60 days a request and its reporting endpoints at 2 requests a minute and 225 a day (reference read 2026-09-25), so the first sync backfills a year in seven 59-day windows and every night after rewrites one window — the one late conversions still land in. A campaign is sent once, so it is read whole from the campaign *values* report (one request for every campaign sent in the last year) and placed in a range by its send time. Days are Klaviyo's account clock, so a 24-hour range reads the whole days it touches.
-
-**The card leads with open rate, not revenue** (the owner's call, 2026-09-25): the tiles are open rate, click rate, recipients, revenue, and the table is sorted by open rate (ties by recipients). Open rate is unique opens over delivered — Klaviyo's definition — and is inflated by Apple Mail Privacy Protection, which the card's note says. A small flow with a high rate can sit above a large campaign; that is the ordering asked for.
-
-**The table lists only flows and campaigns with at least one click** (the owner's rule, 2026-09-25); the four tiles above it still count everything in the range, and the note under the table says how many were left out, so the tiles and the rows never appear to disagree silently.
-
-**Klaviyo's revenue is Klaviyo's attribution, not Shopify's.** It is the value of Placed Order events Klaviyo credits to its messages inside its own attribution window, so it will not equal the `klaviyo` row of Acquisition channels (Shopify's last-click referrer). On a marketplace platform the card is blocked: Klaviyo only ever sees online-store orders.
-
-**It cannot fail the night.** The nightly runs Klaviyo last and records an error in its counts instead of throwing, like storefront months; the failure is also written on `klaviyo_connections`, which is what Settings → Integrations shows.
 
 **The general lesson for the ranged functions: test a new one under `force_generic_plan`**, not only as a plain query, because the plain query is not what runs. The other Sales reads were measured the same way and are 100–300 ms alone; they are slow in the panel (800 ms–1.4 s) only because eleven run at once and the database queues them. Fewer, combined calls per panel — or more database compute — is what would move that, and it is an open decision, not a fix to make quietly: it reverses "each ranged figure is its own SQL function" (§ Insights).

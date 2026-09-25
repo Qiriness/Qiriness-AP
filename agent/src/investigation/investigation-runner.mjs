@@ -13,6 +13,7 @@ import { normaliseConditions, resolveSituationTie,
 } from './answer-selection.mjs';
 import { ENABLED_SUBJECTS, answerSetFor, isInvestigable, isTradeSender } from './investigation-rules.mjs';
 import { summarisePhotoEvidence } from './photo-evidence.mjs';
+import { caseDeltaFrom } from './case-delta.mjs';
 
 // The batch pass that investigates categorised tickets, mirroring
 // `categorise-runner.mjs` in every structural respect — because the problems are
@@ -48,10 +49,11 @@ const TRUNCATION_MARKER = '\n… (message tronqué)';
 const DROPPED_LINE_RESERVE = 64;
 
 export async function runInvestigation({
-  // Answers « which situation did the last reading leave this case in? ».
-  // Absent by default, and absent means the matcher runs on every ticket
-  // exactly as it did before the case state existed.
-  carriedSituation = null,
+  // Answers « where does this message's situation come from? » — carried from
+  // the case state, matched on this message, or matched on the opening one. See
+  // `situationPlan`. Absent by default, and absent (or null) means the matcher
+  // runs on the opening message exactly as it did before the case state existed.
+  planSituation = null,
   // The case-file store owns `ticket_investigations` and nothing else; the
   // ticket record owns the row this pass moves through the queue. They were one
   // object before, which is how a ticket patch ended up being written here, in
@@ -230,14 +232,34 @@ export async function runInvestigation({
     // what the casework reading costs, so the layer pays for itself on any
     // thread that runs to a second message.
     //
-    // Null when no reading exists or the reading dropped it, which is every
-    // first message and every `new_issue`. Then the matcher runs as before.
-    const carried = carriedSituation?.(ticket.id) ?? null;
-    const exemplarMatch = carried
-      ? { ...carried, resolved_from: 'case_state' }
+    // A SECOND REQUEST IS MATCHED ON ITSELF. When the Case Manager read the
+    // trigger message as `new_issue`, the opening message describes the old
+    // case, and matching it again is the one wrong answer; the new message is
+    // scored instead, and the row says so in `matched_on`.
+    //
+    // UNWIRED UNTIL 2026-09-25: the parameter existed and nothing passed it, so
+    // every follow-up was re-matched on its opening message.
+    const plan = (await planSituation?.({ ticket, triggerMessage })) ?? { match: 'opening' };
+    const exemplarMatch = plan.carry
+      ? { ...plan.carry, resolved_from: 'case_state' }
       : await matchExemplar({
-          retrieveExemplar, chooseSituation, senderDirectory, ticket, message: openingMessage, shopId, logger
+          retrieveExemplar,
+          chooseSituation,
+          senderDirectory,
+          ticket,
+          message: plan.match === 'trigger' ? triggerMessage : openingMessage,
+          shopId,
+          logger
         });
+    if (plan.match === 'trigger' && exemplarMatch && Object.keys(exemplarMatch).length > 0) {
+      exemplarMatch.matched_on = 'trigger';
+    }
+
+    // WHAT IS ALREADY KNOWN, for a follow-up the Case Manager has read. Null on
+    // a first message, on a `new_issue`, and whenever the latest reading is not
+    // about this message — and null renders nothing, so those runs are the runs
+    // that happened before the delta existed.
+    const caseDelta = caseDeltaFrom({ reading: plan.reading ?? null, triggerMessageId: triggerMessage.id });
 
     // WHICH RULES COULD APPLY, loaded before the run and read after it.
     //
@@ -264,7 +286,7 @@ export async function runInvestigation({
     let caseFile;
     try {
       caseFile = await investigate(
-        buildInput(ticket, messages, senderDirectory, exemplarMatch.requirement_needs, policy, parameters, conversation)
+        buildInput(ticket, messages, senderDirectory, exemplarMatch.requirement_needs, policy, parameters, conversation, caseDelta)
       );
     } catch (error) {
       await handleFailure({ record, ticket, error, counts, logger, dryRun });
@@ -552,7 +574,8 @@ function buildInput(
   exemplarNeeds = [],
   policy = null,
   parameters = new Map(),
-  conversation = messages
+  conversation = messages,
+  caseDelta = null
 ) {
   const first = messages[0];
   const latest = messages.length > 1 ? messages[messages.length - 1] : null;
@@ -613,6 +636,9 @@ function buildInput(
     // it is derived once here rather than inside a tool handler that would
     // recompute the same answer on every call.
     photoEvidence: summarisePhotoEvidence(messages),
+    // What a follow-up starts from — see `case-delta.mjs`. Rendered into the
+    // prompt; null on every run that is not a read follow-up.
+    caseDelta,
     // THE SHAPE OF THE THREAD, so a reader can branch on "this is a reply to us"
     // without loading the messages again. `lastDirection` is the load-bearing
     // one: it separates a fresh request from an answer to a question we asked,

@@ -67,6 +67,57 @@ export function situationFor({ caseRelationship, previousSituationKey } = {}) {
 }
 
 /**
+ * How the investigation gets its situation for the message it is about to read.
+ *
+ * `{ carry }` — the case state holds a situation: reuse it, and skip the
+ *   matcher. The previous run's match is carried whole when it is for the same
+ *   key, because its `requirement_needs` are the fallback the decomposer leans
+ *   on; a key that arrived some other way carries none rather than a guess.
+ * `{ match: 'trigger' }` — the Case Manager read THIS message as a second
+ *   request. The opening message describes the first one, so matching it again
+ *   would answer the new question from the old case's rules; the new request is
+ *   what gets matched.
+ * `{ match: 'opening' }` — everything else: a first message, a case state with
+ *   no situation in it, or no case state at all. Exactly what ran before the
+ *   case state existed.
+ *
+ * `new_issue` COUNTS ONLY WHEN IT IS ABOUT THIS MESSAGE. An older reading that
+ * said `new_issue` was acted on by the investigation of that message; the case
+ * state after it carries whatever that run matched.
+ */
+export function situationPlan({ reading = null, triggerMessageId = null, previousMatch = null } = {}) {
+  if (!reading) return { match: 'opening' };
+  if (reading.case_relationship === 'new_issue' && reading.trigger_message_id === triggerMessageId) {
+    return { match: 'trigger' };
+  }
+  const key = reading.situation_key ?? null;
+  if (!key) return { match: 'opening' };
+  const same = previousMatch?.exemplar_key === key;
+  const { tied: _tied, ...previous } = same ? previousMatch : {};
+  return {
+    carry: {
+      ...previous,
+      verdict: same ? previous.verdict : 'carried',
+      exemplar_key: key,
+      requirement_needs: same ? previous.requirement_needs ?? [] : []
+    }
+  };
+}
+
+/**
+ * Whether the order the case is about is not the one the last run looked at.
+ *
+ * `context_ref.orderName` is the confirmed number the previous investigation
+ * ran against. A different one now — a correction, a person linking the right
+ * order, an order confirmed after the run — makes every order-derived finding
+ * about the wrong parcel. No number before and one now counts as changed: the
+ * earlier run's order facts were about a candidate at best.
+ */
+export function orderChangedSince({ contextRef = null, currentOrderName = null } = {}) {
+  return (contextRef?.orderName ?? null) !== (currentOrderName ?? null);
+}
+
+/**
  * Which questions are still outstanding after this message.
  *
  * THE POINT OF THE WHOLE TABLE. A question recorded when it is asked, and
@@ -112,10 +163,12 @@ function known(fields) {
  * the order bundle, which has its own refresh (`context:build --refresh`).
  *
  * REPORTED, NOT ENFORCED — like the evidence needs before it. Nothing here
- * skips a tool call. `valid` reaches the investigation as a line saying the fact
- * was already established and by which call; the model may still call the tool,
- * and the budget is unchanged. Suppression is a separate decision with its own
- * replay, and taking it here would mean acting on a signal nothing has measured.
+ * skips a tool call. It is stored on `ticket_case_state.evidence_reuse` and, as
+ * of 2026-09-25, READ BY NOTHING: an earlier version of this comment said `valid`
+ * reached the investigation, and it never did. Handing it over is the next step
+ * of the investigation delta; suppression is a separate decision after that,
+ * with its own replay, because acting here would mean acting on a signal
+ * nothing has measured.
  */
 export const REUSE_STATES = ['valid', 'stale', 'invalidated', 'missing'];
 

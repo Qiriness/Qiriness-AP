@@ -1,5 +1,6 @@
 import { createSupabaseClient } from '../../../scripts/lib/supabase-rest-client.mjs';
 import { createTicketRecord } from '../../../scripts/lib/ticket-record.mjs';
+import { createCaseStateRecord } from '../../../scripts/lib/case-state-record.mjs';
 
 import { loadAgentConfig } from '../config.mjs';
 import { logger } from '../lib/logger.mjs';
@@ -7,6 +8,7 @@ import { resolveShopId } from '../lib/shop.mjs';
 import { toDraftingPrompt, toHumanBrief } from '../investigation/case-file.mjs';
 import { summariseNeeds } from '../investigation/evidence-rules.mjs';
 import { createInvestigationStack } from '../investigation/create-investigation.mjs';
+import { createSituationPlanner } from '../casework/case-runner.mjs';
 import { raiseForCategorised, runInvestigation } from '../investigation/investigation-runner.mjs';
 import { createSenderDirectoryStore } from '../ingestion/sender-directory.mjs';
 import { createShopUsageRecording } from '../llm/usage-store.mjs';
@@ -131,6 +133,13 @@ async function main() {
     loadCollectionMode: investigation.loadCollectionMode,
     parameters: await investigation.loadParameters(shopId),
     lastOrderLookup: investigation.lastOrderLookup,
+    // The worker's situation plan, read-only here as there: it only reads the
+    // case state, so a dry run carries the situation exactly as the poll would.
+    planSituation: createSituationPlanner(supabase, {
+      shopId,
+      caseStateRecord: createCaseStateRecord(supabase, { shopId }),
+      logger
+    }),
     onResult: ({ ticket, caseFile, level }) => {
       const needs = summariseNeeds(caseFile.evidenceGaps);
       totalNeeds.declared += needs.declared;

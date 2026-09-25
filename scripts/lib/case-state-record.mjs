@@ -109,12 +109,12 @@ export function createCaseStateRecord(supabase, { shopId, select = supabaseSelec
      * a follow-up answerable as the case it belongs to; the pending inputs are
      * what stops a question being asked twice.
      */
-    async latest(ticketId) {
+    async latest(ticketId, { columns = COLUMNS.caseStateForCasework } = {}) {
       const rows = await select(
         supabase,
         T.TICKET_CASE_STATE,
         { shop_id: shopId, ticket_id: ticketId },
-        COLUMNS.caseStateForCasework,
+        columns,
         { order: 'read_at.desc', limit: 1 }
       );
       return rows?.[0] ?? null;

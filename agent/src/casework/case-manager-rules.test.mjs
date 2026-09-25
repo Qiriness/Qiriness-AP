@@ -6,10 +6,12 @@ import { CASE_RELATIONSHIPS } from '../../../scripts/lib/case-state-record.mjs';
 import {
   REUSE_STATES,
   evidenceReuseFrom,
+  orderChangedSince,
   pendingAfter,
   reuseState,
   shouldRecategorise,
-  situationFor
+  situationFor,
+  situationPlan
 } from './case-manager-rules.mjs';
 
 // --- whether the categoriser re-runs ------------------------------------------
@@ -170,4 +172,47 @@ test('`unknown` is not carried, because it is not an answer', () => {
 
 test('the relationship vocabulary is shared with the writer, not restated', () => {
   assert.deepEqual([...CASE_RELATIONSHIPS].sort(), ['continuation', 'new_information', 'new_issue', 'unclear']);
+});
+
+test('the plan: no case state matches the opening message', () => {
+  assert.deepEqual(situationPlan({}), { match: 'opening' });
+});
+
+test('the plan: a new request read on THIS message is matched on it', () => {
+  const reading = { case_relationship: 'new_issue', trigger_message_id: 'm2', situation_key: null };
+  assert.deepEqual(situationPlan({ reading, triggerMessageId: 'm2' }), { match: 'trigger' });
+});
+
+test('the plan: an older new_issue reading does not re-match a later message', () => {
+  const reading = { case_relationship: 'new_issue', trigger_message_id: 'm2', situation_key: null };
+  assert.deepEqual(situationPlan({ reading, triggerMessageId: 'm3' }), { match: 'opening' });
+});
+
+test('the plan: a carried key keeps the previous match whole when it is the same situation', () => {
+  const reading = { case_relationship: 'continuation', trigger_message_id: 'm2', situation_key: 'D-36' };
+  const previousMatch = { verdict: 'matched', exemplar_key: 'D-36', similarity: 0.8, requirement_needs: ['order_identity'], tied: [] };
+  assert.deepEqual(situationPlan({ reading, triggerMessageId: 'm2', previousMatch }).carry, {
+    verdict: 'matched',
+    exemplar_key: 'D-36',
+    similarity: 0.8,
+    requirement_needs: ['order_identity']
+  });
+});
+
+test('the plan: a key the previous match does not share carries no needs rather than the wrong ones', () => {
+  const reading = { case_relationship: 'continuation', trigger_message_id: 'm2', situation_key: 'R-23' };
+  const previousMatch = { verdict: 'matched', exemplar_key: 'D-36', requirement_needs: ['order_identity'] };
+  assert.deepEqual(situationPlan({ reading, triggerMessageId: 'm2', previousMatch }).carry, {
+    verdict: 'carried',
+    exemplar_key: 'R-23',
+    requirement_needs: []
+  });
+});
+
+test('the order changed when the confirmed number differs from the one the last run used', () => {
+  assert.equal(orderChangedSince({ contextRef: { orderName: '#6059' }, currentOrderName: '#6059' }), false);
+  assert.equal(orderChangedSince({ contextRef: { orderName: '#6059' }, currentOrderName: '#6060' }), true);
+  // Confirmed after the run: the earlier order facts were about a candidate at best.
+  assert.equal(orderChangedSince({ contextRef: { orderName: null }, currentOrderName: '#6059' }), true);
+  assert.equal(orderChangedSince({ contextRef: {}, currentOrderName: null }), false);
 });

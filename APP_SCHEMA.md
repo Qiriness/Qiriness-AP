@@ -410,6 +410,9 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |   |   |                        #   customer check + last-order product match)
 |   |   |-- investigation/       # case-file (THE output contract) · investigation-rules ·
 |   |   |                        # decompose{,-rules} (tasks + needs, one call) ·
+|   |   |                        # case-delta (a follow-up's « Dossier connu »: what
+|   |   |                        #   stands, what to refresh, what the message brought;
+|   |   |                        #   only when the Case Manager read THIS message) ·
 |   |   |                        # answer-selection (which answer the findings
 |   |   |                        #   select, and the next need to collect) ·
 |   |   |                        # evidence-rules (23 needs, scored vs the ledger;
@@ -451,8 +454,10 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |   |   |                        #   answered, what we promised) · case-manager-rules
 |   |   |                        #   (pure: whether the categoriser re-runs, which
 |   |   |                        #   situation the case is in, which prior evidence
-|   |   |                        #   may be reused) · case-runner (the pass; derived
-|   |   |                        #   queue, no third flag) ·
+|   |   |                        #   may be reused, the situation plan, whether the
+|   |   |                        #   order changed) · case-runner (the pass; derived
+|   |   |                        #   queue, no third flag; createSituationPlanner, which
+|   |   |                        #   the investigation reads as planSituation) ·
 |   |   |                        # closure (does the customer's last message end
 |   |   |                        #   their request? code gate first -- nothing
 |   |   |                        #   outstanding in the dossier -- then one cheap
@@ -608,11 +613,6 @@ Migration 17. Two halves, on two connections — see `DECISIONS.md § Management
 | `chat_turns` | one question + answer: `status` (running / ok / step_limit / empty / error), `error`, `model`, `steps`, tokens, `duration_ms`. Spend here, **not** in `llm_usage` |
 | `chat_queries` | every query tried: `sql`, `ok`, `error` (a refusal or a Postgres error), `row_count`, `truncated`, `duration_ms`, `columns`, the first 50 rows |
 
-### Compliance and audit
-
-| Table | Holds |
-| --- | --- |
-| `integration_events` | metadata-only sync/webhook log, idempotent on `event_key` |
 ### Klaviyo
 
 Migration 39. Named in `KLAVIYO_T` / `KLAVIYO_RPC`, not `T` / `RPC`. See `DECISIONS.md § Insights → Klaviyo`.
@@ -625,6 +625,11 @@ Migration 39. Named in `KLAVIYO_T` / `KLAVIYO_RPC`, not `T` / `RPC`. See `DECISI
 | `klaviyo_save_key` / `_read_key` / `_clear_key` | security definer, `search_path ''`, **service_role only** — the only way to touch the key |
 | `insights_klaviyo_messages(p_shop, p_from, p_to, p_tz)` | flows summed over their days + campaigns by send time, in the Insights range convention |
 
+### Compliance and audit
+
+| Table | Holds |
+| --- | --- |
+| `integration_events` | metadata-only sync/webhook log, idempotent on `event_key` |
 | `privacy_requests` | Shopify compliance webhook lifecycle (hashed contacts, deletion counts) |
 | `data_access_events` | personal-data access audit trail. Sync paths and the agent's customer lookup write here, and so does the dashboard: one row each time a signed-in user is shown customers by name (ticket list, ticket detail and thread, Conversations, Fulfilment's waiting orders, the Customers call list, the contacts CSV), with `actor_type = user` and `actor_id` the Supabase `auth.users.id` — counts in `metadata`, never names |
 
@@ -672,12 +677,12 @@ Written by the worker and the CLIs, read only by the Insights panels.
 | `20_best_products_vip.sql` | drops and recreates `insights_product_sales()` and `insights_country_product_sales()` with `p_vip_only` + the VIP rule arguments (through `vip_customers()`, off by default); both now sit below `vip_customers()` in 06. Copied byte-for-byte from 06, supersedes 11's copies. Applied 2026-09-14 | 01, 02, 06, 11, 12 |
 | `30_customer_mix_plan.sql` | replaces the body of `insights_customer_mix()` — same signature, same four numbers — grouping the range by customer before looking up each first order, because the old shape planned as a nested loop (~1 s on a year). Copied byte-for-byte from 06, supersedes 11's copy. Applied 2026-09-18 | 01, 02, 06, 11 |
 | `31_orders_status_filter.sql` | adds `order_fulfilment_display()` and re-creates `orders_list()` + `orders_list_facets()` to filter and group on it, so the status filter selects what the pill shows (Cancelled / Refunded instead of Unfulfilled for emptied orders). Same signatures: `create or replace`, nothing dropped. Copied byte-for-byte from 06, supersedes 16's `orders_list` and 15's `orders_list_facets`. Applied 2026-09-18 | 01, 02, 06, 15, 16 |
+| `39_klaviyo.sql` | the three Klaviyo tables (`KLAVIYO_T`), the Vault key functions and `insights_klaviyo_messages()` (`KLAVIYO_RPC`). No data. Applied 2026-09-25 | 01 |
 | `38_storefront_months.sql` | the `storefront_session_months` table (named in `STOREFRONT_T`, not `T`). Applied 2026-09-24 and backfilled (36 months) | 01 |
 | `37_collection_handles.sql` | drops 36's seven-argument `insights_collection_sales()` and recreates it with `p_handles`, so the Collection mix card reports the six ranges rather than all 176 collections. Copied byte-for-byte from 06 (its test asserts it); supersedes 36. Applied 2026-09-23 | 01, 02, 06, 27, 36 |
 | `36_collection_sales.sql` | adds `insights_collection_sales()`: per collection for a range, on `insights_product_sales` line rules, plus a null-id row for paid lines in no reported collection. Superseded by 37. Applied 2026-09-23 | 01, 02, 06, 27 |
 | `35_sales_overview.sql` | adds `insights_sales_overview()`, `insights_promotions()` and `insights_inventory_exceptions()` for Overview, Marketing & funnel, the stock card and the monthly report, copied byte-for-byte from 06 (its test asserts it). No table, no data. Applied 2026-09-22 | 01, 02, 06 |
 | `32_investigation_recommendations.sql` | adds `ticket_investigations.recommendations jsonb` — the shop's own product list, carried verbatim so the drafting stage reads what the tool said rather than a paraphrase of it. Idempotent, no data written. Applied 2026-09-20 | 04 |
-| `39_klaviyo.sql` | the three Klaviyo tables (`KLAVIYO_T`), the Vault key functions and `insights_klaviyo_messages()` (`KLAVIYO_RPC`). No data. Applied 2026-09-25 | 01 |
 | `23_agent_situations.sql` | adds `insights_agent_situations()`: tickets investigated in a range (latest run each) split by how the situation was picked — matched, tie settled by rules, near miss chosen by the model, chooser said none, not settled, no match, not recorded — from `ticket_investigations.exemplar_match`. Always one row. Copied byte-for-byte from 06. Applied 2026-09-15 | 04, 06 |
 | `24_rule_tones.sql` | adds `support_answers.tones text[] not null default '{}'` and `support_answers_tones_check` (the keys of `scripts/lib/reply-tones.mjs`), with the column comment — all copied from 05, which its test asserts. Every existing rule takes `{}`. Applied 2026-09-15 | 05 |
 | `29_order_promotion_need.sql` | widens `support_exemplars.requirement_needs` by one value, `order_promotion`, so a situation can declare "was the promotion applied to this order?". Copied from 05. No data. Applied 2026-09-17 | 05 |
@@ -890,7 +895,7 @@ Run `npm run ingest:once` or `npm start` from `agent/`. One poll runs every pass
 | 8a | **Casework** (LLM, existing cases only) — what the newest message changed. Claims only a ticket that ALREADY has a case file and whose newest inbound message has no reading, so a genuinely new case matches nothing. Writes `ticket_case_state` | `casework/case-runner.mjs` |
 | 9 | **Categorisation** (LLM) — 25/poll, oldest first, selects on the pending flag. **Skips the call on a `continuation`** and re-completes the existing labels, so the pass still clears the flag and raises `needs_investigation` | `pipeline/categorise-runner.mjs` |
 | 10 | **Order resolution** then **order context** — no LLM, no category needed. **Before the investigation, and that is load-bearing**: `getOrderContext` READS `tickets.resolved_context` rather than querying, so an investigation that ran first could not see an order however clearly the customer quoted it | `resolution/order-*-runner.mjs` |
-| 11 | **Investigation** (LLM + tools) — decompose (every investigated ticket — the structural gate was removed 2026-08-09), then 6 tool calls +2 per extra task, 4 turns, `ENABLED_SUBJECTS` only. Reads the thread **both directions** since 2026-09-21 and renders it as a labelled transcript; a one-message ticket still renders bare | `investigation/investigation-runner.mjs` |
+| 11 | **Investigation** (LLM + tools) — decompose (every investigated ticket — the structural gate was removed 2026-08-09), then 6 tool calls +2 per extra task, 4 turns, `ENABLED_SUBJECTS` only. Reads the thread **both directions** since 2026-09-21 and renders it as a labelled transcript; a one-message ticket still renders bare. A follow-up the Case Manager read gets its situation from `planSituation` and a « Dossier connu » section from `case-delta.mjs` (2026-09-25); stored `tool_calls` carry `source` (opening_move / planner / model) | `investigation/investigation-runner.mjs` |
 | 12 | **Forwarding** — `contact` kind + a configured address; needs `Mail.Send` | `routing/forward-runner.mjs` |
 | 13 | **Auto-close** — 28d idle, level 4 exempt; last so it sees this poll's timestamps | `lifecycle/auto-close.mjs` |
 | 14 | **Retention purge** — nulls expired `spam_audit` bodies; best-effort | `ingestion/spam-audit.mjs` |
@@ -917,10 +922,14 @@ From `agent/`. Every pass has a standalone runner, most with `:dry-run`.
 | `draft[:dry-run] [--show] [--ticket <id>] [--limit N] [--redraft]` | the drafting pass. Reads case files, writes `ticket_drafts`; **no Graph call**. Refuses unless the Brand voice article is `approved`. `--redraft` overwrites an existing draft — the queue is derived, so a ticket leaves it once one exists |
 | `cases:reconstruct [--ticket <id>] [--limit N] [--min-inbound N] [--json <path>]` | reads finished threads and reports where each case stands. **Writes no ticket, no case file and no draft** — it is built with a reader and no record module. Defaults to threads with 2+ customer messages, because a one-message thread has no trajectory to reconstruct. The output is a review artefact nothing downstream reads: correct it by hand and it becomes the labelled set a regression suite can rest on |
 | `cases:review -- --in <json> --out <name>-review.html` | the reconstruction JSON plus each thread, as a page to disagree with. No model call, no write. `*-review.html` is a gitignored name because these quote real customer mail in full |
+| `cases:label [-- --count] [--prefill] [--groups a,b,c] [--out <name>-review.html]` | the page the multi-turn labelled set is written on: every thread with a customer follow-up or another sender (`--groups` adds `replied_once`), cut after each message in both directions, one form per cut. `--count` reads and counts, no model call. `--prefill` runs `readCase` on inbound cuts as a suggestion, with no usage sink. Labels autosave in the browser and export as ids and choices only. Vocabulary in `eval/casework-vocabulary.mjs`, cutting in `eval/casework-cuts.mjs`. Read only |
+| `cases:import -- <casework-labels.json>` | folds a page export into `eval/casework-cases.mjs`, keyed on message id so batches accumulate. Drops suggestions nobody touched, values outside the vocabulary, and `answered` / `nextAction` on outbound cuts, and prints each. Ids, choices and the labeller's notes; no bodies |
 | `tickets:requeue[:dry-run] -- --ticket <id> [--unlink-customer] [--reopen]` | put named tickets back in the investigation queue after a repair; optionally clear `customer_id` (then run `customers:resolve`) and reopen an agent-set status |
 | `forward:once` / `forward:dry-run` | the forwarding pass |
 | `tickets:autoclose[:dry-run]` | the lifecycle pass |
 | `eval:closure [-- --repeat N] [--show]` | closure detection over every thread where a customer wrote after our reply — the whole population, 16 threads. The one eval whose corpus is real mail: ids and labels are checked in, bodies are read live. A false closure fails the command; a missed one does not |
+| `eval:casework [-- --repeat N] [--show]` | today's pipeline against the multi-turn labelled set, per inbound cut: the Case Manager's `effect` and `answered`, and the next action (`draftDecision` skips, closure through the real case file's gate where one existed at that message, else taken as open). Each cut starts from the labels, not the model's previous answer. Outcomes are agree / disagree / **inexpressible** (a label the pipeline has no value for) / unlabelled. Outbound cuts, case state and internal checks are counted, not scored. Writes nothing; no gate yet |
+| `eval:delta [-- --show]` | what follow-up investigations did with the « Dossier connu » section: calls per run with and without it, runs where the model re-fetched a fact the section said was established, runs where a fact to refresh was not looked at. Rebuilds each delta with the runner's own `caseDeltaFrom`. No model call, no write |
 | `eval:categorise` · `eval:retrieval` · `eval:diagnose` · `eval:exemplars` (`-- --authored-only` drops the translations, for a same-corpus A/B) · `review:sample` · `review:compare` | every measurement — indexed in **`agent/eval/README.md`**, which says what each is judged against (three labelled sets, two proxies) |
 
 ## Read Order

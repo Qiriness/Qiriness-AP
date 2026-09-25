@@ -53,6 +53,10 @@
     "tickets:requeue:dry-run": "node src/tools/run-requeue-tickets.mjs --dry-run",
     "cases:reconstruct": "node src/tools/run-reconstruct-cases.mjs",
     "cases:review": "node src/tools/render-reconstruction-review.mjs",
+    "cases:label": "node src/tools/build-casework-review.mjs",
+    "cases:import": "node eval/import-casework-labels.mjs",
+    "eval:casework": "node eval/run-casework-eval.mjs",
+    "eval:delta": "node eval/report-investigation-delta.mjs",
     "eval:closure": "node eval/run-closure-eval.mjs"
   }
 }

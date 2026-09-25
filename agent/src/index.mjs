@@ -21,7 +21,7 @@ import { createEmbeddingsClient } from '../../scripts/lib/embeddings/openai-embe
 import { createMessageEmbedder } from './ingestion/message-embedder.mjs';
 import { createCategoriser } from './pipeline/categorise.mjs';
 import { runCategorisation } from './pipeline/categorise-runner.mjs';
-import { createCaseworkStore, runCasework } from './casework/case-runner.mjs';
+import { createCaseworkStore, createSituationPlanner, runCasework } from './casework/case-runner.mjs';
 import { shouldRecategorise } from './casework/case-manager-rules.mjs';
 import { createCustomerLookup } from './retrieval/customer-lookup.mjs';
 import {
@@ -400,7 +400,12 @@ async function main() {
         // confirmed. It fires less often now that the resolver runs first —
         // which is the point: it is the fallback for a ticket with no order,
         // not a substitute for one.
-        lastOrderLookup: investigation.lastOrderLookup
+        lastOrderLookup: investigation.lastOrderLookup,
+        // Where a follow-up's situation comes from: carried from the case state,
+        // or matched on the new request when the Case Manager read one. Wired
+        // only while the casework pass is on — with it off there is no case state
+        // to plan from, and the opening message is matched as before.
+        planSituation: readCaseFor ? createSituationPlanner(supabase, { shopId, caseStateRecord, logger }) : null
       });
       if (investigated.considered > 0) {
         logger.info('investigate.pass', { shopId, ...investigated });

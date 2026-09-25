@@ -2,7 +2,7 @@ import { supabaseSelect } from '../../../scripts/lib/supabase-rest-client.mjs';
 import { COLUMNS, T } from '../../../scripts/lib/tables.mjs';
 
 import { readCase } from './case-manager.mjs';
-import { evidenceReuseFrom, pendingAfter, situationFor } from './case-manager-rules.mjs';
+import { evidenceReuseFrom, orderChangedSince, pendingAfter, situationFor, situationPlan } from './case-manager-rules.mjs';
 
 // The casework pass: what the newest message changed about a case already read.
 //
@@ -94,7 +94,10 @@ export async function runCasework({
       evidenceReuse: evidenceReuseFrom({
         toolCalls: investigation?.tool_calls ?? [],
         findings: findingsOf(investigation),
-        orderChanged: false,
+        orderChanged: orderChangedSince({
+          contextRef: investigation?.context_ref,
+          currentOrderName: ticket.shopify_order_number
+        }),
         runAt: investigation?.investigated_at ?? null
       }),
       caseSummary: reading.caseSummary,
@@ -158,7 +161,7 @@ export function createCaseworkStore(supabase, { caseStateRecord }) {
       };
       if (ticketId) filters.id = ticketId;
 
-      const tickets = await supabaseSelect(supabase, T.TICKETS, filters, COLUMNS.ticketForCategorisation, {
+      const tickets = await supabaseSelect(supabase, T.TICKETS, filters, COLUMNS.ticketForCasework, {
         order: 'first_message_at.asc'
       });
       if (tickets.length === 0) return [];
@@ -206,6 +209,48 @@ export function createCaseworkStore(supabase, { caseStateRecord }) {
         candidate.previous = await caseStateRecord.latest(candidate.ticket.id);
       }
       return typeof limit === 'number' ? due.slice(0, limit) : due;
+    }
+  };
+}
+
+/**
+ * The investigation's situation plan, built from the case state.
+ *
+ * WHAT MAKES `situationFor` MORE THAN A NOTE. Until 2026-09-25 the Case Manager
+ * decided which situation a follow-up was in and stored it, and the
+ * investigation never asked: `carriedSituation` was a parameter nothing passed,
+ * so every follow-up was re-matched on its opening message — including a second
+ * request, which is the one case that must not be.
+ *
+ * TWO READS PER FOLLOW-UP, AND NONE ON A FIRST MESSAGE'S TICKET beyond the case
+ * state lookup that finds nothing. A failure returns null, and the runner then
+ * matches the opening message exactly as it did before this existed.
+ */
+export function createSituationPlanner(supabase, { shopId, caseStateRecord, logger = null }) {
+  return async function planSituation({ ticket, triggerMessage }) {
+    try {
+      // The investigation's projection, because the same reading also becomes
+      // the run's `caseDelta` (`case-delta.mjs`) and that needs `new_facts`.
+      const reading = await caseStateRecord.latest(ticket.id, { columns: COLUMNS.caseStateForInvestigation });
+      if (!reading) return situationPlan({});
+      const investigations = await supabaseSelect(
+        supabase,
+        T.TICKET_INVESTIGATIONS,
+        { shop_id: shopId, ticket_id: ticket.id },
+        COLUMNS.investigationForCasework,
+        { order: 'investigated_at.desc', limit: 1 }
+      );
+      return {
+        ...situationPlan({
+          reading,
+          triggerMessageId: triggerMessage?.id ?? null,
+          previousMatch: investigations[0]?.exemplar_match ?? null
+        }),
+        reading
+      };
+    } catch (error) {
+      logger?.warn?.('investigate.situation_plan_failed', { ticketId: ticket?.id, error: error.message });
+      return null;
     }
   };
 }

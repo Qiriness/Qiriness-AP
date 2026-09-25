@@ -243,6 +243,13 @@ export const COLUMNS = {
   /** What the categoriser needs: the previous reading, to ratchet against. */
   ticketForCategorisation: 'id,subject,metadata,category,request_kind,level,happiness',
 
+  /**
+   * The categoriser's view plus the confirmed order number, for the casework
+   * pass: `orderChangedSince` compares it with the order the last case file ran
+   * against, which is what lets `evidence_reuse` say `invalidated`.
+   */
+  ticketForCasework: 'id,subject,metadata,category,request_kind,level,happiness,shopify_order_number',
+
   /** What the investigation needs to choose its tools and open a case file. */
   // `status` is here for one reason: a deliberate re-run over closed threads
   // (`investigate --include-closed`) must write the case file without moving the
@@ -433,17 +440,32 @@ export const COLUMNS = {
    * `missing` is what we asked for on a thread with no case state yet — the
    * first follow-up. `tool_calls` and `findings_trace` are what `evidence_reuse`
    * is built from, and both are already free of tool data. `exemplar_match`
-   * supplies the situation the first time one is carried forward.
+   * supplies the situation the first time one is carried forward, and the
+   * investigation's situation plan reads it too. `context_ref` is the order the
+   * run looked at: a pointer, not the bundle.
    *
    * No claims and no handoff: this pass does not read the dossier's
    * conclusions, only what it asked and what it looked at.
    */
   investigationForCasework:
-    'id,ticket_id,trigger_message_id,missing,tool_calls,findings_trace,exemplar_match,investigated_at',
+    'id,ticket_id,trigger_message_id,missing,tool_calls,findings_trace,exemplar_match,context_ref,investigated_at',
 
   caseStateForCasework:
     'id,ticket_id,trigger_message_id,case_relationship,situation_key,resolved_inputs,' +
     'pending_customer_inputs,commitments,evidence_reuse,read_at',
+
+  /**
+   * The reading a follow-up INVESTIGATION starts from (`case-delta.mjs`).
+   *
+   * The casework projection plus `new_facts`: the casework pass reads the
+   * messages themselves and has no use for its own prose about them, but the
+   * investigation is told what the message brought before it picks a tool.
+   * Still no `case_summary` — a summary of the thread is the thread, which the
+   * investigation already reads.
+   */
+  caseStateForInvestigation:
+    'id,ticket_id,trigger_message_id,case_relationship,situation_key,resolved_inputs,' +
+    'pending_customer_inputs,new_facts,commitments,evidence_reuse,read_at',
 
   /** The case file, latest run, as the detail panel reads it. */
   // `candidate_order` travels HERE and deliberately not in
@@ -579,6 +601,7 @@ export const COLUMNS = {
 export const PROJECTION_SOURCE = {
   ticketQueue: V.TICKET_QUEUE,
   ticketForCategorisation: T.TICKETS,
+  ticketForCasework: T.TICKETS,
   ticketForInvestigation: T.TICKETS,
   ticketForCustomerResolution: T.TICKETS,
   ticketForOrderResolution: T.TICKETS,
@@ -599,6 +622,7 @@ export const PROJECTION_SOURCE = {
   messageEnvelopesForDrafting: T.TICKET_MESSAGES,
   threadForDrafting: T.TICKET_MESSAGES,
   caseStateForCasework: T.TICKET_CASE_STATE,
+  caseStateForInvestigation: T.TICKET_CASE_STATE,
   investigationForCasework: T.TICKET_INVESTIGATIONS,
   investigationForDetail: T.TICKET_INVESTIGATIONS,
   investigationForDrafting: T.TICKET_INVESTIGATIONS,

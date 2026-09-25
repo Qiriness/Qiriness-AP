@@ -677,7 +677,9 @@ export function buildCaseFile({
     // across every investigation row and freeze a snapshot of a snapshot.
     contextRef,
     handoff: normaliseHandoff(answer.handoff),
-    toolCalls: ledger.map(({ id, tool, argsHash, outcome }) => ({ id, tool, argsHash, outcome })),
+    // `source` — opening_move / planner / model — is who asked for the call.
+    // A label, not tool data; absent on rows written before 2026-09-25.
+    toolCalls: ledger.map(({ id, tool, argsHash, outcome, source }) => ({ id, tool, argsHash, outcome, ...(source ? { source } : {}) })),
     // What answering this ticket required, and what the run actually got: one
     // entry per declared need, each `satisfied` / `attempted` / `unavailable` /
     // `not_attempted`. DIAGNOSTIC, NOT A VERDICT INPUT — it is read by people and

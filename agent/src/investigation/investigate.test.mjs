@@ -1283,3 +1283,26 @@ test('a loader that throws never costs the investigation', async () => {
   assert.equal(caseFile.verdict, 'answerable', 'the case file survived');
   assert.equal(caseFile.policy.answer_key, 'product_rule');
 });
+
+test('a follow-up case delta sits between the message and the gathered evidence; none, no section', async () => {
+  const registry = buildRegistry({
+    [TOOL_NAMES.LOOKUP_PRODUCT]: async () => OK_RESULT,
+    [TOOL_NAMES.SEARCH_KNOWLEDGE]: async () => ({ ...OK_RESULT, data: { chunks: [{ title: 'FAQ', text: 'x' }] } })
+  });
+  const openai = buildOpenAI([{ content: caseFileAnswer() }]);
+  const { investigate } = createInvestigator(openai, registry, { model: 'm' });
+
+  await investigate({
+    ...PRODUCT_TICKET,
+    caseDelta: { relationship: 'continuation', established: [], toRefresh: [], invalidated: [], newFacts: ['Photo envoyée.'], answered: ['photo'], stillWaiting: [], promised: [] }
+  });
+  const prompt = openai.sent[0].messages[0].content;
+  const at = (text) => prompt.indexOf(text);
+  assert.ok(at('Message du client') < at('Dossier connu'));
+  assert.ok(at('Dossier connu') < at('Éléments déjà recueillis'));
+  assert.match(prompt, /Photo envoyée\./);
+
+  const plain = buildOpenAI([{ content: caseFileAnswer() }]);
+  await createInvestigator(plain, registry, { model: 'm' }).investigate(PRODUCT_TICKET);
+  assert.doesNotMatch(plain.sent[0].messages[0].content, /Dossier connu/);
+});

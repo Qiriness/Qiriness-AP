@@ -23,6 +23,7 @@ import { liveAnswers, needsNamedBy, selectAnswer } from './answer-selection.mjs'
 import { normaliseTones } from '../../../scripts/lib/reply-tones.mjs';
 import { collectableNeeds, collectedFindings, proposeCollection } from './collection-planner.mjs';
 import { TOOL_NAMES, answerSetFor, escalationTriggers } from './investigation-rules.mjs';
+import { renderCaseDelta } from './case-delta.mjs';
 
 // The investigation agent: a categorised ticket in, a case file out.
 //
@@ -777,7 +778,10 @@ function createRun({ ticket, handlers, maxToolCalls, logger, onToolCall = null }
     let entry;
     try {
       const result = await handler(args);
-      entry = { id, tool, argsHash: stableArgs(args), ...result };
+      // `source` rides along to the stored row: « the model re-fetched a fact
+      // the case delta said was established » and « an opening move ran as it
+      // always does » are different findings, and only this tells them apart.
+      entry = { id, tool, argsHash: stableArgs(args), source, ...result };
     } catch (error) {
       // A failing tool must not lose the investigation: the other evidence still
       // stands, and the model can conclude that this part is unknown.
@@ -786,6 +790,7 @@ function createRun({ ticket, handlers, maxToolCalls, logger, onToolCall = null }
         id,
         tool,
         argsHash: stableArgs(args),
+        source,
         outcome: 'error',
         caveats: [],
         promptText: `L'outil ${tool} a échoué : cette information n'a pas pu être vérifiée.`,
@@ -889,6 +894,14 @@ function buildUserPrompt(ticket, plan, run, maxBodyChars) {
     'Message du client :',
     String(ticket.text || '').slice(0, maxBodyChars) || '(vide)'
   );
+
+  // AFTER THE MESSAGE, BEFORE ANY EVIDENCE: the model reads what the customer
+  // wrote, then what the case already holds, and only then what the opening
+  // moves gathered. Absent on every run that is not a read follow-up.
+  const known = renderCaseDelta(ticket.caseDelta);
+  if (known) {
+    lines.push('', known);
+  }
 
   // Stated only when the email really was split. On an ordinary one-question
   // ticket the list would just restate the message the model has above it.

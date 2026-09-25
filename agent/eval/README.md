@@ -18,6 +18,7 @@ hand-labelled set; two score against a *proxy* and can only ever show you shape.
 | `npm run eval:exemplar-needs` | `compare-exemplar-needs.mjs` | Does the corpus describe what tickets require? | Live rows, **independence** — excludes any row where the exemplar supplied the needs | nothing |
 | `npm run eval:knowledge-gaps` | `knowledge-gaps.mjs` | Which questions the library keeps failing | Live rows — a demand report, not a quality one | nothing |
 | `npm run eval:closure` | `run-closure-eval.mjs` | Does a customer's last message close their request? | **Labelled** — `closure-cases.mjs`, ids and booleans only; the bodies are read live | nothing |
+| `npm run eval:casework` | `run-casework-eval.mjs` | At each message in a thread: what did it change, and what should the pipeline do next? | **Labelled** — `casework-cases.mjs`, written on the `cases:label` page and folded in by `cases:import`; ids and choices only, bodies read live | nothing |
 | `npm run eval:audit-phrasings` | `audit-phrasings.mjs` | Phrasings filed under the wrong situation | Stored vectors against each other — **no API calls** | nothing |
 | `npm run cluster:tickets` _(repo root)_ | `scripts/cluster-ticket-messages.mjs` | What customers actually write about | Nothing — it is the source of demand | nothing |
 
