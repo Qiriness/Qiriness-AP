@@ -1,6 +1,6 @@
 # Case state — from "new email → draft" to "new event → case → next action"
 
-Plan, started 2026-09-26. **Stages 1 and 2 are built and applied; stage 3's tooling is built, and its labels are the team's to write.** It is the proposal
+Plan, started 2026-09-26. **Stages 1–4 are built and applied; stage 5 is next.** It is the proposal
 of 2026-09-26, questioned against the code and the database, with the answers the
 business gave the same day. When a stage ships, its rule moves to `DECISIONS.md`,
 its build to `CHANGELOG.md`, and its map to `APP_SCHEMA.md`, as usual.
@@ -258,6 +258,11 @@ stage reports against it.
 
 ## Stage 4: actors, events and `case_current`
 
+> **Built and applied 2026-09-26.** Fold agrees with 79 of 132 labelled next
+> actors (pipeline: 45). **Moved to stage 5:** status from `next_actor`,
+> `ticket_case_actions`, and re-reads on late events (reasons in DECISIONS.md
+> § *The case has a current state*).
+
 **The actor is stored per message, at ingestion** (`ticket_messages.actor`). It
 is deterministic from the address, using the Q5 mapping. It is stored rather than
 joined in a view for the same reason `sender_label` is: a label is a fact about
@@ -427,6 +432,21 @@ offered only when the actor map sends at least one label that has a directory
 row to it. A setting (`AGENT_OBLIGATION_OWNERS`) overrides this for a brand
 whose partner writes from no listed address. With none, a reply such as « nous
 vérifions auprès du transporteur » stays a support obligation.
+
+**D. When a holding reply is due (decided 2026-09-26).** `next_action.type`
+gains `holding_reply`: « we have your message, someone is on it and will come
+back to you ». It is due:
+1. the first time a case needs a person to act before a real answer;
+2. when the customer chases and our last message to them is **older than N
+   working days**;
+3. always on a level 3 case, whatever the timing.
+
+It is **not** due when we sent one within the last N working days and nothing
+has changed; the next action is then « no reply, a person acts first ».
+**N = 5 working days** for Qiriness. It becomes a parameter
+(`holding_reply_interval_days`, in `/agent-setup/parameters`) when the drafting
+that reads it is built; the parameter catalogue only holds what something
+reads. The labels already use the value (label schema 4).
 
 **C. The order of obligations is declared by the rule.** A rule may open
 obligations in sequence (D-36: `partner: delivery_state`, then

@@ -29,14 +29,23 @@ import { OWN_SIDE_LABELS } from './sender-directory.mjs';
 // So a rewrite happens only when the stored requester IS one of our own
 // addresses AND the thread has an external sender to replace it with. When in
 // doubt, nothing moves.
+//
+// SINCE 2026-09-26 INGESTION APPLIES THIS SAME RULE as each message lands
+// (`threadIdentity` in ticket-writer.mjs), so the cause is closed and
+// `requester:repair` is a backstop for rows written before it.
 
 /**
  * @param ticket    { requester_email_hash }
  * @param messages  the ticket's inbound messages, any order
  * @param isOwnSide (fromEmail) => boolean
+ * @param isCandidate (fromEmail) => boolean — who may BECOME the requester.
+ *   Defaults to « not our side ». Ingestion passes « not non-demand », so a
+ *   courier's tracking mail never becomes a thread's requester while a
+ *   retailer's enquiry still can.
  * @returns the message whose sender should be the requester, or null to leave alone
  */
-export function requesterFor({ ticket, messages = [], isOwnSide } = {}) {
+export function requesterFor({ ticket, messages = [], isOwnSide, isCandidate } = {}) {
+  const eligible = isCandidate ?? ((fromEmail) => !isOwnSide(fromEmail));
   const inbound = [...messages]
     .filter((message) => message?.from_email)
     .sort((a, b) => Date.parse(a.received_at ?? '') - Date.parse(b.received_at ?? ''));
@@ -46,7 +55,7 @@ export function requesterFor({ ticket, messages = [], isOwnSide } = {}) {
 
   // The first person on this thread who is not us. No such sender means a purely
   // internal thread, which has no customer to name and is left exactly as it is.
-  const external = inbound.find((message) => !isOwnSide(message.from_email));
+  const external = inbound.find((message) => !isOwnSide(message.from_email) && eligible(message.from_email));
   if (!external) {
     return null;
   }

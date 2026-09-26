@@ -537,6 +537,8 @@ export async function runRehearsal({
 const DRAFT_SKIP_NOTES = {
   internal_sender:
     'The address that opened this thread is in the sender directory as one of ours, so the agent investigates it but never writes a customer reply.',
+  not_customer_trigger:
+    'The message being answered was written by a colleague or an operations partner, not the customer, so no customer reply is drafted.',
   duplicate: 'This ticket is linked as a duplicate, and a duplicate is answered with silence.',
   level_4:
     'Level 4 is never drafted: the ticket reaches a person untouched, and an automated acknowledgement on the triggers that define level 4 is worse than none.',

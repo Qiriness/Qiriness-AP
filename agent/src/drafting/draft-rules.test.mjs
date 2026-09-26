@@ -371,3 +371,19 @@ test('answeredSince needs a trigger it can actually find', () => {
     false
   );
 });
+
+test('a colleague or partner writing on a customer thread gets no customer-voice draft (known gap #2)', () => {
+  // `sender_label` reads only the opener; the trigger's own actor is what decides.
+  const investigation = { verdict: 'answerable', established: [{}], trigger_message_id: 'm2' };
+  const conversation = (actor) => [
+    { id: 'm1', direction: 'inbound', actor: 'customer', received_at: '2026-09-01T09:00:00Z' },
+    { id: 'm2', direction: 'inbound', actor, received_at: '2026-09-02T09:00:00Z' }
+  ];
+  for (const actor of ['colleague', 'partner']) {
+    const decision = draftDecision({ investigation, ticket: {}, conversation: conversation(actor) });
+    assert.deepEqual([decision.draft, decision.reason], [false, 'not_customer_trigger'], actor);
+  }
+  assert.equal(draftDecision({ investigation, ticket: {}, conversation: conversation('customer') }).draft, true);
+  // A row stored before the actor column is drafted exactly as before.
+  assert.equal(draftDecision({ investigation, ticket: {}, conversation: conversation(null) }).draft, true);
+});

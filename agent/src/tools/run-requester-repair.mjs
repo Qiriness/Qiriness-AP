@@ -18,8 +18,10 @@ import { ownSidePredicate, requesterFor } from '../ingestion/requester-repair.mj
 // `orders.customer_email_hash`, so moving it moves which order a ticket can
 // resolve to.
 //
-// INGESTION IS UNCHANGED. This reconciles stored rows and nothing else — the
-// write-once rule stays exactly as it is.
+// A BACKSTOP SINCE 2026-09-26. Ingestion now applies the same rule as each
+// message lands (`threadIdentity` in ticket-writer.mjs); this reconciles rows
+// stored before that. The write-once rule still holds for every requester that
+// is not one of our own addresses.
 
 const dryRun = process.argv.includes('--dry-run');
 

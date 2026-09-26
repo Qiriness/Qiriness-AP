@@ -10,20 +10,25 @@ something the data states. Correct them once, and every later label follows.
 
 ---
 
-## 1. Five rules for every label
+## 1. Rules for every label
 
 1. **Label the moment, not the outcome.** Decide as if the thread stopped at
    this message.
 2. **The state fields are the full picture after this message.** « On attend du
    client », the obligations, « Le dossier est » and « La suite revient à » repeat
    everything still open, not just what changed.
-3. **The first time a problem needs a person, we still reply**: acknowledge and
-   say we're checking. That is how every « person » rule below is written.
-   → *Réponse complète*, plus an obligation for whoever checks.
-4. **A chase while that check is still open, with nothing new to say** →
+3. **Holding reply** (*Réponse d'attente*, label schema 4): « we have your
+   message, someone is on it and will come back to you », when nothing more can
+   be said yet. It is due:
+   - **the first time a case needs a person**: that is how every « person » rule
+     below is written, plus an obligation for whoever checks;
+   - **on a chase when our last message to them is more than 5 working days
+     old**;
+   - **always on a level 3 case.**
+4. **A chase within 5 working days of our last message, with nothing new** →
    *Aucune réponse : une personne doit agir d'abord* (as labelled on `1e4890dd`).
-   If you think the customer needs another holding message, pick *Réponse
-   complète* and write « holding » in the note.
+   *Réponse complète* is only for a reply that actually answers or asks
+   something.
 5. **Never clear an obligation on an assumption.** Only a message that shows the
    answer clears it.
 
@@ -89,7 +94,7 @@ catalogue; this is a known flaw in the article (DECISIONS).
   « La suite revient à » is **Personne**.
 - **Ask** = *Réponse complète* that asks the customer something. After our
   reply: **Le client**.
-- **Person** = *Réponse complète* acknowledging and announcing a check, and an
+- **Person** = *Réponse d'attente* acknowledging and announcing a check, and an
   obligation for its owner. After our reply: **that owner**.
 
 ### Order & delivery

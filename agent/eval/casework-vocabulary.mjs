@@ -43,12 +43,14 @@ export const OUTBOUND_EFFECTS = {
 };
 
 /**
- * The label schema a page exports under (`labelSchemaVersion`). 3 since
- * 2026-09-26: obligations with owners, nextActor, and five more customer
- * questions (postal_address, preferred_remedy, receipt_confirmation,
- * skin_type, skin_concern). The export envelope itself stays `version: 1`.
+ * The label schema a page exports under (`labelSchemaVersion`). The export
+ * envelope itself stays `version: 1`.
+ * - 3 (2026-09-26): obligations with owners, nextActor, and five more customer
+ *   questions (postal_address, preferred_remedy, receipt_confirmation,
+ *   skin_type, skin_concern).
+ * - 4 (2026-09-26): the `holding_reply` next action.
  */
-export const LABEL_SCHEMA_VERSION = 3;
+export const LABEL_SCHEMA_VERSION = 4;
 
 /**
  * How a question reads to a LABELLER, where it must say more than the agent's
@@ -147,7 +149,13 @@ export const NEXT_ACTIONS = {
   full_reply: 'Réponse complète',
   closing_reply: 'Courte réponse de clôture',
   no_reply: 'Aucune réponse',
-  no_reply_person_acts: "Aucune réponse : une personne doit agir d'abord"
+  no_reply_person_acts: "Aucune réponse : une personne doit agir d'abord",
+  // Not an answer: « nous avons bien reçu votre message, quelqu'un vérifie et
+  // revient vers vous ». Until schema 4 it had to be labelled as one of the two
+  // above, and 17 misses in the stage 3 baseline sat in that grey area. When
+  // one is due is a rule (codex_plans/Case_State_Plan.md, stage 5), not a
+  // labeller's mood.
+  holding_reply: "Réponse d'attente : quelqu'un s'en occupe et revient vers le client"
 };
 
 /**

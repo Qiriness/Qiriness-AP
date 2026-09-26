@@ -10,6 +10,8 @@ import { readCase } from '../src/casework/case-manager.mjs';
 import { readsAsClosure } from '../src/casework/closure.mjs';
 import { closureAllowed } from '../src/drafting/draft-rules.mjs';
 import { createSenderDirectoryStore, senderRole } from '../src/ingestion/sender-directory.mjs';
+import { actorOf } from '../src/casework/actors.mjs';
+import { foldCase } from '../src/casework/case-fold.mjs';
 
 import { CASEWORK_CASES } from './casework-cases.mjs';
 import { threadUpTo } from './casework-cuts.mjs';
@@ -35,6 +37,11 @@ import { PIPELINE_NEXT_ACTIONS, compare, expectedRelationship, pipelineNextActio
 // cut before it, so one wrong reading is one failure rather than a thread of
 // them. The investigation is not re-run: its tools answer as of today, and a
 // July order reads as months late now.
+//
+// `nextActorFold` IS STAGE 4's MEASUREMENT: the same question answered by the
+// fold (casework/case-fold.mjs) over the thread up to the cut, the case files
+// and readings that existed by then, and each message's actor. It is reported
+// beside `nextActor` (today's pipeline) so the two can be compared directly.
 //
 // NOTHING GATES YET. This is a baseline; the exit code is always 0 until a
 // threshold is agreed. IT WRITES NOTHING, and records no `llm_usage`, like
@@ -89,6 +96,26 @@ async function main() {
     'ticket_id,trigger_message_id,verdict,missing,handoff'
   );
 
+  // The Case Manager's readings, for the fold. Few exist; the fold works without.
+  const readings = await supabaseSelect(
+    supabase,
+    T.TICKET_CASE_STATE,
+    { shop_id: shopId, ticket_id: { operator: 'in', value: `(${ticketIds.join(',')})` } },
+    'ticket_id,trigger_message_id,pending_customer_inputs,commitments,contradictions'
+  );
+  const actorFor = (message) => message.actor ?? actorOf(message, senderDirectory, config.actorByLabel);
+  // The fold's answer at a cut: only what existed by then.
+  const foldAt = (conversation, index, ticketId) => {
+    const thread = threadUpTo(conversation, index);
+    const ids = new Set(thread.map((m) => m.id));
+    return foldCase({
+      messages: thread,
+      caseFiles: investigations.filter((run) => run.ticket_id === ticketId && ids.has(run.trigger_message_id)),
+      readings: readings.filter((row) => row.ticket_id === ticketId && ids.has(row.trigger_message_id)),
+      actorFor
+    }).next_actor;
+  };
+
   const scored = [];
   const counted = { outbound: 0, caseState: 0, obligations: 0, ownerless: 0, byOwner: {} };
   const missing = [];
@@ -124,11 +151,15 @@ async function main() {
         // triggered at or before this message.
         const caseFile = runs.filter((run) => run.index <= row.index).sort((a, b) => a.index - b.index).at(-1);
         const actor = pipelineNextActor({ direction: 'outbound', verdict: caseFile?.verdict ?? null });
+        const folded = foldAt(conversation, row.index, ticketId);
         scored.push({
           row,
           role: senderRole(conversation[row.index], senderDirectory),
-          outcome: { nextActor: compare(row.nextActor ?? null, actor, { expressible: actor !== null }) },
-          got: { nextActor: actor },
+          outcome: {
+            nextActor: compare(row.nextActor ?? null, actor, { expressible: actor !== null }),
+            nextActorFold: compare(row.nextActor ?? null, folded)
+          },
+          got: { nextActor: actor, nextActorFold: folded },
           unstable: [],
           carried
         });
@@ -176,14 +207,17 @@ async function main() {
       const customerAnswered = row.answered.filter((key) => Object.hasOwn(CUSTOMER_QUESTIONS, key));
       const answerable = carried.length > 0 || customerAnswered.length > 0;
 
+      const folded = foldAt(conversation, row.index, ticketId);
       const outcomes = reads.map((read) => ({
         effect: compare(expectedEffect ?? row.effect, read.effect, { expressible: expectedEffect !== null }),
         answered: answerable ? compare(customerAnswered, read.answered) : 'unlabelled',
         nextAction: compare(row.nextAction, read.nextAction, {
           expressible: PIPELINE_NEXT_ACTIONS.includes(row.nextAction)
         }),
-        nextActor: compare(row.nextActor ?? null, read.nextActor, { expressible: read.nextActor !== null })
+        nextActor: compare(row.nextActor ?? null, read.nextActor, { expressible: read.nextActor !== null }),
+        nextActorFold: compare(row.nextActor ?? null, folded)
       }));
+      for (const read of reads) read.nextActorFold = folded;
       // A cut counts as agreeing on a field only if every attempt agreed; the
       // disagreeing read is the one reported.
       const worst = outcomes.find((o) => Object.values(o).includes('disagree')) ?? outcomes[0];
@@ -227,12 +261,15 @@ function report({ scored, counted, missing }) {
   for (const s of scored) {
     const bad = Object.entries(s.outcome).filter(([, o]) => o === 'disagree' || o === 'inexpressible');
     if (!show && bad.length === 0) continue;
-    const parts = ['effect', 'answered', 'nextAction', 'nextActor']
+    const parts = ['effect', 'answered', 'nextAction', 'nextActor', 'nextActorFold']
       .filter((field) => field in s.outcome && (show || ['disagree', 'inexpressible'].includes(s.outcome[field])))
       .map((field) => {
-        const expected = field === 'answered' ? `[${s.row.answered.join(',')}]` : s.row[field];
+        // The fold answers the same label as the pipeline's `nextActor`.
+        const labelled = field === 'nextActorFold' ? 'nextActor' : field;
+        const expected = field === 'answered' ? `[${s.row.answered.join(',')}]` : s.row[labelled];
         const got = field === 'answered' ? `[${s.got.answered.join(',')}]` : s.got[field];
-        const mark = s.outcome[field] === 'agree' ? '·' : s.outcome[field] === 'inexpressible' ? '∅' : '✗';
+        // `unlabelled` is not a disagreement: the field was not scored at this cut.
+        const mark = { agree: '·', inexpressible: '∅', unlabelled: '–' }[s.outcome[field]] ?? '✗';
         const why = field === 'nextAction' && s.got.why ? ` (${s.got.why})` : '';
         return `${mark} ${field} attendu ${expected} / obtenu ${got}${why}`;
       });

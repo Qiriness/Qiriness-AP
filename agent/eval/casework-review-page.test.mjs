@@ -31,10 +31,11 @@ test('the data block carries the stage 3 vocabulary, and no mail can close the s
   assert.equal(data.threads[0].subject, 'Colis </script><b>x</b>');
 });
 
-test('the page carries label schema 3: the five added questions and the broader photo wording', () => {
+test('the page carries the current label schema: the five added questions, the broader photo wording, the holding reply', () => {
   const json = page.match(/<script type="application\/json" id="data">([\s\S]*?)<\/script>/)[1];
   const data = JSON.parse(json);
-  assert.equal(data.labelSchemaVersion, 3);
+  assert.equal(data.labelSchemaVersion, 4);
+  assert.ok('holding_reply' in data.vocab.nextActions);
   for (const key of ['postal_address', 'preferred_remedy', 'receipt_confirmation', 'skin_type', 'skin_concern']) {
     assert.ok(key in data.vocab.customerQuestions, key);
   }

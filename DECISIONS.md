@@ -51,7 +51,7 @@ It never falls **across** re-categorisations either (`ratchetLevel`). A thread i
 
 A limited initial delta read adds `$orderby=receivedDateTime desc`. Graph already enumerated this inbox newest-first without it — measured before the from-scratch re-ingestion, the first 400 messages came back in order (2026-09-13 back to 2026-07-10, no inversions) with and without the sort — but that is an observed default, and "re-run the latest 400" should not rest on one. **Unlimited reads are untouched**, because their `deltaLink` becomes the stored cursor, and a limited run never persists one (`delta-poller.mjs`).
 
-**Read newest first, written oldest first.** Every ingestion rule that fires on the message that *creates* a ticket — `sender_label`, the requester, the duplicate link — assumes that message opened the thread. The first limited run wrote in read order, so each thread's ticket was created from its latest message. Measured on that 400-message re-ingestion: **15** staff threads unlabelled, **7** tickets with a colleague as requester (**2** then linked to the wrong customer, which no pass can undo), **4** duplicates and **5** related links missed. So under `--limit` the poller now collects the newest N across pages and writes them in `receivedDateTime` order (`oldestFirst`). Buffering is bounded by the limit. **An unlimited full re-enumeration still writes page by page in Graph's order** and so still carries this risk; sorting it would mean holding the whole mailbox in memory, and it is left open rather than half-fixed.
+**Read newest first, written oldest first.** Every ingestion rule that fires on the message that *creates* a ticket — `sender_label`, the requester, the duplicate link — assumes that message opened the thread. The first limited run wrote in read order, so each thread's ticket was created from its latest message. Measured on that 400-message re-ingestion: **15** staff threads unlabelled, **7** tickets with a colleague as requester (**2** then linked to the wrong customer, which no pass can undo), **4** duplicates and **5** related links missed. So under `--limit` the poller now collects the newest N across pages and writes them in `receivedDateTime` order (`oldestFirst`). Buffering is bounded by the limit. **An unlimited full re-enumeration still writes page by page in Graph's order.** Sorting it would mean holding the whole mailbox in memory. **Since 2026-09-26 that order no longer decides the opener or the requester**: both are re-read from the whole thread as each message lands (§ *The opener and the requester come from the thread, not from arrival order*). The duplicate link still fires only on the creating message.
 
 ### Progress is saved page by page, and a rejected saved link starts the read over (2026-09-26)
 
@@ -122,6 +122,17 @@ Both columns are ours, not Shopify's, and both have a `'{}'` default for a first
 ### Direction: the Inbox is not only inbound
 
 The team's replies land back in it. A message whose sender is the support mailbox is recorded `outbound`. Measured on real mail, 123 of 348 messages; before this they were stored as customer mail and sat at the end of 43% of threads, exactly where the categoriser looks for how the customer currently feels.
+
+### The opener and the requester come from the thread, not from arrival order (2026-09-26)
+
+**The cause of 174 wrong requesters.** `sender_label` and the requester were both taken from whichever message CREATED the ticket, and the requester was written once. The first full read wrote in Graph's order, so many threads were created from a colleague's reply. That colleague became the requester for good, and the thread was labelled as opened by us. Every staff reply on those tickets then failed the reply-to-customer rule, because « the customer » was the colleague. `requester:repair` fixed the rows; this fixes the cause.
+
+**At ingestion, a message landing on an existing ticket now re-reads the thread** (`threadIdentity` in `ticket-writer.mjs`, one query per message):
+- **Opener** = the earliest message not sent by the support mailbox, by `received_at`. `sender_label` follows it. « The opening message decides » still holds; it is now decided on the real opening message.
+- **Requester**: `requesterFor`, the rule `requester:repair` was measured on (0 order matches lost). **Only a requester that is one of our own addresses moves**, to the first correspondent allowed to hold the role: `isCandidate`, meaning not non-demand, so a retailer can and a courier cannot. **A customer requester is never replaced**, so the write-once rule stands for everyone who is not us.
+- When either changes, **the thread's stored staff messages are re-filed** by the same direction rule (`directionFor`, shared with `staff-replies:backfill`), because a reply stored earlier in the poll was judged against the wrong customer.
+
+**Measured on the day:** in a regression test, messages fed in the wrong order end with the customer as requester, the customer as opener and the staff reply as ours. On the live database, the next poll corrected nothing (the repair had already run) and `requester:repair` finds 0 left out of 993. **Fails safe:** if the thread cannot be read, the ticket keeps what it had and the email is stored. `requester:repair` stays as the backstop.
 
 ### A colleague answering the customer from their own inbox is our reply (2026-09-26)
 
@@ -1592,6 +1603,22 @@ Stage 3 of `codex_plans/Case_State_Plan.md`, built **before** the case state it 
 - **The actor of a message is shown, never labelled**, for the reason `cutsFor` already gives for the role. It is derived by `casework/actors.mjs` from the sender directory and a **configurable map** (`AGENT_ACTOR_BY_LABEL`), because which label counts as which actor is a per-business choice: one company's 3PL is part of the team, another's is a supplier.
 - **What today's pipeline can say about the next actor** (`pipelineNextActor`): a draft after an inbound message means `support`; a `needs_customer_input` case file after our message means `customer`. Everything else is `inexpressible`, which is the size of stages 4 and 5, not a model failing.
 
+**The baseline, 2026-09-26: 132 labels on 40 threads.** The set is the v3 AI first pass, reviewed by the business owner, and it **replaced the 25 September human batch** (47 of whose 52 labels it had changed; the old batch is in git). 53 notes still carry `[REVIEW:…]` flags, and `annotationMetadata` says human validation is pending. A later export replaces labels message by message.
+
+| Field | Agree | Disagree | Cannot say | Not scored |
+|---|---|---|---|---|
+| `nextActor` (both directions) | 45 | 16 | **71** | 0 |
+| `effect` | 31 | 15 | 19 | 0 |
+| `nextAction` | 32 | 16 | 17 | 0 |
+| `answered` | 4 | 21 | 0 | 40 |
+
+What it says:
+- **More than half of « who acts next » is inexpressible today** (71 of 132): `nobody` 31, the customer after our message 15, support 13, an operations partner 10. That is stage 4 and 5's work, measured.
+- Where the pipeline can say it, it agrees 45 times in 61. **The disagreements are the pipeline drafting when it should not**: 9 finished cases (`nobody` → support), 4 colleague turns, 3 partner turns.
+- **`effect`: a second request is missed** (`new_issue` read as `new_information` 7 times), and `closes_case` (13) and `internal_note` (5) have no pipeline value.
+- **`nextAction`: a person must act first 17 times and the pipeline drafts anyway**, and a thanks after we had closed gets a closing reply 6 times (known gap 5).
+- **`answered`, 4 of 25**: mostly `receipt_confirmation` (7), a question added today that nothing has asked for yet.
+
 **The corpus to label is ten times what it was:** 356 threads and 1,072 cuts, after the history import, Sent Items and the staff fix. `cases:label -- --limit N` builds one sitting. Already-labelled threads come first, then the groups take turns. The first page (40 threads): 29 follow-ups and 11 with another sender, but **only 2 partner messages**, because partner threads are rare. A second sitting with `--groups other_sender` targets them.
 
 ### Five more questions the agent may ask the customer (2026-09-26)
@@ -1611,6 +1638,36 @@ Each has a label and a sentence in `case-file.mjs`, a noun in `ASK_TERMS` for th
 **`photo` keeps its key and its question to the customer.** Only the labelling page words it more broadly, « la photo demandée (produit ou zone concernée) », so a photo of the eye area asked for in an advice thread is labelled with it too. The customer-facing sentence is unchanged, so no reply changes.
 
 Exports now carry `labelSchemaVersion` (3). The importer refuses an export from a newer schema instead of silently dropping values it does not know.
+
+### The case has a current state, folded in code (2026-09-26)
+
+Stage 4 of `codex_plans/Case_State_Plan.md`. `case_current` is one row per ticket, overwritten in place, folded by a pure function (`case-fold.mjs`) from the messages, the Case Manager's readings and the latest case file. `ticket_case_state` stays the per-message trajectory. The fold sorts by `received_at` itself, so arrival order no longer matters to it.
+
+**The actor is stored per message** (`ticket_messages.actor`, migration 41), at arrival, like `sender_label`: relabelling the directory never rewrites history. 2,304 stored messages backfilled: customer 1,090, support 727, colleague 428, operations partner 59. It moves with a re-filed direction.
+
+**Known gap #2 closed:** drafting now skips a case file whose trigger message was written by a colleague or an operations partner (`not_customer_trigger`). `sender_label` only ever read the opener.
+
+**Measured against the 132 labels** (`npm run eval:fold`, no model call): the fold names the next actor at every cut and agrees on **79**. Today's pipeline agrees on 45 and cannot answer 71. One rule was tried and dropped on the numbers: « the case file says a person must act → support » scored 74 with it and 79 without, because case files are mostly written at the end of a thread and are stale by the time our reply settles them. **The 53 misses are stage 5's work:**
+- **33 after our own message**, where the fold cannot tell whether we asked, promised a check or finished, because the Case Manager does not read our mail;
+- **9 thank-yous after a close**: the Case Manager has no closing reading;
+- **7 where a colleague's or partner's check is still owed**: that needs obligations.
+
+**Moved to stage 5, deliberately:**
+- **Status from `next_actor`.** Without obligations the fold cannot tell « waiting on Deret » from « waiting on us », and switching the live queue on that would be a regression.
+- **The `ticket_case_actions` table**, since nothing writes to it before stage 5's « obligation done » action.
+- **Re-reading on late events**, since the Case Manager reads so few messages (4 readings) that there is almost nothing to re-read.
+
+`ticket_events` was not built as a SQL view: the fold builds the event order in code, and a view waits for a reader that needs one.
+
+**Live:** all 993 tickets folded, and a second run found 0 stale. The pass runs in the worker after the investigation (`fold` stage, 200 a poll), and `fold:once` runs it alone. **Caught on the first live run:** `supabaseSelectAll` pages on `id`, which `case_current` does not have. The fake store could not see it; the live run did.
+
+### A holding reply is its own next action, due by rule (2026-09-26)
+
+« Nous avons bien reçu votre message, quelqu'un vérifie et revient vers vous » is neither a real answer nor silence. Until label schema 4 a labeller had to force it into *full reply* or *no reply, a person acts first*. **17 of the stage 3 baseline's next-action misses sit in that grey area** (a person must act first, and the pipeline drafts anyway); the eval could not tell « a holding message is due » from « stay quiet ».
+
+**Decided with the business:** `holding_reply` is a next action. It is due the first time a case needs a person, on a chase when our last message is **more than 5 working days** old, and always on a level 3 case. It is not due twice within those 5 days unless something changed. **5 is Qiriness's value, not a constant**: it becomes the parameter `holding_reply_interval_days` when the drafting that reads it is built (stage 5). The catalogue only holds parameters something reads.
+
+The 132 existing labels were **not** re-labelled automatically. The 17 *no reply, a person acts first* and the full replies whose note says « holding » are the candidates for review.
 
 ### The Case Manager records what a message changed; it decides nothing else (2026-09-22)
 

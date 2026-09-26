@@ -156,7 +156,7 @@ export const MISSING_FIELDS = {
   // A new or corrected delivery address: an address change before dispatch
   // (O-12), a reshipment to a different place (D-06).
   postal_address: {
-    label: 'l’adresse de livraison complète',
+    label: 'l’adresse postale complète',
     ask:
       'Pourriez-vous nous indiquer l’adresse de livraison complète à utiliser ' +
       '(nom, numéro et rue, code postal, ville et pays) ?'
@@ -164,7 +164,7 @@ export const MISSING_FIELDS = {
   // The customer's choice between remedies WE offered — never a choice we pick
   // for them. D-36 (« remboursez-moi ou renvoyez-la ») and O-12 once shipped.
   preferred_remedy: {
-    label: 'la solution que vous préférez',
+    label: 'la solution souhaitée',
     ask: 'Quelle solution préférez-vous parmi celles que nous vous proposons ?'
   },
   // The customer saying the parcel is actually in their hands. A carrier's

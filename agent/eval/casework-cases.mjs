@@ -3,7 +3,7 @@
 // review page and re-import rather than editing this file by hand.
 //
 // IDS AND CHOICES, NEVER BODIES: the runner reads the mail live. Labelled by the
-// team on the `cases:label` page; last import from an export of 2026-09-25T14:36:00.519Z.
+// team on the `cases:label` page; last import from an export of 2026-09-26T12:29:13Z (v3-completed), plus one relabel to holding_reply on 2026-09-26.
 // Vocabulary: `casework-vocabulary.mjs`. Scored by `npm run eval:casework`.
 
 export const CASEWORK_CASES = [
@@ -11,36 +11,45 @@ export const CASEWORK_CASES = [
     "ticketId": "8236165a-4720-4ba7-a39f-e46dd554f214",
     "messageId": "41a14285-0238-4d14-bd09-69b569917c92",
     "direction": "outbound",
-    "effect": "holding",
+    "effect": "answers",
     "answered": [],
     "waitingCustomer": [],
     "obligations": [
       {
-        "owner": null,
+        "owner": "partner",
         "need": "delivery_state"
       },
       {
-        "owner": null,
-        "need": "order_state"
+        "owner": "support",
+        "need": "dispatch_state"
       }
     ],
     "caseState": "open",
-    "nextActor": null,
+    "nextActor": "partner",
     "nextAction": null,
-    "note": ""
+    "note": "[REVIEW:R11] Reshipment is promised, not confirmed as performed. No prior Deret verification is visible; under the confirmed rule logistics must verify before support initiates the remedy."
   },
   {
     "ticketId": "8236165a-4720-4ba7-a39f-e46dd554f214",
     "messageId": "2fabd1bd-de04-4563-8c3e-447f3a75fa8a",
     "direction": "inbound",
-    "effect": "continuation",
+    "effect": "chase",
     "answered": [],
     "waitingCustomer": [],
-    "obligations": [],
+    "obligations": [
+      {
+        "owner": "partner",
+        "need": "delivery_state"
+      },
+      {
+        "owner": "support",
+        "need": "dispatch_state"
+      }
+    ],
     "caseState": "open",
-    "nextActor": null,
-    "nextAction": null,
-    "note": ""
+    "nextActor": "partner",
+    "nextAction": "no_reply_person_acts",
+    "note": "[REVIEW:R11] Only chases the promised reshipment. Carry forward the unconfirmed parcel check and reshipment; another empty holding message is not selected."
   },
   {
     "ticketId": "8236165a-4720-4ba7-a39f-e46dd554f214",
@@ -51,53 +60,84 @@ export const CASEWORK_CASES = [
     "waitingCustomer": [],
     "obligations": [
       {
-        "owner": null,
-        "need": "order_state"
+        "owner": "partner",
+        "need": "delivery_state"
+      },
+      {
+        "owner": "support",
+        "need": "dispatch_state"
       }
     ],
-    "caseState": null,
-    "nextActor": null,
-    "nextAction": null,
-    "note": ""
+    "caseState": "open",
+    "nextActor": "partner",
+    "nextAction": "no_reply",
+    "note": "The colleague asks Deret about the return. This is not a new customer issue; the warehouse has not yet answered."
   },
   {
     "ticketId": "8236165a-4720-4ba7-a39f-e46dd554f214",
     "messageId": "057e4844-9d1b-40ac-89f0-5efe412421d0",
     "direction": "inbound",
-    "effect": "new_information",
-    "answered": [],
+    "effect": "internal_note",
+    "answered": [
+      "dispatch_state"
+    ],
     "waitingCustomer": [],
-    "obligations": [],
+    "obligations": [
+      {
+        "owner": "support",
+        "need": "other_fact"
+      }
+    ],
     "caseState": "open",
-    "nextActor": null,
+    "nextActor": "support",
     "nextAction": "full_reply",
-    "note": "Numero de suivi donner mais pas evident (il est cache dans le lien code=XXXXX)"
+    "note": "[REVIEW:R01] The colleague clarifies return plus reshipment and supplies tracking, explicitly asking support to tell the customer. full_reply targets the customer, NOT the colleague."
   },
   {
     "ticketId": "8236165a-4720-4ba7-a39f-e46dd554f214",
     "messageId": "3dcc6a7c-8399-4559-8858-58a98cbcc614",
     "direction": "outbound",
-    "effect": null,
+    "effect": "internal_request",
     "answered": [],
     "waitingCustomer": [],
-    "obligations": [],
-    "caseState": null,
-    "nextActor": null,
+    "obligations": [
+      {
+        "owner": "partner",
+        "need": "delivery_state"
+      },
+      {
+        "owner": "support",
+        "need": "other_fact"
+      }
+    ],
+    "caseState": "open",
+    "nextActor": "partner",
     "nextAction": null,
-    "note": "Redemande du numero de suivi, alors qu'il etait deja donner par le lien."
+    "note": "Support asks Deret to reconcile the two tracking references. The earlier customer update remains owed; the new parcel check is the blocking dependency. This outgoing message is internal, not an answer to the customer."
   },
   {
     "ticketId": "8236165a-4720-4ba7-a39f-e46dd554f214",
     "messageId": "243fc2e5-df42-4a2f-8ff5-1428a1eb5344",
     "direction": "inbound",
-    "effect": "new_information",
-    "answered": [],
+    "effect": "internal_note",
+    "answered": [
+      "dispatch_state"
+    ],
     "waitingCustomer": [],
-    "obligations": [],
+    "obligations": [
+      {
+        "owner": "partner",
+        "need": "delivery_state"
+      },
+      {
+        "owner": "support",
+        "need": "other_fact"
+      }
+    ],
     "caseState": "open",
-    "nextActor": null,
+    "nextActor": "support",
     "nextAction": "full_reply",
-    "note": "Le numero de suivi est donné clairement, besoin de chequer si il y a un numero de commande rataché pour comfirmé. Si le numero de commande match avec notre client, il est donc correct (il est possible qu'il sois rataché au meme numéro de commande."
+    "note": "[REVIEW:R01] A tracking reference is confirmed but a carrier claim has only been opened, not resolved. Proposed next step: update the still-unanswered customer while retaining the partner investigation."
   },
   {
     "ticketId": "0866b5d1-76d7-4cd1-9a8e-8495e9f8be20",
@@ -108,14 +148,14 @@ export const CASEWORK_CASES = [
     "waitingCustomer": [],
     "obligations": [
       {
-        "owner": null,
-        "need": "order_state"
+        "owner": "partner",
+        "need": "dispatch_state"
       }
     ],
     "caseState": "open",
-    "nextActor": null,
+    "nextActor": "partner",
     "nextAction": null,
-    "note": "Si le colis n'est pas expedié, la personne doit changer l'adresse. Le premier message est donc time-sensitive (il faut agir plus vite que d'autre)"
+    "note": "The address-change request has explicitly been passed to logistics; their feasibility/implementation confirmation is outstanding."
   },
   {
     "ticketId": "0866b5d1-76d7-4cd1-9a8e-8495e9f8be20",
@@ -124,24 +164,29 @@ export const CASEWORK_CASES = [
     "effect": "new_information",
     "answered": [],
     "waitingCustomer": [],
-    "obligations": [],
-    "caseState": null,
-    "nextActor": null,
-    "nextAction": null,
-    "note": "le client propose que c'est encore possible, c'est le client et donc pas une information fiable. C'est plus un constat. En realité la commande peut-etre deja expedié"
+    "obligations": [
+      {
+        "owner": "partner",
+        "need": "dispatch_state"
+      }
+    ],
+    "caseState": "open",
+    "nextActor": "partner",
+    "nextAction": "no_reply_person_acts",
+    "note": "Customer says the order is not yet shipped. This is a customer assertion, not warehouse confirmation; the existing logistics check remains open."
   },
   {
     "ticketId": "0866b5d1-76d7-4cd1-9a8e-8495e9f8be20",
     "messageId": "2304b9d1-f12b-4a04-b0dc-ab93124b66ac",
     "direction": "outbound",
-    "effect": "answers",
+    "effect": "closes_case",
     "answered": [],
     "waitingCustomer": [],
     "obligations": [],
     "caseState": "closed_by_us",
-    "nextActor": null,
+    "nextActor": "nobody",
     "nextAction": null,
-    "note": ""
+    "note": "Support confirms the address has been changed. That visible confirmation clears the action; no customer confirmation is requested."
   },
   {
     "ticketId": "ea701240-c0bb-4dfa-95a8-2fff71ef6662",
@@ -154,9 +199,9 @@ export const CASEWORK_CASES = [
     "waitingCustomer": [],
     "obligations": [],
     "caseState": "open",
-    "nextActor": null,
+    "nextActor": "support",
     "nextAction": "full_reply",
-    "note": "On a toute les informations pour repondre au client. C'est un bonne exampe dans deuxieme email qui peut etre repondue sans avoir un humain qui agit."
+    "note": "The order number answers the request visible in the quoted acknowledgement. Do not ask again; use the order lookup before answering. Fulfilment status is not included in this export."
   },
   {
     "ticketId": "5836ab80-4474-4ee6-bc3a-4b7f6fe1e486",
@@ -165,11 +210,16 @@ export const CASEWORK_CASES = [
     "effect": "answers",
     "answered": [],
     "waitingCustomer": [],
-    "obligations": [],
-    "caseState": "closed_by_us",
-    "nextActor": null,
+    "obligations": [
+      {
+        "owner": "support",
+        "need": "order_promotion"
+      }
+    ],
+    "caseState": "open",
+    "nextActor": "support",
     "nextAction": null,
-    "note": ""
+    "note": "[REVIEW:R07] The historical reply discusses a new basket although the earlier quoted email already confirms a paid order. It attempts an answer but does not safely resolve the existing-order gift request. Keep support verification open."
   },
   {
     "ticketId": "5836ab80-4474-4ee6-bc3a-4b7f6fe1e486",
@@ -178,80 +228,99 @@ export const CASEWORK_CASES = [
     "effect": "new_information",
     "answered": [],
     "waitingCustomer": [],
-    "obligations": [],
+    "obligations": [
+      {
+        "owner": "support",
+        "need": "order_promotion"
+      },
+      {
+        "owner": "support",
+        "need": "product_identity"
+      }
+    ],
     "caseState": "open",
-    "nextActor": null,
-    "nextAction": null,
-    "note": "la reponse ne reponder pas a la question, le client est revenu vers nous. l'élement pour repondre se trouve en pj"
+    "nextActor": "support",
+    "nextAction": "full_reply",
+    "note": "[REVIEW:R05] Customer corrects the order/basket misunderstanding and says a different mask is concerned. The screenshot is referenced but its pixels are not included; do not invent the gift identity. The existing order number is already in the earlier confirmation."
   },
   {
     "ticketId": "1e4890dd-e5cf-47d8-887b-bb5b2a2e93d1",
     "messageId": "b8275fa6-ca31-423c-8e93-4ba24ab301c9",
     "direction": "inbound",
     "effect": "new_information",
-    "answered": [],
-    "waitingCustomer": [
-      "shopify_order_number"
+    "answered": [
+      "payment_state"
     ],
+    "waitingCustomer": [],
     "obligations": [],
     "caseState": "open",
-    "nextActor": null,
-    "nextAction": "no_reply_person_acts",
-    "note": "le client relance"
+    "nextActor": "support",
+    "nextAction": "full_reply",
+    "note": "Customer adds that payment was debited while the order still shows unprocessed. Treat this as a report to check, not a verified payment result. No need to request the order number already in the subject."
   },
   {
     "ticketId": "1e4890dd-e5cf-47d8-887b-bb5b2a2e93d1",
     "messageId": "fd7ddb66-50cd-4706-b201-eb5b353aaa8e",
     "direction": "inbound",
-    "effect": "continuation",
+    "effect": "chase",
     "answered": [],
-    "waitingCustomer": [
-      "shopify_order_number"
+    "waitingCustomer": [],
+    "obligations": [
+      {
+        "owner": "support",
+        "need": "order_state"
+      }
     ],
-    "obligations": [],
     "caseState": "open",
-    "nextActor": null,
-    "nextAction": null,
-    "note": "le client relance pour la deuxieme fois, il est inquiet"
+    "nextActor": "support",
+    "nextAction": "no_reply_person_acts",
+    "note": "[REVIEW:R03] Pure chase, using the cheat-sheet decision for this exact example. Support must establish current processing status. The date-only export does not justify asserting that the 3-working-day dispatch threshold is exceeded."
   },
   {
     "ticketId": "1e4890dd-e5cf-47d8-887b-bb5b2a2e93d1",
     "messageId": "e98ad20f-dba1-4d2c-9508-ef9db76c3a0b",
     "direction": "outbound",
-    "effect": "answers",
+    "effect": "holding",
     "answered": [],
     "waitingCustomer": [],
-    "obligations": [],
-    "caseState": "closed_by_us",
-    "nextActor": null,
+    "obligations": [
+      {
+        "owner": "partner",
+        "need": "dispatch_state"
+      }
+    ],
+    "caseState": "open",
+    "nextActor": "partner",
     "nextAction": null,
-    "note": ""
+    "note": "The order is described as processing after an inventory delay; dispatch and tracking are still in the future. Logistics must complete/confirm the pending dispatch."
   },
   {
     "ticketId": "1e4890dd-e5cf-47d8-887b-bb5b2a2e93d1",
     "messageId": "95202d57-d81d-40d3-93e8-5981018abad2",
     "direction": "outbound",
-    "effect": null,
+    "effect": "closes_case",
     "answered": [],
     "waitingCustomer": [],
     "obligations": [],
     "caseState": "closed_by_us",
-    "nextActor": null,
+    "nextActor": "nobody",
     "nextAction": null,
-    "note": ""
+    "note": "Support reports a completed delivery after checking. Record that historical statement; do not infer access to a live delivery feed today."
   },
   {
     "ticketId": "1e4890dd-e5cf-47d8-887b-bb5b2a2e93d1",
     "messageId": "ad30df1c-593f-49a3-a575-69e5d3bc2d78",
     "direction": "inbound",
-    "effect": "continuation",
-    "answered": [],
+    "effect": "closes_case",
+    "answered": [
+      "receipt_confirmation"
+    ],
     "waitingCustomer": [],
     "obligations": [],
-    "caseState": null,
-    "nextActor": null,
+    "caseState": "closed_by_customer",
+    "nextActor": "nobody",
     "nextAction": "no_reply",
-    "note": ""
+    "note": "Customer confirms delivery after support already closed the request. No further response or investigation is needed."
   },
   {
     "ticketId": "b781cfba-43b7-4cb3-a2a4-5f272fc3bfd7",
@@ -262,35 +331,44 @@ export const CASEWORK_CASES = [
     "waitingCustomer": [],
     "obligations": [],
     "caseState": "closed_by_us",
-    "nextActor": null,
+    "nextActor": "nobody",
     "nextAction": null,
-    "note": ""
+    "note": "Support supplies the delivery outcome and asks nothing further."
   },
   {
     "ticketId": "b781cfba-43b7-4cb3-a2a4-5f272fc3bfd7",
     "messageId": "a20277d0-cbcd-4685-a61d-4c8a75345019",
     "direction": "inbound",
     "effect": "closes_case",
-    "answered": [],
+    "answered": [
+      "receipt_confirmation"
+    ],
     "waitingCustomer": [],
     "obligations": [],
-    "caseState": null,
-    "nextActor": null,
+    "caseState": "closed_by_customer",
+    "nextActor": "nobody",
     "nextAction": "no_reply",
-    "note": ""
+    "note": "Receipt is confirmed after our final answer: no second closing reply, as specified for this thread in the guide."
   },
   {
     "ticketId": "ec92f914-994f-4286-8fa9-88687b2d3ce3",
     "messageId": "47703e96-9a52-4635-81ba-a8f5551bcc80",
     "direction": "inbound",
-    "effect": "continuation",
-    "answered": [],
+    "effect": "new_information",
+    "answered": [
+      "delivery_state"
+    ],
     "waitingCustomer": [],
-    "obligations": [],
-    "caseState": null,
-    "nextActor": null,
-    "nextAction": null,
-    "note": "le client relance"
+    "obligations": [
+      {
+        "owner": "partner",
+        "need": "delivery_state"
+      }
+    ],
+    "caseState": "open",
+    "nextActor": "support",
+    "nextAction": "holding_reply",
+    "note": "[REVIEW:R08] Customer supplies the carrier reminder and pickup deadline. Proposed holding reply plus Deret check; the order number is already in the original quoted confirmation. No pickup-extension policy is supplied. [holding_reply: relabelled 2026-09-26 once the value existed; the note already proposed a holding reply]"
   },
   {
     "ticketId": "ec92f914-994f-4286-8fa9-88687b2d3ce3",
@@ -299,11 +377,16 @@ export const CASEWORK_CASES = [
     "effect": "answers",
     "answered": [],
     "waitingCustomer": [],
-    "obligations": [],
-    "caseState": "closed_by_us",
-    "nextActor": null,
+    "obligations": [
+      {
+        "owner": "partner",
+        "need": "delivery_state"
+      }
+    ],
+    "caseState": "open",
+    "nextActor": "support",
     "nextAction": null,
-    "note": ""
+    "note": "[REVIEW:R08] The historical response tells the customer to request an extension, but it is dated after both the pickup expiry and requested collection date. This is not evidence the parcel was recovered or returned; support must obtain the current outcome through Deret."
   },
   {
     "ticketId": "2aa6604e-a6d1-4958-bb1a-54eddf068087",
@@ -311,51 +394,61 @@ export const CASEWORK_CASES = [
     "direction": "outbound",
     "effect": "asks_customer",
     "answered": [],
-    "waitingCustomer": [],
+    "waitingCustomer": [
+      "preferred_remedy"
+    ],
     "obligations": [],
     "caseState": "open",
-    "nextActor": null,
+    "nextActor": "customer",
     "nextAction": null,
-    "note": ""
+    "note": "Support offers alternatives and explicitly asks the customer to choose. Do not treat an offered refund or replacement as already executed."
   },
   {
     "ticketId": "2aa6604e-a6d1-4958-bb1a-54eddf068087",
     "messageId": "ecf670ce-3a4b-4f48-b9bc-a75a3d9c4778",
     "direction": "inbound",
-    "effect": "continuation",
-    "answered": [],
+    "effect": "new_information",
+    "answered": [
+      "preferred_remedy",
+      "postal_address"
+    ],
     "waitingCustomer": [],
-    "obligations": [],
+    "obligations": [
+      {
+        "owner": "support",
+        "need": "dispatch_state"
+      }
+    ],
     "caseState": "open",
-    "nextActor": null,
-    "nextAction": "full_reply",
-    "note": ""
+    "nextActor": "support",
+    "nextAction": "no_reply_person_acts",
+    "note": "Customer selects the replacement and supplies a shipping address. Support must initiate it; sending is not yet confirmed. Do not invent an order-number question that the team never asked."
   },
   {
     "ticketId": "2aa6604e-a6d1-4958-bb1a-54eddf068087",
     "messageId": "08f42528-7816-4c83-939f-ff256a73e7ae",
     "direction": "outbound",
-    "effect": "answers",
+    "effect": "closes_case",
     "answered": [],
     "waitingCustomer": [],
     "obligations": [],
     "caseState": "closed_by_us",
-    "nextActor": null,
+    "nextActor": "nobody",
     "nextAction": null,
-    "note": ""
+    "note": "Support explicitly confirms dispatch of the chosen replacement and gives tracking. The agreed sending action is complete; no routine delivery confirmation was requested."
   },
   {
     "ticketId": "1d38908b-9a9f-4ea7-b36a-c19870c5cef6",
     "messageId": "c9658bbe-e75d-401c-aea2-8528f3c424bb",
     "direction": "outbound",
-    "effect": "answers",
+    "effect": "closes_case",
     "answered": [],
     "waitingCustomer": [],
     "obligations": [],
     "caseState": "closed_by_us",
-    "nextActor": null,
+    "nextActor": "nobody",
     "nextAction": null,
-    "note": ""
+    "note": "Support answers the dispatch-status enquiry with tracking. Availability for further questions is not a specific outstanding investigation or promise to monitor delivery."
   },
   {
     "ticketId": "1d38908b-9a9f-4ea7-b36a-c19870c5cef6",
@@ -365,10 +458,10 @@ export const CASEWORK_CASES = [
     "answered": [],
     "waitingCustomer": [],
     "obligations": [],
-    "caseState": null,
-    "nextActor": null,
+    "caseState": "closed_by_customer",
+    "nextActor": "nobody",
     "nextAction": "no_reply",
-    "note": ""
+    "note": "Customer thanks support and confirms receiving carrier INFORMATION, not the parcel. Close the enquiry without recording receipt_confirmation."
   },
   {
     "ticketId": "5232645f-1e5a-4939-a836-aebe60396f4b",
@@ -377,24 +470,34 @@ export const CASEWORK_CASES = [
     "effect": "holding",
     "answered": [],
     "waitingCustomer": [],
-    "obligations": [],
+    "obligations": [
+      {
+        "owner": "partner",
+        "need": "delivery_state"
+      }
+    ],
     "caseState": "open",
-    "nextActor": null,
+    "nextActor": "partner",
     "nextAction": null,
-    "note": ""
+    "note": "[REVIEW:R03] Support says a carrier investigation is underway and promises to report back. Customer contacting neighbours/carrier is advice, not a mandatory pending information request. No actual order ID is visible in the export."
   },
   {
     "ticketId": "5232645f-1e5a-4939-a836-aebe60396f4b",
     "messageId": "84171519-251f-4152-855a-5accb24c285b",
     "direction": "inbound",
-    "effect": "continuation",
+    "effect": "new_information",
     "answered": [],
     "waitingCustomer": [],
-    "obligations": [],
-    "caseState": null,
-    "nextActor": null,
+    "obligations": [
+      {
+        "owner": "partner",
+        "need": "delivery_state"
+      }
+    ],
+    "caseState": "open",
+    "nextActor": "support",
     "nextAction": "full_reply",
-    "note": "personne tres mecontente"
+    "note": "[REVIEW:R03] Customer rejects the proposed effort and demands refund or reshipment. Deret verification still precedes a remedy. A useful reply may request the missing order ID if it is not already reliably linked in the app; no invented past question."
   },
   {
     "ticketId": "5232645f-1e5a-4939-a836-aebe60396f4b",
@@ -403,11 +506,20 @@ export const CASEWORK_CASES = [
     "effect": "answers",
     "answered": [],
     "waitingCustomer": [],
-    "obligations": [],
-    "caseState": "closed_by_us",
-    "nextActor": null,
+    "obligations": [
+      {
+        "owner": "partner",
+        "need": "delivery_state"
+      },
+      {
+        "owner": "partner",
+        "need": "dispatch_state"
+      }
+    ],
+    "caseState": "open",
+    "nextActor": "partner",
     "nextAction": null,
-    "note": ""
+    "note": "[REVIEW:R02] Replacement order has been processed, but dispatch is explicitly tomorrow. Keep that obligation. No visible reply settles the original carrier investigation; confirm whether choosing the replacement formally supersedes it."
   },
   {
     "ticketId": "cffa55ff-2787-4796-9193-57b2b49649ed",
@@ -415,25 +527,29 @@ export const CASEWORK_CASES = [
     "direction": "outbound",
     "effect": "asks_customer",
     "answered": [],
-    "waitingCustomer": [],
+    "waitingCustomer": [
+      "receipt_confirmation"
+    ],
     "obligations": [],
     "caseState": "open",
-    "nextActor": null,
+    "nextActor": "customer",
     "nextAction": null,
-    "note": ""
+    "note": "Support explicitly asks whether the parcel was received, so the case is not yet closed."
   },
   {
     "ticketId": "cffa55ff-2787-4796-9193-57b2b49649ed",
     "messageId": "1203285b-e6ae-4583-9081-8989ac3087c1",
     "direction": "inbound",
     "effect": "closes_case",
-    "answered": [],
+    "answered": [
+      "receipt_confirmation"
+    ],
     "waitingCustomer": [],
     "obligations": [],
-    "caseState": null,
-    "nextActor": null,
+    "caseState": "closed_by_customer",
+    "nextActor": "support",
     "nextAction": "closing_reply",
-    "note": ""
+    "note": "Customer supplies the requested confirmation and ends the request. A courtesy closing reply is selected by the guide for this exact thread."
   },
   {
     "ticketId": "cffa55ff-2787-4796-9193-57b2b49649ed",
@@ -444,9 +560,9 @@ export const CASEWORK_CASES = [
     "waitingCustomer": [],
     "obligations": [],
     "caseState": "closed_by_us",
-    "nextActor": null,
+    "nextActor": "nobody",
     "nextAction": null,
-    "note": ""
+    "note": "The courtesy reply completes the conversation; nothing else is owed."
   },
   {
     "ticketId": "9454eaa2-2d00-40f0-bf57-63ca641fde2a",
@@ -455,141 +571,184 @@ export const CASEWORK_CASES = [
     "effect": "new_information",
     "answered": [],
     "waitingCustomer": [],
-    "obligations": [],
+    "obligations": [
+      {
+        "owner": "partner",
+        "need": "delivery_state"
+      }
+    ],
     "caseState": "open",
-    "nextActor": null,
-    "nextAction": null,
-    "note": "relance"
+    "nextActor": "support",
+    "nextAction": "full_reply",
+    "note": "[REVIEW:R03] Customer now asks for a refund for a parcel still not received. The visible alphanumeric identifier is described as tracking, not a verified shop order number. Ask for a usable order identifier if none is linked, then Deret verifies the parcel."
   },
   {
     "ticketId": "9454eaa2-2d00-40f0-bf57-63ca641fde2a",
     "messageId": "2ae94afa-bddb-438c-b5e8-c903c2da75f8",
     "direction": "outbound",
-    "effect": "answers",
+    "effect": "asks_customer",
     "answered": [],
     "waitingCustomer": [],
-    "obligations": [],
+    "obligations": [
+      {
+        "owner": "partner",
+        "need": "delivery_state"
+      },
+      {
+        "owner": "support",
+        "need": "refund_state"
+      }
+    ],
     "caseState": "open",
-    "nextActor": null,
+    "nextActor": "customer",
     "nextAction": null,
-    "note": ""
+    "note": "[REVIEW:R04] Support asks the customer to refuse delivery; the promised refund depends on return confirmation. waitingCustomer has no value for the physical action refuse/return a parcel, so that action is recorded here rather than mislabelled as receipt_confirmation."
   },
   {
     "ticketId": "9454eaa2-2d00-40f0-bf57-63ca641fde2a",
     "messageId": "88d45b4f-1f6d-4fdd-83f5-1789657e43ec",
     "direction": "inbound",
     "effect": "new_information",
-    "answered": [],
+    "answered": [
+      "shopify_order_number",
+      "delivery_state"
+    ],
     "waitingCustomer": [],
-    "obligations": [],
+    "obligations": [
+      {
+        "owner": "partner",
+        "need": "delivery_state"
+      },
+      {
+        "owner": "support",
+        "need": "refund_state"
+      }
+    ],
     "caseState": "open",
-    "nextActor": null,
+    "nextActor": "support",
     "nextAction": "full_reply",
-    "note": ""
+    "note": "Customer supplies the shop order number and reports a delivered scan without receipt, so refusal was impossible. The old plan is blocked; Deret must verify before support decides the remedy. Do not record actual delivery."
   },
   {
     "ticketId": "9454eaa2-2d00-40f0-bf57-63ca641fde2a",
     "messageId": "7c873b5a-8d92-4497-89da-e3246b702b33",
     "direction": "outbound",
-    "effect": "answers",
+    "effect": "closes_case",
     "answered": [],
     "waitingCustomer": [],
     "obligations": [],
     "caseState": "closed_by_us",
-    "nextActor": null,
+    "nextActor": "nobody",
     "nextAction": null,
-    "note": ""
+    "note": "Support explicitly states the refund has been issued. The customer remedy is completed; a request to report a later-found parcel is conditional, not a current unanswered question."
   },
   {
     "ticketId": "9454eaa2-2d00-40f0-bf57-63ca641fde2a",
     "messageId": "038bdb73-4c43-4340-beeb-066165dd5933",
-    "direction": "inbound",
-    "effect": "continuation",
-    "answered": [],
-    "waitingCustomer": [],
-    "obligations": [],
-    "caseState": "closed_by_customer",
-    "nextActor": null,
-    "nextAction": "closing_reply",
-    "note": ""
-  },
-  {
-    "ticketId": "9454eaa2-2d00-40f0-bf57-63ca641fde2a",
-    "messageId": "a39c41f9-ea83-4a40-9077-8ee026b63c4f",
-    "direction": "outbound",
-    "effect": null,
-    "answered": [],
-    "waitingCustomer": [],
-    "obligations": [],
-    "caseState": "closed_by_us",
-    "nextActor": null,
-    "nextAction": null,
-    "note": ""
-  },
-  {
-    "ticketId": "d6d0d1c3-6176-4923-9c82-7c2a1407fd82",
-    "messageId": "3a5b6989-a6bb-4634-987f-6adcc71f8339",
-    "direction": "outbound",
-    "effect": "answers",
-    "answered": [],
-    "waitingCustomer": [],
-    "obligations": [],
-    "caseState": "closed_by_us",
-    "nextActor": null,
-    "nextAction": null,
-    "note": ""
-  },
-  {
-    "ticketId": "d6d0d1c3-6176-4923-9c82-7c2a1407fd82",
-    "messageId": "29c867cb-3afe-4f66-ac6e-97dc0741809e",
-    "direction": "inbound",
-    "effect": "new_information",
-    "answered": [],
-    "waitingCustomer": [],
-    "obligations": [],
-    "caseState": "open",
-    "nextActor": null,
-    "nextAction": null,
-    "note": ""
-  },
-  {
-    "ticketId": "d6d0d1c3-6176-4923-9c82-7c2a1407fd82",
-    "messageId": "b940660b-4d1e-47e7-9bf7-00bb1016ea40",
-    "direction": "outbound",
-    "effect": "answers",
-    "answered": [],
-    "waitingCustomer": [],
-    "obligations": [],
-    "caseState": "open",
-    "nextActor": null,
-    "nextAction": null,
-    "note": ""
-  },
-  {
-    "ticketId": "d6d0d1c3-6176-4923-9c82-7c2a1407fd82",
-    "messageId": "6114f63e-e0eb-4b54-9cab-738cc14d9a52",
     "direction": "inbound",
     "effect": "closes_case",
     "answered": [],
     "waitingCustomer": [],
     "obligations": [],
     "caseState": "closed_by_customer",
-    "nextActor": null,
+    "nextActor": "support",
+    "nextAction": "closing_reply",
+    "note": "Customer ends the complaint without a fresh request. Use the short complaint-closing reply specified in the guide, not another investigation."
+  },
+  {
+    "ticketId": "9454eaa2-2d00-40f0-bf57-63ca641fde2a",
+    "messageId": "a39c41f9-ea83-4a40-9077-8ee026b63c4f",
+    "direction": "outbound",
+    "effect": "closes_case",
+    "answered": [],
+    "waitingCustomer": [],
+    "obligations": [],
+    "caseState": "closed_by_us",
+    "nextActor": "nobody",
+    "nextAction": null,
+    "note": "Final apology; no outstanding question or action."
+  },
+  {
+    "ticketId": "d6d0d1c3-6176-4923-9c82-7c2a1407fd82",
+    "messageId": "3a5b6989-a6bb-4634-987f-6adcc71f8339",
+    "direction": "outbound",
+    "effect": "closes_case",
+    "answered": [],
+    "waitingCustomer": [],
+    "obligations": [],
+    "caseState": "closed_by_us",
+    "nextActor": "nobody",
+    "nextAction": null,
+    "note": "Support says the gift is already included in the existing order. This is a completed inclusion check, not a separate promised reshipment; routine future packing does not itself create a case obligation."
+  },
+  {
+    "ticketId": "d6d0d1c3-6176-4923-9c82-7c2a1407fd82",
+    "messageId": "29c867cb-3afe-4f66-ac6e-97dc0741809e",
+    "direction": "inbound",
+    "effect": "new_information",
+    "answered": [
+      "receipt_confirmation"
+    ],
+    "waitingCustomer": [],
+    "obligations": [
+      {
+        "owner": "support",
+        "need": "photo_evidence"
+      }
+    ],
+    "caseState": "open",
+    "nextActor": "support",
+    "nextAction": "full_reply",
+    "note": "[REVIEW:R05] Customer received the order but not the gift, contradicting the previous assurance. Existing image markers are from quoted history; they do not establish a usable photo of this parcel. Verify attachments, ask only if missing, then refer packing to Deret."
+  },
+  {
+    "ticketId": "d6d0d1c3-6176-4923-9c82-7c2a1407fd82",
+    "messageId": "b940660b-4d1e-47e7-9bf7-00bb1016ea40",
+    "direction": "outbound",
+    "effect": "closes_case",
+    "answered": [],
+    "waitingCustomer": [],
+    "obligations": [],
+    "caseState": "closed_by_us",
+    "nextActor": "nobody",
+    "nextAction": null,
+    "note": "[REVIEW:R02] Present-tense reshipment announcement plus tracking is treated as the final dispatch answer, consistently with the guide naming this thread as no-reply after thanks. This is not independent warehouse proof."
+  },
+  {
+    "ticketId": "d6d0d1c3-6176-4923-9c82-7c2a1407fd82",
+    "messageId": "6114f63e-e0eb-4b54-9cab-738cc14d9a52",
+    "direction": "inbound",
+    "effect": "closes_case",
+    "answered": [
+      "receipt_confirmation"
+    ],
+    "waitingCustomer": [],
+    "obligations": [],
+    "caseState": "closed_by_customer",
+    "nextActor": "nobody",
     "nextAction": "no_reply",
-    "note": ""
+    "note": "Customer confirms receipt after the final sending answer. Use no_reply as specified for this thread, regardless of the historical courtesy reply that follows."
   },
   {
     "ticketId": "6b0067b8-54c0-4725-adaa-d2a81cf5caee",
     "messageId": "f9d3d28c-4bc0-433a-abe7-62514592edc6",
     "direction": "inbound",
     "effect": "new_information",
-    "answered": [],
+    "answered": [
+      "preferred_remedy",
+      "delivery_state"
+    ],
     "waitingCustomer": [],
-    "obligations": [],
+    "obligations": [
+      {
+        "owner": "support",
+        "need": "dispatch_state"
+      }
+    ],
     "caseState": "open",
-    "nextActor": null,
+    "nextActor": "support",
     "nextAction": "full_reply",
-    "note": ""
+    "note": "[REVIEW:R11] Customer explains non-collection and asks for reshipment. The opening support message already states the warehouse received the return; retain that historical evidence instead of requesting the order number again. Direct Deret confirmation itself is not exported."
   },
   {
     "ticketId": "6b0067b8-54c0-4725-adaa-d2a81cf5caee",
@@ -598,42 +757,57 @@ export const CASEWORK_CASES = [
     "effect": "holding",
     "answered": [],
     "waitingCustomer": [],
-    "obligations": [],
-    "caseState": null,
-    "nextActor": null,
+    "obligations": [
+      {
+        "owner": "support",
+        "need": "dispatch_state"
+      },
+      {
+        "owner": "support",
+        "need": "other_fact"
+      }
+    ],
+    "caseState": "open",
+    "nextActor": "support",
     "nextAction": null,
-    "note": ""
+    "note": "[REVIEW:R08] Reshipment is promised on receipt of the return, contradicting the opener that said it was already received. other_fact: reconcile that contradiction; do not silently reset the return to not received."
   },
   {
     "ticketId": "6b0067b8-54c0-4725-adaa-d2a81cf5caee",
     "messageId": "c8c2b069-4e63-445d-a0d0-66b8a8e77722",
     "direction": "inbound",
-    "effect": "continuation",
-    "answered": [],
+    "effect": "new_information",
+    "answered": [
+      "preferred_remedy"
+    ],
     "waitingCustomer": [],
     "obligations": [
       {
-        "owner": null,
-        "need": "order_state"
+        "owner": "support",
+        "need": "dispatch_state"
+      },
+      {
+        "owner": "support",
+        "need": "other_fact"
       }
     ],
     "caseState": "open",
-    "nextActor": null,
-    "nextAction": "full_reply",
-    "note": ""
+    "nextActor": "support",
+    "nextAction": "no_reply_person_acts",
+    "note": "[REVIEW:R08] Customer still prefers reshipment but adds refund as a fallback. The prior promised action and return-status contradiction remain; a person must resolve them before another empty promise."
   },
   {
     "ticketId": "6b0067b8-54c0-4725-adaa-d2a81cf5caee",
     "messageId": "ee363253-e6bc-40e8-9e64-8deeb0e9d6ba",
     "direction": "outbound",
-    "effect": "answers",
+    "effect": "closes_case",
     "answered": [],
     "waitingCustomer": [],
     "obligations": [],
     "caseState": "closed_by_us",
-    "nextActor": null,
+    "nextActor": "nobody",
     "nextAction": null,
-    "note": ""
+    "note": "Support confirms completed reshipment with tracking, resolving the outstanding action and the blocking return issue."
   },
   {
     "ticketId": "bfe0feea-3fcf-4a2a-9d88-89c41d7f3fd1",
@@ -641,43 +815,47 @@ export const CASEWORK_CASES = [
     "direction": "outbound",
     "effect": "asks_customer",
     "answered": [],
-    "waitingCustomer": [],
+    "waitingCustomer": [
+      "postal_address"
+    ],
     "obligations": [],
-    "caseState": null,
-    "nextActor": null,
+    "caseState": "open",
+    "nextActor": "customer",
     "nextAction": null,
-    "note": "demande d'adresse pour envoyer un cadeau"
+    "note": "A replacement gift is offered and the postal address is explicitly requested. Do not require a Shopify order for this stated in-store purchase."
   },
   {
     "ticketId": "bfe0feea-3fcf-4a2a-9d88-89c41d7f3fd1",
     "messageId": "531a2a45-3f15-410a-b880-56813a079ca4",
     "direction": "inbound",
-    "effect": "continuation",
-    "answered": [],
+    "effect": "new_information",
+    "answered": [
+      "postal_address"
+    ],
     "waitingCustomer": [],
     "obligations": [
       {
-        "owner": null,
-        "need": "order_state"
+        "owner": "support",
+        "need": "dispatch_state"
       }
     ],
-    "caseState": null,
-    "nextActor": null,
-    "nextAction": null,
-    "note": "donne son adresse"
+    "caseState": "open",
+    "nextActor": "support",
+    "nextAction": "no_reply_person_acts",
+    "note": "Customer supplies the requested address and accepts the gift. Support must initiate the promised dispatch; no need to ask for the address again."
   },
   {
     "ticketId": "bfe0feea-3fcf-4a2a-9d88-89c41d7f3fd1",
     "messageId": "2e0ef19f-14d6-4239-845a-9fae9a26612a",
     "direction": "outbound",
-    "effect": null,
+    "effect": "closes_case",
     "answered": [],
     "waitingCustomer": [],
     "obligations": [],
-    "caseState": null,
-    "nextActor": null,
+    "caseState": "closed_by_us",
+    "nextActor": "nobody",
     "nextAction": null,
-    "note": "email pour confirmer l'expedition du cadeau"
+    "note": "Support confirms sending the gift and provides tracking, completing the promised action."
   },
   {
     "ticketId": "e27ef32d-0fea-463e-be0a-cd31735d450e",
@@ -686,11 +864,20 @@ export const CASEWORK_CASES = [
     "effect": "answers",
     "answered": [],
     "waitingCustomer": [],
-    "obligations": [],
-    "caseState": null,
-    "nextActor": null,
+    "obligations": [
+      {
+        "owner": "partner",
+        "need": "other_fact"
+      },
+      {
+        "owner": "support",
+        "need": "refund_state"
+      }
+    ],
+    "caseState": "open",
+    "nextActor": "customer",
     "nextAction": null,
-    "note": ""
+    "note": "[REVIEW:R04] The requested cancellation has become a return-and-refund route. Customer must send the product; partner other_fact is receipt/check of the return, and support refund_state is conditional on it. Physical customer return has no v3 field."
   },
   {
     "ticketId": "e27ef32d-0fea-463e-be0a-cd31735d450e",
@@ -699,23 +886,1409 @@ export const CASEWORK_CASES = [
     "effect": "new_information",
     "answered": [],
     "waitingCustomer": [],
-    "obligations": [],
-    "caseState": null,
-    "nextActor": null,
-    "nextAction": "no_reply_person_acts",
-    "note": "Une personne doit decider quoi faire"
+    "obligations": [
+      {
+        "owner": "partner",
+        "need": "other_fact"
+      },
+      {
+        "owner": "support",
+        "need": "refund_state"
+      },
+      {
+        "owner": "support",
+        "need": "other_fact"
+      }
+    ],
+    "caseState": "open",
+    "nextActor": "support",
+    "nextAction": "full_reply",
+    "note": "The same dispute gains a prepaid-return-label request. support other_fact is the discretionary postage decision; no automatic commercial gesture. Existing return/refund dependencies remain."
   },
   {
     "ticketId": "d9f5fa74-f24a-4b17-b100-26332c07afc8",
     "messageId": "1cfca690-3691-4f00-93e8-9424f1adf38d",
     "direction": "inbound",
     "effect": "new_information",
+    "answered": [
+      "shopify_order_number"
+    ],
+    "waitingCustomer": [],
+    "obligations": [
+      {
+        "owner": "partner",
+        "need": "delivery_state"
+      }
+    ],
+    "caseState": "open",
+    "nextActor": "support",
+    "nextAction": "full_reply",
+    "note": "Customer explicitly separates the tracking code from the shop order number. The reported broken tracking and overdue expected delivery go to Deret; do not infer a precise dispatch date or a lost parcel."
+  },
+  {
+    "ticketId": "8236165a-4720-4ba7-a39f-e46dd554f214",
+    "messageId": "4324e1e4-8309-4b95-821f-a801a491fe7c",
+    "direction": "inbound",
+    "effect": "internal_note",
+    "answered": [
+      "dispatch_state"
+    ],
+    "waitingCustomer": [],
+    "obligations": [
+      {
+        "owner": "support",
+        "need": "other_fact"
+      }
+    ],
+    "caseState": "open",
+    "nextActor": "support",
+    "nextAction": "full_reply",
+    "note": "[REVIEW:R01,R08] Deret reports having sent the parcel again. Support owes the customer an update; other_fact is that communication. The word renvoye is ambiguous without a destination or tracking number; the proposed customer update must not claim delivery."
+  },
+  {
+    "ticketId": "2aa6604e-a6d1-4958-bb1a-54eddf068087",
+    "messageId": "6966ed45-7430-4f0b-8036-19ee1df6251a",
+    "direction": "inbound",
+    "effect": "new_issue",
+    "answered": [
+      "receipt_confirmation"
+    ],
+    "waitingCustomer": [],
+    "obligations": [
+      {
+        "owner": "support",
+        "need": "product_property"
+      }
+    ],
+    "caseState": "open",
+    "nextActor": "support",
+    "nextAction": "full_reply",
+    "note": "[REVIEW:R05,R12] Receipt of the replacement is confirmed, but the customer now asks about its pump design. This concerns the different replacement serum; no approved technical answer or readable photo is present at this cut. Do not use the later answer as prior knowledge."
+  },
+  {
+    "ticketId": "2aa6604e-a6d1-4958-bb1a-54eddf068087",
+    "messageId": "8c9089c2-5def-426d-aec3-271edf522c86",
+    "direction": "outbound",
+    "effect": "closes_case",
+    "answered": [],
+    "waitingCustomer": [],
+    "obligations": [],
+    "caseState": "closed_by_us",
+    "nextActor": "nobody",
+    "nextAction": null,
+    "note": "The historical support reply answers the replacement-pump question and asks nothing further. This records the answer, not an independent technical verification."
+  },
+  {
+    "ticketId": "d6d0d1c3-6176-4923-9c82-7c2a1407fd82",
+    "messageId": "e8fd05cd-b301-45ee-a3a4-c1bdf06ec603",
+    "direction": "outbound",
+    "effect": "closes_case",
+    "answered": [],
+    "waitingCustomer": [],
+    "obligations": [],
+    "caseState": "closed_by_us",
+    "nextActor": "nobody",
+    "nextAction": null,
+    "note": "The historical courtesy reply is final. Its existence does not retroactively make it required at the preceding cut."
+  },
+  {
+    "ticketId": "e27ef32d-0fea-463e-be0a-cd31735d450e",
+    "messageId": "444f6038-07d7-43f3-80dc-92a1e04e3491",
+    "direction": "outbound",
+    "effect": "answers",
+    "answered": [],
+    "waitingCustomer": [],
+    "obligations": [
+      {
+        "owner": "partner",
+        "need": "other_fact"
+      },
+      {
+        "owner": "support",
+        "need": "refund_state"
+      }
+    ],
+    "caseState": "open",
+    "nextActor": "customer",
+    "nextAction": null,
+    "note": "[REVIEW:R04,R07] The historical reply declines prepaid postage but still offers a refund after return. Customer return remains pending. Do not promote its blanket no-cancellation statement into the current operating rules."
+  },
+  {
+    "ticketId": "e27ef32d-0fea-463e-be0a-cd31735d450e",
+    "messageId": "3b380f63-144d-4bb9-b12f-d37e0884802c",
+    "direction": "inbound",
+    "effect": "new_information",
+    "answered": [],
+    "waitingCustomer": [],
+    "obligations": [
+      {
+        "owner": "partner",
+        "need": "other_fact"
+      },
+      {
+        "owner": "support",
+        "need": "refund_state"
+      },
+      {
+        "owner": "support",
+        "need": "other_fact"
+      }
+    ],
+    "caseState": "open",
+    "nextActor": "support",
+    "nextAction": "full_reply",
+    "note": "Customer now requests a specified postage gesture and disputes the dispatch timing. Support must decide the exception; the claim is not proof of the historical fulfilment state."
+  },
+  {
+    "ticketId": "e27ef32d-0fea-463e-be0a-cd31735d450e",
+    "messageId": "5f560891-4415-4571-b998-97550a2e3662",
+    "direction": "inbound",
+    "effect": "closes_case",
+    "answered": [],
+    "waitingCustomer": [],
+    "obligations": [],
+    "caseState": "closed_by_customer",
+    "nextActor": "support",
+    "nextAction": "closing_reply",
+    "note": "Customer explicitly says she will keep the product and stop ordering. At this moment the return-dependent remedy becomes moot; a short complaint-closing reply is appropriate. Do not use the later reopening here."
+  },
+  {
+    "ticketId": "e27ef32d-0fea-463e-be0a-cd31735d450e",
+    "messageId": "b6e73f61-1746-43db-b04b-691c705eefa8",
+    "direction": "inbound",
+    "effect": "new_information",
+    "answered": [],
+    "waitingCustomer": [],
+    "obligations": [
+      {
+        "owner": "support",
+        "need": "other_fact"
+      }
+    ],
+    "caseState": "open",
+    "nextActor": "support",
+    "nextAction": "no_reply_person_acts",
+    "note": "[REVIEW:R08] Same dispute reopens with a conditional 48-hour prepaid-label ultimatum. The deadline has not elapsed at this message. Human commercial/escalation review is required; do not classify the case closed merely because the customer threatens to close it."
+  },
+  {
+    "ticketId": "3822cec8-88b4-4d67-a38c-dde80adb828f",
+    "messageId": "41ee5920-a772-468d-9511-4541fea6d451",
+    "direction": "inbound",
+    "effect": "chase",
+    "answered": [],
+    "waitingCustomer": [
+      "preferred_remedy"
+    ],
+    "obligations": [
+      {
+        "owner": "support",
+        "need": "dispatch_state"
+      }
+    ],
+    "caseState": "open",
+    "nextActor": "support",
+    "nextAction": "full_reply",
+    "note": "[REVIEW:R12] The quoted prehistory asks for one remedy choice, but the customer still only chases. It also lists another missing paid product; retain that unresolved fulfilment need rather than assuming all items were handled."
+  },
+  {
+    "ticketId": "3822cec8-88b4-4d67-a38c-dde80adb828f",
+    "messageId": "2ad361e3-07dc-43bf-83d4-c818b33e53b9",
+    "direction": "outbound",
+    "effect": "asks_customer",
+    "answered": [],
+    "waitingCustomer": [
+      "preferred_remedy"
+    ],
+    "obligations": [
+      {
+        "owner": "support",
+        "need": "dispatch_state"
+      }
+    ],
+    "caseState": "open",
+    "nextActor": "customer",
+    "nextAction": null,
+    "note": "[ROUTING_CORRECTION] Staff reply to the customer, not customer input. [REVIEW:R12] Staff repeats the required single remedy choice. Other missing-item fulfilment in the available quoted prehistory is not visibly settled; that obligation remains conditional on clarifying the case."
+  },
+  {
+    "ticketId": "3822cec8-88b4-4d67-a38c-dde80adb828f",
+    "messageId": "e40f6a86-5dff-47a7-b8da-7744e5a7d593",
+    "direction": "inbound",
+    "effect": "chase",
+    "answered": [],
+    "waitingCustomer": [
+      "preferred_remedy"
+    ],
+    "obligations": [
+      {
+        "owner": "support",
+        "need": "dispatch_state"
+      },
+      {
+        "owner": "support",
+        "need": "other_fact"
+      }
+    ],
+    "caseState": "open",
+    "nextActor": "support",
+    "nextAction": "no_reply_person_acts",
+    "note": "[REVIEW:R08,R12] Escalated chase threatens a bank fraud/chargeback complaint, without making the requested choice. Human review is safer than an automatic draft; whether this is your level-4 boundary needs confirmation."
+  },
+  {
+    "ticketId": "3822cec8-88b4-4d67-a38c-dde80adb828f",
+    "messageId": "b023133b-5fe8-4ab0-8d86-e88358975166",
+    "direction": "outbound",
+    "effect": "answers",
+    "answered": [],
+    "waitingCustomer": [],
+    "obligations": [
+      {
+        "owner": "support",
+        "need": "dispatch_state"
+      }
+    ],
+    "caseState": "open",
+    "nextActor": "support",
+    "nextAction": null,
+    "note": "[ROUTING_CORRECTION] Staff reply to the customer, not customer input. [REVIEW:R12] Staff announces shipment of the now-restocked Booster, superseding the remedy-choice question. The earlier missing Elixir is not explicitly accounted for; keep the remaining fulfilment need rather than closing all issues."
+  },
+  {
+    "ticketId": "3822cec8-88b4-4d67-a38c-dde80adb828f",
+    "messageId": "e19a2e33-cadd-4f9c-8523-3603de72e089",
+    "direction": "outbound",
+    "effect": "answers",
+    "answered": [],
+    "waitingCustomer": [],
+    "obligations": [
+      {
+        "owner": "support",
+        "need": "other_fact"
+      }
+    ],
+    "caseState": "open",
+    "nextActor": "support",
+    "nextAction": null,
+    "note": "[ROUTING_CORRECTION] Staff reply to the customer, not customer input. [REVIEW:R12] Staff says the order has shipped and provides tracking. Proposed remaining check: does this parcel include every originally missing paid item? The exported thread does not enumerate its contents."
+  },
+  {
+    "ticketId": "879b9ca3-04bf-4aa2-bc0e-99b0cc7e7897",
+    "messageId": "403b83c2-be36-4eea-899e-1f094cdf2441",
+    "direction": "outbound",
+    "effect": "closes_case",
+    "answered": [],
+    "waitingCustomer": [],
+    "obligations": [],
+    "caseState": "closed_by_us",
+    "nextActor": "nobody",
+    "nextAction": null,
+    "note": "[ROUTING_CORRECTION] Staff reply to the customer, not customer input. The historical staff reply reports a checked parcel outcome and completed reshipment with tracking. The original customer message already contains the shop order number in its quoted confirmation."
+  },
+  {
+    "ticketId": "77498e49-9f05-4e45-8fb4-8ba7b1b07164",
+    "messageId": "993fb2a7-a939-4e3b-9418-48cfaa5fba88",
+    "direction": "inbound",
+    "effect": "new_information",
+    "answered": [],
+    "waitingCustomer": [],
+    "obligations": [
+      {
+        "owner": "colleague",
+        "need": "other_fact"
+      }
+    ],
+    "caseState": "open",
+    "nextActor": "colleague",
+    "nextAction": "no_reply_person_acts",
+    "note": "B2B accounting request; the requested statement end date changes, so it is not only a chase. A colleague/accounting team must provide the statement. Do not ask a retail order-number question."
+  },
+  {
+    "ticketId": "77498e49-9f05-4e45-8fb4-8ba7b1b07164",
+    "messageId": "05be88b9-6732-41af-90c1-33ac04228281",
+    "direction": "outbound",
+    "effect": "closes_case",
+    "answered": [],
+    "waitingCustomer": [],
+    "obligations": [],
+    "caseState": "closed_by_us",
+    "nextActor": "nobody",
+    "nextAction": null,
+    "note": "[ROUTING_CORRECTION] Staff reply to the customer, not customer input. Staff sends the requested accounting statement. This records a completed human B2B answer, not permission for the agent to draft trade replies."
+  },
+  {
+    "ticketId": "77498e49-9f05-4e45-8fb4-8ba7b1b07164",
+    "messageId": "ad298041-2c67-4f21-aeb8-da992d079617",
+    "direction": "inbound",
+    "effect": "new_issue",
+    "answered": [],
+    "waitingCustomer": [],
+    "obligations": [
+      {
+        "owner": "colleague",
+        "need": "other_fact"
+      }
+    ],
+    "caseState": "open",
+    "nextActor": "colleague",
+    "nextAction": "no_reply_person_acts",
+    "note": "New B2B document request for a particular invoice, separate from the previously supplied statement. Accounting owes it; no automated draft."
+  },
+  {
+    "ticketId": "77498e49-9f05-4e45-8fb4-8ba7b1b07164",
+    "messageId": "cbed03f4-0775-428b-8e7e-167371db8d09",
+    "direction": "inbound",
+    "effect": "new_issue",
+    "answered": [],
+    "waitingCustomer": [],
+    "obligations": [
+      {
+        "owner": "colleague",
+        "need": "other_fact"
+      }
+    ],
+    "caseState": "open",
+    "nextActor": "colleague",
+    "nextAction": "no_reply_person_acts",
+    "note": "[REVIEW:R04] A wider-date statement is now requested. The earlier invoice request is still not visibly answered. The single colleague/other_fact bucket represents BOTH outstanding documents; v3 cannot distinguish obligation instances."
+  },
+  {
+    "ticketId": "77498e49-9f05-4e45-8fb4-8ba7b1b07164",
+    "messageId": "244b46ff-9d83-4567-9449-6a0f30724573",
+    "direction": "outbound",
+    "effect": "holding",
+    "answered": [],
+    "waitingCustomer": [],
+    "obligations": [
+      {
+        "owner": "colleague",
+        "need": "other_fact"
+      }
+    ],
+    "caseState": "open",
+    "nextActor": "colleague",
+    "nextAction": null,
+    "note": "[ROUTING_CORRECTION] Staff reply to the customer, not customer input. [REVIEW:R04] Staff forwards the statement request to accounting rather than fulfilling it. Keep both the statement and the earlier unanswered invoice obligation; no automatic customer draft."
+  },
+  {
+    "ticketId": "eb013de9-4644-4341-a57d-ac1099f4a422",
+    "messageId": "fcb39702-31df-4732-b150-b8042c872ea2",
+    "direction": "outbound",
+    "effect": "closes_case",
+    "answered": [],
+    "waitingCustomer": [],
+    "obligations": [],
+    "caseState": "closed_by_us",
+    "nextActor": "nobody",
+    "nextAction": null,
+    "note": "[ROUTING_CORRECTION] Staff reply to the customer, not customer input. Staff states the carrier investigation found the parcel lost and that reshipment was performed, with tracking. Record the completed historical remedy; no new action or customer question remains."
+  },
+  {
+    "ticketId": "16bef94d-907d-4056-84e0-f05949b1ad7b",
+    "messageId": "773c0ba6-1ccd-4077-b11e-d99a23a11207",
+    "direction": "inbound",
+    "effect": "chase",
+    "answered": [],
+    "waitingCustomer": [],
+    "obligations": [
+      {
+        "owner": "support",
+        "need": "other_fact"
+      }
+    ],
+    "caseState": "open",
+    "nextActor": "support",
+    "nextAction": "no_reply_person_acts",
+    "note": "Pure chase about a leaked lotion. Support must decide/initiate the remedy. The original quoted dispatch email already identifies the order, so do not request it again."
+  },
+  {
+    "ticketId": "16bef94d-907d-4056-84e0-f05949b1ad7b",
+    "messageId": "abda2baf-f74d-4e01-a94a-d0cd058d38c8",
+    "direction": "outbound",
+    "effect": "answers",
+    "answered": [],
+    "waitingCustomer": [],
+    "obligations": [
+      {
+        "owner": "partner",
+        "need": "dispatch_state"
+      },
+      {
+        "owner": "support",
+        "need": "other_fact"
+      }
+    ],
+    "caseState": "open",
+    "nextActor": "partner",
+    "nextAction": null,
+    "note": "[ROUTING_CORRECTION] Staff reply to the customer, not customer input. [REVIEW:R02] Replacement sending is being initiated, with tracking promised in a second email once handed over. Keep physical dispatch plus the explicit tracking notification pending."
+  },
+  {
+    "ticketId": "16bef94d-907d-4056-84e0-f05949b1ad7b",
+    "messageId": "d058cae8-fb51-47e7-869d-c8656e5e9775",
+    "direction": "outbound",
+    "effect": "closes_case",
+    "answered": [],
+    "waitingCustomer": [],
+    "obligations": [],
+    "caseState": "closed_by_us",
+    "nextActor": "nobody",
+    "nextAction": null,
+    "note": "[ROUTING_CORRECTION] Staff reply to the customer, not customer input. Staff explicitly confirms actual shipment and supplies the promised tracking number. Both dispatch and notification obligations are satisfied."
+  },
+  {
+    "ticketId": "a3517e2b-b9ae-4850-9e08-1c9919030421",
+    "messageId": "4fe289d9-1774-4de0-9ca1-ccac5367abd4",
+    "direction": "outbound",
+    "effect": "closes_case",
+    "answered": [],
+    "waitingCustomer": [],
+    "obligations": [],
+    "caseState": "closed_by_us",
+    "nextActor": "nobody",
+    "nextAction": null,
+    "note": "[ROUTING_CORRECTION] Staff reply to the customer, not customer input. Staff supplies the requested B2B invoice. Record completion of the human task without treating this trade case as eligible for automated drafting."
+  },
+  {
+    "ticketId": "433077fc-1698-43a7-bb82-e0fd0c058fc7",
+    "messageId": "b7c8726d-dc12-477c-be51-ee6608329acd",
+    "direction": "inbound",
+    "effect": "chase",
     "answered": [],
     "waitingCustomer": [],
     "obligations": [],
     "caseState": "open",
-    "nextActor": null,
+    "nextActor": "support",
+    "nextAction": "full_reply",
+    "note": "The question mark chases the same texture complaint. No product reference is visible before this cut; a useful reply can ask which product rather than assume it is Soin Bonne Mine. waitingCustomer remains empty because that question has not yet been sent."
+  },
+  {
+    "ticketId": "433077fc-1698-43a7-bb82-e0fd0c058fc7",
+    "messageId": "9b4cb0c1-15c3-4ca8-bce5-99c57e7f1676",
+    "direction": "outbound",
+    "effect": "closes_case",
+    "answered": [],
+    "waitingCustomer": [],
+    "obligations": [],
+    "caseState": "closed_by_us",
+    "nextActor": "nobody",
     "nextAction": null,
-    "note": "Il confirm le numero de commande dans le deuxieme message, its been a while since it was sent fro delivery so likey requires human action, not just a tracking number response."
+    "note": "[ROUTING_CORRECTION] Staff reply to the customer, not customer input. Staff identifies Soin Bonne Mine and answers the texture question. The export does not show how staff identified it; do not retrofit that product identity into earlier labels or treat these technical claims as independently verified."
+  },
+  {
+    "ticketId": "3f0acf9c-2629-4bc7-89a7-678aaee8437d",
+    "messageId": "7f7906bf-9f59-487e-a225-040af0651d2a",
+    "direction": "inbound",
+    "effect": "internal_note",
+    "answered": [],
+    "waitingCustomer": [],
+    "obligations": [
+      {
+        "owner": "colleague",
+        "need": "other_fact"
+      }
+    ],
+    "caseState": "open",
+    "nextActor": "colleague",
+    "nextAction": "no_reply",
+    "note": "The colleague redirects an outstanding B2B payment-document request to another colleague. Forwarding does not fulfil it; no customer-facing draft is requested."
+  },
+  {
+    "ticketId": "a85d21b5-a44d-4ad4-85f8-43fdb97af870",
+    "messageId": "dd0fd402-b294-4123-8142-8a14431290fa",
+    "direction": "inbound",
+    "effect": "closes_case",
+    "answered": [
+      "receipt_confirmation"
+    ],
+    "waitingCustomer": [],
+    "obligations": [],
+    "caseState": "closed_by_customer",
+    "nextActor": "support",
+    "nextAction": "closing_reply",
+    "note": "Customer corrects the earlier non-receipt report and confirms delivery. No check remains necessary. A short courtesy close is selected because support had not already sent a final answer."
+  },
+  {
+    "ticketId": "9125e194-a12c-45e5-923d-a1824f5dff28",
+    "messageId": "217fe100-bbde-4b53-9887-9ca4f03b801a",
+    "direction": "outbound",
+    "effect": "closes_case",
+    "answered": [],
+    "waitingCustomer": [],
+    "obligations": [],
+    "caseState": "closed_by_us",
+    "nextActor": "nobody",
+    "nextAction": null,
+    "note": "[ROUTING_CORRECTION] Staff reply to the customer, not customer input. The historical staff message answers the LED-mode question. This label records the conversation ending, not validation of device/health claims or permission to reuse them without an approved source."
+  },
+  {
+    "ticketId": "884dc51c-60cc-4d3b-bc74-8f8534953d26",
+    "messageId": "4bb5e1be-dff9-4d9c-8c1a-d5cc6af94043",
+    "direction": "outbound",
+    "effect": "answers",
+    "answered": [],
+    "waitingCustomer": [],
+    "obligations": [
+      {
+        "owner": "support",
+        "need": "other_fact"
+      }
+    ],
+    "caseState": "open",
+    "nextActor": "support",
+    "nextAction": null,
+    "note": "[REVIEW:R06] Availability is answered, but staff explicitly promises to inform the customer when Alma launches. other_fact represents that deferred notification, not an unresolved payment transaction."
+  },
+  {
+    "ticketId": "884dc51c-60cc-4d3b-bc74-8f8534953d26",
+    "messageId": "cecec36d-dd6d-4bb1-9509-6291d7372795",
+    "direction": "inbound",
+    "effect": "closes_case",
+    "answered": [],
+    "waitingCustomer": [],
+    "obligations": [
+      {
+        "owner": "support",
+        "need": "other_fact"
+      }
+    ],
+    "caseState": "open",
+    "nextActor": "support",
+    "nextAction": "no_reply_person_acts",
+    "note": "[REVIEW:R06] Customer thanks support but the promised launch notification remains unsatisfied. Keep the case open unless such long-term notifications are transferred to a separate tracked workflow."
+  },
+  {
+    "ticketId": "63c6917f-3afc-4770-a923-b537ec43aa39",
+    "messageId": "6a1c5c74-b20c-4a10-878b-b829b268597e",
+    "direction": "outbound",
+    "effect": "closes_case",
+    "answered": [],
+    "waitingCustomer": [],
+    "obligations": [],
+    "caseState": "closed_by_us",
+    "nextActor": "nobody",
+    "nextAction": null,
+    "note": "[ROUTING_CORRECTION] Staff reply to the customer, not customer input. Staff gives the account-recreation route and asks no confirmation back. A general invitation to write again if necessary is not a pending customer question."
+  },
+  {
+    "ticketId": "3928958f-67a4-4b08-9d14-05d909326ede",
+    "messageId": "1b418e1c-ff36-4278-9f24-4c27db3c355d",
+    "direction": "outbound",
+    "effect": "asks_customer",
+    "answered": [],
+    "waitingCustomer": [
+      "photo",
+      "skin_concern"
+    ],
+    "obligations": [],
+    "caseState": "open",
+    "nextActor": "customer",
+    "nextAction": null,
+    "note": "Support asks for an eye-area photo and the priority concern. Both requests remain pending until answered or clearly superseded."
+  },
+  {
+    "ticketId": "3928958f-67a4-4b08-9d14-05d909326ede",
+    "messageId": "7434fb12-5d24-4734-9c40-8cdd49613692",
+    "direction": "inbound",
+    "effect": "new_issue",
+    "answered": [
+      "skin_concern",
+      "reaction_product_name"
+    ],
+    "waitingCustomer": [
+      "photo"
+    ],
+    "obligations": [
+      {
+        "owner": "support",
+        "need": "reaction_product"
+      },
+      {
+        "owner": "support",
+        "need": "product_property"
+      }
+    ],
+    "caseState": "open",
+    "nextActor": "support",
+    "nextAction": "full_reply",
+    "note": "[REVIEW:R10] New CC-cream and LED questions plus reported swelling with an eye/lip serum. The prior requested photo is still not visible. A human must handle the reaction and check approved device information; full_reply may be a safe acknowledgement, not diagnosis or treatment."
+  },
+  {
+    "ticketId": "3928958f-67a4-4b08-9d14-05d909326ede",
+    "messageId": "adbb4f45-c8d6-4d64-8d3c-ebd378395145",
+    "direction": "outbound",
+    "effect": "answers",
+    "answered": [],
+    "waitingCustomer": [
+      "photo"
+    ],
+    "obligations": [],
+    "caseState": "open",
+    "nextActor": "customer",
+    "nextAction": null,
+    "note": "[REVIEW:R10,R12] The historical response addresses the new questions but does not visibly withdraw the original photo request, so it remains pending. Medical/device claims in this email are NOT approved evidence merely because staff wrote them."
+  },
+  {
+    "ticketId": "3928958f-67a4-4b08-9d14-05d909326ede",
+    "messageId": "01348d72-6651-42c3-b194-169c046ea6aa",
+    "direction": "inbound",
+    "effect": "new_issue",
+    "answered": [
+      "skin_concern"
+    ],
+    "waitingCustomer": [
+      "photo"
+    ],
+    "obligations": [
+      {
+        "owner": "support",
+        "need": "reaction_product"
+      },
+      {
+        "owner": "support",
+        "need": "product_recommendation"
+      },
+      {
+        "owner": "support",
+        "need": "product_property"
+      }
+    ],
+    "caseState": "open",
+    "nextActor": "support",
+    "nextAction": "full_reply",
+    "note": "[REVIEW:R10] Customer clarifies swelling and adds face-serum, retailer-offer and eye-protection questions. These require separate answers; keep the original photo request. Human reaction review remains necessary."
+  },
+  {
+    "ticketId": "3928958f-67a4-4b08-9d14-05d909326ede",
+    "messageId": "38bd95f2-d0a6-4e94-bec2-835b6e09eaee",
+    "direction": "outbound",
+    "effect": "answers",
+    "answered": [],
+    "waitingCustomer": [
+      "photo"
+    ],
+    "obligations": [
+      {
+        "owner": "support",
+        "need": "product_recommendation"
+      }
+    ],
+    "caseState": "open",
+    "nextActor": "support",
+    "nextAction": null,
+    "note": "[REVIEW:R10] Staff addresses the eye products, retailer discounts and protection question, but omits the face-serum recommendation. That unanswered request remains with support; the requested photo has not yet arrived."
+  },
+  {
+    "ticketId": "3928958f-67a4-4b08-9d14-05d909326ede",
+    "messageId": "f2da20c6-bbdd-4dd9-b80e-9f09872ac7e9",
+    "direction": "inbound",
+    "effect": "chase",
+    "answered": [],
+    "waitingCustomer": [
+      "photo"
+    ],
+    "obligations": [
+      {
+        "owner": "support",
+        "need": "product_recommendation"
+      }
+    ],
+    "caseState": "open",
+    "nextActor": "support",
+    "nextAction": "full_reply",
+    "note": "Thanks plus a repeat of the already-asked face-serum question is not closure or a new issue. A useful reply can ask for skin type/priorities; do not produce another empty holding message."
+  },
+  {
+    "ticketId": "3928958f-67a4-4b08-9d14-05d909326ede",
+    "messageId": "5da0c6cf-5d2d-4b90-91ae-8c7676f7b2a7",
+    "direction": "outbound",
+    "effect": "asks_customer",
+    "answered": [],
+    "waitingCustomer": [
+      "photo",
+      "skin_type",
+      "skin_concern"
+    ],
+    "obligations": [
+      {
+        "owner": "support",
+        "need": "product_recommendation"
+      }
+    ],
+    "caseState": "open",
+    "nextActor": "customer",
+    "nextAction": null,
+    "note": "Support requests skin type and face priorities; the earlier photo request remains pending. The recommendation is conditional on those inputs. Optional age is not made mandatory; reactivity detail is recorded in the note because v3 has no separate field."
+  },
+  {
+    "ticketId": "3928958f-67a4-4b08-9d14-05d909326ede",
+    "messageId": "591527f9-58b5-40df-85b9-4a56390aa94f",
+    "direction": "inbound",
+    "effect": "new_information",
+    "answered": [
+      "photo",
+      "skin_type",
+      "skin_concern"
+    ],
+    "waitingCustomer": [],
+    "obligations": [
+      {
+        "owner": "support",
+        "need": "product_recommendation"
+      }
+    ],
+    "caseState": "open",
+    "nextActor": "support",
+    "nextAction": "full_reply",
+    "note": "[REVIEW:R05] Customer explicitly states dry/dehydrated skin and wrinkles, and reports attaching a photo. Those skin labels come from her words, not image inference. photo is provisional because attachment bytes are absent in this export."
+  },
+  {
+    "ticketId": "3928958f-67a4-4b08-9d14-05d909326ede",
+    "messageId": "08c34212-dd7a-469d-93a5-7ff3b7481453",
+    "direction": "outbound",
+    "effect": "closes_case",
+    "answered": [],
+    "waitingCustomer": [],
+    "obligations": [],
+    "caseState": "closed_by_us",
+    "nextActor": "nobody",
+    "nextAction": null,
+    "note": "Staff supplies the requested face-serum recommendation and a routine after acknowledging the photo. No unanswered request remains in the available exchange. This is not validation of product claims."
+  },
+  {
+    "ticketId": "3928958f-67a4-4b08-9d14-05d909326ede",
+    "messageId": "f56752ee-2201-498f-9add-66b457a9ee1e",
+    "direction": "inbound",
+    "effect": "new_information",
+    "answered": [],
+    "waitingCustomer": [],
+    "obligations": [
+      {
+        "owner": "support",
+        "need": "product_recommendation"
+      }
+    ],
+    "caseState": "open",
+    "nextActor": "support",
+    "nextAction": "full_reply",
+    "note": "New budget constraint changes the same serum recommendation request. Support should propose an approved cheaper alternative; do not treat the price as current catalogue data."
+  },
+  {
+    "ticketId": "3928958f-67a4-4b08-9d14-05d909326ede",
+    "messageId": "c95afcc0-d594-4eb5-b501-ad5cda01dfcd",
+    "direction": "inbound",
+    "effect": "chase",
+    "answered": [],
+    "waitingCustomer": [],
+    "obligations": [
+      {
+        "owner": "support",
+        "need": "product_recommendation"
+      }
+    ],
+    "caseState": "open",
+    "nextActor": "support",
+    "nextAction": "no_reply_person_acts",
+    "note": "Pure chase while the cheaper recommendation is still outstanding. Apply the no-empty-holding rule; a person/source-backed recommendation is needed."
+  },
+  {
+    "ticketId": "3928958f-67a4-4b08-9d14-05d909326ede",
+    "messageId": "5a7e2a51-b348-4d30-8695-cb4629aec92d",
+    "direction": "outbound",
+    "effect": "closes_case",
+    "answered": [],
+    "waitingCustomer": [],
+    "obligations": [],
+    "caseState": "closed_by_us",
+    "nextActor": "nobody",
+    "nextAction": null,
+    "note": "Staff supplies the cheaper alternative and asks nothing further, resolving the recommendation request."
+  },
+  {
+    "ticketId": "3928958f-67a4-4b08-9d14-05d909326ede",
+    "messageId": "f81c7129-528c-48a3-ae88-9ee540c8d8f8",
+    "direction": "inbound",
+    "effect": "closes_case",
+    "answered": [],
+    "waitingCustomer": [],
+    "obligations": [],
+    "caseState": "closed_by_customer",
+    "nextActor": "nobody",
+    "nextAction": "no_reply",
+    "note": "Customer thanks support and says she will order. No new request; support had already answered."
+  },
+  {
+    "ticketId": "3928958f-67a4-4b08-9d14-05d909326ede",
+    "messageId": "26082f1a-4873-4f91-a7ef-55fa942819e6",
+    "direction": "inbound",
+    "effect": "new_issue",
+    "answered": [],
+    "waitingCustomer": [],
+    "obligations": [
+      {
+        "owner": "support",
+        "need": "product_property"
+      }
+    ],
+    "caseState": "open",
+    "nextActor": "support",
+    "nextAction": "full_reply",
+    "note": "Customer asks about a different serum, reopening product advice. Its suitability must come from approved product/recommendation information, not the following historical answer."
+  },
+  {
+    "ticketId": "3928958f-67a4-4b08-9d14-05d909326ede",
+    "messageId": "c16a6b22-d180-4042-9717-277660ff7cde",
+    "direction": "outbound",
+    "effect": "closes_case",
+    "answered": [],
+    "waitingCustomer": [],
+    "obligations": [],
+    "caseState": "closed_by_us",
+    "nextActor": "nobody",
+    "nextAction": null,
+    "note": "Staff answers the booster question and its fit with the stated needs. No further action is explicitly owed."
+  },
+  {
+    "ticketId": "3928958f-67a4-4b08-9d14-05d909326ede",
+    "messageId": "d4952660-c233-4a03-b0f6-929a1759c708",
+    "direction": "inbound",
+    "effect": "noise",
+    "answered": [],
+    "waitingCustomer": [],
+    "obligations": [],
+    "caseState": "closed_by_us",
+    "nextActor": "nobody",
+    "nextAction": "no_reply",
+    "note": "The fragment contains no interpretable request. Preserve the prior closed state; this reading does not rely on the next message that explains it."
+  },
+  {
+    "ticketId": "3928958f-67a4-4b08-9d14-05d909326ede",
+    "messageId": "2c5c8026-4522-440b-a784-1bd7448541ba",
+    "direction": "inbound",
+    "effect": "closes_case",
+    "answered": [],
+    "waitingCustomer": [],
+    "obligations": [],
+    "caseState": "closed_by_customer",
+    "nextActor": "nobody",
+    "nextAction": "no_reply",
+    "note": "Customer reports placing the order and thanks support. This ends the advice exchange; it is not a request to investigate the new order."
+  },
+  {
+    "ticketId": "3928958f-67a4-4b08-9d14-05d909326ede",
+    "messageId": "e87c34fe-d9e1-4af9-b2b3-e8ad098a94f3",
+    "direction": "inbound",
+    "effect": "new_issue",
+    "answered": [],
+    "waitingCustomer": [],
+    "obligations": [
+      {
+        "owner": "support",
+        "need": "product_recommendation"
+      }
+    ],
+    "caseState": "open",
+    "nextActor": "support",
+    "nextAction": "full_reply",
+    "note": "A new lip-area skincare recommendation is requested. The mention of future order receipt is context, not a delivery problem."
+  },
+  {
+    "ticketId": "3928958f-67a4-4b08-9d14-05d909326ede",
+    "messageId": "91e4d7ce-e09e-446e-ab09-fc041cf1b517",
+    "direction": "outbound",
+    "effect": "closes_case",
+    "answered": [],
+    "waitingCustomer": [],
+    "obligations": [],
+    "caseState": "closed_by_us",
+    "nextActor": "nobody",
+    "nextAction": null,
+    "note": "The historical staff reply supplies the requested routine. Record completion of the conversation request without approving its medical or product-use claims."
+  },
+  {
+    "ticketId": "3928958f-67a4-4b08-9d14-05d909326ede",
+    "messageId": "613ef459-3875-4ec6-aa92-e25663b7471d",
+    "direction": "inbound",
+    "effect": "closes_case",
+    "answered": [],
+    "waitingCustomer": [],
+    "obligations": [],
+    "caseState": "closed_by_customer",
+    "nextActor": "nobody",
+    "nextAction": "no_reply",
+    "note": "Simple thanks after a final answer; no additional closing email."
+  },
+  {
+    "ticketId": "3928958f-67a4-4b08-9d14-05d909326ede",
+    "messageId": "b34a3261-208c-404f-9361-95d6f1805290",
+    "direction": "inbound",
+    "effect": "continuation",
+    "answered": [],
+    "waitingCustomer": [],
+    "obligations": [],
+    "caseState": "open",
+    "nextActor": "support",
+    "nextAction": "full_reply",
+    "note": "Related application-order clarification, not new evidence or a different product problem. The earlier routine already places sunscreen last; support can give the concise clarification."
+  },
+  {
+    "ticketId": "3928958f-67a4-4b08-9d14-05d909326ede",
+    "messageId": "64a28517-01bc-4cc9-b1f8-d7e0465aee91",
+    "direction": "outbound",
+    "effect": "closes_case",
+    "answered": [],
+    "waitingCustomer": [],
+    "obligations": [],
+    "caseState": "closed_by_us",
+    "nextActor": "nobody",
+    "nextAction": null,
+    "note": "Application order is answered, with no question left pending."
+  },
+  {
+    "ticketId": "3928958f-67a4-4b08-9d14-05d909326ede",
+    "messageId": "37f52c03-2bdd-4755-a5d1-a65014e9fc6f",
+    "direction": "inbound",
+    "effect": "new_issue",
+    "answered": [
+      "skin_concern"
+    ],
+    "waitingCustomer": [],
+    "obligations": [
+      {
+        "owner": "support",
+        "need": "product_property"
+      }
+    ],
+    "caseState": "open",
+    "nextActor": "support",
+    "nextAction": "full_reply",
+    "note": "New request for specific LED programmes for wrinkles and post-blemish marks. Verify the approved device instructions; the export does not supply them, so no programme or therapeutic claim is invented."
+  },
+  {
+    "ticketId": "3928958f-67a4-4b08-9d14-05d909326ede",
+    "messageId": "12e401c8-70f6-478c-a0fd-40dbfd1296de",
+    "direction": "inbound",
+    "effect": "chase",
+    "answered": [],
+    "waitingCustomer": [],
+    "obligations": [
+      {
+        "owner": "support",
+        "need": "product_property"
+      }
+    ],
+    "caseState": "open",
+    "nextActor": "support",
+    "nextAction": "no_reply_person_acts",
+    "note": "Pure chase for the still-unanswered device-programme advice. A source-backed human answer is needed before replying meaningfully."
+  },
+  {
+    "ticketId": "3928958f-67a4-4b08-9d14-05d909326ede",
+    "messageId": "af707a36-031c-4386-bce7-ccf684ca566d",
+    "direction": "outbound",
+    "effect": "closes_case",
+    "answered": [],
+    "waitingCustomer": [],
+    "obligations": [],
+    "caseState": "closed_by_us",
+    "nextActor": "nobody",
+    "nextAction": null,
+    "note": "Staff supplies the requested programme schedule. This labels the historical answer as final, not the safety or accuracy of its specific programme claims."
+  },
+  {
+    "ticketId": "c5872271-5efd-4ab6-9bcf-ec141a2b2b97",
+    "messageId": "c6ed5fcf-b431-4f44-8240-bf146af1281e",
+    "direction": "outbound",
+    "effect": "answers",
+    "answered": [],
+    "waitingCustomer": [],
+    "obligations": [
+      {
+        "owner": "partner",
+        "need": "dispatch_state"
+      }
+    ],
+    "caseState": "open",
+    "nextActor": "partner",
+    "nextAction": null,
+    "note": "[ROUTING_CORRECTION] Staff reply to the customer, not customer input. The missing gift is promised in a separate parcel explicitly still in preparation. Dispatch remains a warehouse obligation; the automatic tracking notification has not yet arrived."
+  },
+  {
+    "ticketId": "d11bd308-abcc-4768-8f22-5882e2d9112c",
+    "messageId": "cc5d0151-6efe-4f19-8156-269bad28963d",
+    "direction": "inbound",
+    "effect": "new_information",
+    "answered": [
+      "shopify_order_number",
+      "product_name"
+    ],
+    "waitingCustomer": [],
+    "obligations": [],
+    "caseState": "open",
+    "nextActor": "support",
+    "nextAction": "full_reply",
+    "note": "Customer supplies the order number and explains the missing LED eye protection. Reply can address the return request and clarify evidence; do not assume she has consented to replacement instead of return/refund."
+  },
+  {
+    "ticketId": "d11bd308-abcc-4768-8f22-5882e2d9112c",
+    "messageId": "e5dae5ef-c0eb-42f5-986c-ad13a2379333",
+    "direction": "outbound",
+    "effect": "asks_customer",
+    "answered": [],
+    "waitingCustomer": [],
+    "obligations": [],
+    "caseState": "open",
+    "nextActor": "customer",
+    "nextAction": null,
+    "note": "[ROUTING_CORRECTION] Staff reply to the customer, not customer input. [REVIEW:R04,R12] Staff asks the customer to confirm that the pictured eye-protection pieces are missing. This is NOT receipt_confirmation for the parcel. Required pending input: missing_item_confirmation, not currently representable in waitingCustomer. The original return request is not automatically withdrawn."
+  },
+  {
+    "ticketId": "4df6fcfb-729f-4298-b076-df3908dcd939",
+    "messageId": "c389f592-0515-4591-9564-92aedc0375e7",
+    "direction": "outbound",
+    "effect": "asks_customer",
+    "answered": [],
+    "waitingCustomer": [
+      "shopify_order_number"
+    ],
+    "obligations": [],
+    "caseState": "open",
+    "nextActor": "customer",
+    "nextAction": null,
+    "note": "[ROUTING_CORRECTION] Staff reply to the customer, not customer input. Staff explicitly requests the missing order number before adding the gift and samples. Record the actual pending question; do not add purchase_email when staff has not asked it."
+  },
+  {
+    "ticketId": "b8c0402e-aa21-496e-a1f8-5aa495b36890",
+    "messageId": "69e02edb-ecae-4148-97f9-8b3691387c6f",
+    "direction": "outbound",
+    "effect": "asks_customer",
+    "answered": [],
+    "waitingCustomer": [],
+    "obligations": [],
+    "caseState": "open",
+    "nextActor": "customer",
+    "nextAction": null,
+    "note": "[REVIEW:R04] Staff asks what was received and how many parcels arrived. These details are not receipt_confirmation alone. Pending inputs parcel_count and issue_description have no exact v3 waitingCustomer value."
+  },
+  {
+    "ticketId": "b8c0402e-aa21-496e-a1f8-5aa495b36890",
+    "messageId": "13cbc071-a4dd-43b6-b403-50dbf9f24e1d",
+    "direction": "inbound",
+    "effect": "new_information",
+    "answered": [
+      "receipt_confirmation",
+      "other_fact"
+    ],
+    "waitingCustomer": [],
+    "obligations": [
+      {
+        "owner": "support",
+        "need": "dispatch_state"
+      }
+    ],
+    "caseState": "open",
+    "nextActor": "support",
+    "nextAction": "full_reply",
+    "note": "[REVIEW:R03] Customer clarifies that one parcel arrived and the apparent duplicate is a message, not another physical parcel. The clarifying questions are answered. Verify any second dispatch; no order number or reliably linked order is exposed in the export."
+  },
+  {
+    "ticketId": "b8c0402e-aa21-496e-a1f8-5aa495b36890",
+    "messageId": "54f393d0-a84f-471f-ab49-28699c3cb050",
+    "direction": "inbound",
+    "effect": "new_information",
+    "answered": [],
+    "waitingCustomer": [],
+    "obligations": [
+      {
+        "owner": "support",
+        "need": "dispatch_state"
+      }
+    ],
+    "caseState": "open",
+    "nextActor": "support",
+    "nextAction": "full_reply",
+    "note": "[REVIEW:R05,R03] Customer supplies/references attachments to clarify the notification. Their contents and presence are not verifiable here, so no photo or order identifier is invented. Retain the duplicate-dispatch check."
+  },
+  {
+    "ticketId": "b8c0402e-aa21-496e-a1f8-5aa495b36890",
+    "messageId": "ebac9e05-d1dd-419a-a55d-0d8585e0b56a",
+    "direction": "outbound",
+    "effect": "closes_case",
+    "answered": [],
+    "waitingCustomer": [],
+    "obligations": [],
+    "caseState": "closed_by_us",
+    "nextActor": "nobody",
+    "nextAction": null,
+    "note": "Support explicitly says no second dispatch was triggered. Reporting a second parcel IF one later arrives is a contingent instruction, not a presently outstanding receipt question."
+  },
+  {
+    "ticketId": "b8c0402e-aa21-496e-a1f8-5aa495b36890",
+    "messageId": "f226b21c-bf9c-43d1-a711-f98e844b84f7",
+    "direction": "inbound",
+    "effect": "closes_case",
+    "answered": [],
+    "waitingCustomer": [],
+    "obligations": [],
+    "caseState": "closed_by_customer",
+    "nextActor": "nobody",
+    "nextAction": "no_reply",
+    "note": "Customer acknowledges the contingent instruction and thanks support. No second parcel is reported and no action remains."
+  },
+  {
+    "ticketId": "90876345-5c7d-4d9a-a46a-2a4f97ebd6df",
+    "messageId": "849da9f9-6067-4093-bb55-747afeaae540",
+    "direction": "outbound",
+    "effect": "answers",
+    "answered": [],
+    "waitingCustomer": [],
+    "obligations": [
+      {
+        "owner": "support",
+        "need": "other_fact"
+      }
+    ],
+    "caseState": "open",
+    "nextActor": "support",
+    "nextAction": null,
+    "note": "[ROUTING_CORRECTION] Staff reply to the customer, not customer input. [REVIEW:R06] Staff states a refund has been initiated and separately promises a personal notification when shipping resumes. other_fact is that future notice, not an assertion about the cause of the delivery restriction. The historical explanation is not verified here."
+  },
+  {
+    "ticketId": "85715d70-6103-4b56-bcd1-40dbd6c78a32",
+    "messageId": "44b38856-e4d1-45d0-89d4-c9b415f3c9ff",
+    "direction": "inbound",
+    "effect": "chase",
+    "answered": [],
+    "waitingCustomer": [],
+    "obligations": [
+      {
+        "owner": "colleague",
+        "need": "other_fact"
+      }
+    ],
+    "caseState": "open",
+    "nextActor": "colleague",
+    "nextAction": "no_reply_person_acts",
+    "note": "[REVIEW:R09] Pure chase about damaged goods. The pharmacy signature suggests a trade case, so keep it with a human and do not auto-draft. Confirm whether this is actually a B2B purchase rather than a personal order sent from a work address."
+  },
+  {
+    "ticketId": "85715d70-6103-4b56-bcd1-40dbd6c78a32",
+    "messageId": "3467abfe-57fd-42f2-becb-c2401437a434",
+    "direction": "outbound",
+    "effect": "asks_customer",
+    "answered": [],
+    "waitingCustomer": [
+      "preferred_remedy"
+    ],
+    "obligations": [],
+    "caseState": "open",
+    "nextActor": "customer",
+    "nextAction": null,
+    "note": "[ROUTING_CORRECTION] Staff reply to the customer, not customer input. [REVIEW:R04,R09] Staff asks whether the products leaked or only labels were damaged, AND asks the preferred solution. preferred_remedy is representable; the additional issue_details question is not. The previous photos are acknowledged as received by staff."
+  },
+  {
+    "ticketId": "85715d70-6103-4b56-bcd1-40dbd6c78a32",
+    "messageId": "df24bab2-5e8d-44dd-9514-aaf87aa2c59b",
+    "direction": "outbound",
+    "effect": "answers",
+    "answered": [],
+    "waitingCustomer": [],
+    "obligations": [
+      {
+        "owner": "partner",
+        "need": "other_fact"
+      },
+      {
+        "owner": "support",
+        "need": "dispatch_state"
+      }
+    ],
+    "caseState": "open",
+    "nextActor": "customer",
+    "nextAction": null,
+    "note": "[ROUTING_CORRECTION] Staff reply to the customer, not customer input. [REVIEW:R04,R09] A prepaid label has been supplied, implying the return/replacement route was agreed, but not that the parcel has returned. Customer must post it; partner checks receipt, then support initiates replacement. The physical return action is only representable in notes."
+  },
+  {
+    "ticketId": "5392f7f7-446e-4bbc-b954-5606c9a4bba0",
+    "messageId": "6b4cd954-c9bb-4fc9-b32c-4fbc62d6cfb7",
+    "direction": "outbound",
+    "effect": "answers",
+    "answered": [],
+    "waitingCustomer": [],
+    "obligations": [
+      {
+        "owner": "support",
+        "need": "dispatch_state"
+      }
+    ],
+    "caseState": "open",
+    "nextActor": "support",
+    "nextAction": null,
+    "note": "[ROUTING_CORRECTION] Staff reply to the customer, not customer input. Staff explains the gift mechanism and promises a separate gift parcel. No preparation/dispatch completion is shown; support must initiate/ensure the promised sending. Do not use current code-only promotion tools to claim this historic basket was checked."
+  },
+  {
+    "ticketId": "2608b01c-efc1-4e4a-9338-fa260a396666",
+    "messageId": "f7513d9f-b297-489f-a194-13758c1fcb0c",
+    "direction": "outbound",
+    "effect": "answers",
+    "answered": [],
+    "waitingCustomer": [],
+    "obligations": [
+      {
+        "owner": "partner",
+        "need": "dispatch_state"
+      }
+    ],
+    "caseState": "open",
+    "nextActor": "partner",
+    "nextAction": null,
+    "note": "[REVIEW:R02] Support announces that sending is being initiated and that tracking will follow handover. Keep dispatch open rather than claiming the carrier already has the replacement."
+  },
+  {
+    "ticketId": "2608b01c-efc1-4e4a-9338-fa260a396666",
+    "messageId": "bd27c866-8f9d-4034-ba47-c4bbccf18854",
+    "direction": "inbound",
+    "effect": "new_information",
+    "answered": [],
+    "waitingCustomer": [],
+    "obligations": [
+      {
+        "owner": "partner",
+        "need": "dispatch_state"
+      },
+      {
+        "owner": "support",
+        "need": "other_fact"
+      }
+    ],
+    "caseState": "open",
+    "nextActor": "support",
+    "nextAction": "full_reply",
+    "note": "Customer adds a commercial-gesture request to the same missing-items problem. Support must decide the gesture; the already-promised dispatch remains outstanding. full_reply must not promise an unapproved gift."
+  },
+  {
+    "ticketId": "2608b01c-efc1-4e4a-9338-fa260a396666",
+    "messageId": "72c60c83-0560-447d-acc4-c32f1bb0040e",
+    "direction": "outbound",
+    "effect": "answers",
+    "answered": [],
+    "waitingCustomer": [],
+    "obligations": [
+      {
+        "owner": "partner",
+        "need": "dispatch_state"
+      }
+    ],
+    "caseState": "open",
+    "nextActor": "partner",
+    "nextAction": null,
+    "note": "[REVIEW:R02] The gesture is confirmed as added and tracking exists, but the text says the parcel WILL be completed and shipped. A tracking number alone does not clear the dispatch obligation."
+  },
+  {
+    "ticketId": "2608b01c-efc1-4e4a-9338-fa260a396666",
+    "messageId": "7139dab9-97f2-47f7-9523-cd1bedecab1c",
+    "direction": "inbound",
+    "effect": "new_information",
+    "answered": [
+      "receipt_confirmation"
+    ],
+    "waitingCustomer": [],
+    "obligations": [
+      {
+        "owner": "support",
+        "need": "photo_evidence"
+      }
+    ],
+    "caseState": "open",
+    "nextActor": "support",
+    "nextAction": "full_reply",
+    "note": "[REVIEW:R05] Receipt makes the previous dispatch obligation moot, but the new parcel still lacks the lotion. Treat this as new evidence on the same issue. Verify whether a suitable parcel photo is available before applying the missing-item route; do not invent an attachment."
+  },
+  {
+    "ticketId": "2608b01c-efc1-4e4a-9338-fa260a396666",
+    "messageId": "65ff124b-930c-4ed4-b9fe-bb8a2be06b90",
+    "direction": "outbound",
+    "effect": "closes_case",
+    "answered": [],
+    "waitingCustomer": [],
+    "obligations": [],
+    "caseState": "closed_by_us",
+    "nextActor": "nobody",
+    "nextAction": null,
+    "note": "Support explicitly confirms the still-missing lotion has now been reshipped and gives tracking. Being available for further contact is not an explicit obligation to monitor every delivery."
+  },
+  {
+    "ticketId": "1d5445ac-bc94-44b6-b055-19fa667995ac",
+    "messageId": "34127135-f4d5-41e3-923b-b8dd38db821c",
+    "direction": "outbound",
+    "effect": "answers",
+    "answered": [],
+    "waitingCustomer": [],
+    "obligations": [
+      {
+        "owner": "support",
+        "need": "dispatch_state"
+      }
+    ],
+    "caseState": "open",
+    "nextActor": "support",
+    "nextAction": null,
+    "note": "[ROUTING_CORRECTION] Staff reply to the customer, not customer input. The human reply settles the mask-discount explanation but promises a separate Cocooning gift shipment with tracking to follow. Keep the sending action open. The current automatic-promotion tooling limitation is not solved by this email."
+  },
+  {
+    "ticketId": "8f0697bf-71fc-49f9-9db4-a61149da608b",
+    "messageId": "2c572c62-7c6b-4203-b873-c999e84d591d",
+    "direction": "outbound",
+    "effect": "closes_case",
+    "answered": [],
+    "waitingCustomer": [],
+    "obligations": [],
+    "caseState": "closed_by_us",
+    "nextActor": "nobody",
+    "nextAction": null,
+    "note": "[REVIEW:R07] This is an informational return-procedure answer (R-21), not proof a return was sent or approved in the system. Its return address and timeframes differ from the current cheat sheet; preserve history but never use them as the present rulebook."
+  },
+  {
+    "ticketId": "8f0697bf-71fc-49f9-9db4-a61149da608b",
+    "messageId": "c024512e-4660-462e-b069-d756139f41df",
+    "direction": "inbound",
+    "effect": "new_information",
+    "answered": [
+      "postal_address"
+    ],
+    "waitingCustomer": [],
+    "obligations": [
+      {
+        "owner": "support",
+        "need": "other_fact"
+      }
+    ],
+    "caseState": "open",
+    "nextActor": "support",
+    "nextAction": "full_reply",
+    "note": "[REVIEW:R03,R08] Customer supplies sender address after a phone call whose content is missing. Support must recover the phone context and linked order before inferring the next return step. No order number is present in the exported prefix."
+  },
+  {
+    "ticketId": "8f0697bf-71fc-49f9-9db4-a61149da608b",
+    "messageId": "fc143385-5f11-4889-8531-e6631c6a3c50",
+    "direction": "inbound",
+    "effect": "new_information",
+    "answered": [
+      "product_name",
+      "order_date_or_amount"
+    ],
+    "waitingCustomer": [],
+    "obligations": [
+      {
+        "owner": "support",
+        "need": "order_identity"
+      },
+      {
+        "owner": "support",
+        "need": "refund_state"
+      }
+    ],
+    "caseState": "open",
+    "nextActor": "support",
+    "nextAction": "no_reply_person_acts",
+    "note": "[REVIEW:R03,R08] Customer supplies parcel contents and the refund amount after another phone call. A person must establish the order, return receipt/approval and refund status. Do not claim refund completed or invent the missing phone instructions."
   }
 ];

@@ -815,3 +815,122 @@ test('attachOnly skips a thread with no ticket instead of opening one', async ()
   assert.equal(store.tickets.size, 0);
   assert.equal(store.messages.size, 0);
 });
+
+// --- the opener and the requester come from the thread, not from arrival order (2026-09-26)
+//
+// 174 tickets had a colleague as requester after the first full read: Graph
+// delivered the staff reply before the customer's message, and whichever
+// message created the ticket named its requester for good.
+
+const IDENTITY_MAILBOX = 'contact@shop.example';
+const ownLabel = (from) => (/@(shop\.example|staff\.example)$/i.test(from) ? 'internal' : null);
+const notCourier = (from) => !/@courier\.example$/i.test(from);
+
+// A store that can read a thread back, like the Supabase one.
+function threadStore() {
+  const store = storeKnowing();
+  store.threadMessages = async (ticketId) =>
+    [...store.messages.values()].filter((m) => m.ticket_id === ticketId).map((m) => ({ ...m, id: m.graph_message_id }));
+  store.directionChanges = [];
+  store.setMessageDirection = async (id, direction) => {
+    store.directionChanges.push([id, direction]);
+    for (const m of store.messages.values()) if (m.graph_message_id === id) m.direction = direction;
+  };
+  return store;
+}
+
+function message({ id, from, name, to = [], at, conversationId = 'c1' }) {
+  const item = mappedMessage({ id, conversationId, at });
+  Object.assign(item.message, { from_email: from, from_name: name, to_emails: to, cc_emails: [] });
+  Object.assign(item.conversation, { requester_email_hash: hashIdentifier(from), requester_name: name });
+  return item;
+}
+
+test('a staff reply ingested BEFORE the customer message it answers: the customer still ends up the requester', async () => {
+  const store = threadStore();
+  const options = { senderLabel: ownLabel, isCandidate: notCourier, mailbox: IDENTITY_MAILBOX };
+  const reply = message({ id: 'r1', from: 'lea@staff.example', name: 'Léa', to: [CUSTOMER], at: '2026-09-02T10:00:00Z' });
+  const question = message({ id: 'q1', from: CUSTOMER, name: 'Marie', to: [IDENTITY_MAILBOX], at: '2026-09-01T10:00:00Z' });
+
+  // Graph's order: the reply first.
+  await writeIngestedMessages(store, store, 'shop-1', [reply], options);
+  const ticket = store.tickets.get('shop-1|c1');
+  assert.equal(ticket.requester_email_hash, hashIdentifier('lea@staff.example'), 'the bug, reproduced: the colleague first');
+  assert.equal(ticket.sender_label, 'internal');
+
+  const counts = await writeIngestedMessages(store, store, 'shop-1', [question], options);
+
+  assert.equal(ticket.requester_email_hash, hashIdentifier(CUSTOMER));
+  assert.equal(ticket.requester_name, 'Marie');
+  assert.equal(ticket.sender_label, null, 'the real opener is the customer');
+  assert.equal(store.messages.get('shop-1|r1').direction, 'outbound', 'the earlier staff reply is re-filed as ours');
+  assert.equal(store.messages.get('shop-1|q1').direction, 'inbound');
+  assert.deepEqual([counts.requestersCorrected, counts.openersCorrected, counts.directionsCorrected], [1, 1, 1]);
+});
+
+test('in chronological order nothing needs correcting', async () => {
+  const store = threadStore();
+  const options = { senderLabel: ownLabel, isCandidate: notCourier, mailbox: IDENTITY_MAILBOX };
+  await writeIngestedMessages(store, store, 'shop-1', [message({ id: 'q1', from: CUSTOMER, name: 'Marie', at: '2026-09-01T10:00:00Z' })], options);
+  const counts = await writeIngestedMessages(
+    store, store, 'shop-1',
+    [message({ id: 'r1', from: 'lea@staff.example', name: 'Léa', to: [CUSTOMER], at: '2026-09-02T10:00:00Z' })],
+    options
+  );
+  const ticket = store.tickets.get('shop-1|c1');
+  assert.equal(ticket.requester_email_hash, hashIdentifier(CUSTOMER));
+  assert.equal(store.messages.get('shop-1|r1').direction, 'outbound');
+  assert.deepEqual([counts.requestersCorrected, counts.openersCorrected, counts.directionsCorrected], [0, 0, 0]);
+});
+
+test('a customer requester is never replaced by another correspondent: write-once still holds for them', async () => {
+  const store = threadStore();
+  const options = { senderLabel: ownLabel, isCandidate: notCourier, mailbox: IDENTITY_MAILBOX };
+  await writeIngestedMessages(store, store, 'shop-1', [message({ id: 'q1', from: CUSTOMER, name: 'Marie', at: '2026-09-02T10:00:00Z' })], options);
+  await writeIngestedMessages(store, store, 'shop-1', [message({ id: 'q0', from: 'paul@example.com', name: 'Paul', at: '2026-09-01T10:00:00Z' })], options);
+  assert.equal(store.tickets.get('shop-1|c1').requester_email_hash, hashIdentifier(CUSTOMER));
+});
+
+test('a colleague thread ABOUT a customer keeps its label; the customer who writes becomes the requester', async () => {
+  const store = threadStore();
+  const options = { senderLabel: ownLabel, isCandidate: notCourier, mailbox: IDENTITY_MAILBOX };
+  await writeIngestedMessages(store, store, 'shop-1', [message({ id: 'n1', from: 'lea@staff.example', name: 'Léa', at: '2026-09-01T10:00:00Z' })], options);
+  await writeIngestedMessages(store, store, 'shop-1', [message({ id: 'q1', from: CUSTOMER, name: 'Marie', at: '2026-09-02T10:00:00Z' })], options);
+  const ticket = store.tickets.get('shop-1|c1');
+  assert.equal(ticket.sender_label, 'internal', 'the colleague really did open it');
+  assert.equal(ticket.requester_email_hash, hashIdentifier(CUSTOMER), 'whose case it is');
+});
+
+test("a courier's mail never becomes the requester", async () => {
+  const store = threadStore();
+  const options = { senderLabel: ownLabel, isCandidate: notCourier, mailbox: IDENTITY_MAILBOX };
+  await writeIngestedMessages(store, store, 'shop-1', [message({ id: 'n1', from: 'lea@staff.example', name: 'Léa', at: '2026-09-01T10:00:00Z' })], options);
+  await writeIngestedMessages(store, store, 'shop-1', [message({ id: 't1', from: 'suivi@courier.example', name: 'Suivi', at: '2026-09-02T10:00:00Z' })], options);
+  assert.equal(store.tickets.get('shop-1|c1').requester_email_hash, hashIdentifier('lea@staff.example'));
+});
+
+test('a thread read that fails leaves the ticket as it was and still stores the message', async () => {
+  const store = threadStore();
+  const warnings = [];
+  const options = { senderLabel: ownLabel, isCandidate: notCourier, mailbox: IDENTITY_MAILBOX, logger: { warn: (e) => warnings.push(e), info() {} } };
+  await writeIngestedMessages(store, store, 'shop-1', [message({ id: 'r1', from: 'lea@staff.example', name: 'Léa', to: [CUSTOMER], at: '2026-09-02T10:00:00Z' })], options);
+  store.threadMessages = async () => { throw new Error('timeout'); };
+  await writeIngestedMessages(store, store, 'shop-1', [message({ id: 'q1', from: CUSTOMER, name: 'Marie', at: '2026-09-01T10:00:00Z' })], options);
+  assert.ok(store.messages.get('shop-1|q1'));
+  assert.deepEqual(warnings, ['ingest.thread_identity_failed']);
+});
+
+test('each stored message carries its actor, and a re-filed staff reply moves to support', async () => {
+  const store = threadStore();
+  const actorFor = (m) => (m.direction === 'outbound' ? 'support' : ownLabel(m.from_email) ? 'colleague' : 'customer');
+  const options = { senderLabel: ownLabel, isCandidate: notCourier, mailbox: IDENTITY_MAILBOX, actorFor };
+  await writeIngestedMessages(store, store, 'shop-1', [message({ id: 'r1', from: 'lea@staff.example', name: 'Léa', to: [CUSTOMER], at: '2026-09-02T10:00:00Z' })], options);
+  assert.equal(store.messages.get('shop-1|r1').actor, 'colleague', 'before the customer is known');
+
+  store.setMessageDirection = async (id, direction, actor) => {
+    for (const m of store.messages.values()) if (m.graph_message_id === id) Object.assign(m, { direction, actor });
+  };
+  await writeIngestedMessages(store, store, 'shop-1', [message({ id: 'q1', from: CUSTOMER, name: 'Marie', at: '2026-09-01T10:00:00Z' })], options);
+  assert.equal(store.messages.get('shop-1|q1').actor, 'customer');
+  assert.deepEqual([store.messages.get('shop-1|r1').direction, store.messages.get('shop-1|r1').actor], ['outbound', 'support']);
+});

@@ -44,6 +44,11 @@ export async function runDeltaPoll({
   // tests call it directly, which is why nothing failed.
   senderLabel,
   detectRelated,
+  // Who may become a ticket's requester in place of one of our own addresses
+  // (ticket-writer `threadIdentity`).
+  isCandidate,
+  // message → actor, stamped on each stored message (casework/actors.mjs).
+  actorFor,
   // `inbox` or `sentitems`. Sent Items mail is ours by definition, and may only
   // join a thread that already has a ticket: outbound mail adds to a case, it
   // never opens one (codex_plans/Case_State_Plan.md, stage 2).
@@ -63,7 +68,10 @@ export async function runDeltaPoll({
     duplicatesLinked: 0,
     relatedLinked: 0,
     skippedNoTicket: 0,
-    skippedCopies: 0
+    skippedCopies: 0,
+    requestersCorrected: 0,
+    openersCorrected: 0,
+    directionsCorrected: 0
   };
   const hitCounts = new Map();
   // Decisions from both passes buffer here and are written once per poll; the
@@ -129,6 +137,9 @@ export async function runDeltaPoll({
       detectDuplicate,
       detectRelated,
       senderLabel,
+      isCandidate,
+      mailbox,
+      actorFor,
       attachOnly: folder === 'sentitems',
       logger
     });
@@ -141,6 +152,9 @@ export async function runDeltaPoll({
     totals.relatedLinked += counts.relatedLinked ?? 0;
     totals.skippedNoTicket += counts.skippedNoTicket ?? 0;
     totals.skippedCopies += counts.skippedCopies ?? 0;
+    totals.requestersCorrected += counts.requestersCorrected ?? 0;
+    totals.openersCorrected += counts.openersCorrected ?? 0;
+    totals.directionsCorrected += counts.directionsCorrected ?? 0;
   }
 
   // Read once per poll, not once per process: `ids:translate` flips the id type

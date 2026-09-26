@@ -9,6 +9,8 @@ import { createGraphClient } from './ingestion/graph-client.mjs';
 import { createSupabaseMessageStore } from './ingestion/ticket-writer.mjs';
 import { createBlocklistStore } from './ingestion/blocklist-store.mjs';
 import { OWN_SIDE_LABELS, createSenderDirectoryStore } from './ingestion/sender-directory.mjs';
+import { actorOf } from './casework/actors.mjs';
+import { createCaseCurrentStore, runFold } from './casework/case-current-store.mjs';
 import { createDuplicateLookup, findDuplicate } from './ingestion/duplicate-rules.mjs';
 import { createRelatedLookup, findRelated } from './ingestion/related-rules.mjs';
 import { exemptKnownSenders } from './ingestion/known-senders.mjs';
@@ -74,6 +76,7 @@ const PIPELINE_STAGES = [
   'orders',
   'context',
   'investigate',
+  'fold',
   'forward',
   'close'
 ];
@@ -100,6 +103,7 @@ async function main() {
   const record = createTicketRecord(supabase, { shopId });
   const caseStateRecord = createCaseStateRecord(supabase, { shopId });
   const store = createSupabaseMessageStore(supabase);
+  const caseCurrentStore = createCaseCurrentStore(supabase, { shopId });
   const cursorStore = createSupabaseCursorStore(supabase);
   // The narrow candidate pool duplicate detection decides against: one sender's
   // recent messages, never the mailbox.
@@ -257,6 +261,12 @@ async function main() {
         const label = senderDirectory.lookup(fromEmail)?.label ?? null;
         return OWN_SIDE_LABELS.includes(label) ? label : null;
       },
+      // A customer or a retailer may take over a requester that is one of our
+      // own addresses; a courier's tracking mail may not.
+      isCandidate: (fromEmail) => !senderDirectory.isNonDemand(fromEmail),
+      // Who wrote each message, in the case vocabulary, through the deployment's
+      // label map (AGENT_ACTOR_BY_LABEL).
+      actorFor: (message) => actorOf(message, senderDirectory, config.actorByLabel),
       limit
     };
     const totals = await runDeltaPoll(ingestOptions);
@@ -420,6 +430,22 @@ async function main() {
       });
       if (investigated.considered > 0) {
         logger.info('investigate.pass', { shopId, ...investigated });
+      }
+    }
+
+    // THE FOLD, after everything that feeds it: the messages this poll stored,
+    // the Case Manager's readings and the case files just written. No model and
+    // no ticket write; it keeps `case_current` in step (stage 4). The first run
+    // works through the backlog 200 tickets a poll.
+    if (runsThrough('fold')) {
+      const folded = await runFold({
+        store: caseCurrentStore,
+        shopId,
+        actorFor: (message) => actorOf(message, senderDirectory, config.actorByLabel),
+        logger
+      });
+      if (folded.considered > 0) {
+        logger.info('fold.pass', { shopId, ...folded });
       }
     }
 

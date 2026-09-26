@@ -57,6 +57,7 @@ export const T = {
   SPAM_AUDIT: 'spam_audit',
   TICKET_INVESTIGATIONS: 'ticket_investigations',
   TICKET_CASE_STATE: 'ticket_case_state',
+  CASE_CURRENT: 'case_current',
   CATEGORY_FORWARDING: 'category_forwarding',
   TICKET_FORWARDS: 'ticket_forwards',
   CATEGORISATION_REVIEW: 'categorisation_review',
@@ -379,7 +380,7 @@ export const COLUMNS = {
    * Still no `from_name`: a person's name is not a role, and nothing here reads
    * it.
    */
-  threadForDrafting: 'id,ticket_id,direction,subject,body_text,received_at,sent_at,from_email',
+  threadForDrafting: 'id,ticket_id,direction,actor,subject,body_text,received_at,sent_at,from_email',
 
   /**
    * Drafting reads the message it is replying to, and nothing about who sent it.

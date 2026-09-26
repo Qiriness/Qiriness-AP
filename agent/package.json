@@ -53,6 +53,9 @@
     "sender-label:backfill:dry-run": "node src/tools/run-sender-label-backfill.mjs --dry-run",
     "staff-replies:backfill": "node src/tools/run-staff-reply-backfill.mjs",
     "staff-replies:backfill:dry-run": "node src/tools/run-staff-reply-backfill.mjs --dry-run",
+    "actors:backfill": "node src/tools/run-actor-backfill.mjs",
+    "actors:backfill:dry-run": "node src/tools/run-actor-backfill.mjs --dry-run",
+    "fold:once": "node src/tools/run-fold.mjs",
     "requester:repair": "node src/tools/run-requester-repair.mjs",
     "requester:repair:dry-run": "node src/tools/run-requester-repair.mjs --dry-run",
     "tickets:requeue": "node src/tools/run-requeue-tickets.mjs",
@@ -62,6 +65,7 @@
     "cases:label": "node src/tools/build-casework-review.mjs",
     "cases:import": "node eval/import-casework-labels.mjs",
     "eval:casework": "node eval/run-casework-eval.mjs",
+    "eval:fold": "node eval/fold-variants.mjs",
     "eval:delta": "node eval/report-investigation-delta.mjs",
     "eval:closure": "node eval/run-closure-eval.mjs"
   }

@@ -462,6 +462,12 @@ create table public.ticket_messages (
   reference_ids text[] not null default '{}',
 
   direction text not null,
+  -- Who wrote it, in the case vocabulary: outbound is support, an inbound sender
+  -- is mapped through sender_directory and AGENT_ACTOR_BY_LABEL
+  -- (agent/src/casework/actors.mjs). Stored at arrival like sender_label, so
+  -- relabelling the directory never rewrites history. Null on a row written
+  -- before the column; `actors:backfill` fills it.
+  actor text,
   from_email text,
   from_name text,
   to_emails text[] not null default '{}',
@@ -496,6 +502,9 @@ create table public.ticket_messages (
   constraint ticket_messages_shop_message_unique unique (shop_id, graph_message_id),
   constraint ticket_messages_direction_check check (
     direction in ('inbound', 'outbound')
+  ),
+  constraint ticket_messages_actor_check check (
+    actor is null or actor in ('customer', 'support', 'colleague', 'partner')
   ),
   constraint ticket_messages_raw_payload_object_check check (
     jsonb_typeof(raw_graph_payload) = 'object'
@@ -1195,6 +1204,69 @@ comment on column public.ticket_case_state.resolved_inputs is
 
 comment on column public.ticket_case_state.evidence_reuse is
   'Per need a prior run touched: { tool, argsHash, outcome, run_at, status }. Outcome buckets only, never tool data -- the same personal-data boundary tool_calls and context_ref already hold.';
+
+-- ---------------------------------------------------------------- case_current
+--
+-- The current state of each case (codex_plans/Case_State_Plan.md, stage 4).
+-- 41_case_current.sql carries a populated database to it; 41's test asserts the
+-- two agree.
+
+create table public.case_current (
+  ticket_id uuid primary key references public.tickets(id) on delete cascade,
+  shop_id uuid not null references public.shops(id) on delete cascade,
+
+  version integer not null default 1,
+  as_of_message_id uuid references public.ticket_messages(id) on delete set null,
+  as_of_at timestamptz,
+  last_actor text,
+
+  pending_customer_inputs jsonb not null default '[]'::jsonb,
+  commitments jsonb not null default '[]'::jsonb,
+  contradictions jsonb not null default '[]'::jsonb,
+  obligations jsonb not null default '[]'::jsonb,
+
+  next_actor text,
+  resolved boolean not null default false,
+
+  material_hash text not null,
+  folded_at timestamptz not null default now(),
+
+  constraint case_current_last_actor_check check (
+    last_actor is null or last_actor in ('customer', 'support', 'colleague', 'partner')
+  ),
+  constraint case_current_next_actor_check check (
+    next_actor is null or next_actor in ('customer', 'support', 'colleague', 'partner', 'nobody')
+  ),
+  constraint case_current_pending_inputs_array_check check (
+    jsonb_typeof(pending_customer_inputs) = 'array'
+  ),
+  constraint case_current_commitments_array_check check (
+    jsonb_typeof(commitments) = 'array'
+  ),
+  constraint case_current_contradictions_array_check check (
+    jsonb_typeof(contradictions) = 'array'
+  ),
+  constraint case_current_obligations_array_check check (
+    jsonb_typeof(obligations) = 'array'
+  )
+);
+
+create index case_current_shop_next_actor_idx
+  on public.case_current (shop_id, next_actor);
+
+alter table public.case_current enable row level security;
+
+comment on table public.case_current is
+  'The current state of each case, one row per ticket, overwritten in place like resolved_context: folded in code (agent/src/casework/case-fold.mjs) from the ticket''s messages, its Case Manager readings and its latest case file. No model writes it. ticket_case_state stays the per-message trajectory.';
+
+comment on column public.case_current.version is
+  'Raised only when material_hash changes, so a thank-you that changes nothing does not make a draft stale (codex_plans/Case_State_Plan.md, stage 6).';
+
+comment on column public.case_current.next_actor is
+  'Who owes the next step: customer | support | colleague | partner | nobody. Derived by the fold; nothing reads it to change a ticket''s status yet (stage 5).';
+
+comment on column public.case_current.obligations is
+  'Checks owed by support, a colleague or an operations partner. Empty until stage 5 creates them.';
 
 -- ---------------------------------------------------------------- category_forwarding
 

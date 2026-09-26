@@ -7,7 +7,8 @@ import {
 import { loadAgentConfig } from '../config.mjs';
 import { resolveShopId } from '../lib/shop.mjs';
 import { OWN_SIDE_LABELS, createSenderDirectoryStore } from '../ingestion/sender-directory.mjs';
-import { isStaffReplyToCustomer } from '../ingestion/ticket-writer.mjs';
+import { actorOf } from '../casework/actors.mjs';
+import { directionFor } from '../ingestion/ticket-writer.mjs';
 
 // Re-files, as `outbound`, the stored replies a colleague sent the customer
 // from a personal inbox. Ingestion does this for new mail since 2026-09-26
@@ -63,9 +64,7 @@ async function main() {
 
   const changes = [];
   for (const message of staff) {
-    const wanted = isStaffReplyToCustomer({ ...message, direction: 'inbound' }, tickets.get(message.ticket_id), senderLabel)
-      ? 'outbound'
-      : 'inbound';
+    const wanted = directionFor(message, tickets.get(message.ticket_id), senderLabel, config.graph.mailbox);
     if (wanted !== message.direction) changes.push({ ...message, wanted });
   }
   const toOutbound = changes.filter((c) => c.wanted === 'outbound');
@@ -84,7 +83,10 @@ async function main() {
   let failed = 0;
   for (const change of changes) {
     try {
-      await supabaseUpdateById(supabase, 'ticket_messages', change.id, { direction: change.wanted });
+      await supabaseUpdateById(supabase, 'ticket_messages', change.id, {
+        direction: change.wanted,
+        actor: actorOf({ ...change, direction: change.wanted }, directory, config.actorByLabel)
+      });
     } catch (error) {
       failed += 1;
       console.error(`  ${change.id}: ${error.message}`);

@@ -10,6 +10,25 @@ Three sibling files carry the other halves, and this one deliberately does not d
 
 ---
 
+## Stage 4: who wrote each message, and the current state of each case (2026-09-26)
+
+- **Migration 41, applied:** `ticket_messages.actor` and the `case_current` table. 2,304 messages backfilled with their actor (`actors:backfill`).
+- **Ingestion** stamps each message's actor and moves it with a re-filed direction.
+- **Drafting** skips a message written by a colleague or an operations partner (`not_customer_trigger`), which closes known gap #2.
+- **The fold** (`case-fold.mjs`, pure) and its worker pass (after the investigation) fill `case_current`. All 993 tickets folded; the re-run found 0 stale. `fold:once` runs it alone.
+- **Measured:** the fold agrees with 79 of 132 labelled next actors; today's pipeline agrees with 45 and cannot answer 71. `eval:fold` scores it with no model call; `eval:casework` shows both side by side.
+- Status from `next_actor`, the case-actions table and re-reads on late events move to stage 5 (`DECISIONS.md`). Tests: 1,677 agent tests pass, and the schema tests pass 86 of 86.
+
+## The requester bug fixed at its cause (2026-09-26)
+
+Ingestion now re-reads a thread's opener and requester from all its messages as each one lands, instead of trusting whichever message created the ticket. A requester that is one of our own addresses moves to the first real correspondent (never a courier). A customer requester never moves. The thread's staff messages are re-filed if either changes. 6 regression tests, including messages in the wrong order; 1,662 agent tests pass. Live poll clean; `requester:repair` finds 0 of 993 left.
+
+## Stage 3 baseline recorded, and 174 tickets given back their customer (2026-09-26)
+
+- **Labels:** the reviewed v3 set (132 labels, 40 threads) is imported and replaces the 25 September batch. Baseline in `DECISIONS.md` (§ *The timeline labels name who owes each check*). Pipeline, where it can say it: next actor 45/61, effect 31/46, next action 32/48. It cannot say 71 of the 132 next actors.
+- **Data repair:** 174 tickets had a colleague as requester, because the first full read created threads from a staff reply. `requester:repair` fixed them (25 now match an order they could not before, 0 lost one). `staff-replies:backfill` then re-filed 180 messages as ours and 39 back to colleague. The AI pass's 21 routing corrections all hold in the data now.
+- `eval:casework --show` marks an unscored field `–`, no longer `✗`.
+
 ## Five new customer questions, and label schema 3 (2026-09-26)
 
 - `MISSING_FIELDS` gains `postal_address`, `preferred_remedy`, `receipt_confirmation`, `skin_type` and `skin_concern`, each with its question and draft-check noun; the dashboard types follow. **Migration 40 is applied**; the live check was verified.

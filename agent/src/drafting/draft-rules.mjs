@@ -211,6 +211,15 @@ export function draftDecision({ investigation, ticket, conversation = [] } = {})
   if (ticket?.sender_label) {
     return { draft: false, reason: 'internal_sender' };
   }
+  // THE MESSAGE BEING ANSWERED IS NOT THE CUSTOMER'S (known gap #2, closed
+  // 2026-09-26). `sender_label` reads only who OPENED the thread, so a colleague
+  // or Deret writing on a customer's thread was drafted a customer-voice reply.
+  // The trigger's actor is stored at ingestion (casework/actors.mjs). A row
+  // written before the column has no actor and is drafted as before.
+  const trigger = conversation.find((message) => message?.id === investigation.trigger_message_id);
+  if (trigger?.actor && trigger.actor !== 'customer') {
+    return { draft: false, reason: 'not_customer_trigger' };
+  }
   if (ticket?.duplicate_of_ticket_id) {
     return { draft: false, reason: 'duplicate' };
   }

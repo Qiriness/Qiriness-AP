@@ -1,6 +1,8 @@
-import { supabaseSelectAll, supabaseUpsert } from '../../../scripts/lib/supabase-rest-client.mjs';
+import { supabaseSelectAll, supabaseUpdateById, supabaseUpsert } from '../../../scripts/lib/supabase-rest-client.mjs';
 import { T } from '../../../scripts/lib/tables.mjs';
 import { hashIdentifier } from '../../../scripts/lib/compliance-audit.mjs';
+
+import { requesterFor } from './requester-repair.mjs';
 
 // How many Graph message ids go into one `in.(...)` filter. They are ~150
 // characters each and the filter travels in the URL, so this is a URL-length
@@ -54,7 +56,16 @@ export async function writeIngestedMessages(
   // attachOnly     (optional): a message whose thread has no ticket is skipped
   // rather than opening one. Sent Items passes it: our own mail adds to a case,
   // it never starts one.
-  { triage, audit, embedMessage, detectDuplicate, detectRelated, senderLabel, attachOnly = false, logger } = {}
+  // isCandidate    (optional): (fromEmail) => whether this sender may become a
+  // ticket's requester in place of one of our own addresses. With senderLabel
+  // and a store that can read a thread, it turns on the identity correction in
+  // `correctThreadIdentity`.
+  // mailbox        (optional): the support address, whose own mail is outbound
+  // by the mapper's rule and is never re-filed here.
+  // actorFor       (optional): (message) => customer | support | colleague |
+  // partner, stamped on each message once its direction is settled
+  // (casework/actors.mjs). Without it the column stays null, as before.
+  { triage, audit, embedMessage, detectDuplicate, detectRelated, senderLabel, attachOnly = false, isCandidate, mailbox, actorFor, logger } = {}
 ) {
   const counts = {
     ticketsCreated: 0,
@@ -65,8 +76,12 @@ export async function writeIngestedMessages(
     duplicatesLinked: 0,
     relatedLinked: 0,
     skippedNoTicket: 0,
-    skippedCopies: 0
+    skippedCopies: 0,
+    requestersCorrected: 0,
+    openersCorrected: 0,
+    directionsCorrected: 0
   };
+  const identity = { store, senderLabel, isCandidate, mailbox, actorFor, logger };
 
   // WHICH OF THESE MESSAGES WE ALREADY HOLD, asked once for the whole page.
   //
@@ -116,13 +131,15 @@ export async function writeIngestedMessages(
     const isNewMessage = !knownMessageIds.has(item.graphMessageId ?? item.message?.graph_message_id);
 
     const ticketId = await resolveTicket(
-      record, shopId, item, triage, counts, audit, detectDuplicate, senderLabel, logger, isNewMessage
+      record, shopId, item, triage, counts, audit, detectDuplicate, senderLabel, logger, isNewMessage, identity
     );
     if (ticketId === null) {
       continue; // dropped by the LLM spam pass — never written
     }
 
     const message = { ...item.message, ticket_id: ticketId, shop_id: shopId };
+    // AFTER the direction is final: a staff reply re-filed as ours is support.
+    if (actorFor) message.actor = actorFor(message);
     // Defence in depth: createMessageEmbedder already swallows its own failures,
     // but the "an embedding never fails ingestion" guarantee belongs here, at the
     // call site, so it holds for whatever embedder is injected.
@@ -201,18 +218,120 @@ export function isStaffReplyToCustomer(message, ticket, senderLabel) {
   );
 }
 
+/**
+ * Where a stored message belongs, by the rules ingestion applies today.
+ *
+ * The support mailbox's own mail is outbound by the mapper's rule and never
+ * moves. An `internal` sender is our reply when it addresses the ticket's
+ * customer and a colleague's message otherwise (`isStaffReplyToCustomer`).
+ * Anyone else keeps the direction they have.
+ */
+export function directionFor(message, ticket, senderLabel, mailbox = null) {
+  const from = String(message?.from_email || '').toLowerCase();
+  if (mailbox && from === String(mailbox).toLowerCase()) return message.direction;
+  if (!senderLabel || senderLabel(message?.from_email) !== 'internal') return message.direction;
+  return isStaffReplyToCustomer({ ...message, direction: 'inbound' }, ticket, senderLabel) ? 'outbound' : 'inbound';
+}
+
+/**
+ * What the thread says the ticket's opener label and requester should be,
+ * reading EVERY message, not only the one that happened to create the ticket.
+ *
+ * THE BUG THIS CLOSES (2026-09-26). Both columns were taken from whichever
+ * message created the ticket. Graph's delta is not chronological, so a thread
+ * could be created from a colleague's REPLY: the colleague became the
+ * requester (written once, never revised) and the thread was labelled as
+ * opened by us. Measured after the first full read: 174 tickets with a
+ * colleague as requester, and every staff reply on them failed the
+ * reply-to-customer rule because « the customer » was the colleague.
+ * `requester:repair` fixed the rows by hand; the cause stayed.
+ *
+ * - **Opener**: the earliest message not sent by the support mailbox, by
+ *   `received_at`. Its label is `sender_label` (« the opening message decides »,
+ *   now decided on the real opening message).
+ * - **Requester**: `requesterFor`, the rule `requester:repair` was measured on.
+ *   It moves ONLY a requester that is one of our own addresses, to the first
+ *   correspondent who may hold the role. A customer requester is never replaced,
+ *   so the write-once rule stands for every requester that is not us.
+ */
+export function threadIdentity({ ticket, thread, senderLabel, isCandidate, mailbox = null }) {
+  const own = (fromEmail) => Boolean(senderLabel?.(fromEmail));
+  const notMailbox = (m) => !mailbox || String(m.from_email || '').toLowerCase() !== String(mailbox).toLowerCase();
+  const people = thread.filter((m) => m?.from_email && notMailbox(m));
+  const opener = [...people].sort((a, b) => Date.parse(a.received_at ?? '') - Date.parse(b.received_at ?? ''))[0];
+  const patch = {};
+  if (opener) {
+    const label = senderLabel(opener.from_email) ?? null;
+    if (label !== (ticket.sender_label ?? null)) patch.sender_label = label;
+  }
+  const replacement = requesterFor({ ticket, messages: people, isOwnSide: own, isCandidate });
+  if (replacement) {
+    const hash = hashIdentifier(replacement.from_email);
+    if (hash !== ticket.requester_email_hash) {
+      patch.requester_email_hash = hash;
+      patch.requester_name = replacement.from_name ?? null;
+    }
+  }
+  return patch;
+}
+
+/**
+ * Applies `threadIdentity` at ingestion, then re-files the thread's staff
+ * messages if the ticket's customer or opener changed. Needs a store that can
+ * read a thread; without one (the older tests' fake, any caller that has not
+ * wired it) nothing happens, exactly as before.
+ *
+ * FAILS SAFE: an error is logged and the ticket keeps what it had. A missed
+ * correction is what `requester:repair` exists to catch; a failed ingestion
+ * would lose the email.
+ */
+async function correctThreadIdentity({ existing, item, identity, counts }) {
+  const { store, senderLabel, isCandidate, mailbox, actorFor, logger } = identity ?? {};
+  if (!senderLabel || typeof store?.threadMessages !== 'function') return { ticket: existing, patch: {} };
+  try {
+    const stored = await store.threadMessages(existing.id);
+    const current = { ...item.message, id: null };
+    const thread = [...stored.filter((m) => m.graph_message_id !== item.message.graph_message_id), current];
+    const patch = threadIdentity({ ticket: existing, thread, senderLabel, isCandidate, mailbox });
+    if (Object.keys(patch).length === 0) return { ticket: existing, patch };
+
+    const ticket = { ...existing, ...patch };
+    if ('requester_email_hash' in patch) counts.requestersCorrected += 1;
+    if ('sender_label' in patch) counts.openersCorrected += 1;
+    for (const message of stored) {
+      if (message.graph_message_id === item.message.graph_message_id) continue;
+      const wanted = directionFor(message, ticket, senderLabel, mailbox);
+      if (wanted !== message.direction && typeof store.setMessageDirection === 'function') {
+        await store.setMessageDirection(message.id, wanted, actorFor?.({ ...message, direction: wanted }));
+        counts.directionsCorrected += 1;
+      }
+    }
+    logger?.info?.('ingest.thread_identity_corrected', { ticketId: existing.id, fields: Object.keys(patch) });
+    return { ticket, patch };
+  } catch (error) {
+    logger?.warn?.('ingest.thread_identity_failed', { ticketId: existing.id, message: error.message });
+    return { ticket: existing, patch: {} };
+  }
+}
+
 async function resolveTicket(
   record, shopId, item, triage, counts, audit, detectDuplicate, senderLabel, logger,
   // Whether this message is one we did not already hold. Only the two state
   // CHANGES below consult it; everything else here is idempotent and runs either
   // way. Defaults true so a caller that does not know behaves as before.
-  isNewMessage = true
+  isNewMessage = true,
+  identity = null
 ) {
   const conversation = item.conversation;
-  const existing = await record.findByConversation(conversation.graph_conversation_id);
+  const found = await record.findByConversation(conversation.graph_conversation_id);
 
-  if (existing) {
-    // FIRST, because every rule below branches on direction.
+  if (found) {
+    // WHO THE THREAD IS FROM AND ABOUT, settled first against every message it
+    // holds, so the direction rule below compares against the real customer.
+    const { ticket: existing, patch: identityPatch } = await correctThreadIdentity({
+      existing: found, item, identity, counts
+    });
+    // Then direction, because every rule below branches on it.
     if (isStaffReplyToCustomer(item.message, existing, senderLabel)) {
       item.message.direction = 'outbound';
     }
@@ -227,7 +346,7 @@ async function resolveTicket(
     // measured on a real inbox it was late on 93 of 171 tickets, by 5 days on
     // average and 24 at worst. The categoriser's queue is ordered on this column,
     // so leaving it at whatever arrived first quietly mis-sorts the backlog.
-    const patch = {};
+    const patch = { ...identityPatch };
     if (isLater(conversation.message_at, existing.last_message_at)) {
       patch.last_message_at = conversation.message_at;
     }
@@ -556,6 +675,21 @@ export function createSupabaseMessageStore(supabase) {
         }
       }
       return stored;
+    },
+
+    /** A ticket's messages, as much as the identity and direction rules read. */
+    async threadMessages(ticketId) {
+      return supabaseSelectAll(
+        supabase,
+        T.TICKET_MESSAGES,
+        { ticket_id: ticketId },
+        'id,graph_message_id,direction,actor,from_email,from_name,to_emails,cc_emails,received_at'
+      );
+    },
+
+    /** Re-files one stored message, and its actor with it; the only write here besides the upsert. */
+    async setMessageDirection(messageId, direction, actor) {
+      await supabaseUpdateById(supabase, T.TICKET_MESSAGES, messageId, actor ? { direction, actor } : { direction });
     },
 
     async upsertMessage(row) {

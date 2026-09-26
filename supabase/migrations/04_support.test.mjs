@@ -20,8 +20,9 @@ const clauseFor = (name) => {
   return clause;
 };
 
-test('creates exactly the ten tables it documents', () => {
+test('creates exactly the eleven tables it documents', () => {
   assert.deepEqual(tablesIn(sql).sort(), [
+    'case_current',
     'categorisation_review',
     'category_forwarding',
     'email_blocklist',
