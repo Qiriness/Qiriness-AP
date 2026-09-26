@@ -2,23 +2,22 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
-  PRIORITY_WEIGHTS,
   byPriorityDesc,
   contactPoints,
+  determinePriorityBand,
   explainPriority,
-  levelPoints,
   priorityBand,
   scorePriority,
   waitDays,
   waitPoints
 } from './ticket-priority.mjs';
 
-const NOW = new Date('2026-08-15T12:00:00Z');
+const NOW = new Date('2026-09-26T12:00:00Z');
 const daysAgo = (n) => new Date(NOW.getTime() - n * 86_400_000).toISOString();
-
-/** A ticket nothing is urgent about: level 1, answered, first contact. */
 const plain = (overrides = {}) => ({
   level: 1,
+  situationKey: 'D-07',
+  orderState: 'unknown',
   waitingSince: null,
   inboundCount: 1,
   status: 'open',
@@ -26,213 +25,136 @@ const plain = (overrides = {}) => ({
   ...overrides
 });
 
-// --- the ordering the weights are supposed to produce -----------------------
-
-test('level 4 outranks everything, whatever the other factors say', () => {
-  // The one absolute in the score. A legal threat or grave harm is not something
-  // an amount of ordinary urgency should ever be served before.
-  const maxedOutLevel3 = plain({
-    level: 3,
-    waitingSince: daysAgo(400),
-    inboundCount: 99,
-    status: 'awaiting_human',
-    isVip: true
-  });
-  const bareLevel4 = plain({ level: 4 });
-
-  assert.ok(scorePriority(bareLevel4, NOW) > scorePriority(maxedOutLevel3, NOW));
-  // And by a margin nothing can close: everything else tops out at 82.
-  assert.ok(scorePriority(bareLevel4, NOW) - scorePriority(maxedOutLevel3, NOW) > 900);
-});
-
-test('a maxed-out level 2 does outrank a bare level 3 — weighted, not tiered', () => {
-  // The deliberate consequence of weighting rather than strict tiering: the
-  // alternative starves the oldest work in the lower band for ever.
-  const chasedLevel2 = plain({
-    level: 2,
-    waitingSince: daysAgo(40),
-    inboundCount: 5,
-    isVip: true
-  });
-  const freshLevel3 = plain({ level: 3, waitingSince: daysAgo(0.01) });
-
-  assert.equal(scorePriority(chasedLevel2, NOW), 69);
-  assert.ok(scorePriority(chasedLevel2, NOW) > scorePriority(freshLevel3, NOW));
-});
-
-test('wait is the strongest ordinary factor below the level 4 band', () => {
-  // The tuned queue should pull old waiting customers up hard, without letting
-  // anything touch a level 4.
-  const w = PRIORITY_WEIGHTS;
-  assert.ok(w.waitMax > w.level[3]);
-  assert.ok(w.level[3] > w.level[2]);
-  assert.ok(w.level[2] > w.level[1]);
-  assert.ok(w.waitMax > w.contactMax);
-  assert.ok(w.contactMax > w.awaitingHuman);
-  assert.ok(w.awaitingHuman > w.vip);
-});
-
-test('a waiting level 1 can overtake a bare level 3', () => {
-  // That is now deliberate: the customer-wait factor is stronger than the level
-  // spread, so an old unanswered low-level ticket does not sit under fresh work
-  // forever.
-  const oldLevel1 = plain({ level: 1, waitingSince: daysAgo(14) });
-  const freshLevel3 = plain({ level: 3 });
-
-  assert.equal(scorePriority(oldLevel1, NOW), 45);
-  assert.equal(scorePriority(freshLevel3, NOW), 25);
-  assert.ok(scorePriority(oldLevel1, NOW) > scorePriority(freshLevel3, NOW));
-});
-
-// --- customer wait ----------------------------------------------------------
-
-test('a ticket we have answered is not waiting, whatever its age', () => {
-  // THE difference from last_message_at, which advances on our own replies and
-  // would report a ticket answered yesterday as waiting forty days.
-  assert.equal(waitPoints(null, NOW), 0);
-  assert.equal(scorePriority(plain({ level: 3, waitingSince: null }), NOW), 25);
-});
-
-test('wait is a diminishing curve, saturating at a fortnight', () => {
-  const at = (d) => Math.round(waitPoints(daysAgo(d), NOW));
-  assert.equal(at(1), 9);
-  assert.equal(at(3), 18);
-  assert.equal(at(7), 27);
-  assert.equal(at(14), 35);
-  // Past the cap it stops discriminating: late is late.
-  assert.equal(at(40), 35);
-  assert.equal(at(400), 35);
-});
-
-test('the first day is worth more than the fortieth', () => {
-  // The whole reason the curve is logarithmic rather than linear.
-  const firstDay = waitPoints(daysAgo(1), NOW) - waitPoints(daysAgo(0), NOW);
-  const fortieth = waitPoints(daysAgo(40), NOW) - waitPoints(daysAgo(39), NOW);
-  assert.ok(firstDay > fortieth);
-  assert.equal(Math.round(fortieth), 0);
-});
-
-test('a timestamp in the future scores no wait, not a negative one', () => {
-  // Clock skew between Graph and here is not hypothetical.
-  const future = new Date(NOW.getTime() + 86_400_000).toISOString();
-  assert.equal(waitDays(future, NOW), 0);
-  assert.equal(waitPoints(future, NOW), 0);
-});
-
-test('an unparseable timestamp is treated as not waiting', () => {
-  assert.equal(waitDays('not-a-date', NOW), 0);
-  assert.equal(waitDays(undefined, NOW), 0);
-});
-
-test('a Date and its ISO string score identically', () => {
-  const d = new Date(NOW.getTime() - 3 * 86_400_000);
-  assert.equal(waitPoints(d, NOW), waitPoints(d.toISOString(), NOW));
-});
-
-// --- times contacted --------------------------------------------------------
-
-test('contacts count the customer writing in, and cap at four', () => {
-  assert.equal(contactPoints(1), 0, 'a first email is not chasing');
-  assert.equal(contactPoints(2), 7);
-  assert.equal(contactPoints(3), 11);
-  assert.equal(contactPoints(4), 14);
-  // Capped: the difference between six and seven is one conversation continuing.
-  assert.equal(contactPoints(12), 14);
-});
-
-test('a ticket with no inbound message at all scores no contacts', () => {
-  // Threads holding only our own replies exist — 11 of them on the measured
-  // mailbox — and they have no customer waiting either.
-  assert.equal(contactPoints(0), 0);
-  assert.equal(contactPoints(null), 0);
-  assert.equal(contactPoints(undefined), 0);
-});
-
-// --- level ------------------------------------------------------------------
-
-test('an uncategorised ticket scores as a level 2, not as a zero', () => {
-  // Unknown severity is not low severity: bottom of the queue is how the one
-  // that mattered gets missed.
-  assert.equal(levelPoints(null), PRIORITY_WEIGHTS.level[2]);
-  assert.equal(levelPoints(undefined), PRIORITY_WEIGHTS.level[2]);
-  assert.ok(levelPoints(null) > levelPoints(1));
-});
-
-test('a level outside the taxonomy falls back rather than scoring zero', () => {
-  assert.equal(levelPoints(9), PRIORITY_WEIGHTS.level[2]);
-  assert.equal(levelPoints('3'), PRIORITY_WEIGHTS.level[3], 'a numeric string is still a level');
-});
-
-// --- the flags --------------------------------------------------------------
-
-test('awaiting_human and VIP add, and only in that order of size', () => {
-  const base = plain({ level: 2 });
-  const human = scorePriority(plain({ level: 2, status: 'awaiting_human' }), NOW) - scorePriority(base, NOW);
-  const vip = scorePriority(plain({ level: 2, isVip: true }), NOW) - scorePriority(base, NOW);
-
-  assert.equal(human, 6);
-  assert.equal(vip, 2);
-  assert.ok(human > vip);
-});
-
-test('other statuses add nothing', () => {
-  for (const status of ['open', 'awaiting_customer', 'forwarded', 'spam']) {
-    assert.equal(scorePriority(plain({ level: 2, status }), NOW), 18, status);
+test('pre-fulfilment address, cancellation and modification branches are High', () => {
+  for (const situationKey of ['O-12', 'O-13', 'O-14']) {
+    const decision = determinePriorityBand(plain({ situationKey, orderState: 'not_dispatched' }));
+    assert.equal(decision.band, 'high', situationKey);
+    assert.match(decision.reason, /check immediately/i);
   }
 });
 
-// --- the whole thing --------------------------------------------------------
-
-test('the score is deterministic — same inputs, same number', () => {
-  const ticket = plain({ level: 3, waitingSince: daysAgo(9), inboundCount: 3, isVip: true });
-  const first = scorePriority(ticket, NOW);
-  assert.equal(first, scorePriority(ticket, NOW));
-  assert.equal(first, scorePriority({ ...ticket }, NOW));
+test('not dispatched requests Deret verification and does not claim changes remain possible', () => {
+  const { reason } = determinePriorityBand(plain({ situationKey: 'O-12', orderState: 'not_dispatched' }));
+  assert.match(reason, /whether Deret can still intervene/i);
+  assert.doesNotMatch(reason, /can be changed|still possible/i);
 });
 
-test('the score is rounded, so tied rows do not shuffle between renders', () => {
-  const a = plain({ level: 3, waitingSince: daysAgo(9) });
-  const b = plain({ level: 3, waitingSince: new Date(NOW.getTime() - 9 * 86_400_000 - 500).toISOString() });
-  // Half a second apart: the same score, not a flicker in the ordering.
-  assert.equal(scorePriority(a, NOW), scorePriority(b, NOW));
+test('missing fulfilment information preserves provisional urgency', () => {
+  for (const orderState of [undefined, 'unknown']) {
+    assert.equal(determinePriorityBand(plain({ situationKey: 'O-13', orderState })).band, 'high');
+  }
 });
 
-test('explainPriority accounts for the whole score', () => {
-  // A priority nobody can interrogate is a priority nobody trusts.
-  const ticket = plain({ level: 3, waitingSince: daysAgo(7), inboundCount: 3, status: 'awaiting_human', isVip: true });
-  const { score, parts } = explainPriority(ticket, NOW);
-
-  assert.deepEqual(parts.map((p) => p.factor), ['level', 'wait', 'contacts', 'awaiting_human', 'vip']);
-  const summed = parts.reduce((total, p) => total + p.points, 0);
-  assert.ok(Math.abs(summed - score) < 0.15, `parts ${summed} should account for score ${score}`);
+test('fulfilment removes the original action-window urgency', () => {
+  for (const orderState of ['dispatched', 'delivered', 'cancelled']) {
+    assert.equal(determinePriorityBand(plain({ situationKey: 'O-12', orderState })).band, 'low', orderState);
+  }
 });
 
-test('priority bands map scores to the row border colours', () => {
-  assert.equal(priorityBand(10), 'low');
-  assert.equal(priorityBand(44.9), 'low');
-  assert.equal(priorityBand(45), 'medium');
-  assert.equal(priorityBand(69.9), 'medium');
-  assert.equal(priorityBand(70), 'high');
-  assert.equal(priorityBand(1000), 'high');
+test('completion removes action urgency without hiding a separate service failure', () => {
+  assert.equal(
+    determinePriorityBand(plain({ situationKey: 'O-13', orderState: 'not_dispatched', actionCompleted: true })).band,
+    'low'
+  );
+  assert.equal(
+    determinePriorityBand(plain({ situationKey: 'O-13', actionCompleted: true, serviceFailure: true })).band,
+    'medium'
+  );
 });
 
-test('byPriorityDesc puts the most urgent first and breaks ties on the longer wait', () => {
-  const tickets = [
-    plain({ level: 1 }),
-    plain({ level: 3, waitingSince: daysAgo(20) }),
-    plain({ level: 4 }),
-    // Same score as the level 3 above (both saturated), longer wait wins.
-    plain({ level: 3, waitingSince: daysAgo(60) })
+test('conditional deadline cases are High only while action is open', () => {
+  const cases = [
+    { actionKind: 'duplicate_order_cancellation', deadlineImminent: true },
+    { actionKind: 'item_or_gift_correction', deadlineImminent: true },
+    { parcelCollectionDeadline: true, deadlineImminent: true },
+    { returnInstructionsBlocked: true, deadlineImminent: true },
+    { logisticsAwaitingInstructions: true }
   ];
-
-  const order = [...tickets].sort(byPriorityDesc(NOW));
-  assert.equal(order[0].level, 4);
-  assert.equal(Math.round(waitDays(order[1].waitingSince, NOW)), 60);
-  assert.equal(Math.round(waitDays(order[2].waitingSince, NOW)), 20);
-  assert.equal(order[3].level, 1);
+  for (const facts of cases) {
+    assert.equal(determinePriorityBand(plain(facts)).band, 'high');
+    assert.equal(determinePriorityBand(plain({ ...facts, actionCompleted: true })).band, 'low');
+  }
 });
 
-test('sorting is stable enough to be a queue: no ticket outranks itself', () => {
-  const ticket = plain({ level: 2, waitingSince: daysAgo(5), inboundCount: 2 });
-  assert.equal(byPriorityDesc(NOW)(ticket, { ...ticket }), 0);
+test('established service failures are Medium and routine advice is Low', () => {
+  for (const situationKey of ['D-02', 'D-03', 'D-05', 'D-06', 'D-08', 'D-36', 'D-37', 'P-20']) {
+    assert.equal(determinePriorityBand(plain({ situationKey })).band, 'medium', situationKey);
+  }
+  assert.equal(determinePriorityBand(plain({ situationKey: 'D-07' })).band, 'low');
+  assert.equal(determinePriorityBand(plain({ situationKey: 'R-21' })).band, 'low');
+});
+
+test('generic dispatch and non-receipt cases become Medium only after their applicable threshold', () => {
+  assert.equal(determinePriorityBand(plain({ situationKey: 'O-09', dispatchExcessWorkingDays: 0 })).band, 'low');
+  assert.equal(determinePriorityBand(plain({ situationKey: 'O-09', dispatchExcessWorkingDays: 1 })).band, 'medium');
+  assert.equal(determinePriorityBand(plain({ situationKey: 'D-01', deliveryExcessWorkingDays: 0 })).band, 'low');
+  assert.equal(determinePriorityBand(plain({ situationKey: 'D-01', deliveryExcessWorkingDays: 1 })).band, 'medium');
+});
+
+test('missing timing information does not lower a potentially overdue case', () => {
+  assert.equal(determinePriorityBand(plain({ situationKey: 'O-09', dispatchExcessWorkingDays: null })).band, 'medium');
+  assert.equal(determinePriorityBand(plain({ situationKey: 'D-01', deliveryExcessWorkingDays: null })).band, 'medium');
+});
+
+test('an old fulfilled order alone is not an undelivered or lost parcel', () => {
+  const oldOrder = plain({ situationKey: 'D-07', orderState: 'dispatched', deliveryExcessWorkingDays: 50 });
+  assert.equal(determinePriorityBand(oldOrder).band, 'low');
+});
+
+test('VIP, message count and age cannot promote a routine enquiry to High', () => {
+  const routine = plain({ isVip: true, inboundCount: 999, waitingSince: daysAgo(400), status: 'awaiting_human' });
+  assert.equal(priorityBand(scorePriority(routine, NOW)), 'low');
+  assert.ok(scorePriority(routine, NOW) < 100);
+});
+
+test('VIP has no score contribution', () => {
+  assert.equal(scorePriority(plain({ isVip: false }), NOW), scorePriority(plain({ isVip: true }), NOW));
+  assert.ok(!explainPriority(plain({ isVip: true }), NOW).parts.some((part) => part.factor === 'vip'));
+});
+
+test('within-band facts order tickets without crossing the band boundary', () => {
+  const fresh = plain({ situationKey: 'D-02' });
+  const chased = plain({ situationKey: 'D-02', waitingSince: daysAgo(40), inboundCount: 8, status: 'awaiting_human' });
+  assert.ok(scorePriority(chased, NOW) > scorePriority(fresh, NOW));
+  assert.equal(priorityBand(scorePriority(fresh, NOW)), 'medium');
+  assert.equal(priorityBand(scorePriority(chased, NOW)), 'medium');
+});
+
+test('level 4 remains High regardless of other facts', () => {
+  assert.equal(determinePriorityBand(plain({ level: 4 })).band, 'high');
+});
+
+test('unknown situations remain Medium until triaged, not silently Low', () => {
+  assert.equal(determinePriorityBand(plain({ situationKey: null })).band, 'medium');
+});
+
+test('wait and contact curves remain deterministic and capped', () => {
+  assert.equal(Math.round(waitPoints(daysAgo(1), NOW)), 9);
+  assert.equal(Math.round(waitPoints(daysAgo(14), NOW)), 35);
+  assert.equal(Math.round(waitPoints(daysAgo(400), NOW)), 35);
+  assert.equal(contactPoints(1), 0);
+  assert.equal(contactPoints(2), 7);
+  assert.equal(contactPoints(3), 11);
+  assert.equal(contactPoints(12), 14);
+  assert.equal(waitDays('not-a-date', NOW), 0);
+});
+
+test('same facts and evaluation time produce exactly the same result and explanation', () => {
+  const ticket = plain({ situationKey: 'D-01', deliveryExcessWorkingDays: 4, waitingSince: daysAgo(9), inboundCount: 3 });
+  assert.equal(scorePriority(ticket, NOW), scorePriority({ ...ticket }, NOW));
+  assert.deepEqual(explainPriority(ticket, NOW), explainPriority({ ...ticket }, NOW));
+});
+
+test('priority bands retain the High, Medium and Low UI contract', () => {
+  assert.equal(priorityBand(99.9), 'low');
+  assert.equal(priorityBand(100), 'medium');
+  assert.equal(priorityBand(199.9), 'medium');
+  assert.equal(priorityBand(200), 'high');
+});
+
+test('byPriorityDesc orders by band, then within-band score, then wait', () => {
+  const low = plain();
+  const medium = plain({ situationKey: 'D-02' });
+  const high = plain({ situationKey: 'O-12', orderState: 'unknown' });
+  assert.deepEqual([...[low, high, medium]].sort(byPriorityDesc(NOW)), [high, medium, low]);
 });

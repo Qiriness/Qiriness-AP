@@ -104,6 +104,12 @@ below. `llm_usage` holds 2174 calls.
 
 ## Next Steps
 
+**Queue priority:** run the live sampling check in `VALIDATION_LOG.md` item 30
+before treating the new action-window bands as operationally proven. In
+particular, verify pre/post-fulfilment changes and the 3 / 3 / 6 working-day
+thresholds against Shopify; deadline-specific historic cases have no structured
+deadline and are deliberately not guessed from email prose.
+
 **2026-09-26: the agent's next phase is `codex_plans/Case_State_Plan.md`.** In order:
 
 1. make the mailbox cursor stick;

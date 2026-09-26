@@ -89,6 +89,31 @@ catalogue; this is a known flaw in the article (DECISIONS).
 
 ## 4. Situation by situation
 
+### Queue priority on the branch
+
+The queue keeps its existing **High / Medium / Low** labels. Apply them to the
+current branch, never permanently to the whole situation:
+
+- **High:** an action window can close. O-12/O-13/O-14 before fulfilment; an
+  accidental duplicate order that still needs cancelling; an item or gift that
+  still needs correcting before fulfilment; a known parcel-collection deadline
+  that is imminent; Deret/logistics waiting for our instruction before
+  return-to-sender; or return instructions blocked by our response near a known
+  deadline. `not_dispatched` means **check immediately**, not “Deret can still
+  change it”. Unknown order/fulfilment state remains provisionally High.
+- **Medium:** an unresolved service failure or overdue commitment: late or
+  disputed delivery, wrong/missing product, overdue refund, or promised
+  reshipment not performed. Deret still verifies late/lost/not-received/returned
+  parcels before support decides or starts the remedy, unless that confirmation
+  is already in the case.
+- **Low:** routine advice or information with no present deadline/failure.
+
+After dispatch, reassess the remaining options; do not carry the pre-fulfilment
+High forever. Once the requested action is completed, remove its urgency. VIP,
+mail age and message count never change the band. Missing facts do not lower a
+potentially urgent branch, and an order number already supplied or reliably
+linked is never requested again.
+
 **How to read the columns:**
 - **Reply now** = *Réponse complète*, with nothing left owed. After our reply,
   « La suite revient à » is **Personne**.

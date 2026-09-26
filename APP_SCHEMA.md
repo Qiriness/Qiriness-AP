@@ -168,6 +168,8 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |   |   `-- server/              # knowledge-service · forwarding-service ·
 |   |       |                    # tickets-service (list + detail + thread + status,
 |   |       |                    # + listTicketsWithOrders for the Orders page) ·
+|   |       |                    # ticket-priority-service (bulk latest situation +
+|   |       |                    # current order/threshold facts for the pure scorer) ·
 |   |       |                    # orders-service (orders_list page + one order) ·
 |   |       |                    # chat-service (Home's chat: wires the loop, writes
 |   |       |                    # the chat_* log, owner-only reads) ·
@@ -255,9 +257,10 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |       |                                # the upsert key, the two bodies, the human
 |       |                                # decision vs the machine outcome, the review
 |       |                                # stamp. Shop-scoped. Cannot send
-|       |-- ticket-priority.mjs          # pure read-time queue score + band:
-|       |                                # level, customer wait, inbound contacts,
-|       |                                # awaiting_human, VIP
+|       |-- ticket-priority.mjs          # pure read-time queue band + score:
+|       |                                # current situation/action window chooses
+|       |                                # High/Medium/Low; wait, contacts, level and
+|       |                                # awaiting_human sort only inside that band
 |       |-- segment-finder.mjs           # pure: Segment Finder vocabulary (orders / spend /
 |       |                                # lifetime_spend, gt / lt, AND / OR), validation,
 |       |                                # AND-before-OR grouping and the bracketed sentence
@@ -799,7 +802,7 @@ Env: `CHAT_DB_URL` (the role's pooler URL; unset = the page says so and nothing 
 
 **The URL holds the reading state**: `?view=&q=&level=&category=&sender=&sort=&ticket=&mail=` (defaults omitted). `page.tsx` passes `searchParams` to `TicketsView` as `initialParams`; the view keeps the address in step with `replaceState` and mirrors it to `sessionStorage` (`tickets.lastSearch`), restoring from there when opened as a bare `/tickets`. `reconcilePageState` follows a saved ticket to its current tab. See DECISIONS.md § Tickets dashboard.
 
-`web/app/tickets/` → `web/components/tickets/`, over `tickets-service.ts` + `dropped-mail-service.ts`. `tickets-service.ts` does not touch `tickets` itself: every read and the one write go through `scripts/lib/ticket-record.mjs`, and the list reads the `ticket_queue` view. Queue priority is computed in `scripts/lib/ticket-priority.mjs`; the view supplies facts (`inbound_count`, `waiting_since`), JavaScript owns the tunable judgement. Four stacked collapsible sections, each scrolling inside a fixed height:
+`web/app/tickets/` → `web/components/tickets/`, over `tickets-service.ts` + `dropped-mail-service.ts`. `tickets-service.ts` does not touch `tickets` itself: every read and the one write go through `scripts/lib/ticket-record.mjs`, and the list reads the `ticket_queue` view. Queue priority is computed in `scripts/lib/ticket-priority.mjs`. In one request-cached bulk read, `ticket-priority-service.ts` adds the latest stored situation (`ticket_investigations` / `ticket_case_state`), the linked order's current synced fulfilment facts, and `dispatch_days` / France / abroad delivery parameters. The situation and action window choose the band; queue age, contacts, level and `awaiting_human` sort only within it. Four stacked collapsible sections, each scrolling inside a fixed height:
 
 | Section | Source | Row action |
 | --- | --- | --- |

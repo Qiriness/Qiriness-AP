@@ -10,6 +10,13 @@ Three sibling files carry the other halves, and this one deliberately does not d
 
 ---
 
+## Current-window queue priority (2026-09-26)
+
+- Replaced the additive, VIP-influenced priority bands with deterministic branch rules while keeping the visible High / Medium / Low labels. High now means an open intervention window; Medium an unresolved service failure or overdue commitment; Low routine assistance.
+- The queue bulk-reads the latest stored situation, current synced Shopify fulfilment facts, and the UI's dispatch/delivery parameters. Address changes, cancellations and additions are High before fulfilment or while fulfilment is unknown, then lose that original urgency after fulfilment or completion.
+- Dispatch and delivery delay use `max(0, elapsed working days - threshold)` with current 3 / 3 / 6 defaults. Delivery age only affects relevant unresolved delivery/non-receipt situations and never asserts loss; the Deret-before-remedy workflow is unchanged.
+- VIP has no score contribution. Age, inbound count, level below 4, `awaiting_human` and excess delay only sort within a band and cannot cross it. Unit tests cover the action window, missing data, completion, service failures, conditional deadlines and determinism. Web lint and typecheck pass.
+
 ## Stage 4: who wrote each message, and the current state of each case (2026-09-26)
 
 - **Migration 41, applied:** `ticket_messages.actor` and the `case_current` table. 2,304 messages backfilled with their actor (`actors:backfill`).

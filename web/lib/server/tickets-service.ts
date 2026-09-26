@@ -54,6 +54,8 @@ import { buildOrderContext } from "../../../agent/src/resolution/order-context.m
 import { createOrderContextStore } from "../../../agent/src/resolution/order-context-runner.mjs";
 import { isAnonymousMarketplaceBuyer } from "../../../agent/src/resolution/order-verification.mjs";
 import { KnowledgeNotFoundError, KnowledgeValidationError } from "./knowledge-errors";
+import { loadTicketPriority } from "./ticket-priority-service";
+import type { PriorityFacts, PriorityRead } from "./ticket-priority-service";
 import { summariseFacts, summariseInvestigation, summariseOrderContext } from "../ticket-detail";
 import type {
   InvestigationVerdict,
@@ -131,8 +133,10 @@ function getRecord(shopId: string) {
  * What mitigates it is `countOpenThreads`, which puts those three on the
  * sidebar so the page announces itself instead of waiting to be found.
  */
-function partitionBySender(rows: any[], directory: any, vipTickets: Set<string>) {
-  const mapped = rows.map((row) => mapTicketRow(row, directory, vipTickets)).sort(byPriorityThenLastActivityDesc);
+function partitionBySender(rows: any[], directory: any, vipTickets: Set<string>, priority: PriorityRead) {
+  const mapped = rows
+    .map((row) => mapTicketRow(row, directory, vipTickets, priority.byTicket.get(row.id), priority.at))
+    .sort(byPriorityThenLastActivityDesc);
   return {
     tickets: mapped.filter((ticket) => !ticket.isOwnSide),
     conversations: mapped.filter((ticket) => ticket.isOwnSide)
@@ -140,22 +144,24 @@ function partitionBySender(rows: any[], directory: any, vipTickets: Set<string>)
 }
 
 export async function listTickets(shopId: string): Promise<TicketListItem[]> {
-  const [rows, directory, vipTickets] = await Promise.all([
-    readQueue(shopId),
+  const rows = await readQueue(shopId) as any[];
+  const [directory, vipTickets, priority] = await Promise.all([
     readSenderDirectory(shopId),
-    loadVipTickets(shopId)
+    loadVipTickets(shopId),
+    readPriority(shopId)
   ]);
-  return partitionBySender(rows as any[], directory, vipTickets).tickets;
+  return partitionBySender(rows, directory, vipTickets, priority).tickets;
 }
 
 /** The other half: threads one of our own addresses opened. */
 export async function listConversations(shopId: string): Promise<TicketListItem[]> {
-  const [rows, directory, vipTickets] = await Promise.all([
-    readQueue(shopId),
+  const rows = await readQueue(shopId) as any[];
+  const [directory, vipTickets, priority] = await Promise.all([
     readSenderDirectory(shopId),
-    loadVipTickets(shopId)
+    loadVipTickets(shopId),
+    readPriority(shopId)
   ]);
-  return partitionBySender(rows as any[], directory, vipTickets).conversations;
+  return partitionBySender(rows, directory, vipTickets, priority).conversations;
 }
 
 /**
@@ -166,15 +172,18 @@ export async function listConversations(shopId: string): Promise<TicketListItem[
  * shows; the Orders page folds these per order and never re-scores them.
  */
 export async function listTicketsWithOrders(shopId: string): Promise<TicketListItem[]> {
-  const [rows, directory, vipTickets] = await Promise.all([
-    readQueue(shopId),
+  const rows = await readQueue(shopId) as any[];
+  const orderRows = rows.filter((row) => row.shopify_order_number);
+  const [directory, vipTickets, priority] = await Promise.all([
     readSenderDirectory(shopId),
-    loadVipTickets(shopId)
+    loadVipTickets(shopId),
+    readPriority(shopId)
   ]);
   const { tickets, conversations } = partitionBySender(
-    (rows as any[]).filter((row) => row.shopify_order_number),
+    orderRows,
     directory,
-    vipTickets
+    vipTickets,
+    priority
   );
   return [...tickets, ...conversations];
 }
@@ -192,8 +201,12 @@ export async function countOpenThreads(
 ): Promise<{ openTickets: number; openConversations: number }> {
   // One `queue()` read for both badges, over the same partition the two pages
   // render — two separate counts would double the read on every page load.
-  const [rows, directory] = await Promise.all([readQueue(shopId), readSenderDirectory(shopId)]);
-  const { tickets, conversations } = partitionBySender(rows as any[], directory, new Set());
+  const rows = await readQueue(shopId) as any[];
+  const directory = await readSenderDirectory(shopId);
+  // Counts need only the sender partition and status. Avoid loading order and
+  // investigation facts on every page merely to sort rows nobody will render.
+  const noPriorityRead: PriorityRead = { at: new Date(), byTicket: new Map() };
+  const { tickets, conversations } = partitionBySender(rows, directory, new Set(), noPriorityRead);
   const open = (ticket: TicketListItem) => ticket.status !== "closed" && ticket.status !== "resolved";
   return {
     openTickets: tickets.filter(open).length,
@@ -248,6 +261,7 @@ async function loadVipTickets(shopId: string, ticketIds: string[] | null = null)
  */
 const readQueue = cache((shopId: string) => getRecord(shopId).queue());
 const readSenderDirectory = cache((shopId: string) => loadSenderDirectory(shopId));
+const readPriority = cache(async (shopId: string) => loadTicketPriority(shopId, await readQueue(shopId) as any[]));
 
 async function loadSenderDirectory(shopId: string) {
   return createSenderDirectoryStore(getSupabaseClient()).load(shopId, {
@@ -673,12 +687,13 @@ export async function changeTicketOrder(
   });
   if (!row) throw changedMeanwhile;
 
-  const [vipTickets, detail] = await Promise.all([
+  const [vipTickets, detail, priority] = await Promise.all([
     loadVipTickets(shopId, [ticketId]),
     getTicketDetail(shopId, ticketId),
+    loadTicketPriority(shopId, [row]),
   ]);
   return {
-    ticket: mapTicketRow(row, undefined, vipTickets),
+    ticket: mapTicketRow(row, undefined, vipTickets, priority.byTicket.get(ticketId), priority.at),
     detail,
     reinvestigation: "needs_investigation" in columns ? "queued" : "not_queued",
   };
@@ -826,7 +841,8 @@ export async function setTicketStatus(
     throw new KnowledgeNotFoundError(`Ticket not found: ${ticketId}`);
   }
 
-  return mapTicketRow(row, undefined, vipTickets);
+  const priority = await loadTicketPriority(shopId, [row]);
+  return mapTicketRow(row, undefined, vipTickets, priority.byTicket.get(ticketId), priority.at);
 }
 
 /**
@@ -853,7 +869,8 @@ export async function getTicketListItem(
     throw new KnowledgeNotFoundError(`Ticket not found: ${ticketId}`);
   }
 
-  return mapTicketRow(row, directory, vipTickets);
+  const priority = await loadTicketPriority(shopId, [row]);
+  return mapTicketRow(row, directory, vipTickets, priority.byTicket.get(ticketId), priority.at);
 }
 
 /** Highest priority first, newest activity breaking ties. */
@@ -894,7 +911,9 @@ function mapCustomer(row: any, vipTickets: Set<string>) {
 function mapTicketRow(
   row: any,
   directory: any = emptySenderDirectory,
-  vipTickets: Set<string> = new Set()
+  vipTickets: Set<string> = new Set(),
+  priorityFacts?: PriorityFacts,
+  priorityAt: Date = new Date()
 ): TicketListItem {
   const customer = mapCustomer(row, vipTickets);
   // THE ADDRESS STOPS HERE. `requester_email` is read from the view so this
@@ -912,8 +931,11 @@ function mapTicketRow(
     waitingSince: row.waiting_since ?? null,
     inboundCount: Number(row.inbound_count ?? 0),
     status: row.status,
+    ...priorityFacts,
+    // Display-only customer status is intentionally absent from the evaluator:
+    // VIP can never manufacture urgency for a routine enquiry.
     isVip: customer.isVip,
-  });
+  }, priorityAt);
 
   return {
     id: row.id,

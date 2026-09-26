@@ -2947,6 +2947,16 @@ Somebody chasing a delivery usually has the **tracking number** and not the orde
 
 The scorer lives in `scripts/lib/ticket-priority.mjs`, not in a column and not in the `ticket_queue` view. The view supplies facts (`inbound_count`, `waiting_since`); the weights are judgement and need unit tests and cheap tuning, not a migration.
 
+### The current action window chooses the band (2026-09-26)
+
+**Supersedes the additive band rules below, including VIP +2 and High at 70.** High / Medium / Low remain the visible labels, but their meaning is now categorical: **High** is an intervention window that can close, **Medium** is an unresolved service failure or overdue commitment, and **Low** is routine assistance without either. Numeric bases are 200 / 100 / 0. Wait, inbound contacts, level below 4, `awaiting_human`, and excess delay order work only inside the selected band; their sum is clamped below 100, so none can promote the ticket into another band. VIP contributes nothing. Level 4 remains a High safety/legal override.
+
+The action rules branch on the current synced order, not on the category alone. O-12/O-13/O-14 are High while the order is `not_dispatched`, with wording that says to check whether Deret can still intervene rather than claiming it can. A missing order or unreadable state is provisionally High. `dispatched`, `delivered`, `cancelled`, or a resolved/closed ticket removes that original urgency and lets any remaining service failure be assessed on its own. This is why the service re-reads live order rows at queue time instead of trusting `resolved_context`, which is a rebuildable snapshot and can be stale.
+
+Delivery age is not a diagnosis. O-09/O-11 use excess working days beyond `dispatch_days`; D-01 uses excess beyond `france_delivery_days` or `abroad_delivery_days`, from the fulfilment timestamp, and only because the situation is already an unresolved delivery/non-receipt case. The formula is `max(0, elapsed working days - threshold)`. Defaults are 3 / 3 / 6 when a setting has no row. An old fulfilled order in an unrelated situation stays Low; lateness never asserts loss. Missing timing data keeps the relevant unresolved case Medium rather than manufacturing reassurance. D-02/D-03/D-05/D-06/D-08/D-36/D-37/P-20 are service-failure situations directly, and their remedy still follows the Deret-before-support workflow recorded in the case rules.
+
+The scorer is deterministic **given its stored inputs and evaluation instant**: no model call occurs while the queue is read. The stored situation may itself have come from the investigation/Case Manager, so “deterministic” does not mean situation recognition has become rule-based. The latest recorded situation wins, and a newer case-state `null` clears an older situation rather than leaving its urgency stuck.
+
 Level 4 is still a hard band at 1000: legal threats and grave personal harm cannot be overtaken by ordinary urgency. Levels 1-3 are normal weights (`10 / 18 / 25`), so the queue is not strict tiering below the emergency band.
 
 Customer wait is the largest ordinary factor (`35`, logarithmic, capped at 14 days). That is deliberate: once the customer is waiting, age should move a ticket harder than one severity step, while still avoiding a linear age score where very old backlog dominates forever. Contacts (`0 / 7 / 11 / 14`), `awaiting_human` (`6`) and VIP (`2`) remain smaller nudges.
@@ -2963,7 +2973,7 @@ This supersedes the VIP row-border treatment above: VIP remains a crown beside t
 
 **The four header cards** recompute from the same array the tables render (`summariseTickets`, isomorphic and pure), so a card can never disagree with the rows under it.
 
-**"High priority" is the red band** — `priorityBand === "high"`, score 70 and above — reversing the earlier "level 3 + 4" stand-in. That stand-in was right for its moment: nothing writes the `priority` column, so a card reading it would show zero for ever. The band needs no column; it is derived at read time by `scorePriority`, so the card can now count exactly the rows a reader sees marked red instead of approximating them by level.
+**"High priority" is the red band** — `priorityBand === "high"`, now an urgent action-window branch (or the level-4 safety/legal override), not a score that age can cross. The band needs no column; it is derived at read time by `scorePriority`, so the card counts exactly the rows a reader sees marked red instead of approximating them by level.
 
 **All three queue cards count the LIVE set — everything not resolved or closed — and two of them did not.** Both errors were visible on screen:
 

@@ -34,10 +34,7 @@ export function TicketStatCards({ stats }: TicketStatCardsProps) {
           {stats.highPriority.toLocaleString()}
           <span className={styles.of}>of {stats.open.toLocaleString()} open</span>
         </span>
-        {/* Names the threshold rather than the colour: the bar is the cue in the
-            table, and a card that says "the red ones" is useless to anyone who
-            cannot separate the two warm bands. */}
-        <span className={styles.foot}>Priority score 70 and above</span>
+        <span className={styles.foot}>Urgent intervention needed</span>
       </li>
 
       <li className={`${styles.card} ${styles.level3}`}>

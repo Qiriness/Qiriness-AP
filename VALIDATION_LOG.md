@@ -40,6 +40,25 @@ these.
 as its own item: `llm_usage` (item 14), `categorisation_review` (item 15), and
 `category_forwarding` / `ticket_forwards` (item 1).
 
+## 30. The current-window priority rules need a live queue review — 2026-09-26
+
+Built and unit-tested: the queue now derives its band from the latest stored
+situation, current synced order state and configured working-day thresholds.
+Web lint and typecheck pass. The full root suite is not green in this Windows
+sandbox because unrelated CRLF-sensitive migration assertions fail and the live
+Postgres check is denied network access; the focused priority and working-day
+suites pass.
+
+Still unproven against the current mailbox: open `/tickets` and sample at least
+one O-12/O-13/O-14 before fulfilment, one after fulfilment, one D-01 inside and
+outside its country threshold, one established delivery failure, and one routine
+old/VIP thread. Confirm the bands and order state against Shopify.
+
+Deadline-specific branches are covered by the pure evaluator once structured
+current-case deadline/obligation facts exist, but historic case files do not
+contain those facts and no deadline is inferred from prose. That integration
+therefore remains to be connected and proven during the obligations stage.
+
 ## 29. The mailbox cursor and immutable ids: applied 2026-09-26, two checks left
 
 **Run 2026-09-26 with the worker stopped** (no agent process; last ingestion 2026-09-25 16:35 UTC):
