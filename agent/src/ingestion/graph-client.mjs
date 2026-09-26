@@ -63,6 +63,12 @@ const DELTA_SELECT = [
   'isDraft'
 ].join(',');
 
+const UNLIMITED_PAGE_SIZE = 50;
+
+// Graph documents up to 1,000 ids per `translateExchangeIds` call; half that
+// keeps a batch well clear of the request size limit.
+const TRANSLATE_BATCH = 500;
+
 export function createGraphClient(config, { fetchImpl = fetch } = {}) {
   const { tenantId, clientId, clientSecret, mailbox } = config.graph;
   let cachedToken = null;
@@ -109,21 +115,53 @@ export function createGraphClient(config, { fetchImpl = fetch } = {}) {
   // `--limit=400` means "the latest 400" only if that is requested. Unlimited
   // reads are left exactly as they were, because their deltaLink is the stored
   // cursor and a limited run never persists one.
-  async function getDeltaPage(url = null, { top } = {}) {
+  //
+  // IMMUTABLE IDS ARE ASKED FOR ON EVERY PAGE, not only the first. The header
+  // decides the format of the ids Graph RETURNS, and a delta read is the only
+  // call whose returned ids this project stores, since `graph_message_id` is
+  // the idempotency key. Measured 2026-09-26: with the header, delta returned
+  // exactly the ids `translateExchangeIds` produced for the same mail (40 of 40,
+  // joined on internetMessageId), and a plain GET accepts an immutable id
+  // without the header, so no other reader needs it. Which format to ask for is
+  // the caller's decision (`sync_cursors.mail_id_type`), because asking for the
+  // wrong one duplicates every stored message.
+  //
+  // AN UNLIMITED READ ASKS FOR PAGES OF 50. Graph's default is 10, which is
+  // about 280 requests for this Inbox (2,785 items on 2026-09-26). The page
+  // size changes nothing about which mail arrives or in what order.
+  async function getDeltaPage(url = null, { top, immutableIds = false } = {}) {
     const token = await getToken();
     const initial = `${GRAPH_BASE}/users/${encodeURIComponent(mailbox)}/mailFolders/inbox/messages/delta?$select=${DELTA_SELECT}`;
     const target = url || (top ? `${initial}&$orderby=receivedDateTime desc` : initial);
 
-    const headers = { Authorization: `Bearer ${token}` };
+    const prefer = [];
+    if (immutableIds) {
+      prefer.push('IdType="ImmutableId"');
+    }
     if (!url && top) {
-      headers.Prefer = `odata.maxpagesize=${top}`;
+      prefer.push(`odata.maxpagesize=${top}`);
+    } else if (!top) {
+      prefer.push(`odata.maxpagesize=${UNLIMITED_PAGE_SIZE}`);
+    }
+    const headers = { Authorization: `Bearer ${token}` };
+    if (prefer.length > 0) {
+      headers.Prefer = prefer.join(', ');
     }
 
     const response = await fetchImpl(target, { headers });
 
     const payload = await response.json().catch(() => null);
     if (!response.ok) {
-      throw new Error(`Graph delta request failed: ${payload?.error?.code || `HTTP ${response.status}`}`);
+      const code = payload?.error?.code || '';
+      const error = new Error(`Graph delta request failed: ${code || `HTTP ${response.status}`}`);
+      error.status = response.status;
+      error.code = code;
+      // A link Graph handed us and now refuses. Measured 2026-09-26: a corrupted
+      // skiptoken answers 400 `BadRequest` « Badly formed token ». An expired
+      // one could not be produced on demand; Graph documents it as 410 Gone.
+      // Only the poller decides what this means, and only for a SAVED link.
+      error.linkRejected = response.status === 400 || response.status === 410;
+      throw error;
     }
 
     return {
@@ -397,9 +435,45 @@ export function createGraphClient(config, { fetchImpl = fetch } = {}) {
     };
   }
 
+  /**
+   * Stored REST ids → immutable ids, one entry per input, in input order.
+   *
+   * A READ, despite the POST: nothing in the mailbox changes. An id Graph
+   * cannot translate (mail deleted since, or an id already immutable) comes back
+   * with `errorDetails` instead of a target. It is returned as `targetId: null`
+   * with its code, so the caller can count it instead of failing the batch.
+   */
+  async function translateToImmutableIds(ids) {
+    const results = [];
+    for (let start = 0; start < ids.length; start += TRANSLATE_BATCH) {
+      const batch = ids.slice(start, start + TRANSLATE_BATCH);
+      const token = await getToken();
+      const response = await fetchImpl(`${GRAPH_BASE}/users/${encodeURIComponent(mailbox)}/translateExchangeIds`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ inputIds: batch, sourceIdType: 'restId', targetIdType: 'restImmutableEntryId' })
+      });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok) {
+        throw new Error(`Graph id translation failed: ${payload?.error?.code || `HTTP ${response.status}`}`);
+      }
+      const bySource = new Map((payload?.value || []).map((entry) => [entry.sourceId, entry]));
+      for (const sourceId of batch) {
+        const entry = bySource.get(sourceId);
+        results.push({
+          sourceId,
+          targetId: entry?.targetId || null,
+          error: entry?.targetId ? null : entry?.errorDetails?.code || 'NoResult'
+        });
+      }
+    }
+    return results;
+  }
+
   return {
     getToken,
     getDeltaPage,
+    translateToImmutableIds,
     getMessage,
     getAttachmentMetadata,
     listAttachmentHandles,

@@ -40,6 +40,65 @@ test('a continuation link is followed verbatim', async () => {
   assert.equal(calls.at(-1).url, 'https://graph/next');
 });
 
+test('immutable ids are asked for on continuation pages too, beside the page size', async () => {
+  const calls = [];
+  const client = createGraphClient(CONFIG, { fetchImpl: fakeFetch(calls) });
+  await client.getDeltaPage(null, { immutableIds: true });
+  assert.equal(calls.at(-1).headers.Prefer, 'IdType="ImmutableId", odata.maxpagesize=50');
+  await client.getDeltaPage('https://graph/next', { immutableIds: true });
+  assert.equal(calls.at(-1).headers.Prefer, 'IdType="ImmutableId", odata.maxpagesize=50');
+});
+
+test('without the option no id type is asked for, so stored REST ids keep matching', async () => {
+  const calls = [];
+  const client = createGraphClient(CONFIG, { fetchImpl: fakeFetch(calls) });
+  await client.getDeltaPage('https://graph/next', { top: 400 });
+  assert.equal(calls.at(-1).headers.Prefer, undefined);
+  await client.getDeltaPage(null);
+  assert.doesNotMatch(calls.at(-1).headers.Prefer, /IdType/);
+});
+
+test('a delta link Graph refuses is flagged, with its status and code', async () => {
+  for (const [status, code, rejected] of [[400, 'BadRequest', true], [410, 'SyncStateNotFound', true], [503, 'ServiceUnavailable', false]]) {
+    const client = createGraphClient(CONFIG, { fetchImpl: failingFetch(status, code) });
+    const error = await client.getDeltaPage('https://graph/saved').catch((e) => e);
+    assert.equal(error.status, status);
+    assert.equal(error.code, code);
+    assert.equal(error.linkRejected, rejected, `${status} ${code}`);
+  }
+});
+
+test('translation returns one entry per input, in order, with failures counted not thrown', async () => {
+  const bodies = [];
+  const fetchImpl = async (url, init = {}) => {
+    if (String(url).includes('oauth2')) {
+      return { ok: true, json: async () => ({ access_token: 'x', expires_in: 3600 }) };
+    }
+    const body = JSON.parse(init.body);
+    bodies.push(body);
+    return {
+      ok: true,
+      json: async () => ({
+        value: body.inputIds.map((id) =>
+          id === 'gone' ? { sourceId: id, errorDetails: { code: 'Format' } } : { sourceId: id, targetId: `imm-${id}` }
+        )
+      })
+    };
+  };
+  const client = createGraphClient(CONFIG, { fetchImpl });
+  const ids = Array.from({ length: 501 }, (_, i) => (i === 3 ? 'gone' : `r${i}`));
+
+  const results = await client.translateToImmutableIds(ids);
+
+  assert.equal(bodies.length, 2);
+  assert.equal(bodies[0].sourceIdType, 'restId');
+  assert.equal(bodies[0].targetIdType, 'restImmutableEntryId');
+  assert.equal(results.length, 501);
+  assert.deepEqual(results[0], { sourceId: 'r0', targetId: 'imm-r0', error: null });
+  assert.deepEqual(results[3], { sourceId: 'gone', targetId: null, error: 'Format' });
+  assert.equal(results[500].targetId, 'imm-r500');
+});
+
 // --- wrong mailbox vs missing mail -------------------------------------------
 
 /** Answers every Graph read with one error payload, at one status. */

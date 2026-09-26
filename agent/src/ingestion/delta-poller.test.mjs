@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { runDeltaPoll } from './delta-poller.mjs';
+import { CURSOR_KEYS, runDeltaPoll, withDeltaLink, withoutLinks } from './delta-poller.mjs';
 import { buildSpamGate } from './spam-gate.mjs';
 
 function graphMessage(id, conversationId, address = 'marie@example.com') {
@@ -15,17 +15,31 @@ function graphMessage(id, conversationId, address = 'marie@example.com') {
   };
 }
 
-// Fake Graph client that serves a scripted list of delta pages.
+// Fake Graph client that serves a scripted list of delta pages. A page that is
+// an Error is thrown instead of returned.
 function fakeGraphClient(pages) {
   let index = 0;
   const requestedUrls = [];
+  const requestedOptions = [];
   return {
     requestedUrls,
-    async getDeltaPage(url) {
+    requestedOptions,
+    async getDeltaPage(url, options) {
       requestedUrls.push(url);
-      return pages[index++];
+      requestedOptions.push(options);
+      const page = pages[index++];
+      if (page instanceof Error) throw page;
+      return page;
     }
   };
+}
+
+function rejectedLink(status = 400, code = 'BadRequest') {
+  const error = new Error(`Graph delta request failed: ${code}`);
+  error.status = status;
+  error.code = code;
+  error.linkRejected = true;
+  return error;
 }
 
 function fakeStore() {
@@ -53,15 +67,25 @@ function fakeStore() {
   };
 }
 
-function fakeCursorStore(initial = null) {
+function fakeCursorStore(initial = null, { resumeLink = null, idType = 'rest' } = {}) {
   let link = initial;
+  let resume = resumeLink;
   return {
     saved: () => link,
-    async getDeltaLink() {
-      return link;
+    resume: () => resume,
+    async load() {
+      return { deltaLink: link, resumeLink: resume, idType };
     },
-    async setDeltaLink(_shopId, deltaLink) {
+    async saveResumeLink(_shopId, next) {
+      resume = next;
+    },
+    async saveDeltaLink(_shopId, deltaLink) {
       link = deltaLink;
+      resume = null;
+    },
+    async clearLinks() {
+      link = null;
+      resume = null;
     }
   };
 }
@@ -366,4 +390,126 @@ test('resumes from the stored deltaLink on the next run', async () => {
 
   assert.equal(graphClient.requestedUrls[0], 'https://graph/delta-saved');
   assert.equal(cursorStore.saved(), 'https://graph/delta-next');
+});
+
+// --- progress survives an interrupted read (2026-09-26) ----------------------
+
+test('saves the nextLink after each page is written, so a dead read resumes there', async () => {
+  const store = fakeStore();
+  const cursorStore = fakeCursorStore(null);
+  const graphClient = fakeGraphClient([
+    { messages: [graphMessage('m1', 'c1')], nextLink: 'https://graph/p2', deltaLink: null },
+    { messages: [graphMessage('m2', 'c2')], nextLink: 'https://graph/p3', deltaLink: null },
+    new Error('socket hang up')
+  ]);
+
+  await assert.rejects(runDeltaPoll({ graphClient, store, record: store, cursorStore, shopId: 'shop-1' }));
+
+  assert.equal(store.messages.size, 2);
+  assert.equal(cursorStore.resume(), 'https://graph/p3');
+  assert.equal(cursorStore.saved(), null);
+});
+
+test('a saved resume link is preferred over the deltaLink, and cleared when the read completes', async () => {
+  const store = fakeStore();
+  const cursorStore = fakeCursorStore('https://graph/delta-old', { resumeLink: 'https://graph/p3' });
+  const graphClient = fakeGraphClient([{ messages: [], nextLink: null, deltaLink: 'https://graph/delta-new' }]);
+
+  await runDeltaPoll({ graphClient, store, record: store, cursorStore, shopId: 'shop-1' });
+
+  assert.equal(graphClient.requestedUrls[0], 'https://graph/p3');
+  assert.equal(cursorStore.saved(), 'https://graph/delta-new');
+  assert.equal(cursorStore.resume(), null);
+});
+
+test('a saved link Graph rejects is logged, dropped, and the read starts over once', async () => {
+  const warnings = [];
+  const logger = { warn: (event, data) => warnings.push({ event, data }) };
+  const store = fakeStore();
+  const cursorStore = fakeCursorStore('https://graph/delta-expired');
+  const graphClient = fakeGraphClient([
+    rejectedLink(410, 'SyncStateNotFound'),
+    { messages: [graphMessage('m1', 'c1')], nextLink: null, deltaLink: 'https://graph/delta-fresh' }
+  ]);
+
+  await runDeltaPoll({ graphClient, store, record: store, cursorStore, shopId: 'shop-1', logger });
+
+  assert.deepEqual(graphClient.requestedUrls, ['https://graph/delta-expired', null]);
+  assert.equal(warnings[0].event, 'ingest.cursor_expired');
+  assert.deepEqual(warnings[0].data, { shopId: 'shop-1', link: 'delta', status: 410, code: 'SyncStateNotFound' });
+  assert.equal(cursorStore.saved(), 'https://graph/delta-fresh');
+});
+
+test('a rejected nextLink mid-read is an error, not a reason to start over', async () => {
+  const store = fakeStore();
+  const cursorStore = fakeCursorStore(null);
+  const graphClient = fakeGraphClient([
+    { messages: [], nextLink: 'https://graph/p2', deltaLink: null },
+    rejectedLink()
+  ]);
+
+  await assert.rejects(runDeltaPoll({ graphClient, store, record: store, cursorStore, shopId: 'shop-1' }));
+  assert.equal(graphClient.requestedUrls.length, 2);
+  assert.equal(cursorStore.resume(), 'https://graph/p2');
+});
+
+test('a fresh read that Graph rejects is not retried', async () => {
+  const store = fakeStore();
+  const graphClient = fakeGraphClient([rejectedLink(), rejectedLink()]);
+
+  await assert.rejects(
+    runDeltaPoll({ graphClient, store, record: store, cursorStore: fakeCursorStore(null), shopId: 'shop-1' })
+  );
+  assert.equal(graphClient.requestedUrls.length, 1);
+});
+
+test('immutable ids are asked for on every page once the store says the ids were translated', async () => {
+  const store = fakeStore();
+  const graphClient = fakeGraphClient([
+    { messages: [], nextLink: 'https://graph/p2', deltaLink: null },
+    { messages: [], nextLink: null, deltaLink: 'https://graph/delta' }
+  ]);
+
+  await runDeltaPoll({
+    graphClient, store, record: store, cursorStore: fakeCursorStore(null, { idType: 'immutable' }), shopId: 'shop-1'
+  });
+
+  assert.deepEqual(graphClient.requestedOptions.map((o) => o.immutableIds), [true, true]);
+});
+
+test('REST ids stay the default while the stored ids have not been translated', async () => {
+  const store = fakeStore();
+  const graphClient = fakeGraphClient([{ messages: [], nextLink: null, deltaLink: 'https://graph/delta' }]);
+
+  await runDeltaPoll({ graphClient, store, record: store, cursorStore: fakeCursorStore(null), shopId: 'shop-1', limit: 5 });
+
+  assert.equal(graphClient.requestedOptions[0].immutableIds, false);
+});
+
+test('the cutover time is written with the first deltaLink and never moved', () => {
+  const first = withDeltaLink({ other: 'kept' }, 'https://graph/d1', new Date('2026-09-26T10:00:00Z'));
+  assert.equal(first[CURSOR_KEYS.cutoverAt], '2026-09-26T10:00:00.000Z');
+  assert.equal(first.other, 'kept');
+
+  const later = withDeltaLink(
+    { ...first, [CURSOR_KEYS.resumeLink]: 'https://graph/p9' },
+    'https://graph/d2',
+    new Date('2026-10-01T10:00:00Z')
+  );
+  assert.equal(later[CURSOR_KEYS.cutoverAt], '2026-09-26T10:00:00.000Z');
+  assert.equal(later[CURSOR_KEYS.deltaLink], 'https://graph/d2');
+  assert.equal(CURSOR_KEYS.resumeLink in later, false);
+});
+
+test('dropping the links keeps the cutover and the id type', () => {
+  const cleared = withoutLinks({
+    [CURSOR_KEYS.deltaLink]: 'd',
+    [CURSOR_KEYS.resumeLink]: 'r',
+    [CURSOR_KEYS.cutoverAt]: '2026-09-26T10:00:00.000Z',
+    [CURSOR_KEYS.idType]: 'immutable'
+  });
+  assert.deepEqual(cleared, {
+    [CURSOR_KEYS.cutoverAt]: '2026-09-26T10:00:00.000Z',
+    [CURSOR_KEYS.idType]: 'immutable'
+  });
 });

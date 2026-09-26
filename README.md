@@ -104,6 +104,17 @@ below. `llm_usage` holds 2174 calls.
 
 ## Next Steps
 
+**2026-09-26: the agent's next phase is `codex_plans/Case_State_Plan.md`.** In order:
+
+1. make the mailbox cursor stick;
+2. read Sent Items;
+3. build the timeline evaluation;
+4. derive `case_current`;
+5. add obligations and next action;
+6. version the drafts, then put drafting in the poll.
+
+Nothing in it is built yet. The list below predates it.
+
 **Reordered 2026-09-09, after reading the database and running a batch rather than the docs.** What changed the
 ordering: the rules layer landed (steps 1–8 of `codex_plans/Rule_Guided_Investigation_Plan.md`),
 and cost work moved from guesswork to measurement. Items that headed the August list and are

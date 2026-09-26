@@ -53,6 +53,39 @@ A limited initial delta read adds `$orderby=receivedDateTime desc`. Graph alread
 
 **Read newest first, written oldest first.** Every ingestion rule that fires on the message that *creates* a ticket — `sender_label`, the requester, the duplicate link — assumes that message opened the thread. The first limited run wrote in read order, so each thread's ticket was created from its latest message. Measured on that 400-message re-ingestion: **15** staff threads unlabelled, **7** tickets with a colleague as requester (**2** then linked to the wrong customer, which no pass can undo), **4** duplicates and **5** related links missed. So under `--limit` the poller now collects the newest N across pages and writes them in `receivedDateTime` order (`oldestFirst`). Buffering is bounded by the limit. **An unlimited full re-enumeration still writes page by page in Graph's order** and so still carries this risk; sorting it would mean holding the whole mailbox in memory, and it is left open rather than half-fixed.
 
+### Progress is saved page by page, and a rejected saved link starts the read over (2026-09-26)
+
+**Measured 2026-09-26: `shops.sync_cursors` was `{}`, so no cursor had ever been saved**, while two runs on 2026-09-25 had imported 1,173 messages. `runDeltaPoll` saved only the final `deltaLink`, never a `nextLink`. A first full read therefore had to cross the whole Inbox (2,785 items, about 280 pages at Graph's default of 10) without dying, and `--limit` runs deliberately save nothing. It never happened, so every run began at page one.
+
+**The `nextLink` is saved after its page is written** (`mail_ingest_resume_link`), and cleared when the `deltaLink` arrives. Written after, never before: resuming can replay a stored page, which the re-delivery rule makes harmless, but can never skip an unstored one. The page-count safety valve now stops the run with the resume link in place, instead of throwing it away. Unlimited reads ask for pages of 50; the page size changes nothing about which mail arrives.
+
+**A saved link Graph refuses is dropped, logged as `ingest.cursor_expired`, and the read starts over once.** Decided with the business: starting over is safe because known mail does not retrigger a ticket. Measured: a corrupted skiptoken answers `400 BadRequest` « Badly formed token ». A real expiry could not be produced on demand; Graph documents it as `410 Gone`, so both count, and the log keeps the status and code Graph actually sent. **Only the first request of a poll, from a saved link, gets this treatment.** A `nextLink` Graph handed over seconds earlier failing is a real error, and a fresh read that fails is not retried.
+
+**`mail_ingest_cutover_at` is written with the first `deltaLink` and never again**, not by an expiry and not by `ingest:reset`. Mail received after it is new to the pipeline. The case-state plan derives draft eligibility from it rather than flagging 440 old threads one by one (`codex_plans/Case_State_Plan.md`, Q3).
+
+### Stored message ids become immutable, and the header follows a marker, not a setting (2026-09-26)
+
+A REST message id can change when mail moves folders. `Prefer: IdType="ImmutableId"` fixes that, **but only if what is stored changes first.** `graph_message_id` is the unique key of `ticket_messages`, `spam_audit` and `categorisation_review`, and it is what `knownMessageIds` compares. With the header on and REST ids stored, every re-delivered message would look new, which is § *Re-delivery is not arrival* all over again.
+
+**Measured before building (2026-09-26, live mailbox):**
+- with the header, delta returns exactly the id `translateExchangeIds` gives for the same mail (40 of 40, then 151 of 151, joined on `internetMessageId`);
+- a plain GET accepts an immutable id without the header, so the attachment viewer, the photo check and `/forward` need no change. Only the delta read, the one call whose returned ids are stored, sends the header;
+- translation needs no permission beyond what the app has.
+
+**So `ids:translate` rewrites the ids, proves them against delta, and only then writes `mail_id_type = immutable` and drops both links.** The poller reads the marker at every poll, not at startup, so a running worker follows the switch at its next poll. The dry run on 2026-09-26: 1,515 of 1,516 message ids and 132 of 180 audit ids translate. The other 49 are `NotFound` (mail deleted since) and keep their old id: Graph will never deliver them again, so they collide with nothing.
+
+**A marker in the database, not an env var**, because the two halves must never disagree. An env var switched on before the translation, or left off after it, duplicates the corpus. The migration is the one writer of the marker, and it writes it last.
+
+### History a full read imports is not queued for the model (2026-09-26)
+
+The first complete read (§ *Progress is saved page by page*) went back to 2025-09-30 and left **831 tickets flagged for categorisation**, only 9 of them ever categorised. Each would cost a categoriser call and then an investigation, on threads nobody is waiting on.
+
+**Decided with the business:** clear `needs_categorisation` on tickets whose every message predates the cutover, and **keep all their labels** for reporting. A later customer message raises the flag again through the ordinary ingestion rule, so nothing needs undoing if a thread comes back to life.
+
+**Narrowed when applied.** Read literally, the rule cleared all 831, including **40 tickets with mail from the last two weeks, 24 of them ending on a customer message nobody had answered** (« Still shipping cost charged », 2026-09-25). The business's premise was "old tickets", and those are not. So the boundary is the cutover **minus the 28 days auto-close already treats as live** (`AUTO_CLOSE_AFTER_DAYS`): **791 cleared, 40 left queued.** `tickets:unqueue-pre-cutover -- --keep-after=<ISO>` sets it. The newest ticket cleared was last written to on 2026-07-23.
+
+**A consequence to expect:** those 791 tickets are `open`, idle for more than 28 days, and no longer flagged. Auto-close exempts only level 4, `awaiting_human` and flagged tickets, so **the next full poll closes them for inactivity** (`closed_reason = 'inactivity'`). That is the housekeeping rule doing its job, and a customer reply still reopens a ticket.
+
 ### A Shopify sync never writes `sync_cursors` (2026-09-11)
 
 `mapShop` returned `sync_cursors: {}` and `app_settings: {}`, and every Shopify sync upserts the shop — so **every sync wiped the mail delta link**, and the next mail poll re-enumerated the whole mailbox. Found while building the Insights freshness strip: `shops.sync_cursors` read `{}` on a shop whose worker had run many times. It is the likely cause of the mail window moving back on re-enumeration, and with the nightly sync now scheduled it would have happened every night.
@@ -62,6 +95,28 @@ Both columns are ours, not Shopify's, and both have a `'{}'` default for a first
 ### Direction: the Inbox is not only inbound
 
 The team's replies land back in it. A message whose sender is the support mailbox is recorded `outbound`. Measured on real mail, 123 of 348 messages; before this they were stored as customer mail and sat at the end of 43% of threads, exactly where the categoriser looks for how the customer currently feels.
+
+### A colleague answering the customer from their own inbox is our reply (2026-09-26)
+
+**The team replies from personal inboxes** (confirmed by the business), with the support address copied. The rule above knows only the support address as ours, so these replies were stored `inbound`. Measured 2026-09-26: **95 messages on 55 tickets** from an `internal` address (`qiriness.com`, `lap-groupe.com`) with the ticket's customer in To or Cc. Each one:
+- raised `needs_categorisation`;
+- reopened a waiting or closed ticket;
+- would have read to the Case Manager as the customer's own words;
+- did not count as an answer for `answeredSince`.
+
+None of the 123 drafts at the time had been written after one, but automatic drafting would meet it.
+
+**The rule, decided with the business:** an `internal` sender with the customer in To or Cc is `outbound`, whichever staff mailbox sent it. Without the customer, it is a colleague's message and stays `inbound`. It is applied in `ticket-writer.mjs` (`isStaffReplyToCustomer`) **before** the reopen and categorisation rules, so all four effects are fixed where they start rather than in each reader.
+
+**"The customer" is the ticket's `requester_email_hash`**, compared by hash, because the ticket stores no raw address. Two cases are excluded:
+- a thread a colleague opened (`sender_label` set), whose requester is a colleague;
+- a requester equal to the sender.
+
+**Only `internal`.** A partner writing to the customer (Deret) is not our reply, and `contractor` covers Shopify's notification address.
+
+**What it cannot see:** a personal-inbox reply sent without copying support never reaches the mailbox. Of 179 customer replies carrying `In-Reply-To`, 63 answer a message we do not hold, but 53 of those are the first message stored on their ticket (older history). **At most 10** look like a missed reply. Reading personal mailboxes was not proposed.
+
+**Stored mail was re-filed** with `staff-replies:backfill`: 124 messages on 72 tickets once the full read had added the older history. Only the direction moved; the reopens these messages caused before are history, and nothing records the status they overwrote.
 
 ### Identity: a contact-form notification is *about* a customer but *from* Shopify
 

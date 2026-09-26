@@ -356,6 +356,7 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |   |   |                        # -> usage-store (best-effort; never fails a pass)
 |   |   |-- ingestion/           # graph-client · graph-message-mapper · contact-form ·
 |   |   |                        # delta-poller · ticket-writer · message-embedder ·
+|   |   |                        # immutable-ids (plan + proof for `ids:translate`) ·
 |   |   |                        # spam-gate + blocklist-store + spam-classifier ·
 |   |   |                        # sender-directory (who a sender is: context for
 |   |   |                        # the case file, filter for the demand report,
@@ -496,7 +497,7 @@ Every table has RLS on with no policies: **service-role access only**. Shopify s
 
 | Table | Holds |
 | --- | --- |
-| `shops` | shop records, environment, app settings, `sync_cursors` (incl. mail delta link), `storefront_url` (Shopify `primaryDomain.url` — where customers go, unlike `shop_domain` which is the *.myshopify.com identity webhooks key on; the base for `/account/login`), `customer_accounts_version` (`CLASSIC` — decides whether a password exists at all), `iana_timezone` (Shopify's `ianaTimezone` — where a day starts on the Insights charts; null until a sync runs the current `mapShop`), `sync_cursors` (incl. the mail delta link — **never written by `mapShop`**), **order retention switch** `order_retention_mode` (`months`/`indefinite`) + `_months` + `_changed_at` + `_reason` — read by `scripts/lib/order-retention.mjs`, never written by `mapShop`; **the VIP rule** `vip_min_spend` + `vip_min_orders` + `vip_window_months` (all or none) + `vip_rule_changed_at` — set on the Customers panel, read by `scripts/lib/vip-rule.mjs` |
+| `shops` | shop records, environment, app settings, `sync_cursors` (incl. mail delta link), `storefront_url` (Shopify `primaryDomain.url` — where customers go, unlike `shop_domain` which is the *.myshopify.com identity webhooks key on; the base for `/account/login`), `customer_accounts_version` (`CLASSIC` — decides whether a password exists at all), `iana_timezone` (Shopify's `ianaTimezone` — where a day starts on the Insights charts; null until a sync runs the current `mapShop`), `sync_cursors` (mail keys `mail_ingest_delta_link` · `mail_ingest_resume_link` · `mail_ingest_cutover_at` (written once) · `mail_id_type` (`immutable` after `ids:translate`), all owned by `ingestion/delta-poller.mjs` `CURSOR_KEYS` — **never written by `mapShop`**), **order retention switch** `order_retention_mode` (`months`/`indefinite`) + `_months` + `_changed_at` + `_reason` — read by `scripts/lib/order-retention.mjs`, never written by `mapShop`; **the VIP rule** `vip_min_spend` + `vip_min_orders` + `vip_window_months` (all or none) + `vip_rule_changed_at` — set on the Customers panel, read by `scripts/lib/vip-rule.mjs` |
 | `customers` | lean support snapshot: contact, marketing state, coarse location, lifetime totals, last order, `rfm_group`. No addresses or notes |
 | `orders` | identity, links, channel, derived `order_status`, totals, line items, fulfillments, returns, refunds. Contacts hashed, plus `customer_email_masked` (`j***l@orange.fr`) for the one question a hash cannot answer; `tracking_numbers text[]` (GIN) lifted out of fulfillments so a ticket can be resolved from a parcel number; destination coarse; `retention_rule` names only WHY the clock started, `retention_delete_after` carries the period and is **null when kept indefinitely** |
 | `products` | snapshots + first-class metafields, `variants` jsonb, `available_stock` |
@@ -881,11 +882,11 @@ Run `npm run ingest:once` or `npm start` from `agent/`. One poll runs every pass
 | # | Pass | Module |
 | --- | --- | --- |
 | 1 | load config, assert Graph creds, resolve `shops.id` | `index.mjs` |
-| 2 | follow Graph delta pages, persist cursor | `ingestion/delta-poller.mjs` |
+| 2 | follow Graph delta pages; save the nextLink after each written page and the deltaLink at the end; a saved link Graph rejects (400/410) is dropped and the read starts over once; immutable ids asked for when `mail_id_type = immutable` | `ingestion/delta-poller.mjs` |
 | 3 | map messages; derive direction + normalise contact-form identity | `ingestion/graph-message-mapper.mjs` |
 | 3a | **Known-sender exemption** — an address in `sender_directory` bypasses BOTH gates; the LLM call is skipped, not overruled. Can only keep mail, never block it | `ingestion/known-senders.mjs` |
 | 4 | **Gate 1** (no LLM): blocklist match → dropped before any write | `ingestion/spam-gate.mjs` |
-| 5 | thread survivors by conversation; embed inline (best-effort) | `ingestion/ticket-writer.mjs` |
+| 5 | thread survivors by conversation; embed inline (best-effort). An `internal` sender with the ticket's customer in To/Cc is re-filed `outbound` first (`isStaffReplyToCustomer`: staff replying from a personal inbox) | `ingestion/ticket-writer.mjs` |
 | 5a | **Duplicate link** (deterministic, pre-embedding): reply chain, or identical body inside an hour → the ticket is skipped by drafting *and* investigation. Fires only on the message that *creates* a ticket | `ingestion/duplicate-rules.mjs` |
 | 5a2 | **Sender label** — the opening address is looked up in `sender_directory`; `internal`/`contractor` stamped onto the ticket | `ingestion/sender-directory.mjs` |
 | 5b | **Related link** (post-embedding, consumers only): cosine ≥ 0.90 from the same sender inside 30 days → context + cross-ticket chase. Never suppresses | `ingestion/related-rules.mjs` |
@@ -910,7 +911,10 @@ From `agent/`. Every pass has a standalone runner, most with `:dry-run`.
 | Command | Does |
 | --- | --- |
 | `ingest:once` / `start` | one poll / the loop. Supports `--limit=N` (the newest N messages, written oldest first; the cursor is not saved); with `--stop-after=categorise`, that limit applies to both Graph ingestion and the categorisation batch |
-| `ingest:reset` | clear the delta cursor |
+| `ingest:reset` | clear the delta and resume links (keeps the cutover and id type) |
+| `tickets:unqueue-pre-cutover[:dry-run] -- [--keep-after=ISO]` | clear `needs_categorisation` (labels kept) on tickets whose every message predates `mail_ingest_cutover_at` |
+| `staff-replies:backfill[:dry-run]` | re-file stored staff→customer messages as `outbound` (the ingestion rule, applied to old mail) |
+| `ids:translate[:dry-run]` | one-off: rewrite stored `graph_message_id`s (ticket_messages, spam_audit, categorisation_review) to immutable ids, verified against delta, then set `mail_id_type` and drop the links (`ingestion/immutable-ids.mjs`) |
 | `blocklist:add` | add a blocklist rule |
 | `spam:backfill[:dry-run] -- --limit=N` | re-read dropped mail from Graph to fill `spam_audit` bodies |
 | `attachments:backfill[:dry-run] -- --limit=N` | fetch attachment metadata from Graph for messages ingested before the column existed |

@@ -40,6 +40,30 @@ these.
 as its own item: `llm_usage` (item 14), `categorisation_review` (item 15), and
 `category_forwarding` / `ticket_forwards` (item 1).
 
+## 29. The mailbox cursor and immutable ids: applied 2026-09-26, two checks left
+
+**Run 2026-09-26 with the worker stopped** (no agent process; last ingestion 2026-09-25 16:35 UTC):
+
+- `ids:translate`: **1,647 of 1,647 rewritten, 0 failed**; 49 `NotFound` kept as they were. Marker set.
+- **First full read (09:00–09:27 UTC):** 56 pages, **cursor committed** (`mail_ingest_delta_link`, `mail_ingest_cutover_at = 2026-09-26T09:27:21Z`, no resume link). Compared with a snapshot taken before: **0 of the 645 existing tickets changed status, 0 newly flagged**, and 0 rows duplicated by the id switch. One pair shares an internet message id, but they are two Graph items in two threads received a day apart (one email delivered twice in January); it is not from the migration.
+- **It imported older history:** 688 new messages and 347 new tickets. 2 are genuinely new mail; the rest date from 2025-09-30 to 2026-01-19, before the 2026-01-20 edge of what was stored. All the new tickets were flagged for categorisation (831 in total). **Resolved the same day:** 791 older than 28 days before the cutover were taken out of the queue, with their labels kept; 40 recent ones stay queued (`DECISIONS.md` § *History a full read imports is not queued*).
+- **Second poll:** 1 page, 0 messages. Incremental.
+- The read re-embedded all 2,203 messages, including those already stored (`messagesEmbedded`), and made 2,850 model calls (855k tokens), mostly embeddings plus gate 2 on the old threads it added. That is existing behaviour: the embed call runs before the `isNewMessage` check.
+
+**Still unchecked:** check 5 and the 410 below. Check 5 needs another full read, which re-embeds everything, so it waits for the next time a full read is needed anyway.
+
+The original checklist follows.
+
+**The checks, in order. Stop the worker first.**
+
+1. `npm run ids:translate`. Expect 1,647 rewritten (1,515 + 132), 0 write errors, and `sync_cursors.mail_id_type = immutable`.
+2. `npm run ingest:once -- --stop-after=ingest`: the first full read, in the new format. Expect **0 new `ticket_messages` rows for mail already stored** and **0 tickets reopened**. Count `ticket_messages` before and after; anything above genuinely new mail is a duplicate, and means stop.
+3. Afterwards `sync_cursors` holds `mail_ingest_delta_link` and `mail_ingest_cutover_at`, and no resume link.
+4. Run it again: one or two pages, only new mail.
+5. Interrupt a read on purpose (Ctrl-C after a few pages, with the links cleared by `ingest:reset`). The next run must start from `mail_ingest_resume_link`, not page one.
+
+Not checkable on demand: a truly expired link (Graph's 410). When `ingest.cursor_expired` first appears in the logs, write the status and code here.
+
 ## 28. The agent reads the whole thread now, and no draft has been re-read since — 2026-09-21
 
 `record.conversation` and the two widened projections ship today: the

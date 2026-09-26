@@ -1,5 +1,6 @@
 import { supabaseSelectAll, supabaseUpsert } from '../../../scripts/lib/supabase-rest-client.mjs';
 import { T } from '../../../scripts/lib/tables.mjs';
+import { hashIdentifier } from '../../../scripts/lib/compliance-audit.mjs';
 
 // How many Graph message ids go into one `in.(...)` filter. They are ~150
 // characters each and the filter travels in the URL, so this is a URL-length
@@ -147,6 +148,38 @@ export async function writeIngestedMessages(
   return counts;
 }
 
+/**
+ * A colleague answering the customer from their own mailbox, with the support
+ * address copied. It is OUR reply, and is stored as `outbound`.
+ *
+ * THE TEAM REPLIES FROM PERSONAL INBOXES (confirmed 2026-09-26), and the mapper
+ * only knows the support address as ours. Measured that day: 105 messages from
+ * `@qiriness.com` / `@lap-groupe.com` addressed to the thread's customer, on 80
+ * tickets, all stored `inbound`. Each such reply re-queued its ticket for the
+ * categoriser, reopened it if it was waiting or closed, read as the customer's
+ * own words to the Case Manager, and did not count as an answer for drafting.
+ *
+ * DETERMINISTIC, from facts already held: the sender's directory label is
+ * `internal`, and a To/Cc address hashes to the ticket's requester. A staff
+ * message that does not address the customer is a colleague's, and stays
+ * inbound.
+ *
+ * NOT ON A THREAD ONE OF US OPENED (`sender_label` set): its requester is a
+ * colleague, so "writing to the requester" is colleagues talking to each other.
+ * And not when the requester IS the sender, which is what a ticket created from
+ * a colleague's message looks like before `requester:repair` runs.
+ */
+export function isStaffReplyToCustomer(message, ticket, senderLabel) {
+  if (message?.direction !== 'inbound' || !senderLabel) return false;
+  if (senderLabel(message.from_email) !== 'internal') return false;
+  const requester = ticket?.requester_email_hash;
+  if (!requester || ticket.sender_label) return false;
+  if (hashIdentifier(message.from_email) === requester) return false;
+  return [...(message.to_emails || []), ...(message.cc_emails || [])].some(
+    (address) => hashIdentifier(address) === requester
+  );
+}
+
 async function resolveTicket(
   record, shopId, item, triage, counts, audit, detectDuplicate, senderLabel, logger,
   // Whether this message is one we did not already hold. Only the two state
@@ -158,6 +191,11 @@ async function resolveTicket(
   const existing = await record.findByConversation(conversation.graph_conversation_id);
 
   if (existing) {
+    // FIRST, because every rule below branches on direction.
+    if (isStaffReplyToCustomer(item.message, existing, senderLabel)) {
+      item.message.direction = 'outbound';
+    }
+
     // Keep the ticket's window around the whole thread: extend it in either
     // direction, and backfill a subject only if the ticket never had one.
     //

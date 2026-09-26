@@ -10,6 +10,27 @@ Three sibling files carry the other halves, and this one deliberately does not d
 
 ---
 
+## Imported history taken out of the categorisation queue (2026-09-26)
+
+`tickets:unqueue-pre-cutover` clears `needs_categorisation` on tickets whose every message predates the cutover, and keeps their labels. Run with `--keep-after` set to 28 days before the cutover: **791 cleared, 0 failed; 40 recent tickets left queued**. Expect the next full poll to auto-close the 791 for inactivity (`DECISIONS.md`).
+
+## A colleague's reply from a personal inbox is filed as ours (2026-09-26)
+
+- Ingestion files an `internal` sender (`qiriness.com`, `lap-groupe.com`) with the ticket's customer in To/Cc as `outbound`, before the reopen and categorisation rules (`isStaffReplyToCustomer` in `ticket-writer.mjs`). Such a reply no longer reopens or re-queues its ticket, and it counts as an answer for drafting.
+- `staff-replies:backfill[:dry-run]` applies the rule to stored mail. **Run 2026-09-26 after the full read: 124 messages on 72 tickets re-filed, 0 failed**; a second dry run finds 0.
+- Tests: 7 new, 1,637 agent tests pass.
+
+## The mailbox cursor survives an interrupted read, and message ids can become immutable (2026-09-26)
+
+Stage 1 of `codex_plans/Case_State_Plan.md`.
+
+- **Progress is saved page by page** (`sync_cursors.mail_ingest_resume_link`). A saved link Graph rejects (400/410) is logged as `ingest.cursor_expired`, dropped, and the read starts over once. The page cap no longer throws the progress away. Unlimited reads use pages of 50.
+- **`mail_ingest_cutover_at`** is written with the first `deltaLink` and never moved; stage 6 uses it to decide which tickets may be drafted automatically.
+- **Immutable ids:** `getDeltaPage` sends `Prefer: IdType="ImmutableId"` when `sync_cursors.mail_id_type = immutable`. The one-off `ids:translate` sets that marker after rewriting every stored `graph_message_id` and proving the result against a live delta read. `ingest:reset` keeps the cutover and the marker.
+- **Dry run on the live mailbox:** 1,515 of 1,516 message ids and 132 of 180 spam-audit ids translate; 49 are `NotFound` (deleted mail, kept as they are). 151 of 151 joinable messages in the newest 200 match, 0 differ.
+- Tests: 1,630 agent tests pass, including 9 new poller tests, 4 Graph client tests and 5 translation tests.
+- **Applied the same day:** 1,647 ids rewritten; the first full read committed the cursor, with 0 existing tickets changed. The second poll read 1 page. The read also imported 688 older messages (2025-09-30 → 2026-01-19) as 347 new tickets (`VALIDATION_LOG.md` item 29).
+
 ## Klaviyo connected: a key on Settings, a nightly sync, and the Marketing card filled (2026-09-25)
 
 - **Settings → Integrations** (developer and management only): paste the Klaviyo private key; it is checked against Klaviyo, stored encrypted in Supabase Vault, and shown again only as its last four characters. Replace and remove are there too.

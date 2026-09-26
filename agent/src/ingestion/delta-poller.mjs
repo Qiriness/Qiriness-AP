@@ -122,20 +122,48 @@ export async function runDeltaPoll({
     totals.duplicatesLinked += counts.duplicatesLinked ?? 0;
   }
 
-  let url = await cursorStore.getDeltaLink(shopId);
+  // Read once per poll, not once per process: `ids:translate` flips the id type
+  // under a running worker, and the next poll must follow it.
+  const cursor = await cursorStore.load(shopId);
+  const immutableIds = cursor.idType === 'immutable';
+  let url = cursor.resumeLink || cursor.deltaLink || null;
+  let savedLink = url ? (cursor.resumeLink ? 'resume' : 'delta') : null;
+
+  // A SAVED LINK GRAPH REFUSES IS DROPPED, AND THE READ STARTS OVER, once.
+  // Starting over is safe: mail already stored does not retrigger its ticket
+  // (DECISIONS.md § "Re-delivery is not arrival"). Only the first request of a
+  // poll can hit this; a nextLink Graph just handed us failing is a real error.
+  async function firstPage(options) {
+    try {
+      return await graphClient.getDeltaPage(url, options);
+    } catch (error) {
+      if (!savedLink || !error.linkRejected) throw error;
+      logger?.warn?.('ingest.cursor_expired', { shopId, link: savedLink, status: error.status, code: error.code });
+      await cursorStore.clearLinks(shopId);
+      url = null;
+      savedLink = null;
+      return graphClient.getDeltaPage(null, options);
+    }
+  }
 
   if (limit) {
     return runLimited();
   }
 
+  // PROGRESS IS SAVED PAGE BY PAGE. Until 2026-09-26 only the final deltaLink
+  // was saved, so a first full read that died anywhere in its ~280 pages
+  // started again from nothing, and no cursor had ever been saved. The nextLink
+  // is stored only after its page is written: resuming re-reads nothing that
+  // was not stored, and replaying a page that was is harmless.
   for (let page = 0; page < MAX_PAGES_PER_RUN; page += 1) {
-    const { messages, nextLink, deltaLink } = await graphClient.getDeltaPage(url);
+    const { messages, nextLink, deltaLink } =
+      page === 0 ? await firstPage({ immutableIds }) : await graphClient.getDeltaPage(url, { immutableIds });
     totals.pages += 1;
 
     await processBatch(messages);
 
     if (deltaLink) {
-      await cursorStore.setDeltaLink(shopId, deltaLink);
+      await cursorStore.saveDeltaLink(shopId, deltaLink);
       await flush();
       return totals;
     }
@@ -145,10 +173,16 @@ export async function runDeltaPoll({
       await flush();
       return totals;
     }
+    await cursorStore.saveResumeLink(shopId, nextLink);
     url = nextLink;
   }
 
-  throw new Error(`Delta poll exceeded ${MAX_PAGES_PER_RUN} pages; aborting to avoid a loop.`);
+  // The safety valve still stops the run, but no longer loses it: the resume
+  // link is saved, so the next poll carries on from here.
+  logger?.warn?.('ingest.page_budget_reached', { shopId, pages: MAX_PAGES_PER_RUN });
+  totals.incomplete = true;
+  await flush();
+  return totals;
 
   // UNDER --limit: COLLECT THE NEWEST N, THEN WRITE THEM OLDEST FIRST.
   //
@@ -170,7 +204,8 @@ export async function runDeltaPoll({
       if (page >= MAX_PAGES_PER_RUN) {
         throw new Error(`Delta poll exceeded ${MAX_PAGES_PER_RUN} pages; aborting to avoid a loop.`);
       }
-      const result = await graphClient.getDeltaPage(url, page === 0 ? { top: limit } : undefined);
+      const result =
+        page === 0 ? await firstPage({ top: limit, immutableIds }) : await graphClient.getDeltaPage(url, { immutableIds });
       totals.pages += 1;
       collected.push(...result.messages.slice(0, limit - collected.length));
 
@@ -196,7 +231,7 @@ export async function runDeltaPoll({
       // stays a repeatable partial test rather than a committed sync position.
       totals.limitReached = true;
     } else if (deltaLink) {
-      await cursorStore.setDeltaLink(shopId, deltaLink);
+      await cursorStore.saveDeltaLink(shopId, deltaLink);
     }
     await flush();
     return totals;
@@ -283,23 +318,75 @@ async function fetchAttachmentMetadata(graphClient, items, logger) {
   return fetched;
 }
 
-// Delta cursor persisted in shops.sync_cursors.mail_ingest_delta_link, reusing the
-// existing per-shop sync-cursor column. Merge-on-write so other cursors are preserved.
+// The keys this poller owns in `shops.sync_cursors`. Merge-on-write, so a key
+// this code does not name is never touched.
+export const CURSOR_KEYS = {
+  // Where the last complete read ended. Its presence means a full read finished.
+  deltaLink: 'mail_ingest_delta_link',
+  // The nextLink of the last page fully written, while a read is under way.
+  resumeLink: 'mail_ingest_resume_link',
+  // When the first deltaLink was committed. Written once, never overwritten
+  // or cleared: mail received after it is genuinely new to the pipeline, which
+  // is what makes a ticket eligible for automatic drafting
+  // (codex_plans/Case_State_Plan.md, stage 6).
+  cutoverAt: 'mail_ingest_cutover_at',
+  // 'immutable' once `ids:translate` has rewritten the stored ids. Absent means
+  // REST ids, the format everything stored before 2026-09-26 is in.
+  idType: 'mail_id_type'
+};
+
+/**
+ * The next cursor state after a complete read. Pure, so the "cutover is
+ * written once" rule is tested without a database.
+ */
+export function withDeltaLink(current, deltaLink, now = new Date()) {
+  const next = { ...current, [CURSOR_KEYS.deltaLink]: deltaLink };
+  delete next[CURSOR_KEYS.resumeLink];
+  if (!next[CURSOR_KEYS.cutoverAt]) {
+    next[CURSOR_KEYS.cutoverAt] = now.toISOString();
+  }
+  return next;
+}
+
+/** The cursor state with both links dropped; the cutover and id type stay. */
+export function withoutLinks(current) {
+  const next = { ...current };
+  delete next[CURSOR_KEYS.deltaLink];
+  delete next[CURSOR_KEYS.resumeLink];
+  return next;
+}
+
 export function createSupabaseCursorStore(supabase) {
-  const CURSOR_KEY = 'mail_ingest_delta_link';
+  async function read(shopId) {
+    const rows = await supabaseSelect(supabase, 'shops', { id: shopId }, 'id,sync_cursors');
+    return rows[0]?.sync_cursors || {};
+  }
+
+  async function write(shopId, cursors) {
+    await supabaseUpdateById(supabase, 'shops', shopId, { sync_cursors: cursors });
+  }
 
   return {
-    async getDeltaLink(shopId) {
-      const rows = await supabaseSelect(supabase, 'shops', { id: shopId }, 'id,sync_cursors');
-      return rows[0]?.sync_cursors?.[CURSOR_KEY] || null;
+    async load(shopId) {
+      const cursors = await read(shopId);
+      return {
+        deltaLink: cursors[CURSOR_KEYS.deltaLink] || null,
+        resumeLink: cursors[CURSOR_KEYS.resumeLink] || null,
+        idType: cursors[CURSOR_KEYS.idType] || 'rest'
+      };
     },
 
-    async setDeltaLink(shopId, deltaLink) {
-      const rows = await supabaseSelect(supabase, 'shops', { id: shopId }, 'id,sync_cursors');
-      const current = rows[0]?.sync_cursors || {};
-      await supabaseUpdateById(supabase, 'shops', shopId, {
-        sync_cursors: { ...current, [CURSOR_KEY]: deltaLink }
-      });
+    async saveResumeLink(shopId, resumeLink) {
+      const current = await read(shopId);
+      await write(shopId, { ...current, [CURSOR_KEYS.resumeLink]: resumeLink });
+    },
+
+    async saveDeltaLink(shopId, deltaLink) {
+      await write(shopId, withDeltaLink(await read(shopId), deltaLink));
+    },
+
+    async clearLinks(shopId) {
+      await write(shopId, withoutLinks(await read(shopId)));
     }
   };
 }

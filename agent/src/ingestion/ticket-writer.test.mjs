@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { writeIngestedMessages } from './ticket-writer.mjs';
+import { isStaffReplyToCustomer, writeIngestedMessages } from './ticket-writer.mjs';
+import { hashIdentifier } from '../../../scripts/lib/compliance-audit.mjs';
 import { createAuditCollector } from './spam-audit.mjs';
 
 // In-memory stand-in for Supabase, so the threading + idempotency logic is
@@ -687,4 +688,88 @@ test('a failing knownMessageIds lookup fails OPEN, never silently swallowing a r
   // would strand a real reply on a closed ticket.
   assert.equal(ticket.status, 'open');
   assert.ok(warnings.includes('ingest.known_message_lookup_failed'));
+});
+
+// --- a colleague answering from a personal inbox is OUR reply (2026-09-26) ---
+//
+// 105 such messages were stored `inbound` on 80 tickets: each re-queued its
+// ticket, could reopen it, and did not count as an answer for drafting.
+
+const CUSTOMER = 'marie@example.com';
+const staffLabel = (from) => (/@(qiriness\.com|lap-groupe\.com)$/i.test(from) ? 'internal' : /@deret\.fr$/.test(from) ? 'logistics' : null);
+const customerTicket = { requester_email_hash: hashIdentifier(CUSTOMER), sender_label: null };
+
+function staffMessage({ from = 'lea@lap-groupe.com', to = [CUSTOMER], cc = [] } = {}) {
+  return { direction: 'inbound', from_email: from, to_emails: to, cc_emails: cc };
+}
+
+test('a staff address writing to the customer is our reply', () => {
+  assert.equal(isStaffReplyToCustomer(staffMessage(), customerTicket, staffLabel), true);
+  assert.equal(isStaffReplyToCustomer(staffMessage({ from: 'anna@qiriness.com', to: ['x@deret.fr'], cc: ['MARIE@example.com'] }), customerTicket, staffLabel), true, 'Cc counts, and case does not matter');
+});
+
+test('a staff address not writing to the customer stays a colleague message', () => {
+  assert.equal(isStaffReplyToCustomer(staffMessage({ to: ['x@deret.fr'] }), customerTicket, staffLabel), false);
+});
+
+test('only internal staff: a partner writing to the customer is not our reply', () => {
+  assert.equal(isStaffReplyToCustomer(staffMessage({ from: 'ops@deret.fr' }), customerTicket, staffLabel), false);
+});
+
+test('no rule on a thread a colleague opened, or before the customer is known', () => {
+  assert.equal(isStaffReplyToCustomer(staffMessage(), { ...customerTicket, sender_label: 'internal' }, staffLabel), false);
+  assert.equal(isStaffReplyToCustomer(staffMessage(), { requester_email_hash: null }, staffLabel), false);
+  const selfRequester = { requester_email_hash: hashIdentifier('lea@lap-groupe.com'), sender_label: null };
+  assert.equal(isStaffReplyToCustomer(staffMessage({ to: ['lea@lap-groupe.com'] }), selfRequester, staffLabel), false);
+});
+
+test('without a labeller nothing is reclassified', () => {
+  assert.equal(isStaffReplyToCustomer(staffMessage(), customerTicket, undefined), false);
+});
+
+test('a new staff reply to the customer is stored outbound, and neither reopens nor re-queues', async () => {
+  const store = storeKnowing();
+  await store.create({
+    graph_conversation_id: 'c1',
+    subject: 'Colis',
+    requester_email_hash: hashIdentifier(CUSTOMER),
+    first_message_at: '2026-09-01T09:00:00.000Z',
+    last_message_at: '2026-09-01T09:00:00.000Z'
+  });
+  const ticket = store.tickets.get('shop-1|c1');
+  ticket.status = 'awaiting_customer';
+  ticket.needs_categorisation = false;
+
+  const item = mappedMessage({ id: 'm9', conversationId: 'c1', at: '2026-09-02T09:00:00.000Z' });
+  Object.assign(item.message, { from_email: 'lea@lap-groupe.com', to_emails: [CUSTOMER], cc_emails: ['contact@qiriness.com'] });
+  Object.assign(item.conversation, { requester_email_hash: hashIdentifier('lea@lap-groupe.com'), requester_name: 'Léa' });
+
+  await writeIngestedMessages(store, store, 'shop-1', [item], { senderLabel: staffLabel });
+
+  assert.equal(store.messages.get('shop-1|m9').direction, 'outbound');
+  assert.equal(ticket.status, 'awaiting_customer', 'our reply does not reopen');
+  assert.notEqual(ticket.needs_categorisation, true, 'our reply does not re-queue');
+  assert.equal(ticket.requester_email_hash, hashIdentifier(CUSTOMER), 'the requester is not touched');
+  assert.equal(ticket.last_message_at, '2026-09-02T09:00:00.000Z');
+});
+
+test('a staff message to a colleague still reopens and re-queues, as any inbound does', async () => {
+  const store = storeKnowing();
+  await store.create({
+    graph_conversation_id: 'c1',
+    subject: 'Colis',
+    requester_email_hash: hashIdentifier(CUSTOMER),
+    first_message_at: '2026-09-01T09:00:00.000Z',
+    last_message_at: '2026-09-01T09:00:00.000Z'
+  });
+  const ticket = store.tickets.get('shop-1|c1');
+  ticket.status = 'awaiting_customer';
+
+  const item = mappedMessage({ id: 'm9', conversationId: 'c1', at: '2026-09-02T09:00:00.000Z' });
+  Object.assign(item.message, { from_email: 'lea@lap-groupe.com', to_emails: ['contact@qiriness.com'], cc_emails: [] });
+
+  await writeIngestedMessages(store, store, 'shop-1', [item], { senderLabel: staffLabel });
+
+  assert.equal(store.messages.get('shop-1|m9').direction, 'inbound');
+  assert.equal(ticket.status, 'open');
 });
