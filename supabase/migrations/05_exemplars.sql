@@ -469,7 +469,9 @@ create table public.support_answers (
     ask <@ array[
       'shopify_order_number', 'purchase_email', 'product_name',
       'purchase_channel', 'photo', 'promotion_code', 'order_date_or_amount',
-      'reaction_product_name', 'lot_number', 'account_email'
+      'reaction_product_name', 'lot_number', 'account_email',
+      'postal_address', 'preferred_remedy', 'receipt_confirmation',
+      'skin_type', 'skin_concern'
     ]::text[]
   ),
   -- Every tone `reply-tones.mjs` can word. A key outside it would be a choice

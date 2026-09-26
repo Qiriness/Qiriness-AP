@@ -163,3 +163,11 @@ test('a 404 that is not about the mailbox still means the message is gone', asyn
     assert.equal(await call(client), null, name);
   }
 });
+
+test('a delta read can start from Sent Items, and an unknown folder is refused', async () => {
+  const calls = [];
+  const client = createGraphClient(CONFIG, { fetchImpl: fakeFetch(calls) });
+  await client.getDeltaPage(null, { folder: 'sentitems' });
+  assert.match(calls.at(-1).url, /mailFolders\/sentitems\/messages\/delta/);
+  await assert.rejects(client.getDeltaPage(null, { folder: 'drafts' }), /Unknown mail folder/);
+});

@@ -65,6 +65,11 @@ const DELTA_SELECT = [
 
 const UNLIMITED_PAGE_SIZE = 50;
 
+// Graph's well-known folder names. Sent Items is read for the replies sent FROM
+// the support address that never come back to the Inbox (98 of 115 on
+// 2026-09-26).
+const DELTA_FOLDERS = new Set(['inbox', 'sentitems']);
+
 // Graph documents up to 1,000 ids per `translateExchangeIds` call; half that
 // keeps a batch well clear of the request size limit.
 const TRANSLATE_BATCH = 500;
@@ -129,9 +134,15 @@ export function createGraphClient(config, { fetchImpl = fetch } = {}) {
   // AN UNLIMITED READ ASKS FOR PAGES OF 50. Graph's default is 10, which is
   // about 280 requests for this Inbox (2,785 items on 2026-09-26). The page
   // size changes nothing about which mail arrives or in what order.
-  async function getDeltaPage(url = null, { top, immutableIds = false } = {}) {
+  //
+  // `folder` is `inbox` or `sentitems`. It only shapes the FIRST request: a
+  // nextLink or deltaLink already names its folder.
+  async function getDeltaPage(url = null, { top, immutableIds = false, folder = 'inbox' } = {}) {
+    if (!DELTA_FOLDERS.has(folder)) {
+      throw new Error(`Unknown mail folder for a delta read: ${folder}`);
+    }
     const token = await getToken();
-    const initial = `${GRAPH_BASE}/users/${encodeURIComponent(mailbox)}/mailFolders/inbox/messages/delta?$select=${DELTA_SELECT}`;
+    const initial = `${GRAPH_BASE}/users/${encodeURIComponent(mailbox)}/mailFolders/${folder}/messages/delta?$select=${DELTA_SELECT}`;
     const target = url || (top ? `${initial}&$orderby=receivedDateTime desc` : initial);
 
     const prefer = [];

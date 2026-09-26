@@ -206,7 +206,7 @@ async function main() {
     // per poll, and a rule that lives in one place cannot be half-applied.
     const guarded = exemptKnownSenders({ senderDirectory, gate, triage, logger });
 
-    const totals = await runDeltaPoll({
+    const ingestOptions = {
       graphClient,
       store,
       record,
@@ -258,8 +258,19 @@ async function main() {
         return OWN_SIDE_LABELS.includes(label) ? label : null;
       },
       limit
-    });
+    };
+    const totals = await runDeltaPoll(ingestOptions);
     logger.info('ingest.poll', { shopId, ...totals });
+
+    // SENT ITEMS, straight after the Inbox and before any other pass, so a poll
+    // sees both halves of a thread before anything reads it
+    // (codex_plans/Case_State_Plan.md, stage 2). Replies sent from the support
+    // address that never came back to the Inbox: 98 of the 115 there on
+    // 2026-09-26. It only joins threads that already have a ticket, and skips a
+    // reply the Inbox already gave us. Its own cursor; the cutover stays the
+    // Inbox's.
+    const sentTotals = await runDeltaPoll({ ...ingestOptions, folder: 'sentitems' });
+    logger.info('ingest.poll_sent', { shopId, ...sentTotals });
 
     // Customer resolution runs as soon as the mail is stored, and before the
     // LLM passes: identity is something a ticket has from its first message —

@@ -1,6 +1,6 @@
 # Case state — from "new email → draft" to "new event → case → next action"
 
-Plan, started 2026-09-26. **Stage 1 and the staff-reply half of stage 2 are built and applied; nothing after them is.** It is the proposal
+Plan, started 2026-09-26. **Stages 1 and 2 are built and applied; stage 3's tooling is built, and its labels are the team's to write.** It is the proposal
 of 2026-09-26, questioned against the code and the database, with the answers the
 business gave the same day. When a stage ships, its rule moves to `DECISIONS.md`,
 its build to `CHANGELOG.md`, and its map to `APP_SCHEMA.md`, as usual.
@@ -56,6 +56,30 @@ appear after one uninterrupted full read, and that has never happened.
 | Q17 | What evidence work is for | **Consistency and contradiction control**, not saving tool calls. |
 | Q18 | When to build the evaluation | **Before** the case-state redesign. 7 of 14 is not a base to build on. |
 | Q19 | Enforced evidence reuse | **Out of this phase.** It may come back later. |
+
+## Configurable, not coded (decided 2026-09-26)
+
+The code must work for a company other than Qiriness, so **anything that
+varies from one business to another is configuration or data, never a
+literal.** This applies to every stage below. Following the existing
+convention:
+- per-deployment knobs are environment settings read once in `config.mjs`,
+  each with a default;
+- business facts live in tables (`sender_directory`, the rulebook).
+
+What this plan introduces, and where each one lives:
+
+| Value | Where |
+| --- | --- |
+| Who is staff, a partner, a courier or a retailer | `sender_directory` rows (already data) |
+| Which directory label is which actor (Q5: `internal`/`contractor` → colleague, `logistics`/`courier` → partner, `retailer` → customer) | `AGENT_ACTOR_BY_LABEL`, defaulting to that map |
+| The support mailbox | `SUPPORT_MAILBOX` (already config) |
+| When an obligation is overdue (2 working days for a colleague, 3 for a partner) | `AGENT_OBLIGATION_OVERDUE_DAYS`, defaulting to `colleague:2,partner:3` |
+| The live window kept out of the backlog clear-out | a `--keep-after` argument, not a date in code |
+| Label vocabularies (effects, next actors, obligation owners) | generic words in `casework-vocabulary.mjs`; business-specific needs come from the evidence vocabulary, not from new literals |
+
+Measurements and examples in comments and `DECISIONS.md` may cite Qiriness.
+Code paths must not branch on a Qiriness value, and tests use example domains.
 
 **Order:** ingestion → Sent Items → timeline evaluation → `case_current` →
 obligations and next action → draft versioning and drafting in the poll →
@@ -377,6 +401,40 @@ thing being measured.*
   marked.
 - "Mark done" and "cancel" on an obligation write a case action. The API route
   checks the action, and business logic stays out of the route.
+
+**Decided 2026-09-26, added to this stage:**
+
+**A. Who is an operations partner is set on a Senders screen.** Today the 11
+`sender_directory` rows were written straight into the database; there is no
+screen and no command-line tool, so a new brand needs a developer. Add
+**Agent Setup → Senders**, beside Parameters and the Rulebook:
+- add a domain or an address, pick what it is (our team, agency, logistics/3PL,
+  carrier, retailer, commercial partner…) and a note. Subdomains count;
+- the screen says what each choice means for a case, through the actor map, e.g.
+  « counts as an operations partner: can owe checks; its replies are not
+  drafted »;
+- it shows whether this brand has any operations partner at all.
+
+It reads and writes `sender_directory`; validation reuses the matcher in
+`scripts/lib/sender-patterns.mjs`. **On screen the actor is « operations
+partner »**, never « partner »: the directory's own `partner` label means a
+commercial partner (mapped to customer by default). The stored key stays
+`partner`.
+
+**B. No operations partner, no partner obligations: derived, not a switch.**
+The owners the Case Manager may choose come from the data. `partner` is
+offered only when the actor map sends at least one label that has a directory
+row to it. A setting (`AGENT_OBLIGATION_OWNERS`) overrides this for a brand
+whose partner writes from no listed address. With none, a reply such as « nous
+vérifions auprès du transporteur » stays a support obligation.
+
+**C. The order of obligations is declared by the rule.** A rule may open
+obligations in sequence (D-36: `partner: delivery_state`, then
+`support: refund_state`), so the Deret check is created when the case opens,
+not only when someone writes « je transmets à Deret ». It is a new
+`support_answers` field plus a Rulebook editor change. A brand without an
+operations partner declares no partner step, so there is nothing to turn off.
+Only owners allowed by B may be declared.
 
 ## Stage 6: draft versioning, then drafting in the poll
 

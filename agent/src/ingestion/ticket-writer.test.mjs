@@ -696,31 +696,31 @@ test('a failing knownMessageIds lookup fails OPEN, never silently swallowing a r
 // ticket, could reopen it, and did not count as an answer for drafting.
 
 const CUSTOMER = 'marie@example.com';
-const staffLabel = (from) => (/@(qiriness\.com|lap-groupe\.com)$/i.test(from) ? 'internal' : /@deret\.fr$/.test(from) ? 'logistics' : null);
+const staffLabel = (from) => (/@(shop\.example|staff\.example)$/i.test(from) ? 'internal' : /@partner\.example$/.test(from) ? 'logistics' : null);
 const customerTicket = { requester_email_hash: hashIdentifier(CUSTOMER), sender_label: null };
 
-function staffMessage({ from = 'lea@lap-groupe.com', to = [CUSTOMER], cc = [] } = {}) {
+function staffMessage({ from = 'lea@staff.example', to = [CUSTOMER], cc = [] } = {}) {
   return { direction: 'inbound', from_email: from, to_emails: to, cc_emails: cc };
 }
 
 test('a staff address writing to the customer is our reply', () => {
   assert.equal(isStaffReplyToCustomer(staffMessage(), customerTicket, staffLabel), true);
-  assert.equal(isStaffReplyToCustomer(staffMessage({ from: 'anna@qiriness.com', to: ['x@deret.fr'], cc: ['MARIE@example.com'] }), customerTicket, staffLabel), true, 'Cc counts, and case does not matter');
+  assert.equal(isStaffReplyToCustomer(staffMessage({ from: 'anna@shop.example', to: ['x@partner.example'], cc: ['MARIE@example.com'] }), customerTicket, staffLabel), true, 'Cc counts, and case does not matter');
 });
 
 test('a staff address not writing to the customer stays a colleague message', () => {
-  assert.equal(isStaffReplyToCustomer(staffMessage({ to: ['x@deret.fr'] }), customerTicket, staffLabel), false);
+  assert.equal(isStaffReplyToCustomer(staffMessage({ to: ['x@partner.example'] }), customerTicket, staffLabel), false);
 });
 
 test('only internal staff: a partner writing to the customer is not our reply', () => {
-  assert.equal(isStaffReplyToCustomer(staffMessage({ from: 'ops@deret.fr' }), customerTicket, staffLabel), false);
+  assert.equal(isStaffReplyToCustomer(staffMessage({ from: 'ops@partner.example' }), customerTicket, staffLabel), false);
 });
 
 test('no rule on a thread a colleague opened, or before the customer is known', () => {
   assert.equal(isStaffReplyToCustomer(staffMessage(), { ...customerTicket, sender_label: 'internal' }, staffLabel), false);
   assert.equal(isStaffReplyToCustomer(staffMessage(), { requester_email_hash: null }, staffLabel), false);
-  const selfRequester = { requester_email_hash: hashIdentifier('lea@lap-groupe.com'), sender_label: null };
-  assert.equal(isStaffReplyToCustomer(staffMessage({ to: ['lea@lap-groupe.com'] }), selfRequester, staffLabel), false);
+  const selfRequester = { requester_email_hash: hashIdentifier('lea@staff.example'), sender_label: null };
+  assert.equal(isStaffReplyToCustomer(staffMessage({ to: ['lea@staff.example'] }), selfRequester, staffLabel), false);
 });
 
 test('without a labeller nothing is reclassified', () => {
@@ -741,8 +741,8 @@ test('a new staff reply to the customer is stored outbound, and neither reopens 
   ticket.needs_categorisation = false;
 
   const item = mappedMessage({ id: 'm9', conversationId: 'c1', at: '2026-09-02T09:00:00.000Z' });
-  Object.assign(item.message, { from_email: 'lea@lap-groupe.com', to_emails: [CUSTOMER], cc_emails: ['contact@qiriness.com'] });
-  Object.assign(item.conversation, { requester_email_hash: hashIdentifier('lea@lap-groupe.com'), requester_name: 'Léa' });
+  Object.assign(item.message, { from_email: 'lea@staff.example', to_emails: [CUSTOMER], cc_emails: ['contact@shop.example'] });
+  Object.assign(item.conversation, { requester_email_hash: hashIdentifier('lea@staff.example'), requester_name: 'Léa' });
 
   await writeIngestedMessages(store, store, 'shop-1', [item], { senderLabel: staffLabel });
 
@@ -766,10 +766,52 @@ test('a staff message to a colleague still reopens and re-queues, as any inbound
   ticket.status = 'awaiting_customer';
 
   const item = mappedMessage({ id: 'm9', conversationId: 'c1', at: '2026-09-02T09:00:00.000Z' });
-  Object.assign(item.message, { from_email: 'lea@lap-groupe.com', to_emails: ['contact@qiriness.com'], cc_emails: [] });
+  Object.assign(item.message, { from_email: 'lea@staff.example', to_emails: ['contact@shop.example'], cc_emails: [] });
 
   await writeIngestedMessages(store, store, 'shop-1', [item], { senderLabel: staffLabel });
 
   assert.equal(store.messages.get('shop-1|m9').direction, 'inbound');
   assert.equal(ticket.status, 'open');
+});
+
+// --- stage 2: copies of our own mail, and attach-only (2026-09-26) -----------
+
+test('an outbound message already stored under another Graph id is skipped as a copy', async () => {
+  const store = storeKnowing();
+  store.storedInternetMessageIds = async () => new Map([['<r1@x>', new Set(['inbox-copy'])]]);
+  await store.create({ graph_conversation_id: 'c1', subject: 'Colis' });
+
+  const item = mappedMessage({ id: 'sent-copy', conversationId: 'c1', at: '2026-09-20T10:00:00Z', direction: 'outbound' });
+  item.message.internet_message_id = '<r1@x>';
+  const counts = await writeIngestedMessages(store, store, 'shop-1', [item]);
+
+  assert.equal(counts.skippedCopies, 1);
+  assert.equal(store.messages.size, 0);
+});
+
+test('re-delivery of the same Graph item is not a copy, and inbound mail is never skipped as one', async () => {
+  const store = storeKnowing();
+  store.storedInternetMessageIds = async () => new Map([['<r1@x>', new Set(['m1'])]]);
+  await store.create({ graph_conversation_id: 'c1', subject: 'Colis' });
+
+  const same = mappedMessage({ id: 'm1', conversationId: 'c1', at: '2026-09-20T10:00:00Z', direction: 'outbound' });
+  same.message.internet_message_id = '<r1@x>';
+  const inbound = mappedMessage({ id: 'm2', conversationId: 'c1', at: '2026-09-20T11:00:00Z' });
+  inbound.message.internet_message_id = '<r1@x>';
+
+  const counts = await writeIngestedMessages(store, store, 'shop-1', [same, inbound]);
+  assert.equal(counts.skippedCopies, 0);
+  assert.equal(store.messages.size, 2);
+});
+
+test('attachOnly skips a thread with no ticket instead of opening one', async () => {
+  const store = createFakeStore();
+  const counts = await writeIngestedMessages(
+    store, store, 'shop-1',
+    [mappedMessage({ id: 's1', conversationId: 'c-new', at: '2026-09-20T10:00:00Z', direction: 'outbound' })],
+    { attachOnly: true }
+  );
+  assert.equal(counts.skippedNoTicket, 1);
+  assert.equal(store.tickets.size, 0);
+  assert.equal(store.messages.size, 0);
 });

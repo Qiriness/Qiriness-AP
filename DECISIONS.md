@@ -63,6 +63,33 @@ A limited initial delta read adds `$orderby=receivedDateTime desc`. Graph alread
 
 **`mail_ingest_cutover_at` is written with the first `deltaLink` and never again**, not by an expiry and not by `ingest:reset`. Mail received after it is new to the pipeline. The case-state plan derives draft eligibility from it rather than flagging 440 old threads one by one (`codex_plans/Case_State_Plan.md`, Q3).
 
+### Sent Items is read too, and it only adds to cases that exist (2026-09-26)
+
+Replies sent from the support address do not all come back to the Inbox. Measured 2026-09-26: of the **115** in Sent Items, **7** were already stored as Inbox copies, **98** were replies we had never seen on threads that have a ticket (3 of them from September 2026), and **10** were on threads with no ticket.
+
+- **Its own cursor** (`mail_sent_delta_link` / `mail_sent_resume_link`), with the same page-by-page saving and restart rule as the Inbox. **The cutover stays the Inbox's**: Sent Items holds only our own mail, so it can make nothing new to the pipeline.
+- **Read straight after the Inbox, before any other pass**, so a poll sees both halves of a thread before anything reads it.
+- **Everything in it is `outbound`**, and **it never opens a ticket** (decided: our mail adds to a case, it does not start one). A thread with no ticket is counted in `skippedNoTicket`.
+- **A copy is skipped on `internetMessageId`**: an outbound message already stored under another Graph id (`skippedCopies`). **Outbound only**, because two inbound items sharing an id have been two real deliveries on two threads (one pair in January). **Not a unique index**: decided to wait until the data with Sent Items in it has been read.
+
+**Result of the first read:** 98 attached, 7 copies and 10 without a ticket skipped, which is exactly the prediction. 0 tickets changed status, 0 were flagged, and the second poll read 1 page per folder.
+
+**This is secondary coverage.** Most of the team replies from personal inboxes (§ *A colleague answering the customer from their own inbox*), which no support-mailbox folder holds.
+
+### `runDeltaPoll` dropped two of the writer's options, and nothing failed (2026-09-26)
+
+The worker passed `senderLabel` and `detectRelated` to `runDeltaPoll`, which never named them and never handed them on. So in the worker:
+- **no ticket was ever labelled at creation.** § *A colleague is not a customer* describes the stamp as happening "at creation, from the address"; in the worker it never did. The only labels were the 16 written by `sender-label:backfill`;
+- **no related link was ever made live**, only by `related:backfill`;
+- **the staff-reply rule built earlier that day never ran.** The writer's tests call it directly, which is why they passed.
+
+Found while wiring Sent Items: the 347 tickets from the first full read carried 0 labels and 0 links. Fixed by passing both through, with a test that goes through `runDeltaPoll` itself.
+
+**Repaired the same day:**
+- `sender-label:backfill`: **125 tickets labelled** (141 in all). A labelled ticket stops receiving drafts; investigation still runs.
+- `staff-replies:backfill` now **reconciles in both directions**. **58 of the morning's 124 re-filed messages went back to `inbound`**: they were on threads a colleague had opened, which only lacked their label. **66 staff replies to customers remain `outbound`.**
+- `related:backfill`: **9 links**, 5 of them unanswered chases.
+
 ### Stored message ids become immutable, and the header follows a marker, not a setting (2026-09-26)
 
 A REST message id can change when mail moves folders. `Prefer: IdType="ImmutableId"` fixes that, **but only if what is stored changes first.** `graph_message_id` is the unique key of `ticket_messages`, `spam_audit` and `categorisation_review`, and it is what `knownMessageIds` compares. With the header on and REST ids stored, every re-delivered message would look new, which is § *Re-delivery is not arrival* all over again.
@@ -116,7 +143,7 @@ None of the 123 drafts at the time had been written after one, but automatic dra
 
 **What it cannot see:** a personal-inbox reply sent without copying support never reaches the mailbox. Of 179 customer replies carrying `In-Reply-To`, 63 answer a message we do not hold, but 53 of those are the first message stored on their ticket (older history). **At most 10** look like a missed reply. Reading personal mailboxes was not proposed.
 
-**Stored mail was re-filed** with `staff-replies:backfill`: 124 messages on 72 tickets once the full read had added the older history. Only the direction moved; the reopens these messages caused before are history, and nothing records the status they overwrote.
+**Stored mail was re-filed** with `staff-replies:backfill`: 124 messages on 72 tickets once the full read had added the older history, then **58 sent back to inbound** once the missing thread labels were restored, leaving **66** (§ *`runDeltaPoll` dropped two of the writer's options*). **Note:** until that fix the rule existed only in the tool; the worker never applied it. Only the direction moved; the reopens these messages caused before are history, and nothing records the status they overwrote.
 
 ### Identity: a contact-form notification is *about* a customer but *from* Shopify
 
@@ -1555,6 +1582,35 @@ A 429 now waits OpenAI's own hint (`retry-after-ms`, `retry-after`, then the `x-
 **`--unlink-customer`** calls `record.unlinkCustomer`, the first path that ever clears `customer_id`. Customer resolution only looks at unlinked tickets, so a link made from a colleague's address was permanent. The resolution trail is kept deliberately: it records the hash the old attempt used, and a changed requester is what lets the next pass try again.
 
 **`--reopen`** is the deliberate exception to "a widened run never moves a ticket" (§ The worker sees open tickets only). That rule protects a status somebody chose. A status written minutes earlier by a run against the wrong identity was chosen by nobody, and left in place it would outlive the corrected verdict. It is a flag a person passes per ticket, never a default.
+
+### The timeline labels name who owes each check and who acts next (2026-09-26)
+
+Stage 3 of `codex_plans/Case_State_Plan.md`, built **before** the case state it will score, because the Case Manager's next action agreed only 7 times in 14.
+
+- **`waitingInternal` became `obligations: [{owner, need}]`**, with the owner being `support`, `colleague` or `partner`. The needs stay the evidence vocabulary, for the reason `INTERNAL_CHECKS` already gives. An older label's list is read as obligations **with no owner** (`owner: null`), and the eval counts those for re-labelling rather than guessing an owner.
+- **`nextActor`** (`customer`, `support`, `colleague`, `partner`, `nobody`) is asked on **every cut, outbound included**, and is required. After we write, somebody still owes the next step, and « nobody » is the only honest definition of a finished case.
+- **The actor of a message is shown, never labelled**, for the reason `cutsFor` already gives for the role. It is derived by `casework/actors.mjs` from the sender directory and a **configurable map** (`AGENT_ACTOR_BY_LABEL`), because which label counts as which actor is a per-business choice: one company's 3PL is part of the team, another's is a supplier.
+- **What today's pipeline can say about the next actor** (`pipelineNextActor`): a draft after an inbound message means `support`; a `needs_customer_input` case file after our message means `customer`. Everything else is `inexpressible`, which is the size of stages 4 and 5, not a model failing.
+
+**The corpus to label is ten times what it was:** 356 threads and 1,072 cuts, after the history import, Sent Items and the staff fix. `cases:label -- --limit N` builds one sitting. Already-labelled threads come first, then the groups take turns. The first page (40 threads): 29 follow-ups and 11 with another sender, but **only 2 partner messages**, because partner threads are rare. A second sitting with `--groups other_sender` targets them.
+
+### Five more questions the agent may ask the customer (2026-09-26)
+
+The multi-turn labelling kept meeting questions the desk asks that no key could name, so a label could not say « we are waiting for it » or « this answered it ». The labelling page added them first (v2 and v3), and **the importer would have dropped every label using them**, because a customer question the eval can score must be one the agent can ask (`CUSTOMER_QUESTIONS` is derived from `MISSING_FIELDS`). The business chose to add them to the agent rather than to the eval alone:
+
+| Key | For | The question the agent asks |
+|---|---|---|
+| `postal_address` | address change before dispatch, reshipment elsewhere | the full delivery address |
+| `preferred_remedy` | D-36, O-12 once shipped | which of the solutions **we** offered |
+| `receipt_confirmation` | the customer confirming arrival; **not** a carrier's « livré » | did the parcel arrive |
+| `skin_type` | PR-25 / PR-29 advice | the skin type, as the customer states it |
+| `skin_concern` | the same | what they want addressed; never inferred |
+
+Each has a label and a sentence in `case-file.mjs`, a noun in `ASK_TERMS` for the invented-question check, an English label on the dashboard, and a place in `support_answers_ask_check` (migration 40, applied 2026-09-26). **No rule asks for them yet**: they are available to the rulebook, and nothing changes until a rule names one.
+
+**`photo` keeps its key and its question to the customer.** Only the labelling page words it more broadly, « la photo demandée (produit ou zone concernée) », so a photo of the eye area asked for in an advice thread is labelled with it too. The customer-facing sentence is unchanged, so no reply changes.
+
+Exports now carry `labelSchemaVersion` (3). The importer refuses an export from a newer schema instead of silently dropping values it does not know.
 
 ### The Case Manager records what a message changed; it decides nothing else (2026-09-22)
 

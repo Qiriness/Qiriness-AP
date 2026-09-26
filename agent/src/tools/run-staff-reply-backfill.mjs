@@ -51,34 +51,45 @@ async function main() {
       (ticket) => [ticket.id, ticket]
     )
   );
-  const inbound = await supabaseSelectAll(
-    supabase,
-    'ticket_messages',
-    { shop_id: shopId, direction: 'inbound' },
-    'id,ticket_id,direction,from_email,to_emails,cc_emails'
-  );
+  // RECONCILES BOTH WAYS. Every message from a staff address other than the
+  // support mailbox itself (which is outbound by the mapper's own rule) is set
+  // to what the rule says today. A thread labelled after a message was
+  // re-filed — the 125 labels restored on 2026-09-26 — sends its colleague
+  // messages back to inbound.
+  const mailbox = String(config.graph.mailbox || '').toLowerCase();
+  const staff = (
+    await supabaseSelectAll(supabase, 'ticket_messages', { shop_id: shopId }, 'id,ticket_id,direction,from_email,to_emails,cc_emails')
+  ).filter((m) => senderLabel(m.from_email) === 'internal' && String(m.from_email).toLowerCase() !== mailbox);
 
-  const matches = inbound.filter((message) => isStaffReplyToCustomer(message, tickets.get(message.ticket_id), senderLabel));
-  const staffInbound = inbound.filter((message) => senderLabel(message.from_email) === 'internal').length;
+  const changes = [];
+  for (const message of staff) {
+    const wanted = isStaffReplyToCustomer({ ...message, direction: 'inbound' }, tickets.get(message.ticket_id), senderLabel)
+      ? 'outbound'
+      : 'inbound';
+    if (wanted !== message.direction) changes.push({ ...message, wanted });
+  }
+  const toOutbound = changes.filter((c) => c.wanted === 'outbound');
+  const toInbound = changes.filter((c) => c.wanted === 'inbound');
   console.log(
-    `${inbound.length} inbound messages · ${staffInbound} from staff addresses · ` +
-      `${matches.length} of those address the customer, on ${new Set(matches.map((m) => m.ticket_id)).size} tickets.`
+    `${staff.length} messages from staff addresses · ${toOutbound.length} to file as outbound ` +
+      `(${new Set(toOutbound.map((m) => m.ticket_id)).size} tickets) · ${toInbound.length} back to inbound ` +
+      `(${new Set(toInbound.map((m) => m.ticket_id)).size} tickets).`
   );
 
   if (dryRun) {
-    console.log('\nNothing was written. Re-run without --dry-run to re-file them.\n');
+    console.log('\nNothing was written. Re-run without --dry-run to apply.\n');
     return;
   }
 
   let failed = 0;
-  for (const message of matches) {
+  for (const change of changes) {
     try {
-      await supabaseUpdateById(supabase, 'ticket_messages', message.id, { direction: 'outbound' });
+      await supabaseUpdateById(supabase, 'ticket_messages', change.id, { direction: change.wanted });
     } catch (error) {
       failed += 1;
-      console.error(`  ${message.id}: ${error.message}`);
+      console.error(`  ${change.id}: ${error.message}`);
     }
   }
-  console.log(`\n${matches.length - failed} re-filed as outbound, ${failed} failed.\n`);
+  console.log(`\n${changes.length - failed} updated, ${failed} failed.\n`);
   if (failed > 0) process.exitCode = 1;
 }

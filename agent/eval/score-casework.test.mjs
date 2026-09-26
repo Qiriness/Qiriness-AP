@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { compare, expectedRelationship, isTouched, pipelineNextAction, tally } from './score-casework.mjs';
+import { compare, expectedRelationship, isTouched, pipelineNextAction, pipelineNextActor, tally } from './score-casework.mjs';
 
 test('a suggestion left alone is not a label', () => {
   assert.equal(isTouched({ effect: 'continuation', fromPrefill: true, answered: [], waitingCustomer: [], waitingInternal: [] }), false);
@@ -43,4 +43,18 @@ test('the tally keeps the four outcomes apart per field', () => {
     effect: { agree: 2, disagree: 0, inexpressible: 1, unlabelled: 0 },
     nextAction: { agree: 0, disagree: 1, inexpressible: 0, unlabelled: 0 }
   });
+});
+
+test('what today pipeline can say about the next actor, and where it has no word', () => {
+  assert.equal(pipelineNextActor({ direction: 'inbound', action: 'full_reply' }), 'support');
+  assert.equal(pipelineNextActor({ direction: 'inbound', action: 'closing_reply' }), 'support');
+  assert.equal(pipelineNextActor({ direction: 'inbound', action: 'no_reply' }), null);
+  assert.equal(pipelineNextActor({ direction: 'outbound', verdict: 'needs_customer_input' }), 'customer');
+  assert.equal(pipelineNextActor({ direction: 'outbound', verdict: 'needs_human' }), null);
+  assert.equal(compare('partner', null, { expressible: false }), 'inexpressible');
+});
+
+test('a labelled obligation or next actor counts as a decision', () => {
+  assert.equal(isTouched({ fromPrefill: true, obligations: [{ owner: 'partner', need: 'delivery_state' }] }), true);
+  assert.equal(isTouched({ fromPrefill: true, nextActor: 'nobody' }), true);
 });

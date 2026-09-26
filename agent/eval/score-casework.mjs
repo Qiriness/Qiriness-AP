@@ -20,8 +20,8 @@
  */
 export function isTouched(label) {
   if (!label) return false;
-  if (label.caseState || label.nextAction || (label.note && label.note.trim())) return true;
-  for (const field of ['answered', 'waitingCustomer', 'waitingInternal']) {
+  if (label.caseState || label.nextAction || label.nextActor || (label.note && label.note.trim())) return true;
+  for (const field of ['answered', 'waitingCustomer', 'obligations', 'waitingInternal']) {
     if (Array.isArray(label[field]) && label[field].length > 0) return true;
   }
   return Boolean(label.effect) && !label.fromPrefill;
@@ -67,6 +67,23 @@ export function pipelineNextAction({ ticket = {}, closes = false, gateOpen = nul
     return { action: 'closing_reply', why: gateOpen === null ? 'clôture, porte supposée ouverte' : 'clôture' };
   }
   return { action: 'full_reply', why: closes ? 'clôture lue, porte fermée par le dossier' : null };
+}
+
+/**
+ * Who today's pipeline says acts next, or null where it has no way to say.
+ *
+ * After an inbound message it drafts, or it does not: a draft means `support`,
+ * and a skip says nothing about who acts instead. After our own message the
+ * only signal is the case file's verdict: `needs_customer_input` parks the
+ * ticket `awaiting_customer`. Nothing in the pipeline can say `colleague`,
+ * `partner` or `nobody`, which is stage 4 and 5's work, and the report
+ * counts those as inexpressible rather than as a model failing.
+ */
+export function pipelineNextActor({ direction, action = null, verdict = null } = {}) {
+  if (direction === 'inbound') {
+    return action === 'full_reply' || action === 'closing_reply' ? 'support' : null;
+  }
+  return verdict === 'needs_customer_input' ? 'customer' : null;
 }
 
 /** One field's outcome. `expected` null means the label did not set it. */

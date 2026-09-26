@@ -450,7 +450,9 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |   |   |                        #   answer schema) ·
 |   |   |                        # draft-checks (the prohibitions, in code) ·
 |   |   |                        # draft-runner (+ the derived queue). NO Graph call
-|   |   |-- casework/            # case-manager (what a new message changed: a
+|   |   |-- casework/            # actors (message -> customer/support/colleague/
+|   |   |                        # partner via sender_directory + AGENT_ACTOR_BY_LABEL) ·
+|   |   |                        # case-manager (what a new message changed: a
 |   |   |                        #   closed relationship, which of OUR questions it
 |   |   |                        #   answered, what we promised) · case-manager-rules
 |   |   |                        #   (pure: whether the categoriser re-runs, which
@@ -497,7 +499,7 @@ Every table has RLS on with no policies: **service-role access only**. Shopify s
 
 | Table | Holds |
 | --- | --- |
-| `shops` | shop records, environment, app settings, `sync_cursors` (incl. mail delta link), `storefront_url` (Shopify `primaryDomain.url` — where customers go, unlike `shop_domain` which is the *.myshopify.com identity webhooks key on; the base for `/account/login`), `customer_accounts_version` (`CLASSIC` — decides whether a password exists at all), `iana_timezone` (Shopify's `ianaTimezone` — where a day starts on the Insights charts; null until a sync runs the current `mapShop`), `sync_cursors` (mail keys `mail_ingest_delta_link` · `mail_ingest_resume_link` · `mail_ingest_cutover_at` (written once) · `mail_id_type` (`immutable` after `ids:translate`), all owned by `ingestion/delta-poller.mjs` `CURSOR_KEYS` — **never written by `mapShop`**), **order retention switch** `order_retention_mode` (`months`/`indefinite`) + `_months` + `_changed_at` + `_reason` — read by `scripts/lib/order-retention.mjs`, never written by `mapShop`; **the VIP rule** `vip_min_spend` + `vip_min_orders` + `vip_window_months` (all or none) + `vip_rule_changed_at` — set on the Customers panel, read by `scripts/lib/vip-rule.mjs` |
+| `shops` | shop records, environment, app settings, `sync_cursors` (incl. mail delta link), `storefront_url` (Shopify `primaryDomain.url` — where customers go, unlike `shop_domain` which is the *.myshopify.com identity webhooks key on; the base for `/account/login`), `customer_accounts_version` (`CLASSIC` — decides whether a password exists at all), `iana_timezone` (Shopify's `ianaTimezone` — where a day starts on the Insights charts; null until a sync runs the current `mapShop`), `sync_cursors` (mail keys `mail_ingest_delta_link` · `mail_ingest_resume_link` · `mail_sent_delta_link` · `mail_sent_resume_link` · `mail_ingest_cutover_at` (written once) · `mail_id_type` (`immutable` after `ids:translate`), all owned by `ingestion/delta-poller.mjs` `CURSOR_KEYS` — **never written by `mapShop`**), **order retention switch** `order_retention_mode` (`months`/`indefinite`) + `_months` + `_changed_at` + `_reason` — read by `scripts/lib/order-retention.mjs`, never written by `mapShop`; **the VIP rule** `vip_min_spend` + `vip_min_orders` + `vip_window_months` (all or none) + `vip_rule_changed_at` — set on the Customers panel, read by `scripts/lib/vip-rule.mjs` |
 | `customers` | lean support snapshot: contact, marketing state, coarse location, lifetime totals, last order, `rfm_group`. No addresses or notes |
 | `orders` | identity, links, channel, derived `order_status`, totals, line items, fulfillments, returns, refunds. Contacts hashed, plus `customer_email_masked` (`j***l@orange.fr`) for the one question a hash cannot answer; `tracking_numbers text[]` (GIN) lifted out of fulfillments so a ticket can be resolved from a parcel number; destination coarse; `retention_rule` names only WHY the clock started, `retention_delete_after` carries the period and is **null when kept indefinitely** |
 | `products` | snapshots + first-class metafields, `variants` jsonb, `available_stock` |
@@ -678,6 +680,7 @@ Written by the worker and the CLIs, read only by the Insights panels.
 | `20_best_products_vip.sql` | drops and recreates `insights_product_sales()` and `insights_country_product_sales()` with `p_vip_only` + the VIP rule arguments (through `vip_customers()`, off by default); both now sit below `vip_customers()` in 06. Copied byte-for-byte from 06, supersedes 11's copies. Applied 2026-09-14 | 01, 02, 06, 11, 12 |
 | `30_customer_mix_plan.sql` | replaces the body of `insights_customer_mix()` — same signature, same four numbers — grouping the range by customer before looking up each first order, because the old shape planned as a nested loop (~1 s on a year). Copied byte-for-byte from 06, supersedes 11's copy. Applied 2026-09-18 | 01, 02, 06, 11 |
 | `31_orders_status_filter.sql` | adds `order_fulfilment_display()` and re-creates `orders_list()` + `orders_list_facets()` to filter and group on it, so the status filter selects what the pill shows (Cancelled / Refunded instead of Unfulfilled for emptied orders). Same signatures: `create or replace`, nothing dropped. Copied byte-for-byte from 06, supersedes 16's `orders_list` and 15's `orders_list_facets`. Applied 2026-09-18 | 01, 02, 06, 15, 16 |
+| `40_customer_questions.sql` | widens `support_answers_ask_check` by five `MISSING_FIELDS` keys (postal_address, preferred_remedy, receipt_confirmation, skin_type, skin_concern). No data. Applied 2026-09-26 | 05 |
 | `39_klaviyo.sql` | the three Klaviyo tables (`KLAVIYO_T`), the Vault key functions and `insights_klaviyo_messages()` (`KLAVIYO_RPC`). No data. Applied 2026-09-25 | 01 |
 | `38_storefront_months.sql` | the `storefront_session_months` table (named in `STOREFRONT_T`, not `T`). Applied 2026-09-24 and backfilled (36 months) | 01 |
 | `37_collection_handles.sql` | drops 36's seven-argument `insights_collection_sales()` and recreates it with `p_handles`, so the Collection mix card reports the six ranges rather than all 176 collections. Copied byte-for-byte from 06 (its test asserts it); supersedes 36. Applied 2026-09-23 | 01, 02, 06, 27, 36 |
@@ -882,7 +885,7 @@ Run `npm run ingest:once` or `npm start` from `agent/`. One poll runs every pass
 | # | Pass | Module |
 | --- | --- | --- |
 | 1 | load config, assert Graph creds, resolve `shops.id` | `index.mjs` |
-| 2 | follow Graph delta pages; save the nextLink after each written page and the deltaLink at the end; a saved link Graph rejects (400/410) is dropped and the read starts over once; immutable ids asked for when `mail_id_type = immutable` | `ingestion/delta-poller.mjs` |
+| 2 | follow Graph delta pages; save the nextLink after each written page and the deltaLink at the end; a saved link Graph rejects (400/410) is dropped and the read starts over once; immutable ids asked for when `mail_id_type = immutable`. **Twice per poll: Inbox, then Sent Items** (`folder: 'sentitems'`: everything outbound, attach-only (`skippedNoTicket`), an outbound copy already stored under another Graph id skipped (`skippedCopies`)) | `ingestion/delta-poller.mjs` |
 | 3 | map messages; derive direction + normalise contact-form identity | `ingestion/graph-message-mapper.mjs` |
 | 3a | **Known-sender exemption** — an address in `sender_directory` bypasses BOTH gates; the LLM call is skipped, not overruled. Can only keep mail, never block it | `ingestion/known-senders.mjs` |
 | 4 | **Gate 1** (no LLM): blocklist match → dropped before any write | `ingestion/spam-gate.mjs` |
@@ -913,7 +916,9 @@ From `agent/`. Every pass has a standalone runner, most with `:dry-run`.
 | `ingest:once` / `start` | one poll / the loop. Supports `--limit=N` (the newest N messages, written oldest first; the cursor is not saved); with `--stop-after=categorise`, that limit applies to both Graph ingestion and the categorisation batch |
 | `ingest:reset` | clear the delta and resume links (keeps the cutover and id type) |
 | `tickets:unqueue-pre-cutover[:dry-run] -- [--keep-after=ISO]` | clear `needs_categorisation` (labels kept) on tickets whose every message predates `mail_ingest_cutover_at` |
-| `staff-replies:backfill[:dry-run]` | re-file stored staff→customer messages as `outbound` (the ingestion rule, applied to old mail) |
+| `cases:label -- [--prefill] [--limit N] [--groups …]` | build the timeline-labelling page (gitignored `*-review.html`); labelled threads first, then groups in turn |
+| `cases:import -- <export.json \| --upgrade>` | fold an export into `eval/casework-cases.mjs`; `--upgrade` re-validates the set after a vocabulary change |
+| `staff-replies:backfill[:dry-run]` | reconcile the direction of stored staff messages with the ingestion rule, both ways (outbound when addressed to the customer on a customer thread, inbound otherwise) |
 | `ids:translate[:dry-run]` | one-off: rewrite stored `graph_message_id`s (ticket_messages, spam_audit, categorisation_review) to immutable ids, verified against delta, then set `mail_id_type` and drop the links (`ingestion/immutable-ids.mjs`) |
 | `blocklist:add` | add a blocklist rule |
 | `spam:backfill[:dry-run] -- --limit=N` | re-read dropped mail from Graph to fill `spam_audit` bodies |

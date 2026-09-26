@@ -62,8 +62,9 @@ test('a label keeps known values and reports the rest', () => {
   assert.equal(label.effect, 'closes_case');
   assert.deepEqual(label.answered, ['shopify_order_number', 'delivery_state']);
   // A customer question is not an internal check, so it cannot be owed by us.
-  assert.deepEqual(label.waitingInternal, []);
-  assert.deepEqual(dropped, ['answered=made_up', 'waitingInternal=photo']);
+  // (A pre-2026-09-26 `waitingInternal` list is read as ownerless obligations.)
+  assert.deepEqual(label.obligations, []);
+  assert.deepEqual(dropped, ['answered=made_up', 'obligations.need=photo']);
 });
 
 test('an effect from the other direction is refused', () => {
@@ -82,4 +83,32 @@ test('the review page carries message text as data, so markup in a body cannot e
   assert.equal(html.match(/<\/script>/g).length, 2);
   const json = html.match(/<script type="application\/json" id="data">(.*?)<\/script>/s)[1];
   assert.equal(JSON.parse(json).threads[0].messages[0].own, '</script><b>x</b>');
+});
+
+test('obligations carry their owner; an old waitingInternal list keeps its need with no owner', () => {
+  const { label, dropped } = validateLabel(
+    {
+      effect: 'internal_request',
+      obligations: [{ owner: 'partner', need: 'delivery_state' }, { owner: 'vendor', need: 'order_state' }],
+      waitingInternal: ['refund_state'],
+      caseState: 'open',
+      nextActor: 'partner'
+    },
+    { direction: 'outbound' }
+  );
+  assert.deepEqual(label.obligations, [{ owner: 'partner', need: 'delivery_state' }, { owner: null, need: 'refund_state' }]);
+  assert.equal(label.nextActor, 'partner');
+  assert.deepEqual(dropped, ['obligations.owner=vendor']);
+});
+
+test('the next actor is asked on both directions; nobody is a value', () => {
+  assert.equal(validateLabel({ nextActor: 'nobody' }, { direction: 'outbound' }).label.nextActor, 'nobody');
+  assert.deepEqual(validateLabel({ nextActor: 'robot' }, { direction: 'inbound' }).dropped, ['nextActor=robot']);
+});
+
+test('each cut carries its actor, through the deployment map', () => {
+  const thread = [customer(1), ours(2), deret(3), customer(4)];
+  assert.deepEqual(cutsFor(thread, directory).map((cut) => cut.actor), ['support', 'partner', 'customer']);
+  // Another business counts its 3PL as part of the team.
+  assert.deepEqual(cutsFor(thread, directory, { logistics: 'colleague' }).map((cut) => cut.actor), ['support', 'colleague', 'customer']);
 });

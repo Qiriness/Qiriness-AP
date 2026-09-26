@@ -51,7 +51,10 @@ export async function writeIngestedMessages(
   // Runs ONLY when a new conversation is about to become a ticket, which is the
   // only moment a duplicate can be created. Optional like the others, so a
   // caller that has not wired it behaves exactly as before.
-  { triage, audit, embedMessage, detectDuplicate, detectRelated, senderLabel, logger } = {}
+  // attachOnly     (optional): a message whose thread has no ticket is skipped
+  // rather than opening one. Sent Items passes it: our own mail adds to a case,
+  // it never starts one.
+  { triage, audit, embedMessage, detectDuplicate, detectRelated, senderLabel, attachOnly = false, logger } = {}
 ) {
   const counts = {
     ticketsCreated: 0,
@@ -60,7 +63,9 @@ export async function writeIngestedMessages(
     removed: 0,
     llmSpamFiltered: 0,
     duplicatesLinked: 0,
-    relatedLinked: 0
+    relatedLinked: 0,
+    skippedNoTicket: 0,
+    skippedCopies: 0
   };
 
   // WHICH OF THESE MESSAGES WE ALREADY HOLD, asked once for the whole page.
@@ -85,10 +90,26 @@ export async function writeIngestedMessages(
   // as new and the behaviour is exactly what it was. That is deliberate: the
   // guard makes a re-sync safe, and its absence can never make ingestion fail.
   const knownMessageIds = await readKnownMessageIds(store, shopId, mapped, logger);
+  const storedCopies = await readOutboundCopies(store, shopId, mapped, logger);
 
   for (const item of mapped) {
     if (item.removed) {
       counts.removed += 1;
+      continue;
+    }
+
+    // ONE OF OUR MESSAGES WE ALREADY HOLD UNDER ANOTHER GRAPH ID. A reply sent
+    // from the support address can sit in Sent Items AND come back to the Inbox:
+    // two Graph items, one internetMessageId (7 of the 115 in Sent Items on
+    // 2026-09-26). Outbound only: two inbound items sharing an id have been two
+    // real deliveries on two threads, and are kept as they always were.
+    if (isStoredCopy(item, storedCopies)) {
+      counts.skippedCopies += 1;
+      continue;
+    }
+
+    if (attachOnly && !(await record.findByConversation(item.conversation?.graph_conversation_id))) {
+      counts.skippedNoTicket += 1;
       continue;
     }
 
@@ -377,6 +398,39 @@ async function resolveTicket(
  * reopen for a real customer reply, stranding a live ticket in `closed`. One
  * failure mode is noisy and recoverable; the other is silent and loses work.
  */
+/**
+ * internetMessageId → the Graph ids already stored under it, for this page's
+ * outbound messages. Optional like `knownMessageIds`: a store without the
+ * method, or a failed lookup, skips nothing, so the worst case is the old
+ * behaviour (a second row for one reply), never a lost message.
+ */
+async function readOutboundCopies(store, shopId, mapped, logger) {
+  if (typeof store?.storedInternetMessageIds !== 'function') {
+    return new Map();
+  }
+  const ids = mapped
+    .filter((item) => !item.removed && item.message?.direction === 'outbound')
+    .map((item) => item.message?.internet_message_id)
+    .filter(Boolean);
+  if (ids.length === 0) {
+    return new Map();
+  }
+  try {
+    return await store.storedInternetMessageIds(shopId, ids);
+  } catch (error) {
+    logger?.warn?.('ingest.copy_lookup_failed', { message: error.message });
+    return new Map();
+  }
+}
+
+export function isStoredCopy(item, storedCopies) {
+  if (item?.message?.direction !== 'outbound') return false;
+  const graphIds = storedCopies.get(item.message?.internet_message_id);
+  if (!graphIds) return false;
+  const own = item.graphMessageId ?? item.message?.graph_message_id;
+  return [...graphIds].some((id) => id !== own);
+}
+
 async function readKnownMessageIds(store, shopId, mapped, logger) {
   if (typeof store?.knownMessageIds !== 'function') {
     return new Set();
@@ -476,6 +530,32 @@ export function createSupabaseMessageStore(supabase) {
         }
       }
       return known;
+    },
+
+    /** internetMessageId → Set of stored Graph ids, chunked like the lookup above. */
+    async storedInternetMessageIds(shopId, internetMessageIds) {
+      const stored = new Map();
+      const ids = [...new Set(internetMessageIds.filter(Boolean))];
+      for (let i = 0; i < ids.length; i += KNOWN_ID_CHUNK) {
+        const chunk = ids.slice(i, i + KNOWN_ID_CHUNK);
+        const rows = await supabaseSelectAll(
+          supabase,
+          T.TICKET_MESSAGES,
+          {
+            shop_id: shopId,
+            internet_message_id: {
+              operator: 'in',
+              value: `(${chunk.map((id) => `"${id.replace(/"/g, '\\"')}"`).join(',')})`
+            }
+          },
+          'internet_message_id,graph_message_id'
+        );
+        for (const row of rows) {
+          if (!stored.has(row.internet_message_id)) stored.set(row.internet_message_id, new Set());
+          stored.get(row.internet_message_id).add(row.graph_message_id);
+        }
+      }
+      return stored;
     },
 
     async upsertMessage(row) {

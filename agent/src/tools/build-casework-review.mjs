@@ -12,9 +12,11 @@ import { createOpenAIClient } from '../llm/openai-client.mjs';
 import { readCase } from '../casework/case-manager.mjs';
 import { pendingAfter } from '../casework/case-manager-rules.mjs';
 import { createSenderDirectoryStore, senderRoleName } from '../ingestion/sender-directory.mjs';
+import { actorOf } from '../casework/actors.mjs';
 
 import { DEFAULT_GROUPS, cutsFor, threadGroup, threadUpTo } from '../../eval/casework-cuts.mjs';
 import { renderReviewPage } from '../../eval/casework-review-page.mjs';
+import { CASEWORK_CASES } from '../../eval/casework-cases.mjs';
 
 // Builds the page the multi-turn labelled set is written on.
 //
@@ -23,6 +25,7 @@ import { renderReviewPage } from '../../eval/casework-review-page.mjs';
 //   npm run cases:label -- --prefill                # the current Case Manager suggests labels
 //   npm run cases:label -- --groups customer_followup,other_sender,replied_once
 //   npm run cases:label -- --out casework-review.html
+//   npm run cases:label -- --limit 40                # a sitting's worth of threads
 //
 // READ ONLY. No record write path is called, and `--prefill` runs the Case
 // Manager's own `readCase` without a usage sink, as `eval:closure` does: the
@@ -41,6 +44,7 @@ const countOnly = args.includes('--count');
 const prefill = args.includes('--prefill');
 const outPath = value('--out') || 'casework-review.html';
 const groups = (value('--groups') || DEFAULT_GROUPS.join(',')).split(',').map((g) => g.trim()).filter(Boolean);
+const limit = Number(value('--limit')) || null;
 
 function value(flag) {
   const index = args.indexOf(flag);
@@ -81,7 +85,7 @@ async function main() {
     const conversation = await record.conversation(ticket.id, { columns: COLUMNS.threadForDrafting });
     const group = threadGroup(conversation, senderDirectory);
     if (!group) continue;
-    const cuts = cutsFor(conversation, senderDirectory);
+    const cuts = cutsFor(conversation, senderDirectory, config.actorByLabel);
     tally[group][0] += 1;
     tally[group][1] += cuts.length;
     if (groups.includes(group)) selected.push({ ticket, conversation, group, cuts });
@@ -90,7 +94,21 @@ async function main() {
   // Richest threads first, so a sitting that stops early has labelled the ones
   // worth most; the one-reply threads come last and are quick.
   const order = ['customer_followup', 'other_sender', 'replied_once'];
-  selected.sort((a, b) => order.indexOf(a.group) - order.indexOf(b.group));
+  //
+  // THREADS ALREADY IN THE SET COME FIRST, whatever their group: a vocabulary
+  // change leaves their new fields empty (`nextActor`, the owner of an
+  // obligation), and finishing them costs less than starting new ones.
+  //
+  // THEN THE GROUPS TAKE TURNS, so a limited sitting sees colleague and partner
+  // threads too: those are where obligations and a non-customer next actor
+  // live, and a sitting of follow-ups alone would label neither.
+  const labelled = new Set(CASEWORK_CASES.map((row) => row.ticketId));
+  const first = selected.filter((t) => labelled.has(t.ticket.id));
+  const queues = order.map((group) => selected.filter((t) => !labelled.has(t.ticket.id) && t.group === group));
+  const rest = [];
+  while (queues.some((q) => q.length)) for (const q of queues) if (q.length) rest.push(q.shift());
+  selected.splice(0, selected.length, ...first, ...rest);
+  if (limit && selected.length > limit) selected.length = limit;
 
   console.log(`\n${tickets.length} tickets lus.`);
   for (const [group, [threads, cuts]] of Object.entries(tally)) {
@@ -126,6 +144,7 @@ async function main() {
           id: message.id,
           direction: message.direction === 'outbound' ? 'outbound' : 'inbound',
           roleName: senderRoleName(message, senderDirectory),
+          actor: actorOf(message, senderDirectory, config.actorByLabel),
           at: message.received_at ?? message.sent_at ?? null,
           own: own?.trim() || '',
           quoted: quoted?.trim() || ''

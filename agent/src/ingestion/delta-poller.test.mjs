@@ -436,7 +436,7 @@ test('a saved link Graph rejects is logged, dropped, and the read starts over on
 
   assert.deepEqual(graphClient.requestedUrls, ['https://graph/delta-expired', null]);
   assert.equal(warnings[0].event, 'ingest.cursor_expired');
-  assert.deepEqual(warnings[0].data, { shopId: 'shop-1', link: 'delta', status: 410, code: 'SyncStateNotFound' });
+  assert.deepEqual(warnings[0].data, { shopId: 'shop-1', folder: 'inbox', link: 'delta', status: 410, code: 'SyncStateNotFound' });
   assert.equal(cursorStore.saved(), 'https://graph/delta-fresh');
 });
 
@@ -512,4 +512,76 @@ test('dropping the links keeps the cutover and the id type', () => {
     [CURSOR_KEYS.cutoverAt]: '2026-09-26T10:00:00.000Z',
     [CURSOR_KEYS.idType]: 'immutable'
   });
+});
+
+// --- stage 2: the writer's options arrive, and Sent Items (2026-09-26) -------
+
+function folderCursorStore() {
+  const saved = [];
+  return {
+    saved,
+    async load(_shopId, folder) {
+      saved.push(['load', folder]);
+      return { deltaLink: null, resumeLink: null, idType: 'immutable' };
+    },
+    async saveResumeLink(_shopId, link, folder) { saved.push(['resume', link, folder]); },
+    async saveDeltaLink(_shopId, link, folder) { saved.push(['delta', link, folder]); },
+    async clearLinks() {}
+  };
+}
+
+test('senderLabel and detectRelated reach the writer (they were dropped here until 2026-09-26)', async () => {
+  const store = fakeStore();
+  const labelled = [];
+  const graphClient = fakeGraphClient([
+    { messages: [graphMessage('m1', 'c1', 'lea@staff.example')], nextLink: null, deltaLink: 'https://graph/d' }
+  ]);
+
+  await runDeltaPoll({
+    graphClient, store, record: store, cursorStore: fakeCursorStore(null), shopId: 'shop-1',
+    senderLabel: (from) => { labelled.push(from); return from.endsWith('@staff.example') ? 'internal' : null; }
+  });
+
+  assert.deepEqual(labelled, ['lea@staff.example']);
+  assert.equal([...store.tickets.values()][0].sender_label, 'internal');
+});
+
+test('Sent Items: read from its own folder and cursor, filed outbound, never opening a ticket', async () => {
+  const store = fakeStore();
+  await store.create({ graph_conversation_id: 'c1', subject: 'Colis' });
+  const cursorStore = folderCursorStore();
+  const sent = (id, conversationId) => ({ ...graphMessage(id, conversationId, 'contact@shop.example'), sentDateTime: '2026-09-20T10:00:00Z' });
+  const graphClient = fakeGraphClient([
+    { messages: [sent('s1', 'c1'), sent('s2', 'c-nobody')], nextLink: 'https://graph/sent-p2', deltaLink: null },
+    { messages: [], nextLink: null, deltaLink: 'https://graph/sent-delta' }
+  ]);
+
+  const totals = await runDeltaPoll({
+    graphClient, store, record: store, cursorStore, shopId: 'shop-1', folder: 'sentitems', mailbox: 'contact@shop.example'
+  });
+
+  assert.deepEqual(graphClient.requestedOptions.map((o) => o.folder), ['sentitems', 'sentitems']);
+  assert.deepEqual(cursorStore.saved, [
+    ['load', 'sentitems'],
+    ['resume', 'https://graph/sent-p2', 'sentitems'],
+    ['delta', 'https://graph/sent-delta', 'sentitems']
+  ]);
+  assert.equal(store.messages.get('shop-1|s1').direction, 'outbound');
+  assert.ok(!store.messages.has('shop-1|s2'));
+  assert.equal(store.tickets.size, 1, 'no ticket opened');
+  assert.equal(totals.skippedNoTicket, 1);
+});
+
+test('a Sent Items cursor never writes the cutover; dropping links with no folder clears both', () => {
+  const sent = withDeltaLink({}, 'https://graph/sent', new Date('2026-09-26T10:00:00Z'), 'sentitems');
+  assert.deepEqual(sent, { [CURSOR_KEYS.sentDeltaLink]: 'https://graph/sent' });
+
+  const all = withoutLinks({
+    [CURSOR_KEYS.deltaLink]: 'd', [CURSOR_KEYS.sentDeltaLink]: 's', [CURSOR_KEYS.sentResumeLink]: 'r',
+    [CURSOR_KEYS.cutoverAt]: 'c'
+  });
+  assert.deepEqual(all, { [CURSOR_KEYS.cutoverAt]: 'c' });
+
+  const inboxOnly = withoutLinks({ [CURSOR_KEYS.deltaLink]: 'd', [CURSOR_KEYS.sentDeltaLink]: 's' }, 'inbox');
+  assert.deepEqual(inboxOnly, { [CURSOR_KEYS.sentDeltaLink]: 's' });
 });

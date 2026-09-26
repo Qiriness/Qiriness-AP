@@ -1,5 +1,6 @@
 import { MISSING_FIELDS } from '../src/investigation/case-file.mjs';
 import { NEED_KEYS } from '../src/investigation/evidence-rules.mjs';
+import { NEXT_ACTORS as NEXT_ACTOR_KEYS } from '../src/casework/actors.mjs';
 
 // The closed vocabulary the multi-turn labelled set is written in.
 //
@@ -41,9 +42,26 @@ export const OUTBOUND_EFFECTS = {
   internal_request: 'Demande à un collègue ou à un prestataire'
 };
 
+/**
+ * The label schema a page exports under (`labelSchemaVersion`). 3 since
+ * 2026-09-26: obligations with owners, nextActor, and five more customer
+ * questions (postal_address, preferred_remedy, receipt_confirmation,
+ * skin_type, skin_concern). The export envelope itself stays `version: 1`.
+ */
+export const LABEL_SCHEMA_VERSION = 3;
+
+/**
+ * How a question reads to a LABELLER, where it must say more than the agent's
+ * own label. `photo` covers the product OR the relevant area (the eye area in
+ * a product-advice thread); the agent's sentence to a customer is unchanged.
+ */
+const LABELLER_WORDING = {
+  photo: 'la photo demandée (produit ou zone concernée)'
+};
+
 /** What the customer still owes us: the case file's own question keys. */
 export const CUSTOMER_QUESTIONS = Object.fromEntries(
-  Object.entries(MISSING_FIELDS).map(([key, field]) => [key, field.label])
+  Object.entries(MISSING_FIELDS).map(([key, field]) => [key, LABELLER_WORDING[key] ?? field.label])
 );
 
 /**
@@ -67,22 +85,55 @@ export const COMMON_INTERNAL_CHECKS = [
 ].filter((key) => Object.hasOwn(INTERNAL_CHECKS, key));
 
 /**
+ * Who owes an internal check (codex_plans/Case_State_Plan.md, stage 3). The
+ * customer's side is `waitingCustomer`; these are ours and our partners'.
+ * The words are generic on purpose: which company is a « partner » is the
+ * sender directory's business, never this file's.
+ */
+export const OBLIGATION_OWNERS = {
+  support: 'Nous (support)',
+  colleague: 'Un collègue',
+  // « opérationnel » because sender_directory also has a `partner` label, and
+  // there it means a COMMERCIAL partner (a collaboration, a distributor). The
+  // key stays `partner` so every stored label keeps working.
+  partner: 'Un partenaire opérationnel (3PL, transporteur)'
+};
+
+/**
+ * Who owes the next step once this message is on the thread. Asked on EVERY
+ * cut, outbound included: after we write, somebody still owes something, and
+ * « nobody » is the only honest definition of a finished case.
+ */
+export const NEXT_ACTORS = Object.fromEntries(
+  NEXT_ACTOR_KEYS.map((key) => [key, {
+    customer: 'Le client',
+    support: 'Nous (support)',
+    colleague: 'Un collègue',
+    partner: 'Un partenaire opérationnel',
+    nobody: 'Personne : dossier terminé'
+  }[key]])
+);
+
+/**
  * Which fields a cut is labelled on, by direction.
  *
  * AN OUTBOUND CUT HAS NO NEXT ACTION AND ANSWERS NOTHING. The first batch showed
  * why: « Réponse complète » under one of our replies was read as describing that
  * reply, three times. After we write, the case state and what we are waiting
  * for say everything the pipeline needs.
+ *
+ * `obligations` replaced `waitingInternal` on 2026-09-26: the same checks,
+ * each with the side that owes it.
  */
 export const FIELDS_BY_DIRECTION = {
-  inbound: ['effect', 'answered', 'waitingCustomer', 'waitingInternal', 'caseState', 'nextAction'],
-  outbound: ['effect', 'waitingCustomer', 'waitingInternal', 'caseState']
+  inbound: ['effect', 'answered', 'waitingCustomer', 'obligations', 'caseState', 'nextActor', 'nextAction'],
+  outbound: ['effect', 'waitingCustomer', 'obligations', 'caseState', 'nextActor']
 };
 
 /** The fields without which a cut does not count as labelled. */
 export const REQUIRED_BY_DIRECTION = {
-  inbound: ['effect', 'caseState', 'nextAction'],
-  outbound: ['effect', 'caseState']
+  inbound: ['effect', 'caseState', 'nextActor', 'nextAction'],
+  outbound: ['effect', 'caseState', 'nextActor']
 };
 
 export const CASE_STATES = {
@@ -110,11 +161,24 @@ export function emptyLabel() {
     effect: null,
     answered: [],
     waitingCustomer: [],
-    waitingInternal: [],
+    obligations: [],
     caseState: null,
+    nextActor: null,
     nextAction: null,
     note: ''
   };
+}
+
+/**
+ * A label's obligations, reading the pre-2026-09-26 `waitingInternal` list as
+ * obligations whose owner nobody has said yet (`owner: null`). Kept so older
+ * exports and the checked-in set stay importable; the eval reports the missing
+ * owners instead of guessing them.
+ */
+export function obligationsOf(label) {
+  const current = Array.isArray(label?.obligations) ? label.obligations : [];
+  const legacy = (Array.isArray(label?.waitingInternal) ? label.waitingInternal : []).map((need) => ({ owner: null, need }));
+  return [...current, ...legacy];
 }
 
 /**
@@ -126,6 +190,22 @@ export function emptyLabel() {
  * unknown key is dropped and reported, never carried into the checked-in set
  * where nothing could score it.
  */
+function pickObligations(obligations, dropped) {
+  const seen = new Set();
+  const kept = [];
+  for (const item of obligations) {
+    const need = item?.need;
+    const owner = item?.owner ?? null;
+    if (!Object.hasOwn(INTERNAL_CHECKS, need)) { dropped.push(`obligations.need=${need}`); continue; }
+    if (owner !== null && !Object.hasOwn(OBLIGATION_OWNERS, owner)) { dropped.push(`obligations.owner=${owner}`); continue; }
+    const key = `${owner}|${need}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    kept.push({ owner, need });
+  }
+  return kept;
+}
+
 export function validateLabel(label, { direction }) {
   const effects = direction === 'outbound' ? OUTBOUND_EFFECTS : INBOUND_EFFECTS;
   const answerable = { ...CUSTOMER_QUESTIONS, ...INTERNAL_CHECKS };
@@ -155,8 +235,9 @@ export function validateLabel(label, { direction }) {
       effect: pick(label?.effect, effects, 'effect'),
       answered: applies.has('answered') ? pickAll(label?.answered, answerable, 'answered') : [],
       waitingCustomer: pickAll(label?.waitingCustomer, CUSTOMER_QUESTIONS, 'waitingCustomer'),
-      waitingInternal: pickAll(label?.waitingInternal, INTERNAL_CHECKS, 'waitingInternal'),
+      obligations: pickObligations(obligationsOf(label), dropped),
       caseState: pick(label?.caseState, CASE_STATES, 'caseState'),
+      nextActor: pick(label?.nextActor, NEXT_ACTORS, 'nextActor'),
       nextAction: applies.has('nextAction') ? pick(label?.nextAction, NEXT_ACTIONS, 'nextAction') : null,
       note: typeof label?.note === 'string' ? label.note.trim() : ''
     },

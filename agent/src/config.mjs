@@ -2,6 +2,7 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { loadEnv } from '../../scripts/lib/sync-config.mjs';
+import { parseActorMap } from './casework/actors.mjs';
 
 // Repo root is two levels up from agent/src, so the worker reads the same
 // .env.local the sync scripts use regardless of the process working directory.
@@ -109,6 +110,11 @@ export function loadAgentConfig(env = loadEnv(REPO_ROOT)) {
     // it was before closures were detected at all.
     closureModel:
       env.AGENT_CLOSURE_MODEL === undefined ? 'gpt-4o-mini' : env.AGENT_CLOSURE_MODEL,
+    // Which sender_directory label counts as which actor on a case, e.g.
+    // `internal:colleague,logistics:partner`. Per business: one company's 3PL is
+    // part of the team, another's a supplier. Unset keeps the default map in
+    // casework/actors.mjs; a label left out keeps its default.
+    actorByLabel: parseActorMap(env.AGENT_ACTOR_BY_LABEL),
     // WHERE A DRAFT GOES TO BE READ, and `none` is the default so a fresh
     // checkout cannot email anything at all. `review-mail` sends a copy to
     // DRAFT_REVIEW_MAILBOX — the reviewer's own inbox, never a customer, and

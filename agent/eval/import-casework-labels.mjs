@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
-import { validateLabel } from './casework-vocabulary.mjs';
+import { LABEL_SCHEMA_VERSION, validateLabel } from './casework-vocabulary.mjs';
 import { isTouched } from './score-casework.mjs';
 
 // Folds a `casework-labels.json` export into the checked-in set.
@@ -22,15 +22,38 @@ import { isTouched } from './score-casework.mjs';
 
 const OUT = fileURLToPath(new URL('./casework-cases.mjs', import.meta.url));
 
+// `--upgrade` re-validates the checked-in set with no export, after a
+// vocabulary change.
 const inPath = process.argv[2];
 if (!inPath) {
-  console.error('usage: npm run cases:import -- <casework-labels.json>');
+  console.error('usage: npm run cases:import -- <casework-labels.json | --upgrade>');
   process.exit(1);
 }
 
-const exported = JSON.parse(readFileSync(inPath, 'utf8'));
+const previousExport = existsSync(OUT) ? readFileSync(OUT, 'utf8').match(/export of (\S+?)\.\s*$/m)?.[1] ?? null : null;
+const exported = inPath === '--upgrade' ? { labels: {}, exportedAt: previousExport } : JSON.parse(readFileSync(inPath, 'utf8'));
 const existing = existsSync(OUT) ? (await import(`${new URL('./casework-cases.mjs', import.meta.url)}?t=${Date.now()}`)).CASEWORK_CASES : [];
-const byMessage = new Map(existing.map((row) => [row.messageId, row]));
+// Rows already in the set go through the same validation, which is what moves a
+// pre-2026-09-26 row's `waitingInternal` to ownerless `obligations`.
+const byMessage = new Map(
+  existing.map((row) => {
+    const { label } = validateLabel(row, { direction: row.direction });
+    const { note, ...decisions } = label;
+    return [row.messageId, { ticketId: row.ticketId, messageId: row.messageId, direction: row.direction, ...decisions, note }];
+  })
+);
+
+// An export from an older page is still valid (every change so far only added
+// values). One from a NEWER page may use values this importer does not know
+// yet, and those would be dropped below: say so before a single row is written.
+const exportedSchema = exported.labelSchemaVersion ?? 1;
+if (exportedSchema > LABEL_SCHEMA_VERSION) {
+  console.error(
+    `This export is label schema ${exportedSchema}; this importer knows ${LABEL_SCHEMA_VERSION}. ` +
+      'Extend casework-vocabulary.mjs first, or its new values would be silently dropped.'
+  );
+  process.exit(1);
+}
 
 let added = 0;
 let replaced = 0;

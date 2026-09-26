@@ -10,6 +10,30 @@ Three sibling files carry the other halves, and this one deliberately does not d
 
 ---
 
+## Five new customer questions, and label schema 3 (2026-09-26)
+
+- `MISSING_FIELDS` gains `postal_address`, `preferred_remedy`, `receipt_confirmation`, `skin_type` and `skin_concern`, each with its question and draft-check noun; the dashboard types follow. **Migration 40 is applied**; the live check was verified.
+- The labelling page words `photo` more broadly for labellers and exports `labelSchemaVersion: 3`. The importer refuses a newer schema rather than drop its values. The hand-edited `casework-review-v3.html` was checked value by value: everything it can export now imports.
+- Tests: 1,656 agent tests pass; migrations 05 and 40 pass 70 of 70; web tsc is clean. **Pre-existing and unrelated:** 19 analytics-migration tests fail (24 on a clean checkout of HEAD).
+
+## Timeline labels: who owes each check, who acts next (2026-09-26)
+
+Stage 3 of `codex_plans/Case_State_Plan.md`.
+
+- **Vocabulary:** `obligations: [{owner, need}]` replaces `waitingInternal`, and `nextActor` is required on every cut. The 52 existing labels were upgraded with `cases:import -- --upgrade`; their 6 old internal checks have no owner yet.
+- **`casework/actors.mjs`:** message → actor, through the sender directory and `AGENT_ACTOR_BY_LABEL` (a per-business setting with a default). Shown on the page, not labelled.
+- **Page:** a row of checks per owner, a next-actor row, and the actor beside each sender. `--limit` builds a sitting, with labelled threads first and then the groups in turn.
+- **Eval:** `nextActor` is scored on both directions against what today's pipeline can say; obligations and case states are counted. **Baseline pending labels:** the run works end to end, and `nextActor` reads 52 unlabelled.
+- Tests: 1,655 agent tests pass.
+
+## Sent Items read; two worker options that never arrived (2026-09-26)
+
+Stage 2 of `codex_plans/Case_State_Plan.md`, second half.
+
+- **Sent Items** is read after the Inbox on every poll, with its own cursor. Everything in it is outbound; it never opens a ticket; an outbound copy already stored under another Graph id is skipped. **First read: 98 replies attached, 7 copies and 10 without a ticket skipped**, 0 tickets changed. The second poll read 1 page per folder.
+- **Bug fixed:** `runDeltaPoll` never passed `senderLabel` or `detectRelated` to the writer, so in the worker no ticket was labelled at creation, no related link was made, and the staff-reply rule did not run. Repaired: 125 tickets labelled, 58 staff messages returned to inbound (66 replies stay outbound), 9 related links.
+- Tests: 1,644 agent tests pass (7 new, including one through `runDeltaPoll` that would have caught the bug).
+
 ## Imported history taken out of the categorisation queue (2026-09-26)
 
 `tickets:unqueue-pre-cutover` clears `needs_categorisation` on tickets whose every message predates the cutover, and keeps their labels. Run with `--keep-after` set to 28 days before the cutover: **791 cleared, 0 failed; 40 recent tickets left queued**. Expect the next full poll to auto-close the 791 for inactivity (`DECISIONS.md`).

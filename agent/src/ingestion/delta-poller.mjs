@@ -36,6 +36,18 @@ export async function runDeltaPoll({
   // Deterministic duplicate detection. Optional: without it the poll behaves
   // exactly as it did before, and no ticket is ever linked.
   detectDuplicate,
+  // Handed straight to the writer. UNTIL 2026-09-26 THESE TWO WERE DROPPED
+  // HERE: the worker passed them and this function never named them, so no
+  // ticket got a sender label at creation, no related link was ever made live,
+  // and a staff reply was never re-filed. Measured that day: 0 labels and 0
+  // links on the 347 tickets the first full read created. The writer's own
+  // tests call it directly, which is why nothing failed.
+  senderLabel,
+  detectRelated,
+  // `inbox` or `sentitems`. Sent Items mail is ours by definition, and may only
+  // join a thread that already has a ticket: outbound mail adds to a case, it
+  // never opens one (codex_plans/Case_State_Plan.md, stage 2).
+  folder = 'inbox',
   limit
 }) {
   const totals = {
@@ -48,7 +60,10 @@ export async function runDeltaPoll({
     spamAudited: 0,
     attachmentsFetched: 0,
     pages: 0,
-    duplicatesLinked: 0
+    duplicatesLinked: 0,
+    relatedLinked: 0,
+    skippedNoTicket: 0,
+    skippedCopies: 0
   };
   const hitCounts = new Map();
   // Decisions from both passes buffer here and are written once per poll; the
@@ -74,7 +89,7 @@ export async function runDeltaPoll({
   async function processBatch(messages) {
     const kept = [];
     for (const message of messages) {
-      const item = mapGraphMessage(message, { mailbox });
+      const item = mapGraphMessage(message, { mailbox, direction: folder === 'sentitems' ? 'outbound' : undefined });
       // Our own replies skip the gate entirely: the blocklist matches on sender,
       // and blocking the support address would drop every reply the team sent.
       if (!item.removed && item.message?.direction === 'inbound') {
@@ -112,6 +127,9 @@ export async function runDeltaPoll({
       audit,
       embedMessage,
       detectDuplicate,
+      detectRelated,
+      senderLabel,
+      attachOnly: folder === 'sentitems',
       logger
     });
     totals.ticketsCreated += counts.ticketsCreated;
@@ -120,11 +138,14 @@ export async function runDeltaPoll({
     totals.removed += counts.removed;
     totals.llmSpamFiltered += counts.llmSpamFiltered;
     totals.duplicatesLinked += counts.duplicatesLinked ?? 0;
+    totals.relatedLinked += counts.relatedLinked ?? 0;
+    totals.skippedNoTicket += counts.skippedNoTicket ?? 0;
+    totals.skippedCopies += counts.skippedCopies ?? 0;
   }
 
   // Read once per poll, not once per process: `ids:translate` flips the id type
   // under a running worker, and the next poll must follow it.
-  const cursor = await cursorStore.load(shopId);
+  const cursor = await cursorStore.load(shopId, folder);
   const immutableIds = cursor.idType === 'immutable';
   let url = cursor.resumeLink || cursor.deltaLink || null;
   let savedLink = url ? (cursor.resumeLink ? 'resume' : 'delta') : null;
@@ -135,14 +156,14 @@ export async function runDeltaPoll({
   // poll can hit this; a nextLink Graph just handed us failing is a real error.
   async function firstPage(options) {
     try {
-      return await graphClient.getDeltaPage(url, options);
+      return await graphClient.getDeltaPage(url, { ...options, folder });
     } catch (error) {
       if (!savedLink || !error.linkRejected) throw error;
-      logger?.warn?.('ingest.cursor_expired', { shopId, link: savedLink, status: error.status, code: error.code });
-      await cursorStore.clearLinks(shopId);
+      logger?.warn?.('ingest.cursor_expired', { shopId, folder, link: savedLink, status: error.status, code: error.code });
+      await cursorStore.clearLinks(shopId, folder);
       url = null;
       savedLink = null;
-      return graphClient.getDeltaPage(null, options);
+      return graphClient.getDeltaPage(null, { ...options, folder });
     }
   }
 
@@ -157,13 +178,13 @@ export async function runDeltaPoll({
   // was not stored, and replaying a page that was is harmless.
   for (let page = 0; page < MAX_PAGES_PER_RUN; page += 1) {
     const { messages, nextLink, deltaLink } =
-      page === 0 ? await firstPage({ immutableIds }) : await graphClient.getDeltaPage(url, { immutableIds });
+      page === 0 ? await firstPage({ immutableIds }) : await graphClient.getDeltaPage(url, { immutableIds, folder });
     totals.pages += 1;
 
     await processBatch(messages);
 
     if (deltaLink) {
-      await cursorStore.saveDeltaLink(shopId, deltaLink);
+      await cursorStore.saveDeltaLink(shopId, deltaLink, folder);
       await flush();
       return totals;
     }
@@ -173,7 +194,7 @@ export async function runDeltaPoll({
       await flush();
       return totals;
     }
-    await cursorStore.saveResumeLink(shopId, nextLink);
+    await cursorStore.saveResumeLink(shopId, nextLink, folder);
     url = nextLink;
   }
 
@@ -205,7 +226,7 @@ export async function runDeltaPoll({
         throw new Error(`Delta poll exceeded ${MAX_PAGES_PER_RUN} pages; aborting to avoid a loop.`);
       }
       const result =
-        page === 0 ? await firstPage({ top: limit, immutableIds }) : await graphClient.getDeltaPage(url, { immutableIds });
+        page === 0 ? await firstPage({ top: limit, immutableIds }) : await graphClient.getDeltaPage(url, { immutableIds, folder });
       totals.pages += 1;
       collected.push(...result.messages.slice(0, limit - collected.length));
 
@@ -231,7 +252,7 @@ export async function runDeltaPoll({
       // stays a repeatable partial test rather than a committed sync position.
       totals.limitReached = true;
     } else if (deltaLink) {
-      await cursorStore.saveDeltaLink(shopId, deltaLink);
+      await cursorStore.saveDeltaLink(shopId, deltaLink, folder);
     }
     await flush();
     return totals;
@@ -321,12 +342,16 @@ async function fetchAttachmentMetadata(graphClient, items, logger) {
 // The keys this poller owns in `shops.sync_cursors`. Merge-on-write, so a key
 // this code does not name is never touched.
 export const CURSOR_KEYS = {
-  // Where the last complete read ended. Its presence means a full read finished.
+  // Where the last complete Inbox read ended. Its presence means a full read
+  // finished.
   deltaLink: 'mail_ingest_delta_link',
-  // The nextLink of the last page fully written, while a read is under way.
+  // The nextLink of the last Inbox page fully written, while a read is under way.
   resumeLink: 'mail_ingest_resume_link',
-  // When the first deltaLink was committed. Written once, never overwritten
-  // or cleared: mail received after it is genuinely new to the pipeline, which
+  // The same pair for Sent Items (stage 2, 2026-09-26).
+  sentDeltaLink: 'mail_sent_delta_link',
+  sentResumeLink: 'mail_sent_resume_link',
+  // When the first INBOX deltaLink was committed. Written once, never
+  // overwritten or cleared, and never by Sent Items, which holds only our mail: mail received after it is genuinely new to the pipeline, which
   // is what makes a ticket eligible for automatic drafting
   // (codex_plans/Case_State_Plan.md, stage 6).
   cutoverAt: 'mail_ingest_cutover_at',
@@ -335,24 +360,40 @@ export const CURSOR_KEYS = {
   idType: 'mail_id_type'
 };
 
+/** Which two keys hold a folder's position. */
+export function linkKeys(folder = 'inbox') {
+  return folder === 'sentitems'
+    ? { deltaLink: CURSOR_KEYS.sentDeltaLink, resumeLink: CURSOR_KEYS.sentResumeLink }
+    : { deltaLink: CURSOR_KEYS.deltaLink, resumeLink: CURSOR_KEYS.resumeLink };
+}
+
 /**
  * The next cursor state after a complete read. Pure, so the "cutover is
  * written once" rule is tested without a database.
  */
-export function withDeltaLink(current, deltaLink, now = new Date()) {
-  const next = { ...current, [CURSOR_KEYS.deltaLink]: deltaLink };
-  delete next[CURSOR_KEYS.resumeLink];
-  if (!next[CURSOR_KEYS.cutoverAt]) {
+export function withDeltaLink(current, deltaLink, now = new Date(), folder = 'inbox') {
+  const keys = linkKeys(folder);
+  const next = { ...current, [keys.deltaLink]: deltaLink };
+  delete next[keys.resumeLink];
+  if (folder === 'inbox' && !next[CURSOR_KEYS.cutoverAt]) {
     next[CURSOR_KEYS.cutoverAt] = now.toISOString();
   }
   return next;
 }
 
-/** The cursor state with both links dropped; the cutover and id type stay. */
-export function withoutLinks(current) {
+/**
+ * The cursor state with links dropped; the cutover and id type stay. One
+ * folder's pair, or with no folder every folder's (`ingest:reset`,
+ * `ids:translate`).
+ */
+export function withoutLinks(current, folder = null) {
   const next = { ...current };
-  delete next[CURSOR_KEYS.deltaLink];
-  delete next[CURSOR_KEYS.resumeLink];
+  const folders = folder ? [folder] : ['inbox', 'sentitems'];
+  for (const f of folders) {
+    const keys = linkKeys(f);
+    delete next[keys.deltaLink];
+    delete next[keys.resumeLink];
+  }
   return next;
 }
 
@@ -367,26 +408,27 @@ export function createSupabaseCursorStore(supabase) {
   }
 
   return {
-    async load(shopId) {
+    async load(shopId, folder = 'inbox') {
       const cursors = await read(shopId);
+      const keys = linkKeys(folder);
       return {
-        deltaLink: cursors[CURSOR_KEYS.deltaLink] || null,
-        resumeLink: cursors[CURSOR_KEYS.resumeLink] || null,
+        deltaLink: cursors[keys.deltaLink] || null,
+        resumeLink: cursors[keys.resumeLink] || null,
         idType: cursors[CURSOR_KEYS.idType] || 'rest'
       };
     },
 
-    async saveResumeLink(shopId, resumeLink) {
+    async saveResumeLink(shopId, resumeLink, folder = 'inbox') {
       const current = await read(shopId);
-      await write(shopId, { ...current, [CURSOR_KEYS.resumeLink]: resumeLink });
+      await write(shopId, { ...current, [linkKeys(folder).resumeLink]: resumeLink });
     },
 
-    async saveDeltaLink(shopId, deltaLink) {
-      await write(shopId, withDeltaLink(await read(shopId), deltaLink));
+    async saveDeltaLink(shopId, deltaLink, folder = 'inbox') {
+      await write(shopId, withDeltaLink(await read(shopId), deltaLink, new Date(), folder));
     },
 
-    async clearLinks(shopId) {
-      await write(shopId, withoutLinks(await read(shopId)));
+    async clearLinks(shopId, folder = 'inbox') {
+      await write(shopId, withoutLinks(await read(shopId), folder));
     }
   };
 }

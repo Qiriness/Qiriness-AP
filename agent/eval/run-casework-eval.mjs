@@ -13,8 +13,8 @@ import { createSenderDirectoryStore, senderRole } from '../src/ingestion/sender-
 
 import { CASEWORK_CASES } from './casework-cases.mjs';
 import { threadUpTo } from './casework-cuts.mjs';
-import { CUSTOMER_QUESTIONS } from './casework-vocabulary.mjs';
-import { PIPELINE_NEXT_ACTIONS, compare, expectedRelationship, pipelineNextAction, tally } from './score-casework.mjs';
+import { CUSTOMER_QUESTIONS, obligationsOf } from './casework-vocabulary.mjs';
+import { PIPELINE_NEXT_ACTIONS, compare, expectedRelationship, pipelineNextAction, pipelineNextActor, tally } from './score-casework.mjs';
 
 // Scores today's pipeline against the multi-turn labelled set.
 //
@@ -24,10 +24,11 @@ import { PIPELINE_NEXT_ACTIONS, compare, expectedRelationship, pipelineNextActio
 //
 // WHAT IS SCORED, per inbound cut: the Case Manager's reading of the message
 // (`effect`, and which of our questions it `answered`), and what the pipeline
-// then does (`nextAction` — draft skip, closing reply or full reply). Outbound
-// cuts, `caseState` and `waitingInternal` are COUNTED, not scored: nothing in
-// the pipeline reads our mail or holds a case state, so every one of them is
-// work not yet built, and the report says how much.
+// then does (`nextAction` — draft skip, closing reply or full reply).
+// `nextActor` is scored on BOTH directions (stage 3 of the case-state plan),
+// from what today's pipeline can say (`pipelineNextActor`); everything it
+// cannot say is `inexpressible`. `caseState` and `obligations` are COUNTED,
+// not scored: nothing holds a case state or an obligation yet.
 //
 // EACH CUT STARTS FROM THE LABELS, NOT FROM THE MODEL'S OWN PREVIOUS ANSWER.
 // The questions carried into a cut are the labeller's `waitingCustomer` from the
@@ -89,7 +90,7 @@ async function main() {
   );
 
   const scored = [];
-  const counted = { outbound: 0, caseState: 0, waitingInternal: 0 };
+  const counted = { outbound: 0, caseState: 0, obligations: 0, ownerless: 0, byOwner: {} };
   const missing = [];
 
   for (const ticketId of ticketIds) {
@@ -107,13 +108,30 @@ async function main() {
     let carried = [];
     for (const row of cases) {
       if (row.caseState) counted.caseState += 1;
-      if (row.waitingInternal.length) counted.waitingInternal += 1;
+      const obligations = obligationsOf(row);
+      if (obligations.length) counted.obligations += 1;
+      for (const { owner } of obligations) {
+        if (owner === null) counted.ownerless += 1;
+        else counted.byOwner[owner] = (counted.byOwner[owner] || 0) + 1;
+      }
       if (row.index === undefined) {
         missing.push(row.messageId);
         continue;
       }
       if (row.direction === 'outbound') {
         counted.outbound += 1;
+        // The verdict drafting would have read here: the newest case file
+        // triggered at or before this message.
+        const caseFile = runs.filter((run) => run.index <= row.index).sort((a, b) => a.index - b.index).at(-1);
+        const actor = pipelineNextActor({ direction: 'outbound', verdict: caseFile?.verdict ?? null });
+        scored.push({
+          row,
+          role: senderRole(conversation[row.index], senderDirectory),
+          outcome: { nextActor: compare(row.nextActor ?? null, actor, { expressible: actor !== null }) },
+          got: { nextActor: actor },
+          unstable: [],
+          carried
+        });
         carried = row.waitingCustomer;
         continue;
       }
@@ -140,12 +158,13 @@ async function main() {
         const closure = config.closureModel
           ? await readsAsClosure({ openai, model: config.closureModel, message, senderDirectory, logger, ticketId })
           : { closes: false };
+        const decided = pipelineNextAction({ ticket, closes: closure.closes, gateOpen });
         reads.push({
           effect: reading.caseRelationship,
           answered: reading.resolvedInputs,
-          ...(({ action, why }) => ({ nextAction: action, why }))(
-            pipelineNextAction({ ticket, closes: closure.closes, gateOpen })
-          ),
+          nextAction: decided.action,
+          why: decided.why,
+          nextActor: pipelineNextActor({ direction: 'inbound', action: decided.action }),
           failed: reading.failed
         });
       }
@@ -162,7 +181,8 @@ async function main() {
         answered: answerable ? compare(customerAnswered, read.answered) : 'unlabelled',
         nextAction: compare(row.nextAction, read.nextAction, {
           expressible: PIPELINE_NEXT_ACTIONS.includes(row.nextAction)
-        })
+        }),
+        nextActor: compare(row.nextActor ?? null, read.nextActor, { expressible: read.nextActor !== null })
       }));
       // A cut counts as agreeing on a field only if every attempt agreed; the
       // disagreeing read is the one reported.
@@ -187,7 +207,7 @@ async function main() {
 
 function report({ scored, counted, missing }) {
   const totals = tally(scored.map((s) => s.outcome));
-  console.log(`\nCasework — ${CASEWORK_CASES.length} messages étiquetés, ${scored.length} reçus notés · ${repeat} passage(s)\n`);
+  console.log(`\nCasework — ${CASEWORK_CASES.length} messages étiquetés, ${scored.length} coupes notées · ${repeat} passage(s)\n`);
   console.log('champ        accord  désaccord  inexprimable  non étiqueté');
   for (const [field, t] of Object.entries(totals)) {
     console.log(
@@ -195,8 +215,9 @@ function report({ scored, counted, missing }) {
     );
   }
   console.log(
-    `\nPas encore lus par le pipeline : ${counted.outbound} messages envoyés · ${counted.caseState} états de dossier · ` +
-      `${counted.waitingInternal} vérifications internes attendues`
+    `\nPas encore tenus par le pipeline : ${counted.caseState} états de dossier · ` +
+      `${counted.obligations} coupes avec des obligations (${Object.entries(counted.byOwner).map(([o, n]) => `${o} ${n}`).join(', ') || 'aucune attribuée'}` +
+      `${counted.ownerless ? `, ${counted.ownerless} sans propriétaire : à ré-étiqueter` : ''})`
   );
   const unstable = scored.filter((s) => s.unstable.length);
   if (repeat > 1) console.log(`Instables sur ${repeat} passages : ${unstable.length}`);
@@ -206,8 +227,8 @@ function report({ scored, counted, missing }) {
   for (const s of scored) {
     const bad = Object.entries(s.outcome).filter(([, o]) => o === 'disagree' || o === 'inexpressible');
     if (!show && bad.length === 0) continue;
-    const parts = ['effect', 'answered', 'nextAction']
-      .filter((field) => show || ['disagree', 'inexpressible'].includes(s.outcome[field]))
+    const parts = ['effect', 'answered', 'nextAction', 'nextActor']
+      .filter((field) => field in s.outcome && (show || ['disagree', 'inexpressible'].includes(s.outcome[field])))
       .map((field) => {
         const expected = field === 'answered' ? `[${s.row.answered.join(',')}]` : s.row[field];
         const got = field === 'answered' ? `[${s.got.answered.join(',')}]` : s.got[field];

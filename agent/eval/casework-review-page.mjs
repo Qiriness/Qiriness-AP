@@ -6,8 +6,11 @@ import {
   INBOUND_EFFECTS,
   INTERNAL_CHECKS,
   NEXT_ACTIONS,
+  NEXT_ACTORS,
+  OBLIGATION_OWNERS,
   OUTBOUND_EFFECTS,
-  REQUIRED_BY_DIRECTION
+  REQUIRED_BY_DIRECTION,
+  LABEL_SCHEMA_VERSION
 } from './casework-vocabulary.mjs';
 
 // The page a person labels the multi-turn set on.
@@ -30,6 +33,7 @@ export function renderReviewPage({ threads, generatedAt, prefillModel = null }) 
   const data = {
     generatedAt,
     prefillModel,
+    labelSchemaVersion: LABEL_SCHEMA_VERSION,
     vocab: {
       inboundEffects: INBOUND_EFFECTS,
       outboundEffects: OUTBOUND_EFFECTS,
@@ -37,6 +41,8 @@ export function renderReviewPage({ threads, generatedAt, prefillModel = null }) 
       internalChecks: INTERNAL_CHECKS,
       caseStates: CASE_STATES,
       nextActions: NEXT_ACTIONS,
+      nextActors: NEXT_ACTORS,
+      obligationOwners: OBLIGATION_OWNERS,
       commonInternalChecks: COMMON_INTERNAL_CHECKS,
       fieldsByDirection: FIELDS_BY_DIRECTION,
       requiredByDirection: REQUIRED_BY_DIRECTION
@@ -111,6 +117,7 @@ details.quoted pre { white-space:pre-wrap; overflow-wrap:anywhere; font:inherit;
 details.more > summary { font-size:.8rem; color:var(--sub); cursor:pointer; margin:.2rem 0; }
 textarea { width:100%; font:inherit; font-size:.85rem; border:1px solid var(--line); border-radius:6px; padding:.3rem .5rem; min-height:2.2rem; }
 .hint { font-size:.8rem; color:var(--amber); margin:.2rem 0 0; }
+.actor { font-size:.72rem; border:1px solid var(--line); border-radius:999px; padding:0 .45rem; }
 @media (max-width: 640px) { .row { grid-template-columns:1fr; } .form { margin-left:0; } }
 `;
 
@@ -122,6 +129,17 @@ const V = DATA.vocab;
 const KEY = 'casework-labels:' + DATA.generatedAt;
 let labels = {};
 try { labels = JSON.parse(localStorage.getItem(KEY) || '{}') || {}; } catch { labels = {}; }
+function upgrade(l) {
+  if (!l) return l;
+  if (!Array.isArray(l.obligations)) l.obligations = [];
+  if (Array.isArray(l.waitingInternal)) {
+    for (const need of l.waitingInternal) if (!l.obligations.some((o) => o.need === need)) l.obligations.push({ owner: null, need });
+    delete l.waitingInternal;
+  }
+  if (!('nextActor' in l)) l.nextActor = null;
+  return l;
+}
+Object.values(labels).forEach(upgrade);
 let at = 0;
 try { at = Math.min(Number(localStorage.getItem(KEY + ':at')) || 0, DATA.threads.length - 1); } catch {}
 
@@ -165,7 +183,7 @@ function labelFor(cut) {
     const p = cut.prefill || {};
     labels[cut.messageId] = {
       effect: p.effect || null, answered: p.answered || [], waitingCustomer: p.waitingCustomer || [],
-      waitingInternal: [], caseState: null, nextAction: null, note: '', fromPrefill: !!cut.prefill
+      obligations: [], caseState: null, nextActor: null, nextAction: null, note: '', fromPrefill: !!cut.prefill
     };
   }
   return labels[cut.messageId];
@@ -196,6 +214,34 @@ function multi(cut, field, options) {
     }, text)));
 }
 
+// One row of checks per side that can owe one. A chip is one obligation:
+// { owner, need }. The same need may be owed by two sides (we ask the 3PL, and
+// the colleague who handles refunds), so the rows are independent.
+function owned(cut, owner, options) {
+  const label = labelFor(cut);
+  const has = (need) => label.obligations.some((o) => o.owner === owner && o.need === need);
+  return el('div', { class: 'chips' }, Object.entries(options).map(([need, text]) =>
+    el('span', {
+      class: 'chip' + (has(need) ? ' on' : ''),
+      title: need,
+      onclick: () => {
+        label.obligations = has(need)
+          ? label.obligations.filter((o) => !(o.owner === owner && o.need === need))
+          : [...label.obligations.filter((o) => !(o.owner === null && o.need === need)), { owner, need }];
+        save(); render();
+      }
+    }, text)));
+}
+
+function ownerRow(cut, owner) {
+  const label = labelFor(cut);
+  const rareOpen = label.obligations.some((o) => o.owner === owner && o.need in otherChecks);
+  return el('div', { class: 'row' }, el('span', {}, 'On attend de : ' + V.obligationOwners[owner]),
+    el('div', {}, owned(cut, owner, commonChecks),
+      el('details', { class: 'more', ...(rareOpen ? { open: '' } : {}) }, el('summary', {}, 'autres vérifications'),
+        owned(cut, owner, otherChecks))));
+}
+
 function form(cut) {
   const label = labelFor(cut);
   const effects = cut.direction === 'outbound' ? V.outboundEffects : V.inboundEffects;
@@ -209,8 +255,12 @@ function form(cut) {
     has.has('answered') ? el('div', { class: 'row' }, el('span', {}, 'A répondu à (client)'), multi(cut, 'answered', V.customerQuestions)) : null,
     has.has('answered') ? el('div', { class: 'row' }, el('span', {}, 'A répondu à (vérification)'), checks('answered')) : null,
     el('div', { class: 'row' }, el('span', {}, 'On attend du client'), multi(cut, 'waitingCustomer', V.customerQuestions)),
-    el('div', { class: 'row' }, el('span', {}, 'On attend de nous / d’un prestataire'), checks('waitingInternal')),
+    ...Object.keys(V.obligationOwners).map((owner) => ownerRow(cut, owner)),
+    label.obligations.some((o) => o.owner === null)
+      ? el('p', { class: 'hint' }, 'Étiquette ancienne : à qui revient « ' + label.obligations.filter((o) => o.owner === null).map((o) => o.need).join(', ') + ' » ? Cochez-le dans la bonne ligne.')
+      : null,
     el('div', { class: 'row' }, el('span', {}, 'Le dossier est'), single(cut, 'caseState', V.caseStates)),
+    el('div', { class: 'row' }, el('span', {}, 'La suite revient à'), single(cut, 'nextActor', V.nextActors)),
     has.has('nextAction') ? el('div', { class: 'row' }, el('span', {}, 'Ensuite, le pipeline'), single(cut, 'nextAction', V.nextActions)) : null,
     el('div', { class: 'row' }, el('span', {}, 'Note'),
       el('textarea', { placeholder: 'Pourquoi, si ce n’est pas évident', oninput: (e) => { label.note = e.target.value; save(); } }, label.note)),
@@ -230,7 +280,7 @@ function render() {
       const cut = t.cuts.find((c) => c.messageId === m.id);
       return [
         el('div', { class: 'msg' + (m.direction === 'outbound' ? ' out' : '') },
-          el('div', { class: 'who' }, el('b', {}, m.roleName), m.at ? m.at.slice(0, 16).replace('T', ' ') : '', i === 0 ? '· message d’ouverture' : ''),
+          el('div', { class: 'who' }, el('b', {}, m.roleName), m.actor ? el('span', { class: 'actor', title: 'acteur (annuaire des expéditeurs)' }, V.nextActors[m.actor] || m.actor) : null, m.at ? m.at.slice(0, 16).replace('T', ' ') : '', i === 0 ? '· message d’ouverture' : ''),
           el('div', { class: 'body' }, m.own || '(vide)'),
           m.quoted ? el('details', { class: 'quoted' }, el('summary', {}, 'historique cité'), el('pre', {}, m.quoted)) : null),
         cut ? form(cut) : null
@@ -252,7 +302,7 @@ document.getElementById('next').addEventListener('click', () => go(at + 1));
 document.getElementById('export').addEventListener('click', () => {
   const out = {};
   for (const c of cuts) if (labels[c.messageId]) out[c.messageId] = { ticketId: c.ticketId, direction: c.direction, ...labels[c.messageId] };
-  const blob = new Blob([JSON.stringify({ version: 1, generatedAt: DATA.generatedAt, exportedAt: new Date().toISOString(), labels: out }, null, 2)], { type: 'application/json' });
+  const blob = new Blob([JSON.stringify({ version: 1, labelSchemaVersion: DATA.labelSchemaVersion, generatedAt: DATA.generatedAt, exportedAt: new Date().toISOString(), labels: out }, null, 2)], { type: 'application/json' });
   const a = el('a', { href: URL.createObjectURL(blob), download: 'casework-labels.json' });
   document.body.append(a); a.click(); a.remove();
 });
@@ -263,7 +313,7 @@ document.getElementById('import').addEventListener('change', async (e) => {
   try {
     const parsed = JSON.parse(await file.text());
     let n = 0;
-    for (const [id, l] of Object.entries(parsed.labels || {})) if (cutById[id]) { labels[id] = l; n += 1; }
+    for (const [id, l] of Object.entries(parsed.labels || {})) if (cutById[id]) { labels[id] = upgrade(l); n += 1; }
     save(); render();
     document.getElementById('progress').textContent += ' · ' + n + ' importé(s)';
   } catch (err) { console.log('import failed', err); }

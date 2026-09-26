@@ -20,3 +20,8 @@ npm-debug.log*
 # are useful and the whole reason they must not be committed.
 situation-matches.html
 *-review.html
+# Hand-edited versions of a review page (casework-review-v3.html) quote the same mail.
+*-review-*.html
+
+# Working notes on a labelling round, kept out of the repo.
+Notes/Labelling_Changes_*.md

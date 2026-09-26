@@ -1,4 +1,5 @@
 import { senderRole } from '../src/ingestion/sender-directory.mjs';
+import { DEFAULT_ACTOR_BY_LABEL, actorOf } from '../src/casework/actors.mjs';
 
 // Which threads the multi-turn set is built from, and where each one is cut.
 //
@@ -45,15 +46,18 @@ export const DEFAULT_GROUPS = ['customer_followup', 'other_sender'];
  * « everything up to here » from the same read without trusting timestamps a
  * second time. `role` is resolved here and never labelled: the code already
  * knows who wrote, and a label for it would only be a way to disagree with the
- * sender directory in a place nobody looks.
+ * sender directory in a place nobody looks. `actor` is the same fact in the
+ * case vocabulary (customer, support, colleague, partner), through the
+ * deployment's label map (AGENT_ACTOR_BY_LABEL).
  */
-export function cutsFor(conversation, directory = null) {
+export function cutsFor(conversation, directory = null, actorByLabel = DEFAULT_ACTOR_BY_LABEL) {
   const messages = Array.isArray(conversation) ? conversation : [];
   return messages.slice(1).map((message, offset) => ({
     messageId: message.id,
     index: offset + 1,
     direction: message.direction === 'outbound' ? 'outbound' : 'inbound',
     role: senderRole(message, directory),
+    actor: actorOf(message, directory, actorByLabel),
     at: message.received_at ?? message.sent_at ?? null
   }));
 }

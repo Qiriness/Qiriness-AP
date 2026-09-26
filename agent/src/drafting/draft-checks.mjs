@@ -744,7 +744,13 @@ export const ASK_TERMS = {
   // which this duplicates rather than aliases: the two fields ask different
   // questions and could diverge.
   reaction_product_name: ['produit'],
-  lot_number: ['lot']
+  lot_number: ['lot'],
+  postal_address: ['adresse'],
+  // « solution » is the one noun every wording of « which do you prefer » shares.
+  preferred_remedy: ['solution'],
+  receipt_confirmation: ['recu'],
+  skin_type: ['peau'],
+  skin_concern: ['peau']
 };
 
 // WHAT WE ALREADY ASKED FOR IS NOT DETECTABLE FROM `ASK_TERMS`, AND IT WAS TRIED.

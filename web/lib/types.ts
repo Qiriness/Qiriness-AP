@@ -500,7 +500,12 @@ export type MissingField =
   | "order_date_or_amount"
   | "photo"
   | "reaction_product_name"
-  | "lot_number";
+  | "lot_number"
+  | "postal_address"
+  | "preferred_remedy"
+  | "receipt_confirmation"
+  | "skin_type"
+  | "skin_concern";
 
 /**
  * Reads after "Ask the customer for …", so each label is a noun phrase.
@@ -524,6 +529,11 @@ export const MISSING_FIELD_LABELS: Record<MissingField, string> = {
   photo: "a photo of the product",
   reaction_product_name: "which product they were using",
   lot_number: "the batch number on the packaging",
+  postal_address: "the full delivery address",
+  preferred_remedy: "which of the offered solutions they prefer",
+  receipt_confirmation: "confirmation that the parcel actually arrived",
+  skin_type: "their skin type",
+  skin_concern: "the skin concerns they want addressed",
 };
 
 /**

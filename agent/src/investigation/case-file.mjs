@@ -148,6 +148,43 @@ export const MISSING_FIELDS = {
       'Pourriez-vous nous communiquer le numéro de lot du produit ? Il est imprimé ' +
       'sur l’emballage ou sous le contenant, et commence généralement par « L ». ' +
       'Il nous permet de remonter jusqu’au lot de fabrication concerné.'
+  },
+  // FIVE KEYS ADDED 2026-09-26, from the multi-turn labelling (Notes, v2 + v3):
+  // the labellers kept meeting questions the desk asks that had no key, so a
+  // label could not say « we are waiting for it » or « this answered it ».
+  //
+  // A new or corrected delivery address: an address change before dispatch
+  // (O-12), a reshipment to a different place (D-06).
+  postal_address: {
+    label: 'l’adresse de livraison complète',
+    ask:
+      'Pourriez-vous nous indiquer l’adresse de livraison complète à utiliser ' +
+      '(nom, numéro et rue, code postal, ville et pays) ?'
+  },
+  // The customer's choice between remedies WE offered — never a choice we pick
+  // for them. D-36 (« remboursez-moi ou renvoyez-la ») and O-12 once shipped.
+  preferred_remedy: {
+    label: 'la solution que vous préférez',
+    ask: 'Quelle solution préférez-vous parmi celles que nous vous proposons ?'
+  },
+  // The customer saying the parcel is actually in their hands. A carrier's
+  // « livré » is not this: that dispute is D-03's whole reason to exist.
+  receipt_confirmation: {
+    label: 'la confirmation de réception du colis',
+    ask: 'Pourriez-vous nous confirmer si vous avez bien reçu votre colis ?'
+  },
+  // For a routine or product recommendation (PR-25, PR-29), whose « nothing to
+  // go on » rule had no key for what it asks. Supplied by the customer, never
+  // inferred from a photo.
+  skin_type: {
+    label: 'le type de peau',
+    ask:
+      'Pourriez-vous nous préciser votre type de peau (sèche, grasse, mixte, ' +
+      'normale ou sensible) ?'
+  },
+  skin_concern: {
+    label: 'les besoins ou préoccupations de soin',
+    ask: 'Quels sont les besoins ou préoccupations de peau que vous souhaitez traiter ?'
   }
   // `photo` WAS DECLARED TWICE IN THIS OBJECT, here and above. The later one won
   // silently — that is what a duplicate key does — so the live sentence asked

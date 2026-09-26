@@ -14,11 +14,18 @@ export const CASEWORK_CASES = [
     "effect": "holding",
     "answered": [],
     "waitingCustomer": [],
-    "waitingInternal": [
-      "delivery_state",
-      "order_state"
+    "obligations": [
+      {
+        "owner": null,
+        "need": "delivery_state"
+      },
+      {
+        "owner": null,
+        "need": "order_state"
+      }
     ],
     "caseState": "open",
+    "nextActor": null,
     "nextAction": null,
     "note": ""
   },
@@ -29,8 +36,9 @@ export const CASEWORK_CASES = [
     "effect": "continuation",
     "answered": [],
     "waitingCustomer": [],
-    "waitingInternal": [],
+    "obligations": [],
     "caseState": "open",
+    "nextActor": null,
     "nextAction": null,
     "note": ""
   },
@@ -41,10 +49,14 @@ export const CASEWORK_CASES = [
     "effect": "internal_note",
     "answered": [],
     "waitingCustomer": [],
-    "waitingInternal": [
-      "order_state"
+    "obligations": [
+      {
+        "owner": null,
+        "need": "order_state"
+      }
     ],
     "caseState": null,
+    "nextActor": null,
     "nextAction": null,
     "note": ""
   },
@@ -55,8 +67,9 @@ export const CASEWORK_CASES = [
     "effect": "new_information",
     "answered": [],
     "waitingCustomer": [],
-    "waitingInternal": [],
+    "obligations": [],
     "caseState": "open",
+    "nextActor": null,
     "nextAction": "full_reply",
     "note": "Numero de suivi donner mais pas evident (il est cache dans le lien code=XXXXX)"
   },
@@ -67,8 +80,9 @@ export const CASEWORK_CASES = [
     "effect": null,
     "answered": [],
     "waitingCustomer": [],
-    "waitingInternal": [],
+    "obligations": [],
     "caseState": null,
+    "nextActor": null,
     "nextAction": null,
     "note": "Redemande du numero de suivi, alors qu'il etait deja donner par le lien."
   },
@@ -79,8 +93,9 @@ export const CASEWORK_CASES = [
     "effect": "new_information",
     "answered": [],
     "waitingCustomer": [],
-    "waitingInternal": [],
+    "obligations": [],
     "caseState": "open",
+    "nextActor": null,
     "nextAction": "full_reply",
     "note": "Le numero de suivi est donné clairement, besoin de chequer si il y a un numero de commande rataché pour comfirmé. Si le numero de commande match avec notre client, il est donc correct (il est possible qu'il sois rataché au meme numéro de commande."
   },
@@ -91,10 +106,14 @@ export const CASEWORK_CASES = [
     "effect": "holding",
     "answered": [],
     "waitingCustomer": [],
-    "waitingInternal": [
-      "order_state"
+    "obligations": [
+      {
+        "owner": null,
+        "need": "order_state"
+      }
     ],
     "caseState": "open",
+    "nextActor": null,
     "nextAction": null,
     "note": "Si le colis n'est pas expedié, la personne doit changer l'adresse. Le premier message est donc time-sensitive (il faut agir plus vite que d'autre)"
   },
@@ -105,8 +124,9 @@ export const CASEWORK_CASES = [
     "effect": "new_information",
     "answered": [],
     "waitingCustomer": [],
-    "waitingInternal": [],
+    "obligations": [],
     "caseState": null,
+    "nextActor": null,
     "nextAction": null,
     "note": "le client propose que c'est encore possible, c'est le client et donc pas une information fiable. C'est plus un constat. En realité la commande peut-etre deja expedié"
   },
@@ -117,8 +137,9 @@ export const CASEWORK_CASES = [
     "effect": "answers",
     "answered": [],
     "waitingCustomer": [],
-    "waitingInternal": [],
+    "obligations": [],
     "caseState": "closed_by_us",
+    "nextActor": null,
     "nextAction": null,
     "note": ""
   },
@@ -131,8 +152,9 @@ export const CASEWORK_CASES = [
       "shopify_order_number"
     ],
     "waitingCustomer": [],
-    "waitingInternal": [],
+    "obligations": [],
     "caseState": "open",
+    "nextActor": null,
     "nextAction": "full_reply",
     "note": "On a toute les informations pour repondre au client. C'est un bonne exampe dans deuxieme email qui peut etre repondue sans avoir un humain qui agit."
   },
@@ -143,8 +165,9 @@ export const CASEWORK_CASES = [
     "effect": "answers",
     "answered": [],
     "waitingCustomer": [],
-    "waitingInternal": [],
+    "obligations": [],
     "caseState": "closed_by_us",
+    "nextActor": null,
     "nextAction": null,
     "note": ""
   },
@@ -155,8 +178,9 @@ export const CASEWORK_CASES = [
     "effect": "new_information",
     "answered": [],
     "waitingCustomer": [],
-    "waitingInternal": [],
+    "obligations": [],
     "caseState": "open",
+    "nextActor": null,
     "nextAction": null,
     "note": "la reponse ne reponder pas a la question, le client est revenu vers nous. l'élement pour repondre se trouve en pj"
   },
@@ -169,8 +193,9 @@ export const CASEWORK_CASES = [
     "waitingCustomer": [
       "shopify_order_number"
     ],
-    "waitingInternal": [],
+    "obligations": [],
     "caseState": "open",
+    "nextActor": null,
     "nextAction": "no_reply_person_acts",
     "note": "le client relance"
   },
@@ -183,8 +208,9 @@ export const CASEWORK_CASES = [
     "waitingCustomer": [
       "shopify_order_number"
     ],
-    "waitingInternal": [],
+    "obligations": [],
     "caseState": "open",
+    "nextActor": null,
     "nextAction": null,
     "note": "le client relance pour la deuxieme fois, il est inquiet"
   },
@@ -195,8 +221,9 @@ export const CASEWORK_CASES = [
     "effect": "answers",
     "answered": [],
     "waitingCustomer": [],
-    "waitingInternal": [],
+    "obligations": [],
     "caseState": "closed_by_us",
+    "nextActor": null,
     "nextAction": null,
     "note": ""
   },
@@ -207,8 +234,9 @@ export const CASEWORK_CASES = [
     "effect": null,
     "answered": [],
     "waitingCustomer": [],
-    "waitingInternal": [],
+    "obligations": [],
     "caseState": "closed_by_us",
+    "nextActor": null,
     "nextAction": null,
     "note": ""
   },
@@ -219,8 +247,9 @@ export const CASEWORK_CASES = [
     "effect": "continuation",
     "answered": [],
     "waitingCustomer": [],
-    "waitingInternal": [],
+    "obligations": [],
     "caseState": null,
+    "nextActor": null,
     "nextAction": "no_reply",
     "note": ""
   },
@@ -231,8 +260,9 @@ export const CASEWORK_CASES = [
     "effect": "closes_case",
     "answered": [],
     "waitingCustomer": [],
-    "waitingInternal": [],
+    "obligations": [],
     "caseState": "closed_by_us",
+    "nextActor": null,
     "nextAction": null,
     "note": ""
   },
@@ -243,8 +273,9 @@ export const CASEWORK_CASES = [
     "effect": "closes_case",
     "answered": [],
     "waitingCustomer": [],
-    "waitingInternal": [],
+    "obligations": [],
     "caseState": null,
+    "nextActor": null,
     "nextAction": "no_reply",
     "note": ""
   },
@@ -255,8 +286,9 @@ export const CASEWORK_CASES = [
     "effect": "continuation",
     "answered": [],
     "waitingCustomer": [],
-    "waitingInternal": [],
+    "obligations": [],
     "caseState": null,
+    "nextActor": null,
     "nextAction": null,
     "note": "le client relance"
   },
@@ -267,8 +299,9 @@ export const CASEWORK_CASES = [
     "effect": "answers",
     "answered": [],
     "waitingCustomer": [],
-    "waitingInternal": [],
+    "obligations": [],
     "caseState": "closed_by_us",
+    "nextActor": null,
     "nextAction": null,
     "note": ""
   },
@@ -279,8 +312,9 @@ export const CASEWORK_CASES = [
     "effect": "asks_customer",
     "answered": [],
     "waitingCustomer": [],
-    "waitingInternal": [],
+    "obligations": [],
     "caseState": "open",
+    "nextActor": null,
     "nextAction": null,
     "note": ""
   },
@@ -291,8 +325,9 @@ export const CASEWORK_CASES = [
     "effect": "continuation",
     "answered": [],
     "waitingCustomer": [],
-    "waitingInternal": [],
+    "obligations": [],
     "caseState": "open",
+    "nextActor": null,
     "nextAction": "full_reply",
     "note": ""
   },
@@ -303,8 +338,9 @@ export const CASEWORK_CASES = [
     "effect": "answers",
     "answered": [],
     "waitingCustomer": [],
-    "waitingInternal": [],
+    "obligations": [],
     "caseState": "closed_by_us",
+    "nextActor": null,
     "nextAction": null,
     "note": ""
   },
@@ -315,8 +351,9 @@ export const CASEWORK_CASES = [
     "effect": "answers",
     "answered": [],
     "waitingCustomer": [],
-    "waitingInternal": [],
+    "obligations": [],
     "caseState": "closed_by_us",
+    "nextActor": null,
     "nextAction": null,
     "note": ""
   },
@@ -327,8 +364,9 @@ export const CASEWORK_CASES = [
     "effect": "closes_case",
     "answered": [],
     "waitingCustomer": [],
-    "waitingInternal": [],
+    "obligations": [],
     "caseState": null,
+    "nextActor": null,
     "nextAction": "no_reply",
     "note": ""
   },
@@ -339,8 +377,9 @@ export const CASEWORK_CASES = [
     "effect": "holding",
     "answered": [],
     "waitingCustomer": [],
-    "waitingInternal": [],
+    "obligations": [],
     "caseState": "open",
+    "nextActor": null,
     "nextAction": null,
     "note": ""
   },
@@ -351,8 +390,9 @@ export const CASEWORK_CASES = [
     "effect": "continuation",
     "answered": [],
     "waitingCustomer": [],
-    "waitingInternal": [],
+    "obligations": [],
     "caseState": null,
+    "nextActor": null,
     "nextAction": "full_reply",
     "note": "personne tres mecontente"
   },
@@ -363,8 +403,9 @@ export const CASEWORK_CASES = [
     "effect": "answers",
     "answered": [],
     "waitingCustomer": [],
-    "waitingInternal": [],
+    "obligations": [],
     "caseState": "closed_by_us",
+    "nextActor": null,
     "nextAction": null,
     "note": ""
   },
@@ -375,8 +416,9 @@ export const CASEWORK_CASES = [
     "effect": "asks_customer",
     "answered": [],
     "waitingCustomer": [],
-    "waitingInternal": [],
+    "obligations": [],
     "caseState": "open",
+    "nextActor": null,
     "nextAction": null,
     "note": ""
   },
@@ -387,8 +429,9 @@ export const CASEWORK_CASES = [
     "effect": "closes_case",
     "answered": [],
     "waitingCustomer": [],
-    "waitingInternal": [],
+    "obligations": [],
     "caseState": null,
+    "nextActor": null,
     "nextAction": "closing_reply",
     "note": ""
   },
@@ -399,8 +442,9 @@ export const CASEWORK_CASES = [
     "effect": "closes_case",
     "answered": [],
     "waitingCustomer": [],
-    "waitingInternal": [],
+    "obligations": [],
     "caseState": "closed_by_us",
+    "nextActor": null,
     "nextAction": null,
     "note": ""
   },
@@ -411,8 +455,9 @@ export const CASEWORK_CASES = [
     "effect": "new_information",
     "answered": [],
     "waitingCustomer": [],
-    "waitingInternal": [],
+    "obligations": [],
     "caseState": "open",
+    "nextActor": null,
     "nextAction": null,
     "note": "relance"
   },
@@ -423,8 +468,9 @@ export const CASEWORK_CASES = [
     "effect": "answers",
     "answered": [],
     "waitingCustomer": [],
-    "waitingInternal": [],
+    "obligations": [],
     "caseState": "open",
+    "nextActor": null,
     "nextAction": null,
     "note": ""
   },
@@ -435,8 +481,9 @@ export const CASEWORK_CASES = [
     "effect": "new_information",
     "answered": [],
     "waitingCustomer": [],
-    "waitingInternal": [],
+    "obligations": [],
     "caseState": "open",
+    "nextActor": null,
     "nextAction": "full_reply",
     "note": ""
   },
@@ -447,8 +494,9 @@ export const CASEWORK_CASES = [
     "effect": "answers",
     "answered": [],
     "waitingCustomer": [],
-    "waitingInternal": [],
+    "obligations": [],
     "caseState": "closed_by_us",
+    "nextActor": null,
     "nextAction": null,
     "note": ""
   },
@@ -459,8 +507,9 @@ export const CASEWORK_CASES = [
     "effect": "continuation",
     "answered": [],
     "waitingCustomer": [],
-    "waitingInternal": [],
+    "obligations": [],
     "caseState": "closed_by_customer",
+    "nextActor": null,
     "nextAction": "closing_reply",
     "note": ""
   },
@@ -471,8 +520,9 @@ export const CASEWORK_CASES = [
     "effect": null,
     "answered": [],
     "waitingCustomer": [],
-    "waitingInternal": [],
+    "obligations": [],
     "caseState": "closed_by_us",
+    "nextActor": null,
     "nextAction": null,
     "note": ""
   },
@@ -483,8 +533,9 @@ export const CASEWORK_CASES = [
     "effect": "answers",
     "answered": [],
     "waitingCustomer": [],
-    "waitingInternal": [],
+    "obligations": [],
     "caseState": "closed_by_us",
+    "nextActor": null,
     "nextAction": null,
     "note": ""
   },
@@ -495,8 +546,9 @@ export const CASEWORK_CASES = [
     "effect": "new_information",
     "answered": [],
     "waitingCustomer": [],
-    "waitingInternal": [],
+    "obligations": [],
     "caseState": "open",
+    "nextActor": null,
     "nextAction": null,
     "note": ""
   },
@@ -507,8 +559,9 @@ export const CASEWORK_CASES = [
     "effect": "answers",
     "answered": [],
     "waitingCustomer": [],
-    "waitingInternal": [],
+    "obligations": [],
     "caseState": "open",
+    "nextActor": null,
     "nextAction": null,
     "note": ""
   },
@@ -519,8 +572,9 @@ export const CASEWORK_CASES = [
     "effect": "closes_case",
     "answered": [],
     "waitingCustomer": [],
-    "waitingInternal": [],
+    "obligations": [],
     "caseState": "closed_by_customer",
+    "nextActor": null,
     "nextAction": "no_reply",
     "note": ""
   },
@@ -531,8 +585,9 @@ export const CASEWORK_CASES = [
     "effect": "new_information",
     "answered": [],
     "waitingCustomer": [],
-    "waitingInternal": [],
+    "obligations": [],
     "caseState": "open",
+    "nextActor": null,
     "nextAction": "full_reply",
     "note": ""
   },
@@ -543,8 +598,9 @@ export const CASEWORK_CASES = [
     "effect": "holding",
     "answered": [],
     "waitingCustomer": [],
-    "waitingInternal": [],
+    "obligations": [],
     "caseState": null,
+    "nextActor": null,
     "nextAction": null,
     "note": ""
   },
@@ -555,10 +611,14 @@ export const CASEWORK_CASES = [
     "effect": "continuation",
     "answered": [],
     "waitingCustomer": [],
-    "waitingInternal": [
-      "order_state"
+    "obligations": [
+      {
+        "owner": null,
+        "need": "order_state"
+      }
     ],
     "caseState": "open",
+    "nextActor": null,
     "nextAction": "full_reply",
     "note": ""
   },
@@ -569,8 +629,9 @@ export const CASEWORK_CASES = [
     "effect": "answers",
     "answered": [],
     "waitingCustomer": [],
-    "waitingInternal": [],
+    "obligations": [],
     "caseState": "closed_by_us",
+    "nextActor": null,
     "nextAction": null,
     "note": ""
   },
@@ -581,8 +642,9 @@ export const CASEWORK_CASES = [
     "effect": "asks_customer",
     "answered": [],
     "waitingCustomer": [],
-    "waitingInternal": [],
+    "obligations": [],
     "caseState": null,
+    "nextActor": null,
     "nextAction": null,
     "note": "demande d'adresse pour envoyer un cadeau"
   },
@@ -593,10 +655,14 @@ export const CASEWORK_CASES = [
     "effect": "continuation",
     "answered": [],
     "waitingCustomer": [],
-    "waitingInternal": [
-      "order_state"
+    "obligations": [
+      {
+        "owner": null,
+        "need": "order_state"
+      }
     ],
     "caseState": null,
+    "nextActor": null,
     "nextAction": null,
     "note": "donne son adresse"
   },
@@ -607,8 +673,9 @@ export const CASEWORK_CASES = [
     "effect": null,
     "answered": [],
     "waitingCustomer": [],
-    "waitingInternal": [],
+    "obligations": [],
     "caseState": null,
+    "nextActor": null,
     "nextAction": null,
     "note": "email pour confirmer l'expedition du cadeau"
   },
@@ -619,8 +686,9 @@ export const CASEWORK_CASES = [
     "effect": "answers",
     "answered": [],
     "waitingCustomer": [],
-    "waitingInternal": [],
+    "obligations": [],
     "caseState": null,
+    "nextActor": null,
     "nextAction": null,
     "note": ""
   },
@@ -631,8 +699,9 @@ export const CASEWORK_CASES = [
     "effect": "new_information",
     "answered": [],
     "waitingCustomer": [],
-    "waitingInternal": [],
+    "obligations": [],
     "caseState": null,
+    "nextActor": null,
     "nextAction": "no_reply_person_acts",
     "note": "Une personne doit decider quoi faire"
   },
@@ -643,8 +712,9 @@ export const CASEWORK_CASES = [
     "effect": "new_information",
     "answered": [],
     "waitingCustomer": [],
-    "waitingInternal": [],
+    "obligations": [],
     "caseState": "open",
+    "nextActor": null,
     "nextAction": null,
     "note": "Il confirm le numero de commande dans le deuxieme message, its been a while since it was sent fro delivery so likey requires human action, not just a tracking number response."
   }

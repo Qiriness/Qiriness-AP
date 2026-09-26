@@ -206,7 +206,7 @@ On a follow-up the Case Manager has read, the model is also told which of these 
 1. ~~**The mailbox cursor is missing.**~~ Committed on 26 September after the first complete read; the next poll read 1 page. That read also imported older history (347 tickets from Sept 2025–Jan 2026). Old threads are kept, and are not drafted automatically until something new arrives on them.
    ~~**Staff replying from personal inboxes were filed as customer mail.**~~ Since 26 September, a staff address writing to the customer is `outbound` (124 stored messages re-filed).
 2. **A colleague or Deret writing on a customer's thread gets a customer draft**, because the skip checks only who opened the thread.
-3. **Our outbound mail isn't read,** so questions we ask in Outlook, promises and closes from our inbox aren't recorded.
+3. **Our outbound mail is stored but not yet read by the Case Manager.** Since 26 September Sent Items is ingested (98 replies added) and staff replies from personal inboxes are filed as ours. What remains is stages 3–5: reading those messages for questions, promises and closes.
 4. **Checks owed by colleagues or partners aren't tracked,** so the closing rule ("nobody owes anything", decided 25 September) can only use the case file, which goes out of date.
 5. **Closures:** a thank-you after we've closed still gets a closing reply, and the Case Manager has no "closes the case" value.
 6. **Drafting isn't automatic, and no sending exists.**
