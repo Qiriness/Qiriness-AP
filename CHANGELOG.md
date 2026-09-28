@@ -10,6 +10,13 @@ Three sibling files carry the other halves, and this one deliberately does not d
 
 ---
 
+## Send check fix, and sending from the sync-only worker (2026-09-28)
+
+- **Fix:** the pre-send check cancelled a second reply on a ticket as `already_answered`, because it counted our earlier sent reply to an older case version. It now counts only sends for the same version or a newer one. Found on the test thread `c3efeb4e`: after the fix, the re-approved reply was created in the support mailbox's Drafts folder (held by `OUTBOUND_STOP_BEFORE_SEND`).
+- **`--also=send`:** the Render worker (`--stop-after=ingest`) can run the send stage without categorising or investigating. Only `send` is accepted.
+- **Live on 2026-09-28:** the Graph webhook. Two subscriptions were created by the Render worker once `MAIL_WEBHOOK_URL` held the full route. A customer reply was stored about 10 s after arriving (notification → `sync_mailbox` job → read).
+- Agent tests: 1,772 pass.
+
 ## Mail layer v1: provider contract, job queue, dormant Graph webhook, the send path (2026-09-28)
 
 - **Checked the brief against what exists first.** Delta sync of Inbox + Sent Items, per-folder cursors saved page by page, immutable ids and « only new mail moves a ticket » were already built. The 60 s poll already beats the proposed 5-minute reconciliation. The Case Manager's derived queues already are the « process new inbound » signal. None of that was rebuilt.

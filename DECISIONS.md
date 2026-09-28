@@ -2533,6 +2533,10 @@ The model never sends. It writes `ticket_drafts`, which holds no recipient. A re
 
 The facts come from the database the same poll has just brought up to date, because the send stage runs after ingestion and the fold.
 
+**Only a send for the same case version or a newer one counts as `already_answered` (fixed 2026-09-28).** The first version counted any earlier sent action on the ticket, so the second reply on a test thread was cancelled: the reply we sent for version 2 blocked answering version 6, although the customer's new message after it is exactly why version 6 exists.
+
+**A sync-only worker can still send.** `--stop-after=ingest --also=send` runs the send stage without any model stage. The pre-send check needs nothing the skipped stages produce, and refuses when the case version or the thread has moved. `--also` accepts only `send`, so a sync-only deployment cannot be made to spend on models by a flag.
+
 **One reply per case version.** A unique index on `(shop_id, ticket_id, case_version, action_type)` over rows not cancelled or failed. A double click, a retried request or two dashboards produce one action. A cancelled or failed one steps aside, so a person can edit and approve again. A new decision on a draft whose action has not reached `send_requested` cancels it (`draft_withdrawn`) before recording; once it has, the dashboard refuses the decision.
 
 **Requested is not confirmed.** `send_requested` is written before the send call, so a crash between the two leaves « maybe sent », never « not sent ». Any action in `draft_created` or `send_requested` is only touched after asking the mailbox where its draft is (`findSentMessage`): `sent` → leave it for confirmation, `draft` → check again, then send, `missing` → failed for a person. **Confirmation comes from ingestion:** with immutable ids the draft keeps its id when it moves to Sent Items, so the stored `graph_message_id` equals `provider_draft_id` (Internet-Message-Id is the fallback). The confirm step runs straight after the mailbox read and before the fold, which would otherwise mark our own draft `superseded_by_outbound`.

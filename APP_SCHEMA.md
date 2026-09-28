@@ -971,6 +971,7 @@ From `agent/`. Every pass has a standalone runner, most with `:dry-run`.
 
 | Command | Does |
 | --- | --- |
+| `start -- --stop-after=ingest --also=send` | the deployed sync-only worker: mailbox sync plus the send stage (approved replies → Outlook drafts or sends), no model stage. `--also` accepts only `send` |
 | `ingest:once` / `start` | one poll / the loop. Supports `--limit=N` (the newest N messages, written oldest first; the cursor is not saved); with `--stop-after=categorise`, that limit applies to both Graph ingestion and the categorisation batch |
 | `ingest:reset` | clear the delta and resume links (keeps the cutover and id type) |
 | `mail:status` | read only: the send/webhook switches, `mail_jobs` by state (dead ones with their error), outbound actions by state, subscriptions and their expiry. No Graph call |
