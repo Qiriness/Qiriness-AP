@@ -100,10 +100,14 @@ async function main() {
   const runOnce = process.argv.includes('--once');
   const limit = parseLimit(process.argv);
   const stopAfter = parseStopAfter(process.argv);
+  // `--also=send` adds named stages back to a staged run: the sync-only
+  // deployment (`--stop-after=ingest --also=send`) turns approved replies into
+  // Outlook drafts without categorising or investigating anything.
+  const also = parseAlso(process.argv);
   // Ordered membership, not a set: stopping AFTER a stage runs every stage up to
   // and including it.
   const runsThrough = (stage) =>
-    stopAfter === null || PIPELINE_STAGES.indexOf(stage) <= PIPELINE_STAGES.indexOf(stopAfter);
+    stopAfter === null || PIPELINE_STAGES.indexOf(stage) <= PIPELINE_STAGES.indexOf(stopAfter) || also.has(stage);
   const config = loadAgentConfig();
   assertGraphConfig(config);
 
@@ -219,7 +223,8 @@ async function main() {
     // a staged run leaves work deliberately undone, and that has to be visible.
     logger.info('ingest.staged_run', {
       stopAfter,
-      skipping: PIPELINE_STAGES.slice(PIPELINE_STAGES.indexOf(stopAfter) + 1)
+      also: [...also],
+      skipping: PIPELINE_STAGES.slice(PIPELINE_STAGES.indexOf(stopAfter) + 1).filter((stage) => !also.has(stage))
     });
   }
 
@@ -795,6 +800,27 @@ function parseStopAfter(argv) {
     );
   }
   return stage;
+}
+
+/**
+ * `--also=<stage>[,<stage>]`: stages to run on top of `--stop-after`.
+ *
+ * Only `send` is accepted. It needs nothing from the stages it would skip: the
+ * pre-send check reads the case version the last full run folded and the
+ * messages this poll stored, and refuses when those have moved. Opening the
+ * flag to a model stage would make a "sync-only" worker spend money, which is
+ * what the flag is for avoiding. An unknown stage throws, like `--stop-after`.
+ */
+function parseAlso(argv) {
+  const eq = argv.find((arg) => arg.startsWith('--also='));
+  if (!eq) return new Set();
+  const stages = eq.slice('--also='.length).split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
+  for (const stage of stages) {
+    if (stage !== 'send') {
+      throw new Error(`--also accepts only "send"; got "${stage}".`);
+    }
+  }
+  return new Set(stages);
 }
 
 function parseLimit(argv) {

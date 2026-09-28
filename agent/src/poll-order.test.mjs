@@ -121,6 +121,12 @@ test('the send pass runs after the fold and drafting, and before forwarding', ()
   assert.ok(stages.indexOf('send') < stages.indexOf('forward'));
 });
 
+test('--also can add back only the send stage, and runsThrough honours it', () => {
+  // A sync-only worker with --also=send must never reach a model stage.
+  assert.match(SOURCE, /if \(stage !== 'send'\) \{\s*throw new Error/);
+  assert.match(SOURCE, /const runsThrough = \(stage\) =>[\s\S]*?\|\| also\.has\(stage\);/);
+});
+
 test('a sent reply is confirmed straight after the mailbox read, before the fold', () => {
   // Otherwise the fold first marks that draft superseded by our own reply.
   const sent = SOURCE.indexOf("folder: 'sentitems'");
