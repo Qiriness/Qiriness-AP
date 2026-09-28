@@ -1099,12 +1099,30 @@ export interface TicketDraft {
   failedChecks: string[];
   /** ISO timestamp of when it was written. */
   draftedAt: string | null;
+  /** Whether approving sends the reply (OUTBOUND_SEND_ENABLED on this server). */
+  sendsOnApprove: boolean;
+  /**
+   * OUTBOUND_STOP_BEFORE_SEND: the worker stops at a reply draft in the
+   * support mailbox's Drafts folder, for a person to send from Outlook.
+   */
+  holdsInDrafts: boolean;
+  /** The newest outbound action for this draft: how far sending it got. */
+  outbound: TicketDraftOutbound | null;
+}
+
+/** Mirrors outbound_actions_state_check in supabase/migrations/07_drafting.sql. */
+export interface TicketDraftOutbound {
+  state: "approved" | "draft_created" | "send_requested" | "sent_confirmed" | "cancelled" | "failed";
+  /** Why it was cancelled (a pre-send check) or why it failed. */
+  reason: string | null;
+  at: string | null;
 }
 
 /**
  * Mirrors ticket_drafts_status_check in supabase/migrations/07_drafting.sql.
- * `sent` is written by nothing today: there is no send path. `stale` is set by
- * the fold when the case moved on since the draft was written (stage 6).
+ * `sent` is written once the outbound worker has read the reply back from
+ * Sent Items. `stale` is set by the fold when the case moved on since the
+ * draft was written (stage 6).
  */
 export type TicketDraftStatus = "pending" | "approved" | "edited" | "rejected" | "sent" | "stale";
 

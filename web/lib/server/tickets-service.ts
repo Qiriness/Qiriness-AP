@@ -39,6 +39,8 @@ import { parseTrackingCandidates } from "../../../agent/src/resolution/tracking-
 import { normaliseTrackingNumber } from "../../../scripts/lib/tracking-number.mjs";
 import { parseEmailForDisplay } from "../../../scripts/lib/email-display.mjs";
 import { createDraftRecord } from "../../../scripts/lib/draft-record.mjs";
+import { OPEN_STATES, actionFromDraft, createOutboundRecord } from "../../../scripts/lib/outbound-record.mjs";
+import { createMailJobRecord, sendDedupeKey } from "../../../scripts/lib/mail-job-record.mjs";
 import {
   listTicketAttachments,
   toPublicAttachments,
@@ -480,7 +482,7 @@ function summarisePolicy(exemplarMatch: unknown): TicketPolicy | null {
 export async function getTicketThread(shopId: string, ticketId: string): Promise<TicketThread> {
   const record = getRecord(shopId);
 
-  const [ticketRow, messageRows, draftRow, directory] = await Promise.all([
+  const [ticketRow, messageRows, draftRow, directory, actions] = await Promise.all([
     record.findForThread(ticketId),
     record.thread(ticketId),
     // Read alongside the thread rather than in the panel: the draft is what an
@@ -488,6 +490,7 @@ export async function getTicketThread(shopId: string, ticketId: string): Promise
     // first and the draft a moment later reads as the draft being missing.
     getDraftRecord(shopId).forTicket(ticketId),
     readSenderDirectory(shopId),
+    readActions(shopId, ticketId),
   ]);
 
   if (!ticketRow) {
@@ -495,7 +498,7 @@ export async function getTicketThread(shopId: string, ticketId: string): Promise
   }
 
   const messages = (messageRows as any[]).map((row) => mapMessageRow(row, directory)).sort(byTimeAsc);
-  const draft = draftRow ? mapDraftRow(draftRow) : null;
+  const draft = draftRow ? mapDraftRow(draftRow, latestActionFor(actions, draftRow.id)) : null;
 
   // The confirmed order's parcels come through the same projection the detail
   // panel reads, so a number linked in the Order block and the same number
@@ -551,9 +554,11 @@ export async function getTicketThread(shopId: string, ticketId: string): Promise
 export async function decideOnDraft(
   shopId: string,
   ticketId: string,
-  decision: { status: "approved" | "edited" | "rejected"; approvedBody: string | null }
+  decision: { status: "approved" | "edited" | "rejected"; approvedBody: string | null },
+  requestedBy: string | null = null
 ): Promise<TicketDraft> {
   const record = getDraftRecord(shopId);
+  const outbound = getOutboundRecord(shopId);
 
   // The dialog knows the ticket, not the draft id — and the draft it is showing
   // is by definition the latest reading, which is what `forTicket` returns.
@@ -566,6 +571,27 @@ export async function decideOnDraft(
   if (current.status === "stale") {
     throw new KnowledgeValidationError("This draft is out of date: the case has moved on since it was written.");
   }
+  if (current.status === "sent") {
+    throw new KnowledgeValidationError("This reply has already been sent.");
+  }
+
+  // A REPLY ALREADY ON ITS WAY. Once the send call may have been made, the
+  // decision can no longer change what the customer gets. Before that, a new
+  // decision withdraws the queued one: the worker would otherwise send the text
+  // as it was approved, not as it now reads.
+  const live = latestActionFor(await readActions(shopId, ticketId), current.id);
+  if (live && ["send_requested", "sent_confirmed"].includes(live.state)) {
+    throw new KnowledgeValidationError("This reply is already being sent.");
+  }
+  const sending = decision.status !== "rejected" && sendOnApprove();
+  if (sending && !Number.isInteger(current.case_version)) {
+    throw new KnowledgeValidationError(
+      "This draft was written before case versions existed and cannot be sent from here. Re-draft the ticket first."
+    );
+  }
+  if (live && OPEN_STATES.includes(live.state)) {
+    await outbound.cancel(live.id, "draft_withdrawn");
+  }
 
   await record.decide(current.id, {
     status: decision.status,
@@ -576,7 +602,60 @@ export async function decideOnDraft(
   });
 
   const updated = await record.forTicket(ticketId);
-  return mapDraftRow(updated);
+
+  // APPROVING SENDS, when OUTBOUND_SEND_ENABLED is on: an outbound action and
+  // a job for the worker, which checks the case again right before it sends.
+  // The key allows one live action per case version, so a double click cannot
+  // produce two emails.
+  if (sending && updated) {
+    const built = actionFromDraft(updated, { mode: "human_approved", requestedBy });
+    if (built.error || !built.row) {
+      throw new KnowledgeValidationError(`This reply cannot be sent (${built.error}).`);
+    }
+    const { created, action } = await outbound.create(built.row);
+    if (created && action) {
+      await getMailJobRecord(shopId).enqueue({
+        kind: "send_outbound",
+        dedupeKey: sendDedupeKey(action.id),
+        payload: { outboundActionId: action.id },
+      });
+    }
+  }
+
+  return mapDraftRow(updated, latestActionFor(await readActions(shopId, ticketId), updated.id));
+}
+
+/**
+ * The ticket's outbound actions, for showing and for withdrawing a queued one.
+ *
+ * WITH SENDING OFF, AN UNREADABLE TABLE IS NOT AN ERROR. Nothing can be queued
+ * then, so the draft block and the three decisions must keep working on a
+ * database without migration 47 — found on 2026-09-28, when the dialog and
+ * Approve both failed on the missing table while sending was off. With sending
+ * ON it throws: deciding without knowing what is already on its way is exactly
+ * the question the actions table exists to answer.
+ */
+async function readActions(shopId: string, ticketId: string): Promise<any[]> {
+  try {
+    return await getOutboundRecord(shopId).forTicket(ticketId);
+  } catch (error) {
+    if (sendOnApprove()) throw error;
+    console.warn("outbound actions unreadable while sending is off", (error as Error).message);
+    return [];
+  }
+}
+
+/**
+ * Whether approving a draft sends it. OUTBOUND_SEND_ENABLED, off unless set to
+ * `true`; the worker reads the same switch and claims no send job without it.
+ */
+function sendOnApprove(): boolean {
+  return process.env.OUTBOUND_SEND_ENABLED === "true";
+}
+
+/** The newest action for this draft, whatever its state. */
+function latestActionFor(actions: any[], draftId: string): any | null {
+  return (Array.isArray(actions) ? actions : []).find((action) => action.draft_id === draftId) ?? null;
 }
 
 // --- linking an order by hand ---------------------------------------------------
@@ -726,6 +805,14 @@ function getDraftRecord(shopId: string) {
   return createDraftRecord(getSupabaseClient(), { shopId });
 }
 
+function getOutboundRecord(shopId: string) {
+  return createOutboundRecord(getSupabaseClient(), { shopId });
+}
+
+function getMailJobRecord(shopId: string) {
+  return createMailJobRecord(getSupabaseClient(), { shopId });
+}
+
 /**
  * The stored draft, as the dialog needs it.
  *
@@ -733,7 +820,7 @@ function getDraftRecord(shopId: string) {
  * the rewrite in its place would hide the only honest measure of how good the
  * drafting is — see 07_drafting.sql on why the two bodies are separate columns.
  */
-function mapDraftRow(row: any): TicketDraft {
+function mapDraftRow(row: any, action: any | null = null): TicketDraft {
   const checks: any[] = Array.isArray(row.checks) ? row.checks : [];
   return {
     id: row.id,
@@ -758,6 +845,15 @@ function mapDraftRow(row: any): TicketDraft {
       .filter((check) => check && check.passed === false)
       .map((check) => String(check.detail ?? check.check ?? "unnamed check")),
     draftedAt: row.drafted_at ?? null,
+    sendsOnApprove: sendOnApprove(),
+    holdsInDrafts: process.env.OUTBOUND_STOP_BEFORE_SEND === "true",
+    outbound: action
+      ? {
+          state: action.state,
+          reason: action.cancel_reason ?? action.failure_reason ?? null,
+          at: action.closed_at ?? action.send_requested_at ?? action.created_at ?? null,
+        }
+      : null,
   };
 }
 

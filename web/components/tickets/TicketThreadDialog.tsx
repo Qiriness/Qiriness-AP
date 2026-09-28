@@ -6,6 +6,7 @@ import { knowledgeErrorMessage } from "@/lib/api/knowledge";
 import { decideOnDraft, fetchTicketThread } from "@/lib/api/tickets";
 import { formatRelativeTime } from "@/lib/relative-time";
 import { TrackingText } from "@/components/ui/TrackingText";
+import { decisionLabel, outboundLine, replyInFlight } from "@/lib/draft-outbound";
 import type { TicketListItem, TicketMessage, TicketThread, TicketTracking } from "@/lib/types";
 import styles from "./TicketThreadDialog.module.css";
 
@@ -31,8 +32,9 @@ interface TicketThreadDialogProps {
  * the thread is the evidence for that decision. Putting the conversation first
  * would mean scrolling past it to reach the only thing there is to act on.
  *
- * Read-only. Sending still happens in Outlook — this exists so *reading* a case
- * does not.
+ * Sending happens here only when OUTBOUND_SEND_ENABLED is on, and then only by
+ * approving: the worker sends, after checking the case again. Otherwise replies
+ * are still sent from Outlook — this exists so *reading* a case does not.
  */
 /**
  * What the draft section is called, by what the case file concluded.
@@ -200,9 +202,15 @@ export function TicketThreadDialog({ ticket, onClose }: TicketThreadDialogProps)
                   ? "Intermediary — sending this waits on the customer."
                   : "Intermediary — a colleague still owes this customer an answer."}
             </p>
-            {/* The three decisions a person can reach by reading. There is no
-                fourth: nothing in this codebase can send an email, so a draft
-                leaves here approved, rewritten or rejected — never sent. */}
+            {outboundLine(thread.draft.outbound) && (
+              <p className={styles.stamp} role="status">
+                {outboundLine(thread.draft.outbound)}
+              </p>
+            )}
+            {/* The three decisions a person can reach by reading. With sending
+                on, approving (or saving an edit) also sends — the buttons say
+                so. Once a reply may be out, there is nothing left to decide. */}
+            {!replyInFlight(thread.draft) && (
             <div className={styles.actions}>
               {editing ? (
                 <>
@@ -212,7 +220,7 @@ export function TicketThreadDialog({ ticket, onClose }: TicketThreadDialogProps)
                     disabled={saving !== null || edited.trim() === ""}
                     onClick={() => decide("edited")}
                   >
-                    {saving === "edited" ? "Saving…" : "Save edit"}
+                    {saving === "edited" ? "Saving…" : decisionLabel(thread.draft, "save")}
                   </button>
                   <button
                     type="button"
@@ -244,7 +252,7 @@ export function TicketThreadDialog({ ticket, onClose }: TicketThreadDialogProps)
                     disabled={saving !== null}
                     onClick={() => decide("approved")}
                   >
-                    {saving === "approved" ? "Saving…" : "Approve"}
+                    {saving === "approved" ? "Saving…" : decisionLabel(thread.draft, "approve")}
                   </button>
                   <button
                     type="button"
@@ -257,6 +265,7 @@ export function TicketThreadDialog({ ticket, onClose }: TicketThreadDialogProps)
                 </>
               )}
             </div>
+            )}
 
             {decideError && (
               <p className={styles.error} role="alert">
