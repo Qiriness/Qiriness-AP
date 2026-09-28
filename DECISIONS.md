@@ -119,6 +119,19 @@ The first complete read (§ *Progress is saved page by page*) went back to 2025-
 
 Both columns are ours, not Shopify's, and both have a `'{}'` default for a first insert, so the mapper now omits them — the same arrangement as `order_retention_mode`, which it already left alone. `shopify-shop-mapper.test.mjs` pins it. The re-delivery rule (below) is what kept the wiped cursor from corrupting tickets; it did not stop the cost of re-reading.
 
+### The webhook is a trigger; the poll is the truth (2026-09-28)
+
+The brief for the mail layer asked for Graph change notifications, a sync worker and a reconciliation every ~5 minutes. Checked against what exists: delta sync of both folders, page-by-page cursors, immutable ids and « only new mail moves a ticket » were already built and measured (sections above), and the worker already polls every 60 s, which is stricter than the 5-minute reconciliation proposed. AGENT_INTEGRATION_PLAN had locked the same rule: subscriptions, if added, poke the same engine.
+
+So a notification does exactly one thing: it queues a `sync_mailbox` job for its folder (`mail_jobs`), and the worker, which checks for due jobs every `JOB_CHECK_INTERVAL_MS`, polls early. The webhook reads no mail and decides nothing. A forged or replayed notification can at worst make the worker read a folder sooner.
+
+- **Believed only with its secret.** The subscription's clientState is generated per subscription, stored as a sha256 (`mail_subscriptions.client_state_hash`), and compared in constant time. Everything else gets a 202 and is dropped, because an error status makes Graph retry.
+- **Dedupe among queued jobs only.** A burst for one folder collapses into one job. A job already running does not absorb a new one, because its read may already be past the mail the notification is about.
+- **Dormant until deployed.** Graph only delivers to a public HTTPS endpoint, and nothing is deployed. Without `MAIL_WEBHOOK_URL` no subscription is created and the timed poll does everything.
+- **A renewal failure is loud and non-fatal:** `mail.subscription_renew_failed` at error level plus `last_error` on the row. There is no alert channel in the project yet; that line is the alert until there is one.
+- **Case processing is not a job.** The `needs_*` flags already fire only for mail we did not hold, and every LLM pass runs after ingestion has committed. A `PROCESS_MESSAGE` job beside them would be a second source of truth for the same fact (decided 2026-09-28).
+- **The columns keep their Graph names.** `graph_message_id` / `graph_conversation_id` are the unique keys of a populated table read by ~20 modules and the views. The MailProvider contract documents them as the provider's message and thread ids; a Gmail adapter fills them with Gmail's (decided 2026-09-28).
+
 ### Direction: the Inbox is not only inbound
 
 The team's replies land back in it. A message whose sender is the support mailbox is recorded `outbound`. Measured on real mail, 123 of 348 messages; before this they were stored as customer mail and sat at the end of 43% of threads, exactly where the categoriser looks for how the customer currently feels.
@@ -1911,7 +1924,7 @@ Runs last, after categorisation, because it reads the category and kind that ste
 
 The covering note is in French (internal mail, French company), and sidesteps both tu/vous and gender agreement by never addressing the reader and referring to `le message` rather than a pronoun agreeing with the category phrase.
 
-Sends via Graph's own `/forward` action, so the recipient gets the original mail with attachments intact (a CV arrives as a CV) rather than a re-composition of the stripped `body_text` we store. **Needs the `Mail.Send` Graph application permission** — the only write this worker makes to Graph; without it every attempt lands as a `failed` row rather than silently doing nothing.
+Sends via Graph's own `/forward` action, so the recipient gets the original mail with attachments intact (a CV arrives as a CV) rather than a re-composition of the stripped `body_text` we store. **Needs the `Mail.Send` Graph application permission**; without it every attempt lands as a `failed` row rather than silently doing nothing. Since 2026-09-28 it is one of two writes to Graph: the other is the outbound worker's reply (§ Sending), which never goes through here.
 
 ### A null address is the off switch
 
@@ -2499,6 +2512,40 @@ Six within-hour cross-ticket identical-body **message pairs** exist. Only **two*
 A wrong merge is unrecoverable and a wrong link is a column. The harm being prevented is that one customer receives two replies, so the minimum fix is that a ticket linked as a duplicate is skipped by the drafting queue — both threads intact, a person deciding.
 
 The candidate pool is **sender hash**, not `customer_id`: 145 of 214 tickets carry a customer and 203 carry a hash, and gating on the customer would miss **24%** of the pairs. Thirty days is the window because nothing falls outside it. And closed tickets must stay in the pool — **51 of the 72** prior tickets are already closed or resolved, because auto-close retires a thread after 28 days of silence.
+
+## Sending
+
+### One component sends a reply, and it checks again right before it does (2026-09-28)
+
+The model never sends. It writes `ticket_drafts`, which holds no recipient. A reply leaves only as an `outbound_actions` row, carried out by `agent/src/outbound/outbound-runner.mjs`, the only caller of the provider's `createReplyDraft` and `sendDraft`. Forwarding to a colleague (§ Forwarding) is the one other path that sends mail, and it never addresses a customer.
+
+**Two ways in.** A person approves or edits a draft in `/tickets` (`human_approved`), or, only with `DRAFT_ONLY=false`, the level gate's `auto_send_eligible` on a pending draft (`auto_send`). Both are behind `OUTBOUND_SEND_ENABLED`, off by default; the dashboard and the worker read the same variable, and the buttons say « Approve & send » when it is on.
+
+**The pre-send check runs at send time, not at approval.** An approval can sit for hours. `preSendCheck` refuses when:
+
+| Reason | When |
+|---|---|
+| `draft_withdrawn` | the draft is no longer approved/edited (rejected, stale under a fold, already sent); for an auto-send, no longer pending |
+| `auto_send_off` | an auto-send while `DRAFT_ONLY` is on, or the draft is not eligible |
+| `case_moved` | `case_current.version` is not the version the text was written against |
+| `customer_wrote_again` | an inbound customer message after the one being answered (a colleague's does not count; the version check covers material changes) |
+| `already_answered` | an outbound message after it (a reply from Outlook or a personal inbox), or another action of ours in `send_requested` / `sent_confirmed` |
+
+The facts come from the database the same poll has just brought up to date, because the send stage runs after ingestion and the fold.
+
+**One reply per case version.** A unique index on `(shop_id, ticket_id, case_version, action_type)` over rows not cancelled or failed. A double click, a retried request or two dashboards produce one action. A cancelled or failed one steps aside, so a person can edit and approve again. A new decision on a draft whose action has not reached `send_requested` cancels it (`draft_withdrawn`) before recording; once it has, the dashboard refuses the decision.
+
+**Requested is not confirmed.** `send_requested` is written before the send call, so a crash between the two leaves « maybe sent », never « not sent ». Any action in `draft_created` or `send_requested` is only touched after asking the mailbox where its draft is (`findSentMessage`): `sent` → leave it for confirmation, `draft` → check again, then send, `missing` → failed for a person. **Confirmation comes from ingestion:** with immutable ids the draft keeps its id when it moves to Sent Items, so the stored `graph_message_id` equals `provider_draft_id` (Internet-Message-Id is the fallback). The confirm step runs straight after the mailbox read and before the fold, which would otherwise mark our own draft `superseded_by_outbound`.
+
+**The recipient is the answered message's `from_email`, read at send time.** Nothing stores an address. For a contact-form ticket that is the address from the form, not Shopify's notification sender. The mapper already swapped it (§ Identity), and the reply sets the To line explicitly rather than trusting Graph's reply-to-sender.
+
+**Retries.** Every attempt is a `mail_jobs` row: backoff 30 s doubling to an hour with ±20 % jitter, dead after `MAIL_JOB_MAX_ATTEMPTS` (5), at which point the action is `failed`. A reply draft created but not recorded (the database failed in between) is left unsent in Drafts, and the retry makes a new one. It is a stray draft, never a second email.
+
+**A second switch stops it one step short (2026-09-28).** `OUTBOUND_STOP_BEFORE_SEND=true` runs every check and creates the threaded reply draft, then leaves the action at `draft_created`; `sendDraft` is never called. Asked for as a further line of defence while the path is tested: what the worker would send can be read in Outlook, exactly as the customer would get it, and sent by hand. A draft sent that way is confirmed from Sent Items like any other, because confirmation accepts `draft_created`. Turning the switch off does not release drafts already held (their jobs are done); a new decision on the ticket cancels the held action but leaves its Outlook draft for a person to delete.
+
+**Needs `Mail.ReadWrite`** for `createReply` and the PATCH, on top of `Mail.Send`. Granted 2026-09-28 (confirmed by the business; no send has exercised it yet).
+
+---
 
 ## Drafting
 

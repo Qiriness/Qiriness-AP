@@ -10,6 +10,20 @@ Three sibling files carry the other halves, and this one deliberately does not d
 
 ---
 
+## Mail layer v1: provider contract, job queue, dormant Graph webhook, the send path (2026-09-28)
+
+- **Checked the brief against what exists first.** Delta sync of Inbox + Sent Items, per-folder cursors saved page by page, immutable ids and « only new mail moves a ticket » were already built. The 60 s poll already beats the proposed 5-minute reconciliation. The Case Manager's derived queues already are the « process new inbound » signal. None of that was rebuilt.
+- **`MailProvider`** (`agent/src/mail/`): the contract, and `OutlookGraphAdapter` wrapping the existing Graph client and mapper. The delta poller now reads only through the provider. Graph's 400/410 on a saved link arrives as `CursorExpiredError`. Column names unchanged (decided).
+- **Migration 46** (applied 2026-09-28): `mail_jobs` with `enqueue_mail_job()` / `claim_mail_jobs()` (SKIP LOCKED, leases, retries with backoff, dead after 5), and `mail_subscriptions` (client state hashed).
+- **Migration 47** (applied 2026-09-28): `outbound_actions`, one live or sent action per case version, approved → draft_created → send_requested → sent_confirmed / cancelled / failed.
+- **Outbound worker** (`agent/src/outbound/`): the only sender of customer replies. `preSendCheck` at send time (five cancel reasons), reply draft via the provider, `send_requested` written before the call, never retried blind, confirmed from the Sent Items delta before the fold. Auto-send path built, inert while `DRAFT_ONLY` is on. New poll stage `send` after `draft`.
+- **Dashboard:** with `OUTBOUND_SEND_ENABLED=true`, « Approve & send » / « Save & send » queue an action. A new decision withdraws a queued one. A sent draft cannot be decided on (also refused in `draft-record`). The draft block says how far sending got.
+- **Graph webhook** `POST /api/webhooks/graph` (public, clientState-checked): validation handshake, one `sync_mailbox` job per folder, 202. **Subscription manager**: creates/renews per folder only with `MAIL_WEBHOOK_URL`, logs failures at error level. The worker wakes early for due jobs.
+- **`npm run mail:status`** (agent): switches, jobs, actions, subscriptions.
+- **`OUTBOUND_STOP_BEFORE_SEND`**, added the same day as a testing guard. The worker stops at the threaded reply draft in the support mailbox's Drafts folder and never sends. The buttons read « Approve & draft in Outlook ».
+- **The dashboard tolerates an unreadable `outbound_actions` while sending is off.** The dialog and Approve had both failed on the missing table before migration 47 was applied.
+- Tests: agent 1,768 pass (+42). Root suite: all new tests pass. The 19 failures are the analytics migration tests (11–37 copies of 06) that were already failing before this change. Web `tsc` and lint clean. **Live:** one `ingest:once --stop-after=customers` through the new provider read both folders from the saved cursors (1 page each) and ingested no duplicates. The missing tables were logged as warnings and did not fail the poll. **Not run:** any send, any webhook delivery.
+
 ## Current-window queue priority (2026-09-26)
 
 - Replaced the additive, VIP-influenced priority bands with deterministic branch rules while keeping the visible High / Medium / Low labels. High now means an open intervention window; Medium an unresolved service failure or overdue commitment; Low routine assistance.

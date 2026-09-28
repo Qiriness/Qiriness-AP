@@ -19,9 +19,9 @@ A customer-support operating system for **Qiriness**, a French skincare and cosm
 
 ## Scope
 
-Built: one-way Shopify → Supabase sync, a curated knowledge library for AI context, retrieval embeddings, email ingestion into conversation-threaded tickets, categorisation, customer and order resolution, the Phase 4 retrieval tools, the exemplar layer, the investigation agent that uses them, the **rules layer** — 108 approved answers that decide the route, the question to ask and the reply's skeleton per situation, including per-request rulebooks for emails that ask two things — team forwarding, four analytics panels, an agent test chat, and **reply drafting** — stored, checked and reviewable, with nothing able to send.
+Built: one-way Shopify → Supabase sync, a curated knowledge library for AI context, retrieval embeddings, email ingestion into conversation-threaded tickets (behind a provider-neutral `MailProvider`, Outlook implemented), categorisation, customer and order resolution, the Phase 4 retrieval tools, the exemplar layer, the investigation agent that uses them, the **rules layer** — 108 approved answers that decide the route, the question to ask and the reply's skeleton per situation, including per-request rulebooks for emails that ask two things — team forwarding, four analytics panels, an agent test chat, **reply drafting** — stored, checked and reviewable — and a **send path**: approved replies go out through one outbound worker, checked again at send time and confirmed from Sent Items. It is off (`OUTBOUND_SEND_ENABLED`) and has not sent anything yet.
 
-Not built: the send path, deployed webhook routes.
+Not built / not live: the send path has never run against the real mailbox; webhook routes (Shopify, Graph) are not deployed, so the Graph subscription stays dormant.
 
 ## Architecture
 
@@ -47,7 +47,9 @@ Pending: ORM/DB client for app reads (scripts use `pg` + a Supabase REST client)
 5. `npm run embed:knowledge` to embed approved knowledge chunks (`:dry-run` available).
 6. `npm test` runs the root test suite (`node --test`).
 
-**Microsoft Graph application permissions:** `Mail.Read` for ingestion, plus **`Mail.Send`** for the forwarding pass — the only write the worker makes to Graph. Without it forwarding records every attempt as `failed` rather than failing quietly; ingestion and categorisation are unaffected.
+**Microsoft Graph application permissions:** `Mail.Read` for ingestion, **`Mail.Send`** for the forwarding pass and for sending replies, and **`Mail.ReadWrite`** for the reply drafts the outbound worker creates before sending (granted 2026-09-28). Without them the affected pass records failures rather than failing quietly; ingestion and categorisation are unaffected.
+
+**Mail layer switches** (all off by default): `OUTBOUND_SEND_ENABLED=true` makes « Approve » in `/tickets` send, through the worker; `OUTBOUND_STOP_BEFORE_SEND=true` stops the worker at a threaded reply draft in the support mailbox's Drafts folder (for testing: send it from Outlook yourself); `DRAFT_ONLY=false` additionally lets eligible drafts send themselves; `MAIL_WEBHOOK_URL` (the public URL of `/api/webhooks/graph`) makes the worker keep Graph change-notification subscriptions. `JOB_CHECK_INTERVAL_MS` (5000) and `MAIL_JOB_MAX_ATTEMPTS` (5) tune the queue. `npm run mail:status` (in `agent/`) shows where it all stands.
 
 **Shopify scopes:** `read_discounts` for promotions; `read_content`/`read_online_store_pages` and `read_legal_policies` for the content catalog; `read_themes` for the theme-template content fallback. Missing optional scopes surface as a clear import error rather than silent failure. For Shopify Dev Dashboard apps, leave `SHOPIFY_ADMIN_API_ACCESS_TOKEN` blank and the scripts request a short-lived Admin token from the client ID/secret at runtime.
 

@@ -58,8 +58,17 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |   |       |                                # webhooks, the three privacy topics ->
 |   |       |                                # compliance. Reads request.text(), never
 |   |       |                                # .json() — the HMAC is over raw bytes
+|   |       |-- webhooks/graph/route.ts       # PUBLIC (clientState, not a session).
+|   |       |                                # Graph change notifications: echoes the
+|   |       |                                # validationToken, else queues one
+|   |       |                                # `sync_mailbox` job per folder and
+|   |       |                                # answers 202. Reads no mail. Dormant
+|   |       |                                # until MAIL_WEBHOOK_URL names it
+|   |       |                                # (scripts/lib/graph-notifications.mjs)
 |   |       |-- tickets/[id]/route.ts         # GET case file + order facts · PATCH status
-|   |       |-- tickets/[id]/draft/route.ts   # PATCH approve / edit / reject a draft
+|   |       |-- tickets/[id]/draft/route.ts   # PATCH approve / edit / reject a draft;
+|   |       |                                # with OUTBOUND_SEND_ENABLED, approve/edit
+|   |       |                                # also queues an outbound action + job
 |   |       |-- tickets/[id]/order/route.ts   # GET preview an order · PUT link it by hand
 |   |       |-- tickets/[id]/thread/route.ts  # GET the conversation (message bodies)
 |   |       |-- tickets/[id]/attachments/[index]/route.ts
@@ -256,7 +265,17 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |       |                                # `ticket_draft_edits`:
 |       |                                # the upsert key, the two bodies, the human
 |       |                                # decision vs the machine outcome, the review
-|       |                                # stamp. Shop-scoped. Cannot send
+|       |                                # stamp, `markSent` (only after a confirmed
+|       |                                # send). Shop-scoped. Cannot send
+|       |-- outbound-record.mjs          # THE ONLY WRITER OF `outbound_actions`:
+|       |                                # actionFromDraft, the conditional state
+|       |                                # moves, CANCEL_REASONS. Holds no recipient
+|       |-- mail-job-record.mjs          # THE ONLY WRITER OF `mail_jobs`: enqueue /
+|       |                                # claim (RPCs) / complete / fail, backoff,
+|       |                                # dead after MAIL_JOB_MAX_ATTEMPTS
+|       |-- mail-subscription-record.mjs # THE ONLY WRITER OF `mail_subscriptions`;
+|       |                                # clientState hashed, compared in constant time
+|       |-- graph-notifications.mjs      # what the Graph webhook does (pure-ish)
 |       |-- ticket-priority.mjs          # pure read-time queue band + score:
 |       |                                # current situation/action window chooses
 |       |                                # High/Medium/Low; wait, contacts, level and
@@ -357,6 +376,18 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |   |   |-- lib/ llm/            # logger (JSON, no PII) · shop · openai-client
 |   |   |                        # (records every call's tokens into) usage-sink
 |   |   |                        # -> usage-store (best-effort; never fails a pass)
+|   |   |-- mail/                # THE PROVIDER BOUNDARY. mail-provider (the
+|   |   |                        # MailProvider contract, CursorExpiredError,
+|   |   |                        # replyHtml) · outlook-graph-adapter (graph-client
+|   |   |                        # + mapper behind the contract; the poller and the
+|   |   |                        # outbound worker see nothing else) ·
+|   |   |                        # subscription-manager (Graph subscriptions per
+|   |   |                        # folder; no-op without MAIL_WEBHOOK_URL)
+|   |   |-- outbound/            # THE ONLY SENDER OF CUSTOMER REPLIES. outbound-rules
+|   |   |                        # (preSendCheck, pure) · outbound-store (reads) ·
+|   |   |                        # outbound-runner (confirmSentActions after the
+|   |   |                        # mailbox read; createAutoSendActions + runOutbound
+|   |   |                        # in the `send` stage)
 |   |   |-- ingestion/           # graph-client · graph-message-mapper · contact-form ·
 |   |   |                        # delta-poller · ticket-writer · message-embedder ·
 |   |   |                        # immutable-ids (plan + proof for `ids:translate`) ·
@@ -542,12 +573,15 @@ The recurring situations, not the answers to them. Same document/chunk mechanics
 | `ticket_messages` | one per Graph message. **`actor`** (customer / support / colleague / partner, migration 41) is stamped at arrival from the direction and the sender directory through `AGENT_ACTOR_BY_LABEL`, and moves with a re-filed direction. Envelope, cleaned `body_text`, sanitised payload, `embedding vector(1536)`, the RFC 5322 reply chain (`in_reply_to` + `reference_ids[]`, captured for deduplication — only those two headers are kept, the rest is `Received` chains carrying relay IPs), and `attachments jsonb` -- part METADATA only (name, contentType, size, isInline), never bytes. **NULL means never fetched**, `[]` means fetched and empty |
 | `ticket_investigations` | **the case file**: `established` / `unverified` / `missing` / `do_not_claim` (four separate columns), `handoff`, `context_ref`, `dropped_claims`, `evidence_gaps` (what the ticket required vs what was obtained, each entry carrying the `finding` and the `details` naming WHICH product or code it is about — diagnostic, does not move the verdict), `exemplar_match` (which recurring situation this is; recorded, never acted on), `candidate_order` (**internal**: the customer's last order as a FULL bundle, same shape and builder as `resolved_context`, fetched in the order tool's unresolved branch so it can never sit beside a confirmed order. Rendered in the human brief and the dashboard under Last order headings, **never** in the drafting prompt). `reaction_report` (**cosmetovigilance only, nullable**: the product the customer BLAMES, their words for it, and the symptoms — attribution, never causation. Lifted out of the ledger by `reactionReportFrom` because `tool_calls` drops every tool's `data`. On the detail projection, deliberately **not** on the drafting one). `findings_trace` (**nullable**: the derived findings after each tool call, in call order — one entry per `tool_calls` entry, `{call, tool, findings}`, scored over the whole need vocabulary. The replay tape: `tool_calls` drops every tool's `data` and 8 of the finding derivations read it, so a replay over `tool_calls` alone would score those as absent and stop earlier. NULL means the row predates the column and can never be filled; `[]` means the run made no calls. On no projection at all). `recommendations` (**what `recommendProducts` put forward, as the tool rendered it** — one entry per type of care, with the product lines a reply quotes. Written by code off the tool ledger like `knowledge`, never by the model, and printed FIRST in the drafting prompt, before `## Établi`; migration 32). `unique(shop_id, trigger_message_id)` |
 | `ticket_drafts` | **what the agent would send**: `body_text` (the model's, never edited) beside `approved_body_text` (a reviewer's rewrite), `source_verdict` (all three — `needs_human` gets an acknowledgement), `disposition` (`terminal` = sending closes the ticket \| `intermediary` = somebody still owes an answer; derived from the verdict + the case file's `handoff`, never model-chosen, and enforced by two check constraints), `level` (1–3; level 4 is never drafted), `status` (the human decision) kept apart from `checks_passed` (the machine outcome), `auto_send_eligible` (four conditions: level 1–2, customer not visibly unhappy, checks passed, verdict not `needs_human` — plus a subject gate, `cosmetovigilance` never qualifying unless **both** `DRAFT_ONLY` and `DRAFT_ONLY_COSMETOVIGILANCE` are false), `prompt_inputs`, `review_sent_at`. **One row per case version** (migration 45): `unique(shop_id, ticket_id, case_version)`, with `trigger_event_id` (the message that produced the version) and `stale_reason` (`case_changed` \| `superseded_by_outbound`, present exactly when `status = stale`; set by the fold, never decided on, never mailed). `trigger_message_id` is indexed, no longer the key; rows from before carry no version. **Holds no recipient and cannot send.** Owned by `scripts/lib/draft-record.mjs` |
+| `outbound_actions` | **a reply we decided to send** (migration 47): `draft_id`, `case_version`, `mode` (`human_approved` \| `auto_send`), `reply_to_message_id` (the recipient is its `from_email`, read at send time; **no address stored**), `body_text` (copied), `state` approved → draft_created → send_requested → sent_confirmed, or cancelled (`cancel_reason`) / failed, `provider_draft_id` (immutable: equals the Sent Items copy's `graph_message_id`), `provider_internet_message_id`, `sent_message_id`. **One live or sent action per `(shop_id, ticket_id, case_version, action_type)`** (unique index ignoring cancelled/failed). Owned by `scripts/lib/outbound-record.mjs`; carried out only by `agent/src/outbound/outbound-runner.mjs` |
 | `ticket_draft_edits` | **append-only record of every human rewrite**, each carrying `model_body_text` — the agent's text as it stood when the edit was made, COPIED rather than referenced, because `ticket_drafts.body_text` is replaced by the next drafting run. `source` (dashboard / mailbox), `edited_by` (null until auth exists). Capture for Phase 7 memory; nothing reads it yet |
 | `email_blocklist` | per-shop sender email/domain rules + hit counts |
 | `sender_directory` | per-shop sender email/domain → `label` (internal, contractor, logistics, courier, retailer, distributor, supplier, partner, other) + free-text `note`. Read into the case file as context and by `cluster:tickets` to tell customer demand from our own mail. Replaces `INTERNAL_EMAIL_DOMAINS`. Rows are exceptions; an unlisted sender is a consumer |
 | `spam_audit` | one row per gate decision. `outcome`, `decided_by`, `reason`, `label`, `model`, `failed_open`, sender, subject, and on a block `body_text` + `body_captured_at` + `body_expires_at` |
 | `category_forwarding` | per-category address book. A null address is the off switch |
 | `ticket_forwards` | attempt ledger, `unique(ticket_message_id)`, `sent`/`failed` + attempt counter |
+| `mail_jobs` | **the durable queue** (migration 46): `sync_mailbox` (a change notification asking for a folder read) and `send_outbound` (the attempts of one outbound action). `state` queued/running/done/dead, `retry_count`, `last_error`, `last_attempt_at`, `next_attempt_at`, `locked_until` (lease). Unique `dedupe_key` among **queued** rows only. RPCs `enqueue_mail_job()` + `claim_mail_jobs()` (SKIP LOCKED; an expired lease is reclaimable and counts as an attempt). Case processing is not a kind. Owned by `scripts/lib/mail-job-record.mjs` |
+| `mail_subscriptions` | one Graph change-notification subscription per shop + provider + folder: `subscription_id`, `client_state_hash` (never the secret), `expires_at`, `needs_renewal`, `last_error`. Owned by `scripts/lib/mail-subscription-record.mjs` |
 | `categorisation_review` | **testing artefact, not runtime**: hand-labelled sample scored against the agent |
 
 ### Projections
@@ -688,6 +722,8 @@ Written by the worker and the CLIs, read only by the Insights panels.
 | `30_customer_mix_plan.sql` | replaces the body of `insights_customer_mix()` — same signature, same four numbers — grouping the range by customer before looking up each first order, because the old shape planned as a nested loop (~1 s on a year). Copied byte-for-byte from 06, supersedes 11's copy. Applied 2026-09-18 | 01, 02, 06, 11 |
 | `31_orders_status_filter.sql` | adds `order_fulfilment_display()` and re-creates `orders_list()` + `orders_list_facets()` to filter and group on it, so the status filter selects what the pill shows (Cancelled / Refunded instead of Unfulfilled for emptied orders). Same signatures: `create or replace`, nothing dropped. Copied byte-for-byte from 06, supersedes 16's `orders_list` and 15's `orders_list_facets`. Applied 2026-09-18 | 01, 02, 06, 15, 16 |
 | `40_customer_questions.sql` | widens `support_answers_ask_check` by five `MISSING_FIELDS` keys (postal_address, preferred_remedy, receipt_confirmation, skin_type, skin_concern). No data. Applied 2026-09-26 | 05 |
+| `47_outbound_actions.sql` | `outbound_actions` (copied from 07) and the new `ticket_drafts.status` comment. No data. Applied 2026-09-28 | 04, 07, 45 |
+| `46_mail_jobs.sql` | `mail_jobs`, `enqueue_mail_job()`, `claim_mail_jobs()`, `mail_subscriptions` (copied from 04). No data. Applied 2026-09-28 | 01 |
 | `45_draft_versions.sql` | `ticket_drafts`: `case_version`, `trigger_event_id`, `stale_reason`, `stale` status, key `(shop_id, ticket_id, case_version)` (the old key dropped by its columns). Copied from 07. No data. Applied 2026-09-28 | 07 |
 | `44_rule_checks.sql` | `support_answers.checks` + its array check (copied from 05). No data. Applied 2026-09-27 | 05 |
 | `43_case_actions.sql` | `ticket_case_actions` (copied from 04). No data. Applied 2026-09-27 | 04 |
@@ -899,8 +935,10 @@ Run `npm run ingest:once` or `npm start` from `agent/`. One poll runs every pass
 | # | Pass | Module |
 | --- | --- | --- |
 | 1 | load config, assert Graph creds, resolve `shops.id` | `index.mjs` |
-| 2 | follow Graph delta pages; save the nextLink after each written page and the deltaLink at the end; a saved link Graph rejects (400/410) is dropped and the read starts over once; immutable ids asked for when `mail_id_type = immutable`. **Twice per poll: Inbox, then Sent Items** (`folder: 'sentitems'`: everything outbound, attach-only (`skippedNoTicket`), an outbound copy already stored under another Graph id skipped (`skippedCopies`)) | `ingestion/delta-poller.mjs` |
-| 3 | map messages; derive direction + normalise contact-form identity | `ingestion/graph-message-mapper.mjs` |
+| 1a | **Subscriptions** — create/renew the Graph change-notification subscription per folder; no-op without `MAIL_WEBHOOK_URL`; a failure logs `mail.subscription_renew_failed` and the poll goes on. Claimed `sync_mailbox` jobs close once both folders are read | `mail/subscription-manager.mjs`, `index.mjs` |
+| 2 | read through the **MailProvider** (`mail/outlook-graph-adapter.mjs`), follow Graph delta pages; save the nextLink after each written page and the deltaLink at the end; a saved link Graph rejects (400/410) is dropped and the read starts over once; immutable ids asked for when `mail_id_type = immutable`. **Twice per poll: Inbox, then Sent Items** (`folder: 'sentitems'`: everything outbound, attach-only (`skippedNoTicket`), an outbound copy already stored under another Graph id skipped (`skippedCopies`)) | `ingestion/delta-poller.mjs` |
+| 3 | map messages; derive direction + normalise contact-form identity (inside the adapter) | `ingestion/graph-message-mapper.mjs` |
+| 3b | **Confirm sends** — an outbound action whose draft id (or Internet-Message-Id) now has a stored Sent Items copy → `sent_confirmed`, its draft `sent`. Before the fold, so the fold never marks that draft superseded by our own reply | `outbound/outbound-runner.mjs` (`confirmSentActions`) |
 | 3a | **Known-sender exemption** — an address in `sender_directory` bypasses BOTH gates; the LLM call is skipped, not overruled. Can only keep mail, never block it | `ingestion/known-senders.mjs` |
 | 4 | **Gate 1** (no LLM): blocklist match → dropped before any write | `ingestion/spam-gate.mjs` |
 | 5 | thread survivors by conversation; embed inline (best-effort). On an existing ticket the opener (`sender_label`) and a requester that is one of our own addresses are first re-read from the whole thread (`threadIdentity`, `requesterFor`), with the thread's staff messages re-filed if either changes (`directionFor`). Then an `internal` sender with the ticket's customer in To/Cc is re-filed `outbound` (`isStaffReplyToCustomer`: staff replying from a personal inbox) | `ingestion/ticket-writer.mjs` |
@@ -916,7 +954,8 @@ Run `npm run ingest:once` or `npm start` from `agent/`. One poll runs every pass
 | 11 | **Investigation** (LLM + tools) — decompose (every investigated ticket — the structural gate was removed 2026-08-09), then 6 tool calls +2 per extra task, 4 turns, `ENABLED_SUBJECTS` only. Reads the thread **both directions** since 2026-09-21 and renders it as a labelled transcript; a one-message ticket still renders bare. A follow-up the Case Manager read gets its situation from `planSituation` and a « Dossier connu » section from `case-delta.mjs` (2026-09-25); stored `tool_calls` carry `source` (opening_move / planner / model) | `investigation/investigation-runner.mjs` |
 | 11a | **Fold** (no LLM): tickets whose fold is older than their latest message, case file or reading, 200 a poll → `case_current`, then the ticket's status from `next_actor` (`AGENT_CASE_STATUS_BY_NEXT_ACTOR`; `off` skips it) | `casework/case-current-store.mjs`, `casework/case-status.mjs` |
 | 11b | **Draft** (LLM, **off unless `DRAFT_IN_POLL=true`**): our turn on a customer message since the mailbox cutover, with a current case file and no pass pending (`pollGate`), at most `DRAFT_POLL_LIMIT` a poll → `ticket_drafts` at the case version. The fold before it stales drafts of a case that moved. Nothing is sent | `drafting/draft-runner.mjs`, `drafting/draft-context.mjs` |
-| 12 | **Forwarding** — `contact` kind + a configured address; needs `Mail.Send` | `routing/forward-runner.mjs` |
+| 11c | **Send** (no LLM; **off unless `OUTBOUND_SEND_ENABLED=true`**): auto-send actions from eligible pending drafts (only with `DRAFT_ONLY=false`), then claim `send_outbound` jobs: `preSendCheck` (draft still approved, case version unchanged, no newer customer message, nobody answered) → reply draft via the provider → `send_requested` → send (with `OUTBOUND_STOP_BEFORE_SEND=true` it stops at the reply draft, `draft_created`). A `send_requested` action is never retried blind: the mailbox is asked whether the draft went | `outbound/outbound-runner.mjs` |
+| 12 | **Forwarding** — `contact` kind + a configured address; needs `Mail.Send`. The one other path that sends mail | `routing/forward-runner.mjs` |
 | 13 | **Auto-close** — 28d idle, level 4 exempt; last so it sees this poll's timestamps | `lifecycle/auto-close.mjs` |
 | 14 | **Retention purge** — nulls expired `spam_audit` bodies; best-effort | `ingestion/spam-audit.mjs` |
 | 15 | **Cost flush** — one insert of this poll's `llm_usage` rows. Like 14, runs whatever `--stop-after` says: the calls were already billed | `llm/usage-store.mjs` |
@@ -931,6 +970,7 @@ From `agent/`. Every pass has a standalone runner, most with `:dry-run`.
 | --- | --- |
 | `ingest:once` / `start` | one poll / the loop. Supports `--limit=N` (the newest N messages, written oldest first; the cursor is not saved); with `--stop-after=categorise`, that limit applies to both Graph ingestion and the categorisation batch |
 | `ingest:reset` | clear the delta and resume links (keeps the cutover and id type) |
+| `mail:status` | read only: the send/webhook switches, `mail_jobs` by state (dead ones with their error), outbound actions by state, subscriptions and their expiry. No Graph call |
 | `actors:backfill[:dry-run] [-- --recompute]` | fill `ticket_messages.actor` on rows stored before migration 41 (empty rows only unless `--recompute`) |
 | `fold:once [-- --limit N] [--all] [--no-status]` | the fold pass alone: no mailbox read, no model call; moves statuses unless `--no-status` |
 | `case-status [-- --apply]` | the status moves stage 5c would make from the stored folds; a dry run unless `--apply` |
