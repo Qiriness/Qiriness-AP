@@ -289,3 +289,20 @@ test('approving or rejecting records no edit', () => {
     assert.equal(rec.calls.find((call) => call.kind === 'insert'), undefined);
   });
 });
+
+// --- sending (outbound_actions) ------------------------------------------------
+
+test('a sent draft is history: no decision may change it', async () => {
+  const { draft } = record({ rows: [{ ...DRAFT_ROW, status: 'sent' }] });
+  await assert.rejects(() => draft.decide('draft-1', { status: 'rejected' }), /already been sent/);
+});
+
+test('markSent moves only a draft still standing, never a rejected or stale one', async () => {
+  const { rec, draft } = record();
+  assert.equal(await draft.markSent('draft-1'), true);
+  const [call] = rec.calls;
+  assert.equal(call.kind, 'update');
+  assert.deepEqual(call.patch, { status: 'sent' });
+  assert.deepEqual(call.filters.status, { operator: 'in', value: '(pending,approved,edited)' });
+  assert.equal(call.filters.shop_id, SHOP);
+});

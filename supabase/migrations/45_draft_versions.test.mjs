@@ -41,7 +41,9 @@ test('the key moves from the message to the case version', () => {
 });
 
 test('45 carries the baseline column comments', () => {
-  for (const column of ['case_version', 'trigger_event_id', 'stale_reason', 'status', 'trigger_message_id']) {
+  // `status` is absent on purpose: 47_outbound_actions.sql rewrote that comment
+  // when `sent` gained a writer, and 47's own test holds it to the baseline.
+  for (const column of ['case_version', 'trigger_event_id', 'stale_reason', 'trigger_message_id']) {
     assert.ok(commentOf(SQL, column), `${column} comment is missing from 45`);
     assert.equal(commentOf(SQL, column), commentOf(DRAFTING, column), column);
   }

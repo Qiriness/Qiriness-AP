@@ -7,8 +7,8 @@ import { checkClause, columnsIn, literalsIn, read, tablesIn } from './_shared.te
 
 const SQL = read('07_drafting');
 
-test('it creates the draft and its edit log, and nothing else', () => {
-  assert.deepEqual(tablesIn(SQL), ['ticket_drafts', 'ticket_draft_edits']);
+test('it creates the draft, its edit log and the outbound action, and nothing else', () => {
+  assert.deepEqual(tablesIn(SQL), ['ticket_drafts', 'ticket_draft_edits', 'outbound_actions']);
 });
 
 // --- the edit log, which exists for a reason the drafts table cannot serve ----

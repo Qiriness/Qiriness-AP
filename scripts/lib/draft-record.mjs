@@ -38,11 +38,12 @@ import { COLUMNS, T } from './tables.mjs';
  *
  * NOTHING HERE CAN SEND. There is no recipient parameter on any function
  * below, and the table holds no address. `markReviewSent` stamps that a copy
- * went to the REVIEWER's own inbox; the customer is never addressed from this
- * module or from the row it writes.
+ * went to the REVIEWER's own inbox; `markSent` records a send the outbound
+ * worker already made and confirmed (scripts/lib/outbound-record.mjs). The
+ * customer is never addressed from this module or from the row it writes.
  */
 
-/** Statuses a human decision may set. `sent` is absent: no send path exists. */
+/** Statuses a human decision may set. `sent` is absent: only a confirmed send writes it (`markSent`). */
 export const DECISIONS = ['approved', 'edited', 'rejected'];
 
 /** What goes stale when the case moves: anything not yet rejected or sent (Q15 withdraws an approval). */
@@ -269,11 +270,10 @@ export function createDraftRecord(supabase, { shopId, transport = REST_TRANSPORT
      * otherwise learn about it as a Postgres error surfaced through PostgREST,
      * at which point the operator's text is already gone from the form.
      *
-     * `sent` IS NOT A DECISION ANYBODY CAN MAKE HERE. It is in the column's
-     * check constraint so the lifecycle reads completely, and it is absent from
-     * DECISIONS because nothing in this codebase can send an email to a
-     * customer — accepting it would let the dashboard record a send that never
-     * happened.
+     * `sent` IS NOT A DECISION ANYBODY CAN MAKE HERE. It is absent from
+     * DECISIONS because only a send the outbound worker has confirmed may write
+     * it (`markSent`) — accepting it here would let the dashboard record a send
+     * that never happened.
      */
     /**
      * @param {string} draftId
@@ -314,6 +314,11 @@ export function createDraftRecord(supabase, { shopId, transport = REST_TRANSPORT
       if (existing?.status === 'stale') {
         throw new Error('This draft is out of date: the case has moved on since it was written.');
       }
+      // A SENT DRAFT IS HISTORY. Rejecting or editing it now would rewrite what
+      // the customer already received.
+      if (existing?.status === 'sent') {
+        throw new Error('This reply has already been sent.');
+      }
       if (status === 'edited') {
         if (existing && normalise(existing.body_text) !== normalise(approvedBodyText)) {
           await insert(supabase, T.TICKET_DRAFT_EDITS, [
@@ -352,6 +357,23 @@ export function createDraftRecord(supabase, { shopId, transport = REST_TRANSPORT
         'id,ticket_id,draft_id,model_body_text,human_body_text,source,edited_at',
         { order: 'edited_at.desc', limit }
       );
+    },
+
+    /**
+     * The reply went out and ingestion read it back from Sent Items
+     * (outbound_actions.sent_confirmed). The one writer of `sent`: from an
+     * approval, or from `pending` for an auto-send. A draft that went stale or
+     * was rejected meanwhile keeps that status. Returns whether the row moved.
+     */
+    async markSent(draftId) {
+      const rows = await update(
+        supabase,
+        T.TICKET_DRAFTS,
+        { id: draftId, shop_id: shopId, status: { operator: 'in', value: `(${STALEABLE.join(',')})` } },
+        { status: 'sent' },
+        { select: 'id' }
+      );
+      return Array.isArray(rows) && rows.length > 0;
     },
 
     /** A review copy of this draft reached the reviewer's inbox. */

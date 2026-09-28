@@ -62,6 +62,8 @@ export const T = {
   CATEGORY_FORWARDING: 'category_forwarding',
   TICKET_FORWARDS: 'ticket_forwards',
   CATEGORISATION_REVIEW: 'categorisation_review',
+  MAIL_JOBS: 'mail_jobs',
+  MAIL_SUBSCRIPTIONS: 'mail_subscriptions',
 
   // 05_exemplars
   SUPPORT_EXEMPLARS: 'support_exemplars',
@@ -77,6 +79,7 @@ export const T = {
   // 07_drafting
   TICKET_DRAFTS: 'ticket_drafts',
   TICKET_DRAFT_EDITS: 'ticket_draft_edits',
+  OUTBOUND_ACTIONS: 'outbound_actions',
 
   // 08_testing
   AGENT_TEST_RUNS: 'agent_test_runs'
@@ -166,6 +169,10 @@ export const RPC = {
   SEARCH_KNOWLEDGE_CHUNKS_TEXT: 'search_knowledge_chunks_text',
   MATCH_SUPPORT_EXEMPLARS: 'match_support_exemplars',
   ORDER_NUMBER_RANGE: 'order_number_range',
+
+  // 04_support — the mail job queue (scripts/lib/mail-job-record.mjs).
+  ENQUEUE_MAIL_JOB: 'enqueue_mail_job',
+  CLAIM_MAIL_JOBS: 'claim_mail_jobs',
 
   // 06_analytics — the Insights panels over a date range. Every one takes the
   // range as wall-clock timestamps plus the shop's timezone; see the header of
