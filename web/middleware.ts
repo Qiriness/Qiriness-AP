@@ -38,12 +38,17 @@ import { clearSession, writeSession, type SupabaseSession } from "./lib/session-
  * not a weaker one: it covers the payload as well as the caller. Behind the gate
  * it would simply 401 every delivery, and Shopify would retry for 48 hours and
  * give up.
+ *
+ * `/api/webhooks/graph` is public for the same reason: Microsoft Graph proves
+ * itself with the clientState secret of a subscription we created, and a
+ * notification only ever queues a mailbox read.
  */
 const PUBLIC = new Set([
   "/login",
   "/api/auth/login",
   "/api/auth/logout",
   "/api/webhooks/shopify",
+  "/api/webhooks/graph",
 ]);
 
 export async function middleware(request: NextRequest) {
