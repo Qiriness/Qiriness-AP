@@ -114,6 +114,9 @@ export async function listDroppedMail(shopId: string): Promise<DroppedMail[]> {
  * what makes the derived approach affordable — the same reasoning as
  * `withoutDrafts()`.
  */
+/** Ids per request: a Graph id is ~76 characters, more once URL-encoded, so 50 stay well under 8 KB. */
+const PROMOTED_BATCH = 50;
+
 async function promotedMessageIds(
   supabase: unknown,
   shopId: string,
@@ -124,17 +127,28 @@ async function promotedMessageIds(
     return new Set();
   }
 
-  const rows = (await supabaseSelectAll(
-    supabase,
-    T.TICKET_MESSAGES,
-    {
-      shop_id: shopId,
-      graph_message_id: { operator: "in", value: `(${ids.map((id) => `"${id}"`).join(",")})` },
-    },
-    "graph_message_id"
-  )) as any[];
+  // IN BATCHES, because the list is in the URL. The « 49 » above had become 851
+  // by 2026-09-27, about 64 KB of ids, and the server refused the request
+  // (HTTP 414), which took the whole Tickets page down with it.
+  const batches: string[][] = [];
+  for (let index = 0; index < ids.length; index += PROMOTED_BATCH) {
+    batches.push(ids.slice(index, index + PROMOTED_BATCH));
+  }
+  const pages = await Promise.all(
+    batches.map((batch) =>
+      supabaseSelectAll(
+        supabase,
+        T.TICKET_MESSAGES,
+        {
+          shop_id: shopId,
+          graph_message_id: { operator: "in", value: `(${batch.map((id) => `"${id}"`).join(",")})` },
+        },
+        "graph_message_id"
+      )
+    )
+  );
 
-  return new Set(rows.map((row) => row.graph_message_id));
+  return new Set((pages.flat() as any[]).map((row) => row.graph_message_id));
 }
 
 /**
