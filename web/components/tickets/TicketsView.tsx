@@ -21,6 +21,7 @@ import { TrackingText } from "@/components/ui/TrackingText";
 import { ATTACHMENT_REASON_FALLBACK, fetchAttachmentReason } from "@/lib/attachment-reasons";
 import { promoteDroppedMail } from "@/lib/api/dropped-mail";
 import { knowledgeErrorMessage } from "@/lib/api/knowledge";
+import { decisionLabel, handedOffNotice, outboundLine, replyInFlight } from "@/lib/draft-outbound";
 import { actOnObligation, decideOnDraft, fetchTicketDetail, fetchTicketThread, setTicketStatus } from "@/lib/api/tickets";
 import { formatRelativeTime } from "@/lib/relative-time";
 import { isBacklogTicket, isClosed, summariseTickets } from "@/lib/ticket-stats";
@@ -634,6 +635,23 @@ export function TicketsView({ initialTickets, droppedMail, loadError, initialPar
     }
   }
 
+  /**
+   * An approval (or a saved edit) hands the reply to the worker, so the
+   * reviewer moves on: the next ticket in this list opens and the banner says
+   * what was handed off. The ticket itself stays in the list — it is open until
+   * a send is confirmed, and the worker may still refuse. A rejection keeps the
+   * ticket on screen: somebody still has to answer it.
+   */
+  function draftChanged(draft: TicketDraft, decided?: "approved" | "edited" | "rejected") {
+    setThread((current) => (current ? { ...current, draft } : current));
+    if ((decided !== "approved" && decided !== "edited") || !selectedTicket) return;
+    const index = activeTickets.findIndex((ticket) => ticket.id === selectedTicket.id);
+    const next = activeTickets[index + 1] ?? (index > 0 ? activeTickets[index - 1] : null) ?? null;
+    setSelectedTicketId(next?.id ?? null);
+    setActionError(null);
+    setActionNotice(handedOffNotice(draft, requesterName(selectedTicket)));
+  }
+
   if (loadError) {
     return (
       <section className={styles.section}>
@@ -743,7 +761,7 @@ export function TicketsView({ initialTickets, droppedMail, loadError, initialPar
           detailError={detailError}
           thread={thread}
           threadError={threadError}
-          onDraftChange={(draft) => setThread((current) => (current ? { ...current, draft } : current))}
+          onDraftChange={draftChanged}
           onChangeStatus={changeStatus}
           pendingId={pendingId}
           contextOpen={contextOpen}
@@ -898,6 +916,9 @@ function TicketToolbar({
   );
 }
 
+/** A draft came back from the server; `decided` says which button produced it. */
+type DraftChangeHandler = (draft: TicketDraft, decided?: "approved" | "edited" | "rejected") => void;
+
 interface TicketWorkspaceProps {
   view: TicketView;
   tickets: TicketListItem[];
@@ -908,7 +929,7 @@ interface TicketWorkspaceProps {
   detailError: string | null;
   thread: TicketThread | null;
   threadError: string | null;
-  onDraftChange: (draft: TicketDraft) => void;
+  onDraftChange: DraftChangeHandler;
   onChangeStatus: (ticket: TicketListItem, status: "open" | "closed") => void;
   pendingId: string | null;
   contextOpen: boolean;
@@ -1072,7 +1093,7 @@ function TicketDetailWorkspace({
   detailError: string | null;
   thread: TicketThread | null;
   threadError: string | null;
-  onDraftChange: (draft: TicketDraft) => void;
+  onDraftChange: DraftChangeHandler;
   onChangeStatus: (ticket: TicketListItem, status: "open" | "closed") => void;
   pendingId: string | null;
   onOpenContext: () => void;
@@ -1420,7 +1441,7 @@ function DraftResponsePanel({
   ticket: TicketListItem;
   thread: TicketThread | null;
   error: string | null;
-  onDraftChange: (draft: TicketDraft) => void;
+  onDraftChange: DraftChangeHandler;
   detail: TicketDetail | null;
   detailError: string | null;
 }) {
@@ -1446,7 +1467,7 @@ function DraftResponsePanel({
         status,
         approvedBody: status === "edited" ? edited : null,
       });
-      onDraftChange(updated);
+      onDraftChange(updated, status);
       setEditing(false);
     } catch (cause) {
       setDecideError(knowledgeErrorMessage(cause));
@@ -1505,6 +1526,12 @@ function DraftResponsePanel({
             </p>
           )}
 
+          {outboundLine(draft.outbound) && (
+            <p className={draft.outbound?.state === "cancelled" || draft.outbound?.state === "failed" ? styles.blocked : styles.related} role="status">
+              {outboundLine(draft.outbound)}
+            </p>
+          )}
+
           {draft.status !== "stale" && !draft.checksPassed && (
             <p className={styles.blocked} role="alert">
               Not sendable - {draft.failedChecks.length || "some"} mechanical {draft.failedChecks.length === 1 ? "check" : "checks"} failed:{" "}
@@ -1545,10 +1572,10 @@ function DraftResponsePanel({
 
           <div className={styles.draftFoot}>
             <div className={styles.draftActions}>
-              {draft.status === "stale" ? null : editing ? (
+              {draft.status === "stale" || replyInFlight(draft) ? null : editing ? (
                 <>
                   <Button size="sm" variant="primary" loading={saving === "edited"} disabled={saving !== null || edited.trim() === ""} onClick={() => decide("edited")}>
-                    Save edit
+                    {decisionLabel(draft, "save")}
                   </Button>
                   <Button size="sm" variant="secondary" disabled={saving !== null} onClick={() => setEditing(false)}>
                     Cancel
@@ -1574,7 +1601,7 @@ function DraftResponsePanel({
                       Reject
                     </Button>
                     <Button size="sm" variant="primary" loading={saving === "approved"} disabled={saving !== null} onClick={() => decide("approved")}>
-                      Approve
+                      {decisionLabel(draft, "approve")}
                     </Button>
                   </span>
                 </>
