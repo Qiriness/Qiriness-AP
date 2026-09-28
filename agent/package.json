@@ -8,6 +8,7 @@
     "start": "node src/index.mjs",
     "ingest:once": "node src/index.mjs --once",
     "ingest:reset": "node src/tools/reset-cursor.mjs",
+    "mail:status": "node src/tools/run-mail-status.mjs",
     "ids:translate": "node src/tools/run-translate-message-ids.mjs",
     "ids:translate:dry-run": "node src/tools/run-translate-message-ids.mjs --dry-run",
     "blocklist:add": "node src/tools/add-blocklist.mjs",

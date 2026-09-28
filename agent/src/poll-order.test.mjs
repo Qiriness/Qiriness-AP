@@ -111,3 +111,20 @@ test('casework runs before the categoriser, which is the whole point of its posi
   // sender the reading is about.
   assert.ok(declared.indexOf('customers') < declared.indexOf('casework'));
 });
+
+test('the send pass runs after the fold and drafting, and before forwarding', () => {
+  // After the fold: the pre-send check compares the approved case version with
+  // the one this poll just folded. After drafting: an auto-send follows its draft.
+  const stages = executedStages();
+  assert.ok(stages.indexOf('fold') < stages.indexOf('send'));
+  assert.ok(stages.indexOf('draft') < stages.indexOf('send'));
+  assert.ok(stages.indexOf('send') < stages.indexOf('forward'));
+});
+
+test('a sent reply is confirmed straight after the mailbox read, before the fold', () => {
+  // Otherwise the fold first marks that draft superseded by our own reply.
+  const sent = SOURCE.indexOf("folder: 'sentitems'");
+  const confirm = SOURCE.indexOf('confirmSentActions({');
+  const fold = SOURCE.indexOf('runFold({');
+  assert.ok(sent > 0 && confirm > sent && confirm < fold);
+});

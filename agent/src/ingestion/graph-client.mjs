@@ -295,8 +295,8 @@ export function createGraphClient(config, { fetchImpl = fetch } = {}) {
    * as a CV. Nothing has to be reconstructed from `ticket_messages`, which
    * stores stripped plain text and no attachments at all.
    *
-   * THE ONLY WRITE THIS WORKER MAKES to Graph, and the only call needing the
-   * `Mail.Send` application permission — everything else is Mail.Read. If that
+   * One of two paths that send mail, the other being the outbound worker's
+   * reply (below). Needs the `Mail.Send` application permission. If that
    * permission has not been granted the send fails with ErrorAccessDenied,
    * which the caller records as a failed forward rather than retrying blindly.
    *
@@ -481,6 +481,137 @@ export function createGraphClient(config, { fetchImpl = fetch } = {}) {
     return results;
   }
 
+  // --- the send path (agent/src/outbound, through the Outlook adapter) -------
+  //
+  // EVERY CALL HERE ASKS FOR IMMUTABLE IDS. A reply draft's id is what the
+  // outbound action stores, and a REST id changes when the draft moves to Sent
+  // Items on send. With the immutable form the id ingestion later reads back
+  // from Sent Items is the same string, which is how a send is confirmed.
+  //
+  // `createReply` and the PATCH need `Mail.ReadWrite`; `send` needs `Mail.Send`.
+
+  async function writeRequest(path, { method = 'POST', body = null, what }) {
+    const token = await getToken();
+    const headers = { Authorization: `Bearer ${token}`, Prefer: 'IdType="ImmutableId"' };
+    if (body !== null) headers['Content-Type'] = 'application/json';
+    const response = await fetchImpl(`${GRAPH_BASE}/users/${encodeURIComponent(mailbox)}${path}`, {
+      method,
+      headers,
+      body: body === null ? undefined : JSON.stringify(body)
+    });
+    const payload = await response.json().catch(() => null);
+    if (!response.ok) {
+      const code = payload?.error?.code || '';
+      if (WRONG_MAILBOX_CODES.has(code)) throw mailboxMismatchError(code, mailbox);
+      const error = new Error(`Graph ${what} failed: ${code || `HTTP ${response.status}`}`);
+      error.status = response.status;
+      error.code = code;
+      throw error;
+    }
+    return payload;
+  }
+
+  /**
+   * A reply draft to `graphMessageId`, threaded under it, with our body and
+   * recipients. Two calls: `createReply` makes the draft with the right
+   * headers (In-Reply-To, References, the RE: subject), then a PATCH sets the
+   * body and the To line. The To line is always given: a contact-form
+   * notification's sender is Shopify, not the customer.
+   *
+   * Returns the draft's id and Internet-Message-Id.
+   */
+  async function createReplyDraft(graphMessageId, { html, toRecipients }) {
+    if (!graphMessageId) throw new Error('createReplyDraft requires a Graph message id.');
+    const recipients = (Array.isArray(toRecipients) ? toRecipients : [toRecipients])
+      .map((address) => String(address || '').trim())
+      .filter(Boolean);
+    if (recipients.length === 0) throw new Error('createReplyDraft requires at least one recipient.');
+
+    const draft = await writeRequest(`/messages/${encodeURIComponent(graphMessageId)}/createReply`, {
+      body: {},
+      what: 'createReply'
+    });
+    if (!draft?.id) throw new Error('Graph createReply returned no draft id.');
+
+    const updated = await writeRequest(`/messages/${encodeURIComponent(draft.id)}`, {
+      method: 'PATCH',
+      body: {
+        body: { contentType: 'html', content: html },
+        toRecipients: recipients.map((address) => ({ emailAddress: { address } })),
+        ccRecipients: []
+      },
+      what: 'draft update'
+    });
+    return { id: draft.id, internetMessageId: updated?.internetMessageId || draft.internetMessageId || null };
+  }
+
+  /** Send a draft the mailbox holds. Graph answers 202 with no body. */
+  async function sendDraft(draftId) {
+    if (!draftId) throw new Error('sendDraft requires a draft id.');
+    await writeRequest(`/messages/${encodeURIComponent(draftId)}/send`, { what: 'send' });
+  }
+
+  /**
+   * Where a message we created now stands: `{ isDraft }`, or null when the
+   * mailbox no longer holds it. A sent draft is `isDraft: false` (it moved to
+   * Sent Items under the same immutable id).
+   */
+  async function getDraftState(draftId) {
+    if (!draftId) throw new Error('getDraftState requires a draft id.');
+    const token = await getToken();
+    const response = await fetchImpl(
+      `${GRAPH_BASE}/users/${encodeURIComponent(mailbox)}/messages/${encodeURIComponent(draftId)}?$select=id,isDraft,internetMessageId`,
+      { headers: { Authorization: `Bearer ${token}`, Prefer: 'IdType="ImmutableId"' } }
+    );
+    const payload = await response.json().catch(() => null);
+    const code = payload?.error?.code || '';
+    if (WRONG_MAILBOX_CODES.has(code)) throw mailboxMismatchError(code, mailbox);
+    if (response.status === 404) return null;
+    if (!response.ok) throw new Error(`Graph message request failed: ${code || `HTTP ${response.status}`}`);
+    return { isDraft: Boolean(payload?.isDraft), internetMessageId: payload?.internetMessageId || null };
+  }
+
+  // --- change-notification subscriptions (agent/src/mail/subscription-manager)
+
+  /** Subscribe to created messages in one folder. Returns Graph's subscription. */
+  async function createSubscription({ folder, notificationUrl, lifecycleNotificationUrl, clientState, expirationDateTime }) {
+    if (!DELTA_FOLDERS.has(folder)) throw new Error(`Unknown mail folder for a subscription: ${folder}`);
+    const token = await getToken();
+    const response = await fetchImpl(`${GRAPH_BASE}/subscriptions`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        changeType: 'created',
+        notificationUrl,
+        lifecycleNotificationUrl: lifecycleNotificationUrl || notificationUrl,
+        resource: `/users/${mailbox}/mailFolders('${folder}')/messages`,
+        expirationDateTime,
+        clientState
+      })
+    });
+    const payload = await response.json().catch(() => null);
+    if (!response.ok) {
+      throw new Error(`Graph subscription create failed: ${payload?.error?.code || `HTTP ${response.status}`}`);
+    }
+    return payload;
+  }
+
+  /** Push a subscription's expiry out. `gone: true` when Graph no longer has it. */
+  async function renewSubscription(subscriptionId, expirationDateTime) {
+    const token = await getToken();
+    const response = await fetchImpl(`${GRAPH_BASE}/subscriptions/${encodeURIComponent(subscriptionId)}`, {
+      method: 'PATCH',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ expirationDateTime })
+    });
+    const payload = await response.json().catch(() => null);
+    if (response.status === 404) return { gone: true };
+    if (!response.ok) {
+      throw new Error(`Graph subscription renew failed: ${payload?.error?.code || `HTTP ${response.status}`}`);
+    }
+    return { gone: false, expirationDateTime: payload?.expirationDateTime || expirationDateTime };
+  }
+
   return {
     getToken,
     getDeltaPage,
@@ -489,6 +620,11 @@ export function createGraphClient(config, { fetchImpl = fetch } = {}) {
     getAttachmentMetadata,
     listAttachmentHandles,
     getAttachmentContent,
-    forwardMessage
+    forwardMessage,
+    createReplyDraft,
+    sendDraft,
+    getDraftState,
+    createSubscription,
+    renewSubscription
   };
 }

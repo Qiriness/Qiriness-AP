@@ -1,8 +1,15 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { CURSOR_KEYS, runDeltaPoll, withDeltaLink, withoutLinks } from './delta-poller.mjs';
+import { CURSOR_KEYS, runDeltaPoll as runDeltaPollOverProvider, withDeltaLink, withoutLinks } from './delta-poller.mjs';
 import { buildSpamGate } from './spam-gate.mjs';
+import { createOutlookGraphAdapter } from '../mail/outlook-graph-adapter.mjs';
+
+// These tests script raw Graph pages. The poller reads through a MailProvider,
+// so each run wraps the fake Graph client in the real Outlook adapter: what is
+// under test is the poller plus the adapter, which is what the worker runs.
+const runDeltaPoll = ({ graphClient, ...options }) =>
+  runDeltaPollOverProvider({ ...options, provider: createOutlookGraphAdapter({ graphClient, mailbox: options.mailbox }) });
 
 function graphMessage(id, conversationId, address = 'marie@example.com') {
   return {

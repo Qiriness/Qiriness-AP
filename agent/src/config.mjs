@@ -33,6 +33,29 @@ export function loadAgentConfig(env = loadEnv(REPO_ROOT)) {
     // the forwarding pass to avoid handing a colleague their own mail back.
     internalEmailDomains: splitCsv(env.INTERNAL_EMAIL_DOMAINS),
     pollIntervalMs: Number(env.INGEST_POLL_INTERVAL_MS) || 60000,
+    // Between polls the worker looks this often for a due mail job (a change
+    // notification's `sync_mailbox`, an approved reply's `send_outbound`) and
+    // polls at once if there is one. The timed poll still runs regardless: it
+    // is the reconciliation, the job only shortens the wait.
+    jobCheckIntervalMs: Number(env.JOB_CHECK_INTERVAL_MS) || 5000,
+    // Attempts before a mail job goes `dead` and is left for a person.
+    mailJobMaxAttempts: Number(env.MAIL_JOB_MAX_ATTEMPTS) || 5,
+    // THE SEND SWITCH, OFF UNLESS SET TO `true`. With it off the outbound
+    // worker claims nothing and approving a draft in the dashboard sends
+    // nothing (the dashboard reads the same variable). Needs the Graph
+    // `Mail.ReadWrite` permission for reply drafts, and `Mail.Send`.
+    outboundSendEnabled: env.OUTBOUND_SEND_ENABLED === 'true',
+    // A SECOND LINE FOR TESTING THE SEND PATH. With it `true` the worker does
+    // everything up to the send (the checks, the threaded reply draft in the
+    // support mailbox's Drafts folder) and stops there. A person can open that
+    // draft in Outlook and send it; Sent Items confirms it as usual. Turning
+    // it off later does not release drafts already held: they stay for a
+    // person, by design.
+    outboundStopBeforeSend: env.OUTBOUND_STOP_BEFORE_SEND === 'true',
+    // The public HTTPS URL of /api/webhooks/graph. Unset (the default), no
+    // change-notification subscription is created and the timed poll does all
+    // the work. Set, the worker creates and renews one per folder.
+    mailWebhookUrl: env.MAIL_WEBHOOK_URL || '',
     // How long a dropped email's body stays readable in spam_audit before the
     // purge nulls it (04_support.sql). The decision row is kept for ever;
     // only the text expires. Lower this to shorten the review window,

@@ -171,3 +171,67 @@ test('a delta read can start from Sent Items, and an unknown folder is refused',
   assert.match(calls.at(-1).url, /mailFolders\/sentitems\/messages\/delta/);
   await assert.rejects(client.getDeltaPage(null, { folder: 'drafts' }), /Unknown mail folder/);
 });
+
+// --- the send path ----------------------------------------------------------
+
+function scriptedFetch(calls, responses) {
+  return async (url, init = {}) => {
+    if (String(url).includes('oauth2')) {
+      return { ok: true, status: 200, json: async () => ({ access_token: 'x', expires_in: 3600 }) };
+    }
+    calls.push({ url: String(url), method: init.method || 'GET', headers: init.headers || {}, body: init.body ? JSON.parse(init.body) : null });
+    const next = responses.shift() ?? { status: 200, body: {} };
+    return { ok: next.status < 400, status: next.status, json: async () => next.body };
+  };
+}
+
+test('a reply draft is createReply then a PATCH of body and recipients, asking for immutable ids', async () => {
+  const calls = [];
+  const client = createGraphClient(CONFIG, {
+    fetchImpl: scriptedFetch(calls, [
+      { status: 201, body: { id: 'AAMk-draft', internetMessageId: '<a@b>' } },
+      { status: 200, body: { id: 'AAMk-draft', internetMessageId: '<a@b>' } }
+    ])
+  });
+  const draft = await client.createReplyDraft('AAMk-customer', { html: '<p>Bonjour</p>', toRecipients: ['marie@example.com'] });
+  assert.deepEqual(draft, { id: 'AAMk-draft', internetMessageId: '<a@b>' });
+
+  const [create, patch] = calls;
+  assert.equal(create.method, 'POST');
+  assert.match(create.url, /\/users\/support%40example\.com\/messages\/AAMk-customer\/createReply$/);
+  assert.equal(create.headers.Prefer, 'IdType="ImmutableId"');
+  assert.equal(patch.method, 'PATCH');
+  assert.match(patch.url, /\/messages\/AAMk-draft$/);
+  assert.deepEqual(patch.body.toRecipients, [{ emailAddress: { address: 'marie@example.com' } }]);
+  assert.deepEqual(patch.body.body, { contentType: 'html', content: '<p>Bonjour</p>' });
+});
+
+test('a reply draft needs a recipient', async () => {
+  const client = createGraphClient(CONFIG, { fetchImpl: scriptedFetch([], []) });
+  await assert.rejects(client.createReplyDraft('m', { html: 'x', toRecipients: [' '] }), /at least one recipient/);
+});
+
+test('sending posts to the draft, and a refusal carries Graph\'s code', async () => {
+  const calls = [];
+  const ok = createGraphClient(CONFIG, { fetchImpl: scriptedFetch(calls, [{ status: 202, body: null }]) });
+  await ok.sendDraft('AAMk-draft');
+  assert.match(calls.at(-1).url, /\/messages\/AAMk-draft\/send$/);
+
+  const refused = createGraphClient(CONFIG, {
+    fetchImpl: scriptedFetch([], [{ status: 403, body: { error: { code: 'ErrorAccessDenied' } } }])
+  });
+  await assert.rejects(refused.sendDraft('AAMk-draft'), /Graph send failed: ErrorAccessDenied/);
+});
+
+test('a draft\'s state: still a draft, sent, or gone', async () => {
+  const client = createGraphClient(CONFIG, {
+    fetchImpl: scriptedFetch([], [
+      { status: 200, body: { id: 'd', isDraft: true } },
+      { status: 200, body: { id: 'd', isDraft: false, internetMessageId: '<a@b>' } },
+      { status: 404, body: { error: { code: 'ErrorItemNotFound' } } }
+    ])
+  });
+  assert.deepEqual(await client.getDraftState('d'), { isDraft: true, internetMessageId: null });
+  assert.deepEqual(await client.getDraftState('d'), { isDraft: false, internetMessageId: '<a@b>' });
+  assert.equal(await client.getDraftState('d'), null);
+});

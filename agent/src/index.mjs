@@ -43,6 +43,13 @@ import { createForwardingStore } from './routing/forwarding-store.mjs';
 import { runForwarding } from './routing/forward-runner.mjs';
 import { AUTO_CLOSE_EXEMPT_LEVELS, runAutoClose } from './lifecycle/auto-close.mjs';
 import { resolveInternalDomains } from '../../scripts/lib/message-audience.mjs';
+import { createOutlookGraphAdapter } from './mail/outlook-graph-adapter.mjs';
+import { manageSubscriptions } from './mail/subscription-manager.mjs';
+import { createMailJobRecord } from '../../scripts/lib/mail-job-record.mjs';
+import { createMailSubscriptionRecord } from '../../scripts/lib/mail-subscription-record.mjs';
+import { createOutboundRecord } from '../../scripts/lib/outbound-record.mjs';
+import { createOutboundStore } from './outbound/outbound-store.mjs';
+import { confirmSentActions, createAutoSendActions, runOutbound } from './outbound/outbound-runner.mjs';
 
 // The passes a poll runs, in the order it runs them. `--stop-after=<stage>` ends
 // the poll once that stage has run.
@@ -84,6 +91,7 @@ const PIPELINE_STAGES = [
   'investigate',
   'fold',
   'draft',
+  'send',
   'forward',
   'close'
 ];
@@ -103,6 +111,18 @@ async function main() {
   const shopId = await resolveShopId(supabase, config.shopDomain);
 
   const graphClient = createGraphClient(config);
+  // Everything that reads or writes the mailbox goes through the provider
+  // contract (mail/mail-provider.mjs); only the Outlook adapter knows Graph.
+  // Forwarding and the subscription manager still take the Graph client:
+  // both are Outlook features with no provider-neutral shape yet.
+  const provider = createOutlookGraphAdapter({ graphClient, mailbox: config.graph.mailbox });
+  // The durable queue (mail_jobs) and the send path. Both are read defensively
+  // below: a database without migrations 46-47 logs a warning and polls as before.
+  const jobs = createMailJobRecord(supabase, { shopId });
+  const outboundRecord = createOutboundRecord(supabase, { shopId });
+  const outboundStore = createOutboundStore(supabase, { shopId });
+  const outboundDraftRecord = createDraftRecord(supabase, { shopId });
+  const subscriptions = createMailSubscriptionRecord(supabase);
   // ONE ticket record for the whole poll, shared by every pass below. It is the
   // only writer of `tickets` in the codebase; each pass hands it columns and it
   // owns the flags, the filters, the lifecycle timestamps and the metadata
@@ -203,7 +223,25 @@ async function main() {
     });
   }
 
-  const poll = async () => {
+  const poll = async ({ afterIngest } = {}) => {
+    // CHANGE-NOTIFICATION SUBSCRIPTIONS, kept alive before the read. A no-op
+    // without MAIL_WEBHOOK_URL; a failure is logged at error level and the
+    // poll carries on, because a subscription is only ever a trigger.
+    try {
+      const subscribed = await manageSubscriptions({
+        graphClient,
+        subscriptions,
+        shopId,
+        webhookUrl: config.mailWebhookUrl,
+        logger
+      });
+      if (subscribed.created > 0 || subscribed.renewed > 0 || subscribed.failed > 0) {
+        logger.info('mail.subscriptions', { shopId, ...subscribed });
+      }
+    } catch (error) {
+      logger.error('mail.subscription_renew_failed', { shopId, error: error.message });
+    }
+
     // Load the blocklist each poll so newly added rules take effect immediately.
     const { gate, rulesById } = await blocklistStore.loadGate(shopId);
     // Loaded before ingestion because the related-ticket check needs it on the
@@ -229,7 +267,7 @@ async function main() {
     const guarded = exemptKnownSenders({ senderDirectory, gate, triage, logger });
 
     const ingestOptions = {
-      graphClient,
+      provider,
       store,
       record,
       cursorStore,
@@ -299,6 +337,26 @@ async function main() {
     // Inbox's.
     const sentTotals = await runDeltaPoll({ ...ingestOptions, folder: 'sentitems' });
     logger.info('ingest.poll_sent', { shopId, ...sentTotals });
+    // Both folders are read: a queued `sync_mailbox` request is satisfied.
+    await afterIngest?.();
+
+    // A REPLY WE SENT, READ BACK. Straight after Sent Items and before the
+    // fold, so the fold never marks that draft superseded by our own reply.
+    // Runs whatever `--stop-after` says: it only records what already happened.
+    try {
+      const confirmed = await confirmSentActions({
+        outboundRecord,
+        draftRecord: outboundDraftRecord,
+        store: outboundStore,
+        logger,
+        shopId
+      });
+      if (confirmed.confirmed > 0) {
+        logger.info('outbound.confirm_pass', { shopId, ...confirmed });
+      }
+    } catch (error) {
+      logger.warn('outbound.confirm_failed', { shopId, error: error.message });
+    }
 
     // Customer resolution runs as soon as the mail is stored, and before the
     // LLM passes: identity is something a ticket has from its first message —
@@ -533,6 +591,45 @@ async function main() {
       }
     }
 
+    // THE SEND PASS: after the fold (so the pre-send check reads the case
+    // version and thread this poll brought up to date) and after drafting (so
+    // an auto-send can follow its draft). Only with OUTBOUND_SEND_ENABLED;
+    // auto-send additionally needs DRAFT_ONLY=false. The ONLY pass that sends
+    // a reply to a customer.
+    if (runsThrough('send')) {
+      try {
+        const autoQueued = await createAutoSendActions({
+          store: outboundStore,
+          outboundRecord,
+          jobs,
+          draftOnly: config.draftOnly,
+          enabled: config.outboundSendEnabled,
+          logger,
+          shopId
+        });
+        const sent = await runOutbound({
+          jobs,
+          outboundRecord,
+          draftRecord: outboundDraftRecord,
+          store: outboundStore,
+          provider,
+          enabled: config.outboundSendEnabled,
+          stopBeforeSend: config.outboundStopBeforeSend,
+          draftOnly: config.draftOnly,
+          maxAttempts: config.mailJobMaxAttempts,
+          logger,
+          shopId
+        });
+        if (autoQueued.created > 0 || sent.considered > 0) {
+          logger.info('outbound.pass', { shopId, autoQueued: autoQueued.created, ...sent });
+        }
+      } catch (error) {
+        // A send failure is counted on its job; this is the pass itself failing
+        // (the database), which must not stop forwarding or auto-close.
+        logger.warn('outbound.pass_failed', { shopId, error: error.message });
+      }
+    }
+
     // Forwarding runs last: it reads the category and request_kind the step
     // above assigns. Like categorisation it selects on ticket state rather than
     // on what this poll wrote, so mail that became forwardable only because an
@@ -594,10 +691,56 @@ async function main() {
     }
   };
 
+  // One poll, with the `sync_mailbox` jobs that asked for it. They are claimed
+  // before the read and closed once both folders are read; if the read fails
+  // they are retried with backoff. A queue that cannot be read (migration 46
+  // not applied) is logged and the poll runs as it always did.
+  const pollWithJobs = async () => {
+    let syncJobs = [];
+    try {
+      syncJobs = await jobs.claim({ kinds: ['sync_mailbox'], limit: 20, leaseSeconds: 600 });
+    } catch (error) {
+      logger.warn('mail_jobs.claim_failed', { shopId, error: error.message });
+    }
+    let ingested = false;
+    try {
+      await poll({
+        afterIngest: async () => {
+          ingested = true;
+          for (const job of syncJobs) await jobs.complete(job.id).catch(() => {});
+        }
+      });
+    } catch (error) {
+      if (!ingested) {
+        for (const job of syncJobs) {
+          await jobs.fail(job, error, { maxAttempts: config.mailJobMaxAttempts }).catch(() => {});
+        }
+      }
+      throw error;
+    }
+  };
+
   if (runOnce) {
-    await poll();
+    await pollWithJobs();
     return;
   }
+
+  // Between timed polls, a due job wakes the worker early. `send_outbound`
+  // counts only while sending is on: otherwise its jobs wait untouched and
+  // would wake every check.
+  const wakeKinds = ['sync_mailbox', ...(config.outboundSendEnabled ? ['send_outbound'] : [])];
+  const waitForNextPoll = async (isStopping) => {
+    const deadline = Date.now() + config.pollIntervalMs;
+    while (!isStopping() && Date.now() < deadline) {
+      await sleep(Math.max(1, Math.min(config.jobCheckIntervalMs, deadline - Date.now())), isStopping);
+      if (isStopping()) return;
+      const due = await jobs.hasDue({ kinds: wakeKinds }).catch(() => false);
+      if (due) {
+        logger.info('ingest.woken_by_job', { shopId });
+        return;
+      }
+    }
+  };
 
   logger.info('ingest.start', { shopId, intervalMs: config.pollIntervalMs, draftOnly: config.draftOnly });
 
@@ -612,7 +755,7 @@ async function main() {
 
   while (!stopping) {
     try {
-      await poll();
+      await pollWithJobs();
     } catch (error) {
       // Keep the loop alive across transient Graph/Supabase errors.
       // `error`, not `message`: the logger reserves `message` for the event name
@@ -620,7 +763,7 @@ async function main() {
       // log at all (see lib/logger.mjs).
       logger.error('ingest.poll_failed', { error: error.message });
     }
-    await sleep(config.pollIntervalMs, () => stopping);
+    await waitForNextPoll(() => stopping);
   }
 
   logger.info('ingest.stopped', {});

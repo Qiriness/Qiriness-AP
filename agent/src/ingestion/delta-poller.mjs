@@ -1,23 +1,28 @@
 import { supabaseSelect, supabaseUpdateById } from '../../../scripts/lib/supabase-rest-client.mjs';
 
-import { mapGraphMessage } from './graph-message-mapper.mjs';
+import { CursorExpiredError } from '../mail/mail-provider.mjs';
 import { writeIngestedMessages } from './ticket-writer.mjs';
 import { allowAllGate } from './spam-gate.mjs';
 import { createAuditCollector } from './spam-audit.mjs';
 
 const MAX_PAGES_PER_RUN = 1000; // safety valve against a pathological pagination loop
 
-// One delta reconciliation pass: follow @odata.nextLink pages from the stored
-// cursor to the terminating @odata.deltaLink, writing tickets/messages as we go,
-// then persist the new deltaLink so the next run resumes exactly here. This is the
-// source-of-truth ingestion engine; a future subscription would just trigger it.
+// One delta reconciliation pass: follow the provider's pages from the stored
+// cursor to the terminating delta cursor, writing tickets/messages as we go,
+// then persist it so the next run resumes exactly here. This is the
+// source-of-truth ingestion engine; a change notification only triggers it
+// sooner (mail_jobs `sync_mailbox`).
+//
+// It reads through a MailProvider (agent/src/mail/mail-provider.mjs) and sees
+// no provider payload: items arrive already mapped. The cursor strings are the
+// provider's own (Graph nextLink / deltaLink for Outlook), stored as given.
 //
 // The deterministic spam gate runs *before* writing, so blocklisted senders are
 // dropped and never stored. recordSpamHits (optional) persists per-rule block counts.
 // auditStore (optional) persists one spam_audit row per gate decision — the only
 // record a dropped email leaves, since it never reaches tickets/ticket_messages.
 export async function runDeltaPoll({
-  graphClient,
+  provider,
   store,
   record,
   cursorStore,
@@ -93,11 +98,10 @@ export async function runDeltaPoll({
     }
   }
 
-  // Gate, fetch attachment metadata and write one batch of raw Graph messages.
-  async function processBatch(messages) {
+  // Gate, fetch attachment metadata and write one batch of mapped messages.
+  async function processBatch(items) {
     const kept = [];
-    for (const message of messages) {
-      const item = mapGraphMessage(message, { mailbox, direction: folder === 'sentitems' ? 'outbound' : undefined });
+    for (const item of items) {
       // Our own replies skip the gate entirely: the blocklist matches on sender,
       // and blocking the support address would drop every reply the team sent.
       if (!item.removed && item.message?.direction === 'inbound') {
@@ -128,7 +132,7 @@ export async function runDeltaPoll({
       kept.push(item);
     }
 
-    totals.attachmentsFetched += await fetchAttachmentMetadata(graphClient, kept, logger);
+    totals.attachmentsFetched += await fetchAttachmentMetadata(provider, kept, logger);
 
     const counts = await writeIngestedMessages(store, record, shopId, kept, {
       triage,
@@ -164,20 +168,21 @@ export async function runDeltaPoll({
   let url = cursor.resumeLink || cursor.deltaLink || null;
   let savedLink = url ? (cursor.resumeLink ? 'resume' : 'delta') : null;
 
-  // A SAVED LINK GRAPH REFUSES IS DROPPED, AND THE READ STARTS OVER, once.
-  // Starting over is safe: mail already stored does not retrigger its ticket
-  // (DECISIONS.md § "Re-delivery is not arrival"). Only the first request of a
-  // poll can hit this; a nextLink Graph just handed us failing is a real error.
+  // A SAVED LINK THE PROVIDER REFUSES IS DROPPED, AND THE READ STARTS OVER,
+  // once. Starting over is safe: mail already stored does not retrigger its
+  // ticket (DECISIONS.md § "Re-delivery is not arrival"). Only the first
+  // request of a poll can hit this; a next cursor handed over seconds earlier
+  // failing is a real error.
   async function firstPage(options) {
     try {
-      return await graphClient.getDeltaPage(url, { ...options, folder });
+      return await provider.getChanges(folder, url, options);
     } catch (error) {
-      if (!savedLink || !error.linkRejected) throw error;
+      if (!savedLink || !(error instanceof CursorExpiredError)) throw error;
       logger?.warn?.('ingest.cursor_expired', { shopId, folder, link: savedLink, status: error.status, code: error.code });
       await cursorStore.clearLinks(shopId, folder);
       url = null;
       savedLink = null;
-      return graphClient.getDeltaPage(null, { ...options, folder });
+      return provider.getChanges(folder, null, options);
     }
   }
 
@@ -191,11 +196,11 @@ export async function runDeltaPoll({
   // is stored only after its page is written: resuming re-reads nothing that
   // was not stored, and replaying a page that was is harmless.
   for (let page = 0; page < MAX_PAGES_PER_RUN; page += 1) {
-    const { messages, nextLink, deltaLink } =
-      page === 0 ? await firstPage({ immutableIds }) : await graphClient.getDeltaPage(url, { immutableIds, folder });
+    const { items, nextCursor: nextLink, deltaCursor: deltaLink } =
+      page === 0 ? await firstPage({ stableIds: immutableIds }) : await provider.getChanges(folder, url, { stableIds: immutableIds });
     totals.pages += 1;
 
-    await processBatch(messages);
+    await processBatch(items);
 
     if (deltaLink) {
       await cursorStore.saveDeltaLink(shopId, deltaLink, folder);
@@ -240,23 +245,25 @@ export async function runDeltaPoll({
         throw new Error(`Delta poll exceeded ${MAX_PAGES_PER_RUN} pages; aborting to avoid a loop.`);
       }
       const result =
-        page === 0 ? await firstPage({ top: limit, immutableIds }) : await graphClient.getDeltaPage(url, { immutableIds, folder });
+        page === 0
+          ? await firstPage({ top: limit, stableIds: immutableIds })
+          : await provider.getChanges(folder, url, { stableIds: immutableIds });
       totals.pages += 1;
-      collected.push(...result.messages.slice(0, limit - collected.length));
+      collected.push(...result.items.slice(0, limit - collected.length));
 
       if (collected.length >= limit) {
         limitReached = true;
         break;
       }
-      if (result.deltaLink) {
-        deltaLink = result.deltaLink;
+      if (result.deltaCursor) {
+        deltaLink = result.deltaCursor;
         break;
       }
-      if (!result.nextLink) {
+      if (!result.nextCursor) {
         logger?.warn?.('ingest.delta_page_without_links', { shopId });
         break;
       }
-      url = result.nextLink;
+      url = result.nextCursor;
     }
 
     await processBatch(oldestFirst(collected));
@@ -274,15 +281,15 @@ export async function runDeltaPoll({
 }
 
 /**
- * Raw Graph messages sorted by when they arrived, oldest first.
+ * Mapped messages sorted by when they arrived, oldest first.
  *
- * Stable, and undated entries (a delta `@removed` tombstone carries no dates)
- * go last in their original order: they create no ticket, so where they fall
- * cannot change which message opened a thread.
+ * Stable, and undated entries (a deletion tombstone carries no dates) go last
+ * in their original order: they create no ticket, so where they fall cannot
+ * change which message opened a thread.
  */
-export function oldestFirst(messages) {
-  const dateOf = (message) => message?.receivedDateTime ?? message?.sentDateTime ?? null;
-  return messages
+export function oldestFirst(items) {
+  const dateOf = (item) => item?.message?.received_at ?? item?.message?.sent_at ?? null;
+  return items
     .map((message, index) => ({ message, index, at: dateOf(message) }))
     .sort((a, b) => {
       if (a.at && b.at && a.at !== b.at) return a.at < b.at ? -1 : 1;
@@ -324,8 +331,8 @@ export function oldestFirst(messages) {
  * row for the same configuration reason, so it is logged once per message with
  * its own event rather than buried as a generic warning.
  */
-async function fetchAttachmentMetadata(graphClient, items, logger) {
-  if (typeof graphClient?.getAttachmentMetadata !== 'function') {
+async function fetchAttachmentMetadata(provider, items, logger) {
+  if (typeof provider?.getAttachmentMetadata !== 'function') {
     return 0;
   }
 
@@ -335,7 +342,7 @@ async function fetchAttachmentMetadata(graphClient, items, logger) {
       continue;
     }
     try {
-      const attachments = await graphClient.getAttachmentMetadata(item.graphMessageId);
+      const attachments = await provider.getAttachmentMetadata(item.graphMessageId);
       // null means the mailbox no longer holds the message. Leave the column
       // null too: both mean "not learned", and inventing `[]` would claim we
       // looked and found nothing attached to a mail that says it has something.
