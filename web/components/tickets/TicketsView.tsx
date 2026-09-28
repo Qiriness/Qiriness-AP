@@ -748,6 +748,7 @@ export function TicketsView({ initialTickets, droppedMail, loadError, initialPar
           onCancelSelecting={stopSelectingMail}
           onTogglePick={toggleMailPick}
           onClearPicked={clearPickedMail}
+          onPickAll={setPickedMailIds}
           onRestoreCleared={restoreClearedMail}
         />
       ) : (
@@ -1124,25 +1125,45 @@ function TicketDetailWorkspace({
     writeDraftHeight(height);
   }
 
+  // THE DRAG WRITES THE PANEL'S STYLE, NOT STATE. Setting state on every
+  // pointermove re-rendered the conversation, the draft and its explanation
+  // dozens of times a second, which is what made the handle lag. React learns
+  // the height once, on release. Moves are coalesced to one per frame.
   function startDrag(event: ReactPointerEvent<HTMLDivElement>) {
     const frame = frameRef.current;
-    if (!frame || event.button !== 0) return;
+    const panel = frame?.querySelector<HTMLElement>(`.${styles.draftPanel}`);
+    if (!frame || !panel || event.button !== 0) return;
     event.preventDefault();
     const handle = event.currentTarget;
     handle.setPointerCapture(event.pointerId);
     const bottom = frame.getBoundingClientRect().bottom;
     let latest = draftHeight;
+    let frameRequest = 0;
+    let pointerY = event.clientY;
 
+    // Only once the pointer actually moves: a plain click must leave the panel
+    // exactly as React rendered it, since nothing is committed then.
+    const apply = () => {
+      frameRequest = 0;
+      latest = clampDraftHeight(bottom - pointerY - DRAFT_HANDLE_HEIGHT / 2);
+      panel.classList.add(styles.draftPanelSized);
+      panel.style.maxHeight = "none";
+      panel.style.height = `${latest}px`;
+    };
     const move = (moveEvent: PointerEvent) => {
-      latest = clampDraftHeight(bottom - moveEvent.clientY - DRAFT_HANDLE_HEIGHT / 2);
-      setDraftHeight(latest);
+      pointerY = moveEvent.clientY;
+      if (!frameRequest) frameRequest = window.requestAnimationFrame(apply);
     };
     const stop = () => {
       handle.removeEventListener("pointermove", move);
       handle.removeEventListener("pointerup", stop);
       handle.removeEventListener("pointercancel", stop);
+      if (frameRequest) {
+        window.cancelAnimationFrame(frameRequest);
+        apply();
+      }
       document.body.style.userSelect = "";
-      writeDraftHeight(latest);
+      if (latest !== draftHeight) commitDraftHeight(latest);
     };
 
     document.body.style.userSelect = "none";
@@ -2553,6 +2574,7 @@ function IrrelevantWorkspace({
   onTogglePick,
   onClearPicked,
   onRestoreCleared,
+  onPickAll,
 }: {
   mail: DroppedMail[];
   selectedMail: DroppedMail | null;
@@ -2570,7 +2592,13 @@ function IrrelevantWorkspace({
   onTogglePick: (id: string) => void;
   onClearPicked: () => void;
   onRestoreCleared: () => void;
+  /** Replaces the ticks with these ids: every shown row, or none. */
+  onPickAll: (ids: string[]) => void;
 }) {
+  // "All" means every row the list shows — a search narrows what Select all
+  // ticks, so it never clears mail the reviewer could not see.
+  const allPicked = mail.length > 0 && mail.every((item) => picked.has(item.id));
+
   return (
     <div className={`${styles.workspace} ${styles.irrelevantWorkspace} ${selectedMail ? styles.hasSelection : ""}`}>
       <aside className={styles.listPane} aria-label="Irrelevant email list">
@@ -2586,6 +2614,9 @@ function IrrelevantWorkspace({
           <div className={styles.listActions}>
             {selecting ? (
               <>
+                <Button size="sm" variant="tertiary" disabled={mail.length === 0} onClick={() => onPickAll(allPicked ? [] : mail.map((item) => item.id))}>
+                  {allPicked ? "Select none" : "Select all"}
+                </Button>
                 <Button size="sm" variant="secondary" disabled={picked.size === 0} onClick={onClearPicked}>
                   {picked.size > 0 ? `Clear ${picked.size}` : "Clear"}
                 </Button>

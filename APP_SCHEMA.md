@@ -167,6 +167,9 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |   |   |-- tracking-links.ts    # isomorphic: the one import of scripts/lib's
 |   |   |                        # splitTrackingText into the browser bundle
 |   |   |-- ticket-stats.ts      # isomorphic: summariseTickets + isClosed
+|   |   |-- draft-outbound.ts    # what Approve does, worded once for TicketsView +
+|   |   |                        # TicketThreadDialog: outbound line, button labels,
+|   |   |                        # the hand-off notice
 |   |   |-- ticket-detail.ts     # pure, 3 projections: case file -> 3 blocks ·
 |   |   |                        # resolved_context -> order owner / status / tracking lines ·
 |   |   |                        # evidence_gaps -> the facts behind the findings

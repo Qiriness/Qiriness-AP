@@ -195,6 +195,10 @@
   min-height: 0;
   display: grid;
   grid-template-columns: minmax(320px, 360px) minmax(0, 1fr) minmax(300px, 340px);
+  /* The row is the workspace's height, whatever the panes hold. Left as an
+     auto row it grew with the tallest pane, so the draft panel's maximum
+     depended on which ticket was open. */
+  grid-template-rows: minmax(0, 1fr);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   background: var(--surface);
