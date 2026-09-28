@@ -1961,3 +1961,25 @@
 .orderLink:hover {
   color: var(--accent-700, var(--text-strong));
 }
+
+/* The case section: open checks, one card each; overdue gets the warning edge. */
+.caseChecks {
+  display: grid;
+  gap: 8px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.caseCheck,
+.caseCheckOverdue {
+  display: grid;
+  gap: 4px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.caseCheckOverdue {
+  border-left: 3px solid var(--warning);
+}

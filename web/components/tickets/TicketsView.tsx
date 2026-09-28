@@ -21,10 +21,14 @@ import { TrackingText } from "@/components/ui/TrackingText";
 import { ATTACHMENT_REASON_FALLBACK, fetchAttachmentReason } from "@/lib/attachment-reasons";
 import { promoteDroppedMail } from "@/lib/api/dropped-mail";
 import { knowledgeErrorMessage } from "@/lib/api/knowledge";
-import { decideOnDraft, fetchTicketDetail, fetchTicketThread, setTicketStatus } from "@/lib/api/tickets";
+import { actOnObligation, decideOnDraft, fetchTicketDetail, fetchTicketThread, setTicketStatus } from "@/lib/api/tickets";
 import { formatRelativeTime } from "@/lib/relative-time";
 import { isBacklogTicket, isClosed, summariseTickets } from "@/lib/ticket-stats";
 import type {
+  CaseActor,
+  TicketCaseChange,
+  TicketCaseState,
+  TicketObligation,
   DroppedMail,
   InvestigationVerdict,
   TicketPolicy,
@@ -749,6 +753,10 @@ export function TicketsView({ initialTickets, droppedMail, loadError, initialPar
             setTickets((current) => current.map((row) => (row.id === change.ticket.id ? change.ticket : row)));
             setDetail(change.detail);
           }}
+          onCaseStateChanged={(change) => {
+            setTickets((current) => current.map((row) => (row.id === change.ticket.id ? change.ticket : row)));
+            setDetail((current) => (current ? { ...current, caseState: change.caseState } : current));
+          }}
         />
       )}
     </section>
@@ -907,6 +915,7 @@ interface TicketWorkspaceProps {
   onOpenContext: () => void;
   onCloseContext: () => void;
   onOrderChanged: (change: TicketOrderChange) => void;
+  onCaseStateChanged: (change: TicketCaseChange) => void;
 }
 
 function TicketWorkspace({
@@ -926,6 +935,7 @@ function TicketWorkspace({
   onOpenContext,
   onCloseContext,
   onOrderChanged,
+  onCaseStateChanged,
 }: TicketWorkspaceProps) {
   return (
     <div className={`${styles.workspace} ${selectedTicket ? styles.hasSelection : ""}`}>
@@ -952,7 +962,7 @@ function TicketWorkspace({
 
       <aside className={styles.contextPane} aria-label="Ticket context">
         {selectedTicket ? (
-          <TicketContextPane ticket={selectedTicket} detail={detail} error={detailError} onOrderChanged={onOrderChanged} />
+          <TicketContextPane ticket={selectedTicket} detail={detail} error={detailError} onOrderChanged={onOrderChanged} onCaseStateChanged={onCaseStateChanged} />
         ) : (
           <EmptyDetail title="No ticket selected" body="Customer, ticket, order and investigation context appears here." />
         )}
@@ -966,7 +976,7 @@ function TicketWorkspace({
               <h2 id="ticket-context-title">Ticket context</h2>
               <Button size="sm" variant="tertiary" onClick={onCloseContext}>Close</Button>
             </header>
-            <TicketContextPane ticket={selectedTicket} detail={detail} error={detailError} onOrderChanged={onOrderChanged} />
+            <TicketContextPane ticket={selectedTicket} detail={detail} error={detailError} onOrderChanged={onOrderChanged} onCaseStateChanged={onCaseStateChanged} />
           </aside>
         </div>
       )}
@@ -1459,7 +1469,7 @@ function DraftResponsePanel({
         {draft && (
           <div className={styles.draftLabels}>
             <span className={styles.aiDraftLabel}>AI draft</span>
-            <span className={styles.draftStatus}>{draft.status}</span>
+            <span className={styles.draftStatus}>{draft.status === "stale" ? "out of date" : draft.status}</span>
           </div>
         )}
       </div>
@@ -1487,7 +1497,15 @@ function DraftResponsePanel({
             </div>
           )}
 
-          {!draft.checksPassed && (
+          {draft.status === "stale" && (
+            <p className={styles.blocked} role="status">
+              {draft.staleReason === "superseded_by_outbound"
+                ? "Out of date - a reply has been sent from the mailbox since this was written."
+                : "Out of date - the case has moved on since this was written. A new draft follows when it is our turn to reply."}
+            </p>
+          )}
+
+          {draft.status !== "stale" && !draft.checksPassed && (
             <p className={styles.blocked} role="alert">
               Not sendable - {draft.failedChecks.length || "some"} mechanical {draft.failedChecks.length === 1 ? "check" : "checks"} failed:{" "}
               {draft.failedChecks.join("; ") || "see the draft record"}.
@@ -1527,7 +1545,7 @@ function DraftResponsePanel({
 
           <div className={styles.draftFoot}>
             <div className={styles.draftActions}>
-              {editing ? (
+              {draft.status === "stale" ? null : editing ? (
                 <>
                   <Button size="sm" variant="primary" loading={saving === "edited"} disabled={saving !== null || edited.trim() === ""} onClick={() => decide("edited")}>
                     Save edit
@@ -1631,11 +1649,13 @@ function TicketContextPane({
   detail,
   error,
   onOrderChanged,
+  onCaseStateChanged,
 }: {
   ticket: TicketListItem;
   detail: TicketDetail | null;
   error: string | null;
   onOrderChanged: (change: TicketOrderChange) => void;
+  onCaseStateChanged: (change: TicketCaseChange) => void;
 }) {
   const results = detail?.results ?? null;
   const order = detail?.order ?? results?.candidateOrder ?? null;
@@ -1770,6 +1790,10 @@ function TicketContextPane({
         )}
       </ContextSection>
 
+      {detail && (
+        <CaseSection ticketId={ticket.id} caseState={detail.caseState ?? null} onChanged={onCaseStateChanged} />
+      )}
+
       <ContextSection title="Required action">
         {error ? (
           <p className={styles.inlineError} role="alert">{error}</p>
@@ -1795,6 +1819,119 @@ function TicketContextPane({
           first, and comes here when one of them surprises them. */}
       <PolicySection policy={detail?.policy ?? null} />
     </div>
+  );
+}
+
+/** Who acts next, as a person reads it. */
+const NEXT_ACTOR_WORDS: Record<CaseActor, string> = {
+  customer: "The customer",
+  support: "Us (support)",
+  colleague: "A colleague",
+  partner: "An operations partner",
+  nobody: "Nobody: nothing is owed",
+};
+
+const OWNER_WORDS: Record<TicketObligation["owner"], string> = {
+  support: "Us",
+  colleague: "A colleague",
+  partner: "An operations partner",
+};
+
+/**
+ * The case as it stands (stage 5 of the case-state plan): who acts next, the
+ * checks our side owes, and what the customer still owes us.
+ *
+ * READ-ONLY EXCEPT FOR ONE ACTION. A check settled outside email (by phone, in
+ * Shopify, by Deret) is marked done here, or cancelled when it no longer
+ * matters. That writes one row and re-folds the case; it changes no status and
+ * sends nothing. Overdue is an alert only, from the shop's parameters.
+ *
+ * SHOWN BESIDE THE STATUS, NOT INSTEAD OF IT: the status still follows the
+ * investigation until « who acts next » has proved itself on real tickets.
+ */
+function CaseSection({
+  ticketId,
+  caseState,
+  onChanged,
+}: {
+  ticketId: string;
+  caseState: TicketCaseState | null;
+  onChanged: (change: TicketCaseChange) => void;
+}) {
+  const [pending, setPending] = useState<string | null>(null);
+  const [failure, setFailure] = useState<string | null>(null);
+
+  if (!caseState) {
+    return (
+      <ContextSection title="Case">
+        <p className={styles.muted}>Not read yet: the worker folds new cases on its next poll.</p>
+      </ContextSection>
+    );
+  }
+
+  const open = caseState.obligations.filter((o) => o.status === "pending");
+  // A rule's later steps, in order: owed by nobody yet, shown so the next move is known.
+  const queued = caseState.obligations
+    .filter((o) => o.status === "queued")
+    .sort((a, b) => (a.ruleStep?.step ?? 0) - (b.ruleStep?.step ?? 0));
+  const act = async (obligation: TicketObligation, action: "fulfilled" | "cancelled") => {
+    setPending(obligation.id);
+    setFailure(null);
+    try {
+      onChanged(await actOnObligation(ticketId, obligation.id, action));
+    } catch (cause) {
+      setFailure(knowledgeErrorMessage(cause));
+    } finally {
+      setPending(null);
+    }
+  };
+
+  return (
+    <ContextSection title="Case">
+      <InfoList rows={[["Next", caseState.nextActor ? NEXT_ACTOR_WORDS[caseState.nextActor] : "Unknown"]]} />
+      {open.length > 0 && (
+        <ul className={styles.caseChecks} aria-label="Open checks">
+          {open.map((obligation) => (
+            <li key={obligation.id} className={obligation.overdue ? styles.caseCheckOverdue : styles.caseCheck}>
+              <p className={styles.actionText}>
+                {OWNER_WORDS[obligation.owner]}: {obligation.needLabel}
+              </p>
+              <p className={styles.reason}>
+                {obligation.workingDaysOpen === null
+                  ? "Open"
+                  : `Open ${obligation.workingDaysOpen} working day${obligation.workingDaysOpen === 1 ? "" : "s"}`}
+                {obligation.overdue ? " · overdue" : ""}
+                {obligation.ruleStep
+                  ? ` · step ${obligation.ruleStep.step} of ${obligation.ruleStep.steps} (${obligation.ruleStep.rule})`
+                  : ""}
+              </p>
+              <div className={styles.orderActions}>
+                <Button size="sm" variant="secondary" disabled={pending !== null} onClick={() => act(obligation, "fulfilled")}>
+                  Mark done
+                </Button>
+                <Button size="sm" variant="tertiary" disabled={pending !== null} onClick={() => act(obligation, "cancelled")}>
+                  No longer needed
+                </Button>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+      {queued.length > 0 && (
+        <p className={styles.reason}>
+          Then: {queued.map((step) => `${OWNER_WORDS[step.owner]}: ${step.needLabel}`).join(", then ")}
+        </p>
+      )}
+      {caseState.pendingQuestions.length > 0 && (
+        <p className={styles.reason}>
+          Waiting for the customer: {caseState.pendingQuestions.map((q) => q.label).join(", ")}
+        </p>
+      )}
+      {open.length === 0 && caseState.pendingQuestions.length === 0 && (
+        <p className={styles.muted}>No open checks and no question waiting.</p>
+      )}
+      {failure && <p className={styles.inlineError} role="alert">{failure}</p>}
+    </ContextSection>
   );
 }
 

@@ -71,3 +71,90 @@ test('a message stored before the actor column is given one', async () => {
   await runFold({ store, shopId: 's', actorFor: () => 'partner' });
   assert.equal(store.saved[0].last_actor, 'partner');
 });
+
+function statusStore(ticketRow, { moves = true } = {}) {
+  const store = fakeStore({ t1: { messages: thread('support'), caseFiles: [], readings: [], previous: null } });
+  store.moved = [];
+  store.ticket = async () => ticketRow;
+  store.setStatus = async (ticket, status, caseStatus) => {
+    store.moved.push({ from: ticket.status, status, caseStatus });
+    return moves ? { id: ticket.id } : null;
+  };
+  return store;
+}
+
+test('the fold moves the ticket to the status its next actor asks for (stage 5c)', async () => {
+  const store = statusStore({ id: 't1', status: 'open', metadata: {} });
+  const totals = await runFold({
+    store,
+    shopId: 's',
+    actorFor: () => 'customer',
+    statusMap: { nobody: ['resolved'] },
+    now: () => new Date('2026-09-27T10:00:00Z')
+  });
+  assert.equal(totals.statusesMoved, 1);
+  assert.deepEqual(store.moved[0].caseStatus, {
+    status: 'resolved', from: 'open', next_actor: 'nobody', version: 1, at: '2026-09-27T10:00:00.000Z', resolved_at: '2026-09-27T10:00:00.000Z'
+  });
+});
+
+test('with no status map the fold writes case_current only', async () => {
+  const store = statusStore({ id: 't1', status: 'open', metadata: {} });
+  const totals = await runFold({ store, shopId: 's', actorFor: () => 'customer' });
+  assert.equal(totals.statusesMoved, 0);
+  assert.equal(store.moved.length, 0);
+});
+
+test('a ticket a person changed meanwhile is not counted as moved', async () => {
+  const store = statusStore({ id: 't1', status: 'open', metadata: {} }, { moves: false });
+  const totals = await runFold({ store, shopId: 's', actorFor: () => 'customer', statusMap: { nobody: ['resolved'] } });
+  assert.equal(store.moved.length, 1);
+  assert.equal(totals.statusesMoved, 0);
+});
+
+function draftStore(previous, messages) {
+  const store = fakeStore({ t1: { messages, caseFiles: [], readings: [], previous } });
+  store.staled = [];
+  store.staleDrafts = async (ticketId, options) => {
+    store.staled.push({ ticketId, ...options });
+    return 1;
+  };
+  return store;
+}
+
+test('our own new reply supersedes the open drafts written before it (stage 6)', async () => {
+  const first = fakeStore({ t1: { messages: thread('customer'), caseFiles: [], readings: [], previous: null } });
+  await runFold({ store: first, shopId: 's', actorFor: () => 'customer' });
+  const before = first.saved[0];
+
+  // Our reply typed in Outlook arrives: the last message is now ours.
+  const messages = [...thread('customer'), { id: 'c', direction: 'outbound', actor: 'support', received_at: '2026-09-03T10:00:00Z' }];
+  const store = draftStore({ version: before.version, material_hash: before.material_hash, as_of_message_id: 'b' }, messages);
+  const totals = await runFold({ store, shopId: 's', actorFor: () => 'customer' });
+  assert.equal(store.staled.length, 1);
+  assert.equal(store.staled[0].outboundAt, '2026-09-03T10:00:00Z');
+  assert.equal(store.staled[0].reason, 'superseded_by_outbound');
+  assert.equal(totals.draftsStaled, 1);
+});
+
+test('a raised version stales the older drafts as case_changed', async () => {
+  const first = fakeStore({ t1: { messages: thread('support'), caseFiles: [], readings: [], previous: null } });
+  await runFold({ store: first, shopId: 's', actorFor: () => 'customer' });
+  const before = first.saved[0];
+
+  // The customer writes again: the case moves, nothing of ours is new.
+  const store = draftStore({ version: before.version, material_hash: before.material_hash, as_of_message_id: 'b' }, thread('customer'));
+  await runFold({ store, shopId: 's', actorFor: () => 'customer' });
+  assert.deepEqual(store.staled[0], { ticketId: 't1', outboundAt: null, version: before.version + 1, reason: 'case_changed' });
+});
+
+test('an unchanged case and a first fold stale nothing', async () => {
+  const first = draftStore(null, thread('customer'));
+  await runFold({ store: first, shopId: 's', actorFor: () => 'customer' });
+  assert.equal(first.staled.length, 0);
+
+  const row = first.saved[0];
+  const same = draftStore({ version: row.version, material_hash: row.material_hash, as_of_message_id: row.as_of_message_id }, thread('customer'));
+  await runFold({ store: same, shopId: 's', actorFor: () => 'customer' });
+  assert.equal(same.staled.length, 0);
+});

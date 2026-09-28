@@ -1639,6 +1639,130 @@ Each has a label and a sentence in `case-file.mjs`, a noun in `ASK_TERMS` for th
 
 Exports now carry `labelSchemaVersion` (3). The importer refuses an export from a newer schema instead of silently dropping values it does not know.
 
+### One draft per case version, stale when the case moves, drafting in the poll behind a switch (2026-09-28)
+
+Stage 6 of `codex_plans/Case_State_Plan.md` (Q11–Q15).
+
+**The key is the case version, not the message.** `ticket_drafts` is unique on `(shop_id, ticket_id, case_version)` (migration 45). `case_version` is `case_current.version` when the draft was written, and `trigger_event_id` is the message that produced it. Keyed on the trigger message, a case that moved without the customer writing (Deret answering, our own reply) had nowhere to put a second draft. Now it gets a new row, and the old one keeps exactly what its reviewer saw. The 123 drafts from before carry no version and keep their place. A draft from before versions still counts for its message, so switching this on redrafts no history.
+
+**Stale, and why.** `stale` joins the status, with `stale_reason` present exactly when it is stale. The fold sets it:
+- **`superseded_by_outbound`:** a new message of ours (a reply typed in Outlook, read from Sent Items) stales every open draft written before it. This applies **whether or not it moved the version**. The plan tied staleness to the version (Q13), but our reply does not always change the case (a check of ours can stay open), and a pending draft answering a message we have already answered must not stay pending. No guess about whether it was this text that went out (Q14).
+- **`case_changed`:** a raised version stales every open draft of an older version, and of no version.
+- Only `pending`, `approved` and `edited` move. An approval of text written for a case that no longer exists is withdrawn (Q15). `rejected` and `sent` are history.
+
+A stale draft cannot be decided on: the record and the ticket page both refuse it, and the page shows why. It is never mailed for review (`pendingReview` takes pending only), so once per version (Q12) comes free: each version is its own row with its own `review_sent_at`.
+
+**Drafting in the poll: a `draft` stage after the fold, off unless `DRAFT_IN_POLL=true`**, at most `DRAFT_POLL_LIMIT` (10) drafts a poll. The gates (`pollGate`), the first to fail counted by name:
+- the case is folded and it is our turn (`next_actor = support`);
+- no categorisation or investigation pending;
+- the ticket is open or `awaiting_human`;
+- the case file answers the customer's latest message;
+- that message came after the mailbox cutover (Q3);
+- it is the customer's;
+- then `draftDecision`'s own skips (already answered, duplicate, internal sender, level 4…).
+
+The candidate read starts from `case_current` (our turn, something since the cutover) rather than from every case file in the shop, and every id list is batched, since the list travels in the URL (the HTTP 414 of 2026-09-27). **Nothing is sent**: there is still no send path.
+
+**The dry run, before the switch** (`npm run draft -- --dry-run --gates=poll`): every gate, no model call. It prints:
+- the cases waiting on us since the cutover, split into those with a case file and those still waiting for the worker;
+- the drafts that would be written;
+- the median tokens per draft from the drafting pass's own `llm_usage` rows (452 calls: 2,488 in, 133 out);
+- the cost at `llm-rates.mjs` prices (`LLM_RATES` overrides them).
+
+**Measured 2026-09-28:** 3 cases wait on us since the cutover, none of them investigated yet, so 0 drafts now and at most 3 × $0.0075 once they are. A handful, as the plan wanted.
+
+**Found on the way:** the 3 are new customer messages from 26 and 27 September, still flagged for categorisation. Categorisation has not run on anything since the cutover, so the worker is either stopped or stopping before the categorise stage.
+
+### A rule declares the checks it opens, in order (2026-09-27)
+
+Stage 5 item C of `codex_plans/Case_State_Plan.md`. Until now a check existed only once someone wrote « je transmets à Deret » and the Case Manager read it. The rules that say « a person picks this up with the carrier » (D-36 `retard_client_veut_sortir`, D-37, O-09 `suivi_bloque`, `dispatched_no_scan_delivery_late`) opened nothing. So after our holding reply the case folded to `nobody`, and from 5c on it would resolve.
+
+**The rule carries the steps; the case file carries a copy.** `support_answers.checks` holds `[{ owner, need }]` (migration 44). When an investigation selects the rule, the steps are copied onto `exemplar_match.policy.check_sequences`, and the fold reads them from there. So editing a rule never changes a case already opened, and an old case file never gains checks. With two requests, each rule keeps its own sequence.
+
+**One step open at a time** (`casework/rule-checks.mjs`):
+- **The first step** opens when the case file is written.
+- **Each next step** opens when the one before it is done: a reading of that owner's message, or « Mark done » at the moment it was pressed. The fold now walks messages, case files and dashboard actions as one timeline.
+- **Steps not yet open** are kept as `queued`. Nobody owes them, and every reader counts only `pending`. The ticket shows them as « Then: … ».
+- **« No longer needed » ends the sequence.** Once a person has cancelled the Deret check, opening the refund check behind it would be the rule overruling them. Chosen at build time, not measured: revisit if it proves wrong.
+
+**No duplicate, and Deret is not asked twice.** A step adopts a check of the same owner and need that is already open, and otherwise one already settled in the thread (the cheat sheet: « don't ask Deret again when their confirmation is already in the thread »). An adopted settled check counts as the step done.
+
+**Owners are what the brand has.** The editor offers « Operations partner » only when the sender directory maps a label to one (`obligationOwners`, item B). Saving a step with an owner the brand lacks is refused in words. The need list is `NEED_KEYS`, the same list the Case Manager picks from.
+
+**No live rule has steps yet.** All 130 read `[]` after migration 44, so nothing changes until someone adds them in the Rulebook. The fold eval is unchanged: 79 of 132.
+
+### The ticket status follows who acts next (2026-09-27)
+
+Stage 5c of `codex_plans/Case_State_Plan.md` (Q10). The fold moves each ticket's status to what `case_current.next_actor` asks for, in the worker and whenever a person settles a check. `casework/case-status.mjs` holds the rule.
+
+| next actor | accepted statuses (the first is where a ticket moves) |
+| --- | --- |
+| customer | `awaiting_customer` |
+| support | `open`, `awaiting_human` |
+| colleague, operations partner | `awaiting_human` |
+| nobody | `resolved` |
+
+**Our turn is two statuses, not one.** The plan mapped support to `open` alone. The dry run on the live queue showed that would move 15 `awaiting_human` tickets back to `open`: cases the investigation handed to a person. Auto-close exempts `awaiting_human`, so four weeks of silence would then close work nobody did. A ticket already on an accepted status stays where it is.
+
+**Only the agent's statuses move.** A person sets `open`, `resolved` and `closed`; auto-close sets `closed`, forwarding `forwarded`, the filter `spam`. The fold moves tickets between `open`, `awaiting_customer` and `awaiting_human`, and to `resolved`. It moves a `resolved` ticket back only if it resolved it itself: `metadata.case_status` records the move (status, from, next actor, version, time), and its `resolved_at` must be the ticket's. The write is conditional on the status the fold read, so a person's change made meanwhile wins. The customer writing again still reopens the ticket at ingestion, as before.
+
+**Three guards:**
+- A ticket still flagged for categorisation or investigation stays `open`. Both passes claim only `open`, so moving it would strand it.
+- Level 4 is never resolved by the fold, like auto-close. A person closes those.
+- Archived and deleted tickets never move.
+
+**Per brand:** `AGENT_CASE_STATUS_BY_NEXT_ACTOR` overrides the map actor by actor (`nobody:open` keeps finished cases in the queue for a person), and `off` leaves statuses to the investigation's verdict as before. The verdict still sets its status first. In the same poll the fold then corrects it, for example a `needs_customer_input` verdict goes back to `open` until our question has actually been sent.
+
+**Applied 2026-09-27** with `npm run case-status -- --apply`: 352 moves. 340 were old `open` threads already past auto-close's 28 days, 7 `awaiting_human` → `resolved`, 4 `awaiting_customer` → `open` and 1 `awaiting_customer` → `resolved`. Only 4 had a message in the last 28 days. Two of those were read before applying: `bfe0feea` (we confirmed the replacement Wrap d'Or is on its way) and `c5ec7404` (we sent the tracking number for the missing serum). Both were stale `awaiting_human`, finished once our reply went out. A second dry run found nothing left to move.
+
+**Found on the way:** 795 of the 840 open tickets were already eligible for auto-close. The `close` stage had not run on them.
+
+### Open checks on the ticket, and a Senders screen (2026-09-27)
+
+Stage 5d of `codex_plans/Case_State_Plan.md`, built before 5c at the owner's request: people see and settle the checks before anything moves a status on its own.
+
+**A person settles a check by recording an action, never by editing the case.** « Mark done » or « No longer needed » inserts a row in `ticket_case_actions` (migration 43: `fulfilled` / `cancelled`, the user's id, never a name) and re-folds that ticket at once. The fold applies the latest action per check after the readings (`applyActions`), so `case_current` stays something code recomputes: `fold:once -- --all` after a rule change keeps every manual action. Without this, a check settled by phone or in Shopify is owed forever, since no message will ever clear it.
+
+**Overdue is an alert on screen only.** A colleague's check is overdue after `colleague_check_overdue_days` working days, a partner's after `partner_check_overdue_days` (2 and 3 for Qiriness, in `support_parameters`). Nothing is sent and no status moves: alert first, automate later, as the owner decided.
+
+**The sender directory is edited in Agent Setup, not in the database.** Each row shows what its label means for a case, through the same `AGENT_ACTOR_BY_LABEL` map the agent uses: answered like a customer, our side, or an operations partner. The screen says whether this brand has any operations partner at all, because that is what offers « partner » as an owner of checks (`obligationOwners`); a brand with none never sees partner checks. The support mailbox's own domain counts as the team without a row. **A label change applies to mail that arrives after it:** stored messages keep their actor until `actors:backfill -- --recompute` is run on purpose.
+
+**Names on screen:** « operations partner » (warehouse, carrier) is never shortened to « partner », since the directory also has a « Commercial partner » label that is answered like a customer. Needs are shown in English through `web/lib/need-labels.ts`, shared with Insights.
+
+### The Case Manager reads every message, and the fold turns readings into obligations (2026-09-27)
+
+Stages 5a and 5b of `codex_plans/Case_State_Plan.md`.
+
+**The reading gains four fields, each from a closed list** (`case-manager.mjs`):
+- `effect`: the effect lists, filtered by who wrote the message (`casework/effects.mjs`, now shared with the labels);
+- `asked`: our message only, `MISSING_FIELDS` keys;
+- `obligations_opened`: `{ owner, need, quote }`, where the owner comes from `obligationOwners` (support always; a colleague or operations partner only if a directory label maps there) and the need from `NEED_KEYS`;
+- `obligations_cleared`: ids from the open list the model is shown, so it cannot clear a check that does not exist.
+
+`case_relationship` stays, for customer messages only: it still drives the categoriser.
+
+**Two reading paths.** The customer path is unchanged: it is tied to the categoriser and gains the new fields. A new path, `runOtherMessageCasework`, reads **our messages and colleagues'/partners' received after the mailbox cutover**, oldest first per ticket, carrying pending questions and open checks from one message to the next. History is not re-read at a model call per message. Migration 42 makes `case_relationship` nullable and adds the five columns.
+
+**The fold walks the readings** (`applyReading`, then `nextActorAfter`). Its rule order, each rule checked against the labels:
+- **After the customer:**
+  - a thank-you ends the case when nothing is owed; with our question still open it is ours (a closing reply); with a check open it goes to the check's owner;
+  - a chase while a colleague's or partner's check is open, and our last message is within the holding interval, waits on that owner;
+  - otherwise it is ours.
+- **After a colleague or partner:** ours when they settled a check, theirs while it is still open.
+- **After us:** nobody if we closed it with nothing open. Otherwise, in order: the customer if we just asked them something, then our open check, then theirs, then the customer's pending question, then nobody.
+
+**The holding interval is a parameter**, `holding_reply_interval_days`, set to 5 for Qiriness.
+
+**Measured, one step per labelled cut** (`eval:casework`, each cut starting from the previous label): **who acts next 91 to 93 of 132**, the range across two runs of the model. The stage 4 fold scores 79 and today's pipeline 45. The message's effect scores 79 to 80. Two tuning passes, both kept: « our question to the customer is `asked`, never a check of ours », and « `new_issue` only for a separate order, product or problem ».
+
+**What is left:**
+- **`closes_case` versus `answers` for our final reply** differs from the reviewed labels 20 times. It does not move who acts next: an answer with nothing asked and nothing open already folds to `nobody`.
+- **Open checks as exact sets agree only about 50 times in 132**, because the labels and the reading name the same check with different needs. Who owes a check agrees 71 times, and that is what decides the next step.
+
+**Found live (2026-09-27, ticket 2aa6604e):** an unread reply of ours fell back to the stage 4 rule and dropped an open check. Now only « we closed it » needs the reading; open checks and pending questions count either way. `fold:once -- --all` re-folds every ticket after a rule change.
+
+5c (the status from `next_actor`), 5d (the checks on the ticket and the Senders screen) and item C (the checks a rule opens) are above.
+
 ### The case has a current state, folded in code (2026-09-26)
 
 Stage 4 of `codex_plans/Case_State_Plan.md`. `case_current` is one row per ticket, overwritten in place, folded by a pure function (`case-fold.mjs`) from the messages, the Case Manager's readings and the latest case file. `ticket_case_state` stays the per-message trajectory. The fold sorts by `received_at` itself, so arrival order no longer matters to it.

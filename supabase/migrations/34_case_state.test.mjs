@@ -12,16 +12,26 @@ const TABLE = 'ticket_case_state';
 
 const squash = (text) => String(text ?? '').replace(/\s+/g, ' ').trim();
 
-test('34 creates the same table the baseline does, column for column', () => {
-  // A fresh install applies 04; an existing database applies this. The two
-  // drifting apart is the failure this pattern exists to make impossible, and
-  // `advice_collections` set the precedent of stating it in both places.
-  assert.deepEqual(columnsIn(SQL, TABLE), columnsIn(SUPPORT, TABLE));
+test('34 created no column the baseline has since dropped', () => {
+  // Equal until 42 added five columns (stage 5); an applied migration is
+  // history, so what survives is that nothing 34 created has gone.
+  const baseline = columnsIn(SUPPORT, TABLE);
+  for (const column of columnsIn(SQL, TABLE)) assert.ok(baseline.includes(column), column);
 });
 
-test('every constraint is stated identically in both files', () => {
+// 34 WAS EQUAL TO THE BASELINE ON THE RELATIONSHIP CHECK AND IS NO LONGER,
+// WHICH IS CORRECT: 42_case_state_every_message.sql made the column nullable
+// (stage 5) and carries that assertion now. An applied migration is history, so
+// what survives here is that 34 named nothing the baseline has since dropped.
+test('34 named no relationship the baseline has since dropped', () => {
+  const baseline = literalsIn(checkClause(SUPPORT, 'ticket_case_state_relationship_check'));
+  for (const value of literalsIn(checkClause(SQL, 'ticket_case_state_relationship_check'))) {
+    assert.ok(baseline.includes(value), value);
+  }
+});
+
+test('every other constraint is stated identically in both files', () => {
   const constraints = [
-    'ticket_case_state_relationship_check',
     'ticket_case_state_resolved_inputs_array_check',
     'ticket_case_state_pending_inputs_array_check',
     'ticket_case_state_new_facts_array_check',

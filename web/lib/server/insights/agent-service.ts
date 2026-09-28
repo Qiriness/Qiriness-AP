@@ -23,32 +23,13 @@ import type {
 import { rangeArgs, type InsightsContext } from "./context";
 import { toSeries } from "./series";
 import { callRpc, callRpcOne, count, num } from "./shared";
+import { needLabel } from "../../need-labels";
 
 /**
  * `satisfied` means the agent GOT the fact: the gaps array is the whole ledger
  * of what a ticket required, not a list of failures.
  */
 const SATISFIED = "satisfied";
-
-/** Readable names for the needs worth naming; anything else is title-cased from its slug. */
-const NEED_LABELS: Record<string, string> = {
-  order_identity: "Which order is this",
-  order_state: "Where the order stands",
-  delivery_state: "Where the parcel is",
-  delivery_delay_state: "Whether delivery is running late",
-  promotion_identity: "Which promotion is this",
-  promotion_validity: "Whether the code is live",
-  promotion_eligibility: "Whether this order qualifies",
-  product_identity: "Which product is this",
-  product_property: "A fact about the product",
-  product_availability: "Whether it is in stock",
-  customer_identity: "Who is writing",
-  customer_account_state: "The state of their account",
-  return_eligibility: "Whether a return is still possible",
-  policy_answer: "What an approved policy says",
-  checkout_state: "What was in the abandoned basket",
-  other_fact: "Something else the reply needed",
-};
 
 export async function getAgentPanel(ctx: InsightsContext): Promise<AgentPanel> {
   const rates = resolveModelRates(process.env);
@@ -165,7 +146,7 @@ export function rankBlockers(rows: Record<string, unknown>[]): EvidenceGapRow[] 
       const need = String(row.need ?? "unknown");
       return {
         need,
-        label: NEED_LABELS[need] ?? titleCase(need),
+        label: needLabel(need),
         state: (row.state as string) ?? null,
         finding: (row.finding as string) ?? null,
         occurrences: count(row.occurrences),
@@ -173,11 +154,6 @@ export function rankBlockers(rows: Record<string, unknown>[]): EvidenceGapRow[] 
       };
     })
     .sort((a, b) => b.tickets - a.tickets || b.occurrences - a.occurrences);
-}
-
-function titleCase(slug: string): string {
-  const words = slug.split("_").join(" ");
-  return words.charAt(0).toUpperCase() + words.slice(1);
 }
 
 function mapFunnel(row: Record<string, unknown>): PipelineFunnel {

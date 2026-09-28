@@ -2,6 +2,7 @@ import { supabaseSelect } from '../../../scripts/lib/supabase-rest-client.mjs';
 import { COLUMNS, T } from '../../../scripts/lib/tables.mjs';
 
 import { readCase } from './case-manager.mjs';
+import { applyReading } from './case-fold.mjs';
 import { evidenceReuseFrom, orderChangedSince, pendingAfter, situationFor, situationPlan } from './case-manager-rules.mjs';
 
 // The casework pass: what the newest message changed about a case already read.
@@ -40,6 +41,9 @@ export async function runCasework({
   limit = DEFAULT_BATCH_LIMIT,
   ticketId = null,
   dryRun = false,
+  // Stage 5: who may owe a check here (`obligationOwners`). Without it every
+  // owner is offered, as before the directory decided.
+  owners,
   onReading
 }) {
   const counts = { considered: 0, read: 0, skipped: 0, failed: 0, byRelationship: {} };
@@ -52,6 +56,7 @@ export async function runCasework({
     const conversation = await record.conversation(ticket.id, { columns: COLUMNS.threadForDrafting });
     const pendingInputs = previous?.pending_customer_inputs ?? missingFieldsOf(investigation);
 
+    const openObligations = (await store.openObligations?.(ticket.id)) ?? [];
     const reading = await readCase({
       openai,
       model,
@@ -61,6 +66,9 @@ export async function runCasework({
       pendingInputs,
       previousSummary: previous?.case_summary ?? null,
       senderDirectory,
+      actor: 'customer',
+      openObligations,
+      ...(owners ? { owners } : {}),
       logger
     });
 
@@ -101,6 +109,11 @@ export async function runCasework({
         runAt: investigation?.investigated_at ?? null
       }),
       caseSummary: reading.caseSummary,
+      actor: 'customer',
+      effect: reading.effect,
+      asked: [],
+      obligationsOpened: reading.obligationsOpened,
+      obligationsCleared: reading.obligationsCleared,
       model
     };
 
@@ -122,6 +135,101 @@ export async function runCasework({
     });
   }
 
+  return counts;
+}
+
+/**
+ * STAGE 5: OUR MESSAGES AND A COLLEAGUE'S OR PARTNER'S, READ TOO.
+ *
+ * The customer path above is tied to the categoriser and stays as it was. This
+ * reads what it never did: our replies (what we asked, what we promised, what
+ * we closed) and the back office's messages (which checks they opened or
+ * settled). Only mail received after the mailbox cutover: history is not
+ * re-read at a model call per message.
+ *
+ * IN DATE ORDER PER TICKET, carrying state between messages: the pending
+ * questions and the open checks one message leaves are what the next is read
+ * against, so two messages landing in one poll do not both see the state from
+ * before either.
+ *
+ * The reading's `case_relationship` is null (it is the customer's relationship
+ * to their case); the situation and the evidence reuse are carried from the
+ * previous reading so the customer path that reads `latest()` loses nothing.
+ */
+export async function runOtherMessageCasework({
+  store,
+  record,
+  caseStateRecord,
+  openai,
+  model,
+  shopId,
+  senderDirectory = null,
+  owners,
+  since,
+  limit = DEFAULT_BATCH_LIMIT,
+  logger,
+  dryRun = false
+}) {
+  const counts = { considered: 0, read: 0, failed: 0, byEffect: {} };
+  if (!since) return counts;
+  const batches = await store.otherMessagesDue({ shopId, since, limit });
+
+  for (const { ticket, messages } of batches) {
+    const conversation = await record.conversation(ticket.id, { columns: COLUMNS.threadForDrafting });
+    const previous = await caseStateRecord.latest(ticket.id);
+    let state = {
+      pending: previous?.pending_customer_inputs ?? [],
+      obligations: (await store.openObligations(ticket.id)) ?? [],
+      lastSupportAt: null
+    };
+
+    for (const message of messages) {
+      counts.considered += 1;
+      const at = message.received_at ?? message.sent_at ?? null;
+      const upTo = conversation.filter((row) => (row.received_at ?? row.sent_at ?? '') <= (at ?? ''));
+      const openObligations = state.obligations.filter((o) => o.status === 'pending');
+      const reading = await readCase({
+        openai,
+        model,
+        ticket,
+        message,
+        conversation: upTo,
+        pendingInputs: state.pending,
+        previousSummary: previous?.case_summary ?? null,
+        senderDirectory,
+        actor: message.actor,
+        openObligations,
+        ...(owners ? { owners } : {}),
+        logger
+      });
+      if (reading.failed) counts.failed += 1;
+
+      state = applyReading(state, reading, { actor: message.actor, at, messageId: message.id });
+      const stored = {
+        ticketId: ticket.id,
+        triggerMessageId: message.id,
+        caseRelationship: null,
+        situationKey: previous?.situation_key ?? null,
+        resolvedInputs: reading.resolvedInputs,
+        pendingCustomerInputs: state.pending,
+        newFacts: reading.newFacts,
+        commitments: reading.commitments,
+        contradictions: reading.contradictions,
+        evidenceReuse: previous?.evidence_reuse ?? {},
+        caseSummary: reading.caseSummary,
+        actor: message.actor,
+        effect: reading.effect,
+        asked: reading.asked,
+        obligationsOpened: reading.obligationsOpened,
+        obligationsCleared: reading.obligationsCleared,
+        model
+      };
+      if (!dryRun) await caseStateRecord.save(stored);
+      counts.read += 1;
+      counts.byEffect[reading.effect ?? 'none'] = (counts.byEffect[reading.effect ?? 'none'] || 0) + 1;
+      logger?.info?.('casework.read_other', { ticketId: ticket.id, actor: message.actor, effect: reading.effect });
+    }
+  }
   return counts;
 }
 
@@ -209,6 +317,46 @@ export function createCaseworkStore(supabase, { caseStateRecord }) {
         candidate.previous = await caseStateRecord.latest(candidate.ticket.id);
       }
       return typeof limit === 'number' ? due.slice(0, limit) : due;
+    },
+
+    /** The checks still pending on a ticket, as the last fold left them. */
+    async openObligations(ticketId) {
+      const rows = await supabaseSelect(supabase, T.CASE_CURRENT, { ticket_id: ticketId }, 'obligations');
+      return (rows[0]?.obligations ?? []).filter((o) => o?.status === 'pending');
+    },
+
+    /**
+     * Our messages and a colleague's or partner's received after `since` with no
+     * reading yet, grouped by ticket and oldest first within each.
+     */
+    async otherMessagesDue({ shopId, since, limit }) {
+      const rows = await supabaseSelect(
+        supabase,
+        T.TICKET_MESSAGES,
+        {
+          shop_id: shopId,
+          actor: { operator: 'in', value: '(support,colleague,partner)' },
+          received_at: { operator: 'gt', value: since },
+          deleted_at: { operator: 'is', value: 'null' }
+        },
+        'id,ticket_id,subject,body_text,direction,actor,from_email,received_at,sent_at',
+        { order: 'received_at.asc' }
+      );
+      const done = await caseStateRecord.withCaseState(rows.map((row) => row.id));
+      const due = rows.filter((row) => !done.has(row.id)).slice(0, limit);
+      const byTicket = new Map();
+      for (const row of due) {
+        if (!byTicket.has(row.ticket_id)) byTicket.set(row.ticket_id, []);
+        byTicket.get(row.ticket_id).push(row);
+      }
+      if (byTicket.size === 0) return [];
+      const tickets = await supabaseSelect(
+        supabase,
+        T.TICKETS,
+        { shop_id: shopId, id: { operator: 'in', value: `(${[...byTicket.keys()].join(',')})` }, deleted_at: { operator: 'is', value: 'null' } },
+        COLUMNS.ticketForCasework
+      );
+      return tickets.map((ticket) => ({ ticket, messages: byTicket.get(ticket.id) }));
     }
   };
 }

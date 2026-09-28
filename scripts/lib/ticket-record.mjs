@@ -597,6 +597,31 @@ export function createTicketRecord(supabase, { shopId, transport = REST_TRANSPOR
       return row ? queueRow(ticketId) : null;
     },
 
+    /**
+     * The fold moving a ticket to the status its next actor asks for (stage 5c,
+     * agent/src/casework/case-status.mjs).
+     *
+     * CONDITIONAL ON THE STATUS IT READ. A person who resolved or reopened the
+     * ticket meanwhile makes this match nothing and return null; theirs stands.
+     * `caseStatus` goes to `metadata.case_status`, the record that lets the
+     * fold tell its own resolve from a person's.
+     */
+    async setCaseStatus(ticket, status, caseStatus, at = new Date().toISOString()) {
+      const updated = await update(
+        supabase,
+        T.TICKETS,
+        { id: ticket.id, shop_id: shopId, status: ticket.status },
+        {
+          ...lifecycleColumns(status, at),
+          updated_at: at,
+          metadata: { ...(ticket.metadata || {}), case_status: caseStatus }
+        },
+        { select: 'id' }
+      );
+      const row = Array.isArray(updated) ? updated[0] : updated;
+      return row ?? null;
+    },
+
     async setStatus(ticketId, status) {
       const at = new Date().toISOString();
       const updated = await update(

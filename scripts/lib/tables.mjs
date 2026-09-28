@@ -58,6 +58,7 @@ export const T = {
   TICKET_INVESTIGATIONS: 'ticket_investigations',
   TICKET_CASE_STATE: 'ticket_case_state',
   CASE_CURRENT: 'case_current',
+  TICKET_CASE_ACTIONS: 'ticket_case_actions',
   CATEGORY_FORWARDING: 'category_forwarding',
   TICKET_FORWARDS: 'ticket_forwards',
   CATEGORISATION_REVIEW: 'categorisation_review',
@@ -286,7 +287,9 @@ export const COLUMNS = {
   // two replies to one message.
   ticketForDrafting:
     'id,subject,status,level,language,happiness,requester_name,resolved_context,' +
-    'duplicate_of_ticket_id,related_ticket_id,related_score,sender_label',
+    'duplicate_of_ticket_id,related_ticket_id,related_score,sender_label,' +
+    // The poll gate (stage 6): a ticket still owed a pass is not drafted yet.
+    'needs_categorisation,needs_investigation',
 
   /**
    * Auto-close. `needs_categorisation` is read so a ticket still queued for the
@@ -527,7 +530,9 @@ export const COLUMNS = {
     'id,ticket_id,trigger_message_id,source_verdict,disposition,level,language,subject,' +
     'body_text,approved_body_text,status,checks,checks_passed,auto_send_eligible,model,' +
     // `reply_link` IS read: the dashboard puts it on the draft's [[marker]].
-    'drafted_at,review_sent_at,reply_link',
+    'drafted_at,review_sent_at,reply_link,' +
+    // Stage 6: which case version it answers, and why it went stale if it did.
+    'case_version,stale_reason',
 
   /**
    * The rehearsal history list, WITHOUT the trace.

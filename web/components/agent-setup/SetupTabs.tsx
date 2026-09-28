@@ -32,6 +32,7 @@ const TABS = [
   { href: "/agent-setup/collections", label: "Collections", hint: "what we can advise on" },
   { href: "/agent-setup/recommendations", label: "Recommendations", hint: "what we suggest, by skin type" },
   { href: "/agent-setup/forwarding", label: "Forwarding", hint: "who gets non-support mail" },
+  { href: "/agent-setup/senders", label: "Senders", hint: "who is team, warehouse, carrier" },
 ];
 
 export function SetupTabs() {

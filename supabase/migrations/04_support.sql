@@ -1126,7 +1126,19 @@ create table public.ticket_case_state (
 
   -- How this message relates to the case that already existed. A closed
   -- vocabulary: the model picks which, and this codebase owns what each means.
-  case_relationship text not null,
+  -- Null on a reading of OUR message or a colleague's/partner's (stage 5): it
+  -- is the customer's relationship to their own case, and drives the categoriser.
+  case_relationship text,
+
+  -- STAGE 5 (migration 42): who wrote the message, what it did (`effect`, from
+  -- agent/src/casework/effects.mjs), the customer questions OUR message asked,
+  -- and the checks it opened ({ owner, need, quote }) and cleared (ids). The
+  -- fold (case-fold.mjs) turns these into obligations and who acts next.
+  actor text,
+  effect text,
+  asked jsonb not null default '[]'::jsonb,
+  obligations_opened jsonb not null default '[]'::jsonb,
+  obligations_cleared jsonb not null default '[]'::jsonb,
 
   -- The situation carried forward from the previous reading, so a follow-up is
   -- answered as the case it belongs to rather than re-matched from the opening
@@ -1163,7 +1175,22 @@ create table public.ticket_case_state (
   unique (shop_id, trigger_message_id),
 
   constraint ticket_case_state_relationship_check check (
-    case_relationship in ('continuation', 'new_information', 'new_issue', 'unclear')
+    case_relationship is null or case_relationship in ('continuation', 'new_information', 'new_issue', 'unclear')
+  ),
+  constraint ticket_case_state_actor_check check (
+    actor is null or actor in ('customer', 'support', 'colleague', 'partner')
+  ),
+  constraint ticket_case_state_effect_check check (
+    effect is null or effect in ('continuation', 'chase', 'new_information', 'new_issue', 'closes_case', 'internal_note', 'noise', 'answers', 'asks_customer', 'holding', 'internal_request')
+  ),
+  constraint ticket_case_state_asked_array_check check (
+    jsonb_typeof(asked) = 'array'
+  ),
+  constraint ticket_case_state_obligations_opened_array_check check (
+    jsonb_typeof(obligations_opened) = 'array'
+  ),
+  constraint ticket_case_state_obligations_cleared_array_check check (
+    jsonb_typeof(obligations_cleared) = 'array'
   ),
   constraint ticket_case_state_resolved_inputs_array_check check (
     jsonb_typeof(resolved_inputs) = 'array'
@@ -1267,6 +1294,38 @@ comment on column public.case_current.next_actor is
 
 comment on column public.case_current.obligations is
   'Checks owed by support, a colleague or an operations partner. Empty until stage 5 creates them.';
+
+-- ---------------------------------------------------------------- ticket_case_actions
+--
+-- Stage 5 of codex_plans/Case_State_Plan.md. 43_case_actions.sql carries a
+-- populated database to it; 43's test asserts the two agree.
+
+create table public.ticket_case_actions (
+  id uuid primary key default gen_random_uuid(),
+  shop_id uuid not null references public.shops(id) on delete cascade,
+  ticket_id uuid not null references public.tickets(id) on delete cascade,
+
+  -- The obligation it settles, by the id the fold gives it (`o-<message>-<n>`).
+  obligation_id text not null,
+  action text not null,
+  note text,
+
+  -- The dashboard user's id, never a name or an address.
+  acted_by text,
+  acted_at timestamptz not null default now(),
+
+  constraint ticket_case_actions_action_check check (
+    action in ('fulfilled', 'cancelled')
+  )
+);
+
+create index ticket_case_actions_ticket_idx
+  on public.ticket_case_actions (ticket_id, acted_at);
+
+alter table public.ticket_case_actions enable row level security;
+
+comment on table public.ticket_case_actions is
+  'What a person did to a case from the dashboard: an open check marked done or cancelled. The fold (agent/src/casework/case-fold.mjs) applies these after the readings, so a check that was settled by phone or in Shopify stops being owed. Append-only.';
 
 -- ---------------------------------------------------------------- category_forwarding
 

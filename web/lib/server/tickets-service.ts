@@ -55,6 +55,7 @@ import { createOrderContextStore } from "../../../agent/src/resolution/order-con
 import { isAnonymousMarketplaceBuyer } from "../../../agent/src/resolution/order-verification.mjs";
 import { KnowledgeNotFoundError, KnowledgeValidationError } from "./knowledge-errors";
 import { loadTicketPriority } from "./ticket-priority-service";
+import { getCaseState } from "./case-state-service";
 import type { PriorityFacts, PriorityRead } from "./ticket-priority-service";
 import { summariseFacts, summariseInvestigation, summariseOrderContext } from "../ticket-detail";
 import type {
@@ -296,7 +297,7 @@ export async function getTicketDetail(shopId: string, ticketId: string): Promise
   // record's to own (see agent/src/investigation/case-file.mjs).
   const record = getRecord(shopId);
 
-  const [ticketRow, investigationRows, attachmentRows] = await Promise.all([
+  const [ticketRow, investigationRows, attachmentRows, caseState] = await Promise.all([
     record.findForDetail(ticketId),
     supabaseSelect(
       supabase,
@@ -310,6 +311,9 @@ export async function getTicketDetail(shopId: string, ticketId: string): Promise
     // the 263 tickets that carry no case file at all — which include every
     // uncategorised one a person is most likely to be opening by hand.
     record.inboundMessages(ticketId, { columns: COLUMNS.messageForAttachments }),
+    // The case's current state (stage 5). A failure here must not cost the
+    // operator the rest of the page, so it degrades to "not folded yet".
+    getCaseState(shopId, ticketId).catch(() => null),
   ]);
 
   if (!ticketRow) {
@@ -344,7 +348,7 @@ export async function getTicketDetail(shopId: string, ticketId: string): Promise
   if (!row) {
     // No case file: the order facts may still exist, because the resolution pass
     // writes them for tickets the agent never investigated. Facts cannot.
-    return { ticketId, orderNumber, orderId, results: null, order, facts: [], attachments, policy: null, activity: [] };
+    return { ticketId, orderNumber, orderId, results: null, order, facts: [], attachments, policy: null, activity: [], caseState };
   }
 
   return {
@@ -369,6 +373,7 @@ export async function getTicketDetail(shopId: string, ticketId: string): Promise
     }),
     policy: summarisePolicy(row.exemplar_match),
     activity: summariseActivity(row),
+    caseState,
   };
 }
 
@@ -556,6 +561,11 @@ export async function decideOnDraft(
   if (!current) {
     throw new KnowledgeNotFoundError(`No draft to decide on for ticket: ${ticketId}`);
   }
+  // A stale draft answers a case that has moved on (stage 6). Refused here as a
+  // sentence; the record refuses it too.
+  if (current.status === "stale") {
+    throw new KnowledgeValidationError("This draft is out of date: the case has moved on since it was written.");
+  }
 
   await record.decide(current.id, {
     status: decision.status,
@@ -739,6 +749,8 @@ function mapDraftRow(row: any): TicketDraft {
     // be read must not be the one a send closes a ticket on.
     disposition: row.disposition === "terminal" ? "terminal" : "intermediary",
     status: DRAFT_STATUSES.includes(row.status) ? row.status : "pending",
+    staleReason:
+      row.stale_reason === "case_changed" || row.stale_reason === "superseded_by_outbound" ? row.stale_reason : null,
     checksPassed: Boolean(row.checks_passed),
     // Only the failures: a reviewer needs to know what was caught, not to read
     // a list of everything that was fine.
@@ -749,7 +761,7 @@ function mapDraftRow(row: any): TicketDraft {
   };
 }
 
-const DRAFT_STATUSES: string[] = ["pending", "approved", "edited", "rejected", "sent"];
+const DRAFT_STATUSES: string[] = ["pending", "approved", "edited", "rejected", "sent", "stale"];
 const DRAFT_VERDICTS: string[] = ["answerable", "needs_customer_input", "needs_human"];
 
 /** Oldest first: a conversation reads downwards, unlike the queue. */

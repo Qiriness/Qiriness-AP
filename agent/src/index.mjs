@@ -9,21 +9,27 @@ import { createGraphClient } from './ingestion/graph-client.mjs';
 import { createSupabaseMessageStore } from './ingestion/ticket-writer.mjs';
 import { createBlocklistStore } from './ingestion/blocklist-store.mjs';
 import { OWN_SIDE_LABELS, createSenderDirectoryStore } from './ingestion/sender-directory.mjs';
-import { actorOf } from './casework/actors.mjs';
+import { actorOf, obligationOwners } from './casework/actors.mjs';
 import { createCaseCurrentStore, runFold } from './casework/case-current-store.mjs';
 import { createDuplicateLookup, findDuplicate } from './ingestion/duplicate-rules.mjs';
 import { createRelatedLookup, findRelated } from './ingestion/related-rules.mjs';
 import { exemptKnownSenders } from './ingestion/known-senders.mjs';
 import { createSupabaseSpamAuditStore } from './ingestion/spam-audit.mjs';
-import { runDeltaPoll, createSupabaseCursorStore } from './ingestion/delta-poller.mjs';
+import { CURSOR_KEYS, runDeltaPoll, createSupabaseCursorStore } from './ingestion/delta-poller.mjs';
+import { T } from '../../scripts/lib/tables.mjs';
 import { createOpenAIClient } from './llm/openai-client.mjs';
 import { createShopUsageRecording } from './llm/usage-store.mjs';
+import { createDraftRecord } from '../../scripts/lib/draft-record.mjs';
+import { createBrandVoiceStore } from './drafting/brand-voice.mjs';
+import { createDraftingStore, runDrafting } from './drafting/draft-runner.mjs';
+import { loadDraftingContext } from './drafting/draft-context.mjs';
+import { readsAsClosure } from './casework/closure.mjs';
 import { createSpamClassifier } from './ingestion/spam-classifier.mjs';
 import { createEmbeddingsClient } from '../../scripts/lib/embeddings/openai-embeddings-client.mjs';
 import { createMessageEmbedder } from './ingestion/message-embedder.mjs';
 import { createCategoriser } from './pipeline/categorise.mjs';
 import { runCategorisation } from './pipeline/categorise-runner.mjs';
-import { createCaseworkStore, createSituationPlanner, runCasework } from './casework/case-runner.mjs';
+import { createCaseworkStore, createSituationPlanner, runCasework, runOtherMessageCasework } from './casework/case-runner.mjs';
 import { shouldRecategorise } from './casework/case-manager-rules.mjs';
 import { createCustomerLookup } from './retrieval/customer-lookup.mjs';
 import {
@@ -35,7 +41,7 @@ import { createOrderResolutionStore, runOrderResolution } from './resolution/ord
 import { createOrderContextStore, runOrderContext } from './resolution/order-context-runner.mjs';
 import { createForwardingStore } from './routing/forwarding-store.mjs';
 import { runForwarding } from './routing/forward-runner.mjs';
-import { runAutoClose } from './lifecycle/auto-close.mjs';
+import { AUTO_CLOSE_EXEMPT_LEVELS, runAutoClose } from './lifecycle/auto-close.mjs';
 import { resolveInternalDomains } from '../../scripts/lib/message-audience.mjs';
 
 // The passes a poll runs, in the order it runs them. `--stop-after=<stage>` ends
@@ -77,6 +83,7 @@ const PIPELINE_STAGES = [
   'context',
   'investigate',
   'fold',
+  'draft',
   'forward',
   'close'
 ];
@@ -129,6 +136,9 @@ async function main() {
   // pass. Null means the casework stage is skipped entirely and the pipeline
   // behaves exactly as it did before this layer existed.
   let readCaseFor = null;
+  // Stage 6: the drafting pass in the poll. Null unless DRAFT_IN_POLL=true and a
+  // key is set, and null means the stage is skipped, as before.
+  let drafting = null;
   // ONE buffer for the whole process, drained at the end of every poll. It is
   // created here, outside the `openaiApiKey` branch, so the flush at the end of
   // the poll can be unconditional: with no key there are no model calls, the
@@ -151,6 +161,14 @@ async function main() {
     // `AGENT_CASEWORK_MODEL=` (empty) leaves this null, which turns the stage
     // off — the switch is the absence of the reader, not a flag inside it.
     readCaseFor = config.caseworkModel ? { openai, model: config.caseworkModel } : null;
+    drafting = config.draftInPoll
+      ? {
+          openai,
+          store: createDraftingStore(supabase, { caseStateStore: caseStateRecord }),
+          record: createDraftRecord(supabase, { shopId }),
+          brandVoice: createBrandVoiceStore(supabase)
+        }
+      : null;
     // Embeds each stored message inline, best-effort. `npm run embed:tickets`
     // is the reconciler behind it and the better path for any bulk backfill.
     embedMessage = createMessageEmbedder(
@@ -310,14 +328,22 @@ async function main() {
     // exactly as it did before.
     const continuations = new Set();
     if (readCaseFor && runsThrough('casework')) {
+      const caseworkStore = createCaseworkStore(supabase, { caseStateRecord });
+      // Who may owe a check here: support always, a colleague or an operations
+      // partner only when a directory label this brand uses maps to one.
+      const owners = obligationOwners({
+        labels: [...new Set((await supabaseSelect(supabase, T.SENDER_DIRECTORY, { shop_id: shopId }, 'label')).map((r) => r.label))],
+        actorByLabel: config.actorByLabel
+      });
       const casework = await runCasework({
-        store: createCaseworkStore(supabase, { caseStateRecord }),
+        store: caseworkStore,
         record,
         caseStateRecord,
         openai: readCaseFor.openai,
         model: readCaseFor.model,
         shopId,
         senderDirectory,
+        owners,
         logger,
         limit,
         onReading: ({ ticket, reading }) => {
@@ -326,6 +352,25 @@ async function main() {
       });
       if (casework.considered > 0) {
         logger.info('casework.pass', { shopId, ...casework });
+      }
+
+      // STAGE 5: our messages and the back office's, received after the
+      // mailbox cutover, read in date order per ticket.
+      const cursors = (await supabaseSelect(supabase, T.SHOPS, { id: shopId }, 'sync_cursors'))[0]?.sync_cursors ?? {};
+      const others = await runOtherMessageCasework({
+        store: caseworkStore,
+        record,
+        caseStateRecord,
+        openai: readCaseFor.openai,
+        model: readCaseFor.model,
+        shopId,
+        senderDirectory,
+        owners,
+        since: cursors[CURSOR_KEYS.cutoverAt] ?? null,
+        logger
+      });
+      if (others.considered > 0) {
+        logger.info('casework.other_pass', { shopId, ...others });
       }
     }
 
@@ -434,18 +479,57 @@ async function main() {
     }
 
     // THE FOLD, after everything that feeds it: the messages this poll stored,
-    // the Case Manager's readings and the case files just written. No model and
-    // no ticket write; it keeps `case_current` in step (stage 4). The first run
-    // works through the backlog 200 tickets a poll.
+    // the Case Manager's readings and the case files just written. No model. It
+    // keeps `case_current` in step (stage 4) and moves each ticket's status to
+    // what its next actor asks for (stage 5c). Before auto-close, so a case
+    // resolved here is not then closed for silence.
     if (runsThrough('fold')) {
       const folded = await runFold({
         store: caseCurrentStore,
         shopId,
         actorFor: (message) => actorOf(message, senderDirectory, config.actorByLabel),
+        statusMap: config.caseStatusByNextActor,
+        keepOpenLevels: [...AUTO_CLOSE_EXEMPT_LEVELS],
         logger
       });
       if (folded.considered > 0) {
         logger.info('fold.pass', { shopId, ...folded });
+      }
+    }
+
+    // DRAFTING IN THE POLL (stage 6), after the fold so each draft is written
+    // against the case version the fold just settled, and only behind
+    // DRAFT_IN_POLL. The gates (`pollGate`) keep it to our turn on a customer
+    // message received since the mailbox cutover. Nothing is sent: a draft waits
+    // for a person on the ticket page.
+    if (drafting && runsThrough('draft')) {
+      try {
+        const cursors = (await supabaseSelect(supabase, T.SHOPS, { id: shopId }, 'sync_cursors'))[0]?.sync_cursors ?? {};
+        const drafted = await runDrafting({
+          store: drafting.store,
+          draftRecord: drafting.record,
+          openai: drafting.openai,
+          brandVoice: await drafting.brandVoice.load(shopId),
+          shopId,
+          model: config.draftingModel,
+          ...(await loadDraftingContext(supabase, shopId, logger)),
+          senderDirectory,
+          closureReader: config.closureModel
+            ? ({ message, ticketId, senderDirectory: directory }) =>
+                readsAsClosure({ openai: drafting.openai, model: config.closureModel, message, senderDirectory: directory, ticketId, logger })
+            : null,
+          cosmetovigilanceDraftOnly: config.draftOnlyCosmetovigilance,
+          gates: 'poll',
+          cutoverAt: cursors[CURSOR_KEYS.cutoverAt] ?? null,
+          limit: config.draftPollLimit,
+          logger
+        });
+        if (drafted.considered > 0) {
+          logger.info('draft.pass', { shopId, ...drafted });
+        }
+      } catch (error) {
+        // An unapproved brand voice or a store failure stops this pass, not the poll.
+        logger.warn('draft.pass_failed', { shopId, reason: error.message });
       }
     }
 

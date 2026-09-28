@@ -40,6 +40,42 @@ these.
 as its own item: `llm_usage` (item 14), `categorisation_review` (item 15), and
 `category_forwarding` / `ticket_forwards` (item 1).
 
+## 34. Draft versions and drafting in the poll: built, off, never run live — 2026-09-28
+
+Migration 45 is applied and checked in the database (only the new key). The stale rules, the gates and the estimate are unit-tested. No draft has been written with a version.
+
+1. **The plan's test thread.** **Check:** with `DRAFT_IN_POLL=true` on a test thread: v1 pending; a reply typed in Outlook makes it `stale` / `superseded_by_outbound`; the next customer message produces a v2 row; the ticket page shows v2, and v1 as « out of date » in the history.
+2. **The first live polls with it on.** **Check:** `draft.pass` counts match `npm run draft -- --dry-run --gates=poll` run just before; no more than `DRAFT_POLL_LIMIT` drafts a poll; `skippedBy` names only the expected gates.
+3. **The worker's categorise stage.** 3 customer messages from 26–27 September are still `needs_categorisation`. **Check:** why categorisation has not run since the cutover (worker stopped, or running with `--stop-after`), before switching drafting on.
+4. **The review mail.** Not built. **Check, once it is:** one mail per version row, none for a stale row.
+5. **The 120 pending drafts from before versions** (all drafted by 2026-09-22) stay pending until their case moves. **Check:** whether to stale them in one go.
+
+## 33. Rule checks exist, and no rule declares any yet — 2026-09-27
+
+Built, unit-tested on the D-36 shape (11 tests) and migrated; all 130 rules read `[]`. Nothing has opened a rule check live.
+
+1. **Declare the first sequences in the Rulebook.** Proposed, from the cheat sheet (« Deret first, then us »): D-36 `retard_client_veut_sortir` and both D-37 rules: Operations partner / `delivery_state`, then Our team / `refund_state`. O-09 `suivi_bloque` and `dispatched_no_scan_delivery_late`: Operations partner / `delivery_state` only. **Check:** the editor saves them and shows them again on reopening.
+2. **The first live sequence.** **Check:** the next ticket investigated under one of those rules has `check_sequences` on its case file, step 1 `pending` and step 2 `queued` in `case_current`, and after our reply `next_actor = partner` with status `awaiting_human`.
+3. **Step 2 opening.** **Check:** « Mark done » on the Deret step (or Deret's answer being read) opens the refund step, and the ticket moves back to our turn.
+4. **The editor and Case block in a browser** (item 31 covers the rest of the Case block).
+
+## 32. Statuses from who acts next: applied once, not yet watched in the worker — 2026-09-27
+
+The catch-up is applied and re-checked (352 moves, then 0). The worker's own moves are unit-tested and ran live only on tickets with nothing to move (`fold:once -- --all --limit 50`: 0 moved).
+
+1. **The worker moving a ticket after new mail.** **Check:** after the worker is restarted on this code, the next `fold.status_moved` log lines. For each, the ticket's new status matches its `case_current.next_actor`, and `metadata.case_status.from` is what it was.
+2. **A customer reply to a fold-resolved ticket.** **Check:** it reopens to `open` at ingestion, is categorised and investigated, and the fold does not resolve it again until our reply is sent.
+3. **Nothing a person set was moved.** **Check:** no ticket with `status in ('closed','forwarded','spam')` or a person's `resolved` carries a `case_status.at` later than that status change.
+4. **Verdict churn.** A `needs_customer_input` verdict sets `awaiting_customer`, and the fold puts it back to `open` in the same poll. **Check:** whether that double write is visible anywhere (`updated_at`, the Activity tab). If so, drop that line of `TICKET_STATUS_BY_VERDICT` while the case status is on.
+
+## 31. The Case block and the Senders screen have not been seen in a browser — 2026-09-27
+
+Stage 5d. Web `tsc` and lint pass, and a read of the live directory gives what the Senders screen should list (11 rows; owners support, colleague, partner). Nothing has been rendered or clicked.
+
+1. **The Case block on a ticket with an open check.** **Check:** open a ticket whose `case_current.obligations` has a pending check; the block shows the next actor, the check's owner, need and age, and « overdue » only past 2 working days (colleague) or 3 (partner).
+2. **Mark done / No longer needed.** **Check:** press one; a `ticket_case_actions` row appears with your user id, the check leaves the open list, and `case_current.version` has risen. Then `fold:once -- --all` and confirm it stays settled.
+3. **Senders.** **Check:** add a throwaway domain, relabel it, remove it; each step's list matches `sender_directory`. A bad domain (`foo`) shows the error inline.
+
 ## 30. The current-window priority rules need a live queue review — 2026-09-26
 
 Built and unit-tested: the queue now derives its band from the latest stored

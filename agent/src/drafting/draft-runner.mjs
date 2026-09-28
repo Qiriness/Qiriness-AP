@@ -1,4 +1,4 @@
-import { supabaseSelect } from '../../../scripts/lib/supabase-rest-client.mjs';
+import { supabaseSelect, supabaseSelectAll } from '../../../scripts/lib/supabase-rest-client.mjs';
 import { COLUMNS, T } from '../../../scripts/lib/tables.mjs';
 
 import { brandVoiceProblem, composeSystemPrompt } from './brand-voice.mjs';
@@ -86,6 +86,15 @@ export async function runDrafting({
   // rendered as the customer speaking. Absent means every inbound message
   // reads as « client », which is what it did before.
   senderDirectory = null,
+  // WHICH GATES APPLY (stage 6). `manual`: the CLI and the rehearsal, as
+  // before. `poll`: the worker, which drafts only when it is our turn to reply
+  // on a case that has moved since the mailbox cutover (`pollGate`).
+  gates = 'manual',
+  // `sync_cursors.mail_ingest_cutover_at`; required by the poll gates (Q3).
+  cutoverAt = null,
+  // Count what would be drafted and call no model: the dry run before
+  // DRAFT_IN_POLL is switched on (decided 2026-09-26).
+  estimateOnly = false,
   onDraft
 } = {}) {
   const problem = brandVoiceProblem(brandVoice);
@@ -93,17 +102,36 @@ export async function runDrafting({
     throw new Error(problem);
   }
 
-  const candidates = await store.claimable({ shopId, limit, ticketId, redraft });
+  const candidates = await store.claimable({ shopId, limit, ticketId, redraft, gates, cutoverAt });
   const totals = { considered: candidates.length, drafted: 0, skipped: 0, failed: 0 };
   const skippedBy = {};
+  const skip = (reason) => {
+    totals.skipped += 1;
+    skippedBy[reason] = (skippedBy[reason] || 0) + 1;
+  };
 
   for (const candidate of candidates) {
     const { investigation, ticket, message, orderContext, thread = [], conversation = [], caseState = null } = candidate;
+    const caseCurrent = candidate.caseCurrent ?? null;
+
+    if (gates === 'poll') {
+      const gate = pollGate({ caseCurrent, ticket, investigation, conversation, cutoverAt });
+      if (!gate.ok) {
+        skip(gate.reason);
+        continue;
+      }
+    }
 
     const decision = draftDecision({ investigation, ticket, conversation });
     if (!decision.draft) {
-      totals.skipped += 1;
-      skippedBy[decision.reason] = (skippedBy[decision.reason] || 0) + 1;
+      skip(decision.reason);
+      continue;
+    }
+
+    // THE DRY RUN BEFORE THE SWITCH: every gate has run, no model is called.
+    if (estimateOnly) {
+      totals.drafted += 1;
+      onDraft?.({ ticket, estimate: true, sourceVerdict: investigation.verdict, level: ticket.level ?? null, caseVersion: caseCurrent?.version ?? null });
       continue;
     }
 
@@ -190,6 +218,10 @@ export async function runDrafting({
       const draft = {
         ticketId: ticket.id,
         triggerMessageId: investigation.trigger_message_id,
+        // The case version this reply answers, and the message that produced it
+        // (stage 6). Null from a caller with no fold, like the rehearsal.
+        caseVersion: caseCurrent?.version ?? null,
+        triggerEventId: caseCurrent?.as_of_message_id ?? null,
         investigationId: investigation.id,
         sourceVerdict: investigation.verdict,
         // Derived by draftDecision from the verdict and the case file's
@@ -240,6 +272,43 @@ export async function runDrafting({
 }
 
 /**
+ * The worker's gates (stage 6 of codex_plans/Case_State_Plan.md). A draft is
+ * written in the poll only when every one holds; the first that fails is the
+ * reason counted.
+ *
+ *   not_folded             no `case_current` row yet: the fold runs first
+ *   not_our_turn           `next_actor` is not support (the customer, a colleague
+ *                          or Deret owes the next step, or nobody does)
+ *   pass_pending           the categoriser or the investigation still owes a pass
+ *   not_open               resolved, closed, forwarded or spam
+ *   stale_case_file        the case file answers an older message than the
+ *                          customer's latest
+ *   before_cutover         the message answered predates the mailbox cutover (Q3):
+ *                          the imported history is never drafted to
+ *   not_customer_trigger   the message answered is not the customer's
+ *
+ * `draftDecision`'s own skips (already answered, duplicate, level 4…) follow.
+ */
+export function pollGate({ caseCurrent, ticket, investigation, conversation = [], cutoverAt }) {
+  if (!caseCurrent) return { ok: false, reason: 'not_folded' };
+  if (caseCurrent.next_actor !== 'support') return { ok: false, reason: 'not_our_turn' };
+  if (ticket?.needs_categorisation || ticket?.needs_investigation) return { ok: false, reason: 'pass_pending' };
+  if (!['open', 'awaiting_human'].includes(ticket?.status)) return { ok: false, reason: 'not_open' };
+
+  const trigger = conversation.find((message) => message?.id === investigation?.trigger_message_id) ?? null;
+  const time = (message) => Date.parse(message?.received_at ?? message?.sent_at ?? '') || 0;
+  const latestCustomer = conversation
+    .filter((message) => message?.actor === 'customer' || (!message?.actor && message?.direction === 'inbound'))
+    .reduce((latest, message) => (!latest || time(message) > time(latest) ? message : latest), null);
+  if (latestCustomer && trigger && time(latestCustomer) > time(trigger)) return { ok: false, reason: 'stale_case_file' };
+
+  const cutover = Date.parse(cutoverAt ?? '');
+  if (!Number.isFinite(cutover) || !trigger || time(trigger) < cutover) return { ok: false, reason: 'before_cutover' };
+  if (trigger.actor !== 'customer') return { ok: false, reason: 'not_customer_trigger' };
+  return { ok: true, reason: null };
+}
+
+/**
  * What the drafting pass reads.
  *
  * THE QUEUE IS DERIVED, not flagged. Categorisation and investigation run off
@@ -268,21 +337,53 @@ export async function runDrafting({
  * PENDING ONLY. A draft a person approved, edited, rejected or sent is theirs;
  * `save` would keep its status but replace the text they decided on.
  */
-export function needingDraft(investigations = [], drafts = []) {
-  const byMessage = new Map(drafts.map((row) => [row.trigger_message_id, row]));
-  return investigations.filter((row) => {
-    const draft = byMessage.get(row.trigger_message_id);
-    if (!draft) return true;
-    if (draft.status !== 'pending') return false;
+export function needingDraft(investigations = [], drafts = [], versions = new Map()) {
+  const olderThanCaseFile = (row, draft) => {
     const investigated = Date.parse(row.investigated_at || '');
     const drafted = Date.parse(draft.drafted_at || '');
     return Number.isFinite(investigated) && Number.isFinite(drafted) && investigated > drafted;
+  };
+  // A stale draft answers a case that has moved: it never stands for the current one.
+  const live = drafts.filter((row) => row.status !== 'stale');
+  return investigations.filter((row) => {
+    // STAGE 6: ONE DRAFT PER CASE VERSION. With a fold, the question is whether
+    // this version has one. A draft from before versions (none recorded) on the
+    // same message still counts, so the switch does not redraft history.
+    const version = versions.get(row.ticket_id);
+    if (version !== undefined && version !== null) {
+      const exact = live.find((draft) => draft.ticket_id === row.ticket_id && draft.case_version === version);
+      if (exact) return exact.status === 'pending' && olderThanCaseFile(row, exact);
+      const legacy = live.find(
+        (draft) => (draft.case_version ?? null) === null && draft.trigger_message_id === row.trigger_message_id
+      );
+      if (legacy) return legacy.status === 'pending' && olderThanCaseFile(row, legacy);
+      return true;
+    }
+    const draft = live.find((candidate) => candidate.trigger_message_id === row.trigger_message_id);
+    if (!draft) return true;
+    if (draft.status !== 'pending') return false;
+    return olderThanCaseFile(row, draft);
   });
+}
+
+/** Ids per `in.()` request: the list travels in the URL (the HTTP 414 of 2026-09-27). */
+const ID_BATCH = 100;
+
+async function selectInBatches(supabase, table, column, ids, filters, columns, options) {
+  const unique = [...new Set(ids.filter(Boolean))];
+  const pages = [];
+  for (let index = 0; index < unique.length; index += ID_BATCH) {
+    const batch = unique.slice(index, index + ID_BATCH);
+    pages.push(
+      supabaseSelect(supabase, table, { ...filters, [column]: { operator: 'in', value: `(${batch.join(',')})` } }, columns, options)
+    );
+  }
+  return (await Promise.all(pages)).flat();
 }
 
 export function createDraftingStore(supabase, { caseStateStore = null } = {}) {
   return {
-    async claimable({ shopId, limit, ticketId = null, redraft = false }) {
+    async claimable({ shopId, limit, ticketId = null, redraft = false, gates = 'manual', cutoverAt = null }) {
       const filters = {
         shop_id: shopId,
         // All three verdicts produce text now. `needs_human` gets an
@@ -293,13 +394,45 @@ export function createDraftingStore(supabase, { caseStateStore = null } = {}) {
         filters.ticket_id = ticketId;
       }
 
-      const investigations = await supabaseSelect(
-        supabase,
-        T.TICKET_INVESTIGATIONS,
-        filters,
-        COLUMNS.investigationForDrafting,
-        { order: 'investigated_at.desc' }
-      );
+      // THE POLL STARTS FROM THE CASES, NOT THE CASE FILES. Every case file in
+      // the shop, with its jsonb, on every poll would be the worker's heaviest
+      // read for a handful of tickets. `case_current` narrows it first: our
+      // turn, and something new since the mailbox cutover. `pollGate` then
+      // checks each one properly; this only has to be a superset.
+      let caseRows = null;
+      if (gates === 'poll') {
+        const cutover = Date.parse(cutoverAt ?? '');
+        if (!Number.isFinite(cutover)) return [];
+        caseRows = await supabaseSelectAll(
+          supabase,
+          T.CASE_CURRENT,
+          {
+            shop_id: shopId,
+            next_actor: 'support',
+            as_of_at: { operator: 'gte', value: new Date(cutover).toISOString() },
+            ...(ticketId ? { ticket_id: ticketId } : {})
+          },
+          'ticket_id,version,next_actor,as_of_message_id,as_of_at',
+          { order: 'ticket_id.asc' }
+        );
+        if (caseRows.length === 0) return [];
+      }
+
+      const investigations = caseRows
+        ? await selectInBatches(
+            supabase,
+            T.TICKET_INVESTIGATIONS,
+            'ticket_id',
+            caseRows.map((row) => row.ticket_id),
+            filters,
+            COLUMNS.investigationForDrafting,
+            { order: 'investigated_at.desc' }
+          )
+        : await supabaseSelect(supabase, T.TICKET_INVESTIGATIONS, filters, COLUMNS.investigationForDrafting, {
+            order: 'investigated_at.desc'
+          });
+      // Batches each come back newest first; the per-ticket pick below needs it overall.
+      investigations.sort((a, b) => String(b.investigated_at ?? '').localeCompare(String(a.investigated_at ?? '')));
 
       // Newest first from the query, so the first row seen per ticket is the
       // one to keep.
@@ -320,34 +453,38 @@ export function createDraftingStore(supabase, { caseStateStore = null } = {}) {
         latest.push({ ...row, handoff: Boolean(row.handoff) });
       }
 
-      const pending = redraft ? latest : await this.undrafted(shopId, latest);
+      // The case each ticket is at, when a fold exists: the version a draft is
+      // written against, and the next actor the poll gate reads.
+      const caseByTicket = new Map(
+        (caseRows ??
+          (await selectInBatches(
+            supabase,
+            T.CASE_CURRENT,
+            'ticket_id',
+            latest.map((row) => row.ticket_id),
+            { shop_id: shopId },
+            'ticket_id,version,next_actor,as_of_message_id,as_of_at'
+          ))
+        ).map((row) => [row.ticket_id, row])
+      );
+      const versions = new Map([...caseByTicket].map(([id, row]) => [id, row.version]));
+
+      const pending = redraft ? latest : await this.undrafted(shopId, latest, versions);
       const claimed = typeof limit === 'number' ? pending.slice(0, limit) : pending;
       if (claimed.length === 0) {
         return [];
       }
 
       const [tickets, messages, envelopes] = await Promise.all([
-        supabaseSelect(
+        selectInBatches(
           supabase,
           T.TICKETS,
-          {
-            shop_id: shopId,
-            id: { operator: 'in', value: `(${claimed.map((row) => row.ticket_id).join(',')})` },
-            deleted_at: { operator: 'is', value: 'null' }
-          },
+          'id',
+          claimed.map((row) => row.ticket_id),
+          { shop_id: shopId, deleted_at: { operator: 'is', value: 'null' } },
           COLUMNS.ticketForDrafting
         ),
-        supabaseSelect(
-          supabase,
-          T.TICKET_MESSAGES,
-          {
-            id: {
-              operator: 'in',
-              value: `(${claimed.map((row) => row.trigger_message_id).join(',')})`
-            }
-          },
-          COLUMNS.messageForDrafting
-        ),
+        selectInBatches(supabase, T.TICKET_MESSAGES, 'id', claimed.map((row) => row.trigger_message_id), {}, COLUMNS.messageForDrafting),
         // THE WHOLE THREAD, BOTH DIRECTIONS, WITH BODIES.
         //
         // This read was envelopes only — directions and timestamps — and
@@ -355,17 +492,7 @@ export function createDraftingStore(supabase, { caseStateStore = null } = {}) {
         // (`describesChase`). It still answers it; the extra columns cost that
         // question nothing and buy the one nothing in this pipeline could
         // answer before, which is what we have already told this customer.
-        supabaseSelect(
-          supabase,
-          T.TICKET_MESSAGES,
-          {
-            ticket_id: {
-              operator: 'in',
-              value: `(${claimed.map((row) => row.ticket_id).join(',')})`
-            }
-          },
-          COLUMNS.threadForDrafting
-        )
+        selectInBatches(supabase, T.TICKET_MESSAGES, 'ticket_id', claimed.map((row) => row.ticket_id), {}, COLUMNS.threadForDrafting)
       ]);
 
       // WHAT THE LAST READING LEFT: which questions are answered, which are
@@ -411,10 +538,12 @@ export function createDraftingStore(supabase, { caseStateStore = null } = {}) {
       // listed in `sender_directory`.
       const relatedIds = tickets.map((row) => row.related_ticket_id).filter(Boolean);
       if (relatedIds.length > 0) {
-        const relatedEnvelopes = await supabaseSelect(
+        const relatedEnvelopes = await selectInBatches(
           supabase,
           T.TICKET_MESSAGES,
-          { ticket_id: { operator: 'in', value: `(${relatedIds.join(',')})` } },
+          'ticket_id',
+          relatedIds,
+          {},
           COLUMNS.messageEnvelopesForDrafting
         );
         const byRelated = new Map();
@@ -444,31 +573,29 @@ export function createDraftingStore(supabase, { caseStateStore = null } = {}) {
           // Absent on a first message and on any thread it has not read, which
           // renders no block and leaves the prompt exactly as it was.
           caseState: caseStateByTicket.get(investigation.ticket_id) || null,
-          conversation: conversationByTicket.get(investigation.ticket_id) || []
+          conversation: conversationByTicket.get(investigation.ticket_id) || [],
+          // `case_current`: the version this draft is written against (stage 6).
+          caseCurrent: caseByTicket.get(investigation.ticket_id) || null
         }))
         // A soft-deleted ticket or a purged message drops out here rather than
         // reaching the model as an undefined.
         .filter((candidate) => candidate.ticket && candidate.message);
     },
 
-    /** The candidates that have no draft yet, in the order they were claimed. */
-    async undrafted(shopId, investigations) {
+    /** The candidates that still need a draft for their case version, in the order they were claimed. */
+    async undrafted(shopId, investigations, versions = new Map()) {
       if (investigations.length === 0) {
         return [];
       }
-      const drafted = await supabaseSelect(
+      const drafted = await selectInBatches(
         supabase,
         T.TICKET_DRAFTS,
-        {
-          shop_id: shopId,
-          trigger_message_id: {
-            operator: 'in',
-            value: `(${investigations.map((row) => row.trigger_message_id).join(',')})`
-          }
-        },
-        'trigger_message_id,status,drafted_at'
+        'ticket_id',
+        investigations.map((row) => row.ticket_id),
+        { shop_id: shopId },
+        'ticket_id,trigger_message_id,case_version,status,drafted_at'
       );
-      return needingDraft(investigations, drafted);
+      return needingDraft(investigations, drafted, versions);
     }
   };
 }

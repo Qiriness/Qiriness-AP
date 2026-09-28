@@ -5,6 +5,8 @@
  */
 
 import type {
+  TicketCaseChange,
+  TicketCaseState,
   TicketDetail,
   TicketDraft,
   TicketListItem,
@@ -129,4 +131,25 @@ export async function changeTicketOrder(
     throw new KnowledgeApiError(body?.error || `Request failed (${response.status}).`, response.status);
   }
   return body as TicketOrderChange;
+}
+
+/**
+ * Marks one open check on a case done or cancelled, and returns the case as it
+ * now stands (re-folded server-side). Changes no ticket status and sends nothing.
+ */
+export async function actOnObligation(
+  ticketId: string,
+  obligationId: string,
+  action: "fulfilled" | "cancelled"
+): Promise<TicketCaseChange> {
+  const response = await fetch(`/api/tickets/${ticketId}/obligations`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ obligationId, action }),
+  });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new KnowledgeApiError(body?.error || `Request failed (${response.status}).`, response.status);
+  }
+  return { caseState: (body.caseState ?? null) as TicketCaseState | null, ticket: body.ticket as TicketListItem };
 }

@@ -8,7 +8,7 @@
  */
 
 import { KnowledgeApiError } from "@/lib/api/knowledge";
-import type { PolicyRule, PolicySituation, PolicyVocabulary } from "@/lib/types";
+import type { PolicyRule, PolicySituation, PolicyVocabulary, RuleCheck } from "@/lib/types";
 
 async function request<T>(input: string, init?: RequestInit): Promise<T> {
   const response = await fetch(input, {
@@ -48,6 +48,8 @@ export interface SaveRulePayload {
   tones: string[];
   /** A page the reply offers and what it opens, or null. https only. */
   link: { url: string; label: string } | null;
+  /** The checks the rule opens, in order. */
+  checks: RuleCheck[];
   priority: number;
   isFallback: boolean;
 }

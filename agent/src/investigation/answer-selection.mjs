@@ -1,6 +1,7 @@
 import { NEED_KEYS, findingValues, isMoot, needRequires } from './evidence-rules.mjs';
 import { normaliseTones } from '../../../scripts/lib/reply-tones.mjs';
 import { normaliseReplyLink } from '../../../scripts/lib/reply-link.mjs';
+import { normaliseChecks } from '../casework/rule-checks.mjs';
 
 // Which answer the evidence selects — and, because it is the same question,
 // which fact to go and establish next.
@@ -106,6 +107,9 @@ export function answerFromRow(row) {
     tones: normaliseTones(row.tones),
     // `{ url, label }` or null; a malformed pair reads as no link.
     link: normaliseReplyLink({ url: row.link_url, label: row.link_label }),
+    // The checks the rule opens, in order (stage 5 item C); a row predating the
+    // column, or a malformed step, reads as none.
+    checks: normaliseChecks(row.checks),
     priority: row.priority ?? 0,
     isFallback: Boolean(row.is_fallback)
   };

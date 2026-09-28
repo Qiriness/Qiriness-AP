@@ -10,8 +10,9 @@ import { readCase } from '../src/casework/case-manager.mjs';
 import { readsAsClosure } from '../src/casework/closure.mjs';
 import { closureAllowed } from '../src/drafting/draft-rules.mjs';
 import { createSenderDirectoryStore, senderRole } from '../src/ingestion/sender-directory.mjs';
-import { actorOf } from '../src/casework/actors.mjs';
-import { foldCase } from '../src/casework/case-fold.mjs';
+import { actorOf, obligationOwners } from '../src/casework/actors.mjs';
+import { applyReading, foldCase, nextActorAfter } from '../src/casework/case-fold.mjs';
+import { days as parameterDays, toParameterMap } from '../../scripts/lib/parameters.mjs';
 
 import { CASEWORK_CASES } from './casework-cases.mjs';
 import { threadUpTo } from './casework-cuts.mjs';
@@ -104,6 +105,15 @@ async function main() {
     'ticket_id,trigger_message_id,pending_customer_inputs,commitments,contradictions'
   );
   const actorFor = (message) => message.actor ?? actorOf(message, senderDirectory, config.actorByLabel);
+  // Stage 5 inputs: who may owe a check here, and the holding interval.
+  const owners = obligationOwners({
+    labels: [...new Set((await supabaseSelect(supabase, T.SENDER_DIRECTORY, { shop_id: shopId }, 'label')).map((r) => r.label))],
+    actorByLabel: config.actorByLabel
+  });
+  const holdingDays = parameterDays(
+    toParameterMap(await supabaseSelect(supabase, T.SUPPORT_PARAMETERS, { shop_id: shopId }, 'parameter_key,value')),
+    'holding_reply_interval_days'
+  );
   // The fold's answer at a cut: only what existed by then.
   const foldAt = (conversation, index, ticketId) => {
     const thread = threadUpTo(conversation, index);
@@ -133,6 +143,7 @@ async function main() {
       .map((run) => ({ ...run, index: position.get(run.trigger_message_id) ?? Infinity }));
 
     let carried = [];
+    let carriedObligations = [];
     for (const row of cases) {
       if (row.caseState) counted.caseState += 1;
       const obligations = obligationsOf(row);
@@ -145,6 +156,40 @@ async function main() {
         missing.push(row.messageId);
         continue;
       }
+      // STAGE 5, ONE STEP: the previous label's state, this message's reading,
+      // and the fold's answer. `openObligations` carry label ids so the reading
+      // can name which ones it cleared.
+      const openObligations = carriedObligations.map((o, i) => ({ id: `L${i}`, owner: o.owner ?? 'support', need: o.need, status: 'pending' }));
+      const stepFor = (reading) => {
+        const current = conversation[row.index];
+        const actor = actorFor(current);
+        const lastSupportAt = [...threadUpTo(conversation, row.index - 1)].reverse().find((m) => actorFor(m) === 'support');
+        const after = applyReading(
+          { pending: carried, obligations: openObligations, lastSupportAt: lastSupportAt?.received_at ?? lastSupportAt?.sent_at ?? null },
+          reading,
+          { actor, at: current.received_at ?? current.sent_at ?? null, messageId: current.id }
+        );
+        const open = after.obligations.filter((o) => o.status === 'pending').map((o) => `${o.owner}|${o.need}`);
+        return {
+          effect5: reading.effect,
+          nextActor5: nextActorAfter(after, { holdingDays }),
+          obligations5: open,
+          waiting5: after.pending
+        };
+      };
+      const stepOutcome = (step) => ({
+        effect5: compare(row.effect ?? null, step.effect5),
+        nextActor5: compare(row.nextActor ?? null, step.nextActor5),
+        obligations5: compare((row.obligations ?? []).map((o) => `${o.owner ?? 'support'}|${o.need}`), step.obligations5),
+        // WHO owes a check, which is what decides the next step; the need is
+        // often named differently by the labels and the reading.
+        owners5: compare(
+          [...new Set((row.obligations ?? []).map((o) => o.owner ?? 'support'))],
+          [...new Set(step.obligations5.map((key) => key.split('|')[0]))]
+        ),
+        waiting5: compare(row.waitingCustomer ?? [], step.waiting5)
+      });
+
       if (row.direction === 'outbound') {
         counted.outbound += 1;
         // The verdict drafting would have read here: the newest case file
@@ -152,18 +197,34 @@ async function main() {
         const caseFile = runs.filter((run) => run.index <= row.index).sort((a, b) => a.index - b.index).at(-1);
         const actor = pipelineNextActor({ direction: 'outbound', verdict: caseFile?.verdict ?? null });
         const folded = foldAt(conversation, row.index, ticketId);
+        const reading = await readCase({
+          openai,
+          model: config.caseworkModel,
+          ticket,
+          message: conversation[row.index],
+          conversation: threadUpTo(conversation, row.index),
+          pendingInputs: carried,
+          senderDirectory,
+          actor: actorFor(conversation[row.index]),
+          openObligations,
+          owners,
+          logger
+        });
+        const step = stepFor(reading);
         scored.push({
           row,
           role: senderRole(conversation[row.index], senderDirectory),
           outcome: {
             nextActor: compare(row.nextActor ?? null, actor, { expressible: actor !== null }),
-            nextActorFold: compare(row.nextActor ?? null, folded)
+            nextActorFold: compare(row.nextActor ?? null, folded),
+            ...stepOutcome(step)
           },
-          got: { nextActor: actor, nextActorFold: folded },
+          got: { nextActor: actor, nextActorFold: folded, ...step },
           unstable: [],
           carried
         });
         carried = row.waitingCustomer;
+        carriedObligations = row.obligations ?? [];
         continue;
       }
 
@@ -184,6 +245,9 @@ async function main() {
           conversation: thread,
           pendingInputs: carried,
           senderDirectory,
+          actor: actorFor(message),
+          openObligations,
+          owners,
           logger
         });
         const closure = config.closureModel
@@ -196,6 +260,7 @@ async function main() {
           nextAction: decided.action,
           why: decided.why,
           nextActor: pipelineNextActor({ direction: 'inbound', action: decided.action }),
+          ...stepFor(reading),
           failed: reading.failed
         });
       }
@@ -215,7 +280,8 @@ async function main() {
           expressible: PIPELINE_NEXT_ACTIONS.includes(row.nextAction)
         }),
         nextActor: compare(row.nextActor ?? null, read.nextActor, { expressible: read.nextActor !== null }),
-        nextActorFold: compare(row.nextActor ?? null, folded)
+        nextActorFold: compare(row.nextActor ?? null, folded),
+        ...stepOutcome(read)
       }));
       for (const read of reads) read.nextActorFold = folded;
       // A cut counts as agreeing on a field only if every attempt agreed; the
@@ -233,6 +299,7 @@ async function main() {
         carried
       });
       carried = row.waitingCustomer;
+      carriedObligations = row.obligations ?? [];
     }
   }
 
@@ -261,13 +328,20 @@ function report({ scored, counted, missing }) {
   for (const s of scored) {
     const bad = Object.entries(s.outcome).filter(([, o]) => o === 'disagree' || o === 'inexpressible');
     if (!show && bad.length === 0) continue;
-    const parts = ['effect', 'answered', 'nextAction', 'nextActor', 'nextActorFold']
+    const parts = ['effect', 'answered', 'nextAction', 'nextActor', 'nextActorFold', 'effect5', 'nextActor5', 'obligations5', 'owners5', 'waiting5']
       .filter((field) => field in s.outcome && (show || ['disagree', 'inexpressible'].includes(s.outcome[field])))
       .map((field) => {
         // The fold answers the same label as the pipeline's `nextActor`.
-        const labelled = field === 'nextActorFold' ? 'nextActor' : field;
-        const expected = field === 'answered' ? `[${s.row.answered.join(',')}]` : s.row[labelled];
-        const got = field === 'answered' ? `[${s.got.answered.join(',')}]` : s.got[field];
+        const labelled = { nextActorFold: 'nextActor', effect5: 'effect', nextActor5: 'nextActor', obligations5: 'obligations', waiting5: 'waitingCustomer' }[field] ?? field;
+        const expected =
+          field === 'answered'
+            ? `[${s.row.answered.join(',')}]`
+            : field === 'obligations5'
+              ? `[${(s.row.obligations ?? []).map((o) => `${o.owner ?? 'support'}|${o.need}`).join(',')}]`
+              : Array.isArray(s.row[labelled])
+                ? `[${s.row[labelled].join(',')}]`
+                : s.row[labelled];
+        const got = Array.isArray(s.got[field]) ? `[${s.got[field].join(',')}]` : s.got[field];
         // `unlabelled` is not a disagreement: the field was not scored at this cut.
         const mark = { agree: '·', inexpressible: '∅', unlabelled: '–' }[s.outcome[field]] ?? '✗';
         const why = field === 'nextAction' && s.got.why ? ` (${s.got.why})` : '';

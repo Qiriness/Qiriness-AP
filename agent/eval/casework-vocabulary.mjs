@@ -18,29 +18,9 @@ import { NEXT_ACTORS as NEXT_ACTOR_KEYS } from '../src/casework/actors.mjs';
 // the set is the specification, each field is scored separately, and the new
 // ones start failing and turn green as they are built.
 
-/** What a message RECEIVED on the thread did to the case. */
-export const INBOUND_EFFECTS = {
-  continuation: 'Même demande, qui avance',
-  // A CHASE IS ITS OWN VALUE because the labeller kept needing it: four notes in
-  // the first batch say « relance », filed as continuation twice and as new
-  // information twice. It is what the delay apology keys on, and the pipeline
-  // reads it as `continuation`.
-  chase: 'Relance (même demande, rien de nouveau)',
-  new_information: "Apporte un élément (réponse, preuve, correction)",
-  new_issue: 'Nouvelle demande dans le même fil',
-  closes_case: 'Clôt la demande (merci, reçu, plus besoin)',
-  internal_note: 'Échange interne / prestataire, sans le client',
-  noise: 'Rien (accusé automatique, doublon, hors sujet)'
-};
-
-/** What a message WE SENT did to the case. */
-export const OUTBOUND_EFFECTS = {
-  answers: 'Répond à la demande',
-  asks_customer: 'Demande quelque chose au client',
-  holding: 'Fait patienter (vérification en cours)',
-  closes_case: 'Clôt le dossier',
-  internal_request: 'Demande à un collègue ou à un prestataire'
-};
+// The effects live with the Case Manager, which now reads into them too.
+export { INBOUND_EFFECTS, OUTBOUND_EFFECTS } from '../src/casework/effects.mjs';
+import { INBOUND_EFFECTS, OUTBOUND_EFFECTS } from '../src/casework/effects.mjs';
 
 /**
  * The label schema a page exports under (`labelSchemaVersion`). The export

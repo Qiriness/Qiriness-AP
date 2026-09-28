@@ -39,10 +39,13 @@ import { MISSING_FIELDS, VERDICTS } from "../../../agent/src/investigation/case-
 import { PARAMETERS } from "../../../scripts/lib/parameters.mjs";
 import { REPLY_TONES, TONE_KEYS } from "../../../scripts/lib/reply-tones.mjs";
 import { MAX_LINK_LABEL, isReplyLinkUrl } from "../../../scripts/lib/reply-link.mjs";
+import { checkProblems, normaliseChecks } from "../../../agent/src/casework/rule-checks.mjs";
+import { needLabel } from "../need-labels";
 
 import { listPinnableArticles } from "./knowledge-service";
 import { listOfferableCodes } from "./promotions-service";
 import { listParameters } from "./parameters-service";
+import { checkOwnersFor } from "./senders-service";
 
 import { KnowledgeNotFoundError, KnowledgeValidationError } from "./knowledge-errors";
 
@@ -59,7 +62,7 @@ const normaliseConditions = normaliseConditionsRaw as (
   raw: unknown,
   options?: { warn?: (message: string) => void },
 ) => Record<string, string[]>;
-import type { PolicyRule, PolicyVocabulary } from "../types";
+import type { PolicyRule, PolicyVocabulary, RuleCheck } from "../types";
 
 function getSupabaseClient() {
   return createSupabaseClient(loadConfig(process.env as Record<string, string | undefined>));
@@ -129,6 +132,11 @@ export async function policyVocabulary(shopId?: string): Promise<PolicyVocabular
   // rulebook cannot offer a pin that drafting will drop.
   const articles = shopId ? await listPinnableArticles(shopId) : [];
 
+  // Who a rule's checks may be owed by: our team always, the others only when
+  // the sender directory has one (stage 5 item B). A brand with no operations
+  // partner is never offered one, so it has nothing to turn off.
+  const owners = shopId ? await checkOwnersFor(shopId) : ["support"];
+
   return {
     needs,
     routes: ROUTES,
@@ -149,8 +157,17 @@ export async function policyVocabulary(shopId?: string): Promise<PolicyVocabular
       label: (meta as { label: string }).label,
       set: !unsetParameters.includes(key),
     })),
+    checkOwners: CHECK_OWNER_LABELS.filter((owner) => owners.includes(owner.key)),
+    checkNeeds: NEED_KEYS.map((key: string) => ({ key, label: needLabel(key) })),
   };
 }
+
+/** Who owes a check, as the editor names them. « Operations partner », never « partner »: see actors.mjs. */
+const CHECK_OWNER_LABELS: PolicyVocabulary["checkOwners"] = [
+  { key: "support", label: "Our team" },
+  { key: "colleague", label: "A colleague" },
+  { key: "partner", label: "Operations partner" },
+];
 
 /**
  * State → the parameters it is computed from.
@@ -183,7 +200,7 @@ export async function listRules(shopId: string, answerSet?: string): Promise<Pol
       ...(answerSet ? { answer_set: answerSet } : {}),
       deleted_at: { operator: "is", value: "null" },
     },
-    "id,answer_set,answer_key,situation_key,when_conditions,answer_skeleton,route,ask,offer_code,knowledge_document_id,tones,link_url,link_label,priority,is_fallback,approval_status,updated_at",
+    "id,answer_set,answer_key,situation_key,when_conditions,answer_skeleton,route,ask,offer_code,knowledge_document_id,tones,link_url,link_label,checks,priority,is_fallback,approval_status,updated_at",
   )) as Record<string, unknown>[];
 
   return rows.map(mapRule).sort(byAnswerSetThenKey);
@@ -240,6 +257,8 @@ export interface RuleInput {
   tones: string[];
   /** A page the reply offers and what it opens, or null. Both halves, https only. */
   link: { url: string; label: string } | null;
+  /** The checks the rule opens, in order. Owners limited to what the brand has. */
+  checks?: RuleCheck[];
   priority: number;
   isFallback: boolean;
   approvalStatus: string;
@@ -324,6 +343,15 @@ export async function saveRule(shopId: string, input: RuleInput): Promise<Policy
     link = { url: linkUrl, label: linkLabel };
   }
 
+  // Refused rather than dropped, like a bad tone: a step naming an owner the
+  // brand does not have would open a check nobody can be chased for.
+  const owners = await checkOwnersFor(shopId);
+  const stepProblems = checkProblems(input.checks ?? [], { owners }) as string[];
+  if (stepProblems.length > 0) {
+    throw new KnowledgeValidationError(stepProblems.join(" "));
+  }
+  const checks = normaliseChecks(input.checks ?? []);
+
   const shaped = {
     answerKey,
     situationKey: input.situationKey || null,
@@ -358,6 +386,7 @@ export async function saveRule(shopId: string, input: RuleInput): Promise<Policy
         tones,
         link_url: link?.url ?? null,
         link_label: link?.label ?? null,
+        checks,
         priority: shaped.priority,
         is_fallback: shaped.isFallback,
         approval_status: input.approvalStatus || "draft",
@@ -441,6 +470,7 @@ function mapRule(row: Record<string, unknown>): PolicyRule {
       typeof row.link_url === "string" && typeof row.link_label === "string"
         ? { url: row.link_url, label: row.link_label }
         : null,
+    checks: normaliseChecks(row.checks) as RuleCheck[],
     priority: Number(row.priority ?? 0),
     isFallback: Boolean(row.is_fallback),
     approvalStatus: String(row.approval_status ?? "draft"),

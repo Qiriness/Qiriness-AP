@@ -1,6 +1,6 @@
 # Case state — from "new email → draft" to "new event → case → next action"
 
-Plan, started 2026-09-26. **Stages 1–4 are built and applied; stage 5 is next.** It is the proposal
+Plan, started 2026-09-26. **Stages 1–6 are built and applied (stage 6 on 2026-09-28). Drafting in the poll is built and off (`DRAFT_IN_POLL`); the review-mail sender is not built.** It is the proposal
 of 2026-09-26, questioned against the code and the database, with the answers the
 business gave the same day. When a stage ships, its rule moves to `DECISIONS.md`,
 its build to `CHANGELOG.md`, and its map to `APP_SCHEMA.md`, as usual.
@@ -332,6 +332,8 @@ that followed it.
 | `colleague`, `partner` | `awaiting_human` |
 | `nobody` | eligible to close (stage 5) |
 
+> **As built (2026-09-27):** support accepts `open` **or** `awaiting_human`, so a case the investigation handed to a person keeps its auto-close exemption; `nobody` resolves. See DECISIONS.md § « The ticket status follows who acts next ».
+
 Only statuses the agent set are rewritten. `resolved` and `closed` set by a person
 in the dashboard are never overridden, which is the guarantee the verdict map
 already gives.
@@ -448,7 +450,7 @@ has changed; the next action is then « no reply, a person acts first ».
 that reads it is built; the parameter catalogue only holds what something
 reads. The labels already use the value (label schema 4).
 
-**C. The order of obligations is declared by the rule.** A rule may open
+**C. The order of obligations is declared by the rule.** *(Built 2026-09-27: `support_answers.checks`, migration 44; DECISIONS.md § « A rule declares the checks it opens ».)* A rule may open
 obligations in sequence (D-36: `partner: delivery_state`, then
 `support: refund_state`), so the Deret check is created when the case opens,
 not only when someone writes « je transmets à Deret ». It is a new
@@ -508,6 +510,12 @@ tickets, not hundreds. If the dry run says otherwise, a gate is wrong.
 **Done when:** on a test thread, draft v1 is pending; a reply typed in Outlook
 makes it `stale`; the next customer message produces v2; the reviewer is mailed
 once for each version.
+
+> **As built (2026-09-28):** all but the last clause are unit-tested and wait for a live thread
+> (VALIDATION_LOG item 34). The last cannot happen yet: **no review-mail sender exists**, only
+> `review_sent_at` and `pendingReview`. Once per version is true by construction when one is
+> built. Our own reply stales open drafts even when the version holds (DECISIONS.md § « One
+> draft per case version »).
 
 ## Later: evidence for consistency, not economy (Q17, Q19)
 

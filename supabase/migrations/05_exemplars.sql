@@ -430,6 +430,20 @@ create table public.support_answers (
   -- at is a person's decision, the same kind `offer_code` is.
   link_url text,
   link_label text,
+  -- THE CHECKS THIS RULE OPENS, IN ORDER: `[{ owner, need }]`. Stage 5 item C of
+  -- codex_plans/Case_State_Plan.md. D-36 opens `partner: delivery_state` (ask
+  -- Deret where the parcel is) and then `support: refund_state`; the second
+  -- opens only once the first is done. Without it a check exists only once
+  -- someone writes « je transmets à Deret ».
+  --
+  -- OWNERS ARE WHAT THE BRAND HAS. The editor offers `partner` only when the
+  -- sender directory has an operations partner (`obligationOwners`), so a brand
+  -- without one declares no partner step and has nothing to turn off. Owner and
+  -- need are checked in code against the same closed lists the Case Manager
+  -- picks from; this constraint holds only the shape.
+  --
+  -- `'[]'` means no checks: one representation, as `ask` and `tones` have.
+  checks jsonb not null default '[]'::jsonb,
   -- Ordering among rows that match equally deeply. Most-specific wins first;
   -- this only breaks the tie, so authoring order never becomes load-bearing by
   -- accident.
@@ -491,6 +505,10 @@ create table public.support_answers (
   constraint support_answers_link_pair_check check (
     (link_url is null) = (link_label is null)
     and (link_label is null or length(btrim(link_label)) between 1 and 120)
+  ),
+  -- A list of steps, never an object or a scalar: the order is the sequence.
+  constraint support_answers_checks_array_check check (
+    jsonb_typeof(checks) = 'array'
   ),
   -- A rule that asks must say so in its route, or the drafting stage gets a
   -- question to ask and a verdict that does not permit asking it —
@@ -567,6 +585,9 @@ comment on column public.support_answers.link_url is
 
 comment on column public.support_answers.link_label is
   'What link_url opens, in the words the reply uses (« le guide d''utilisation »). Present exactly when link_url is.';
+
+comment on column public.support_answers.checks is
+  'The checks this rule opens on a case, in order: [{owner, need}], owner support / colleague / partner, need a NEED_KEYS key. The fold (agent/src/casework/case-fold.mjs) opens the first when a case file selects this rule and each next one when the one before it is done; a step marked no longer needed ends the sequence. Copied onto the case file (exemplar_match.policy.check_sequences), so editing the rule never changes a case already opened.';
 
 -- ============================================================================
 -- EXEMPLAR RETRIEVAL

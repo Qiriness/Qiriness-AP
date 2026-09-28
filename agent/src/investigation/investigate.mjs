@@ -626,6 +626,10 @@ function combinePolicies(selections) {
     // One link per reply, like the code: the first is taken, per_request shows any clash.
     link: selections.find((s) => s.link)?.link ?? null,
     answer_skeleton: skeleton || null,
+    // Each request's rule keeps its own sequence: two requests, two plans.
+    ...(selections.some((s) => s.check_sequences)
+      ? { check_sequences: selections.flatMap((s) => s.check_sequences ?? []) }
+      : {}),
     candidates: [...new Set(selections.flatMap((s) => s.candidates))],
     // The findings are one map for the whole ticket, so any selection’s copy is
     // the same map. See DECISIONS for why they are not scoped per request.
@@ -695,6 +699,13 @@ function selectOnePolicy(policy, ledger, toolNames) {
     // The wording guidance, carried so the drafting pass can read it back off
     // the stored row. It is the one field here that reaches a model.
     answer_skeleton: result.answer?.answerSkeleton ?? null,
+    // The checks the rule opens, in order, copied here so the fold reads them off
+    // the case file and editing the rule never changes a case already opened.
+    // Present only when there are some: a rule with none keeps this object
+    // exactly as it was.
+    ...((result.answer?.checks ?? []).length > 0
+      ? { check_sequences: [{ answer_key: result.answer.answerKey, steps: result.answer.checks }] }
+      : {}),
     // Every rule that matched, not just the winner: two rules matching equally
     // is an authoring problem, and it is invisible if only the winner is kept.
     candidates: result.candidates.map((c) => c.answerKey),

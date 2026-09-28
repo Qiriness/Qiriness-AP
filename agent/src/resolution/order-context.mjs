@@ -1,3 +1,4 @@
+import { workingDaysBetween } from '../lib/working-days.mjs';
 import { buildCustomerContext } from '../retrieval/customer-context.mjs';
 
 // Assembles the order/customer bundle a drafting agent (or the next tool) reads
@@ -637,24 +638,6 @@ function deliveryDelayState(order, delivery, { franceDeliveryDays, abroadDeliver
     return 'unknown';
   }
   return elapsed > allowed ? 'overdue' : 'within_window';
-}
-
-/** Whole working days from `from` to `now`, Saturdays and Sundays excluded. */
-function workingDaysBetween(from, now) {
-  const start = new Date(from);
-  const end = new Date(now);
-  if (!Number.isFinite(start.getTime()) || !Number.isFinite(end.getTime())) {
-    return null;
-  }
-  const days = Math.max(0, Math.floor((end.getTime() - start.getTime()) / 86400000));
-  let working = 0;
-  for (let i = 1; i <= days; i += 1) {
-    const day = new Date(start.getTime() + i * 86400000).getUTCDay();
-    if (day !== 0 && day !== 6) {
-      working += 1;
-    }
-  }
-  return working;
 }
 
 function deliveryState(delivery, signals, staleTransitDays, now) {

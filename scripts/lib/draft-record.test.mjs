@@ -20,6 +20,10 @@ function recorder({ rows = [] } = {}) {
         calls.push({ kind: 'select', table, filters, columns, options });
         return calls.at(-1).table === T.TICKET_DRAFTS ? rows : [];
       },
+      async update(_client, table, filters, patch, options) {
+        calls.push({ kind: 'update', table, filters, patch, options });
+        return [{ id: 'x' }];
+      },
       async updateById(_client, table, id, patch) {
         calls.push({ kind: 'updateById', table, id, patch });
         return { id, ...patch };
@@ -57,14 +61,44 @@ test('it refuses to be constructed without a shop', () => {
 
 // --- save --------------------------------------------------------------------
 
-test('a draft is upserted on the message it answers, not on the ticket', async () => {
+test('a draft is upserted on the case version it was written against', async () => {
+  // Stage 6: a case that moved gets a new row; the same version rewrites its own.
   const { rec, draft } = record();
-  await draft.save(SAVE);
+  await draft.save({ ...SAVE, caseVersion: 3, triggerEventId: 'message-2' });
 
   const [call] = rec.calls;
   assert.equal(call.kind, 'upsert');
   assert.equal(call.table, T.TICKET_DRAFTS);
-  assert.equal(call.onConflict, 'shop_id,trigger_message_id');
+  assert.equal(call.onConflict, 'shop_id,ticket_id,case_version');
+  assert.equal(call.bodies[0].case_version, 3);
+  assert.equal(call.bodies[0].trigger_event_id, 'message-2');
+});
+
+test('a case that moved stales every open draft of an older or unversioned version', async () => {
+  const { rec, draft } = record();
+  const count = await draft.markStale('ticket-1', { version: 4, reason: 'superseded_by_outbound' });
+
+  const writes = rec.calls.filter((call) => call.kind === 'update');
+  assert.equal(writes.length, 2);
+  for (const write of writes) {
+    assert.equal(write.filters.shop_id, SHOP);
+    assert.equal(write.filters.ticket_id, 'ticket-1');
+    // Rejected and sent drafts are history: only these three move.
+    assert.deepEqual(write.filters.status, { operator: 'in', value: '(pending,approved,edited)' });
+    assert.deepEqual(write.patch, { status: 'stale', stale_reason: 'superseded_by_outbound' });
+  }
+  assert.deepEqual(writes[0].filters.case_version, { operator: 'lt', value: 4 });
+  assert.deepEqual(writes[1].filters.case_version, { operator: 'is', value: 'null' });
+  assert.equal(count, 2);
+  await assert.rejects(() => draft.markStale('ticket-1', { version: 4, reason: 'because' }), /markStale takes one of/);
+});
+
+test('a stale draft cannot be approved, edited or rejected', async () => {
+  const { draft } = record({ rows: [{ id: 'draft-1', ticket_id: 'ticket-1', body_text: 'x', status: 'stale' }] });
+  for (const status of ['approved', 'rejected']) {
+    await assert.rejects(() => draft.decide('draft-1', { status }), /out of date/);
+  }
+  await assert.rejects(() => draft.decide('draft-1', { status: 'edited', approvedBodyText: 'y' }), /out of date/);
 });
 
 test('the shop is bound at construction, never passed per call', async () => {
@@ -159,8 +193,9 @@ test('an approval may carry the reviewer text, and a rejection never does', asyn
   await draft.decide('draft-1', { status: 'approved', approvedBodyText: 'Bonjour…' });
   await draft.decide('draft-2', { status: 'rejected', approvedBodyText: 'ignored' });
 
-  assert.equal(rec.calls[0].patch.approved_body_text, 'Bonjour…');
-  assert.equal(rec.calls[1].patch.approved_body_text, null);
+  const decided = rec.calls.filter((call) => call.kind === 'updateById');
+  assert.equal(decided[0].patch.approved_body_text, 'Bonjour…');
+  assert.equal(decided[1].patch.approved_body_text, null);
 });
 
 // --- review copies -----------------------------------------------------------
@@ -171,6 +206,8 @@ test('the review queue is what has never been mailed, oldest first', async () =>
 
   const [call] = rec.calls;
   assert.deepEqual(call.filters.review_sent_at, { operator: 'is', value: 'null' });
+  // A stale draft is never mailed; each version is its own row, mailed once.
+  assert.equal(call.filters.status, 'pending');
   assert.equal(call.options.order, 'drafted_at.asc');
 });
 

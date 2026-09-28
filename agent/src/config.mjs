@@ -3,6 +3,7 @@ import { fileURLToPath } from 'node:url';
 
 import { loadEnv } from '../../scripts/lib/sync-config.mjs';
 import { parseActorMap } from './casework/actors.mjs';
+import { parseCaseStatusMap } from './casework/case-status.mjs';
 
 // Repo root is two levels up from agent/src, so the worker reads the same
 // .env.local the sync scripts use regardless of the process working directory.
@@ -51,6 +52,15 @@ export function loadAgentConfig(env = loadEnv(REPO_ROOT)) {
     // nothing here. A second subject wanting this should turn the pair into a
     // list rather than add a third boolean.
     draftOnlyCosmetovigilance: env.DRAFT_ONLY_COSMETOVIGILANCE !== 'false',
+    // DRAFTING IN THE POLL (stage 6), OFF UNLESS SET TO `true`. When on, the
+    // worker drafts after the fold, only where it is our turn to reply to a
+    // customer message received since the mailbox cutover (`pollGate`). Run
+    // `npm run draft -- --dry-run --gates=poll` first: it says how many drafts
+    // and what they would cost, with no model call. Nothing is ever sent.
+    draftInPoll: env.DRAFT_IN_POLL === 'true',
+    // At most this many drafts a poll, so a gate that turns out wrong costs a
+    // handful of calls rather than hundreds.
+    draftPollLimit: Number(env.DRAFT_POLL_LIMIT) || 10,
     // RULE-DIRECTED COLLECTION, GLOBALLY. The per-situation `collection_mode`
     // column is the normal control; this is the one a person reaches for at
     // 2am without a deploy. Defaults ON because the column defaults to
@@ -115,6 +125,11 @@ export function loadAgentConfig(env = loadEnv(REPO_ROOT)) {
     // part of the team, another's a supplier. Unset keeps the default map in
     // casework/actors.mjs; a label left out keeps its default.
     actorByLabel: parseActorMap(env.AGENT_ACTOR_BY_LABEL),
+    // THE TICKET STATUS FROM WHO ACTS NEXT (stage 5c). `off` leaves statuses to
+    // the investigation's verdict as before; `nobody:open` keeps finished cases
+    // in the queue for a person to close. Unset keeps the default map in
+    // casework/case-status.mjs.
+    caseStatusByNextActor: parseCaseStatusMap(env.AGENT_CASE_STATUS_BY_NEXT_ACTOR),
     // WHERE A DRAFT GOES TO BE READ, and `none` is the default so a fresh
     // checkout cannot email anything at all. `review-mail` sends a copy to
     // DRAFT_REVIEW_MAILBOX — the reviewer's own inbox, never a customer, and

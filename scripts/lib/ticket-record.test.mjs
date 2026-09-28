@@ -449,3 +449,25 @@ test('a ticket with no order is matched on a null order, and a lost race returns
   assert.equal('status' in call.columns, false, 'no status change unless the columns carry one');
   assert.equal(result, null);
 });
+
+test('setCaseStatus is conditional on the status the fold read, and records itself', async () => {
+  const { transport, record } = build();
+  const ticket = { id: 't1', status: 'open', metadata: { investigation: { verdict: 'answerable' } } };
+  const caseStatus = { status: 'resolved', resolved_at: '2026-09-27T10:00:00Z' };
+  const row = await record.setCaseStatus(ticket, 'resolved', caseStatus, '2026-09-27T10:00:00Z');
+
+  const write = transport.calls.find((c) => c.kind === 'update');
+  // A person who resolved or reopened it meanwhile makes this match nothing.
+  assert.deepEqual(write.filters, { id: 't1', shop_id: SHOP, status: 'open' });
+  assert.equal(write.columns.resolved_at, '2026-09-27T10:00:00Z');
+  // The proof the resolve was the fold's, beside the other trails, not over them.
+  assert.deepEqual(write.columns.metadata, { investigation: { verdict: 'answerable' }, case_status: caseStatus });
+  assert.equal(row.id, 't1');
+});
+
+test('setCaseStatus answers null when the ticket moved on', async () => {
+  const transport = recordingTransport();
+  transport.update = () => Promise.resolve([]);
+  const record = createTicketRecord({}, { shopId: SHOP, transport });
+  assert.equal(await record.setCaseStatus({ id: 't1', status: 'open' }, 'resolved', {}), null);
+});

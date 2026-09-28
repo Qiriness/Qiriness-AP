@@ -1,5 +1,8 @@
 import { createHash } from 'node:crypto';
 
+import { workingDaysBetween } from '../lib/working-days.mjs';
+import { advanceSequences, sequencesOf, startSequences } from './rule-checks.mjs';
+
 // The current state of a case, folded from what the ticket holds. Stage 4 of
 // codex_plans/Case_State_Plan.md.
 //
@@ -72,12 +75,172 @@ export function nextActorFor({ lastActor, pending = [] }) {
 }
 
 /**
+ * One message's reading applied to the state before it (stage 5).
+ *
+ * Questions: those the message answered are struck off; those OUR message
+ * asked are added. Checks: those it cleared are fulfilled, those it opened are
+ * added as pending. An obligation's id is derived from the message that opened
+ * it, so the same thread folds to the same ids every time.
+ *
+ * @param before  { pending: string[], obligations: [{ id, owner, need, status }], lastSupportAt }
+ * @param reading { resolvedInputs, asked, obligationsOpened, obligationsCleared, effect }
+ */
+export function applyReading(before, reading, { actor, at = null, messageId = null } = {}) {
+  const answered = new Set(reading?.resolvedInputs ?? []);
+  let pending = (before.pending ?? []).filter((field) => !answered.has(field));
+  if (actor === 'support') pending = unique([...pending, ...(reading?.asked ?? [])]);
+
+  const cleared = new Set(reading?.obligationsCleared ?? []);
+  const obligations = (before.obligations ?? []).map((o) =>
+    cleared.has(o.id) && o.status === 'pending' ? { ...o, status: 'fulfilled', cleared_by: messageId } : o
+  );
+  (reading?.obligationsOpened ?? []).forEach((o, index) => {
+    obligations.push({
+      id: `o-${messageId ?? 'x'}-${index}`,
+      owner: o.owner,
+      need: o.need,
+      status: 'pending',
+      opened_by: messageId,
+      opened_at: at
+    });
+  });
+
+  return {
+    pending,
+    obligations,
+    lastActor: actor,
+    lastEffect: reading?.effect ?? null,
+    lastCleared: cleared.size > 0,
+    lastAsked: actor === 'support' && ((reading?.asked ?? []).length > 0 || reading?.effect === 'asks_customer'),
+    lastAt: at,
+    lastSupportAt: actor === 'support' ? at : before.lastSupportAt ?? null
+  };
+}
+
+/** A reading written by the stage 5 Case Manager, stored or in memory. */
+function isStageFiveReading(row) {
+  return row?.effect !== undefined && row?.effect !== null;
+}
+
+/** A stored row (snake case) or an in-memory reading (camel case), as `applyReading` takes it. */
+function readingOf(row) {
+  return {
+    effect: row.effect ?? null,
+    resolvedInputs: row.resolvedInputs ?? row.resolved_inputs ?? [],
+    asked: row.asked ?? [],
+    obligationsOpened: row.obligationsOpened ?? row.obligations_opened ?? [],
+    obligationsCleared: row.obligationsCleared ?? row.obligations_cleared ?? []
+  };
+}
+
+/**
+ * Dashboard actions applied to the obligations: the latest action per check
+ * wins, and only a pending check moves.
+ */
+export function applyActions(obligations = [], actions = []) {
+  const latest = new Map();
+  for (const row of [...actions].sort((a, b) => String(a.acted_at ?? '').localeCompare(String(b.acted_at ?? '')))) {
+    latest.set(row.obligation_id, row);
+  }
+  return obligations.map((o) => {
+    const row = latest.get(o.id);
+    if (!row || o.status !== 'pending') return o;
+    return { ...o, status: row.action, cleared_by: { kind: 'manual', by: row.acted_by ?? null, at: row.acted_at ?? null } };
+  });
+}
+
+/**
+ * How long each pending check has been open, and whether it is overdue, for
+ * the dashboard. An alert only (decided 2026-09-26): nothing reads it to act.
+ *
+ * @param delays { colleague, partner, support? } working days, null = no alert
+ */
+export function obligationAges(obligations = [], { now = new Date(), delays = {} } = {}) {
+  return obligations.map((o) => {
+    if (o.status !== 'pending' || !o.opened_at) return { ...o, workingDaysOpen: null, overdue: false };
+    const open = workingDaysBetween(o.opened_at, now);
+    const limit = delays[o.owner] ?? null;
+    return { ...o, workingDaysOpen: open, overdue: limit !== null && open !== null && open > limit };
+  });
+}
+
+// Queued rule steps are owed by nobody yet: only a pending check counts.
+const openOf = (state) => (state.obligations ?? []).filter((o) => o.status === 'pending');
+
+/**
+ * Who owes the next step once readings exist (stage 5). First rule wins.
+ *
+ * After the CUSTOMER:
+ *   - a thank-you (`closes_case`) with nothing owed on either side: nobody; with
+ *     our question still open: us (a short closing reply); with a check open:
+ *     that check's owner;
+ *   - a chase with nothing new, while a colleague's or partner's check is open
+ *     and our last message is within the holding interval: that owner (no
+ *     reply yet: Notes/Labelling_Cheat_Sheet.md, holding reply);
+ *   - otherwise us.
+ * After a COLLEAGUE or OPERATIONS PARTNER: us when they settled a check (the
+ * customer is owed the result); the owner of a check still open otherwise; us.
+ * After US: nobody when we closed and nothing is open; then an open check of
+ * ours, then one of a colleague or partner, then the customer's pending
+ * question; otherwise nobody.
+ *
+ * With no reading for the last message the effect is unknown, and this falls
+ * back to the stage 4 rule (`nextActorFor`).
+ */
+export function nextActorAfter(state, { now = null, holdingDays = null } = {}) {
+  const actor = state.lastActor;
+  if (!actor) return null;
+  const open = openOf(state);
+  const ours = open.find((o) => o.owner === 'support');
+  const theirs = open.find((o) => o.owner !== 'support');
+  const effect = state.lastEffect;
+
+  if (actor === 'customer') {
+    if (effect === 'closes_case') {
+      if (open.length > 0) return (ours ?? theirs).owner;
+      return (state.pending ?? []).length > 0 ? 'support' : 'nobody';
+    }
+    if ((effect === 'chase' || effect === 'continuation') && theirs && holdingDays !== null && state.lastSupportAt) {
+      const since = workingDaysBetween(state.lastSupportAt, now ?? state.lastAt);
+      if (since !== null && since <= holdingDays) return theirs.owner;
+    }
+    return 'support';
+  }
+  if (actor === 'colleague' || actor === 'partner') {
+    if (effect === null) return 'support';
+    if (state.lastCleared) return 'support';
+    return theirs ? theirs.owner : 'support';
+  }
+  // Us. An unread message of ours (no effect) still leaves the checks and the
+  // questions the thread holds: only « we closed it » needs the reading.
+  // (Found live 2026-09-27 on 2aa6604e: an open check of ours folded to
+  // `nobody` because our last reply had no stage 5 reading.)
+  if (effect === 'closes_case' && open.length === 0) return 'nobody';
+  // A message that ASKED the customer something hands the next step to them,
+  // even with a check of ours still open (the labels, 11 cuts, 2026-09-27).
+  if (state.lastAsked && (state.pending ?? []).length > 0) return 'customer';
+  if (ours) return 'support';
+  if (theirs) return theirs.owner;
+  if ((state.pending ?? []).length > 0) return 'customer';
+  return 'nobody';
+}
+
+/**
  * @param messages  the ticket's messages: { id, direction, actor?, received_at|sent_at }
  * @param readings  ticket_case_state rows: { trigger_message_id, pending_customer_inputs, commitments, contradictions }
- * @param caseFiles ticket_investigations rows: { trigger_message_id, verdict, missing }
+ * @param caseFiles ticket_investigations rows: { trigger_message_id, verdict, missing, investigated_at?, check_sequences? }
  * @param actorFor  message → actor; defaults to the stored actor
  */
-export function foldCase({ messages = [], readings = [], caseFiles = [], actorFor = defaultActorFor } = {}) {
+export function foldCase({
+  messages = [],
+  readings = [],
+  caseFiles = [],
+  actorFor = defaultActorFor,
+  holdingDays = null,
+  now = null,
+  // ticket_case_actions rows: { obligation_id, action, acted_by, acted_at }
+  actions = []
+} = {}) {
   const thread = orderedThread(messages);
   const position = new Map(thread.map((message, index) => [message.id, index]));
   const at = (row) => position.get(row?.trigger_message_id);
@@ -104,7 +267,64 @@ export function foldCase({ messages = [], readings = [], caseFiles = [], actorFo
   }
   pending = unique(pending);
 
-  const next = nextActorFor({ lastActor, pending });
+  let next = nextActorFor({ lastActor, pending });
+  let obligations = [];
+
+  // STAGE 5: WALK THE THREAD WHEN READINGS CARRY THE NEW FIELDS, OR A CASE FILE
+  // SELECTED A RULE THAT OPENS CHECKS. One timeline: each message with its
+  // reading, each case file's rule steps just after the message it was written
+  // on, and each dashboard action at its time. Readings from before stage 5 have
+  // no `effect`; a thread made only of those, with no rule checks, folds
+  // exactly as stage 4 did.
+  const stageFive = reads.some(isStageFiveReading);
+  const ruleFiles = files.filter((file) => sequencesOf(file).length > 0);
+  if (stageFive || ruleFiles.length > 0) {
+    const byTrigger = new Map(stageFive ? reads.map((row) => [row.trigger_message_id, row]) : []);
+    const filesAt = new Map();
+    for (const file of ruleFiles) filesAt.set(file.trigger_message_id, [...(filesAt.get(file.trigger_message_id) ?? []), file]);
+    // WHAT A PERSON DID IN THE DASHBOARD settles a check whatever the thread
+    // says: work done by phone or in Shopify leaves no email to read. In time
+    // order, so « Mark done » on step 1 opens step 2 from that moment.
+    const queue = [...actions].sort((a, b) => String(a.acted_at ?? '').localeCompare(String(b.acted_at ?? '')));
+    let sequences = [];
+    let walk = { pending: [], obligations: [], lastSupportAt: null };
+    const settle = (until) => {
+      while (queue.length > 0 && (until === null || Date.parse(queue[0].acted_at ?? '') < until)) {
+        const action = queue.shift();
+        walk = { ...walk, obligations: advanceSequences(applyActions(walk.obligations, [action]), sequences, { at: action.acted_at ?? null }) };
+      }
+    };
+    for (const message of thread) {
+      const actor = actorFor(message);
+      const when = message.received_at ?? message.sent_at ?? null;
+      settle(timeOf(message));
+      const row = byTrigger.get(message.id);
+      walk = row
+        ? applyReading(walk, readingOf(row), { actor, at: when, messageId: message.id })
+        : {
+            ...walk,
+            lastActor: actor,
+            lastEffect: null,
+            lastCleared: false,
+            lastAsked: false,
+            lastAt: when,
+            lastSupportAt: actor === 'support' ? when : walk.lastSupportAt
+          };
+      for (const file of filesAt.get(message.id) ?? []) {
+        const started = startSequences(walk.obligations, file, { at: file.investigated_at ?? when });
+        sequences = [...sequences, ...started.sequences];
+        walk = { ...walk, obligations: started.obligations };
+      }
+      walk = { ...walk, obligations: advanceSequences(walk.obligations, sequences, { at: when }) };
+    }
+    settle(null);
+    // Without stage 5 readings, what we wait on from the customer is stage 4's.
+    if (!stageFive) walk = { ...walk, pending };
+    pending = walk.pending;
+    obligations = walk.obligations;
+    next = nextActorAfter(walk, { now, holdingDays });
+  }
+
   const state = {
     as_of_message_id: last?.id ?? null,
     as_of_at: last ? last.received_at ?? last.sent_at ?? null : null,
@@ -112,7 +332,7 @@ export function foldCase({ messages = [], readings = [], caseFiles = [], actorFo
     pending_customer_inputs: pending,
     commitments: unique(reads.flatMap((row) => row.commitments ?? [])),
     contradictions: unique(reads.flatMap((row) => row.contradictions ?? [])),
-    obligations: [],
+    obligations,
     next_actor: next,
     resolved: next === 'nobody'
   };

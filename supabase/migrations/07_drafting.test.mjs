@@ -43,11 +43,11 @@ test('the mailbox is declared as an edit source before anything writes it', () =
 
 // --- the idempotency key -----------------------------------------------------
 
-test('a draft is keyed on the message it answers, not on the ticket', () => {
-  // Per ticket, a customer's reply would overwrite the draft a human is
-  // part-way through reviewing. Same rule, same reason, as
-  // ticket_investigations.
-  assert.match(SQL, /unique \(shop_id, trigger_message_id\)/);
+test('a draft is keyed on the case version it was written against', () => {
+  // Stage 6: one row per case version, so a case that moved gets a new draft
+  // and the old one keeps what its reviewer saw (it goes stale). Keyed on the
+  // message before, which left a partner's answer nowhere to put a second draft.
+  assert.match(SQL, /unique \(shop_id, ticket_id, case_version\)/);
 });
 
 test('the trigger message and the case file are both required', () => {
@@ -150,7 +150,8 @@ test('the lifecycle names sending but nothing else in the file does', () => {
     'edited',
     'pending',
     'rejected',
-    'sent'
+    'sent',
+    'stale'
   ]);
   const columns = columnsIn(SQL, 'ticket_drafts');
   for (const forbidden of ['to_email', 'recipient', 'recipient_email', 'reply_to', 'sent_at']) {

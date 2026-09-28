@@ -8,9 +8,12 @@ import { knowledgeErrorMessage } from "@/lib/api/knowledge";
 import type { SaveRulePayload } from "@/lib/api/policy";
 import { isReplyLinkUrl } from "@/lib/reply-links";
 import { ruleLabel } from "@/lib/rule-labels";
-import type { PolicyRule, PolicySituation, PolicyVocabulary } from "@/lib/types";
+import type { PolicyRule, PolicySituation, PolicyVocabulary, RuleCheck } from "@/lib/types";
 
 import styles from "./RuleEditor.module.css";
+
+/** As `MAX_CHECK_STEPS` in agent/src/casework/rule-checks.mjs, which refuses more on save. */
+const MAX_CHECK_STEPS = 5;
 
 export interface RuleEditorSeed {
   answerSet?: string;
@@ -134,6 +137,7 @@ export function RuleEditor({
   const [tones, setTones] = useState<string[]>(rule?.tones ?? []);
   const [linkUrl, setLinkUrl] = useState(rule?.link?.url ?? "");
   const [linkLabel, setLinkLabel] = useState(rule?.link?.label ?? "");
+  const [checks, setChecks] = useState<RuleCheck[]>(rule?.checks ?? []);
   const [useGeneral, setUseGeneral] = useState(false);
   const [generalRuleId, setGeneralRuleId] = useState(generalRules[0]?.id ?? "");
   const [scopeOpen, setScopeOpen] = useState(() => !(rule?.answerSet ?? seed?.answerSet ?? answerSets[0]));
@@ -192,10 +196,23 @@ export function RuleEditor({
     knowledgeDocumentId: knowledgeDocumentId || null,
     tones,
     link: trimmedLinkUrl || trimmedLinkLabel ? { url: trimmedLinkUrl, label: trimmedLinkLabel } : null,
+    checks,
     priority: rule?.priority ?? 0,
     isFallback: rule?.isFallback ?? false,
   };
   const snapshot = JSON.stringify(payload);
+
+  function updateCheck(index: number, change: Partial<RuleCheck>) {
+    setChecks((prev) => prev.map((step, i) => (i === index ? { ...step, ...change } : step)));
+  }
+  function moveCheck(index: number, by: number) {
+    setChecks((prev) => {
+      const next = [...prev];
+      const [step] = next.splice(index, 1);
+      next.splice(index + by, 0, step);
+      return next;
+    });
+  }
   const [initialSnapshot] = useState(snapshot);
   const dirty = snapshot !== initialSnapshot;
 
@@ -735,6 +752,93 @@ export function RuleEditor({
                     )}
                   </div>
                 )}
+
+                {/* THE CHECKS THIS RULE OPENS, IN ORDER (stage 5 item C). The first opens
+                    when a case file selects the rule; each next one when the one before
+                    it is done. Owners are only those the brand has: no operations
+                    partner in the sender directory, none offered here. */}
+                <div className={styles.field}>
+                  <span className={styles.label} id={`${titleId}-checks`}>
+                    Checks this rule opens
+                  </span>
+                  {checks.length > 0 && (
+                    <ol className={styles.checkSteps} aria-labelledby={`${titleId}-checks`}>
+                      {checks.map((step, index) => {
+                        const ownerKnown = vocabulary.checkOwners.some((owner) => owner.key === step.owner);
+                        return (
+                          <li key={index} className={styles.checkStep}>
+                            <span className={styles.checkStepNumber}>{index + 1}</span>
+                            <select
+                              className={styles.select}
+                              aria-label={`Step ${index + 1}: who owes it`}
+                              value={step.owner}
+                              onChange={(e) => updateCheck(index, { owner: e.target.value as RuleCheck["owner"] })}
+                            >
+                              {!ownerKnown && <option value={step.owner}>{step.owner} (not in this brand)</option>}
+                              {vocabulary.checkOwners.map((owner) => (
+                                <option key={owner.key} value={owner.key}>
+                                  {owner.label}
+                                </option>
+                              ))}
+                            </select>
+                            <select
+                              className={styles.select}
+                              aria-label={`Step ${index + 1}: what is checked`}
+                              value={step.need}
+                              onChange={(e) => updateCheck(index, { need: e.target.value })}
+                            >
+                              {vocabulary.checkNeeds.map((need) => (
+                                <option key={need.key} value={need.key}>
+                                  {need.label}
+                                </option>
+                              ))}
+                            </select>
+                            <span className={styles.checkStepActions}>
+                              <button
+                                type="button"
+                                className={styles.linkButton}
+                                disabled={index === 0}
+                                onClick={() => moveCheck(index, -1)}
+                                aria-label={`Move step ${index + 1} up`}
+                              >
+                                Up
+                              </button>
+                              <button
+                                type="button"
+                                className={styles.linkButton}
+                                onClick={() => setChecks((prev) => prev.filter((_, i) => i !== index))}
+                                aria-label={`Remove step ${index + 1}`}
+                              >
+                                Remove
+                              </button>
+                            </span>
+                          </li>
+                        );
+                      })}
+                    </ol>
+                  )}
+                  {checks.length < MAX_CHECK_STEPS && vocabulary.checkNeeds.length > 0 && (
+                    <button
+                      type="button"
+                      className={styles.linkButton}
+                      onClick={() =>
+                        setChecks((prev) => [
+                          ...prev,
+                          { owner: vocabulary.checkOwners.at(-1)?.key ?? "support", need: vocabulary.checkNeeds[0].key },
+                        ])
+                      }
+                    >
+                      Add a check
+                    </button>
+                  )}
+                  <p className={styles.hint}>
+                    {checks.length === 0
+                      ? "None: a check opens only when someone writes that they are checking."
+                      : "The first opens when a ticket is answered by this rule; each next one when the one before it is marked done. « No longer needed » ends the sequence."}
+                    {!vocabulary.checkOwners.some((owner) => owner.key === "partner") &&
+                      " No operations partner in Senders, so none can be chosen."}
+                  </p>
+                </div>
 
                 {/* A LINK, AND THE MODEL NEVER SEES THE ADDRESS. It is given what the
                     link opens and writes « cliquez [[ici]] … »; the address is put on

@@ -48,6 +48,21 @@ export function parseActorMap(text) {
 }
 
 /**
+ * Who may OWE a check in this deployment (stage 5, decided 2026-09-26).
+ *
+ * Support always can. A colleague or an operations partner only when at least
+ * one sender_directory label this brand uses maps to that actor, so a brand
+ * with no 3PL and no carrier on file is never offered « partner », and a line
+ * like « nous vérifions auprès du transporteur » stays our own check.
+ *
+ * @param labels the distinct labels present in sender_directory
+ */
+export function obligationOwners({ labels = [], actorByLabel = DEFAULT_ACTOR_BY_LABEL } = {}) {
+  const present = new Set(labels.map((label) => actorByLabel[label]).filter(Boolean));
+  return ['support', 'colleague', 'partner'].filter((owner) => owner === 'support' || present.has(owner));
+}
+
+/**
  * The actor of one stored message. Direction decides first: an `outbound` row
  * is ours by construction, including a staff reply from a personal inbox,
  * which ingestion files as outbound (`isStaffReplyToCustomer`).

@@ -70,7 +70,9 @@ export function createCaseStateRecord(supabase, { shopId, select = supabaseSelec
      * a new one. The trajectory survives as rows rather than being flattened.
      */
     async save(reading) {
-      if (!CASE_RELATIONSHIPS.includes(reading?.caseRelationship)) {
+      // NULL IS A REAL VALUE SINCE STAGE 5: a reading of our own message or of a
+      // colleague's/partner's has no customer relationship (migration 42).
+      if (reading?.caseRelationship !== null && !CASE_RELATIONSHIPS.includes(reading?.caseRelationship)) {
         // Refused rather than defaulted. A relationship this module does not
         // recognise is a caller bug, and quietly storing `unclear` would hide
         // it behind behaviour that looks deliberate.
@@ -93,6 +95,11 @@ export function createCaseStateRecord(supabase, { shopId, select = supabaseSelec
             contradictions: reading.contradictions ?? [],
             evidence_reuse: reading.evidenceReuse ?? {},
             case_summary: reading.caseSummary ?? null,
+            actor: reading.actor ?? null,
+            effect: reading.effect ?? null,
+            asked: reading.asked ?? [],
+            obligations_opened: reading.obligationsOpened ?? [],
+            obligations_cleared: reading.obligationsCleared ?? [],
             model: reading.model ?? null,
             read_at: reading.readAt ?? new Date().toISOString()
           }

@@ -26,12 +26,14 @@
 -- ticket_drafts — the reply the agent would send
 -- ============================================================================
 --
--- IDEMPOTENCY, keyed on the message that triggered the run, exactly as
--- ticket_investigations is. `unique (shop_id, trigger_message_id)` means one
--- draft per inbound email: re-running the pass over the same thread rewrites
--- its own row, and a customer's reply produces a NEW draft rather than
--- silently overwriting the one a human is part-way through reviewing. That
--- second half is the reason it is not keyed on the ticket.
+-- ONE ROW PER CASE VERSION (stage 6 of codex_plans/Case_State_Plan.md, since
+-- 2026-09-28). `unique (shop_id, ticket_id, case_version)`: re-running the pass
+-- on an unchanged case rewrites its own row, and a case that moved (a customer
+-- reply, a reply typed in Outlook, Deret answering) gets a NEW row, so what each
+-- reviewer saw and what each edit corrected stays on the row it was about. Until
+-- then it was keyed on the trigger message, and a partner's answer on an
+-- unchanged trigger had nowhere to put a second draft. Rows written before the
+-- change have no case version and keep their place.
 --
 -- TWO BODIES, AND THAT IS THE MEASUREMENT. `body_text` is what the model wrote
 -- and is never edited; `approved_body_text` is what a human decided to send
@@ -62,6 +64,14 @@ create table public.ticket_drafts (
 
   -- THE IDEMPOTENCY KEY. The inbound message this draft answers.
   trigger_message_id uuid not null references public.ticket_messages(id) on delete cascade,
+
+  -- THE CASE VERSION THIS REPLY WAS WRITTEN AGAINST (`case_current.version`).
+  -- The key, with the ticket. Null only on rows written before stage 6.
+  case_version integer,
+  -- The event that produced that version: the newest message when the case was
+  -- folded. Often the trigger itself; a partner's answer or our own Outlook reply
+  -- when the case moved without the customer writing.
+  trigger_event_id uuid references public.ticket_messages(id) on delete set null,
 
   -- The case file this was written from. A draft with no case file is not a
   -- thing that can exist: the verdict decides what KIND of reply this is, and
@@ -109,6 +119,10 @@ create table public.ticket_drafts (
   -- machine outcome — a draft can be mechanically clean and still rejected, and
   -- a person may edit one precisely because a check caught something.
   status text not null default 'pending',
+  -- WHY A DRAFT WENT `stale`: the case moved on (`case_changed`), or we replied
+  -- ourselves (`superseded_by_outbound`, with no guess about whether it was this
+  -- text that went out — Q14). Present exactly when the status is `stale`.
+  stale_reason text,
 
   -- The mechanical post-checks: prohibitions from the case file's do_not_claim,
   -- identifiers the tool layer withheld, the reply language, the signature.
@@ -154,7 +168,7 @@ create table public.ticket_drafts (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
 
-  unique (shop_id, trigger_message_id),
+  constraint ticket_drafts_shop_ticket_version_key unique (shop_id, ticket_id, case_version),
 
   constraint ticket_drafts_source_verdict_check check (
     source_verdict in ('answerable', 'needs_customer_input', 'needs_human')
@@ -177,7 +191,17 @@ create table public.ticket_drafts (
     source_verdict <> 'needs_customer_input' or disposition = 'intermediary'
   ),
   constraint ticket_drafts_status_check check (
-    status in ('pending', 'approved', 'edited', 'rejected', 'sent')
+    status in ('pending', 'approved', 'edited', 'rejected', 'sent', 'stale')
+  ),
+  -- A stale draft says why, and only a stale draft carries a reason.
+  constraint ticket_drafts_stale_reason_check check (
+    stale_reason is null or stale_reason in ('case_changed', 'superseded_by_outbound')
+  ),
+  constraint ticket_drafts_stale_has_reason_check check (
+    (status = 'stale') = (stale_reason is not null)
+  ),
+  constraint ticket_drafts_case_version_check check (
+    case_version is null or case_version >= 1
   ),
   -- Level 4 is never drafted: `allowedTools` hands it an empty registry and the
   -- ticket reaches a person untouched. A level 4 draft row would mean that rule
@@ -210,6 +234,9 @@ create index ticket_drafts_shop_status_idx on public.ticket_drafts (shop_id, sta
 
 create index ticket_drafts_investigation_idx on public.ticket_drafts (investigation_id);
 
+-- The message a draft answers, now that it is no longer the key.
+create index ticket_drafts_trigger_idx on public.ticket_drafts (shop_id, trigger_message_id);
+
 -- What the review-mail pass claims: drafted, not yet mailed to the reviewer.
 create index ticket_drafts_shop_review_pending_idx
   on public.ticket_drafts (shop_id, drafted_at)
@@ -223,10 +250,19 @@ execute function public.set_updated_at();
 alter table public.ticket_drafts enable row level security;
 
 comment on table public.ticket_drafts is
-  'One customer-facing reply per investigated inbound message: what the agent would send, the mechanical checks it passed, and the human decision about it. Holds no recipient and cannot send. unique(shop_id, trigger_message_id) makes the pass safe to re-run and keeps a thread''s successive readings as separate drafts.';
+  'One customer-facing reply per case version: what the agent would send, the mechanical checks it passed, and the human decision about it. Holds no recipient and cannot send. unique(shop_id, ticket_id, case_version) makes the pass safe to re-run and gives a case that moved a new row, leaving the old one stale with what its reviewer saw.';
 
 comment on column public.ticket_drafts.trigger_message_id is
-  'THE IDEMPOTENCY KEY. The inbound message this draft answers. Per message rather than per ticket, so a customer reply produces a new draft instead of overwriting one a human is reviewing.';
+  'The customer message this draft answers. No longer the key since stage 6: two case versions can answer the same message (Deret answered, nothing new from the customer).';
+
+comment on column public.ticket_drafts.case_version is
+  'The case_current.version this reply was written against; with the ticket, the key. Null only on rows written before stage 6. A fold that raises the version marks every pending, approved or edited draft of an older one stale.';
+
+comment on column public.ticket_drafts.trigger_event_id is
+  'The event that produced case_version: the newest message when the case was folded. The trigger message itself, or a partner''s answer or our Outlook reply when the case moved without the customer.';
+
+comment on column public.ticket_drafts.stale_reason is
+  'Why the draft went stale: case_changed (the case moved on) or superseded_by_outbound (we replied ourselves; no guess about whether it was this text). Present exactly when status is stale. A stale draft is never approved; the next version gets its own row.';
 
 comment on column public.ticket_drafts.investigation_id is
   'The case file this was written from. Not nullable: the verdict decides what kind of reply this is, and the established claims are the only facts the model may use.';
@@ -244,7 +280,7 @@ comment on column public.ticket_drafts.approved_body_text is
   'What a human decided to send instead. Null while a draft is untouched or was approved as written; required when status is edited.';
 
 comment on column public.ticket_drafts.status is
-  'The human decision: pending | approved | edited | rejected | sent. Independent of checks_passed, which is a machine outcome. Nothing writes `sent` today -- there is no send path, and this table cannot address a customer.';
+  'The human decision: pending | approved | edited | rejected | sent, plus stale (set by the fold when the case moved on; see stale_reason). Independent of checks_passed, which is a machine outcome. Nothing writes `sent` today -- there is no send path, and this table cannot address a customer.';
 
 comment on column public.ticket_drafts.checks is
   'One entry per mechanical post-check run against the body: the prohibitions in the case file''s do_not_claim, identifiers the tool layer withheld, the reply language, the signature. Recorded rather than trusted, because a prohibition that lives only in a prompt is the weakest guardrail in this codebase.';

@@ -1,6 +1,7 @@
 import {
   supabaseInsert,
   supabaseSelect,
+  supabaseUpdate,
   supabaseUpdateById,
   supabaseUpsert
 } from './supabase-rest-client.mjs';
@@ -18,7 +19,8 @@ import { COLUMNS, T } from './tables.mjs';
  * dashboard to grow a second one over the same columns.
  *
  * WHAT IT OWNS
- *   · the upsert key. One draft per inbound message, never per ticket
+ *   · the upsert key. One draft per case version of a ticket (stage 6), so a
+ *     case that moved gets a new row and the old one goes `stale`
  *   · the two bodies, and the rule that `edited` must carry a rewrite
  *   · the human lifecycle (`status`) and the machine outcome (`checks_passed`),
  *     kept apart because they answer different questions
@@ -43,6 +45,12 @@ import { COLUMNS, T } from './tables.mjs';
 /** Statuses a human decision may set. `sent` is absent: no send path exists. */
 export const DECISIONS = ['approved', 'edited', 'rejected'];
 
+/** What goes stale when the case moves: anything not yet rejected or sent (Q15 withdraws an approval). */
+export const STALEABLE = ['pending', 'approved', 'edited'];
+
+/** Why a draft went stale; mirrors ticket_drafts_stale_reason_check. */
+export const STALE_REASONS = ['case_changed', 'superseded_by_outbound'];
+
 /**
  * The PostgREST calls this module makes, as one object.
  *
@@ -54,6 +62,7 @@ export const DECISIONS = ['approved', 'edited', 'rejected'];
 export const REST_TRANSPORT = {
   select: supabaseSelect,
   insert: supabaseInsert,
+  update: supabaseUpdate,
   updateById: supabaseUpdateById,
   upsert: supabaseUpsert
 };
@@ -63,17 +72,18 @@ export function createDraftRecord(supabase, { shopId, transport = REST_TRANSPORT
     throw new Error('createDraftRecord requires a shopId: every read and write here is shop-scoped.');
   }
 
-  const { select, insert, updateById, upsert } = transport;
+  const { select, insert, update, updateById, upsert } = transport;
 
   return {
     /**
      * Store what the model produced.
      *
-     * UPSERT ON (shop_id, trigger_message_id), which is what makes the drafting
-     * pass safe to re-run: drafting the same reading twice rewrites one row
-     * instead of accumulating near-duplicates a reviewer then has to choose
-     * between. A customer's REPLY is a different trigger message, so it lands as
-     * a new draft and leaves the one under review alone.
+     * UPSERT ON (shop_id, ticket_id, case_version), which is what makes the
+     * drafting pass safe to re-run: drafting the same case version twice rewrites
+     * one row instead of accumulating near-duplicates a reviewer then has to
+     * choose between. A case that MOVED (a customer reply, our Outlook reply,
+     * Deret answering) has a new version, so it lands as a new draft and the one
+     * a reviewer saw stays as it was, stale (`markStale`).
      *
      * IT DOES NOT CARRY THE HUMAN COLUMNS. `status` and `approved_body_text` are
      * absent from the patch rather than reset to their defaults: a re-run is the
@@ -84,6 +94,10 @@ export function createDraftRecord(supabase, { shopId, transport = REST_TRANSPORT
     async save({
       ticketId,
       triggerMessageId,
+      // `case_current.version` when this was written, and the message that
+      // produced it. Null only from a caller with no fold (the rehearsal).
+      caseVersion = null,
+      triggerEventId = null,
       investigationId,
       sourceVerdict,
       disposition,
@@ -110,6 +124,8 @@ export function createDraftRecord(supabase, { shopId, transport = REST_TRANSPORT
             shop_id: shopId,
             ticket_id: ticketId,
             trigger_message_id: triggerMessageId,
+            case_version: caseVersion,
+            trigger_event_id: triggerEventId,
             investigation_id: investigationId,
             source_verdict: sourceVerdict,
             disposition,
@@ -131,9 +147,30 @@ export function createDraftRecord(supabase, { shopId, transport = REST_TRANSPORT
             review_sent_at: null
           }
         ],
-        'shop_id,trigger_message_id'
+        'shop_id,ticket_id,case_version'
       );
       return rows?.[0] ?? null;
+    },
+
+    /**
+     * The case moved to `version`: every draft of an older version still
+     * pending, approved or edited goes stale (Q15: an approval of text written
+     * for a case that no longer exists is withdrawn). Rejected and sent drafts
+     * are history and stay. Rows from before stage 6 (no version) count as older.
+     *
+     * TWO WRITES, because « older or unversioned » is an OR the filter builder
+     * does not express; each is conditional on the status, so a decision made
+     * meanwhile is never overwritten.
+     */
+    async markStale(ticketId, { version, reason }) {
+      if (!STALE_REASONS.includes(reason)) {
+        throw new Error(`markStale takes one of ${STALE_REASONS.join(', ')}; got ${JSON.stringify(reason)}.`);
+      }
+      const base = { shop_id: shopId, ticket_id: ticketId, status: { operator: 'in', value: `(${STALEABLE.join(',')})` } };
+      const patch = { status: 'stale', stale_reason: reason };
+      const older = await update(supabase, T.TICKET_DRAFTS, { ...base, case_version: { operator: 'lt', value: version } }, patch, { select: 'id' });
+      const unversioned = await update(supabase, T.TICKET_DRAFTS, { ...base, case_version: { operator: 'is', value: 'null' } }, patch, { select: 'id' });
+      return (Array.isArray(older) ? older.length : 0) + (Array.isArray(unversioned) ? unversioned.length : 0);
     },
 
     /**
@@ -186,12 +223,38 @@ export function createDraftRecord(supabase, { shopId, transport = REST_TRANSPORT
       return rows[0] || null;
     },
 
-    /** Drafted, and no review copy sent yet. What the review-mail pass claims. */
+    /**
+     * We replied ourselves (a reply typed in Outlook, read from Sent Items): every
+     * open draft written before that message is superseded, whether or not the
+     * reply changed the case version. No guess about whether it was this text
+     * that went out (Q14).
+     */
+    async markSuperseded(ticketId, { before }) {
+      const rows = await update(
+        supabase,
+        T.TICKET_DRAFTS,
+        {
+          shop_id: shopId,
+          ticket_id: ticketId,
+          status: { operator: 'in', value: `(${STALEABLE.join(',')})` },
+          drafted_at: { operator: 'lt', value: before }
+        },
+        { status: 'stale', stale_reason: 'superseded_by_outbound' },
+        { select: 'id' }
+      );
+      return Array.isArray(rows) ? rows.length : 0;
+    },
+
+    /**
+     * Drafted, still pending, and no review copy sent yet. What the review-mail
+     * pass claims. Once per version comes free: each version is its own row with
+     * its own stamp, and a stale one is never mailed.
+     */
     async pendingReview({ limit } = {}) {
       return select(
         supabase,
         T.TICKET_DRAFTS,
-        { shop_id: shopId, review_sent_at: { operator: 'is', value: 'null' } },
+        { shop_id: shopId, status: 'pending', review_sent_at: { operator: 'is', value: 'null' } },
         COLUMNS.draftForReview,
         { order: 'drafted_at.asc', limit }
       );
@@ -239,14 +302,19 @@ export function createDraftRecord(supabase, { shopId, transport = REST_TRANSPORT
       // An edit that changed nothing is not recorded: the database refuses it
       // (see 07_drafting.sql), and a row asserting the agent's text needed
       // correcting into itself is the most misleading kind of training pair.
+      const [existing] = await select(
+        supabase,
+        T.TICKET_DRAFTS,
+        { id: draftId, shop_id: shopId },
+        'id,ticket_id,body_text,status',
+        { limit: 1 }
+      );
+      // A STALE DRAFT IS NOT DECIDED ON. It answers a case that has moved; the
+      // next version gets its own draft (stage 6, Q15).
+      if (existing?.status === 'stale') {
+        throw new Error('This draft is out of date: the case has moved on since it was written.');
+      }
       if (status === 'edited') {
-        const [existing] = await select(
-          supabase,
-          T.TICKET_DRAFTS,
-          { id: draftId, shop_id: shopId },
-          'id,ticket_id,body_text',
-          { limit: 1 }
-        );
         if (existing && normalise(existing.body_text) !== normalise(approvedBodyText)) {
           await insert(supabase, T.TICKET_DRAFT_EDITS, [
             {

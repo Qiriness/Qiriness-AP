@@ -116,6 +116,31 @@ export const PARAMETERS = {
       'would raise the ceiling above itself and switch the guard off.',
     usedBy: 'the buyer_type state, and the payments rules that route a trade sender to a person'
   },
+  holding_reply_interval_days: {
+    kind: 'days',
+    label: 'How long before a chasing customer gets another « we are on it »?',
+    description:
+      'Working days since our last message to the customer. A chase within it, while a ' +
+      'colleague or partner check is open and nothing new has arrived, gets no reply: the ' +
+      'owner of the check acts next. Past it, a holding reply is due. Qiriness: 5 (2026-09-26).',
+    usedBy: 'the case fold (who acts next) and, from stage 6, drafting'
+  },
+  colleague_check_overdue_days: {
+    kind: 'days',
+    label: 'When is a check a colleague owes overdue?',
+    description:
+      'Working days after the check was opened. Overdue is an alert on the ticket only: ' +
+      'it never escalates, reassigns or clears anything. Qiriness: 2 (2026-09-26).',
+    usedBy: 'the ticket page (open checks)'
+  },
+  partner_check_overdue_days: {
+    kind: 'days',
+    label: 'When is a check an operations partner owes overdue?',
+    description:
+      'Working days after the check was opened (a 3PL or a carrier). An alert only, like ' +
+      'the colleague delay. Qiriness: 3 (2026-09-26).',
+    usedBy: 'the ticket page (open checks)'
+  },
   returns_address: {
     kind: 'text',
     label: 'Where does a customer send a return?',

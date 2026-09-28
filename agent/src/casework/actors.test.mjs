@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
+import * as actorsModule from './actors.mjs';
 import { DEFAULT_ACTOR_BY_LABEL, actorOf, parseActorMap } from './actors.mjs';
 
 const directory = {
@@ -37,4 +38,13 @@ test('an unset map is the default, and an unknown actor is refused', () => {
   assert.deepEqual(parseActorMap(''), { ...DEFAULT_ACTOR_BY_LABEL });
   assert.deepEqual(parseActorMap(undefined), { ...DEFAULT_ACTOR_BY_LABEL });
   assert.throws(() => parseActorMap('logistics:vendor'), /not an actor/);
+});
+
+test('who may owe a check follows the directory: no partner on file, no partner owner', () => {
+  const { obligationOwners } = actorsModule;
+  assert.deepEqual(obligationOwners({ labels: ['internal', 'logistics', 'retailer'] }), ['support', 'colleague', 'partner']);
+  assert.deepEqual(obligationOwners({ labels: ['internal'] }), ['support', 'colleague']);
+  assert.deepEqual(obligationOwners({ labels: [] }), ['support']);
+  // A brand whose 3PL counts as the team: logistics is a colleague, no partner.
+  assert.deepEqual(obligationOwners({ labels: ['logistics'], actorByLabel: { logistics: 'colleague' } }), ['support', 'colleague']);
 });

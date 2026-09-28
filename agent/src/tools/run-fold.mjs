@@ -6,12 +6,18 @@ import { resolveShopId } from '../lib/shop.mjs';
 import { createSenderDirectoryStore } from '../ingestion/sender-directory.mjs';
 import { actorOf } from '../casework/actors.mjs';
 import { createCaseCurrentStore, runFold } from '../casework/case-current-store.mjs';
+import { AUTO_CLOSE_EXEMPT_LEVELS } from '../lifecycle/auto-close.mjs';
 
 // Runs the fold pass on its own: no mailbox read and no model call, unlike
 // `ingest:once -- --stop-after=fold`, which runs every pass before it.
 //
 //   npm run fold:once                 # up to 200 stale tickets
 //   npm run fold:once -- --limit 2000 # the whole backlog in one go
+//   npm run fold:once -- --all --limit 2000  # re-fold every ticket, after a rule change
+//   npm run fold:once -- --no-status  # case_current only; ticket statuses untouched
+//
+// Moves each folded ticket's status as the worker does (stage 5c). To see what
+// that would change first, without writing: `npm run case-status`.
 
 const args = process.argv.slice(2);
 const limitAt = args.indexOf('--limit');
@@ -31,8 +37,11 @@ async function main() {
     store: createCaseCurrentStore(supabase, { shopId }),
     shopId,
     actorFor: (message) => actorOf(message, directory, config.actorByLabel),
+    statusMap: args.includes('--no-status') ? null : config.caseStatusByNextActor,
+    keepOpenLevels: [...AUTO_CLOSE_EXEMPT_LEVELS],
     limit,
+    all: args.includes('--all'),
     logger
   });
-  console.log(`\nFolded ${totals.folded} of ${totals.considered} stale ticket(s); ${totals.versionsRaised} version(s) raised, ${totals.failed} failed.\n`);
+  console.log(`\nFolded ${totals.folded} of ${totals.considered} stale ticket(s); ${totals.versionsRaised} version(s) raised, ${totals.statusesMoved} status(es) moved, ${totals.failed} failed.\n`);
 }

@@ -358,14 +358,49 @@ export type SenderLabel =
 export const SENDER_LABELS: Record<SenderLabel, string> = {
   internal: "Internal",
   contractor: "Contractor",
-  logistics: "Logistics",
+  logistics: "Logistics (3PL)",
   courier: "Carrier",
   retailer: "Retailer",
   distributor: "Distributor",
   supplier: "Supplier",
-  partner: "Partner",
+  // « Commercial » because a case has an OPERATIONS partner too (the 3PL or a
+  // carrier), and one word for both was the confusion (decided 2026-09-26).
+  partner: "Commercial partner",
   other: "Business"
 };
+
+/** Every label, in the order the Senders screen offers them. */
+export const SENDER_LABEL_KEYS = [
+  "internal",
+  "contractor",
+  "logistics",
+  "courier",
+  "retailer",
+  "distributor",
+  "supplier",
+  "partner",
+  "other",
+] as const satisfies readonly SenderLabel[];
+
+/** What a label counts as on a case, through AGENT_ACTOR_BY_LABEL. */
+export type SenderActor = "customer" | "colleague" | "partner";
+
+export interface SenderDirectoryEntry {
+  id: string;
+  patternType: "email" | "domain";
+  pattern: string;
+  label: SenderLabel;
+  note: string | null;
+  actor: SenderActor;
+}
+
+export interface SenderDirectoryView {
+  entries: SenderDirectoryEntry[];
+  /** Whether any label on file counts as an operations partner, which is what offers « partner » as an owner of checks. */
+  hasOperationsPartner: boolean;
+  /** The support mailbox's own domain, which counts as our team without a row. */
+  supportMailboxDomain: string | null;
+}
 
 /** The gloss behind each score, used as the face's tooltip. */
 export const TICKET_HAPPINESS_MEANINGS: Record<TicketHappiness, string> = {
@@ -860,6 +895,50 @@ export interface TicketDetail {
   policy: TicketPolicy | null;
   /** Latest investigation and its persisted tool-call ledger, newest first. */
   activity: TicketActivityEvent[];
+  /**
+   * The case's current state, from `case_current` (stage 5): who acts next, the
+   * checks owed, the questions the customer still owes. Null until the fold has
+   * reached this ticket.
+   */
+  caseState: TicketCaseState | null;
+}
+
+/** Who owes the next step on a case. */
+export type CaseActor = "customer" | "support" | "colleague" | "partner" | "nobody";
+
+/** One check someone on our side owes, as the ticket page shows it. */
+export interface TicketObligation {
+  /** The fold's id (`o-<message>-<n>`), what a mark-done names. */
+  id: string;
+  owner: "support" | "colleague" | "partner";
+  need: string;
+  /** The need in words (`evidence-rules.mjs needLabel`). */
+  needLabel: string;
+  /** `queued`: a rule's later step, owed by nobody until the one before it is done. */
+  status: "pending" | "queued" | "fulfilled" | "cancelled";
+  openedAt: string | null;
+  /** Working days since it was opened; null once settled. */
+  workingDaysOpen: number | null;
+  /** Past the owner's overdue delay (a shop parameter). An alert only. */
+  overdue: boolean;
+  /** Settled by a person in the dashboard rather than by a message. */
+  clearedManually: boolean;
+  /** When a rule opened it: the rule's key and its place in the sequence. */
+  ruleStep: { rule: string; step: number; steps: number } | null;
+}
+
+/** What settling a check returns: the new case, and the queue row (its status may have moved, stage 5c). */
+export interface TicketCaseChange {
+  caseState: TicketCaseState | null;
+  ticket: TicketListItem;
+}
+
+export interface TicketCaseState {
+  nextActor: CaseActor | null;
+  version: number;
+  foldedAt: string | null;
+  pendingQuestions: { key: string; label: string }[];
+  obligations: TicketObligation[];
 }
 
 /** One attached file, as Graph described it. Metadata only — never the bytes. */
@@ -1008,6 +1087,8 @@ export interface TicketDraft {
    */
   disposition: "terminal" | "intermediary";
   status: TicketDraftStatus;
+  /** Why a `stale` draft went stale: the case moved on, or we replied ourselves. */
+  staleReason: "case_changed" | "superseded_by_outbound" | null;
   /**
    * Whether every mechanical check passed: the case file's prohibitions, the
    * withheld identifiers, the reply language, the signature. False means the
@@ -1022,9 +1103,10 @@ export interface TicketDraft {
 
 /**
  * Mirrors ticket_drafts_status_check in supabase/migrations/07_drafting.sql.
- * `sent` is written by nothing today: there is no send path.
+ * `sent` is written by nothing today: there is no send path. `stale` is set by
+ * the fold when the case moved on since the draft was written (stage 6).
  */
-export type TicketDraftStatus = "pending" | "approved" | "edited" | "rejected" | "sent";
+export type TicketDraftStatus = "pending" | "approved" | "edited" | "rejected" | "sent" | "stale";
 
 /**
  * One spam-gate decision that dropped an email.
@@ -2306,10 +2388,18 @@ export interface PolicyRule {
   tones: string[];
   /** A page the reply offers, and what it opens. The model is only ever given the label. */
   link: { url: string; label: string } | null;
+  /** The checks this rule opens on a case, in order; each opens when the one before it is done. */
+  checks: RuleCheck[];
   priority: number;
   isFallback: boolean;
   approvalStatus: string;
   updatedAt: string | null;
+}
+
+/** One step of a rule's checks: who owes it, and what is to be checked (a NEED_KEYS key). */
+export interface RuleCheck {
+  owner: "support" | "colleague" | "partner";
+  need: string;
 }
 
 /**
@@ -2340,6 +2430,13 @@ export interface PolicyVocabulary {
   tones: { key: string; label: string; hint: string }[];
   /** For the skeleton box: the one place a rule names a parameter directly. */
   parameters: { key: string; label: string; set: boolean }[];
+  /**
+   * Who a rule's checks may be owed by in this brand: our team always, a
+   * colleague or an operations partner only when the sender directory has one.
+   */
+  checkOwners: { key: RuleCheck["owner"]; label: string }[];
+  /** What a check can be about, in English. */
+  checkNeeds: { key: string; label: string }[];
 }
 
 /** A situation a rule can be keyed to. */

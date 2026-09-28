@@ -17,6 +17,53 @@ Three sibling files carry the other halves, and this one deliberately does not d
 - Dispatch and delivery delay use `max(0, elapsed working days - threshold)` with current 3 / 3 / 6 defaults. Delivery age only affects relevant unresolved delivery/non-receipt situations and never asserts loss; the Deret-before-remedy workflow is unchanged.
 - VIP has no score contribution. Age, inbound count, level below 4, `awaiting_human` and excess delay only sort within a band and cannot cross it. Unit tests cover the action window, missing data, completion, service failures, conditional deadlines and determinism. Web lint and typecheck pass.
 
+## Stage 6: one draft per case version, stale drafts, drafting in the poll behind a switch (2026-09-28)
+
+- **Migration 45, applied:** `ticket_drafts` is keyed on `(shop_id, ticket_id, case_version)`, with `trigger_event_id`, `stale_reason` and a `stale` status. The old key (shop, trigger message) is gone (checked in the database) and is kept as an index. The 123 existing drafts are unchanged.
+- **The fold stales drafts:** our new reply supersedes every open draft written before it (`superseded_by_outbound`); a raised version stales the older ones (`case_changed`). Approvals of stale text are withdrawn. A stale draft is never decided on or mailed for review.
+- **Drafting in the poll:** a `draft` stage after the fold, off unless `DRAFT_IN_POLL=true`, at most `DRAFT_POLL_LIMIT` (10) a poll. The gates are our turn, no pass pending, open, a current case file, a customer message after the cutover, then the existing skips. Candidates start from `case_current`, and every id list is batched.
+- **`npm run draft -- --dry-run --gates=poll`:** no model call. It prints the cases waiting on us, the drafts, the median tokens and the cost. Now: 3 waiting on us, none investigated yet, at most $0.02.
+- **Ticket page:** a stale draft reads « out of date », says why, and offers no Approve, Edit or Reject.
+- The drafting context loaders moved to `drafting/draft-context.mjs`, shared by the CLI and the worker.
+- Tests: 1,726 agent tests pass (+10 poll/version, +3 fold), the shared library tests pass 686 of 686 (+3 record), the drafting schema tests pass 211 of 211, and web `tsc` and lint are clean.
+
+## Fix: the Tickets page failed with HTTP 414 (2026-09-27)
+
+« Could not load tickets — Supabase select from ticket_messages failed: HTTP 414 ». The Irrelevant view checks which dropped emails were later promoted to tickets with one `graph_message_id=in.(…)` query. That list was sized for 49 dropped emails; there are now 851, about 64 KB of ids in one URL, which the server refuses. It now asks in batches of 50 (`dropped-mail-service.ts`). Checked against the live data: 18 requests, no error. Web `tsc` and lint clean.
+
+## Stage 5 item C: a rule opens its checks, in order (2026-09-27)
+
+- **Migration 44, applied:** `support_answers.checks`, `[{ owner, need }]`. All 130 rules read `[]`.
+- **The investigation** copies the selected rule's steps onto the case file (`exemplar_match.policy.check_sequences`). A rule with none leaves the policy object exactly as before.
+- **The fold** opens step 1 when the case file is written and each next step when the one before it is done (by a reading or « Mark done »). « No longer needed » ends the sequence. It adopts a matching check that is already open or already settled, so Deret is not asked twice. `casework/rule-checks.mjs`.
+- **Rulebook editor:** « Checks this rule opens », numbered steps (who owes it, what is checked), reorder and remove. Operations partner is offered only when Senders has one. **Ticket page:** « step 1 of 2 (rule) » on an open check and « Then: … » for the queued ones.
+- Tests: 1,713 agent tests pass (+11 sequence tests), the schema tests pass 145 of 145, and web `tsc` and lint are clean. `eval:fold` is unchanged at 79 of 132.
+
+## Stage 5c: the ticket status follows who acts next (2026-09-27)
+
+- **`casework/case-status.mjs`:** customer → `awaiting_customer`; support → `open` (an `awaiting_human` ticket stays); colleague or operations partner → `awaiting_human`; nobody → `resolved`. Only the agent's own statuses move. A ticket stays `open` while a pass is pending, and level 4 is never resolved.
+- **The fold pass moves statuses** in the worker, in `fold:once` (`--no-status` to skip) and after « Mark done » on the ticket page, which now also returns the refreshed queue row. Each move is recorded in `metadata.case_status`, and the write is conditional on the status it read (`ticket-record.setCaseStatus`).
+- **Configurable:** `AGENT_CASE_STATUS_BY_NEXT_ACTOR` (or `off`).
+- **`npm run case-status`:** a dry run of the moves; `-- --apply` makes them. Applied: 352 moves, 4 of them on tickets active in the last 28 days. The re-run finds none.
+- Tests: 1,702 agent tests pass (+9 rule, +3 fold, +2 record); web `tsc` and lint clean.
+
+## Stage 5d: open checks on the ticket, and the Senders screen (2026-09-27)
+
+- **Migration 43, applied:** `ticket_case_actions`. The fold applies them after the readings.
+- **Ticket page:** a **Case** block in the context rail shows who acts next, the open checks with their owner, age in working days and an overdue flag, and the customer's pending questions. « Mark done » and « No longer needed » record an action and re-fold the ticket (`POST /api/tickets/[id]/obligations`).
+- **Two parameters:** `colleague_check_overdue_days` (2) and `partner_check_overdue_days` (3). Alert only.
+- **Agent Setup → Senders:** add, relabel and remove sender-directory rows, with what each label means for a case, and whether the brand has an operations partner (`/api/senders`, `/api/senders/[id]`).
+- Checked: web `tsc` and lint clean; a read of the live directory gives 11 rows and owners support, colleague and partner. **Not yet seen in a browser** (`VALIDATION_LOG.md` item 31).
+
+## Stage 5a–5b: the Case Manager reads every message; obligations and who acts next (2026-09-27)
+
+- **The reading** gains `effect`, `asked` (our messages), and the checks opened and cleared, all from closed lists. Owners are limited to those the brand has in its sender directory.
+- **The worker reads our messages and the back office's** received after the mailbox cutover, in date order per ticket. Migration 42 is applied.
+- **The fold** applies each reading and derives who acts next from open checks, pending questions and the holding interval (a new parameter, set to 5).
+- **Measured** on the 132 labelled cuts: who acts next agrees **91–93** times (stage 4 fold 79, today's pipeline 45); the message's effect agrees 79–80 times.
+- **Live:** 5 readings; 995 tickets re-folded after a fold bug found on a real ticket and fixed. `fold:once -- --all` added.
+- Tests: 1,687 agent tests pass, and the schema tests pass 110 of 110.
+
 ## Stage 4: who wrote each message, and the current state of each case (2026-09-26)
 
 - **Migration 41, applied:** `ticket_messages.actor` and the `case_current` table. 2,304 messages backfilled with their actor (`actors:backfill`).

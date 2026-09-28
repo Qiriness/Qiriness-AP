@@ -1,0 +1,124 @@
+.section {
+  max-width: 860px;
+  padding: var(--space-6) var(--space-5);
+}
+
+.header {
+  margin-bottom: var(--space-5);
+}
+
+.title {
+  margin: 0 0 var(--space-2);
+  font-size: var(--text-h2, 1.25rem);
+  font-weight: var(--weight-semibold, 600);
+  color: var(--text-strong);
+}
+
+.intro {
+  margin: 0 0 var(--space-3);
+  color: var(--text-muted);
+  font-size: var(--text-body);
+  line-height: 1.55;
+}
+
+/* Whether this brand has an operations partner at all: what offers one as an owner of checks. */
+.callout {
+  margin: 0;
+  padding: var(--space-3);
+  border: 1px solid var(--info-100);
+  border-radius: var(--radius);
+  background: var(--info-050);
+  color: var(--text-default);
+  font-size: var(--text-body);
+  line-height: 1.55;
+}
+
+.addForm {
+  display: grid;
+  grid-template-columns: 110px minmax(160px, 1fr) 190px minmax(120px, 1fr) auto;
+  gap: var(--space-2);
+  align-items: end;
+  margin: var(--space-5) 0 var(--space-3);
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  color: var(--text-subtle);
+  font-size: var(--text-caption);
+}
+
+.input,
+.select {
+  height: 38px;
+  min-width: 0;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text-strong);
+  font-size: var(--text-body);
+  font-family: inherit;
+}
+.input:focus-visible,
+.select:focus-visible {
+  outline: none;
+  border-color: var(--teal);
+  box-shadow: 0 0 0 3px var(--teal-050);
+}
+
+.list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: minmax(170px, 1.2fr) 190px minmax(160px, 1.4fr) auto;
+  gap: var(--space-3);
+  align-items: center;
+  padding: var(--space-3) 0;
+  border-bottom: 1px solid var(--mist-050);
+}
+.row:last-child {
+  border-bottom: none;
+}
+
+.pattern {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: var(--text-strong);
+  font-size: var(--text-body);
+  font-weight: var(--weight-medium);
+}
+
+.kind,
+.meaning,
+.note {
+  color: var(--text-subtle);
+  font-size: var(--text-caption);
+  line-height: 1.45;
+}
+
+.meaning {
+  color: var(--text-default);
+}
+
+.error {
+  margin: var(--space-2) 0 0;
+  color: var(--error);
+  font-size: var(--text-caption);
+}
+
+@media (max-width: 760px) {
+  .addForm,
+  .row {
+    grid-template-columns: 1fr;
+  }
+}
