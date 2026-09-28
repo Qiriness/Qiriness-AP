@@ -54,12 +54,21 @@ test('somebody already answered: an Outlook reply, or another action that went',
   assert.deepEqual(preSendCheck(facts({ laterMessages: outlook })), { ok: false, reason: 'already_answered' });
 
   for (const state of ['send_requested', 'sent_confirmed']) {
-    const other = [{ id: 'a0', state }];
+    const other = [{ id: 'a0', state, case_version: 3 }];
     assert.deepEqual(preSendCheck(facts({ otherActions: other })), { ok: false, reason: 'already_answered' }, state);
   }
   // A cancelled attempt and the action itself do not count.
   const harmless = [{ id: 'a0', state: 'cancelled' }, { id: 'a1', state: 'send_requested' }];
   assert.deepEqual(preSendCheck(facts({ otherActions: harmless })), { ok: true });
+});
+
+test('a reply we sent for an EARLIER case version does not block answering the new one', () => {
+  // The customer wrote again after our reply: that is why the case has a new
+  // version. Found on a real test thread, where the second reply was cancelled.
+  const earlier = [{ id: 'a0', state: 'sent_confirmed', case_version: 2 }];
+  assert.deepEqual(preSendCheck(facts({ otherActions: earlier })), { ok: true });
+  const sameOrNewer = [{ id: 'a0', state: 'sent_confirmed', case_version: 4 }];
+  assert.deepEqual(preSendCheck(facts({ otherActions: sameOrNewer })), { ok: false, reason: 'already_answered' });
 });
 
 test('auto-send is refused while DRAFT_ONLY is on, or when the draft is not eligible', () => {

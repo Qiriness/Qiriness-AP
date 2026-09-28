@@ -52,7 +52,18 @@ export function preSendCheck({ action, draft, caseCurrent, replyTo, laterMessage
   if (later.some((message) => message.direction === 'outbound')) {
     return refuse('already_answered');
   }
-  if (otherActions.some((other) => other.id !== action.id && ['send_requested', 'sent_confirmed'].includes(other.state))) {
+  // Only a send for THIS case version or a newer one. A reply to an earlier
+  // version is why the customer wrote again; counting it made every ticket
+  // that had ever had a reply through here unanswerable (found 2026-09-28 on
+  // the second reply of a test thread).
+  if (
+    otherActions.some(
+      (other) =>
+        other.id !== action.id &&
+        ['send_requested', 'sent_confirmed'].includes(other.state) &&
+        !(Number(other.case_version) < Number(action.case_version))
+    )
+  ) {
     return refuse('already_answered');
   }
 
