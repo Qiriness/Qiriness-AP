@@ -146,6 +146,29 @@ const MODES = ['mom', 'yoy', 'six'];
  * month's — and a card showing the month's revenue above a half-year's change
  * would be the most confident wrong thing on the page.
  */
+/**
+ * NO SCRIPT ANYWHERE. Every switch — the sections, the comparison and the
+ * tabs inside a card — is a hidden radio and a <label>, shown by CSS
+ * `:checked`. The file is opened from an email, and a phone's attachment
+ * preview (iOS Quick Look, the Gmail app) runs no JavaScript: with the old
+ * script there, the buttons did nothing and every hidden version showed at
+ * once, stacked and untitled. A radio needs no script, so the file behaves
+ * the same in a browser and in a preview.
+ *
+ * A card's radios come first in the card, so its labels and panes are later
+ * siblings the `~` selector can reach; the page's radios come first in
+ * `.shell` for the same reason.
+ */
+function tabStates(group, count) {
+  return Array.from({ length: count }, (_, i) =>
+    `<input class="state tab-${i + 1}" type="radio" name="${group}" id="${group}-${i + 1}"${i === 0 ? ' checked' : ''}>`
+  ).join('');
+}
+
+function tabLabels(group, names) {
+  return names.map((name, i) => `<label class="lab-${i + 1}" for="${group}-${i + 1}">${name}</label>`).join('');
+}
+
 function perMode(data, render) {
   return MODES.map((key) => `<div data-cmp="${key}">${render(data.modes[key], data)}</div>`).join('');
 }
@@ -226,10 +249,19 @@ function kpis(mode) {
  * tooltip says is exactly what the report was built with; the circles keep a
  * <title> for readers whose client ignores CSS.
  */
-function trendSvg(months, metric, { drawn = 12, offset = 0, comparisonLabel = '' } = {}) {
-  const w = 700;
-  const h = 215;
-  const p = { l: 52, r: 14, t: 12, b: 28 };
+/** The trend at desktop and at phone width; CSS shows one. */
+function trendChart(data, metric, mode) {
+  const options = { drawn: data.trendMonths ?? 12, offset: mode.offset, comparisonLabel: mode.label };
+  return `<div class="chart"><div class="wide">${trendSvg(data.trend, metric, options)}</div><div class="narrow">${trendSvg(data.trend, metric, { ...options, narrow: true })}</div></div>`;
+}
+
+function trendSvg(months, metric, { drawn = 12, offset = 0, comparisonLabel = '', narrow = false } = {}) {
+  // NARROW is the phone drawing: a phone scales the 700-wide chart to half
+  // size, which leaves 4px labels, so it gets its own geometry at about 1:1
+  // and labels every other month (always the last).
+  const w = narrow ? 360 : 700;
+  const h = narrow ? 200 : 215;
+  const p = { l: narrow ? 40 : 52, r: 14, t: 12, b: 28 };
   const points = months.slice(-drawn);
   const start = months.length - drawn - offset;
   const compare = offset > 0 && start >= 0 ? months.slice(start, start + drawn) : [];
@@ -271,8 +303,9 @@ function trendSvg(months, metric, { drawn = 12, offset = 0, comparisonLabel = ''
         : `<circle class="point" cx="${x(i).toFixed(1)}" cy="${y(v).toFixed(1)}" r="3.3"><title>${escapeHtml(points[i].label)} · ${metric === 'revenue' ? money(v) : num(v)}</title></circle>`
     )
     .join('');
+  const labelled = (i) => !narrow || (points.length - 1 - i) % 2 === 0;
   const labels = points
-    .map((pt, i) => `<text class="axis-label" x="${x(i).toFixed(1)}" y="${h - 7}" text-anchor="middle">${escapeHtml(pt.label)}</text>`)
+    .map((pt, i) => (labelled(i) ? `<text class="axis-label" x="${x(i).toFixed(1)}" y="${h - 7}" text-anchor="middle">${escapeHtml(pt.label)}</text>` : ''))
     .join('');
   const hovers = points.map((pt, i) => hoverZone(i)).join('');
   const solid = `<span><i class="dash solid"></i>${escapeHtml(points[0].label)} – ${escapeHtml(points[points.length - 1].label)}</span>`;
@@ -409,15 +442,15 @@ function salesMix(mode) {
 }
 
 function overview(data) {
-  return `<section class="view active" id="view-overview">
+  return `<section class="view" id="view-overview"><h2 class="view-title">Overview</h2>
 ${perMode(data, (mode) => kpis(mode))}
 <div class="grid2">
-  <article class="card panel"><div class="panel-head"><div><h2>Performance trend</h2><div class="hint">${data.trendMonths ?? 12} months ending ${escapeHtml(data.label)}<span data-cmp="yoy">, with the same months a year earlier dotted</span><span data-cmp="six">, with the same months a year earlier dotted</span> · hover a month for its figures</div></div><div class="metric-tabs" data-tabs="trend"><button class="active" data-show="trend-revenue">Revenue</button><button data-show="trend-orders">Orders</button></div></div>
-    <div data-pane="trend" id="trend-revenue">${perMode(data, (mode) =>
-      `<div class="chart">${trendSvg(data.trend, 'revenue', { drawn: data.trendMonths ?? 12, offset: mode.offset, comparisonLabel: mode.label })}</div>`
+  <article class="card panel">${tabStates('trend', 2)}<div class="panel-head"><div><h2>Performance trend</h2><div class="hint">${data.trendMonths ?? 12} months ending ${escapeHtml(data.label)}<span data-cmp="yoy">, with the same months a year earlier dotted</span><span data-cmp="six">, with the same months a year earlier dotted</span> · hover a month for its figures</div></div><div class="metric-tabs">${tabLabels('trend', ['Revenue', 'Orders'])}</div></div>
+    <div class="pane pane-1" id="trend-revenue">${perMode(data, (mode) =>
+      trendChart(data, 'revenue', mode)
     )}</div>
-    <div data-pane="trend" id="trend-orders">${perMode(data, (mode) =>
-      `<div class="chart">${trendSvg(data.trend, 'orders', { drawn: data.trendMonths ?? 12, offset: mode.offset, comparisonLabel: mode.label })}</div>`
+    <div class="pane pane-2" id="trend-orders">${perMode(data, (mode) =>
+      trendChart(data, 'orders', mode)
     )}</div>
   </article>
   <article class="card panel"><div class="panel-head"><div><h2>What moved revenue?</h2><div class="hint">Total sales = orders × basket</div></div></div>
@@ -453,16 +486,16 @@ function newsletterCard(mode, data) {
     `<tr><td><b>${label}</b></td><td>${value}</td><td>${chip(current, previous, { polarity, absolute })}</td></tr>`;
   return `<article class="card panel"><div class="panel-head"><div><h2>Newsletter subscribers</h2><div class="hint">Gained and lost in ${escapeHtml(mode.currentLabel)} · Shopify customers</div></div><span class="pill ${net >= 0 ? '' : 'negative'}">Net ${net >= 0 ? '+' : '−'}${num(Math.abs(net))}</span></div>
 <div class="splitbar"><i style="width:${total > 0 ? ((n.subscribed / total) * 100).toFixed(1) : 50}%;background:var(--green2)"></i><i style="width:${total > 0 ? ((n.unsubscribed / total) * 100).toFixed(1) : 50}%;background:var(--rose)"></i></div>
-<table><thead><tr><th></th><th>${escapeHtml(mode.currentLabel)}</th><th>vs ${escapeHtml(mode.comparisonLabel)}</th></tr></thead><tbody>
+<div class="table-wrap"><table><thead><tr><th></th><th>${escapeHtml(mode.currentLabel)}</th><th>vs ${escapeHtml(mode.comparisonLabel)}</th></tr></thead><tbody>
 ${row('Gained', `+${num(n.subscribed)}`, n.subscribed, before?.subscribed, 'up')}
 ${row('Lost', `−${num(n.unsubscribed)}`, n.unsubscribed, before?.unsubscribed, 'down')}
 ${row('Net', `${net >= 0 ? '+' : '−'}${num(Math.abs(net))}`, net, before ? before.subscribed - before.unsubscribed : null, 'up', true)}
-</tbody></table>
+</tbody></table></div>
 <div class="footer-note">${num(n.subscribersNow)} on the list at generation. Read from each customer's current consent and when it last changed, so both figures are floors: someone who joined and left inside the period counts once, as a loss.</div></article>`;
 }
 
 function customersAndProducts(data) {
-  return `<section class="view" id="view-customers">
+  return `<section class="view" id="view-customers"><h2 class="view-title">Customers &amp; Products</h2>
 ${perMode(data, (mode) => customerBlock(mode, data))}
 </section>`;
 }
@@ -479,10 +512,10 @@ function customerBlock(mode, data) {
   const people = mix ? mix.newCustomers + mix.returningCustomers : 0;
   const mixHtml = mix
     ? `<div class="splitbar"><i style="width:${(share(mix.newCustomerOrders, orders) ?? 50).toFixed(1)}%"></i><i style="width:${(100 - (share(mix.newCustomerOrders, orders) ?? 50)).toFixed(1)}%"></i></div>
-<table><thead><tr><th>Segment</th><th>Customers</th><th>Orders</th><th>Share of orders</th><th>vs ${escapeHtml(mode.comparisonLabel)}</th></tr></thead><tbody>
+<div class="table-wrap"><table><thead><tr><th>Segment</th><th>Customers</th><th>Orders</th><th>Share of orders</th><th>vs ${escapeHtml(mode.comparisonLabel)}</th></tr></thead><tbody>
 <tr><td><b>New</b></td><td>${num(mix.newCustomers)}</td><td>${num(mix.newCustomerOrders)}</td><td>${pct(share(mix.newCustomerOrders, orders), 0)}</td><td>${chip(mix.newCustomers, before?.newCustomers)}</td></tr>
 <tr><td><b>Returning</b></td><td>${num(mix.returningCustomers)}</td><td>${num(mix.returningCustomerOrders)}</td><td>${pct(share(mix.returningCustomerOrders, orders), 0)}</td><td>${chip(mix.returningCustomers, before?.returningCustomers)}</td></tr>
-</tbody></table><div class="legend"><span><i class="swatch gold"></i>New</span><span><i class="swatch green"></i>Returning</span><span>${num(people)} Shopify customers ordered</span></div>`
+</tbody></table></div><div class="legend"><span><i class="swatch gold"></i>New</span><span><i class="swatch green"></i>Returning</span><span>${num(people)} Shopify customers ordered</span></div>`
     : '<p class="muted">No Shopify customer ordered in this period.</p>';
 
   const repeatShare = mix ? share(mix.returningCustomerOrders, orders) : null;
@@ -531,20 +564,20 @@ function productCard(mode) {
   const rows = (list, empty) =>
     list.length === 0
       ? `<p class="muted">${empty}</p>`
-      : `<table><thead><tr><th>Product</th><th>Revenue</th><th>Δ €</th><th>Δ %</th><th>Orders</th><th>Units</th></tr></thead><tbody>${list
+      : `<div class="table-wrap"><table><thead><tr><th>Product</th><th>Revenue</th><th>Δ €</th><th>Δ %</th><th>Orders</th><th>Units</th></tr></thead><tbody>${list
           .map((product, i) => {
             const diff = product.previousRevenue === null ? null : product.revenue - product.previousRevenue;
             const change = rel(product.revenue, product.previousRevenue);
             return `<tr><td><span class="rank">${i + 1}</span><b>${escapeHtml(product.title)}</b></td><td>${money(product.revenue)}</td><td class="${diff === null ? 'flat' : diff >= 0 ? 'up' : 'down'}">${diff === null ? '—' : `${diff >= 0 ? '+' : '−'}${money(Math.abs(diff))}`}</td><td>${change === null ? (product.previousRevenue === null ? '<span class="muted">—</span>' : '<span class="pill">new</span>') : `<span class="pill ${change < 0 ? 'negative' : ''}">${change >= 0 ? '+' : '−'}${Math.abs(change).toFixed(1)}%</span>`}</td><td>${num(product.orders)}</td><td>${num(product.units)}</td></tr>`;
           })
-          .join('')}</tbody></table>`;
+          .join('')}</tbody></table></div>`;
   const none = tables.comparable
     ? null
     : `No comparison with ${escapeHtml(mode.comparisonLabel)}: the order history does not reach it.`;
-  return `<article class="card panel"><div class="panel-head"><div><h2>Product performance</h2><div class="hint">Top ten by net line revenue, vs ${escapeHtml(mode.comparisonLabel)} · samples and gifts excluded</div></div><div class="metric-tabs" data-tabs="${id('tabs')}"><button class="active" data-show="${id('revenue')}">Revenue</button><button data-show="${id('growth')}">Growth</button><button data-show="${id('decline')}">Declines</button></div></div>
-<div data-pane="${id('tabs')}" id="${id('revenue')}">${rows(tables.revenue, 'No product sold in this period.')}</div>
-<div data-pane="${id('tabs')}" id="${id('growth')}">${rows(tables.growth, none ?? `No product sold more than it did in ${escapeHtml(mode.comparisonLabel)}.`)}</div>
-<div data-pane="${id('tabs')}" id="${id('decline')}">${rows(tables.decline, none ?? `No product sold less than it did in ${escapeHtml(mode.comparisonLabel)}.`)}</div>
+  return `<article class="card panel">${tabStates(id('tabs'), 3)}<div class="panel-head"><div><h2>Product performance</h2><div class="hint">Top ten by net line revenue, vs ${escapeHtml(mode.comparisonLabel)} · samples and gifts excluded</div></div><div class="metric-tabs">${tabLabels(id('tabs'), ['Revenue', 'Growth', 'Declines'])}</div></div>
+<div class="pane pane-1" id="${id('revenue')}">${rows(tables.revenue, 'No product sold in this period.')}</div>
+<div class="pane pane-2" id="${id('growth')}">${rows(tables.growth, none ?? `No product sold more than it did in ${escapeHtml(mode.comparisonLabel)}.`)}</div>
+<div class="pane pane-3" id="${id('decline')}">${rows(tables.decline, none ?? `No product sold less than it did in ${escapeHtml(mode.comparisonLabel)}.`)}</div>
 </article>`;
 }
 
@@ -574,7 +607,7 @@ function collectionMix(mode) {
     return `<tr${r.collectionId === null ? ' class="muted"' : ''}><td><b>${escapeHtml(r.title)}</b></td><td>${money(r.revenue)}</td><td>${portion}</td><td>${change}</td></tr>`;
   };
   return `<article class="card panel"><div class="panel-head"><div><h2>Collection mix</h2><div class="hint">The ranges the catalogue is managed by · vs ${escapeHtml(mode.comparisonLabel)}</div></div></div>
-<table><thead><tr><th>Collection</th><th>Revenue</th><th>Share</th><th>Δ</th></tr></thead><tbody>${rows.map(line).join('')}</tbody></table>
+<div class="table-wrap"><table><thead><tr><th>Collection</th><th>Revenue</th><th>Share</th><th>Δ</th></tr></thead><tbody>${rows.map(line).join('')}</tbody></table></div>
 <div class="concentration">${named.map((r) => `<i style="width:${Math.max(2, (r.revenue / widest) * 100).toFixed(1)}%"></i>`).join('')}</div>
 <div class="footer-note">A product counts in every range that carries it, so the shares overlap and never add up to 100%. Share is of the period's paid product revenue; anything in none of the ranges is the last row.</div></article>`;
 }
@@ -605,7 +638,7 @@ function marketing(data) {
     )
     .join('');
   const fullPriceOrders = c.paidOrders - c.discountedOrders;
-  return `<section class="view" id="view-marketing">
+  return `<section class="view" id="view-marketing"><h2 class="view-title">Marketing &amp; Funnel</h2>
 <div class="grid2 equal">
   <article class="card panel"><div class="panel-head"><div><h2>E-commerce funnel</h2><div class="hint">Stage conversion and largest leakage · ${escapeHtml(data.label)} only</div></div><span class="pill${c.conversionRate === null ? ' warn' : ''}">CVR ${c.conversionRate === null ? '—' : pct(c.conversionRate, 2)}</span></div>
     <div class="funnel">${funnel}</div>
@@ -617,7 +650,7 @@ function marketing(data) {
     <div class="marketing-summary"><div class="ms"><span>Klaviyo revenue</span><strong>—</strong></div><div class="ms"><span>Ad spend</span><strong>—</strong></div><div class="ms"><span>ROAS</span><strong>—</strong></div><div class="ms"><span>Social reach</span><strong>—</strong></div></div>
     ${blockedTable(['Source', 'Spend', 'Revenue', 'ROAS', 'Conversion'], 'Klaviyo, Google Ads, Meta Ads, Instagram and TikTok are not connected yet.')}</article>
   <article class="card panel"><div class="panel-head"><div><h2>Promotions &amp; discounting</h2><div class="hint">What each promotion recorded on its orders · ${escapeHtml(data.label)} only</div></div></div>
-    ${data.promotions.length ? `<table><thead><tr><th>Promotion</th><th>Revenue</th><th>Orders</th><th>AOV</th><th>Discount</th><th>New cust.</th></tr></thead><tbody>${promos}</tbody></table>` : '<p class="muted">No order this month.</p>'}
+    ${data.promotions.length ? `<div class="table-wrap"><table><thead><tr><th>Promotion</th><th>Revenue</th><th>Orders</th><th>AOV</th><th>Discount</th><th>New cust.</th></tr></thead><tbody>${promos}</tbody></table></div>` : '<p class="muted">No order this month.</p>'}
     <div class="callout"><b>Full-price revenue:</b> ${money(c.fullPriceRevenue)} · <b>Discounted-order AOV:</b> ${money(c.discountedOrders > 0 ? c.discountedRevenue / c.discountedOrders : null, true)} · <b>Full-price AOV:</b> ${money(fullPriceOrders > 0 ? c.fullPriceRevenue / fullPriceOrders : null, true)}</div>
     <div class="footer-note">An order with two promotions counts in both rows. Gifts are valued at list price; discounts &amp; gifts were ${pct(discountShareOf(c))} of gross sales.</div></article>
 </div>
@@ -626,7 +659,7 @@ function marketing(data) {
 
 /** A table that exists to show its columns, with the reason its cells are empty. */
 function blockedTable(head, reason) {
-  return `<table><thead><tr>${head.map((h) => `<th>${h}</th>`).join('')}</tr></thead><tbody><tr><td colspan="${head.length}" class="pending">${reason}</td></tr></tbody></table>`;
+  return `<div class="table-wrap"><table><thead><tr>${head.map((h) => `<th>${h}</th>`).join('')}</tr></thead><tbody><tr><td colspan="${head.length}" class="pending">${reason}</td></tr></tbody></table></div>`;
 }
 
 /** Traffic and money per channel, or the reason there is none. */
@@ -638,12 +671,12 @@ function channelTable(data) {
     );
   }
   const dash = '<span class="muted">—</span>';
-  return `<table><thead><tr><th>Channel</th><th>Sessions</th><th>Revenue</th><th>Orders</th><th>CVR</th><th>Rev/session</th></tr></thead><tbody>${data.channels
+  return `<div class="table-wrap"><table><thead><tr><th>Channel</th><th>Sessions</th><th>Revenue</th><th>Orders</th><th>CVR</th><th>Rev/session</th></tr></thead><tbody>${data.channels
     .map(
       (ch) =>
         `<tr><td><b>${escapeHtml(ch.channel)}</b></td><td>${ch.sessions === null ? dash : num(ch.sessions)}</td><td>${ch.revenue === null ? dash : money(ch.revenue)}</td><td>${ch.orders === null ? dash : num(ch.orders)}</td><td>${ch.conversionRate === null ? dash : pct(ch.conversionRate, 2)}</td><td>${ch.revenuePerSession === null ? dash : money(ch.revenuePerSession, true)}</td></tr>`
     )
-    .join('')}</tbody></table><div class="footer-note">Revenue here is Shopify's attribution and can differ from the revenue elsewhere in this report, which is this dashboard's own. A channel with traffic and no orders, or revenue and no recorded sessions, keeps its figure rather than being filled with a zero.</div>`;
+    .join('')}</tbody></table></div><div class="footer-note">Revenue here is Shopify's attribution and can differ from the revenue elsewhere in this report, which is this dashboard's own. A channel with traffic and no orders, or revenue and no recorded sessions, keeps its figure rather than being filled with a zero.</div>`;
 }
 
 function operations(data) {
@@ -667,33 +700,33 @@ function operations(data) {
   };
   const c = data.modes.mom.period;
 
-  return `<section class="view" id="view-operations">
+  return `<section class="view" id="view-operations"><h2 class="view-title">Operations</h2>
 ${perMode(data, (mode) => opsCards(mode))}
 <div class="grid3">
   <article class="card panel"><div class="panel-head"><div><h2>Inventory exceptions</h2><div class="hint">Active products, stock as of ${escapeHtml(synced)} · cover at the last ${inv.windowDays} days' rate</div></div></div>
-    ${inv.items.length ? `<table><thead><tr><th>Product</th><th>Stock</th><th>Days</th><th>Status</th></tr></thead><tbody>${inv.items
+    ${inv.items.length ? `<div class="table-wrap"><table><thead><tr><th>Product</th><th>Stock</th><th>Days</th><th>Status</th></tr></thead><tbody>${inv.items
       .slice(0, 10)
       .map(
         (i) =>
           `<tr><td><b>${escapeHtml(i.title)}</b></td><td>${num(i.stock)}</td><td>${i.coverDays === null ? '—' : Math.floor(i.coverDays)}</td><td><span class="pill ${statusClass(i.status)}">${escapeHtml(INVENTORY_STATUS_LABELS[i.status] ?? i.status)}</span></td></tr>`
       )
-      .join('')}</tbody></table>` : `<p class="muted">No active product is out of stock or under ${inv.windowDays} days of cover.</p>`}
+      .join('')}</tbody></table></div>` : `<p class="muted">No active product is out of stock or under ${inv.windowDays} days of cover.</p>`}
     <div class="footer-note">Stock is now, not at month end: Shopify keeps no stock history this app reads. No replenishment is shown — purchase orders do not reach it.</div></article>
   <article class="card panel"><div class="panel-head"><div><h2>Carrier performance</h2><div class="hint">Dispatch by carrier · delivery not measured yet</div></div></div>
-    ${data.carriers.length ? `<table><thead><tr><th>Carrier</th><th>Shipments</th><th>Share</th><th>Median to ship</th><th>After 3 days</th></tr></thead><tbody>${data.carriers
+    ${data.carriers.length ? `<div class="table-wrap"><table><thead><tr><th>Carrier</th><th>Shipments</th><th>Share</th><th>Median to ship</th><th>After 3 days</th></tr></thead><tbody>${data.carriers
       .map(
         (x) =>
           `<tr><td><b>${escapeHtml(x.carrier)}</b></td><td>${num(x.shipments)}</td><td>${pct(share(x.shipments, carrierTotal), 0)}</td><td>${hoursText(x.p50Hours)}</td><td>${pct(share(x.over72h, x.shipments))}</td></tr>`
       )
-      .join('')}</tbody></table>` : '<p class="muted">No shipment this month.</p>'}
+      .join('')}</tbody></table></div>` : '<p class="muted">No shipment this month.</p>'}
     <div class="footer-note">On-time delivery and failed deliveries need a carrier feed; none reaches Shopify yet.</div></article>
   <article class="card panel"><div class="panel-head"><div><h2>Returns &amp; refunds</h2><div class="hint">What Shopify recorded</div></div></div>
-    <table><tbody>
+    <div class="table-wrap"><table><tbody>
       <tr><td><b>Refunded orders</b></td><td>${num(c.refundedOrders)}</td></tr>
       <tr><td><b>Amount refunded</b></td><td>${money(c.refundedAmount)}</td></tr>
       <tr><td><b>Returns opened</b></td><td>${num(c.returnsOpened)}</td></tr>
       <tr><td><b>Refund rate</b></td><td>${pct(refundRateOf(c))}</td></tr>
-    </tbody></table>
+    </tbody></table></div>
     <div class="footer-note">Refund reasons are not recorded in Shopify here, so there is no breakdown by cause. A refund agreed by email with no return raised reads as a refund without a return.</div></article>
 </div>
 </section>`;
@@ -704,23 +737,23 @@ ${perMode(data, (mode) => opsCards(mode))}
 const STYLE = `:root{--ink:#17211d;--muted:#6e7771;--line:#e8e3da;--paper:#faf9f6;--card:#fff;--green:#173f35;--green2:#2f7562;--gold:#bd9a58;--rose:#bd615c;--amber:#c68a3c;--wash:#f4eee4;--soft:#f7f5f0;--shadow:0 10px 30px rgba(30,43,37,.065);--r:17px}
 *{box-sizing:border-box}body{margin:0;background:var(--paper);color:var(--ink);font:14px/1.45 Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}button{font:inherit}.shell{max-width:1260px;margin:auto;padding:26px}
 .topbar{display:flex;align-items:flex-end;justify-content:space-between;gap:24px;margin-bottom:17px}.eyebrow{color:var(--gold);font-size:10px;font-weight:850;letter-spacing:.15em;text-transform:uppercase}h1{font:600 clamp(26px,3vw,38px)/1.08 Georgia,serif;margin:5px 0 4px}.subtitle,.muted{color:var(--muted)}.muted{font-size:12px;margin:0}
-.controls{display:flex;align-items:center;gap:9px;flex-wrap:wrap;justify-content:flex-end}.segmented{display:flex;padding:3px;background:#fff;border:1px solid var(--line);border-radius:11px;box-shadow:0 2px 8px rgba(0,0,0,.03)}.segmented button{border:0;background:transparent;color:var(--muted);padding:7px 10px;border-radius:8px;cursor:pointer;white-space:nowrap}.segmented button.active{background:var(--green);color:#fff}.stamp{font-size:10px;color:var(--muted)}
+.controls{display:flex;align-items:center;gap:9px;flex-wrap:wrap;justify-content:flex-end}.segmented{display:flex;padding:3px;background:#fff;border:1px solid var(--line);border-radius:11px;box-shadow:0 2px 8px rgba(0,0,0,.03)}.segmented label{display:flex;align-items:center;justify-content:center;border:0;background:transparent;color:var(--muted);padding:7px 10px;border-radius:8px;cursor:pointer;white-space:nowrap}#cmp-mom:checked~.topbar label[for="cmp-mom"],#cmp-yoy:checked~.topbar label[for="cmp-yoy"],#cmp-six:checked~.topbar label[for="cmp-six"]{background:var(--green);color:#fff}.stamp{font-size:10px;color:var(--muted)}
 .notice{display:flex;align-items:center;justify-content:space-between;gap:14px;background:var(--wash);border:1px solid #eadfcf;border-radius:12px;padding:9px 12px;margin-bottom:13px;color:#635c50;font-size:12px}.notice b{color:var(--ink)}.dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--gold);margin-right:7px}
-.report-nav{display:none;gap:5px;padding:5px;background:#ebe8e1;border-radius:13px;margin-bottom:13px;overflow:auto}.js .report-nav{display:flex}.report-nav button{flex:1;min-width:145px;border:0;background:transparent;color:#626a65;border-radius:9px;padding:9px 12px;cursor:pointer;font-weight:700;font-size:12px}.report-nav button.active{background:white;color:var(--ink);box-shadow:0 2px 9px rgba(0,0,0,.08)}
-.view{display:block;margin-bottom:22px}.js .view{display:none}.js .view.active{display:block}.card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--shadow)}.panel{padding:18px;min-width:0;margin-bottom:13px}.grid2 .panel,.grid3 .panel{margin-bottom:0}.panel-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:14px}h2{font-size:15px;margin:0 0 2px}.hint{font-size:11px;color:var(--muted)}
+.report-nav{display:flex;gap:5px;padding:5px;background:#ebe8e1;border-radius:13px;margin-bottom:13px;overflow:auto}.report-nav label{display:flex;align-items:center;justify-content:center;text-align:center;flex:1;min-width:145px;border:0;background:transparent;color:#626a65;border-radius:9px;padding:9px 12px;cursor:pointer;font-weight:700;font-size:12px}#nav-overview:checked~.report-nav label[for="nav-overview"],#nav-customers:checked~.report-nav label[for="nav-customers"],#nav-marketing:checked~.report-nav label[for="nav-marketing"],#nav-operations:checked~.report-nav label[for="nav-operations"]{background:white;color:var(--ink);box-shadow:0 2px 9px rgba(0,0,0,.08)}
+.state{position:absolute;opacity:0;width:0;height:0;pointer-events:none}.view{display:none;margin-bottom:22px}#nav-overview:checked~#view-overview,#nav-customers:checked~#view-customers,#nav-marketing:checked~#view-marketing,#nav-operations:checked~#view-operations{display:block}.view-title{display:none}.pane{display:none}.tab-1:checked~.pane-1,.tab-2:checked~.pane-2,.tab-3:checked~.pane-3{display:block}.card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--shadow)}.panel{padding:18px;min-width:0;margin-bottom:13px}.grid2 .panel,.grid3 .panel{margin-bottom:0}.panel-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:14px}h2{font-size:15px;margin:0 0 2px}.hint{font-size:11px;color:var(--muted)}
 .kpis{display:grid;grid-template-columns:repeat(8,1fr);gap:10px;margin-bottom:13px}.kpi{padding:15px;min-width:0}.kpi.blocked{background:repeating-linear-gradient(45deg,#fff 0 6px,#f7f5f0 6px 12px)}.kpi-label{font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.kpi-value{font-size:21px;font-weight:750;letter-spacing:-.035em;margin:6px 0 3px}.delta{font-size:10px;font-weight:750}.up{color:var(--green2)}.down{color:#b8514d}.flat{color:var(--muted)}
 [data-cmp="yoy"],[data-cmp="six"]{display:none}
-body[data-compare="yoy"] [data-cmp="yoy"],body[data-compare="six"] [data-cmp="six"]{display:inline}
-body[data-compare="yoy"] div[data-cmp="yoy"],body[data-compare="six"] div[data-cmp="six"]{display:block}
-body[data-compare="yoy"] [data-cmp="mom"],body[data-compare="six"] [data-cmp="mom"]{display:none}
+#cmp-yoy:checked~* [data-cmp="yoy"],#cmp-six:checked~* [data-cmp="six"]{display:inline}
+#cmp-yoy:checked~* div[data-cmp="yoy"],#cmp-six:checked~* div[data-cmp="six"]{display:block}
+#cmp-yoy:checked~* [data-cmp="mom"],#cmp-six:checked~* [data-cmp="mom"]{display:none}
 .grid-wide{display:grid;grid-template-columns:1.35fr .9fr;gap:13px;margin-bottom:13px}.grid-wide .panel{margin-bottom:0}
 .grid2{display:grid;grid-template-columns:1.58fr 1fr;gap:13px;margin-bottom:13px}.grid2.equal{grid-template-columns:1fr 1fr}.grid3{display:grid;grid-template-columns:1fr 1.25fr 1fr;gap:13px;margin-bottom:13px}
-.metric-tabs{display:flex;gap:3px;background:#f1efe9;padding:3px;border-radius:9px}.metric-tabs button{border:0;background:transparent;padding:6px 8px;border-radius:7px;color:var(--muted);font-size:10px;cursor:pointer;white-space:nowrap}.metric-tabs button.active{background:white;color:var(--ink);box-shadow:0 1px 5px rgba(0,0,0,.08)}.metric-tabs{display:none}.js .metric-tabs{display:flex}
-.chart{height:225px}.chart+.chart{margin-top:10px}.js .chart+.chart{margin-top:0}.chart svg{width:100%;height:100%;overflow:visible}.axis{stroke:#ebe7df;stroke-width:1}.axis-label{fill:#8a8f8b;font-size:9px}.line{fill:none;stroke:var(--green);stroke-width:3;stroke-linecap:round;stroke-linejoin:round}.line.compare{stroke:#9fb3ab;stroke-width:2;stroke-dasharray:5 4}.dash{display:inline-block;width:14px;height:0;border-top:3px solid var(--green);margin-right:5px;vertical-align:middle}.dash.dotted{border-top:2px dashed #9fb3ab}.point{fill:#fff;stroke:var(--green);stroke-width:2}.hover .hit{fill:transparent;pointer-events:all}.hover .tip{opacity:0;pointer-events:none;transition:opacity .12s}.hover:hover .tip{opacity:1}.guide{stroke:#cfc9bd;stroke-width:1;stroke-dasharray:2 3}.mark{fill:var(--green);stroke:#fff;stroke-width:2}.mark.compare{fill:#9fb3ab}.tip-box{fill:#fff;stroke:#e2ddd3;filter:drop-shadow(0 2px 4px rgba(0,0,0,.08))}.tip-text{font-size:10px;fill:#5d625e}.tip-text.strong{fill:#1f2a24;font-weight:700}.tip-text.up{fill:#2f7a55;font-weight:600}.tip-text.down{fill:#b0473b;font-weight:600}@media(prefers-reduced-motion:reduce){.hover .tip{transition:none}}
+.metric-tabs{display:flex;gap:3px;background:#f1efe9;padding:3px;border-radius:9px}.metric-tabs label{display:flex;align-items:center;border:0;background:transparent;padding:6px 8px;border-radius:7px;color:var(--muted);font-size:10px;cursor:pointer;white-space:nowrap}.tab-1:checked~.panel-head .lab-1,.tab-2:checked~.panel-head .lab-2,.tab-3:checked~.panel-head .lab-3{background:white;color:var(--ink);box-shadow:0 1px 5px rgba(0,0,0,.08)}
+.chart{height:225px}.chart>div{height:100%}.chart .narrow{display:none}.chart+.chart{margin-top:10px}.chart svg{width:100%;height:100%;overflow:visible}.axis{stroke:#ebe7df;stroke-width:1}.axis-label{fill:#8a8f8b;font-size:9px}.line{fill:none;stroke:var(--green);stroke-width:3;stroke-linecap:round;stroke-linejoin:round}.line.compare{stroke:#9fb3ab;stroke-width:2;stroke-dasharray:5 4}.dash{display:inline-block;width:14px;height:0;border-top:3px solid var(--green);margin-right:5px;vertical-align:middle}.dash.dotted{border-top:2px dashed #9fb3ab}.point{fill:#fff;stroke:var(--green);stroke-width:2}.hover .hit{fill:transparent;pointer-events:all}.hover .tip{opacity:0;pointer-events:none;transition:opacity .12s}.hover:hover .tip{opacity:1}.guide{stroke:#cfc9bd;stroke-width:1;stroke-dasharray:2 3}.mark{fill:var(--green);stroke:#fff;stroke-width:2}.mark.compare{fill:#9fb3ab}.tip-box{fill:#fff;stroke:#e2ddd3;filter:drop-shadow(0 2px 4px rgba(0,0,0,.08))}.tip-text{font-size:10px;fill:#5d625e}.tip-text.strong{fill:#1f2a24;font-weight:700}.tip-text.up{fill:#2f7a55;font-weight:600}.tip-text.down{fill:#b0473b;font-weight:600}@media(prefers-reduced-motion:reduce){.hover .tip{transition:none}}
 .driver-total{display:flex;align-items:baseline;justify-content:space-between;border-bottom:1px solid var(--line);padding-bottom:11px;margin-bottom:12px}.driver-total strong{font-size:24px}.drivers{display:grid;gap:12px}.driver-row{display:grid;grid-template-columns:82px 1fr 48px;align-items:center;gap:8px}.driver-label b{display:block;font-size:11px}.driver-label span{font-size:9px;color:var(--muted)}.bar{height:7px;background:#eeeae3;border-radius:20px;overflow:hidden}.bar.blocked{background:repeating-linear-gradient(45deg,#eeeae3 0 4px,#fff 4px 8px)}.bar i{display:block;height:100%;border-radius:20px;background:var(--green2)}.bar i.neg{background:var(--rose)}.driver-val{text-align:right;font-size:11px;font-weight:800}.callout{background:var(--soft);border-radius:10px;padding:10px 11px;margin-top:13px;font-size:11px;color:#5f655f}.callout b{color:var(--ink)}
 .bridge{display:grid;gap:9px}.bridge-row{display:grid;grid-template-columns:96px 1fr 84px;align-items:center;gap:9px}.bridge-label{font-size:10px;color:var(--muted)}.bridge-track{height:14px;background:#eeeae3;border-radius:20px;overflow:hidden}.bridge-track i{display:block;height:100%;border-radius:20px;background:var(--green)}.bridge-row.neg .bridge-track i{background:var(--rose)}.bridge-row.gold .bridge-track i{background:var(--gold)}.bridge-row.add .bridge-track i{background:var(--green2)}.bridge-row b{text-align:right;font-size:11px;font-variant-numeric:tabular-nums}
 .insights{display:grid;gap:8px}.insight{display:grid;grid-template-columns:24px 1fr;gap:8px;padding:9px;background:var(--soft);border-radius:10px}.insight i{display:grid;place-items:center;width:24px;height:24px;border-radius:8px;background:#e7efe9;color:var(--green2);font-style:normal;font-weight:850;font-size:10px}.insight.warn i{background:#f7e9e7;color:var(--rose)}.insight.neutral i{background:#eeeae3;color:var(--muted)}.insight b{display:block;font-size:11px}.insight span{display:block;color:var(--muted);font-size:10px;margin-top:1px}
-table{width:100%;border-collapse:collapse}th{text-align:left;color:var(--muted);font-size:9px;text-transform:uppercase;letter-spacing:.06em;padding:0 6px 7px;white-space:nowrap}td{padding:8px 6px;border-top:1px solid var(--line);font-size:11px}td:nth-child(n+2),th:nth-child(n+2){text-align:right}tr.muted td{color:var(--muted)}td.pending{text-align:center!important;color:var(--muted);background:repeating-linear-gradient(45deg,#fff 0 6px,#f7f5f0 6px 12px)}.rank{display:inline-grid;place-items:center;width:19px;height:19px;border-radius:6px;background:#f1eee7;color:var(--muted);font-size:9px;margin-right:6px}.sub{display:inline-block;margin-left:6px;color:var(--muted);font-size:9px}.pill{font-size:9px;font-weight:800;padding:3px 6px;border-radius:10px;background:#e9f3ef;color:var(--green2);white-space:nowrap}.pill.negative{background:#f8e9e7;color:#ad4a45}.pill.warn{background:#faefdf;color:#a56b24}
+.table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}table{width:100%;border-collapse:collapse}th{text-align:left;color:var(--muted);font-size:9px;text-transform:uppercase;letter-spacing:.06em;padding:0 6px 7px;white-space:nowrap}td{padding:8px 6px;border-top:1px solid var(--line);font-size:11px}td:nth-child(n+2),th:nth-child(n+2){text-align:right}tr.muted td{color:var(--muted)}td.pending{text-align:center!important;color:var(--muted);background:repeating-linear-gradient(45deg,#fff 0 6px,#f7f5f0 6px 12px)}.rank{display:inline-grid;place-items:center;width:19px;height:19px;border-radius:6px;background:#f1eee7;color:var(--muted);font-size:9px;margin-right:6px}.sub{display:inline-block;margin-left:6px;color:var(--muted);font-size:9px}.pill{font-size:9px;font-weight:800;padding:3px 6px;border-radius:10px;background:#e9f3ef;color:var(--green2);white-space:nowrap}.pill.negative{background:#f8e9e7;color:#ad4a45}.pill.warn{background:#faefdf;color:#a56b24}
 .stat-strip{display:grid;grid-template-columns:repeat(4,1fr);gap:9px;margin-bottom:13px}.mini{background:#fff;border:1px solid var(--line);border-radius:13px;padding:12px;box-shadow:0 5px 18px rgba(30,43,37,.04)}.mini span{font-size:9px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}.mini strong{display:block;font-size:19px;margin-top:3px}.mini em{font-style:normal;font-size:9px;color:var(--muted)}
 .splitbar{height:10px;border-radius:20px;display:flex;overflow:hidden;background:#eee;margin-bottom:12px}.splitbar i:first-child{background:var(--gold)}.splitbar i:last-child{background:var(--green)}.legend{display:flex;flex-wrap:wrap;gap:16px;font-size:10px;color:var(--muted);margin-top:8px}.swatch{display:inline-block;width:7px;height:7px;border-radius:2px;margin-right:4px}.swatch.gold{background:var(--gold)}.swatch.green{background:var(--green)}
 .funnel{display:grid;gap:10px}.funnel-row{display:grid;grid-template-columns:120px 1fr 75px;gap:10px;align-items:center}.funnel-row label{font-size:11px;font-weight:700}.funnel-row label small{display:block;color:var(--muted);font-weight:500}.funnel-bar{height:20px;background:#f0ede7;border-radius:5px;overflow:hidden}.funnel-bar.blocked{background:repeating-linear-gradient(45deg,#f0ede7 0 5px,#fff 5px 10px)}.funnel-bar.aside i{background:var(--gold)}.funnel-bar i{display:block;height:100%;width:var(--w);background:linear-gradient(90deg,var(--green),var(--green2));border-radius:5px}.funnel-val{text-align:right;font-size:11px}.funnel-val b{display:block}.funnel-val small{color:var(--muted)}
@@ -730,16 +763,16 @@ table{width:100%;border-collapse:collapse}th{text-align:left;color:var(--muted);
 .footer-note{font-size:9px;color:var(--muted);margin-top:11px;padding-top:9px;border-top:1px solid var(--line)}.foot{font-size:10px;color:var(--muted);margin-top:18px}
 @media(max-width:1080px){.kpis{grid-template-columns:repeat(4,1fr)}.grid3{grid-template-columns:1fr 1fr}.grid3>*:last-child{grid-column:1/-1}.ops-cards{grid-template-columns:repeat(2,1fr)}}
 @media(max-width:1080px){.grid-wide{grid-template-columns:1fr}}
-@media(max-width:760px){.shell{padding:15px}.topbar{align-items:flex-start;flex-direction:column}.controls{justify-content:flex-start}.kpis{grid-template-columns:repeat(2,1fr)}.grid2,.grid2.equal,.grid3{grid-template-columns:1fr}.grid3>*:last-child{grid-column:auto}.stat-strip{grid-template-columns:repeat(2,1fr)}.chart{height:205px}.notice{align-items:flex-start;flex-direction:column}.marketing-summary{grid-template-columns:1fr 1fr}.funnel-row{grid-template-columns:90px 1fr 60px}.panel{padding:15px}}
-@media print{body{background:#fff}.shell{max-width:none;padding:0}.controls,.report-nav,.metric-tabs{display:none!important}.view{display:block!important;break-before:page}.view:first-of-type{break-before:auto}.card{box-shadow:none;break-inside:avoid}.chart{display:block!important;height:200px}}`;
+@media(max-width:760px){.shell{padding:15px}.topbar{align-items:flex-start;flex-direction:column}.controls{justify-content:flex-start}.kpis{grid-template-columns:repeat(2,1fr)}.grid2,.grid2.equal,.grid3{grid-template-columns:1fr}.grid3>*:last-child{grid-column:auto}.stat-strip{grid-template-columns:repeat(2,1fr)}.chart{height:205px}.notice{align-items:flex-start;flex-direction:column}.marketing-summary{grid-template-columns:1fr 1fr}.funnel-row{grid-template-columns:90px 1fr 60px}.panel{padding:15px}.report-nav{display:grid;grid-template-columns:1fr 1fr}.report-nav label{min-width:0;min-height:42px;padding:8px 6px}.controls{width:100%}.segmented{width:100%}.segmented label{flex:1;min-height:38px}.panel-head{flex-wrap:wrap}.metric-tabs label{min-height:36px;padding:8px 12px;font-size:12px}th{white-space:normal;padding:0 4px 7px}td{padding:8px 4px}td:nth-child(n+2){white-space:nowrap}.chart{height:auto}.chart .wide{display:none}.chart .narrow{display:block}.chart svg{height:auto;display:block}.shell{padding:12px}.kpi-value{font-size:19px}}
+@media print{body{background:#fff}.shell{max-width:none;padding:0}.controls,.report-nav,.metric-tabs{display:none!important}.view{display:block!important;break-before:page}.view-title{display:block;font:600 22px Georgia,serif;margin:0 0 12px}.view:first-of-type{break-before:auto}.card{box-shadow:none;break-inside:avoid}.chart{display:block!important;height:200px}}`;
 
-// Tabs, the trend metric and the comparison switch. Everything it toggles is
-// already rendered, so a reader with scripts off loses nothing but the tabs.
-const SCRIPT = `document.body.classList.add('js');
-const q=(s)=>[...document.querySelectorAll(s)];
-q('#reportNav button').forEach(b=>b.onclick=()=>{q('#reportNav button').forEach(x=>x.classList.toggle('active',x===b));q('.view').forEach(v=>v.classList.toggle('active',v.id==='view-'+b.dataset.view));});
-q('[data-tabs]').forEach(g=>{const panes=q('[data-pane="'+g.dataset.tabs+'"]');const show=id=>{panes.forEach(p=>p.style.display=p.id===id?'':'none');g.querySelectorAll('button').forEach(x=>x.classList.toggle('active',x.dataset.show===id));};g.querySelectorAll('button').forEach(b=>b.onclick=()=>show(b.dataset.show));show(g.querySelector('button.active').dataset.show);});
-q('#compareControls button').forEach(b=>b.onclick=()=>{q('#compareControls button').forEach(x=>x.classList.toggle('active',x===b));document.body.dataset.compare=b.dataset.mode;document.getElementById('comparisonLabel').textContent=b.dataset.label;});`;
+/** The four sections, in nav order. */
+const VIEWS = [
+  ['overview', 'Overview'],
+  ['customers', 'Customers &amp; Products'],
+  ['marketing', 'Marketing &amp; Funnel'],
+  ['operations', 'Operations']
+];
 
 /**
  * @param {SalesReportData} data
@@ -764,24 +797,25 @@ export function renderSalesReport(data) {
 <title>Qiriness — Sales report, ${escapeHtml(data.label)}</title>
 <style>${STYLE}</style>
 </head>
-<body data-compare="mom">
+<body>
 <main class="shell">
+  ${MODES.map((key, i) => `<input class="state" type="radio" name="cmp" id="cmp-${key}"${i === 0 ? ' checked' : ''}>`).join('')}
+  ${VIEWS.map(([key], i) => `<input class="state" type="radio" name="view" id="nav-${key}"${i === 0 ? ' checked' : ''}>`).join('')}
   <header class="topbar">
     <div><div class="eyebrow">Qiriness · E-commerce</div><h1>Sales Performance</h1><div class="subtitle">${escapeHtml(data.label)}${data.inProgress ? ' (in progress)' : ''} · monthly management report</div></div>
     <div class="controls">
-      <div class="segmented" id="compareControls"><button class="active" data-mode="mom" data-label="${momLabel}">MoM</button><button data-mode="yoy" data-label="${yoyLabel}">YoY</button><button data-mode="six" data-label="${sixLabel}">6M on 6M</button></div>
+      <div class="segmented" id="compareControls"><label for="cmp-mom" title="${momLabel}">MoM</label><label for="cmp-yoy" title="${yoyLabel}">YoY</label><label for="cmp-six" title="${sixLabel}">6M on 6M</label></div>
       <span class="stamp">Generated ${escapeHtml(stamp)}</span>
     </div>
   </header>
-  <div class="notice"><span><span class="dot"></span><b>Live data</b> from Shopify: all platforms, net revenue after refunds, cancelled orders excluded. A dash means the figure has no source yet — never zero.</span><span id="comparisonLabel">${momLabel}</span></div>
-  <nav class="report-nav" id="reportNav"><button class="active" data-view="overview">Overview</button><button data-view="customers">Customers &amp; Products</button><button data-view="marketing">Marketing &amp; Funnel</button><button data-view="operations">Operations</button></nav>
+  <div class="notice"><span><span class="dot"></span><b>Live data</b> from Shopify: all platforms, net revenue after refunds, cancelled orders excluded. A dash means the figure has no source yet — never zero.</span><span id="comparisonLabel"><span data-cmp="mom">${momLabel}</span><span data-cmp="yoy">${yoyLabel}</span><span data-cmp="six">${sixLabel}</span></span></div>
+  <nav class="report-nav" id="reportNav">${VIEWS.map(([key, name]) => `<label for="nav-${key}">${name}</label>`).join('')}</nav>
 ${overview(data)}
 ${customersAndProducts(data)}
 ${marketing(data)}
 ${operations(data)}
   <p class="foot">Qiriness Support OS · ${escapeHtml(data.label)} in the shop's timezone (${escapeHtml(data.timezone)}). Profitability is not reported: cost of goods, shipping cost and ad spend do not reach this app.</p>
 </main>
-<script>${SCRIPT}</script>
 </body>
 </html>
 `;

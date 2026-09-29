@@ -42,6 +42,10 @@ import { clearSession, writeSession, type SupabaseSession } from "./lib/session-
  * `/api/webhooks/graph` is public for the same reason: Microsoft Graph proves
  * itself with the clientState secret of a subscription we created, and a
  * notification only ever queues a mailbox read.
+ *
+ * `/api/reports/sales` is the worker fetching the monthly report to mail it.
+ * It proves itself with SALES_REPORT_SECRET, and the route answers 404 while
+ * no secret is set.
  */
 const PUBLIC = new Set([
   "/login",
@@ -49,6 +53,7 @@ const PUBLIC = new Set([
   "/api/auth/logout",
   "/api/webhooks/shopify",
   "/api/webhooks/graph",
+  "/api/reports/sales",
 ]);
 
 export async function middleware(request: NextRequest) {

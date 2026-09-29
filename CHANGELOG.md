@@ -10,6 +10,19 @@ Three sibling files carry the other halves, and this one deliberately does not d
 
 ---
 
+## The monthly sales report is mailed on the 1st (2026-09-29)
+
+- **The worker mails last month's report** on the 1st of each month from 08:00 Paris time, from the support mailbox, as an HTML attachment. In French: subject « Rapport des ventes E-commerce Qiriness - Septembre 2026 », a one-sentence body signed « Agent Contact Qiriness ». Catches up until the 7th if the worker was down. Not saved to Sent Items.
+- **Recipients:** every active `management` dashboard account (3 today) plus `SALES_REPORT_EXTRA_RECIPIENTS`.
+- **`GET /api/reports/sales?month=`** (dashboard): the same report for the worker, behind `SALES_REPORT_SECRET`; 404 while unset. Checked locally: 401 without or with a wrong secret, 200 with August 2026 (128 KB, 18 s).
+- Once per month via `integration_events` (`sales_report_mail`); failures retry every 30 min, 5 attempts. No migration.
+- **Off until configured:** `SALES_REPORT_SECRET` on Vercel and Render, `SALES_REPORT_URL` and `SALES_REPORT_EXTRA_RECIPIENTS` on Render.
+- **The body ends with a P.S.** saying to download the attachment and open it in a browser: a mail client's preview runs no script, so the tabs and switch do nothing there.
+- **The report works on a phone.** Measured at 375 px in headless Chrome across every tab and comparison. Before: the page scrolled 105 px sideways, three tables ran off screen, only two of the four tabs showed, and the chart's labels were about 4 px. Now: no sideways scroll; tables scroll inside their card; tabs in a 2×2 grid; the comparison switch full width; buttons 36–42 px tall; the trend chart has its own phone drawing (360 wide, every other month labelled). Desktop unchanged. Channels (6 columns) still scrolls 51 px inside its card.
+- **Fix: on a phone, YoY and 6M on 6M did nothing, and every version showed stacked with no titles.** The phone opened the attachment in a preview that runs no JavaScript, and the switches were a script. They are now hidden radios and CSS: no script in the file at all. Checked in headless Chrome by tapping every section, comparison and card tab, at 375 px and at 1,280 px: 27 checks each, one view, one comparison and one pane visible every time, no sideways scroll. Sent again to the developer's address for a check on the phone.
+- **`npm run report:sales:test [-- --month=YYYY-MM]`** (agent): sends one month to `SALES_REPORT_EXTRA_RECIPIENTS` only, with no record, so it cannot stand in for the 1st.
+- Tests: agent 1,780 pass (+8). Web `tsc` and lint clean. **Sent for real once**: August 2026 from contact@ to the developer's address only, via a local dashboard (128 KB).
+
 ## Send check fix, and sending from the sync-only worker (2026-09-28)
 
 - **Fix:** the pre-send check cancelled a second reply on a ticket as `already_answered`, because it counted our earlier sent reply to an older case version. It now counts only sends for the same version or a newer one. Found on the test thread `c3efeb4e`: after the fix, the re-approved reply was created in the support mailbox's Drafts folder (held by `OUTBOUND_STOP_BEFORE_SEND`).

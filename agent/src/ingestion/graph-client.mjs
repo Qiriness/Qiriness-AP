@@ -65,6 +65,9 @@ const DELTA_SELECT = [
 
 const UNLIMITED_PAGE_SIZE = 50;
 
+// Graph's limit on one sendMail request, attachments included.
+const SEND_MAIL_MAX_BYTES = 4 * 1024 * 1024;
+
 // Graph's well-known folder names. Sent Items is read for the replies sent FROM
 // the support address that never come back to the Inbox (98 of 115 on
 // 2026-09-26).
@@ -612,8 +615,56 @@ export function createGraphClient(config, { fetchImpl = fetch } = {}) {
     return { gone: false, expirationDateTime: payload?.expirationDateTime || expirationDateTime };
   }
 
+  /**
+   * A new message from the mailbox, with file attachments, to our own people.
+   *
+   * Used only by the monthly sales report. NOT SAVED TO SENT ITEMS: the delta
+   * poller reads Sent Items as the record of our replies, and a report there
+   * would be ingested as support mail. The send is recorded in
+   * `integration_events` instead. Needs `Mail.Send`, like the forward.
+   *
+   * Graph caps a sendMail request at 4 MB, attachments base64-encoded inside
+   * it, so a larger file throws here with its size rather than as a 413.
+   */
+  async function sendMail({ subject, text, toRecipients, attachments = [] }) {
+    const recipients = toRecipients.map((address) => String(address || '').trim()).filter(Boolean);
+    if (recipients.length === 0) {
+      throw new Error('sendMail requires at least one recipient.');
+    }
+    const files = attachments.map((file) => ({
+      '@odata.type': '#microsoft.graph.fileAttachment',
+      name: file.name,
+      contentType: file.contentType,
+      contentBytes: Buffer.from(file.content).toString('base64')
+    }));
+    const body = JSON.stringify({
+      message: {
+        subject,
+        body: { contentType: 'Text', content: text },
+        toRecipients: recipients.map((address) => ({ emailAddress: { address } })),
+        attachments: files
+      },
+      saveToSentItems: false
+    });
+    if (Buffer.byteLength(body) > SEND_MAIL_MAX_BYTES) {
+      throw new Error(`Graph sendMail refused locally: ${Buffer.byteLength(body)} bytes is over the 4 MB request cap.`);
+    }
+
+    const token = await getToken();
+    const response = await fetchImpl(`${GRAPH_BASE}/users/${encodeURIComponent(mailbox)}/sendMail`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body
+    });
+    if (!response.ok) {
+      const payload = await response.json().catch(() => null);
+      throw new Error(`Graph sendMail failed: ${payload?.error?.code || `HTTP ${response.status}`}`);
+    }
+  }
+
   return {
     getToken,
+    sendMail,
     getDeltaPage,
     translateToImmutableIds,
     getMessage,

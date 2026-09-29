@@ -50,6 +50,8 @@ import { createMailSubscriptionRecord } from '../../scripts/lib/mail-subscriptio
 import { createOutboundRecord } from '../../scripts/lib/outbound-record.mjs';
 import { createOutboundStore } from './outbound/outbound-store.mjs';
 import { confirmSentActions, createAutoSendActions, runOutbound } from './outbound/outbound-runner.mjs';
+import { createAdminClient } from '../../scripts/lib/dashboard-user-admin.mjs';
+import { runSalesReportMail } from './reports/sales-report-mail.mjs';
 
 // The passes a poll runs, in the order it runs them. `--stop-after=<stage>` ends
 // the poll once that stage has run.
@@ -127,6 +129,8 @@ async function main() {
   const outboundStore = createOutboundStore(supabase, { shopId });
   const outboundDraftRecord = createDraftRecord(supabase, { shopId });
   const subscriptions = createMailSubscriptionRecord(supabase);
+  // Reads the dashboard accounts, for the sales report's recipients.
+  const reportAdminClient = createAdminClient({ url: config.supabaseUrl, secretKey: config.supabaseKey });
   // ONE ticket record for the whole poll, shared by every pass below. It is the
   // only writer of `tickets` in the codebase; each pass hands it columns and it
   // owns the flags, the filters, the lifecycle timestamps and the metadata
@@ -681,6 +685,23 @@ async function main() {
       }
     } catch (error) {
       logger.warn('ingest.spam_audit_purge_failed', { shopId, error: error.message });
+    }
+
+    // The monthly sales report, on the 1st. Outside `--stop-after` like
+    // retention: it is a date, not a pipeline stage, and the sync-only worker
+    // is the one that is always running. A no-op until SALES_REPORT_URL and
+    // SALES_REPORT_SECRET are set; its own failures are recorded and retried.
+    try {
+      await runSalesReportMail({
+        supabase,
+        graphClient,
+        adminClient: reportAdminClient,
+        shopId,
+        config: config.salesReport,
+        logger
+      });
+    } catch (error) {
+      logger.warn('sales_report.check_failed', { shopId, error: error.message });
     }
 
     // What this poll spent, written once at the end.

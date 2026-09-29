@@ -160,6 +160,23 @@ export function loadAgentConfig(env = loadEnv(REPO_ROOT)) {
     // land somewhere the delta poller would ingest it as a new ticket.
     draftDelivery: env.DRAFT_DELIVERY || 'none',
     draftReviewMailbox: env.DRAFT_REVIEW_MAILBOX || '',
+    // THE MONTHLY SALES REPORT, mailed from the support mailbox on the 1st
+    // (reports/sales-report-mail.mjs). Off unless both the URL and the secret
+    // are set: the URL is the dashboard's /api/reports/sales on its public
+    // host, and the secret is the same SALES_REPORT_SECRET the dashboard has.
+    // The recipients are every active dashboard account with one of `roles`,
+    // plus `extraRecipients` — so a new manager is added with `npm run users`,
+    // not a deploy.
+    salesReport: {
+      url: env.SALES_REPORT_URL || '',
+      secret: env.SALES_REPORT_SECRET || '',
+      roles: splitCsv(env.SALES_REPORT_ROLES || 'management'),
+      extraRecipients: splitCsv(env.SALES_REPORT_EXTRA_RECIPIENTS),
+      // Shop-clock hour on the 1st from which it may go. After the nightly
+      // Shopify sync (02:00 UTC, about 70 minutes), so the month's last day
+      // is in the orders table the product figures are read from.
+      sendHour: Number(env.SALES_REPORT_SEND_HOUR) || 8
+    },
     // Must match what the knowledge chunks were embedded with, or cosine
     // comparison between a message and a chunk is meaningless.
     embeddingModel: env.EMBEDDING_MODEL || 'text-embedding-3-small',

@@ -150,6 +150,10 @@ test('the report is one self-contained HTML document', () => {
   assert.match(html, /<title>Qiriness — Sales report, August 2026<\/title>/);
   // Nothing loaded from anywhere: it has to open from an email attachment.
   assert.doesNotMatch(html, /<script src|<link |https?:\/\//);
+  // And no script at all: a phone's attachment preview runs none, so every
+  // switch is a radio and CSS.
+  assert.doesNotMatch(html, /<script/);
+  assert.doesNotMatch(html, /<button/);
 });
 
 test('it has the four sections and no profitability', () => {
@@ -160,10 +164,10 @@ test('it has the four sections and no profitability', () => {
 
 test('every comparison is rendered on the server, and each names both windows', () => {
   const html = renderSalesReport(report());
-  assert.match(html, /<body data-compare="mom">/);
-  assert.match(html, /data-mode="mom" data-label="August 2026 vs July 2026"/);
-  assert.match(html, /data-mode="yoy" data-label="August 2026 vs August 2025"/);
-  assert.match(html, /data-mode="six" data-label="March 2026 – August 2026 vs March 2025 – August 2025"/);
+  assert.match(html, /<input class="state" type="radio" name="cmp" id="cmp-mom" checked>/);
+  assert.match(html, /<span data-cmp="mom">August 2026 vs July 2026<\/span>/);
+  assert.match(html, /<span data-cmp="yoy">August 2026 vs August 2025<\/span>/);
+  assert.match(html, /<span data-cmp="six">March 2026 – August 2026 vs March 2025 – August 2025<\/span>/);
   assert.match(html, />6M on 6M</);
 });
 

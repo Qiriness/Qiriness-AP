@@ -93,6 +93,9 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |   |       |                                  # report as an HTML download (default: last
 |   |       |                                  # complete month). report-service.ts +
 |   |       |                                  # sales-report.mjs; aggregates only
+|   |       |-- reports/sales/route.ts       # PUBLIC (Bearer SALES_REPORT_SECRET; 404
+|   |       |                                  # while unset). GET ?month= -> the same
+|   |       |                                  # report, for the worker's monthly mail
 |   |       |-- knowledge/                   # shopify-sources · articles · articles/[id]
 |   |       |                                 # · articles/[id]/resync
 |   |       `-- agent-test/                   # run (NDJSON stream, writes no ticket) ·
@@ -386,6 +389,10 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |   |   |                        # outbound worker see nothing else) ·
 |   |   |                        # subscription-manager (Graph subscriptions per
 |   |   |                        # folder; no-op without MAIL_WEBHOOK_URL)
+|   |   |-- reports/             # sales-report-mail: the monthly sales report,
+|   |   |                        # mailed from the support mailbox on the 1st
+|   |   |                        # (fetched from /api/reports/sales; recorded in
+|   |   |                        # integration_events, one key per shop + month)
 |   |   |-- outbound/            # THE ONLY SENDER OF CUSTOMER REPLIES. outbound-rules
 |   |   |                        # (preSendCheck, pure) · outbound-store (reads) ·
 |   |   |                        # outbound-runner (confirmSentActions after the
@@ -961,6 +968,7 @@ Run `npm run ingest:once` or `npm start` from `agent/`. One poll runs every pass
 | 12 | **Forwarding** — `contact` kind + a configured address; needs `Mail.Send`. The one other path that sends mail | `routing/forward-runner.mjs` |
 | 13 | **Auto-close** — 28d idle, level 4 exempt; last so it sees this poll's timestamps | `lifecycle/auto-close.mjs` |
 | 14 | **Retention purge** — nulls expired `spam_audit` bodies; best-effort | `ingestion/spam-audit.mjs` |
+| 14b | **Monthly sales report** (no LLM; **off unless `SALES_REPORT_URL` + `SALES_REPORT_SECRET`**): from `SALES_REPORT_SEND_HOUR` (8) on the 1st, shop clock, catching up to the 7th: fetch last month's report from the dashboard, mail it as an attachment to active `SALES_REPORT_ROLES` accounts (management) + `SALES_REPORT_EXTRA_RECIPIENTS`, not saved to Sent Items. Once per month via `integration_events` (`sales_report_mail`); a failure retries every 30 min, 5 attempts. Runs whatever `--stop-after` says | `reports/sales-report-mail.mjs` |
 | 15 | **Cost flush** — one insert of this poll's `llm_usage` rows. Like 14, runs whatever `--stop-after` says: the calls were already billed | `llm/usage-store.mjs` |
 
 Built through Phase 4 (retrieval tools + the agent that uses them). **Drafting is built as a standalone pass (`npm run draft`) and is deliberately NOT in the poll yet** — it is the first pass whose output a customer would read, and it stays operator-triggered until the drafts have been reviewed.

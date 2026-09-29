@@ -3967,6 +3967,20 @@ The CEOs will be emailed it at the start of each month, and a mail client runs n
 - **0 against 0 is flat, not "no comparison"** — nothing cancelled in either month is no change.
 - **Contact cannot download it**, as it cannot open Sales: it leads with revenue.
 
+**Superseded on 2026-09-29: there is no script at all.** On a phone the attachment opens in a preview (iOS Quick Look, the Gmail app) that runs no JavaScript, and "every section shows in turn" turned out to be unusable: YoY and 6M did nothing, and every comparison and every card tab showed at once, stacked with no titles. Every switch — sections, comparison, the tabs inside a card — is now a hidden radio and a `<label>`, shown by CSS `:checked`, so the file behaves the same in a preview and in a browser. The radios sit first in `.shell` (and first in each card) so the `~` selector reaches what they control. Print still lays out all four sections, each now titled.
+
+### The report is mailed on the 1st by the worker, which fetches it from the dashboard (2026-09-29)
+
+**The calendar month, not every 30 days.** The report is a month's report, so it goes when the month ends on the shop's clock: the 1st, from 08:00 — after the 02:00 UTC nightly sync has put the last day's orders in the table the product figures read. A worker that was down catches up until the 7th, then leaves the month rather than mail a "latest" report on the 20th.
+
+**The worker sends; the dashboard builds.** `buildSalesReport` is TypeScript on live ShopifyQL reads, and a second copy in the worker would drift. So the worker (always running on Render) calls `/api/reports/sales` with `SALES_REPORT_SECRET` and mails the HTML it gets back. A Vercel cron was the alternative; it would miss a month silently if the call failed, where the worker retries and records.
+
+**Recipients are dashboard roles, not a list in the environment.** Every active `management` account, plus `SALES_REPORT_EXTRA_RECIPIENTS` for anyone without one. Adding a manager with `npm run users` adds them to the mail; disabling the account removes them.
+
+**Once per month, in `integration_events`.** Its unique `event_key` is the claim, so Render and a local `ingest:once` cannot both send. A failure is retried every 30 minutes, five times. A lost Graph response can send the report twice; for internal mail that is better than not at all.
+
+**Not saved to Sent Items.** The poller reads Sent Items as our replies to customers; a report there would be ingested as support mail.
+
 ### Shopify Analytics answers, and what it will not answer (2026-09-23)
 
 The owner's reasonable challenge — *the figures are all on Shopify's own Analytics page, so they must be reachable the same way* — turned out to be half right, and the half that is right is the more useful half. Measured against the live store with `npm run probe:analytics`, not read off the documentation.

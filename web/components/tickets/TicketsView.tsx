@@ -984,7 +984,7 @@ function TicketWorkspace({
 
       <aside className={styles.contextPane} aria-label="Ticket context">
         {selectedTicket ? (
-          <TicketContextPane ticket={selectedTicket} detail={detail} error={detailError} onOrderChanged={onOrderChanged} onCaseStateChanged={onCaseStateChanged} />
+          <TicketContextPane ticket={selectedTicket} detail={detail} thread={thread} error={detailError} onOrderChanged={onOrderChanged} onCaseStateChanged={onCaseStateChanged} />
         ) : (
           <EmptyDetail title="No ticket selected" body="Customer, ticket, order and investigation context appears here." />
         )}
@@ -998,7 +998,7 @@ function TicketWorkspace({
               <h2 id="ticket-context-title">Ticket context</h2>
               <Button size="sm" variant="tertiary" onClick={onCloseContext}>Close</Button>
             </header>
-            <TicketContextPane ticket={selectedTicket} detail={detail} error={detailError} onOrderChanged={onOrderChanged} onCaseStateChanged={onCaseStateChanged} />
+            <TicketContextPane ticket={selectedTicket} detail={detail} thread={thread} error={detailError} onOrderChanged={onOrderChanged} onCaseStateChanged={onCaseStateChanged} />
           </aside>
         </div>
       )}
@@ -1695,12 +1695,14 @@ function draftStatusText(draft: TicketDraft): string {
 function TicketContextPane({
   ticket,
   detail,
+  thread,
   error,
   onOrderChanged,
   onCaseStateChanged,
 }: {
   ticket: TicketListItem;
   detail: TicketDetail | null;
+  thread: TicketThread | null;
   error: string | null;
   onOrderChanged: (change: TicketOrderChange) => void;
   onCaseStateChanged: (change: TicketCaseChange) => void;
@@ -1727,6 +1729,7 @@ function TicketContextPane({
         <InfoList
           rows={[
             ["Name", requesterName(ticket)],
+            ["Email", thread ? contactingAddress(thread) : null],
             ["Shopify segment", ticket.rfmGroup],
             ["VIP", ticket.isVip ? "Yes" : null],
             ["Sender", ticket.senderLabel ? SENDER_LABELS[ticket.senderLabel] : "Consumer"],
@@ -2377,16 +2380,17 @@ function MessageBlock({
   const role = MESSAGE_ROLE_LABELS[message.role];
   const route = message.routeTo.length > 0 ? `${role} → ${message.routeTo.join(" + ")}` : null;
   const entities = messageEntities(message, parcels);
+  const address = message.fromEmail?.trim() || undefined;
 
   return (
     <li className={styles.message} ref={itemRef}>
-      <span className={`${styles.timelineAvatar} ${styles[`role_${message.role}`]}`} aria-hidden="true">
+      <span className={`${styles.timelineAvatar} ${styles[`role_${message.role}`]}`} aria-hidden="true" title={address}>
         {senderInitials(message)}
       </span>
       <article className={styles.messageContent}>
         <header className={styles.messageHead}>
           <div className={styles.senderLine}>
-            <span className={styles.sender}>{senderDisplayName(message)}</span>
+            <span className={styles.sender} title={address}>{senderDisplayName(message)}</span>
             <span className={`${styles.roleBadge} ${styles[`role_${message.role}`]}`}>{role}</span>
             {message.hasAttachments && <span className={styles.attachment}>Attachment</span>}
           </div>
@@ -2466,6 +2470,22 @@ function senderDisplayName(message: TicketMessage): string {
     }
   }
   return senderIdentity(message, message.direction === "outbound").name;
+}
+
+/**
+ * The address the customer is writing from: their latest inbound message's, so a
+ * customer who switched mailboxes mid-thread shows the one a reply goes to. The
+ * thread route already ships (and audits) every sender address; the ticket list
+ * never carries one, which is why this reads the thread and not the ticket.
+ */
+function contactingAddress(thread: TicketThread): string | null {
+  for (let i = thread.messages.length - 1; i >= 0; i--) {
+    const message = thread.messages[i];
+    if (message.direction === "inbound" && message.role === "customer" && message.fromEmail?.trim()) {
+      return message.fromEmail.trim();
+    }
+  }
+  return null;
 }
 
 function senderInitials(message: TicketMessage): string {

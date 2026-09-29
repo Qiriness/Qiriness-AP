@@ -16,6 +16,7 @@
     "review:sample": "node eval/sample-mailbox.mjs",
     "review:compare": "node eval/compare-review-labels.mjs",
     "test": "node --test \"src/**/*.test.mjs\" \"eval/**/*.test.mjs\"",
+    "report:sales:test": "node src/tools/run-sales-report.mjs",
     "forward:once": "node src/tools/run-forwarding.mjs",
     "forward:dry-run": "node src/tools/run-forwarding.mjs --dry-run",
     "orders:resolve": "node src/tools/run-order-resolution.mjs",
