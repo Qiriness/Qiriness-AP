@@ -66,9 +66,12 @@ const LIMITS = Object.freeze({ label: 80, description: 1000, publicName: 120, no
  * Returns `{ ok: true, value }` with the row to store (snake_case, the table's
  * own columns) or `{ ok: false, error }` with one sentence a person can act on.
  *
- * AN EMPTY ADDRESS IS ALLOWED and means « do not forward »: the same off switch
- * `category_forwarding` used, so a destination can be described before anyone
- * knows its address, and switched off without losing its description.
+ * AN EMPTY ADDRESS IS ALLOWED: a destination can be described before anyone
+ * knows its address. It cannot be switched on until it has one.
+ *
+ * `active_since` is not here on purpose. Switching a destination on or off is
+ * its own action (like the global switch), so saving the form can never move
+ * the moment it started receiving mail.
  */
 export function normaliseDestination(input = {}) {
   const label = clean(input.label);
@@ -170,15 +173,27 @@ export function normaliseAckSettings(input = {}) {
 }
 
 /**
+ * Whether a destination receives mail: switched on (`active_since`, the moment
+ * it was) and with an address to send to.
+ *
+ * A DATE, NOT A FLAG, for the same reason as the global switch: a destination
+ * receives only mail that arrived after it was switched on. Switching one back
+ * on must not deliver everything that arrived while it was off.
+ */
+export function isActive(destination) {
+  return Boolean(destination?.forward_email && destination?.active_since);
+}
+
+/**
  * Which destinations a ticket of this category and kind may go to.
  *
- * Only destinations with an address count: one without is described but
- * switched off, and must not turn a fixed route into a model choice.
+ * Only active destinations count: one switched off must not turn a fixed route
+ * into a model choice, nor be offered to the model.
  */
 export function candidatesFor(destinations, { category, requestKind } = {}) {
   return (destinations ?? []).filter(
     (d) =>
-      Boolean(d.forward_email) &&
+      isActive(d) &&
       (d.categories ?? []).includes(category) &&
       ((d.request_kinds ?? []).length === 0 || d.request_kinds.includes(requestKind))
   );
@@ -202,7 +217,7 @@ export function routingModeByCategory(destinations) {
   /** @type {Record<string, { mode: 'stays' | 'fixed' | 'choice', destinations: string[] }>} */
   const modes = {};
   for (const category of TICKET_SUBJECTS) {
-    const active = (destinations ?? []).filter((d) => d.forward_email && (d.categories ?? []).includes(category));
+    const active = (destinations ?? []).filter((d) => isActive(d) && (d.categories ?? []).includes(category));
     modes[category] = {
       mode:
         active.length === 0

@@ -7,7 +7,7 @@ import {
   shouldForwardMessage
 } from './forward-rules.mjs';
 import { planRoute } from './destination-router.mjs';
-import { ackLanguage, renderAcknowledgement } from '../../../scripts/lib/forwarding-destinations.mjs';
+import { ackLanguage, isActive, renderAcknowledgement } from '../../../scripts/lib/forwarding-destinations.mjs';
 
 // The forwarding pass: hand mail the contact team does not own to the
 // destination that does, and tell the sender it went. Runs after categorisation,
@@ -15,8 +15,9 @@ import { ackLanguage, renderAcknowledgement } from '../../../scripts/lib/forward
 //
 // OFF UNTIL SWITCHED ON. `forwarding_settings.forward_since` null forwards
 // nothing, and once set only mail received from then on is considered, so the
-// first run cannot send the backlog. A destination without an address routes
-// nothing either.
+// first run cannot send the backlog. Each destination has the same kind of
+// switch (`active_since`): it receives only mail received after it was turned
+// on, so turning one back on never delivers what arrived while it was off.
 //
 // ONE FAILURE DOES NOT STOP THE PASS. Each message is sent and recorded on its
 // own; a Graph rejection on one becomes a `failed` row and the loop continues.
@@ -64,7 +65,7 @@ export async function runForwarding({
   const since = rehearseSince ?? settings?.forward_since;
   if (!since) return totals;
 
-  const active = destinations.filter((d) => d.forward_email);
+  const active = destinations.filter(isActive);
   const categories = [...new Set(active.flatMap((d) => d.categories ?? []))];
   if (categories.length === 0) return totals;
 
@@ -105,6 +106,14 @@ export async function runForwarding({
 
     let firstSent = null;
     for (const message of item.messages) {
+      // Arrived while this destination was off: it stays with the contact team,
+      // as it would have had the pass run then.
+      // A rehearsal treats every destination on now as on since the rehearsal date.
+      const start = rehearseSince ?? destination.active_since;
+      if (message.receivedAt && Date.parse(message.receivedAt) < Date.parse(start)) {
+        totals.skipped += 1;
+        continue;
+      }
       if (!shouldForwardMessage({ fromEmail: message.fromEmail, internalDomains })) {
         totals.skipped += 1;
         continue;
@@ -206,7 +215,12 @@ export async function runForwarding({
    * router cannot decide yet (no chooser configured).
    */
   async function decide({ ticket, routing }) {
-    if (routing && routing.category === ticket.category && (routing.request_kind ?? null) === (ticket.request_kind ?? null)) {
+    if (
+      routing &&
+      routing.category === ticket.category &&
+      (routing.request_kind ?? null) === (ticket.request_kind ?? null) &&
+      !switchedOnSince(ticket.category, routing.decided_at)
+    ) {
       return routing;
     }
 
@@ -253,6 +267,17 @@ export async function runForwarding({
     }
     const row = await store.recordRouting(shopId, ticket, decision);
     return row ?? view;
+  }
+
+  /**
+   * Whether a destination for this category was switched on after the decision
+   * was taken. A b2b ticket kept while Export was off was never offered Export;
+   * its next message is decided again now that it could go there.
+   */
+  function switchedOnSince(category, decidedAt) {
+    if (!decidedAt) return false;
+    const decided = Date.parse(decidedAt);
+    return active.some((d) => (d.categories ?? []).includes(category) && Date.parse(d.active_since) > decided);
   }
 
   async function acknowledge({ ticket, routing, destination, message }) {

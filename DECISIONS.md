@@ -2008,6 +2008,16 @@ The pass now reads `forwarding_destinations`, routes through `planRoute` and the
 
 **The rehearsal found one thing the router does not cover.** `partner_collaboration` is fixed to marketcom, and the categoriser files more than partnerships there: « (URGENT – FINAL REMINDER) EU Omnibus IX Regulation-ATP 23 – Feedback » (a regulatory questionnaire) and « Qiriness — partenaire industriel pour vos prochains soins » (a manufacturer's pitch) would both go to marketcom. Marking marketcom « only mail that matches this description » would send each through the chooser; left as the business's call.
 
+### A switch per destination, and it is a date too (2026-09-29)
+
+Clearing the address used to be the off switch (§ *A null address is the off switch*), chosen so a flag and an address could never disagree. Once the business wanted to switch destinations on and off individually it cost two things: the address was lost, and **switching back on would have delivered everything that arrived meanwhile**, because none of it had a forward row.
+
+So `active_since` works like `forward_since`: null is off, otherwise the moment it was switched on, and the destination receives only mail received from then. On requires an address (a check constraint); removing the address switches it off. The address stays when it is off — Défectueux keeps `defectueux@qiriness.com`, switched off.
+
+**Off means:** new mail is not routed to it (a lone destination's category stays with the contact team; one of several drops out of the model's choice, and a sole remaining one becomes a fixed route), and follow-ups on tickets already routed to it stay too. **Back on:** a ticket decided before it was switched on is decided again, so a b2b ticket kept while Export was off can reach Export with its next message; messages from while it was off are never sent.
+
+A rehearsal (`--since`) treats destinations that are on as on since the rehearsal date, or it would show nothing.
+
 **The French service name carries its own preposition** (« au service comptabilité »). A template writing « à {service} » produced « à le service comptabilité » in the first test; the contraction depends on the noun, so it belongs with the noun.
 
 ### `unique(ticket_message_id)` is what makes the pass safe to re-run

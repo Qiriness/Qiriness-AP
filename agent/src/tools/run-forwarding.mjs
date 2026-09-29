@@ -1,5 +1,6 @@
 import { createSupabaseClient } from '../../../scripts/lib/supabase-rest-client.mjs';
 import { resolveInternalDomains } from '../../../scripts/lib/message-audience.mjs';
+import { isActive } from '../../../scripts/lib/forwarding-destinations.mjs';
 
 import { loadAgentConfig, assertGraphConfig } from '../config.mjs';
 import { logger } from '../lib/logger.mjs';
@@ -64,7 +65,7 @@ async function main() {
     console.log('Forwarding is off: no start date is set in Agent Setup > Forwarding, so nothing would be sent.');
     return;
   }
-  const active = destinations.filter((d) => d.forward_email);
+  const active = destinations.filter(isActive);
   console.log(
     `\n${dryRun ? 'DRY RUN — nothing will be sent or recorded.' : 'Forwarding for real.'}\n` +
       `mailbox: ${config.graph.mailbox}\n` +

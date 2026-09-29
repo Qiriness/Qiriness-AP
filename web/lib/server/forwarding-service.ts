@@ -43,7 +43,7 @@ import type {
 
 const DESTINATION_COLUMNS =
   "id,label,forward_email,description,categories,request_kinds,match_description,timing,acknowledge," +
-  "public_name_fr,public_name_en,ack_note_fr,ack_note_en,position";
+  "public_name_fr,public_name_en,ack_note_fr,ack_note_en,position,active_since";
 
 interface DestinationRow {
   id: string;
@@ -60,6 +60,7 @@ interface DestinationRow {
   ack_note_fr: string | null;
   ack_note_en: string | null;
   position: number | null;
+  active_since: string | null;
 }
 
 function getSupabaseClient() {
@@ -111,22 +112,58 @@ export async function createDestination(
   return toDestination(rows[0]);
 }
 
-/** Replaces one destination whole. Scoped to the shop, so an id from elsewhere matches nothing. */
+/**
+ * Replaces one destination's form fields. Scoped to the shop, so an id from
+ * elsewhere matches nothing. The switch is left alone — except that removing
+ * the address switches it off, since there is nowhere left to send.
+ */
 export async function updateDestination(
   shopId: string,
   id: string,
   input: ForwardingDestinationInput
 ): Promise<ForwardingDestination> {
   const value = validated(input);
+  const patch = value.forward_email ? value : { ...value, active_since: null };
   const supabase = getSupabaseClient();
   const rows = (await withLabelCheck(() =>
-    supabaseUpdate(supabase, T.FORWARDING_DESTINATIONS, { id, shop_id: shopId }, value, {
+    supabaseUpdate(supabase, T.FORWARDING_DESTINATIONS, { id, shop_id: shopId }, patch, {
       select: DESTINATION_COLUMNS,
     })
   )) as DestinationRow[];
   if (!rows?.[0]) {
     throw new KnowledgeNotFoundError("That destination no longer exists.");
   }
+  return toDestination(rows[0]);
+}
+
+/**
+ * One destination's switch. On keeps the moment it was already on, or starts
+ * from now; off clears it. It receives only mail received after that moment,
+ * so switching it back on never delivers what arrived while it was off.
+ * A new destination starts off.
+ */
+export async function setDestinationOn(shopId: string, id: string, on: boolean): Promise<ForwardingDestination> {
+  const supabase = getSupabaseClient();
+  const [current] = (await supabaseSelect(
+    supabase,
+    T.FORWARDING_DESTINATIONS,
+    { id, shop_id: shopId },
+    "forward_email,active_since"
+  )) as { forward_email: string | null; active_since: string | null }[];
+  if (!current) {
+    throw new KnowledgeNotFoundError("That destination no longer exists.");
+  }
+  if (on && !current.forward_email) {
+    throw new KnowledgeValidationError("Give the destination an address before switching it on.");
+  }
+  const activeSince = on ? current.active_since ?? new Date().toISOString() : null;
+  const rows = (await supabaseUpdate(
+    supabase,
+    T.FORWARDING_DESTINATIONS,
+    { id, shop_id: shopId },
+    { active_since: activeSince },
+    { select: DESTINATION_COLUMNS }
+  )) as DestinationRow[];
   return toDestination(rows[0]);
 }
 
@@ -216,5 +253,6 @@ function toDestination(row: DestinationRow): ForwardingDestination {
     ackNoteFr: row.ack_note_fr,
     ackNoteEn: row.ack_note_en,
     position: row.position ?? 0,
+    activeSince: row.active_since,
   };
 }

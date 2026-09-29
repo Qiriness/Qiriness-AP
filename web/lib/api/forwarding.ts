@@ -44,6 +44,16 @@ export async function updateForwardingDestination(
   return body.destination;
 }
 
+/** Switches one destination on or off. */
+export async function setForwardingDestinationOn(id: string, on: boolean): Promise<ForwardingDestination> {
+  const body = await send<{ destination: ForwardingDestination }>(
+    `/api/forwarding/destinations/${encodeURIComponent(id)}`,
+    "PATCH",
+    { on }
+  );
+  return body.destination;
+}
+
 export async function deleteForwardingDestination(id: string): Promise<void> {
   await send<void>(`/api/forwarding/destinations/${encodeURIComponent(id)}`, "DELETE");
 }

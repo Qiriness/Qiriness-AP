@@ -122,10 +122,12 @@ export interface ForwardingDestination {
   ackNoteFr: string | null;
   ackNoteEn: string | null;
   position: number;
+  /** The destination's switch: null is off, otherwise when it was switched on. Needs an address. */
+  activeSince: string | null;
 }
 
-/** What a person edits; the server assigns the id. */
-export type ForwardingDestinationInput = Omit<ForwardingDestination, "id">;
+/** What a person edits in the form; the id and the switch are not part of it. */
+export type ForwardingDestinationInput = Omit<ForwardingDestination, "id" | "activeSince">;
 
 /** Shop-wide acknowledgement settings (forwarding_settings). Null templates use the defaults. */
 export interface ForwardingAckSettings {

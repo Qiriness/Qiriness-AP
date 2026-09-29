@@ -1580,6 +1580,9 @@ create table public.forwarding_destinations (
 
   timing text not null default 'immediate',
   acknowledge boolean not null default true,
+  -- The destination's switch: null is off, otherwise the moment it was switched
+  -- on; it receives only mail received from then (migration 51).
+  active_since timestamptz,
 
   -- Customer-facing name in the acknowledgement. The French one carries its
   -- own preposition (« au service comptabilité »), since « à le » is wrong.
@@ -1613,6 +1616,9 @@ create table public.forwarding_destinations (
   -- sender; a templated acknowledgement on top would repeat it.
   constraint forwarding_destinations_acknowledge_check check (
     not acknowledge or timing = 'immediate'
+  ),
+  constraint forwarding_destinations_active_needs_address_check check (
+    active_since is null or forward_email is not null
   )
 );
 

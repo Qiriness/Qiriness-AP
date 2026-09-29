@@ -6,6 +6,7 @@ import { buildUserPrompt, createDestinationChooser, planRoute } from './destinat
 const dest = (label, categories, extra = {}) => ({
   label,
   forward_email: `${label.toLowerCase()}@example.com`,
+  active_since: '2026-09-29T00:00:00Z',
   description: `${label} handles things`,
   categories,
   request_kinds: [],

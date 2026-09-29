@@ -18,7 +18,7 @@ const CHECKS = [
 
 test('49 creates the same two tables the baseline does, column for column', () => {
   // Columns a later migration added to the baseline are not 49's to create.
-  const LATER = new Set(['forward_since']);
+  const LATER = new Set(['forward_since', 'active_since']);
   for (const table of ['forwarding_destinations', 'forwarding_settings']) {
     assert.deepEqual(columnsIn(SQL, table), columnsIn(SUPPORT, table).filter((c) => !LATER.has(c)), table);
   }

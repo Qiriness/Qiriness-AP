@@ -14,6 +14,7 @@ import {
   createForwardingDestination,
   deleteForwardingDestination,
   saveForwardingAckSettings,
+  setForwardingDestinationOn,
   setForwardingOn,
   updateForwardingDestination,
 } from "@/lib/api/forwarding";
@@ -113,8 +114,8 @@ export function ForwardingSettings({ initialConfig, loadError }: ForwardingSetti
           <strong>One destination on a category forwards all of it</strong>, unless it is set to
           take only the mail matching its description. Several on the same category make the agent
           choose between them from their descriptions — and when it is not sure, the ticket stays
-          here. Leave an address empty to switch a destination off without
-          losing it.
+          here. A destination switched off receives nothing: its mail stays here, and when it is
+          switched back on it receives only what arrives from then.
         </p>
       </header>
 
@@ -147,7 +148,11 @@ export function ForwardingSettings({ initialConfig, loadError }: ForwardingSetti
                   onDeleted={removed}
                 />
               ) : (
-                <DestinationSummary destination={destination} onEdit={() => setEditing(destination.id)} />
+                <DestinationSummary
+                  destination={destination}
+                  onEdit={() => setEditing(destination.id)}
+                  onChanged={saved}
+                />
               )}
             </li>
           ))}
@@ -256,16 +261,38 @@ function RoutingOverview({ destinations }: { destinations: ForwardingDestination
 
 // --- one destination ---------------------------------------------------------
 
-function DestinationSummary({ destination, onEdit }: { destination: ForwardingDestination; onEdit: () => void }) {
+interface DestinationSummaryProps {
+  destination: ForwardingDestination;
+  onEdit: () => void;
+  onChanged: (destination: ForwardingDestination) => void;
+}
+
+function DestinationSummary({ destination, onEdit, onChanged }: DestinationSummaryProps) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const on = Boolean(destination.activeSince && destination.forwardEmail);
+
+  async function flip() {
+    setBusy(true);
+    setError(null);
+    try {
+      onChanged(await setForwardingDestinationOn(destination.id, !on));
+    } catch (err) {
+      setError(knowledgeErrorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
-    <div className={styles.summary}>
+    <div className={`${styles.summary} ${on ? "" : styles.summaryOff}`}>
       <div className={styles.summaryMain}>
         <div className={styles.summaryTitle}>
           <span className={styles.destinationName}>{destination.label}</span>
           {destination.forwardEmail ? (
             <span className={styles.address}>{destination.forwardEmail}</span>
           ) : (
-            <span className={styles.off}>Off — no address</span>
+            <span className={styles.off}>No address</span>
           )}
         </div>
         {destination.description && <p className={styles.description}>{destination.description}</p>}
@@ -281,10 +308,32 @@ function DestinationSummary({ destination, onEdit }: { destination: ForwardingDe
               : "forwarded at once"
             : "forwarded after our first reply"}
         </p>
+        {on && destination.activeSince && (
+          <p className={styles.meta}>On since {formatSince(destination.activeSince)}</p>
+        )}
+        {error && (
+          <p className={styles.error} role="alert">
+            {error}
+          </p>
+        )}
       </div>
-      <Button size="sm" variant="tertiary" onClick={onEdit}>
-        Edit
-      </Button>
+      <div className={styles.summaryActions}>
+        <label className={styles.toggle} title={destination.forwardEmail ? undefined : "Add an address first"}>
+          <input
+            type="checkbox"
+            role="switch"
+            checked={on}
+            disabled={busy || !destination.forwardEmail}
+            onChange={flip}
+            aria-label={`${destination.label}: ${on ? "on" : "off"}`}
+          />
+          <span className={styles.toggleTrack} aria-hidden="true" />
+          <span className={styles.toggleText}>{on ? "On" : "Off"}</span>
+        </label>
+        <Button size="sm" variant="tertiary" onClick={onEdit}>
+          Edit
+        </Button>
+      </div>
     </div>
   );
 }
@@ -369,7 +418,7 @@ function DestinationEditor({ initial, onCancel, onSaved, onDeleted }: Destinatio
             spellCheck={false}
             value={draft.forwardEmail ?? ""}
             onChange={(e) => set("forwardEmail", e.target.value || null)}
-            placeholder="Empty switches it off"
+            placeholder="Needed to switch it on"
           />
         </label>
       </div>
@@ -723,6 +772,7 @@ function toRows(destinations: ForwardingDestination[]) {
   return destinations.map((d) => ({
     label: d.label,
     forward_email: d.forwardEmail,
+    active_since: d.activeSince,
     categories: d.categories,
     request_kinds: d.requestKinds,
     match_description: d.matchDescription,

@@ -6,10 +6,13 @@ import { MAX_ACK_ATTEMPTS } from './forward-rules.mjs';
 
 const SINCE = '2026-09-29T00:00:00.000Z';
 
+const ON_SINCE = '2026-09-28T00:00:00.000Z';
+
 const HR = {
   id: 'd-hr',
   label: 'RH',
   forward_email: 'hr@example.com',
+  active_since: ON_SINCE,
   description: 'Candidatures',
   categories: ['careers'],
   request_kinds: [],
@@ -26,6 +29,7 @@ const message = (id, extra = {}) => ({
   graphMessageId: `graph-${id}`,
   fromEmail: 'sender@outside.fr',
   subject: 'Candidature spontanée',
+  receivedAt: '2026-09-30T09:00:00.000Z',
   priorAttempts: 0,
   ...extra
 });
@@ -132,7 +136,7 @@ test('a rehearsal date works on a dry run and is refused on a real one', async (
 });
 
 test('only the categories some destination with an address takes are looked for', async () => {
-  const store = buildStore({ destinations: [HR, { ...EXPORT, forward_email: null }] });
+  const store = buildStore({ destinations: [HR, { ...EXPORT, active_since: null }, { ...ACCOUNTS, forward_email: null, active_since: null }] });
   await runForwarding({ store, graphClient: buildGraph(), shopId: 's' });
   assert.deepEqual(store.calls.pendingOptions, { since: SINCE, categories: ['careers'] });
 });
@@ -306,6 +310,75 @@ test('a failed acknowledgement is retried on a later poll against the first forw
   assert.equal(provider.replies[0].messageId, 'graph-9');
   assert.match(provider.replies[0].bodyText, /^Hello,/);
   assert.deepEqual(store.calls.acks.map((a) => [a.state, a.attempts]), [['requested', 2], ['sent', undefined]]);
+});
+
+test('a destination switched off routes nothing, and its sibling becomes a fixed route', async () => {
+  const store = buildStore({
+    destinations: [HR, ACCOUNTS, { ...EXPORT, active_since: null }],
+    pending: [item({ category: 'b2b', request_kind: 'problem' })]
+  });
+  const chooser = chooserPicking('Export');
+  const graph = buildGraph();
+  await runForwarding({ store, graphClient: graph, provider: buildProvider(), chooser, shopId: 's' });
+  // Only one b2b destination is on: no model call, and never to Export.
+  assert.equal(chooser.calls, 0);
+  assert.deepEqual(graph.sent[0].toRecipients, ['acc@example.com']);
+});
+
+test('a ticket already routed to a destination now off: its follow-ups stay', async () => {
+  const stored = { ticket_id: 't1', category: 'b2b', request_kind: 'problem', outcome: 'forward', destination_id: 'd-exp', decided_at: '2026-09-29T00:00:00Z' };
+  const store = buildStore({
+    destinations: [HR, ACCOUNTS, { ...EXPORT, active_since: null }],
+    pending: [item({ category: 'b2b', request_kind: 'problem' }, [message(2)], { routing: stored })]
+  });
+  const graph = buildGraph();
+  const totals = await runForwarding({ store, graphClient: graph, chooser: chooserPicking('Comptabilité'), shopId: 's' });
+  assert.equal(graph.sent.length, 0);
+  assert.equal(totals.skipped, 1);
+});
+
+test('switched back on, a destination receives only what arrived after', async () => {
+  const reopened = { ...HR, active_since: '2026-09-30T12:00:00.000Z' };
+  const store = buildStore({
+    destinations: [reopened],
+    pending: [item({}, [message(1, { receivedAt: '2026-09-30T08:00:00.000Z' }), message(2, { receivedAt: '2026-09-30T13:00:00.000Z' })])]
+  });
+  const graph = buildGraph();
+  const totals = await runForwarding({ store, graphClient: graph, provider: buildProvider(), shopId: 's' });
+  assert.deepEqual(graph.sent.map((s) => s.id), ['graph-2']);
+  assert.equal(totals.skipped, 1);
+});
+
+test('a rehearsal treats destinations on now as on since the rehearsal date', async () => {
+  const store = buildStore({
+    destinations: [{ ...HR, active_since: '2026-09-30T12:00:00.000Z' }],
+    pending: [item({}, [message(1, { receivedAt: '2026-08-01T08:00:00.000Z' })])]
+  });
+  const totals = await runForwarding({ store, graphClient: buildGraph(), shopId: 's', dryRun: true, rehearseSince: '2026-07-01T00:00:00.000Z' });
+  assert.equal(totals.forwarded, 1);
+});
+
+test('a decision taken before a destination was switched on is taken again', async () => {
+  const kept = { ticket_id: 't1', category: 'b2b', request_kind: 'problem', outcome: 'keep', decided_at: '2026-09-29T00:00:00Z' };
+  const exportOnLater = { ...EXPORT, active_since: '2026-09-30T00:00:00.000Z' };
+  const store = buildStore({
+    destinations: [ACCOUNTS, exportOnLater],
+    pending: [item({ category: 'b2b', request_kind: 'problem' }, [message(3, { receivedAt: '2026-09-30T10:00:00.000Z' })], { routing: kept })]
+  });
+  const chooser = chooserPicking('Export');
+  const graph = buildGraph();
+  await runForwarding({ store, graphClient: graph, provider: buildProvider(), chooser, shopId: 's' });
+  assert.equal(chooser.calls, 1);
+  assert.deepEqual(graph.sent[0].toRecipients, ['export@example.com']);
+
+  // Decided after it was switched on: reused, no second model call.
+  const fresh = buildStore({
+    destinations: [ACCOUNTS, exportOnLater],
+    pending: [item({ category: 'b2b', request_kind: 'problem' }, [message(4)], { routing: { ...kept, decided_at: '2026-09-30T06:00:00Z' } })]
+  });
+  const chooser2 = chooserPicking('Export');
+  await runForwarding({ store: fresh, graphClient: buildGraph(), chooser: chooser2, shopId: 's' });
+  assert.equal(chooser2.calls, 0);
 });
 
 test('a dry run decides everything, the router included, but sends and records nothing', async () => {

@@ -1,5 +1,6 @@
 import { createSupabaseClient, supabaseSelectAll } from '../../../scripts/lib/supabase-rest-client.mjs';
 import { T } from '../../../scripts/lib/tables.mjs';
+import { isActive } from '../../../scripts/lib/forwarding-destinations.mjs';
 
 import { loadAgentConfig } from '../config.mjs';
 import { resolveShopId } from '../lib/shop.mjs';
@@ -34,7 +35,7 @@ async function main() {
   const destinations = await supabaseSelectAll(supabase, T.FORWARDING_DESTINATIONS, { shop_id: shopId }, '*', {
     order: 'position.asc'
   });
-  const routed = [...new Set(destinations.filter((d) => d.forward_email).flatMap((d) => d.categories))];
+  const routed = [...new Set(destinations.filter(isActive).flatMap((d) => d.categories))];
   const categories = categoryArg ? [categoryArg] : routed;
   if (categories.length === 0) {
     console.log('No destination has an address, so nothing would be routed.');

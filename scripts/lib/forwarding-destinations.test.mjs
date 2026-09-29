@@ -5,6 +5,7 @@ import {
   ackLanguage,
   candidatesFor,
   DEFAULT_ACK_TEMPLATES,
+  isActive,
   isAutomatedAddress,
   normaliseAckSettings,
   normaliseDestination,
@@ -58,6 +59,7 @@ test('clearing a template stores null, which restores the default', () => {
 const row = (label, categories, extra = {}) => ({
   label,
   forward_email: `${label.toLowerCase()}@example.com`,
+  active_since: '2026-09-29T00:00:00Z',
   categories,
   request_kinds: [],
   ...extra
@@ -72,7 +74,7 @@ test('routing is fixed with one active destination and a choice with several', (
   ]);
   assert.deepEqual(modes.careers, { mode: 'fixed', destinations: ['Careers'] });
   assert.deepEqual(modes.b2b, { mode: 'choice', destinations: ['Accounting', 'Export'] });
-  // Switched off: described, but nothing leaves.
+  // No address: described, but nothing leaves.
   assert.equal(modes.product.mode, 'stays');
   assert.equal(modes.delivery.mode, 'stays');
 });
@@ -87,6 +89,17 @@ test('matching the description needs a description to match', () => {
   const result = normaliseDestination({ ...base, matchDescription: true, description: 'Defective products' });
   assert.equal(result.value.match_description, true);
   assert.equal(normaliseDestination(base).value.match_description, false);
+});
+
+test('a destination switched off keeps its address and routes nothing', () => {
+  const off = row('Export', ['b2b'], { active_since: null });
+  assert.equal(isActive(off), false);
+  assert.equal(isActive(row('Export', ['b2b'])), true);
+  assert.equal(isActive(row('Export', ['b2b'], { forward_email: null })), false);
+  // Its sibling is then the category's only destination: fixed, not a choice.
+  const modes = routingModeByCategory([row('Accounting', ['b2b']), off]);
+  assert.deepEqual(modes.b2b, { mode: 'fixed', destinations: ['Accounting'] });
+  assert.deepEqual(candidatesFor([off], { category: 'b2b', requestKind: 'problem' }), []);
 });
 
 test('candidates respect a destination limited to some request kinds', () => {

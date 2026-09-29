@@ -10,6 +10,13 @@ Three sibling files carry the other halves, and this one deliberately does not d
 
 ---
 
+## A switch per destination (2026-09-29)
+
+- **Each destination has its own on/off switch** on the Forwarding page, beside the global one. `forwarding_destinations.active_since` (migration 51): switched on at a moment, it receives only mail received after it; off keeps the address and description.
+- **Off:** new mail is not routed to it, and follow-ups on tickets already routed to it stay with the contact team. **Back on:** decisions taken before are re-taken; mail from while it was off is never sent. A new destination starts off; removing the address switches it off.
+- **Migration 51 applied 2026-09-29**: the six destinations with an address are on; Défectueux has its address back and is off. Rehearsal unchanged: 23 of 35 would go, 12 kept.
+- Tests: agent 1,799 pass (runner 22), migrations 04/49/50/51 pass, shared lib pass. Web `tsc` and lint clean. Not opened in a browser.
+
 ## Forwarding runs on destinations, with the acknowledgement (2026-09-29)
 
 - **The forwarding pass now routes on `forwarding_destinations`** through `planRoute` and the b2b chooser, whatever the request kind. `category_forwarding` is no longer read.

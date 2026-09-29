@@ -210,6 +210,73 @@
   font-size: 0.75rem;
 }
 
+.summaryOff .destinationName,
+.summaryOff .description {
+  color: var(--text-muted);
+}
+
+.summaryActions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+/* A switch: the native checkbox stays for keyboard and screen readers, drawn as a track. */
+.toggle {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  cursor: pointer;
+  font-size: 0.8125rem;
+  color: var(--text-default);
+}
+.toggle input {
+  position: absolute;
+  width: 34px;
+  height: 20px;
+  margin: 0;
+  opacity: 0;
+  cursor: inherit;
+}
+.toggleTrack {
+  position: relative;
+  width: 34px;
+  height: 20px;
+  border-radius: 999px;
+  background: var(--border-strong);
+  transition: background var(--dur-fast) var(--ease-out);
+}
+.toggleTrack::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--surface);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.2);
+  transition: transform var(--dur-fast) var(--ease-out);
+}
+.toggle input:checked + .toggleTrack {
+  background: var(--teal);
+}
+.toggle input:checked + .toggleTrack::after {
+  transform: translateX(14px);
+}
+.toggle input:focus-visible + .toggleTrack {
+  box-shadow: 0 0 0 3px var(--teal-050);
+}
+.toggle:has(input:disabled) {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+.toggleText {
+  min-width: 22px;
+}
+
 /* --- the editor --- */
 
 .editor {
