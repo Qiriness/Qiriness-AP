@@ -1,5 +1,6 @@
 import { ratchetLevel } from '../../../scripts/lib/support-taxonomy.mjs';
 import { attemptsSoFar } from '../../../scripts/lib/ticket-record.mjs';
+import { keepOverrides, overridesOf } from '../../../scripts/lib/ticket-overrides.mjs';
 
 import { normaliseCategorisation } from './categorise.mjs';
 
@@ -91,6 +92,7 @@ export async function runCategorisation({
     // can only ratchet the level or rewrite a subject that was already right.
     if (labelsStillValid?.(ticket)) {
       await record.complete('categorisation', ticket, {
+        // The existing columns already hold a person's values; nothing to keep.
         columns: {
           category: ticket.category,
           request_kind: ticket.request_kind,
@@ -123,7 +125,21 @@ export async function runCategorisation({
     const isRecategorisation = Boolean(ticket.category);
     // The ratchet: a fresh reading may raise the level but never lower it, so a
     // calmer follow-up cannot walk back work the ticket has already earned.
-    const level = ratchetLevel(ticket.level, result.level);
+    //
+    // AGAINST THE MODEL'S OWN LAST LEVEL, not a person's. A person may lower a
+    // level; the ratchet is a rule about the model, so it reads `ai_value` when
+    // the column holds a correction.
+    const levelOverride = overridesOf(ticket).level;
+    const level = ratchetLevel(levelOverride ? levelOverride.ai_value ?? null : ticket.level, result.level);
+
+    // A PERSON'S CORRECTION STAYS. Their value keeps the column; the model's goes
+    // to `overrides.<field>.ai_value`, so « Reset to automatic » returns to what
+    // the model says now (scripts/lib/ticket-overrides.mjs).
+    const kept = keepOverrides(ticket, {
+      category: result.category,
+      level,
+      responsible_team: result.responsible_team
+    });
 
     // `complete` writes the labels, stamps `categorised_at`, clears
     // `needs_categorisation` LAST and raises `needs_investigation` in the same
@@ -136,12 +152,13 @@ export async function runCategorisation({
     // full three attempts again when a reply puts it back in the queue.
     await record.complete('categorisation', ticket, {
       columns: {
-        category: result.category,
+        category: kept.columns.category,
         request_kind: result.request_kind,
         secondary_category: result.secondary_category,
         secondary_request_kind: result.secondary_request_kind,
-        level,
-        responsible_team: result.responsible_team,
+        level: kept.columns.level,
+        responsible_team: kept.columns.responsible_team,
+        ...(kept.overrides ? { overrides: kept.overrides } : {}),
         // Cleared, not set: the column now means "these labels are known to be
         // untrustworthy", written only by the failure paths below. A successful
         // categorisation has no such caveat, and leaving a stale `low` here would

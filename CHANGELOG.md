@@ -10,6 +10,47 @@ Three sibling files carry the other halves, and this one deliberately does not d
 
 ---
 
+## Forwarding runs on destinations, with the acknowledgement (2026-09-29)
+
+- **The forwarding pass now routes on `forwarding_destinations`** through `planRoute` and the b2b chooser, whatever the request kind. `category_forwarding` is no longer read.
+- **Master switch** (`forwarding_settings.forward_since`, migration 50): « Turn on forwarding » on the page records the moment; only mail received after it is forwarded. Off by default.
+- **Decisions stored per ticket** (`ticket_routing`), reused until the category or kind changes; follow-ups go to the same destination.
+- **Cosmétovigilance waits for our first reply** (an outbound message on the ticket), and the note says one was sent.
+- **The acknowledgement is sent**: after a successful forward, once per ticket, through the outbound worker's reply-draft-and-send path. Never to our domains or to automated senders; `requested` before the send; a failed one retried up to 5 times on later polls. Tickets forwarded while it is off are marked skipped.
+- **`forward:dry-run -- --since=<date>`** rehearses on older mail. Rehearsed since 2026-07-01 on the live data: 23 of 35 messages would go (Comptabilité 6, RH 7, Marketing & communication 7, Marché France 1, Export 1, Cosmétovigilance 1), 12 kept (the Nocibé POs, PFAS, TCC); 20 acknowledgements skipped because they are off.
+- **Migration 50 applied 2026-09-29.** Forwarding is still **off** (`forward_since` null) and **nothing has been sent**.
+- Tests: agent 1,794 pass (forwarding runner 17, rules 17), shared lib 740, migrations 49/50/04 pass. Web `tsc` and lint clean. Not opened in a browser.
+
+## A small router for b2b (2026-09-29)
+
+- **`agent/src/routing/destination-router.mjs`**: `planRoute` (stays / fixed / choose, no model) and `createDestinationChooser` (one `gpt-4o-mini` call, `AGENT_ROUTER_MODEL`, picks a destination by id from the descriptions or keeps the ticket). Usage recorded under pass `other`. 7 tests.
+- **`npm run route:preview`** (agent): read-only preview over real tickets.
+- **Checked on the 19 real b2b tickets**: 19 of 19 after adding « not existing retailers' orders » to the Marché France and Export descriptions (without it, all 10 Nocibé POs went to France). Stable over five runs except the TCC shipping question (Export or kept).
+- **Défectueux switched off** (address cleared); product problems stay in the normal flow.
+- **Not wired in.** Nothing forwards on the router's decision yet; the forwarding pass is unchanged.
+- Tests: agent 1,792 pass.
+
+## Forwarding destinations (2026-09-29)
+
+- **Named destinations replace one address per category** (`forwarding_destinations`, migration 49). Each has an address (empty = off), the business's description of what it handles, its categories and optional request kinds, whether it only takes mail matching its description, when it is forwarded (at once / after our first reply), and its wording in the acknowledgement.
+- **The acknowledgement** (`forwarding_settings`): fixed FR/EN templates with `{service}`, `{note}`, `{shop}`, a per-destination extra paragraph, French for French mail and English otherwise. **Off by default. Nothing sends it yet.**
+- **`/agent-setup/forwarding` rebuilt**: where each of the 14 categories goes today, one card per destination, the acknowledgement with a live preview. Shared validation and rendering in `scripts/lib/forwarding-destinations.mjs`.
+- **Loaded with the business's seven destinations**: Comptabilité (b2b), Marketing & communication (partner_collaboration), RH (careers), Marché Export and Marché France (b2b), Cosmétovigilance and Produits défectueux (after our first reply; défectueux only on product problems and complaints matching its description). b2b is the agent's choice between three; everything else not listed stays.
+- **Migration 49 applied 2026-09-29**: both tables created empty with RLS on, then the seven rows written through the shared validation. The Comptabilité acknowledgement rendered from the stored rows reads « Nous l'avons transmis au service comptabilité », with its extra paragraph, signed « Le service client Qiriness ».
+- **Not yet routing.** The forwarding pass still reads `category_forwarding` with the `contact`-only rule, and the live worker does not run it. The router, the dry run on the real tickets, the acknowledgement send and the after-first-reply trigger are the next steps.
+- Tests: `forwarding-destinations.test.mjs` 13 pass, `49_forwarding_destinations.test.mjs` 5 pass, `04_support` / `_shared` / routing pass. The 19 analytics copy failures (06 vs 11–37) are unchanged. Web `tsc` and lint clean. Not opened in a browser.
+
+## « Edit case »: a person corrects a ticket (2026-09-29)
+
+- **One « Edit case » mode on the ticket rail.** Category, Level, State, Team, Priority band and Situation become pickers in place; one Save. Investigation, Case, Required action and Rule stay read-only. « Human override » marks a corrected field (the automatic value on hover), with « Reset to automatic » while editing. No approval step, and nothing is sent.
+- **What a Save triggers** (`scripts/lib/ticket-overrides.mjs`): a new situation or category queues one investigation for the next poll. A new situation, category or level raises `case_current.version`, so open drafts are withdrawn at once and the pre-send check refuses them. Team, priority and state move nothing.
+- **A forwarded or out-of-scope category is never investigated.** The investigation's own `isInvestigable` is asked of the ticket as it will be: kind `contact`, b2b, level 4, duplicates and subjects not enabled. The draft is still withdrawn.
+- **Corrections stick.** The categoriser keeps a person's category, level and team and stores its own reading as `ai_value` (the level ratchet reads that). A person's state holds until the customer writes again. A person's situation is carried as `verdict: 'human'` with its own needs, until a later second request is matched on its own. A priority pin sets the band; the ticket still climbs inside it, and level 4 stays high.
+- **Situation & rule** leads with the situation's name. While the match is unsettled it offers the nearest three with « Apply ». The matcher now stores the top three (`exemplar_match.top`).
+- **Migration 48** (`tickets.overrides`, `ticket_overrides`, `ticket_queue.overrides`). **Applied 2026-09-29**: 1,003 tickets read `{}`, the audit table is empty with RLS on, and PostgREST serves the column on `ticket_queue` and the investigation projection.
+- `eval:exemplar-needs` excludes situations a person chose. `eval:fold` unchanged: 79 of 132.
+- Tests: agent 1,785 pass. Root suite: new tests pass; the 19 failures are the analytics function copies (06 vs 11–37), already failing before this change. Web `tsc` and lint clean. Not run in a browser.
+
 ## The monthly sales report is mailed on the 1st (2026-09-29)
 
 - **The worker mails last month's report** on the 1st of each month from 08:00 Paris time, from the support mailbox, as an HTML attachment. In French: subject « Rapport des ventes E-commerce Qiriness - Septembre 2026 », a one-sentence body signed « Agent Contact Qiriness ». Catches up until the 7th if the worker was down. Not saved to Sent Items.

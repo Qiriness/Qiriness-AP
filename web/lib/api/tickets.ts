@@ -11,6 +11,9 @@ import type {
   TicketDraft,
   TicketListItem,
   TicketOrderChange,
+  TicketOverrideChanges,
+  TicketOverrideResult,
+  TicketStatus,
   TicketOrderLinkSource,
   TicketOrderPreview,
   TicketThread,
@@ -152,4 +155,29 @@ export async function actOnObligation(
     throw new KnowledgeApiError(body?.error || `Request failed (${response.status}).`, response.status);
   }
   return { caseState: (body.caseState ?? null) as TicketCaseState | null, ticket: body.ticket as TicketListItem };
+}
+
+/**
+ * Saves a person's corrections from « Edit case ». `expected` is what the page
+ * showed; a ticket changed meanwhile is refused with a reload message.
+ */
+export async function saveTicketOverrides(
+  ticketId: string,
+  body: {
+    changes: TicketOverrideChanges;
+    expected: { status: TicketStatus };
+    source?: "edit_case" | "closest_situation" | "quick_edit";
+  },
+): Promise<TicketOverrideResult> {
+  const response = await fetch(`/api/tickets/${ticketId}/overrides`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new KnowledgeApiError(result?.error || `Request failed (${response.status}).`, response.status);
+  }
+  return result as TicketOverrideResult;
 }

@@ -2015,3 +2015,95 @@
   box-shadow: 0 2px 8px rgb(0 0 0 / 0.12);
   pointer-events: none;
 }
+
+/* --- « Edit case »: one mode for the context rail ------------------------- */
+
+.editBar {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+}
+
+.editField {
+  display: grid;
+  gap: 4px;
+}
+
+.fieldSelect {
+  width: 100%;
+  min-height: 32px;
+  padding: 0 var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text-strong);
+  font: inherit;
+  font-size: var(--text-sm);
+}
+
+.fieldSelect:focus-visible {
+  outline: 2px solid var(--teal);
+  outline-offset: 1px;
+}
+
+.resetLink {
+  justify-self: start;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--teal-ink);
+  font-size: var(--text-caption);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.resetLink:disabled {
+  color: var(--text-subtle);
+  cursor: default;
+}
+
+/* Small and quiet: a fact about the value, not an alarm. */
+.overrideMark {
+  display: inline-block;
+  margin-left: var(--space-2);
+  padding: 0 6px;
+  border: 1px solid var(--warning-100);
+  border-radius: var(--radius-sm);
+  background: var(--warning-050);
+  color: var(--text-default);
+  font-size: var(--text-caption);
+  line-height: 18px;
+  cursor: help;
+}
+
+.situationKey {
+  color: var(--text-subtle);
+  font-size: var(--text-caption);
+}
+
+.nearest {
+  margin-top: var(--space-3);
+}
+
+.nearestList {
+  margin: var(--space-1) 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: var(--space-1);
+}
+
+.nearestList li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.nearestName {
+  min-width: 0;
+  font-size: var(--text-sm);
+  color: var(--text-strong);
+  overflow-wrap: anywhere;
+}

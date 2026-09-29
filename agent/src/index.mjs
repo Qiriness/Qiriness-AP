@@ -41,6 +41,7 @@ import { createOrderResolutionStore, runOrderResolution } from './resolution/ord
 import { createOrderContextStore, runOrderContext } from './resolution/order-context-runner.mjs';
 import { createForwardingStore } from './routing/forwarding-store.mjs';
 import { runForwarding } from './routing/forward-runner.mjs';
+import { createDestinationChooser } from './routing/destination-router.mjs';
 import { AUTO_CLOSE_EXEMPT_LEVELS, runAutoClose } from './lifecycle/auto-close.mjs';
 import { resolveInternalDomains } from '../../scripts/lib/message-audience.mjs';
 import { createOutlookGraphAdapter } from './mail/outlook-graph-adapter.mjs';
@@ -164,6 +165,9 @@ async function main() {
   // pass. Null means the casework stage is skipped entirely and the pipeline
   // behaves exactly as it did before this layer existed.
   let readCaseFor = null;
+  // The forwarding router's model half; null without an OpenAI key, which
+  // leaves a category with several destinations undecided rather than guessed.
+  let destinationChooser = null;
   // Stage 6: the drafting pass in the poll. Null unless DRAFT_IN_POLL=true and a
   // key is set, and null means the stage is skipped, as before.
   let drafting = null;
@@ -186,6 +190,7 @@ async function main() {
     const openai = createOpenAIClient({ apiKey: config.openaiApiKey, usageSink: usage.sink });
     triage = createSpamClassifier(openai, { model: config.triageModel, logger }).triage;
     categorise = createCategoriser(openai, { model: config.categoriserModel }).categorise;
+    destinationChooser = createDestinationChooser(openai, { model: config.routerModel });
     // `AGENT_CASEWORK_MODEL=` (empty) leaves this null, which turns the stage
     // off — the switch is the absence of the reader, not a flag inside it.
     readCaseFor = config.caseworkModel ? { openai, model: config.caseworkModel } : null;
@@ -639,15 +644,18 @@ async function main() {
       }
     }
 
-    // Forwarding runs last: it reads the category and request_kind the step
-    // above assigns. Like categorisation it selects on ticket state rather than
-    // on what this poll wrote, so mail that became forwardable only because an
-    // address was configured today is picked up without a backfill. A no-op
-    // until the address book has at least one entry.
+    // Forwarding runs last: the route starts from the category the step above
+    // assigns, and a destination that waits for our first reply needs the send
+    // above to have happened. Like categorisation it selects on ticket state
+    // rather than on what this poll wrote. A no-op until Agent Setup > Forwarding
+    // sets a start date (`forwarding_settings.forward_since`).
     if (runsThrough('forward')) {
       const forwarded = await runForwarding({
         store: forwardingStore,
         graphClient,
+        provider,
+        chooser: destinationChooser,
+        senderDirectory,
         shopId,
         logger,
         internalDomains: resolveInternalDomains({
@@ -655,7 +663,7 @@ async function main() {
           extra: config.internalEmailDomains
         })
       });
-      if (forwarded.considered > 0) {
+      if (forwarded.considered > 0 || forwarded.acknowledged > 0 || forwarded.ackFailed > 0) {
         logger.info('forward.pass', { shopId, ...forwarded });
       }
     }

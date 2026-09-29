@@ -22,7 +22,7 @@ import { ATTACHMENT_REASON_FALLBACK, fetchAttachmentReason } from "@/lib/attachm
 import { promoteDroppedMail } from "@/lib/api/dropped-mail";
 import { knowledgeErrorMessage } from "@/lib/api/knowledge";
 import { decisionLabel, handedOffNotice, outboundLine, replyInFlight } from "@/lib/draft-outbound";
-import { actOnObligation, decideOnDraft, fetchTicketDetail, fetchTicketThread, setTicketStatus } from "@/lib/api/tickets";
+import { actOnObligation, decideOnDraft, fetchTicketDetail, fetchTicketThread, saveTicketOverrides, setTicketStatus } from "@/lib/api/tickets";
 import { formatRelativeTime } from "@/lib/relative-time";
 import { isBacklogTicket, isClosed, summariseTickets } from "@/lib/ticket-stats";
 import type {
@@ -42,6 +42,12 @@ import type {
   TicketOrderChange,
   TicketOrderFacts,
   TicketOrderLinkSource,
+  TicketOverride,
+  TicketOverrideChanges,
+  TicketOverrideField,
+  TicketOverrideResult,
+  TicketPriorityBand,
+  TicketSituationOption,
   TicketThread,
   TicketTracking,
 } from "@/lib/types";
@@ -936,7 +942,7 @@ interface TicketWorkspaceProps {
   contextOpen: boolean;
   onOpenContext: () => void;
   onCloseContext: () => void;
-  onOrderChanged: (change: TicketOrderChange) => void;
+  onOrderChanged: (change: TicketChange) => void;
   onCaseStateChanged: (change: TicketCaseChange) => void;
 }
 
@@ -1704,7 +1710,7 @@ function TicketContextPane({
   detail: TicketDetail | null;
   thread: TicketThread | null;
   error: string | null;
-  onOrderChanged: (change: TicketOrderChange) => void;
+  onOrderChanged: (change: TicketChange) => void;
   onCaseStateChanged: (change: TicketCaseChange) => void;
 }) {
   const results = detail?.results ?? null;
@@ -1723,8 +1729,136 @@ function TicketContextPane({
   const openAdd = () => setOrderDialog({ source: "add", initialNumber: null });
   const openEdit = () => setOrderDialog({ source: "edit", initialNumber: null });
 
+  // « EDIT CASE »: one mode for the whole rail, one Save. Everything the agent
+  // derived (investigation, case, required action, rule) stays read-only; only
+  // the fields a person may correct turn into pickers where they stand.
+  const [editing, setEditing] = useState(false);
+  const [pending, setPending] = useState<TicketOverrideChanges>({});
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [saveNotice, setSaveNotice] = useState<{ ticketId: string; text: string } | null>(null);
+  // Another ticket opened: whatever was being edited belonged to the last one.
+  useEffect(() => {
+    setEditing(false);
+    setPending({});
+    setSaveError(null);
+  }, [ticket.id]);
+
+  const overrides = ticket.overrides ?? {};
+  const situationOverride = detail?.situationOverride ?? null;
+  const overrideOf = (name: TicketOverrideField): TicketOverride | null =>
+    name === "situation" ? situationOverride : overrides[name] ?? null;
+  const setField = (name: TicketOverrideField, value: string | number | null) =>
+    setPending((current) => ({ ...current, [name]: value }));
+  const keepField = (name: TicketOverrideField) =>
+    setPending((current) => {
+      const next = { ...current };
+      delete next[name];
+      return next;
+    });
+  const cancelEdit = () => {
+    setEditing(false);
+    setPending({});
+    setSaveError(null);
+  };
+
+  const save = async (changes: TicketOverrideChanges, source: "edit_case" | "closest_situation") => {
+    if (Object.keys(changes).length === 0) {
+      setEditing(false);
+      return;
+    }
+    setSaving(true);
+    setSaveError(null);
+    try {
+      const result = await saveTicketOverrides(ticket.id, { changes, expected: { status: ticket.status }, source });
+      onOrderChanged(result);
+      setSaveNotice({ ticketId: ticket.id, text: overrideNotice(result) });
+      setEditing(false);
+      setPending({});
+    } catch (cause) {
+      setSaveError(knowledgeErrorMessage(cause));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  /** A picker in edit mode; the value with its override mark otherwise. */
+  const field = (
+    name: TicketOverrideField,
+    shown: ReactNode,
+    options: { value: string; label: string; disabled?: boolean }[],
+    current: string
+  ): ReactNode => {
+    const override = overrideOf(name);
+    if (!editing) {
+      if (!shown) return null;
+      return (
+        <>
+          {shown}
+          {override && <OverrideMark override={override} field={name} />}
+        </>
+      );
+    }
+    const chosen = name in pending ? pending[name] : undefined;
+    const resetting = chosen === null;
+    return (
+      <span className={styles.editField}>
+        <select
+          className={styles.fieldSelect}
+          aria-label={OVERRIDE_FIELD_LABELS[name]}
+          value={chosen !== undefined && chosen !== null ? String(chosen) : current}
+          disabled={saving || resetting}
+          onChange={(event) => setField(name, event.target.value)}
+        >
+          {options.map((option) => (
+            <option key={option.value} value={option.value} disabled={option.disabled}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+        {override && (
+          <button
+            type="button"
+            className={styles.resetLink}
+            disabled={saving}
+            onClick={() => (resetting ? keepField(name) : setField(name, null))}
+          >
+            {resetting ? "Keep my value" : "Reset to automatic"}
+          </button>
+        )}
+      </span>
+    );
+  };
+
   return (
     <div className={styles.contextScroll}>
+      <div className={styles.editBar}>
+        {editing ? (
+          <>
+            <Button size="sm" variant="primary" disabled={saving} onClick={() => save(pending, "edit_case")}>
+              {saving ? "Saving…" : "Save"}
+            </Button>
+            <Button size="sm" variant="tertiary" disabled={saving} onClick={cancelEdit}>
+              Cancel
+            </Button>
+          </>
+        ) : (
+          <Button size="sm" variant="secondary" leadingIcon={<PencilIcon size={14} />} onClick={() => setEditing(true)}>
+            Edit case
+          </Button>
+        )}
+      </div>
+      {editing && (
+        <p className={styles.reason}>
+          A new situation or category makes the agent investigate again on its next poll and replaces the pending
+          draft. A new level withdraws the draft. Team, priority and state change nothing else. Nothing is sent.
+        </p>
+      )}
+      {saveError && <p className={styles.inlineError} role="alert">{saveError}</p>}
+      {saveNotice?.ticketId === ticket.id && !editing && (
+        <p className={styles.orderNotice} role="status">{saveNotice.text}</p>
+      )}
+
       <ContextSection title="Customer">
         <InfoList
           rows={[
@@ -1740,14 +1874,72 @@ function TicketContextPane({
       <ContextSection title="Ticket">
         <InfoList
           rows={[
-            ["Category", ticket.category ? CATEGORY_LABELS[ticket.category] : "Uncategorised"],
+            [
+              "Category",
+              field(
+                "category",
+                ticket.category ? CATEGORY_LABELS[ticket.category] : "Uncategorised",
+                [
+                  ...(ticket.category ? [] : [{ value: "", label: "Uncategorised", disabled: true }]),
+                  ...TICKET_CATEGORIES.map((category) => ({ value: category, label: CATEGORY_LABELS[category] })),
+                ],
+                ticket.category ?? ""
+              ),
+            ],
             ["Secondary", ticket.secondaryCategory ? CATEGORY_LABELS[ticket.secondaryCategory] : null],
-            ["Level", ticket.level ? `${TICKET_LEVEL_MEANINGS[ticket.level]} (L${ticket.level})` : "Uncategorised"],
-            ["State", TICKET_STATUS_LABELS[ticket.status]],
-            ["Team", ticket.responsibleTeam ? RESPONSIBLE_TEAM_LABELS[ticket.responsibleTeam] : null],
+            [
+              "Level",
+              field(
+                "level",
+                ticket.level ? `${TICKET_LEVEL_MEANINGS[ticket.level]} (L${ticket.level})` : "Uncategorised",
+                [
+                  ...(ticket.level ? [] : [{ value: "", label: "Uncategorised", disabled: true }]),
+                  ...([1, 2, 3, 4] as const).map((level) => ({
+                    value: String(level),
+                    label: `${TICKET_LEVEL_MEANINGS[level]} (L${level})`,
+                  })),
+                ],
+                ticket.level ? String(ticket.level) : ""
+              ),
+            ],
+            [
+              "State",
+              field(
+                "status",
+                TICKET_STATUS_LABELS[ticket.status],
+                [
+                  // An agent-set state is shown, never offered: a person sets these three.
+                  ...(PERSON_STATUSES.includes(ticket.status)
+                    ? []
+                    : [{ value: ticket.status, label: TICKET_STATUS_LABELS[ticket.status], disabled: true }]),
+                  ...PERSON_STATUSES.map((status) => ({ value: status, label: TICKET_STATUS_LABELS[status] })),
+                ],
+                ticket.status
+              ),
+            ],
+            [
+              "Team",
+              field(
+                "responsible_team",
+                ticket.responsibleTeam ? RESPONSIBLE_TEAM_LABELS[ticket.responsibleTeam] : null,
+                [
+                  ...(ticket.responsibleTeam ? [] : [{ value: "", label: "None", disabled: true }]),
+                  ...TEAMS.map((team) => ({ value: team, label: RESPONSIBLE_TEAM_LABELS[team] })),
+                ],
+                ticket.responsibleTeam ?? ""
+              ),
+            ],
             ["Messages", String(ticket.messageCount)],
             ["Last activity", ticketAge(ticket)],
-            ["Priority", `${formatPriorityScore(ticket.priorityScore)} (${priorityLabel(ticket)})`],
+            [
+              "Priority",
+              field(
+                "priority",
+                `${formatPriorityScore(ticket.priorityScore)} (${priorityLabel(ticket)})`,
+                PRIORITY_BANDS.map((band) => ({ value: band, label: PRIORITY_BAND_WORDS[band] })),
+                ticket.priorityBand
+              ),
+            ],
           ]}
         />
       </ContextSection>
@@ -1868,9 +2060,74 @@ function TicketContextPane({
       {/* LAST, because it answers "why does this say what it says" rather than
           "what does it say" — an operator reads the verdict and the action
           first, and comes here when one of them surprises them. */}
-      <PolicySection policy={detail?.policy ?? null} />
+      <PolicySection
+        policy={detail?.policy ?? null}
+        situationOverride={situationOverride}
+        situations={detail?.situations ?? []}
+        editing={editing}
+        picked={"situation" in pending ? (pending.situation === null ? null : String(pending.situation)) : undefined}
+        saving={saving}
+        onPick={(key) => setField("situation", key)}
+        onReset={() => setField("situation", null)}
+        onKeep={() => keepField("situation")}
+        onApply={(key) => save({ situation: key }, "closest_situation")}
+      />
     </div>
   );
+}
+
+/** Any change the rail makes to one ticket: the queue row and the detail, replaced together. */
+type TicketChange = { ticket: TicketListItem; detail: TicketDetail };
+
+const PERSON_STATUSES: TicketListItem["status"][] = ["open", "resolved", "closed"];
+
+const TEAMS = Object.keys(RESPONSIBLE_TEAM_LABELS) as (keyof typeof RESPONSIBLE_TEAM_LABELS)[];
+
+const PRIORITY_BANDS: TicketPriorityBand[] = ["high", "medium", "low"];
+
+const PRIORITY_BAND_WORDS: Record<TicketPriorityBand, string> = { high: "High", medium: "Medium", low: "Low" };
+
+const OVERRIDE_FIELD_LABELS: Record<TicketOverrideField, string> = {
+  situation: "Situation",
+  category: "Category",
+  level: "Level",
+  status: "State",
+  responsible_team: "Team",
+  priority: "Priority",
+};
+
+/** What a Save did, in one line: a re-run, withdrawn drafts, or nothing else. */
+function overrideNotice(result: TicketOverrideResult): string {
+  const parts: string[] = [];
+  if (result.requeued) parts.push("The agent investigates this ticket again on its next poll and writes a new draft.");
+  if (result.notInvestigable) {
+    parts.push(
+      "It is not investigated: this category is outside what the agent handles (forwarded, trade, level 4 or not enabled), so a person answers it."
+    );
+  }
+  if (result.draftsStaled > 0) {
+    parts.push(`${result.draftsStaled} draft${result.draftsStaled === 1 ? "" : "s"} withdrawn: written for the case before your change.`);
+  }
+  return parts.length > 0 ? `Saved. ${parts.join(" ")}` : "Saved. Nothing else changes.";
+}
+
+/** « Human override », with what the pipeline says on hover. */
+function OverrideMark({ override, field }: { override: TicketOverride; field: TicketOverrideField }) {
+  const automatic = override.aiValue === null ? "none" : automaticWords(field, override.aiValue);
+  return (
+    <span className={styles.overrideMark} title={`Automatic value: ${automatic}`}>
+      Human override
+    </span>
+  );
+}
+
+function automaticWords(field: TicketOverrideField, value: string | number): string {
+  if (field === "category") return CATEGORY_LABELS[value as KnowledgeCategory] ?? String(value);
+  if (field === "level") return `L${value}`;
+  if (field === "status") return TICKET_STATUS_LABELS[value as TicketListItem["status"]] ?? String(value);
+  if (field === "responsible_team") return RESPONSIBLE_TEAM_LABELS[value as keyof typeof RESPONSIBLE_TEAM_LABELS] ?? String(value);
+  if (field === "priority") return PRIORITY_BAND_WORDS[value as TicketPriorityBand] ?? String(value);
+  return String(value);
 }
 
 /** Who acts next, as a person reads it. */
@@ -1986,16 +2243,23 @@ function CaseSection({
   );
 }
 
-/** How the situation was reached, in the reader's words rather than a number. */
-const MATCH_WORDS: Record<string, (policy: TicketPolicy) => string> = {
-  matched: (policy) => `matched ${score(policy.similarity)}`,
-  near: (policy) => `near miss ${score(policy.similarity)}, chosen by the agent`,
-  ambiguous: (policy) => `two situations too close to call ${score(policy.similarity)}`,
-  none: (policy) => `nothing close enough ${score(policy.similarity)}`,
+/** How the situation was reached, in one word: the scores are the agent's business. */
+const MATCH_WORDS: Record<string, string> = {
+  matched: "matched",
+  near: "near miss, chosen by the agent",
+  ambiguous: "two situations too close to call",
+  none: "nothing close enough",
 };
 
-const score = (similarity: number | null) =>
-  similarity === null ? "" : `(${similarity.toFixed(2)})`;
+/** « Name (KEY) »: the name is what a person reads, the key what the rulebook is searched by. */
+function situationLabel(key: string, name: string | null | undefined): ReactNode {
+  return (
+    <>
+      {name ?? key}
+      {name && <span className={styles.situationKey}> {key}</span>}
+    </>
+  );
+}
 
 /**
  * Which situation the run settled on, and which rule its findings selected.
@@ -2009,56 +2273,141 @@ const score = (similarity: number | null) =>
  * ticket no rule answered is precisely the case worth seeing: it is a gap in the
  * rulebook, and it is otherwise invisible until somebody reads a transcript.
  *
- * THE KEYS ARE RAW (`PR-29`, `pr29_equivalent_partiel`) because they are what
- * the rulebook screen is searched by; a prettified label would have to be
- * translated back before anybody could act on it.
+ * THE NAME LEADS AND THE RAW KEY FOLLOWS (`PR-29`, `pr29_equivalent_partiel`):
+ * the key is still what the rulebook screen is searched by, so it stays on
+ * screen, small, rather than being translated away.
+ *
+ * THE SITUATION IS THE ONE FIELD HERE A PERSON MAY CORRECT. In « Edit case » it
+ * becomes a picker; when the match was not settled, the nearest three are
+ * offered with « Apply », which saves at once. The rule is never picked: it is
+ * re-derived by the investigation from the corrected situation.
  */
-function PolicySection({ policy }: { policy: TicketPolicy | null }) {
-  // No investigation ran: there is no decision to explain, and an empty heading
-  // would read as one that was made badly.
-  if (!policy) {
+function PolicySection({
+  policy,
+  situationOverride,
+  situations,
+  editing,
+  picked,
+  saving,
+  onPick,
+  onReset,
+  onKeep,
+  onApply,
+}: {
+  policy: TicketPolicy | null;
+  situationOverride: TicketOverride | null;
+  situations: TicketSituationOption[];
+  editing: boolean;
+  /** The situation chosen in this edit: a key, null to reset, undefined when untouched. */
+  picked: string | null | undefined;
+  saving: boolean;
+  onPick: (key: string) => void;
+  onReset: () => void;
+  onKeep: () => void;
+  onApply: (key: string) => void;
+}) {
+  // No investigation ran and nobody chose a situation: there is no decision to
+  // explain, and an empty heading would read as one that was made badly.
+  if (!policy && !situationOverride && !editing) {
     return null;
   }
-  const matchWord = policy.match ? MATCH_WORDS[policy.match]?.(policy) : null;
-  const asked = [
-    policy.route ? `route to ${policy.route.replace(/_/g, " ")}` : null,
-    policy.asks.length > 0 ? `ask for ${policy.asks.join(", ").replace(/_/g, " ")}` : null,
-    policy.offerCode ? `offer ${policy.offerCode}` : null,
-  ]
-    .filter(Boolean)
-    .join(" · ");
+  const names = new Map(situations.map((row) => [row.key, row.question]));
+  const overrideKey = situationOverride ? String(situationOverride.value) : null;
+  // The correction is saved but the next run has not used it yet.
+  const awaitingRun = Boolean(overrideKey && overrideKey !== policy?.situation);
+  const current = overrideKey ?? policy?.situation ?? null;
+
+  const asked = policy
+    ? [
+        policy.route ? `route to ${policy.route.replace(/_/g, " ")}` : null,
+        policy.asks.length > 0 ? `ask for ${policy.asks.join(", ").replace(/_/g, " ")}` : null,
+        policy.offerCode ? `offer ${policy.offerCode}` : null,
+      ]
+        .filter(Boolean)
+        .join(" · ")
+    : "";
+
+  const shownSituation: ReactNode = current ? (
+    <>
+      {situationLabel(current, names.get(current) ?? policy?.situationName)}
+      {situationOverride ? (
+        <OverrideMark override={situationOverride} field="situation" />
+      ) : policy?.match ? (
+        <span className={styles.situationKey}> · {MATCH_WORDS[policy.match] ?? policy.match}</span>
+      ) : null}
+    </>
+  ) : (
+    "None settled"
+  );
+
+  const resetting = picked === null;
+  const situationCell: ReactNode = editing ? (
+    <span className={styles.editField}>
+      <select
+        className={styles.fieldSelect}
+        aria-label="Situation"
+        value={typeof picked === "string" ? picked : current ?? ""}
+        disabled={saving || resetting}
+        onChange={(event) => onPick(event.target.value)}
+      >
+        {!current && <option value="" disabled>None settled</option>}
+        {situations.map((row) => (
+          <option key={row.key} value={row.key}>
+            {row.question} ({row.key})
+          </option>
+        ))}
+      </select>
+      {situationOverride && (
+        <button type="button" className={styles.resetLink} disabled={saving} onClick={resetting ? onKeep : onReset}>
+          {resetting ? "Keep my value" : "Reset to automatic"}
+        </button>
+      )}
+    </span>
+  ) : (
+    shownSituation
+  );
+
+  // THE NEAREST THREE, offered only while the situation is unsettled and nobody
+  // has chosen one: on a clean match they would be noise.
+  const offerNearest = !editing && !situationOverride && policy && policy.match !== "matched" && policy.nearest.length > 0;
 
   return (
     <ContextSection title="Situation & rule">
       <InfoList
         rows={[
-          [
-            "Situation",
-            [
-              policy.situation ?? "None settled",
-              matchWord,
-              // The closest exemplar is worth seeing even when it lost: one that
-              // keeps coming second is the situation missing from the corpus.
-              !policy.situation && policy.closest ? `closest ${policy.closest}` : null,
-            ]
-              .filter(Boolean)
-              .join(" — "),
-          ],
+          ["Situation", situationCell],
           [
             "Rule",
-            policy.rule
-              ? [
-                  policy.rule,
-                  policy.changedVerdict ? "changed the verdict" : "verdict unchanged",
-                  policy.ruleVerdict && policy.ruleVerdict !== "selected" ? policy.ruleVerdict : null,
-                ]
-                  .filter(Boolean)
-                  .join(" — ")
-              : "No rule matched",
+            awaitingRun
+              ? "Re-derived from your situation on the next run"
+              : policy?.rule
+                ? [
+                    policy.rule,
+                    policy.changedVerdict ? "changed the verdict" : "verdict unchanged",
+                    policy.ruleVerdict && policy.ruleVerdict !== "selected" ? policy.ruleVerdict : null,
+                  ]
+                    .filter(Boolean)
+                    .join(" — ")
+                : "No rule matched",
           ],
-          ["It asked for", asked || null],
+          ["It asked for", awaitingRun ? null : asked || null],
         ]}
       />
+      {offerNearest && (
+        <div className={styles.nearest}>
+          <p className={styles.reason}>Closest situations</p>
+          <ul className={styles.nearestList}>
+            {policy.nearest.map((row) => (
+              <li key={row.key}>
+                <span className={styles.nearestName}>{situationLabel(row.key, row.name ?? names.get(row.key))}</span>
+                <Button size="sm" variant="tertiary" disabled={saving} onClick={() => onApply(row.key)}>
+                  Apply
+                </Button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
     </ContextSection>
   );
 }

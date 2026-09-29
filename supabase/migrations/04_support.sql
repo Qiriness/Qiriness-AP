@@ -154,9 +154,15 @@ create table public.tickets (
   retention_delete_after timestamptz,
   deleted_at timestamptz,
 
+  -- A person's corrections, per field: { value, ai_value, set_by, set_at, source }.
+  -- The column of an overridden field holds the person's value; `ai_value` keeps
+  -- the pipeline's. See scripts/lib/ticket-overrides.mjs and 48_ticket_overrides.sql.
+  overrides jsonb not null default '{}'::jsonb,
+
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
 
+  constraint tickets_overrides_object_check check (jsonb_typeof(overrides) = 'object'),
   constraint tickets_shop_conversation_unique unique (shop_id, graph_conversation_id),
   constraint tickets_status_check check (
     status in (
@@ -333,6 +339,9 @@ comment on table public.tickets is
 
 comment on column public.tickets.duplicate_of_ticket_id is
   'The ticket this one duplicates, set by deterministic rules only: an identical body from the same sender within an hour, or an RFC reply chain pointing at a message already stored. LINKED, NEVER MERGED -- both threads stay whole and a person decides. The drafting queue skips a linked ticket, which is what stops one customer receiving two replies.';
+
+comment on column public.tickets.overrides is
+  'A person''s corrections, per field: { value, ai_value, set_by, set_at, source }. The column of an overridden field holds the person''s value; ai_value keeps the pipeline''s, and the categoriser keeps it current. Empty object when nothing is overridden.';
 
 comment on column public.tickets.sender_label is
   'The sender_directory label of the address that OPENED this thread, when that address is one of ours -- internal (qiriness.com, lap-groupe.com), contractor, or logistics (the 3PL running the warehouse). Null means a consumer, the ordinary case. Set deterministically at ticket creation from the address, never by a model: who wrote to us is a fact we hold before any pass runs. The drafting queue skips a labelled ticket, because a customer-voice reply addressed to a colleague is never the right output; investigation still runs, because a colleague chasing a real order still needs the order facts gathered for whoever picks it up.';
@@ -1327,6 +1336,43 @@ alter table public.ticket_case_actions enable row level security;
 comment on table public.ticket_case_actions is
   'What a person did to a case from the dashboard: an open check marked done or cancelled. The fold (agent/src/casework/case-fold.mjs) applies these after the readings, so a check that was settled by phone or in Shopify stops being owed. Append-only.';
 
+-- ---------------------------------------------------------------- ticket_overrides
+--
+-- 48_ticket_overrides.sql carries a populated database to it; 48's test asserts
+-- the two agree.
+
+create table public.ticket_overrides (
+  id uuid primary key default gen_random_uuid(),
+  shop_id uuid not null references public.shops(id) on delete cascade,
+  ticket_id uuid not null references public.tickets(id) on delete cascade,
+
+  field text not null,
+  action text not null,
+  -- Null on a reset. Text whatever the field: a level is stored as '3'.
+  value text,
+  -- What the pipeline said at the time, so a correction can be measured against it.
+  ai_value text,
+  source text,
+
+  -- The dashboard user's id, never a name or an address.
+  set_by text,
+  set_at timestamptz not null default now(),
+
+  constraint ticket_overrides_field_check check (
+    field in ('situation', 'category', 'level', 'status', 'responsible_team', 'priority')
+  ),
+  constraint ticket_overrides_action_check check (action in ('set', 'cleared')),
+  constraint ticket_overrides_value_check check ((action = 'set') = (value is not null))
+);
+
+create index ticket_overrides_ticket_idx
+  on public.ticket_overrides (ticket_id, set_at);
+
+alter table public.ticket_overrides enable row level security;
+
+comment on table public.ticket_overrides is
+  'Every correction a person made to a ticket from the dashboard, and every reset to automatic. Append-only audit: the active values live in tickets.overrides.';
+
 -- ---------------------------------------------------------------- category_forwarding
 
 -- ============================================================================
@@ -1456,6 +1502,9 @@ create table public.ticket_forwards (
   -- goes tomorrow must not rewrite where it went yesterday.
   category text not null,
   forward_email text not null,
+  -- The destination it went to, as named then. Null on rows from before
+  -- destinations existed.
+  destination_label text,
 
   status text not null default 'sent' check (status in ('sent', 'failed')),
   -- One line, no stack, no message body. Enough to see why and retry.
@@ -1490,11 +1539,178 @@ comment on column public.ticket_forwards.category is
 comment on column public.ticket_forwards.status is
   'sent | failed. Failures are recorded rather than dropped, so a Graph rejection is visible and retryable instead of silently never happening.';
 
+comment on column public.ticket_forwards.destination_label is
+  'The destination this forward went to, as named when it was sent. Null on rows written before destinations existed.';
+
 comment on column public.ticket_forwards.attempts is
   'How many times this message has been attempted. Retry stops at the cap in agent/src/routing/forwarding-store.mjs, so a permanently undeliverable address fails a bounded number of times and then stays visible instead of being re-sent on every poll.';
 
 comment on column public.ticket_forwards.status is
   'sent | failed. `sent` is final and excludes the message from future passes; `failed` is retried until attempts hits the cap. Recording upserts on ticket_message_id, so a retry updates this row rather than colliding with its unique constraint.';
+
+-- ---------------------------------------------------------------- forwarding_destinations
+
+-- Named destinations: who receives mail the contact team does not own, which
+-- categories and kinds they may take, and what they handle in the business's
+-- words. Replaces category_forwarding, which stays until the router reads
+-- these (migration 49).
+
+create table public.forwarding_destinations (
+  id uuid primary key default gen_random_uuid(),
+  shop_id uuid not null references public.shops(id) on delete cascade,
+
+  -- What the dashboard calls it: « Comptabilité », « Export ».
+  label text not null,
+  -- Null is the off switch, as in category_forwarding: a destination can be
+  -- described before its address is known, and switched off without losing it.
+  forward_email text check (forward_email is null or forward_email like '%_@_%'),
+  -- What it handles, in the business's words. The router's only guide when a
+  -- category has several destinations, so it is written for a reader, not a rule.
+  description text not null default '',
+
+  categories text[] not null,
+  -- Empty means any kind.
+  request_kinds text[] not null default '{}',
+  -- The agent checks the mail against the description even when this is the
+  -- category's only destination, and keeps the ticket when it does not fit.
+  -- Without it, one destination takes the whole category unread: right for
+  -- careers, wrong for defects, where `product` problems also hold a customer
+  -- who cannot reach the phone line.
+  match_description boolean not null default false,
+
+  timing text not null default 'immediate',
+  acknowledge boolean not null default true,
+
+  -- Customer-facing name in the acknowledgement. The French one carries its
+  -- own preposition (« au service comptabilité »), since « à le » is wrong.
+  public_name_fr text,
+  public_name_en text,
+  -- An extra paragraph in that destination's acknowledgement only.
+  ack_note_fr text,
+  ack_note_en text,
+
+  position integer not null default 0,
+
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+
+  constraint forwarding_destinations_label_unique unique (shop_id, label),
+  constraint forwarding_destinations_categories_check check (
+    cardinality(categories) > 0
+    and categories <@ array[
+      'order', 'delivery', 'return_exchange', 'product', 'product_stock', 'payment',
+      'account', 'promotions', 'cosmetovigilance', 'legal_privacy', 'b2b',
+      'partner_collaboration', 'careers', 'other'
+    ]::text[]
+  ),
+  constraint forwarding_destinations_request_kinds_check check (
+    request_kinds <@ array['question', 'problem', 'complaint', 'contact']::text[]
+  ),
+  constraint forwarding_destinations_timing_check check (
+    timing in ('immediate', 'after_first_reply')
+  ),
+  -- A destination that waits for our first reply has already written to the
+  -- sender; a templated acknowledgement on top would repeat it.
+  constraint forwarding_destinations_acknowledge_check check (
+    not acknowledge or timing = 'immediate'
+  )
+);
+
+create index forwarding_destinations_shop_idx
+  on public.forwarding_destinations (shop_id, position);
+
+create trigger forwarding_destinations_set_updated_at
+before update on public.forwarding_destinations
+for each row
+execute function public.set_updated_at();
+
+alter table public.forwarding_destinations enable row level security;
+
+comment on table public.forwarding_destinations is
+  'Who receives mail the contact team does not own: a name, an address (null = off), the categories and request kinds it may take, and a description in the business''s words that the router reads when a category has several destinations. Written by Agent Setup > Forwarding.';
+
+comment on column public.forwarding_destinations.timing is
+  'immediate: forwarded as soon as routed, with the acknowledgement. after_first_reply: forwarded once the contact team''s first reply has gone out (cosmetovigilance and defects ask for information first).';
+
+comment on column public.forwarding_destinations.public_name_fr is
+  'The phrase that follows « Nous l''avons transmis » in the acknowledgement, preposition included: « au service comptabilité ». Null reads « au service concerné ».';
+
+create table public.forwarding_settings (
+  shop_id uuid primary key references public.shops(id) on delete cascade,
+  -- Off by default: this is the one email the system sends with no person
+  -- approving it, so it is switched on deliberately.
+  ack_enabled boolean not null default false,
+  -- Null means the default template in scripts/lib/forwarding-destinations.mjs.
+  ack_template_fr text,
+  ack_template_en text,
+  -- The master switch. Null forwards nothing; otherwise only mail received
+  -- from this instant on, so turning forwarding on never sends the backlog.
+  forward_since timestamptz,
+  updated_at timestamptz not null default now()
+);
+
+create trigger forwarding_settings_set_updated_at
+before update on public.forwarding_settings
+for each row
+execute function public.set_updated_at();
+
+alter table public.forwarding_settings enable row level security;
+
+comment on column public.forwarding_settings.forward_since is
+  'The master switch. Null forwards nothing. Otherwise only inbound mail received at or after this instant is forwarded, so turning forwarding on never sends the backlog.';
+
+comment on table public.forwarding_settings is
+  'Shop-wide acknowledgement for forwarded mail: whether it is sent, and the FR/EN templates ({service}, {note}, {shop}). Null templates use the defaults in code.';
+
+-- ---------------------------------------------------------------- ticket_routing
+
+-- The router's decision per ticket and the once-per-ticket acknowledgement
+-- (migration 50).
+
+create table public.ticket_routing (
+  id uuid primary key default gen_random_uuid(),
+  shop_id uuid not null references public.shops(id) on delete cascade,
+  ticket_id uuid not null unique references public.tickets(id) on delete cascade,
+
+  -- What the decision was made on. A different category or kind on the ticket
+  -- means the decision is stale and is taken again.
+  category text not null,
+  request_kind text,
+
+  outcome text not null,
+  method text not null,
+  -- Null when the ticket stays, or when the destination was deleted since.
+  destination_id uuid references public.forwarding_destinations(id) on delete set null,
+  destination_label text,
+  -- The model's one line; null on a fixed route.
+  reason text,
+  model text,
+  decided_at timestamptz not null default now(),
+
+  -- The acknowledgement, at most once per ticket. `requested` is written BEFORE
+  -- the send, so a crash between the two is never retried into a second mail.
+  ack_state text,
+  ack_at timestamptz,
+  ack_error text,
+  ack_attempts integer not null default 0,
+
+  constraint ticket_routing_outcome_check check (outcome in ('forward', 'keep')),
+  constraint ticket_routing_method_check check (method in ('fixed', 'model')),
+  constraint ticket_routing_destination_check check (outcome = 'keep' or destination_label is not null),
+  constraint ticket_routing_ack_state_check check (
+    ack_state is null or ack_state in ('requested', 'sent', 'failed', 'skipped')
+  )
+);
+
+create index ticket_routing_shop_idx on public.ticket_routing (shop_id);
+
+alter table public.ticket_routing enable row level security;
+
+comment on table public.ticket_routing is
+  'The forwarding router''s decision per ticket (forward to a destination, or keep), taken once and re-taken when the category or kind changes; and the once-per-ticket acknowledgement state.';
+
+comment on column public.ticket_routing.ack_state is
+  'requested (written before sending; never retried) | sent | failed (retried up to the cap) | skipped (automated or internal sender, or acknowledgements off). Null until the first forward.';
 
 -- ---------------------------------------------------------------- categorisation_review
 
@@ -1992,7 +2208,11 @@ with (security_invoker = true) as
     --
     -- Whose thread this is: the row is skipped by drafting, and somebody
     -- working the queue should see that before they open it expecting a reply.
-    t.sender_label as sender_label
+    t.sender_label as sender_label,
+    -- A person's corrections (48_ticket_overrides.sql): the queue marks an
+    -- overridden row and pins a priority band a person chose. Appended last for
+    -- the reason above.
+    t.overrides as overrides
   from public.tickets t
   left join public.customers c on c.id = t.customer_id
   left join public.ticket_message_counts n on n.ticket_id = t.id

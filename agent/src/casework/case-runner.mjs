@@ -1,5 +1,6 @@
 import { supabaseSelect } from '../../../scripts/lib/supabase-rest-client.mjs';
 import { COLUMNS, T } from '../../../scripts/lib/tables.mjs';
+import { activeSituationOverride, overridesOf } from '../../../scripts/lib/ticket-overrides.mjs';
 
 import { readCase } from './case-manager.mjs';
 import { applyReading } from './case-fold.mjs';
@@ -380,7 +381,8 @@ export function createSituationPlanner(supabase, { shopId, caseStateRecord, logg
       // The investigation's projection, because the same reading also becomes
       // the run's `caseDelta` (`case-delta.mjs`) and that needs `new_facts`.
       const reading = await caseStateRecord.latest(ticket.id, { columns: COLUMNS.caseStateForInvestigation });
-      if (!reading) return situationPlan({});
+      const override = await humanSituation(supabase, { shopId, ticket });
+      if (!reading) return situationPlan({ override });
       const investigations = await supabaseSelect(
         supabase,
         T.TICKET_INVESTIGATIONS,
@@ -392,7 +394,8 @@ export function createSituationPlanner(supabase, { shopId, caseStateRecord, logg
         ...situationPlan({
           reading,
           triggerMessageId: triggerMessage?.id ?? null,
-          previousMatch: investigations[0]?.exemplar_match ?? null
+          previousMatch: investigations[0]?.exemplar_match ?? null,
+          override
         }),
         reading
       };
@@ -401,4 +404,33 @@ export function createSituationPlanner(supabase, { shopId, caseStateRecord, logg
       return null;
     }
   };
+}
+
+/**
+ * The situation a person chose in « Edit case », with that situation's needs,
+ * or null. Two reads, and only on a ticket that carries a correction.
+ *
+ * Dropped once a LATER `new_issue` reading exists: the correction was about
+ * the request it was made on (DECISIONS § Human overrides).
+ */
+async function humanSituation(supabase, { shopId, ticket }) {
+  const entry = overridesOf(ticket).situation;
+  if (!entry?.value) return null;
+  const [newIssue] = await supabaseSelect(
+    supabase,
+    T.TICKET_CASE_STATE,
+    { shop_id: shopId, ticket_id: ticket.id, case_relationship: 'new_issue' },
+    'read_at',
+    { order: 'read_at.desc', limit: 1 }
+  );
+  const active = activeSituationOverride(overridesOf(ticket), { newIssueAt: newIssue?.read_at ?? null });
+  if (!active) return null;
+  const [exemplar] = await supabaseSelect(
+    supabase,
+    T.SUPPORT_EXEMPLARS,
+    { shop_id: shopId, exemplar_key: active.value, deleted_at: { operator: 'is', value: 'null' } },
+    'requirement_needs',
+    { limit: 1 }
+  );
+  return { ...active, requirement_needs: exemplar?.requirement_needs ?? [] };
 }

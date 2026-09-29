@@ -27,6 +27,7 @@ import { loadVipRule, loadVipTicketIds } from "../../../scripts/lib/vip-rule.mjs
 import { priorityBand, scorePriority } from "../../../scripts/lib/ticket-priority.mjs";
 import {
   createSupabaseClient,
+  supabaseInsert,
   supabaseSelect,
 } from "../../../scripts/lib/supabase-rest-client.mjs";
 import { COLUMNS, T } from "../../../scripts/lib/tables.mjs";
@@ -57,7 +58,10 @@ import { createOrderContextStore } from "../../../agent/src/resolution/order-con
 import { isAnonymousMarketplaceBuyer } from "../../../agent/src/resolution/order-verification.mjs";
 import { KnowledgeNotFoundError, KnowledgeValidationError } from "./knowledge-errors";
 import { loadTicketPriority } from "./ticket-priority-service";
-import { getCaseState } from "./case-state-service";
+import { getCaseState, refoldTicket } from "./case-state-service";
+import { isInvestigable } from "../../../agent/src/investigation/investigation-rules.mjs";
+import { listSituations } from "./policy-service";
+import { OVERRIDE_SOURCES, overrideChange, overridesOf } from "../../../scripts/lib/ticket-overrides.mjs";
 import type { PriorityFacts, PriorityRead } from "./ticket-priority-service";
 import { summariseFacts, summariseInvestigation, summariseOrderContext } from "../ticket-detail";
 import type {
@@ -80,6 +84,9 @@ import type {
   TicketStatus,
   TicketThread,
   TicketTracking,
+  TicketOverrideField,
+  TicketOverrideResult,
+  TicketOverrides,
 } from "../types";
 
 function getSupabaseClient() {
@@ -299,7 +306,7 @@ export async function getTicketDetail(shopId: string, ticketId: string): Promise
   // record's to own (see agent/src/investigation/case-file.mjs).
   const record = getRecord(shopId);
 
-  const [ticketRow, investigationRows, attachmentRows, caseState] = await Promise.all([
+  const [ticketRow, investigationRows, attachmentRows, caseState, situationRows] = await Promise.all([
     record.findForDetail(ticketId),
     supabaseSelect(
       supabase,
@@ -316,7 +323,13 @@ export async function getTicketDetail(shopId: string, ticketId: string): Promise
     // The case's current state (stage 5). A failure here must not cost the
     // operator the rest of the page, so it degrades to "not folded yet".
     getCaseState(shopId, ticketId).catch(() => null),
+    // Names for the situation keys, and the « Edit case » picker. Degrades to
+    // raw keys rather than costing the page.
+    listSituations(shopId).catch(() => []),
   ]);
+  const situations = situationRows.map((row) => ({ key: row.key, question: row.question, category: row.category }));
+  const names = new Map(situations.map((row) => [row.key, row.question]));
+  const situationOverride = mapOverrides(ticketRow ?? {}).situation ?? null;
 
   if (!ticketRow) {
     throw new KnowledgeNotFoundError(`Ticket not found: ${ticketId}`);
@@ -350,7 +363,10 @@ export async function getTicketDetail(shopId: string, ticketId: string): Promise
   if (!row) {
     // No case file: the order facts may still exist, because the resolution pass
     // writes them for tickets the agent never investigated. Facts cannot.
-    return { ticketId, orderNumber, orderId, results: null, order, facts: [], attachments, policy: null, activity: [], caseState };
+    return {
+      ticketId, orderNumber, orderId, results: null, order, facts: [], attachments, policy: null, activity: [], caseState,
+      situationOverride, situations,
+    };
   }
 
   return {
@@ -373,9 +389,11 @@ export async function getTicketDetail(shopId: string, ticketId: string): Promise
       reactionReport: row.reaction_report ?? null,
       investigatedAt: row.investigated_at ?? null,
     }),
-    policy: summarisePolicy(row.exemplar_match),
+    policy: summarisePolicy(row.exemplar_match, names),
     activity: summariseActivity(row),
     caseState,
+    situationOverride,
+    situations,
   };
 }
 
@@ -441,17 +459,29 @@ function toolLabel(value: unknown): string {
  * run genuinely used one. `match` and `similarity` are shown beside it so the
  * distinction is visible rather than implied.
  */
-function summarisePolicy(exemplarMatch: unknown): TicketPolicy | null {
+function summarisePolicy(exemplarMatch: unknown, names: Map<string, string> = new Map()): TicketPolicy | null {
   if (!exemplarMatch || typeof exemplarMatch !== "object") {
     return null;
   }
   const match = exemplarMatch as Record<string, unknown>;
   const policy = (match.policy ?? {}) as Record<string, unknown>;
   const similarity = Number(match.similarity);
+  const situation = (policy.situation_key as string) ?? (match.verdict === "human" ? (match.exemplar_key as string) : null) ?? null;
+  // The nearest three, stored since 2026-09-29; older runs kept only two keys.
+  const stored = Array.isArray(match.top) ? (match.top as Record<string, unknown>[]) : [];
+  const nearest = (stored.length > 0
+    ? stored.map((row) => ({ key: String(row.key ?? ""), similarity: Number.isFinite(Number(row.similarity)) && row.similarity !== null ? Number(row.similarity) : null }))
+    : [match.closest, match.runner_up].filter(Boolean).map((key, index) => ({ key: String(key), similarity: index === 0 && Number.isFinite(similarity) ? similarity : null }))
+  )
+    .filter((row) => row.key)
+    .map((row) => ({ ...row, name: names.get(row.key) ?? null }));
 
   return {
-    situation: (policy.situation_key as string) ?? null,
-    match: (match.verdict as TicketPolicy["match"]) ?? null,
+    situation,
+    situationName: situation ? names.get(situation) ?? null : null,
+    nearest,
+    byPerson: match.verdict === "human",
+    match: match.verdict === "human" ? null : ((match.verdict as TicketPolicy["match"]) ?? null),
     closest: (match.closest as string) ?? null,
     similarity: Number.isFinite(similarity) ? similarity : null,
     rule: (policy.answer_key as string) ?? null,
@@ -788,6 +818,98 @@ export async function changeTicketOrder(
   };
 }
 
+/**
+ * A person corrects a ticket from « Edit case »: one Save, any number of fields.
+ *
+ * WHAT A SAVE TRIGGERS is `overrideChange`'s to decide (scripts/lib/ticket-overrides.mjs):
+ * a new situation or subject queues the investigation once, unless the ticket is
+ * now outside what the agent investigates (a forwarded `contact`, b2b, level 4,
+ * a subject not enabled — the investigation's own `isInvestigable`); a new
+ * situation, subject or level raises the case version, which stales every open
+ * draft so the pre-send check refuses it. Team, priority and status move nothing.
+ * Nothing is sent, and no model runs here: the worker picks the ticket up next poll.
+ *
+ * `expected` is what the page showed. A change made meanwhile (another person,
+ * the fold, the categoriser) is refused rather than overwritten.
+ */
+export async function saveTicketOverrides(
+  shopId: string,
+  ticketId: string,
+  input: { changes: unknown; expected: unknown; source: unknown },
+  actorId: string | null
+): Promise<TicketOverrideResult> {
+  const changes = input.changes && typeof input.changes === "object" && !Array.isArray(input.changes)
+    ? (input.changes as Record<string, unknown>)
+    : null;
+  if (!changes || Object.keys(changes).length === 0) throw new KnowledgeValidationError("Nothing to save.");
+  const source = OVERRIDE_SOURCES.includes(String(input.source)) ? String(input.source) : "edit_case";
+  const expected = (input.expected ?? {}) as { status?: unknown; overrides?: unknown };
+
+  const record = getRecord(shopId);
+  const ticket = await record.findForOverrides(ticketId);
+  if (!ticket) throw new KnowledgeNotFoundError(`Ticket not found: ${ticketId}`);
+  const changedMeanwhile = new KnowledgeValidationError(
+    "This ticket changed since you opened it. Reload the ticket and try again."
+  );
+  if (expected.status !== ticket.status) throw changedMeanwhile;
+
+  const supabase = getSupabaseClient();
+  let aiSituation: string | null = null;
+  if ("situation" in changes) {
+    const [latest] = await supabaseSelect(
+      supabase,
+      T.TICKET_INVESTIGATIONS,
+      { ticket_id: ticketId, shop_id: shopId },
+      "exemplar_match",
+      { order: "investigated_at.desc", limit: 1 }
+    );
+    const match = (latest?.exemplar_match ?? {}) as Record<string, any>;
+    aiSituation = match.verdict === "human"
+      ? match.ai_situation ?? null
+      : match.policy?.situation_key ?? match.exemplar_key ?? null;
+    if (changes.situation !== null) {
+      const known = (await listSituations(shopId)).some((row) => row.key === changes.situation);
+      if (!known) throw new KnowledgeValidationError(`${String(changes.situation)} is not a situation in the rulebook.`);
+    }
+  }
+
+  let change;
+  try {
+    // Loosely typed: TypeScript reads the JS defaults (`null`) as the only allowed type.
+    const build = overrideChange as unknown as (args: Record<string, unknown>) => ReturnType<typeof overrideChange>;
+    change = build({ ticket, changes, actorId, source, aiSituation, isInvestigable });
+  } catch (error) {
+    throw new KnowledgeValidationError((error as Error).message);
+  }
+  if (change.changed.length === 0) throw new KnowledgeValidationError("Nothing changed.");
+
+  const row = await record.applyOverrides(ticketId, {
+    expectedStatus: ticket.status,
+    expectedOverrides: overridesOf(ticket),
+    columns: change.columns,
+  });
+  if (!row) throw changedMeanwhile;
+  await supabaseInsert(
+    supabase,
+    T.TICKET_OVERRIDES,
+    change.audit.map((entry: Record<string, unknown>) => ({ shop_id: shopId, ticket_id: ticketId, ...entry }))
+  );
+
+  // Re-fold now: a raised version stales the open drafts before anything can
+  // send them, rather than one poll later.
+  const folded = await refoldTicket(shopId, ticketId).catch(() => ({ versionsRaised: 0, draftsStaled: 0 }));
+
+  const [ticketItem, detail] = await Promise.all([getTicketListItem(shopId, ticketId), getTicketDetail(shopId, ticketId)]);
+  return {
+    ticket: ticketItem,
+    detail,
+    requeued: change.requeued,
+    notInvestigable: change.notInvestigable,
+    versionChanged: change.versionChanged,
+    draftsStaled: folded.draftsStaled ?? 0,
+  };
+}
+
 /** The order behind a confirmed number, by id — null once retention has deleted it. */
 async function findOrderIdByName(shopId: string, orderName: string): Promise<string | null> {
   const [row] = await supabaseSelect(
@@ -1039,6 +1161,8 @@ function mapTicketRow(
     waitingSince: row.waiting_since ?? null,
     inboundCount: Number(row.inbound_count ?? 0),
     status: row.status,
+    // A band a person pinned in « Edit case ». The score still climbs inside it.
+    pinnedBand: overridesOf(row).priority?.value ?? null,
     ...priorityFacts,
     // Display-only customer status is intentionally absent from the evaluator:
     // VIP can never manufacture urgency for a routine enquiry.
@@ -1073,6 +1197,7 @@ function mapTicketRow(
     ...customer,
     priorityScore,
     priorityBand: priorityBand(priorityScore) as TicketPriorityBand,
+    overrides: mapOverrides(row),
     orderNumber: row.shopify_order_number,
     // Counted by the `ticket_message_counts` view the queue joins, and
     // `coalesce`d to 0 there — a ticket with no stored message is a row with a
@@ -1166,4 +1291,18 @@ export async function parcelsInText(
   }
 
   return parcels;
+}
+
+/** `tickets.overrides` as the page reads it: value, the pipeline's value, when. Never who: an id means nothing on screen. */
+function mapOverrides(row: any): TicketOverrides {
+  const out: TicketOverrides = {};
+  for (const [field, entry] of Object.entries(overridesOf(row) as Record<string, any>)) {
+    if (!entry || entry.value === undefined || entry.value === null) continue;
+    out[field as TicketOverrideField] = {
+      value: entry.value,
+      aiValue: entry.ai_value ?? null,
+      setAt: entry.set_at ?? null,
+    };
+  }
+  return out;
 }

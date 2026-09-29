@@ -200,3 +200,14 @@ test('overdue is counted in working days per owner, and only on pending checks',
   );
   assert.deepEqual(ages.map((o) => [o.id, o.workingDaysOpen, o.overdue]), [['p', 4, true], ['c', 1, false], ['s', 18, false], ['d', null, false]]);
 });
+
+test('a person’s correction raises the version; no correction leaves every hash as it was', () => {
+  const messages = [{ id: 'm1', direction: 'inbound', actor: 'customer', received_at: '2026-09-29T08:00:00Z' }];
+  const plain = foldCase({ messages });
+  assert.equal(foldCase({ messages, overrides: {} }).material_hash, plain.material_hash);
+  // Workflow fields do not move the case.
+  assert.equal(foldCase({ messages, overrides: { priority: { value: 'high' }, responsible_team: { value: 'logistics' } } }).material_hash, plain.material_hash);
+  const corrected = foldCase({ messages, overrides: { situation: { value: 'D-05' } } });
+  assert.notEqual(corrected.material_hash, plain.material_hash);
+  assert.equal(nextVersion({ version: 4, material_hash: plain.material_hash }, corrected), 5);
+});

@@ -40,6 +40,16 @@ these.
 as its own item: `llm_usage` (item 14), `categorisation_review` (item 15), and
 `category_forwarding` / `ticket_forwards` (item 1).
 
+## 35. Team forwarding: built, rehearsed, off — 2026-09-29
+
+Migrations 49 and 50 applied; seven destinations configured (Défectueux switched off). `forward:dry-run -- --since=2026-07-01` routed the live data as the business described. Nothing has been sent: `forward_since` is null and `ticket_forwards` holds 0 rows.
+
+1. **The first real forward.** **Check:** after turning forwarding on, the first `forward.pass` log line; the colleague receives the original with attachments (a CV arrives as a CV) under the French note; a `ticket_forwards` row with `destination_label`.
+2. **The first acknowledgement.** **Check:** with it on, the sender receives it threaded under their message, in their language, with the destination's name and paragraph; `ticket_routing.ack_state = 'sent'`; ingestion reads it back as an outbound message on the ticket.
+3. **Cosmétovigilance after our reply.** **Check:** a new cosmetovigilance ticket is not forwarded before our reply is sent, and is on the first poll after.
+4. **The worker actually runs the stage.** **Check:** the deployment that categorises also runs `forward` (a `--stop-after` before it, or a sync-only worker without `--also=forward`, silently forwards nothing).
+5. **marketcom's non-partnership mail.** **Check:** with the business, whether to mark marketcom « only mail that matches this description » (regulatory questionnaires and manufacturer pitches are filed as partner_collaboration).
+
 ## 34. Draft versions and drafting in the poll: built, off, never run live — 2026-09-28
 
 Migration 45 is applied and checked in the database (only the new key). The stale rules, the gates and the estimate are unit-tested. No draft has been written with a version.
@@ -1946,3 +1956,15 @@ Built and unit-tested; nothing below has run against the real mailbox.
 4. **The uncertain-send path.** **Check:** stop the worker between `send_requested` and confirmation (or delete the Sent Items copy's ingestion by hand on a test row): the next run calls `findSentMessage` and sends nothing twice.
 5. **The webhook, once deployed.** **Check:** set `MAIL_WEBHOOK_URL`, run one poll: two `mail_subscriptions` rows, Graph's validation handshake answered. A test email to the support address produces `ingest.woken_by_job` within `JOB_CHECK_INTERVAL_MS` of the notification. Let a subscription come within 24 h of expiry: it is renewed.
 6. **`SUPPORT_MAILBOX` is the support address** before sending is switched on (AGENT_INTEGRATION_PLAN records it once pointing at a personal mailbox). Replies go out from whatever it names.
+
+## 19. « Edit case »: human overrides — 2026-09-29
+
+Built and unit-tested. Migration 48 applied 2026-09-29; no correction has been made on a real ticket yet.
+
+1. ~~**Apply migration 48 before deploying.**~~ **Closed 2026-09-29.** Applied with `db:apply:migration` and the schema reloaded. Read back: 1,003 tickets, 0 with an override; `ticket_overrides` empty, RLS on; `ticket_queue.overrides` present. Through PostgREST, `COLUMNS.ticketQueue` and `COLUMNS.ticketForInvestigation` both return `overrides`. **Still to check:** open /tickets on the deployed dashboard; the queue loads.
+2. **No case version moved on apply.** **Check:** `select count(*) from case_current` before and after a full `fold:once -- --all`: `versionsRaised` is 0, because no ticket carries an override yet.
+3. **The PostgREST jsonb equality filter.** `applyOverrides` filters on `overrides=eq.<json>`. Assumed: PostgREST casts the value to jsonb and compares semantically. **Partly checked 2026-09-29:** `overrides=eq.{}` matches an untouched ticket through PostgREST. **Still to check:** a SECOND Save on a ticket that already carries an override succeeds (a non-empty object compared as jsonb, not as text), and a Save from a stale page is refused with « This ticket changed since you opened it ».
+4. **One situation correction, end to end, on a test ticket with a pending draft.** **Check:** on Save, `case_current.version` rises by one, the pending draft becomes `stale / case_changed`, `needs_investigation` is true and `ticket_overrides` has one `set` row. On the next poll, the new `ticket_investigations.exemplar_match` reads `verdict: 'human'`, `resolved_from: 'person'` with the chosen key; its rule is re-selected, and a new draft is written for the new version. An outbound action on the old version, if any, is cancelled `case_moved`.
+5. **A category moved out of scope.** **Check:** move an open ticket's category to one `isInvestigable` refuses. The Save says a person answers it, `needs_investigation` stays false, and the draft is withdrawn.
+6. **The categoriser keeps a correction.** **Check:** on an overridden ticket, a customer reply re-categorises it. The column keeps the person's value, and `overrides.<field>.ai_value` holds the model's new reading.
+7. **A held state.** **Check:** set State = Open on an `awaiting_customer` ticket. The next polls leave it open. The customer writing again lets the fold move it.

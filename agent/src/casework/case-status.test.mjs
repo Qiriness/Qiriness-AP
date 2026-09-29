@@ -83,3 +83,9 @@ test('the record says what the fold set, from what, and when it resolved', () =>
   assert.deepEqual(record, { status: 'resolved', from: 'open', next_actor: 'nobody', version: 3, at: '2026-09-27T10:00:00Z', resolved_at: '2026-09-27T10:00:00Z' });
   assert.equal(caseStatusRecord({ status: 'open', state: next('support'), from: 'awaiting_customer', at: 'x' }).resolved_at, null);
 });
+
+test('a status a person set holds until the customer writes again', () => {
+  const held = ticket('open', { overrides: { status: { value: 'open', set_at: '2026-09-29T10:00:00Z' } } });
+  assert.deepEqual(statusFromCase(held, next('customer'), { lastCustomerAt: '2026-09-29T09:00:00Z' }), { status: null, reason: 'held_by_person' });
+  assert.equal(statusFromCase(held, next('customer'), { lastCustomerAt: '2026-09-29T11:00:00Z' }).status, 'awaiting_customer');
+});

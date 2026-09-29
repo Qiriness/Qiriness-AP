@@ -489,6 +489,11 @@ test('the matched situation is stored beside the case file', async () => {
     similarity: 0.824,
     margin: 0.131,
     runner_up: 'PR-27',
+    // The nearest three, for the ticket page to offer; the fixture has two.
+    top: [
+      { key: 'PR-24', similarity: null, question: null },
+      { key: 'PR-27', similarity: null, question: null }
+    ],
     requirement_needs: ['product_property']
   });
 });

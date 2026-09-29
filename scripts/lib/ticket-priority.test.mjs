@@ -158,3 +158,9 @@ test('byPriorityDesc orders by band, then within-band score, then wait', () => {
   const high = plain({ situationKey: 'O-12', orderState: 'unknown' });
   assert.deepEqual([...[low, high, medium]].sort(byPriorityDesc(NOW)), [high, medium, low]);
 });
+
+test('a band a person pinned holds, except over level 4', () => {
+  assert.equal(determinePriorityBand({ level: 1, pinnedBand: 'high' }).band, 'high');
+  assert.equal(determinePriorityBand({ level: 4, pinnedBand: 'low' }).band, 'high');
+  assert.equal(determinePriorityBand({ level: 1, pinnedBand: 'bogus' }).band, determinePriorityBand({ level: 1 }).band);
+});

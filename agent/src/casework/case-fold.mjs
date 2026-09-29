@@ -1,5 +1,7 @@
 import { createHash } from 'node:crypto';
 
+import { versionMaterial } from '../../../scripts/lib/ticket-overrides.mjs';
+
 import { workingDaysBetween } from '../lib/working-days.mjs';
 import { advanceSequences, sequencesOf, startSequences } from './rule-checks.mjs';
 
@@ -239,7 +241,9 @@ export function foldCase({
   holdingDays = null,
   now = null,
   // ticket_case_actions rows: { obligation_id, action, acted_by, acted_at }
-  actions = []
+  actions = [],
+  // tickets.overrides: a person's corrections. Only the version fields count.
+  overrides = null
 } = {}) {
   const thread = orderedThread(messages);
   const position = new Map(thread.map((message, index) => [message.id, index]));
@@ -336,7 +340,7 @@ export function foldCase({
     next_actor: next,
     resolved: next === 'nobody'
   };
-  return { ...state, material_hash: materialHash(state) };
+  return { ...state, material_hash: materialHash(state, versionMaterial(overrides)) };
 }
 
 /**
@@ -345,14 +349,19 @@ export function foldCase({
  * whether it is resolved. Never timestamps or ids, so a thank-you that changes
  * nothing leaves the version, and any draft written against it, alone.
  */
-export function materialHash(state) {
+export function materialHash(state, overrides = null) {
   const material = {
     pending: [...(state.pending_customer_inputs ?? [])].map(String).sort(),
     commitments: (state.commitments ?? []).map((c) => JSON.stringify(c)).sort(),
     contradictions: (state.contradictions ?? []).map((c) => JSON.stringify(c)).sort(),
     obligations: (state.obligations ?? []).map((o) => JSON.stringify(o)).sort(),
     next: state.next_actor ?? null,
-    resolved: Boolean(state.resolved)
+    resolved: Boolean(state.resolved),
+    // A PERSON'S CORRECTION MOVES THE CASE: a new situation, subject or level
+    // changes what the reply must say, so drafts written before it go stale and
+    // the pre-send check refuses them (`case_moved`). ADDED ONLY WHEN PRESENT:
+    // a key on every ticket would change every hash and stale every draft.
+    ...(overrides ? { overrides } : {})
   };
   return createHash('sha256').update(JSON.stringify(material)).digest('hex').slice(0, 32);
 }

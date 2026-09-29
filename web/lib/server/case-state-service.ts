@@ -108,14 +108,24 @@ export async function actOnObligation(
     { shop_id: shopId, ticket_id: ticketId, obligation_id: obligationId, action, acted_by: actedBy },
   ]);
 
-  // Re-fold this ticket now, with the agent's fold and the agent's actor map.
+  await refoldTicket(shopId, ticketId);
+  return getCaseState(shopId, ticketId);
+}
+
+/**
+ * Re-folds one ticket now, with the agent's fold and the agent's actor map, so
+ * the page shows the result of a person's action without waiting for the
+ * worker's next poll. A raised version stales the drafts written before it.
+ */
+export async function refoldTicket(shopId: string, ticketId: string): Promise<{ versionsRaised: number; draftsStaled: number }> {
+  const supabase = getSupabaseClient();
   // Loosely typed: TypeScript reads these JS signatures off their `null`
   // defaults and would refuse a real list or directory.
-  const fold = runFold as unknown as (args: Record<string, unknown>) => Promise<unknown>;
+  const fold = runFold as unknown as (args: Record<string, unknown>) => Promise<{ versionsRaised: number; draftsStaled: number }>;
   const actor = actorOf as unknown as (...args: unknown[]) => string;
   const config = loadAgentConfig();
   const directory = await createSenderDirectoryStore(supabase).load(shopId, { supportMailbox: config.graph.mailbox });
-  await fold({
+  return fold({
     store: createCaseCurrentStore(supabase, { shopId }),
     shopId,
     ticketIds: [ticketId],
@@ -125,5 +135,4 @@ export async function actOnObligation(
     statusMap: config.caseStatusByNextActor,
     keepOpenLevels: [...AUTO_CLOSE_EXEMPT_LEVELS],
   });
-  return getCaseState(shopId, ticketId);
 }

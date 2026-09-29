@@ -431,3 +431,29 @@ test('`ticketId` narrows the claim to one ticket, without dropping the queue fil
 });
 
 test('a continuation keeps its labels and spends no model call', () => {});
+
+test('a person’s category and level survive a re-categorisation; the model’s go to ai_value', async () => {
+  const setAt = '2026-09-29T10:00:00.000Z';
+  const record = fakeStore({
+    tickets: [categorisedTicket({
+      category: 'product',
+      level: 1,
+      overrides: {
+        category: { value: 'product', ai_value: 'order', set_by: 'u1', set_at: setAt },
+        level: { value: 1, ai_value: 2, set_by: 'u1', set_at: setAt }
+      }
+    })],
+    messages: { t1: [{ body_text: 'Toujours rien reçu' }] }
+  });
+  await runCategorisation({ record, categorise: async () => verdict({ level: 3 }) });
+
+  const { patch } = record.updates.at(-1);
+  assert.equal(patch.category, 'product');
+  assert.equal(patch.level, 1);
+  // The team is not overridden, so the model's reading lands as before.
+  assert.equal(patch.responsible_team, 'logistics');
+  assert.equal(patch.overrides.category.ai_value, 'delivery');
+  // Ratcheted against the model's own previous level (2), not the person's 1.
+  assert.equal(patch.overrides.level.ai_value, 3);
+  assert.equal(patch.overrides.level.set_by, 'u1');
+});

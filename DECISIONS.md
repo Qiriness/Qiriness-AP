@@ -423,6 +423,43 @@ The bundle carries the buyer's name and email (support cannot answer without kno
 
 ---
 
+## Human overrides
+
+### A person corrects a ticket in one Save, and the case version is what keeps a stale reply from going out (2026-09-29)
+
+The ticket rail has one « Edit case » mode. A person can correct the situation, category, level, state, team and priority band. Only those fields become pickers. What the agent derived stays read-only: the investigation, the case, the required action and the rule. The order keeps its own dialog (§ *A person can link a ticket's order*). There is no approval step: a correction is recorded and the pipeline moves on.
+
+**No second version counter.** The brief asked for a `ticket_version` checked before any send. `case_current.version` already is that counter: drafts are keyed on it, the fold stales older ones (`case_changed`) and `preSendCheck` refuses a send with `case_moved`. What was missing was an override reaching the fold. The fold now adds the overridden **situation, category and level** to `material_hash`, but only when one exists: a key on every ticket would change every hash at once and stale every open draft in the shop. The dashboard re-folds on Save, so a draft is withdrawn before anything can send it. It does not wait for the next poll.
+
+**What each field triggers** (`scripts/lib/ticket-overrides.mjs`, the only place the classes are written):
+
+| Class | Fields | Raises the version | Investigation |
+|---|---|---|---|
+| Meaning | situation, category | yes | queued once per Save |
+| Gate | level | yes (level 4 is silent; level decides auto-send) | no: the draft gate re-reads it |
+| Workflow | state, team, priority band | no | no |
+
+**Automatic re-investigation, not a button (decided with the owner).** A manual « re-investigate » fails silently. The version bump has already withdrawn the draft, so if a person forgets the button, nothing is sent and nothing is redrafted. The race is already covered: an in-flight send is refused at send time, and the next poll drafts on the new version. One Save is one run, however many fields moved. It is queued, never run inline, like the order link.
+
+**Not through the Case Manager.** The Case Manager is a model that reads a *message*. A correction is a fact with one right value, and the Case Manager is barred from naming a situation anyway. Routing it there would cost one mini-tier call and add nothing. The investigation still gets the « Dossier connu » from the reading already stored for the trigger message.
+
+**Out of scope after the change: no run.** A meaning change queues the investigation only if the ticket, *as it will be*, passes the investigation's own `isInvestigable`. The rule is injected, not copied. So a ticket moved to a forwarded kind (`contact`), to b2b, to level 4, to a linked duplicate or to a subject not enabled costs nothing. Its version still moves, so the draft written for the old subject is withdrawn. Since 2026-09-29 forwarding follows the category through `forwarding_destinations`, whatever the kind: a ticket moved to `careers` is re-routed to its destination on the next pass (the stored decision is re-taken when the category changes). Changing the kind is not an override; that was left out on purpose.
+
+**A category change alone is a label while the situation is pinned.** The category only reaches the investigation through the matcher's subject filter, and a pinned situation skips the matcher.
+
+**The column holds the person's value.** `tickets.<column>` is the effective value, so the queue, the investigation and the draft gate read what they always read. `tickets.overrides.<field>` keeps `{ value, ai_value, set_by, set_at, source }`. **The categoriser keeps `ai_value` current.** It writes its reading of an overridden field there instead of into the column, so « Reset to automatic » goes back to what the model says *now*. « Level never falls » is a rule about the model, so it ratchets against `ai_value`, and a person may lower a level. `ticket_overrides` is the append-only audit of every set and every reset.
+
+**Who wins, per field:**
+- **State** holds until the customer writes again (`statusHeld`). Before this, the fold moved a person's `open` to `awaiting_customer` on the next poll. A person still sets only `open`, `resolved` and `closed`.
+- **Situation** is carried as `verdict: 'human'`, with that exemplar's own `requirement_needs`, and skips the matcher and the chooser. A later `new_issue` is matched on its own (decided with the owner): the correction was about the first request. It stays in the audit, and the planner looks for a `new_issue` reading newer than the correction.
+- **Priority** pins the band only. The ticket still climbs inside the band as it waits. Level 4 stays high whatever was pinned.
+
+**The evals exclude a person's situation.** `eval:exemplar-needs` asks whether the matcher's situations describe real tickets, and a situation a person chose is not the matcher's claim. `eval:fold` is unchanged at 79 of 132, since it carries no overrides.
+
+**Left out by decision:** assignee (no column and no user list exist, and AGENTS.md forbids inventing them); linking a customer (no dashboard path today, and it touches personal-data rules); unlinking an order.
+
+**The nearest three situations** are now stored as `exemplar_match.top` (key, similarity, question). The rail offers them with « Apply » while the match is unsettled and nobody has chosen one. Runs before 2026-09-29 offer `closest` and `runner_up` only.
+
 ## Investigation
 
 Runs immediately after categorisation and consumes its output in the same poll — the categoriser raises `needs_investigation` in the same patch that clears its own flag, so a thread is never investigated against labels describing an older conversation. It is the only writer **that follows a new message**. Order resolution also raises the flag when it confirms an order on a ticket already investigated (§ An order confirmed after the investigation), a person linking an order on the dashboard raises it (§ A person can link a ticket's order), and `tickets:requeue` raises it by hand. Neither changes the labels.
@@ -1920,7 +1957,7 @@ Run over the same 36 threads twice, with the prompt differing only by an instruc
 
 Runs last, after categorisation, because it reads the category and kind that step assigns.
 
-`forward-rules.mjs` is the whole decision: `request_kind = 'contact'` **and** the category has an address in `category_forwarding`. Both halves are load-bearing — routing on category alone would divert genuine `b2b` reorder problems as FYIs, and the taxonomy already restricts `contact` to b2b, partner_collaboration and careers (38 of 330 customer-facing tickets on the measured corpus).
+**Superseded 2026-09-29** (§ *Destinations, not one address per category* and § *Forwarding goes live on destinations*). Until then `forward-rules.mjs` forwarded on `request_kind = 'contact'` **and** an address in `category_forwarding` — the kind was meant to keep genuine `b2b` reorder problems in the inbox, and the taxonomy restricts `contact` to b2b, partner_collaboration and careers (38 of 330 customer-facing tickets on the measured corpus).
 
 The covering note is in French (internal mail, French company), and sidesteps both tu/vous and gender agreement by never addressing the reader and referring to `le message` rather than a pronoun agreeing with the category phrase.
 
@@ -1929,6 +1966,49 @@ Sends via Graph's own `/forward` action, so the recipient gets the original mail
 ### A null address is the off switch
 
 There is deliberately no separate `enabled` flag, because two ways to express the same state can disagree. Keyed by category rather than `responsible_team`: the team mapping sends `careers` to `contact`, the generic bucket the mail just came from.
+
+### Destinations, not one address per category (2026-09-29)
+
+Only the contact team works in the dashboard, so everything another team owns has to leave it. The business supplied its own directory: comptabilité, marketcom, RH, the Export and France sales desks, cosmétovigilance, défectueux — each with a sentence saying what it handles.
+
+**A category cannot carry that.** The 19 real `b2b` tickets split five ways: 11 Nocibé reorder POs (no owner yet, they stay), 5 invoice and accounting mails (« DEMANDE DE DUPLICATA DE FACTURE », « URGENT: RAPPEL FACTURES IMPAYÉES », an In Extenso balance audit), 2 new trade enquiries split by *geography* (« UK distribution enquiry » is Export, a French beautician asking for a pro account is France), 1 export shipping request and 1 PFAS regulatory question. So a destination names who receives mail, the categories it may take, and a description in the business's words. One destination on a category takes all of it without a model call; several make the router choose from the descriptions, or keep the ticket.
+
+**Split the taxonomy was rejected.** b2b_invoice / b2b_reorder would move the categoriser, the level rules and both review sets to serve one routing need; the taxonomy describes support work, not the org chart.
+
+**`match_description` exists because of defects.** Défectueux is the only destination on `product`, which would make it fixed — and `product` problems also hold « jai essayer d'appeler le numéro 0811701748 mais pas attribué ». Marked, a lone destination is still checked against its description.
+
+**Decided with the business, and not yet built into the router:**
+- **Comptabilité is B2B only.** Consumer billing (« Cadeau facturé par erreur », chargebacks) stays with the contact team. Two business mails filed under `payment` (« Courrier de relance - Ref 01178417 », « Code client C0004184 ») are missed until a person corrects the category.
+- **Only partnerships go to marketcom.** The 12 `promotions` tickets are customers whose code failed; the agent answers them.
+- **Cosmétovigilance and défectueux forward after our first reply**, which asks for the batch number, photos and place of purchase; the customer's answer follows by the per-message ledger. **Forwarding never changes the ticket's status.**
+- **The others get a fixed acknowledgement**, never model-written, sent after the forward succeeds, once per ticket. Comptabilité's carries a line sending future invoicing requests straight to its address. It is the first mail the system would send with no person approving it, so `ack_enabled` defaults to false.
+- **The `request_kind = 'contact'` gate goes** when the router lands: the 11 identical Nocibé POs were labelled `contact` 5 times and `problem` 6 times, so the kind is noise for routing.
+
+### A small router, for b2b only (2026-09-29)
+
+`planRoute` needs no model for most of it: no destination → stays, one → fixed. Only a category with several destinations (b2b: Comptabilité, Marché Export, Marché France) — or a lone one marked `match_description` — reaches `createDestinationChooser`: `gpt-4o-mini`, the candidates by id with their descriptions, the sender's **domain** and Senders-directory label (never the address), language, subject, first and latest inbound message. « garder » is always offered and is the answer when unsure. Défectueux is switched off (address cleared): product problems stay in the normal flow.
+
+**Rules on existing fields were tried first** and scored 17 of 19 (retailer → stays, invoice words → Comptabilité, language → Export/France). The router was chosen instead on the business's call.
+
+**Measured with `route:preview` on the 19 real b2b tickets.** First run: every non-Nocibé ticket right, but **all 10 Nocibé reorder POs went to Marché France** (« réassort pour un institut en France ») although the prompt said the sender is a known retailer. Fixed in the DATA, not the prompt: both sales descriptions now end « Pas les commandes ni les réassorts des enseignes déjà clientes (ex. bons de commande Nocibé) : ils restent au service client ». Then 19 of 19 on the business's own answers: 5 Comptabilité, UK enquiry → Export, the beautician → France, PFAS and the POs kept. Over five runs at temperature 0 one ticket varies — TCC Logistics' export shipping question, Export or kept — which has no owner and is harmless either way.
+
+### Forwarding goes live on destinations (2026-09-29)
+
+The pass now reads `forwarding_destinations`, routes through `planRoute` and the chooser, and **no longer requires `request_kind = 'contact'`**: the 11 identical Nocibé POs were labelled `contact` 5 times and `problem` 6, and the router keeps them anyway. `category_forwarding` is no longer read.
+
+**`forward_since` is the master switch, and it is a date, not a flag.** Only inbound mail received from then on is forwarded, on the mail's own `received_at`. Without it the first run would have sent 23 messages from the last three months (measured with `forward:dry-run -- --since=2026-07-01`), and a delta re-enumeration replaying old mail (§ *Re-delivery is not arrival*) could do the same at any time.
+
+**A decision is stored per ticket** (`ticket_routing`) and reused while the category and kind it was taken on hold: the model is asked once, and a follow-up goes where the first message went. A category correction re-takes it. A ticket nothing routes gets no row, so a destination added later sees it fresh.
+
+**Forwarding never changes the ticket's status** (the business's rule). A forwarded ticket waits in the queue like any other.
+
+**`after_first_reply` waits for an outbound message** on the ticket — what the outbound worker's send or a colleague replying with support in copy leaves behind. The note then says a first reply has gone out, so the colleague does not ask the same questions.
+
+**The acknowledgement goes through the outbound worker's own path** (`createReplyDraft` + `sendDraft`), so it threads under the customer's message and lands in Sent Items, where ingestion reads it back as an outbound message on the thread. It is sent only after a forward succeeded, once per ticket; `requested` is written before the send, as the outbound worker does, so a crash is never retried into a second mail. Never to our own domains, never to a machine (`isAutomatedAddress`: noreply, mailer-daemon, notifications…). **Forwarded while acknowledgements were off means `skipped` for good**: switching them on must not send a week-old « we have passed it on » to everyone forwarded meanwhile.
+
+**The rehearsal found one thing the router does not cover.** `partner_collaboration` is fixed to marketcom, and the categoriser files more than partnerships there: « (URGENT – FINAL REMINDER) EU Omnibus IX Regulation-ATP 23 – Feedback » (a regulatory questionnaire) and « Qiriness — partenaire industriel pour vos prochains soins » (a manufacturer's pitch) would both go to marketcom. Marking marketcom « only mail that matches this description » would send each through the chooser; left as the business's call.
+
+**The French service name carries its own preposition** (« au service comptabilité »). A template writing « à {service} » produced « à le service comptabilité » in the first test; the contraction depends on the noun, so it belongs with the noun.
 
 ### `unique(ticket_message_id)` is what makes the pass safe to re-run
 

@@ -94,10 +94,55 @@ export const TICKET_CATEGORIES: KnowledgeCategory[] = KNOWLEDGE_CATEGORIES.filte
   (category) => category !== "faq" && category !== "brand_story"
 );
 
-/** category -> the colleague who receives mail of that subject. */
-export interface CategoryForwarding {
-  category: KnowledgeCategory;
+/** Mirrors REQUEST_KINDS in scripts/lib/support-taxonomy.mjs. */
+export const REQUEST_KINDS = ["question", "problem", "complaint", "contact"] as const;
+export type RequestKind = (typeof REQUEST_KINDS)[number];
+
+/** Mirrors FORWARD_TIMINGS in scripts/lib/forwarding-destinations.mjs. */
+export type ForwardTiming = "immediate" | "after_first_reply";
+
+/** Who receives mail the contact team does not own (forwarding_destinations). */
+export interface ForwardingDestination {
+  id: string;
+  label: string;
+  /** Null is the off switch: described, but nothing is forwarded. */
   forwardEmail: string | null;
+  /** What it handles, in the business's words. The router reads it. */
+  description: string;
+  categories: KnowledgeCategory[];
+  /** Empty means any kind. */
+  requestKinds: RequestKind[];
+  /** The agent checks the mail fits the description even when this is the only destination. */
+  matchDescription: boolean;
+  timing: ForwardTiming;
+  acknowledge: boolean;
+  /** French carries its own preposition: « au service comptabilité ». */
+  publicNameFr: string | null;
+  publicNameEn: string | null;
+  ackNoteFr: string | null;
+  ackNoteEn: string | null;
+  position: number;
+}
+
+/** What a person edits; the server assigns the id. */
+export type ForwardingDestinationInput = Omit<ForwardingDestination, "id">;
+
+/** Shop-wide acknowledgement settings (forwarding_settings). Null templates use the defaults. */
+export interface ForwardingAckSettings {
+  ackEnabled: boolean;
+  ackTemplateFr: string | null;
+  ackTemplateEn: string | null;
+}
+
+/** Everything the Forwarding page renders. */
+export interface ForwardingConfig {
+  destinations: ForwardingDestination[];
+  settings: ForwardingAckSettings;
+  /** The master switch: null forwards nothing, otherwise mail received since this instant. */
+  forwardSince: string | null;
+  /** The defaults shown when a template is empty, from scripts/lib/forwarding-destinations.mjs. */
+  defaultTemplates: { fr: string; en: string };
+  shopName: string;
 }
 
 /**
@@ -500,6 +545,12 @@ export interface TicketListItem {
    */
   priorityScore: number;
   priorityBand: TicketPriorityBand;
+  /**
+   * A person's corrections from « Edit case », by field. The visible value is
+   * already the corrected one (the column holds it); this says which fields were
+   * corrected and what the pipeline said. Empty when nothing is overridden.
+   */
+  overrides: TicketOverrides;
   orderNumber: string | null;
   messageCount: number;
   /**
@@ -708,6 +759,41 @@ export interface TicketOrderPreview {
 }
 
 /** What `PUT /api/tickets/:id/order` returns. */
+/** A field a person may correct in « Edit case ». Mirrors `OVERRIDE_FIELDS`. */
+export type TicketOverrideField = "situation" | "category" | "level" | "status" | "responsible_team" | "priority";
+
+export interface TicketOverride {
+  value: string | number;
+  /** What the pipeline says, kept current by the categoriser. Null when it said nothing. */
+  aiValue: string | number | null;
+  setAt: string | null;
+}
+
+export type TicketOverrides = Partial<Record<TicketOverrideField, TicketOverride>>;
+
+/** One Save from « Edit case »: `null` resets a field to automatic. */
+export type TicketOverrideChanges = Partial<Record<TicketOverrideField, string | number | null>>;
+
+export interface TicketOverrideResult {
+  ticket: TicketListItem;
+  detail: TicketDetail;
+  /** The investigation runs again on the next poll. */
+  requeued: boolean;
+  /** A meaning field changed, but the ticket is now outside what the agent investigates. */
+  notInvestigable: boolean;
+  /** The case version moved: drafts written before it are stale and cannot be sent. */
+  versionChanged: boolean;
+  /** How many open drafts this Save staled. */
+  draftsStaled: number;
+}
+
+/** A situation a person can pick, by its name. */
+export interface TicketSituationOption {
+  key: string;
+  question: string;
+  category: string | null;
+}
+
 export interface TicketOrderChange {
   ticket: TicketListItem;
   detail: TicketDetail;
@@ -844,6 +930,12 @@ export interface TicketPolicy {
   route: string | null;
   asks: string[];
   offerCode: string | null;
+  /** The situation's name (`canonical_question`), shown before the key. */
+  situationName: string | null;
+  /** Up to three nearest situations with their names, for « apply ». Empty on runs before 2026-09-29 beyond closest/runner-up. */
+  nearest: { key: string; name: string | null; similarity: number | null }[];
+  /** True when a person chose the situation this run used. */
+  byPerson: boolean;
 }
 
 export interface TicketDetail {
@@ -901,6 +993,10 @@ export interface TicketDetail {
    * reached this ticket.
    */
   caseState: TicketCaseState | null;
+  /** The situation a person chose, when there is one; the run may not have used it yet. */
+  situationOverride: TicketOverride | null;
+  /** Every situation, for the « Edit case » picker. */
+  situations: TicketSituationOption[];
 }
 
 /** Who owes the next step on a case. */

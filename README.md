@@ -190,9 +190,12 @@ sink, `support_answers` being empty, and the first pass of the test chat.
    empty, so the real-mail accuracy figures cannot be recomputed or defended.
    `npm run review:sample`, then blind labelling; sample toward ~100 rather than back to 30,
    since at n=30 the harness cannot resolve a change smaller than ~16 points.
-10. **Configure forwarding and run it once for real.** `ticket_forwards` holds 0 rows and no
-    `category_forwarding` address is set, so the pass has never routed a message. Confirm a
-    forwarded CV arrives as a CV — the one thing no test covers.
+10. **Switch team forwarding on.** Built and rehearsed (2026-09-29), still off. Turn it on in
+    Agent Setup → Forwarding (and the acknowledgement separately), make sure the worker that
+    runs categorisation also runs the forward stage, and watch the first `forward.pass`.
+    `ticket_forwards` still holds 0 rows: confirm a forwarded CV arrives as a CV and that the
+    acknowledgement threads under the sender's message. Nocibé reorder POs have no destination
+    yet; marketcom also receives non-partnership mail the categoriser files as partnerships.
 11. ~~**Add dashboard authentication, role policies, and personal-data access logging.**~~
     **Built 2026-09-11**: email + password sign-in through **Supabase Auth**, Developer / Management /
     Contact roles (Contact cannot open Insights → Sales), and a `data_access_events` row per

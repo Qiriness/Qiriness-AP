@@ -19,6 +19,7 @@
     "report:sales:test": "node src/tools/run-sales-report.mjs",
     "forward:once": "node src/tools/run-forwarding.mjs",
     "forward:dry-run": "node src/tools/run-forwarding.mjs --dry-run",
+    "route:preview": "node src/tools/run-routing-preview.mjs",
     "orders:resolve": "node src/tools/run-order-resolution.mjs",
     "orders:resolve:dry-run": "node src/tools/run-order-resolution.mjs --dry-run",
     "context:build": "node src/tools/run-order-context.mjs",

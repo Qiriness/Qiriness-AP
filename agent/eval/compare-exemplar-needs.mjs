@@ -44,12 +44,18 @@ async function main() {
     'ticket_id,verdict,exemplar_match,evidence_gaps,investigated_at'
   );
 
-  const committed = rows.filter((r) => r.exemplar_match?.exemplar_key);
+  // A situation a person chose (« Edit case ») is not the matcher's claim, so it
+  // says nothing about whether the corpus describes real tickets.
+  const byPerson = rows.filter((r) => r.exemplar_match?.verdict === 'human').length;
+  const committed = rows.filter((r) => r.exemplar_match?.exemplar_key && r.exemplar_match.verdict !== 'human');
   const usable = committed.filter((r) => !r.exemplar_match.supplied_needs);
   const excluded = committed.length - usable.length;
 
   console.log(`${rows.length} investigation(s)`);
   console.log(`  ${committed.length} with a committed exemplar match`);
+  if (byPerson > 0) {
+    console.log(`  ${byPerson} excluded: a person chose the situation`);
+  }
   if (excluded > 0) {
     console.log(`  ${excluded} excluded: the exemplar supplied the needs (not independent)`);
   }

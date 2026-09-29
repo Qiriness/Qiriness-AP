@@ -1,3 +1,5 @@
+import { statusHeld } from '../../../scripts/lib/ticket-overrides.mjs';
+
 import { NEXT_ACTORS } from './actors.mjs';
 
 // The ticket's status, from who acts next. Stage 5c of
@@ -76,10 +78,14 @@ export function parseCaseStatusMap(text) {
  * @param state   the `case_current` row: `{ next_actor, version }`
  * @param map     next_actor → accepted statuses (`parseCaseStatusMap`)
  * @param keepOpenLevels levels the fold never resolves: a person closes those
+ * @param lastCustomerAt  when the customer last wrote: a person's status holds until then
  */
-export function statusFromCase(ticket, state, { map = DEFAULT_STATUS_BY_NEXT_ACTOR, keepOpenLevels = [] } = {}) {
+export function statusFromCase(ticket, state, { map = DEFAULT_STATUS_BY_NEXT_ACTOR, keepOpenLevels = [], lastCustomerAt = null } = {}) {
   if (!ticket || !state) return { status: null, reason: 'no_case' };
   if (ticket.deleted_at || ticket.archived_at) return { status: null, reason: 'archived' };
+  // A STATUS A PERSON SET IN « EDIT CASE » HOLDS until the customer writes again.
+  // Without this, a person's `open` became `awaiting_customer` on the next poll.
+  if (statusHeld(ticket.overrides, lastCustomerAt)) return { status: null, reason: 'held_by_person' };
   const current = ticket.status ?? null;
 
   const ownResolve =

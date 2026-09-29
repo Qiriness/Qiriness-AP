@@ -6,6 +6,7 @@ import { createDraftRecord } from '../../../scripts/lib/draft-record.mjs';
 
 import { foldCase, nextVersion } from './case-fold.mjs';
 import { caseStatusRecord, statusFromCase } from './case-status.mjs';
+import { overridesOf } from '../../../scripts/lib/ticket-overrides.mjs';
 
 // Keeps `case_current` folded: one row per ticket, rewritten when the ticket
 // has moved since its last fold. Stage 4 of codex_plans/Case_State_Plan.md.
@@ -18,7 +19,12 @@ import { caseStatusRecord, statusFromCase } from './case-status.mjs';
 export function staleTickets({ tickets = [], current = [], readings = [], actions = [] }) {
   const folded = new Map(current.map((row) => [row.ticket_id, Date.parse(row.folded_at)]));
   const lastReading = new Map();
-  for (const row of [...readings, ...actions.map((a) => ({ ticket_id: a.ticket_id, read_at: a.acted_at }))]) {
+  // A person's correction counts as an event: the dashboard re-folds at once, and
+  // this catches the case where that re-fold failed.
+  const corrections = tickets.flatMap((ticket) =>
+    Object.values(overridesOf(ticket)).map((entry) => ({ ticket_id: ticket.id, read_at: entry?.set_at ?? null }))
+  );
+  for (const row of [...readings, ...actions.map((a) => ({ ticket_id: a.ticket_id, read_at: a.acted_at })), ...corrections]) {
     const at = Date.parse(row.read_at);
     if (!(lastReading.get(row.ticket_id) > at)) lastReading.set(row.ticket_id, at);
   }
@@ -37,7 +43,7 @@ export function staleTickets({ tickets = [], current = [], readings = [], action
 }
 
 /** What the status rule reads off the ticket. */
-const TICKET_FOR_STATUS = 'id,status,resolved_at,level,deleted_at,archived_at,needs_categorisation,needs_investigation,metadata';
+const TICKET_FOR_STATUS = 'id,status,resolved_at,level,deleted_at,archived_at,needs_categorisation,needs_investigation,metadata,overrides';
 
 export function createCaseCurrentStore(supabase, { shopId }) {
   const record = createTicketRecord(supabase, { shopId });
@@ -45,7 +51,7 @@ export function createCaseCurrentStore(supabase, { shopId }) {
   return {
     async staleTicketIds(limit, { all = false } = {}) {
       const [tickets, current, readings, actions] = await Promise.all([
-        supabaseSelectAll(supabase, T.TICKETS, { shop_id: shopId, deleted_at: { operator: 'is', value: 'null' } }, 'id,last_message_at,investigated_at'),
+        supabaseSelectAll(supabase, T.TICKETS, { shop_id: shopId, deleted_at: { operator: 'is', value: 'null' } }, 'id,last_message_at,investigated_at,overrides'),
         // Keyed by ticket, with no `id` column for the default paging order.
         supabaseSelectAll(supabase, T.CASE_CURRENT, { shop_id: shopId }, 'ticket_id,folded_at', { order: 'ticket_id.asc' }),
         supabaseSelectAll(supabase, T.TICKET_CASE_STATE, { shop_id: shopId }, 'ticket_id,read_at'),
@@ -57,7 +63,7 @@ export function createCaseCurrentStore(supabase, { shopId }) {
     },
 
     async inputs(ticketId) {
-      const [messages, caseFiles, readings, previous, actions] = await Promise.all([
+      const [messages, caseFiles, readings, previous, actions, ticketRows] = await Promise.all([
         supabaseSelectAll(supabase, T.TICKET_MESSAGES, { ticket_id: ticketId }, 'id,direction,actor,from_email,received_at,sent_at'),
         supabaseSelect(
           supabase,
@@ -72,9 +78,10 @@ export function createCaseCurrentStore(supabase, { shopId }) {
           'trigger_message_id,pending_customer_inputs,resolved_inputs,commitments,contradictions,effect,asked,obligations_opened,obligations_cleared'
         ),
         supabaseSelect(supabase, T.CASE_CURRENT, { ticket_id: ticketId }, 'version,material_hash,as_of_message_id'),
-        supabaseSelect(supabase, T.TICKET_CASE_ACTIONS, { ticket_id: ticketId }, 'obligation_id,action,acted_by,acted_at')
+        supabaseSelect(supabase, T.TICKET_CASE_ACTIONS, { ticket_id: ticketId }, 'obligation_id,action,acted_by,acted_at'),
+        supabaseSelect(supabase, T.TICKETS, { id: ticketId, shop_id: shopId }, 'overrides')
       ]);
-      return { messages, caseFiles, readings, previous: previous[0] ?? null, actions };
+      return { messages, caseFiles, readings, previous: previous[0] ?? null, actions, overrides: overridesOf(ticketRows[0]) };
     },
 
     /** The holding interval, in working days, or null when the shop has not set it. */
@@ -134,8 +141,9 @@ export async function runFold({
   for (const ticketId of ids) {
     totals.considered += 1;
     try {
-      const { messages, caseFiles, readings, previous, actions } = await store.inputs(ticketId);
-      const state = foldCase({ messages, caseFiles, readings, actions, holdingDays, actorFor: (m) => m.actor ?? actorFor(m) });
+      const { messages, caseFiles, readings, previous, actions, overrides = null } = await store.inputs(ticketId);
+      const actorOfMessage = (m) => m.actor ?? actorFor(m);
+      const state = foldCase({ messages, caseFiles, readings, actions, overrides, holdingDays, actorFor: actorOfMessage });
       const version = nextVersion(previous, state);
       if (previous && version !== previous.version) totals.versionsRaised += 1;
       const at = now().toISOString();
@@ -164,7 +172,8 @@ export async function runFold({
 
       if (statusMap && store.ticket) {
         const ticket = await store.ticket(ticketId);
-        const { status } = statusFromCase(ticket, { ...state, version }, { map: statusMap, keepOpenLevels });
+        const lastCustomerAt = lastCustomerMessageAt(messages, actorOfMessage);
+        const { status } = statusFromCase(ticket, { ...state, version }, { map: statusMap, keepOpenLevels, lastCustomerAt });
         if (status) {
           const moved = await store.setStatus(ticket, status, caseStatusRecord({ status, state: { ...state, version }, from: ticket.status, at }), at);
           if (moved) {
@@ -179,4 +188,15 @@ export async function runFold({
     }
   }
   return totals;
+}
+
+/** When the customer last wrote, or null: a person's status holds until then. */
+export function lastCustomerMessageAt(messages = [], actorFor) {
+  let latest = null;
+  for (const message of messages) {
+    if (actorFor(message) !== 'customer') continue;
+    const at = message.received_at ?? message.sent_at ?? null;
+    if (at && (!latest || Date.parse(at) > Date.parse(latest))) latest = at;
+  }
+  return latest;
 }

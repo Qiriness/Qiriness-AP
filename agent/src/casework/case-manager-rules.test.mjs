@@ -216,3 +216,23 @@ test('the order changed when the confirmed number differs from the one the last 
   assert.equal(orderChangedSince({ contextRef: { orderName: null }, currentOrderName: '#6059' }), true);
   assert.equal(orderChangedSince({ contextRef: {}, currentOrderName: null }), false);
 });
+
+test('a situation a person chose is carried, with its needs, and skips the matcher', () => {
+  const override = { value: 'D-05', set_at: '2026-09-29T10:00:00Z', set_by: 'u1', ai_value: 'D-36', requirement_needs: ['delivery_state'] };
+  const plan = situationPlan({ override });
+  assert.equal(plan.carry.exemplar_key, 'D-05');
+  assert.equal(plan.carry.verdict, 'human');
+  assert.deepEqual(plan.carry.requirement_needs, ['delivery_state']);
+  // Beats a situation the Case Manager carried.
+  const carried = situationPlan({ reading: { situation_key: 'D-36', read_at: '2026-09-29T09:00:00Z' }, override });
+  assert.equal(carried.carry.exemplar_key, 'D-05');
+});
+
+test('a second request read after the correction is matched on itself', () => {
+  const override = { value: 'D-05', set_at: '2026-09-29T10:00:00Z' };
+  const later = { case_relationship: 'new_issue', trigger_message_id: 'm2', read_at: '2026-09-29T11:00:00Z' };
+  assert.deepEqual(situationPlan({ reading: later, triggerMessageId: 'm2', override }), { match: 'trigger' });
+  // A correction made after that reading is the person fixing the new request.
+  const earlier = { ...later, read_at: '2026-09-29T09:00:00Z' };
+  assert.equal(situationPlan({ reading: earlier, triggerMessageId: 'm2', override }).carry.exemplar_key, 'D-05');
+});

@@ -96,6 +96,9 @@ export function loadAgentConfig(env = loadEnv(REPO_ROOT)) {
     // Categoriser: same cheap tier as triage — it picks 1-of-14 plus 1-of-4 with
     // the enums constrained by Structured Outputs, not free reasoning.
     categoriserModel: env.AGENT_CATEGORISER_MODEL || 'gpt-4o-mini',
+    // Forwarding router: picks one of a few destinations from their descriptions,
+    // or keeps the ticket. Constrained 1-of-n, the cheap tier.
+    routerModel: env.AGENT_ROUTER_MODEL || 'gpt-4o-mini',
     // Settles a situation the matcher scored as a near miss or a tie, by reading
     // the message beside the candidates — a constrained 1-of-3-or-none, the cheap
     // tier's job. Set to an empty string to turn it off: near misses then keep no

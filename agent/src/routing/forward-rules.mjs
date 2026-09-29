@@ -1,50 +1,76 @@
-// Decides which mail leaves the support inbox for a colleague, and what the
-// covering note says.
+// Decides which messages on a routed ticket leave the support inbox, when, what
+// the covering note says, and whether the sender is told.
 //
 // Pure: no Graph, no Supabase, no clock. Everything here is a decision, so the
 // decisions are unit-testable and the runner stays a thin shell around them.
 
 import { isInternalSender } from '../../../scripts/lib/message-audience.mjs';
+import { isAutomatedAddress } from '../../../scripts/lib/forwarding-destinations.mjs';
+
+/** How many times a failed acknowledgement is retried before it is left visible as failed. */
+export const MAX_ACK_ATTEMPTS = 5;
 
 /**
- * The rule, deliberately narrow: the ticket asks nothing of customer support
- * (`request_kind = 'contact'`), its category has an address configured, AND the
- * message came from outside.
+ * Whether one message on a routed ticket may be handed to a colleague.
  *
- * The first two halves matter because routing on the category alone would sweep
- * in real work — `b2b` also holds reorder problems that need action, and a
- * configured address would quietly divert them — while routing on the kind alone
- * would have nowhere to send it. The taxonomy already restricts `contact` to
- * b2b, partner_collaboration and careers, so this is 38 of 330 tickets on the
- * measured corpus, and nothing a customer is waiting on.
- *
- * THE SENDER CHECK was added after counting a real pass: 9 of 51 pending
- * messages were from our own domain — colleagues forwarding things *into* the
- * inbox, subjects prefixed `TR:` and `RE:`. `direction` only catches mail sent
- * by the support mailbox itself, so a colleague writing from their own address
- * is `inbound` and would have been handed back to a colleague under the words
- * "nous avons reçu", which is both wrong and confusing. Same idea, and the same
- * module, as the audience split in the clustering report.
- *
- * Level is not consulted. `contact` derives level 2 and only ever climbs by
- * escalation; if a ticket has escalated past that, the kind will have been
- * re-categorised too, and this returns false on its own.
+ * WHERE the ticket goes is the router's (destination-router.mjs). This is the
+ * part that is about the message: a colleague forwarding something INTO the
+ * inbox is `inbound` too — 9 of 51 pending messages on the first real count
+ * were from our own domain, subjects prefixed `TR:` and `RE:` — and handing it
+ * back under « nous avons reçu » is both wrong and confusing.
  */
-export function shouldForward({ ticket, fromEmail, addressByCategory, internalDomains = [] }) {
-  if (!ticket || ticket.request_kind !== 'contact') {
-    return false;
-  }
-  if (isInternalSender(fromEmail, internalDomains)) {
-    return false;
-  }
-  return Boolean(resolveAddress(ticket.category, addressByCategory));
+export function shouldForwardMessage({ fromEmail, internalDomains = [] }) {
+  return !isInternalSender(fromEmail, internalDomains);
 }
 
-/** The configured recipient for a category, or null when it must not forward. */
-export function resolveAddress(category, addressByCategory) {
-  const raw = addressByCategory?.get?.(category) ?? addressByCategory?.[category];
-  const address = String(raw || '').trim();
-  return address.includes('@') ? address : null;
+/**
+ * Whether the destination takes the thread yet.
+ *
+ * `after_first_reply` waits for an outbound message on the ticket: our reply
+ * asks the customer for what that team needs (the batch number, the place of
+ * purchase), and the colleague should receive the thread with it asked. An
+ * outbound message is what the outbound worker's send or a colleague replying
+ * with support in copy leaves behind — both are read back from the mailbox.
+ */
+export function isReadyToForward({ destination, hasOutbound }) {
+  return destination?.timing !== 'after_first_reply' || Boolean(hasOutbound);
+}
+
+/**
+ * What to do about the acknowledgement once something has been forwarded.
+ *
+ * Returns `{ action: 'none' }` when there is nothing to decide (already done,
+ * or the destination does not acknowledge), `{ action: 'skip', reason }` when
+ * the answer is « never for this ticket », and `{ action: 'send' }`.
+ *
+ * SWITCHED OFF MEANS SKIPPED, NOT PENDING. A ticket forwarded while
+ * acknowledgements were off is marked skipped, so turning them on later does not
+ * send a week-old « we have passed it on » to everyone forwarded meanwhile.
+ */
+export function planAcknowledgement({ settings, destination, routing, recipient, internalDomains = [] }) {
+  if (destination?.timing !== 'immediate' || !destination?.acknowledge) {
+    return { action: 'none' };
+  }
+  const state = routing?.ack_state ?? null;
+  if (state === 'sent' || state === 'requested' || state === 'skipped') {
+    return { action: 'none' };
+  }
+  if (state === 'failed' && (routing?.ack_attempts ?? 0) >= MAX_ACK_ATTEMPTS) {
+    return { action: 'none' };
+  }
+  if (!settings?.ack_enabled) {
+    return { action: 'skip', reason: 'acknowledgements_off' };
+  }
+  if (!String(recipient ?? '').includes('@')) {
+    return { action: 'skip', reason: 'no_recipient' };
+  }
+  if (isInternalSender(recipient, internalDomains)) {
+    return { action: 'skip', reason: 'internal_sender' };
+  }
+  if (isAutomatedAddress(recipient)) {
+    return { action: 'skip', reason: 'automated_sender' };
+  }
+  return { action: 'send' };
 }
 
 /**
@@ -69,13 +95,17 @@ export function resolveAddress(category, addressByCategory) {
  * candidature, "*le*" for un signalement). One wrong agreement in mail that
  * goes out unattended is exactly the kind of thing nobody fixes.
  */
-export function buildForwardNote({ category, subject } = {}) {
+export function buildForwardNote({ category, subject, afterReply = false } = {}) {
   const label = CATEGORY_PHRASING[category] || 'un message';
   const trimmed = String(subject || '').replace(/\s+/g, ' ').trim();
   const line = trimmed ? `${label} — « ${truncate(trimmed, 120)} »` : label;
   return (
     `Bonjour,\n\n` +
     `Pour information, nous avons reçu ${line} dans la boîte contact.\n` +
+    // A destination that waits for our reply receives the thread after the
+    // customer has been asked for what it needs; saying so stops the colleague
+    // asking the same questions a second time.
+    (afterReply ? `Une première réponse a déjà été envoyée à l'expéditeur.\n` : '') +
     `Je vous transmets le message ci-dessous.\n\n` +
     `Merci !`
   );

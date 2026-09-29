@@ -598,6 +598,33 @@ export function createTicketRecord(supabase, { shopId, transport = REST_TRANSPOR
     },
 
     /**
+     * A person's corrections from « Edit case » (`overrideChange` in
+     * ticket-overrides.mjs builds `columns`).
+     *
+     * CONDITIONAL ON THE STATUS AND THE OVERRIDES IT READ, so a change made
+     * meanwhile (another person, the fold moving the status, the categoriser
+     * keeping an `ai_value` current) makes this match nothing and return null
+     * rather than overwrite it. A status in `columns` carries its lifecycle
+     * columns, as every status change does.
+     */
+    async applyOverrides(ticketId, { expectedStatus, expectedOverrides, columns }) {
+      const at = new Date().toISOString();
+      const updated = await update(
+        supabase,
+        T.TICKETS,
+        live({ id: ticketId, status: expectedStatus, overrides: { operator: 'eq', value: JSON.stringify(expectedOverrides ?? {}) } }),
+        {
+          ...columns,
+          ...(columns.status ? lifecycleColumns(columns.status, at) : {}),
+          updated_at: at
+        },
+        { select: 'id' }
+      );
+      const row = Array.isArray(updated) ? updated[0] : updated;
+      return row ? queueRow(ticketId) : null;
+    },
+
+    /**
      * The fold moving a ticket to the status its next actor asks for (stage 5c,
      * agent/src/casework/case-status.mjs).
      *
@@ -727,6 +754,11 @@ export function createTicketRecord(supabase, { shopId, transport = REST_TRANSPOR
     queueRow,
 
     /** What a person linking an order reads before the change. */
+    async findForOverrides(ticketId) {
+      const rows = await select(supabase, T.TICKETS, live({ id: ticketId }), COLUMNS.ticketForOverrides, { limit: 1 });
+      return rows[0] || null;
+    },
+
     async findForOrderLink(ticketId) {
       const rows = await select(
         supabase,

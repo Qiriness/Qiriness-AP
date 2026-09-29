@@ -124,6 +124,12 @@ export function determinePriorityBand(ticket) {
   if (Number(ticket.level) === 4) {
     return { band: 'high', reason: 'Level 4 safety or legal escalation.' };
   }
+  // A PERSON PINNED THE BAND (« Edit case »). Only the band: the ticket still
+  // climbs inside it as it waits, so a pinned ticket is not frozen. Level 4
+  // stays high above, whatever was pinned: safety is not a queue preference.
+  if (Object.hasOwn(BAND_BASE, ticket.pinnedBand ?? '')) {
+    return { band: ticket.pinnedBand, reason: 'Set by a person.' };
+  }
 
   const completed = actionIsComplete(ticket);
   if (!completed && hasImminentDeadline(ticket)) {

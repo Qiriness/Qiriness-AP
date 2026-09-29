@@ -59,8 +59,12 @@ export const T = {
   TICKET_CASE_STATE: 'ticket_case_state',
   CASE_CURRENT: 'case_current',
   TICKET_CASE_ACTIONS: 'ticket_case_actions',
+  TICKET_OVERRIDES: 'ticket_overrides',
   CATEGORY_FORWARDING: 'category_forwarding',
   TICKET_FORWARDS: 'ticket_forwards',
+  FORWARDING_DESTINATIONS: 'forwarding_destinations',
+  FORWARDING_SETTINGS: 'forwarding_settings',
+  TICKET_ROUTING: 'ticket_routing',
   CATEGORISATION_REVIEW: 'categorisation_review',
   MAIL_JOBS: 'mail_jobs',
   MAIL_SUBSCRIPTIONS: 'mail_subscriptions',
@@ -247,17 +251,20 @@ export const COLUMNS = {
     'requester_name,requester_email,shopify_order_number,first_message_at,last_message_at,' +
     'duplicate_of_ticket_id,duplicate_reason,sender_label,' +
     'customer_display_name,customer_first_name,customer_last_name,customer_rfm_group,' +
-    'message_count,inbound_count,waiting_since',
+    'message_count,inbound_count,waiting_since,overrides',
 
-  /** What the categoriser needs: the previous reading, to ratchet against. */
-  ticketForCategorisation: 'id,subject,metadata,category,request_kind,level,happiness',
+  /**
+   * What the categoriser needs: the previous reading, to ratchet against, and
+   * a person's corrections, which it keeps (`keepOverrides`).
+   */
+  ticketForCategorisation: 'id,subject,metadata,category,request_kind,level,happiness,overrides',
 
   /**
    * The categoriser's view plus the confirmed order number, for the casework
    * pass: `orderChangedSince` compares it with the order the last case file ran
    * against, which is what lets `evidence_reuse` say `invalidated`.
    */
-  ticketForCasework: 'id,subject,metadata,category,request_kind,level,happiness,shopify_order_number',
+  ticketForCasework: 'id,subject,metadata,category,request_kind,level,happiness,shopify_order_number,overrides',
 
   /** What the investigation needs to choose its tools and open a case file. */
   // `status` is here for one reason: a deliberate re-run over closed threads
@@ -266,7 +273,7 @@ export const COLUMNS = {
   // handed unless the column comes back with it.
   ticketForInvestigation:
     'id,subject,status,category,secondary_category,request_kind,level,customer_id,requester_email_hash,' +
-    'shopify_order_number,resolved_context,metadata,duplicate_of_ticket_id',
+    'shopify_order_number,resolved_context,metadata,duplicate_of_ticket_id,overrides',
 
   /** Customer resolution: an address hash and somewhere to record the attempt. */
   ticketForCustomerResolution: 'id,customer_id,requester_email_hash,metadata',
@@ -315,11 +322,21 @@ export const COLUMNS = {
   /** The dashboard's detail panel reads the bundle, not the whole row. */
   // `metadata` for `order_resolution.verified_by`: the panel says when the buyer
   // behind the order was never checked (a marketplace placeholder).
-  ticketForDetail: 'id,resolved_context,metadata,shopify_order_number',
+  // `overrides` for the situation a person chose, which the run may not have used yet.
+  ticketForDetail: 'id,resolved_context,metadata,shopify_order_number,overrides',
 
   /** A person linking an order: what the change reads before writing. */
   ticketForOrderLink:
     'id,status,shopify_order_number,requester_email_hash,customer_id,investigated_at,metadata',
+
+  /**
+   * A person correcting a ticket (« Edit case »): what the change reads before
+   * writing, including what the investigation's scope rule asks of the ticket
+   * as it will be.
+   */
+  ticketForOverrides:
+    'id,status,investigated_at,category,secondary_category,request_kind,level,responsible_team,' +
+    'duplicate_of_ticket_id,overrides',
 
   /** The order a person is about to link, beyond the bundle: ownership and channel. */
   orderForLink: 'id,name,order_number,customer_id,customer_email_hash,sales_channel_handle,processed_at',
@@ -623,6 +640,7 @@ export const PROJECTION_SOURCE = {
   ticketForConversation: T.TICKETS,
   ticketForDetail: T.TICKETS,
   ticketForOrderLink: T.TICKETS,
+  ticketForOverrides: T.TICKETS,
   orderForLink: T.ORDERS,
   orderForContext: T.ORDERS,
   ticketForDrafting: T.TICKETS,

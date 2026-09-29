@@ -3,106 +3,58 @@ import test from 'node:test';
 
 import {
   buildForwardNote,
+  isReadyToForward,
   isTransientGraphError,
-  resolveAddress,
-  shouldForward
+  MAX_ACK_ATTEMPTS,
+  planAcknowledgement,
+  shouldForwardMessage
 } from './forward-rules.mjs';
 
-const BOOK = new Map([
-  ['careers', 'hr@example.com'],
-  ['b2b', 'sales@example.com'],
-  ['partner_collaboration', 'marketing@example.com']
-]);
-
-test('contact-kind mail in a configured category is forwarded', () => {
-  for (const category of ['careers', 'b2b', 'partner_collaboration']) {
-    assert.equal(
-      shouldForward({ ticket: { category, request_kind: 'contact' }, addressByCategory: BOOK }),
-      true,
-      category
-    );
-  }
-});
-
-test('real customer work is never forwarded, even in a configured category', () => {
-  // The reason the rule is (kind AND address) rather than address alone: `b2b`
-  // holds genuine reorder problems that need action, and diverting one to sales
-  // as an FYI would drop it.
-  for (const kind of ['question', 'problem', 'complaint']) {
-    assert.equal(
-      shouldForward({ ticket: { category: 'b2b', request_kind: kind }, addressByCategory: BOOK }),
-      false,
-      kind
-    );
-  }
-});
-
-test('a category with no address is never forwarded', () => {
-  // Absence is the off switch, so a fresh install forwards nothing.
-  assert.equal(
-    shouldForward({ ticket: { category: 'order', request_kind: 'contact' }, addressByCategory: BOOK }),
-    false
-  );
-  assert.equal(
-    shouldForward({ ticket: { category: 'careers', request_kind: 'contact' }, addressByCategory: new Map() }),
-    false
-  );
-});
-
-test('a blank or malformed address does not forward', () => {
-  const book = new Map([['careers', '   '], ['b2b', 'not-an-address']]);
-  assert.equal(shouldForward({ ticket: { category: 'careers', request_kind: 'contact' }, addressByCategory: book }), false);
-  assert.equal(shouldForward({ ticket: { category: 'b2b', request_kind: 'contact' }, addressByCategory: book }), false);
-});
+const INTERNAL = ['example.com'];
 
 test('a colleague writing in is never forwarded back to a colleague', () => {
-  // Counted on the real corpus: 9 of 51 pending messages came from our own
-  // domain — staff forwarding things into the inbox, subjects prefixed `TR:`.
-  // `direction` only catches mail sent by the support mailbox itself, so a
-  // colleague writing from their own address arrives as `inbound`.
-  assert.equal(
-    shouldForward({
-      ticket: { category: 'b2b', request_kind: 'contact' },
-      fromEmail: 'colleague@lap-groupe.com',
-      addressByCategory: BOOK,
-      internalDomains: ['lap-groupe.com']
-    }),
-    false
-  );
+  assert.equal(shouldForwardMessage({ fromEmail: 'colleague@example.com', internalDomains: INTERNAL }), false);
+  assert.equal(shouldForwardMessage({ fromEmail: 'buyer@shop.fr', internalDomains: INTERNAL }), true);
+  // With no internal domains configured nothing is treated as ours.
+  assert.equal(shouldForwardMessage({ fromEmail: 'colleague@example.com' }), true);
 });
 
-test('an outside sender on the same ticket still forwards', () => {
-  assert.equal(
-    shouldForward({
-      ticket: { category: 'b2b', request_kind: 'contact' },
-      fromEmail: 'buyer@nocibe.fr',
-      addressByCategory: BOOK,
-      internalDomains: ['lap-groupe.com']
-    }),
-    true
-  );
+test('a destination that waits for our reply waits until one exists', () => {
+  const later = { timing: 'after_first_reply' };
+  assert.equal(isReadyToForward({ destination: later, hasOutbound: false }), false);
+  assert.equal(isReadyToForward({ destination: later, hasOutbound: true }), true);
+  assert.equal(isReadyToForward({ destination: { timing: 'immediate' }, hasOutbound: false }), true);
 });
 
-test('with no internal domains configured nothing is treated as ours', () => {
-  assert.equal(
-    shouldForward({
-      ticket: { category: 'b2b', request_kind: 'contact' },
-      fromEmail: 'colleague@lap-groupe.com',
-      addressByCategory: BOOK
-    }),
-    true
-  );
+const ACK_DEST = { timing: 'immediate', acknowledge: true };
+const ON = { ack_enabled: true };
+
+test('the acknowledgement is sent once, to a person, when switched on', () => {
+  assert.deepEqual(planAcknowledgement({ settings: ON, destination: ACK_DEST, routing: {}, recipient: 'buyer@shop.fr' }), { action: 'send' });
+  for (const ack_state of ['sent', 'requested', 'skipped']) {
+    assert.equal(planAcknowledgement({ settings: ON, destination: ACK_DEST, routing: { ack_state }, recipient: 'buyer@shop.fr' }).action, 'none', ack_state);
+  }
 });
 
-test('a missing ticket does not throw', () => {
-  assert.equal(shouldForward({ ticket: null, addressByCategory: BOOK }), false);
-  assert.equal(shouldForward({ addressByCategory: BOOK }), false);
+test('a failed acknowledgement is retried until the cap', () => {
+  const plan = (ack_attempts) =>
+    planAcknowledgement({ settings: ON, destination: ACK_DEST, routing: { ack_state: 'failed', ack_attempts }, recipient: 'buyer@shop.fr' }).action;
+  assert.equal(plan(1), 'send');
+  assert.equal(plan(MAX_ACK_ATTEMPTS), 'none');
 });
 
-test('resolveAddress accepts a Map or a plain object, and trims', () => {
-  assert.equal(resolveAddress('careers', BOOK), 'hr@example.com');
-  assert.equal(resolveAddress('careers', { careers: ' hr@example.com ' }), 'hr@example.com');
-  assert.equal(resolveAddress('nope', BOOK), null);
+test('switched off, a colleague, a machine or nobody: skipped for good', () => {
+  const reason = (overrides) =>
+    planAcknowledgement({ settings: ON, destination: ACK_DEST, routing: {}, recipient: 'buyer@shop.fr', internalDomains: INTERNAL, ...overrides }).reason;
+  assert.equal(reason({ settings: { ack_enabled: false } }), 'acknowledgements_off');
+  assert.equal(reason({ recipient: 'colleague@example.com' }), 'internal_sender');
+  assert.equal(reason({ recipient: 'noreply@shop.fr' }), 'automated_sender');
+  assert.equal(reason({ recipient: null }), 'no_recipient');
+});
+
+test('a destination that does not acknowledge, or waits for our reply, has nothing to decide', () => {
+  assert.equal(planAcknowledgement({ settings: ON, destination: { timing: 'immediate', acknowledge: false }, recipient: 'a@b.fr' }).action, 'none');
+  assert.equal(planAcknowledgement({ settings: ON, destination: { timing: 'after_first_reply', acknowledge: true }, recipient: 'a@b.fr' }).action, 'none');
 });
 
 // --- the covering note -------------------------------------------------------
@@ -158,6 +110,11 @@ test('a missing subject still produces a sensible sentence', () => {
 
 test('an unknown category falls back rather than producing broken French', () => {
   assert.match(buildForwardNote({ category: 'not_a_category' }), /nous avons reçu un message/);
+});
+
+test('after our first reply the note says the sender has been answered', () => {
+  assert.match(buildForwardNote({ category: 'cosmetovigilance', afterReply: true }), /Une première réponse a déjà été envoyée à l'expéditeur\./);
+  assert.doesNotMatch(buildForwardNote({ category: 'careers' }), /première réponse/);
 });
 
 test('a very long subject is truncated so the note stays a note', () => {

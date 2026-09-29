@@ -85,11 +85,32 @@ export function situationFor({ caseRelationship, previousSituationKey } = {}) {
  * said `new_issue` was acted on by the investigation of that message; the case
  * state after it carries whatever that run matched.
  */
-export function situationPlan({ reading = null, triggerMessageId = null, previousMatch = null } = {}) {
-  if (!reading) return { match: 'opening' };
-  if (reading.case_relationship === 'new_issue' && reading.trigger_message_id === triggerMessageId) {
-    return { match: 'trigger' };
+export function situationPlan({ reading = null, triggerMessageId = null, previousMatch = null, override = null } = {}) {
+  // A SECOND REQUEST ABOUT THIS MESSAGE IS MATCHED ON ITSELF, even over a
+  // person's correction: the correction was about the first request. The
+  // caller passes `override` only while no later `new_issue` has replaced it
+  // (`activeSituationOverride`), so a correction made AFTER the new request
+  // was read still wins.
+  const newIssueHere = reading?.case_relationship === 'new_issue' && reading.trigger_message_id === triggerMessageId;
+  const overrideAfterReading = override && Date.parse(override.set_at ?? '') > Date.parse(reading?.read_at ?? '');
+  if (newIssueHere && !overrideAfterReading) return { match: 'trigger' };
+  // A PERSON CHOSE THE SITUATION. No matcher, no chooser: the person is the
+  // proof, as with a linked order. Their situation's own needs are carried,
+  // because it is a known exemplar and not a guess.
+  if (override?.value) {
+    return {
+      carry: {
+        verdict: 'human',
+        exemplar_key: override.value,
+        requirement_needs: override.requirement_needs ?? [],
+        resolved_from: 'person',
+        set_by: override.set_by ?? null,
+        ai_situation: override.ai_value ?? null
+      }
+    };
   }
+  if (!reading) return { match: 'opening' };
+  if (newIssueHere) return { match: 'trigger' };
   const key = reading.situation_key ?? null;
   if (!key) return { match: 'opening' };
   const same = previousMatch?.exemplar_key === key;

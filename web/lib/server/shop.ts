@@ -21,6 +21,8 @@ import { createSupabaseClient, supabaseSelect } from "../../../scripts/lib/supab
 export interface ShopRow {
   id: string;
   ianaTimezone: string | null;
+  /** Shopify's shop name, null until the first shop sync. Signs the forwarding acknowledgement. */
+  shopName: string | null;
 }
 
 const TTL_MS = 5 * 60 * 1000;
@@ -52,8 +54,8 @@ async function readShop(): Promise<ShopRow | null> {
     createSupabaseClient(config),
     T.SHOPS,
     { shop_domain: config.shopDomain },
-    "id,iana_timezone"
-  )) as { id: string; iana_timezone: string | null }[];
+    "id,iana_timezone,shop_name"
+  )) as { id: string; iana_timezone: string | null; shop_name: string | null }[];
   const row = rows?.[0];
-  return row?.id ? { id: row.id, ianaTimezone: row.iana_timezone ?? null } : null;
+  return row?.id ? { id: row.id, ianaTimezone: row.iana_timezone ?? null, shopName: row.shop_name ?? null } : null;
 }

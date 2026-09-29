@@ -241,7 +241,7 @@ export async function runInvestigation({
     // every follow-up was re-matched on its opening message.
     const plan = (await planSituation?.({ ticket, triggerMessage })) ?? { match: 'opening' };
     const exemplarMatch = plan.carry
-      ? { ...plan.carry, resolved_from: 'case_state' }
+      ? { resolved_from: 'case_state', ...plan.carry }
       : await matchExemplar({
           retrieveExemplar,
           chooseSituation,
@@ -718,6 +718,14 @@ async function matchExemplar({ retrieveExemplar, chooseSituation = null, senderD
       similarity: round3(result.bestSimilarity),
       margin: round3(result.margin),
       runner_up: result.candidates?.[1]?.exemplarKey ?? null,
+      // THE NEAREST THREE, for the ticket page's « apply the closest situation ».
+      // A person picks from them when the match was not settled; nothing in the
+      // pipeline reads this list.
+      top: (result.candidates ?? []).slice(0, 3).map((candidate) => ({
+        key: candidate.exemplarKey,
+        similarity: round3(candidate.similarity),
+        question: candidate.question ?? null
+      })),
       // The claim being tested: that this situation's declared needs are the
       // ones the run turns out to require.
       requirement_needs: result.exemplar?.requirementNeeds ?? [],
