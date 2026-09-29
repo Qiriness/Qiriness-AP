@@ -1987,3 +1987,31 @@
 .caseCheckOverdue {
   border-left: 3px solid var(--warning);
 }
+
+/* The sender's address on hover over their initials or name. Drawn here rather
+   than with `title`, whose delay and platform styling made it easy to miss. */
+.timelineAvatar[data-email],
+.sender[data-email] {
+  position: relative;
+  cursor: default;
+}
+
+.timelineAvatar[data-email]:hover::after,
+.sender[data-email]:hover::after {
+  content: attr(data-email);
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 20;
+  padding: 4px 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text-strong);
+  font-size: var(--text-caption);
+  font-weight: normal;
+  letter-spacing: normal;
+  white-space: nowrap;
+  box-shadow: 0 2px 8px rgb(0 0 0 / 0.12);
+  pointer-events: none;
+}

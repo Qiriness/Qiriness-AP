@@ -2384,13 +2384,13 @@ function MessageBlock({
 
   return (
     <li className={styles.message} ref={itemRef}>
-      <span className={`${styles.timelineAvatar} ${styles[`role_${message.role}`]}`} aria-hidden="true" title={address}>
-        {senderInitials(message)}
+      <span className={`${styles.timelineAvatar} ${styles[`role_${message.role}`]}`} data-email={address}>
+        <span aria-hidden="true">{senderInitials(message)}</span>
       </span>
       <article className={styles.messageContent}>
         <header className={styles.messageHead}>
           <div className={styles.senderLine}>
-            <span className={styles.sender} title={address}>{senderDisplayName(message)}</span>
+            <span className={styles.sender} data-email={address}>{senderDisplayName(message)}</span>
             <span className={`${styles.roleBadge} ${styles[`role_${message.role}`]}`}>{role}</span>
             {message.hasAttachments && <span className={styles.attachment}>Attachment</span>}
           </div>
@@ -2473,15 +2473,17 @@ function senderDisplayName(message: TicketMessage): string {
 }
 
 /**
- * The address the customer is writing from: their latest inbound message's, so a
- * customer who switched mailboxes mid-thread shows the one a reply goes to. The
+ * The address the requester is writing from: their latest inbound message's, so
+ * someone who switched mailboxes mid-thread shows the one a reply goes to. Any
+ * outside sender counts — a retailer or partner is the requester on its own
+ * threads — and only a colleague's inbound note is skipped. The
  * thread route already ships (and audits) every sender address; the ticket list
  * never carries one, which is why this reads the thread and not the ticket.
  */
 function contactingAddress(thread: TicketThread): string | null {
   for (let i = thread.messages.length - 1; i >= 0; i--) {
     const message = thread.messages[i];
-    if (message.direction === "inbound" && message.role === "customer" && message.fromEmail?.trim()) {
+    if (message.direction === "inbound" && message.role !== "internal" && message.fromEmail?.trim()) {
       return message.fromEmail.trim();
     }
   }
