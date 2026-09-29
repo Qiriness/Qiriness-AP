@@ -19,6 +19,7 @@ import {
   createSupabaseClient,
   supabaseDelete,
   supabaseInsert,
+  supabaseSelect,
   supabaseSelectAll,
   supabaseUpdate,
   supabaseUpsert,
@@ -72,7 +73,9 @@ export async function getForwardingConfig(shopId: string, shopName: string | nul
     supabaseSelectAll(supabase, T.FORWARDING_DESTINATIONS, { shop_id: shopId }, DESTINATION_COLUMNS, {
       order: "position.asc,created_at.asc",
     }) as Promise<DestinationRow[]>,
-    supabaseSelectAll(
+    // One row per shop, keyed on shop_id: a plain select. `supabaseSelectAll`
+    // pages by ordering on `id`, which this table does not have.
+    supabaseSelect(
       supabase,
       T.FORWARDING_SETTINGS,
       { shop_id: shopId },
@@ -164,7 +167,7 @@ export async function saveAckSettings(
  */
 export async function setForwardingOn(shopId: string, on: boolean): Promise<string | null> {
   const supabase = getSupabaseClient();
-  const [current] = (await supabaseSelectAll(supabase, T.FORWARDING_SETTINGS, { shop_id: shopId }, "forward_since")) as {
+  const [current] = (await supabaseSelect(supabase, T.FORWARDING_SETTINGS, { shop_id: shopId }, "forward_since")) as {
     forward_since: string | null;
   }[];
   const forwardSince = on ? current?.forward_since ?? new Date().toISOString() : null;
