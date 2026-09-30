@@ -11,11 +11,18 @@ const EXEMPLARS = read('05_exemplars');
 const squash = (text) => String(text ?? '').replace(/\s+/g, ' ').trim();
 const CONSTRAINT = 'support_exemplars_requirement_needs_check';
 
-test('33 carries the baseline check, not a retyped one', () => {
+// 33 WAS THE HEAD OF THIS CONSTRAINT UNTIL 56 removed `policy_answer`
+// (2026-10-01). An applied migration is a historical step and is not edited to
+// keep up, so what survives is what still holds: 33 is the baseline of its day,
+// which is today's baseline plus the one need 56 retired.
+const RETIRED_BY_56 = ['policy_answer'];
+
+test('33 carries the baseline check of its day, not a retyped one', () => {
   const clause = checkClause(SQL, CONSTRAINT);
   assert.ok(clause, 'the check is missing from 33');
-  assert.equal(squash(clause), squash(checkClause(EXEMPLARS, CONSTRAINT)));
+  assert.deepEqual(literalsIn(clause), [...literalsIn(checkClause(EXEMPLARS, CONSTRAINT)), ...RETIRED_BY_56].sort());
 });
+void squash;
 
 test('the baseline allows the new need, beside the ones it already had', () => {
   const clause = checkClause(EXEMPLARS, CONSTRAINT);
@@ -26,11 +33,9 @@ test('the baseline allows the new need, beside the ones it already had', () => {
   }
 });
 
-test('the head migration is the one pinned to the code vocabulary', () => {
-  // The same claim 05_exemplars.test.mjs makes about the baseline, made here
-  // too: this file is what an existing database applies, so a need code can
-  // only ever be declarable if BOTH say so.
-  assert.deepEqual(literalsIn(checkClause(SQL, CONSTRAINT)), [...NEED_KEYS].sort());
+test('what 33 allowed is the code vocabulary plus what 56 retired', () => {
+  // 56_policy_search_retired.test.mjs pins the head to the code vocabulary now.
+  assert.deepEqual(literalsIn(checkClause(SQL, CONSTRAINT)), [...NEED_KEYS, ...RETIRED_BY_56].sort());
 });
 
 test('it only widens: no table, no data, nothing dropped but the constraint', () => {

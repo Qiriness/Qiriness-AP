@@ -148,60 +148,26 @@ export interface ForwardingConfig {
 }
 
 /**
- * The required-knowledge slots every agent needs covered. Mirrors the
- * knowledge_documents_core_topic_check constraint in
- * supabase/migrations/03_knowledge.sql — keep in sync. Five of
- * these ("order_policies" through "faqs") make up the Core setup checklist;
- * "brand" is the Drafting agent setup slot instead (see CORE_TOPICS, which
- * excludes it, and BrandVoiceWorkspace).
+ * The one fixed knowledge slot: the Brand voice (BrandVoiceWorkspace), which
+ * every draft is written with. Mirrors knowledge_documents_core_topic_check in
+ * supabase/migrations/03_knowledge.sql. The « Core setup » checklist that
+ * listed order policies, delivery & returns, confidentiality, locations and
+ * FAQs was removed 2026-10-01: the company's policies live in Agent Setup →
+ * Policies (company_policies), read by key rather than found by search.
  */
-export type CoreTopic =
-  | "order_policies"
-  | "brand"
-  | "confidentiality"
-  | "delivery_returns"
-  | "locations"
-  | "faqs";
+export type CoreTopic = "brand";
 
 export const CORE_TOPIC_LABELS: Record<CoreTopic, string> = {
-  order_policies: "Order policies",
   brand: "Brand voice",
-  confidentiality: "Confidentiality & privacy",
-  delivery_returns: "Delivery & returns",
-  locations: "Store locations",
-  faqs: "FAQs",
 };
 
-/** Sensible default category to pre-fill when starting an article from a core-topic slot. */
+/** The category an article started from a slot is given. */
 export const CORE_TOPIC_DEFAULT_CATEGORY: Record<CoreTopic, KnowledgeCategory> = {
-  order_policies: "order",
   brand: "brand_story",
-  confidentiality: "legal_privacy",
-  // The slot combines delivery and returns; "delivery" is the more common half.
-  delivery_returns: "delivery",
-  locations: "other",
-  faqs: "faq",
 };
 
-// "brand" is intentionally excluded — Brand voice now lives in its own
-// "Drafting agent setup" section (see BrandVoiceWorkspace) instead of the
-// Core setup checklist, though it remains a valid CoreTopic value and DB slot.
-export const CORE_TOPICS: CoreTopic[] = [
-  "order_policies",
-  "confidentiality",
-  "delivery_returns",
-  "locations",
-  "faqs",
-];
-
-/**
- * Every valid CoreTopic value, including "brand" — for validating a raw
- * coreTopic string from the API. Deliberately distinct from CORE_TOPICS
- * (the Core setup checklist subset): using CORE_TOPICS for this check would
- * silently null out "brand" on every article, since it was removed from that
- * list.
- */
-export const ALL_CORE_TOPICS: CoreTopic[] = [...CORE_TOPICS, "brand"];
+/** Every valid CoreTopic value, for validating a raw coreTopic string from the API. */
+export const ALL_CORE_TOPICS: CoreTopic[] = ["brand"];
 
 /** A Shopify page or shop policy available to import, from the unified catalog. */
 export interface ShopifySource {

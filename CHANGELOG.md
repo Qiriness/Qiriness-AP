@@ -16,6 +16,17 @@ Three sibling files carry the other halves, and this one deliberately does not d
 
 
 
+## Knowledge: policy search path and « Core setup » retired; list scrolls (2026-10-01)
+
+- **Built:**
+  - `policy_answer` removed from the need vocabulary. Policies reach the agent by key only; `searchKnowledge` stays for product and brand questions.
+  - The « Core setup » checklist removed from Knowledge; `core_topic` is `brand` only.
+  - Migration 56 (not applied): strips `policy_answer` from 20 situations and narrows both checks.
+  - The Knowledge article list scrolls inside its panel. The pane was not a flex container, so the list overflowed instead of scrolling.
+  - « Other » is the last article group.
+  - Articles a test run had tested can be deleted again; the empty « Untitled article » that could not be deleted is gone.
+- **Proven:** agent 1834/0; root 4031 pass (the same 19 old analytics failures); `tsc` and lint on `web/`. **Not yet:** migration 56 applied; D-33 / D-07 rules rewritten; looked at on screen.
+
 ## Agent Setup: company policies (2026-09-30)
 
 - **Built:**

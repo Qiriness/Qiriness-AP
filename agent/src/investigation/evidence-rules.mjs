@@ -308,11 +308,10 @@ const NEEDS = {
   },
 
   // --- knowledge -------------------------------------------------------------
-  policy_answer: {
-    label: 'ce que dit une politique approuvée (retours, livraison, CGV)',
-    satisfiedBy: [{ tool: TOOL_NAMES.SEARCH_KNOWLEDGE, outcomes: ['answerable'] }],
-    asksCustomer: null
-  },
+  // `policy_answer` (« what an approved policy says », found by searching the
+  // knowledge articles) was removed 2026-10-01: the company's policies are read
+  // by key with getPolicy (scripts/lib/company-policies.mjs) and a policy never
+  // sets a finding. DECISIONS.md § Company policies.
   brand_answer: {
     label: 'ce que dit la marque (philosophie, hanbang, sourcing)',
     satisfiedBy: [{ tool: TOOL_NAMES.SEARCH_KNOWLEDGE, outcomes: ['answerable'] }],
@@ -498,7 +497,6 @@ const FINDINGS = {
       return deriveKnowledge(entries);
     }
   },
-  policy_answer: { values: KNOWLEDGE_FINDINGS, derive: deriveKnowledge },
   brand_answer: { values: KNOWLEDGE_FINDINGS, derive: deriveKnowledge },
 
   promotion_identity: {
@@ -906,7 +904,6 @@ const DETAILS = {
   // `weak` means an article exists and did not match well enough (rewrite or
   // retitle it), `none` means the library holds nothing on the subject at all.
   product_property: (entries) => detailsFromKnowledge(entries),
-  policy_answer: (entries) => detailsFromKnowledge(entries),
   brand_answer: (entries) => detailsFromKnowledge(entries),
 
   promotion_identity: (entries) => {

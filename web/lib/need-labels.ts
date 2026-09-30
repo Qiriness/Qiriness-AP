@@ -24,7 +24,6 @@ const NEED_LABELS: Record<string, string> = {
   customer_identity: "Who is writing",
   customer_account_state: "The state of their account",
   return_eligibility: "Whether a return is still possible",
-  policy_answer: "What an approved policy says",
   checkout_state: "What was in the abandoned basket",
   reaction_product: "Which product caused the reaction",
   photo_evidence: "The photo",

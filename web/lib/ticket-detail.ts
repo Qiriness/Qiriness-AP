@@ -387,7 +387,6 @@ function describeDetails(need: unknown, details: any): string[] {
     }
 
     case "product_property":
-    case "policy_answer":
     case "brand_answer": {
       // THE ONE LINE HERE THAT IS A TO-DO. The library could not answer this, so
       // the agent will keep failing the same question until an article covers

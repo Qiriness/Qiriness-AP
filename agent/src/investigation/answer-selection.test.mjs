@@ -407,7 +407,7 @@ test('the audit catches the two outcomes the schema forbids', () => {
 
 test('the rules say which needs to score, not the ticket', () => {
   // THE BUG THIS PREVENTS, and it is not hypothetical: D-02 declares
-  // `order_identity, order_state, policy_answer` while its rules branch on
+  // `order_identity, order_state, brand_answer` while its rules branch on
   // `photo_evidence`. Scoring only the declared needs would leave every one of
   // those rules permanently unmatched — a branch that can never fire.
   const rules = [
@@ -513,12 +513,12 @@ test('neither condition order nor finding order makes two rules differ', () => {
   const rules = [
     answer(
       'a',
-      { reaction_product: ['ambiguous', 'identified'], policy_answer: 'answered' },
+      { reaction_product: ['ambiguous', 'identified'], brand_answer: 'answered' },
       { situationKey: 'CV-02', route: 'needs_human' }
     ),
     answer(
       'b',
-      { policy_answer: 'answered', reaction_product: ['identified', 'ambiguous'] },
+      { brand_answer: 'answered', reaction_product: ['identified', 'ambiguous'] },
       { situationKey: 'CV-04', route: 'needs_human' }
     )
   ];

@@ -3040,9 +3040,20 @@ The owner asked for a central library before the Rules tab. It replaces the poli
 
 **Still to do, once the policies are written:** move D-07 and D-33 onto them (link the policy to the situation, remove the re-typed text and the `policy_answer` branches, keep the fallback wording), and unapprove the articles they replace.
 
+### The search path to policies and the « Core setup » checklist are retired (2026-10-01)
+
+With 15 policies written and 36 links made, the owner asked to remove what stood in for them:
+
+- **`policy_answer` is no longer a need.** It scored « what an approved policy says » from a knowledge search. A policy is now read by key, and it never sets a finding. The need is gone from `evidence-rules.mjs`, from the 20 situations that declared it (migration 56) and from the need labels.
+- **Three rules still named it** (D-33 × 2, D-07's draft). `normaliseConditions` drops an unknown need, so they read as unconditional. D-33's live rule was already the one that fired on almost every ticket (its « documented » twin is a draft), so live behaviour is unchanged until those rules are rewritten.
+- **`searchKnowledge` stays** for product properties and brand questions (`product_property`, `brand_answer`), which are not policies.
+- **The « Core setup » checklist is gone** from Knowledge: five empty slots (order policies, delivery & returns, confidentiality, locations, FAQs). No article held one. `core_topic` keeps only `brand`, the Brand voice every draft is written with.
+
+**Found on the way:** an article that a « Test the agent » run had tested could not be deleted. The FK sets the run's `expect_document_id` to null, but `agent_test_runs_article_verdict_needs_document_check` refuses a verdict with no article. `deleteArticle` now clears that run's verdict first; the run itself is kept.
+
 Nothing auto-writes `knowledge_documents`; the catalog sync only fills `shopify_content_sources`. `source_type` → `manual` **is** the manual-edit lock — no separate flag, and resync is then unavailable.
 
-Unfilled core-topic slots are client-side placeholders, never database rows; clicking one creates a pre-filled draft.
+The one fixed slot is the Brand voice (`core_topic = 'brand'`): shown as a placeholder until created, never a database row before then. The « Core setup » checklist was removed 2026-10-01 (§ The search path to policies…).
 
 ---
 

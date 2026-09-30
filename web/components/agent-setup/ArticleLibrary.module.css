@@ -1,6 +1,8 @@
 .library {
   display: flex;
   flex-direction: column;
+  /* Shrinks to the pane (AgentSetup .listPane), so `.list` below scrolls. */
+  flex: 1 1 auto;
   min-height: 0;
   background: var(--surface);
   border: 1px solid var(--border);

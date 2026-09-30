@@ -46,7 +46,7 @@ test('core-topic default categories are all valid categories', () => {
   )?.[1];
   assert.ok(defaults, 'expected a CORE_TOPIC_DEFAULT_CATEGORY record');
   const values = [...defaults.matchAll(/:\s*"([a-z_]+)"/g)].map((m) => m[1]);
-  assert.ok(values.length >= 6, 'expected a default per core topic');
+  assert.ok(values.length >= 1, 'expected a default per core topic (the brand voice)');
   for (const value of values) {
     assert.ok(isKnowledgeCategory(value), `CORE_TOPIC_DEFAULT_CATEGORY has invalid category "${value}"`);
   }

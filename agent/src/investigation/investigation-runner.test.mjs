@@ -506,7 +506,7 @@ const NEAR_RESULT = {
   margin: 0.0351,
   candidates: [
     { exemplarKey: 'D-36', question: 'Ma commande a beaucoup de retard', requirementNeeds: ['order_identity'] },
-    { exemplarKey: 'D-07', question: 'Quels sont vos délais ?', requirementNeeds: ['policy_answer'] }
+    { exemplarKey: 'D-07', question: 'Quels sont vos délais ?', requirementNeeds: ['brand_answer'] }
   ]
 };
 
@@ -536,7 +536,7 @@ test('a near miss is settled by the chooser, and drives the needs and the stored
   assert.equal(match.exemplar_key, 'D-07', 'the runner-up the model chose, not the top score');
   assert.equal(match.verdict, 'near', 'the embedding verdict is kept as the record of what it could tell');
   assert.equal(match.chosen_by, 'model');
-  assert.deepEqual(match.requirement_needs, ['policy_answer']);
+  assert.deepEqual(match.requirement_needs, ['brand_answer']);
   assert.deepEqual(match.chooser, {
     model: 'gpt-4o-mini',
     choice: 'D-07',

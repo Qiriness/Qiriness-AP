@@ -505,7 +505,7 @@ test('what the ticket needed is scored against what actually ran', async () => {
     tasks: [{ question: 'Le masque convient-il ?', category: 'product', request_kind: 'question' }],
     // Declared: one the run gets, one it looks for and misses, one this SUBJECT
     // is not given the tool for (a product ticket gets no checkout lookup).
-    needs: ['product_identity', 'policy_answer', 'checkout_state']
+    needs: ['product_identity', 'brand_answer', 'checkout_state']
   });
   const openai = buildOpenAI([{ content: caseFileAnswer() }]);
   const { investigate } = createInvestigator(openai, registry, { model: 'm', decomposer });
@@ -514,7 +514,7 @@ test('what the ticket needed is scored against what actually ran', async () => {
   const byNeed = Object.fromEntries(caseFile.evidenceGaps.map((g) => [g.need, g.state]));
 
   assert.equal(byNeed.product_identity, 'satisfied');
-  assert.equal(byNeed.policy_answer, 'attempted', 'searched, found nothing');
+  assert.equal(byNeed.brand_answer, 'attempted', 'searched, found nothing');
   assert.equal(byNeed.checkout_state, 'unavailable', 'this subject is not given the checkout tool');
 });
 
@@ -547,7 +547,7 @@ test('every call leaves a snapshot, in call order and keyed to its ledger id', a
   });
   const decomposer = buildDecomposer({
     tasks: [{ question: 'Le masque convient-il ?', category: 'product', request_kind: 'question' }],
-    needs: ['product_identity', 'policy_answer']
+    needs: ['product_identity', 'brand_answer']
   });
   const openai = buildOpenAI([{ content: caseFileAnswer() }]);
   const { investigate } = createInvestigator(openai, registry, { model: 'm', decomposer });
@@ -574,7 +574,7 @@ test('the last snapshot is the same reading the case file itself reports', async
   });
   const decomposer = buildDecomposer({
     tasks: [{ question: 'Le masque convient-il ?', category: 'product', request_kind: 'question' }],
-    needs: ['product_identity', 'policy_answer']
+    needs: ['product_identity', 'brand_answer']
   });
   const openai = buildOpenAI([{ content: caseFileAnswer() }]);
   const { investigate } = createInvestigator(openai, registry, { model: 'm', decomposer });
@@ -747,13 +747,13 @@ test('a matched exemplar stands in only when decomposition produced nothing', as
 
   const caseFile = await investigate({
     ...PRODUCT_TICKET,
-    exemplarNeeds: ['product_property', 'policy_answer']
+    exemplarNeeds: ['product_property', 'brand_answer']
   });
 
   assert.equal(caseFile.needsSource, 'exemplar');
   assert.deepEqual(
     caseFile.evidenceGaps.map((g) => g.need).sort(),
-    ['policy_answer', 'product_property']
+    ['brand_answer', 'product_property']
   );
 });
 
@@ -771,7 +771,7 @@ test('while the decomposer has spoken the exemplar is ignored entirely', async (
 
   const caseFile = await investigate({
     ...PRODUCT_TICKET,
-    exemplarNeeds: ['policy_answer', 'brand_answer']
+    exemplarNeeds: ['brand_answer', 'brand_answer']
   });
 
   assert.equal(caseFile.needsSource, 'model');
@@ -797,12 +797,12 @@ test('the article a rule pins is recorded on the policy block, not resolved here
   // document is still approved is a drafting-time question, and a stored run has
   // to read back which article the rule chose either way.
   const registry = buildPlanningRegistry({
-    // `answerable` is the outcome `policy_answer` reads; `found` derives `unknown`.
+    // `answerable` is the outcome `brand_answer` reads; `found` derives `unknown`.
     [TOOL_NAMES.SEARCH_KNOWLEDGE]: async () => ({ ...OK_RESULT, outcome: 'answerable' })
   });
   const decomposer = buildDecomposer({
     tasks: [{ question: 'Livrez-vous en Italie ?', category: 'product', request_kind: 'question' }],
-    needs: ['policy_answer']
+    needs: ['brand_answer']
   });
   const openai = buildOpenAI([{ content: caseFileAnswer() }]);
   const { investigate } = createInvestigator(openai, registry, { model: 'm', decomposer });
@@ -816,7 +816,7 @@ test('the article a rule pins is recorded on the policy block, not resolved here
         {
           answerKey: 'd33_livraison_documentee',
           situationKey: null,
-          conditions: { policy_answer: ['answered'] },
+          conditions: { brand_answer: ['answered'] },
           route: null,
           ask: [],
           offerCode: null,
@@ -836,12 +836,12 @@ test('a rule with no pinned article records null rather than omitting the field'
   // Omitting it would make "no article" and "written before pinning existed"
   // the same row, which is the distinction a replay would need.
   const registry = buildPlanningRegistry({
-    // `answerable` is the outcome `policy_answer` reads; `found` derives `unknown`.
+    // `answerable` is the outcome `brand_answer` reads; `found` derives `unknown`.
     [TOOL_NAMES.SEARCH_KNOWLEDGE]: async () => ({ ...OK_RESULT, outcome: 'answerable' })
   });
   const decomposer = buildDecomposer({
     tasks: [{ question: 'x', category: 'product', request_kind: 'question' }],
-    needs: ['policy_answer']
+    needs: ['brand_answer']
   });
   const openai = buildOpenAI([{ content: caseFileAnswer() }]);
   const { investigate } = createInvestigator(openai, registry, { model: 'm', decomposer });
@@ -855,7 +855,7 @@ test('a rule with no pinned article records null rather than omitting the field'
         {
           answerKey: 'plain',
           situationKey: null,
-          conditions: { policy_answer: ['answered'] },
+          conditions: { brand_answer: ['answered'] },
           route: null,
           ask: [],
           offerCode: null,

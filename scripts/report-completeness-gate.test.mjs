@@ -85,7 +85,7 @@ test('an answerable run whose every gap is unclosable is reported as a wrong dow
 });
 
 test('an answerable run with a gap somebody can close is a downgrade worth making', () => {
-  const scored = scoreRun(row({ evidence_gaps: [gap('policy_answer', 'not_attempted')] }));
+  const scored = scoreRun(row({ evidence_gaps: [gap('brand_answer', 'not_attempted')] }));
 
   assert.equal(gateVerdictFor(scored), 'right');
 });
@@ -129,7 +129,7 @@ test('an errored call counts only against a need this ticket declared', () => {
     'lookupStock can settle product_availability, which was declared'
   );
   assert.deepEqual(
-    erroredCallsAffecting([{ tool: 'lookupStock', outcome: 'error' }], [gap('policy_answer', 'attempted')]),
+    erroredCallsAffecting([{ tool: 'lookupStock', outcome: 'error' }], [gap('brand_answer', 'attempted')]),
     [],
     'the same failure against a ticket that never wanted availability is noise'
   );

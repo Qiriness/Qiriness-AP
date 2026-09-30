@@ -74,17 +74,13 @@ create table public.knowledge_documents (
   constraint knowledge_documents_approval_status_check check (
     approval_status in ('draft', 'in_review', 'approved', 'needs_optimization')
   ),
-  -- Six slots, with delivery and returns combined into one. The app's CoreTopic
-  -- type is the other copy of this list; they must agree or saving an article
-  -- into a slot fails with a check violation.
+  -- ONE SLOT: the Brand voice, which every draft is written with. The « Core
+  -- setup » checklist (order policies, delivery & returns, confidentiality,
+  -- locations, FAQs) was removed 2026-10-01: company policies live in
+  -- company_policies, read by key. The app's CoreTopic type is the other copy.
   constraint knowledge_documents_core_topic_check check (
     core_topic is null or core_topic in (
-      'order_policies',
-      'brand',
-      'confidentiality',
-      'delivery_returns',
-      'locations',
-      'faqs'
+      'brand'
     )
   ),
   -- THE SHARED SUBJECT VOCABULARY. Nullable: an article can exist before a
@@ -155,7 +151,7 @@ comment on column public.knowledge_documents.approval_status is
   'Team review state for agent usage: draft, in_review, approved, or needs_optimization. Independent of status, which holds the Shopify publish state for Shopify-sourced articles.';
 
 comment on column public.knowledge_documents.core_topic is
-  'Optional required-knowledge slot this article fulfills (order_policies, brand, confidentiality, delivery_returns, locations, faqs). At most one active article per shop per slot. Distinct from the category column.';
+  'The fixed slot this article fills: brand (the Brand voice) or null. At most one active article per shop per slot. Distinct from the category column. The other five slots were removed 2026-10-01 (56_policy_search_retired.sql).';
 
 comment on column public.knowledge_documents.voice_profile is
   'Structured brand-voice fields for the singleton Brand Voice article (core_topic = ''brand''): { roleDescription: string, toneAndVoice: string }. Empty ({}) on every other article. Always-included drafting-agent context, distinct from content_html (used on this row for freeform general-context guidance) and from ordinary knowledge_documents rows, which are selectively retrieved via knowledge_chunks.';

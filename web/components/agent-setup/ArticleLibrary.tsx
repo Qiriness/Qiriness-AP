@@ -2,7 +2,7 @@
 
 import { useMemo } from "react";
 import type { Article, ArticleStatus, CoreTopic, KnowledgeCategory } from "@/lib/types";
-import { CORE_TOPICS, KNOWLEDGE_CATEGORIES } from "@/lib/types";
+import { KNOWLEDGE_CATEGORIES } from "@/lib/types";
 import { useT } from "@/lib/i18n/client";
 import { Button } from "@/components/ui/Button";
 import { ArticleListItem } from "./ArticleListItem";
@@ -51,34 +51,20 @@ export function ArticleLibrary({
   const t = useT();
   const isFiltering = query.trim() !== "" || statusFilter !== "all";
 
-  // Core setup is a fixed checklist, not a filtered view — only meaningful
-  // (and only accurate) when nothing is filtered out, since `articles` here
-  // equals the full list exactly when query/statusFilter are at their
-  // defaults. While filtering, core articles simply behave like any other
-  // article instead of disappearing into a hidden section.
-  const coreArticleByTopic = useMemo(() => {
-    const map = new Map<CoreTopic, Article>();
-    if (isFiltering) return map;
-    for (const article of articles) {
-      if (article.coreTopic && !map.has(article.coreTopic)) {
-        map.set(article.coreTopic, article);
-      }
-    }
-    return map;
-  }, [articles, isFiltering]);
+  // THE BRAND VOICE is the one fixed slot left: every draft is written with it,
+  // so it sits in its own section. The old « Core setup » checklist (order
+  // policies, delivery & returns, confidentiality…) is gone: the company's
+  // policies live in Agent Setup → Policies now. Only meaningful while nothing
+  // is filtered; while filtering, the brand voice behaves like any article.
+  const brandVoiceArticle = useMemo(
+    () => (isFiltering ? undefined : articles.find((article) => article.coreTopic === "brand")),
+    [articles, isFiltering]
+  );
 
-  // coreArticleByTopic can also hold the "brand" entry (see the Drafting
-  // agent setup section below), which isn't part of CORE_TOPICS anymore — so
-  // count only the topics actually in the checklist, not every map key.
-  const coreFilledCount = CORE_TOPICS.filter((t) => coreArticleByTopic.has(t)).length;
-  const coreComplete = coreFilledCount === CORE_TOPICS.length;
-  const brandVoiceArticle = coreArticleByTopic.get("brand");
-
-  const groupableArticles = useMemo(() => {
-    if (coreArticleByTopic.size === 0) return articles;
-    const coreIds = new Set([...coreArticleByTopic.values()].map((a) => a.id));
-    return articles.filter((a) => !coreIds.has(a.id));
-  }, [articles, coreArticleByTopic]);
+  const groupableArticles = useMemo(
+    () => (brandVoiceArticle ? articles.filter((a) => a.id !== brandVoiceArticle.id) : articles),
+    [articles, brandVoiceArticle]
+  );
 
   const categoryGroups = useMemo(() => {
     const groups = new Map<KnowledgeCategory, Article[]>();
@@ -94,7 +80,11 @@ export function ArticleLibrary({
   // one category — a single "Support" heading over every item adds a label
   // with no organizing value.
   const groupByCategory = categoryGroups.size >= 2;
-  const orderedCategories = KNOWLEDGE_CATEGORIES.filter((c) => categoryGroups.has(c));
+  // « Other » last: it is the catch-all, read after the named groups.
+  const orderedCategories = [
+    ...KNOWLEDGE_CATEGORIES.filter((c) => c !== "other" && categoryGroups.has(c)),
+    ...(categoryGroups.has("other") ? (["other"] as KnowledgeCategory[]) : []),
+  ];
 
   const showEmptyState = isFiltering && articles.length === 0;
 
@@ -176,28 +166,6 @@ export function ArticleLibrary({
               ) : (
                 <CoreTopicPlaceholder topic="brand" onCreate={onCreateCoreTopic} />
               )}
-            </CollapsibleSection>
-          )}
-
-          {!isFiltering && (
-            <CollapsibleSection
-              title={t("setup.knowledge.coreSetup")}
-              meta={t("setup.knowledge.coreStarted", { n: coreFilledCount, total: CORE_TOPICS.length })}
-              defaultCollapsed={coreComplete}
-            >
-              {CORE_TOPICS.map((topic) => {
-                const article = coreArticleByTopic.get(topic);
-                return article ? (
-                  <ArticleListItem
-                    key={topic}
-                    article={article}
-                    selected={article.id === selectedId}
-                    onSelect={onSelect}
-                  />
-                ) : (
-                  <CoreTopicPlaceholder key={topic} topic={topic} onCreate={onCreateCoreTopic} />
-                );
-              })}
             </CollapsibleSection>
           )}
 

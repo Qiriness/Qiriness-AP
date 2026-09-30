@@ -18,7 +18,8 @@ const CONSTRAINT = 'support_exemplars_requirement_needs_check';
 test('29 copied the baseline of its day: it names nothing the baseline lost', () => {
   const clause = checkClause(SQL, CONSTRAINT);
   assert.ok(clause, 'the check is missing from 29');
-  const baseline = literalsIn(checkClause(EXEMPLARS, CONSTRAINT));
+  // `policy_answer` was retired by 56 (2026-10-01), after 29 was written.
+  const baseline = [...literalsIn(checkClause(EXEMPLARS, CONSTRAINT)), 'policy_answer'];
   for (const need of literalsIn(clause)) {
     assert.ok(baseline.includes(need), `${need} is in 29 but no longer in the baseline`);
   }

@@ -112,7 +112,7 @@ test('a different order invalidates every order-derived need', () => {
     );
   }
   // And leaves alone what the order has nothing to do with.
-  assert.equal(reuseState({ entry: { tool: 'searchKnowledge', need: 'policy_answer' }, orderChanged: true }), 'valid');
+  assert.equal(reuseState({ entry: { tool: 'searchKnowledge', need: 'brand_answer' }, orderChanged: true }), 'valid');
 });
 
 test('a fact that moves on its own is stale; one that does not is valid', () => {
@@ -164,10 +164,10 @@ test('`unknown` is not carried, because it is not an answer', () => {
   // finding would stop the next run looking again.
   const reuse = evidenceReuseFrom({
     toolCalls: [{ tool: 'getOrderContext' }, { tool: 'searchKnowledge' }],
-    findings: { order_state: 'unknown', policy_answer: 'answered' }
+    findings: { order_state: 'unknown', brand_answer: 'answered' }
   });
   assert.equal(reuse.order_state, undefined);
-  assert.ok(reuse.policy_answer);
+  assert.ok(reuse.brand_answer);
 });
 
 test('the relationship vocabulary is shared with the writer, not restated', () => {

@@ -39,6 +39,7 @@ import {
   createSupabaseClient,
   supabaseSelect,
   supabaseInsert,
+  supabaseUpdate,
   supabaseUpdateById,
   supabaseDelete,
   supabaseDeleteWhereIn,
@@ -427,6 +428,17 @@ export async function resyncArticle(shopId: string, articleId: string): Promise<
 
 export async function deleteArticle(shopId: string, articleId: string): Promise<void> {
   const supabase = getSupabaseClient();
+  // A TEST RUN THAT WAS TESTING THIS ARTICLE loses its verdict first. The FK
+  // detaches the run (on delete set null, so the run itself is kept), but
+  // agent_test_runs_article_verdict_needs_document_check refuses a verdict
+  // with no article — so without this, any article ever tested could not be
+  // deleted at all. Found 2026-10-01 on an empty « Untitled article ».
+  await supabaseUpdate(
+    supabase,
+    "agent_test_runs",
+    { shop_id: shopId, expect_document_id: articleId, article_verdict: { operator: "not.is", value: "null" } },
+    { article_verdict: null }
+  );
   // knowledge_chunks cascades automatically via its ON DELETE CASCADE FK.
   // The shopify_content_sources catalog row (if any) is untouched: the page
   // or policy still exists in Shopify and stays importable again later.

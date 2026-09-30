@@ -82,7 +82,7 @@ test('a phrasing quoting our own reply is skipped and named', () => {
 **Variantes réelles**
 - « Les offres ne sont pas cumulables… » _(our own reply — the customer-side phrasing needs writing)_
 
-**needs** \`policy_answer\`
+**needs** \`brand_answer\`
 `);
   assert.equal(exemplars[0].phrasings.length, 1, 'only the canonical question survives');
   assert.match(warnings.join('\n'), /our own reply/);
@@ -121,7 +121,7 @@ test('an entry with no message count parses without one', () => {
 ### D-07 · Quels sont vos délais de livraison ?
 \`delivery\` · \`question\` · _no cluster — see note_ · 🟢
 
-**needs** \`policy_answer\`
+**needs** \`brand_answer\`
 `).exemplars;
   assert.equal(e.demandMessageCount, null);
   assert.equal(e.category, 'delivery');
@@ -212,7 +212,7 @@ const LANGUAGES = `
 - « Je n'arrive pas à sélectionner mon pays »  _(authored)_
 - « nouvelle adresse pour recevoir mon coli »  _(objet du message)_
 
-**needs** \`policy_answer\`
+**needs** \`brand_answer\`
 `;
 
 test('a variant is French unless its annotation opens with a language code', () => {
@@ -250,7 +250,7 @@ test('a two-letter opener that is not a language is reported, not read as one', 
 **Variantes réelles**
 - « une phrase »  _(xx — pas un code)_
 
-**needs** \`policy_answer\`
+**needs** \`brand_answer\`
 `);
 
   assert.equal(exemplars[0].phrasings[1].language, 'fr');

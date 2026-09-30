@@ -20,6 +20,12 @@
   position: sticky;
   top: 0;
   max-height: calc(100dvh - 56px - var(--space-8));
+  /* A FLEX COLUMN, so the library card is held to this height and its list
+     scrolls inside it. As a plain block the card grew to its full content,
+     spilled past the pane, and the articles below the fold could not be
+     reached: the list's own `overflow-y: auto` never engaged. */
+  display: flex;
+  flex-direction: column;
 }
 
 .workPane {

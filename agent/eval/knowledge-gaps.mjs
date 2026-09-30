@@ -27,7 +27,7 @@ import { resolveShopId } from '../src/lib/shop.mjs';
 //
 //   npm run eval:knowledge-gaps
 
-const KNOWLEDGE_NEEDS = new Set(['product_property', 'policy_answer', 'brand_answer']);
+const KNOWLEDGE_NEEDS = new Set(['product_property', 'brand_answer']);
 
 main().catch((error) => {
   console.error(error.message);

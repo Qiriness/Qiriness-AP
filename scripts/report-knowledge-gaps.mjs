@@ -108,7 +108,7 @@ async function main() {
     console.log(`\n${subject.toUpperCase()}  —  ${list.length} of ${seen} investigations (${share}%)`);
 
     // Which need, so the shape of the missing article is obvious: a
-    // `product_property` gap wants a spec sheet, a `policy_answer` gap wants a
+    // `product_property` gap wants a spec sheet, a `brand_answer` gap wants a
     // policy page.
     const needCounts = new Map();
     for (const gap of list) {

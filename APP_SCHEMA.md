@@ -625,7 +625,7 @@ Never auto-synced — every row is an explicit import or a hand-written article.
 
 | Table | Holds |
 | --- | --- |
-| `knowledge_documents` | `content_html` is the editor's truth; `approval_status` independent of Shopify publish `status`; `core_topic` = 1 of 6 slots, max one per shop; `voice_profile` jsonb = the drafting agent's system prompt on the singleton `brand` row (`roleDescription`, `toneAndVoice`, `responseFramework[]`, `guidelinesAndGuardrails[]`, `closingLine`, `signature`) — all five stored, so the worker reads one source rather than a constant in `web/` |
+| `knowledge_documents` | `content_html` is the editor's truth; `approval_status` independent of Shopify publish `status`; `core_topic` = `brand` or null since migration 56 (the « Core setup » checklist is gone; policies live in `company_policies`); `voice_profile` jsonb = the drafting agent's system prompt on the singleton `brand` row (`roleDescription`, `toneAndVoice`, `responseFramework[]`, `guidelinesAndGuardrails[]`, `closingLine`, `signature`) — all five stored, so the worker reads one source rather than a constant in `web/` |
 | `knowledge_chunks` | retrieval chunks + `embedding vector(1536)` HNSW cosine, plus the determinism quadruple; `category` and `product_ids` denormalised from the parent document |
 
 ### Support exemplars
@@ -810,6 +810,7 @@ Written by the worker and the CLIs, read only by the Insights panels.
 | `49_forwarding_destinations.sql` | `forwarding_destinations`, `forwarding_settings` (copied from 04). No data. Applied 2026-09-29 | 04 |
 | `50_forwarding_routing.sql` | `forwarding_settings.forward_since`, `ticket_forwards.destination_label`, `ticket_routing` (copied from 04). No data. Applied 2026-09-29 | 04, 49 |
 | `51_destination_switch.sql` | `forwarding_destinations.active_since` + its needs-an-address check (copied from 04); switches on the destinations that had an address. Applied 2026-09-29 | 49 |
+| `56_policy_search_retired.sql` | Removes `policy_answer` from `support_exemplars.requirement_needs` (data: 20 situations) and from its check; narrows `knowledge_documents.core_topic` to `brand`. Copied from 03 and 05. **Not applied yet** | 03, 05, 33 |
 | `55_company_policies.sql` | `company_policies`, `company_policy_versions`, `company_policy_links` (copied from 05) + `ticket_investigations.company_policies`. No data (the library starts empty). Applied 2026-09-30 | 04, 05 |
 | `54_ticket_snoozes.sql` | `ticket_snoozes` (copied from 04). No data. Applied 2026-09-30 | 04 |
 | `53_agent_models.sql` | `agent_models` (copied from 04). No data. Applied 2026-09-30 | 01 |

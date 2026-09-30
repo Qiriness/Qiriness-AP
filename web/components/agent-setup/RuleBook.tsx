@@ -879,7 +879,7 @@ function buildWorkflow(
   // above condition depth, so a rule keyed to this situation always outranks a
   // shared one. Building the decision list from both put `order_state` and
   // `delivery_state` on D-33 — a pure shipping-policy question that branches on
-  // nothing but `policy_answer` — and dragged `order_identity` in behind them as
+  // nothing but what the policy said — and dragged `order_identity` in behind them as
   // a prerequisite. Three decisions the reader cannot act on and no rule here
   // reads. They keep their own lane below instead of disappearing.
   const scoped = situationKey ? rules.filter((rule) => rule.situationKey === situationKey) : rules;

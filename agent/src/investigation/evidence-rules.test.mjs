@@ -56,7 +56,7 @@ test('unknown needs are dropped rather than carried', () => {
 });
 
 test('a need declared twice is counted once', () => {
-  assert.deepEqual(normaliseNeeds(['policy_answer', 'policy_answer']), ['policy_answer']);
+  assert.deepEqual(normaliseNeeds(['brand_answer', 'brand_answer']), ['brand_answer']);
 });
 
 // --- the four states ---------------------------------------------------------
@@ -166,7 +166,7 @@ test('a blocked code is a settled eligibility, not a failure to establish one', 
 
 test('a weak knowledge match does not answer a policy question', () => {
   // The same bar the case file uses: below `answerable`, chunks never reach it.
-  const [item] = resolveNeeds(['policy_answer'], [entry('t1', TOOL_NAMES.SEARCH_KNOWLEDGE, 'weak')], ALL_TOOLS);
+  const [item] = resolveNeeds(['brand_answer'], [entry('t1', TOOL_NAMES.SEARCH_KNOWLEDGE, 'weak')], ALL_TOOLS);
   assert.equal(item.state, 'attempted');
 });
 
@@ -208,7 +208,7 @@ test('complete means every declared need was satisfied', () => {
     entry('t1', TOOL_NAMES.LOOKUP_PRODUCT, 'found'),
     entry('t2', TOOL_NAMES.SEARCH_KNOWLEDGE, 'answerable')
   ];
-  const summary = summariseNeeds(resolveNeeds(['product_identity', 'policy_answer'], ledger, ALL_TOOLS));
+  const summary = summariseNeeds(resolveNeeds(['product_identity', 'brand_answer'], ledger, ALL_TOOLS));
   assert.equal(summary.complete, true);
   assert.equal(summary.satisfied, 2);
   assert.equal(summary.declared, 2);
@@ -572,7 +572,7 @@ test('a library that could not answer says so, and how close it came', () => {
   assert.equal(weak.details.closest, 0.49, 'rounded, because two decimals is all it means');
 
   const [none] = resolveNeeds(
-    ['policy_answer'],
+    ['brand_answer'],
     [{ id: 't1', tool: TOOL_NAMES.SEARCH_KNOWLEDGE, outcome: 'none',
        data: { verdict: 'none', bestSimilarity: null, chunks: [] } }],
     [TOOL_NAMES.SEARCH_KNOWLEDGE]
@@ -943,7 +943,7 @@ test('closability reads the question before the state, and the finding before bo
   // Attempted, nothing found, nobody to ask. A real class, and deliberately not
   // folded into `never`: an article somebody could write is not a fact that does
   // not exist.
-  assert.equal(gapClosability({ need: 'policy_answer', state: 'attempted', finding: 'none' }), 'unclear');
+  assert.equal(gapClosability({ need: 'brand_answer', state: 'attempted', finding: 'none' }), 'unclear');
 });
 
 test('every need scores a closability, and none of them scores "satisfied"', () => {
@@ -959,7 +959,7 @@ test('every need scores a closability, and none of them scores "satisfied"', () 
 
 test('the satisfiedBy table reads backwards, and only for tools that appear in it', () => {
   assert.ok(needsSatisfiedBy(TOOL_NAMES.LOOKUP_STOCK).includes('product_availability'));
-  assert.ok(needsSatisfiedBy(TOOL_NAMES.SEARCH_KNOWLEDGE).includes('policy_answer'));
+  assert.ok(needsSatisfiedBy(TOOL_NAMES.SEARCH_KNOWLEDGE).includes('brand_answer'));
   // `other_fact` declares no source at all, so no tool can ever name it.
   for (const need of NEED_KEYS) {
     const sources = needsSatisfiedBy('noSuchTool');
@@ -1066,5 +1066,5 @@ test('a subject with no declared floor is ungoverned, not complete', () => {
   // An empty list is the absence of a rule about when to stop, and reading it as
   // "stop now" would suppress collection hardest exactly where nobody has said
   // what a good answer needs.
-  assert.equal(responseComplete('other', [{ need: 'policy_answer', state: 'satisfied', finding: 'answered' }]), false);
+  assert.equal(responseComplete('other', [{ need: 'brand_answer', state: 'satisfied', finding: 'answered' }]), false);
 });

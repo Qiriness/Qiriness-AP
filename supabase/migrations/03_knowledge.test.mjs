@@ -50,12 +50,10 @@ test('approval_status covers the four agent workflow states', () => {
   );
 });
 
-test('core_topic is the six combined slots, not the older seven', () => {
+test('core_topic is the brand voice alone: the checklist slots were retired by 56', () => {
   const clause = sql.match(/constraint knowledge_documents_core_topic_check check \(([\s\S]*?)\n  \)/i)?.[1];
   const slots = [...clause.matchAll(/'([a-z_]+)'/g)].map((m) => m[1]);
-  assert.deepEqual(slots.sort(), [
-    'brand', 'confidentiality', 'delivery_returns', 'faqs', 'locations', 'order_policies'
-  ]);
+  assert.deepEqual(slots.sort(), ['brand']);
 });
 
 test('one active article per core-topic slot per shop', () => {
