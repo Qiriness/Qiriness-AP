@@ -3,6 +3,7 @@ import { T } from '../../../scripts/lib/tables.mjs';
 import { hashIdentifier } from '../../../scripts/lib/compliance-audit.mjs';
 
 import { requesterFor } from './requester-repair.mjs';
+import { createSnoozeRecord, wakeReasonForActor } from '../../../scripts/lib/snooze-record.mjs';
 
 // How many Graph message ids go into one `in.(...)` filter. They are ~150
 // characters each and the filter travels in the URL, so this is a URL-length
@@ -77,6 +78,7 @@ export async function writeIngestedMessages(
     relatedLinked: 0,
     skippedNoTicket: 0,
     skippedCopies: 0,
+    snoozesWoken: 0,
     requestersCorrected: 0,
     openersCorrected: 0,
     directionsCorrected: 0
@@ -148,6 +150,23 @@ export async function writeIngestedMessages(
     counts.messagesIngested += 1;
     if (embedding) {
       counts.messagesEmbedded += 1;
+    }
+
+    // A NEW MESSAGE FROM ANYONE BUT US WAKES A SNOOZED TICKET, whatever its
+    // deadline: a customer is never left unread because the case was waiting.
+    // New only (a re-delivery is not arrival), and inbound only: our own reply
+    // is the fold's to judge. The pipeline then reads it like any other message.
+    // A failed wake never fails ingestion; the deadline sweep is the backstop.
+    const wakeReason = isNewMessage && message.direction === 'inbound' ? wakeReasonForActor(message.actor ?? 'customer') : null;
+    if (wakeReason && typeof store.wakeSnooze === 'function') {
+      try {
+        if (await store.wakeSnooze(shopId, ticketId, wakeReason)) {
+          counts.snoozesWoken += 1;
+          logger?.info?.('ingest.snooze_woken', { ticketId, reason: wakeReason });
+        }
+      } catch (error) {
+        logger?.warn?.('ingest.snooze_wake_failed', { ticketId, error: error.message });
+      }
     }
 
     // AFTER THE EMBEDDING, AND THAT IS THE WHOLE REASON IT IS NOT UP THERE WITH
@@ -619,6 +638,11 @@ function isEarlier(candidate, current) {
  */
 export function createSupabaseMessageStore(supabase) {
   return {
+    /** Wakes the ticket's open snooze, if it has one. The woken row, or null. */
+    async wakeSnooze(shopId, ticketId, reason) {
+      return createSnoozeRecord(supabase, { shopId }).wake(ticketId, reason);
+    },
+
     /**
      * Which of these Graph message ids this shop already stores.
      *

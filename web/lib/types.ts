@@ -563,6 +563,51 @@ export interface TicketListItem {
   waitingSince: string | null;
   firstMessageAt: string | null;
   lastMessageAt: string | null;
+  /** The open snooze: the ticket is out of the queue until it wakes. Null when not snoozed. */
+  snooze: TicketSnooze | null;
+  /** The last wake in the past 24 hours, so a ticket that just came back is marked. */
+  lastWake: TicketWake | null;
+}
+
+/* ------------------------------------------------------- snooze */
+
+/** Mirrors ticket_snoozes_waiting_for_check (scripts/lib/snooze-record.mjs WAITING_FOR). */
+export type SnoozeWaitingFor = "customer" | "colleague" | "partner" | "date";
+
+/** Mirrors ticket_snoozes_wake_reason_check (WAKE_REASONS). */
+export type SnoozeWakeReason =
+  | "customer_message"
+  | "colleague_message"
+  | "partner_message"
+  | "deadline"
+  | "manual"
+  | "case_changed"
+  | "resolved"
+  | "order_update";
+
+export interface TicketSnooze {
+  id: string;
+  /** `auto`: the agent, after our reply was sent. `manual`: a person. */
+  source: "auto" | "manual";
+  waitingFor: SnoozeWaitingFor;
+  /** A person's note, or null. Automatic snoozes carry no note to show. */
+  reason: string | null;
+  /** When it comes back at the latest. A new message wakes it sooner. */
+  wakeAt: string;
+  snoozedAt: string;
+}
+
+export interface TicketWake {
+  reason: SnoozeWakeReason;
+  at: string;
+}
+
+/** What « Snooze » offers: a time, or a party to wait for (with the shop's fallback). */
+export interface SnoozeRequest {
+  waitingFor: SnoozeWaitingFor;
+  /** ISO time. Required for `date`; for a party, overrides the shop's fallback. */
+  until?: string | null;
+  reason?: string | null;
 }
 
 /* ------------------------------------------------------- ticket detail */

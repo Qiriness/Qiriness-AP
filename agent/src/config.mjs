@@ -156,6 +156,12 @@ export function loadAgentConfig(env = loadEnv(REPO_ROOT)) {
     // in the queue for a person to close. Unset keeps the default map in
     // casework/case-status.mjs.
     caseStatusByNextActor: parseCaseStatusMap(env.AGENT_CASE_STATUS_BY_NEXT_ACTOR),
+    // SNOOZE, OFF UNLESS SET TO `true`. When on, the fold snoozes a case our
+    // SENT reply left waiting on the customer, a colleague or an operations
+    // partner, until the shop's delay for that party; and wakes a snoozed case
+    // that comes back to us (casework/snooze-rule.mjs). Waking on new mail and
+    // on the deadline runs whatever this says: a snooze a person set must end.
+    autoSnooze: env.AGENT_AUTO_SNOOZE === 'true',
     // WHERE A DRAFT GOES TO BE READ, and `none` is the default so a fresh
     // checkout cannot email anything at all. `review-mail` sends a copy to
     // DRAFT_REVIEW_MAILBOX — the reviewer's own inbox, never a customer, and

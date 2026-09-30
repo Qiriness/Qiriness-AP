@@ -172,6 +172,31 @@ test('an order we already hold a newer copy of is skipped, not overwritten', asy
   );
 });
 
+test('an order whose parcel moved wakes the tickets snoozed on it; an unchanged one does not', async () => {
+  const calls = [];
+  const wakeSnoozed = async (args) => { calls.push(args); return 1; };
+  const moved = stubWorld({
+    storedRow: { shopify_updated_at: '2026-09-12T10:00:00Z', name: '#6997', fulfillment_status: 'UNFULFILLED', tracking_numbers: [], fulfillments: [] }
+  });
+  let result;
+  try {
+    result = await processOrderWebhook({ ...baseArgs(), verifyHmac: () => true, wakeSnoozed });
+  } finally {
+    moved.restore();
+  }
+  assert.equal(result.body.status, 'ok');
+  assert.deepEqual(calls.map((c) => [c.shopId, c.orderName]), [['shop-1', '#6997']]);
+
+  // First sight of an order: nothing could have been waiting on a change to it.
+  const fresh = stubWorld();
+  try {
+    await processOrderWebhook({ ...baseArgs(), verifyHmac: () => true, wakeSnoozed });
+  } finally {
+    fresh.restore();
+  }
+  assert.equal(calls.length, 1);
+});
+
 test('an order Shopify will not return is skipped with 200, not retried forever', async () => {
   const { restore } = stubWorld({ order: null });
   try {
@@ -248,6 +273,7 @@ function stubWorld({
     returns: { nodes: [] }
   },
   storedUpdatedAt = null,
+  storedRow = null,
   failUpsert = false
 } = {}) {
   const requests = [];
@@ -274,6 +300,7 @@ function stubWorld({
     }
     if (href.includes('/orders?')) {
       if (method === 'GET') {
+        if (storedRow) return json([storedRow]);
         return json(storedUpdatedAt ? [{ shopify_updated_at: storedUpdatedAt }] : []);
       }
       if (failUpsert) {

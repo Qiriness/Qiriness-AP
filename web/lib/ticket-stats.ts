@@ -79,7 +79,8 @@ export function summariseTickets(tickets: TicketListItem[], now: Date = new Date
   };
 
   for (const ticket of tickets) {
-    if (!isClosed(ticket)) {
+    // Snoozed tickets wait in their own tab, so they are not part of the live set.
+    if (!isClosed(ticket) && !ticket.snooze) {
       stats.open += 1;
       if (ticket.priorityBand === "high") stats.highPriority += 1;
       if (ticket.level === 3) stats.levelThree += 1;

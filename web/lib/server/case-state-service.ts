@@ -134,5 +134,8 @@ export async function refoldTicket(shopId: string, ticketId: string): Promise<{ 
     // last check a colleague owed moves it off awaiting_human.
     statusMap: config.caseStatusByNextActor,
     keepOpenLevels: [...AUTO_CLOSE_EXEMPT_LEVELS],
+    // A snoozed case a person's action hands back to us wakes here, as in the
+    // worker; this re-fold would otherwise be the one that saw the change.
+    autoSnooze: config.autoSnooze,
   });
 }

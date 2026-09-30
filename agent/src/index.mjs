@@ -44,6 +44,8 @@ import { createForwardingStore } from './routing/forwarding-store.mjs';
 import { runForwarding } from './routing/forward-runner.mjs';
 import { createDestinationChooser } from './routing/destination-router.mjs';
 import { AUTO_CLOSE_EXEMPT_LEVELS, runAutoClose } from './lifecycle/auto-close.mjs';
+import { runWakeDue } from './lifecycle/snooze-wake.mjs';
+import { createSnoozeRecord } from '../../scripts/lib/snooze-record.mjs';
 import { resolveInternalDomains } from '../../scripts/lib/message-audience.mjs';
 import { createOutlookGraphAdapter } from './mail/outlook-graph-adapter.mjs';
 import { manageSubscriptions } from './mail/subscription-manager.mjs';
@@ -141,6 +143,7 @@ async function main() {
   const caseStateRecord = createCaseStateRecord(supabase, { shopId });
   const store = createSupabaseMessageStore(supabase);
   const caseCurrentStore = createCaseCurrentStore(supabase, { shopId });
+  const snoozeRecord = createSnoozeRecord(supabase, { shopId });
   const cursorStore = createSupabaseCursorStore(supabase);
   // The narrow candidate pool duplicate detection decides against: one sender's
   // recent messages, never the mailbox.
@@ -594,6 +597,7 @@ async function main() {
         actorFor: (message) => actorOf(message, senderDirectory, config.actorByLabel),
         statusMap: config.caseStatusByNextActor,
         keepOpenLevels: [...AUTO_CLOSE_EXEMPT_LEVELS],
+        autoSnooze: config.autoSnooze,
         logger
       });
       if (folded.considered > 0) {
@@ -704,10 +708,22 @@ async function main() {
     // the timestamps this poll just advanced, so a thread that received a reply
     // seconds ago is never retired by the same pass that ingested it.
     if (runsThrough('close')) {
-      const autoClosed = await runAutoClose({ record, shopId, logger });
+      const autoClosed = await runAutoClose({ record, shopId, logger, snoozes: snoozeRecord });
       if (autoClosed.closed > 0 || autoClosed.failed > 0) {
         logger.info('lifecycle.auto_close.pass', { shopId, ...autoClosed });
       }
+    }
+
+    // SNOOZES PAST THEIR DEADLINE come back to the queue, whatever `--stop-after`
+    // says: no model, one query, and a snooze a person set must end even on the
+    // sync-only worker. New mail woke its tickets at ingestion already.
+    try {
+      const woke = await runWakeDue({ snoozes: snoozeRecord, shopId, logger });
+      if (woke.due > 0) {
+        logger.info('lifecycle.snooze_wake.pass', { shopId, ...woke });
+      }
+    } catch (error) {
+      logger.warn('lifecycle.snooze_wake_failed', { shopId, error: error.message });
     }
 
     // Retention runs whatever `--stop-after` says. Deleting personal data on

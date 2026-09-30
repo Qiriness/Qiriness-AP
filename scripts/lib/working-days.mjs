@@ -28,3 +28,22 @@ export function excessWorkingDays(from, now, threshold) {
   if (elapsed === null || !Number.isFinite(limit) || limit < 0) return null;
   return Math.max(0, elapsed - limit);
 }
+
+/**
+ * `from` plus `count` working days, at the same time of day. A start on a
+ * weekend counts from the next Monday's first step, so « 2 working days » from
+ * Saturday lands on Tuesday. Null when `from` cannot be read or `count` is not
+ * a whole number of days.
+ */
+export function addWorkingDays(from, count) {
+  const start = new Date(from);
+  if (!Number.isFinite(start.getTime()) || !Number.isInteger(count) || count < 0) return null;
+  let at = start.getTime();
+  let left = count;
+  while (left > 0) {
+    at += 86_400_000;
+    const day = new Date(at).getUTCDay();
+    if (day !== 0 && day !== 6) left -= 1;
+  }
+  return new Date(at);
+}

@@ -1,0 +1,146 @@
+.root {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 20;
+  width: min(320px, calc(100vw - 32px));
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: 0 8px 24px rgba(15, 20, 27, 0.12);
+}
+
+.menuTitle {
+  margin: 0 0 var(--space-2);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.options {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.option {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: var(--space-2);
+  width: 100%;
+  padding: 6px var(--space-2);
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-default);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.option:hover:not(:disabled),
+.option:focus-visible {
+  background: var(--teal-050);
+}
+
+.option:disabled {
+  color: var(--text-subtle);
+  cursor: not-allowed;
+}
+
+.when {
+  flex-shrink: 0;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.pick {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-2);
+  padding: 6px var(--space-2);
+}
+
+.pick label,
+.reason {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.pick input,
+.reason input {
+  min-width: 0;
+  padding: 5px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text-default);
+  font: inherit;
+  font-size: 13px;
+}
+
+.reason {
+  margin-top: var(--space-3);
+}
+
+.hint {
+  margin: var(--space-2) 0 0;
+  font-size: 12px;
+  color: var(--text-subtle);
+}
+
+.error {
+  margin: var(--space-2) 0 0;
+  font-size: 12px;
+  color: var(--error);
+}
+
+.banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px var(--space-2);
+  margin: 0;
+  padding: 6px var(--space-3);
+  border-radius: var(--radius-sm);
+  background: var(--info-050);
+  color: var(--text-default);
+  font-size: 13px;
+}
+
+.bannerBy {
+  color: var(--text-muted);
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--info-050);
+  color: var(--info);
+  font-size: 11px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.chipWoke {
+  background: var(--warning-050);
+  color: var(--priority-medium-ink);
+}

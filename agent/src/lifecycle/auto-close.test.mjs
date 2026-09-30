@@ -109,7 +109,7 @@ test('runAutoClose closes the stale ones and counts the exempt', async () => {
   const totals = await runAutoClose({ record, shopId: 's1', now: NOW });
 
   assert.deepEqual(closed, ['stale-1', 'stale-2']);
-  assert.deepEqual(totals, { considered: 3, closed: 2, exempt: 1, awaitingHuman: 0, failed: 0 });
+  assert.deepEqual(totals, { considered: 3, closed: 2, exempt: 1, awaitingHuman: 0, snoozed: 0, failed: 0 });
 });
 
 test('dry run decides everything and writes nothing', async () => {

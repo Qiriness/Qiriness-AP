@@ -158,3 +158,59 @@ test('an unchanged case and a first fold stale nothing', async () => {
   await runFold({ store: same, shopId: 's', actorFor: () => 'customer' });
   assert.equal(same.staled.length, 0);
 });
+
+function snoozeStore(previous, messages, { open = null, snoozedOn = false } = {}) {
+  const store = fakeStore({ t1: { messages, caseFiles: [], readings: [], previous } });
+  store.written = [];
+  store.woken = [];
+  store.ticket = async () => ({ id: 't1', status: 'awaiting_customer', level: 2, metadata: {}, overrides: {} });
+  store.parameters = async () => new Map([['customer_reply_wait_days', '5']]);
+  store.snoozes = {
+    open: async () => open,
+    autoSnoozedOn: async () => snoozedOn,
+    snooze: async (row) => {
+      store.written.push(row);
+      return { created: true, snooze: { id: 's1', ...row } };
+    },
+    wake: async (ticketId, reason) => {
+      store.woken.push({ ticketId, reason });
+      return { id: 's1' };
+    }
+  };
+  return store;
+}
+
+// The customer wrote (b); our reply (c) has just come back through Sent Items.
+const answered = [...thread('customer'), { id: 'c', direction: 'outbound', actor: 'support', received_at: '2026-09-30T09:00:00Z' }];
+
+test('with AGENT_AUTO_SNOOZE, our sent reply snoozes the ticket until the customer delay', async () => {
+  const store = snoozeStore({ version: 1, as_of_message_id: 'b', next_actor: 'support' }, answered);
+  // A reply that answered everything folds to nobody; one that asked, to the customer.
+  store.inputs = async () => ({
+    messages: answered,
+    caseFiles: [{ trigger_message_id: 'b', verdict: 'needs_customer_input', missing: [{ field: 'order_number' }] }],
+    readings: [],
+    previous: { version: 1, as_of_message_id: 'b', next_actor: 'support' }
+  });
+  const totals = await runFold({ store, shopId: 's', actorFor: () => 'customer', autoSnooze: true, now: () => new Date('2026-09-30T10:00:00Z') });
+  assert.equal(totals.snoozed, 1);
+  assert.equal(store.written[0].waiting_for, 'customer');
+  assert.equal(store.written[0].trigger_message_id, 'c');
+  assert.equal(store.written[0].source, 'auto');
+  assert.equal(store.written[0].wake_at, '2026-10-07T09:00:00.000Z');
+});
+
+test('without the switch the fold never snoozes', async () => {
+  const store = snoozeStore({ version: 1, as_of_message_id: 'b', next_actor: 'support' }, answered);
+  const totals = await runFold({ store, shopId: 's', actorFor: () => 'customer' });
+  assert.equal(totals.snoozed, 0);
+  assert.equal(store.written.length, 0);
+});
+
+test('a snoozed case the fold hands back to us is woken', async () => {
+  // The customer writes on a snoozed ticket: the case is ours again.
+  const store = snoozeStore({ version: 1, as_of_message_id: 'x', next_actor: 'customer' }, thread('customer'), { open: { id: 's1' } });
+  const totals = await runFold({ store, shopId: 's', actorFor: () => 'customer', autoSnooze: true });
+  assert.equal(totals.woken, 1);
+  assert.deepEqual(store.woken, [{ ticketId: 't1', reason: 'case_changed' }]);
+});

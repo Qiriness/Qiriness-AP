@@ -16,6 +16,11 @@ Three sibling files carry the other halves, and this one deliberately does not d
 
 
 
+## Tickets: snooze (2026-09-30)
+
+- **Built:** `ticket_snoozes` (migration 54, applied 2026-09-30); a **Snoozed** tab; a **Snooze** menu on the ticket (later today, tomorrow, a date, or until the customer / an operations partner / a colleague replies), with Unsnooze and a banner. The fold snoozes automatically after a **sent** reply of ours that leaves the next step to someone else, behind `AGENT_AUTO_SNOOZE` (off). Wakes: new mail at ingestion, the fold when the case comes back to us, a deadline sweep each poll, a person, and an order update on a partner's snooze. New parameter `customer_reply_wait_days`, set to 3 for Qiriness. Auto-close skips snoozed tickets. `npm run snooze -- --dry-run`.
+- **Proven:** unit tests for the rule, the record, the fold wiring, ingestion, the sweep, auto-close, the order webhook and migration 54 (root 3974 pass / the 19 old analytics failures; agent 1823/0); `tsc` and lint on `web/`; the dry run against the live data. **Not yet:** on screen, or live in the worker. See VALIDATION_LOG § 21.
+
 ## Settings → Agent settings: choose each agent's model (2026-09-30)
 
 - **Built:** a « Change » link under each agent's model (spam, categoriser, situation chooser, decomposer, investigator, drafting, Home chat), listing the chat models the OpenAI key can call. The choice is stored in `agent_models` (migration 53) and overrides `AGENT_*_MODEL` / `CHAT_MODEL`; the worker reloads it every poll and rebuilds its model clients on a change, the test chat and Home chat read it per run. « Back to default » returns to the env var. Contact can see, not change. Reasoning models (gpt-5 and later, o-series) get a 4,000-token completion floor so the worker's small caps are not eaten by reasoning.

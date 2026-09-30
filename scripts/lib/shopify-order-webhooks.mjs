@@ -28,6 +28,7 @@ import { fetchOrderByLegacyId } from './shopify-admin-client.mjs';
 import { readRetentionPolicy } from './order-retention.mjs';
 import { mapOrder } from './shopify-sync-mappers.mjs';
 import { supabaseSelect, supabaseUpsert } from './supabase-rest-client.mjs';
+import { ORDER_WAKE_COLUMNS, materialOrderChange, wakeSnoozedForOrder } from './snooze-order-wake.mjs';
 
 /**
  * The topics this handles. `orders/paid` is included because payment is what
@@ -87,7 +88,10 @@ export async function processOrderWebhook({
   supabase,
   shopify,
   verifyHmac,
-  now = new Date()
+  now = new Date(),
+  // Wakes tickets snoozed on a partner about this order (snooze-order-wake.mjs).
+  // Injected so a test can see it called without a snooze table.
+  wakeSnoozed = wakeSnoozedForOrder
 }) {
   if (!verifyHmac(rawBody, headers, config.shopifyWebhookSecret)) {
     // 401 AND NOTHING WRITTEN. An unsigned request has not proved it is Shopify,
@@ -170,7 +174,7 @@ export async function processOrderWebhook({
       supabase,
       'orders',
       { shop_id: shopRow.id, shopify_order_id: order.id },
-      'shopify_updated_at'
+      `shopify_updated_at,${ORDER_WAKE_COLUMNS}`
     );
 
     if (isStale(order.updatedAt, stored[0]?.shopify_updated_at)) {
@@ -193,6 +197,13 @@ export async function processOrderWebhook({
 
     await supabaseUpsert(supabase, 'orders', [row], 'shop_id,shopify_order_id');
 
+    // A parcel scanned, delivered or refunded may be what a snoozed ticket was
+    // waiting for. After the upsert, so the woken ticket reads the new order.
+    let snoozesWoken = 0;
+    if (materialOrderChange(stored[0] ?? null, row)) {
+      snoozesWoken = await wakeSnoozed({ supabase, shopId: shopRow.id, orderName: row.name });
+    }
+
     // The same trail the paged sync writes: what was read and why, never who.
     await recordDataAccessEvent(supabase, {
       shop_id: shopRow.id,
@@ -206,7 +217,7 @@ export async function processOrderWebhook({
 
     await finishIntegrationEvent(supabase, event.row.id, {
       status: 'completed',
-      counts: { orders: 1 }
+      counts: snoozesWoken > 0 ? { orders: 1, snoozes_woken: snoozesWoken } : { orders: 1 }
     });
 
     return { statusCode: 200, body: { status: 'ok', order: row.name, order_id: legacyId } };

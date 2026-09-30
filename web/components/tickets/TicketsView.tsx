@@ -40,6 +40,8 @@ import {
 import { actOnObligation, decideOnDraft, fetchTicketDetail, fetchTicketThread, saveTicketOverrides, sendManualReply, setTicketStatus } from "@/lib/api/tickets";
 import { replyHtmlIsEmpty, textToReplyHtml } from "@/lib/reply-html";
 import { ReplyEditor, ReplyHtmlView } from "./ReplyEditor";
+import { SnoozeBanner, SnoozeChip, SnoozeControl, type SnoozeChange } from "./SnoozeControl";
+import { NO_DELAYS, isSnoozed, type SnoozeDelays } from "@/lib/snooze";
 import { formatRelativeTime } from "@/lib/relative-time";
 import { isBacklogTicket, isClosed, summariseTickets } from "@/lib/ticket-stats";
 import type {
@@ -88,13 +90,15 @@ interface TicketsViewProps {
   loadError: string | null;
   /** Rendered on the server at the header's right: the freshness pills. */
   headerAside?: ReactNode;
+  /** The shop's delay per party, for « Snooze until the customer replies ». */
+  snoozeDelays?: SnoozeDelays;
   /** The page's query string: which tab, filters and ticket to open on. */
   initialParams?: Record<string, string | string[] | undefined>;
 }
 
 type LevelFilter = "all" | "4" | "3" | "2" | "1" | "uncategorised";
 type SortOrder = "priority" | "recent" | "oldest" | "severity";
-type TicketView = "queue" | "backlog" | "irrelevant" | "closed";
+type TicketView = "queue" | "backlog" | "snoozed" | "irrelevant" | "closed";
 
 // Labels come from the dictionary: `tickets.view.sort.<key>`, `tickets.view.tab.<key>`
 // and `tickets.view.verdict.<key>`.
@@ -146,7 +150,7 @@ function matchesDroppedMail(mail: DroppedMail, query: string): boolean {
 const LEVEL_FILTERS: readonly LevelFilter[] = ["all", "4", "3", "2", "1", "uncategorised"];
 const SENDER_FILTERS = ["all", "consumer", "business"] as const;
 type SenderFilter = (typeof SENDER_FILTERS)[number];
-const TICKET_VIEWS: TicketView[] = ["queue", "backlog", "irrelevant", "closed"];
+const TICKET_VIEWS: TicketView[] = ["queue", "backlog", "snoozed", "irrelevant", "closed"];
 const SORT_ORDERS: SortOrder[] = ["priority", "recent", "oldest", "severity"];
 const CATEGORY_FILTERS: readonly (KnowledgeCategory | "all")[] = ["all", ...TICKET_CATEGORIES];
 const STATE_PARAMS = ["view", "q", "level", "category", "sender", "sort", "ticket", "mail"];
@@ -166,7 +170,7 @@ const LAST_TICKETS_SEARCH_KEY = "tickets.lastSearch";
  * here is visible to the worker or to anybody else.
  */
 const CLEARED_MAIL_KEY = "tickets.clearedMail";
-const EMPTY_QUERIES: Record<TicketView, string> = { queue: "", backlog: "", irrelevant: "", closed: "" };
+const EMPTY_QUERIES: Record<TicketView, string> = { queue: "", backlog: "", snoozed: "", irrelevant: "", closed: "" };
 
 interface TicketsPageState {
   view: TicketView;
@@ -244,6 +248,7 @@ function passesFilters(
 
 function viewOfTicket(ticket: TicketListItem): TicketView {
   if (isClosed(ticket)) return "closed";
+  if (isSnoozed(ticket)) return "snoozed";
   return isBacklogTicket(ticket) ? "backlog" : "queue";
 }
 
@@ -265,8 +270,8 @@ function reconcilePageState(
     if (ticket) {
       next.view = viewOfTicket(ticket);
       next.mailId = null;
-      // Level, category and sender filter Queue and Backlog only; Closed is unfiltered.
-      if (next.view !== "closed" && !passesFilters(ticket, next.level, next.category, next.sender)) {
+      // Level, category and sender filter Queue and Backlog only; Snoozed and Closed are unfiltered.
+      if (next.view !== "closed" && next.view !== "snoozed" && !passesFilters(ticket, next.level, next.category, next.sender)) {
         next.level = "all";
         next.category = "all";
         next.sender = "all";
@@ -317,7 +322,14 @@ function statusClass(ticket: TicketListItem): string {
   return styles.statusNeutral;
 }
 
-export function TicketsView({ initialTickets, droppedMail, loadError, initialParams, headerAside }: TicketsViewProps) {
+export function TicketsView({
+  initialTickets,
+  droppedMail,
+  loadError,
+  initialParams,
+  headerAside,
+  snoozeDelays = NO_DELAYS,
+}: TicketsViewProps) {
   const t = useT();
   const locale = useLocale();
   const [initialState] = useState(() =>
@@ -356,7 +368,8 @@ export function TicketsView({ initialTickets, droppedMail, loadError, initialPar
   const [pickedMailIds, setPickedMailIds] = useState<string[]>([]);
 
   const stats = useMemo(() => summariseTickets(tickets), [tickets]);
-  const openTickets = useMemo(() => tickets.filter((ticket) => !isClosed(ticket)), [tickets]);
+  // Queue and Backlog: live and not snoozed. A snoozed ticket waits in its own tab.
+  const openTickets = useMemo(() => tickets.filter((ticket) => !isClosed(ticket) && !isSnoozed(ticket)), [tickets]);
 
   const levelCounts = useMemo(() => {
     const counts = { all: openTickets.length, "4": 0, "3": 0, "2": 0, "1": 0, uncategorised: 0 };
@@ -394,6 +407,14 @@ export function TicketsView({ initialTickets, droppedMail, loadError, initialPar
     [filteredOpenTickets]
   );
   const closedBase = useMemo(() => tickets.filter(isClosed), [tickets]);
+  // Soonest back first: the top of the tab is what returns next.
+  const snoozedBase = useMemo(
+    () =>
+      tickets
+        .filter((ticket) => !isClosed(ticket) && isSnoozed(ticket))
+        .sort((a, b) => Date.parse(a.snooze?.wakeAt ?? "") - Date.parse(b.snooze?.wakeAt ?? "")),
+    [tickets]
+  );
   const clearedMail = useMemo(() => new Set(clearedMailIds), [clearedMailIds]);
   const pickedMail = useMemo(() => new Set(pickedMailIds), [pickedMailIds]);
   // Cleared mail is gone from the tab count as well as from the list: a count
@@ -420,13 +441,25 @@ export function TicketsView({ initialTickets, droppedMail, loadError, initialPar
     () => closedBase.filter((ticket) => matchesTicket(ticket, queryByView.closed)),
     [closedBase, queryByView.closed]
   );
+  const snoozed = useMemo(
+    () => snoozedBase.filter((ticket) => matchesTicket(ticket, queryByView.snoozed)),
+    [snoozedBase, queryByView.snoozed]
+  );
   const visibleDropped = useMemo(
     () => droppedBase.filter((mail) => matchesDroppedMail(mail, queryByView.irrelevant)),
     [droppedBase, queryByView.irrelevant]
   );
 
   const activeTickets =
-    activeView === "queue" ? queue : activeView === "backlog" ? backlog : activeView === "closed" ? closed : [];
+    activeView === "queue"
+      ? queue
+      : activeView === "backlog"
+        ? backlog
+        : activeView === "snoozed"
+          ? snoozed
+          : activeView === "closed"
+            ? closed
+            : [];
   const selectedTicket = activeTickets.find((ticket) => ticket.id === selectedTicketId) ?? null;
   const selectedDropped = activeView === "irrelevant"
     ? visibleDropped.find((mail) => mail.id === selectedDroppedId) ?? null
@@ -672,6 +705,26 @@ export function TicketsView({ initialTickets, droppedMail, loadError, initialPar
    * a send is confirmed, and the worker may still refuse. A rejection keeps the
    * ticket on screen: somebody still has to answer it.
    */
+  /**
+   * A person snoozed or woke the open ticket. Snoozing moves it to the Snoozed
+   * tab, so the next ticket in this list opens, as after an approval; waking it
+   * from the Snoozed tab sends it back to the queue.
+   */
+  function snoozeChanged(ticketId: string, change: SnoozeChange) {
+    const ticket = tickets.find((row) => row.id === ticketId);
+    setTickets((current) => current.map((row) => (row.id === ticketId ? { ...row, ...change } : row)));
+    if (!ticket) return;
+    const leaves = change.snooze ? activeView !== "snoozed" : activeView === "snoozed";
+    if (leaves) {
+      const index = activeTickets.findIndex((row) => row.id === ticketId);
+      const next = activeTickets[index + 1] ?? (index > 0 ? activeTickets[index - 1] : null) ?? null;
+      setSelectedTicketId(next?.id ?? null);
+    }
+    setActionError(null);
+    const subject = ticketTitle(ticket, t);
+    setActionNotice(change.snooze ? t("tickets.view.notice.snoozed", { subject }) : t("tickets.view.notice.woken", { subject }));
+  }
+
   /** A person queued a reply of their own: it joins the thread's list, newest first. */
   function manualReplySent(reply: TicketManualReply) {
     setThread((current) =>
@@ -706,6 +759,7 @@ export function TicketsView({ initialTickets, droppedMail, loadError, initialPar
   const tabCounts: Record<TicketView, number> = {
     queue: queueBase.length,
     backlog: backlogBase.length,
+    snoozed: snoozedBase.length,
     irrelevant: droppedBase.length,
     closed: closedBase.length,
   };
@@ -805,6 +859,8 @@ export function TicketsView({ initialTickets, droppedMail, loadError, initialPar
           onDraftChange={draftChanged}
           onManualReply={manualReplySent}
           onChangeStatus={changeStatus}
+          snoozeDelays={snoozeDelays}
+          onSnoozeChanged={snoozeChanged}
           pendingId={pendingId}
           contextOpen={contextOpen}
           onOpenContext={() => setContextOpen(true)}
@@ -978,6 +1034,8 @@ interface TicketWorkspaceProps {
   onDraftChange: DraftChangeHandler;
   onManualReply: ManualReplyHandler;
   onChangeStatus: (ticket: TicketListItem, status: "open" | "closed") => void;
+  snoozeDelays: SnoozeDelays;
+  onSnoozeChanged: (ticketId: string, change: SnoozeChange) => void;
   pendingId: string | null;
   contextOpen: boolean;
   onOpenContext: () => void;
@@ -999,6 +1057,8 @@ function TicketWorkspace({
   onDraftChange,
   onManualReply,
   onChangeStatus,
+  snoozeDelays,
+  onSnoozeChanged,
   pendingId,
   contextOpen,
   onOpenContext,
@@ -1022,6 +1082,8 @@ function TicketWorkspace({
             onDraftChange={onDraftChange}
             onManualReply={onManualReply}
             onChangeStatus={onChangeStatus}
+            snoozeDelays={snoozeDelays}
+            onSnoozeChanged={onSnoozeChanged}
             pendingId={pendingId}
             onOpenContext={onOpenContext}
             onBack={() => onSelect("")}
@@ -1074,7 +1136,13 @@ function TicketListPane({
           <h2>{t(`tickets.view.tab.${view}`)}</h2>
           <p>{t("tickets.panels.list.count", { count: tickets.length })}</p>
         </div>
-        <span>{view === "closed" ? t("tickets.panels.list.recentlyClosed") : t("tickets.panels.list.priorityFirst")}</span>
+        <span>
+          {view === "closed"
+            ? t("tickets.panels.list.recentlyClosed")
+            : view === "snoozed"
+              ? t("tickets.panels.list.soonestBack")
+              : t("tickets.panels.list.priorityFirst")}
+        </span>
       </div>
 
       {tickets.length === 0 ? (
@@ -1116,6 +1184,7 @@ function TicketListPane({
                 </span>
                 <span className={styles.itemMeta}>
                   <span>{ticket.category ? t(`category.${ticket.category}`) : t("tickets.panels.uncategorised")}</span>
+                  <SnoozeChip ticket={ticket} />
                   <TicketLevelBadge ticket={ticket} />
                 </span>
               </button>
@@ -1136,6 +1205,8 @@ function TicketDetailWorkspace({
   onDraftChange,
   onManualReply,
   onChangeStatus,
+  snoozeDelays,
+  onSnoozeChanged,
   pendingId,
   onOpenContext,
   onBack,
@@ -1148,6 +1219,8 @@ function TicketDetailWorkspace({
   onDraftChange: DraftChangeHandler;
   onManualReply: ManualReplyHandler;
   onChangeStatus: (ticket: TicketListItem, status: "open" | "closed") => void;
+  snoozeDelays: SnoozeDelays;
+  onSnoozeChanged: (ticketId: string, change: SnoozeChange) => void;
   pendingId: string | null;
   onOpenContext: () => void;
   onBack: () => void;
@@ -1261,6 +1334,14 @@ function TicketDetailWorkspace({
           <Button size="sm" variant="secondary" className={styles.contextButton} onClick={onOpenContext}>
             {t("tickets.panels.context")}
           </Button>
+          {!closed && (
+            <SnoozeControl
+              ticket={ticket}
+              delays={snoozeDelays}
+              disabled={pendingId !== null && pendingId !== ticket.id}
+              onChanged={onSnoozeChanged}
+            />
+          )}
           <Button
             size="sm"
             variant={closed ? "secondary" : "danger"}
@@ -1272,6 +1353,8 @@ function TicketDetailWorkspace({
           </Button>
         </div>
       </div>
+
+      {ticket.snooze && <SnoozeBanner snooze={ticket.snooze} />}
 
       {detail?.results?.action && (
         <p className={styles.nextAction} title={detail.results.action}>

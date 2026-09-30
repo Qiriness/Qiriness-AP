@@ -3,9 +3,11 @@ import { T } from '../../../scripts/lib/tables.mjs';
 import { days, toParameterMap } from '../../../scripts/lib/parameters.mjs';
 import { createTicketRecord } from '../../../scripts/lib/ticket-record.mjs';
 import { createDraftRecord } from '../../../scripts/lib/draft-record.mjs';
+import { createSnoozeRecord, snoozeRow } from '../../../scripts/lib/snooze-record.mjs';
 
 import { foldCase, nextVersion } from './case-fold.mjs';
 import { caseStatusRecord, statusFromCase } from './case-status.mjs';
+import { snoozeDecision } from './snooze-rule.mjs';
 import { overridesOf } from '../../../scripts/lib/ticket-overrides.mjs';
 
 // Keeps `case_current` folded: one row per ticket, rewritten when the ticket
@@ -13,7 +15,9 @@ import { overridesOf } from '../../../scripts/lib/ticket-overrides.mjs';
 //
 // NO MODEL. It reads messages, readings and case files and writes `case_current`.
 // Since stage 5c it also moves the ticket's status to what `next_actor` asks for
-// (case-status.mjs), unless AGENT_CASE_STATUS_BY_NEXT_ACTOR is `off`.
+// (case-status.mjs), unless AGENT_CASE_STATUS_BY_NEXT_ACTOR is `off`. With
+// AGENT_AUTO_SNOOZE on, it snoozes a case our sent reply left waiting on someone
+// else, and wakes one that came back to us (snooze-rule.mjs).
 
 /** Tickets whose fold is missing or older than their latest message, case file or reading. */
 export function staleTickets({ tickets = [], current = [], readings = [], actions = [] }) {
@@ -48,6 +52,9 @@ const TICKET_FOR_STATUS = 'id,status,resolved_at,level,deleted_at,archived_at,ne
 export function createCaseCurrentStore(supabase, { shopId }) {
   const record = createTicketRecord(supabase, { shopId });
   const drafts = createDraftRecord(supabase, { shopId });
+  const snoozes = createSnoozeRecord(supabase, { shopId });
+  const parameterMap = async () =>
+    toParameterMap(await supabaseSelect(supabase, T.SUPPORT_PARAMETERS, { shop_id: shopId }, 'parameter_key,value'));
   return {
     async staleTicketIds(limit, { all = false } = {}) {
       const [tickets, current, readings, actions] = await Promise.all([
@@ -77,7 +84,7 @@ export function createCaseCurrentStore(supabase, { shopId }) {
           { ticket_id: ticketId },
           'trigger_message_id,pending_customer_inputs,resolved_inputs,commitments,contradictions,effect,asked,obligations_opened,obligations_cleared'
         ),
-        supabaseSelect(supabase, T.CASE_CURRENT, { ticket_id: ticketId }, 'version,material_hash,as_of_message_id'),
+        supabaseSelect(supabase, T.CASE_CURRENT, { ticket_id: ticketId }, 'version,material_hash,as_of_message_id,next_actor'),
         supabaseSelect(supabase, T.TICKET_CASE_ACTIONS, { ticket_id: ticketId }, 'obligation_id,action,acted_by,acted_at'),
         supabaseSelect(supabase, T.TICKETS, { id: ticketId, shop_id: shopId }, 'overrides')
       ]);
@@ -86,8 +93,17 @@ export function createCaseCurrentStore(supabase, { shopId }) {
 
     /** The holding interval, in working days, or null when the shop has not set it. */
     async holdingDays() {
-      const rows = await supabaseSelect(supabase, T.SUPPORT_PARAMETERS, { shop_id: shopId }, 'parameter_key,value');
-      return days(toParameterMap(rows), 'holding_reply_interval_days');
+      return days(await parameterMap(), 'holding_reply_interval_days');
+    },
+
+    /** The shop's parameters: the snooze deadlines are read from them. */
+    parameters: parameterMap,
+
+    snoozes: {
+      open: (ticketId) => snoozes.open(ticketId),
+      autoSnoozedOn: (ticketId, messageId) => snoozes.autoSnoozedOn(ticketId, messageId),
+      snooze: (row) => snoozes.snooze(row),
+      wake: (ticketId, reason, options) => snoozes.wake(ticketId, reason, options)
     },
 
     async save(row) {
@@ -121,6 +137,7 @@ export function createCaseCurrentStore(supabase, { shopId }) {
  * @param actorFor message → actor, for rows stored before the actor column
  * @param statusMap next_actor → statuses (`parseCaseStatusMap`); null leaves statuses alone
  * @param keepOpenLevels levels the fold never resolves
+ * @param autoSnooze snooze a case our sent reply left waiting, wake one that came back (AGENT_AUTO_SNOOZE)
  */
 export async function runFold({
   store,
@@ -131,13 +148,16 @@ export async function runFold({
   ticketIds = null,
   statusMap = null,
   keepOpenLevels = [],
+  autoSnooze = false,
   logger,
   now = () => new Date()
 }) {
-  const totals = { considered: 0, folded: 0, versionsRaised: 0, statusesMoved: 0, draftsStaled: 0, failed: 0 };
+  const totals = { considered: 0, folded: 0, versionsRaised: 0, statusesMoved: 0, draftsStaled: 0, snoozed: 0, woken: 0, failed: 0 };
   // `ticketIds`: fold exactly these, now (the dashboard, after a person acts).
   const ids = ticketIds ?? (await store.staleTicketIds(limit, { all }));
   const holdingDays = ids.length > 0 && store.holdingDays ? await store.holdingDays() : null;
+  const snoozing = autoSnooze && ids.length > 0 && store.snoozes && store.ticket;
+  const parameters = snoozing && store.parameters ? await store.parameters() : new Map();
   for (const ticketId of ids) {
     totals.considered += 1;
     try {
@@ -170,15 +190,57 @@ export async function runFold({
         }
       }
 
-      if (statusMap && store.ticket) {
-        const ticket = await store.ticket(ticketId);
-        const lastCustomerAt = lastCustomerMessageAt(messages, actorOfMessage);
+      let ticket = (statusMap || snoozing) && store.ticket ? await store.ticket(ticketId) : null;
+      const lastCustomerAt = lastCustomerMessageAt(messages, actorOfMessage);
+      if (statusMap && ticket) {
         const { status } = statusFromCase(ticket, { ...state, version }, { map: statusMap, keepOpenLevels, lastCustomerAt });
         if (status) {
           const moved = await store.setStatus(ticket, status, caseStatusRecord({ status, state: { ...state, version }, from: ticket.status, at }), at);
           if (moved) {
             totals.statusesMoved += 1;
             logger?.info?.('fold.status_moved', { ticketId, from: ticket.status, to: status, nextActor: state.next_actor });
+            ticket = { ...ticket, status };
+          }
+        }
+      }
+
+      // SNOOZE, after the status: the rule reads the status the case now has.
+      if (snoozing && ticket) {
+        const openSnooze = await store.snoozes.open(ticketId);
+        const alreadySnoozedOn = openSnooze ? false : await store.snoozes.autoSnoozedOn(ticketId, state.as_of_message_id);
+        const decision = snoozeDecision({
+          ticket,
+          state: { ...state, version },
+          previous,
+          openSnooze,
+          alreadySnoozedOn,
+          parameters,
+          lastCustomerAt,
+          keepOpenLevels,
+          now: new Date(at)
+        });
+        if (decision.action === 'snooze') {
+          const { row, error } = snoozeRow({
+            ticketId,
+            source: 'auto',
+            waitingFor: decision.waitingFor,
+            wakeAt: decision.wakeAt,
+            reason: 'after_our_reply',
+            triggerMessageId: decision.triggerMessageId,
+            caseVersion: version,
+            snoozedBy: 'agent',
+            now: new Date(at)
+          });
+          if (row && (await store.snoozes.snooze(row)).created) {
+            totals.snoozed += 1;
+            logger?.info?.('fold.snoozed', { ticketId, waitingFor: decision.waitingFor, wakeAt: row.wake_at });
+          } else if (error) {
+            logger?.warn?.('fold.snooze_refused', { ticketId, error });
+          }
+        } else if (decision.action === 'wake') {
+          if (await store.snoozes.wake(ticketId, decision.reason, { wokenBy: 'agent', at: new Date(at) })) {
+            totals.woken += 1;
+            logger?.info?.('fold.woken', { ticketId, reason: decision.reason, nextActor: state.next_actor });
           }
         }
       }

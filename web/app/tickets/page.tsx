@@ -10,6 +10,8 @@ import { logDashboardAccess } from "@/lib/server/access-log";
 import { readFreshnessItems } from "@/lib/server/insights/context";
 import { FreshnessStrip } from "@/components/ui/FreshnessStrip";
 import type { FreshnessItem } from "@/lib/types";
+import { readSnoozeDelays } from "@/lib/server/snooze-service";
+import { NO_DELAYS, type SnoozeDelays } from "@/lib/snooze";
 
 export const dynamic = "force-dynamic";
 
@@ -40,6 +42,7 @@ export default async function TicketsPage({
   let droppedMail: DroppedMail[] = [];
   let loadError: string | null = null;
   let freshness: FreshnessItem[] = [];
+  let snoozeDelays: SnoozeDelays = NO_DELAYS;
 
   try {
     const shopId = await getShopId();
@@ -53,9 +56,9 @@ export default async function TicketsPage({
     // answers that now. See DECISIONS.md § Tickets dashboard.
     // How current the mail and the syncs are, the same pills Insights shows:
     // a queue is only as current as the last mail read. Read beside the list.
-    [tickets, droppedMail, freshness] = await timed(
+    [tickets, droppedMail, freshness, snoozeDelays] = await timed(
       "tickets list",
-      Promise.all([listTickets(shopId), listDroppedMail(shopId), readFreshnessItems(shopId)])
+      Promise.all([listTickets(shopId), listDroppedMail(shopId), readFreshnessItems(shopId), readSnoozeDelays(shopId)])
     );
     await logDashboardAccess({
       shopId,
@@ -77,6 +80,7 @@ export default async function TicketsPage({
         loadError={loadError}
         initialParams={searchParams}
         headerAside={<FreshnessStrip items={freshness} />}
+        snoozeDelays={snoozeDelays}
       />
     </AppShell>
   );

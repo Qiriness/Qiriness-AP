@@ -59,6 +59,8 @@ import { createOrderContextStore } from "../../../agent/src/resolution/order-con
 import { isAnonymousMarketplaceBuyer } from "../../../agent/src/resolution/order-verification.mjs";
 import { KnowledgeNotFoundError, KnowledgeValidationError } from "./knowledge-errors";
 import { loadTicketPriority } from "./ticket-priority-service";
+import { NO_SNOOZE, readSnoozeFacts } from "./snooze-service";
+import type { SnoozeFacts } from "./snooze-service";
 import { getCaseState, refoldTicket } from "./case-state-service";
 import { isInvestigable } from "../../../agent/src/investigation/investigation-rules.mjs";
 import { listSituations } from "./policy-service";
@@ -145,9 +147,15 @@ function getRecord(shopId: string) {
  * What mitigates it is `countOpenThreads`, which puts those three on the
  * sidebar so the page announces itself instead of waiting to be found.
  */
-function partitionBySender(rows: any[], directory: any, vipTickets: Set<string>, priority: PriorityRead) {
+function partitionBySender(
+  rows: any[],
+  directory: any,
+  vipTickets: Set<string>,
+  priority: PriorityRead,
+  snoozes: Map<string, SnoozeFacts> = new Map()
+) {
   const mapped = rows
-    .map((row) => mapTicketRow(row, directory, vipTickets, priority.byTicket.get(row.id), priority.at))
+    .map((row) => mapTicketRow(row, directory, vipTickets, priority.byTicket.get(row.id), priority.at, snoozes.get(row.id)))
     .sort(byPriorityThenLastActivityDesc);
   return {
     tickets: mapped.filter((ticket) => !ticket.isOwnSide),
@@ -157,12 +165,13 @@ function partitionBySender(rows: any[], directory: any, vipTickets: Set<string>,
 
 export async function listTickets(shopId: string): Promise<TicketListItem[]> {
   const rows = await readQueue(shopId) as any[];
-  const [directory, vipTickets, priority] = await Promise.all([
+  const [directory, vipTickets, priority, snoozes] = await Promise.all([
     readSenderDirectory(shopId),
     loadVipTickets(shopId),
-    readPriority(shopId)
+    readPriority(shopId),
+    readSnoozeFacts(shopId)
   ]);
-  return partitionBySender(rows, directory, vipTickets, priority).tickets;
+  return partitionBySender(rows, directory, vipTickets, priority, snoozes).tickets;
 }
 
 /** The other half: threads one of our own addresses opened. */
@@ -218,8 +227,10 @@ export async function countOpenThreads(
   // Counts need only the sender partition and status. Avoid loading order and
   // investigation facts on every page merely to sort rows nobody will render.
   const noPriorityRead: PriorityRead = { at: new Date(), byTicket: new Map() };
-  const { tickets, conversations } = partitionBySender(rows, directory, new Set(), noPriorityRead);
-  const open = (ticket: TicketListItem) => ticket.status !== "closed" && ticket.status !== "resolved";
+  const snoozes = await readSnoozeFacts(shopId);
+  const { tickets, conversations } = partitionBySender(rows, directory, new Set(), noPriorityRead, snoozes);
+  // A snoozed ticket needs nobody until it wakes, so it does not light the badge.
+  const open = (ticket: TicketListItem) => ticket.status !== "closed" && ticket.status !== "resolved" && !ticket.snooze;
   return {
     openTickets: tickets.filter(open).length,
     openConversations: conversations.filter(open).length
@@ -929,13 +940,14 @@ export async function changeTicketOrder(
   });
   if (!row) throw changedMeanwhile;
 
-  const [vipTickets, detail, priority] = await Promise.all([
+  const [vipTickets, detail, priority, snoozes] = await Promise.all([
     loadVipTickets(shopId, [ticketId]),
     getTicketDetail(shopId, ticketId),
     loadTicketPriority(shopId, [row]),
+    readSnoozeFacts(shopId),
   ]);
   return {
-    ticket: mapTicketRow(row, undefined, vipTickets, priority.byTicket.get(ticketId), priority.at),
+    ticket: mapTicketRow(row, undefined, vipTickets, priority.byTicket.get(ticketId), priority.at, snoozes.get(ticketId)),
     detail,
     reinvestigation: "needs_investigation" in columns ? "queued" : "not_queued",
   };
@@ -1195,8 +1207,8 @@ export async function setTicketStatus(
     throw new KnowledgeNotFoundError(`Ticket not found: ${ticketId}`);
   }
 
-  const priority = await loadTicketPriority(shopId, [row]);
-  return mapTicketRow(row, undefined, vipTickets, priority.byTicket.get(ticketId), priority.at);
+  const [priority, snoozes] = await Promise.all([loadTicketPriority(shopId, [row]), readSnoozeFacts(shopId)]);
+  return mapTicketRow(row, undefined, vipTickets, priority.byTicket.get(ticketId), priority.at, snoozes.get(ticketId));
 }
 
 /**
@@ -1223,8 +1235,8 @@ export async function getTicketListItem(
     throw new KnowledgeNotFoundError(`Ticket not found: ${ticketId}`);
   }
 
-  const priority = await loadTicketPriority(shopId, [row]);
-  return mapTicketRow(row, directory, vipTickets, priority.byTicket.get(ticketId), priority.at);
+  const [priority, snoozes] = await Promise.all([loadTicketPriority(shopId, [row]), readSnoozeFacts(shopId)]);
+  return mapTicketRow(row, directory, vipTickets, priority.byTicket.get(ticketId), priority.at, snoozes.get(ticketId));
 }
 
 /** Highest priority first, newest activity breaking ties. */
@@ -1267,7 +1279,8 @@ function mapTicketRow(
   directory: any = emptySenderDirectory,
   vipTickets: Set<string> = new Set(),
   priorityFacts?: PriorityFacts,
-  priorityAt: Date = new Date()
+  priorityAt: Date = new Date(),
+  snoozeFacts: SnoozeFacts = NO_SNOOZE
 ): TicketListItem {
   const customer = mapCustomer(row, vipTickets);
   // THE ADDRESS STOPS HERE. `requester_email` is read from the view so this
@@ -1330,6 +1343,8 @@ function mapTicketRow(
     waitingSince: row.waiting_since ?? null,
     firstMessageAt: row.first_message_at,
     lastMessageAt: row.last_message_at,
+    snooze: snoozeFacts.snooze,
+    lastWake: snoozeFacts.lastWake,
   };
 }
 

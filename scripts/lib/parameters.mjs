@@ -131,7 +131,7 @@ export const PARAMETERS = {
     description:
       'Working days after the check was opened. Overdue is an alert on the ticket only: ' +
       'it never escalates, reassigns or clears anything. Qiriness: 2 (2026-09-26).',
-    usedBy: 'the ticket page (open checks)'
+    usedBy: 'the ticket page (open checks) and snooze (a case waiting on a colleague wakes then)'
   },
   partner_check_overdue_days: {
     kind: 'days',
@@ -139,7 +139,16 @@ export const PARAMETERS = {
     description:
       'Working days after the check was opened (a 3PL or a carrier). An alert only, like ' +
       'the colleague delay. Qiriness: 3 (2026-09-26).',
-    usedBy: 'the ticket page (open checks)'
+    usedBy: 'the ticket page (open checks) and snooze (a case waiting on a partner wakes then)'
+  },
+  customer_reply_wait_days: {
+    kind: 'days',
+    label: 'How long do we wait for a customer before looking at the case again?',
+    description:
+      'Working days after our reply was sent. A case waiting on the customer is snoozed ' +
+      'out of the queue and comes back then if they have not written. Unset: such cases ' +
+      'are never snoozed automatically. Qiriness: 3 (2026-09-30).',
+    usedBy: 'snooze (the deadline of a case waiting on the customer)'
   },
   returns_address: {
     kind: 'text',

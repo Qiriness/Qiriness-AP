@@ -934,3 +934,45 @@ test('each stored message carries its actor, and a re-filed staff reply moves to
   assert.equal(store.messages.get('shop-1|q1').actor, 'customer');
   assert.deepEqual([store.messages.get('shop-1|r1').direction, store.messages.get('shop-1|r1').actor], ['outbound', 'support']);
 });
+
+// ------------------------------------------------------------------- snooze
+
+function snoozedStore(...knownIds) {
+  const store = storeKnowing(...knownIds);
+  store.woken = [];
+  store.wakeSnooze = async (shopId, ticketId, reason) => {
+    store.woken.push({ shopId, ticketId, reason });
+    return { id: 's1' };
+  };
+  return store;
+}
+
+test('a new message from the customer wakes a snoozed ticket; a re-delivered one does not', async () => {
+  const store = snoozedStore('m1');
+  const counts = await writeIngestedMessages(store, store, 'shop-1', [
+    mappedMessage({ id: 'm1', conversationId: 'c1', at: '2026-09-01T09:00:00.000Z' }),
+    mappedMessage({ id: 'm2', conversationId: 'c1', at: '2026-09-30T09:00:00.000Z' })
+  ], { actorFor: () => 'customer' });
+  assert.equal(store.woken.length, 1);
+  assert.equal(store.woken[0].reason, 'customer_message');
+  assert.equal(counts.snoozesWoken, 1);
+});
+
+test('a partner writing wakes it as a partner message; our own reply wakes nothing', async () => {
+  const store = snoozedStore();
+  await writeIngestedMessages(store, store, 'shop-1', [
+    mappedMessage({ id: 'm1', conversationId: 'c1', at: '2026-09-29T09:00:00.000Z' }),
+    mappedMessage({ id: 'm2', conversationId: 'c1', at: '2026-09-30T09:00:00.000Z', direction: 'outbound' })
+  ], { actorFor: (message) => (message.direction === 'outbound' ? 'support' : 'partner') });
+  assert.deepEqual(store.woken.map((w) => w.reason), ['partner_message']);
+});
+
+test('a failed wake never fails ingestion', async () => {
+  const store = snoozedStore();
+  store.wakeSnooze = async () => { throw new Error('supabase down'); };
+  const counts = await writeIngestedMessages(store, store, 'shop-1', [
+    mappedMessage({ id: 'm1', conversationId: 'c1', at: '2026-09-30T09:00:00.000Z' })
+  ]);
+  assert.equal(counts.messagesIngested, 1);
+  assert.equal(counts.snoozesWoken, 0);
+});

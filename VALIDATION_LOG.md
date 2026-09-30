@@ -1980,3 +1980,15 @@ Built and unit-tested. Migration 52 applied 2026-09-30 and read back (the four c
 5. **An unchanged edit is not an edit.** **Check:** Edit a draft with a marker, save without changing anything: no `ticket_draft_edits` row (the text folds back to the same `[[marker]]`).
 6. **No agent pass.** **Check:** after a manual reply is confirmed from Sent Items, `llm_usage` gains at most the Case Manager reading for that message (`pass = 'casework'`), and no `investigate` or `draft` row for the ticket until the customer writes again.
 7. **The customer wrote meanwhile.** **Check:** open a ticket, have the customer write, then send a manual reply from the stale page: it is refused with « The customer has written again… ».
+
+## 21. Snooze — 2026-09-30
+
+Built and unit-tested. Migration 54 applied 2026-09-30 and read back through PostgREST (empty table).
+
+1. **Apply 54.** **Check:** `ticket_snoozes` exists with its three indexes; `/tickets` loads with an empty Snoozed tab.
+2. **A manual snooze.** **Check:** on an open ticket, Snooze → « Until the customer replies » with a note. The ticket leaves Queue, the next one opens, and it is in Snoozed with « Snoozed · back … ». Reopen it: the banner reads « Waiting for the customer », the date, « Snoozed by a person » and the note. The menu showed « No delay set » until `customer_reply_wait_days` was saved in Agent Setup.
+3. **A new message wakes it.** **Check:** have the customer answer a snoozed ticket. After the next poll it is back in Queue with « Back: the customer wrote », and its row in `ticket_snoozes` has `wake_reason = customer_message`.
+4. **The deadline.** **Check:** snooze a ticket « Later today ». About 3 h later, after the next poll, it is back with « Back: snooze time reached ». No `llm_usage` row appeared for it.
+5. **Automatic snooze on send.** **Check:** with `AGENT_AUTO_SNOOZE=true` on the full worker and `customer_reply_wait_days` set, approve a reply that asks the customer something. Nothing snoozes while it waits in Outlook's Drafts. Once it is sent and read back from Sent Items, the ticket moves to Snoozed, marked « Snoozed by the agent ».
+6. **Waiting on Deret.** **Check:** a ticket where we wrote to the 3PL (a partner check opened by that message) snoozes on the partner until `partner_check_overdue_days`. A ticket whose partner check only a rule opened stays in the queue.
+7. **An order update.** **Check:** a ticket snoozed on a partner about an order wakes « Back: the order was updated » when that parcel's status changes in Shopify. A price or tag edit wakes nothing.

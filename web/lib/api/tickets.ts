@@ -5,6 +5,9 @@
  */
 
 import type {
+  SnoozeRequest,
+  TicketSnooze,
+  TicketWake,
   TicketCaseChange,
   TicketCaseState,
   TicketDetail,
@@ -119,6 +122,32 @@ export async function sendManualReply(
     throw new KnowledgeApiError(body?.error || `Request failed (${response.status}).`, response.status);
   }
   return body.reply as TicketManualReply;
+}
+
+/** Snooze a ticket: out of the queue until `until`, or until the party writes. */
+export async function snoozeTicket(ticketId: string, request: SnoozeRequest): Promise<TicketSnooze> {
+  const response = await fetch(`/api/tickets/${ticketId}/snooze`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(request),
+  });
+
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new KnowledgeApiError(body?.error || `Request failed (${response.status}).`, response.status);
+  }
+  return body.snooze as TicketSnooze;
+}
+
+/** Wake a snoozed ticket now. Null when it was not snoozed any more. */
+export async function unsnoozeTicket(ticketId: string): Promise<TicketWake | null> {
+  const response = await fetch(`/api/tickets/${ticketId}/snooze`, { method: "DELETE" });
+
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new KnowledgeApiError(body?.error || `Request failed (${response.status}).`, response.status);
+  }
+  return (body.wake ?? null) as TicketWake | null;
 }
 
 /** The order a person typed, before they commit to linking it. */

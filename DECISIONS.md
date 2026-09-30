@@ -2028,6 +2028,27 @@ Per message, not per ticket, so a candidate's follow-up still reaches the recipi
 
 ## Lifecycle
 
+### Snooze hides a waiting case until something happens, and only a sent message snoozes it (2026-09-30)
+
+Asked for: a ticket nobody can act on yet should leave the queue and come back on its own when it needs someone. The customer has our question, Deret is investigating, or a colleague has been asked. Nothing is closed. **Decided by the owner: an automatic snooze happens when our reply is sent, not when it is drafted or approved.**
+
+- **A layer, not a status.** The fold owns `open` / `awaiting_*` / `resolved` (§ The ticket status follows who acts next), and the categoriser and the investigation claim only `status = 'open'`. A `snoozed` status would have fought the fold and stranded tickets. Instead an open row in `ticket_snoozes` hides the ticket, and the status still says who acts next.
+- **The trigger is a message of ours new in the thread.** Our reply is in the thread only once it has gone out: it comes back through Sent Items. That one trigger covers a sent agent draft, a manual reply and a reply typed in Outlook, and no approval or draft in Outlook's Drafts folder can snooze anything. The fold then snoozes when `next_actor` is the customer, a colleague or an operations partner and no check of ours is open (`casework/snooze-rule.mjs`, behind `AGENT_AUTO_SNOOZE`).
+- **Waiting is not work.** A check a person must do (`support`) keeps the case in the queue. So does a partner's or colleague's check that a **rule** opened, until someone has written to them about it: « Deret needs asking » is work, « Deret has been asked » is waiting. A cancellation, an address change or a manual refund stays active until the check is done.
+- **Edge-triggered, so it never loops.** The rule fires on « we just sent something », never on a case that still reads « waiting ». A ticket its deadline woke is not snoozed again until something new happens. The index on `(ticket_id, trigger_message_id)` holds the same line in the database.
+- **Every snooze has a deadline** (`wake_at not null`). A partner's snooze ends when its check would turn overdue (`partner_check_overdue_days`), a colleague's likewise (`colleague_check_overdue_days`), and a customer's after `customer_reply_wait_days` working days. The customer delay is new: 3 working days for Qiriness (set 2026-09-30); a shop that leaves it unset never has a case waiting on the customer snoozed automatically. A person picks a time, or a party with the same delay as the deadline. 60 days at most.
+- **What wakes a ticket:**
+  - a **new** message from anyone but us, at ingestion, whatever the deadline (re-delivery is not arrival, § Re-delivery);
+  - the fold, when the case comes back to us (`case_changed`) or ends (`resolved`), on the change only, so « follow up Friday » on a case already ours holds;
+  - the deadline sweep, each poll, whatever `--stop-after` says;
+  - a person;
+  - for a partner's snooze, an order update that changes what a carrier would tell us (a parcel number, a fulfilment or parcel status, a refund, a cancellation). Shopify's parcel status comes from the carrier's tracking, so « delivered » can reach us before any email.
+- **A deadline wake costs no model.** It brings no new information: the ticket returns marked « snooze time reached » and a person decides. A wake by mail runs the normal pipeline on that message: Case Manager, investigation, fold, draft. The old draft is never restored; the fold has already staled it once the case moved. Priority is scored at read time, so a woken ticket is ranked on what is true now.
+- **Auto-close skips a snoozed ticket**, so a snooze a person set for five weeks is not closed for silence first.
+- **Not `--also=fold` on the sync-only worker.** Proposed, then dropped: without the Case Manager reading our reply, the fold reads an unread reply of ours as « nobody owes anything », and the status map would resolve those tickets. Automatic snoozing needs the full pipeline; waking does not.
+
+**Measured before switching it on (dry run, 2026-09-30).** Of 1,008 tickets, 13 end with our reply on a status the fold manages. With a 5-day customer delay, 2 would have snoozed on the customer: `59869d23` and `27aa78bb`, both after we asked for the purchase channel. Only `59869d23` would still be snoozed today. `2aa6604e` (« Produit défectueux ? ») stays: a `product_property` check is ours. The rest are owed by nobody (7) or still have a pass pending (4).
+
 ### Tickets close themselves after 28 days of silence
 
 Last pass of every poll, so it sees the timestamps that poll just advanced. Without it `status` carried no information at all — every one of the 565 tickets read `open`, including threads last touched seven months ago.

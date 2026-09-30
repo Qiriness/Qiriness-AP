@@ -55,10 +55,16 @@ export function shouldAutoClose(
     now = new Date(),
     afterDays = AUTO_CLOSE_AFTER_DAYS,
     exemptLevels = AUTO_CLOSE_EXEMPT_LEVELS,
-    exemptStatuses = AUTO_CLOSE_EXEMPT_STATUSES
+    exemptStatuses = AUTO_CLOSE_EXEMPT_STATUSES,
+    snoozed = false
   } = {}
 ) {
   if (!ticket || TERMINAL_STATUSES.has(ticket.status)) {
+    return false;
+  }
+  // A snoozed ticket is waiting on purpose, until a date somebody chose. Its
+  // deadline brings it back to the queue; silence before then is the plan.
+  if (snoozed) {
     return false;
   }
   // Work the agent handed to a person, which nobody did. See the constant.
@@ -115,10 +121,13 @@ export async function runAutoClose({
   now = new Date(),
   afterDays = AUTO_CLOSE_AFTER_DAYS,
   dryRun = false,
-  onPreview
+  onPreview,
+  // The snooze record: its open snoozes are spared. Optional, as before it existed.
+  snoozes = null
 } = {}) {
   const cutoff = new Date(now.getTime() - afterDays * 24 * 60 * 60 * 1000);
   const candidates = await record.findInactive(cutoff);
+  const snoozed = candidates.length > 0 && snoozes ? new Set((await snoozes.allOpen()).map((row) => row.ticket_id)) : new Set();
 
   // `awaitingHuman` is counted apart from `exempt` because it is the only figure
   // here that is a BACKLOG rather than a policy. Level 4s being spared is the
@@ -129,13 +138,16 @@ export async function runAutoClose({
     closed: 0,
     exempt: 0,
     awaitingHuman: 0,
+    snoozed: 0,
     failed: 0
   };
 
   for (const ticket of candidates) {
-    if (!shouldAutoClose(ticket, { now, afterDays })) {
+    if (!shouldAutoClose(ticket, { now, afterDays, snoozed: snoozed.has(ticket?.id) })) {
       if (AUTO_CLOSE_EXEMPT_STATUSES.has(ticket?.status)) {
         totals.awaitingHuman += 1;
+      } else if (snoozed.has(ticket?.id)) {
+        totals.snoozed += 1;
       }
       totals.exempt += 1;
       continue;

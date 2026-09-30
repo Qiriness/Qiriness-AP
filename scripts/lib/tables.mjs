@@ -60,6 +60,7 @@ export const T = {
   CASE_CURRENT: 'case_current',
   TICKET_CASE_ACTIONS: 'ticket_case_actions',
   TICKET_OVERRIDES: 'ticket_overrides',
+  TICKET_SNOOZES: 'ticket_snoozes',
   CATEGORY_FORWARDING: 'category_forwarding',
   TICKET_FORWARDS: 'ticket_forwards',
   FORWARDING_DESTINATIONS: 'forwarding_destinations',
