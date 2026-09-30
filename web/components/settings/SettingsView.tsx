@@ -6,6 +6,7 @@ import { LanguageSwitch } from "@/components/app-shell/LanguageSwitch";
 import { getFormat, getT } from "@/lib/i18n/server";
 import header from "../insights/InsightsHeader.module.css";
 import t from "../insights/tables.module.css";
+import { AgentModelPicker } from "./AgentModelPicker";
 import { DevInfo } from "./DevInfo";
 import { KlaviyoKeyCard } from "./KlaviyoKeyCard";
 import styles from "./SettingsView.module.css";
@@ -43,6 +44,7 @@ export function SettingsView({
   roster,
   klaviyo,
   canManageIntegrations,
+  canChooseModels,
 }: {
   tab: SettingsTab;
   me: SettingsMe | null;
@@ -50,6 +52,8 @@ export function SettingsView({
   klaviyo: KlaviyoStatus | { error: string } | null;
   /** The contact team is not shown the Integrations or Dev info tabs (dashboard-auth.mjs). */
   canManageIntegrations: boolean;
+  /** The contact team sees the models but cannot change them (dashboard-auth.mjs). */
+  canChooseModels: boolean;
 }) {
   const tr = getT();
   return (
@@ -78,7 +82,7 @@ export function SettingsView({
       {tab === "me" ? (
         <MyInfo me={me} />
       ) : tab === "agents" ? (
-        <AgentSettings roster={roster} />
+        <AgentSettings roster={roster} canChooseModels={canChooseModels} />
       ) : tab === "dev" ? (
         <DevInfo roster={roster} />
       ) : (
@@ -142,7 +146,7 @@ function Integrations({ klaviyo }: { klaviyo: KlaviyoStatus | { error: string } 
   );
 }
 
-function AgentSettings({ roster }: { roster: AgentRoster | null }) {
+function AgentSettings({ roster, canChooseModels }: { roster: AgentRoster | null; canChooseModels: boolean }) {
   const tr = getT();
   const { compactNumber, percent, usd } = getFormat();
   if (!roster) return null;
@@ -191,7 +195,7 @@ function AgentSettings({ roster }: { roster: AgentRoster | null }) {
                 </thead>
                 <tbody>
                   {rows.map((row) => (
-                    <AgentRow key={row.id} row={row} />
+                    <AgentRow key={row.id} row={row} roster={roster} canChooseModels={canChooseModels} />
                   ))}
                 </tbody>
               </table>
@@ -200,14 +204,12 @@ function AgentSettings({ roster }: { roster: AgentRoster | null }) {
         </Card>
       </Grid>
 
-      <Caption>
-        Models are chosen by environment variables (the name under each model) on the worker, and CHAT_MODEL on the dashboard; this page shows them and does not change them. The model shown is the one that actually ran; &ldquo;not run&rdquo; means no call in the window, so the configured model is shown instead. Agent test-chat runs are not counted.
-      </Caption>
+      <Caption>{tr("settings.models.caption")}</Caption>
     </>
   );
 }
 
-function AgentRow({ row }: { row: AgentRosterRow }) {
+function AgentRow({ row, roster, canChooseModels }: { row: AgentRosterRow; roster: AgentRoster; canChooseModels: boolean }) {
   const tr = getT();
   const { integer, percent, usd } = getFormat();
   return (
@@ -227,8 +229,27 @@ function AgentRow({ row }: { row: AgentRosterRow }) {
         <span className={t.sub}>
           {row.modelSource === "configured" ? `${tr("settings.notRun")} · ` : ""}
           {row.otherModels.length > 0 ? `${tr("settings.alsoRan", { models: row.otherModels.join(", ") })} · ` : ""}
-          {row.envVar}
+          {row.chosenModel ? tr("settings.models.chosen") : row.envVar}
         </span>
+        {row.chosenModel && row.chosenModel !== row.model ? (
+          <span className={t.sub}>{tr("settings.models.pending", { model: row.chosenModel })}</span>
+        ) : null}
+        {row.chosenModel && row.defaultModel && row.chosenModel !== row.defaultModel ? (
+          <span className={t.sub}>
+            {tr("settings.models.default", { model: row.defaultModel })} · {row.envVar}
+          </span>
+        ) : null}
+        {canChooseModels && row.editable ? (
+          <AgentModelPicker
+            agent={row.id}
+            agentName={row.name}
+            chosenModel={row.chosenModel}
+            defaultModel={row.defaultModel}
+            availableModels={roster.availableModels}
+            listError={roster.availableModelsError}
+            pricedModels={roster.pricedModels}
+          />
+        ) : null}
       </td>
       <td className={t.n}>{integer(row.calls)}</td>
       <td className={t.n}>

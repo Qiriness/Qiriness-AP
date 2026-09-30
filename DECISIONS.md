@@ -4256,12 +4256,24 @@ Every row on every panel carries a pin in the top-right corner of its rightmost 
 - **Per viewer, per panel, in the browser.** Which rows someone keeps at the top is a personal view, so it lives in `localStorage` under `qiriness.insights.pins.<panel>`, read after mount (the first render matches the server's, no pins) and guarded on every access. A pin whose row is not on the page today leaves no empty band.
 - **Every row needs a stable id** — `<Grid pin="…" label="…">`. Renaming an id forgets that pin for anyone who had it; the label is only the button's accessible name.
 
+### A model is chosen in Settings, and the worker reads it every poll (2026-09-30)
+
+Asked for by the owner: pick the model per agent from Agent settings (e.g. the categoriser off `gpt-4o-mini` onto a newer one) without an env change and a restart on Render.
+
+- **A row in `agent_models` beats the env var, and no row is the env var.** The env stays the default and the fallback, so an unapplied migration, an unreadable table or an empty table all run exactly as before. Clearing a choice ("Back to default") deletes the row.
+- **The worker reloads the table at the top of every poll** and rebuilds its model clients only when a model changed (`modelSignature`). A read failure after start keeps the models already running rather than dropping to the env mid-flight. That is what the 2026-09-15 rule was missing: a switch the worker did not read.
+- **The list comes from the OpenAI key's `/v1/models`**, not from code, so a model released next month shows up without a deploy and a model the key cannot reach is not offered. Filtered by a blocklist (embeddings, audio, realtime, image…) for the same reason. A typed id is refused server-side when the list was readable and does not include it.
+- **Not embeddings**: stored vectors were made with one model, and a query embedded with another compares meaninglessly. **Not the off switch**: an empty `AGENT_DECOMPOSER_MODEL` / `AGENT_SITUATION_CHOOSER_MODEL` stays off whatever the table says; a row only ever names a model.
+- **Reasoning models get a floor of 4,000 completion tokens.** The worker's caps (120–1,200) were sized for visible output on gpt-4o; on a reasoning model the hidden reasoning comes out of the same budget and a 200-token cap can be spent before the answer starts. It is a ceiling, not a spend. `isReasoningModel` now also matches gpt-6 and later, since `max_completion_tokens` is accepted by every chat model and `max_tokens` is not.
+- **The contact team sees the models and cannot change them**: a model moves what the desk spends.
+- **Not applied to the one-off CLIs** (`npm run draft`, `investigate`, the evals): they still read the env, so an eval measures the model it says it measures.
+
 ### Settings shows the model that ran, not the one configured here (2026-09-15)
 
 Asked for by the owner: a Settings table of the agents with their model and key figures, and forwarding moved into Agent Setup (it decides where the agent sends mail).
 
 - **The model column leads with what `llm_usage` recorded.** The worker reads its own environment on another machine, so the dashboard's `AGENT_*_MODEL` can differ from what actually runs; the recorded model on every call cannot. The configured model shows only for an agent with no call in 30 days, marked "Not run", and a second model in the window is listed, so a mid-window change is visible.
-- **Read-only.** Changing a model is an env var and a worker restart; a dashboard switch would write a setting the worker does not read.
+- ~~**Read-only.**~~ Superseded 2026-09-30, below: the worker now reads the setting.
 - **The management chat is read from `chat_turns`**, since its tokens are deliberately kept out of `llm_usage`; test-chat runs are in neither and are not counted.
 
 ### Large screens get a larger UI, not wider margins (2026-09-11)

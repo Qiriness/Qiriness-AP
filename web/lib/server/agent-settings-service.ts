@@ -13,16 +13,23 @@
  * tokens in `chat_turns`, never in `llm_usage`, so it is read separately.
  * Test-chat runs are in neither and are not counted.
  *
+ * A MODEL CAN BE CHOSEN HERE (2026-09-30): a row in `agent_models` overrides
+ * the env var, and the worker picks it up on its next poll. The model column
+ * still leads with what ran, so a change shows as "chosen" until calls on the
+ * new model arrive.
+ *
  * Server-only.
  */
 
 import { loadAgentConfig } from "../../../agent/src/config.mjs";
+import { EDITABLE_AGENTS, isChatModelId, isValidModelId, loadAgentModels, saveAgentModel } from "../../../scripts/lib/agent-models.mjs";
 import { estimateCost, resolveModelRates } from "../../../scripts/lib/llm-rates.mjs";
 import { supabaseSelectAll } from "../../../scripts/lib/supabase-rest-client.mjs";
 import { CHAT_T, RPC } from "../../../scripts/lib/tables.mjs";
 import { chatModel } from "./chat-service";
 import { callRpc, count, getSupabaseClient } from "./insights/shared";
 import { getShopId } from "./knowledge-service";
+import { listOpenAIModels } from "./openai-models";
 
 export const AGENT_WINDOW_DAYS = 30;
 
@@ -36,6 +43,12 @@ export interface AgentRosterRow {
   /** Other models seen in the window — a model change mid-window shows here. */
   otherModels: string[];
   envVar: string;
+  /** Chosen in Settings (`agent_models`); overrides the env var. */
+  chosenModel: string | null;
+  /** What the env var gives this process — what runs when nothing is chosen. */
+  defaultModel: string | null;
+  /** May a model be chosen here? Not for embeddings, nor a stage the env switched off. */
+  editable: boolean;
   calls: number;
   failed: number;
   /** Null when any model it ran has no rate in `llm-rates.mjs`. */
@@ -45,6 +58,11 @@ export interface AgentRosterRow {
 export interface AgentRoster {
   windowDays: number;
   rows: AgentRosterRow[];
+  /** Chat models the OpenAI key can call, for the picker. */
+  availableModels: string[];
+  availableModelsError: string | null;
+  /** Chat models with a rate in `llm-rates.mjs` (or LLM_RATES): the rest cost "—". Also the picker's suggestions when OpenAI will not list. */
+  pricedModels: string[];
   error: string | null;
 }
 
@@ -82,21 +100,23 @@ export async function getAgentRoster(): Promise<AgentRoster> {
 
   try {
     const rates = resolveModelRates(process.env);
-    const [usageRows, chatRows] = await Promise.all([
-      getShopId().then((shopId) =>
-        callRpc<Record<string, unknown>>(RPC.INSIGHTS_LLM_USAGE, {
-          p_shop: shopId,
-          p_from: from.toISOString().slice(0, 19),
-          p_to: to.toISOString().slice(0, 19),
-          p_tz: "UTC",
-        })
-      ),
+    const shopId = await getShopId();
+    const [usageRows, chatRows, chosen, available] = await Promise.all([
+      callRpc<Record<string, unknown>>(RPC.INSIGHTS_LLM_USAGE, {
+        p_shop: shopId,
+        p_from: from.toISOString().slice(0, 19),
+        p_to: to.toISOString().slice(0, 19),
+        p_tz: "UTC",
+      }),
       supabaseSelectAll(
         getSupabaseClient(),
         CHAT_T.TURNS,
         { created_at: { operator: "gte", value: from.toISOString() } },
         "id,model,status,input_tokens,cached_input_tokens,output_tokens"
       ) as Promise<Record<string, unknown>[]>,
+      // Before migration 53 there is no table: nothing is chosen, and the page still loads.
+      (loadAgentModels(getSupabaseClient(), shopId) as Promise<Record<string, string>>).catch(() => ({}) as Record<string, string>),
+      listOpenAIModels(),
     ]);
 
     const byPass = new Map<string, Tally>();
@@ -133,13 +153,14 @@ export async function getAgentRoster(): Promise<AgentRoster> {
 
     const rows = AGENTS.map((agent) => {
       const configured = config[agent.configKey];
-      return toRow(agent, byPass.get(agent.id) ?? emptyTally(), typeof configured === "string" ? configured : undefined);
+      return toRow(agent, byPass.get(agent.id) ?? emptyTally(), typeof configured === "string" ? configured : undefined, chosen[agent.id]);
     });
     rows.push(
       toRow(
         { id: "chat", name: "Management chat", job: "Answers questions about the shop on Home", envVar: "CHAT_MODEL" },
         chat,
-        chatModel()
+        chatModel(),
+        chosen.chat
       )
     );
     const other = byPass.get("other");
@@ -147,11 +168,21 @@ export async function getAgentRoster(): Promise<AgentRoster> {
       rows.push(toRow({ id: "other", name: "Other", job: "Calls recorded without a known agent", envVar: "—" }, other, undefined));
     }
 
-    return { windowDays: AGENT_WINDOW_DAYS, rows, error: null };
+    return {
+      windowDays: AGENT_WINDOW_DAYS,
+      rows,
+      availableModels: available.models,
+      availableModelsError: available.error,
+      pricedModels: Object.keys(rates ?? {}).filter((model) => isChatModelId(model)),
+      error: null,
+    };
   } catch (error) {
     return {
       windowDays: AGENT_WINDOW_DAYS,
       rows: [],
+      availableModels: [],
+      availableModelsError: null,
+      pricedModels: [],
       error: error instanceof Error ? error.message : "Could not load the agents.",
     };
   }
@@ -160,7 +191,8 @@ export async function getAgentRoster(): Promise<AgentRoster> {
 function toRow(
   agent: { id: string; name: string; job: string; envVar: string },
   tally: Tally,
-  configured: string | undefined
+  configured: string | undefined,
+  chosen?: string
 ): AgentRosterRow {
   const ranked = [...tally.byModel.entries()].sort((a, b) => b[1] - a[1]).map(([model]) => model);
   // An empty AGENT_DECOMPOSER_MODEL or AGENT_SITUATION_CHOOSER_MODEL is the documented off switch.
@@ -169,12 +201,37 @@ function toRow(
     id: agent.id,
     name: agent.name,
     job: agent.job,
-    model: ranked[0] ?? (configured || null),
+    model: ranked[0] ?? (chosen || configured || null),
     modelSource: ranked.length > 0 ? "observed" : off ? "off" : "configured",
     otherModels: ranked.slice(1),
     envVar: agent.envVar,
+    chosenModel: chosen ?? null,
+    defaultModel: configured || null,
+    editable: (EDITABLE_AGENTS as readonly string[]).includes(agent.id) && configured !== "",
     calls: tally.calls,
     failed: tally.failed,
     costUsd: tally.unpriced ? null : tally.cost,
   };
+}
+
+export class AgentModelError extends Error {}
+
+/**
+ * Sets one agent's model, or hands it back to the env var with `model = null`.
+ * A model the OpenAI key cannot list is refused, so a typo is caught here
+ * rather than as a failed call on the next poll. When the list itself cannot
+ * be read, a well-formed id is accepted.
+ */
+export async function setAgentModel(agent: string, model: string | null, updatedBy: string | null): Promise<void> {
+  if (!(EDITABLE_AGENTS as readonly string[]).includes(agent)) {
+    throw new AgentModelError("That agent's model cannot be chosen here.");
+  }
+  if (model !== null) {
+    if (!isValidModelId(model)) throw new AgentModelError("That is not a model id.");
+    const available = await listOpenAIModels();
+    if (!available.error && !available.models.includes(model)) {
+      throw new AgentModelError(`${model} is not a chat model this OpenAI key can use.`);
+    }
+  }
+  await saveAgentModel(getSupabaseClient(), { shopId: await getShopId(), agent, model, updatedBy });
 }

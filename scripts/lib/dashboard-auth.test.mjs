@@ -8,6 +8,7 @@ import {
   ROLE_LABELS,
   SESSION_MAX_AGE_SECONDS,
   canAccessPath,
+  canChooseAgentModels,
   canManageIntegrations,
   canSeePanel,
   canUseManagementChat,
@@ -157,6 +158,14 @@ test('the integrations key is closed to contact and open to the other two', () =
   assert.equal(canManageIntegrations('management'), true);
   assert.equal(canManageIntegrations('developer'), true);
   // The rest of Settings stays open to every role.
+  assert.equal(canAccessPath('contact', '/settings'), true);
+});
+
+test('choosing an agent model is closed to contact; the tab itself is not', () => {
+  assert.equal(canAccessPath('contact', '/api/settings/agents/models'), false);
+  assert.equal(canChooseAgentModels('contact'), false);
+  assert.equal(canChooseAgentModels('management'), true);
+  assert.equal(canChooseAgentModels('developer'), true);
   assert.equal(canAccessPath('contact', '/settings'), true);
 });
 

@@ -21,6 +21,7 @@
  */
 
 import { loadAgentConfig } from "../../../agent/src/config.mjs";
+import { loadAgentModels, withAgentModels } from "../../../scripts/lib/agent-models.mjs";
 import { logger } from "../../../agent/src/lib/logger.mjs";
 import { createBrandVoiceStore } from "../../../agent/src/drafting/brand-voice.mjs";
 import { articleReadiness as articleReadinessJs } from "../../../agent/src/testing/article-check.mjs";
@@ -224,11 +225,14 @@ export async function rehearse({
   const supabase = getSupabaseClient();
   const expected = expectDocumentId ? await loadExpectedArticle(shopId, expectDocumentId) : null;
   const brandVoice = await createBrandVoiceStore(supabase).load(shopId);
+  // A rehearsal runs on the models the worker runs on, including one chosen in
+  // Settings — otherwise a test would vouch for a model the desk no longer uses.
+  const chosen = await loadAgentModels(supabase, shopId).catch(() => ({}));
 
   const result = await runRehearsal({
     supabase,
     shopId,
-    config,
+    config: withAgentModels(config, chosen),
     logger,
     brandVoice,
     input,

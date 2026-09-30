@@ -220,13 +220,17 @@ test('a reasoning model gets max_completion_tokens and no temperature', async ()
   await client.completeWithTools({ model: 'gpt-5.2', messages: [], maxTokens: 900 });
   await client.completeWithTools({ model: 'gpt-4o', messages: [], maxTokens: 900 });
 
-  assert.equal(bodies[0].max_completion_tokens, 900);
+  // Floored: the reasoning comes out of the same budget as the answer.
+  assert.equal(bodies[0].max_completion_tokens, 4000);
   assert.equal(bodies[0].temperature, undefined);
   assert.equal(bodies[0].max_tokens, undefined);
   assert.equal(bodies[1].max_tokens, 900);
   assert.equal(bodies[1].temperature, 0);
   assert.equal(isReasoningModel('o3'), true);
   assert.equal(isReasoningModel('gpt-4o-mini'), false);
+  assert.equal(isReasoningModel('gpt-6'), true);
+  assert.equal(isReasoningModel('gpt-10-mini'), true);
+  assert.equal(isReasoningModel('gpt-4.1'), false);
 });
 
 test('no tools means no tools field at all', async () => {

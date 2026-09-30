@@ -234,19 +234,27 @@ export function createOpenAIClient({
 }
 
 /**
- * Reasoning models — the gpt-5 family and the o-series — refuse `temperature`
- * and `max_tokens`. They take `max_completion_tokens` instead, and that budget
- * also has to cover the reasoning they never show. Every model the worker calls
- * is on the older shape, so this changes nothing for it; the management chat
- * (web/lib/server/chat/) is the caller on a reasoning model.
+ * Reasoning models — gpt-5 and every later generation, and the o-series —
+ * refuse `temperature` and `max_tokens`. They take `max_completion_tokens`
+ * instead, and that budget also has to cover the reasoning they never show.
+ * A future family is assumed to be one: `max_completion_tokens` is accepted by
+ * every chat model, `max_tokens` is not.
  */
 export function isReasoningModel(model) {
-  return /^(gpt-5|o\d)/.test(String(model ?? ''));
+  return /^(gpt-([5-9]|\d{2,})|o\d)/.test(String(model ?? ''));
 }
+
+// THE WORKER'S CAPS ARE SIZED FOR VISIBLE OUTPUT (120 tokens for the closure
+// reader, 300 for the categoriser). On a reasoning model the hidden reasoning
+// comes out of the same budget, so a 200-token cap can be spent before a word
+// of the answer is written. Since models became selectable in Settings
+// (2026-09-30) any stage can land on one, so the cap is floored. Only a
+// ceiling: tokens that are not produced are not billed.
+const REASONING_MIN_COMPLETION_TOKENS = 4000;
 
 function samplingParams(model, maxTokens) {
   return isReasoningModel(model)
-    ? { max_completion_tokens: maxTokens }
+    ? { max_completion_tokens: Math.max(maxTokens, REASONING_MIN_COMPLETION_TOKENS) }
     : { temperature: 0, max_tokens: maxTokens };
 }
 

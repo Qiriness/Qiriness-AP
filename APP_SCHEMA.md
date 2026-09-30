@@ -140,7 +140,8 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |   |   |                            # TrackingText (tracking numbers -> carrier links,
 |   |   |                            # used by every surface showing a number in prose)
 |   |   |-- settings/                # SettingsView (Insights kit: tabs, cards, tables) ·
-|   |   |                            # KlaviyoKeyCard (write-only key field, last sync)
+|   |   |                            # KlaviyoKeyCard (write-only key field, last sync) ·
+|   |   |                            # AgentModelPicker (one agent's model, Agent settings)
 |   |   |-- orders/                  # OrdersView (filters + table + pager, URL state;
 |   |   |                            # customer name ringed by open-ticket band) ·
 |   |   |                            # OrderDetailView (Articles · Fulfilment · Payment ·
@@ -629,6 +630,7 @@ The recurring situations, not the answers to them. Same document/chunk mechanics
 | `category_forwarding` | the old per-category address book. **Nothing reads it since 2026-09-29** (superseded by `forwarding_destinations`); left in place, to be dropped |
 | `forwarding_destinations` | who receives mail the contact team does not own (migration 49): `label`, `forward_email`, `active_since` (**the destination's switch**: null = off, otherwise when it was switched on; it receives only mail received since then; needs an address — migration 51), `description` (the business's words; what the router reads), `categories`, `request_kinds` (empty = any), `match_description` (the agent checks even a lone destination), `timing` (`immediate` / `after_first_reply`), `acknowledge`, `public_name_fr/en` + `ack_note_fr/en` (the acknowledgement's wording), `position`. Validated by `scripts/lib/forwarding-destinations.mjs` |
 | `forwarding_settings` | one row per shop: `forward_since` (**the master switch**: null forwards nothing; otherwise only inbound mail received since then — migration 50), `ack_enabled` (default false) and the FR/EN acknowledgement templates (null = the defaults in `forwarding-destinations.mjs`) |
+| `agent_models` | the model an agent runs on, chosen in Settings (migration 53): `(shop_id, agent)` key, `agent` ∈ spam/categorise/situation/decompose/investigate/draft/chat, `model`, `updated_by`. **Overrides the env var**; no row = the env decides. Read by `scripts/lib/agent-models.mjs` — the worker every poll (`refreshModels` in `agent/src/index.mjs` rebuilds the model clients on a change), the test chat and the management chat (`currentChatModel`) |
 | `ticket_routing` | the router's decision per ticket (migration 50): `outcome` forward/keep, `method` fixed/model, `destination_id` + `destination_label`, `reason`, `model`, the `category`/`request_kind` it was taken on (re-taken when they change); and the once-per-ticket acknowledgement: `ack_state` requested/sent/failed/skipped, `ack_at`, `ack_error`, `ack_attempts` |
 | `ticket_forwards` | attempt ledger, `unique(ticket_message_id)`, `sent`/`failed` + attempt counter, snapshots `category`, `forward_email`, `destination_label` |
 | `mail_jobs` | **the durable queue** (migration 46): `sync_mailbox` (a change notification asking for a folder read) and `send_outbound` (the attempts of one outbound action). `state` queued/running/done/dead, `retry_count`, `last_error`, `last_attempt_at`, `next_attempt_at`, `locked_until` (lease). Unique `dedupe_key` among **queued** rows only. RPCs `enqueue_mail_job()` + `claim_mail_jobs()` (SKIP LOCKED; an expired lease is reclaimable and counts as an attempt). Case processing is not a kind. Owned by `scripts/lib/mail-job-record.mjs` |
@@ -777,6 +779,7 @@ Written by the worker and the CLIs, read only by the Insights panels.
 | `49_forwarding_destinations.sql` | `forwarding_destinations`, `forwarding_settings` (copied from 04). No data. Applied 2026-09-29 | 04 |
 | `50_forwarding_routing.sql` | `forwarding_settings.forward_since`, `ticket_forwards.destination_label`, `ticket_routing` (copied from 04). No data. Applied 2026-09-29 | 04, 49 |
 | `51_destination_switch.sql` | `forwarding_destinations.active_since` + its needs-an-address check (copied from 04); switches on the destinations that had an address. Applied 2026-09-29 | 49 |
+| `53_agent_models.sql` | `agent_models` (copied from 04). No data. Applied 2026-09-30 | 01 |
 | `52_manual_replies.sql` | `outbound_actions`: `draft_id` nullable, `client_key`, `body_html`; `manual` mode + `manual_reply` type + their shape check; the version key narrowed to `reply`, `client_key` unique. `ticket_drafts.approved_body_html`. Copied from 07. No data. Applied 2026-09-30 | 07, 47 |
 | `47_outbound_actions.sql` | `outbound_actions` (copied from 07) and the new `ticket_drafts.status` comment. No data. Applied 2026-09-28 | 04, 07, 45 |
 | `46_mail_jobs.sql` | `mail_jobs`, `enqueue_mail_job()`, `claim_mail_jobs()`, `mail_subscriptions` (copied from 04). No data. Applied 2026-09-28 | 01 |
@@ -984,7 +987,7 @@ The Support topic map reads the latest `cluster_runs` row and renders each
 - **Integrations** — developer and management only (`canManageIntegrations`; the tab is not drawn for contact and `/api/settings/integrations` is denied in `dashboard-auth.mjs`). `KlaviyoKeyCard` over `lib/server/integrations-service.ts` and `PUT|DELETE /api/settings/integrations/klaviyo`: the key is checked with Klaviyo (`connectKlaviyo`), then stored in Vault; the card shows `pk_…` + last 4 and the last sync.
 
 - **My info** — the signed-in user from `getSession()`, and which areas the role may open (`canAccessPath` in `dashboard-auth.mjs`).
-- **Agent settings** — `lib/server/agent-settings-service.ts`: one row per agent (spam, categorise, situation chooser, decompose, investigate, draft, embed from `insights_llm_usage`; the management chat from `chat_turns`), last 30 days: model (most-called in the window, else the configured one from `loadAgentConfig` / `chatModel()`), calls, failed, cost via `llm-rates.mjs`. Read-only.
+- **Agent settings** — `lib/server/agent-settings-service.ts`: one row per agent (spam, categorise, situation chooser, decompose, investigate, draft, embed from `insights_llm_usage`; the management chat from `chat_turns`), last 30 days: model (most-called in the window, else the configured one from `loadAgentConfig` / `chatModel()`), calls, failed, cost via `llm-rates.mjs`. **A model can be chosen per agent** (developer and management; `canChooseAgentModels`, `/api/settings/agents` denied to contact): `AgentModelPicker` → `PUT /api/settings/agents/models` `{agent, model|null}` → `setAgentModel` → `agent_models`. The list is the OpenAI key's own `/v1/models`, filtered to chat models (`lib/server/openai-models.ts`, 10-min cache); a model not on it is refused. Not embeddings, not a stage whose env var is empty (off).
 
 ## Agent Worker
 

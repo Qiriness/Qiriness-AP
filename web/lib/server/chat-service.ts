@@ -36,6 +36,7 @@ import {
   supabaseUpdate,
 } from "../../../scripts/lib/supabase-rest-client.mjs";
 import { loadConfig } from "../../../scripts/lib/sync-config.mjs";
+import { loadAgentModels } from "../../../scripts/lib/agent-models.mjs";
 import { CHAT_T } from "../../../scripts/lib/tables.mjs";
 import type {
   ChatConversationDetail,
@@ -69,11 +70,23 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export class ChatNotFoundError extends Error {}
 
+/** The env's model: CHAT_MODEL, else the default. What runs when Settings has not chosen one. */
 export function chatModel(): string {
   return process.env.CHAT_MODEL || DEFAULT_CHAT_MODEL;
 }
 
-export function chatReadiness(): ChatReadiness {
+/** The model a turn runs on: the one chosen in Settings → Agent settings, else the env's. */
+export async function currentChatModel(): Promise<string> {
+  try {
+    const chosen = (await loadAgentModels(rest(), await getShopId())) as Record<string, string>;
+    return chosen.chat ?? chatModel();
+  } catch {
+    // Migration 53 not applied, or the database unreachable: the env still answers.
+    return chatModel();
+  }
+}
+
+export async function chatReadiness(): Promise<ChatReadiness> {
   const problems: string[] = [];
   if (!process.env.CHAT_DB_URL) {
     problems.push(
@@ -81,7 +94,7 @@ export function chatReadiness(): ChatReadiness {
     );
   }
   if (!process.env.OPENAI_API_KEY) problems.push("OPENAI_API_KEY is not set.");
-  return { ready: problems.length === 0, model: chatModel(), problems };
+  return { ready: problems.length === 0, model: await currentChatModel(), problems };
 }
 
 // --- connections -----------------------------------------------------------------
@@ -238,7 +251,7 @@ export async function askQuestion({
   onConversation,
   onEvent,
 }: AskOptions): Promise<{ conversationId: string; turn: ChatTurnView }> {
-  const readiness = chatReadiness();
+  const readiness = await chatReadiness();
   if (!readiness.ready) throw new Error(readiness.problems.join(" "));
 
   const db = rest();
@@ -258,7 +271,7 @@ export async function askQuestion({
   // nothing a follow-up could build on.
   const earlier = (await loadTurns(conversation.id)).filter((turn) => turn.answer && turn.status !== "error");
 
-  const model = chatModel();
+  const model = await currentChatModel();
   const [turnRow] = await supabaseInsert(db, CHAT_T.TURNS, [
     { conversation_id: conversation.id, asked_by: user.sub, question, model, status: "running" },
   ]);

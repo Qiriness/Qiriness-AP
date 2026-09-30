@@ -16,6 +16,11 @@ Three sibling files carry the other halves, and this one deliberately does not d
 
 
 
+## Settings → Agent settings: choose each agent's model (2026-09-30)
+
+- **Built:** a « Change » link under each agent's model (spam, categoriser, situation chooser, decomposer, investigator, drafting, Home chat), listing the chat models the OpenAI key can call. The choice is stored in `agent_models` (migration 53) and overrides `AGENT_*_MODEL` / `CHAT_MODEL`; the worker reloads it every poll and rebuilds its model clients on a change, the test chat and Home chat read it per run. « Back to default » returns to the env var. Contact can see, not change. Reasoning models (gpt-5 and later, o-series) get a 4,000-token completion floor so the worker's small caps are not eaten by reasoning.
+- **Proven:** unit tests (`agent-models`, the transport, role gate, migration 53 against the baseline); `tsc` and lint on `web/`; full `npm test` shows only the 19 migration failures that were there before. Migration 53 applied 2026-09-30; the table reads back empty through PostgREST. **Not yet:** the picker looked at in a browser, a worker poll seen picking up a change (`agent.models_changed` in the log).
+
 ## Tickets: freshness pills in the header (2026-09-30)
 
 The Insights line (Orders synced · Email last message · Nightly sync) now also sits top right on /tickets. One component, `components/ui/FreshnessStrip`, for both pages, fed by the same `insights_freshness` RPC (`readFreshnessItems`, which never fails the page). Proven: `tsc`, lint; not looked at in a browser.

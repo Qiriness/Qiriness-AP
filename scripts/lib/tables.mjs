@@ -65,6 +65,7 @@ export const T = {
   FORWARDING_DESTINATIONS: 'forwarding_destinations',
   FORWARDING_SETTINGS: 'forwarding_settings',
   TICKET_ROUTING: 'ticket_routing',
+  AGENT_MODELS: 'agent_models',
   CATEGORISATION_REVIEW: 'categorisation_review',
   MAIL_JOBS: 'mail_jobs',
   MAIL_SUBSCRIPTIONS: 'mail_subscriptions',

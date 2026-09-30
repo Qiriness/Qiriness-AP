@@ -18,6 +18,7 @@ import { createSupabaseSpamAuditStore } from './ingestion/spam-audit.mjs';
 import { CURSOR_KEYS, runDeltaPoll, createSupabaseCursorStore } from './ingestion/delta-poller.mjs';
 import { T } from '../../scripts/lib/tables.mjs';
 import { createOpenAIClient } from './llm/openai-client.mjs';
+import { loadAgentModels, modelSignature, withAgentModels } from '../../scripts/lib/agent-models.mjs';
 import { createShopUsageRecording } from './llm/usage-store.mjs';
 import { createDraftRecord } from '../../scripts/lib/draft-record.mjs';
 import { createBrandVoiceStore } from './drafting/brand-voice.mjs';
@@ -186,14 +187,19 @@ async function main() {
   const customerLookup = createCustomerLookup({ supabase, shopId, logger });
   const orderResolutionStore = createOrderResolutionStore(supabase);
   const orderContextStore = createOrderContextStore(supabase);
-  if (config.openaiApiKey) {
+  // THE MODELS, rebuilt whenever Settings → Agent settings changes one
+  // (`agent_models`, reloaded at the top of every poll). `models` is the config
+  // with those choices applied; everything else keeps reading `config`.
+  let models = config;
+  let modelsSignature = null;
+  const buildModelStages = () => {
     const openai = createOpenAIClient({ apiKey: config.openaiApiKey, usageSink: usage.sink });
-    triage = createSpamClassifier(openai, { model: config.triageModel, logger }).triage;
-    categorise = createCategoriser(openai, { model: config.categoriserModel }).categorise;
-    destinationChooser = createDestinationChooser(openai, { model: config.routerModel });
+    triage = createSpamClassifier(openai, { model: models.triageModel, logger }).triage;
+    categorise = createCategoriser(openai, { model: models.categoriserModel }).categorise;
+    destinationChooser = createDestinationChooser(openai, { model: models.routerModel });
     // `AGENT_CASEWORK_MODEL=` (empty) leaves this null, which turns the stage
     // off — the switch is the absence of the reader, not a flag inside it.
-    readCaseFor = config.caseworkModel ? { openai, model: config.caseworkModel } : null;
+    readCaseFor = models.caseworkModel ? { openai, model: models.caseworkModel } : null;
     drafting = config.draftInPoll
       ? {
           openai,
@@ -218,11 +224,35 @@ async function main() {
     investigation = createInvestigationStack({
       supabase,
       shopId,
-      config,
+      config: models,
       logger,
       customerLookup,
       usageSink: usage.sink
     });
+  };
+  // Picks up a model chosen in Settings. A table that cannot be read (migration
+  // 53 not applied, a blip) keeps the models already running.
+  const refreshModels = async () => {
+    let chosen = {};
+    try {
+      chosen = await loadAgentModels(supabase, shopId);
+    } catch (error) {
+      if (modelsSignature !== null) {
+        logger.warn('agent.models_load_failed', { shopId, error: error.message });
+        return;
+      }
+    }
+    const next = withAgentModels(config, chosen);
+    const signature = modelSignature(next);
+    if (signature === modelsSignature) return;
+    const before = modelsSignature;
+    models = next;
+    modelsSignature = signature;
+    buildModelStages();
+    if (before !== null) logger.info('agent.models_changed', { shopId, models: signature });
+  };
+  if (config.openaiApiKey) {
+    await refreshModels();
   } else {
     logger.warn('ingest.llm_filter_disabled', { reason: 'OPENAI_API_KEY not set' });
   }
@@ -238,6 +268,8 @@ async function main() {
   }
 
   const poll = async ({ afterIngest } = {}) => {
+    if (config.openaiApiKey) await refreshModels();
+
     // CHANGE-NOTIFICATION SUBSCRIPTIONS, kept alive before the read. A no-op
     // without MAIL_WEBHOOK_URL; a failure is logged at error level and the
     // poll carries on, because a subscription is only ever a trigger.
@@ -583,12 +615,12 @@ async function main() {
           openai: drafting.openai,
           brandVoice: await drafting.brandVoice.load(shopId),
           shopId,
-          model: config.draftingModel,
+          model: models.draftingModel,
           ...(await loadDraftingContext(supabase, shopId, logger)),
           senderDirectory,
-          closureReader: config.closureModel
+          closureReader: models.closureModel
             ? ({ message, ticketId, senderDirectory: directory }) =>
-                readsAsClosure({ openai: drafting.openai, model: config.closureModel, message, senderDirectory: directory, ticketId, logger })
+                readsAsClosure({ openai: drafting.openai, model: models.closureModel, message, senderDirectory: directory, ticketId, logger })
             : null,
           cosmetovigilanceDraftOnly: config.draftOnlyCosmetovigilance,
           gates: 'poll',

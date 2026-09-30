@@ -4,7 +4,7 @@ import { getAgentRoster } from "@/lib/server/agent-settings-service";
 import { getSession } from "@/lib/server/auth";
 import { navBadgeCounts } from "@/lib/server/conversation-badge";
 import { getKlaviyoStatus } from "@/lib/server/integrations-service";
-import { canAccessPath, canManageIntegrations } from "../../../scripts/lib/dashboard-auth.mjs";
+import { canAccessPath, canChooseAgentModels, canManageIntegrations } from "../../../scripts/lib/dashboard-auth.mjs";
 
 export const dynamic = "force-dynamic";
 
@@ -52,7 +52,14 @@ export default async function SettingsPage({ searchParams }: { searchParams?: { 
 
   return (
     <AppShell activeHref="/settings" {...badges}>
-      <SettingsView tab={tab} me={me} roster={roster} klaviyo={klaviyo} canManageIntegrations={integrations} />
+      <SettingsView
+        tab={tab}
+        me={me}
+        roster={roster}
+        klaviyo={klaviyo}
+        canManageIntegrations={integrations}
+        canChooseModels={Boolean(user && canChooseAgentModels(user.role))}
+      />
     </AppShell>
   );
 }

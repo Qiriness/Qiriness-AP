@@ -26,7 +26,7 @@ export default async function HomePage() {
   // Started, not awaited: the badges are read beside this page's own data
   // rather than before it. navBadgeCounts never throws.
   const badgesRead = navBadgeCounts();
-  const readiness = chatReadiness();
+  const readiness = await chatReadiness();
   let conversations: ChatConversationSummary[] = [];
   let loadError: string | null = null;
   try {

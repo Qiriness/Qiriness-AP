@@ -1668,6 +1668,41 @@ comment on column public.forwarding_settings.forward_since is
 comment on table public.forwarding_settings is
   'Shop-wide acknowledgement for forwarded mail: whether it is sent, and the FR/EN templates ({service}, {note}, {shop}). Null templates use the defaults in code.';
 
+-- ---------------------------------------------------------------- agent_models
+
+-- The model an agent runs on, chosen in Settings → Agent settings (migration
+-- 53). No row means the env var (AGENT_*_MODEL, CHAT_MODEL) decides, so an
+-- empty table changes nothing. Read by the worker every poll.
+
+create table public.agent_models (
+  shop_id uuid not null references public.shops(id) on delete cascade,
+  -- The agent's id, the same one it records under in llm_usage.pass
+  -- (scripts/lib/agent-models.mjs, AGENT_MODEL_KEYS). Embeddings are not
+  -- here: the stored vectors were made with one model.
+  agent text not null,
+  -- An OpenAI model id. Only a name: a row can never switch an agent off.
+  model text not null,
+  -- The Supabase auth.users id of who chose it. No foreign key: auth is
+  -- another schema, and the choice outlives the account.
+  updated_by uuid,
+  updated_at timestamptz not null default now(),
+  primary key (shop_id, agent),
+  constraint agent_models_agent_check check (
+    agent in ('spam', 'categorise', 'situation', 'decompose', 'investigate', 'draft', 'chat')
+  ),
+  constraint agent_models_model_check check (model ~ '^[A-Za-z0-9][A-Za-z0-9._:-]{0,99}$')
+);
+
+create trigger agent_models_set_updated_at
+before update on public.agent_models
+for each row
+execute function public.set_updated_at();
+
+alter table public.agent_models enable row level security;
+
+comment on table public.agent_models is
+  'The model each agent runs on, when chosen in Settings. Overrides the worker''s AGENT_*_MODEL and the dashboard''s CHAT_MODEL; no row means the env var decides.';
+
 -- ---------------------------------------------------------------- ticket_routing
 
 -- The router's decision per ticket and the once-per-ticket acknowledgement
