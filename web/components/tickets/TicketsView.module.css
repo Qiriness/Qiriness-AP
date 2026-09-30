@@ -226,6 +226,9 @@
 .listHeader {
   flex: none;
   display: flex;
+  /* Wraps: longer French labels used to push the Select / Restore buttons out of
+     the pane's left edge, where they could not be reached. */
+  flex-wrap: wrap;
   align-items: flex-end;
   justify-content: space-between;
   gap: var(--space-3);
@@ -241,6 +244,10 @@
   color: var(--text-strong);
 }
 
+.listHeader > div:first-child {
+  min-width: 0;
+}
+
 .listHeader p,
 .listHeader span {
   margin: 0;
@@ -249,10 +256,17 @@
   white-space: nowrap;
 }
 
+.listHeader p {
+  white-space: normal;
+}
+
 /* Select / Clear / Restore, in the list header where the list operation is. */
 .listActions {
-  flex: none;
+  flex: 0 1 auto;
   display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  margin-inline-start: auto;
   align-items: center;
   gap: var(--space-2);
 }

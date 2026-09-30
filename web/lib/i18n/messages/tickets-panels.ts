@@ -564,7 +564,7 @@ export const fr: Record<keyof typeof en, string> = {
   "tickets.panels.irrelevant.selected": "{n} sélectionné(s)",
   "tickets.panels.irrelevant.count_one": "{count} e-mail écarté",
   "tickets.panels.irrelevant.count_other": "{count} e-mails écartés",
-  "tickets.panels.irrelevant.newestFirst": "du plus récent au plus ancien",
+  "tickets.panels.irrelevant.newestFirst": "récents d'abord",
   "tickets.panels.irrelevant.selectNone": "Tout désélectionner",
   "tickets.panels.irrelevant.selectAll": "Tout sélectionner",
   "tickets.panels.irrelevant.clearN": "Masquer {n}",
