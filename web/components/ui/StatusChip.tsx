@@ -1,5 +1,5 @@
 import type { ArticleStatus } from "@/lib/types";
-import { STATUS_LABELS } from "@/lib/types";
+import { Tx } from "@/lib/i18n/client";
 import {
   AlertIcon,
   CheckCircleIcon,
@@ -27,17 +27,17 @@ export function StatusChip({ status, size = "sm" }: StatusChipProps) {
   return (
     <span className={[styles.chip, styles[status], styles[size]].join(" ")}>
       <Icon size={size === "sm" ? 13 : 15} className={styles.icon} />
-      {STATUS_LABELS[status]}
+      <Tx k={`articleStatus.${status}`} />
     </span>
   );
 }
 
 /** Small red inline marker for the Shopify import error state. */
-export function ErrorChip({ label = "Import failed" }: { label?: string }) {
+export function ErrorChip({ label = "setup.knowledge.importFailed" }: { label?: string }) {
   return (
     <span className={[styles.chip, styles.error, styles.sm].join(" ")}>
       <AlertIcon size={13} className={styles.icon} />
-      {label}
+      <Tx k={label} />
     </span>
   );
 }

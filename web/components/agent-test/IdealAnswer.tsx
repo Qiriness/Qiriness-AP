@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/Button";
+import { useLocale, useT } from "@/lib/i18n/client";
+import { intlTag } from "@/lib/i18n/locales";
 
 import styles from "./IdealAnswer.module.css";
 
@@ -34,6 +36,8 @@ export function IdealAnswer({
   onSave: (body: string | null) => Promise<void>;
   disabled?: boolean;
 }) {
+  const t = useT();
+  const locale = useLocale();
   const [open, setOpen] = useState(Boolean(saved));
   const [text, setText] = useState(saved ?? "");
   const [saving, setSaving] = useState(false);
@@ -53,7 +57,7 @@ export function IdealAnswer({
     try {
       await onSave(next);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Could not save.");
+      setError(caught instanceof Error ? caught.message : t("setup.test.couldNotSave"));
     } finally {
       setSaving(false);
     }
@@ -63,7 +67,7 @@ export function IdealAnswer({
     return (
       <div className={styles.collapsed}>
         <Button variant="secondary" size="sm" onClick={() => setOpen(true)} disabled={disabled}>
-          Write the ideal answer
+          {t("setup.test.writeIdeal")}
         </Button>
         <p className={styles.hint}>
           Kept with this run as a worked example of what the agent should have said.
@@ -75,8 +79,8 @@ export function IdealAnswer({
   return (
     <div className={styles.panel}>
       <div className={styles.head}>
-        <h3 className={styles.title}>The ideal answer</h3>
-        {savedAt && <span className={styles.saved}>Saved {new Date(savedAt).toLocaleString()}</span>}
+        <h3 className={styles.title}>{t("setup.test.theIdeal")}</h3>
+        {savedAt && <span className={styles.saved}>{t("setup.knowledge.savedAt", { when: new Date(savedAt).toLocaleString(intlTag(locale)) })}</span>}
       </div>
       <p className={styles.hint}>
         What you would have sent instead. Kept with this run as a worked example — nothing reads it
@@ -95,7 +99,7 @@ export function IdealAnswer({
       <div className={styles.actions}>
         {draftBody && text.trim() === "" && (
           <Button variant="tertiary" size="sm" onClick={() => setText(draftBody)} disabled={saving}>
-            Start from the agent&apos;s reply
+            {t("setup.test.startFromReply")}
           </Button>
         )}
         {saved && (
@@ -108,7 +112,7 @@ export function IdealAnswer({
             }}
             disabled={saving}
           >
-            Clear
+            {t("setup.parameters.clear")}
           </Button>
         )}
         <Button
@@ -118,7 +122,7 @@ export function IdealAnswer({
           loading={saving}
           disabled={!dirty || text.trim() === ""}
         >
-          {saved ? "Update" : "Save"}
+          {saved ? t("setup.test.update") : t("tickets.panels.save")}
         </Button>
       </div>
 

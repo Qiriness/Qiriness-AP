@@ -19,6 +19,7 @@ import { IdealAnswer } from "./IdealAnswer";
 import { RunHistory } from "./RunHistory";
 import { RunTranscript } from "./RunTranscript";
 import { TestComposer } from "./TestComposer";
+import { useT } from "@/lib/i18n/client";
 import styles from "./TestChatDialog.module.css";
 
 /**
@@ -45,6 +46,7 @@ export function TestChatDialog({
   expectDocumentId?: string | null;
   expectDocumentTitle?: string | null;
 }) {
+  const t = useT();
   const [input, setInput] = useState<RehearsalInput>(EMPTY_INPUT);
   const [events, setEvents] = useState<TraceEvent[]>([]);
   const [finished, setFinished] = useState<RunFinished | null>(null);
@@ -195,9 +197,9 @@ export function TestChatDialog({
 
   return (
     <Dialog
-      title={expectDocumentTitle ? `Test: ${expectDocumentTitle}` : "Test the agent"}
+      title={expectDocumentTitle ? t("setup.test.testTitle", { title: expectDocumentTitle }) : t("setup.header.test")}
       meta="A message you write, put through the real pipeline. Nothing is added to the ticket queue."
-      closeLabel="Close the agent test"
+      closeLabel={t("setup.test.close")}
       onClose={onClose}
     >
       <div className={styles.layout}>
@@ -236,7 +238,7 @@ export function TestChatDialog({
                   button that copied them back would do nothing visible. */}
               {opened && (
                 <Button variant="secondary" size="sm" onClick={() => reuse(opened)} disabled={running}>
-                  Reuse this message
+                  {t("setup.test.reuse")}
                 </Button>
               )}
               <Cost finished={finished} opened={opened} running={running} />
@@ -252,7 +254,7 @@ export function TestChatDialog({
                   finding — but you can push it through if you want to see the rest.
                 </p>
                 <Button variant="secondary" size="sm" onClick={() => run(true)} disabled={running}>
-                  Run it anyway
+                  {t("setup.test.runAnyway")}
                 </Button>
               </div>
             )}
@@ -285,7 +287,7 @@ export function TestChatDialog({
             onClick={() => setShowHistory((value) => !value)}
             aria-expanded={showHistory}
           >
-            Earlier runs
+            {t("setup.test.earlierRuns")}
             <span className={styles.historyCount}>{runs.length}</span>
           </button>
           {showHistory && (

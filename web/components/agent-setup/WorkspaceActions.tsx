@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { ArticleStatus, SaveState } from "@/lib/types";
 import { Button } from "@/components/ui/Button";
 import { CheckCircleIcon, SparkleIcon } from "@/components/icons";
+import { useT } from "@/lib/i18n/client";
 import styles from "./WorkspaceActions.module.css";
 
 interface WorkspaceActionsProps {
@@ -39,6 +40,7 @@ export function WorkspaceActions({
   onDelete,
   onTest,
 }: WorkspaceActionsProps) {
+  const t = useT();
   const approved = status === "approved";
   const busy = optimizing || saveState === "saving";
   const [confirmingDelete, setConfirmingDelete] = useState(false);
@@ -66,7 +68,7 @@ export function WorkspaceActions({
         loading={saveState === "saving"}
         disabled={saveState === "saved" || optimizing}
       >
-        {saveState === "saved" ? "Saved" : "Save draft"}
+        {saveState === "saved" ? t("setup.knowledge.saved") : t("setup.knowledge.saveDraft")}
       </Button>
 
       <Button
@@ -77,7 +79,7 @@ export function WorkspaceActions({
         loading={optimizing}
         disabled={saveState === "saving"}
       >
-        {optimizing ? "Optimizing" : "Optimize draft"}
+        {optimizing ? t("setup.knowledge.optimizing") : t("setup.knowledge.optimize")}
       </Button>
 
       <Button
@@ -87,17 +89,17 @@ export function WorkspaceActions({
         onClick={onApprove}
         disabled={approved || busy}
       >
-        {approved ? "Approved for agent" : "Approve for agent"}
+        {approved ? t("setup.knowledge.approvedForAgent") : t("setup.knowledge.approveForAgent")}
       </Button>
 
       {approved && (
         <Button variant="secondary" block onClick={onUnapprove} disabled={busy}>
-          Unapprove
+          {t("setup.knowledge.unapprove")}
         </Button>
       )}
 
       <p className={styles.hint}>
-        Approved articles become trusted sources your agent can answer from.
+        {t("setup.knowledge.approvedHint")}
       </p>
 
       {/* Directly under the approval, because that is when the question arises:
@@ -108,10 +110,10 @@ export function WorkspaceActions({
       {onTest && (
         <>
           <Button variant="secondary" block onClick={onTest} disabled={busy}>
-            Test this article
+            {t("setup.knowledge.testArticle")}
           </Button>
           <p className={styles.hint}>
-            Ask a question this article should answer, and see whether the agent actually reached it.
+            {t("setup.knowledge.testHint")}
           </p>
         </>
       )}
@@ -124,7 +126,7 @@ export function WorkspaceActions({
         disabled={busy}
         className={styles.deleteButton}
       >
-        {confirmingDelete ? "Confirm delete" : "Delete article"}
+        {confirmingDelete ? t("setup.knowledge.confirmDelete") : t("setup.knowledge.deleteArticle")}
       </Button>
     </div>
   );

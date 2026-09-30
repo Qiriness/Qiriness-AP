@@ -5,6 +5,7 @@ import { Fragment, useEffect, useId, useMemo, useRef, useState } from "react";
 import { ChevronDownIcon, CloseIcon, HelpIcon } from "@/components/icons";
 import { Button } from "@/components/ui/Button";
 import { knowledgeErrorMessage } from "@/lib/api/knowledge";
+import { useT } from "@/lib/i18n/client";
 import type { SaveRulePayload } from "@/lib/api/policy";
 import { isReplyLinkUrl } from "@/lib/reply-links";
 import { ruleLabel } from "@/lib/rule-labels";
@@ -121,6 +122,7 @@ export function RuleEditor({
   onClose: () => void;
   onSave: (payload: SaveRulePayload) => Promise<void>;
 }) {
+  const t = useT();
   const titleId = useId();
   const closeRef = useRef<HTMLButtonElement>(null);
   const skeletonRef = useRef<HTMLTextAreaElement>(null);
@@ -352,13 +354,13 @@ export function RuleEditor({
       >
         <header className={styles.header}>
           <div className={styles.headerText}>
-            <p className={styles.kicker}>{answerSet || "No answer set"}</p>
+            <p className={styles.kicker}>{answerSet || t("setup.rules.noAnswerSet")}</p>
             <div className={styles.titleRow}>
               <h2 id={titleId} className={styles.title} title={rule?.answerKey}>
-                {rule ? ruleLabel(rule) : "New rule"}
+                {rule ? ruleLabel(rule) : t("setup.rules.newRule")}
               </h2>
               <span className={styles.status} data-live={rule?.approvalStatus === "approved" || undefined}>
-                {rule ? (rule.approvalStatus === "approved" ? "live" : "draft") : "new"}
+                {rule ? (rule.approvalStatus === "approved" ? t("setup.rules.live") : t("setup.rules.draft")) : t("setup.rules.new")}
               </span>
             </div>
             <p className={styles.meta}>
@@ -368,10 +370,10 @@ export function RuleEditor({
                 </>
               ) : contextSituation ? (
                 <>
-                  General rule — every situation in the set, written from <b>{contextSituation.key}</b>
+                  {t("setup.rules.generalWrittenFrom", { key: contextSituation.key })}
                 </>
               ) : (
-                "General rule — every situation in the set"
+                t("setup.rules.generalEvery")
               )}
             </p>
           </div>
@@ -380,7 +382,7 @@ export function RuleEditor({
             type="button"
             className={styles.close}
             onClick={() => requestCloseRef.current()}
-            aria-label="Close the rule editor"
+            aria-label={t("setup.rules.closeEditor")}
           >
             <CloseIcon size={16} />
           </button>
@@ -390,7 +392,7 @@ export function RuleEditor({
           <details className={styles.recap}>
             <summary>
               <HelpIcon size={15} />
-              How a rule is chosen
+              {t("setup.rules.howChosen")}
               <span className={styles.recapChevron} aria-hidden="true">
                 <ChevronDownIcon size={15} />
               </span>
@@ -411,13 +413,12 @@ export function RuleEditor({
                   onChange={(e) => setUseGeneral(e.target.checked)}
                 />
                 <span>
-                  <b>Use a general rule</b> — general rules apply to every situation in the set, whenever
-                  no {situation?.key ?? "situation"} rule matches.
+                  <b>{t("setup.rules.useGeneral")}</b> — {t("setup.rules.useGeneralText", { key: situation?.key ?? t("setup.rules.situation").toLowerCase() })}
                 </span>
               </label>
               {useGeneral && (
                 <label className={styles.field}>
-                  <span className={styles.label}>General rule</span>
+                  <span className={styles.label}>{t("setup.rules.generalRule")}</span>
                   <select
                     className={styles.select}
                     value={chosenGeneralRule?.id ?? ""}
@@ -460,7 +461,7 @@ export function RuleEditor({
             <>
               <section className={styles.card}>
                 <label className={styles.field}>
-                  <span className={styles.label}>Rule key</span>
+                  <span className={styles.label}>{t("setup.rules.ruleKey")}</span>
                   <input
                     className={styles.input}
                     value={answerKey}
@@ -470,7 +471,7 @@ export function RuleEditor({
                 </label>
                 <div className={styles.scopeRow}>
                   <span>
-                    Applies to <b>{situation ? situation.key : "every situation"}</b> in <b>{answerSet || "—"}</b>
+                    {t("setup.rules.appliesTo", { situation: situation ? situation.key : t("setup.rules.everySituationShort"), set: answerSet || "—" })}
                   </span>
                   <button
                     type="button"
@@ -478,13 +479,13 @@ export function RuleEditor({
                     aria-expanded={scopeOpen}
                     onClick={() => setScopeOpen((open) => !open)}
                   >
-                    {scopeOpen ? "Done" : "Change"}
+                    {scopeOpen ? t("setup.rules.done") : t("setup.rules.change")}
                   </button>
                 </div>
                 {scopeOpen && (
                   <div className={styles.grid2}>
                     <label className={styles.field}>
-                      <span className={styles.label}>Answer set</span>
+                      <span className={styles.label}>{t("setup.rules.answerSet")}</span>
                       <input
                         className={styles.input}
                         value={answerSet}
@@ -498,13 +499,13 @@ export function RuleEditor({
                       </datalist>
                     </label>
                     <label className={styles.field}>
-                      <span className={styles.label}>Situation</span>
+                      <span className={styles.label}>{t("setup.rules.situation")}</span>
                       <select
                         className={styles.select}
                         value={situationKey}
                         onChange={(e) => setSituationKey(e.target.value)}
                       >
-                        <option value="">General rule — every situation</option>
+                        <option value="">{t("setup.rules.generalOption")}</option>
                         {situations.map((s) => (
                           <option key={s.key} value={s.key}>
                             {s.key} — {s.question.slice(0, 70)}
@@ -525,14 +526,14 @@ export function RuleEditor({
                   <span className={styles.step}>1</span>
                   <div>
                     <h3 id={`${titleId}-when`} className={styles.cardTitle}>
-                      When the agent found
+                      {t("setup.rules.whenFound")}
                     </h3>
                     <p className={styles.cardHint}>
                       Pick every finding this rule covers — several in one need mean <i>either</i>, across
                       needs they must <i>all</i> hold. Nothing picked: the rule applies whatever was found.
                     </p>
                   </div>
-                  <span className={styles.cardAside}>{tickedCount} picked</span>
+                  <span className={styles.cardAside}>{t("setup.rules.picked", { n: tickedCount })}</span>
                 </header>
 
                 <div className={styles.needs}>
@@ -552,7 +553,7 @@ export function RuleEditor({
                           <span className={styles.needName} title={need}>
                             {humanise(need)}
                           </span>
-                          {picked.length > 0 && <span className={styles.needCount}>{picked.length} picked</span>}
+                          {picked.length > 0 && <span className={styles.needCount}>{t("setup.rules.picked", { n: picked.length })}</span>}
                           {/* A state computed from a number nobody has set can never
                               resolve, and a rule branching on it would never fire.
                               Saying so here is cheaper than finding out from a transcript. */}
@@ -594,8 +595,8 @@ export function RuleEditor({
                 {narrowed && (
                   <button type="button" className={styles.linkButton} onClick={() => setShowAllNeeds((all) => !all)}>
                     {showAllNeeds
-                      ? "Show only this situation's needs"
-                      : `Show all ${vocabulary.needs.length} needs`}
+                      ? t("setup.rules.showOnlyNeeds")
+                      : t("setup.rules.showAllNeeds", { n: vocabulary.needs.length })}
                   </button>
                 )}
               </section>
@@ -607,7 +608,7 @@ export function RuleEditor({
                   <span className={styles.step}>2</span>
                   <div>
                     <h3 id={`${titleId}-then`} className={styles.cardTitle}>
-                      Then
+                      {t("setup.rules.then")}
                     </h3>
                     <p className={styles.cardHint}>Where the ticket goes once this rule wins.</p>
                   </div>
@@ -638,7 +639,7 @@ export function RuleEditor({
                     number, and one slot forced that into two round trips. */}
                 {route === "needs_customer_input" && (
                   <div className={styles.field}>
-                    <span className={styles.label}>Ask the customer for</span>
+                    <span className={styles.label}>{t("setup.rules.askFor")}</span>
                     <div className={styles.chips}>
                       {vocabulary.asks.map((a) => {
                         const on = ask.includes(a);
@@ -667,7 +668,7 @@ export function RuleEditor({
                   <span className={styles.step}>3</span>
                   <div>
                     <h3 id={`${titleId}-reply`} className={styles.cardTitle}>
-                      Reply
+                      {t("setup.rules.reply")}
                     </h3>
                     <p className={styles.cardHint}>
                       Guidance for the drafting agent — never sent as written.
@@ -676,7 +677,7 @@ export function RuleEditor({
                 </header>
 
                 <label className={styles.field}>
-                  <span className={styles.label}>What the reply should do</span>
+                  <span className={styles.label}>{t("setup.rules.replyShould")}</span>
                   <textarea
                     ref={skeletonRef}
                     className={styles.textarea}
@@ -693,7 +694,7 @@ export function RuleEditor({
                     skeleton that says it — the whole reason the number is held once. */}
                 {vocabulary.parameters.length > 0 && (
                   <div className={styles.tokens}>
-                    <span className={styles.tokensLabel}>Insert a number</span>
+                    <span className={styles.tokensLabel}>{t("setup.rules.insertNumber")}</span>
                     {vocabulary.parameters.map((p) => (
                       <button
                         key={p.key}
@@ -704,7 +705,7 @@ export function RuleEditor({
                         onClick={() => insertParameter(p.key)}
                       >
                         {p.key}
-                        {!p.set && <span className={styles.tokenWarn}>unset</span>}
+                        {!p.set && <span className={styles.tokenWarn}>{t("setup.rules.unset")}</span>}
                       </button>
                     ))}
                   </div>
@@ -721,7 +722,7 @@ export function RuleEditor({
                 {vocabulary.tones.length > 0 && (
                   <div className={styles.field}>
                     <span className={styles.label} id={`${titleId}-tone`}>
-                      Tone
+                      {t("setup.rules.tone")}
                     </span>
                     <div className={styles.chips} role="group" aria-labelledby={`${titleId}-tone`}>
                       {vocabulary.tones.map((tone) => {
@@ -759,7 +760,7 @@ export function RuleEditor({
                     partner in the sender directory, none offered here. */}
                 <div className={styles.field}>
                   <span className={styles.label} id={`${titleId}-checks`}>
-                    Checks this rule opens
+                    {t("setup.rules.checksOpens")}
                   </span>
                   {checks.length > 0 && (
                     <ol className={styles.checkSteps} aria-labelledby={`${titleId}-checks`}>
@@ -770,7 +771,7 @@ export function RuleEditor({
                             <span className={styles.checkStepNumber}>{index + 1}</span>
                             <select
                               className={styles.select}
-                              aria-label={`Step ${index + 1}: who owes it`}
+                              aria-label={t("setup.rules.stepWho", { n: index + 1 })}
                               value={step.owner}
                               onChange={(e) => updateCheck(index, { owner: e.target.value as RuleCheck["owner"] })}
                             >
@@ -783,7 +784,7 @@ export function RuleEditor({
                             </select>
                             <select
                               className={styles.select}
-                              aria-label={`Step ${index + 1}: what is checked`}
+                              aria-label={t("setup.rules.stepWhat", { n: index + 1 })}
                               value={step.need}
                               onChange={(e) => updateCheck(index, { need: e.target.value })}
                             >
@@ -799,17 +800,17 @@ export function RuleEditor({
                                 className={styles.linkButton}
                                 disabled={index === 0}
                                 onClick={() => moveCheck(index, -1)}
-                                aria-label={`Move step ${index + 1} up`}
+                                aria-label={t("setup.rules.moveUp", { n: index + 1 })}
                               >
-                                Up
+                                {t("setup.rules.up")}
                               </button>
                               <button
                                 type="button"
                                 className={styles.linkButton}
                                 onClick={() => setChecks((prev) => prev.filter((_, i) => i !== index))}
-                                aria-label={`Remove step ${index + 1}`}
+                                aria-label={t("setup.rules.removeStep", { n: index + 1 })}
                               >
-                                Remove
+                                {t("setup.senders.remove")}
                               </button>
                             </span>
                           </li>
@@ -828,7 +829,7 @@ export function RuleEditor({
                         ])
                       }
                     >
-                      Add a check
+                      {t("setup.rules.addCheck")}
                     </button>
                   )}
                   <p className={styles.hint}>
@@ -845,10 +846,10 @@ export function RuleEditor({
                     the marked word wherever the draft is shown. Typed per rule, https
                     only — see `scripts/lib/reply-link.mjs`. */}
                 <div className={styles.field}>
-                  <span className={styles.label}>Link</span>
+                  <span className={styles.label}>{t("setup.rules.link")}</span>
                   <div className={styles.grid2}>
                     <label className={styles.field}>
-                      <span className={styles.hint}>Address</span>
+                      <span className={styles.hint}>{t("setup.senders.address")}</span>
                       <input
                         className={styles.input}
                         type="url"
@@ -859,7 +860,7 @@ export function RuleEditor({
                       />
                     </label>
                     <label className={styles.field}>
-                      <span className={styles.hint}>What it opens</span>
+                      <span className={styles.hint}>{t("setup.rules.whatOpens")}</span>
                       <input
                         className={styles.input}
                         value={linkLabel}
@@ -893,9 +894,9 @@ export function RuleEditor({
                       cannot be reached from here at all. */}
                   {vocabulary.offerableCodes.length > 0 && (
                     <label className={styles.field}>
-                      <span className={styles.label}>Give the customer a code</span>
+                      <span className={styles.label}>{t("setup.rules.giveCode")}</span>
                       <select className={styles.select} value={offerCode} onChange={(e) => setOfferCode(e.target.value)}>
-                        <option value="">No code</option>
+                        <option value="">{t("setup.rules.noCode")}</option>
                         {vocabulary.offerableCodes.map((code) => (
                           <option key={code.code} value={code.code}>
                             {code.code}
@@ -916,13 +917,13 @@ export function RuleEditor({
                       from here, as though it worked. */}
                   {vocabulary.articles.length > 0 && (
                     <label className={styles.field}>
-                      <span className={styles.label}>Answer from an article</span>
+                      <span className={styles.label}>{t("setup.rules.answerFromArticle")}</span>
                       <select
                         className={styles.select}
                         value={knowledgeDocumentId}
                         onChange={(e) => setKnowledgeDocumentId(e.target.value)}
                       >
-                        <option value="">Whatever retrieval finds</option>
+                        <option value="">{t("setup.rules.whateverRetrieval")}</option>
                         {vocabulary.articles.map((article) => (
                           <option key={article.id} value={article.id}>
                             {article.title}
@@ -945,12 +946,12 @@ export function RuleEditor({
           <div className={styles.footerText}>
             {closeBlocked ? (
               <div className={styles.discard} role="alert">
-                <span>You have unsaved changes.</span>
+                <span>{t("setup.knowledge.unsaved")}</span>
                 <Button variant="secondary" size="sm" onClick={onClose}>
-                  Discard
+                  {t("setup.rules.discard")}
                 </Button>
                 <Button variant="secondary" size="sm" onClick={() => setCloseBlocked(false)}>
-                  Keep editing
+                  {t("setup.rules.keepEditing")}
                 </Button>
               </div>
             ) : useGeneral ? (
@@ -973,7 +974,7 @@ export function RuleEditor({
           </div>
           <div className={styles.actions}>
             <Button variant="secondary" size="sm" disabled={saving} onClick={onClose}>
-              Cancel
+              {t("tickets.panels.draft.cancel")}
             </Button>
             {useGeneral ? (
               <Button
@@ -982,7 +983,7 @@ export function RuleEditor({
                 disabled={!chosenGeneralRule || pickedBranches.length === 0}
                 onClick={() => chosenGeneralRule && onUseGeneralRule?.(chosenGeneralRule, pickedBranches)}
               >
-                Use general rule
+                {t("setup.rules.useGeneralButton")}
               </Button>
             ) : (
               <Button
@@ -991,7 +992,7 @@ export function RuleEditor({
                 disabled={saving || !payload.answerKey || !payload.answerSet || askWithoutRoute || Boolean(linkProblem)}
                 onClick={save}
               >
-                {saving ? "Saving…" : "Save as draft"}
+                {saving ? t("tickets.panels.saving") : t("setup.rules.saveDraft")}
               </Button>
             )}
           </div>

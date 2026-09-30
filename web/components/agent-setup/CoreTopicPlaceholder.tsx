@@ -1,5 +1,5 @@
+import { Tx } from "@/lib/i18n/client";
 import type { CoreTopic } from "@/lib/types";
-import { CORE_TOPIC_LABELS } from "@/lib/types";
 import { PlusIcon } from "@/components/icons";
 import styles from "./CoreTopicPlaceholder.module.css";
 
@@ -16,8 +16,8 @@ export function CoreTopicPlaceholder({ topic, onCreate }: CoreTopicPlaceholderPr
         <PlusIcon size={15} />
       </span>
       <span className={styles.body}>
-        <span className={styles.title}>{CORE_TOPIC_LABELS[topic]}</span>
-        <span className={styles.hint}>Not started</span>
+        <span className={styles.title}><Tx k={`coreTopic.${topic}`} /></span>
+        <span className={styles.hint}><Tx k="setup.knowledge.notStarted" /></span>
       </span>
     </button>
   );

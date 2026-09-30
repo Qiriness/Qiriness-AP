@@ -1,4 +1,5 @@
 import { ArrowRightIcon, CheckCircleIcon, DotIcon } from "@/components/icons";
+import { useT } from "@/lib/i18n/client";
 import styles from "./SetupHeader.module.css";
 
 interface SetupHeaderProps {
@@ -9,19 +10,18 @@ interface SetupHeaderProps {
 }
 
 export function SetupHeader({ approved, total, onTest }: SetupHeaderProps) {
+  const t = useT();
   const ready = total > 0 && approved === total;
-  const message = ready
-    ? "Your agent is ready to answer with approved knowledge."
-    : `${approved} of ${total} articles approved for the agent.`;
+  const message = ready ? t("setup.header.ready") : t("setup.header.progress", { approved, total });
 
   return (
     <header className={styles.header}>
       <div className={styles.headingRow}>
-        <h1 className={styles.title}>Agent Setup</h1>
+        <h1 className={styles.title}>{t("nav.agentSetup")}</h1>
         {/* Navigation moved to the tab bar in the layout. This stays a button
             because it IS an action: it opens a dialog and goes nowhere. */}
         <button type="button" className={styles.preview} onClick={onTest}>
-          Test the agent
+          {t("setup.header.test")}
           <ArrowRightIcon size={16} />
         </button>
       </div>

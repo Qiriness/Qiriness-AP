@@ -10,6 +10,7 @@ import { WorkspaceActions } from "./WorkspaceActions";
 import { WorkspaceHeader } from "./WorkspaceHeader";
 import { EditorFooter } from "./EditorFooter";
 import { AlertIcon, CheckCircleIcon, RefreshIcon } from "@/components/icons";
+import { useT } from "@/lib/i18n/client";
 import styles from "./ArticleWorkspace.module.css";
 
 interface ArticleWorkspaceProps {
@@ -61,6 +62,7 @@ export function ArticleWorkspace({
   onDelete,
   onTest,
 }: ArticleWorkspaceProps) {
+  const t = useT();
   const syncing = article.syncState === "syncing";
   // A source can only be attached once, to a genuinely fresh article — the
   // backend has no "reassign source" or "detach" path, only import (once)
@@ -73,7 +75,7 @@ export function ArticleWorkspace({
       <div className={styles.editorCol}>
         <WorkspaceHeader
           article={article}
-          placeholder="Untitled article"
+          placeholder={t("setup.knowledge.untitled")}
           focusTitleNonce={focusTitleNonce}
           onBack={onBack}
           onTitleChange={onTitleChange}
@@ -83,7 +85,7 @@ export function ArticleWorkspace({
           <div className={styles.sourceRow}>
             <div className={styles.sourceSelect}>
               <label className={styles.label} id="source-label">
-                Shopify source
+                {t("setup.knowledge.shopifySource")}
               </label>
               <div aria-labelledby="source-label">
                 <SourcePageSelect
@@ -104,7 +106,7 @@ export function ArticleWorkspace({
 
           <div className={styles.categoryRow}>
             <label className={styles.label} id="category-label">
-              Category
+              {t("tickets.panels.row.category")}
             </label>
             <div aria-labelledby="category-label">
               <CategorySelect value={article.category} onChange={onCategoryChange} />
@@ -139,12 +141,12 @@ export function ArticleWorkspace({
 
         <div className={styles.field}>
           <label className={styles.label} htmlFor="article-content-hint">
-            Article content
+            {t("setup.knowledge.content")}
           </label>
           {article.sourcePageId && (
             <p className={styles.syncWarning}>
               <AlertIcon size={14} />
-              Editing this content will disconnect it from Shopify — it won&apos;t sync automatically after that.
+              {t("setup.knowledge.disconnectWarning")}
             </p>
           )}
           <RichTextEditor
@@ -188,14 +190,15 @@ function SyncIndicator({
   article: Article;
   onResync: () => void;
 }) {
+  const t = useT();
   if (!article.sourcePageId) {
-    return <span className={styles.syncMuted}>No source linked</span>;
+    return <span className={styles.syncMuted}>{t("setup.knowledge.noSourceLinked")}</span>;
   }
   if (article.syncState === "syncing") {
     return (
       <span className={styles.syncing}>
         <span className={styles.spinner} aria-hidden="true" />
-        Importing…
+        {t("setup.knowledge.importing")}
       </span>
     );
   }
@@ -204,11 +207,11 @@ function SyncIndicator({
       <span className={styles.syncBlock}>
         <span className={styles.syncError}>
           <AlertIcon size={15} />
-          Import failed
+          {t("setup.knowledge.importFailed")}
         </span>
         <button type="button" className={styles.resync} onClick={onResync}>
           <RefreshIcon size={14} />
-          Retry
+          {t("setup.knowledge.retry")}
         </button>
       </span>
     );
@@ -217,14 +220,14 @@ function SyncIndicator({
     <span className={styles.syncBlock}>
       <span className={styles.synced}>
         <CheckCircleIcon size={15} />
-        Synced
+        {t("setup.knowledge.synced")}
       </span>
       <span className={styles.syncMeta}>
-        {article.lastSyncedLabel ? `Last synced ${article.lastSyncedLabel}` : ""}
+        {article.lastSyncedLabel ? t("setup.knowledge.lastSynced", { when: article.lastSyncedLabel }) : ""}
       </span>
       <button type="button" className={styles.resync} onClick={onResync}>
         <RefreshIcon size={14} />
-        Resync
+        {t("setup.knowledge.resync")}
       </button>
     </span>
   );

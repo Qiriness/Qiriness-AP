@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 
 import { SearchIcon } from "@/components/icons";
 import { knowledgeErrorMessage } from "@/lib/api/knowledge";
+import { useT } from "@/lib/i18n/client";
 import type { ConcernOption, RecommendableProduct } from "@/lib/types";
 
 import styles from "./RecommendationList.module.css";
@@ -49,6 +50,7 @@ export function RecommendationList({
   initialConcerns: ConcernOption[];
   loadError: string | null;
 }) {
+  const t = useT();
   const [products, setProducts] = useState(initialProducts);
   const [concern, setConcern] = useState(initialConcerns[0]?.key ?? "");
   const [busy, setBusy] = useState<string | null>(null);
@@ -121,7 +123,7 @@ export function RecommendationList({
     <section className={styles.wrap}>
       <header className={styles.head}>
         <div>
-          <h2 className={styles.title}>What we suggest, by skin type</h2>
+          <h2 className={styles.title}>{t("setup.tabs.recommendations.hint").charAt(0).toUpperCase() + t("setup.tabs.recommendations.hint").slice(1)}</h2>
           <p className={styles.lede}>
             The agent recommends only what is ticked here. The catalogue tags most products as
             suiting most skin, which is right on a product page and no use in a reply — so this is
@@ -140,8 +142,8 @@ export function RecommendationList({
           REORDER an answer the intersection already found, so an untouched
           collection is the shop having no preference rather than a gap, and
           somebody looking at a zero should not read it as unfinished. */}
-      <div className={styles.concerns} role="tablist" aria-label="Skin type">
-        <span className={styles.groupLabel}>Skin type</span>
+      <div className={styles.concerns} role="tablist" aria-label={t("setup.recommendations.skinType")}>
+        <span className={styles.groupLabel}>{t("setup.recommendations.skinType")}</span>
         {counts
           .filter((option) => option.kind === "concern")
           .map((option) => (
@@ -160,8 +162,8 @@ export function RecommendationList({
       </div>
 
       {counts.some((option) => option.kind === "collection") && (
-        <div className={styles.concerns} role="tablist" aria-label="Live collections">
-          <span className={styles.groupLabel}>Preferred in — live collections</span>
+        <div className={styles.concerns} role="tablist" aria-label={t("setup.recommendations.liveCollections")}>
+          <span className={styles.groupLabel}>{t("setup.recommendations.preferredIn")}</span>
           {counts
             .filter((option) => option.kind === "collection")
             .map((option) => (
@@ -190,8 +192,8 @@ export function RecommendationList({
           <input
             type="search"
             className={styles.searchInput}
-            placeholder="Search the catalogue…"
-            aria-label="Search products by name or description"
+            placeholder={t("setup.recommendations.search")}
+            aria-label={t("setup.recommendations.searchAria")}
             value={query}
             onChange={(event) => setQuery(event.target.value)}
           />
@@ -204,8 +206,7 @@ export function RecommendationList({
             onChange={(event) => setOnlyCompatible(event.target.checked)}
           />
           <span>
-            Only products the catalogue already tags for this skin type ({shown.length} of{" "}
-            {products.length})
+            {t("setup.recommendations.onlyTagged", { n: shown.length, total: products.length })}
           </span>
         </label>
       </div>
@@ -221,7 +222,7 @@ export function RecommendationList({
                   checked={picked}
                   disabled={busy === product.id}
                   onChange={() => toggle(product)}
-                  aria-label={`Suggest ${product.title} for this skin type`}
+                  aria-label={t("setup.recommendations.suggest", { title: product.title })}
                 />
                 <span className={styles.main}>
                   <span className={styles.name}>{product.title}</span>
@@ -234,12 +235,11 @@ export function RecommendationList({
                         curating one concern does not happen blind to the rest. */}
                     {product.concerns.length > 0 && (
                       <span className={styles.muted}>
-                        suggested for {product.concerns.length} skin type
-                        {product.concerns.length === 1 ? "" : "s"}
+                        {t("setup.recommendations.suggestedFor", { count: product.concerns.length })}
                       </span>
                     )}
                     {!product.compatibleWith.includes(concern) && (
-                      <span className={styles.warn}>not tagged for this skin type</span>
+                      <span className={styles.warn}>{t("setup.recommendations.notTagged")}</span>
                     )}
                   </span>
                 </span>
@@ -257,17 +257,12 @@ export function RecommendationList({
         <p className={styles.empty}>
           {query && matchesQuery > 0 ? (
             <>
-              {matchesQuery} product{matchesQuery === 1 ? "" : "s"} match “{query}”, but{" "}
-              {matchesQuery === 1 ? "it is" : "none is"} tagged for this skin type. Untick the
-              filter above to curate {matchesQuery === 1 ? "it" : "them"} anyway.
+              {t("setup.recommendations.hiddenByTag", { count: matchesQuery, query })}
             </>
           ) : query ? (
-            <>Nothing in the catalogue matches “{query}”.</>
+            <>{t("setup.recommendations.noMatch", { query })}</>
           ) : (
-            <>
-              No product is tagged for this skin type. Untick the filter above to curate from the
-              whole catalogue.
-            </>
+            <>{t("setup.recommendations.noneTagged")}</>
           )}
         </p>
       )}

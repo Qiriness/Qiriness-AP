@@ -3,6 +3,7 @@
 import { useEffect, useId, useRef, useState } from "react";
 import type { ShopifySource } from "@/lib/types";
 import { ChevronDownIcon, PageIcon } from "@/components/icons";
+import { useT } from "@/lib/i18n/client";
 import styles from "./SourcePageSelect.module.css";
 
 interface SourcePageSelectProps {
@@ -20,6 +21,7 @@ export function SourcePageSelect({
   disabled,
   onChange,
 }: SourcePageSelectProps) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -29,7 +31,7 @@ export function SourcePageSelect({
   // shopify_content_sources.title is already sorted by the API, but keep it
   // deterministic here too since NONE is prepended client-side.
   const options: Array<{ id: string; title: string; handle: string; group: "page" | "policy" | "none" }> = [
-    { id: NONE, title: "No source", handle: "Standalone article", group: "none" },
+    { id: NONE, title: t("setup.knowledge.noSource"), handle: t("setup.knowledge.standaloneArticle"), group: "none" },
     ...sources
       .filter((s) => s.sourceType === "shopify_page")
       .map((s) => ({ id: s.id, title: s.title, handle: s.handle, group: "page" as const })),
@@ -96,7 +98,7 @@ export function SourcePageSelect({
       >
         <PageIcon size={17} className={styles.leadingIcon} />
         <span className={styles.triggerText}>
-          {selected ? selected.title : "No source"}
+          {selected ? selected.title : t("setup.knowledge.noSource")}
         </span>
         <ChevronDownIcon
           size={17}
@@ -115,7 +117,7 @@ export function SourcePageSelect({
               <li key={opt.id} role="presentation">
                 {showHeading && (
                   <div className={styles.groupHeading} role="presentation">
-                    {opt.group === "page" ? "Pages" : "Policies"}
+                    {opt.group === "page" ? t("setup.knowledge.pages") : t("setup.knowledge.policies")}
                   </div>
                 )}
                 <div

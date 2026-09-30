@@ -3,6 +3,9 @@
 import { ARTICLE_VERDICT_LABELS } from "@/lib/agent-test-types";
 import type { ArticleVerdict, RunSummary } from "@/lib/agent-test-types";
 
+import { useLocale, useT } from "@/lib/i18n/client";
+import { intlTag } from "@/lib/i18n/locales";
+
 import styles from "./RunHistory.module.css";
 
 /**
@@ -30,8 +33,10 @@ export function RunHistory({
   onDelete: (id: string) => void;
   loading: boolean;
 }) {
+  const t = useT();
+  const locale = useLocale();
   if (loading) {
-    return <p className={styles.empty}>Loading earlier runs…</p>;
+    return <p className={styles.empty}>{t("setup.test.loadingRuns")}</p>;
   }
   if (runs.length === 0) {
     return (
@@ -50,7 +55,7 @@ export function RunHistory({
             <button type="button" className={styles.open} onClick={() => onOpen(run.id)}>
               <span className={styles.subject}>{run.subject || firstLine(run.body)}</span>
               <span className={styles.meta}>
-                {new Date(run.ranAt).toLocaleString()}
+                {new Date(run.ranAt).toLocaleString(intlTag(locale))}
                 {run.requesterMasked ? ` · ${run.requesterMasked}` : ""}
               </span>
               <span className={styles.chips}>
@@ -66,7 +71,7 @@ export function RunHistory({
                 )}
                 {run.hasIdealAnswer && (
                   <span className={styles.chip} data-tone="good">
-                    ideal answer
+                    {t("setup.test.idealAnswerChip")}
                   </span>
                 )}
               </span>
@@ -75,8 +80,8 @@ export function RunHistory({
               type="button"
               className={styles.delete}
               onClick={() => onDelete(run.id)}
-              aria-label="Delete this run"
-              title="Delete this run"
+              aria-label={t("setup.test.deleteRun")}
+              title={t("setup.test.deleteRun")}
             >
               ×
             </button>
@@ -89,17 +94,18 @@ export function RunHistory({
 
 /** The one-line answer: how far the run got, and what it concluded. */
 function Outcome({ run }: { run: RunSummary }) {
+  const t = useT();
   if (run.status === "failed") {
     return (
       <span className={styles.chip} data-tone="bad">
-        failed
+        {t("setup.test.failed")}
       </span>
     );
   }
   if (run.status === "gated") {
     return (
       <span className={styles.chip} data-tone="bad">
-        would have been dropped
+        {t("setup.test.dropped")}
       </span>
     );
   }
@@ -115,11 +121,11 @@ function Outcome({ run }: { run: RunSummary }) {
       {run.verdict && <span className={styles.chip}>{run.verdict}</span>}
       {run.draftSkippedReason ? (
         <span className={styles.chip} data-tone="warn">
-          no reply · {run.draftSkippedReason}
+          {t("setup.test.noReply")} · {run.draftSkippedReason}
         </span>
       ) : run.draftChecksPassed === false ? (
         <span className={styles.chip} data-tone="warn">
-          checks failed
+          {t("setup.test.checksFailed")}
         </span>
       ) : null}
     </>

@@ -4,8 +4,9 @@ import { useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { addSender, deleteSender, updateSender } from "@/lib/api/senders";
 import { knowledgeErrorMessage } from "@/lib/api/knowledge";
-import { SENDER_LABEL_KEYS, SENDER_LABELS } from "@/lib/types";
-import type { SenderActor, SenderDirectoryView, SenderLabel } from "@/lib/types";
+import { useT } from "@/lib/i18n/client";
+import { SENDER_LABEL_KEYS } from "@/lib/types";
+import type { SenderDirectoryView, SenderLabel } from "@/lib/types";
 import styles from "./SenderDirectory.module.css";
 
 /**
@@ -19,13 +20,10 @@ import styles from "./SenderDirectory.module.css";
  * « partner » here: the directory also has a commercial partner, and the two
  * mean opposite things for a case.
  */
-const ACTOR_MEANING: Record<SenderActor, string> = {
-  customer: "Answered like a customer.",
-  colleague: "Our side: can owe a check; never sent a customer-style reply.",
-  partner: "Operations partner: can owe a check (warehouse, carrier); never sent a customer-style reply.",
-};
+// Meanings: `setup.senders.actor.<actor>`.
 
 export function SenderDirectory({ initial, loadError }: { initial: SenderDirectoryView | null; loadError: string | null }) {
+  const t = useT();
   const [view, setView] = useState<SenderDirectoryView | null>(initial);
   const [patternType, setPatternType] = useState<"domain" | "email">("domain");
   const [pattern, setPattern] = useState("");
@@ -51,8 +49,8 @@ export function SenderDirectory({ initial, loadError }: { initial: SenderDirecto
   if (loadError || !view) {
     return (
       <section className={styles.section}>
-        <h2 className={styles.title}>Senders</h2>
-        <p className={styles.error} role="alert">{loadError ?? "Failed to load the sender directory."}</p>
+        <h2 className={styles.title}>{t("setup.tabs.senders.label")}</h2>
+        <p className={styles.error} role="alert">{loadError ?? t("setup.senders.loadFailed")}</p>
       </section>
     );
   }
@@ -60,7 +58,7 @@ export function SenderDirectory({ initial, loadError }: { initial: SenderDirecto
   return (
     <section className={styles.section} aria-labelledby="senders-heading">
       <header className={styles.header}>
-        <h2 className={styles.title} id="senders-heading">Senders</h2>
+        <h2 className={styles.title} id="senders-heading">{t("setup.tabs.senders.label")}</h2>
         <p className={styles.intro}>
           Who writes to the support mailbox besides customers: your own team, an agency, your warehouse, a carrier, a
           retailer. Add a domain (every address under it counts, subdomains too) or a single address. Anyone not listed
@@ -87,14 +85,14 @@ export function SenderDirectory({ initial, loadError }: { initial: SenderDirecto
         }}
       >
         <label className={styles.field}>
-          Type
+          {t("setup.senders.type")}
           <select className={styles.select} value={patternType} onChange={(e) => setPatternType(e.target.value as "domain" | "email")}>
-            <option value="domain">Domain</option>
-            <option value="email">Address</option>
+            <option value="domain">{t("setup.senders.domain")}</option>
+            <option value="email">{t("setup.senders.address")}</option>
           </select>
         </label>
         <label className={styles.field}>
-          {patternType === "domain" ? "Domain" : "Address"}
+          {patternType === "domain" ? t("setup.senders.domain") : t("setup.senders.address")}
           <input
             className={styles.input}
             value={pattern}
@@ -105,42 +103,42 @@ export function SenderDirectory({ initial, loadError }: { initial: SenderDirecto
           />
         </label>
         <label className={styles.field}>
-          Who they are
+          {t("setup.senders.whoTheyAre")}
           <select className={styles.select} value={label} onChange={(e) => setLabel(e.target.value as SenderLabel)}>
             {SENDER_LABEL_KEYS.map((key) => (
-              <option key={key} value={key}>{SENDER_LABELS[key]}</option>
+              <option key={key} value={key}>{t(`sender.${key}`)}</option>
             ))}
           </select>
         </label>
         <label className={styles.field}>
-          Note
-          <input className={styles.input} value={note} placeholder="optional" onChange={(e) => setNote(e.target.value)} />
+          {t("setup.senders.note")}
+          <input className={styles.input} value={note} placeholder={t("setup.senders.optional")} onChange={(e) => setNote(e.target.value)} />
         </label>
-        <Button type="submit" size="sm" disabled={busy || !pattern.trim()}>Add</Button>
+        <Button type="submit" size="sm" disabled={busy || !pattern.trim()}>{t("setup.senders.add")}</Button>
       </form>
       {error && <p className={styles.error} role="alert">{error}</p>}
 
-      <ul className={styles.list} aria-label="Sender directory">
+      <ul className={styles.list} aria-label={t("setup.senders.directory")}>
         {view.entries.map((entry) => (
           <li key={entry.id} className={styles.row}>
             <span className={styles.pattern}>
               {entry.pattern}
-              <span className={styles.kind}>{entry.patternType === "domain" ? "Domain" : "Address"}{entry.note ? ` · ${entry.note}` : ""}</span>
+              <span className={styles.kind}>{entry.patternType === "domain" ? t("setup.senders.domain") : t("setup.senders.address")}{entry.note ? ` · ${entry.note}` : ""}</span>
             </span>
             <select
               className={styles.select}
-              aria-label={`Who ${entry.pattern} is`}
+              aria-label={t("setup.senders.whoIs", { pattern: entry.pattern })}
               value={entry.label}
               disabled={busy}
               onChange={(e) => run(() => updateSender(entry.id, { label: e.target.value as SenderLabel }))}
             >
               {SENDER_LABEL_KEYS.map((key) => (
-                <option key={key} value={key}>{SENDER_LABELS[key]}</option>
+                <option key={key} value={key}>{t(`sender.${key}`)}</option>
               ))}
             </select>
-            <span className={styles.meaning}>{ACTOR_MEANING[entry.actor]}</span>
+            <span className={styles.meaning}>{t(`setup.senders.actor.${entry.actor}`)}</span>
             <Button size="sm" variant="tertiary" disabled={busy} onClick={() => run(() => deleteSender(entry.id))}>
-              Remove
+              {t("setup.senders.remove")}
             </Button>
           </li>
         ))}

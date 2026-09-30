@@ -18,6 +18,7 @@ import { BrandVoiceWorkspace } from "./BrandVoiceWorkspace";
 import { EmptyWorkspace } from "./EmptyWorkspace";
 import { LoadError } from "./LoadError";
 import { Toast, type ToastMessage, type ToastVariant } from "./Toast";
+import { useT } from "@/lib/i18n/client";
 import styles from "./AgentSetup.module.css";
 
 const OPTIMIZE_MS = 1300;
@@ -43,6 +44,7 @@ function tidyContent(html: string): string {
 }
 
 export function AgentSetup({ initialArticles, initialSources, loadError }: AgentSetupProps) {
+  const t = useT();
   const [articles, setArticles] = useState<Article[]>(initialArticles);
   const [sources] = useState<ShopifySource[]>(initialSources);
   const [selectedId, setSelectedId] = useState<string | null>(initialArticles[0]?.id ?? null);
@@ -136,7 +138,7 @@ export function AgentSetup({ initialArticles, initialSources, loadError }: Agent
     patchArticle(selected.id, demoted ? { ...patch, status: "draft" } : patch);
     setSaveState("unsaved");
     if (demoted) {
-      showToast("Moved back to draft — approve again once you're happy with the changes.", "info");
+      showToast(t("setup.knowledge.toast.demoted"), "info");
     }
   }
 
@@ -179,7 +181,7 @@ export function AgentSetup({ initialArticles, initialSources, loadError }: Agent
       const updated = await updateArticle(id, { sourceId });
       patchArticle(id, updated);
       bumpEditor(id);
-      showToast(`Imported from ${source?.title ?? "Shopify"}.`);
+      showToast(t("setup.knowledge.toast.imported", { source: source?.title ?? "Shopify" }));
     } catch (error) {
       patchArticle(id, { syncState: "error" });
       showToast(knowledgeErrorMessage(error), "error");
@@ -196,7 +198,7 @@ export function AgentSetup({ initialArticles, initialSources, loadError }: Agent
       const updated = await resyncArticle(id);
       patchArticle(id, updated);
       bumpEditor(id);
-      showToast(`Resynced from ${source?.title ?? "Shopify"}.`);
+      showToast(t("setup.knowledge.toast.resynced", { source: source?.title ?? "Shopify" }));
     } catch (error) {
       patchArticle(id, { syncState: "error" });
       showToast(knowledgeErrorMessage(error), "error");
@@ -219,7 +221,7 @@ export function AgentSetup({ initialArticles, initialSources, loadError }: Agent
       });
       patchArticle(id, updated);
       setSaveState("saved");
-      showToast("Draft saved.");
+      showToast(t("setup.knowledge.toast.saved"));
     } catch (error) {
       setSaveState("unsaved");
       showToast(knowledgeErrorMessage(error), "error");
@@ -241,7 +243,7 @@ export function AgentSetup({ initialArticles, initialSources, loadError }: Agent
       setWordCount(wordsIn(tidied));
       setOptimizing(false);
       setSaveState("unsaved");
-      showToast("Draft tidied up — review before approving.", "info");
+      showToast(t("setup.knowledge.toast.tidied"), "info");
     }, OPTIMIZE_MS);
   }
 
@@ -261,7 +263,7 @@ export function AgentSetup({ initialArticles, initialSources, loadError }: Agent
       });
       patchArticle(id, updated);
       setSaveState("saved");
-      showToast("Approved for the agent.");
+      showToast(t("setup.knowledge.toast.approved"));
     } catch (error) {
       setSaveState("unsaved");
       showToast(knowledgeErrorMessage(error), "error");
@@ -284,7 +286,7 @@ export function AgentSetup({ initialArticles, initialSources, loadError }: Agent
       });
       patchArticle(id, updated);
       setSaveState("saved");
-      showToast("Unapproved — moved back to draft.");
+      showToast(t("setup.knowledge.toast.unapproved"));
     } catch (error) {
       setSaveState("unsaved");
       showToast(knowledgeErrorMessage(error), "error");
@@ -331,7 +333,7 @@ export function AgentSetup({ initialArticles, initialSources, loadError }: Agent
         return next;
       });
       setMobilePane("list");
-      showToast("Article deleted.");
+      showToast(t("setup.knowledge.toast.deleted"));
     } catch (error) {
       showToast(knowledgeErrorMessage(error), "error");
     } finally {

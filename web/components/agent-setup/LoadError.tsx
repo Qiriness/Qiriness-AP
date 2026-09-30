@@ -1,4 +1,5 @@
 import { AlertIcon } from "@/components/icons";
+import { Tx } from "@/lib/i18n/client";
 import styles from "./LoadError.module.css";
 
 interface LoadErrorProps {
@@ -13,7 +14,7 @@ export function LoadError({ message }: LoadErrorProps) {
         <span className={styles.icon}>
           <AlertIcon size={26} />
         </span>
-        <h1 className={styles.title}>Couldn&apos;t load Agent Setup</h1>
+        <h1 className={styles.title}><Tx k="setup.knowledge.loadFailed" /></h1>
         <p className={styles.message}>{message}</p>
         <p className={styles.hint}>
           Check that <code>web/.env.local</code> has Supabase and Shopify credentials, and that a

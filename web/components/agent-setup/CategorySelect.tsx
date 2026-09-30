@@ -2,7 +2,8 @@
 
 import { useEffect, useId, useRef, useState } from "react";
 import type { KnowledgeCategory } from "@/lib/types";
-import { CATEGORY_LABELS, KNOWLEDGE_CATEGORIES } from "@/lib/types";
+import { KNOWLEDGE_CATEGORIES } from "@/lib/types";
+import { useT } from "@/lib/i18n/client";
 import { ChevronDownIcon } from "@/components/icons";
 import styles from "./CategorySelect.module.css";
 
@@ -13,6 +14,7 @@ interface CategorySelectProps {
 
 /** Accessible listbox for the knowledge-base category. Same interaction as SourcePageSelect. */
 export function CategorySelect({ value, onChange }: CategorySelectProps) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -70,7 +72,7 @@ export function CategorySelect({ value, onChange }: CategorySelectProps) {
         onClick={() => setOpen((o) => !o)}
         onKeyDown={onKeyDown}
       >
-        <span className={styles.triggerText}>{CATEGORY_LABELS[value]}</span>
+        <span className={styles.triggerText}>{t(`category.${value}`)}</span>
         <ChevronDownIcon
           size={17}
           className={`${styles.chevron} ${open ? styles.chevronOpen : ""}`}
@@ -93,7 +95,7 @@ export function CategorySelect({ value, onChange }: CategorySelectProps) {
                 onMouseEnter={() => setActiveIndex(i)}
                 onClick={() => choose(category)}
               >
-                {CATEGORY_LABELS[category]}
+                {t(`category.${category}`)}
               </li>
             );
           })}

@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { AlertIcon, CheckCircleIcon, DotIcon, PlusIcon } from "@/components/icons";
 import { Button } from "@/components/ui/Button";
 import { knowledgeErrorMessage } from "@/lib/api/knowledge";
+import { useT } from "@/lib/i18n/client";
 import { deleteRule, saveRule, setCollectionMode, setRuleApproval } from "@/lib/api/policy";
 import {
   branchChoiceKey,
@@ -73,6 +74,7 @@ export function RuleBook({
   vocabulary: PolicyVocabulary;
   loadError: string | null;
 }) {
+  const t = useT();
   const startingAnswerSet =
     initialRules[0]?.answerSet ?? situations.find((situation) => situation.answerSet)?.answerSet ?? "";
   const startingSituation =
@@ -254,7 +256,7 @@ export function RuleBook({
     <section className={styles.wrap}>
       <header className={styles.head}>
         <div className={styles.headText}>
-          <h2 className={styles.title}>Rule workflows</h2>
+          <h2 className={styles.title}>{t("setup.rules.title")}</h2>
           <p className={styles.lede}>
             Pick a situation and review the branches the agent can take. The canvas shows the
             decision shape; the agent still applies the approved rules by situation and specificity.
@@ -262,7 +264,7 @@ export function RuleBook({
         </div>
         <div className={styles.headActions}>
           <span className={styles.count}>
-            {liveCount} live of {rules.length}
+            {t("setup.rules.liveOf", { n: liveCount, total: rules.length })}
           </span>
           <Button
             variant="secondary"
@@ -270,7 +272,7 @@ export function RuleBook({
             leadingIcon={<PlusIcon size={15} />}
             onClick={() => openNewRule()}
           >
-            New rule
+            {t("setup.rules.newRule")}
           </Button>
         </div>
       </header>
@@ -284,9 +286,9 @@ export function RuleBook({
         </p>
       ) : (
         <div className={styles.workspace}>
-          <aside className={styles.rail} aria-label="Situations">
+          <aside className={styles.rail} aria-label={t("setup.rules.situations")}>
             <div className={styles.railBlock}>
-              <p className={styles.railLabel}>Answer set</p>
+              <p className={styles.railLabel}>{t("setup.rules.answerSet")}</p>
               <div className={styles.setList} role="list">
                 {answerSets.map((setName) => (
                   <button
@@ -306,7 +308,7 @@ export function RuleBook({
             </div>
 
             <div className={styles.railBlock}>
-              <p className={styles.railLabel}>Situation</p>
+              <p className={styles.railLabel}>{t("setup.rules.situation")}</p>
               <button
                 type="button"
                 className={activeSituation === SHARED ? styles.situationOn : styles.situationButton}
@@ -315,8 +317,8 @@ export function RuleBook({
                   setSelectedRuleId(null);
                 }}
               >
-                <span className={styles.situationKey}>General rules</span>
-                <span className={styles.situationQuestion}>Apply to every situation in the set</span>
+                <span className={styles.situationKey}>{t("setup.rules.generalRules")}</span>
+                <span className={styles.situationQuestion}>{t("setup.rules.applyEvery")}</span>
               </button>
               {situationsForSet.map((situation) => {
                 const count = rulesInSet.filter((rule) => rule.situationKey === situation.key).length;
@@ -341,22 +343,22 @@ export function RuleBook({
             </div>
           </aside>
 
-          <main className={styles.canvas} aria-label="Rule workflow canvas">
+          <main className={styles.canvas} aria-label={t("setup.rules.canvas")}>
             <div className={styles.canvasTop}>
               <div>
-                <p className={styles.canvasKicker}>{answerSet || "No answer set"}</p>
+                <p className={styles.canvasKicker}>{answerSet || t("setup.rules.noAnswerSet")}</p>
                 <h3 className={styles.canvasTitle}>
-                  {activeSituationMeta ? activeSituationMeta.key : "General rules"}
+                  {activeSituationMeta ? activeSituationMeta.key : t("setup.rules.generalRules")}
                 </h3>
                 <p className={styles.canvasMeta}>
                   {activeSituationMeta?.question ??
                     "Rules for every situation in the set. They apply whenever no situation rule matches."}
                 </p>
               </div>
-              <div className={styles.canvasStats} aria-label="Workflow summary">
-                <span>{specificRuleCount} situation rules</span>
-                <span>{sharedRuleCount} general</span>
-                <span>{workflow.missingBranches} gaps</span>
+              <div className={styles.canvasStats} aria-label={t("setup.rules.summary")}>
+                <span>{t("setup.rules.situationRules", { n: specificRuleCount })}</span>
+                <span>{t("setup.rules.generalCount", { n: sharedRuleCount })}</span>
+                <span>{t("setup.rules.gaps", { n: workflow.missingBranches })}</span>
                 {/* WHO DECIDES WHAT GETS COLLECTED for this situation. `model`
                     is today's behaviour: the deterministic opening moves run and
                     the model chooses the rest. `rule_directed` additionally lets
@@ -384,15 +386,15 @@ export function RuleBook({
                       checked={modes[activeSituationMeta.key] === "rule_directed"}
                       disabled={busy === `mode:${activeSituationMeta.key}`}
                       onChange={() => toggleCollectionMode(activeSituationMeta.key)}
-                      aria-label={`Let the rules for ${activeSituationMeta.key} direct collection`}
+                      aria-label={t("setup.rules.directCollection", { key: activeSituationMeta.key })}
                     />
                     <span className={styles.modeSwitchTrack} aria-hidden="true">
                       <span className={styles.modeSwitchKnob} />
                     </span>
                     <span className={styles.modeSwitchState}>
                       {modes[activeSituationMeta.key] === "rule_directed"
-                        ? "rules collect"
-                        : "model collects"}
+                        ? t("setup.rules.rulesCollect")
+                        : t("setup.rules.modelCollects")}
                     </span>
                   </label>
                 )}
@@ -405,16 +407,16 @@ export function RuleBook({
                   <DotIcon size={14} />
                 </span>
                 <div>
-                  <p className={styles.nodeLabel}>Start</p>
-                  <h4>{activeSituationMeta ? activeSituationMeta.question : "Any matched request in this set"}</h4>
+                  <p className={styles.nodeLabel}>{t("setup.rules.start")}</p>
+                  <h4>{activeSituationMeta ? activeSituationMeta.question : t("setup.rules.anyRequest")}</h4>
                 </div>
               </div>
 
               {workflow.needs.length === 0 ? (
                 <div className={styles.noBranches}>
-                  <p>No evidence branches are defined here yet.</p>
+                  <p>{t("setup.rules.noBranches")}</p>
                   <Button size="sm" variant="secondary" onClick={() => openNewRule()}>
-                    Add first branch
+                    {t("setup.rules.addFirst")}
                   </Button>
                 </div>
               ) : (
@@ -424,18 +426,18 @@ export function RuleBook({
                     <div className={styles.decisionNode}>
                       <header className={styles.nodeHeader}>
                         <div>
-                          <p className={styles.nodeLabel}>Decision {index + 1}</p>
+                          <p className={styles.nodeLabel}>{t("setup.rules.decision", { n: index + 1 })}</p>
                           <h4>{labelNeed(need.need)}</h4>
                         </div>
                         {need.isPrerequisiteOnly ? (
-                          <span className={styles.prereqTag}>required first</span>
+                          <span className={styles.prereqTag}>{t("setup.rules.requiredFirst")}</span>
                         ) : (
                           <span className={styles.coverageTag}>{coveredCount(need)} / {need.findings.length}</span>
                         )}
                       </header>
 
                       {need.requires.length > 0 && (
-                        <p className={styles.requires}>Requires {need.requires.map(labelNeed).join(", ")}</p>
+                        <p className={styles.requires}>{t("setup.rules.requires", { needs: need.requires.map(labelNeed).join(", ") })}</p>
                       )}
 
                       {need.isPrerequisiteOnly ? (
@@ -454,7 +456,7 @@ export function RuleBook({
                               {branch.rules.length > 0 ? (
                                 <div className={styles.outcomes}>{branch.rules.map(ruleButton)}</div>
                               ) : branch.continues ? (
-                                <p className={styles.continues}>Continues to a deeper decision.</p>
+                                <p className={styles.continues}>{t("setup.rules.continues")}</p>
                               ) : branch.generalRules.length > 0 || branch.chosenRule ? (
                                 // NOT A GAP. No rule of this situation answers the
                                 // branch; a general rule does — because its
@@ -463,7 +465,7 @@ export function RuleBook({
                                 // on says so. Writing a situation rule is still
                                 // offered, because it would win.
                                 <div className={styles.generalBox}>
-                                  <span className={styles.generalLabel}>General rule applies</span>
+                                  <span className={styles.generalLabel}>{t("setup.rules.generalApplies")}</span>
                                   <div className={styles.outcomes}>
                                     {branch.generalRules.map(ruleButton)}
                                     {branch.chosenRule &&
@@ -486,7 +488,7 @@ export function RuleBook({
                                         )
                                       }
                                     >
-                                      Write a {activeSituationMeta?.key ?? "situation"} rule instead
+                                      {t("setup.rules.writeInstead", { key: activeSituationMeta?.key ?? t("setup.rules.situation").toLowerCase() })}
                                     </button>
                                     {branch.chosenRule && (
                                       <button
@@ -500,7 +502,7 @@ export function RuleBook({
                                           })
                                         }
                                       >
-                                        Unpick
+                                        {t("setup.rules.unpick")}
                                       </button>
                                     )}
                                   </div>
@@ -515,7 +517,7 @@ export function RuleBook({
                                     })
                                   }
                                 >
-                                  Add branch
+                                  {t("setup.rules.addBranch")}
                                 </button>
                               )}
                             </div>
@@ -538,8 +540,8 @@ export function RuleBook({
                   <div className={styles.decisionNode}>
                     <header className={styles.nodeHeader}>
                       <div>
-                        <p className={styles.nodeLabel}>General rules</p>
-                        <h4>Apply when no {activeSituationMeta?.key ?? "situation"} rule matches</h4>
+                        <p className={styles.nodeLabel}>{t("setup.rules.generalRules")}</p>
+                        <h4>{t("setup.rules.applyWhenNone", { key: activeSituationMeta?.key ?? t("setup.rules.situation").toLowerCase() })}</h4>
                         <p className={styles.requires}>
                           They cover every situation in the set, and lose to the rules above whenever one
                           of those matches — a situation outranks condition depth.
@@ -551,13 +553,13 @@ export function RuleBook({
                         leadingIcon={<PlusIcon size={14} />}
                         onClick={() => openNewRule({ situationKey: null, contextSituationKey: selectedSituationKey })}
                       >
-                        Create a general rule
+                        {t("setup.rules.createGeneral")}
                       </Button>
                     </header>
                     {workflow.sharedRules.length > 0 ? (
                       <div className={styles.outcomes}>{workflow.sharedRules.map(ruleButton)}</div>
                     ) : (
-                      <p className={styles.requires}>No general rules in {answerSet} yet.</p>
+                      <p className={styles.requires}>{t("setup.rules.noGeneral", { set: answerSet })}</p>
                     )}
                   </div>
                 </section>
@@ -569,8 +571,8 @@ export function RuleBook({
                   <div className={styles.decisionNode}>
                     <header className={styles.nodeHeader}>
                       <div>
-                        <p className={styles.nodeLabel}>Fallback lane</p>
-                        <h4>Rules without evidence conditions</h4>
+                        <p className={styles.nodeLabel}>{t("setup.rules.fallbackLane")}</p>
+                        <h4>{t("setup.rules.noConditions")}</h4>
                       </div>
                     </header>
                     <div className={styles.outcomes}>{workflow.conditionlessRules.map(ruleButton)}</div>
@@ -580,7 +582,7 @@ export function RuleBook({
             </div>
           </main>
 
-          <aside className={styles.inspector} aria-label="Selected rule">
+          <aside className={styles.inspector} aria-label={t("setup.rules.selectedRule")}>
             {selectedRule ? (
               <RuleInspector
                 // Keyed by rule, so a half-open delete confirmation never carries
@@ -600,8 +602,8 @@ export function RuleBook({
               />
             ) : (
               <div className={styles.inspectorEmpty}>
-                <p className={styles.inspectorLabel}>Inspector</p>
-                <h3>Select a rule or missing branch</h3>
+                <p className={styles.inspectorLabel}>{t("setup.rules.inspector")}</p>
+                <h3>{t("setup.rules.selectRule")}</h3>
                 <p>
                   The inspector keeps edits tied to one outcome. Missing branches can be added from
                   the canvas with the situation and condition already filled in.
@@ -667,40 +669,41 @@ function RuleInspector({
   onApprove: () => void;
   onDelete: () => void;
 }) {
+  const t = useT();
   return (
     <div className={styles.inspectorBody}>
       <div className={styles.inspectorHead}>
         <div>
-          <p className={styles.inspectorLabel}>{rule.situationKey ? "Selected rule" : "General rule"}</p>
+          <p className={styles.inspectorLabel}>{rule.situationKey ? t("setup.rules.selectedRule") : t("setup.rules.generalRule")}</p>
           <h3 title={rule.answerKey}>{ruleLabel(rule)}</h3>
         </div>
         <span className={rule.approvalStatus === "approved" ? styles.liveTag : styles.draftTag}>
-          {rule.approvalStatus === "approved" ? "live" : "draft"}
+          {rule.approvalStatus === "approved" ? t("setup.rules.live") : t("setup.rules.draft")}
         </span>
       </div>
 
       <dl className={styles.ruleFacts}>
         <div>
-          <dt>Situation</dt>
-          <dd>{rule.situationKey ?? "Every situation in the set"}</dd>
+          <dt>{t("setup.rules.situation")}</dt>
+          <dd>{rule.situationKey ?? t("setup.rules.everySituation")}</dd>
         </div>
         <div>
-          <dt>When</dt>
+          <dt>{t("setup.rules.when")}</dt>
           <dd>{conditionSummary(rule)}</dd>
         </div>
         <div>
-          <dt>Then</dt>
+          <dt>{t("setup.rules.then")}</dt>
           <dd>{actionSummary(rule)}</dd>
         </div>
         {toneLabel && (
           <div>
-            <dt>Tone</dt>
+            <dt>{t("setup.rules.tone")}</dt>
             <dd>{toneLabel}</dd>
           </div>
         )}
         {rule.link && (
           <div>
-            <dt>Link</dt>
+            <dt>{t("setup.rules.link")}</dt>
             <dd>
               <a href={rule.link.url} target="_blank" rel="noreferrer">
                 {rule.link.label}
@@ -710,17 +713,17 @@ function RuleInspector({
         )}
         {rule.offerCode && (
           <div>
-            <dt>Code</dt>
+            <dt>{t("setup.rules.code")}</dt>
             <dd>{rule.offerCode}</dd>
           </div>
         )}
         {rule.knowledgeDocumentId && (
           <div>
-            <dt>Article</dt>
+            <dt>{t("setup.rules.article")}</dt>
             {/* No title means the pin points at something no longer approved.
                 Saying so beats printing a uuid: it is the same rule drafting
                 applies, surfaced where it can be fixed. */}
-            <dd>{articleTitle ?? "linked article is no longer approved"}</dd>
+            <dd>{articleTitle ?? t("setup.rules.articleGone")}</dd>
           </div>
         )}
       </dl>
@@ -729,10 +732,10 @@ function RuleInspector({
 
       <div className={styles.inspectorActions}>
         <Button variant="secondary" size="sm" onClick={onEdit}>
-          Edit
+          {t("setup.forwarding.edit")}
         </Button>
         <Button variant="secondary" size="sm" disabled={busy} onClick={onApprove}>
-          {rule.approvalStatus === "approved" ? "Take off live mail" : "Put live"}
+          {rule.approvalStatus === "approved" ? t("setup.rules.takeOff") : t("setup.rules.putLive")}
         </Button>
         <DeleteRuleButton rule={rule} busy={busy} onDelete={onDelete} />
       </div>
@@ -757,20 +760,21 @@ function DeleteRuleButton({
   busy: boolean;
   onDelete: () => void;
 }) {
+  const t = useT();
   const [confirming, setConfirming] = useState(false);
 
   if (!confirming) {
     return (
       <Button variant="secondary" size="sm" disabled={busy} onClick={() => setConfirming(true)}>
-        Delete
+        {t("setup.forwarding.delete")}
       </Button>
     );
   }
 
   return (
-    <div className={styles.deleteConfirm} role="alertdialog" aria-label={`Delete ${ruleLabel(rule)}`}>
+    <div className={styles.deleteConfirm} role="alertdialog" aria-label={t("setup.rules.deleteAria", { name: ruleLabel(rule) })}>
       <p>
-        <b>Delete {ruleLabel(rule)}?</b> It is removed permanently — there is no undo.{" "}
+        <b>{t("setup.forwarding.deleteQuestion", { name: ruleLabel(rule) })}</b> {t("setup.rules.noUndo")}{" "}
         {!rule.situationKey
           ? "It is a general rule: every situation in this set without its own rule for this case falls back to it, and would be left with none."
           : rule.approvalStatus === "approved"
@@ -779,10 +783,10 @@ function DeleteRuleButton({
       </p>
       <div className={styles.inspectorActions}>
         <Button variant="primary" size="sm" disabled={busy} onClick={onDelete}>
-          Delete permanently
+          {t("setup.rules.deletePermanently")}
         </Button>
         <Button variant="secondary" size="sm" disabled={busy} onClick={() => setConfirming(false)}>
-          Keep
+          {t("setup.forwarding.keep")}
         </Button>
       </div>
     </div>
@@ -790,23 +794,24 @@ function DeleteRuleButton({
 }
 
 function BranchStatusIcon({ status }: { status: BranchStatus }) {
+  const t = useT();
   if (status === "covered") {
     return (
-      <span className={styles.branchCovered} title="Covered">
+      <span className={styles.branchCovered} title={t("setup.rules.covered")}>
         <CheckCircleIcon size={14} />
       </span>
     );
   }
   if (status === "general") {
     return (
-      <span className={styles.branchGeneral} title="Covered by a general rule">
+      <span className={styles.branchGeneral} title={t("setup.rules.coveredGeneral")}>
         <CheckCircleIcon size={14} />
       </span>
     );
   }
   if (status === "missing") {
     return (
-      <span className={styles.branchMissing} title="Missing branch">
+      <span className={styles.branchMissing} title={t("setup.rules.missingBranch")}>
         <AlertIcon size={14} />
       </span>
     );

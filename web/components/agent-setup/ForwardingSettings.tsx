@@ -9,7 +9,9 @@ import type {
   KnowledgeCategory,
   RequestKind,
 } from "@/lib/types";
-import { CATEGORY_LABELS, REQUEST_KINDS, TICKET_CATEGORIES } from "@/lib/types";
+import { REQUEST_KINDS, TICKET_CATEGORIES } from "@/lib/types";
+import { useLocale, useT } from "@/lib/i18n/client";
+import { intlTag, type Locale } from "@/lib/i18n/locales";
 import {
   createForwardingDestination,
   deleteForwardingDestination,
@@ -40,12 +42,7 @@ import styles from "./ForwardingSettings.module.css";
  * effect is visible before anything is sent.
  */
 
-const KIND_LABELS: Record<RequestKind, string> = {
-  question: "Questions",
-  problem: "Problems",
-  complaint: "Complaints",
-  contact: "First contact",
-};
+// Request kinds: `setup.forwarding.kind.<kind>`.
 
 const EMPTY_INPUT: ForwardingDestinationInput = {
   label: "",
@@ -69,6 +66,7 @@ interface ForwardingSettingsProps {
 }
 
 export function ForwardingSettings({ initialConfig, loadError }: ForwardingSettingsProps) {
+  const t = useT();
   const [destinations, setDestinations] = useState<ForwardingDestination[]>(initialConfig?.destinations ?? []);
   // Which card is open: a destination id, "new", or none.
   const [editing, setEditing] = useState<string | null>(null);
@@ -76,9 +74,9 @@ export function ForwardingSettings({ initialConfig, loadError }: ForwardingSetti
   if (loadError || !initialConfig) {
     return (
       <section className={styles.section}>
-        <h2 className={styles.title}>Email forwarding</h2>
+        <h2 className={styles.title}>{t("setup.forwarding.title")}</h2>
         <p className={styles.loadError} role="alert">
-          {loadError ?? "Failed to load forwarding settings."}
+          {loadError ?? t("setup.forwarding.loadFailed")}
         </p>
       </section>
     );
@@ -103,7 +101,7 @@ export function ForwardingSettings({ initialConfig, loadError }: ForwardingSetti
     <section className={styles.section} aria-labelledby="forwarding-heading">
       <header className={styles.header}>
         <h2 className={styles.title} id="forwarding-heading">
-          Email forwarding
+          {t("setup.forwarding.title")}
         </h2>
         <p className={styles.intro}>
           Some mail reaching the contact inbox belongs to another team — an invoice, a job
@@ -125,16 +123,16 @@ export function ForwardingSettings({ initialConfig, loadError }: ForwardingSetti
 
       <div className={styles.block}>
         <div className={styles.blockHead}>
-          <h3 className={styles.blockTitle}>Destinations</h3>
+          <h3 className={styles.blockTitle}>{t("setup.forwarding.destinations")}</h3>
           {editing !== "new" && (
             <Button size="sm" onClick={() => setEditing("new")}>
-              Add destination
+              {t("setup.forwarding.add")}
             </Button>
           )}
         </div>
 
         {destinations.length === 0 && editing !== "new" && (
-          <p className={styles.empty}>No destinations yet — nothing is forwarded.</p>
+          <p className={styles.empty}>{t("setup.forwarding.none")}</p>
         )}
 
         <ul className={styles.cards}>
@@ -181,6 +179,8 @@ export function ForwardingSettings({ initialConfig, loadError }: ForwardingSetti
 // --- the master switch ------------------------------------------------------
 
 function ForwardingSwitch({ initial }: { initial: string | null }) {
+  const t = useT();
+  const locale = useLocale();
   const [since, setSince] = useState<string | null>(initial);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -200,11 +200,11 @@ function ForwardingSwitch({ initial }: { initial: string | null }) {
   return (
     <div className={`${styles.switchPanel} ${since ? styles.switchOn : ""}`}>
       <div className={styles.switchText}>
-        <strong>{since ? "Forwarding is on" : "Forwarding is off"}</strong>
+        <strong>{since ? t("setup.forwarding.isOn") : t("setup.forwarding.isOff")}</strong>
         <span>
           {since
-            ? `Mail received since ${formatSince(since)} is forwarded. Earlier mail never is.`
-            : "Nothing is forwarded. Turning it on forwards mail received from that moment; mail already in the inbox is never sent."}
+            ? t("setup.forwarding.onNote", { since: formatSince(since, locale) })
+            : t("setup.forwarding.offNote")}
         </span>
         {error && (
           <span className={styles.error} role="alert">
@@ -213,14 +213,14 @@ function ForwardingSwitch({ initial }: { initial: string | null }) {
         )}
       </div>
       <Button size="sm" variant={since ? "secondary" : "primary"} loading={busy} onClick={() => flip(!since)}>
-        {since ? "Turn off" : "Turn on forwarding"}
+        {since ? t("setup.forwarding.turnOff") : t("setup.forwarding.turnOn")}
       </Button>
     </div>
   );
 }
 
-function formatSince(iso: string) {
-  return new Date(iso).toLocaleString("en-GB", {
+function formatSince(iso: string, locale: Locale) {
+  return new Date(iso).toLocaleString(intlTag(locale), {
     day: "numeric",
     month: "short",
     year: "numeric",
@@ -232,22 +232,23 @@ function formatSince(iso: string) {
 // --- where each category goes ------------------------------------------------
 
 function RoutingOverview({ destinations }: { destinations: ForwardingDestination[] }) {
+  const t = useT();
   const modes = useMemo(() => routingModeByCategory(toRows(destinations)), [destinations]);
   return (
     <div className={styles.block}>
-      <h3 className={styles.blockTitle}>Where each category goes</h3>
+      <h3 className={styles.blockTitle}>{t("setup.forwarding.whereGoes")}</h3>
       <dl className={styles.overview}>
         {TICKET_CATEGORIES.map((category) => {
           const { mode, destinations: names } = modes[category];
           return (
             <div key={category} className={styles.overviewRow}>
-              <dt className={styles.overviewCategory}>{CATEGORY_LABELS[category]}</dt>
+              <dt className={styles.overviewCategory}>{t(`category.${category}`)}</dt>
               <dd className={styles.overviewRoute}>
-                {mode === "stays" && <span className={styles.stays}>Stays with the contact team</span>}
+                {mode === "stays" && <span className={styles.stays}>{t("setup.forwarding.stays")}</span>}
                 {mode === "fixed" && <span className={styles.fixed}>→ {names[0]}</span>}
                 {mode === "choice" && (
                   <span className={styles.choice}>
-                    Agent decides: {names.join(" · ")} — or keeps it
+                    {t("setup.forwarding.decides", { names: names.join(" · ") })}
                   </span>
                 )}
               </dd>
@@ -268,6 +269,8 @@ interface DestinationSummaryProps {
 }
 
 function DestinationSummary({ destination, onEdit, onChanged }: DestinationSummaryProps) {
+  const t = useT();
+  const locale = useLocale();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const on = Boolean(destination.activeSince && destination.forwardEmail);
@@ -292,24 +295,24 @@ function DestinationSummary({ destination, onEdit, onChanged }: DestinationSumma
           {destination.forwardEmail ? (
             <span className={styles.address}>{destination.forwardEmail}</span>
           ) : (
-            <span className={styles.off}>No address</span>
+            <span className={styles.off}>{t("setup.forwarding.noAddress")}</span>
           )}
         </div>
         {destination.description && <p className={styles.description}>{destination.description}</p>}
         <p className={styles.meta}>
-          {destination.categories.map((c) => CATEGORY_LABELS[c]).join(", ")}
+          {destination.categories.map((c) => t(`category.${c}`)).join(", ")}
           {destination.requestKinds.length > 0 &&
-            ` · ${destination.requestKinds.map((k) => KIND_LABELS[k].toLowerCase()).join(", ")} only`}
-          {destination.matchDescription && " · only when it matches the description"}
+            ` · ${t("setup.forwarding.kindsOnly", { kinds: destination.requestKinds.map((k) => t(`setup.forwarding.kind.${k}`).toLowerCase()).join(", ") })}`}
+          {destination.matchDescription && ` · ${t("setup.forwarding.onlyMatching")}`}
           {" · "}
           {destination.timing === "immediate"
             ? destination.acknowledge
-              ? "forwarded at once, sender acknowledged"
-              : "forwarded at once"
-            : "forwarded after our first reply"}
+              ? t("setup.forwarding.atOnceAck")
+              : t("setup.forwarding.atOnce")
+            : t("setup.forwarding.afterReply")}
         </p>
         {on && destination.activeSince && (
-          <p className={styles.meta}>On since {formatSince(destination.activeSince)}</p>
+          <p className={styles.meta}>{t("setup.forwarding.onSince", { since: formatSince(destination.activeSince, locale) })}</p>
         )}
         {error && (
           <p className={styles.error} role="alert">
@@ -318,20 +321,20 @@ function DestinationSummary({ destination, onEdit, onChanged }: DestinationSumma
         )}
       </div>
       <div className={styles.summaryActions}>
-        <label className={styles.toggle} title={destination.forwardEmail ? undefined : "Add an address first"}>
+        <label className={styles.toggle} title={destination.forwardEmail ? undefined : t("setup.forwarding.addAddressFirst")}>
           <input
             type="checkbox"
             role="switch"
             checked={on}
             disabled={busy || !destination.forwardEmail}
             onChange={flip}
-            aria-label={`${destination.label}: ${on ? "on" : "off"}`}
+            aria-label={`${destination.label}: ${on ? t("setup.forwarding.on") : t("setup.forwarding.off")}`}
           />
           <span className={styles.toggleTrack} aria-hidden="true" />
-          <span className={styles.toggleText}>{on ? "On" : "Off"}</span>
+          <span className={styles.toggleText}>{on ? t("setup.forwarding.on") : t("setup.forwarding.off")}</span>
         </label>
         <Button size="sm" variant="tertiary" onClick={onEdit}>
-          Edit
+          {t("setup.forwarding.edit")}
         </Button>
       </div>
     </div>
@@ -346,6 +349,7 @@ interface DestinationEditorProps {
 }
 
 function DestinationEditor({ initial, onCancel, onSaved, onDeleted }: DestinationEditorProps) {
+  const t = useT();
   const id = "id" in initial ? initial.id : null;
   const [draft, setDraft] = useState<ForwardingDestinationInput>(() => toInput(initial));
   const [busy, setBusy] = useState<"saving" | "deleting" | null>(null);
@@ -397,7 +401,7 @@ function DestinationEditor({ initial, onCancel, onSaved, onDeleted }: Destinatio
     >
       <div className={styles.grid2}>
         <label className={styles.field} htmlFor={fieldId("label")}>
-          <span className={styles.fieldLabel}>Name</span>
+          <span className={styles.fieldLabel}>{t("setup.forwarding.name")}</span>
           <input
             id={fieldId("label")}
             className={styles.input}
@@ -408,7 +412,7 @@ function DestinationEditor({ initial, onCancel, onSaved, onDeleted }: Destinatio
           />
         </label>
         <label className={styles.field} htmlFor={fieldId("email")}>
-          <span className={styles.fieldLabel}>Forward to</span>
+          <span className={styles.fieldLabel}>{t("setup.forwarding.forwardTo")}</span>
           <input
             id={fieldId("email")}
             className={styles.input}
@@ -418,13 +422,13 @@ function DestinationEditor({ initial, onCancel, onSaved, onDeleted }: Destinatio
             spellCheck={false}
             value={draft.forwardEmail ?? ""}
             onChange={(e) => set("forwardEmail", e.target.value || null)}
-            placeholder="Needed to switch it on"
+            placeholder={t("setup.forwarding.neededToSwitchOn")}
           />
         </label>
       </div>
 
       <label className={styles.field} htmlFor={fieldId("description")}>
-        <span className={styles.fieldLabel}>What they handle</span>
+        <span className={styles.fieldLabel}>{t("setup.forwarding.handle")}</span>
         <span className={styles.hint}>
           In plain words. When a category has several destinations, this is what the agent reads to
           choose.
@@ -452,7 +456,7 @@ function DestinationEditor({ initial, onCancel, onSaved, onDeleted }: Destinatio
       </label>
 
       <fieldset className={styles.fieldset}>
-        <legend className={styles.fieldLabel}>Categories it receives</legend>
+        <legend className={styles.fieldLabel}>{t("setup.forwarding.categoriesIt")}</legend>
         <div className={styles.chips}>
           {TICKET_CATEGORIES.map((category) => (
             <label key={category} className={styles.chip}>
@@ -461,15 +465,15 @@ function DestinationEditor({ initial, onCancel, onSaved, onDeleted }: Destinatio
                 checked={draft.categories.includes(category)}
                 onChange={() => set("categories", toggle(draft.categories, category))}
               />
-              <span>{CATEGORY_LABELS[category]}</span>
+              <span>{t(`category.${category}`)}</span>
             </label>
           ))}
         </div>
       </fieldset>
 
       <fieldset className={styles.fieldset}>
-        <legend className={styles.fieldLabel}>Only these request kinds</legend>
-        <span className={styles.hint}>None ticked means any kind.</span>
+        <legend className={styles.fieldLabel}>{t("setup.forwarding.onlyKinds")}</legend>
+        <span className={styles.hint}>{t("setup.forwarding.noneMeansAny")}</span>
         <div className={styles.chips}>
           {REQUEST_KINDS.map((kind) => (
             <label key={kind} className={styles.chip}>
@@ -478,14 +482,14 @@ function DestinationEditor({ initial, onCancel, onSaved, onDeleted }: Destinatio
                 checked={draft.requestKinds.includes(kind)}
                 onChange={() => set("requestKinds", toggle(draft.requestKinds, kind))}
               />
-              <span>{KIND_LABELS[kind]}</span>
+              <span>{t(`setup.forwarding.kind.${kind}`)}</span>
             </label>
           ))}
         </div>
       </fieldset>
 
       <fieldset className={styles.fieldset}>
-        <legend className={styles.fieldLabel}>When it is forwarded</legend>
+        <legend className={styles.fieldLabel}>{t("setup.forwarding.whenForwarded")}</legend>
         <label className={styles.radio}>
           <input
             type="radio"
@@ -494,7 +498,7 @@ function DestinationEditor({ initial, onCancel, onSaved, onDeleted }: Destinatio
             onChange={() => setDraft((d) => ({ ...d, timing: "immediate", acknowledge: true }))}
           />
           <span>
-            <strong>At once</strong> — as soon as the agent routes it
+            <strong>{t("setup.forwarding.timingNowTitle")}</strong> — {t("setup.forwarding.timingNowText")}
           </span>
         </label>
         <label className={styles.radio}>
@@ -505,8 +509,7 @@ function DestinationEditor({ initial, onCancel, onSaved, onDeleted }: Destinatio
             onChange={() => setDraft((d) => ({ ...d, timing: "after_first_reply", acknowledge: false }))}
           />
           <span>
-            <strong>After our first reply</strong> — we ask the customer for what is missing first,
-            then forward the thread
+            <strong>{t("setup.forwarding.timingAfterTitle")}</strong> — {t("setup.forwarding.timingAfterText")}
           </span>
         </label>
         {draft.timing === "immediate" && (
@@ -516,14 +519,14 @@ function DestinationEditor({ initial, onCancel, onSaved, onDeleted }: Destinatio
               checked={draft.acknowledge}
               onChange={(e) => set("acknowledge", e.target.checked)}
             />
-            <span>Tell the sender it has been passed on</span>
+            <span>{t("setup.forwarding.tellSender")}</span>
           </label>
         )}
       </fieldset>
 
       {draft.timing === "immediate" && draft.acknowledge && (
         <fieldset className={styles.fieldset}>
-          <legend className={styles.fieldLabel}>In the acknowledgement</legend>
+          <legend className={styles.fieldLabel}>{t("setup.forwarding.inAck")}</legend>
           <div className={styles.grid2}>
             <label className={styles.field} htmlFor={fieldId("name-fr")}>
               <span className={styles.hint}>French — the words after « Nous l&apos;avons transmis »</span>
@@ -546,7 +549,7 @@ function DestinationEditor({ initial, onCancel, onSaved, onDeleted }: Destinatio
               />
             </label>
             <label className={styles.field} htmlFor={fieldId("note-fr")}>
-              <span className={styles.hint}>Extra paragraph (French)</span>
+              <span className={styles.hint}>{t("setup.forwarding.extraFr")}</span>
               <textarea
                 id={fieldId("note-fr")}
                 className={styles.textarea}
@@ -556,7 +559,7 @@ function DestinationEditor({ initial, onCancel, onSaved, onDeleted }: Destinatio
               />
             </label>
             <label className={styles.field} htmlFor={fieldId("note-en")}>
-              <span className={styles.hint}>Extra paragraph (English)</span>
+              <span className={styles.hint}>{t("setup.forwarding.extraEn")}</span>
               <textarea
                 id={fieldId("note-en")}
                 className={styles.textarea}
@@ -580,26 +583,26 @@ function DestinationEditor({ initial, onCancel, onSaved, onDeleted }: Destinatio
           <span className={styles.deleteArea}>
             {confirmDelete ? (
               <>
-                <span className={styles.confirmText}>Delete {draft.label || "this destination"}?</span>
+                <span className={styles.confirmText}>{t("setup.forwarding.deleteQuestion", { name: draft.label || t("setup.forwarding.thisDestination") })}</span>
                 <Button size="sm" variant="danger" type="button" loading={busy === "deleting"} onClick={remove}>
-                  Delete
+                  {t("setup.forwarding.delete")}
                 </Button>
                 <Button size="sm" variant="tertiary" type="button" onClick={() => setConfirmDelete(false)}>
-                  Keep
+                  {t("setup.forwarding.keep")}
                 </Button>
               </>
             ) : (
               <Button size="sm" variant="tertiary" type="button" onClick={() => setConfirmDelete(true)}>
-                Delete
+                {t("setup.forwarding.delete")}
               </Button>
             )}
           </span>
         )}
         <Button size="sm" variant="secondary" type="button" onClick={onCancel} disabled={busy !== null}>
-          Cancel
+          {t("tickets.panels.draft.cancel")}
         </Button>
         <Button size="sm" variant="primary" type="submit" loading={busy === "saving"}>
-          Save
+          {t("tickets.panels.save")}
         </Button>
       </div>
     </form>
@@ -616,6 +619,7 @@ interface AcknowledgementSettingsProps {
 }
 
 function AcknowledgementSettings({ initial, defaults, destinations, shopName }: AcknowledgementSettingsProps) {
+  const t = useT();
   const [draft, setDraft] = useState<ForwardingAckSettings>(initial);
   const [savedValue, setSavedValue] = useState<ForwardingAckSettings>(initial);
   const [state, setState] = useState<"idle" | "saving" | "saved" | "error">("idle");
@@ -653,7 +657,7 @@ function AcknowledgementSettings({ initial, defaults, destinations, shopName }: 
 
   return (
     <div className={styles.block}>
-      <h3 className={styles.blockTitle}>Acknowledgement to the sender</h3>
+      <h3 className={styles.blockTitle}>{t("setup.forwarding.ackTitle")}</h3>
       <p className={styles.blockIntro}>
         A fixed message, never written by the AI, sent once per ticket after the forward has gone
         through — never to our own colleagues or to automated senders. It is the one email that
@@ -666,12 +670,12 @@ function AcknowledgementSettings({ initial, defaults, destinations, shopName }: 
           checked={draft.ackEnabled}
           onChange={(e) => setDraft((d) => ({ ...d, ackEnabled: e.target.checked }))}
         />
-        <span>Send the acknowledgement</span>
+        <span>{t("setup.forwarding.sendAck")}</span>
       </label>
 
       <div className={styles.grid2}>
         <label className={styles.field} htmlFor="ack-template-fr">
-          <span className={styles.fieldLabel}>French template</span>
+          <span className={styles.fieldLabel}>{t("setup.forwarding.templateFr")}</span>
           <textarea
             id="ack-template-fr"
             className={`${styles.textarea} ${styles.template}`}
@@ -682,7 +686,7 @@ function AcknowledgementSettings({ initial, defaults, destinations, shopName }: 
           />
         </label>
         <label className={styles.field} htmlFor="ack-template-en">
-          <span className={styles.fieldLabel}>English template</span>
+          <span className={styles.fieldLabel}>{t("setup.forwarding.templateEn")}</span>
           <textarea
             id="ack-template-en"
             className={`${styles.textarea} ${styles.template}`}
@@ -701,10 +705,10 @@ function AcknowledgementSettings({ initial, defaults, destinations, shopName }: 
 
       <div className={styles.actions}>
         <span className={styles.status} aria-live="polite">
-          {state === "saved" && !dirty && <span className={styles.saved}>Saved</span>}
+          {state === "saved" && !dirty && <span className={styles.saved}>{t("setup.knowledge.saved")}</span>}
         </span>
         <Button size="sm" variant="primary" onClick={save} disabled={!dirty} loading={state === "saving"}>
-          Save acknowledgement
+          {t("setup.forwarding.saveAck")}
         </Button>
       </div>
       {error && (
@@ -715,13 +719,13 @@ function AcknowledgementSettings({ initial, defaults, destinations, shopName }: 
 
       <div className={styles.preview}>
         <div className={styles.previewHead}>
-          <span className={styles.fieldLabel}>Preview</span>
+          <span className={styles.fieldLabel}>{t("setup.editor.preview")}</span>
           {acknowledging.length > 0 && (
             <select
               className={styles.select}
               value={previewDestination?.id ?? ""}
               onChange={(e) => setPreviewId(e.target.value)}
-              aria-label="Destination to preview"
+              aria-label={t("setup.forwarding.destinationPreview")}
             >
               {acknowledging.map((d) => (
                 <option key={d.id} value={d.id}>
@@ -734,7 +738,7 @@ function AcknowledgementSettings({ initial, defaults, destinations, shopName }: 
             className={styles.select}
             value={previewLanguage}
             onChange={(e) => setPreviewLanguage(e.target.value as "fr" | "en")}
-            aria-label="Language to preview"
+            aria-label={t("setup.forwarding.languagePreview")}
           >
             <option value="fr">Français</option>
             <option value="en">English</option>

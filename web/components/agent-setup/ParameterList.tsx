@@ -4,6 +4,7 @@ import { useState } from "react";
 
 import { Button } from "@/components/ui/Button";
 import { knowledgeErrorMessage } from "@/lib/api/knowledge";
+import { useT } from "@/lib/i18n/client";
 import type { SupportParameter } from "@/lib/types";
 
 import styles from "./ParameterList.module.css";
@@ -28,6 +29,7 @@ export function ParameterList({
   initial: SupportParameter[];
   loadError: string | null;
 }) {
+  const t = useT();
   const [parameters, setParameters] = useState(initial);
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState<string | null>(null);
@@ -63,7 +65,7 @@ export function ParameterList({
     <section className={styles.wrap}>
       <header className={styles.head}>
         <div>
-          <h2 className={styles.title}>Parameters</h2>
+          <h2 className={styles.title}>{t("setup.tabs.parameters.label")}</h2>
           <p className={styles.lede}>
             One number, held once. A rule compares against it, an article states it, and a reply
             quotes it — so none of them can disagree.
@@ -71,7 +73,7 @@ export function ParameterList({
         </div>
         {unset > 0 && (
           <span className={styles.outstanding}>
-            {unset} still to decide
+            {t("setup.parameters.toDecide", { count: unset })}
           </span>
         )}
       </header>
@@ -90,11 +92,11 @@ export function ParameterList({
               <div className={styles.text}>
                 <p className={styles.label}>
                   {p.label}
-                  {p.value === null && <span className={styles.tag}>not decided</span>}
+                  {p.value === null && <span className={styles.tag}>{t("setup.parameters.notDecided")}</span>}
                 </p>
                 <p className={styles.description}>{p.description}</p>
                 <p className={styles.usedBy}>
-                  <span className={styles.usedByLabel}>changes</span> {p.usedBy}
+                  <span className={styles.usedByLabel}>{t("setup.parameters.changes")}</span> {p.usedBy}
                 </p>
               </div>
 
@@ -104,11 +106,11 @@ export function ParameterList({
                     className={styles.input}
                     value={current}
                     inputMode={p.kind === "text" ? "text" : "decimal"}
-                    placeholder={p.kind === "days" ? "e.g. 30" : p.kind === "amount" ? "e.g. 70" : ""}
+                    placeholder={p.kind === "days" ? t("setup.parameters.eg30") : p.kind === "amount" ? t("setup.parameters.eg70") : ""}
                     onChange={(e) => setDrafts((prev) => ({ ...prev, [p.key]: e.target.value }))}
                   />
                   {p.kind !== "text" && (
-                    <span className={styles.unit}>{p.kind === "days" ? "days" : "€"}</span>
+                    <span className={styles.unit}>{p.kind === "days" ? t("setup.parameters.days") : "€"}</span>
                   )}
                 </div>
                 <div className={styles.actions}>
@@ -118,7 +120,7 @@ export function ParameterList({
                     disabled={busy === p.key || !dirty}
                     onClick={() => save(p.key, current)}
                   >
-                    {busy === p.key ? "Saving…" : "Save"}
+                    {busy === p.key ? t("tickets.panels.saving") : t("tickets.panels.save")}
                   </Button>
                   {p.value !== null && (
                     <Button
@@ -129,7 +131,7 @@ export function ParameterList({
                       // of circulation must not require inventing a right one.
                       onClick={() => save(p.key, null)}
                     >
-                      Clear
+                      {t("setup.parameters.clear")}
                     </Button>
                   )}
                 </div>

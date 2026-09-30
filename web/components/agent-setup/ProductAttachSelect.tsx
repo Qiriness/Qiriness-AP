@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { SearchIcon } from "@/components/icons";
+import { useT } from "@/lib/i18n/client";
 import styles from "./ProductAttachSelect.module.css";
 
 /**
@@ -76,6 +77,7 @@ function loadCatalogue(): Promise<CatalogueProduct[]> {
 }
 
 export function ProductAttachSelect({ value, onChange, disabled = false }: ProductAttachSelectProps) {
+  const t = useT();
   // The checkbox is a VIEW OF THE VALUE, not a second source of truth: an
   // article with products attached is by definition product-specific, and one
   // with none is not. It carries local state only to stay open while the list
@@ -172,8 +174,8 @@ export function ProductAttachSelect({ value, onChange, disabled = false }: Produ
           onChange={(event) => handleToggleSection(event.target.checked)}
         />
         <span>
-          This article is about specific products
-          {value.length > 0 && <span className={styles.count}> · {value.length} attached</span>}
+          {t("setup.knowledge.aboutProducts")}
+          {value.length > 0 && <span className={styles.count}> · {t("setup.knowledge.attachedN", { n: value.length })}</span>}
         </span>
       </label>
 
@@ -194,8 +196,8 @@ export function ProductAttachSelect({ value, onChange, disabled = false }: Produ
                       type="button"
                       className={styles.chipRemove}
                       disabled={disabled}
-                      aria-label={`Detach ${product.title}`}
-                      title={`Detach ${product.title}`}
+                      aria-label={t("setup.knowledge.detach", { title: product.title })}
+                      title={t("setup.knowledge.detach", { title: product.title })}
                       onClick={() => toggle(product.id)}
                     >
                       &times;
@@ -208,8 +210,7 @@ export function ProductAttachSelect({ value, onChange, disabled = false }: Produ
 
           {unresolved > 0 && (
             <p className={styles.stale}>
-              {unresolved} attached {unresolved === 1 ? "product is" : "products are"} no longer in the
-              catalogue. Untick and re-attach to clear {unresolved === 1 ? "it" : "them"}.
+              {t("setup.knowledge.unresolved", { count: unresolved })}
             </p>
           )}
 
@@ -218,8 +219,8 @@ export function ProductAttachSelect({ value, onChange, disabled = false }: Produ
             <input
               type="search"
               className={styles.searchInput}
-              placeholder="Search the catalogue…"
-              aria-label="Search products by name or description"
+              placeholder={t("setup.recommendations.search")}
+              aria-label={t("setup.recommendations.searchAria")}
               value={query}
               disabled={disabled || !products}
               onChange={(event) => setQuery(event.target.value)}
@@ -228,19 +229,19 @@ export function ProductAttachSelect({ value, onChange, disabled = false }: Produ
 
           {loadError && (
             <p className={styles.empty}>
-              The catalogue could not be loaded.{" "}
+              {t("setup.knowledge.catalogueFailed")}{" "}
               <button type="button" className={styles.retry} onClick={() => setAttempt((n) => n + 1)}>
-                Try again
+                {t("setup.knowledge.tryAgain")}
               </button>
             </p>
           )}
-          {!loadError && !products && <p className={styles.empty}>Loading the catalogue…</p>}
+          {!loadError && !products && <p className={styles.empty}>{t("setup.knowledge.catalogueLoading")}</p>}
 
           {products && shown.length === 0 && (
             <p className={styles.empty}>
               {query
-                ? `No other product matches “${query}”.`
-                : "Every product in the catalogue is already attached."}
+                ? t("setup.knowledge.noOtherMatch", { query })
+                : t("setup.knowledge.allAttached")}
             </p>
           )}
 

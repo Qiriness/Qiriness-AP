@@ -2,7 +2,8 @@
 
 import { useMemo } from "react";
 import type { Article, ArticleStatus, CoreTopic, KnowledgeCategory } from "@/lib/types";
-import { CATEGORY_LABELS, CORE_TOPICS, KNOWLEDGE_CATEGORIES, STATUS_LABELS } from "@/lib/types";
+import { CORE_TOPICS, KNOWLEDGE_CATEGORIES } from "@/lib/types";
+import { useT } from "@/lib/i18n/client";
 import { Button } from "@/components/ui/Button";
 import { ArticleListItem } from "./ArticleListItem";
 import { CollapsibleSection } from "./CollapsibleSection";
@@ -19,11 +20,6 @@ const FILTERS: StatusFilter[] = [
   "in_review",
   "approved",
 ];
-
-const FILTER_LABELS: Record<StatusFilter, string> = {
-  all: "All",
-  ...STATUS_LABELS,
-};
 
 interface ArticleLibraryProps {
   articles: Article[];
@@ -52,6 +48,7 @@ export function ArticleLibrary({
   onCreateCoreTopic,
   onClearFilters,
 }: ArticleLibraryProps) {
+  const t = useT();
   const isFiltering = query.trim() !== "" || statusFilter !== "all";
 
   // Core setup is a fixed checklist, not a filtered view — only meaningful
@@ -102,16 +99,16 @@ export function ArticleLibrary({
   const showEmptyState = isFiltering && articles.length === 0;
 
   return (
-    <section className={styles.library} aria-label="Knowledge articles">
+    <section className={styles.library} aria-label={t("setup.knowledge.articles")}>
       <div className={styles.head}>
-        <h2 className={styles.title}>Knowledge articles</h2>
+        <h2 className={styles.title}>{t("setup.knowledge.articles")}</h2>
         <Button
           variant="primary"
           size="sm"
           leadingIcon={<PlusIcon size={16} />}
           onClick={onCreate}
         >
-          Create article
+          {t("setup.knowledge.create")}
         </Button>
       </div>
 
@@ -120,14 +117,14 @@ export function ArticleLibrary({
         <input
           type="search"
           className={styles.searchInput}
-          placeholder="Search articles"
+          placeholder={t("setup.knowledge.searchArticles")}
           value={query}
           onChange={(e) => onQueryChange(e.target.value)}
-          aria-label="Search articles"
+          aria-label={t("setup.knowledge.searchArticles")}
         />
       </div>
 
-      <div className={styles.filters} role="group" aria-label="Filter by status">
+      <div className={styles.filters} role="group" aria-label={t("setup.knowledge.filterStatus")}>
         {FILTERS.map((f) => (
           <button
             key={f}
@@ -136,7 +133,7 @@ export function ArticleLibrary({
             aria-pressed={statusFilter === f}
             onClick={() => onStatusFilterChange(f)}
           >
-            {FILTER_LABELS[f]}
+            {f === "all" ? t("setup.knowledge.all") : t(`articleStatus.${f}`)}
           </button>
         ))}
       </div>
@@ -146,27 +143,27 @@ export function ArticleLibrary({
           <span className={styles.emptyIcon}>
             <KnowledgeIcon size={26} />
           </span>
-          <p className={styles.emptyTitle}>No articles match</p>
+          <p className={styles.emptyTitle}>{t("setup.knowledge.noMatch")}</p>
           <p className={styles.emptyText}>
             {totalCount > 0
-              ? "Try a different search or status filter."
-              : "You have no articles yet."}
+              ? t("setup.knowledge.tryDifferent")
+              : t("setup.knowledge.noneYet")}
           </p>
           <Button variant="secondary" size="sm" onClick={onClearFilters}>
-            Clear filters
+            {t("setup.knowledge.clearFilters")}
           </Button>
         </div>
       ) : (
         <div className={styles.list}>
           {!isFiltering && (
             <CollapsibleSection
-              title="Drafting agent setup"
+              title={t("setup.knowledge.draftingSetup")}
               meta={
                 brandVoiceArticle
                   ? brandVoiceArticle.status === "approved"
-                    ? "Configured"
-                    : STATUS_LABELS[brandVoiceArticle.status]
-                  : "Not started"
+                    ? t("setup.knowledge.configured")
+                    : t(`articleStatus.${brandVoiceArticle.status}`)
+                  : t("setup.knowledge.notStarted")
               }
               defaultCollapsed={Boolean(brandVoiceArticle)}
             >
@@ -184,8 +181,8 @@ export function ArticleLibrary({
 
           {!isFiltering && (
             <CollapsibleSection
-              title="Core setup"
-              meta={`${coreFilledCount} of ${CORE_TOPICS.length} started`}
+              title={t("setup.knowledge.coreSetup")}
+              meta={t("setup.knowledge.coreStarted", { n: coreFilledCount, total: CORE_TOPICS.length })}
               defaultCollapsed={coreComplete}
             >
               {CORE_TOPICS.map((topic) => {
@@ -205,11 +202,11 @@ export function ArticleLibrary({
           )}
 
           {!isFiltering && groupByCategory ? (
-            <CollapsibleSection title="Articles" meta={`${groupableArticles.length}`}>
+            <CollapsibleSection title={t("setup.knowledge.articlesGroup")} meta={`${groupableArticles.length}`}>
               {orderedCategories.map((category) => (
                 <CollapsibleSection
                   key={category}
-                  title={CATEGORY_LABELS[category]}
+                  title={t(`category.${category}`)}
                   meta={`${categoryGroups.get(category)?.length ?? 0}`}
                 >
                   {(categoryGroups.get(category) ?? []).map((article) => (
@@ -226,7 +223,7 @@ export function ArticleLibrary({
           ) : (
             <>
               {!isFiltering && groupableArticles.length > 0 && (
-                <CollapsibleSection title="Articles" meta={`${groupableArticles.length}`}>
+                <CollapsibleSection title={t("setup.knowledge.articlesGroup")} meta={`${groupableArticles.length}`}>
                   {groupableArticles.map((article) => (
                     <ArticleListItem
                       key={article.id}
@@ -254,8 +251,8 @@ export function ArticleLibrary({
               <PlusIcon size={18} />
             </span>
             <span className={styles.createTileText}>
-              <span className={styles.createTileTitle}>Create a new article</span>
-              <span className={styles.createTileSub}>Start from scratch or a Shopify page</span>
+              <span className={styles.createTileTitle}>{t("setup.knowledge.createNew")}</span>
+              <span className={styles.createTileSub}>{t("setup.knowledge.createSub")}</span>
             </span>
           </button>
         </div>

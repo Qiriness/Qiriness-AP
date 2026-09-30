@@ -3,6 +3,7 @@
 import { useState } from "react";
 
 import { knowledgeErrorMessage } from "@/lib/api/knowledge";
+import { useT } from "@/lib/i18n/client";
 import type { PromotionChoice } from "@/lib/types";
 
 import styles from "./PromotionList.module.css";
@@ -32,6 +33,7 @@ export function PromotionList({
   initial: PromotionChoice[];
   loadError: string | null;
 }) {
+  const t = useT();
   const [promotions, setPromotions] = useState(initial);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -66,7 +68,7 @@ export function PromotionList({
     <section className={styles.wrap}>
       <header className={styles.head}>
         <div>
-          <h2 className={styles.title}>Codes support may offer</h2>
+          <h2 className={styles.title}>{t("setup.promotions.title")}</h2>
           <p className={styles.lede}>
             Every code discount currently active in Shopify. Switch on the ones a reply may hand to
             a customer — the drafting screen only ever sees these. Nothing else here is editable:
@@ -74,7 +76,7 @@ export function PromotionList({
           </p>
         </div>
         <span className={styles.count}>
-          {offerable} offerable of {promotions.length}
+          {t("setup.promotions.count", { n: offerable, total: promotions.length })}
         </span>
       </header>
 
@@ -107,18 +109,19 @@ export function PromotionList({
                     and says so in three words. */}
                 {promotion.stacksWith ? (
                   <span className={styles.warn}>
-                    Not combinable with {promotion.stacksWith.join(", ")}
+                    {t("setup.promotions.notCombinable", { with: promotion.stacksWith.join(", ") })}
                   </span>
                 ) : (
-                  <span className={styles.muted}>Combines with other discounts</span>
+                  <span className={styles.muted}>{t("setup.promotions.combines")}</span>
                 )}
-                {promotion.oncePerCustomer && <span className={styles.muted}>Once per customer</span>}
+                {promotion.oncePerCustomer && <span className={styles.muted}>{t("setup.promotions.once")}</span>}
                 <span className={styles.muted}>
-                  Used {promotion.usage.used}
-                  {promotion.usage.limit === null ? "" : ` of ${promotion.usage.limit}`}
+                  {promotion.usage.limit === null
+                    ? t("setup.promotions.used", { n: promotion.usage.used })
+                    : t("setup.promotions.usedOf", { n: promotion.usage.used, limit: promotion.usage.limit })}
                 </span>
                 {promotion.endsAt && (
-                  <span className={styles.muted}>Ends {promotion.endsAt.slice(0, 10)}</span>
+                  <span className={styles.muted}>{t("setup.promotions.ends", { date: promotion.endsAt.slice(0, 10) })}</span>
                 )}
               </div>
             </div>
@@ -129,9 +132,9 @@ export function PromotionList({
                 checked={promotion.offerable}
                 disabled={busy === promotion.promotionKey}
                 onChange={() => toggle(promotion)}
-                aria-label={`Allow support to offer ${promotion.code}`}
+                aria-label={t("setup.promotions.allow", { code: promotion.code })}
               />
-              <span>{promotion.offerable ? "Offerable" : "Internal"}</span>
+              <span>{promotion.offerable ? t("setup.promotions.offerable") : t("setup.promotions.internal")}</span>
             </label>
           </li>
         ))}

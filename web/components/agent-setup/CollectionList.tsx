@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 
 import { SearchIcon } from "@/components/icons";
 import { knowledgeErrorMessage } from "@/lib/api/knowledge";
+import { useT } from "@/lib/i18n/client";
 import { setCollectionActive, setCollectionDetails, syncCollections } from "@/lib/api/collections";
 import type { AdviceCollection, CollectionAxis } from "@/lib/types";
 
@@ -34,6 +35,7 @@ export function CollectionList({
   initial: AdviceCollection[];
   loadError: string | null;
 }) {
+  const t = useT();
   const [collections, setCollections] = useState(initial);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -86,9 +88,7 @@ export function CollectionList({
     try {
       const result = await syncCollections();
       setCollections(result.collections);
-      setSynced(
-        `${result.synced.total} collections checked, ${result.synced.refreshed} live ones refreshed.`
-      );
+      setSynced(t("setup.collections.synced", { total: result.synced.total, refreshed: result.synced.refreshed }));
     } catch (caught) {
       setError(knowledgeErrorMessage(caught));
     } finally {
@@ -100,7 +100,7 @@ export function CollectionList({
     <section className={styles.wrap}>
       <header className={styles.head}>
         <div>
-          <h2 className={styles.title}>Collections support may advise from</h2>
+          <h2 className={styles.title}>{t("setup.collections.title")}</h2>
           <p className={styles.lede}>
             Every collection in Shopify. Switch on the ones that describe something a customer
             asks for — a concern like « rides et ridules », or a type of care like « sérums ». The
@@ -111,10 +111,10 @@ export function CollectionList({
         </div>
         <div className={styles.headSide}>
           <span className={styles.count}>
-            {active} live of {collections.length}
+            {t("setup.collections.count", { n: active, total: collections.length })}
           </span>
           <button type="button" className={styles.sync} onClick={sync} disabled={syncing}>
-            {syncing ? "Syncing…" : "Sync from Shopify"}
+            {syncing ? t("setup.collections.syncing") : t("setup.collections.sync")}
           </button>
         </div>
       </header>
@@ -129,8 +129,8 @@ export function CollectionList({
             onKeyDown={(event) => {
               if (event.key === "Escape") setQuery("");
             }}
-            placeholder={`Search ${collections.length} collections`}
-            aria-label="Search collections"
+            placeholder={t("setup.collections.searchN", { n: collections.length })}
+            aria-label={t("setup.collections.search")}
           />
         </div>
         <label className={styles.filter}>
@@ -139,7 +139,7 @@ export function CollectionList({
             checked={activeOnly}
             onChange={(event) => setActiveOnly(event.target.checked)}
           />
-          <span>Live only</span>
+          <span>{t("setup.collections.liveOnly")}</span>
         </label>
       </div>
 
@@ -147,8 +147,7 @@ export function CollectionList({
       {error && <p className={styles.error} role="status">{error}</p>}
       {synced && (
         <p className={styles.synced} role="status">
-          {synced} A collection new to Shopify arrives switched off — the sync never
-          switches anything on.
+          {synced} {t("setup.collections.syncedNote")}
         </p>
       )}
 
@@ -157,12 +156,12 @@ export function CollectionList({
       {shown.length === 0 && !loadError && (
         <p className={styles.empty}>
           {activeOnly && needle
-            ? `No live collection matches “${query.trim()}”. Untick “Live only” to search all ${collections.length}.`
+            ? t("setup.collections.noLiveMatch", { query: query.trim(), n: collections.length })
             : activeOnly
-              ? "Nothing is live yet. Search below and switch on the collections that describe what customers ask for."
+              ? t("setup.collections.nothingLive")
               : needle
-                ? `No collection matches “${query.trim()}”.`
-                : "No collections synced yet — use “Sync from Shopify” above."}
+                ? t("setup.collections.noMatch", { query: query.trim() })
+                : t("setup.collections.noneSynced")}
         </p>
       )}
 
@@ -183,14 +182,14 @@ export function CollectionList({
                     membership has been fetched. */}
                 <span className={styles.muted}>
                   {collection.productsCount === null
-                    ? "Count unknown"
-                    : `${collection.productsCount} in Shopify`}
+                    ? t("setup.collections.countUnknown")
+                    : t("setup.collections.inShopify", { n: collection.productsCount })}
                 </span>
                 {collection.active && (
                   <span className={collection.liveProducts ? styles.muted : styles.warn}>
                     {collection.liveProducts === null
-                      ? "Membership not fetched yet — run the collections sync"
-                      : `${collection.liveProducts} live for advice`}
+                      ? t("setup.collections.notFetched")
+                      : t("setup.collections.liveForAdvice", { n: collection.liveProducts })}
                   </span>
                 )}
                 {collection.note && <span className={styles.note}>{collection.note}</span>}
@@ -198,7 +197,7 @@ export function CollectionList({
             </div>
 
             <div className={styles.actions}>
-              <div className={styles.axis} role="group" aria-label={`What ${collection.title} is`}>
+              <div className={styles.axis} role="group" aria-label={t("setup.collections.whatIs", { title: collection.title })}>
                 {(["concern", "category"] as CollectionAxis[]).map((axis) => (
                   <button
                     key={axis}
@@ -217,7 +216,7 @@ export function CollectionList({
                       )
                     }
                   >
-                    {axis === "concern" ? "Concern" : "Type of care"}
+                    {axis === "concern" ? t("setup.collections.concern") : t("setup.collections.careType")}
                   </button>
                 ))}
               </div>
@@ -230,9 +229,9 @@ export function CollectionList({
                   onChange={() =>
                     run(collection.id, () => setCollectionActive(collection.id, !collection.active))
                   }
-                  aria-label={`Let the agent advise from ${collection.title}`}
+                  aria-label={t("setup.collections.letAdvise", { title: collection.title })}
                 />
-                <span>{collection.active ? "Live" : "Off"}</span>
+                <span>{collection.active ? t("setup.collections.live") : t("setup.collections.off")}</span>
               </label>
             </div>
           </li>

@@ -8,6 +8,7 @@ import { WorkspaceActions } from "./WorkspaceActions";
 import { WorkspaceHeader } from "./WorkspaceHeader";
 import { EditorFooter } from "./EditorFooter";
 import { LockIcon } from "@/components/icons";
+import { useT } from "@/lib/i18n/client";
 import styles from "./ArticleWorkspace.module.css";
 import voiceStyles from "./BrandVoiceWorkspace.module.css";
 
@@ -66,6 +67,7 @@ export function BrandVoiceWorkspace({
   onUnapprove,
   onDelete,
 }: BrandVoiceWorkspaceProps) {
+  const t = useT();
   const voiceProfile = article.voiceProfile ?? EMPTY_VOICE_PROFILE;
 
   return (
@@ -73,58 +75,58 @@ export function BrandVoiceWorkspace({
       <div className={styles.editorCol}>
         <WorkspaceHeader
           article={article}
-          placeholder="Brand voice"
+          placeholder={t("coreTopic.brand")}
           focusTitleNonce={focusTitleNonce}
           onBack={onBack}
           onTitleChange={onTitleChange}
         />
 
         <section className={voiceStyles.section}>
-          <h3 className={voiceStyles.sectionTitle}>Agent role description</h3>
+          <h3 className={voiceStyles.sectionTitle}>{t("setup.brand.role")}</h3>
           <textarea
             className={voiceStyles.voiceTextarea}
             value={voiceProfile.roleDescription}
             onChange={(e) => onRoleDescriptionChange(e.target.value)}
             placeholder="Describe who the agent is and what it's responsible for…"
             rows={3}
-            aria-label="Agent role description"
+            aria-label={t("setup.brand.role")}
           />
         </section>
 
         <section className={voiceStyles.section}>
-          <h3 className={voiceStyles.sectionTitle}>Agent tone and voice</h3>
+          <h3 className={voiceStyles.sectionTitle}>{t("setup.brand.tone")}</h3>
           <textarea
             className={voiceStyles.voiceTextarea}
             value={voiceProfile.toneAndVoice}
             onChange={(e) => onToneAndVoiceChange(e.target.value)}
             placeholder="Describe how the agent should sound — tone, personality, style…"
             rows={3}
-            aria-label="Agent tone and voice"
+            aria-label={t("setup.brand.tone")}
           />
         </section>
 
         <section className={voiceStyles.section}>
-          <h3 className={voiceStyles.sectionTitle}>Response framework</h3>
-          <p className={voiceStyles.hint}>Not yet editable here — saved with the article.</p>
+          <h3 className={voiceStyles.sectionTitle}>{t("setup.brand.framework")}</h3>
+          <p className={voiceStyles.hint}>{t("setup.brand.notEditable")}</p>
           <ChipList
-            label="Response framework"
+            label={t("setup.brand.framework")}
             items={voiceProfile.responseFramework}
             layout="list"
           />
         </section>
 
         <section className={voiceStyles.section}>
-          <h3 className={voiceStyles.sectionTitle}>Guidelines and guardrails</h3>
-          <p className={voiceStyles.hint}>Not yet editable here — saved with the article.</p>
+          <h3 className={voiceStyles.sectionTitle}>{t("setup.brand.guidelines")}</h3>
+          <p className={voiceStyles.hint}>{t("setup.brand.notEditable")}</p>
           <ChipList
-            label="Guidelines and guardrails"
+            label={t("setup.brand.guidelines")}
             items={voiceProfile.guidelinesAndGuardrails}
             layout="list"
           />
         </section>
 
         <section className={voiceStyles.section}>
-          <h3 className={voiceStyles.sectionTitle}>Closing line</h3>
+          <h3 className={voiceStyles.sectionTitle}>{t("setup.brand.closing")}</h3>
           <p className={voiceStyles.hint}>
             The courtesy line just above the signature, reproduced exactly on every reply.
             Left to the agent it invented one per email and worded it differently every time;
@@ -137,12 +139,12 @@ export function BrandVoiceWorkspace({
             onChange={(e) => onClosingLineChange(e.target.value)}
             placeholder={"N’hésitez pas à revenir vers nous si vous avez d’autres questions."}
             rows={2}
-            aria-label="Closing line"
+            aria-label={t("setup.brand.closing")}
           />
         </section>
 
         <section className={voiceStyles.section}>
-          <h3 className={voiceStyles.sectionTitle}>Signature</h3>
+          <h3 className={voiceStyles.sectionTitle}>{t("setup.brand.signature")}</h3>
           <p className={voiceStyles.hint}>
             The sign-off applied to every drafted reply — the last step of the response framework.
             Write it exactly as it should appear at the foot of an email.
@@ -153,12 +155,12 @@ export function BrandVoiceWorkspace({
             onChange={(e) => onSignatureChange(e.target.value)}
             placeholder={"Bien cordialement,\nLe service client Qiriness"}
             rows={3}
-            aria-label="Signature"
+            aria-label={t("setup.brand.signature")}
           />
         </section>
 
         <section className={voiceStyles.section}>
-          <h3 className={voiceStyles.sectionTitle}>General context</h3>
+          <h3 className={voiceStyles.sectionTitle}>{t("setup.brand.context")}</h3>
           <p className={voiceStyles.hint}>
             Anything else that should apply to every email, no matter the category — category-specific
             guidance (e.g. how to word a returns email) belongs in a regular knowledge article instead.

@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react";
 import type { Article } from "@/lib/types";
 import { StatusChip } from "@/components/ui/StatusChip";
 import { ChevronLeftIcon } from "@/components/icons";
+import { useT } from "@/lib/i18n/client";
 import styles from "./ArticleWorkspace.module.css";
 
 interface WorkspaceHeaderProps {
@@ -23,6 +24,7 @@ export function WorkspaceHeader({
   onBack,
   onTitleChange,
 }: WorkspaceHeaderProps) {
+  const t = useT();
   const titleRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -35,12 +37,12 @@ export function WorkspaceHeader({
         type="button"
         className={styles.back}
         onClick={onBack}
-        aria-label="Back to article list"
+        aria-label={t("setup.knowledge.backToList")}
       >
         <ChevronLeftIcon size={18} />
       </button>
       <label className={styles.titleField}>
-        <span className="sr-only">Article title</span>
+        <span className="sr-only">{t("setup.knowledge.articleTitle")}</span>
         <input
           ref={titleRef}
           type="text"

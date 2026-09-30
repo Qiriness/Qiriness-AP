@@ -9,6 +9,7 @@ import {
   OrderedListIcon,
   UnderlineIcon,
 } from "@/components/icons";
+import { useT } from "@/lib/i18n/client";
 import styles from "./RichTextEditor.module.css";
 
 interface RichTextEditorProps {
@@ -103,6 +104,7 @@ export function RichTextEditor({
   placeholder,
   onChange,
 }: RichTextEditorProps) {
+  const t = useT();
   const ref = useRef<HTMLDivElement>(null);
   const [preview, setPreview] = useState(false);
   const [empty, setEmpty] = useState(() => countWords(stripHtml(initialHtml)) === 0);
@@ -180,24 +182,24 @@ export function RichTextEditor({
   }
 
   function addLink() {
-    const url = window.prompt("Link URL", "https://");
+    const url = window.prompt(t("setup.editor.linkUrl"), "https://");
     if (url && url !== "https://") exec("createLink", url);
   }
 
   const tools = [
-    { label: "Bold", icon: BoldIcon, run: () => exec("bold"), on: active.bold },
-    { label: "Italic", icon: ItalicIcon, run: () => exec("italic"), on: active.italic },
-    { label: "Underline", icon: UnderlineIcon, run: () => exec("underline"), on: active.underline },
-    { label: "Bulleted list", icon: ListIcon, run: () => exec("insertUnorderedList"), on: active.unorderedList },
-    { label: "Numbered list", icon: OrderedListIcon, run: () => exec("insertOrderedList"), on: active.orderedList },
+    { label: t("setup.editor.bold"), icon: BoldIcon, run: () => exec("bold"), on: active.bold },
+    { label: t("setup.editor.italic"), icon: ItalicIcon, run: () => exec("italic"), on: active.italic },
+    { label: t("setup.editor.underline"), icon: UnderlineIcon, run: () => exec("underline"), on: active.underline },
+    { label: t("setup.editor.bullets"), icon: ListIcon, run: () => exec("insertUnorderedList"), on: active.unorderedList },
+    { label: t("setup.editor.numbered"), icon: OrderedListIcon, run: () => exec("insertOrderedList"), on: active.orderedList },
     // A link is an action, not a state the caret can be "in" for toolbar
     // purposes, so it never lights up.
-    { label: "Insert link", icon: LinkIcon, run: addLink, on: false },
+    { label: t("setup.editor.link"), icon: LinkIcon, run: addLink, on: false },
   ];
 
   return (
     <div className={styles.editor} data-preview={preview || undefined}>
-      <div className={styles.toolbar} role="toolbar" aria-label="Formatting">
+      <div className={styles.toolbar} role="toolbar" aria-label={t("setup.editor.formatting")}>
         {/* HEADINGS ARE NOT DECORATION HERE. `htmlToSections` cuts an article
             into sections on h1-h6, and each section is chunked separately for
             retrieval — so an article typed without headings becomes ONE chunk,
@@ -208,8 +210,8 @@ export function RichTextEditor({
               key={block.tag}
               type="button"
               className={`${styles.toolBtn} ${styles.blockBtn} ${active.block === block.tag ? styles.toolOn : ""}`}
-              title={block.title}
-              aria-label={block.title}
+              title={t(`setup.editor.${block.tag}`)}
+              aria-label={t(`setup.editor.${block.tag}`)}
               aria-pressed={active.block === block.tag}
               disabled={preview}
               onMouseDown={(e) => e.preventDefault()}
@@ -221,19 +223,19 @@ export function RichTextEditor({
         </div>
         <span className={styles.divider} aria-hidden="true" />
         <div className={styles.tools}>
-          {tools.map((t) => {
-            const Icon = t.icon;
+          {tools.map((tool) => {
+            const Icon = tool.icon;
             return (
               <button
-                key={t.label}
+                key={tool.label}
                 type="button"
-                className={`${styles.toolBtn} ${t.on ? styles.toolOn : ""}`}
-                title={t.label}
-                aria-label={t.label}
-                aria-pressed={t.on}
+                className={`${styles.toolBtn} ${tool.on ? styles.toolOn : ""}`}
+                title={tool.label}
+                aria-label={tool.label}
+                aria-pressed={tool.on}
                 disabled={preview}
                 onMouseDown={(e) => e.preventDefault()}
-                onClick={t.run}
+                onClick={tool.run}
               >
                 <Icon size={17} />
               </button>
@@ -246,7 +248,7 @@ export function RichTextEditor({
           aria-pressed={preview}
           onClick={() => setPreview((p) => !p)}
         >
-          {preview ? "Edit" : "Preview"}
+          {preview ? t("setup.editor.edit") : t("setup.editor.preview")}
         </button>
       </div>
 
@@ -263,7 +265,7 @@ export function RichTextEditor({
           suppressContentEditableWarning
           role="textbox"
           aria-multiline="true"
-          aria-label="Article content"
+          aria-label={t("setup.knowledge.content")}
           spellCheck
           onInput={emit}
           // `selectionchange` covers almost everything, but these fire first on

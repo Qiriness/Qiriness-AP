@@ -1,6 +1,7 @@
 "use client";
 
 import { Button } from "@/components/ui/Button";
+import { useT } from "@/lib/i18n/client";
 import type { RehearsalInput } from "@/lib/agent-test-types";
 
 import styles from "./TestComposer.module.css";
@@ -33,6 +34,7 @@ export function TestComposer({
   disabled: boolean;
   articleTitle: string | null;
 }) {
+  const t = useT();
   const set = (patch: Partial<RehearsalInput>) => onChange({ ...value, ...patch });
   const ready = value.body.trim() !== "";
 
@@ -47,7 +49,7 @@ export function TestComposer({
 
       <div className={styles.identity}>
         <label className={styles.field}>
-          <span className={styles.label}>Customer name</span>
+          <span className={styles.label}>{t("setup.test.customerName")}</span>
           <input
             className={styles.input}
             value={value.name}
@@ -57,7 +59,7 @@ export function TestComposer({
           />
         </label>
         <label className={styles.field}>
-          <span className={styles.label}>Email address</span>
+          <span className={styles.label}>{t("setup.test.email")}</span>
           <input
             className={styles.input}
             type="email"
@@ -68,7 +70,7 @@ export function TestComposer({
           />
         </label>
         <label className={styles.field}>
-          <span className={styles.label}>Order number</span>
+          <span className={styles.label}>{t("setup.test.orderNumber")}</span>
           <input
             className={styles.input}
             value={value.orderNumber}
@@ -86,7 +88,7 @@ export function TestComposer({
       </p>
 
       <label className={styles.field}>
-        <span className={styles.label}>Subject</span>
+        <span className={styles.label}>{t("setup.test.subject")}</span>
         <input
           className={styles.input}
           value={value.subject}
@@ -97,7 +99,7 @@ export function TestComposer({
       </label>
 
       <label className={styles.field}>
-        <span className={styles.label}>Message</span>
+        <span className={styles.label}>{t("setup.test.message")}</span>
         <textarea
           className={styles.textarea}
           value={value.body}
@@ -122,7 +124,7 @@ export function TestComposer({
           ticket.
         </p>
         <Button variant="primary" onClick={onRun} loading={running} disabled={!ready || disabled}>
-          {running ? "Running" : "Run through the agent"}
+          {running ? t("setup.test.running") : t("setup.test.run")}
         </Button>
       </div>
     </div>
