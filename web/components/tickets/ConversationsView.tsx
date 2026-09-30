@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { setTicketStatus } from "@/lib/api/tickets";
 import { knowledgeErrorMessage } from "@/lib/api/knowledge";
+import { useT } from "@/lib/i18n/client";
 import { isClosed } from "@/lib/ticket-stats";
 import type { TicketListItem } from "@/lib/types";
 import { TicketSection } from "./TicketSection";
@@ -41,6 +42,7 @@ function matchesConversation(ticket: TicketListItem, query: string): boolean {
  * furniture. Search is per-section, as it is on Tickets.
  */
 export function ConversationsView({ conversations, loadError }: ConversationsViewProps) {
+  const t = useT();
   const [rows, setRows] = useState(conversations);
   const [openQuery, setOpenQuery] = useState("");
   const [closedQuery, setClosedQuery] = useState("");
@@ -79,57 +81,54 @@ export function ConversationsView({ conversations, loadError }: ConversationsVie
   return (
     <div className={styles.page}>
       <header className={styles.header}>
-        <h1 className={styles.title}>Conversations</h1>
+        <h1 className={styles.title}>{t("nav.conversations")}</h1>
         <p className={styles.subtitle}>
-          Threads opened by our own side — a colleague forwarding a customer&apos;s problem in,
-          the warehouse coordinating a return, a logged phone call. The agent gathers the
-          facts on these but never drafts a reply, because the reply would be addressed to a
-          colleague rather than a customer.
+          {t("tickets.dialogs.conversations.subtitle")}
         </p>
       </header>
 
       {actionError && <p className={styles.error}>{actionError}</p>}
 
       <TicketSection
-        title="Open"
+        title={t("tickets.dialogs.conversations.open")}
         count={open.length}
-        description="Still needs somebody. These are customer problems relayed by a colleague, not internal chatter."
+        description={t("tickets.dialogs.conversations.openDescription")}
         search={{
           value: openQuery,
           onChange: setOpenQuery,
-          placeholder: "Search open conversations…",
-          label: "Search open conversations",
+          placeholder: t("tickets.dialogs.conversations.searchOpenPlaceholder"),
+          label: t("tickets.dialogs.conversations.searchOpen"),
         }}
       >
         <TicketTable
           tickets={open.filter((ticket) => matchesConversation(ticket, openQuery))}
-          actionLabel="Close"
+          actionLabel={t("tickets.dialogs.conversations.close")}
           onAction={toggleStatus}
           pendingId={pendingId}
-          emptyTitle="Nothing open"
-          emptyBody="Every internal thread has been dealt with."
+          emptyTitle={t("tickets.dialogs.conversations.nothingOpen")}
+          emptyBody={t("tickets.dialogs.conversations.nothingOpenBody")}
         />
       </TicketSection>
 
       <TicketSection
-        title="Closed"
+        title={t("tickets.dialogs.conversations.closed")}
         count={closed.length}
-        description="Finished internal threads, kept because they are often the only record of what was done for a customer."
+        description={t("tickets.dialogs.conversations.closedDescription")}
         defaultCollapsed
         search={{
           value: closedQuery,
           onChange: setClosedQuery,
-          placeholder: "Search closed conversations…",
-          label: "Search closed conversations",
+          placeholder: t("tickets.dialogs.conversations.searchClosedPlaceholder"),
+          label: t("tickets.dialogs.conversations.searchClosed"),
         }}
       >
         <TicketTable
           tickets={closed.filter((ticket) => matchesConversation(ticket, closedQuery))}
-          actionLabel="Reopen"
+          actionLabel={t("tickets.dialogs.conversations.reopen")}
           onAction={toggleStatus}
           pendingId={pendingId}
-          emptyTitle="Nothing closed yet"
-          emptyBody="Internal threads appear here once they are finished."
+          emptyTitle={t("tickets.dialogs.conversations.nothingClosed")}
+          emptyBody={t("tickets.dialogs.conversations.nothingClosedBody")}
         />
       </TicketSection>
     </div>

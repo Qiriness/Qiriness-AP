@@ -1,5 +1,7 @@
+"use client";
+
+import { useT } from "@/lib/i18n/client";
 import type { TicketLevel } from "@/lib/types";
-import { TICKET_LEVEL_MEANINGS } from "@/lib/types";
 import styles from "./LevelChip.module.css";
 
 interface LevelChipProps {
@@ -15,10 +17,11 @@ interface LevelChipProps {
  * reached this ticket yet, which is a different thing from "low severity".
  */
 export function LevelChip({ level }: LevelChipProps) {
+  const t = useT();
   if (level === null) {
     return (
-      <span className={`${styles.chip} ${styles.none}`} title="Not categorised yet">
-        Uncategorised
+      <span className={`${styles.chip} ${styles.none}`} title={t("tickets.dialogs.level.notCategorised")}>
+        {t("tickets.panels.uncategorised")}
       </span>
     );
   }
@@ -26,10 +29,10 @@ export function LevelChip({ level }: LevelChipProps) {
   return (
     <span
       className={`${styles.chip} ${styles[`level${level}`]}`}
-      title={`Level ${level} — ${TICKET_LEVEL_MEANINGS[level]}`}
+      title={`${t(`level.${level}`)} — ${t(`levelMeaning.${level}`)}`}
     >
       L{level}
-      <span className={styles.meaning}>{TICKET_LEVEL_MEANINGS[level]}</span>
+      <span className={styles.meaning}>{t(`levelMeaning.${level}`)}</span>
     </span>
   );
 }

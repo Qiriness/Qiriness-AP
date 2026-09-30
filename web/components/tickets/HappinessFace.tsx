@@ -1,5 +1,7 @@
+"use client";
+
+import { useT } from "@/lib/i18n/client";
 import type { TicketHappiness } from "@/lib/types";
-import { TICKET_HAPPINESS_MEANINGS } from "@/lib/types";
 import styles from "./HappinessFace.module.css";
 
 interface HappinessFaceProps {
@@ -23,17 +25,18 @@ interface HappinessFaceProps {
  * with the app's own success/warning/error tokens.
  */
 export function HappinessFace({ happiness }: HappinessFaceProps) {
+  const t = useT();
   if (happiness === null) {
     return (
-      <span className={`${styles.face} ${styles.none}`} title="Mood not scored yet">
+      <span className={`${styles.face} ${styles.none}`} title={t("tickets.dialogs.mood.unscored")}>
         <FaceIcon mouth="none" />
-        <span className={styles.srOnly}>Mood not scored yet</span>
+        <span className={styles.srOnly}>{t("tickets.dialogs.mood.unscored")}</span>
       </span>
     );
   }
 
   const tone = happiness <= 2 ? "happy" : happiness === 3 ? "medium" : "sad";
-  const label = `${TICKET_HAPPINESS_MEANINGS[happiness]} customer`;
+  const label = t(`tickets.dialogs.mood.${happiness}`);
 
   return (
     <span className={`${styles.face} ${styles[tone]}`} title={label}>

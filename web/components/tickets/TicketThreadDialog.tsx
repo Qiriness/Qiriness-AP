@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import { Dialog } from "@/components/ui/Dialog";
 import { knowledgeErrorMessage } from "@/lib/api/knowledge";
 import { decideOnDraft, fetchTicketThread } from "@/lib/api/tickets";
+import { useT } from "@/lib/i18n/client";
+import type { Translate } from "@/lib/i18n/translate";
 import { formatRelativeTime } from "@/lib/relative-time";
 import { TrackingText } from "@/components/ui/TrackingText";
 import { decisionLabel, outboundLine, replyInFlight } from "@/lib/draft-outbound";
@@ -47,13 +49,10 @@ interface TicketThreadDialogProps {
 /** Written as a constant because a literal newline escape cannot survive a JSX attribute. */
 const NEWLINE = String.fromCharCode(10);
 
-const DRAFT_HEADINGS: Record<string, string> = {
-  answerable: "Draft reply",
-  needs_customer_input: "Draft question to the customer",
-  needs_human: "Draft acknowledgement — resolves nothing",
-};
+const DRAFT_HEADING_KEYS = ["answerable", "needs_customer_input", "needs_human"];
 
 export function TicketThreadDialog({ ticket, onClose }: TicketThreadDialogProps) {
+  const t = useT();
   const [thread, setThread] = useState<TicketThread | null>(null);
   const [error, setError] = useState<string | null>(null);
   // The editor is opt-in: a reviewer reads first and edits second, and a
@@ -105,14 +104,14 @@ export function TicketThreadDialog({ ticket, onClose }: TicketThreadDialogProps)
 
   return (
     <Dialog
-      title={subject?.trim() || "(no subject)"}
-      closeLabel="Close the conversation"
+      title={subject?.trim() || t("tickets.view.noSubject")}
+      closeLabel={t("tickets.dialogs.thread.close")}
       onClose={onClose}
       meta={
         <>
-          {ticket.requesterName?.trim() || "Unknown requester"}
-          {ticket.orderNumber ? ` · Order ${ticket.orderNumber}` : ""}
-          {thread ? ` · ${thread.messages.length} message${thread.messages.length === 1 ? "" : "s"}` : ""}
+          {ticket.requesterName?.trim() || t("tickets.view.unknownRequester")}
+          {ticket.orderNumber ? ` · ${t("tickets.panels.orderNumber", { number: ticket.orderNumber })}` : ""}
+          {thread ? ` · ${t("tickets.dialogs.thread.messages", { count: thread.messages.length })}` : ""}
         </>
       }
     >
@@ -123,12 +122,11 @@ export function TicketThreadDialog({ ticket, onClose }: TicketThreadDialogProps)
             it looks fine. */}
         {thread?.duplicateOf && (
           <p className={styles.duplicate} role="alert">
-            Duplicate of another ticket
+            {t("tickets.dialogs.thread.duplicate")}
             {thread.duplicateOf.reason === "identical_body"
-              ? " — the same message arrived twice"
-              : " — part of the same email conversation"}
-            . The agent will not draft here, and this reply should not be sent:
-            answer on the original instead.
+              ? t("tickets.dialogs.thread.duplicateSame")
+              : t("tickets.dialogs.thread.duplicateThread")}
+            {t("tickets.dialogs.thread.duplicateEnd")}
           </p>
         )}
         {/* Below the duplicate banner and visually calmer than it, because the
@@ -136,11 +134,10 @@ export function TicketThreadDialog({ ticket, onClose }: TicketThreadDialogProps)
             read the earlier thread first. Never suppresses the draft. */}
         {thread?.relatedTo && !thread?.duplicateOf && (
           <p className={styles.related}>
-            This customer wrote to us before about the same thing — see the earlier ticket.
-            The reply below takes that into account.
+            {t("tickets.dialogs.thread.related")}
           </p>
         )}
-        <h3 className={styles.heading}>{DRAFT_HEADINGS[thread?.draft?.sourceVerdict ?? "answerable"]}</h3>
+        <h3 className={styles.heading}>{t(`tickets.dialogs.thread.heading.${DRAFT_HEADING_KEYS.includes(thread?.draft?.sourceVerdict ?? "") ? thread?.draft?.sourceVerdict : "answerable"}`)}</h3>
         {thread?.draft ? (
           <>
             {/* The failed checks go ABOVE the text. A reviewer who reads a
@@ -148,9 +145,8 @@ export function TicketThreadDialog({ ticket, onClose }: TicketThreadDialogProps)
                 warning underneath it arrives. */}
             {!thread.draft.checksPassed && (
               <p className={styles.blocked} role="alert">
-                Not sendable — {thread.draft.failedChecks.length || "some"} mechanical{" "}
-                {thread.draft.failedChecks.length === 1 ? "check" : "checks"} failed:{" "}
-                {thread.draft.failedChecks.join("; ") || "see the draft record"}.
+                {t("tickets.panels.draft.notSendable", { count: thread.draft.failedChecks.length })}{" "}
+                {thread.draft.failedChecks.join("; ") || t("tickets.panels.draft.seeRecord")}.
               </p>
             )}
             {/* THE MODEL'S TEXT IS NEVER EDITED IN PLACE. Opening the editor
@@ -163,7 +159,7 @@ export function TicketThreadDialog({ ticket, onClose }: TicketThreadDialogProps)
                 value={edited}
                 onChange={(event) => setEdited(event.target.value)}
                 rows={Math.min(24, Math.max(8, edited.split(NEWLINE).length + 2))}
-                aria-label="Edit the drafted reply"
+                aria-label={t("tickets.panels.draft.editLabel")}
               />
             ) : (
               <pre className={styles.draft}>
@@ -172,8 +168,7 @@ export function TicketThreadDialog({ ticket, onClose }: TicketThreadDialogProps)
             )}
             {editing && thread.draft.replyLink && (
               <p className={styles.stamp}>
-                Keep the word in [[double brackets]] where the link to {thread.draft.replyLink.label} goes — it
-                becomes the link.
+                {t("tickets.panels.draft.keepBrackets", { label: thread.draft.replyLink.label })}
               </p>
             )}
             {/* The model's text stays above; a reviewer's rewrite is shown as a
@@ -181,7 +176,7 @@ export function TicketThreadDialog({ ticket, onClose }: TicketThreadDialogProps)
                 between them is what says whether the drafting is any good. */}
             {thread.draft.approvedBody && (
               <>
-                <h3 className={styles.heading}>Reviewer&apos;s version</h3>
+                <h3 className={styles.heading}>{t("tickets.panels.draft.reviewerVersion")}</h3>
                 <pre className={styles.draft}>
                   <TrackingText
                     text={thread.draft.approvedBody}
@@ -197,14 +192,14 @@ export function TicketThreadDialog({ ticket, onClose }: TicketThreadDialogProps)
                 thread, an intermediary one hands it to whoever is waited on. */}
             <p className={styles.stamp}>
               {thread.draft.disposition === "terminal"
-                ? "Terminal — sending this closes the ticket."
+                ? t("tickets.panels.draft.terminal")
                 : thread.draft.sourceVerdict === "needs_customer_input"
-                  ? "Intermediary — sending this waits on the customer."
-                  : "Intermediary — a colleague still owes this customer an answer."}
+                  ? t("tickets.panels.draft.intermediaryCustomer")
+                  : t("tickets.panels.draft.intermediaryColleague")}
             </p>
-            {outboundLine(thread.draft.outbound) && (
+            {outboundLine(thread.draft.outbound, t) && (
               <p className={styles.stamp} role="status">
-                {outboundLine(thread.draft.outbound)}
+                {outboundLine(thread.draft.outbound, t)}
               </p>
             )}
             {/* The three decisions a person can reach by reading. With sending
@@ -220,7 +215,7 @@ export function TicketThreadDialog({ ticket, onClose }: TicketThreadDialogProps)
                     disabled={saving !== null || edited.trim() === ""}
                     onClick={() => decide("edited")}
                   >
-                    {saving === "edited" ? "Saving…" : decisionLabel(thread.draft, "save")}
+                    {saving === "edited" ? t("tickets.panels.saving") : decisionLabel(thread.draft, "save", t)}
                   </button>
                   <button
                     type="button"
@@ -228,7 +223,7 @@ export function TicketThreadDialog({ ticket, onClose }: TicketThreadDialogProps)
                     disabled={saving !== null}
                     onClick={() => setEditing(false)}
                   >
-                    Cancel
+                    {t("tickets.panels.draft.cancel")}
                   </button>
                 </>
               ) : (
@@ -244,7 +239,7 @@ export function TicketThreadDialog({ ticket, onClose }: TicketThreadDialogProps)
                       setEditing(true);
                     }}
                   >
-                    Edit
+                    {t("tickets.panels.draft.edit")}
                   </button>
                   <button
                     type="button"
@@ -252,7 +247,7 @@ export function TicketThreadDialog({ ticket, onClose }: TicketThreadDialogProps)
                     disabled={saving !== null}
                     onClick={() => decide("approved")}
                   >
-                    {saving === "approved" ? "Saving…" : decisionLabel(thread.draft, "approve")}
+                    {saving === "approved" ? t("tickets.panels.saving") : decisionLabel(thread.draft, "approve", t)}
                   </button>
                   <button
                     type="button"
@@ -260,7 +255,7 @@ export function TicketThreadDialog({ ticket, onClose }: TicketThreadDialogProps)
                     disabled={saving !== null}
                     onClick={() => decide("rejected")}
                   >
-                    {saving === "rejected" ? "Saving…" : "Reject"}
+                    {saving === "rejected" ? t("tickets.panels.saving") : t("tickets.panels.draft.reject")}
                   </button>
                 </>
               )}
@@ -275,11 +270,11 @@ export function TicketThreadDialog({ ticket, onClose }: TicketThreadDialogProps)
 
             {thread.draft.draftedAt && (
               <p className={styles.stamp}>
-                Drafted{" "}
+                {t("tickets.panels.draft.drafted")}{" "}
                 <time dateTime={thread.draft.draftedAt}>
-                  {formatRelativeTime(thread.draft.draftedAt)}
+                  {formatRelativeTime(thread.draft.draftedAt, t)}
                 </time>
-                {thread.draft.status !== "pending" ? ` · ${thread.draft.status}` : ""}
+                {thread.draft.status !== "pending" ? ` · ${t(`tickets.panels.draft.status.${thread.draft.status}`)}` : ""}
               </p>
             )}
           </>
@@ -289,22 +284,21 @@ export function TicketThreadDialog({ ticket, onClose }: TicketThreadDialogProps)
              level 4, where the agent stays silent on purpose. Saying so beats a
              blank box that reads as a load that went wrong. */
           <p className={styles.placeholder}>
-            No draft — this ticket has no case file yet, or it is level 4, where the
-            agent stays silent on purpose. What it established is in the expanded row.
+            {t("tickets.dialogs.thread.noDraft")}
           </p>
         )}
       </section>
 
       <section className={styles.section}>
-        <h3 className={styles.heading}>Conversation</h3>
+        <h3 className={styles.heading}>{t("tickets.panels.conversation")}</h3>
         {error ? (
           <p className={styles.error} role="alert">
             {error}
           </p>
         ) : !thread ? (
-          <p className={styles.placeholder}>Loading the thread…</p>
+          <p className={styles.placeholder}>{t("tickets.dialogs.thread.loading")}</p>
         ) : thread.messages.length === 0 ? (
-          <p className={styles.placeholder}>This ticket holds no stored messages.</p>
+          <p className={styles.placeholder}>{t("tickets.panels.thread.emptyTitle")}.</p>
         ) : (
           <ol className={styles.messages}>
             {thread.messages.map((message) => (
@@ -332,7 +326,7 @@ export function TicketThreadDialog({ ticket, onClose }: TicketThreadDialogProps)
  * same sender as `jean@qiriness.com` in the address field, and treating them as
  * different would print the duplicate this check exists to avoid.
  */
-function senderIdentity(message: TicketMessage, outbound: boolean): {
+function senderIdentity(message: TicketMessage, outbound: boolean, t: Translate): {
   name: string;
   email: string | null;
 } {
@@ -340,7 +334,7 @@ function senderIdentity(message: TicketMessage, outbound: boolean): {
   const email = message.fromEmail?.trim() ?? "";
 
   // Nothing at all: the direction is the only thing left to say who this was.
-  if (!name && !email) return { name: outbound ? "Qiriness" : "Unknown sender", email: null };
+  if (!name && !email) return { name: outbound ? "Qiriness" : t("tickets.panels.unknownSender"), email: null };
   // The address is the identity — as a name on its own, not repeated beside it.
   if (!name) return { name: email, email: null };
   if (!email) return { name, email: null };
@@ -360,21 +354,22 @@ function MessageBlock({
   message: TicketMessage;
   parcels: TicketTracking[];
 }) {
+  const t = useT();
   const outbound = message.direction === "outbound";
-  const sender = senderIdentity(message, outbound);
+  const sender = senderIdentity(message, outbound, t);
 
   return (
     <li className={`${styles.message} ${outbound ? styles.outbound : styles.inbound}`}>
       <div className={styles.messageHead}>
         <span className={styles.sender}>{sender.name}</span>
         {sender.email && <span className={styles.senderEmail}>{sender.email}</span>}
-        <span className={styles.direction}>{outbound ? "Sent" : "Received"}</span>
+        <span className={styles.direction}>{outbound ? t("tickets.dialogs.thread.sent") : t("tickets.dialogs.thread.received")}</span>
         {message.at && (
           <time className={styles.when} dateTime={message.at}>
-            {formatRelativeTime(message.at)}
+            {formatRelativeTime(message.at, t)}
           </time>
         )}
-        {message.hasAttachments && <span className={styles.attachment}>Has attachments</span>}
+        {message.hasAttachments && <span className={styles.attachment}>{t("tickets.dialogs.thread.hasAttachments")}</span>}
       </div>
       {/* `pre` rather than `p`: `body_text` is plain text whose paragraph breaks
           and quoted-reply indentation are the only structure it has left after
@@ -384,7 +379,7 @@ function MessageBlock({
           <TrackingText text={message.body} parcels={parcels} />
         </pre>
       ) : (
-        <p className={styles.placeholder}>No body stored for this message.</p>
+        <p className={styles.placeholder}>{t("tickets.panels.message.noBody")}</p>
       )}
     </li>
   );

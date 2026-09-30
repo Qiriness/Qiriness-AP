@@ -17,8 +17,12 @@ import {
   SparkleIcon,
 } from "@/components/icons";
 import { Button } from "@/components/ui/Button";
+import { useLocale, useT } from "@/lib/i18n/client";
+import { formatNumber } from "@/lib/i18n/format";
+import { intlTag, type Locale } from "@/lib/i18n/locales";
+import type { Translate } from "@/lib/i18n/translate";
 import { TrackingText } from "@/components/ui/TrackingText";
-import { ATTACHMENT_REASON_FALLBACK, fetchAttachmentReason } from "@/lib/attachment-reasons";
+import { ATTACHMENT_REASON_KEYS, fetchAttachmentReasonKey } from "@/lib/attachment-reasons";
 import { promoteDroppedMail } from "@/lib/api/dropped-mail";
 import { knowledgeErrorMessage } from "@/lib/api/knowledge";
 import { decisionLabel, handedOffNotice, outboundLine, replyInFlight } from "@/lib/draft-outbound";
@@ -76,25 +80,8 @@ type LevelFilter = "all" | "4" | "3" | "2" | "1" | "uncategorised";
 type SortOrder = "priority" | "recent" | "oldest" | "severity";
 type TicketView = "queue" | "backlog" | "irrelevant" | "closed";
 
-const SORT_LABELS: Record<SortOrder, string> = {
-  priority: "Highest priority",
-  recent: "Most recent activity",
-  oldest: "Oldest activity",
-  severity: "Highest level first",
-};
-
-const VIEW_LABELS: Record<TicketView, string> = {
-  queue: "Queue",
-  backlog: "Backlog",
-  irrelevant: "Irrelevant",
-  closed: "Closed",
-};
-
-const VERDICT_LABELS: Record<InvestigationVerdict, string> = {
-  answerable: "Answerable",
-  needs_customer_input: "Needs customer input",
-  needs_human: "Needs human",
-};
+// Labels come from the dictionary: `tickets.view.sort.<key>`, `tickets.view.tab.<key>`
+// and `tickets.view.verdict.<key>`.
 
 const NEWLINE = String.fromCharCode(10);
 
@@ -144,8 +131,8 @@ function matchesDroppedMail(mail: DroppedMail, query: string): boolean {
 const LEVEL_FILTERS: readonly LevelFilter[] = ["all", "4", "3", "2", "1", "uncategorised"];
 const SENDER_FILTERS = ["all", "consumer", "business"] as const;
 type SenderFilter = (typeof SENDER_FILTERS)[number];
-const TICKET_VIEWS = Object.keys(VIEW_LABELS) as TicketView[];
-const SORT_ORDERS = Object.keys(SORT_LABELS) as SortOrder[];
+const TICKET_VIEWS: TicketView[] = ["queue", "backlog", "irrelevant", "closed"];
+const SORT_ORDERS: SortOrder[] = ["priority", "recent", "oldest", "severity"];
 const CATEGORY_FILTERS: readonly (KnowledgeCategory | "all")[] = ["all", ...TICKET_CATEGORIES];
 const STATE_PARAMS = ["view", "q", "level", "category", "sender", "sort", "ticket", "mail"];
 const LAST_TICKETS_SEARCH_KEY = "tickets.lastSearch";
@@ -292,22 +279,20 @@ function formatPriorityScore(score: number): string {
   return Number.isInteger(score) ? String(score) : score.toFixed(1);
 }
 
-function ticketTitle(ticket: TicketListItem): string {
-  return ticket.subject?.trim() || "(no subject)";
+function ticketTitle(ticket: TicketListItem, t: Translate): string {
+  return ticket.subject?.trim() || t("tickets.view.noSubject");
 }
 
-function requesterName(ticket: TicketListItem): string {
-  return ticket.customerName?.trim() || ticket.requesterName?.trim() || "Unknown requester";
+function requesterName(ticket: TicketListItem, t: Translate): string {
+  return ticket.customerName?.trim() || ticket.requesterName?.trim() || t("tickets.view.unknownRequester");
 }
 
-function ticketAge(ticket: TicketListItem): string {
-  return formatRelativeTime(ticket.lastMessageAt ?? ticket.firstMessageAt) || "-";
+function ticketAge(ticket: TicketListItem, t: Translate): string {
+  return formatRelativeTime(ticket.lastMessageAt ?? ticket.firstMessageAt, t) || "-";
 }
 
-function priorityLabel(ticket: TicketListItem): string {
-  if (ticket.priorityBand === "high") return "High";
-  if (ticket.priorityBand === "medium") return "Medium";
-  return "Low";
+function priorityLabel(ticket: TicketListItem, t: Translate): string {
+  return t(`tickets.view.priority.${ticket.priorityBand === "high" || ticket.priorityBand === "medium" ? ticket.priorityBand : "low"}`);
 }
 
 function statusClass(ticket: TicketListItem): string {
@@ -318,6 +303,8 @@ function statusClass(ticket: TicketListItem): string {
 }
 
 export function TicketsView({ initialTickets, droppedMail, loadError, initialParams }: TicketsViewProps) {
+  const t = useT();
+  const locale = useLocale();
   const [initialState] = useState(() =>
     reconcilePageState(parsePageState(toSearchParams(initialParams)), initialTickets, droppedMail)
   );
@@ -583,17 +570,14 @@ export function TicketsView({ initialTickets, droppedMail, loadError, initialPar
     // The preview pane is looking at one of these if it was picked.
     setSelectedDroppedId((current) => (current && picked.includes(current) ? null : current));
     setActionError(null);
-    setActionNotice(
-      `${picked.length} dropped email${picked.length === 1 ? "" : "s"} cleared from this list. ` +
-        "The gate's record is untouched, and Restore brings them back."
-    );
+    setActionNotice(t("tickets.view.notice.cleared", { count: picked.length }));
     stopSelectingMail();
   }
 
   function restoreClearedMail() {
     rememberCleared([]);
     setActionError(null);
-    setActionNotice("Cleared mail is back in the list.");
+    setActionNotice(t("tickets.view.notice.restored"));
   }
 
   async function promote(mail: DroppedMail) {
@@ -611,12 +595,13 @@ export function TicketsView({ initialTickets, droppedMail, loadError, initialPar
             : [ticket, ...current]
         );
       }
+      const subject = ticket.subject ?? t("tickets.view.noSubject");
       setActionNotice(
         ticketCreated
           ? ticket.isOwnSide
-            ? `"${ticket.subject ?? "(no subject)"}" was added to Conversations. The agent reads it on its next poll.`
-            : `"${ticket.subject ?? "(no subject)"}" is in the queue. The agent categorises and investigates it on its next poll.`
-          : `Added to the existing ticket "${ticket.subject ?? "(no subject)"}", which is back in the agent's queue.`
+            ? t("tickets.view.notice.promotedOwn", { subject })
+            : t("tickets.view.notice.promotedQueue", { subject })
+          : t("tickets.view.notice.promotedExisting", { subject })
       );
     } catch (error) {
       setActionError(knowledgeErrorMessage(error));
@@ -655,15 +640,15 @@ export function TicketsView({ initialTickets, droppedMail, loadError, initialPar
     const next = activeTickets[index + 1] ?? (index > 0 ? activeTickets[index - 1] : null) ?? null;
     setSelectedTicketId(next?.id ?? null);
     setActionError(null);
-    setActionNotice(handedOffNotice(draft, requesterName(selectedTicket)));
+    setActionNotice(handedOffNotice(draft, requesterName(selectedTicket, t), t));
   }
 
   if (loadError) {
     return (
       <section className={styles.section}>
-        <h1 className={styles.title}>Tickets</h1>
+        <h1 className={styles.title}>{t("nav.tickets")}</h1>
         <div className={styles.error} role="alert">
-          <p className={styles.errorTitle}>Could not load tickets</p>
+          <p className={styles.errorTitle}>{t("tickets.view.loadFailed")}</p>
           <p className={styles.errorBody}>{loadError}</p>
         </div>
       </section>
@@ -681,7 +666,7 @@ export function TicketsView({ initialTickets, droppedMail, loadError, initialPar
     <section className={styles.section}>
       <header className={styles.pageHeader}>
         <div className={styles.headerMain}>
-          <h1 className={styles.title}>Tickets</h1>
+          <h1 className={styles.title}>{t("nav.tickets")}</h1>
           <TicketsMetrics stats={stats} />
         </div>
       </header>
@@ -693,8 +678,8 @@ export function TicketsView({ initialTickets, droppedMail, loadError, initialPar
       )}
 
       <div className={styles.navToolbar}>
-        <div className={styles.viewTabs} role="tablist" aria-label="Ticket views">
-          {(Object.keys(VIEW_LABELS) as TicketView[]).map((view) => (
+        <div className={styles.viewTabs} role="tablist" aria-label={t("tickets.view.viewsLabel")}>
+          {TICKET_VIEWS.map((view) => (
             <button
               key={view}
               type="button"
@@ -711,8 +696,8 @@ export function TicketsView({ initialTickets, droppedMail, loadError, initialPar
                 stopSelectingMail();
               }}
             >
-              {VIEW_LABELS[view]}
-              <span>{tabCounts[view].toLocaleString()}</span>
+              {t(`tickets.view.tab.${view}`)}
+              <span>{formatNumber(tabCounts[view], locale)}</span>
             </button>
           ))}
         </div>
@@ -735,8 +720,8 @@ export function TicketsView({ initialTickets, droppedMail, loadError, initialPar
 
       <p className={styles.srOnly} role="status" aria-live="polite">
         {activeView === "irrelevant"
-          ? `${visibleDropped.length} dropped emails shown`
-          : `${activeTickets.length} tickets shown in ${VIEW_LABELS[activeView]}`}
+          ? t("tickets.view.shownDropped", { count: visibleDropped.length })
+          : t("tickets.view.shownTickets", { count: activeTickets.length, view: t(`tickets.view.tab.${activeView}`) })}
       </p>
 
       {activeView === "irrelevant" ? (
@@ -789,20 +774,22 @@ export function TicketsView({ initialTickets, droppedMail, loadError, initialPar
 }
 
 function TicketsMetrics({ stats }: { stats: ReturnType<typeof summariseTickets> }) {
+  const t = useT();
+  const locale = useLocale();
   const metrics = [
-    ["Open", stats.open],
-    ["Needs human", stats.levelThree],
-    ["High priority", stats.highPriority],
-    ["New today", stats.last24h],
-    ["Last 30 days", stats.last30d],
+    [t("tickets.view.metric.open"), stats.open],
+    [t("tickets.view.metric.needsHuman"), stats.levelThree],
+    [t("tickets.view.metric.highPriority"), stats.highPriority],
+    [t("tickets.view.metric.newToday"), stats.last24h],
+    [t("tickets.view.metric.last30d"), stats.last30d],
   ];
 
   return (
-    <dl className={styles.metrics} aria-label="Ticket summary">
+    <dl className={styles.metrics} aria-label={t("tickets.view.metric.label")}>
       {metrics.map(([label, value]) => (
         <div className={styles.metric} key={label}>
           <dt>{label}</dt>
-          <dd>{Number(value).toLocaleString()}</dd>
+          <dd>{formatNumber(Number(value), locale)}</dd>
         </div>
       ))}
     </dl>
@@ -838,14 +825,15 @@ function TicketToolbar({
   sort,
   onSortChange,
 }: TicketToolbarProps) {
+  const t = useT();
   const ticketView = activeView === "queue" || activeView === "backlog";
   const placeholder =
-    activeView === "irrelevant" ? "Search subject, sender or reason..." : "Search subject, requester or order...";
+    activeView === "irrelevant" ? t("tickets.view.search.irrelevant") : t("tickets.view.search.tickets");
 
   return (
     <div className={styles.toolbar}>
       <label className={styles.searchWrap}>
-        <span className={styles.srOnly}>Search {VIEW_LABELS[activeView]}</span>
+        <span className={styles.srOnly}>{t("tickets.view.search.in", { view: t(`tickets.view.tab.${activeView}`) })}</span>
         <SearchIcon size={15} />
         <input
           type="search"
@@ -859,60 +847,60 @@ function TicketToolbar({
       {ticketView && (
         <>
           <label className={styles.selectLabel}>
-            <span>Level</span>
+            <span>{t("tickets.view.filter.level")}</span>
             <select
               className={styles.select}
               value={level}
               onChange={(event) => onLevelChange(event.target.value as LevelFilter)}
             >
-              <option value="all">All ({levelCounts.all})</option>
-              <option value="4">Level 4 ({levelCounts["4"]})</option>
-              <option value="3">Level 3 ({levelCounts["3"]})</option>
-              <option value="2">Level 2 ({levelCounts["2"]})</option>
-              <option value="1">Level 1 ({levelCounts["1"]})</option>
-              <option value="uncategorised">Uncategorised ({levelCounts.uncategorised})</option>
+              <option value="all">{t("tickets.view.filter.all", { n: levelCounts.all })}</option>
+              <option value="4">{t("level.4")} ({levelCounts["4"]})</option>
+              <option value="3">{t("level.3")} ({levelCounts["3"]})</option>
+              <option value="2">{t("level.2")} ({levelCounts["2"]})</option>
+              <option value="1">{t("level.1")} ({levelCounts["1"]})</option>
+              <option value="uncategorised">{t("tickets.view.filter.uncategorised", { n: levelCounts.uncategorised })}</option>
             </select>
           </label>
 
           <label className={styles.selectLabel}>
-            <span>Category</span>
+            <span>{t("tickets.view.filter.category")}</span>
             <select
               className={styles.select}
               value={category}
               onChange={(event) => onCategoryChange(event.target.value as KnowledgeCategory | "all")}
             >
-              <option value="all">All categories</option>
+              <option value="all">{t("tickets.view.filter.allCategories")}</option>
               {TICKET_CATEGORIES.map((value) => (
                 <option key={value} value={value}>
-                  {CATEGORY_LABELS[value]}
+                  {t(`category.${value}`)}
                 </option>
               ))}
             </select>
           </label>
 
           <label className={styles.selectLabel}>
-            <span>Sender</span>
+            <span>{t("tickets.view.filter.sender")}</span>
             <select
               className={styles.select}
               value={sender}
               onChange={(event) => onSenderChange(event.target.value as "all" | "consumer" | "business")}
             >
-              <option value="all">Anyone</option>
-              <option value="consumer">Consumers only</option>
-              <option value="business">Staff & partners only</option>
+              <option value="all">{t("tickets.view.filter.anyone")}</option>
+              <option value="consumer">{t("tickets.view.filter.consumers")}</option>
+              <option value="business">{t("tickets.view.filter.business")}</option>
             </select>
           </label>
 
           <label className={styles.selectLabel}>
-            <span>Sort</span>
+            <span>{t("tickets.view.filter.sort")}</span>
             <select
               className={styles.select}
               value={sort}
               onChange={(event) => onSortChange(event.target.value as SortOrder)}
             >
-              {(Object.keys(SORT_LABELS) as SortOrder[]).map((value) => (
+              {SORT_ORDERS.map((value) => (
                 <option key={value} value={value}>
-                  {SORT_LABELS[value]}
+                  {t(`tickets.view.sort.${value}`)}
                 </option>
               ))}
             </select>
@@ -965,11 +953,12 @@ function TicketWorkspace({
   onOrderChanged,
   onCaseStateChanged,
 }: TicketWorkspaceProps) {
+  const t = useT();
   return (
     <div className={`${styles.workspace} ${selectedTicket ? styles.hasSelection : ""}`}>
       <TicketListPane view={view} tickets={tickets} selectedId={selectedId} onSelect={onSelect} />
 
-      <section className={styles.detailPane} aria-label="Selected ticket detail">
+      <section className={styles.detailPane} aria-label={t("tickets.view.detailLabel")}>
         {selectedTicket ? (
           <TicketDetailWorkspace
             ticket={selectedTicket}
@@ -984,25 +973,25 @@ function TicketWorkspace({
             onBack={() => onSelect("")}
           />
         ) : (
-          <EmptyDetail title="Select a ticket to view its conversation." body="The queue stays visible while the conversation, draft and investigation load here." />
+          <EmptyDetail title={t("tickets.view.emptyDetail.title")} body={t("tickets.view.emptyDetail.body")} />
         )}
       </section>
 
-      <aside className={styles.contextPane} aria-label="Ticket context">
+      <aside className={styles.contextPane} aria-label={t("tickets.view.contextLabel")}>
         {selectedTicket ? (
           <TicketContextPane ticket={selectedTicket} detail={detail} thread={thread} error={detailError} onOrderChanged={onOrderChanged} onCaseStateChanged={onCaseStateChanged} />
         ) : (
-          <EmptyDetail title="No ticket selected" body="Customer, ticket, order and investigation context appears here." />
+          <EmptyDetail title={t("tickets.view.emptyContext.title")} body={t("tickets.view.emptyContext.body")} />
         )}
       </aside>
 
       {selectedTicket && (
         <div className={`${styles.contextSheet} ${contextOpen ? styles.contextSheetOpen : ""}`} aria-hidden={!contextOpen}>
-          <button className={styles.sheetScrim} type="button" aria-label="Close context" onClick={onCloseContext} />
+          <button className={styles.sheetScrim} type="button" aria-label={t("tickets.view.closeContext")} onClick={onCloseContext} />
           <aside className={styles.sheetPanel} role="dialog" aria-modal="true" aria-labelledby="ticket-context-title">
             <header className={styles.sheetHeader}>
-              <h2 id="ticket-context-title">Ticket context</h2>
-              <Button size="sm" variant="tertiary" onClick={onCloseContext}>Close</Button>
+              <h2 id="ticket-context-title">{t("tickets.view.contextLabel")}</h2>
+              <Button size="sm" variant="tertiary" onClick={onCloseContext}>{t("tickets.view.close")}</Button>
             </header>
             <TicketContextPane ticket={selectedTicket} detail={detail} thread={thread} error={detailError} onOrderChanged={onOrderChanged} onCaseStateChanged={onCaseStateChanged} />
           </aside>
@@ -1023,20 +1012,21 @@ function TicketListPane({
   selectedId: string | null;
   onSelect: (id: string) => void;
 }) {
+  const t = useT();
   return (
-    <aside className={styles.listPane} aria-label={`${VIEW_LABELS[view]} ticket list`}>
+    <aside className={styles.listPane} aria-label={t("tickets.view.listLabel", { view: t(`tickets.view.tab.${view}`) })}>
       <div className={styles.listHeader}>
         <div>
-          <h2>{VIEW_LABELS[view]}</h2>
-          <p>{tickets.length.toLocaleString()} ticket{tickets.length === 1 ? "" : "s"}</p>
+          <h2>{t(`tickets.view.tab.${view}`)}</h2>
+          <p>{t("tickets.panels.list.count", { count: tickets.length })}</p>
         </div>
-        <span>{view === "closed" ? "Recently closed" : "Highest priority first"}</span>
+        <span>{view === "closed" ? t("tickets.panels.list.recentlyClosed") : t("tickets.panels.list.priorityFirst")}</span>
       </div>
 
       {tickets.length === 0 ? (
-        <CompactEmpty title="No tickets match this view" body="Clear search or filters to widen the list." />
+        <CompactEmpty title={t("tickets.panels.list.emptyTitle")} body={t("tickets.panels.list.emptyBody")} />
       ) : (
-        <ol className={styles.ticketList} role="listbox" aria-label={`${VIEW_LABELS[view]} tickets`}>
+        <ol className={styles.ticketList} role="listbox" aria-label={t("tickets.panels.list.ticketsLabel", { view: t(`tickets.view.tab.${view}`) })}>
           {tickets.map((ticket) => (
             <li key={ticket.id}>
               <button
@@ -1053,25 +1043,25 @@ function TicketListPane({
                 <span className={styles.itemTop}>
                   <span className={styles.priorityGroup}>
                     <span className={styles.priorityScore}>{formatPriorityScore(ticket.priorityScore)}</span>
-                    <span className={styles.priorityWord}>{priorityLabel(ticket)}</span>
+                    <span className={styles.priorityWord}>{priorityLabel(ticket, t)}</span>
                   </span>
-                  <time dateTime={ticket.lastMessageAt ?? undefined}>{ticketAge(ticket)}</time>
+                  <time dateTime={ticket.lastMessageAt ?? undefined}>{ticketAge(ticket, t)}</time>
                 </span>
-                <span className={styles.itemSubject} title={ticketTitle(ticket)}>
-                  {ticketTitle(ticket)}
+                <span className={styles.itemSubject} title={ticketTitle(ticket, t)}>
+                  {ticketTitle(ticket, t)}
                 </span>
-                <span className={styles.itemRequester} title={`${requesterName(ticket)}${ticket.orderNumber ? ` - Order ${ticket.orderNumber}` : ""}`}>
-                  {requesterName(ticket)}
-                  {ticket.orderNumber ? ` - Order ${ticket.orderNumber}` : ""}
+                <span className={styles.itemRequester} title={`${requesterName(ticket, t)}${ticket.orderNumber ? ` - ${t("tickets.panels.orderNumber", { number: ticket.orderNumber })}` : ""}`}>
+                  {requesterName(ticket, t)}
+                  {ticket.orderNumber ? ` - ${t("tickets.panels.orderNumber", { number: ticket.orderNumber })}` : ""}
                   {ticket.isVip && (
-                    <span className={styles.vipInline} title="VIP customer — by the rule set on Insights → Customers">
+                    <span className={styles.vipInline} title={t("tickets.panels.vipTitle")}>
                       <CrownIcon size={12} />
-                      <span className={styles.srOnly}>VIP customer</span>
+                      <span className={styles.srOnly}>{t("tickets.panels.vip")}</span>
                     </span>
                   )}
                 </span>
                 <span className={styles.itemMeta}>
-                  <span>{ticket.category ? CATEGORY_LABELS[ticket.category] : "Uncategorised"}</span>
+                  <span>{ticket.category ? t(`category.${ticket.category}`) : t("tickets.panels.uncategorised")}</span>
                   <TicketLevelBadge ticket={ticket} />
                 </span>
               </button>
@@ -1106,6 +1096,7 @@ function TicketDetailWorkspace({
   onOpenContext: () => void;
   onBack: () => void;
 }) {
+  const t = useT();
   const closed = isClosed(ticket);
   const frameRef = useRef<HTMLDivElement>(null);
   const headerRef = useRef<HTMLElement>(null);
@@ -1195,24 +1186,24 @@ function TicketDetailWorkspace({
       <div className={styles.ticketHeader}>
         <button type="button" className={styles.mobileBack} onClick={onBack}>
           <ChevronLeftIcon size={15} />
-          Back to tickets
+          {t("tickets.panels.backToTickets")}
         </button>
         <div className={styles.ticketHeaderText}>
-          <h2 title={ticketTitle(ticket)}>{ticketTitle(ticket)}</h2>
+          <h2 title={ticketTitle(ticket, t)}>{ticketTitle(ticket, t)}</h2>
           <p>
-            {requesterName(ticket)}
-            {ticket.orderNumber ? ` - Order ${ticket.orderNumber}` : ""}
-            {ticket.category ? ` - ${CATEGORY_LABELS[ticket.category]}` : ""}
-            {ticket.lastMessageAt ? ` - Last activity ${formatRelativeTime(ticket.lastMessageAt)}` : ""}
+            {requesterName(ticket, t)}
+            {ticket.orderNumber ? ` - ${t("tickets.panels.orderNumber", { number: ticket.orderNumber })}` : ""}
+            {ticket.category ? ` - ${t(`category.${ticket.category}`)}` : ""}
+            {ticket.lastMessageAt ? ` - ${t("tickets.panels.lastActivity", { when: formatRelativeTime(ticket.lastMessageAt, t) })}` : ""}
           </p>
         </div>
         <div className={styles.ticketHeaderActions}>
           <TicketLevelBadge ticket={ticket} />
           {ticket.responsibleTeam && (
-            <span className={styles.assignment}>Team: {RESPONSIBLE_TEAM_LABELS[ticket.responsibleTeam]}</span>
+            <span className={styles.assignment}>{t("tickets.panels.team", { team: t(`team.${ticket.responsibleTeam}`) })}</span>
           )}
           <Button size="sm" variant="secondary" className={styles.contextButton} onClick={onOpenContext}>
-            Context
+            {t("tickets.panels.context")}
           </Button>
           <Button
             size="sm"
@@ -1221,19 +1212,19 @@ function TicketDetailWorkspace({
             disabled={pendingId !== null && pendingId !== ticket.id}
             onClick={() => onChangeStatus(ticket, closed ? "open" : "closed")}
           >
-            {closed ? "Reopen ticket" : "Close ticket"}
+            {closed ? t("tickets.panels.reopenTicket") : t("tickets.panels.closeTicket")}
           </Button>
         </div>
       </div>
 
       {detail?.results?.action && (
         <p className={styles.nextAction} title={detail.results.action}>
-          <span>Next action</span>
+          <span>{t("tickets.panels.nextAction")}</span>
           {detail.results.action}
         </p>
       )}
 
-      <div className={styles.middleTabs} role="tablist" aria-label="Ticket history">
+      <div className={styles.middleTabs} role="tablist" aria-label={t("tickets.panels.historyLabel")}>
         <button
           type="button"
           role="tab"
@@ -1241,7 +1232,7 @@ function TicketDetailWorkspace({
           className={middleTab === "conversation" ? styles.middleTabActive : undefined}
           onClick={() => setMiddleTab("conversation")}
         >
-          Conversation
+          {t("tickets.panels.conversation")}
           {thread && <span>{thread.messages.length}</span>}
         </button>
         <button
@@ -1251,8 +1242,8 @@ function TicketDetailWorkspace({
           className={middleTab === "activity" ? styles.middleTabActive : undefined}
           onClick={() => setMiddleTab("activity")}
         >
-          Activity
-          {detail && thread && <span>{activityItems(detail, thread).length}</span>}
+          {t("tickets.panels.activity")}
+          {detail && thread && <span>{activityItems(detail, thread, t).length}</span>}
         </button>
       </div>
       </header>
@@ -1271,10 +1262,10 @@ function TicketDetailWorkspace({
         className={styles.draftHandle}
         role="separator"
         aria-orientation="horizontal"
-        aria-label="Resize the draft panel"
+        aria-label={t("tickets.panels.resizeDraft")}
         aria-valuenow={draftHeight ?? undefined}
         tabIndex={0}
-        title="Drag to resize · double-click to reset"
+        title={t("tickets.panels.resizeHint")}
         onPointerDown={startDrag}
         onDoubleClick={() => commitDraftHeight(null)}
         onKeyDown={nudgeDraftHeight}
@@ -1294,6 +1285,8 @@ function TicketDetailWorkspace({
 }
 
 function ConversationThread({ thread, error }: { thread: TicketThread | null; error: string | null }) {
+  const t = useT();
+  const locale = useLocale();
   const latestRef = useRef<HTMLLIElement>(null);
   if (error) {
     return <p className={styles.inlineError} role="alert">{error}</p>;
@@ -1302,19 +1295,19 @@ function ConversationThread({ thread, error }: { thread: TicketThread | null; er
     return <ThreadSkeleton />;
   }
   if (thread.messages.length === 0) {
-    return <CompactEmpty title="This ticket holds no stored messages" body="The detail and draft can still be reviewed if available." />;
+    return <CompactEmpty title={t("tickets.panels.thread.emptyTitle")} body={t("tickets.panels.thread.emptyBody")} />;
   }
 
   return (
-    <section className={styles.threadSection} aria-label="Conversation thread">
+    <section className={styles.threadSection} aria-label={t("tickets.panels.thread.label")}>
       <div className={styles.sectionHead}>
-        <h3>Conversation</h3>
+        <h3>{t("tickets.panels.conversation")}</h3>
         <button type="button" className={styles.jumpLatest} onClick={() => latestRef.current?.scrollIntoView({ behavior: "smooth", block: "end" })}>
-          Jump to latest
+          {t("tickets.panels.thread.jumpLatest")}
         </button>
       </div>
       <div className={styles.dateGroups}>
-        {groupMessagesByDate(thread.messages).map((group) => (
+        {groupMessagesByDate(thread.messages, t, locale).map((group) => (
           <section className={styles.dateGroup} key={group.key} aria-label={group.label}>
             <div className={styles.dateDivider}>
               <time dateTime={group.key}>{group.label}</time>
@@ -1354,14 +1347,6 @@ const ACTIVITY_ICONS: Record<ActivityKind, (props: { size?: number }) => ReactNo
   draft: PencilIcon,
 };
 
-const ACTIVITY_KIND_LABELS: Record<ActivityKind, string> = {
-  inbound: "Email received",
-  outbound: "Email sent",
-  lookup: "Agent lookup",
-  investigation: "Agent analysis",
-  draft: "AI draft",
-};
-
 function ActivityTimeline({
   detail,
   thread,
@@ -1371,21 +1356,23 @@ function ActivityTimeline({
   thread: TicketThread | null;
   error: string | null;
 }) {
+  const t = useT();
+  const locale = useLocale();
   if (error) return <p className={styles.inlineError} role="alert">{error}</p>;
   if (!detail || !thread) return <ThreadSkeleton />;
 
-  const events = activityItems(detail, thread);
+  const events = activityItems(detail, thread, t);
 
   if (events.length === 0) {
-    return <CompactEmpty title="No activity yet" body="Emails in and out, agent lookups, case analysis and draft generation will appear here." />;
+    return <CompactEmpty title={t("tickets.panels.activityFeed.emptyTitle")} body={t("tickets.panels.activityFeed.emptyBody")} />;
   }
 
   return (
-    <section className={styles.activitySection} aria-label="Ticket activity">
+    <section className={styles.activitySection} aria-label={t("tickets.panels.activityFeed.label")}>
       <div className={styles.sectionHead}>
         <div>
-          <h3>Activity</h3>
-          <p>Every email in and out, and what the agent did in between, oldest first.</p>
+          <h3>{t("tickets.panels.activity")}</h3>
+          <p>{t("tickets.panels.activityFeed.intro")}</p>
         </div>
       </div>
       <ol className={styles.activityList}>
@@ -1393,10 +1380,10 @@ function ActivityTimeline({
           const Icon = ACTIVITY_ICONS[event.kind];
           return (
             <li key={event.id} className={styles[`activity_${event.kind}`]}>
-              <time dateTime={event.at ?? undefined}>{formatEventTime(event.at)}</time>
-              <span className={styles.activityIcon} title={ACTIVITY_KIND_LABELS[event.kind]}>
+              <time dateTime={event.at ?? undefined}>{formatEventTime(event.at, locale)}</time>
+              <span className={styles.activityIcon} title={t(`tickets.panels.activityKind.${event.kind}`)}>
                 <Icon size={14} />
-                <span className="sr-only">{ACTIVITY_KIND_LABELS[event.kind]}</span>
+                <span className="sr-only">{t(`tickets.panels.activityKind.${event.kind}`)}</span>
               </span>
               <div className={styles.activityText}>
                 <strong>{event.title}</strong>
@@ -1410,25 +1397,54 @@ function ActivityTimeline({
   );
 }
 
+/** The tool names the server records, grouped under the label the Activity feed shows. */
+const TOOL_ACTIVITY_KEYS: Record<string, string> = {
+  getOrderContext: "order",
+  lookupOrder: "order",
+  lookupShipment: "shipment",
+  lookupTracking: "shipment",
+  lookupCustomer: "customer",
+  lookupPromotion: "promotion",
+  lookupProduct: "product",
+  searchKnowledge: "knowledge",
+  recommendProducts: "recommendation",
+  lookupAbandonedCheckout: "checkout",
+  checkPhotoEvidence: "photo",
+};
+
+/** A need's label in the reader's language; the server's English stands when the key is unknown. */
+function needText(t: Translate, need: string, fallback: string): string {
+  const key = `need.${need}`;
+  const text = t(key);
+  return text === key ? fallback : text;
+}
+
+/** What the customer still owes, by the field's key (`field.<key>`), else the server's words. */
+function questionText(t: Translate, key: string, fallback: string): string {
+  const path = `field.${key}`;
+  const text = t(path);
+  return text === path ? fallback : text;
+}
+
 /**
  * The conversation's emails and the agent's persisted actions on one clock,
  * oldest first. The sort is stable, and the server lists the lookups before
  * the analysis that used them — they share the investigation's timestamp, as
  * the tool-call ledger keeps no time of its own.
  */
-function activityItems(detail: TicketDetail, thread: TicketThread): ActivityItem[] {
+function activityItems(detail: TicketDetail, thread: TicketThread, t: Translate): ActivityItem[] {
   const messages: ActivityItem[] = thread.messages.map((message) => {
     const inbound = message.direction === "inbound";
-    const name = senderDisplayName(message);
-    const role = MESSAGE_ROLE_LABELS[message.role];
+    const name = senderDisplayName(message, t);
+    const role = t(`tickets.panels.role.${message.role}`);
     const who = inbound && message.role !== "customer" ? `${name} (${role})` : name;
     return {
       id: `message-${message.id}`,
       at: message.at,
       title: inbound
-        ? `${message.isForward ? "Forwarded email" : "Email"} received from ${who}`
-        : `Email sent by ${who}`,
-      detail: messageSnippet(message),
+        ? t(message.isForward ? "tickets.panels.activityFeed.forwardedFrom" : "tickets.panels.activityFeed.receivedFrom", { who })
+        : t("tickets.panels.activityFeed.sentBy", { who }),
+      detail: messageSnippet(message, t),
       kind: inbound ? "inbound" : "outbound",
     };
   });
@@ -1437,21 +1453,36 @@ function activityItems(detail: TicketDetail, thread: TicketThread): ActivityItem
     ? [{
         id: `draft-${thread.draft.id}`,
         at: thread.draft.draftedAt,
-        title: "AI draft generated",
-        detail: draftStatusText(thread.draft),
+        title: t("tickets.panels.activityFeed.draftGenerated"),
+        detail: draftStatusText(thread.draft, t),
         kind: "draft",
       }]
     : [];
 
-  return [...messages, ...detail.activity, ...draft].sort(
+  const agentEvents: ActivityItem[] = detail.activity.map((event) => {
+    if (event.kind === "investigation") {
+      const verdictKnown = event.verdict && ["answerable", "needs_customer_input", "needs_human"].includes(event.verdict);
+      return {
+        ...event,
+        title: t("tickets.panels.activityFeed.analysisDone"),
+        detail: verdictKnown ? t(`tickets.panels.activityFeed.verdict.${event.verdict}`) : event.detail,
+      };
+    }
+    const toolKey = event.tool ? TOOL_ACTIVITY_KEYS[event.tool] : null;
+    return toolKey
+      ? { ...event, title: t("tickets.panels.activityFeed.lookupDone", { tool: t(`tickets.panels.tool.${toolKey}`) }) }
+      : event;
+  });
+
+  return [...messages, ...agentEvents, ...draft].sort(
     (a, b) => (Date.parse(a.at ?? "") || 0) - (Date.parse(b.at ?? "") || 0)
   );
 }
 
-function messageSnippet(message: TicketMessage): string | null {
+function messageSnippet(message: TicketMessage, t: Translate): string | null {
   const text = (message.bodyClean ?? "").replace(/\s+/g, " ").trim();
-  const attachment = message.hasAttachments ? " · Attachment" : "";
-  if (!text) return message.hasAttachments ? "Attachment" : null;
+  const attachment = message.hasAttachments ? ` · ${t("tickets.panels.attachment")}` : "";
+  if (!text) return message.hasAttachments ? t("tickets.panels.attachment") : null;
   return `${text.length > 140 ? `${text.slice(0, 140).trimEnd()}…` : text}${attachment}`;
 }
 
@@ -1472,6 +1503,7 @@ function DraftResponsePanel({
   detail: TicketDetail | null;
   detailError: string | null;
 }) {
+  const t = useT();
   const [editing, setEditing] = useState(false);
   const [edited, setEdited] = useState("");
   const [saving, setSaving] = useState<null | "approved" | "edited" | "rejected">(null);
@@ -1507,29 +1539,29 @@ function DraftResponsePanel({
     <section
       className={`${styles.draftPanel} ${height !== null ? styles.draftPanelSized : ""}`}
       style={height !== null ? { height, maxHeight: "none" } : undefined}
-      aria-label="AI draft"
+      aria-label={t("tickets.panels.draft.aiDraft")}
     >
       <div className={styles.draftHead}>
         <div>
-          <h3>Reply to {requesterName(ticket)}</h3>
-          {draft && <p>{draftStatusText(draft)}</p>}
+          <h3>{t("tickets.panels.draft.replyTo", { name: requesterName(ticket, t) })}</h3>
+          {draft && <p>{draftStatusText(draft, t)}</p>}
         </div>
         {draft && (
           <div className={styles.draftLabels}>
-            <span className={styles.aiDraftLabel}>AI draft</span>
-            <span className={styles.draftStatus}>{draft.status === "stale" ? "out of date" : draft.status}</span>
+            <span className={styles.aiDraftLabel}>{t("tickets.panels.draft.aiDraft")}</span>
+            <span className={styles.draftStatus}>{t(`tickets.panels.draft.status.${draft.status}`)}</span>
           </div>
         )}
       </div>
 
       {thread?.duplicateOf && (
         <p className={styles.duplicate} role="alert">
-          Duplicate of another ticket. The agent will not draft here; answer on the original instead.
+          {t("tickets.panels.draft.duplicate")}
         </p>
       )}
 
       {thread?.relatedTo && !thread.duplicateOf && (
-        <p className={styles.related}>This customer wrote before about the same thing. The reply below takes that into account.</p>
+        <p className={styles.related}>{t("tickets.panels.draft.related")}</p>
       )}
 
       {error ? (
@@ -1540,7 +1572,7 @@ function DraftResponsePanel({
         <>
           {detail?.results?.action && (
             <div className={styles.requiredAction}>
-              <span>Required before sending</span>
+              <span>{t("tickets.panels.draft.requiredBeforeSending")}</span>
               <p><span aria-hidden="true">●</span> {detail.results.action}</p>
             </div>
           )}
@@ -1548,21 +1580,21 @@ function DraftResponsePanel({
           {draft.status === "stale" && (
             <p className={styles.blocked} role="status">
               {draft.staleReason === "superseded_by_outbound"
-                ? "Out of date - a reply has been sent from the mailbox since this was written."
-                : "Out of date - the case has moved on since this was written. A new draft follows when it is our turn to reply."}
+                ? t("tickets.panels.draft.staleSent")
+                : t("tickets.panels.draft.staleMoved")}
             </p>
           )}
 
-          {outboundLine(draft.outbound) && (
+          {outboundLine(draft.outbound, t) && (
             <p className={draft.outbound?.state === "cancelled" || draft.outbound?.state === "failed" ? styles.blocked : styles.related} role="status">
-              {outboundLine(draft.outbound)}
+              {outboundLine(draft.outbound, t)}
             </p>
           )}
 
           {draft.status !== "stale" && !draft.checksPassed && (
             <p className={styles.blocked} role="alert">
-              Not sendable - {draft.failedChecks.length || "some"} mechanical {draft.failedChecks.length === 1 ? "check" : "checks"} failed:{" "}
-              {draft.failedChecks.join("; ") || "see the draft record"}.
+              {t("tickets.panels.draft.notSendable", { count: draft.failedChecks.length })}{" "}
+              {draft.failedChecks.join("; ") || t("tickets.panels.draft.seeRecord")}.
             </p>
           )}
 
@@ -1573,12 +1605,11 @@ function DraftResponsePanel({
                 value={edited}
                 onChange={(event) => setEdited(event.target.value)}
                 rows={Math.min(18, Math.max(7, edited.split(NEWLINE).length + 2))}
-                aria-label="Edit the drafted reply"
+                aria-label={t("tickets.panels.draft.editLabel")}
               />
               {draft.replyLink && (
                 <p className={styles.related}>
-                  Keep the word in [[double brackets]] where the link to {draft.replyLink.label} goes — it
-                  becomes the link.
+                  {t("tickets.panels.draft.keepBrackets", { label: draft.replyLink.label })}
                 </p>
               )}
             </>
@@ -1590,7 +1621,7 @@ function DraftResponsePanel({
 
           {draft.approvedBody && (
             <div className={styles.reviewerVersion}>
-              <h4>Reviewer version</h4>
+              <h4>{t("tickets.panels.draft.reviewerVersion")}</h4>
               <pre className={styles.draftBody}>
                 <TrackingText text={draft.approvedBody} parcels={thread.parcels} link={draft.replyLink} />
               </pre>
@@ -1602,10 +1633,10 @@ function DraftResponsePanel({
               {draft.status === "stale" || replyInFlight(draft) ? null : editing ? (
                 <>
                   <Button size="sm" variant="primary" loading={saving === "edited"} disabled={saving !== null || edited.trim() === ""} onClick={() => decide("edited")}>
-                    {decisionLabel(draft, "save")}
+                    {decisionLabel(draft, "save", t)}
                   </Button>
                   <Button size="sm" variant="secondary" disabled={saving !== null} onClick={() => setEditing(false)}>
-                    Cancel
+                    {t("tickets.panels.draft.cancel")}
                   </Button>
                 </>
               ) : (
@@ -1620,15 +1651,15 @@ function DraftResponsePanel({
                         setEditing(true);
                       }}
                     >
-                      Edit
+                      {t("tickets.panels.draft.edit")}
                     </Button>
                   </span>
                   <span className={styles.draftActionsEnd}>
                     <Button size="sm" variant="secondary" loading={saving === "rejected"} disabled={saving !== null} onClick={() => decide("rejected")}>
-                      Reject
+                      {t("tickets.panels.draft.reject")}
                     </Button>
                     <Button size="sm" variant="primary" loading={saving === "approved"} disabled={saving !== null} onClick={() => decide("approved")}>
-                      {decisionLabel(draft, "approve")}
+                      {decisionLabel(draft, "approve", t)}
                     </Button>
                   </span>
                 </>
@@ -1636,7 +1667,7 @@ function DraftResponsePanel({
             </div>
             {draft.draftedAt && (
               <p className={styles.stamp}>
-                Drafted <time dateTime={draft.draftedAt}>{formatRelativeTime(draft.draftedAt)}</time>
+                {t("tickets.panels.draft.drafted")} <time dateTime={draft.draftedAt}>{formatRelativeTime(draft.draftedAt, t)}</time>
               </p>
             )}
           </div>
@@ -1647,7 +1678,7 @@ function DraftResponsePanel({
         </>
       ) : (
         <p className={styles.placeholder}>
-          No draft - this ticket has no case file yet, or it is level 4, where the agent stays silent on purpose.
+          {t("tickets.panels.draft.none")}
         </p>
       )}
 
@@ -1657,33 +1688,34 @@ function DraftResponsePanel({
 }
 
 function DraftExplanation({ detail, draft }: { detail: TicketDetail | null; draft: TicketDraft }) {
+  const t = useT();
   const sources = [
-    detail?.order?.orderName ? `Order ${detail.order.orderName}` : null,
-    ...(detail?.order?.tracking ?? []).map((parcel) => `Tracking ${parcel.number}`),
-    detail?.results ? "Case investigation" : null,
+    detail?.order?.orderName ? t("tickets.panels.orderNumber", { number: detail.order.orderName }) : null,
+    ...(detail?.order?.tracking ?? []).map((parcel) => t("tickets.panels.tracking", { number: parcel.number })),
+    detail?.results ? t("tickets.panels.draft.caseInvestigation") : null,
   ].filter((value): value is string => Boolean(value));
 
   return (
     <details className={styles.draftExplanation}>
-      <summary>ⓘ Why this response?</summary>
+      <summary>ⓘ {t("tickets.panels.draft.whyTitle")}</summary>
       <dl>
         <div>
-          <dt>Situation</dt>
-          <dd>{detail?.results?.headline ?? "No case analysis yet"}</dd>
+          <dt>{t("tickets.panels.draft.situation")}</dt>
+          <dd>{detail?.results?.headline ?? t("tickets.panels.draft.noAnalysis")}</dd>
         </div>
         <div>
-          <dt>State</dt>
-          <dd>{VERDICT_LABELS[draft.sourceVerdict]}</dd>
+          <dt>{t("tickets.panels.draft.state")}</dt>
+          <dd>{t(`tickets.view.verdict.${draft.sourceVerdict}`)}</dd>
         </div>
         {detail?.results?.action && (
           <div>
-            <dt>Missing action</dt>
+            <dt>{t("tickets.panels.draft.missingAction")}</dt>
             <dd>{detail.results.action}</dd>
           </div>
         )}
         {sources.length > 0 && (
           <div>
-            <dt>Sources used</dt>
+            <dt>{t("tickets.panels.draft.sources")}</dt>
             <dd>{sources.join(" · ")}</dd>
           </div>
         )}
@@ -1692,10 +1724,10 @@ function DraftExplanation({ detail, draft }: { detail: TicketDetail | null; draf
   );
 }
 
-function draftStatusText(draft: TicketDraft): string {
-  if (draft.disposition === "terminal") return "Terminal - sending this closes the ticket.";
-  if (draft.sourceVerdict === "needs_customer_input") return "Intermediary - sending this waits on the customer.";
-  return "Intermediary - a colleague still owes this customer an answer.";
+function draftStatusText(draft: TicketDraft, t: Translate): string {
+  if (draft.disposition === "terminal") return t("tickets.panels.draft.terminal");
+  if (draft.sourceVerdict === "needs_customer_input") return t("tickets.panels.draft.intermediaryCustomer");
+  return t("tickets.panels.draft.intermediaryColleague");
 }
 
 function TicketContextPane({
@@ -1713,6 +1745,7 @@ function TicketContextPane({
   onOrderChanged: (change: TicketChange) => void;
   onCaseStateChanged: (change: TicketCaseChange) => void;
 }) {
+  const t = useT();
   const results = detail?.results ?? null;
   const order = detail?.order ?? results?.candidateOrder ?? null;
   const isCandidate = !detail?.order && Boolean(results?.candidateOrder);
@@ -1734,7 +1767,11 @@ function TicketContextPane({
   // the fields a person may correct turn into pickers where they stand.
   const [editing, setEditing] = useState(false);
   const [pending, setPending] = useState<TicketOverrideChanges>({});
-  const [saving, setSaving] = useState(false);
+  // WHICH action is saving, not only whether one is: the spinner goes on the
+  // button that was clicked (« Save », or the one « Apply » row), and the rail
+  // says what it is doing while the request is out.
+  const [savingAction, setSavingAction] = useState<{ kind: "edit" } | { kind: "apply"; key: string } | null>(null);
+  const saving = savingAction !== null;
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saveNotice, setSaveNotice] = useState<{ ticketId: string; text: string } | null>(null);
   // Another ticket opened: whatever was being edited belonged to the last one.
@@ -1767,18 +1804,22 @@ function TicketContextPane({
       setEditing(false);
       return;
     }
-    setSaving(true);
+    setSavingAction(source === "closest_situation" && typeof changes.situation === "string"
+      ? { kind: "apply", key: changes.situation }
+      : { kind: "edit" });
     setSaveError(null);
+    // The previous result no longer describes the ticket once a new save is out.
+    setSaveNotice(null);
     try {
       const result = await saveTicketOverrides(ticket.id, { changes, expected: { status: ticket.status }, source });
       onOrderChanged(result);
-      setSaveNotice({ ticketId: ticket.id, text: overrideNotice(result) });
+      setSaveNotice({ ticketId: ticket.id, text: overrideNotice(result, t) });
       setEditing(false);
       setPending({});
     } catch (cause) {
       setSaveError(knowledgeErrorMessage(cause));
     } finally {
-      setSaving(false);
+      setSavingAction(null);
     }
   };
 
@@ -1805,7 +1846,7 @@ function TicketContextPane({
       <span className={styles.editField}>
         <select
           className={styles.fieldSelect}
-          aria-label={OVERRIDE_FIELD_LABELS[name]}
+          aria-label={t(`tickets.panels.field.${name}`)}
           value={chosen !== undefined && chosen !== null ? String(chosen) : current}
           disabled={saving || resetting}
           onChange={(event) => setField(name, event.target.value)}
@@ -1823,7 +1864,7 @@ function TicketContextPane({
             disabled={saving}
             onClick={() => (resetting ? keepField(name) : setField(name, null))}
           >
-            {resetting ? "Keep my value" : "Reset to automatic"}
+            {resetting ? t("tickets.panels.keepMine") : t("tickets.panels.resetAuto")}
           </button>
         )}
       </span>
@@ -1831,27 +1872,40 @@ function TicketContextPane({
   };
 
   return (
-    <div className={styles.contextScroll}>
+    <div className={styles.contextScroll} aria-busy={saving || undefined}>
       <div className={styles.editBar}>
         {editing ? (
           <>
-            <Button size="sm" variant="primary" disabled={saving} onClick={() => save(pending, "edit_case")}>
-              {saving ? "Saving…" : "Save"}
+            <Button
+              size="sm"
+              variant="primary"
+              loading={savingAction?.kind === "edit"}
+              disabled={saving}
+              onClick={() => save(pending, "edit_case")}
+            >
+              {savingAction?.kind === "edit" ? t("tickets.panels.saving") : t("tickets.panels.save")}
             </Button>
             <Button size="sm" variant="tertiary" disabled={saving} onClick={cancelEdit}>
-              Cancel
+              {t("tickets.panels.draft.cancel")}
             </Button>
           </>
         ) : (
           <Button size="sm" variant="secondary" leadingIcon={<PencilIcon size={14} />} onClick={() => setEditing(true)}>
-            Edit case
+            {t("tickets.panels.editCase")}
           </Button>
         )}
       </div>
       {editing && (
         <p className={styles.reason}>
-          A new situation or category makes the agent investigate again on its next poll and replaces the pending
-          draft. A new level withdraws the draft. Team, priority and state change nothing else. Nothing is sent.
+          {t("tickets.panels.editNote")}
+        </p>
+      )}
+      {savingAction && (
+        <p className={styles.savingStatus} role="status">
+          <span className={styles.savingSpinner} aria-hidden="true" />
+          {savingAction.kind === "apply"
+            ? t("tickets.panels.applyingStatus", { situation: savingAction.key })
+            : t("tickets.panels.savingStatus")}
         </p>
       )}
       {saveError && <p className={styles.inlineError} role="alert">{saveError}</p>}
@@ -1859,84 +1913,84 @@ function TicketContextPane({
         <p className={styles.orderNotice} role="status">{saveNotice.text}</p>
       )}
 
-      <ContextSection title="Customer">
+      <ContextSection title={t("tickets.panels.section.customer")}>
         <InfoList
           rows={[
-            ["Name", requesterName(ticket)],
-            ["Email", thread ? contactingAddress(thread) : null],
-            ["Shopify segment", ticket.rfmGroup],
-            ["VIP", ticket.isVip ? "Yes" : null],
-            ["Sender", ticket.senderLabel ? SENDER_LABELS[ticket.senderLabel] : "Consumer"],
+            [t("tickets.panels.row.name"), requesterName(ticket, t)],
+            [t("tickets.panels.row.email"), thread ? contactingAddress(thread) : null],
+            [t("tickets.panels.row.segment"), ticket.rfmGroup],
+            [t("tickets.panels.row.vip"), ticket.isVip ? t("tickets.panels.yes") : null],
+            [t("tickets.panels.row.sender"), ticket.senderLabel ? t(`sender.${ticket.senderLabel}`) : t("tickets.panels.consumer")],
           ]}
         />
       </ContextSection>
 
-      <ContextSection title="Ticket">
+      <ContextSection title={t("tickets.panels.section.ticket")}>
         <InfoList
           rows={[
             [
-              "Category",
+              t("tickets.panels.row.category"),
               field(
                 "category",
-                ticket.category ? CATEGORY_LABELS[ticket.category] : "Uncategorised",
+                ticket.category ? t(`category.${ticket.category}`) : t("tickets.panels.uncategorised"),
                 [
-                  ...(ticket.category ? [] : [{ value: "", label: "Uncategorised", disabled: true }]),
-                  ...TICKET_CATEGORIES.map((category) => ({ value: category, label: CATEGORY_LABELS[category] })),
+                  ...(ticket.category ? [] : [{ value: "", label: t("tickets.panels.uncategorised"), disabled: true }]),
+                  ...TICKET_CATEGORIES.map((category) => ({ value: category, label: t(`category.${category}`) })),
                 ],
                 ticket.category ?? ""
               ),
             ],
-            ["Secondary", ticket.secondaryCategory ? CATEGORY_LABELS[ticket.secondaryCategory] : null],
+            [t("tickets.panels.row.secondary"), ticket.secondaryCategory ? t(`category.${ticket.secondaryCategory}`) : null],
             [
-              "Level",
+              t("tickets.panels.row.level"),
               field(
                 "level",
-                ticket.level ? `${TICKET_LEVEL_MEANINGS[ticket.level]} (L${ticket.level})` : "Uncategorised",
+                ticket.level ? `${t(`levelMeaning.${ticket.level}`)} (L${ticket.level})` : t("tickets.panels.uncategorised"),
                 [
-                  ...(ticket.level ? [] : [{ value: "", label: "Uncategorised", disabled: true }]),
+                  ...(ticket.level ? [] : [{ value: "", label: t("tickets.panels.uncategorised"), disabled: true }]),
                   ...([1, 2, 3, 4] as const).map((level) => ({
                     value: String(level),
-                    label: `${TICKET_LEVEL_MEANINGS[level]} (L${level})`,
+                    label: `${t(`levelMeaning.${level}`)} (L${level})`,
                   })),
                 ],
                 ticket.level ? String(ticket.level) : ""
               ),
             ],
             [
-              "State",
+              t("tickets.panels.row.state"),
               field(
                 "status",
-                TICKET_STATUS_LABELS[ticket.status],
+                t(`status.${ticket.status}`),
                 [
                   // An agent-set state is shown, never offered: a person sets these three.
                   ...(PERSON_STATUSES.includes(ticket.status)
                     ? []
-                    : [{ value: ticket.status, label: TICKET_STATUS_LABELS[ticket.status], disabled: true }]),
-                  ...PERSON_STATUSES.map((status) => ({ value: status, label: TICKET_STATUS_LABELS[status] })),
+                    : [{ value: ticket.status, label: t(`status.${ticket.status}`), disabled: true }]),
+                  ...PERSON_STATUSES.map((status) => ({ value: status, label: t(`status.${status}`) })),
                 ],
                 ticket.status
               ),
             ],
             [
-              "Team",
+              t("tickets.panels.row.team"),
               field(
                 "responsible_team",
-                ticket.responsibleTeam ? RESPONSIBLE_TEAM_LABELS[ticket.responsibleTeam] : null,
+                ticket.responsibleTeam ? t(`team.${ticket.responsibleTeam}`) : null,
                 [
-                  ...(ticket.responsibleTeam ? [] : [{ value: "", label: "None", disabled: true }]),
-                  ...TEAMS.map((team) => ({ value: team, label: RESPONSIBLE_TEAM_LABELS[team] })),
+                  ...(ticket.responsibleTeam ? [] : [{ value: "", label: t("tickets.panels.none"), disabled: true }]),
+                  ...TEAMS.map((team) => ({ value: team, label: t(`team.${team}`) })),
                 ],
                 ticket.responsibleTeam ?? ""
               ),
             ],
-            ["Messages", String(ticket.messageCount)],
-            ["Last activity", ticketAge(ticket)],
+            [t("tickets.panels.row.messages"), String(ticket.messageCount)],
+            [t("tickets.panels.row.lastActivity"), ticketAge(ticket, t)],
             [
-              "Priority",
+              t("tickets.panels.row.priority"),
               field(
                 "priority",
-                `${formatPriorityScore(ticket.priorityScore)} (${priorityLabel(ticket)})`,
-                PRIORITY_BANDS.map((band) => ({ value: band, label: PRIORITY_BAND_WORDS[band] })),
+                `${formatPriorityScore(ticket.priorityScore)} (${priorityLabel(ticket, t)})`,
+                PRIORITY_BANDS.map((band) => ({ value: band, label: t(`tickets.view.priority.${band}`) })),
                 ticket.priorityBand
               ),
             ],
@@ -1944,7 +1998,7 @@ function TicketContextPane({
         />
       </ContextSection>
 
-      <ContextSection title="Order">
+      <ContextSection title={t("tickets.panels.section.order")}>
         {error ? (
           <p className={styles.inlineError} role="alert">{error}</p>
         ) : !detail ? (
@@ -1966,10 +2020,10 @@ function TicketContextPane({
                   disabled={!order.orderName}
                   onClick={() => setOrderDialog({ source: "candidate", initialNumber: order.orderName })}
                 >
-                  Confirm this order
+                  {t("tickets.panels.order.confirm")}
                 </Button>
                 <Button size="sm" variant="tertiary" leadingIcon={<PlusIcon size={14} />} onClick={openAdd}>
-                  Add order number
+                  {t("tickets.panels.order.add")}
                 </Button>
               </div>
             )}
@@ -1978,17 +2032,17 @@ function TicketContextPane({
           <>
             <p className={styles.muted}>
               {currentOrder
-                ? `Order ${currentOrder} is linked; its details have not been read yet.`
-                : "No order number confirmed for this ticket."}
+                ? t("tickets.panels.order.linkedUnread", { number: currentOrder })
+                : t("tickets.panels.order.none")}
             </p>
             <div className={styles.orderActions}>
               {currentOrder ? (
                 <Button size="sm" variant="secondary" leadingIcon={<PencilIcon size={14} />} onClick={openEdit}>
-                  Change order number
+                  {t("tickets.panels.order.change")}
                 </Button>
               ) : (
                 <Button size="sm" variant="secondary" leadingIcon={<PlusIcon size={14} />} onClick={openAdd}>
-                  Add order number
+                  {t("tickets.panels.order.add")}
                 </Button>
               )}
             </div>
@@ -2010,8 +2064,8 @@ function TicketContextPane({
                 ticketId: ticket.id,
                 text:
                   change.reinvestigation === "queued"
-                    ? `${change.detail.orderNumber ?? "The order"} is linked. The agent investigates this ticket again on its next poll.`
-                    : `${change.detail.orderNumber ?? "The order"} is linked. The ticket is resolved or closed, so it was not investigated again.`,
+                    ? t("tickets.panels.order.linkedQueued", { order: change.detail.orderNumber ?? t("tickets.panels.order.theOrder") })
+                    : t("tickets.panels.order.linkedClosed", { order: change.detail.orderNumber ?? t("tickets.panels.order.theOrder") }),
               });
               onOrderChanged(change);
             }}
@@ -2019,7 +2073,7 @@ function TicketContextPane({
         )}
       </ContextSection>
 
-      <ContextSection title="Investigation">
+      <ContextSection title={t("tickets.panels.section.investigation")}>
         {error ? (
           <p className={styles.inlineError} role="alert">{error}</p>
         ) : !detail ? (
@@ -2028,7 +2082,7 @@ function TicketContextPane({
           <InvestigationBlock detail={detail} />
         ) : (
           <p className={styles.muted}>
-            The agent has not investigated this ticket. It may still be queued, uncategorised, or outside the enabled subjects.
+            {t("tickets.panels.investigation.none")}
           </p>
         )}
       </ContextSection>
@@ -2037,7 +2091,7 @@ function TicketContextPane({
         <CaseSection ticketId={ticket.id} caseState={detail.caseState ?? null} onChanged={onCaseStateChanged} />
       )}
 
-      <ContextSection title="Required action">
+      <ContextSection title={t("tickets.panels.section.requiredAction")}>
         {error ? (
           <p className={styles.inlineError} role="alert">{error}</p>
         ) : !detail ? (
@@ -2048,7 +2102,7 @@ function TicketContextPane({
             {results.actionReason && <p className={styles.reason}>{results.actionReason}</p>}
           </>
         ) : (
-          <p className={styles.actionText}>Triage this one by hand.</p>
+          <p className={styles.actionText}>{t("tickets.panels.triageByHand")}</p>
         )}
       </ContextSection>
 
@@ -2067,6 +2121,7 @@ function TicketContextPane({
         editing={editing}
         picked={"situation" in pending ? (pending.situation === null ? null : String(pending.situation)) : undefined}
         saving={saving}
+        applying={savingAction?.kind === "apply" ? savingAction.key : null}
         onPick={(key) => setField("situation", key)}
         onReset={() => setField("situation", null)}
         onKeep={() => keepField("situation")}
@@ -2082,68 +2137,39 @@ type TicketChange = { ticket: TicketListItem; detail: TicketDetail };
 const PERSON_STATUSES: TicketListItem["status"][] = ["open", "resolved", "closed"];
 
 const TEAMS = Object.keys(RESPONSIBLE_TEAM_LABELS) as (keyof typeof RESPONSIBLE_TEAM_LABELS)[];
+// Team, status, category and level words come from the shared `team.*`, `status.*`,
+// `category.*` and `levelMeaning.*` keys.
 
 const PRIORITY_BANDS: TicketPriorityBand[] = ["high", "medium", "low"];
 
-const PRIORITY_BAND_WORDS: Record<TicketPriorityBand, string> = { high: "High", medium: "Medium", low: "Low" };
-
-const OVERRIDE_FIELD_LABELS: Record<TicketOverrideField, string> = {
-  situation: "Situation",
-  category: "Category",
-  level: "Level",
-  status: "State",
-  responsible_team: "Team",
-  priority: "Priority",
-};
-
 /** What a Save did, in one line: a re-run, withdrawn drafts, or nothing else. */
-function overrideNotice(result: TicketOverrideResult): string {
+function overrideNotice(result: TicketOverrideResult, t: Translate): string {
   const parts: string[] = [];
-  if (result.requeued) parts.push("The agent investigates this ticket again on its next poll and writes a new draft.");
-  if (result.notInvestigable) {
-    parts.push(
-      "It is not investigated: this category is outside what the agent handles (forwarded, trade, level 4 or not enabled), so a person answers it."
-    );
-  }
-  if (result.draftsStaled > 0) {
-    parts.push(`${result.draftsStaled} draft${result.draftsStaled === 1 ? "" : "s"} withdrawn: written for the case before your change.`);
-  }
-  return parts.length > 0 ? `Saved. ${parts.join(" ")}` : "Saved. Nothing else changes.";
+  if (result.requeued) parts.push(t("tickets.panels.override.requeued"));
+  if (result.notInvestigable) parts.push(t("tickets.panels.override.notInvestigable"));
+  if (result.draftsStaled > 0) parts.push(t("tickets.panels.override.withdrawn", { count: result.draftsStaled }));
+  return parts.length > 0 ? t("tickets.panels.override.saved", { details: parts.join(" ") }) : t("tickets.panels.override.savedNothing");
 }
 
 /** « Human override », with what the pipeline says on hover. */
 function OverrideMark({ override, field }: { override: TicketOverride; field: TicketOverrideField }) {
-  const automatic = override.aiValue === null ? "none" : automaticWords(field, override.aiValue);
+  const t = useT();
+  const automatic = override.aiValue === null ? t("tickets.panels.none").toLowerCase() : automaticWords(field, override.aiValue, t);
   return (
-    <span className={styles.overrideMark} title={`Automatic value: ${automatic}`}>
-      Human override
+    <span className={styles.overrideMark} title={t("tickets.panels.override.automatic", { value: automatic })}>
+      {t("tickets.panels.override.mark")}
     </span>
   );
 }
 
-function automaticWords(field: TicketOverrideField, value: string | number): string {
-  if (field === "category") return CATEGORY_LABELS[value as KnowledgeCategory] ?? String(value);
+function automaticWords(field: TicketOverrideField, value: string | number, t: Translate): string {
+  if (field === "category") return t(`category.${value}`);
   if (field === "level") return `L${value}`;
-  if (field === "status") return TICKET_STATUS_LABELS[value as TicketListItem["status"]] ?? String(value);
-  if (field === "responsible_team") return RESPONSIBLE_TEAM_LABELS[value as keyof typeof RESPONSIBLE_TEAM_LABELS] ?? String(value);
-  if (field === "priority") return PRIORITY_BAND_WORDS[value as TicketPriorityBand] ?? String(value);
+  if (field === "status") return t(`status.${value}`);
+  if (field === "responsible_team") return t(`team.${value}`);
+  if (field === "priority") return t(`tickets.view.priority.${value}`);
   return String(value);
 }
-
-/** Who acts next, as a person reads it. */
-const NEXT_ACTOR_WORDS: Record<CaseActor, string> = {
-  customer: "The customer",
-  support: "Us (support)",
-  colleague: "A colleague",
-  partner: "An operations partner",
-  nobody: "Nobody: nothing is owed",
-};
-
-const OWNER_WORDS: Record<TicketObligation["owner"], string> = {
-  support: "Us",
-  colleague: "A colleague",
-  partner: "An operations partner",
-};
 
 /**
  * The case as it stands (stage 5 of the case-state plan): who acts next, the
@@ -2166,13 +2192,14 @@ function CaseSection({
   caseState: TicketCaseState | null;
   onChanged: (change: TicketCaseChange) => void;
 }) {
+  const t = useT();
   const [pending, setPending] = useState<string | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
 
   if (!caseState) {
     return (
-      <ContextSection title="Case">
-        <p className={styles.muted}>Not read yet: the worker folds new cases on its next poll.</p>
+      <ContextSection title={t("tickets.panels.section.case")}>
+        <p className={styles.muted}>{t("tickets.panels.case.notRead")}</p>
       </ContextSection>
     );
   }
@@ -2195,30 +2222,30 @@ function CaseSection({
   };
 
   return (
-    <ContextSection title="Case">
-      <InfoList rows={[["Next", caseState.nextActor ? NEXT_ACTOR_WORDS[caseState.nextActor] : "Unknown"]]} />
+    <ContextSection title={t("tickets.panels.section.case")}>
+      <InfoList rows={[[t("tickets.panels.case.next"), caseState.nextActor ? t(`tickets.panels.case.actor.${caseState.nextActor}`) : t("tickets.panels.case.unknown")]]} />
       {open.length > 0 && (
-        <ul className={styles.caseChecks} aria-label="Open checks">
+        <ul className={styles.caseChecks} aria-label={t("tickets.panels.case.openChecks")}>
           {open.map((obligation) => (
             <li key={obligation.id} className={obligation.overdue ? styles.caseCheckOverdue : styles.caseCheck}>
               <p className={styles.actionText}>
-                {OWNER_WORDS[obligation.owner]}: {obligation.needLabel}
+                {t(`tickets.panels.case.owner.${obligation.owner}`)}: {needText(t, obligation.need, obligation.needLabel)}
               </p>
               <p className={styles.reason}>
                 {obligation.workingDaysOpen === null
-                  ? "Open"
-                  : `Open ${obligation.workingDaysOpen} working day${obligation.workingDaysOpen === 1 ? "" : "s"}`}
-                {obligation.overdue ? " · overdue" : ""}
+                  ? t("tickets.panels.case.open")
+                  : t("tickets.panels.case.openDays", { count: obligation.workingDaysOpen })}
+                {obligation.overdue ? ` · ${t("tickets.panels.case.overdue")}` : ""}
                 {obligation.ruleStep
-                  ? ` · step ${obligation.ruleStep.step} of ${obligation.ruleStep.steps} (${obligation.ruleStep.rule})`
+                  ? ` · ${t("tickets.panels.case.step", { step: obligation.ruleStep.step, steps: obligation.ruleStep.steps, rule: obligation.ruleStep.rule })}`
                   : ""}
               </p>
               <div className={styles.orderActions}>
                 <Button size="sm" variant="secondary" disabled={pending !== null} onClick={() => act(obligation, "fulfilled")}>
-                  Mark done
+                  {t("tickets.panels.case.markDone")}
                 </Button>
                 <Button size="sm" variant="tertiary" disabled={pending !== null} onClick={() => act(obligation, "cancelled")}>
-                  No longer needed
+                  {t("tickets.panels.case.noLongerNeeded")}
                 </Button>
               </div>
             </li>
@@ -2227,29 +2254,21 @@ function CaseSection({
       )}
       {queued.length > 0 && (
         <p className={styles.reason}>
-          Then: {queued.map((step) => `${OWNER_WORDS[step.owner]}: ${step.needLabel}`).join(", then ")}
+          {t("tickets.panels.case.then", { steps: queued.map((step) => `${t(`tickets.panels.case.owner.${step.owner}`)}: ${needText(t, step.need, step.needLabel)}`).join(t("tickets.panels.case.thenSeparator")) })}
         </p>
       )}
       {caseState.pendingQuestions.length > 0 && (
         <p className={styles.reason}>
-          Waiting for the customer: {caseState.pendingQuestions.map((q) => q.label).join(", ")}
+          {t("tickets.panels.case.waiting", { items: caseState.pendingQuestions.map((q) => questionText(t, q.key, q.label)).join(", ") })}
         </p>
       )}
       {open.length === 0 && caseState.pendingQuestions.length === 0 && (
-        <p className={styles.muted}>No open checks and no question waiting.</p>
+        <p className={styles.muted}>{t("tickets.panels.case.nothing")}</p>
       )}
       {failure && <p className={styles.inlineError} role="alert">{failure}</p>}
     </ContextSection>
   );
 }
-
-/** How the situation was reached, in one word: the scores are the agent's business. */
-const MATCH_WORDS: Record<string, string> = {
-  matched: "matched",
-  near: "near miss, chosen by the agent",
-  ambiguous: "two situations too close to call",
-  none: "nothing close enough",
-};
 
 /** « Name (KEY) »: the name is what a person reads, the key what the rulebook is searched by. */
 function situationLabel(key: string, name: string | null | undefined): ReactNode {
@@ -2289,6 +2308,7 @@ function PolicySection({
   editing,
   picked,
   saving,
+  applying,
   onPick,
   onReset,
   onKeep,
@@ -2301,11 +2321,14 @@ function PolicySection({
   /** The situation chosen in this edit: a key, null to reset, undefined when untouched. */
   picked: string | null | undefined;
   saving: boolean;
+  /** The situation whose « Apply » is out, for its spinner. */
+  applying: string | null;
   onPick: (key: string) => void;
   onReset: () => void;
   onKeep: () => void;
   onApply: (key: string) => void;
 }) {
+  const t = useT();
   // No investigation ran and nobody chose a situation: there is no decision to
   // explain, and an empty heading would read as one that was made badly.
   if (!policy && !situationOverride && !editing) {
@@ -2319,9 +2342,9 @@ function PolicySection({
 
   const asked = policy
     ? [
-        policy.route ? `route to ${policy.route.replace(/_/g, " ")}` : null,
-        policy.asks.length > 0 ? `ask for ${policy.asks.join(", ").replace(/_/g, " ")}` : null,
-        policy.offerCode ? `offer ${policy.offerCode}` : null,
+        policy.route ? t("tickets.panels.policy.route", { to: policy.route.replace(/_/g, " ") }) : null,
+        policy.asks.length > 0 ? t("tickets.panels.policy.ask", { items: policy.asks.join(", ").replace(/_/g, " ") }) : null,
+        policy.offerCode ? t("tickets.panels.policy.offer", { code: policy.offerCode }) : null,
       ]
         .filter(Boolean)
         .join(" · ")
@@ -2333,11 +2356,11 @@ function PolicySection({
       {situationOverride ? (
         <OverrideMark override={situationOverride} field="situation" />
       ) : policy?.match ? (
-        <span className={styles.situationKey}> · {MATCH_WORDS[policy.match] ?? policy.match}</span>
+        <span className={styles.situationKey}> · {["matched", "near", "ambiguous", "none"].includes(policy.match) ? t(`tickets.panels.policy.match.${policy.match}`) : policy.match}</span>
       ) : null}
     </>
   ) : (
-    "None settled"
+    t("tickets.panels.policy.noneSettled")
   );
 
   const resetting = picked === null;
@@ -2345,12 +2368,12 @@ function PolicySection({
     <span className={styles.editField}>
       <select
         className={styles.fieldSelect}
-        aria-label="Situation"
+        aria-label={t("tickets.panels.field.situation")}
         value={typeof picked === "string" ? picked : current ?? ""}
         disabled={saving || resetting}
         onChange={(event) => onPick(event.target.value)}
       >
-        {!current && <option value="" disabled>None settled</option>}
+        {!current && <option value="" disabled>{t("tickets.panels.policy.noneSettled")}</option>}
         {situations.map((row) => (
           <option key={row.key} value={row.key}>
             {row.question} ({row.key})
@@ -2359,7 +2382,7 @@ function PolicySection({
       </select>
       {situationOverride && (
         <button type="button" className={styles.resetLink} disabled={saving} onClick={resetting ? onKeep : onReset}>
-          {resetting ? "Keep my value" : "Reset to automatic"}
+          {resetting ? t("tickets.panels.keepMine") : t("tickets.panels.resetAuto")}
         </button>
       )}
     </span>
@@ -2372,36 +2395,42 @@ function PolicySection({
   const offerNearest = !editing && !situationOverride && policy && policy.match !== "matched" && policy.nearest.length > 0;
 
   return (
-    <ContextSection title="Situation & rule">
+    <ContextSection title={t("tickets.panels.section.policy")}>
       <InfoList
         rows={[
-          ["Situation", situationCell],
+          [t("tickets.panels.field.situation"), situationCell],
           [
-            "Rule",
+            t("tickets.panels.policy.rule"),
             awaitingRun
-              ? "Re-derived from your situation on the next run"
+              ? t("tickets.panels.policy.rederived")
               : policy?.rule
                 ? [
                     policy.rule,
-                    policy.changedVerdict ? "changed the verdict" : "verdict unchanged",
+                    policy.changedVerdict ? t("tickets.panels.policy.changed") : t("tickets.panels.policy.unchanged"),
                     policy.ruleVerdict && policy.ruleVerdict !== "selected" ? policy.ruleVerdict : null,
                   ]
                     .filter(Boolean)
                     .join(" — ")
-                : "No rule matched",
+                : t("tickets.panels.policy.noRule"),
           ],
-          ["It asked for", awaitingRun ? null : asked || null],
+          [t("tickets.panels.policy.askedFor"), awaitingRun ? null : asked || null],
         ]}
       />
       {offerNearest && (
         <div className={styles.nearest}>
-          <p className={styles.reason}>Closest situations</p>
+          <p className={styles.reason}>{t("tickets.panels.policy.closest")}</p>
           <ul className={styles.nearestList}>
             {policy.nearest.map((row) => (
               <li key={row.key}>
                 <span className={styles.nearestName}>{situationLabel(row.key, row.name ?? names.get(row.key))}</span>
-                <Button size="sm" variant="tertiary" disabled={saving} onClick={() => onApply(row.key)}>
-                  Apply
+                <Button
+                  size="sm"
+                  variant="tertiary"
+                  loading={applying === row.key}
+                  disabled={saving}
+                  onClick={() => onApply(row.key)}
+                >
+                  {applying === row.key ? t("tickets.panels.policy.applying") : t("tickets.panels.policy.apply")}
                 </Button>
               </li>
             ))}
@@ -2434,6 +2463,8 @@ function AttachmentsSection({
   detail: TicketDetail | null;
   error: string | null;
 }) {
+  const t = useT();
+  const locale = useLocale();
   const attachments = detail?.attachments ?? null;
   if (error || !attachments) return null;
 
@@ -2442,11 +2473,11 @@ function AttachmentsSection({
   if (images.length === 0 && others.length === 0 && !missing && known) return null;
 
   return (
-    <ContextSection title="Attachments">
+    <ContextSection title={t("tickets.panels.section.attachments")}>
       {missing && (
         <p className={styles.attachmentWarning}>
-          The customer mentions a photo
-          {matchedTerm ? <> (“{matchedTerm}”)</> : null} but nothing image-shaped arrived.
+          {t("tickets.panels.attach.mentions")}
+          {matchedTerm ? <> (“{matchedTerm}”)</> : null} {t("tickets.panels.attach.butNone")}
         </p>
       )}
 
@@ -2454,8 +2485,7 @@ function AttachmentsSection({
         /* The `attachments` column's null, surfaced. Saying "no photo" about a
            message whose own flag says otherwise is the one wrong answer here. */
         <p className={styles.muted}>
-          Something is attached, but its type was never recorded — this thread was ingested
-          before attachment metadata was fetched.
+          {t("tickets.panels.attach.unknownType")}
         </p>
       )}
 
@@ -2465,7 +2495,7 @@ function AttachmentsSection({
             <li key={`${file.name ?? "image"}-${index}`}>
               <AttachmentPhoto file={file} />
               <span className={styles.photoCaption}>
-                {file.name ?? "Unnamed image"} · {describeAttachment(file)}
+                {file.name ?? t("tickets.panels.attach.unnamedImage")} · {describeAttachment(file, t, locale)}
               </span>
             </li>
           ))}
@@ -2476,7 +2506,7 @@ function AttachmentsSection({
         <ul className={styles.attachmentFiles}>
           {others.map((file, index) => (
             <li key={`${file.name ?? "file"}-${index}`}>
-              {file.name ?? "Unnamed file"} · {describeAttachment(file)}
+              {file.name ?? t("tickets.panels.attach.unnamedFile")} · {describeAttachment(file, t, locale)}
             </li>
           ))}
         </ul>
@@ -2484,8 +2514,7 @@ function AttachmentsSection({
 
       {furniture > 0 && (
         <p className={styles.muted}>
-          {furniture} inline image{furniture === 1 ? "" : "s"} ignored (signature logos and
-          placeholders).
+          {t("tickets.panels.attach.ignored", { count: furniture })}
         </p>
       )}
     </ContextSection>
@@ -2506,12 +2535,15 @@ function AttachmentsSection({
  * tells an operator nothing about whether Outlook is worth opening.
  */
 function AttachmentPhoto({ file }: { file: TicketAttachmentFile }) {
+  const t = useT();
   const [failed, setFailed] = useState(false);
   const [reason, setReason] = useState<string | null>(null);
 
   if (!file.src || failed) {
     return (
-      <span className={styles.photoMissing}>{reason ?? ATTACHMENT_REASON_FALLBACK}</span>
+      <span className={styles.photoMissing}>
+        {t(`tickets.panels.attachReason.${reason && ATTACHMENT_REASON_KEYS.includes(reason) ? reason : "fallback"}`)}
+      </span>
     );
   }
 
@@ -2521,7 +2553,7 @@ function AttachmentPhoto({ file }: { file: TicketAttachmentFile }) {
       <img
         className={styles.photoThumb}
         src={file.src}
-        alt={file.name ?? "Photo attached by the customer"}
+        alt={file.name ?? t("tickets.panels.attach.photoAlt")}
         loading="lazy"
         // The reason travels as a response header and an `<img>` cannot read
         // one, so the failure path asks the route directly. Until it answers,
@@ -2529,7 +2561,7 @@ function AttachmentPhoto({ file }: { file: TicketAttachmentFile }) {
         onError={() => {
           setFailed(true);
           if (file.src) {
-            void fetchAttachmentReason(file.src).then(setReason);
+            void fetchAttachmentReasonKey(file.src).then(setReason);
           }
         }}
       />
@@ -2538,18 +2570,18 @@ function AttachmentPhoto({ file }: { file: TicketAttachmentFile }) {
 }
 
 /** "JPEG · 820 KB" — the two things that separate a phone photo from a logo. */
-function describeAttachment(file: TicketAttachmentFile): string {
+function describeAttachment(file: TicketAttachmentFile, t: Translate, locale: Locale): string {
   const subtype = file.contentType?.split("/")[1]?.toUpperCase() ?? null;
-  const size = formatAttachmentBytes(file.size);
+  const size = formatAttachmentBytes(file.size, t, locale);
   return [subtype, size].filter(Boolean).join(" · ");
 }
 
 /** Bytes as a person reads them. 0 means Graph did not record a size. */
-function formatAttachmentBytes(size: number): string | null {
+function formatAttachmentBytes(size: number, t: Translate, locale: Locale): string | null {
   if (!Number.isFinite(size) || size <= 0) return null;
-  if (size < 1024) return `${size} B`;
-  if (size < 1024 * 1024) return `${Math.round(size / 1024)} KB`;
-  return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+  if (size < 1024) return t("tickets.panels.attach.bytes", { n: size });
+  if (size < 1024 * 1024) return t("tickets.panels.attach.kilobytes", { n: Math.round(size / 1024) });
+  return t("tickets.panels.attach.megabytes", { n: formatNumber(size / (1024 * 1024), locale, { maximumFractionDigits: 1, minimumFractionDigits: 1 }) });
 }
 
 function ContextSection({ title, children }: { title: string; children: ReactNode }) {
@@ -2587,6 +2619,7 @@ function OrderFactsBlock({
   /** The order page, carrying this ticket so that page can offer the way back. */
   orderHref?: string | null;
 }) {
+  const t = useT();
   const orderName = orderHref && order.orderName ? (
     <a className={styles.orderLink} href={orderHref}>
       {order.orderName}
@@ -2598,7 +2631,7 @@ function OrderFactsBlock({
     onEdit && order.orderName ? (
       <span className={styles.orderValue}>
         {orderName}
-        <button type="button" className={styles.iconButton} aria-label="Change order number" title="Change order number" onClick={onEdit}>
+        <button type="button" className={styles.iconButton} aria-label={t("tickets.panels.order.change")} title={t("tickets.panels.order.change")} onClick={onEdit}>
           <PencilIcon size={14} />
         </button>
       </span>
@@ -2608,38 +2641,38 @@ function OrderFactsBlock({
 
   return (
     <div className={styles.orderFacts}>
-      {candidate && <p className={styles.candidateNote}>Candidate last order only - not confirmed as the order they mean.</p>}
+      {candidate && <p className={styles.candidateNote}>{t("tickets.panels.order.candidateNote")}</p>}
       {!candidate && order.buyerUnverified && (
         <p className={styles.candidateNote}>
-          {order.channel ?? "Marketplace"} order with an anonymous buyer: linked on the order number alone, the buyer could not be checked.
+          {t("tickets.panels.order.anonymous", { channel: order.channel ?? t("tickets.panels.order.marketplace") })}
         </p>
       )}
       {!candidate && order.linkedByPerson && (
-        <p className={styles.candidateNote}>Linked by a person on the dashboard.</p>
+        <p className={styles.candidateNote}>{t("tickets.panels.order.linkedByPerson")}</p>
       )}
       <InfoList
         rows={[
-          [candidate ? "Last order" : "Order", orderValue],
+          [candidate ? t("tickets.panels.order.lastOrder") : t("tickets.panels.section.order"), orderValue],
           // Named here as well as in the detail panel: this block is the one a
           // reviewer reads first, and a marketplace order changes how the
           // status and tracking lines under it should be read. Null on a web
           // order, and `InfoList` drops a null row.
-          ["Sales channel", order.channel],
-          ["Name on order", order.customerName],
-          ["Order contact", order.contactEmail],
-          ["Order status", order.orderStatus],
-          ["Tracking status", order.trackingStatus],
+          [t("tickets.panels.order.channel"), order.channel],
+          [t("tickets.panels.order.nameOnOrder"), order.customerName],
+          [t("tickets.panels.order.contact"), order.contactEmail],
+          [t("tickets.panels.order.status"), order.orderStatus],
+          [t("tickets.panels.order.trackingStatus"), order.trackingStatus],
           // On BOTH blocks. It was candidate-only on the reasoning that a
           // confirmed order is already the right one, but what was bought is
           // the line a reviewer needs to answer the reply itself — which
           // product the complaint is about, whether the parcel that is late
           // holds one item or four.
-          ["Items", order.items.length > 0 ? order.items.join(", ") : null],
+          [t("tickets.panels.order.items"), order.items.length > 0 ? order.items.join(", ") : null],
         ]}
       />
       {order.tracking.length > 0 && (
         <div className={styles.trackingList}>
-          <span>Tracking</span>
+          <span>{t("tickets.panels.order.tracking")}</span>
           {order.tracking.map((parcel) => (
             <span key={parcel.number} className={styles.parcel}>
               {parcel.url ? (
@@ -2653,22 +2686,23 @@ function OrderFactsBlock({
         </div>
       )}
       {order.resolvedAt && (
-        <p className={styles.stamp}>Shopify data read <time dateTime={order.resolvedAt}>{formatRelativeTime(order.resolvedAt)}</time></p>
+        <p className={styles.stamp}>{t("tickets.panels.order.dataRead")} <time dateTime={order.resolvedAt}>{formatRelativeTime(order.resolvedAt, t)}</time></p>
       )}
     </div>
   );
 }
 
 function InvestigationBlock({ detail }: { detail: TicketDetail }) {
+  const t = useT();
   const results = detail.results;
   if (!results) return null;
 
   return (
     <div className={styles.investigation}>
-      <p className={`${styles.verdict} ${styles[`verdict_${results.verdict}`]}`}>{VERDICT_LABELS[results.verdict]}</p>
+      <p className={`${styles.verdict} ${styles[`verdict_${results.verdict}`]}`}>{t(`tickets.view.verdict.${results.verdict}`)}</p>
       <p className={styles.resultHeadline}>{results.headline}</p>
       {results.investigatedAt && (
-        <p className={styles.stamp}>Investigated <time dateTime={results.investigatedAt}>{formatRelativeTime(results.investigatedAt)}</time></p>
+        <p className={styles.stamp}>{t("tickets.panels.investigation.investigated")} <time dateTime={results.investigatedAt}>{formatRelativeTime(results.investigatedAt, t)}</time></p>
       )}
       {results.findings.length > 0 && (
         <ul className={styles.evidenceList}>
@@ -2701,17 +2735,18 @@ function InvestigationBlock({ detail }: { detail: TicketDetail }) {
         </dl>
       )}
       {results.findings.length === 0 && results.unresolved.length === 0 && detail.facts.length === 0 && (
-        <p className={styles.muted}>Nothing could be established from the tools available.</p>
+        <p className={styles.muted}>{t("tickets.panels.investigation.nothing")}</p>
       )}
     </div>
   );
 }
 
 function TicketLevelBadge({ ticket }: { ticket: TicketListItem }) {
-  const status = TICKET_STATUS_LABELS[ticket.status];
+  const t = useT();
+  const status = t(`status.${ticket.status}`);
   return (
     <span className={`${styles.levelBadge} ${statusClass(ticket)}`}>
-      {ticket.level ? `L${ticket.level} ${TICKET_LEVEL_MEANINGS[ticket.level]}` : "Uncategorised"}
+      {ticket.level ? `L${ticket.level} ${t(`levelMeaning.${ticket.level}`)}` : t("tickets.panels.uncategorised")}
       {ticket.status !== "open" ? ` - ${status}` : ""}
     </span>
   );
@@ -2726,7 +2761,9 @@ function MessageBlock({
   parcels: TicketTracking[];
   itemRef?: RefObject<HTMLLIElement>;
 }) {
-  const role = MESSAGE_ROLE_LABELS[message.role];
+  const t = useT();
+  const locale = useLocale();
+  const role = t(`tickets.panels.role.${message.role}`);
   const route = message.routeTo.length > 0 ? `${role} → ${message.routeTo.join(" + ")}` : null;
   const entities = messageEntities(message, parcels);
   const address = message.fromEmail?.trim() || undefined;
@@ -2734,38 +2771,38 @@ function MessageBlock({
   return (
     <li className={styles.message} ref={itemRef}>
       <span className={`${styles.timelineAvatar} ${styles[`role_${message.role}`]}`} data-email={address}>
-        <span aria-hidden="true">{senderInitials(message)}</span>
+        <span aria-hidden="true">{senderInitials(message, t)}</span>
       </span>
       <article className={styles.messageContent}>
         <header className={styles.messageHead}>
           <div className={styles.senderLine}>
-            <span className={styles.sender} data-email={address}>{senderDisplayName(message)}</span>
+            <span className={styles.sender} data-email={address}>{senderDisplayName(message, t)}</span>
             <span className={`${styles.roleBadge} ${styles[`role_${message.role}`]}`}>{role}</span>
-            {message.hasAttachments && <span className={styles.attachment}>Attachment</span>}
+            {message.hasAttachments && <span className={styles.attachment}>{t("tickets.panels.attachment")}</span>}
           </div>
-          {message.at && <time className={styles.when} dateTime={message.at}>{formatExactTime(message.at)}</time>}
+          {message.at && <time className={styles.when} dateTime={message.at}>{formatExactTime(message.at, locale)}</time>}
         </header>
 
-        {route && <p className={styles.messageRoute}>{message.isForward ? `Forwarded message · ${route}` : route}</p>}
+        {route && <p className={styles.messageRoute}>{message.isForward ? `${t("tickets.panels.message.forwarded")} · ${route}` : route}</p>}
 
         {message.bodyClean?.trim() ? (
           <pre className={styles.messageBody}>
             <TrackingText text={message.bodyClean} parcels={parcels} />
           </pre>
         ) : message.isForward ? (
-          <p className={styles.forwardLabel}>Forwarded email</p>
+          <p className={styles.forwardLabel}>{t("tickets.panels.message.forwardedEmail")}</p>
         ) : (
-          <p className={styles.placeholder}>No body stored for this message.</p>
+          <p className={styles.placeholder}>{t("tickets.panels.message.noBody")}</p>
         )}
 
         {entities.length > 0 && (
-          <div className={styles.entityList} aria-label="Operational references">
+          <div className={styles.entityList} aria-label={t("tickets.panels.message.references")}>
             {entities.map((entity) => (
               <span className={styles.entityChip} key={`${entity.kind}-${entity.value}`}>
                 {entity.kind === "tracking" ? (
-                  <TrackingText text={`Tracking ${entity.value}`} parcels={parcels} />
+                  <TrackingText text={t("tickets.panels.tracking", { number: entity.value })} parcels={parcels} />
                 ) : (
-                  `${entity.label} ${entity.value}`
+                  `${t(`tickets.panels.entity.${entity.kind}`)} ${entity.value}`
                 )}
               </span>
             ))}
@@ -2775,25 +2812,25 @@ function MessageBlock({
         <div className={styles.messageDisclosures}>
           {message.quotedBody && (
             <details>
-              <summary>↳ Show {message.quotedMessageCount} quoted message{message.quotedMessageCount === 1 ? "" : "s"}</summary>
+              <summary>↳ {t("tickets.panels.message.showQuoted", { count: message.quotedMessageCount })}</summary>
               <pre><TrackingText text={message.quotedBody} parcels={parcels} /></pre>
             </details>
           )}
           {message.forwardedContent && (
             <details>
-              <summary>View forwarded content</summary>
+              <summary>{t("tickets.panels.message.viewForwarded")}</summary>
               <pre><TrackingText text={message.forwardedContent} parcels={parcels} /></pre>
             </details>
           )}
           {message.signature && (
             <details>
-              <summary>Show signature</summary>
+              <summary>{t("tickets.panels.message.showSignature")}</summary>
               <pre>{message.signature}</pre>
             </details>
           )}
           {message.body && (
             <details>
-              <summary>View original email</summary>
+              <summary>{t("tickets.panels.message.viewOriginal")}</summary>
               <pre><TrackingText text={message.body} parcels={parcels} /></pre>
             </details>
           )}
@@ -2803,22 +2840,14 @@ function MessageBlock({
   );
 }
 
-const MESSAGE_ROLE_LABELS: Record<TicketMessage["role"], string> = {
-  customer: "Customer",
-  qiriness: "Qiriness",
-  internal: "Internal",
-  logistics: "Logistics",
-  partner: "Partner",
-};
-
-function senderDisplayName(message: TicketMessage): string {
+function senderDisplayName(message: TicketMessage, t: Translate): string {
   if (message.role === "qiriness") {
     const stored = message.fromName?.trim().toLowerCase() ?? "";
     if (!stored || stored === "contact" || stored.includes("service client") || stored.includes("support")) {
       return "Qiriness";
     }
   }
-  return senderIdentity(message, message.direction === "outbound").name;
+  return senderIdentity(message, message.direction === "outbound", t).name;
 }
 
 /**
@@ -2839,13 +2868,13 @@ function contactingAddress(thread: TicketThread): string | null {
   return null;
 }
 
-function senderInitials(message: TicketMessage): string {
-  const name = senderDisplayName(message).replace(/[^\p{L}\p{N} ]/gu, " ").trim();
+function senderInitials(message: TicketMessage, t: Translate): string {
+  const name = senderDisplayName(message, t).replace(/[^\p{L}\p{N} ]/gu, " ").trim();
   const parts = name.split(/\s+/).filter(Boolean);
   return (parts.length > 1 ? `${parts[0][0]}${parts[parts.length - 1][0]}` : parts[0]?.slice(0, 2) || "?").toUpperCase();
 }
 
-function groupMessagesByDate(messages: TicketMessage[]) {
+function groupMessagesByDate(messages: TicketMessage[], t: Translate, locale: Locale) {
   const groups: { key: string; label: string; messages: TicketMessage[]; isLast: boolean }[] = [];
   for (const message of messages) {
     const date = message.at ? new Date(message.at) : null;
@@ -2856,8 +2885,8 @@ function groupMessagesByDate(messages: TicketMessage[]) {
       ? `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`
       : "undated";
     const label = valid
-      ? new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: date.getFullYear() === new Date().getFullYear() ? undefined : "numeric" }).format(date).toUpperCase()
-      : "DATE UNKNOWN";
+      ? new Intl.DateTimeFormat(intlTag(locale), { day: "numeric", month: "short", year: date.getFullYear() === new Date().getFullYear() ? undefined : "numeric" }).format(date).toUpperCase()
+      : t("tickets.panels.message.dateUnknown");
     const previous = groups[groups.length - 1];
     if (previous?.key === key) previous.messages.push(message);
     else groups.push({ key, label, messages: [message], isLast: false });
@@ -2866,16 +2895,16 @@ function groupMessagesByDate(messages: TicketMessage[]) {
   return groups;
 }
 
-function formatExactTime(value: string): string {
+function formatExactTime(value: string, locale: Locale): string {
   const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? "" : new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit", hour12: false }).format(date);
+  return Number.isNaN(date.getTime()) ? "" : new Intl.DateTimeFormat(intlTag(locale), { hour: "2-digit", minute: "2-digit", hour12: false }).format(date);
 }
 
-function formatEventTime(value: string | null): string {
+function formatEventTime(value: string | null, locale: Locale): string {
   if (!value) return "—";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "—";
-  return new Intl.DateTimeFormat("en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", hour12: false }).format(date);
+  return new Intl.DateTimeFormat(intlTag(locale), { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", hour12: false }).format(date);
 }
 
 
@@ -2904,11 +2933,11 @@ function messageEntities(message: TicketMessage, parcels: TicketTracking[]) {
   return entities.slice(0, 5);
 }
 
-function senderIdentity(message: TicketMessage, outbound: boolean): { name: string; email: string | null } {
+function senderIdentity(message: TicketMessage, outbound: boolean, t: Translate): { name: string; email: string | null } {
   const name = message.fromName?.trim() ?? "";
   const email = message.fromEmail?.trim() ?? "";
 
-  if (!name && !email) return { name: outbound ? "Qiriness" : "Unknown sender", email: null };
+  if (!name && !email) return { name: outbound ? "Qiriness" : t("tickets.panels.unknownSender"), email: null };
   if (!name) return { name: email, email: null };
   if (!email) return { name, email: null };
   return { name, email: name.toLowerCase() === email.toLowerCase() ? null : email };
@@ -2966,44 +2995,46 @@ function IrrelevantWorkspace({
   /** Replaces the ticks with these ids: every shown row, or none. */
   onPickAll: (ids: string[]) => void;
 }) {
+  const t = useT();
+  const locale = useLocale();
   // "All" means every row the list shows — a search narrows what Select all
   // ticks, so it never clears mail the reviewer could not see.
   const allPicked = mail.length > 0 && mail.every((item) => picked.has(item.id));
 
   return (
     <div className={`${styles.workspace} ${styles.irrelevantWorkspace} ${selectedMail ? styles.hasSelection : ""}`}>
-      <aside className={styles.listPane} aria-label="Irrelevant email list">
+      <aside className={styles.listPane} aria-label={t("tickets.panels.irrelevant.listLabel")}>
         <div className={styles.listHeader}>
           <div>
-            <h2>Irrelevant</h2>
+            <h2>{t("tickets.view.tab.irrelevant")}</h2>
             <p>
               {selecting
-                ? `${picked.size.toLocaleString()} selected`
-                : `${mail.length.toLocaleString()} dropped email${mail.length === 1 ? "" : "s"} · newest first`}
+                ? t("tickets.panels.irrelevant.selected", { n: formatNumber(picked.size, locale) })
+                : `${t("tickets.panels.irrelevant.count", { count: mail.length })} · ${t("tickets.panels.irrelevant.newestFirst")}`}
             </p>
           </div>
           <div className={styles.listActions}>
             {selecting ? (
               <>
                 <Button size="sm" variant="tertiary" disabled={mail.length === 0} onClick={() => onPickAll(allPicked ? [] : mail.map((item) => item.id))}>
-                  {allPicked ? "Select none" : "Select all"}
+                  {allPicked ? t("tickets.panels.irrelevant.selectNone") : t("tickets.panels.irrelevant.selectAll")}
                 </Button>
                 <Button size="sm" variant="secondary" disabled={picked.size === 0} onClick={onClearPicked}>
-                  {picked.size > 0 ? `Clear ${picked.size}` : "Clear"}
+                  {picked.size > 0 ? t("tickets.panels.irrelevant.clearN", { n: picked.size }) : t("tickets.panels.irrelevant.clear")}
                 </Button>
                 <Button size="sm" variant="tertiary" onClick={onCancelSelecting}>
-                  Cancel
+                  {t("tickets.panels.draft.cancel")}
                 </Button>
               </>
             ) : (
               <>
                 {clearedCount > 0 && (
                   <Button size="sm" variant="tertiary" onClick={onRestoreCleared}>
-                    Restore {clearedCount}
+                    {t("tickets.panels.irrelevant.restore", { n: clearedCount })}
                   </Button>
                 )}
                 <Button size="sm" variant="secondary" disabled={mail.length === 0} onClick={onStartSelecting}>
-                  Select
+                  {t("tickets.panels.irrelevant.select")}
                 </Button>
               </>
             )}
@@ -3014,11 +3045,11 @@ function IrrelevantWorkspace({
              or everything dropped has been cleared from this browser. */
           clearedCount > 0 ? (
             <CompactEmpty
-              title="Everything here has been cleared"
-              body="The gate's record is untouched. Restore brings the cleared mail back into this list."
+              title={t("tickets.panels.irrelevant.allClearedTitle")}
+              body={t("tickets.panels.irrelevant.allClearedBody")}
             />
           ) : (
-            <CompactEmpty title="Nothing has been dropped" body="Mail blocked by the blocklist or classifier will appear here." />
+            <CompactEmpty title={t("tickets.panels.irrelevant.emptyTitle")} body={t("tickets.panels.irrelevant.emptyBody")} />
           )
         ) : (
           /* A list of checkboxes is not a listbox: in select mode the rows stop
@@ -3026,7 +3057,7 @@ function IrrelevantWorkspace({
           <ol
             className={styles.ticketList}
             role={selecting ? "group" : "listbox"}
-            aria-label={selecting ? "Dropped emails to clear" : "Dropped emails"}
+            aria-label={selecting ? t("tickets.panels.irrelevant.toClear") : t("tickets.panels.irrelevant.dropped")}
           >
             {mail.map((item) => (
               <li key={item.id}>
@@ -3051,12 +3082,12 @@ function IrrelevantWorkspace({
                     </span>
                   )}
                   <span className={styles.itemTop}>
-                    <span className={styles.priorityWord}>{item.label ?? "Blocklisted"}</span>
-                    <time dateTime={item.decidedAt ?? undefined}>{formatRelativeTime(item.decidedAt) || "-"}</time>
+                    <span className={styles.priorityWord}>{item.label ?? t("tickets.panels.irrelevant.blocklisted")}</span>
+                    <time dateTime={item.decidedAt ?? undefined}>{formatRelativeTime(item.decidedAt, t) || "-"}</time>
                   </span>
-                  <span className={styles.itemSubject} title={item.subject ?? undefined}>{item.subject?.trim() || "(no subject)"}</span>
-                  <span className={styles.itemRequester} title={item.fromEmail ?? undefined}>{item.fromEmail?.trim() || "Unknown sender"}</span>
-                  <span className={styles.itemMeta}>{item.decidedBy === "llm" ? "Classifier" : "Blocklist"}</span>
+                  <span className={styles.itemSubject} title={item.subject ?? undefined}>{item.subject?.trim() || t("tickets.view.noSubject")}</span>
+                  <span className={styles.itemRequester} title={item.fromEmail ?? undefined}>{item.fromEmail?.trim() || t("tickets.panels.unknownSender")}</span>
+                  <span className={styles.itemMeta}>{item.decidedBy === "llm" ? t("tickets.panels.irrelevant.classifier") : t("tickets.panels.irrelevant.blocklist")}</span>
                 </button>
               </li>
             ))}
@@ -3064,19 +3095,19 @@ function IrrelevantWorkspace({
         )}
       </aside>
 
-      <section className={styles.detailPane} aria-label="Dropped email preview">
+      <section className={styles.detailPane} aria-label={t("tickets.panels.irrelevant.previewLabel")}>
         {selectedMail ? (
           <DroppedMailPreview mail={selectedMail} />
         ) : (
-          <EmptyDetail title="Select an email to review the message." body="Dropped mail is not a ticket until Add as ticket is used." />
+          <EmptyDetail title={t("tickets.panels.irrelevant.selectTitle")} body={t("tickets.panels.irrelevant.selectBody")} />
         )}
       </section>
 
-      <aside className={styles.contextPane} aria-label="Classification context">
+      <aside className={styles.contextPane} aria-label={t("tickets.panels.irrelevant.contextLabel")}>
         {selectedMail ? (
           <DroppedMailContext mail={selectedMail} onPromote={onPromote} pendingId={pendingId} />
         ) : (
-          <EmptyDetail title="No email selected" body="Verdict, reason and the Add as ticket action appear here." />
+          <EmptyDetail title={t("tickets.panels.irrelevant.noneTitle")} body={t("tickets.panels.irrelevant.noneBody")} />
         )}
       </aside>
     </div>
@@ -3084,19 +3115,20 @@ function IrrelevantWorkspace({
 }
 
 function DroppedMailPreview({ mail }: { mail: DroppedMail }) {
+  const t = useT();
   const expired = !mail.body && Boolean(mail.bodyCapturedAt);
   return (
     <div className={styles.detailFrame}>
       <header className={styles.ticketHeader}>
         <div className={styles.ticketHeaderText}>
-          <h2 title={mail.subject ?? undefined}>{mail.subject?.trim() || "(no subject)"}</h2>
-          <p>{mail.fromEmail?.trim() || "Unknown sender"}{mail.decidedAt ? ` - dropped ${formatRelativeTime(mail.decidedAt)}` : ""}</p>
+          <h2 title={mail.subject ?? undefined}>{mail.subject?.trim() || t("tickets.view.noSubject")}</h2>
+          <p>{mail.fromEmail?.trim() || t("tickets.panels.unknownSender")}{mail.decidedAt ? ` - ${t("tickets.panels.irrelevant.droppedAgo", { when: formatRelativeTime(mail.decidedAt, t) })}` : ""}</p>
         </div>
       </header>
       <div className={styles.conversationArea}>
         {mail.failedOpen && (
           <p className={styles.blocked} role="note">
-            The classifier failed on this email. The fallback decision should be read as fallback, not as a judgement about the message.
+            {t("tickets.panels.irrelevant.failedOpen")}
           </p>
         )}
         {mail.body ? (
@@ -3104,9 +3136,9 @@ function DroppedMailPreview({ mail }: { mail: DroppedMail }) {
             <TrackingText text={mail.body} parcels={mail.parcels} />
           </pre>
         ) : expired ? (
-          <p className={styles.placeholder}>The text has passed its retention window and was deleted. The decision record is kept.</p>
+          <p className={styles.placeholder}>{t("tickets.panels.irrelevant.expired")}</p>
         ) : (
-          <p className={styles.placeholder}>No text was captured for this email. The decision record is all that can be shown here.</p>
+          <p className={styles.placeholder}>{t("tickets.panels.irrelevant.noText")}</p>
         )}
       </div>
     </div>
@@ -3122,21 +3154,22 @@ function DroppedMailContext({
   onPromote: (mail: DroppedMail) => void;
   pendingId: string | null;
 }) {
+  const t = useT();
   return (
     <div className={styles.contextScroll}>
-      <ContextSection title="Verdict">
+      <ContextSection title={t("tickets.panels.irrelevant.verdict")}>
         <InfoList
           rows={[
-            ["Verdict", mail.label ?? "Blocklisted"],
-            ["Decided by", mail.decidedBy === "llm" ? "Classifier" : "Blocklist"],
-            ["Decided", formatRelativeTime(mail.decidedAt) || null],
+            [t("tickets.panels.irrelevant.verdict"), mail.label ?? t("tickets.panels.irrelevant.blocklisted")],
+            [t("tickets.panels.irrelevant.decidedBy"), mail.decidedBy === "llm" ? t("tickets.panels.irrelevant.classifier") : t("tickets.panels.irrelevant.blocklist")],
+            [t("tickets.panels.irrelevant.decided"), formatRelativeTime(mail.decidedAt, t) || null],
           ]}
         />
       </ContextSection>
-      <ContextSection title="Reason">
+      <ContextSection title={t("tickets.panels.irrelevant.reason")}>
         <p className={styles.actionText}>{mail.reason}</p>
       </ContextSection>
-      <ContextSection title="Required action">
+      <ContextSection title={t("tickets.panels.section.requiredAction")}>
         <Button
           size="sm"
           variant="primary"
@@ -3146,13 +3179,13 @@ function DroppedMailContext({
           onClick={() => onPromote(mail)}
           title={
             mail.body
-              ? "Thread this email into a ticket and let the agent read it."
-              : "The text of this email is not stored, so there is nothing for the agent to read into a ticket."
+              ? t("tickets.panels.irrelevant.promoteHint")
+              : t("tickets.panels.irrelevant.promoteNoBody")
           }
         >
-          Add as ticket
+          {t("tickets.panels.irrelevant.addAsTicket")}
         </Button>
-        <p className={styles.stamp}>Threads this email into the queue. The gate decision record is kept.</p>
+        <p className={styles.stamp}>{t("tickets.panels.irrelevant.promoteNote")}</p>
       </ContextSection>
     </div>
   );
@@ -3178,8 +3211,9 @@ function CompactEmpty({ title, body }: { title: string; body: string }) {
 }
 
 function ThreadSkeleton() {
+  const t = useT();
   return (
-    <div className={styles.skeletonStack} aria-busy="true" aria-label="Loading conversation">
+    <div className={styles.skeletonStack} aria-busy="true" aria-label={t("tickets.panels.loading.conversation")}>
       <span className={styles.skeletonLine} />
       <span className={styles.skeletonBlock} />
       <span className={styles.skeletonLineShort} />
@@ -3189,8 +3223,9 @@ function ThreadSkeleton() {
 }
 
 function DraftSkeleton() {
+  const t = useT();
   return (
-    <div className={styles.skeletonStack} aria-busy="true" aria-label="Loading draft">
+    <div className={styles.skeletonStack} aria-busy="true" aria-label={t("tickets.panels.loading.draft")}>
       <span className={styles.skeletonLineShort} />
       <span className={styles.skeletonBlockSmall} />
     </div>
@@ -3198,8 +3233,9 @@ function DraftSkeleton() {
 }
 
 function ContextSkeleton() {
+  const t = useT();
   return (
-    <div className={styles.skeletonStack} aria-busy="true" aria-label="Loading context">
+    <div className={styles.skeletonStack} aria-busy="true" aria-label={t("tickets.panels.loading.context")}>
       <span className={styles.skeletonLineShort} />
       <span className={styles.skeletonLine} />
       <span className={styles.skeletonLineShort} />

@@ -3,13 +3,9 @@
 import { Fragment, useState } from "react";
 import { ChevronDownIcon, ChevronRightIcon, CrownIcon } from "@/components/icons";
 import { Button } from "@/components/ui/Button";
+import { useLocale, useT } from "@/lib/i18n/client";
+import { formatNumber } from "@/lib/i18n/format";
 import type { TicketListItem } from "@/lib/types";
-import {
-  CATEGORY_LABELS,
-  RESPONSIBLE_TEAM_LABELS,
-  SENDER_LABELS,
-  TICKET_STATUS_LABELS,
-} from "@/lib/types";
 import { formatRelativeTime } from "@/lib/relative-time";
 import { HappinessFace } from "./HappinessFace";
 import { LevelChip } from "./LevelChip";
@@ -62,6 +58,8 @@ export function TicketTable({
   emptyTitle,
   emptyBody,
 }: TicketTableProps) {
+  const t = useT();
+  const locale = useLocale();
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [threadTicket, setThreadTicket] = useState<TicketListItem | null>(null);
 
@@ -83,23 +81,23 @@ export function TicketTable({
     <div className={styles.scroll}>
       <table className={styles.table}>
         <caption className={styles.srOnly}>
-          {tickets.length.toLocaleString()} tickets
+          {t("tickets.dialogs.table.caption", { count: tickets.length, n: formatNumber(tickets.length, locale) })}
         </caption>
         <thead>
           <tr>
-            <th scope="col" className={styles.priorityCol}>Priority</th>
+            <th scope="col" className={styles.priorityCol}>{t("tickets.dialogs.table.priority")}</th>
             <th scope="col" className={styles.moodCol}>
-              <span className={styles.srOnly}>Customer mood</span>
+              <span className={styles.srOnly}>{t("tickets.dialogs.table.mood")}</span>
             </th>
-            <th scope="col" className={styles.subjectCol}>Subject</th>
-            <th scope="col">Requester</th>
-            <th scope="col">Category</th>
-            <th scope="col">Level</th>
-            <th scope="col">Team</th>
-            <th scope="col" className={styles.numCol}>Messages</th>
-            <th scope="col">Last activity</th>
+            <th scope="col" className={styles.subjectCol}>{t("tickets.dialogs.table.subject")}</th>
+            <th scope="col">{t("tickets.dialogs.table.requester")}</th>
+            <th scope="col">{t("tickets.panels.row.category")}</th>
+            <th scope="col">{t("tickets.panels.row.level")}</th>
+            <th scope="col">{t("tickets.panels.row.team")}</th>
+            <th scope="col" className={styles.numCol}>{t("tickets.panels.row.messages")}</th>
+            <th scope="col">{t("tickets.panels.row.lastActivity")}</th>
             <th scope="col" className={styles.actionCol}>
-              <span className={styles.srOnly}>Actions</span>
+              <span className={styles.srOnly}>{t("tickets.dialogs.table.actions")}</span>
             </th>
           </tr>
         </thead>
@@ -123,7 +121,7 @@ export function TicketTable({
                   <td className={styles.priorityCol}>
                     <span
                       className={styles.priorityScore}
-                      title={`Priority score: ${formatPriorityScore(ticket.priorityScore)}`}
+                      title={t("tickets.dialogs.table.priorityScore", { score: formatPriorityScore(ticket.priorityScore) })}
                     >
                       {formatPriorityScore(ticket.priorityScore)}
                     </span>
@@ -143,7 +141,7 @@ export function TicketTable({
                         className={styles.disclosure}
                         aria-expanded={expanded}
                         aria-controls={panelId}
-                        aria-label={expanded ? "Hide the agent's reading" : "Show the agent's reading"}
+                        aria-label={expanded ? t("tickets.dialogs.table.hideReading") : t("tickets.dialogs.table.showReading")}
                         onClick={(event) => {
                           // Otherwise the click reaches the row handler too and the
                           // panel opens and closes in the same gesture.
@@ -169,13 +167,13 @@ export function TicketTable({
                         }}
                       >
                         <span className={styles.subject}>
-                          {ticket.subject?.trim() || "(no subject)"}
+                          {ticket.subject?.trim() || t("tickets.view.noSubject")}
                         </span>
                       </button>
                     </span>
                     <span className={styles.subMeta}>
-                      {TICKET_STATUS_LABELS[ticket.status]}
-                      {ticket.orderNumber ? ` · Order ${ticket.orderNumber}` : ""}
+                      {t(`status.${ticket.status}`)}
+                      {ticket.orderNumber ? ` · ${t("tickets.panels.orderNumber", { number: ticket.orderNumber })}` : ""}
                     </span>
                   </th>
 
@@ -188,7 +186,7 @@ export function TicketTable({
                     <span className={styles.requesterLine}>
                       <span className={styles.requesterName}>
                         {ticket.customerName?.trim() ||
-                          ticket.requesterName?.trim() || <span className={styles.muted}>Unknown</span>}
+                          ticket.requesterName?.trim() || <span className={styles.muted}>{t("tickets.dialogs.table.unknown")}</span>}
                       </span>
                       {/* WHO SENT IT, NOT WHAT IT IS ABOUT. A thread opened by
                           the logistics team is still a customer's return — these
@@ -201,10 +199,10 @@ export function TicketTable({
                           className={`${styles.senderChip} ${styles[ticket.senderLabel] ?? ""}`}
                           title={
                             ticket.senderNote ??
-                            `${SENDER_LABELS[ticket.senderLabel]} sender — not a consumer address`
+                            t("tickets.dialogs.table.senderNote", { sender: t(`sender.${ticket.senderLabel}`) })
                           }
                         >
-                          {SENDER_LABELS[ticket.senderLabel]}
+                          {t(`sender.${ticket.senderLabel}`)}
                         </span>
                       )}
                       {/* A ticket the agent will not draft on, marked in the
@@ -215,9 +213,9 @@ export function TicketTable({
                       {ticket.isDuplicate && (
                         <span
                           className={styles.duplicateChip}
-                          title="The same message already arrived on another ticket — answer there, not here"
+                          title={t("tickets.dialogs.table.duplicateHint")}
                         >
-                          Duplicate
+                          {t("tickets.dialogs.table.duplicate")}
                         </span>
                       )}
                       {/* The crown follows the name, and the flex row is what
@@ -231,10 +229,10 @@ export function TicketTable({
                       {ticket.isVip && (
                         <span
                           className={styles.vipMark}
-                          title="VIP customer — by the rule set on Insights → Customers"
+                          title={t("tickets.panels.vipTitle")}
                         >
                           <CrownIcon size={14} />
-                          <span className={styles.srOnly}>VIP customer</span>
+                          <span className={styles.srOnly}>{t("tickets.panels.vip")}</span>
                         </span>
                       )}
                     </span>
@@ -243,10 +241,10 @@ export function TicketTable({
                   <td>
                     {ticket.category ? (
                       <>
-                        <span className={styles.category}>{CATEGORY_LABELS[ticket.category]}</span>
+                        <span className={styles.category}>{t(`category.${ticket.category}`)}</span>
                         {/* The second subject only exists on mail spanning two topics. */}
                         {ticket.secondaryCategory && (
-                          <span className={styles.subMeta}>+ {CATEGORY_LABELS[ticket.secondaryCategory]}</span>
+                          <span className={styles.subMeta}>+ {t(`category.${ticket.secondaryCategory}`)}</span>
                         )}
                       </>
                     ) : (
@@ -258,7 +256,7 @@ export function TicketTable({
 
                   <td>
                     {ticket.responsibleTeam ? (
-                      RESPONSIBLE_TEAM_LABELS[ticket.responsibleTeam]
+                      t(`team.${ticket.responsibleTeam}`)
                     ) : (
                       <span className={styles.muted}>—</span>
                     )}
@@ -268,7 +266,7 @@ export function TicketTable({
 
                   <td className={styles.time}>
                     <time dateTime={ticket.lastMessageAt ?? undefined}>
-                      {formatRelativeTime(ticket.lastMessageAt) || "—"}
+                      {formatRelativeTime(ticket.lastMessageAt, t) || "—"}
                     </time>
                   </td>
 

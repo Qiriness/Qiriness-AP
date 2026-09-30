@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import { Button } from "@/components/ui/Button";
+import { useLocale, useT } from "@/lib/i18n/client";
+import { formatNumber } from "@/lib/i18n/format";
 import type { DroppedMail } from "@/lib/types";
 import { formatRelativeTime } from "@/lib/relative-time";
 import { DroppedMailDialog } from "./DroppedMailDialog";
@@ -15,11 +17,7 @@ interface DroppedMailTableProps {
   pendingId: string | null;
 }
 
-const LABELS: Record<string, string> = {
-  spam: "Spam",
-  irrelevant: "Irrelevant",
-  keep: "Keep",
-};
+const KNOWN_LABELS = ["spam", "irrelevant", "keep"];
 
 /**
  * Mail the spam gate dropped — `spam_audit` rows, not tickets. The email itself
@@ -48,15 +46,15 @@ const LABELS: Record<string, string> = {
  * truncated in a row.
  */
 export function DroppedMailTable({ mail, onPromote, pendingId }: DroppedMailTableProps) {
+  const t = useT();
+  const locale = useLocale();
   const [openMail, setOpenMail] = useState<DroppedMail | null>(null);
 
   if (mail.length === 0) {
     return (
       <div className={styles.empty}>
-        <p className={styles.emptyTitle}>Nothing has been dropped</p>
-        <p className={styles.emptyBody}>
-          Mail blocked by the blocklist or the spam classifier will appear here.
-        </p>
+        <p className={styles.emptyTitle}>{t("tickets.panels.irrelevant.emptyTitle")}</p>
+        <p className={styles.emptyBody}>{t("tickets.dialogs.dropped.emptyBody")}</p>
       </div>
     );
   }
@@ -66,18 +64,18 @@ export function DroppedMailTable({ mail, onPromote, pendingId }: DroppedMailTabl
     <div className={styles.scroll}>
       <table className={styles.table}>
         <caption className={styles.srOnly}>
-          {mail.length.toLocaleString()} dropped emails, most recent decision first
+          {t("tickets.dialogs.dropped.caption", { count: mail.length, n: formatNumber(mail.length, locale) })}
         </caption>
         <thead>
           <tr>
-            <th scope="col" className={styles.subjectCol}>Subject</th>
-            <th scope="col">From</th>
-            <th scope="col">Verdict</th>
-            <th scope="col">Decided by</th>
-            <th scope="col">Reason</th>
-            <th scope="col">Decided</th>
+            <th scope="col" className={styles.subjectCol}>{t("tickets.dialogs.table.subject")}</th>
+            <th scope="col">{t("tickets.dialogs.dropped.from")}</th>
+            <th scope="col">{t("tickets.panels.irrelevant.verdict")}</th>
+            <th scope="col">{t("tickets.panels.irrelevant.decidedBy")}</th>
+            <th scope="col">{t("tickets.panels.irrelevant.reason")}</th>
+            <th scope="col">{t("tickets.panels.irrelevant.decided")}</th>
             <th scope="col" className={styles.actionCol}>
-              <span className={styles.srOnly}>Actions</span>
+              <span className={styles.srOnly}>{t("tickets.dialogs.table.actions")}</span>
             </th>
           </tr>
         </thead>
@@ -92,22 +90,22 @@ export function DroppedMailTable({ mail, onPromote, pendingId }: DroppedMailTabl
                   onClick={() => setOpenMail(item)}
                 >
                   <span className={styles.subject}>
-                    {item.subject?.trim() || "(no subject)"}
+                    {item.subject?.trim() || t("tickets.view.noSubject")}
                   </span>
                 </button>
               </th>
 
               <td className={styles.requester} title={item.fromEmail ?? undefined}>
-                {item.fromEmail?.trim() || <span className={styles.muted}>Unknown</span>}
+                {item.fromEmail?.trim() || <span className={styles.muted}>{t("tickets.dialogs.table.unknown")}</span>}
               </td>
 
               <td>
                 {/* The blocklist pass writes no label — say so rather than
                     showing an empty cell that reads as missing data. */}
-                {item.label ? LABELS[item.label] ?? item.label : <span className={styles.muted}>Blocklisted</span>}
+                {item.label ? (KNOWN_LABELS.includes(item.label) ? t(`tickets.dialogs.dropped.label.${item.label}`) : item.label) : <span className={styles.muted}>{t("tickets.panels.irrelevant.blocklisted")}</span>}
               </td>
 
-              <td>{item.decidedBy === "llm" ? "Classifier" : "Blocklist"}</td>
+              <td>{item.decidedBy === "llm" ? t("tickets.panels.irrelevant.classifier") : t("tickets.panels.irrelevant.blocklist")}</td>
 
               <td className={styles.reason} title={item.reason}>
                 {item.reason}
@@ -115,7 +113,7 @@ export function DroppedMailTable({ mail, onPromote, pendingId }: DroppedMailTabl
 
               <td className={styles.time}>
                 <time dateTime={item.decidedAt ?? undefined}>
-                  {formatRelativeTime(item.decidedAt) || "—"}
+                  {formatRelativeTime(item.decidedAt, t) || "—"}
                 </time>
               </td>
 
@@ -128,11 +126,11 @@ export function DroppedMailTable({ mail, onPromote, pendingId }: DroppedMailTabl
                   onClick={() => onPromote(item)}
                   title={
                     item.body
-                      ? "Overturn the gate: thread this email into a ticket and let the agent read it."
-                      : "The text of this email is not stored, so there is nothing for the agent to read into a ticket."
+                      ? t("tickets.dialogs.dropped.promoteHint")
+                      : t("tickets.panels.irrelevant.promoteNoBody")
                   }
                 >
-                  Add as ticket
+                  {t("tickets.panels.irrelevant.addAsTicket")}
                 </Button>
               </td>
             </tr>

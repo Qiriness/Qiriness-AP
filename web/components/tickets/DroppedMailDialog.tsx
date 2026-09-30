@@ -2,6 +2,7 @@
 
 import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
+import { useT } from "@/lib/i18n/client";
 import { formatRelativeTime } from "@/lib/relative-time";
 import { TrackingText } from "@/components/ui/TrackingText";
 import type { DroppedMail } from "@/lib/types";
@@ -31,6 +32,7 @@ interface DroppedMailDialogProps {
  * cases and is only actionable in the first.
  */
 export function DroppedMailDialog({ mail, onClose, onPromote }: DroppedMailDialogProps) {
+  const t = useT();
   // Captured-then-purged, distinguished from never-captured by the stamp the
   // backfill and ingestion both write. The expiry alone would not: a row whose
   // body is still live also has one.
@@ -38,13 +40,13 @@ export function DroppedMailDialog({ mail, onClose, onPromote }: DroppedMailDialo
 
   return (
     <Dialog
-      title={mail.subject?.trim() || "(no subject)"}
-      closeLabel="Close the dropped mail record"
+      title={mail.subject?.trim() || t("tickets.view.noSubject")}
+      closeLabel={t("tickets.dialogs.dropped.closeRecord")}
       onClose={onClose}
       meta={
         <>
-          {mail.fromEmail?.trim() || "Unknown sender"}
-          {mail.decidedAt ? ` · dropped ${formatRelativeTime(mail.decidedAt)}` : ""}
+          {mail.fromEmail?.trim() || t("tickets.panels.unknownSender")}
+          {mail.decidedAt ? ` · ${t("tickets.panels.irrelevant.droppedAgo", { when: formatRelativeTime(mail.decidedAt, t) })}` : ""}
         </>
       }
     >
@@ -54,8 +56,7 @@ export function DroppedMailDialog({ mail, onClose, onPromote }: DroppedMailDialo
           judgement about the email. */}
       {mail.failedOpen && (
         <p className={styles.warning} role="note">
-          The classifier failed on this email. The decision was taken by the fallback, not
-          by a reading of the message.
+          {t("tickets.dialogs.dropped.failedOpen")}
         </p>
       )}
 
@@ -68,9 +69,9 @@ export function DroppedMailDialog({ mail, onClose, onPromote }: DroppedMailDialo
           </pre>
           {mail.bodyExpiresAt && (
             <p className={styles.stamp}>
-              This text is kept for review only and is deleted{" "}
-              <time dateTime={mail.bodyExpiresAt}>{formatRelativeTime(mail.bodyExpiresAt)}</time>.
-              The decision record is kept.
+              {t("tickets.dialogs.dropped.keptFor")}{" "}
+              <time dateTime={mail.bodyExpiresAt}>{formatRelativeTime(mail.bodyExpiresAt, t)}</time>.{" "}
+              {t("tickets.dialogs.dropped.recordKept")}
             </p>
           )}
 
@@ -84,25 +85,19 @@ export function DroppedMailDialog({ mail, onClose, onPromote }: DroppedMailDialo
               again. */}
           <div className={styles.actions}>
             <Button variant="primary" size="sm" onClick={onPromote}>
-              Add as ticket
+              {t("tickets.panels.irrelevant.addAsTicket")}
             </Button>
-            <p className={styles.stamp}>
-              Threads this email into the queue and hands it to the agent. The gate&rsquo;s
-              decision record is kept, and mail from this sender is still dropped.
-            </p>
+            <p className={styles.stamp}>{t("tickets.dialogs.dropped.scope")}</p>
           </div>
         </>
       ) : expired ? (
         <p className={styles.placeholder}>
-          The text has passed its retention window and was deleted. The decision record is
-          kept indefinitely; only the message itself expires.
+          {t("tickets.dialogs.dropped.expired")}
         </p>
       ) : (
         <p className={styles.placeholder}>
-          No text was captured for this email. Decisions made before the body was stored can
-          be filled in from the mailbox — run <code>npm run spam:backfill</code> from{" "}
-          <code>agent/</code> — unless the message has since left the Inbox, in which case
-          the row&rsquo;s decision record is all there will ever be.
+          {t("tickets.dialogs.dropped.noText")} <code>npm run spam:backfill</code>{" "}
+          {t("tickets.dialogs.dropped.noTextFrom")} <code>agent/</code> {t("tickets.dialogs.dropped.noTextEnd")}
         </p>
       )}
     </Dialog>

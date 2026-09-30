@@ -3,6 +3,8 @@
 import { useId, useState } from "react";
 import type { ReactNode } from "react";
 import { ChevronDownIcon, SearchIcon } from "@/components/icons";
+import { useLocale } from "@/lib/i18n/client";
+import { formatNumber } from "@/lib/i18n/format";
 import styles from "./TicketSection.module.css";
 
 /** Each section searches its own table; see the note on the component. */
@@ -60,6 +62,7 @@ export function TicketSection({
   search,
   children,
 }: TicketSectionProps) {
+  const locale = useLocale();
   const [collapsed, setCollapsed] = useState(defaultCollapsed);
   const bodyId = useId();
 
@@ -78,7 +81,7 @@ export function TicketSection({
             className={`${styles.chevron} ${collapsed ? styles.chevronCollapsed : ""}`}
           />
           <span className={styles.title}>{title}</span>
-          <span className={styles.count}>{count.toLocaleString()}</span>
+          <span className={styles.count}>{formatNumber(count, locale)}</span>
           <span className={styles.description}>{description}</span>
         </button>
 

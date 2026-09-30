@@ -1,9 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ATTACHMENT_REASON_FALLBACK, fetchAttachmentReason } from "@/lib/attachment-reasons";
+import { ATTACHMENT_REASON_KEYS, fetchAttachmentReasonKey } from "@/lib/attachment-reasons";
 import { knowledgeErrorMessage } from "@/lib/api/knowledge";
 import { fetchTicketDetail } from "@/lib/api/tickets";
+import { useLocale, useT } from "@/lib/i18n/client";
+import { formatNumber } from "@/lib/i18n/format";
+import type { Locale } from "@/lib/i18n/locales";
+import type { Translate } from "@/lib/i18n/translate";
 import { formatRelativeTime } from "@/lib/relative-time";
 import type {
   InvestigationVerdict,
@@ -21,13 +25,7 @@ interface TicketDetailPanelProps {
   ticket: TicketListItem;
 }
 
-/** The badge beside the results heading. Three verdicts, three colours. */
-const VERDICT_LABELS: Record<InvestigationVerdict, string> = {
-  answerable: "Answerable",
-  needs_customer_input: "Needs customer input",
-  needs_human: "Needs a human",
-};
-
+/** The badge beside the results heading. Three verdicts, three colours; words at `tickets.view.verdict.*`. */
 const VERDICT_CLASSES: Record<InvestigationVerdict, string> = {
   answerable: styles.verdictAnswerable,
   needs_customer_input: styles.verdictAsk,
@@ -45,19 +43,19 @@ const VERDICT_CLASSES: Record<InvestigationVerdict, string> = {
  */
 const REACTION_PRODUCT: Record<
   TicketReactionReport["outcome"],
-  (report: TicketReactionReport) => string
+  (report: TicketReactionReport, t: Translate) => string
 > = {
   identified: (report) => report.product ?? "—",
-  ambiguous: (report) =>
+  ambiguous: (report, t) =>
     report.alternatives.length > 0
-      ? `Could be ${report.alternatives.join(", ")} — needs confirming`
-      : "Matched more than one product — needs confirming",
-  not_in_catalogue: (report) =>
+      ? t("tickets.dialogs.detail.reaction.couldBe", { items: report.alternatives.join(", ") })
+      : t("tickets.dialogs.detail.reaction.several"),
+  not_in_catalogue: (report, t) =>
     report.claimed
-      ? `“${report.claimed}” — not a product in the catalogue`
-      : "Not a product in the catalogue",
-  not_attributed: () => "The customer did not say which product",
-  unknown: () => "Not recorded",
+      ? t("tickets.dialogs.detail.reaction.notInCatalogueNamed", { name: report.claimed })
+      : t("tickets.dialogs.detail.reaction.notInCatalogue"),
+  not_attributed: (_report, t) => t("tickets.dialogs.detail.reaction.notSaid"),
+  unknown: (_report, t) => t("tickets.dialogs.detail.reaction.notRecorded"),
 };
 
 /**
@@ -125,6 +123,7 @@ function TrackingList({ parcels }: { parcels: TicketTracking[] }) {
 }
 
 export function TicketDetailPanel({ ticket }: TicketDetailPanelProps) {
+  const t = useT();
   const [detail, setDetail] = useState<TicketDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -170,10 +169,10 @@ export function TicketDetailPanel({ ticket }: TicketDetailPanelProps) {
     <div className={styles.panel}>
       <section className={styles.block}>
         <h3 className={styles.heading}>
-          Results
+          {t("tickets.dialogs.detail.results")}
           {results && (
             <span className={`${styles.verdict} ${VERDICT_CLASSES[results.verdict]}`}>
-              {VERDICT_LABELS[results.verdict]}
+              {t(`tickets.view.verdict.${results.verdict}`)}
             </span>
           )}
         </h3>
@@ -183,11 +182,10 @@ export function TicketDetailPanel({ ticket }: TicketDetailPanelProps) {
             {error}
           </p>
         ) : !detail ? (
-          <p className={styles.muted}>Loading…</p>
+          <p className={styles.muted}>{t("tickets.dialogs.detail.loading")}</p>
         ) : !results ? (
           <p className={styles.muted}>
-            The agent has not investigated this ticket. It is either still queued, not yet
-            categorised, or on a subject the agent has no tools for.
+            {t("tickets.dialogs.detail.notInvestigated")}
           </p>
         ) : (
           <>
@@ -196,9 +194,9 @@ export function TicketDetailPanel({ ticket }: TicketDetailPanelProps) {
                 latest reply describes an older conversation. */}
             {results.investigatedAt && (
               <p className={styles.stamp}>
-                Investigated{" "}
+                {t("tickets.panels.investigation.investigated")}{" "}
                 <time dateTime={results.investigatedAt}>
-                  {formatRelativeTime(results.investigatedAt)}
+                  {formatRelativeTime(results.investigatedAt, t)}
                 </time>
               </p>
             )}
@@ -211,7 +209,7 @@ export function TicketDetailPanel({ ticket }: TicketDetailPanelProps) {
                 ))}
               </ul>
             ) : (
-              <p className={styles.muted}>Nothing could be established from the tools available.</p>
+              <p className={styles.muted}>{t("tickets.panels.investigation.nothing")}</p>
             )}
 
             {/* THE FACTS UNDER THE FINDINGS. The lines above are the model's
@@ -270,15 +268,15 @@ export function TicketDetailPanel({ ticket }: TicketDetailPanelProps) {
           person, and a heading like "Cause" would quietly make it for them. */}
       {reaction && (
         <section className={styles.block}>
-          <h3 className={styles.heading}>Reported reaction</h3>
+          <h3 className={styles.heading}>{t("tickets.dialogs.detail.reportedReaction")}</h3>
           <dl className={styles.facts}>
             <div className={styles.fact}>
-              <dt>Product blamed</dt>
-              <dd>{REACTION_PRODUCT[reaction.outcome](reaction)}</dd>
+              <dt>{t("tickets.dialogs.detail.productBlamed")}</dt>
+              <dd>{REACTION_PRODUCT[reaction.outcome](reaction, t)}</dd>
             </div>
             {reaction.reaction && (
               <div className={styles.fact}>
-                <dt>Reaction described</dt>
+                <dt>{t("tickets.dialogs.detail.reactionDescribed")}</dt>
                 <dd>{reaction.reaction}</dd>
               </div>
             )}
@@ -288,24 +286,23 @@ export function TicketDetailPanel({ ticket }: TicketDetailPanelProps) {
                 whole answer above and repeating them reads as a bug. */}
             {reaction.outcome === "identified" && reaction.claimed && (
               <div className={styles.fact}>
-                <dt>Their words</dt>
+                <dt>{t("tickets.dialogs.detail.theirWords")}</dt>
                 <dd className={styles.muted}>“{reaction.claimed}”</dd>
               </div>
             )}
           </dl>
           <p className={styles.candidateNote}>
-            What the customer attributes their reaction to. Not an established cause — the
-            agent is barred from drawing one, and so is any reply.
+            {t("tickets.dialogs.detail.reactionNote")}
           </p>
         </section>
       )}
 
       <section className={styles.block}>
-        <h3 className={styles.heading}>Order</h3>
+        <h3 className={styles.heading}>{t("tickets.panels.section.order")}</h3>
         {orderNumber ? (
           <dl className={styles.facts}>
             <div className={styles.fact}>
-              <dt>Order</dt>
+              <dt>{t("tickets.panels.section.order")}</dt>
               <dd className={styles.order}>{orderNumber}</dd>
             </div>
 
@@ -321,7 +318,7 @@ export function TicketDetailPanel({ ticket }: TicketDetailPanelProps) {
                 dashboard would disagree with the first the day either changed. */}
             {order?.customerName && (
               <div className={styles.fact}>
-                <dt>Name on the order</dt>
+                <dt>{t("tickets.dialogs.detail.nameOnOrder")}</dt>
                 <dd>
                   {order.customerName}
                   {/* Masked at map time — the local part was destroyed on the
@@ -340,7 +337,7 @@ export function TicketDetailPanel({ ticket }: TicketDetailPanelProps) {
                 order has, and it is still worth seeing. */}
             {!order?.customerName && order?.contactEmail && (
               <div className={styles.fact}>
-                <dt>Order contact</dt>
+                <dt>{t("tickets.panels.order.contact")}</dt>
                 <dd className={styles.contactEmailOnly}>{order.contactEmail}</dd>
               </div>
             )}
@@ -356,7 +353,7 @@ export function TicketDetailPanel({ ticket }: TicketDetailPanelProps) {
                 the facts, not after them. */}
             {order?.channel && (
               <div className={styles.fact}>
-                <dt>Sales channel</dt>
+                <dt>{t("tickets.panels.order.channel")}</dt>
                 <dd>
                   <span className={styles.channelChip}>{order.channel}</span>
                 </dd>
@@ -365,14 +362,14 @@ export function TicketDetailPanel({ ticket }: TicketDetailPanelProps) {
 
             {order?.orderStatus && (
               <div className={styles.fact}>
-                <dt>Order status</dt>
+                <dt>{t("tickets.panels.order.status")}</dt>
                 <dd>{order.orderStatus}</dd>
               </div>
             )}
 
             {order && order.tracking.length > 0 && (
               <div className={styles.fact}>
-                <dt>Tracking number</dt>
+                <dt>{t("tickets.dialogs.detail.trackingNumber")}</dt>
                 <dd>
                   <TrackingList parcels={order.tracking} />
                 </dd>
@@ -381,7 +378,7 @@ export function TicketDetailPanel({ ticket }: TicketDetailPanelProps) {
 
             {order?.trackingStatus && (
               <div className={styles.fact}>
-                <dt>Tracking status</dt>
+                <dt>{t("tickets.panels.order.trackingStatus")}</dt>
                 <dd>{order.trackingStatus}</dd>
               </div>
             )}
@@ -394,29 +391,28 @@ export function TicketDetailPanel({ ticket }: TicketDetailPanelProps) {
              tool fetches it only in the branch where nothing was confirmed. */
           <>
             <p className={styles.candidateNote}>
-              No order number confirmed. Their most recent order, as a starting point —
-              the customer gave no number, so this may not be the one they mean.
+              {t("tickets.dialogs.detail.candidateNote")}
             </p>
             <dl className={`${styles.facts} ${styles.candidateFacts}`}>
               <div className={styles.fact}>
-                <dt>Last order</dt>
+                <dt>{t("tickets.panels.order.lastOrder")}</dt>
                 <dd className={styles.order}>{candidate.orderName}</dd>
               </div>
               {candidate.orderStatus && (
                 <div className={styles.fact}>
-                  <dt>Last order status</dt>
+                  <dt>{t("tickets.dialogs.detail.lastStatus")}</dt>
                   <dd>{candidate.orderStatus}</dd>
                 </div>
               )}
               {candidate.items.length > 0 && (
                 <div className={styles.fact}>
-                  <dt>Last order items</dt>
+                  <dt>{t("tickets.dialogs.detail.lastItems")}</dt>
                   <dd>{candidate.items.join(", ")}</dd>
                 </div>
               )}
               {candidate.tracking.length > 0 && (
                 <div className={styles.fact}>
-                  <dt>Last order tracking</dt>
+                  <dt>{t("tickets.dialogs.detail.lastTracking")}</dt>
                   <dd>
                     <TrackingList parcels={candidate.tracking} />
                   </dd>
@@ -424,7 +420,7 @@ export function TicketDetailPanel({ ticket }: TicketDetailPanelProps) {
               )}
               {candidate.trackingStatus && (
                 <div className={styles.fact}>
-                  <dt>Last order delivery</dt>
+                  <dt>{t("tickets.dialogs.detail.lastDelivery")}</dt>
                   <dd>{candidate.trackingStatus}</dd>
                 </div>
               )}
@@ -433,25 +429,25 @@ export function TicketDetailPanel({ ticket }: TicketDetailPanelProps) {
         ) : (
           /* Absent is not the same as "no order": the column is written only on a
              confirmed match between the order's email hash and the requester's. */
-          <p className={styles.muted}>No order number confirmed for this ticket.</p>
+          <p className={styles.muted}>{t("tickets.panels.order.none")}</p>
         )}
 
         {/* A bundle assembled weeks ago describes the order as it was then.
             Outside the list, because a `p` is not a valid child of a `dl`. */}
         {orderNumber && order?.resolvedAt && (
           <p className={styles.stamp}>
-            Shopify data read{" "}
-            <time dateTime={order.resolvedAt}>{formatRelativeTime(order.resolvedAt)}</time>
+            {t("tickets.panels.order.dataRead")}{" "}
+            <time dateTime={order.resolvedAt}>{formatRelativeTime(order.resolvedAt, t)}</time>
           </p>
         )}
       </section>
 
       <section className={styles.block}>
-        <h3 className={styles.heading}>Action</h3>
+        <h3 className={styles.heading}>{t("tickets.dialogs.detail.action")}</h3>
         {error || !detail ? (
           <p className={styles.muted}>—</p>
         ) : !results ? (
-          <p className={styles.action}>Triage this one by hand.</p>
+          <p className={styles.action}>{t("tickets.panels.triageByHand")}</p>
         ) : (
           <>
             <p className={styles.action}>{results.action}</p>
@@ -467,12 +463,7 @@ export function TicketDetailPanel({ ticket }: TicketDetailPanelProps) {
 }
 
 /** How the situation was reached, in the reader's words rather than a number. */
-const MATCH_WORDS: Record<string, (p: TicketPolicy) => string> = {
-  matched: (p) => `matched ${score(p.similarity)}`,
-  near: (p) => `near miss ${score(p.similarity)}, chosen by the agent`,
-  ambiguous: (p) => `two situations too close to call ${score(p.similarity)}`,
-  none: (p) => `nothing close enough ${score(p.similarity)}`,
-};
+const MATCH_KEYS = ["matched", "near", "ambiguous", "none"];
 
 const score = (similarity: number | null) =>
   similarity === null ? "" : `(${similarity.toFixed(2)})`;
@@ -495,44 +486,47 @@ const score = (similarity: number | null) =>
  * translated back before anybody could act on it.
  */
 function PolicyBlock({ policy }: { policy: TicketPolicy | null }) {
+  const t = useT();
   // No investigation ran at all: there is no decision to explain.
   if (!policy) {
     return null;
   }
-  const matchWord = policy.match ? MATCH_WORDS[policy.match]?.(policy) : null;
+  const matchWord = policy.match && MATCH_KEYS.includes(policy.match)
+    ? `${t(`tickets.panels.policy.match.${policy.match}`)} ${score(policy.similarity)}`.trim()
+    : null;
 
   return (
     <section className={styles.block}>
-      <h3 className={styles.heading}>Situation &amp; rule</h3>
+      <h3 className={styles.heading}>{t("tickets.panels.section.policy")}</h3>
 
       <dl className={styles.policy}>
-        <dt>Situation</dt>
+        <dt>{t("tickets.panels.field.situation")}</dt>
         <dd>
           {policy.situation ? (
             <code className={styles.policyKey}>{policy.situation}</code>
           ) : (
-            <span className={styles.muted}>None settled</span>
+            <span className={styles.muted}>{t("tickets.panels.policy.noneSettled")}</span>
           )}
           {/* The closest exemplar is worth seeing even when it lost: a situation
               that keeps coming second is the one missing from the corpus. */}
           {matchWord && (
             <span className={styles.policyNote}>
               {matchWord}
-              {!policy.situation && policy.closest ? ` — closest ${policy.closest}` : ""}
+              {!policy.situation && policy.closest ? ` — ${t("tickets.dialogs.detail.closest", { name: policy.closest })}` : ""}
             </span>
           )}
         </dd>
 
-        <dt>Rule</dt>
+        <dt>{t("tickets.panels.policy.rule")}</dt>
         <dd>
           {policy.rule ? (
             <code className={styles.policyKey}>{policy.rule}</code>
           ) : (
-            <span className={styles.muted}>No rule matched</span>
+            <span className={styles.muted}>{t("tickets.panels.policy.noRule")}</span>
           )}
           {policy.rule && (
             <span className={styles.policyNote}>
-              {policy.changedVerdict ? "changed the verdict" : "verdict unchanged"}
+              {policy.changedVerdict ? t("tickets.panels.policy.changed") : t("tickets.panels.policy.unchanged")}
               {policy.ruleVerdict && policy.ruleVerdict !== "selected"
                 ? ` · ${policy.ruleVerdict}`
                 : ""}
@@ -542,12 +536,12 @@ function PolicyBlock({ policy }: { policy: TicketPolicy | null }) {
 
         {(policy.route || policy.asks.length > 0 || policy.offerCode) && (
           <>
-            <dt>It asked for</dt>
+            <dt>{t("tickets.panels.policy.askedFor")}</dt>
             <dd>
               {[
-                policy.route ? `route to ${policy.route.replace(/_/g, " ")}` : null,
-                policy.asks.length > 0 ? `ask for ${policy.asks.join(", ").replace(/_/g, " ")}` : null,
-                policy.offerCode ? `offer ${policy.offerCode}` : null,
+                policy.route ? t("tickets.panels.policy.route", { to: policy.route.replace(/_/g, " ") }) : null,
+                policy.asks.length > 0 ? t("tickets.panels.policy.ask", { items: policy.asks.join(", ").replace(/_/g, " ") }) : null,
+                policy.offerCode ? t("tickets.panels.policy.offer", { code: policy.offerCode }) : null,
               ]
                 .filter(Boolean)
                 .join(" · ")}
@@ -580,6 +574,8 @@ function PolicyBlock({ policy }: { policy: TicketPolicy | null }) {
  * where somebody is about to want the other half.
  */
 function AttachmentsBlock({ attachments }: { attachments: TicketAttachments | null }) {
+  const t = useT();
+  const locale = useLocale();
   if (!attachments) return null;
 
   const { images, others, furniture, known, mentioned, matchedTerm } = attachments;
@@ -592,13 +588,13 @@ function AttachmentsBlock({ attachments }: { attachments: TicketAttachments | nu
 
   return (
     <section className={styles.block}>
-      <h3 className={styles.heading}>Attachments</h3>
+      <h3 className={styles.heading}>{t("tickets.panels.section.attachments")}</h3>
 
       {missing && (
         <p className={styles.missingPhoto}>
-          The customer mentions a photo
-          {matchedTerm && <> (<span className={styles.matchedTerm}>“{matchedTerm}”</span>)</>} but
-          nothing image-shaped arrived.
+          {t("tickets.panels.attach.mentions")}
+          {matchedTerm && <> (<span className={styles.matchedTerm}>“{matchedTerm}”</span>)</>}{" "}
+          {t("tickets.panels.attach.butNone")}
         </p>
       )}
 
@@ -606,8 +602,7 @@ function AttachmentsBlock({ attachments }: { attachments: TicketAttachments | nu
         /* The `attachments` column's null, surfaced. Saying "no photo" about a
            message whose own flag says otherwise is the one wrong answer here. */
         <p className={styles.muted}>
-          Something is attached, but its type was never recorded — this thread was ingested
-          before attachment metadata was fetched.
+          {t("tickets.panels.attach.unknownType")}
         </p>
       )}
 
@@ -616,8 +611,8 @@ function AttachmentsBlock({ attachments }: { attachments: TicketAttachments | nu
           {images.map((file, index) => (
             <li key={`${file.name ?? "image"}-${index}`}>
               <Photo file={file} />
-              <span className={styles.fileName}>{file.name ?? "Unnamed image"}</span>{" "}
-              <span className={styles.fileMeta}>{describeFile(file)}</span>
+              <span className={styles.fileName}>{file.name ?? t("tickets.panels.attach.unnamedImage")}</span>{" "}
+              <span className={styles.fileMeta}>{describeFile(file, t, locale)}</span>
             </li>
           ))}
         </ul>
@@ -627,8 +622,8 @@ function AttachmentsBlock({ attachments }: { attachments: TicketAttachments | nu
         <ul className={styles.files}>
           {others.map((file, index) => (
             <li key={`${file.name ?? "file"}-${index}`}>
-              <span className={styles.fileName}>{file.name ?? "Unnamed file"}</span>{" "}
-              <span className={styles.fileMeta}>{describeFile(file)}</span>
+              <span className={styles.fileName}>{file.name ?? t("tickets.panels.attach.unnamedFile")}</span>{" "}
+              <span className={styles.fileMeta}>{describeFile(file, t, locale)}</span>
             </li>
           ))}
         </ul>
@@ -636,8 +631,7 @@ function AttachmentsBlock({ attachments }: { attachments: TicketAttachments | nu
 
       {furniture > 0 && (
         <p className={styles.furnitureNote}>
-          {furniture} inline image{furniture === 1 ? "" : "s"} ignored (signature logos and
-          placeholders).
+          {t("tickets.panels.attach.ignored", { count: furniture })}
         </p>
       )}
     </section>
@@ -663,12 +657,15 @@ function AttachmentsBlock({ attachments }: { attachments: TicketAttachments | nu
  * operator nothing about whether to go looking in Outlook.
  */
 function Photo({ file }: { file: TicketAttachmentFile }) {
+  const t = useT();
   const [failed, setFailed] = useState(false);
   const [reason, setReason] = useState<string | null>(null);
 
   if (!file.src || failed) {
     return (
-      <span className={styles.photoMissing}>{reason ?? ATTACHMENT_REASON_FALLBACK}</span>
+      <span className={styles.photoMissing}>
+        {t(`tickets.panels.attachReason.${reason && ATTACHMENT_REASON_KEYS.includes(reason) ? reason : "fallback"}`)}
+      </span>
     );
   }
 
@@ -683,7 +680,7 @@ function Photo({ file }: { file: TicketAttachmentFile }) {
       <img
         className={styles.photo}
         src={file.src}
-        alt={file.name ?? "Photo attached by the customer"}
+        alt={file.name ?? t("tickets.panels.attach.photoAlt")}
         loading="lazy"
         // The reason travels as a response header and an `<img>` cannot read
         // one, so the failure path asks the route directly. Until it answers,
@@ -691,7 +688,7 @@ function Photo({ file }: { file: TicketAttachmentFile }) {
         onError={() => {
           setFailed(true);
           if (file.src) {
-            void fetchAttachmentReason(file.src).then(setReason);
+            void fetchAttachmentReasonKey(file.src).then(setReason);
           }
         }}
       />
@@ -705,16 +702,16 @@ function Photo({ file }: { file: TicketAttachmentFile }) {
  * The MIME subtype rather than the whole type: an operator reads "JPEG", not
  * "image/jpeg", and the prefix is already implied by the block it sits in.
  */
-function describeFile(file: TicketAttachmentFile): string {
+function describeFile(file: TicketAttachmentFile, t: Translate, locale: Locale): string {
   const subtype = file.contentType?.split("/")[1]?.toUpperCase() ?? null;
-  const parts = [subtype, formatBytes(file.size)].filter(Boolean);
+  const parts = [subtype, formatBytes(file.size, t, locale)].filter(Boolean);
   return parts.join(" · ");
 }
 
 /** Bytes as a person reads them. 0 is "size unknown", which is what Graph gives. */
-function formatBytes(size: number): string | null {
+function formatBytes(size: number, t: Translate, locale: Locale): string | null {
   if (!Number.isFinite(size) || size <= 0) return null;
-  if (size < 1024) return `${size} B`;
-  if (size < 1024 * 1024) return `${Math.round(size / 1024)} KB`;
-  return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+  if (size < 1024) return t("tickets.panels.attach.bytes", { n: size });
+  if (size < 1024 * 1024) return t("tickets.panels.attach.kilobytes", { n: Math.round(size / 1024) });
+  return t("tickets.panels.attach.megabytes", { n: formatNumber(size / (1024 * 1024), locale, { maximumFractionDigits: 1, minimumFractionDigits: 1 }) });
 }

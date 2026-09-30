@@ -406,6 +406,8 @@ function summariseActivity(row: any): TicketActivityEvent[] {
     title: `${toolLabel(call?.tool)} completed`,
     detail: call?.outcome ? String(call.outcome).replace(/_/g, " ") : null,
     kind: "lookup" as const,
+    tool: call?.tool ? String(call.tool) : null,
+    outcome: call?.outcome ? String(call.outcome) : null,
   }));
   return [
     ...lookups,
@@ -415,6 +417,7 @@ function summariseActivity(row: any): TicketActivityEvent[] {
       title: "Case analysis completed",
       detail: row.verdict ? VERDICT_ACTIVITY_LABELS[String(row.verdict)] ?? String(row.verdict) : null,
       kind: "investigation" as const,
+      verdict: row.verdict ? String(row.verdict) : null,
     },
   ];
 }
