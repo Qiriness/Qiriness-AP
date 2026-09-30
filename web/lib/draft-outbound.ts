@@ -1,3 +1,4 @@
+import type { Translate } from "@/lib/i18n/translate";
 import type { TicketDraft, TicketDraftOutbound } from "@/lib/types";
 
 /**
@@ -8,33 +9,35 @@ import type { TicketDraft, TicketDraftOutbound } from "@/lib/types";
  * APPROVING NEVER MEANS "SENT". It queues an outbound action; the worker checks
  * the case again and may refuse, and with OUTBOUND_STOP_BEFORE_SEND it stops at
  * a reply draft in Outlook. Only `sent_confirmed` is a sent reply.
+ *
+ * Wording lives in the dictionary (`tickets.panels.outbound.*`); this module
+ * picks the key.
  */
 
-/** Why the worker did not send, in the reviewer's words. Keys: CANCEL_REASONS. */
-const NOT_SENT_REASONS: Record<string, string> = {
-  case_moved: "the case changed after this was approved",
-  customer_wrote_again: "the customer wrote again",
-  already_answered: "somebody already replied",
-  draft_withdrawn: "the approval was withdrawn",
-  auto_send_off: "automatic sending is off",
-};
+/** Why the worker did not send. Keys: CANCEL_REASONS; unknown reasons print raw. */
+const KNOWN_NOT_SENT_REASONS = ["case_moved", "customer_wrote_again", "already_answered", "draft_withdrawn", "auto_send_off"];
 
 /** How far sending got, or null when nothing was asked. */
-export function outboundLine(outbound: TicketDraftOutbound | null): string | null {
+export function outboundLine(outbound: TicketDraftOutbound | null, t: Translate): string | null {
   if (!outbound) return null;
   switch (outbound.state) {
     case "approved":
-      return "Queued. The case is checked again before anything is created in the mailbox.";
+      return t("tickets.panels.outbound.approved");
     case "draft_created":
-      return "Reply draft created in the support mailbox (Drafts). Not sent yet.";
+      return t("tickets.panels.outbound.draftCreated");
     case "send_requested":
-      return "Sending — waiting for it to appear in Sent Items.";
+      return t("tickets.panels.outbound.sendRequested");
     case "sent_confirmed":
-      return "Sent.";
-    case "cancelled":
-      return `Not sent — ${NOT_SENT_REASONS[outbound.reason ?? ""] ?? outbound.reason ?? "a check refused it"}.`;
+      return t("tickets.panels.outbound.sent");
+    case "cancelled": {
+      const reason = outbound.reason ?? "";
+      const words = KNOWN_NOT_SENT_REASONS.includes(reason)
+        ? t(`tickets.panels.outbound.reason.${reason}`)
+        : reason || t("tickets.panels.outbound.reason.default");
+      return t("tickets.panels.outbound.cancelled", { reason: words });
+    }
     case "failed":
-      return `Sending failed (${outbound.reason ?? "unknown"}). Check Outlook before sending again.`;
+      return t("tickets.panels.outbound.failed", { reason: outbound.reason ?? t("tickets.panels.outbound.unknown") });
     default:
       return null;
   }
@@ -50,10 +53,10 @@ export function replyInFlight(draft: TicketDraft): boolean {
 }
 
 /** The primary button's label: it says what the click does on this server. */
-export function decisionLabel(draft: TicketDraft, kind: "approve" | "save"): string {
-  const verb = kind === "approve" ? "Approve" : "Save";
-  if (!draft.sendsOnApprove) return kind === "approve" ? "Approve" : "Save edit";
-  return draft.holdsInDrafts ? `${verb} & draft in Outlook` : `${verb} & send`;
+export function decisionLabel(draft: TicketDraft, kind: "approve" | "save", t: Translate): string {
+  if (!draft.sendsOnApprove) return t(kind === "approve" ? "tickets.panels.decision.approve" : "tickets.panels.decision.saveEdit");
+  if (draft.holdsInDrafts) return t(kind === "approve" ? "tickets.panels.decision.approveDraft" : "tickets.panels.decision.saveDraft");
+  return t(kind === "approve" ? "tickets.panels.decision.approveSend" : "tickets.panels.decision.saveSend");
 }
 
 /**
@@ -61,15 +64,11 @@ export function decisionLabel(draft: TicketDraft, kind: "approve" | "save"): str
  * to the next ticket. Worded from the draft the server returned, so it says
  * "queued" rather than "sent" — the worker has not run yet.
  */
-export function handedOffNotice(draft: TicketDraft, name: string): string {
+export function handedOffNotice(draft: TicketDraft, name: string, t: Translate): string {
   if (draft.outbound?.state === "cancelled" || draft.outbound?.state === "failed") {
-    return `Reply to ${name}: ${outboundLine(draft.outbound)}`;
+    return t("tickets.panels.handoff.refused", { name, line: outboundLine(draft.outbound, t) ?? "" });
   }
-  if (!draft.sendsOnApprove) {
-    return `Reply to ${name} approved. Sending from here is off, so send it from Outlook.`;
-  }
-  if (draft.holdsInDrafts) {
-    return `Reply to ${name} queued. It will appear in the support mailbox's Drafts folder, ready to send from Outlook.`;
-  }
-  return `Reply to ${name} queued for sending. The case is checked once more before it goes.`;
+  if (!draft.sendsOnApprove) return t("tickets.panels.handoff.approvedOff", { name });
+  if (draft.holdsInDrafts) return t("tickets.panels.handoff.queuedDrafts", { name });
+  return t("tickets.panels.handoff.queuedSend", { name });
 }

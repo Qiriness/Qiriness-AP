@@ -1117,9 +1117,16 @@ export interface TicketMessage {
 export interface TicketActivityEvent {
   id: string;
   at: string | null;
+  /** English fallback; the Tickets screen translates from `tool` / `verdict` when it knows them. */
   title: string;
   detail: string | null;
   kind: "investigation" | "lookup";
+  /** The tool's raw name, on a lookup. */
+  tool?: string | null;
+  /** The raw outcome, on a lookup. */
+  outcome?: string | null;
+  /** The raw verdict, on the case analysis. */
+  verdict?: string | null;
 }
 
 /**
@@ -1359,8 +1366,11 @@ export interface InsightsScope {
 
 export interface SeriesPoint {
   key: string;
+  /** English label and tooltip from the shared range module: the fallback when `grain` is absent. */
   label: string;
   title: string;
+  /** With `key`, lets the chart rebuild `label` and `title` in the reader's language. */
+  grain?: Grain;
   value: number | null;
   state: BucketState;
 }
@@ -1374,6 +1384,8 @@ export interface FreshnessItem {
   tone: FreshnessTone;
   /** The instant behind the text, for the tooltip. */
   at: string | null;
+  /** What the text says, for translation: the screen rebuilds it from `id` + `code` + `at`. */
+  code?: string;
 }
 
 /** When each source last moved: the edges every coverage decision is made against. */

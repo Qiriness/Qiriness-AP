@@ -48,3 +48,20 @@ export async function fetchAttachmentReason(src: string): Promise<string> {
     return ATTACHMENT_REASON_FALLBACK;
   }
 }
+
+/**
+ * The reasons the route can send, as dictionary keys (`tickets.panels.attachReason.<key>`).
+ * The sentences above stay for the screens not converted yet; converted screens
+ * translate the key themselves.
+ */
+export const ATTACHMENT_REASON_KEYS = Object.keys(ATTACHMENT_REASONS);
+
+/** Like `fetchAttachmentReason`, but returns the route's reason key (or null) for the caller to translate. */
+export async function fetchAttachmentReasonKey(src: string): Promise<string | null> {
+  try {
+    const response = await fetch(src, { method: "HEAD", cache: "no-store" });
+    return response.headers.get("X-Attachment-Reason");
+  } catch {
+    return null;
+  }
+}

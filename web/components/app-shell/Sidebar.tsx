@@ -18,15 +18,18 @@ import {
 } from "@/components/icons";
 import { TEAM_MEMBER } from "@/lib/demo-data";
 import { canUseManagementChat } from "../../../scripts/lib/dashboard-auth.mjs";
+import { useT } from "@/lib/i18n/client";
+import type { MessageKey } from "@/lib/i18n/en";
 import styles from "./Sidebar.module.css";
 
 interface NavItem {
-  label: string;
+  /** A `nav.*` key in the dictionary. */
+  labelKey: MessageKey;
   href: string;
   icon: ComponentType<{ size?: number }>;
   available: boolean;
   /** A chip beside the label, e.g. "Beta". */
-  chip?: string;
+  chipKey?: MessageKey;
   /** Drawn only for roles this admits. Absent means every role. */
   visibleTo?: (role: string | null) => boolean;
 }
@@ -35,23 +38,23 @@ const NAV: NavItem[] = [
   // The management chat. Hidden until the role is known, so the contact team
   // never sees a link that would only redirect them.
   {
-    label: "Home",
+    labelKey: "nav.home",
     href: "/home",
     icon: HomeIcon,
     available: true,
-    chip: "Beta",
+    chipKey: "nav.beta",
     visibleTo: (role) => canUseManagementChat(role),
   },
   // Points at the section, not at a panel. `isActive` is an exact match, so
   // every page under /insights passes "/insights" as its activeHref and the
   // panel tabs inside handle the rest.
-  { label: "Insights", href: "/insights", icon: InsightsIcon, available: true },
-  { label: "Tickets", href: "/tickets", icon: TicketIcon, available: true },
+  { labelKey: "nav.insights", href: "/insights", icon: InsightsIcon, available: true },
+  { labelKey: "nav.tickets", href: "/tickets", icon: TicketIcon, available: true },
   // `/orders/[id]` passes "/orders" as its activeHref, as Insights does.
-  { label: "Orders", href: "/orders", icon: OrdersIcon, available: true },
-  { label: "Agent Setup", href: "/agent-setup", icon: AgentIcon, available: true },
-  { label: "Conversations", href: "/conversations", icon: ChatIcon, available: true },
-  { label: "Settings", href: "/settings", icon: SettingsIcon, available: true },
+  { labelKey: "nav.orders", href: "/orders", icon: OrdersIcon, available: true },
+  { labelKey: "nav.agentSetup", href: "/agent-setup", icon: AgentIcon, available: true },
+  { labelKey: "nav.conversations", href: "/conversations", icon: ChatIcon, available: true },
+  { labelKey: "nav.settings", href: "/settings", icon: SettingsIcon, available: true },
 ];
 
 interface SidebarProps {
@@ -95,18 +98,19 @@ export function Sidebar({
   unfulfilledOrders = 0,
   role = null,
 }: SidebarProps) {
+  const t = useT();
   // Tickets is the queue to work, so it gets the warning colour; Conversations and
   // Orders are grey, present but not competing with it.
-  const badges: Record<string, { count: number; noun: string; state: string; muted: boolean }> = {
-    "/tickets": { count: openTickets, noun: "ticket", state: "still open", muted: false },
-    "/conversations": { count: openConversations, noun: "conversation", state: "still open", muted: true },
-    "/orders": { count: unfulfilledOrders, noun: "order", state: "waiting to ship", muted: true },
+  const badges: Record<string, { count: number; key: string; muted: boolean }> = {
+    "/tickets": { count: openTickets, key: "badge.tickets", muted: false },
+    "/conversations": { count: openConversations, key: "badge.conversations", muted: true },
+    "/orders": { count: unfulfilledOrders, key: "badge.orders", muted: true },
   };
 
   return (
     <nav
       className={`${styles.sidebar} ${collapsed ? styles.collapsed : ""}`}
-      aria-label="Primary"
+      aria-label={t("nav.primary")}
     >
       <div className={styles.brand}>
         <Image
@@ -131,17 +135,17 @@ export function Sidebar({
 
           if (!item.available) {
             return (
-              <li key={item.label}>
+              <li key={item.labelKey}>
                 <span
                   className={styles.navItem}
                   aria-disabled="true"
-                  title="Available soon"
+                  title={t("nav.availableSoon")}
                 >
                   <Icon size={19} />
                   {!collapsed && (
                     <>
-                      <span className={styles.navLabel}>{item.label}</span>
-                      <span className={styles.soon}>Soon</span>
+                      <span className={styles.navLabel}>{t(item.labelKey)}</span>
+                      <span className={styles.soon}>{t("nav.soon")}</span>
                     </>
                   )}
                 </span>
@@ -150,24 +154,24 @@ export function Sidebar({
           }
 
           return (
-            <li key={item.label}>
+            <li key={item.labelKey}>
               <Link
                 href={item.href}
                 className={`${styles.navItem} ${styles.navLink} ${
                   isActive ? styles.active : ""
                 }`}
                 aria-current={isActive ? "page" : undefined}
-                onClick={(event) => onNavigate?.(event, item.href, item.label)}
+                onClick={(event) => onNavigate?.(event, item.href, t(item.labelKey))}
               >
                 <Icon size={19} />
-                {!collapsed && <span className={styles.navLabel}>{item.label}</span>}
-                {!collapsed && item.chip && <span className={styles.chip}>{item.chip}</span>}
+                {!collapsed && <span className={styles.navLabel}>{t(item.labelKey)}</span>}
+                {!collapsed && item.chipKey && <span className={styles.chip}>{t(item.chipKey)}</span>}
                 {/* Hidden on the collapsed rail, with the label and chip: the
                     rail is icons only, and a number there crowds the icon. */}
                 {!collapsed && badge && badge.count > 0 && (
                   <span
                     className={`${styles.badge} ${badge.muted ? styles.badgeMuted : ""}`}
-                    title={`${badge.count} ${badge.noun}${badge.count === 1 ? "" : "s"} ${badge.state}`}
+                    title={t(badge.key, { count: badge.count })}
                   >
                     {badge.count}
                   </span>
@@ -184,7 +188,7 @@ export function Sidebar({
           href="https://qiriness.com"
           target="_blank"
           rel="noreferrer noopener"
-          title="Open the Qiriness store"
+          title={t("nav.openStore")}
         >
           <span className={styles.storeIcon}>
             <StoreIcon size={18} />
@@ -192,7 +196,7 @@ export function Sidebar({
           {!collapsed && (
             <span className={styles.storeText}>
               <span className={styles.storeName}>{TEAM_MEMBER.store}</span>
-              <span className={styles.storeMeta}>Shopify store</span>
+              <span className={styles.storeMeta}>{t("nav.shopifyStore")}</span>
             </span>
           )}
           {!collapsed && <ExternalLinkIcon size={15} className={styles.storeExternal} />}
@@ -205,7 +209,7 @@ export function Sidebar({
           aria-pressed={collapsed}
         >
           <CollapseIcon size={18} className={collapsed ? styles.flip : ""} />
-          {!collapsed && <span>Collapse</span>}
+          {!collapsed && <span>{t("nav.collapse")}</span>}
         </button>
       </div>
     </nav>

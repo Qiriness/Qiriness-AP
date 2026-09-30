@@ -54,7 +54,8 @@ export function describeFreshness(row, now = new Date(), rules = FRESHNESS_RULES
     label: 'Orders',
     text: ordersAt ? `synced ${formatAgo(ordersAt, now)}` : 'never synced',
     tone: ageHours(ordersAt, now) > rules.ordersStaleHours ? 'warn' : 'ok',
-    at: ordersAt
+    at: ordersAt,
+    code: ordersAt ? 'synced' : 'never'
   });
 
   const mailAt = row.mail_synced_through ?? null;
@@ -63,7 +64,8 @@ export function describeFreshness(row, now = new Date(), rules = FRESHNESS_RULES
     label: 'Email',
     text: mailAt ? `last message ${formatAgo(mailAt, now)}` : 'never synced',
     tone: ageHours(mailAt, now) > rules.mailStaleHours ? 'warn' : 'ok',
-    at: mailAt
+    at: mailAt,
+    code: mailAt ? 'lastMessage' : 'never'
   });
 
   const status = row.nightly_sync_status ?? null;
@@ -72,18 +74,22 @@ export function describeFreshness(row, now = new Date(), rules = FRESHNESS_RULES
     const finished = row.nightly_sync_finished_at ?? null;
     let text;
     let tone;
+    let code;
     if (status === 'processing') {
       const stuck = ageHours(started, now) > rules.syncStuckHours;
       text = stuck ? `started ${formatAgo(started, now)}, never finished` : `running since ${formatAgo(started, now)}`;
       tone = stuck ? 'error' : 'info';
+      code = stuck ? 'stuck' : 'running';
     } else if (status === 'failed' || status === 'error') {
       text = `failed ${formatAgo(finished ?? started, now)}`;
       tone = 'error';
+      code = 'failed';
     } else {
       text = `${status} ${formatAgo(finished ?? started, now)}`;
       tone = 'ok';
+      code = 'other';
     }
-    items.push({ id: 'sync', label: 'Nightly sync', text, tone, at: finished ?? started });
+    items.push({ id: 'sync', label: 'Nightly sync', text, tone, at: finished ?? started, code });
   }
 
   const topicsAt = row.topic_map_built_at ?? null;
@@ -93,7 +99,8 @@ export function describeFreshness(row, now = new Date(), rules = FRESHNESS_RULES
       label: 'Topic map',
       text: `built ${formatAgo(topicsAt, now)}`,
       tone: ageHours(topicsAt, now) > rules.topicMapStaleDays * 24 ? 'warn' : 'info',
-      at: topicsAt
+      at: topicsAt,
+      code: 'built'
     });
   }
 

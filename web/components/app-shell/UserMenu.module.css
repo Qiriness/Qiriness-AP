@@ -126,3 +126,73 @@
     padding-inline-end: var(--space-1);
   }
 }
+
+.langRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-2) var(--space-3);
+}
+.langLabel {
+  flex: 1;
+  color: var(--text-muted);
+  font-size: var(--text-body);
+}
+.langOption {
+  padding: 2px var(--space-2);
+  border: 1px solid var(--mist-050);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--text-strong);
+  font-size: var(--text-body);
+  cursor: pointer;
+}
+.langActive {
+  background: var(--mist-050);
+  font-weight: 600;
+}
+.langError {
+  display: block;
+  padding: 0 var(--space-3) var(--space-2);
+  color: var(--text-muted);
+  font-size: var(--text-body);
+}
+
+.spinner {
+  display: inline-block;
+  width: 0.85em;
+  height: 0.85em;
+  margin-inline-end: 0.35em;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  border-radius: 50%;
+  vertical-align: -0.1em;
+  animation: langSpin 0.7s linear infinite;
+}
+.avatar .spinner {
+  margin: 0;
+  width: 1em;
+  height: 1em;
+}
+.langOption:disabled {
+  cursor: progress;
+}
+.langOption:disabled:not(.langActive) {
+  opacity: 0.5;
+}
+.langStatus {
+  display: block;
+  padding: 0 var(--space-3) var(--space-2);
+  color: var(--text-muted);
+  font-size: var(--text-body);
+}
+@keyframes langSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .spinner {
+    animation-duration: 2s;
+  }
+}

@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useT } from "@/lib/i18n/client";
+import { LanguageSwitch } from "./LanguageSwitch";
 import styles from "./UserMenu.module.css";
 
 export interface Me {
@@ -28,6 +30,8 @@ export function UserMenu({ me }: { me: Me | null }) {
   const [open, setOpen] = useState(false);
   const [leaving, setLeaving] = useState(false);
   const root = useRef<HTMLDivElement>(null);
+  const t = useT();
+  const [switching, setSwitching] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -63,20 +67,23 @@ export function UserMenu({ me }: { me: Me | null }) {
         aria-expanded={open}
         onClick={() => setOpen((value) => !value)}
       >
-        <span className={styles.avatar}>{initials(me)}</span>
+        <span className={styles.avatar}>{switching ? <span className={styles.spinner} aria-hidden="true" /> : initials(me)}</span>
         <span className={styles.identity}>
           <span className={styles.name}>{name}</span>
-          <span className={styles.role}>{me.roleLabel}</span>
+          <span className={styles.role}>{t(`role.${me.role}`)}</span>
         </span>
       </button>
-      {open && (
-        <div className={styles.menu} role="menu">
+      {/* Always mounted, only hidden: the language switch keeps its state (and the
+          avatar its spinner) when the menu is closed mid-switch. */}
+      {(
+        <div className={styles.menu} role="menu" hidden={!open}>
           <div className={styles.menuHead}>
             <span className={styles.menuEmail}>{me.email}</span>
-            <span className={styles.menuRole}>{me.roleLabel}</span>
+            <span className={styles.menuRole}>{t(`role.${me.role}`)}</span>
           </div>
+          <LanguageSwitch onBusyChange={setSwitching} />
           <button type="button" role="menuitem" className={styles.menuItem} onClick={signOut} disabled={leaving}>
-            {leaving ? "Signing out…" : "Sign out"}
+            {leaving ? t("common.signingOut") : t("common.signOut")}
           </button>
         </div>
       )}

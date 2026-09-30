@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { Sidebar } from "./Sidebar";
 import { UserMenu, type Me } from "./UserMenu";
 import { HelpIcon } from "@/components/icons";
+import { useT } from "@/lib/i18n/client";
 import styles from "./AppShell.module.css";
 
 interface AppShellProps {
@@ -33,6 +34,7 @@ export function AppShell({ activeHref, children, openConversations, openTickets,
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [me, setMe] = useState<Me | null>(null);
   const router = useRouter();
+  const t = useT();
   const [pending, startTransition] = useTransition();
   const [target, setTarget] = useState<{ href: string; label: string } | null>(null);
 
@@ -113,7 +115,7 @@ export function AppShell({ activeHref, children, openConversations, openTickets,
         <button
           type="button"
           className={styles.scrim}
-          aria-label="Close navigation"
+          aria-label={t("nav.closeNavigation")}
           onClick={() => setDrawerOpen(false)}
         />
       )}
@@ -123,7 +125,7 @@ export function AppShell({ activeHref, children, openConversations, openTickets,
           <button
             type="button"
             className={styles.menuBtn}
-            aria-label="Open navigation"
+            aria-label={t("nav.openNavigation")}
             aria-expanded={drawerOpen}
             onClick={() => setDrawerOpen(true)}
           >
@@ -144,7 +146,7 @@ export function AppShell({ activeHref, children, openConversations, openTickets,
           <div className={styles.topbarActions}>
             <button type="button" className={styles.helpBtn}>
               <HelpIcon size={17} />
-              <span className={styles.helpLabel}>Help</span>
+              <span className={styles.helpLabel}>{t("nav.help")}</span>
             </button>
             <UserMenu me={me} />
           </div>
@@ -157,7 +159,7 @@ export function AppShell({ activeHref, children, openConversations, openTickets,
           <div className={styles.loadingLayer}>
             <p className={styles.loadingPill} role="status">
               <span className={styles.spinner} aria-hidden="true" />
-              {`Loading ${target.label}…`}
+              {t("nav.loading", { label: target.label })}
             </p>
           </div>
         ) : null}

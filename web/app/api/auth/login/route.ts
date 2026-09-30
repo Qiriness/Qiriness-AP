@@ -8,6 +8,7 @@ import {
   safeNextPath,
 } from "../../../../../scripts/lib/dashboard-auth.mjs";
 import { writeSession } from "@/lib/session-cookies";
+import { LOCALE_COOKIE, isLocale } from "@/lib/i18n/locales";
 
 export const dynamic = "force-dynamic";
 
@@ -97,5 +98,10 @@ export async function POST(request: Request) {
     { headers: { "Cache-Control": "no-store" } }
   );
   writeSession(response, result.session);
+  // The language they chose on another browser comes with them.
+  const savedLocale = user?.user_metadata?.locale;
+  if (isLocale(savedLocale)) {
+    response.cookies.set(LOCALE_COOKIE, savedLocale, { sameSite: "lax", path: "/", maxAge: 365 * 24 * 60 * 60 });
+  }
   return response;
 }
