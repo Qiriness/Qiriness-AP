@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useT } from "@/lib/i18n/client";
 import styles from "./OverviewView.module.css";
 
 /**
@@ -15,12 +16,13 @@ export function ReportDownload({
   months: { id: string; label: string }[];
   initial: string;
 }) {
+  const t = useT();
   const [month, setMonth] = useState(months.some((m) => m.id === initial) ? initial : months[0]?.id ?? "");
-  if (months.length === 0) return <p className={styles.muted}>No month has ended since the first synced order.</p>;
+  if (months.length === 0) return <p className={styles.muted}>{t("insights.shell.noMonthEnded")}</p>;
   return (
     <div className={styles.report}>
       <label className={styles.reportLabel}>
-        <span>Month</span>
+        <span>{t("insights.filter.month")}</span>
         <select className={styles.reportSelect} value={month} onChange={(event) => setMonth(event.target.value)}>
           {months.map((m) => (
             <option key={m.id} value={m.id}>
@@ -30,7 +32,7 @@ export function ReportDownload({
         </select>
       </label>
       <a className={styles.reportButton} href={`/api/insights/report?month=${month}`} download>
-        Download report (HTML)
+        {t("insights.shell.downloadReport")}
       </a>
     </div>
   );

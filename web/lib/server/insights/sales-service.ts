@@ -294,13 +294,13 @@ async function getBestProducts(
   if (marketplace) {
     return {
       ...empty,
-      notice: "Marketplace buyers are never VIPs: Amazon and Yves Rocher create a new customer for every order.",
+      notice: "insights.sales.noticeMarketplaceVip",
     };
   }
   if (!rule) {
     return {
       ...empty,
-      notice: "No VIP rule is set, so nobody is a VIP yet. Set one on Insights → Customers, or show all customers.",
+      notice: "insights.sales.noticeNoVipRule",
     };
   }
 
@@ -380,7 +380,7 @@ async function getProductCustomerMix(
     return {
       ...empty,
       blockedReason:
-        "Not measured on a marketplace: Amazon and Yves Rocher create a new customer for every order, so no buyer can be seen buying anything else.",
+        "insights.blocked.marketplaceBuyers",
     };
   }
 
@@ -397,7 +397,7 @@ async function getProductCustomerMix(
     return {
       ...empty,
       selected: selectedRef,
-      notice: "No VIP rule is set, so nobody is a VIP yet. Set one on Insights → Customers, or show all customers.",
+      notice: "insights.sales.noticeNoVipRule",
     };
   }
 

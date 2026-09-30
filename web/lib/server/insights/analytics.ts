@@ -85,11 +85,11 @@ export const EMPTY_TOTALS: StorefrontTotals = {
   convertedSessions: null,
 };
 
-export const BLOCKED_MARKETPLACE =
-  "Not measured for a marketplace: Shopify Analytics counts storefront traffic, and Amazon and Yves Rocher orders never touch the storefront.";
+// Reasons are dictionary keys: the screen translates them (a string that is not a key prints as it is).
+export const BLOCKED_MARKETPLACE = "insights.blocked.marketplace";
 
 /** What a card prints while its Shopify queries are waiting. */
-export const LOADING_REASON = "Loading from Shopify Analytics…";
+export const LOADING_REASON = "insights.kit.loadingShopify";
 
 /** Resolve, never reject: a failure becomes the reason the card prints. */
 async function part<T>(empty: T, read: () => Promise<T>): Promise<LivePart<T>> {
@@ -156,6 +156,7 @@ export function liveSalesSeries(ctx: InsightsContext): Promise<LivePart<SalesSer
           key,
           label: bucketLabel(key, ctx.range.grain) as string,
           title: bucketTitle(key, ctx.range.grain) as string,
+          grain: ctx.range.grain,
           value: states[i] === "missing" ? null : values.get(key) ?? empty,
           state: states[i],
         })
@@ -240,6 +241,7 @@ export function liveSessionSeries(ctx: InsightsContext): Promise<LivePart<Series
         key,
         label: bucketLabel(key, ctx.range.grain) as string,
         title: bucketTitle(key, ctx.range.grain) as string,
+        grain: ctx.range.grain,
         value: states[i] === "missing" ? null : folded.get(key) ?? 0,
         state: states[i],
       })

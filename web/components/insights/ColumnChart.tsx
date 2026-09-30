@@ -2,7 +2,7 @@
 
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import type { BucketState, ValueUnit } from "@/lib/types";
-import { formatTick, formatValue } from "@/lib/insights-format";
+import { useFormat, useT } from "@/lib/i18n/client";
 import styles from "./ColumnChart.module.css";
 
 /**
@@ -62,9 +62,12 @@ export function ColumnChart({
   unit,
   ariaLabel,
   height: baseHeight = 260,
-  missingLabel = "No data for this period",
+  missingLabel = "insights.charts.noDataPeriod",
   xTitle,
 }: Props) {
+  const t = useT();
+  const fmt = useFormat();
+  const signed = (value: number) => `${value > 0 ? "+" : value < 0 ? "−" : ""}${fmt.integer(Math.abs(Math.round(value)))}`;
   const wrapRef = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(720);
   // The root font size over the 16px base: >1 on large screens (globals.css),
@@ -104,7 +107,7 @@ export function ColumnChart({
     const hi = Math.ceil(max / step) * step;
     const ticks: number[] = [];
     for (let t = lo; t <= hi + step / 1000; t += step) ticks.push(Number(t.toPrecision(12)));
-    const left = Math.max(36, ...ticks.map((t) => formatTick(unit, t).length * 7 * scale + 14));
+    const left = Math.max(36, ...ticks.map((tick) => fmt.tick(unit, tick).length * 7 * scale + 14));
     const plotW = Math.max(10, width - left - PAD.right);
     const plotH = height - PAD.top - bottom;
     const band = plotW / Math.max(1, data.length);
@@ -113,7 +116,7 @@ export function ColumnChart({
     const x = (i: number) => left + band * (i + 0.5);
     const every = Math.max(1, Math.ceil(LABEL_GAP / band));
     return { ticks, left, plotW, plotH, band, colW, y, x, every, hi, lo };
-  }, [data, width, height, unit, bottom, scale]);
+  }, [data, width, height, unit, bottom, scale, fmt]);
 
   const { ticks, left, plotW, plotH, band, colW, y, x, every } = g;
   const zero = y(0);
@@ -197,11 +200,11 @@ export function ColumnChart({
             <rect x={left + band * active} y={PAD.top} width={band} height={plotH} className={styles.hover} />
           ) : null}
 
-          {ticks.map((t) => (
-            <g key={t}>
-              <line x1={left} x2={left + plotW} y1={y(t)} y2={y(t)} className={t === 0 ? styles.axis : styles.grid} />
-              <text x={left - 10} y={y(t)} className={styles.tick} textAnchor="end" dominantBaseline="middle">
-                {formatTick(unit, t)}
+          {ticks.map((tick) => (
+            <g key={tick}>
+              <line x1={left} x2={left + plotW} y1={y(tick)} y2={y(tick)} className={tick === 0 ? styles.axis : styles.grid} />
+              <text x={left - 10} y={y(tick)} className={styles.tick} textAnchor="end" dominantBaseline="middle">
+                {fmt.tick(unit, tick)}
               </text>
             </g>
           ))}
@@ -281,19 +284,19 @@ export function ColumnChart({
           <div className={styles.tooltip} style={{ left: tipLeft }} role="status">
             <span className={styles.tipTitle}>{activeDatum.title}</span>
             {activeDatum.state === "missing" ? (
-              <span className={styles.tipNote}>{missingLabel}</span>
+              <span className={styles.tipNote}>{t(missingLabel)}</span>
             ) : (
               <>
                 {series.map((s, idx) => (
                   <span key={s.label} className={styles.tipRow}>
                     <span className={styles.tipKey} style={{ background: s.color }} aria-hidden="true" />
-                    <strong>{formatValue(unit, activeDatum.segments[idx] ?? 0)}</strong> {s.label}
+                    <strong>{fmt.value(unit, activeDatum.segments[idx] ?? 0)}</strong> {s.label}
                   </span>
                 ))}
                 {negativeSeries ? (
                   <span className={styles.tipRow}>
                     <span className={styles.tipKey} style={{ background: negativeSeries.color }} aria-hidden="true" />
-                    <strong>{formatValue(unit, activeDatum.negative ?? 0)}</strong> {negativeSeries.label}
+                    <strong>{fmt.value(unit, activeDatum.negative ?? 0)}</strong> {negativeSeries.label}
                   </span>
                 ) : null}
                 {lineSeries ? (
@@ -303,7 +306,7 @@ export function ColumnChart({
                   </span>
                 ) : null}
                 {activeDatum.note ? <span className={styles.tipNote}>{activeDatum.note}</span> : null}
-                {activeDatum.state === "partial" ? <span className={styles.tipNote}>Period not complete</span> : null}
+                {activeDatum.state === "partial" ? <span className={styles.tipNote}>{t("insights.charts.partial")}</span> : null}
               </>
             )}
           </div>
@@ -314,7 +317,7 @@ export function ColumnChart({
         <caption>{ariaLabel}</caption>
         <thead>
           <tr>
-            <th scope="col">Period</th>
+            <th scope="col">{t("insights.charts.period")}</th>
             {legend.map((s) => (
               <th key={s.label} scope="col">
                 {s.label}
@@ -327,13 +330,13 @@ export function ColumnChart({
             <tr key={`t-${d.key}`}>
               <th scope="row">{d.title}</th>
               {d.state === "missing" ? (
-                <td colSpan={legend.length}>{missingLabel}</td>
+                <td colSpan={legend.length}>{t(missingLabel)}</td>
               ) : (
                 <>
                   {series.map((s, idx) => (
-                    <td key={s.label}>{formatValue(unit, d.segments[idx] ?? 0)}</td>
+                    <td key={s.label}>{fmt.value(unit, d.segments[idx] ?? 0)}</td>
                   ))}
-                  {negativeSeries ? <td>{formatValue(unit, d.negative ?? 0)}</td> : null}
+                  {negativeSeries ? <td>{fmt.value(unit, d.negative ?? 0)}</td> : null}
                   {lineSeries ? <td>{signed(d.line ?? 0)}</td> : null}
                 </>
               )}
@@ -353,10 +356,6 @@ function roundedTop(x: number, y: number, w: number, h: number, r: number): stri
 function roundedBottom(x: number, y: number, w: number, h: number, r: number): string {
   const rr = Math.min(r, h, w / 2);
   return `M${x},${y}H${x + w}V${y + h - rr}Q${x + w},${y + h} ${x + w - rr},${y + h}H${x + rr}Q${x},${y + h} ${x},${y + h - rr}Z`;
-}
-
-function signed(value: number): string {
-  return `${value > 0 ? "+" : value < 0 ? "−" : ""}${Math.abs(Math.round(value)).toLocaleString("en-GB")}`;
 }
 
 function niceStep(rough: number): number {

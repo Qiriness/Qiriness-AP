@@ -2,7 +2,8 @@
 
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import type { SeriesPoint, ValueUnit } from "@/lib/types";
-import { formatTick, formatValue } from "@/lib/insights-format";
+import { useFormat, useLocale, useT } from "@/lib/i18n/client";
+import { bucketLabelL, bucketTitleL } from "@/lib/insights-labels";
 import styles from "./TimeSeriesChart.module.css";
 
 /**
@@ -40,8 +41,13 @@ export function TimeSeriesChart({
   ariaLabel,
   height: baseHeight = 280,
   threshold,
-  missingLabel = "No data for this period",
+  missingLabel = "insights.charts.noDataPeriod",
 }: Props) {
+  const t = useT();
+  const locale = useLocale();
+  const fmt = useFormat();
+  const pointLabel = (p: SeriesPoint) => (p.grain ? bucketLabelL(p.key, p.grain, locale) : p.label);
+  const pointTitle = (p: SeriesPoint) => (p.grain ? bucketTitleL(p.key, p.grain, t, locale) : p.title);
   const wrapRef = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(880);
   // The root font size over the 16px base: >1 on large screens (globals.css),
@@ -73,7 +79,7 @@ export function TimeSeriesChart({
     const rawMax = Math.max(threshold?.value ?? 0, ...values, 0);
     const ticks = niceTicks(rawMax);
     const max = ticks[ticks.length - 1] || 1;
-    const left = Math.max(40, ...ticks.map((t) => formatTick(unit, t).length * 7 * scale + 14));
+    const left = Math.max(40, ...ticks.map((tick) => fmt.tick(unit, tick).length * 7 * scale + 14));
     const plotW = Math.max(10, width - left - PAD.right);
     const plotH = height - PAD.top - PAD.bottom;
     const band = plotW / Math.max(1, points.length);
@@ -81,7 +87,7 @@ export function TimeSeriesChart({
     const y = (v: number) => PAD.top + plotH - (v / max) * plotH;
     const every = Math.max(1, Math.ceil(LABEL_GAP / band));
     return { ticks, max, left, plotW, plotH, band, x, y, every };
-  }, [points, width, height, unit, threshold?.value, scale]);
+  }, [points, width, height, unit, threshold?.value, scale, fmt]);
 
   const { ticks, left, plotW, plotH, band, x, y, every } = geometry;
   const base = PAD.top + plotH;
@@ -158,11 +164,11 @@ export function TimeSeriesChart({
           ) : null
         )}
 
-        {ticks.map((t) => (
-          <g key={t}>
-            <line x1={left} x2={left + plotW} y1={y(t)} y2={y(t)} className={t === 0 ? styles.axis : styles.grid} />
-            <text x={left - 10} y={y(t)} className={styles.tick} textAnchor="end" dominantBaseline="middle">
-              {formatTick(unit, t)}
+        {ticks.map((tick) => (
+          <g key={tick}>
+            <line x1={left} x2={left + plotW} y1={y(tick)} y2={y(tick)} className={tick === 0 ? styles.axis : styles.grid} />
+            <text x={left - 10} y={y(tick)} className={styles.tick} textAnchor="end" dominantBaseline="middle">
+              {fmt.tick(unit, tick)}
             </text>
           </g>
         ))}
@@ -222,7 +228,7 @@ export function TimeSeriesChart({
           const shown = i % every === 0 || (last && i % every >= Math.ceil(every * 0.6));
           return shown ? (
             <text key={`x-${p.key}`} x={x(i)} y={height - 8} className={styles.xLabel} textAnchor="middle">
-              {p.label}
+              {pointLabel(p)}
             </text>
           ) : null;
         })}
@@ -235,13 +241,13 @@ export function TimeSeriesChart({
       {activePoint ? (
         <div className={styles.tooltip} style={{ left: tooltipLeft }} role="status">
           <span className={styles.tipValue}>
-            {activePoint.state === "missing" ? "—" : formatValue(unit, activePoint.value)}
+            {activePoint.state === "missing" ? "—" : fmt.value(unit, activePoint.value)}
           </span>
-          <span className={styles.tipTitle}>{activePoint.title}</span>
+          <span className={styles.tipTitle}>{pointTitle(activePoint)}</span>
           {activePoint.state === "missing" ? (
-            <span className={styles.tipNote}>{missingLabel}</span>
+            <span className={styles.tipNote}>{t(missingLabel)}</span>
           ) : activePoint.state === "partial" ? (
-            <span className={styles.tipNote}>Period not complete</span>
+            <span className={styles.tipNote}>{t("insights.charts.partial")}</span>
           ) : null}
         </div>
       ) : null}
@@ -252,8 +258,8 @@ export function TimeSeriesChart({
         <tbody>
           {points.map((p) => (
             <tr key={`t-${p.key}`}>
-              <th scope="row">{p.title}</th>
-              <td>{p.state === "missing" ? missingLabel : formatValue(unit, p.value)}</td>
+              <th scope="row">{pointTitle(p)}</th>
+              <td>{p.state === "missing" ? t(missingLabel) : fmt.value(unit, p.value)}</td>
             </tr>
           ))}
         </tbody>

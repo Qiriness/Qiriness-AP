@@ -23,7 +23,7 @@ export default function CustomersInsightsPage({ searchParams }: { searchParams: 
       scope={{
         range: true,
         platform: false,
-        platformReason: "Per-person figures leave out Amazon and Yves Rocher, which create one customer per order",
+        platformReason: "insights.customers.platformReason",
       }}
       searchParams={searchParams}
       render={async (ctx) => {

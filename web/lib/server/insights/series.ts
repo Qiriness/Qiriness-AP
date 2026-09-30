@@ -40,6 +40,7 @@ export function toSeries<R extends { bucket: unknown }>(
     key,
     label: bucketLabel(key, range.grain),
     title: bucketTitle(key, range.grain),
+    grain: range.grain,
     value: states[i] === "missing" ? null : value(filled[i]),
     state: states[i],
   }));

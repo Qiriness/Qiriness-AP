@@ -7,10 +7,11 @@ import {
   SEGMENT_METRICS,
   SEGMENT_OPERATORS,
   SEGMENT_WINDOW_MONTHS,
-  describeSegment,
   validateSegment,
 } from "../../../scripts/lib/segment-finder.mjs";
-import { euros, percent } from "./InsightsKit";
+import { useFormat, useLocale, useT } from "@/lib/i18n/client";
+import { intlTag } from "@/lib/i18n/locales";
+import { describeSegmentL, segmentError } from "@/lib/segment-messages";
 import t from "./tables.module.css";
 import styles from "./SegmentFinder.module.css";
 
@@ -36,11 +37,14 @@ const INITIAL_ROWS: Row[] = [
  * because the answer names people and every search is logged.
  */
 export function SegmentFinder() {
+  const tr = useT();
+  const locale = useLocale();
   const [windowMonths, setWindowMonths] = useState(String(SEGMENT_WINDOW_MONTHS.default));
   const [rows, setRows] = useState<Row[]>(INITIAL_ROWS);
   const [connectors, setConnectors] = useState<SegmentConnector[]>(["and"]);
   const [result, setResult] = useState<SegmentFinderResult | null>(null);
   const [resultFor, setResultFor] = useState<string | null>(null);
+  const [resultDescription, setResultDescription] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const nextKey = useRef(INITIAL_ROWS.length + 1);
@@ -51,7 +55,7 @@ export function SegmentFinder() {
     connectors,
   };
   const checked = validateSegment(input);
-  const description = checked.ok ? describeSegment(checked.segment) : null;
+  const description = checked.ok ? describeSegmentL(checked.segment, tr, locale) : null;
   const signature = JSON.stringify(input);
   const stale = result !== null && resultFor !== signature;
 
@@ -83,13 +87,14 @@ export function SegmentFinder() {
       });
       const payload = await response.json();
       if (!response.ok) {
-        setError(payload.error ?? "Could not find this segment.");
+        setError(payload.error ?? tr("insights.customers.finder.couldNot"));
         return;
       }
       setResult(payload as SegmentFinderResult);
       setResultFor(signature);
+      setResultDescription(description);
     } catch {
-      setError("Could not find this segment.");
+      setError(tr("insights.customers.finder.couldNot"));
     } finally {
       setLoading(false);
     }
@@ -99,9 +104,9 @@ export function SegmentFinder() {
     <section className={styles.card} aria-labelledby="segment-finder-title">
       <header className={styles.head}>
         <h2 id="segment-finder-title" className={styles.title}>
-          Segment finder
+          {tr("insights.customers.finder")}
         </h2>
-        <span className={styles.state}>Shopify customers; Amazon and Yves Rocher cannot be tied to a person</span>
+        <span className={styles.state}>{tr("insights.customers.finder.scope")}</span>
       </header>
 
       <form
@@ -112,9 +117,9 @@ export function SegmentFinder() {
         }}
       >
         <div className={styles.window}>
-          <span>Count orders and spend over the last</span>
+          <span>{tr("insights.customers.finder.countOver")}</span>
           <label className={styles.field}>
-            <span className={styles.srOnly}>Time range in months</span>
+            <span className={styles.srOnly}>{tr("insights.customers.finder.rangeMonths")}</span>
             <input
               type="number"
               inputMode="numeric"
@@ -126,7 +131,7 @@ export function SegmentFinder() {
               className={`${styles.input} ${styles.narrow}`}
             />
           </label>
-          <span>months.</span>
+          <span>{tr("insights.customers.finder.months")}</span>
         </div>
 
         <ol className={styles.rules}>
@@ -135,7 +140,7 @@ export function SegmentFinder() {
             return (
               <li key={row.key} className={styles.ruleItem}>
                 {index > 0 ? (
-                  <div className={styles.connector} role="group" aria-label={`Between conditions ${index} and ${index + 1}`}>
+                  <div className={styles.connector} role="group" aria-label={tr("insights.customers.finder.between", { a: index, b: index + 1 })}>
                     {(["and", "or"] as const).map((option) => (
                       <button
                         key={option}
@@ -146,7 +151,7 @@ export function SegmentFinder() {
                           setConnectors((current) => current.map((c, i) => (i === index - 1 ? option : c)))
                         }
                       >
-                        {option.toUpperCase()}
+                        {tr(`insights.customers.finder.${option}`)}
                       </button>
                     ))}
                   </div>
@@ -154,7 +159,7 @@ export function SegmentFinder() {
 
                 <div className={styles.rule}>
                   <label className={styles.metricField}>
-                    <span className={styles.srOnly}>Condition {index + 1}: what to compare</span>
+                    <span className={styles.srOnly}>{tr("insights.customers.finder.conditionWhat", { n: index + 1 })}</span>
                     <select
                       className={styles.select}
                       value={row.metric}
@@ -162,21 +167,21 @@ export function SegmentFinder() {
                     >
                       {SEGMENT_METRICS.map((m) => (
                         <option key={m.id} value={m.id}>
-                          {m.windowed ? `${m.label} (last ${windowMonths || "N"} months)` : m.label}
+                          {m.windowed ? tr("insights.customers.finder.metricWindow", { label: tr(`insights.customers.finder.metric.${m.id}`), months: windowMonths || "N" }) : tr(`insights.customers.finder.metric.${m.id}`)}
                         </option>
                       ))}
                     </select>
                   </label>
 
-                  <div className={styles.operator} role="group" aria-label={`Condition ${index + 1}: comparison`}>
+                  <div className={styles.operator} role="group" aria-label={tr("insights.customers.finder.conditionCompare", { n: index + 1 })}>
                     {SEGMENT_OPERATORS.map((o) => (
                       <button
                         key={o.id}
                         type="button"
                         className={`${styles.operatorBtn} ${row.op === o.id ? styles.operatorOn : ""}`}
                         aria-pressed={row.op === o.id}
-                        aria-label={o.label}
-                        title={o.label}
+                        aria-label={tr(`insights.customers.finder.op.${o.id}`)}
+                        title={tr(`insights.customers.finder.op.${o.id}`)}
                         onClick={() => update(row.key, { op: o.id as SegmentOperator })}
                       >
                         {o.symbol}
@@ -185,7 +190,7 @@ export function SegmentFinder() {
                   </div>
 
                   <label className={styles.field}>
-                    <span className={styles.srOnly}>Condition {index + 1}: value</span>
+                    <span className={styles.srOnly}>{tr("insights.customers.finder.conditionValue", { n: index + 1 })}</span>
                     {metric.unit === "euro" ? (
                       <span className={styles.prefix} aria-hidden="true">
                         €
@@ -208,8 +213,8 @@ export function SegmentFinder() {
                     className={styles.remove}
                     onClick={() => removeRow(index)}
                     disabled={rows.length <= 1}
-                    aria-label={`Remove condition ${index + 1}`}
-                    title="Remove this condition"
+                    aria-label={tr("insights.customers.finder.remove", { n: index + 1 })}
+                    title={tr("insights.customers.finder.removeTitle")}
                   >
                     ×
                   </button>
@@ -221,102 +226,106 @@ export function SegmentFinder() {
 
         <div className={styles.actions}>
           <button type="button" className={styles.add} onClick={addRow} disabled={rows.length >= MAX_SEGMENT_CONDITIONS}>
-            + Add condition
+            {tr("insights.customers.finder.add")}
           </button>
           <button type="submit" className={styles.find} disabled={!checked.ok || loading}>
-            {loading ? "Finding…" : "Find customers"}
+            {loading ? tr("insights.customers.finder.finding") : tr("insights.customers.finder.find")}
           </button>
         </div>
 
         <p className={styles.preview} role="status">
           {checked.ok ? (
             <>
-              <span className={styles.previewLabel}>Customers where</span> {description}
+              <span className={styles.previewLabel}>{tr("insights.customers.finder.where")}</span> {description}
             </>
           ) : (
-            <span className={styles.error}>{checked.error}</span>
+            <span className={styles.error}>{segmentError(checked.error, tr)}</span>
           )}
         </p>
       </form>
 
       {error ? <p className={styles.error}>{error}</p> : null}
 
-      {result ? <SegmentResult result={result} stale={stale} /> : null}
+      {result ? <SegmentResult result={result} stale={stale} description={resultDescription ?? result.description} /> : null}
     </section>
   );
 }
 
-function SegmentResult({ result, stale }: { result: SegmentFinderResult; stale: boolean }) {
+function SegmentResult({ result, stale, description }: { result: SegmentFinderResult; stale: boolean; description: string }) {
+  const tr = useT();
+  const locale = useLocale();
+  const { euros, integer, percent } = useFormat();
   const lastOrder = useMemo(
     () => (iso: string | null) =>
-      iso ? new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }) : "Never",
-    []
+      iso ? new Date(iso).toLocaleDateString(intlTag(locale), { day: "numeric", month: "short", year: "numeric" }) : tr("insights.customers.finder.never"),
+    [locale, tr]
   );
+  const window = tr("insights.customers.finder.lastMonths", { count: result.windowMonths, n: result.windowMonths });
 
   return (
     <div className={`${styles.result} ${stale ? styles.stale : ""}`}>
-      {stale ? <p className={styles.staleNote}>The conditions changed since this search — find again to update.</p> : null}
-      <p className={styles.resultFor}>{result.description}</p>
+      {stale ? <p className={styles.staleNote}>{tr("insights.customers.finder.stale")}</p> : null}
+      <p className={styles.resultFor}>{description}</p>
 
       <dl className={styles.stats}>
         <div>
-          <dt>Customers</dt>
-          <dd>{result.matched.toLocaleString("en-GB")}</dd>
+          <dt>{tr("insights.sales.customers")}</dt>
+          <dd>{integer(result.matched)}</dd>
           <span>
-            {percent(result.matched, result.baseCustomers)} of {result.baseCustomers.toLocaleString("en-GB")} on file ·{" "}
-            {percent(Math.min(result.matched, result.baseBuyers), result.baseBuyers)} of buyers
+            {tr("insights.customers.finder.ofOnFile", { pct: percent(result.matched, result.baseCustomers), n: integer(result.baseCustomers) })} ·{" "}
+            {tr("insights.customers.finder.ofBuyers", { pct: percent(Math.min(result.matched, result.baseBuyers), result.baseBuyers) })}
           </span>
         </div>
         <div>
-          <dt>On the newsletter</dt>
-          <dd>{result.matchedOnMarketingList.toLocaleString("en-GB")}</dd>
-          <span>{percent(result.matchedOnMarketingList, result.matched)} of this segment</span>
+          <dt>{tr("insights.customers.finder.onNewsletter")}</dt>
+          <dd>{integer(result.matchedOnMarketingList)}</dd>
+          <span>{tr("insights.customers.finder.ofSegment", { pct: percent(result.matchedOnMarketingList, result.matched) })}</span>
         </div>
         <div>
-          <dt>Spent, last {result.windowMonths === 1 ? "month" : `${result.windowMonths} months`}</dt>
+          <dt>{tr("insights.customers.finder.spentLast", { window })}</dt>
           <dd>{euros(result.matchedSpend)}</dd>
-          <span>Net of refunds</span>
+          <span>{tr("insights.customers.finder.netRefunds")}</span>
         </div>
         <div>
-          <dt>Lifetime spend</dt>
+          <dt>{tr("insights.customers.sort.spend")}</dt>
           <dd>{euros(result.matchedLifetimeSpend)}</dd>
           <span>
-            {result.matched > 0 ? `${euros(result.matchedLifetimeSpend / result.matched)} per customer` : "—"}
+            {result.matched > 0 ? tr("insights.customers.finder.perCustomer", { amount: euros(result.matchedLifetimeSpend / result.matched) }) : "—"}
           </span>
         </div>
       </dl>
 
       {result.members.length === 0 ? (
-        <p className={styles.empty}>No customer matches these conditions.</p>
+        <p className={styles.empty}>{tr("insights.customers.finder.noMatch")}</p>
       ) : (
         <>
           <div className={t.wrap}>
             <table className={t.table}>
               <thead>
                 <tr>
-                  <th scope="col">Customer</th>
+                  <th scope="col">{tr("insights.fulfilment.open.customer")}</th>
                   <th scope="col" className={t.n}>
-                    Orders
+                    {tr("insights.overview.orders")}
                   </th>
                   <th scope="col" className={t.n}>
-                    Spent
+                    {tr("insights.customers.finder.metric.spend")}
                   </th>
                   <th scope="col" className={t.n}>
-                    Lifetime spend
+                    {tr("insights.customers.sort.spend")}
                   </th>
-                  <th scope="col">Last order</th>
-                  <th scope="col">Newsletter</th>
+                  <th scope="col">{tr("insights.customers.finder.lastOrder")}</th>
+                  <th scope="col">{tr("insights.customers.finder.newsletter")}</th>
                 </tr>
               </thead>
               <tbody>
                 {result.members.map((m) => (
                   <tr key={m.customerId}>
-                    <th scope="row">{m.name ?? <span className={t.muted}>No name on file</span>}</th>
-                    <td className={t.n}>{m.orders.toLocaleString("en-GB")}</td>
+                    <th scope="row">{m.name ?? <span className={t.muted}>{tr("insights.fulfilment.open.noName")}</span>}</th>
+                    <td className={t.n}>{integer(m.orders)}</td>
                     <td className={t.n}>{euros(m.spend, { cents: true })}</td>
                     <td className={t.n}>{euros(m.lifetimeSpend, { cents: true })}</td>
                     <td>{lastOrder(m.lastOrderAt)}</td>
-                    <td>{m.onMarketingList ? "Subscribed" : <span className={t.muted}>—</span>}</td>
+                    <td>{m.onMarketingList ? tr("insights.customers.finder.subscribed") : <span className={t.muted}>—</span>}</td>
                   </tr>
                 ))}
               </tbody>
@@ -324,9 +333,9 @@ function SegmentResult({ result, stale }: { result: SegmentFinderResult; stale: 
           </div>
           <p className={styles.caption}>
             {result.matched > result.memberLimit
-              ? `The ${result.memberLimit} with the highest lifetime spend, of ${result.matched.toLocaleString("en-GB")}.`
-              : `All ${result.matched.toLocaleString("en-GB")}, highest lifetime spend first.`}{" "}
-            Orders and Spent cover the last {result.windowMonths === 1 ? "month" : `${result.windowMonths} months`}.
+              ? tr("insights.customers.finder.topOf", { limit: result.memberLimit, n: integer(result.matched) })
+              : tr("insights.customers.finder.allOf", { n: integer(result.matched) })}{" "}
+            {tr("insights.customers.finder.cover", { window })}
           </p>
         </>
       )}

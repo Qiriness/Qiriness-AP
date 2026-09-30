@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { NumText, PercentText } from "./KitText";
 import styles from "./SplitBar.module.css";
 
 export interface SplitPart {
@@ -30,8 +31,8 @@ export function SplitBar({ parts, total }: { parts: SplitPart[]; total: number }
                 {part.label}
               </span>
               <span className={styles.figures}>
-                <span className={styles.share}>{total > 0 ? `${(share * 100).toFixed(1)}%` : "—"}</span>
-                <span className={styles.value}>{part.display ?? part.value.toLocaleString("en-GB")}</span>
+                <span className={styles.share}>{total > 0 ? <PercentText value={share * 100} digits={1} /> : "—"}</span>
+                <span className={styles.value}>{part.display ?? <NumText value={part.value} />}</span>
               </span>
             </div>
             <span className={styles.track}>

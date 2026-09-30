@@ -1,15 +1,6 @@
 import type { FulfilmentCarrier, FulfilmentPanel } from "@/lib/types";
-import {
-  BarList,
-  BlockedCard,
-  Card,
-  DeltaChip,
-  Grid,
-  KpiCard,
-  euros,
-  hours,
-  percent,
-} from "./InsightsKit";
+import { getFormat, getT } from "@/lib/i18n/server";
+import { BarList, BlockedCard, Card, DeltaChip, Grid, KpiCard } from "./InsightsKit";
 import { InventoryTable, inventoryAside } from "./InventoryCard";
 import { OpenOrders } from "./OpenOrders";
 import { TimeSeriesChart } from "./TimeSeriesChart";
@@ -21,44 +12,46 @@ import t from "./tables.module.css";
  * how many, and — once a carrier feed exists — how long they take to arrive.
  */
 export function FulfilmentView({ panel, compareLabel }: { panel: FulfilmentPanel; compareLabel: string }) {
+  const tr = getT();
+  const { euros, hours, integer, percent, percentOf } = getFormat();
   const { current, previous } = panel.summary;
   const lateShare = current.measured ? (current.over72h / current.measured) * 100 : null;
   const previousLate = previous && previous.measured ? (previous.over72h / previous.measured) * 100 : null;
-  const grain = perGrain(panel.orders);
+  const grain = tr(`insights.sales.per.${perGrain(panel.orders)}`);
 
   return (
     <>
-      <Grid pin="headline" label="Fulfilment headline figures">
+      <Grid pin="headline" label={tr("insights.fulfilment.headline")}>
         <KpiCard
-          label="Orders"
-          value={current.orders.toLocaleString("en-GB")}
+          label={tr("insights.overview.orders")}
+          value={integer(current.orders)}
           delta={<DeltaChip current={current.orders} previous={previous?.orders} polarity="up" compareLabel={compareLabel} />}
           sub={[
-            { label: "Shipped", value: current.measured.toLocaleString("en-GB") },
-            { label: "Cancelled", value: current.cancelledOrders.toLocaleString("en-GB") },
+            { label: tr("insights.fulfilment.shipped"), value: integer(current.measured) },
+            { label: tr("insights.sales.cancelled"), value: integer(current.cancelledOrders) },
           ]}
         />
         <KpiCard
-          label="Median time to ship"
+          label={tr("insights.fulfilment.median")}
           value={hours(current.p50Hours)}
           delta={
             <DeltaChip current={current.p50Hours} previous={previous?.p50Hours} polarity="down" compareLabel={compareLabel} />
           }
           sub={[
-            { label: "90th percentile", value: hours(current.p90Hours) },
-            { label: "Average", value: hours(current.meanHours) },
+            { label: tr("insights.fulfilment.p90"), value: hours(current.p90Hours) },
+            { label: tr("insights.fulfilment.average"), value: hours(current.meanHours) },
           ]}
         />
         <KpiCard
-          label="Shipped after 3 days"
-          value={lateShare === null ? "—" : `${lateShare.toFixed(1)}%`}
+          label={tr("insights.fulfilment.after3")}
+          value={lateShare === null ? "—" : percentOf(lateShare, 1)}
           tone={lateShare !== null && lateShare > 10 ? "bad" : undefined}
           delta={<DeltaChip current={lateShare} previous={previousLate} polarity="down" points compareLabel={compareLabel} />}
-          sub={[{ label: "Orders past 72 h", value: `${current.over72h.toLocaleString("en-GB")} of ${current.measured.toLocaleString("en-GB")}` }]}
+          sub={[{ label: tr("insights.fulfilment.past72"), value: tr("insights.fulfilment.ofTotal", { n: integer(current.over72h), total: integer(current.measured) }) }]}
         />
         <KpiCard
-          label="Shipped without tracking"
-          value={current.shippedWithoutTracking.toLocaleString("en-GB")}
+          label={tr("insights.fulfilment.noTracking")}
+          value={integer(current.shippedWithoutTracking)}
           tone={current.shippedWithoutTracking > 0 ? "warn" : undefined}
           delta={
             <DeltaChip
@@ -68,91 +61,91 @@ export function FulfilmentView({ panel, compareLabel }: { panel: FulfilmentPanel
               compareLabel={compareLabel}
             />
           }
-          sub={[{ label: "Share of shipped", value: percent(current.shippedWithoutTracking, current.measured) }]}
+          sub={[{ label: tr("insights.fulfilment.shareOfShipped"), value: percent(current.shippedWithoutTracking, current.measured) }]}
         />
       </Grid>
 
-      <Grid min={100} pin="open-orders" label="Orders waiting to ship">
+      <Grid min={100} pin="open-orders" label={tr("insights.fulfilment.waiting")}>
         <Card
-          title="Orders waiting to ship"
-          aside={<span>Now, as of the last order sync — not cut by the date range · names and emails, do not share</span>}
+          title={tr("insights.fulfilment.waiting")}
+          aside={<span>{tr("insights.fulfilment.waitingAside")}</span>}
         >
           <OpenOrders orders={panel.openOrders} vipRuleSet={panel.vipRuleSet} />
         </Card>
       </Grid>
 
-      <Grid min={100} pin="inventory" label="Inventory exceptions">
-        <Card title="Inventory exceptions" aside={<span>{inventoryAside(panel.inventory)}</span>}>
+      <Grid min={100} pin="inventory" label={tr("insights.overview.inventory")}>
+        <Card title={tr("insights.overview.inventory")} aside={<span>{inventoryAside(panel.inventory, tr)}</span>}>
           <InventoryTable inventory={panel.inventory} />
         </Card>
       </Grid>
 
-      <Grid min={100} pin="orders-chart" label="Orders chart">
-        <Card title={`Orders ${grain}`}>
+      <Grid min={100} pin="orders-chart" label={tr("insights.fulfilment.ordersChart")}>
+        <Card title={tr("insights.fulfilment.ordersPer", { grain })}>
           <TimeSeriesChart
             points={panel.orders}
             unit="count"
-            ariaLabel={`Orders ${grain}`}
-            missingLabel="Not synced from Shopify yet"
+            ariaLabel={tr("insights.fulfilment.ordersPer", { grain })}
+            missingLabel="insights.sales.notSynced"
           />
         </Card>
       </Grid>
 
-      <Grid min={26} pin="timing" label="Time to ship">
-        <Card title={`Median time to ship, ${grain}`}>
+      <Grid min={26} pin="timing" label={tr("insights.fulfilment.timeToShip")}>
+        <Card title={tr("insights.fulfilment.medianPer", { grain })}>
           <TimeSeriesChart
             points={panel.medianHours}
             unit="hours"
-            ariaLabel={`Median time from order to dispatch, ${grain}`}
+            ariaLabel={tr("insights.fulfilment.medianAria", { grain })}
             height={240}
-            threshold={{ value: 72, label: "3 days" }}
-            missingLabel="Not synced from Shopify yet"
+            threshold={{ value: 72, label: tr("insights.fulfilment.threeDays") }}
+            missingLabel="insights.sales.notSynced"
           />
         </Card>
-        <Card title="How long orders take to ship">
+        <Card title={tr("insights.fulfilment.howLong")}>
           <BarList
-            ariaLabel="Orders by time to ship"
+            ariaLabel={tr("insights.fulfilment.byTime")}
             data={panel.buckets.map((b) => ({
               key: b.bucket,
-              label: b.bucket,
+              label: b.waiting ? tr("insights.fulfilment.notShipped") : b.bucket,
               value: b.orders,
               emphasis: b.late || b.waiting,
               // The waiting bar is a count of open orders, not a share of the
               // shipped ones, so it carries no percentage of that denominator.
               display: b.waiting
-                ? b.orders.toLocaleString("en-GB")
-                : `${b.orders.toLocaleString("en-GB")}  ·  ${percent(b.orders, current.measured, 0)}`,
+                ? integer(b.orders)
+                : `${integer(b.orders)}  ·  ${percent(b.orders, current.measured, 0)}`,
               title: b.waiting
-                ? `${b.orders} orders placed in this range have not shipped yet`
-                : `${b.orders} orders shipped in ${b.bucket}`,
+                ? tr("insights.fulfilment.notShippedHint", { count: b.orders })
+                : tr("insights.fulfilment.shippedIn", { count: b.orders, bucket: b.bucket }),
             }))}
           />
         </Card>
       </Grid>
 
-      <Grid pin="returns" label="Refunds and delivery">
+      <Grid pin="returns" label={tr("insights.fulfilment.refundsRow")}>
         <KpiCard
-          label="Refunded orders"
-          value={current.refundedOrders.toLocaleString("en-GB")}
-          unit={`of ${current.orders.toLocaleString("en-GB")}`}
+          label={tr("insights.fulfilment.refundedOrders")}
+          value={integer(current.refundedOrders)}
+          unit={tr("insights.fulfilment.of", { total: integer(current.orders) })}
           sub={[
-            { label: "Refunded", value: euros(current.refundedAmount) },
-            { label: "Returns opened", value: current.returnsOpened.toLocaleString("en-GB") },
+            { label: tr("insights.sales.refunded"), value: euros(current.refundedAmount) },
+            { label: tr("insights.fulfilment.returnsOpened"), value: integer(current.returnsOpened) },
           ]}
         />
         {panel.hasDeliveryData ? null : (
           <>
-            <BlockedCard label="Median delivery time" reason="No carrier scan events reach Shopify" />
-            <BlockedCard label="Delivered after 4 days" reason="Needs the same carrier feed" />
-            <BlockedCard label="Parcels stuck in transit" reason="Needs intermediate carrier scans" />
+            <BlockedCard label={tr("insights.fulfilment.deliveryMedian")} reason="insights.fulfilment.noScans" />
+            <BlockedCard label={tr("insights.fulfilment.deliveredAfter4")} reason="insights.fulfilment.needsFeed" />
+            <BlockedCard label={tr("insights.fulfilment.stuck")} reason="insights.fulfilment.needsScans" />
           </>
         )}
       </Grid>
 
-      <Grid min={100} pin="carriers" label="Carriers">
-        <Card title="Carriers">
+      <Grid min={100} pin="carriers" label={tr("insights.fulfilment.carriers")}>
+        <Card title={tr("insights.fulfilment.carriers")}>
           {panel.carriers.length === 0 ? (
-            <p className={t.muted}>No shipment with a carrier in this range.</p>
+            <p className={t.muted}>{tr("insights.fulfilment.noCarrier")}</p>
           ) : (
             <CarrierTable rows={panel.carriers} />
           )}
@@ -162,11 +155,7 @@ export function FulfilmentView({ panel, compareLabel }: { panel: FulfilmentPanel
   );
 }
 
-const OUTCOMES: { key: "lost" | "damaged" | "late"; label: string }[] = [
-  { key: "lost", label: "Lost" },
-  { key: "damaged", label: "Damaged" },
-  { key: "late", label: "Delivered late" },
-];
+const OUTCOMES: ("lost" | "damaged" | "late")[] = ["lost", "damaged", "late"];
 
 /**
  * `Contacted support` counts orders, not threads, and only reaches the threads
@@ -174,23 +163,25 @@ const OUTCOMES: { key: "lost" | "damaged" | "late"; label: string }[] = [
  * and late are placeholders nothing writes yet: dashes, never zeros.
  */
 function CarrierTable({ rows }: { rows: FulfilmentCarrier[] }) {
+  const tr = getT();
+  const { hours, integer, percent } = getFormat();
   const total = rows.reduce((sum, c) => sum + c.shipments, 0);
   return (
     <div className={t.wrap}>
       <table className={t.table}>
         <thead>
           <tr>
-            <th scope="col">Carrier</th>
-            <th scope="col" className={t.n}>Shipments</th>
-            <th scope="col" className={t.n}>Share</th>
-            <th scope="col" className={t.n}>Median to ship</th>
-            <th scope="col" className={t.n}>Past 3 days</th>
-            <th scope="col" className={t.n} title="Orders with a ticket whose order number was confirmed — a floor">
-              Contacted support
+            <th scope="col">{tr("insights.fulfilment.carrier")}</th>
+            <th scope="col" className={t.n}>{tr("insights.fulfilment.shipments")}</th>
+            <th scope="col" className={t.n}>{tr("insights.sales.share")}</th>
+            <th scope="col" className={t.n}>{tr("insights.fulfilment.medianToShip")}</th>
+            <th scope="col" className={t.n}>{tr("insights.fulfilment.past3")}</th>
+            <th scope="col" className={t.n} title={tr("insights.fulfilment.contactedHint")}>
+              {tr("insights.fulfilment.contacted")}
             </th>
             {OUTCOMES.map((o) => (
-              <th key={o.key} scope="col" className={t.n} title="Needs a carrier delivery feed — not measured yet">
-                {o.label}
+              <th key={o} scope="col" className={t.n} title={tr("insights.fulfilment.needsCarrierFeed")}>
+                {tr(`insights.fulfilment.outcome.${o}`)}
               </th>
             ))}
           </tr>
@@ -199,20 +190,20 @@ function CarrierTable({ rows }: { rows: FulfilmentCarrier[] }) {
           {rows.map((c) => (
             <tr key={c.carrier}>
               <th scope="row">{c.carrier}</th>
-              <td className={t.n}>{c.shipments.toLocaleString("en-GB")}</td>
+              <td className={t.n}>{integer(c.shipments)}</td>
               <td className={t.n}>{percent(c.shipments, total)}</td>
               <td className={t.n}>{hours(c.p50Hours)}</td>
               <td className={t.n}>
-                {c.over72h.toLocaleString("en-GB")} <span className={t.muted}>({percent(c.over72h, c.shipments)})</span>
+                {integer(c.over72h)} <span className={t.muted}>({percent(c.over72h, c.shipments)})</span>
               </td>
               <td className={t.n}>
-                {c.ordersWithTicket.toLocaleString("en-GB")}{" "}
+                {integer(c.ordersWithTicket)}{" "}
                 <span className={t.muted}>({percent(c.ordersWithTicket, c.shipments)})</span>
               </td>
               {OUTCOMES.map((o) => (
-                <td key={o.key} className={`${t.n} ${t.pending}`}>
+                <td key={o} className={`${t.n} ${t.pending}`}>
                   <span aria-hidden="true">—</span>
-                  <span className={t.srOnly}>{o.label}: not measured yet</span>
+                  <span className={t.srOnly}>{tr("insights.fulfilment.outcomeNotMeasured", { label: tr(`insights.fulfilment.outcome.${o}`) })}</span>
                 </td>
               ))}
             </tr>

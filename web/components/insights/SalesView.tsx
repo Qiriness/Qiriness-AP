@@ -4,7 +4,8 @@ import { CountrySales } from "./CountrySales";
 import { ProductCustomerMixCard } from "./ProductCustomerMixCard";
 import { ProductPairs } from "./ProductPairs";
 import { ProductPerformance } from "./ProductPerformance";
-import { Card, DeltaChip, Grid, KpiCard, euros } from "./InsightsKit";
+import { getFormat, getT } from "@/lib/i18n/server";
+import { Card, DeltaChip, Grid, KpiCard } from "./InsightsKit";
 import { SplitBar } from "./SplitBar";
 import { TimeSeriesChart } from "./TimeSeriesChart";
 import { perGrain } from "./grain";
@@ -22,82 +23,84 @@ const PLATFORM_COLORS: Record<string, string> = {
  * revenue leads, then who bought and where, then the curve, then what sold.
  */
 export function SalesView({ panel, compareLabel }: { panel: SalesPanel; compareLabel: string }) {
+  const t = getT();
+  const { euros, integer } = getFormat();
   const { current, previous } = panel.summary;
   const paidOrders = current.orders - current.cancelledOrders;
   const previousPaid = previous ? previous.orders - previous.cancelledOrders : null;
   const basket = paidOrders > 0 ? current.revenue / paidOrders : null;
   const previousBasket = previous && previousPaid ? previous.revenue / previousPaid : null;
-  const grain = perGrain(panel.revenue);
+  const grain = t(`insights.sales.per.${perGrain(panel.revenue)}`);
   const platformRevenue = panel.platforms.reduce((sum, p) => sum + p.revenue, 0);
   const mix = panel.customerMix;
 
   return (
     <>
-      <Grid min={17} pin="headline" label="Revenue, orders and customer mix">
+      <Grid min={17} pin="headline" label={t("insights.sales.headlineRow")}>
         <KpiCard
           hero
           span={2}
-          label="Revenue"
+          label={t("insights.sales.revenue")}
           value={euros(current.revenue, { cents: true })}
           delta={<DeltaChip current={current.revenue} previous={previous?.revenue} polarity="up" compareLabel={compareLabel} />}
           sub={[
-            { label: "Average per day", value: euros(current.revenue / panel.days, { cents: true }) },
+            { label: t("insights.sales.avgPerDay"), value: euros(current.revenue / panel.days, { cents: true }) },
             // NOT Shopify's AOV, which is net sales over orders: this revenue
             // is Shopify's TOTAL sales, VAT and shipping included. Overview
             // carries the comparable figure.
-            { label: "Total sales ÷ orders", value: euros(basket, { cents: true }) },
+            { label: t("insights.overview.aovFallback"), value: euros(basket, { cents: true }) },
             {
-              label: "Refunded",
-              value: current.refundedAmount > 0 ? euros(current.refundedAmount, { cents: true }) : "0 €",
+              label: t("insights.sales.refunded"),
+              value: current.refundedAmount > 0 ? euros(current.refundedAmount, { cents: true }) : euros(0),
             },
           ]}
         />
         <KpiCard
-          label="Orders"
-          value={paidOrders.toLocaleString("en-GB")}
+          label={t("insights.overview.orders")}
+          value={integer(paidOrders)}
           delta={<DeltaChip current={paidOrders} previous={previousPaid} polarity="up" compareLabel={compareLabel} />}
           sub={[
             {
-              label: "Basket change",
+              label: t("insights.sales.basketChange"),
               value:
                 basket !== null && previousBasket !== null
                   ? `${basket >= previousBasket ? "+" : "−"}${euros(Math.abs(basket - previousBasket), { cents: true })}`
                   : "—",
             },
-            { label: "Cancelled", value: current.cancelledOrders.toLocaleString("en-GB") },
+            { label: t("insights.sales.cancelled"), value: integer(current.cancelledOrders) },
           ]}
         />
-        <Card title="New vs returning">
+        <Card title={t("insights.sales.newVsReturning")}>
           {mix ? (
             <SplitBar
               total={mix.newCustomerOrders + mix.returningCustomerOrders}
               parts={[
                 {
                   key: "new",
-                  label: `New customers (${mix.newCustomers})`,
+                  label: t("insights.sales.newCustomers", { n: mix.newCustomers }),
                   value: mix.newCustomerOrders,
                   color: "var(--chart-1)",
-                  display: `${mix.newCustomerOrders} orders`,
+                  display: t("insights.sales.ordersCount", { count: mix.newCustomerOrders }),
                 },
                 {
                   key: "returning",
-                  label: `Returning (${mix.returningCustomers})`,
+                  label: t("insights.sales.returning", { n: mix.returningCustomers }),
                   value: mix.returningCustomerOrders,
                   color: "var(--chart-3)",
-                  display: `${mix.returningCustomerOrders} orders`,
+                  display: t("insights.sales.ordersCount", { count: mix.returningCustomerOrders }),
                 },
               ]}
             />
           ) : (
             <p className={styles.note}>
-              Marketplaces create a new customer record for every order, so new and returning cannot be told apart.
+              {t("insights.sales.marketplaceNote")}
             </p>
           )}
         </Card>
       </Grid>
 
-      <Grid min={17} pin="platforms" label="Revenue by platform">
-        <Card title="Revenue by platform" span={2}>
+      <Grid min={17} pin="platforms" label={t("insights.sales.byPlatform")}>
+        <Card title={t("insights.sales.byPlatform")} span={2}>
           <SplitBar
             total={platformRevenue}
             parts={panel.platforms.map((p) => ({
@@ -108,32 +111,32 @@ export function SalesView({ panel, compareLabel }: { panel: SalesPanel; compareL
               display: (
                 <>
                   {euros(p.revenue, { cents: true })}{" "}
-                  <span className={styles.dim}>· {p.orders} orders</span>
+                  <span className={styles.dim}>· {t("insights.sales.ordersCount", { count: p.orders })}</span>
                 </>
               ),
             }))}
           />
         </Card>
         <KpiCard
-          label="Units sold"
-          value={panel.products.global.products.reduce((sum, p) => sum + p.units, 0).toLocaleString("en-GB")}
-          sub={[{ label: "Products sold", value: panel.products.global.products.length.toLocaleString("en-GB") }]}
+          label={t("insights.overview.units")}
+          value={integer(panel.products.global.products.reduce((sum, p) => sum + p.units, 0))}
+          sub={[{ label: t("insights.sales.productsSold"), value: integer(panel.products.global.products.length) }]}
         />
       </Grid>
 
-      <Grid min={100} pin="revenue-chart" label="Revenue chart">
-        <Card title={`Revenue ${grain}`}>
-          <TimeSeriesChart points={panel.revenue} unit="euro" ariaLabel={`Revenue ${grain}`} height={320} missingLabel="Not synced from Shopify yet" />
+      <Grid min={100} pin="revenue-chart" label={t("insights.sales.chart")}>
+        <Card title={t("insights.sales.revenuePer", { grain })}>
+          <TimeSeriesChart points={panel.revenue} unit="euro" ariaLabel={t("insights.sales.revenuePer", { grain })} height={320} missingLabel="insights.sales.notSynced" />
         </Card>
       </Grid>
 
       {/* The pin id stays `best-products` through the rename: changing it would
           forget the pin for anyone who had set one (PinBoard.tsx). */}
-      <Grid min={30} pin="best-products" label="Product performance and collection mix">
-        <Card title="Product performance" span={2} aside={<span>vs {compareLabel}</span>}>
+      <Grid min={30} pin="best-products" label={t("insights.sales.productRow")}>
+        <Card title={t("insights.sales.productPerformance")} span={2} aside={<span>{t("insights.kit.vs", { label: compareLabel })}</span>}>
           <ProductPerformance products={panel.products} compareLabel={compareLabel} />
         </Card>
-        <Card title="Collection mix" aside={<span>Collections overlap</span>}>
+        <Card title={t("insights.sales.collectionMix")} aside={<span>{t("insights.sales.collectionsOverlap")}</span>}>
           <CollectionMix
             collections={panel.collections}
             productRevenue={panel.productRevenue}
@@ -142,17 +145,17 @@ export function SalesView({ panel, compareLabel }: { panel: SalesPanel; compareL
         </Card>
       </Grid>
 
-      <Grid min={17} pin="countries-pairs" label="Sales by country and bought together">
-        <Card title="Sales by country">
+      <Grid min={17} pin="countries-pairs" label={t("insights.sales.countriesRow")}>
+        <Card title={t("insights.sales.byCountry")}>
           <CountrySales countries={panel.countries} />
         </Card>
-        <Card title="Bought together" span={2}>
+        <Card title={t("insights.sales.boughtTogether")} span={2}>
           <ProductPairs groups={panel.pairs} />
         </Card>
       </Grid>
 
-      <Grid min={100} pin="product-customer-mix" label="Who buys this product">
-        <Card title="Who buys this product">
+      <Grid min={100} pin="product-customer-mix" label={t("insights.sales.whoBuys")}>
+        <Card title={t("insights.sales.whoBuys")}>
           <ProductCustomerMixCard mix={panel.productCustomerMix} />
         </Card>
       </Grid>

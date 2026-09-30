@@ -1,5 +1,7 @@
 import type { ReactNode } from "react";
 import { change } from "../../../scripts/lib/insights-range.mjs";
+import { Tx } from "@/lib/i18n/client";
+import { DeltaFigure, NumText } from "./KitText";
 import { PinnableRow } from "./PinBoard";
 import styles from "./InsightsKit.module.css";
 
@@ -12,8 +14,6 @@ import styles from "./InsightsKit.module.css";
  * — "nothing was late", "nobody complained" — and making an absent measurement
  * look like one is the fastest way to lose trust in the whole screen.
  */
-
-export { compactNumber, euros, formatValue, hours, percent, usd } from "@/lib/insights-format";
 
 // --- layout ---------------------------------------------------------------
 
@@ -123,18 +123,14 @@ export function DeltaChip({
   const flat = Math.abs(points ? diff : diff * 100) < 0.05;
   const up = diff > 0;
   const tone = flat || polarity === "neutral" ? "flat" : up === (polarity === "up") ? "good" : "bad";
-  const text = points
-    ? `${up ? "+" : ""}${diff.toFixed(1)} pts`
-    : `${up ? "+" : ""}${(diff * 100).toFixed(1)}%`;
-
   return (
     <span className={styles.deltaRow}>
       <span className={`${styles.delta} ${styles[`delta_${tone}`]}`}>
         <span aria-hidden="true">{flat ? "→" : up ? "↑" : "↓"}</span>
-        {text.replace(/^[+-]/, "")}
-        <span className={styles.srOnly}>{up ? " up" : " down"}</span>
+        <DeltaFigure diff={diff} points={points} />
+        <span className={styles.srOnly}> <Tx k={up ? "insights.kit.up" : "insights.kit.down"} /></span>
       </span>
-      <span className={styles.deltaLabel}>vs {compareLabel}</span>
+      <span className={styles.deltaLabel}><Tx k="insights.kit.vs" params={{ label: compareLabel }} /></span>
     </span>
   );
 }
@@ -215,9 +211,9 @@ export function BlockedCard({ label, reason }: { label: string; reason: string }
         <span className={styles.kpiValue} aria-hidden="true">
           —
         </span>
-        <span className={styles.srOnly}>Not measurable</span>
+        <span className={styles.srOnly}><Tx k="insights.kit.notMeasurable" /></span>
       </p>
-      <p className={styles.blockedReason}>{reason}</p>
+      <p className={styles.blockedReason}><Tx k={reason} /></p>
     </section>
   );
 }
@@ -236,9 +232,9 @@ export function LoadingCard({ label }: { label: string }) {
       </header>
       <p className={styles.kpiFigure}>
         <span className={`${styles.kpiValue} ${styles.loadingBar}`} aria-hidden="true" />
-        <span className={styles.srOnly}>Loading</span>
+        <span className={styles.srOnly}><Tx k="insights.kit.loading" /></span>
       </p>
-      <p className={styles.blockedReason}>Loading from Shopify Analytics…</p>
+      <p className={styles.blockedReason}><Tx k="insights.kit.loadingShopify" /></p>
     </section>
   );
 }
@@ -247,7 +243,7 @@ export function LoadingCard({ label }: { label: string }) {
 export function LoadingNote() {
   return (
     <p className={`${styles.blockedReason} ${styles.loadingNote}`} aria-busy="true">
-      Loading from Shopify Analytics… a long range can take up to a minute while Shopify&apos;s rate limit resets.
+      <Tx k="insights.kit.loadingNote" />
     </p>
   );
 }
@@ -295,7 +291,7 @@ export function BarList({ data, ariaLabel }: { data: BarDatum[]; ariaLabel: stri
             />
           </span>
           <span className={`${styles.barValue} ${d.missing ? styles.barValueDim : ""}`}>
-            {d.missing ? "no data" : d.display ?? (d.value ?? 0).toLocaleString("en-GB")}
+            {d.missing ? <Tx k="insights.kit.noData" /> : d.display ?? <NumText value={d.value ?? 0} />}
           </span>
         </li>
       ))}
@@ -308,7 +304,7 @@ export function BarList({ data, ariaLabel }: { data: BarDatum[]; ariaLabel: stri
 export function PanelError({ message }: { message: string }) {
   return (
     <div className={styles.error} role="alert">
-      <strong>This panel could not load.</strong> {message}
+      <strong><Tx k="insights.kit.panelError" /></strong> {message}
     </div>
   );
 }

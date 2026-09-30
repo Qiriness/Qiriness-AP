@@ -11,6 +11,7 @@ import {
   type ReactNode,
 } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useT } from "@/lib/i18n/client";
 import { PinBoard } from "./PinBoard";
 import styles from "./InsightsHeader.module.css";
 
@@ -60,6 +61,7 @@ export function InsightsFrame({
   header: ReactNode;
   children: ReactNode;
 }) {
+  const t = useT();
   const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams();
@@ -108,7 +110,7 @@ export function InsightsFrame({
             <div className={styles.loadingLayer}>
               <p className={styles.loadingPill} role="status">
                 <span className={styles.spinner} aria-hidden="true" />
-                {label ? `Loading ${label}…` : "Loading…"}
+                {label ? t("nav.loading", { label }) : t("insights.shell.loading")}
               </p>
             </div>
           ) : null}

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import type { InsightsPanel } from "@/lib/types";
 import { INSIGHTS_PANELS } from "@/lib/types";
+import { useT } from "@/lib/i18n/client";
 import { useInsightsFrame } from "./InsightsFrame";
 import styles from "./InsightsHeader.module.css";
 
@@ -25,6 +26,7 @@ const KEPT = ["range", "from", "to", "month", "platform"];
  * to the browser, which is the point of keeping real links.
  */
 export function InsightsNav({ active, panels }: { active: InsightsPanel; panels: InsightsPanel[] }) {
+  const t = useT();
   const params = useSearchParams();
   const { go, pending } = useInsightsFrame();
   const [target, setTarget] = useState<InsightsPanel | null>(null);
@@ -44,7 +46,7 @@ export function InsightsNav({ active, panels }: { active: InsightsPanel; panels:
   const current = target ?? active;
 
   return (
-    <nav className={styles.nav} aria-label="Insights panels">
+    <nav className={styles.nav} aria-label={t("insights.shell.panelsLabel")}>
       <ul className={styles.tabs}>
         {INSIGHTS_PANELS.filter((panel) => panels.includes(panel.id)).map((panel) => {
           const isCurrent = panel.id === current;
@@ -60,10 +62,10 @@ export function InsightsNav({ active, panels }: { active: InsightsPanel; panels:
                   if (panel.id === active) return;
                   event.preventDefault();
                   setTarget(panel.id);
-                  go(href, panel.label.toLowerCase());
+                  go(href, t(`insights.panel.${panel.id}`).toLowerCase());
                 }}
               >
-                {panel.label}
+                {t(`insights.panel.${panel.id}`)}
               </Link>
             </li>
           );

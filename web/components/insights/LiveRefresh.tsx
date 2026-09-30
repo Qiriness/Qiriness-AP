@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { useLocale, useT } from "@/lib/i18n/client";
+import { intlTag } from "@/lib/i18n/locales";
 import { useInsightsFrame } from "./InsightsFrame";
 import styles from "./InsightsHeader.module.css";
 
@@ -17,6 +19,8 @@ const INTERVAL_MS = 5 * 60_000;
 const RETURN_AFTER_MS = 60_000;
 
 export function LiveRefresh({ renderedAt }: { renderedAt: string }) {
+  const t = useT();
+  const locale = useLocale();
   const { refresh, pending } = useInsightsFrame();
   const renderedRef = useRef(Date.parse(renderedAt));
   renderedRef.current = Date.parse(renderedAt);
@@ -36,13 +40,13 @@ export function LiveRefresh({ renderedAt }: { renderedAt: string }) {
     };
   }, [refresh]);
 
-  const time = new Date(renderedAt).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+  const time = new Date(renderedAt).toLocaleTimeString(intlTag(locale), { hour: "2-digit", minute: "2-digit" });
 
   return (
     <div className={styles.live}>
       <span className={styles.liveDot} aria-hidden="true" />
-      <span suppressHydrationWarning>{pending ? "Updating…" : `Live · updated ${time}`}</span>
-      <button type="button" className={styles.refresh} onClick={refresh} disabled={pending} aria-label="Refresh now">
+      <span suppressHydrationWarning>{pending ? t("insights.shell.updating") : t("insights.shell.live", { time })}</span>
+      <button type="button" className={styles.refresh} onClick={refresh} disabled={pending} aria-label={t("insights.shell.refresh")}>
         <svg width="15" height="15" viewBox="0 0 24 24" aria-hidden="true">
           <path
             d="M20 11a8 8 0 1 0-2.34 5.66M20 4v7h-7"

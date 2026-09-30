@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import type { InsightsRange, InsightsScope, PlatformId } from "@/lib/types";
 import { PLATFORMS, RANGE_PRESETS } from "../../../scripts/lib/insights-range.mjs";
+import { useT } from "@/lib/i18n/client";
 import { useInsightsFrame } from "./InsightsFrame";
 import styles from "./InsightsHeader.module.css";
 
@@ -34,6 +35,7 @@ export function FilterBar({
   /** The months the picker offers, newest first (`monthOptions`). */
   months: { id: string; label: string }[];
 }) {
+  const t = useT();
   const { navigate, pending } = useInsightsFrame();
   const fromDay = range.from.slice(0, 10);
   const today = range.now.slice(0, 10);
@@ -52,12 +54,12 @@ export function FilterBar({
     navigate({ range: null, month: null, from: nextFrom, to: nextTo });
   };
 
-  const rangeTitle = scope.range ? undefined : scope.rangeReason ?? "This panel is a snapshot as of the last sync";
-  const platformTitle = scope.platform ? undefined : scope.platformReason ?? "Tickets are not tied to a sales platform";
+  const rangeTitle = scope.range ? undefined : t(scope.rangeReason ?? "insights.filter.snapshotReason");
+  const platformTitle = scope.platform ? undefined : t(scope.platformReason ?? "insights.filter.noPlatformReason");
 
   return (
     <div className={styles.filters} data-pending={pending || undefined}>
-      <div className={styles.presets} role="group" aria-label="Date range" title={rangeTitle}>
+      <div className={styles.presets} role="group" aria-label={t("insights.filter.dateRange")} title={rangeTitle}>
         {RANGE_PRESETS.map((preset) => {
           const active = scope.range && range.preset === preset.id;
           return (
@@ -69,7 +71,7 @@ export function FilterBar({
               disabled={!scope.range}
               onClick={() => navigate({ range: preset.id, month: null, from: null, to: null })}
             >
-              {preset.label}
+              {t(`insights.range.preset.${preset.id}`)}
             </button>
           );
         })}
@@ -77,7 +79,7 @@ export function FilterBar({
 
       <div className={styles.filterRight}>
         <label className={styles.selectWrap} title={rangeTitle}>
-          <span className={styles.srOnly}>Month</span>
+          <span className={styles.srOnly}>{t("insights.filter.month")}</span>
           <select
             className={styles.select}
             value={scope.range && range.preset === "month" ? range.query.month ?? "" : ""}
@@ -86,7 +88,7 @@ export function FilterBar({
               navigate({ month: event.target.value || null, range: null, from: null, to: null })
             }
           >
-            <option value="">Month…</option>
+            <option value="">{t("insights.filter.monthPlaceholder")}</option>
             {months.map((m) => (
               <option key={m.id} value={m.id}>
                 {m.label}
@@ -96,7 +98,7 @@ export function FilterBar({
         </label>
 
         <label className={styles.selectWrap} title={platformTitle}>
-          <span className={styles.srOnly}>Platform</span>
+          <span className={styles.srOnly}>{t("insights.filter.platform")}</span>
           <select
             className={styles.select}
             value={scope.platform ? platform : "all"}
@@ -105,7 +107,7 @@ export function FilterBar({
           >
             {PLATFORMS.map((p) => (
               <option key={p.id} value={p.id}>
-                {p.label}
+                {p.id === "all" ? t("insights.filter.allPlatforms") : p.label}
               </option>
             ))}
           </select>
@@ -115,7 +117,7 @@ export function FilterBar({
 
         <div className={styles.dates} title={rangeTitle}>
           <label>
-            <span className={styles.srOnly}>From</span>
+            <span className={styles.srOnly}>{t("insights.filter.from")}</span>
             <input
               type="date"
               className={styles.date}
@@ -128,9 +130,9 @@ export function FilterBar({
               }}
             />
           </label>
-          <span className={styles.dateSep}>to</span>
+          <span className={styles.dateSep}>{t("insights.filter.to")}</span>
           <label>
-            <span className={styles.srOnly}>To</span>
+            <span className={styles.srOnly}>{t("insights.filter.toLabel")}</span>
             <input
               type="date"
               className={styles.date}

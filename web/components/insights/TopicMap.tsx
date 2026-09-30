@@ -3,8 +3,8 @@
 import { useMemo, useState } from "react";
 import { useInsightsFrame } from "./InsightsFrame";
 import type { SupportCategoryRow, TopicCluster, TopicMap as TopicMapData } from "@/lib/types";
-import { CATEGORY_LABELS } from "@/lib/types";
-import { formatAge } from "@/lib/insights-format";
+import { useFormat, useT } from "@/lib/i18n/client";
+import type { Translate } from "@/lib/i18n/translate";
 import {
   RAMP_STEPS,
   clusterLabel,
@@ -15,7 +15,7 @@ import {
   unhappinessStep,
   type TreemapInput,
 } from "@/lib/insights-support";
-import { EmptyState, percent } from "./InsightsKit";
+import { EmptyState } from "./InsightsKit";
 import styles from "./TopicMap.module.css";
 
 /**
@@ -36,7 +36,9 @@ interface ClusterNode extends TreemapInput {
 type SortKey = "label" | "subject" | "size" | "cohesion" | "meanHappiness";
 
 export function TopicMap({ map, categories }: { map: TopicMapData; categories: SupportCategoryRow[] }) {
-  const clusters = useMemo(() => buildClusterTiles(map.clusters, categories), [map.clusters, categories]);
+  const t = useT();
+  const { integer, percentOf, decimal } = useFormat();
+  const clusters = useMemo(() => buildClusterTiles(map.clusters, categories, t), [map.clusters, categories, t]);
   const clustered = clusters.reduce((sum, cluster) => sum + cluster.size, 0);
   const rows = useMemo(() => sliceAndDice(clusters), [clusters]);
 
@@ -48,8 +50,7 @@ export function TopicMap({ map, categories }: { map: TopicMapData; categories: S
       <div className={styles.wrap}>
         <StalenessBanner map={map} drift={drift} baseline={baseline} />
         <EmptyState>
-          This saved run did not find any repeated customer topics of at least {map.minSize} messages at
-          threshold {map.threshold}. That is a measured empty map, not a missing rebuild.
+          {t("insights.support.map.empty", { min: map.minSize, threshold: map.threshold })}
         </EmptyState>
         <RebuildButton />
       </div>
@@ -62,7 +63,7 @@ export function TopicMap({ map, categories }: { map: TopicMapData; categories: S
 
       <figure className={styles.figure}>
         <figcaption className={styles.caption}>
-          <span className={styles.capTitle}>Message volume by cluster</span>
+          <span className={styles.capTitle}>{t("insights.support.map.volume")}</span>
         </figcaption>
 
         <ul className={styles.map}>
@@ -83,22 +84,25 @@ export function TopicMap({ map, categories }: { map: TopicMapData; categories: S
                       className={styles.tile}
                       data-step={step ?? "none"}
                       style={{ flex: `${widthPct} 1 0%` }}
-                      title={`${item.label}: ${item.size} message(s), ${areaPct.toFixed(
-                        1
-                      )}% of the map, subject ${item.subjectLabel}${
-                        item.meanHappiness === null
-                          ? " — no happiness score"
-                          : `, mean happiness ${item.meanHappiness.toFixed(2)}`
-                      }`}
+                      title={t("insights.support.map.tileTitle", {
+                        label: item.label,
+                        size: item.size,
+                        area: percentOf(areaPct, 1),
+                        subject: item.subjectLabel,
+                        mood:
+                          item.meanHappiness === null
+                            ? t("insights.support.map.noScore")
+                            : t("insights.support.map.meanIs", { value: decimal(item.meanHappiness, 2) }),
+                      })}
                     >
                       <span className={styles.tileName}>{item.label}</span>
                       <span className={styles.tileCount}>
-                        {item.size} msg · {item.subjectLabel}
+                        {t("insights.support.map.msg", { n: item.size })} · {item.subjectLabel}
                       </span>
                       {roomForDetail ? (
                         <span className={styles.tileMeta}>
-                          Topic {item.clusterIndex + 1}
-                          {item.cohesion === null ? "" : ` · cohesion ${item.cohesion.toFixed(2)}`}
+                          {t("insights.support.map.topic", { n: item.clusterIndex + 1 })}
+                          {item.cohesion === null ? "" : ` · ${t("insights.support.map.cohesionIs", { value: decimal(item.cohesion, 2) })}`}
                         </span>
                       ) : null}
                     </li>
@@ -113,8 +117,7 @@ export function TopicMap({ map, categories }: { map: TopicMapData; categories: S
       </figure>
 
       <p className={styles.coverage}>
-        {clustered.toLocaleString()} of {map.messageCount.toLocaleString()} customer messages fall into a topic of at
-        least {map.minSize}.
+        {t("insights.support.map.coverage", { n: integer(clustered), total: integer(map.messageCount), min: map.minSize })}
       </p>
 
       <ClusterTable clusters={clusters} clustered={clustered} />
@@ -134,41 +137,46 @@ function StalenessBanner({
   drift: number | null;
   baseline: number;
 }) {
+  const t = useT();
+  const fmt = useFormat();
   return (
     <div className={`${styles.banner} ${map.stale ? styles.bannerStale : ""}`}>
       <span className={styles.bannerMain}>
-        Rebuilt {formatAge(map.builtAt)} · threshold {map.threshold} ·{" "}
-        {map.messageCount.toLocaleString()} messages
+        {t("insights.support.map.rebuilt", { age: fmt.age(map.builtAt), threshold: map.threshold, n: fmt.integer(map.messageCount) })}
       </span>
       <span className={styles.bannerSub}>
-        {map.topicCount} topics across {map.subjectCount} subjects ·{" "}
+        {t("insights.support.map.topics", { topics: map.topicCount, subjects: map.subjectCount })} ·{" "}
         {drift === null ? (
           // Not "0% drift": the check failed, and saying the corpus has not
           // moved is a claim this component is in no position to make.
-          <span className={styles.bannerUnknown}>corpus size could not be checked just now</span>
+          <span className={styles.bannerUnknown}>{t("insights.support.map.unchecked")}</span>
         ) : (
-          `corpus now ${map.liveMessageCount?.toLocaleString()} against ${baseline.toLocaleString()} at build time (${formatDrift(
-            drift
-          )})`
+          t("insights.support.map.corpus", {
+            now: fmt.integer(map.liveMessageCount ?? 0),
+            then: fmt.integer(baseline),
+            drift: formatDrift(drift, t, fmt.percentOf),
+          })
         )}
       </span>
     </div>
   );
 }
 
-function formatDrift(drift: number | null): string {
-  if (drift === null) return "unknown";
+function formatDrift(drift: number | null, t: Translate, percentOf: (value: number, digits?: number) => string): string {
+  if (drift === null) return t("insights.age.unknown");
   const pct = drift * 100;
-  if (Math.abs(pct) < 0.05) return "no change";
-  return `${pct > 0 ? "+" : ""}${pct.toFixed(1)}%`;
+  if (Math.abs(pct) < 0.05) return t("insights.support.map.noChange");
+  return `${pct > 0 ? "+" : "−"}${percentOf(Math.abs(pct), 1)}`;
 }
 
 // --- legend -----------------------------------------------------------------
 
 function Legend() {
+  const t = useT();
+  const { decimal } = useFormat();
   return (
     <div className={styles.legend}>
-      <span className={styles.legendLabel}>Mean happiness</span>
+      <span className={styles.legendLabel}>{t("insights.support.meanHappiness")}</span>
       <ul className={styles.legendScale}>
         {Array.from({ length: RAMP_STEPS }, (_, i) => {
           const step = i + 1;
@@ -177,17 +185,17 @@ function Legend() {
             <li key={step} className={styles.legendItem}>
               <span className={styles.legendSwatch} data-step={step} aria-hidden="true" />
               <span className={styles.legendText}>
-                {from.toFixed(1)}–{to.toFixed(1)}
+                {decimal(from, 1)}–{decimal(to, 1)}
               </span>
             </li>
           );
         })}
         <li className={styles.legendItem}>
           <span className={styles.legendSwatch} data-step="none" aria-hidden="true" />
-          <span className={styles.legendText}>unscored</span>
+          <span className={styles.legendText}>{t("insights.support.map.unscored")}</span>
         </li>
       </ul>
-      <span className={styles.legendFoot}>1 is content, 4 is angry. Bins are fixed, not relative.</span>
+      <span className={styles.legendFoot}>{t("insights.support.map.legendFoot")}</span>
     </div>
   );
 }
@@ -202,6 +210,8 @@ function Legend() {
  * badly, and that second question is the one that gets asked in a meeting.
  */
 function ClusterTable({ clusters, clustered }: { clusters: ClusterNode[]; clustered: number }) {
+  const t = useT();
+  const { integer, percent, decimal } = useFormat();
   const [sortKey, setSortKey] = useState<SortKey>("size");
   const [ascending, setAscending] = useState(false);
 
@@ -231,18 +241,18 @@ function ClusterTable({ clusters, clustered }: { clusters: ClusterNode[]; cluste
   };
 
   const columns: { key: SortKey; label: string; numeric: boolean }[] = [
-    { key: "label", label: "Cluster", numeric: false },
-    { key: "subject", label: "Category", numeric: false },
-    { key: "size", label: "Messages", numeric: true },
-    { key: "cohesion", label: "Cohesion", numeric: true },
-    { key: "meanHappiness", label: "Mean happiness", numeric: true },
+    { key: "label", label: t("insights.support.map.cluster"), numeric: false },
+    { key: "subject", label: t("insights.support.map.category"), numeric: false },
+    { key: "size", label: t("insights.support.map.messages"), numeric: true },
+    { key: "cohesion", label: t("insights.support.map.cohesion"), numeric: true },
+    { key: "meanHappiness", label: t("insights.support.meanHappiness"), numeric: true },
   ];
 
   return (
     <div className={styles.tableWrap}>
       <table className={styles.table}>
         <caption className={styles.tableCaption}>
-          Every cluster on the map, in text. Click a heading to sort.
+          {t("insights.support.map.tableCaption")}
         </caption>
         <thead>
           <tr>
@@ -262,7 +272,7 @@ function ClusterTable({ clusters, clustered }: { clusters: ClusterNode[]; cluste
               </th>
             ))}
             <th scope="col" className={styles.n}>
-              Share of map
+              {t("insights.support.map.share")}
             </th>
           </tr>
         </thead>
@@ -274,17 +284,17 @@ function ClusterTable({ clusters, clustered }: { clusters: ClusterNode[]; cluste
                 {cluster.label}
               </th>
               <td>{cluster.subjectLabel}</td>
-              <td className={styles.n}>{cluster.size.toLocaleString()}</td>
+              <td className={styles.n}>{integer(cluster.size)}</td>
               <td className={styles.n}>
-                {cluster.cohesion === null ? <span className={styles.muted}>—</span> : cluster.cohesion.toFixed(2)}
+                {cluster.cohesion === null ? <span className={styles.muted}>—</span> : decimal(cluster.cohesion, 2)}
               </td>
               <td className={styles.n}>
                 {cluster.meanHappiness === null ? (
-                  <span className={styles.muted} title="No ticket under this cluster's subject carries a happiness score">
+                  <span className={styles.muted} title={t("insights.support.map.noMoodHint")}>
                     —
                   </span>
                 ) : (
-                  cluster.meanHappiness.toFixed(2)
+                  decimal(cluster.meanHappiness, 2)
                 )}
               </td>
               <td className={styles.n}>{percent(cluster.size, clustered)}</td>
@@ -317,6 +327,7 @@ function sortValue(cluster: ClusterNode, key: SortKey): number | null {
  * time on the server; the page re-reads the new run when it lands.
  */
 function RebuildButton() {
+  const t = useT();
   const { refresh } = useInsightsFrame();
   const [state, setState] = useState<{ busy: boolean; message: string | null; error: boolean }>({
     busy: false,
@@ -332,22 +343,22 @@ function RebuildButton() {
       if (!response.ok) throw new Error(payload.error || `HTTP ${response.status}`);
       setState({
         busy: false,
-        message: `Rebuilt in ${payload.seconds}s${payload.topics !== null ? ` — ${payload.topics} topics` : ""}`,
+        message: `${t("insights.support.map.rebuiltIn", { s: payload.seconds })}${payload.topics !== null ? ` — ${t("insights.support.map.topicsCount", { n: payload.topics })}` : ""}`,
         error: false,
       });
       refresh();
     } catch (error) {
-      setState({ busy: false, message: error instanceof Error ? error.message : "The rebuild failed.", error: true });
+      setState({ busy: false, message: error instanceof Error ? error.message : t("insights.support.map.failed"), error: true });
     }
   };
 
   return (
     <div className={styles.resync}>
       <button type="button" className={styles.rebuildButton} onClick={rebuild} disabled={state.busy}>
-        {state.busy ? "Rebuilding…" : "Rebuild map"}
+        {state.busy ? t("insights.support.map.rebuilding") : t("insights.support.map.rebuild")}
       </button>
       <span className={state.error ? styles.rebuildError : styles.rebuildNote} role="status">
-        {state.busy ? "Clustering every embedded customer message — about ten seconds." : state.message}
+        {state.busy ? t("insights.support.map.clustering") : state.message}
       </span>
     </div>
   );
@@ -365,7 +376,7 @@ function RebuildButton() {
  * the colour a statement about the parent subject's tickets, which the caption
  * says.
  */
-function buildClusterTiles(clusters: TopicCluster[], categories: SupportCategoryRow[]): ClusterNode[] {
+function buildClusterTiles(clusters: TopicCluster[], categories: SupportCategoryRow[], t: Translate): ClusterNode[] {
   const mood = new Map(categories.map((row) => [row.category ?? "", row]));
 
   return clusters.map((cluster) => ({
@@ -373,7 +384,7 @@ function buildClusterTiles(clusters: TopicCluster[], categories: SupportCategory
     size: cluster.size,
     label: clusterLabel(cluster.excerpt, cluster.clusterIndex),
     subject: cluster.subject,
-    subjectLabel: CATEGORY_LABELS[cluster.subject as keyof typeof CATEGORY_LABELS] ?? cluster.subject,
+    subjectLabel: (() => { const key = `category.${cluster.subject}`; const text = t(key); return text === key ? cluster.subject : text; })(),
     clusterIndex: cluster.clusterIndex,
     meanHappiness: mood.get(cluster.subject)?.meanHappiness ?? null,
     cohesion: cluster.cohesion,

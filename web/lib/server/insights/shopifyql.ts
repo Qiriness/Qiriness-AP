@@ -119,7 +119,7 @@ function pump() {
       queue.splice(i, 1);
       job.reject(
         new Error(
-          "Shopify Analytics' rate limit had no room for this within the time allowed. It frees up every minute — reload to try again."
+          "insights.blocked.rateLimit"
         )
       );
     }

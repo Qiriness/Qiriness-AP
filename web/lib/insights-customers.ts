@@ -13,15 +13,14 @@
  */
 
 import type { CustomerAtRisk } from "./types";
+import type { Translate } from "./i18n/translate";
 import { agoInDays } from "./insights-format";
 
 /** The two orders an operator actually wants: biggest customer, or longest ignored. */
 export type AtRiskSort = "spend" | "wait";
 
-export const AT_RISK_SORTS: { id: AtRiskSort; label: string }[] = [
-  { id: "spend", label: "Lifetime spend" },
-  { id: "wait", label: "Waiting longest" },
-];
+/** The sort buttons; their words are `insights.customers.sort.<id>`. */
+export const AT_RISK_SORTS: { id: AtRiskSort }[] = [{ id: "spend" }, { id: "wait" }];
 
 /**
  * How long this ticket has been waiting, in whole days.
@@ -37,12 +36,11 @@ export function waitedDays(iso: string | null, now: Date = new Date()): number |
 }
 
 /** The wait as a table cell. Em dash, not "0 days", when it cannot be known. */
-export function formatWait(iso: string | null, now: Date = new Date()): string {
+export function formatWait(iso: string | null, t: Translate, now: Date = new Date()): string {
   const days = waitedDays(iso, now);
   if (days === null) return "—";
-  if (days <= 0) return "today";
-  if (days === 1) return "1 day";
-  return `${days} days`;
+  if (days <= 0) return t("insights.age.today");
+  return t("insights.customers.days", { count: days, n: days });
 }
 
 /**

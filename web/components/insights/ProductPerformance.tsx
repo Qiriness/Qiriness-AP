@@ -3,7 +3,9 @@
 import { useMemo, useState } from "react";
 import type { ProductGroup, ProductSale, SalesPanel } from "@/lib/types";
 import { SearchIcon } from "@/components/icons";
-import { euros, foldForSearch as fold } from "@/lib/insights-format";
+import { useFormat, useLocale, useT } from "@/lib/i18n/client";
+import { foldForSearch as fold } from "@/lib/insights-format";
+import { countryName } from "@/lib/insights-labels";
 import { useInsightsFrame } from "./InsightsFrame";
 import { GroupSelect, Segmented } from "./Segmented";
 import t from "./tables.module.css";
@@ -13,22 +15,6 @@ type Dimension = "global" | "country";
 type Metric = "revenue" | "orders" | "growth" | "decline";
 type Who = "all" | "vip";
 
-const DIMENSIONS: { id: Dimension; label: string }[] = [
-  { id: "global", label: "Global" },
-  { id: "country", label: "By country" },
-];
-
-const METRICS: { id: Metric; label: string }[] = [
-  { id: "revenue", label: "Revenue" },
-  { id: "orders", label: "Orders" },
-  { id: "growth", label: "Growth" },
-  { id: "decline", label: "Declines" },
-];
-
-const WHO: { id: Who; label: string }[] = [
-  { id: "all", label: "All customers" },
-  { id: "vip", label: "VIP only" },
-];
 
 const TOP = 10;
 
@@ -61,6 +47,23 @@ const MAX_MATCHES = 50;
  * VIP customers' orders rather than filtered here.
  */
 export function ProductPerformance({ products, compareLabel }: { products: SalesPanel["products"]; compareLabel: string }) {
+  const tr = useT();
+  const locale = useLocale();
+  const { euros, integer, percentOf } = useFormat();
+  const DIMENSIONS: { id: Dimension; label: string }[] = [
+    { id: "global", label: tr("insights.sales.global") },
+    { id: "country", label: tr("insights.sales.byCountryTab") },
+  ];
+  const METRICS: { id: Metric; label: string }[] = [
+    { id: "revenue", label: tr("insights.sales.revenue") },
+    { id: "orders", label: tr("insights.overview.orders") },
+    { id: "growth", label: tr("insights.sales.growth") },
+    { id: "decline", label: tr("insights.sales.declines") },
+  ];
+  const WHO: { id: Who; label: string }[] = [
+    { id: "all", label: tr("insights.sales.allCustomers") },
+    { id: "vip", label: tr("insights.sales.vipOnly") },
+  ];
   const [dimension, setDimension] = useState<Dimension>("global");
   const [metric, setMetric] = useState<Metric>("revenue");
   const [countryKey, setCountryKey] = useState<string | null>(null);
@@ -106,19 +109,19 @@ export function ProductPerformance({ products, compareLabel }: { products: Sales
   return (
     <div className={styles.wrap}>
       <div className={styles.controls}>
-        <Segmented options={DIMENSIONS} value={dimension} onChange={setDimension} label="Group products" />
+        <Segmented options={DIMENSIONS} value={dimension} onChange={setDimension} label={tr("insights.sales.groupProducts")} />
         {dimension === "country" && countries.length > 0 ? (
           <GroupSelect
-            label="Country"
+            label={tr("insights.sales.country")}
             value={country?.key ?? ""}
             onChange={setCountryKey}
-            groups={countries.map((g) => ({ key: g.key, label: g.label, hint: `${g.orders.toLocaleString("en-GB")} orders` }))}
+            groups={countries.map((g) => ({ key: g.key, label: countryName(g.key, g.label, locale), hint: tr("insights.sales.ordersCount", { count: g.orders }) }))}
           />
         ) : null}
         <Segmented
           options={WHO}
           value={products.vipOnly ? "vip" : "all"}
-          label="Customers"
+          label={tr("insights.sales.customers")}
           onChange={(next) => navigate({ bestVip: next === "vip" ? "1" : null })}
         />
         <span className={styles.spacer} />
@@ -128,8 +131,8 @@ export function ProductPerformance({ products, compareLabel }: { products: Sales
             type="search"
             className={styles.searchInput}
             value={search}
-            placeholder="Find a product"
-            aria-label="Find a product"
+            placeholder={tr("insights.sales.findProduct")}
+            aria-label={tr("insights.sales.findProduct")}
             onChange={(event) => setSearch(event.target.value)}
             onKeyDown={(event) => {
               if (event.key === "Escape") setSearch("");
@@ -143,56 +146,56 @@ export function ProductPerformance({ products, compareLabel }: { products: Sales
           }))}
           value={effective}
           onChange={setMetric}
-          label="Rank by"
+          label={tr("insights.sales.rankBy")}
         />
       </div>
 
       {movement && !comparable ? (
         <p className={styles.hint} role="status">
           {products.vipOnly
-            ? "Growth and declines are not compared over VIP customers: the VIP lists have no previous-period twin."
-            : "Growth and declines are ranked globally. A country list holds only that country's top products, so the same cut one period earlier would be a different set."}
+            ? tr("insights.sales.movementVip")
+            : tr("insights.sales.movementCountry")}
         </p>
       ) : null}
 
       {needle && matches.length > 0 ? (
         <p className={styles.hint} role="status">
-          {matches.length} {matches.length === 1 ? "product matches" : "products match"}
-          {matches.length > MAX_MATCHES ? ` — showing the top ${MAX_MATCHES}` : ""}
+          {tr("insights.sales.matches", { count: matches.length })}
+          {matches.length > MAX_MATCHES ? ` — ${tr("insights.sales.showingTop", { n: MAX_MATCHES })}` : ""}
         </p>
       ) : null}
 
       {products.notice ? (
         <p className={styles.empty} role="status">
-          {products.notice}
+          {tr(products.notice)}
         </p>
       ) : ranked.length === 0 ? (
         <p className={styles.empty}>
           {effective === "growth"
-            ? `No product sold more than it did ${compareLabel}.`
+            ? tr("insights.sales.noGrowth", { label: compareLabel })
             : effective === "decline"
-              ? `No product sold less than it did ${compareLabel}.`
+              ? tr("insights.sales.noDecline", { label: compareLabel })
               : products.vipOnly
-                ? "No VIP customer bought a paid product in this range."
-                : "No paid product line in this range."}
+                ? tr("insights.sales.noVipLine")
+                : tr("insights.sales.noPaidLine")}
         </p>
       ) : shown.length === 0 ? (
         <p className={styles.empty}>
           {dimension === "global"
-            ? `No product matching “${search.trim()}” sold in this range.`
-            : `No product matching “${search.trim()}” among the ${ranked.length} best sellers loaded for ${group?.label ?? "this country"}.`}
+            ? tr("insights.sales.noMatchGlobal", { query: search.trim() })
+            : tr("insights.sales.noMatchCountry", { query: search.trim(), n: ranked.length, where: group ? countryName(group.key, group.label, locale) : tr("insights.sales.thisCountry") })}
         </p>
       ) : (
         <div className={t.wrap}>
           <table className={t.table}>
             <thead>
               <tr>
-                <th scope="col">Product</th>
-                <th scope="col" className={t.n}>Revenue</th>
-                <th scope="col" className={t.n} title={`Change against ${compareLabel}`}>Δ €</th>
+                <th scope="col">{tr("insights.inventory.product")}</th>
+                <th scope="col" className={t.n}>{tr("insights.sales.revenue")}</th>
+                <th scope="col" className={t.n} title={tr("insights.sales.changeAgainst", { label: compareLabel })}>Δ €</th>
                 <th scope="col" className={t.n}>Δ %</th>
-                <th scope="col" className={t.n}>Orders</th>
-                <th scope="col" className={t.n}>Units</th>
+                <th scope="col" className={t.n}>{tr("insights.overview.orders")}</th>
+                <th scope="col" className={t.n}>{tr("insights.sales.units")}</th>
               </tr>
             </thead>
             <tbody>
@@ -211,8 +214,8 @@ export function ProductPerformance({ products, compareLabel }: { products: Sales
                   <td className={t.n}>
                     <DeltaPercent product={p} />
                   </td>
-                  <td className={t.n}>{p.orders.toLocaleString("en-GB")}</td>
-                  <td className={t.n}>{p.units.toLocaleString("en-GB")}</td>
+                  <td className={t.n}>{integer(p.orders)}</td>
+                  <td className={t.n}>{integer(p.units)}</td>
                 </tr>
               ))}
             </tbody>
@@ -225,9 +228,10 @@ export function ProductPerformance({ products, compareLabel }: { products: Sales
 
 /** The change in euros, or a dash where no period can be compared. */
 function Delta({ product }: { product: ProductSale }) {
+  const { euros } = useFormat();
   if (product.previousRevenue === null) return <span className={t.muted}>—</span>;
   const diff = product.revenue - product.previousRevenue;
-  if (Math.abs(diff) < 0.005) return <span className={t.muted}>0 €</span>;
+  if (Math.abs(diff) < 0.005) return <span className={t.muted}>{euros(0)}</span>;
   return (
     <span className={diff > 0 ? styles.up : styles.down}>
       {diff > 0 ? "+" : "−"}
@@ -241,14 +245,16 @@ function Delta({ product }: { product: ProductSale }) {
  * no percentage — every change from zero is infinite — so it reads "new".
  */
 function DeltaPercent({ product }: { product: ProductSale }) {
+  const tr = useT();
+  const { percentOf } = useFormat();
   if (product.previousRevenue === null) return <span className={t.muted}>—</span>;
-  if (product.previousRevenue === 0) return <span className={styles.badge}>new</span>;
+  if (product.previousRevenue === 0) return <span className={styles.badge}>{tr("insights.sales.new")}</span>;
   const change = ((product.revenue - product.previousRevenue) / product.previousRevenue) * 100;
-  if (Math.abs(change) < 0.05) return <span className={t.muted}>0.0%</span>;
+  if (Math.abs(change) < 0.05) return <span className={t.muted}>{percentOf(0, 1)}</span>;
   return (
     <span className={change > 0 ? styles.up : styles.down}>
       {change > 0 ? "+" : "−"}
-      {Math.abs(change).toFixed(1)}%
+      {percentOf(Math.abs(change), 1)}
     </span>
   );
 }

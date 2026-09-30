@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import type { SeriesPoint } from "@/lib/types";
+import { useT } from "@/lib/i18n/client";
 import { Segmented } from "./Segmented";
 import { TimeSeriesChart } from "./TimeSeriesChart";
 import styles from "./OverviewView.module.css";
@@ -16,7 +17,7 @@ type Metric = "revenue" | "orders" | "aov" | "sessions";
  * names the fallback when they had to come from our synced orders instead.
  */
 export function OverviewTrend({
-  revenueLabel = "Net sales",
+  revenueLabel,
   note = null,
   revenue,
   orders,
@@ -33,35 +34,37 @@ export function OverviewTrend({
   sessions: SeriesPoint[] | null;
   sessionsBlockedReason: string | null;
 }) {
+  const t = useT();
+  const revenueName = revenueLabel ?? t("insights.overview.netSales");
   const [metric, setMetric] = useState<Metric>("revenue");
   const metrics: { id: Metric; label: string }[] = [
-    { id: "revenue", label: revenueLabel },
-    { id: "orders", label: "Orders" },
-    { id: "aov", label: "AOV" },
-    { id: "sessions", label: "Sessions" },
+    { id: "revenue", label: revenueName },
+    { id: "orders", label: t("insights.overview.orders") },
+    { id: "aov", label: t("insights.overview.aov") },
+    { id: "sessions", label: t("insights.overview.sessions") },
   ];
   const chart =
     metric === "revenue" ? (
-      <TimeSeriesChart points={revenue} unit="euro" ariaLabel={revenueLabel} missingLabel="Not measured" />
+      <TimeSeriesChart points={revenue} unit="euro" ariaLabel={revenueName} missingLabel="insights.overview.notMeasured" />
     ) : metric === "orders" ? (
-      <TimeSeriesChart points={orders} unit="count" ariaLabel="Orders" missingLabel="Not measured" />
+      <TimeSeriesChart points={orders} unit="count" ariaLabel={t("insights.overview.orders")} missingLabel="insights.overview.notMeasured" />
     ) : metric === "aov" ? (
       <TimeSeriesChart
         points={aov}
         unit="euro"
-        ariaLabel="Average order value"
-        missingLabel="Not measured"
+        ariaLabel={t("insights.overview.aovFull")}
+        missingLabel="insights.overview.notMeasured"
       />
     ) : sessions ? (
-      <TimeSeriesChart points={sessions} unit="count" ariaLabel="Sessions" missingLabel="Not covered by Shopify Analytics" />
+      <TimeSeriesChart points={sessions} unit="count" ariaLabel={t("insights.overview.sessions")} missingLabel="insights.overview.notCovered" />
     ) : (
-      <p className={styles.chartBlocked}>{sessionsBlockedReason ?? "Sessions could not be read from Shopify Analytics."}</p>
+      <p className={styles.chartBlocked}>{t(sessionsBlockedReason ?? "insights.overview.sessionsUnreadable")}</p>
     );
 
   return (
     <>
       <div className={styles.trendTabs}>
-        <Segmented options={metrics} value={metric} onChange={setMetric} label="Trend metric" />
+        <Segmented options={metrics} value={metric} onChange={setMetric} label={t("insights.overview.trendMetric")} />
       </div>
       {chart}
       {note && metric !== "sessions" ? <p className={styles.chartNote}>{note}</p> : null}

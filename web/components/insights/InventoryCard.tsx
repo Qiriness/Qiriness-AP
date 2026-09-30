@@ -1,5 +1,6 @@
 import type { InventoryExceptions, InventoryStatus } from "@/lib/types";
-import { INVENTORY_STATUS_LABELS } from "../../../scripts/lib/sales-overview.mjs";
+import { getFormat, getT } from "@/lib/i18n/server";
+import type { Translate } from "@/lib/i18n/translate";
 import t from "./tables.module.css";
 import styles from "./OverviewView.module.css";
 
@@ -17,8 +18,10 @@ const STATUS_CLASS: Record<InventoryStatus, string> = {
  * reach this app — so nothing claims stock is on its way.
  */
 export function InventoryTable({ inventory, limit }: { inventory: InventoryExceptions; limit?: number }) {
+  const tr = getT();
+  const { integer } = getFormat();
   if (inventory.items.length === 0) {
-    return <p className={t.muted}>No active product is out of stock or under {inventory.windowDays} days of cover.</p>;
+    return <p className={t.muted}>{tr("insights.inventory.none", { days: inventory.windowDays })}</p>;
   }
   const rows = limit ? inventory.items.slice(0, limit) : inventory.items;
   return (
@@ -26,13 +29,13 @@ export function InventoryTable({ inventory, limit }: { inventory: InventoryExcep
       <table className={t.table}>
         <thead>
           <tr>
-            <th scope="col">Product</th>
-            <th scope="col" className={t.n}>Stock</th>
-            <th scope="col" className={t.n} title={`Units that left in the last ${inventory.windowDays} days, samples and gifts included`}>
-              Out, {inventory.windowDays} d
+            <th scope="col">{tr("insights.inventory.product")}</th>
+            <th scope="col" className={t.n}>{tr("insights.inventory.stock")}</th>
+            <th scope="col" className={t.n} title={tr("insights.inventory.outHint", { days: inventory.windowDays })}>
+              {tr("insights.inventory.out", { days: inventory.windowDays })}
             </th>
-            <th scope="col" className={t.n}>Days of cover</th>
-            <th scope="col">Status</th>
+            <th scope="col" className={t.n}>{tr("insights.inventory.cover")}</th>
+            <th scope="col">{tr("insights.inventory.status")}</th>
           </tr>
         </thead>
         <tbody>
@@ -41,13 +44,13 @@ export function InventoryTable({ inventory, limit }: { inventory: InventoryExcep
               <th scope="row" className={styles.productCell} title={item.title}>
                 {item.title}
               </th>
-              <td className={t.n}>{item.stock.toLocaleString("en-GB")}</td>
-              <td className={t.n}>{item.unitsOut.toLocaleString("en-GB")}</td>
+              <td className={t.n}>{integer(item.stock)}</td>
+              <td className={t.n}>{integer(item.unitsOut)}</td>
               <td className={t.n}>
-                {item.coverDays === null ? <span className={t.muted}>not moving</span> : Math.floor(item.coverDays)}
+                {item.coverDays === null ? <span className={t.muted}>{tr("insights.inventory.notMoving")}</span> : Math.floor(item.coverDays)}
               </td>
               <td>
-                <span className={`${styles.pill} ${STATUS_CLASS[item.status]}`}>{INVENTORY_STATUS_LABELS[item.status]}</span>
+                <span className={`${styles.pill} ${STATUS_CLASS[item.status]}`}>{tr(`insights.inventory.status.${item.status}`)}</span>
               </td>
             </tr>
           ))}
@@ -58,7 +61,7 @@ export function InventoryTable({ inventory, limit }: { inventory: InventoryExcep
 }
 
 /** The card's aside: what "now" means for stock. */
-export function inventoryAside(inventory: InventoryExceptions): string {
-  const synced = inventory.syncedAt ? new Date(inventory.syncedAt).toUTCString().slice(5, 22) : "never";
-  return `Now, as of the product sync (${synced} UTC) — not cut by the date range`;
+export function inventoryAside(inventory: InventoryExceptions, tr: Translate): string {
+  const synced = inventory.syncedAt ? new Date(inventory.syncedAt).toUTCString().slice(5, 22) : tr("insights.ago.never");
+  return tr("insights.inventory.aside", { synced });
 }

@@ -1,6 +1,7 @@
 import type { CustomerActivity } from "@/lib/types";
 import { ColumnChart } from "./ColumnChart";
-import { Card, Grid, KpiCard, percent } from "./InsightsKit";
+import { getFormat, getT } from "@/lib/i18n/server";
+import { Card, Grid, KpiCard } from "./InsightsKit";
 
 /**
  * What customers did inside the selected range: how often they ordered.
@@ -13,6 +14,8 @@ import { Card, Grid, KpiCard, percent } from "./InsightsKit";
  * Server-rendered; the charts are client islands handed finished data.
  */
 export function CustomerActivityRows({ activity }: { activity: CustomerActivity }) {
+  const t = getT();
+  const { integer, decimal, percent } = getFormat();
 
   // --- orders per customer
   const buyers = activity.ordersPerCustomer.reduce((sum, b) => sum + b.customers, 0);
@@ -22,32 +25,30 @@ export function CustomerActivityRows({ activity }: { activity: CustomerActivity 
 
   return (
     <>
-      <Grid min={17} pin="orders-per-customer" label="Customers by number of orders">
-        <Card title="Customers by number of orders" span={2}>
+      <Grid min={17} pin="orders-per-customer" label={t("insights.customers.byOrders")}>
+        <Card title={t("insights.customers.byOrders")} span={2}>
           <ColumnChart
             unit="count"
-            ariaLabel="Customers by how many orders they placed in the selected range"
-            xTitle="Orders placed in the range"
+            ariaLabel={t("insights.customers.byOrdersAria")}
+            xTitle={t("insights.customers.xTitle")}
             height={240}
-            series={[{ label: "Customers", color: "var(--chart-line)" }]}
+            series={[{ label: t("insights.sales.customers"), color: "var(--chart-line)" }]}
             data={activity.ordersPerCustomer.map((b) => ({
               key: String(b.orders),
               label: b.orMore ? `${b.orders}+` : String(b.orders),
-              title: b.orMore
-                ? `${b.orders} or more orders`
-                : `${b.orders} ${b.orders === 1 ? "order" : "orders"}`,
+              title: b.orMore ? t("insights.sales.mix.orMore", { n: b.orders }) : t("insights.sales.ordersCount", { count: b.orders }),
               segments: [b.customers],
               top: b.customers === 0 ? undefined : b.customers / buyers < 0.005 ? "<1%" : percent(b.customers, buyers, 0),
-              note: `${percent(b.customers, buyers)} of customers who ordered`,
+              note: t("insights.customers.ofOrdered", { pct: percent(b.customers, buyers) }),
             }))}
           />
         </Card>
         <KpiCard
-          label="Customers who ordered"
-          value={buyers.toLocaleString("en-GB")}
+          label={t("insights.customers.ordered")}
+          value={integer(buyers)}
           sub={[
-            { label: "Ordered more than once", value: percent(repeat, buyers) },
-            { label: "Orders per customer", value: buyers ? (orders / buyers).toFixed(2) : "—" },
+            { label: t("insights.customers.repeat"), value: percent(repeat, buyers) },
+            { label: t("insights.customers.perCustomer"), value: buyers ? decimal(orders / buyers, 2) : "—" },
           ]}
         />
       </Grid>

@@ -3,6 +3,8 @@ import { redirect } from "next/navigation";
 import { canSeePanel, fallbackPath } from "../../../scripts/lib/dashboard-auth.mjs";
 import { AppShell } from "@/components/app-shell/AppShell";
 import { getSession } from "@/lib/server/auth";
+import { getLocale, getT } from "@/lib/i18n/server";
+import { compareLabel, monthLabelL, rangeLabel } from "@/lib/insights-labels";
 import { navBadgeCounts } from "@/lib/server/conversation-badge";
 import { timed } from "@/lib/server/timing";
 import { resolveInsightsContext, type InsightsContext, type SearchParams } from "@/lib/server/insights/context";
@@ -45,10 +47,26 @@ export async function InsightsPage({
   let error: string | null = null;
 
   try {
-    ctx = await timed(`insights ${active} context`, resolveInsightsContext(searchParams));
+    const resolved = await timed(`insights ${active} context`, resolveInsightsContext(searchParams));
+    // The shared range module words periods in English (the monthly report reads
+    // it too); the dashboard rebuilds them from the range's own fields.
+    const locale = getLocale();
+    const t = getT(locale);
+    ctx = {
+      ...resolved,
+      range: {
+        ...resolved.range,
+        label: rangeLabel(resolved.range, t, locale),
+        compareLabel: compareLabel(resolved.range, t, locale),
+      },
+      months: resolved.months.map((month) => ({
+        ...month,
+        label: monthLabelL(new Date(`${month.id}-01T00:00:00Z`), locale),
+      })),
+    };
     body = await timed(`insights ${active} panel (${ctx.range.preset})`, render(ctx));
   } catch (e) {
-    error = e instanceof Error ? e.message : "Failed to load this panel.";
+    error = e instanceof Error ? e.message : getT()("insights.shell.loadFailed");
   }
   const badges = await badgesRead;
 

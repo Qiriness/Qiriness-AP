@@ -118,13 +118,13 @@ function klaviyoBlocked(blockedReason: string, lastSyncAt: string | null = null)
  */
 async function getKlaviyoPerformance(ctx: InsightsContext): Promise<KlaviyoPerformance> {
   if (isMarketplacePlatform(ctx.platform)) {
-    return klaviyoBlocked("Klaviyo credits online-store orders only — not this marketplace.");
+    return klaviyoBlocked("insights.marketing.klaviyoMarketplace");
   }
   try {
     const connection = await readKlaviyoConnection(getSupabaseClient(), ctx.shopId);
-    if (!connection) return klaviyoBlocked("Klaviyo is not connected — add the private key in Settings → Integrations.");
+    if (!connection) return klaviyoBlocked("insights.marketing.klaviyoNotConnected");
     const lastSyncAt: string | null = connection.last_sync_at ?? null;
-    if (!lastSyncAt) return klaviyoBlocked("Klaviyo is connected; flows and campaigns arrive with the next nightly sync.");
+    if (!lastSyncAt) return klaviyoBlocked("insights.marketing.klaviyoNoSync");
 
     const rows = await callRpc<Record<string, unknown>>(KLAVIYO_RPC.MESSAGES, rangeArgs(ctx));
     const { summary, rows: clicked, hiddenWithoutClicks, hiddenTooSmall } = summariseKlaviyoMessages(rows);

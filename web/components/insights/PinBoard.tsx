@@ -10,6 +10,7 @@ import {
   type CSSProperties,
   type ReactNode,
 } from "react";
+import { useT } from "@/lib/i18n/client";
 import { createPortal } from "react-dom";
 import styles from "./InsightsKit.module.css";
 
@@ -62,6 +63,7 @@ function writePins(panel: string, pins: string[]) {
 }
 
 export function PinBoard({ panel, children }: { panel: string; children: ReactNode }) {
+  const t = useT();
   const [pins, setPins] = useState<string[]>([]);
   const [slots, setSlots] = useState<Record<string, HTMLElement | null>>({});
   const [present, setPresent] = useState<Record<string, string>>({});
@@ -112,12 +114,12 @@ export function PinBoard({ panel, children }: { panel: string; children: ReactNo
     <PinContext.Provider value={api}>
       <section
         className={`${styles.pinned} ${shown.length === 0 ? styles.pinnedEmpty : ""}`}
-        aria-label="Pinned rows"
+        aria-label={t("insights.pin.rows")}
       >
         <div className={styles.pinnedHead}>
-          <h2>Pinned</h2>
+          <h2>{t("insights.pin.title")}</h2>
           <span>
-            {shown.length} of {MAX_PINS}
+            {t("insights.pin.count", { shown: shown.length, max: MAX_PINS })}
           </span>
         </div>
         {pins.map((id) => (
@@ -154,6 +156,7 @@ export function PinnableRow({
   className?: string;
   children: ReactNode;
 }) {
+  const t = useT();
   const api = useContext(PinContext);
   const register = api?.register;
 
@@ -178,8 +181,8 @@ export function PinnableRow({
         onClick={() => api.toggle(id)}
         disabled={full}
         aria-pressed={pinned}
-        aria-label={pinned ? `Unpin ${label}` : `Pin ${label} to the top`}
-        title={full ? `Two rows are pinned — unpin one first` : pinned ? "Unpin this row" : "Pin this row to the top"}
+        aria-label={pinned ? t("insights.pin.unpin", { label }) : t("insights.pin.pinTop", { label })}
+        title={full ? t("insights.pin.full") : pinned ? t("insights.pin.unpinRow") : t("insights.pin.pinRow")}
       >
         <svg width="15" height="15" viewBox="0 0 24 24" aria-hidden="true">
           <path

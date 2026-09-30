@@ -2,16 +2,14 @@ import { Suspense, type ReactNode } from "react";
 import type { Compared, LivePart, OverviewPanel, SalesSeries, SeriesPoint, StorefrontMoney, StorefrontTotals } from "@/lib/types";
 import { averageOrderValue, revenueDrivers } from "../../../scripts/lib/sales-overview.mjs";
 import { InventoryTable, inventoryAside } from "./InventoryCard";
-import { Await, BlockedCard, Caption, Card, DeltaChip, Grid, KpiCard, LoadingCard, LoadingNote, euros } from "./InsightsKit";
+import { getFormat, getT } from "@/lib/i18n/server";
+import { Await, BlockedCard, Caption, Card, DeltaChip, Grid, KpiCard, LoadingCard, LoadingNote } from "./InsightsKit";
 import { OverviewTrend } from "./OverviewTrend";
 import { ReportDownload } from "./ReportDownload";
 import styles from "./OverviewView.module.css";
 
-/** What a Shopify card prints in place of its figure while the queue gets to it. */
-const LOADING = "Loading from Shopify Analytics…";
-
-/** Said wherever a card had to fall back to our synced orders because Shopify could not be read. */
-const FALLBACK_NOTE = "Shopify unavailable — from our synced orders (refunds counted against the order's own month)";
+// Loading text: `insights.kit.loadingShopify`. The fallback note: `insights.overview.fallbackNote`,
+// said wherever a card had to use our synced orders because Shopify could not be read.
 
 /**
  * The management view, laid out as the sales report is: the headline row, the
@@ -29,30 +27,32 @@ const FALLBACK_NOTE = "Shopify unavailable — from our synced orders (refunds c
  * cannot be read renders blocked with its reason, never as a zero.
  */
 export function OverviewView({ panel, compareLabel }: { panel: OverviewPanel; compareLabel: string }) {
+  const t = getT();
+  const f = getFormat();
   const figures = panel.figures.current;
   const before = panel.figures.previous;
   const { live } = panel;
 
   return (
     <>
-      <Grid columns={8} pin="headline" label="Headline figures">
-        <Suspense fallback={<LoadingCard label="Net sales" />}>
+      <Grid columns={8} pin="headline" label={t("insights.overview.headline")}>
+        <Suspense fallback={<LoadingCard label={t("insights.overview.netSales")} />}>
           <Await promise={live.sales}>
             {(sales) => <NetSalesCard sales={sales} panel={panel} compareLabel={compareLabel} />}
           </Await>
         </Suspense>
-        <Suspense fallback={<LoadingCard label="Orders" />}>
+        <Suspense fallback={<LoadingCard label={t("insights.overview.orders")} />}>
           <Await promise={live.sales}>{(sales) => <OrdersCard sales={sales} panel={panel} compareLabel={compareLabel} />}</Await>
         </Suspense>
         <KpiCard
-          label="Units sold"
-          value={figures.units.toLocaleString("en-GB")}
+          label={t("insights.overview.units")}
+          value={f.integer(figures.units)}
           delta={<DeltaChip current={figures.units} previous={before?.units} polarity="up" compareLabel={compareLabel} />}
         />
-        <Suspense fallback={<LoadingCard label="AOV" />}>
+        <Suspense fallback={<LoadingCard label={t("insights.overview.aov")} />}>
           <Await promise={live.sales}>{(sales) => <AovCard sales={sales} panel={panel} compareLabel={compareLabel} />}</Await>
         </Suspense>
-        <Suspense fallback={<LoadingCard label="Refund rate" />}>
+        <Suspense fallback={<LoadingCard label={t("insights.overview.refundRate")} />}>
           <Await promise={live.sales}>
             {(sales) => <RefundRateCard sales={sales} panel={panel} compareLabel={compareLabel} />}
           </Await>
@@ -60,9 +60,9 @@ export function OverviewView({ panel, compareLabel }: { panel: OverviewPanel; co
         <Suspense
           fallback={
             <>
-              <LoadingCard label="Sessions" />
-              <LoadingCard label="Conversion" />
-              <LoadingCard label="Net sales / session" />
+              <LoadingCard label={t("insights.overview.sessions")} />
+              <LoadingCard label={t("insights.overview.conversion")} />
+              <LoadingCard label={t("insights.overview.perSession")} />
             </>
           }
         >
@@ -72,15 +72,15 @@ export function OverviewView({ panel, compareLabel }: { panel: OverviewPanel; co
         </Suspense>
       </Grid>
 
-      <Grid min={26} pin="trend" label="Performance trend and what moved net sales">
-        <Card title="Performance trend" span={2}>
+      <Grid min={26} pin="trend" label={t("insights.overview.trendRow")}>
+        <Card title={t("insights.overview.trend")} span={2}>
           <Suspense fallback={<LoadingNote />}>
             <Await promise={Promise.all([live.series, live.sessions])}>
               {([series, sessions]) => <Trend panel={panel} series={series} sessions={sessions} />}
             </Await>
           </Suspense>
         </Card>
-        <Card title="What moved net sales?" aside={<span>Orders × AOV</span>}>
+        <Card title={t("insights.overview.whatMoved")} aside={<span>{t("insights.overview.ordersTimesAov")}</span>}>
           <Suspense fallback={<LoadingNote />}>
             <Await promise={live.sales}>
               {(sales) => (
@@ -92,8 +92,8 @@ export function OverviewView({ panel, compareLabel }: { panel: OverviewPanel; co
                     <Suspense
                       fallback={
                         <>
-                          <DriverRow label="Sessions" hint="Traffic · storefront" value={null} blocked blockedTitle={LOADING} />
-                          <DriverRow label="Conversion" hint="Efficiency · storefront" value={null} blocked blockedTitle={LOADING} />
+                          <DriverRow label={t("insights.overview.sessions")} hint={t("insights.overview.trafficHint")} value={null} blocked blockedTitle={t("insights.kit.loadingShopify")} />
+                          <DriverRow label={t("insights.overview.conversion")} hint={t("insights.overview.efficiencyHint")} value={null} blocked blockedTitle={t("insights.kit.loadingShopify")} />
                         </>
                       }
                     >
@@ -107,13 +107,13 @@ export function OverviewView({ panel, compareLabel }: { panel: OverviewPanel; co
         </Card>
       </Grid>
 
-      <Grid min={20} pin="bridge-signals-mix" label="Sales bridge, signals and sales mix">
-        <Card title="Sales bridge" aside={<span>Shopify&apos;s own figures</span>}>
+      <Grid min={20} pin="bridge-signals-mix" label={t("insights.overview.bridgeRow")}>
+        <Card title={t("insights.overview.bridge")} aside={<span>{t("insights.overview.shopifyOwn")}</span>}>
           <Suspense fallback={<LoadingNote />}>
             <Await promise={live.sales}>{(sales) => <SalesBridge sales={sales} />}</Await>
           </Suspense>
         </Card>
-        <Card title="Management signals" aside={<span>Rule-based, not AI</span>}>
+        <Card title={t("insights.overview.signals")} aside={<span>{t("insights.overview.ruleBased")}</span>}>
           <Suspense fallback={<LoadingNote />}>
             <Await promise={live.signals}>
               {({ signals, basis }) => (
@@ -129,33 +129,30 @@ export function OverviewView({ panel, compareLabel }: { panel: OverviewPanel; co
                       </li>
                     ))}
                   </ol>
-                  {basis === "orders" ? <Caption>{FALLBACK_NOTE}.</Caption> : null}
+                  {basis === "orders" ? <Caption>{t("insights.overview.fallbackNote")}.</Caption> : null}
                 </>
               )}
             </Await>
           </Suspense>
         </Card>
-        <Card title="Sales mix" aside={<span>Where net sales came from</span>}>
+        <Card title={t("insights.overview.mix")} aside={<span>{t("insights.overview.mixAside")}</span>}>
           <Suspense fallback={<LoadingNote />}>
             <Await promise={live.sales}>{(sales) => <PlatformMix sales={sales} panel={panel} />}</Await>
           </Suspense>
           <MixBars
-            title="Top products · line revenue"
+            title={t("insights.overview.topProducts")}
             total={panel.productRevenue}
             rows={panel.topProducts.map((p) => ({ key: p.productId, label: p.title, value: p.revenue }))}
           />
         </Card>
       </Grid>
 
-      <Grid min={26} pin="stock-report" label="Stock and monthly report">
-        <Card title="Inventory exceptions" span={2} aside={<span>{inventoryAside(panel.inventory)}</span>}>
+      <Grid min={26} pin="stock-report" label={t("insights.overview.stockRow")}>
+        <Card title={t("insights.overview.inventory")} span={2} aside={<span>{inventoryAside(panel.inventory, t)}</span>}>
           <InventoryTable inventory={panel.inventory} limit={6} />
         </Card>
-        <Card title="Monthly sales report">
-          <p className={styles.muted}>
-            The month&apos;s figures as one HTML file, laid out for the CEOs — the report that will be emailed at the
-            start of each month.
-          </p>
+        <Card title={t("insights.overview.report")}>
+          <p className={styles.muted}>{t("insights.overview.reportNote")}</p>
           <ReportDownload months={panel.reportMonths} initial={panel.reportMonth} />
         </Card>
       </Grid>
@@ -175,21 +172,23 @@ type Totals = LivePart<Compared<StorefrontTotals>>;
  * it is.
  */
 function NetSalesCard({ sales, panel, compareLabel }: { sales: Sales; panel: OverviewPanel; compareLabel: string }) {
+  const t = getT();
+  const { euros } = getFormat();
   const ladder = sales.value.current;
   if (!ladder) {
     const { current, previous } = panel.summary;
     return (
       <KpiCard
-        label="Total sales"
+        label={t("insights.overview.totalSales")}
         value={euros(current.revenue)}
         delta={<DeltaChip current={current.revenue} previous={previous?.revenue} polarity="up" compareLabel={compareLabel} />}
-        sub={[{ label: "Net sales", value: "Shopify unavailable" }]}
+        sub={[{ label: t("insights.overview.netSales"), value: t("insights.overview.shopifyUnavailable") }]}
       />
     );
   }
   return (
     <KpiCard
-      label="Net sales"
+      label={t("insights.overview.netSales")}
       value={euros(ladder.netSales)}
       delta={
         <DeltaChip current={ladder.netSales} previous={sales.value.previous?.netSales ?? null} polarity="up" compareLabel={compareLabel} />
@@ -204,22 +203,24 @@ function NetSalesCard({ sales, panel, compareLabel }: { sales: Sales; panel: Ove
  * 2026 — which is what the admin prints.
  */
 function OrdersCard({ sales, panel, compareLabel }: { sales: Sales; panel: OverviewPanel; compareLabel: string }) {
+  const t = getT();
+  const fmt = getFormat();
   const ladder = sales.value.current;
   if (!ladder) {
     const f = panel.figures;
     return (
       <KpiCard
-        label="Orders"
-        value={f.current.paidOrders.toLocaleString("en-GB")}
+        label={t("insights.overview.orders")}
+        value={fmt.integer(f.current.paidOrders)}
         delta={<DeltaChip current={f.current.paidOrders} previous={f.previous?.paidOrders} polarity="up" compareLabel={compareLabel} />}
-        sub={[{ label: "Paid orders, ours", value: "Shopify unavailable" }]}
+        sub={[{ label: t("insights.overview.paidOrdersOurs"), value: t("insights.overview.shopifyUnavailable") }]}
       />
     );
   }
   return (
     <KpiCard
-      label="Orders"
-      value={ladder.orders.toLocaleString("en-GB")}
+      label={t("insights.overview.orders")}
+      value={fmt.integer(ladder.orders)}
       delta={<DeltaChip current={ladder.orders} previous={sales.value.previous?.orders ?? null} polarity="up" compareLabel={compareLabel} />}
     />
   );
@@ -227,18 +228,20 @@ function OrdersCard({ sales, panel, compareLabel }: { sales: Sales; panel: Overv
 
 /** AOV IS SHOPIFY'S OWN, weighted by orders across the channels folded. */
 function AovCard({ sales, panel, compareLabel }: { sales: Sales; panel: OverviewPanel; compareLabel: string }) {
+  const t = getT();
+  const { euros } = getFormat();
   const aov = sales.value.current?.averageOrderValue ?? null;
   const previousAov = sales.value.previous?.averageOrderValue ?? null;
   const fallbackAov = averageOrderValue(panel.summary.current.revenue, panel.figures.current.paidOrders);
   return (
     <KpiCard
-      label="AOV"
+      label={t("insights.overview.aov")}
       value={euros(aov ?? fallbackAov, { cents: true })}
       delta={<DeltaChip current={aov} previous={previousAov} polarity="up" compareLabel={compareLabel} />}
       sub={[
         aov === null
-          ? { label: "Total sales ÷ orders", value: "Shopify unavailable" }
-          : { label: "(Gross − discounts) ÷ orders", value: "Shopify's own" },
+          ? { label: t("insights.overview.aovFallback"), value: t("insights.overview.shopifyUnavailable") }
+          : { label: t("insights.overview.aovBasis"), value: t("insights.overview.shopifysOwn") },
       ]}
     />
   );
@@ -252,6 +255,8 @@ function AovCard({ sales, panel, compareLabel }: { sales: Sales; panel: Overview
  * against €19.43 of refunds on orders placed in the window).
  */
 function RefundRateCard({ sales, panel, compareLabel }: { sales: Sales; panel: OverviewPanel; compareLabel: string }) {
+  const t = getT();
+  const { euros, percentOf } = getFormat();
   const rate = (l: StorefrontMoney["current"]) => (l && l.grossSales > 0 ? (l.returns / l.grossSales) * 100 : null);
   const ladder = sales.value.current;
   if (!ladder) {
@@ -260,20 +265,20 @@ function RefundRateCard({ sales, panel, compareLabel }: { sales: Sales; panel: O
     const now = ours(panel.summary.current);
     return (
       <KpiCard
-        label="Refund rate"
-        value={now === null ? "—" : `${now.toFixed(1)}%`}
+        label={t("insights.overview.refundRate")}
+        value={now === null ? "—" : percentOf(now, 1)}
         delta={<DeltaChip current={now} previous={ours(panel.summary.previous)} polarity="down" points compareLabel={compareLabel} />}
-        sub={[{ label: "Refunds ÷ order value, ours", value: "Shopify unavailable" }]}
+        sub={[{ label: t("insights.overview.refundOurs"), value: t("insights.overview.shopifyUnavailable") }]}
       />
     );
   }
   const now = rate(ladder);
   return (
     <KpiCard
-      label="Refund rate"
-      value={now === null ? "—" : `${now.toFixed(1)}%`}
+      label={t("insights.overview.refundRate")}
+      value={now === null ? "—" : percentOf(now, 1)}
       delta={<DeltaChip current={now} previous={rate(sales.value.previous)} polarity="down" points compareLabel={compareLabel} />}
-      sub={[{ label: "Returns ÷ gross sales", value: euros(ladder.returns) }]}
+      sub={[{ label: t("insights.overview.returnsOverGross"), value: euros(ladder.returns) }]}
     />
   );
 }
@@ -289,6 +294,8 @@ function RefundRateCard({ sales, panel, compareLabel }: { sales: Sales; panel: O
  * (it does not add up across months), so its bounce sub reads "—".
  */
 function SessionCards({ totals, sales, compareLabel }: { totals: Totals; sales: Sales; compareLabel: string }) {
+  const t = getT();
+  const { euros, integer, decimal, percentOf } = getFormat();
   const store = totals.value.current;
   const storeBefore = totals.value.previous;
   const reason = totals.blockedReason;
@@ -299,21 +306,21 @@ function SessionCards({ totals, sales, compareLabel }: { totals: Totals; sales: 
   return (
     <>
       {store.sessions === null ? (
-        <BlockedCard label="Sessions" reason={reason ?? "Not measured"} />
+        <BlockedCard label={t("insights.overview.sessions")} reason={reason ?? "insights.overview.notMeasured"} />
       ) : (
         <KpiCard
-          label="Sessions"
-          value={store.sessions.toLocaleString("en-GB")}
+          label={t("insights.overview.sessions")}
+          value={integer(store.sessions)}
           delta={<DeltaChip current={store.sessions} previous={storeBefore?.sessions ?? null} polarity="up" compareLabel={compareLabel} />}
-          sub={[{ label: "Pageviews", value: store.pageviews === null ? "—" : store.pageviews.toLocaleString("en-GB") }]}
+          sub={[{ label: t("insights.overview.pageviews"), value: store.pageviews === null ? "—" : integer(store.pageviews) }]}
         />
       )}
       {store.conversionRate === null ? (
-        <BlockedCard label="Conversion" reason={reason ?? "Not measured"} />
+        <BlockedCard label={t("insights.overview.conversion")} reason={reason ?? "insights.overview.notMeasured"} />
       ) : (
         <KpiCard
-          label="Conversion"
-          value={`${store.conversionRate.toFixed(2)}%`}
+          label={t("insights.overview.conversion")}
+          value={percentOf(store.conversionRate, 2)}
           delta={
             <DeltaChip
               current={store.conversionRate}
@@ -323,20 +330,20 @@ function SessionCards({ totals, sales, compareLabel }: { totals: Totals; sales: 
               compareLabel={compareLabel}
             />
           }
-          sub={[{ label: "Bounce rate", value: store.bounceRate === null ? "—" : `${store.bounceRate.toFixed(1)}%` }]}
+          sub={[{ label: t("insights.overview.bounce"), value: store.bounceRate === null ? "—" : percentOf(store.bounceRate, 1) }]}
         />
       )}
       {perSession === null ? (
         <BlockedCard
-          label="Net sales / session"
-          reason={reason ?? sales.blockedReason ?? "Needs sessions and storefront net sales"}
+          label={t("insights.overview.perSession")}
+          reason={reason ?? sales.blockedReason ?? "insights.overview.needsSessions"}
         />
       ) : (
         <KpiCard
-          label="Net sales / session"
+          label={t("insights.overview.perSession")}
           value={euros(perSession, { cents: true })}
           delta={<DeltaChip current={perSession} previous={previousPerSession} polarity="up" compareLabel={compareLabel} />}
-          sub={[{ label: "Storefront net sales", value: euros(storefront.current!.netSales) }]}
+          sub={[{ label: t("insights.overview.storefrontNet"), value: euros(storefront.current!.netSales) }]}
         />
       )}
     </>
@@ -357,14 +364,15 @@ function Trend({
   series: LivePart<SalesSeries | null>;
   sessions: LivePart<SeriesPoint[] | null>;
 }) {
+  const t = getT();
   const shopify = series.value;
   return (
     <OverviewTrend
-      revenueLabel={shopify ? "Net sales" : "Revenue"}
+      revenueLabel={shopify ? t("insights.overview.netSales") : t("insights.overview.revenue")}
       revenue={shopify ? shopify.netSales : panel.revenue}
       orders={shopify ? shopify.orders : panel.orders}
       aov={shopify ? shopify.aov : panel.aov}
-      note={shopify ? null : FALLBACK_NOTE}
+      note={shopify ? null : t("insights.overview.fallbackNote")}
       sessions={sessions.value}
       sessionsBlockedReason={sessions.blockedReason}
     />
@@ -388,6 +396,7 @@ function MoneyDrivers({
   compareLabel: string;
   sessionRows: ReactNode;
 }) {
+  const t = getT();
   const now = sales.value.current;
   const then = sales.value.previous;
   const shopify = now !== null;
@@ -405,44 +414,44 @@ function MoneyDrivers({
   return (
     <>
       <div className={styles.driverTotal}>
-        <span>{shopify ? "Net sales change" : "Revenue change"}</span>
+        <span>{shopify ? t("insights.overview.netSalesChange") : t("insights.overview.revenueChange")}</span>
         <strong className={tone(drivers.total)}>{signed(drivers.total)}</strong>
       </div>
       <ul className={styles.drivers}>
-        <DriverRow label="Orders" hint="Volume" value={drivers.orders} />
-        <DriverRow label="AOV" hint="Basket" value={drivers.aov} />
+        <DriverRow label={t("insights.overview.orders")} hint={t("insights.overview.volume")} value={drivers.orders} />
+        <DriverRow label={t("insights.overview.aov")} hint={t("insights.overview.basket")} value={drivers.aov} />
         {sessionRows}
       </ul>
       <p className={styles.callout}>
         {drivers.lead === null ? (
-          <>No earlier period to compare with.</>
+          <>{t("insights.overview.noEarlier")}</>
         ) : (
           <>
-            <b>{drivers.lead === "orders" ? "Order volume" : "Average order value"} moved most</b> vs {compareLabel}. Orders
-            × AOV covers the whole business; sessions and conversion are Shopify&apos;s storefront figures and do not
-            multiply out to it, because marketplace orders have no session.
+            <b>{t(drivers.lead === "orders" ? "insights.overview.movedOrders" : "insights.overview.movedAov")}</b>{" "}
+            {t("insights.kit.vs", { label: compareLabel })}. {t("insights.overview.driversNote")}
           </>
         )}
       </p>
-      {shopify ? null : <Caption>{FALLBACK_NOTE}.</Caption>}
+      {shopify ? null : <Caption>{t("insights.overview.fallbackNote")}.</Caption>}
     </>
   );
 }
 
 function SessionDrivers({ totals }: { totals: Totals }) {
+  const t = getT();
   const relative = (now: number | null, then: number | null | undefined) =>
     now === null || then === null || then === undefined || then === 0 ? null : (now - then) / Math.abs(then);
   const store = totals.value.current;
   const before = totals.value.previous;
   const sessionChange = relative(store.sessions, before?.sessions);
   const conversionChange = relative(store.conversionRate, before?.conversionRate);
-  const title = totals.blockedReason ?? "Needs sessions data";
+  const title = t(totals.blockedReason ?? "insights.overview.needsSessionsData");
   return (
     <>
-      <DriverRow label="Sessions" hint="Traffic · storefront" value={sessionChange} blocked={sessionChange === null} blockedTitle={title} />
+      <DriverRow label={t("insights.overview.sessions")} hint={t("insights.overview.trafficHint")} value={sessionChange} blocked={sessionChange === null} blockedTitle={title} />
       <DriverRow
-        label="Conversion"
-        hint="Efficiency · storefront"
+        label={t("insights.overview.conversion")}
+        hint={t("insights.overview.efficiencyHint")}
         value={conversionChange}
         blocked={conversionChange === null}
         blockedTitle={title}
@@ -456,18 +465,19 @@ function SessionDrivers({ totals }: { totals: Totals }) {
  * filter — so the shares add up to the Net sales card when the filter is off.
  */
 function PlatformMix({ sales, panel }: { sales: Sales; panel: OverviewPanel }) {
+  const t = getT();
   if (sales.value.current) {
     return (
       <MixBars
-        title="By platform · net sales"
+        title={t("insights.overview.byPlatformNet")}
         rows={sales.value.platforms.map((p) => ({ key: p.platform, label: p.label, value: p.netSales }))}
       />
     );
   }
   return (
     <>
-      <MixBars title="By platform" rows={panel.platforms.map((p) => ({ key: p.platform, label: p.label, value: p.revenue }))} />
-      <Caption>{FALLBACK_NOTE}.</Caption>
+      <MixBars title={t("insights.overview.byPlatform")} rows={panel.platforms.map((p) => ({ key: p.platform, label: p.label, value: p.revenue }))} />
+      <Caption>{t("insights.overview.fallbackNote")}.</Caption>
     </>
   );
 }
@@ -480,31 +490,29 @@ function PlatformMix({ sales, panel }: { sales: Sales; panel: OverviewPanel }) {
  * Every step is arithmetic the reader can follow along the row.
  */
 function SalesBridge({ sales }: { sales: Sales }) {
+  const t = getT();
+  const { euros } = getFormat();
   const ladder = sales.value.current;
-  if (!ladder) return <p className={styles.muted}>{sales.blockedReason ?? "Shopify Analytics could not be read."}</p>;
+  if (!ladder) return <p className={styles.muted}>{t(sales.blockedReason ?? "insights.overview.shopifyUnreadable")}</p>;
   const steps = [
-    { label: "Total sales", value: ladder.totalSales, kind: "net" as const },
-    { label: "VAT & shipping", value: ladder.taxes + ladder.shipping, kind: "cost" as const },
-    { label: "Net sales", value: ladder.netSales, kind: "net" as const },
-    { label: "Discounts", value: ladder.discounts, kind: "add" as const },
-    { label: "Returns", value: ladder.returns, kind: "add" as const },
-    { label: "Gross sales", value: ladder.grossSales, kind: "gross" as const },
+    { label: t("insights.overview.totalSales"), value: ladder.totalSales, kind: "net" as const },
+    { label: t("insights.overview.vatShipping"), value: ladder.taxes + ladder.shipping, kind: "cost" as const },
+    { label: t("insights.overview.netSales"), value: ladder.netSales, kind: "net" as const },
+    { label: t("insights.overview.discounts"), value: ladder.discounts, kind: "add" as const },
+    { label: t("insights.overview.returns"), value: ladder.returns, kind: "add" as const },
+    { label: t("insights.overview.grossSales"), value: ladder.grossSales, kind: "gross" as const },
   ];
   return (
     <>
       <Bridge steps={steps} />
-      <Caption>
-        Reads left to right: total sales less VAT ({euros(ladder.taxes)}) and shipping ({euros(ladder.shipping)}) is net
-        sales; adding back discounts and returns gives gross sales, the value of the goods before any reduction.
-        Returns are counted in the period the refund was made, at the goods&apos; value before VAT.
-      </Caption>
+      <Caption>{t("insights.overview.bridgeNote", { vat: euros(ladder.taxes), shipping: euros(ladder.shipping) })}</Caption>
     </>
   );
 }
 
 function signed(value: number | null): string {
   if (value === null) return "—";
-  return `${value >= 0 ? "+" : "−"}${Math.abs(value * 100).toFixed(1)}%`;
+  return `${value >= 0 ? "+" : "−"}${getFormat().percentOf(Math.abs(value * 100), 1)}`;
 }
 
 function tone(value: number | null): string {
@@ -517,7 +525,7 @@ function DriverRow({
   hint,
   value,
   blocked = false,
-  blockedTitle = "Needs sessions data",
+  blockedTitle,
 }: {
   label: string;
   hint: string;
@@ -525,6 +533,7 @@ function DriverRow({
   blocked?: boolean;
   blockedTitle?: string;
 }) {
+  const t = getT();
   const width = value === null ? 0 : Math.min(100, Math.max(3, Math.abs(value) * 400));
   return (
     <li className={styles.driver}>
@@ -535,7 +544,7 @@ function DriverRow({
       <span className={`${styles.track} ${blocked ? styles.trackBlocked : ""}`}>
         {blocked ? null : <i className={value !== null && value < 0 ? styles.fillNeg : styles.fill} style={{ width: `${width}%` }} />}
       </span>
-      <span className={`${styles.driverValue} ${blocked ? styles.flat : tone(value)}`} title={blocked ? blockedTitle : undefined}>
+      <span className={`${styles.driverValue} ${blocked ? styles.flat : tone(value)}`} title={blocked ? blockedTitle ?? t("insights.overview.needsSessionsData") : undefined}>
         {blocked ? "—" : signed(value)}
       </span>
     </li>
@@ -546,6 +555,7 @@ type BridgeKind = "gross" | "cost" | "net" | "add";
 
 /** The sign the step carries along the chain: taken off, added back, or a subtotal. */
 function signedStep(kind: BridgeKind, value: number): string {
+  const { euros } = getFormat();
   if (value <= 0) return euros(value);
   if (kind === "cost") return `−${euros(value)}`;
   if (kind === "add") return `+${euros(value)}`;
@@ -578,19 +588,21 @@ function MixBars({
   rows: { key: string; label: string; value: number }[];
   total?: number;
 }) {
+  const t = getT();
+  const { euros, percentOf } = getFormat();
   const sum = total ?? rows.reduce((s, r) => s + r.value, 0);
   const max = Math.max(1, ...rows.map((r) => r.value));
   return (
     <div className={styles.mix}>
       <h3>{title}</h3>
-      {rows.length === 0 ? <p className={styles.muted}>No sales in this range.</p> : null}
+      {rows.length === 0 ? <p className={styles.muted}>{t("insights.overview.noSales")}</p> : null}
       {rows.map((row) => (
         <div key={row.key} className={styles.mixRow} title={`${row.label} · ${euros(row.value)}`}>
           <span className={styles.mixLabel}>{row.label}</span>
           <span className={styles.track}>
             <i className={styles.fill} style={{ width: `${(row.value / max) * 100}%` }} />
           </span>
-          <b>{sum > 0 ? `${((row.value / sum) * 100).toFixed(0)}%` : "—"}</b>
+          <b>{sum > 0 ? percentOf((row.value / sum) * 100, 0) : "—"}</b>
         </div>
       ))}
     </div>

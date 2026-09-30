@@ -1,6 +1,8 @@
 import type { NewsletterActivity, Grain } from "@/lib/types";
 import { ColumnChart } from "./ColumnChart";
-import { BlockedCard, Card, DeltaChip, Grid, KpiCard, percent } from "./InsightsKit";
+import { getFormat, getLocale, getT } from "@/lib/i18n/server";
+import { formatDayL, pointWords } from "@/lib/insights-labels";
+import { BlockedCard, Card, DeltaChip, Grid, KpiCard } from "./InsightsKit";
 
 /** A month, for turning a per-day rate into a monthly one. */
 const DAYS_PER_MONTH = 30.44;
@@ -30,7 +32,10 @@ export function NewsletterRows({
   grain: Grain;
   compareLabel: string;
 }) {
-  const per = grain === "hour" ? "per hour" : grain === "day" ? "per day" : grain === "week" ? "per week" : "per month";
+  const tr = getT();
+  const locale = getLocale();
+  const { integer, percent, percentOf } = getFormat(locale);
+  const per = tr(`insights.sales.per.${grain}`);
 
   // --- churn: daily on short ranges, monthly on long ones, as the range reads.
   const daily = grain === "hour" || grain === "day";
@@ -50,40 +55,39 @@ export function NewsletterRows({
 
   return (
     <>
-      <Grid min={17} pin="newsletter" label="Newsletter churn and movement">
+      <Grid min={17} pin="newsletter" label={tr("insights.marketing.nlRow")}>
         {newsletter.marketing.covered ? (
           <KpiCard
-            label={daily ? "Newsletter churn, daily" : "Newsletter churn, monthly"}
-            value={churn === null ? "—" : `${churn.toFixed(daily ? 2 : 1)}%`}
+            label={daily ? tr("insights.marketing.churnDaily") : tr("insights.marketing.churnMonthly")}
+            value={churn === null ? "—" : percentOf(churn, daily ? 2 : 1)}
             delta={<DeltaChip current={churn} previous={churnOf(mPrev)} polarity="down" compareLabel={compareLabel} />}
             sub={[
-              { label: "Unsubscribed", value: m.unsubscribed.toLocaleString("en-GB") },
-              { label: "List at start (est.)", value: m.listAtStart.toLocaleString("en-GB") },
-              { label: "Net change", value: `${net > 0 ? "+" : net < 0 ? "−" : ""}${Math.abs(net).toLocaleString("en-GB")}` },
+              { label: tr("insights.marketing.unsubscribed"), value: integer(m.unsubscribed) },
+              { label: tr("insights.marketing.listStart"), value: integer(m.listAtStart) },
+              { label: tr("insights.marketing.netChange"), value: `${net > 0 ? "+" : net < 0 ? "−" : ""}${integer(Math.abs(net))}` },
             ]}
           />
         ) : (
           <BlockedCard
-            label={daily ? "Newsletter churn, daily" : "Newsletter churn, monthly"}
-            reason={`Unsubscribes are only recorded from ${shortDate(newsletter.marketing.unsubscribesFrom)} — pick a range that starts after it`}
+            label={daily ? tr("insights.marketing.churnDaily") : tr("insights.marketing.churnMonthly")}
+            reason={tr("insights.marketing.unsubFrom", { date: shortDate(newsletter.marketing.unsubscribesFrom, locale, tr) })}
           />
         )}
-        <Card title={`Subscribes and unsubscribes, ${per}`} aside={<span>From each customer&apos;s latest consent change — floors</span>} span={2}>
+        <Card title={tr("insights.marketing.subsUnsubs", { per })} aside={<span>{tr("insights.marketing.floors")}</span>} span={2}>
           <ColumnChart
             unit="count"
-            ariaLabel={`Newsletter subscribes and unsubscribes ${per}`}
+            ariaLabel={tr("insights.marketing.subsUnsubsAria", { per })}
             height={240}
-            missingLabel="No consent change synced for this period yet"
-            series={[{ label: "Subscribed", color: "var(--chart-1)" }]}
-            negativeSeries={{ label: "Unsubscribed", color: "var(--chart-2)" }}
-            lineSeries={{ label: "Net", color: "var(--chart-3)" }}
+            missingLabel="insights.marketing.noConsent"
+            series={[{ label: tr("insights.marketing.subscribed"), color: "var(--chart-1)" }]}
+            negativeSeries={{ label: tr("insights.marketing.unsubscribed"), color: "var(--chart-2)" }}
+            lineSeries={{ label: tr("insights.marketing.net"), color: "var(--chart-3)" }}
             data={newsletter.marketing.subscribed.map((point, i) => {
               const unsub = newsletter.marketing.unsubscribed[i]?.value ?? 0;
               const sub = point.value ?? 0;
               return {
                 key: point.key,
-                label: point.label,
-                title: point.title,
+                ...pointWords(point, tr, locale),
                 state: point.state,
                 segments: [sub],
                 negative: unsub,
@@ -94,39 +98,38 @@ export function NewsletterRows({
         </Card>
       </Grid>
 
-      <Grid min={17} pin="capture" label="Capture rate">
-        <Card title={`First-time buyers on the newsletter, ${per}`} aside={<span>% = share of first orders</span>} span={2}>
+      <Grid min={17} pin="capture" label={tr("insights.marketing.captureRate")}>
+        <Card title={tr("insights.marketing.firstBuyers", { per })} aside={<span>{tr("insights.marketing.shareFirst")}</span>} span={2}>
           <ColumnChart
             unit="count"
-            ariaLabel={`First-time buyers who were on the newsletter ${per}`}
+            ariaLabel={tr("insights.marketing.firstBuyersAria", { per })}
             height={240}
-            missingLabel="Orders not synced for this period yet"
+            missingLabel="insights.marketing.ordersNotSynced"
             series={[
-              { label: "Subscribed before ordering", color: "var(--chart-1)" },
-              { label: "Joined at checkout", color: "var(--chart-3)" },
+              { label: tr("insights.marketing.subBefore"), color: "var(--chart-1)" },
+              { label: tr("insights.marketing.atCheckout"), color: "var(--chart-3)" },
             ]}
             data={newsletter.capture.map((p) => ({
               key: p.key,
-              label: p.label,
-              title: p.title,
+              ...pointWords(p, tr, locale),
               state: p.state,
               segments: [p.subscribedBefore, p.subscribedAtCheckout],
               top: p.firstOrders > 0 ? percent(p.subscribedBefore + p.subscribedAtCheckout, p.firstOrders, 0) : undefined,
-              note: `${p.firstOrders.toLocaleString("en-GB")} first-time ${p.firstOrders === 1 ? "buyer" : "buyers"} · ${percent(
-                p.subscribedBefore + p.subscribedAtCheckout,
-                p.firstOrders,
-                0
-              )} captured`,
+              note: tr("insights.marketing.captureNote", {
+                count: p.firstOrders,
+                n: integer(p.firstOrders),
+                pct: percent(p.subscribedBefore + p.subscribedAtCheckout, p.firstOrders, 0),
+              }),
             }))}
           />
         </Card>
         <KpiCard
-          label="Capture rate"
+          label={tr("insights.marketing.captureRate")}
           value={firstOrders ? percent(before + atCheckout, firstOrders) : "—"}
           sub={[
-            { label: "Subscribed before ordering", value: percent(before, firstOrders, 0) },
-            { label: "Joined at checkout", value: percent(atCheckout, firstOrders, 0) },
-            { label: "First-time buyers", value: firstOrders.toLocaleString("en-GB") },
+            { label: tr("insights.marketing.subBefore"), value: percent(before, firstOrders, 0) },
+            { label: tr("insights.marketing.atCheckout"), value: percent(atCheckout, firstOrders, 0) },
+            { label: tr("insights.marketing.firstTime"), value: integer(firstOrders) },
           ]}
         />
       </Grid>
@@ -134,11 +137,8 @@ export function NewsletterRows({
   );
 }
 
-const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-
-/** `2025-04-17T...` -> `17 Apr 2025`, for the churn card's reason. */
-function shortDate(iso: string | null): string {
-  if (!iso) return "an unknown date";
-  const d = new Date(iso);
-  return `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
+/** `2025-04-17T...` -> `17 Apr 2025` / `17 avr. 2025`, for the churn card's reason. */
+function shortDate(iso: string | null, locale: "fr" | "en", tr: (key: string) => string): string {
+  if (!iso) return tr("insights.marketing.unknownDate");
+  return formatDayL(new Date(iso), locale);
 }

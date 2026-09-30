@@ -3,7 +3,9 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import type { ProductCustomerMix } from "@/lib/types";
 import { ChevronDownIcon, SearchIcon } from "@/components/icons";
-import { foldForSearch, percent } from "@/lib/insights-format";
+import { useFormat, useLocale, useT } from "@/lib/i18n/client";
+import { foldForSearch } from "@/lib/insights-format";
+import { countryName } from "@/lib/insights-labels";
 import { ColumnChart } from "./ColumnChart";
 import { useInsightsFrame } from "./InsightsFrame";
 import { GroupSelect, Segmented } from "./Segmented";
@@ -11,11 +13,6 @@ import styles from "./ProductCustomerMixCard.module.css";
 
 type Option = ProductCustomerMix["options"][number];
 type Who = "all" | "vip";
-
-const WHO: { id: Who; label: string }[] = [
-  { id: "all", label: "All customers" },
-  { id: "vip", label: "VIP only" },
-];
 
 /** The value the country select uses for "no country filter". */
 const ALL_COUNTRIES = "";
@@ -30,21 +27,29 @@ const ALL_COUNTRIES = "";
  * change and a shared link. Choosing re-renders the panel (dimmed meanwhile).
  */
 export function ProductCustomerMixCard({ mix }: { mix: ProductCustomerMix }) {
+  const t = useT();
+  const locale = useLocale();
+  const { integer, percent } = useFormat();
   const { navigate, pending } = useInsightsFrame();
+  const WHO: { id: Who; label: string }[] = [
+    { id: "all", label: t("insights.sales.allCustomers") },
+    { id: "vip", label: t("insights.sales.vipOnly") },
+  ];
 
   if (mix.blockedReason) {
-    return <p className={styles.empty}>{mix.blockedReason}</p>;
+    return <p className={styles.empty}>{t(mix.blockedReason)}</p>;
   }
   if (!mix.selected) {
-    return <p className={styles.empty}>No paid product was sold in this range.</p>;
+    return <p className={styles.empty}>{t("insights.sales.mix.noProduct")}</p>;
   }
 
   const { selected, customers } = mix;
   // Its buyers: the two buckets that bought it. The distribution describes them
   // and nobody else, so it is their total the shares divide by.
   const buyers = mix.onlyCustomers + mix.withOtherCustomers;
-  const countryLabel = mix.countries.find((c) => c.code === mix.country)?.label ?? null;
-  const group = [countryLabel ? `delivered to ${countryLabel}` : null, mix.vipOnly ? "VIP customers only" : null]
+  const countryEntry = mix.countries.find((c) => c.code === mix.country) ?? null;
+  const countryLabel = countryEntry ? countryName(countryEntry.code, countryEntry.label, locale) : null;
+  const group = [countryLabel ? t("insights.sales.mix.deliveredTo", { country: countryLabel }) : null, mix.vipOnly ? t("insights.sales.mix.vipOnlyGroup") : null]
     .filter(Boolean)
     .join(", ");
 
@@ -52,7 +57,7 @@ export function ProductCustomerMixCard({ mix }: { mix: ProductCustomerMix }) {
     <div className={styles.wrap}>
       <div className={styles.controls}>
         <span className={styles.selectLabel} id="product-customer-mix-label">
-          Product
+          {t("insights.inventory.product")}
         </span>
         <ProductPicker
           options={mix.options}
@@ -63,54 +68,52 @@ export function ProductCustomerMixCard({ mix }: { mix: ProductCustomerMix }) {
         />
       </div>
 
-      <div className={styles.filters} aria-label="Which customers to count">
+      <div className={styles.filters} aria-label={t("insights.sales.mix.whichCustomers")}>
         <GroupSelect
-          label="Country"
+          label={t("insights.sales.country")}
           value={mix.country ?? ALL_COUNTRIES}
           onChange={(code) => navigate({ mixCountry: code || null })}
           groups={[
-            { key: ALL_COUNTRIES, label: "All countries" },
-            ...mix.countries.map((c) => ({ key: c.code, label: c.label })),
+            { key: ALL_COUNTRIES, label: t("insights.sales.mix.allCountries") },
+            ...mix.countries.map((c) => ({ key: c.code, label: countryName(c.code, c.label, locale) })),
           ]}
         />
         <Segmented
           options={WHO}
           value={mix.vipOnly ? "vip" : "all"}
-          label="Customers"
+          label={t("insights.sales.customers")}
           onChange={(next) => navigate({ mixVip: next === "vip" ? "1" : null })}
         />
       </div>
 
       {mix.notice ? (
         <p className={styles.empty} role="status">
-          {mix.notice}
+          {t(mix.notice)}
         </p>
       ) : (
         <>
-      <div className={styles.stats} aria-label={`Customer split for ${selected.title}`}>
-        <Metric label="Bought only this product" value={mix.onlyCustomers} total={customers} />
-        <Metric label="Did not order it" value={mix.withoutCustomers} total={customers} />
-        <Metric label="Ordered it with other products" value={mix.withOtherCustomers} total={customers} />
+      <div className={styles.stats} aria-label={t("insights.sales.mix.split", { title: selected.title })}>
+        <Metric label={t("insights.sales.mix.only")} value={mix.onlyCustomers} total={customers} />
+        <Metric label={t("insights.sales.mix.without")} value={mix.withoutCustomers} total={customers} />
+        <Metric label={t("insights.sales.mix.withOther")} value={mix.withOtherCustomers} total={customers} />
       </div>
 
       <div className={styles.chartBlock}>
         <div className={styles.chartHead}>
-          <h3>Buyers by number of orders carrying it</h3>
-          <span>
-            {buyers.toLocaleString("en-GB")} {buyers === 1 ? "buyer" : "buyers"}
-          </span>
+          <h3>{t("insights.sales.mix.buyersByOrders")}</h3>
+          <span>{t("insights.sales.mix.buyers", { count: buyers, n: integer(buyers) })}</span>
         </div>
         {buyers > 0 ? (
           <ColumnChart
             unit="count"
-            ariaLabel={`Customers who bought ${selected.title} by how many of their orders carried it`}
-            xTitle="Orders carrying this product"
+            ariaLabel={t("insights.sales.mix.chartLabel", { title: selected.title })}
+            xTitle={t("insights.sales.mix.xTitle")}
             height={220}
-            series={[{ label: "Customers", color: "var(--chart-line)" }]}
+            series={[{ label: t("insights.sales.customers"), color: "var(--chart-line)" }]}
             data={mix.ordersPerBuyer.map((b) => ({
               key: String(b.orders),
               label: b.orMore ? `${b.orders}+` : String(b.orders),
-              title: b.orMore ? `${b.orders} or more orders` : `${b.orders} ${b.orders === 1 ? "order" : "orders"}`,
+              title: b.orMore ? t("insights.sales.mix.orMore", { n: b.orders }) : t("insights.sales.ordersCount", { count: b.orders }),
               segments: [b.customers],
               top:
                 b.customers === 0
@@ -118,18 +121,18 @@ export function ProductCustomerMixCard({ mix }: { mix: ProductCustomerMix }) {
                   : b.customers / buyers < 0.005
                     ? "<1%"
                     : percent(b.customers, buyers, 0),
-              note: `${percent(b.customers, buyers)} of its buyers`,
+              note: t("insights.sales.mix.ofBuyers", { pct: percent(b.customers, buyers) }),
             }))}
           />
         ) : (
-          <p className={styles.empty}>Nobody in this group bought it, so there is nothing to count orders over.</p>
+          <p className={styles.empty}>{t("insights.sales.mix.nobody")}</p>
         )}
       </div>
 
       <div className={styles.tableBlock}>
         <div className={styles.tableHead}>
-          <h3>Ordered with</h3>
-          <span>Customers</span>
+          <h3>{t("insights.sales.mix.orderedWith")}</h3>
+          <span>{t("insights.sales.customers")}</span>
         </div>
         {mix.alsoBought.length > 0 ? (
           <ol className={styles.rows}>
@@ -139,24 +142,19 @@ export function ProductCustomerMixCard({ mix }: { mix: ProductCustomerMix }) {
                 <span className={styles.product} title={product.title}>
                   {product.title}
                 </span>
-                <span className={styles.count}>{product.customers.toLocaleString("en-GB")}</span>
+                <span className={styles.count}>{integer(product.customers)}</span>
               </li>
             ))}
           </ol>
         ) : (
-          <p className={styles.empty}>Nobody who bought this product bought another paid product in this range.</p>
+          <p className={styles.empty}>{t("insights.sales.mix.noOthers")}</p>
         )}
       </div>
 
       <p className={styles.caption}>
-        Out of {customers.toLocaleString("en-GB")} Shopify customers who ordered in this range
-        {group ? ` (${group})` : ""}; Amazon and Yves Rocher orders are not counted.
-        {countryLabel ? ` Only orders delivered to ${countryLabel} are counted, including for “ordered with”.` : ""}
-        {mix.vipOnly ? " VIP follows the shop’s rule over its own window, not this range." : ""} Free items (samples,
-        promotional masques) are ignored, so a sample alongside the product still counts as buying only this product.
-        &ldquo;Ordered with&rdquo; covers the whole range, not just the same order. The chart counts its buyers only
-        &mdash; everyone else is the &ldquo;did not order it&rdquo; figure above &mdash; and one order carrying two jars
-        is one order, as on Customers &rarr; Customers by number of orders.
+        {t("insights.sales.mix.caption", { n: integer(customers), group: group ? ` (${group})` : "" })}
+        {countryLabel ? ` ${t("insights.sales.mix.captionCountry", { country: countryLabel })}` : ""}
+        {mix.vipOnly ? ` ${t("insights.sales.mix.captionVip")}` : ""} {t("insights.sales.mix.captionEnd")}
       </p>
         </>
       )}
@@ -186,6 +184,7 @@ function ProductPicker({
   labelledBy: string;
   onPick: (productId: string) => void;
 }) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(0);
@@ -258,7 +257,7 @@ function ProductPicker({
         }}
       >
         <span id={`${listId}-value`} className={styles.pickerValue}>
-          {selected?.title ?? "Choose a product"}
+          {selected?.title ?? t("insights.sales.mix.choose")}
         </span>
         <ChevronDownIcon size={16} className={open ? styles.chevronOpen : styles.chevron} />
       </button>
@@ -272,8 +271,8 @@ function ProductPicker({
               type="text"
               role="combobox"
               className={styles.pickerInput}
-              placeholder={`Search ${options.length} products`}
-              aria-label="Search products"
+              placeholder={t("insights.sales.mix.searchN", { n: options.length })}
+              aria-label={t("insights.sales.mix.search")}
               aria-expanded
               aria-controls={listId}
               aria-autocomplete="list"
@@ -331,7 +330,7 @@ function ProductPicker({
             </ul>
           ) : (
             <p className={styles.pickerEmpty} role="status">
-              No product matching &ldquo;{query.trim()}&rdquo; sold in this range.
+              {t("insights.sales.noMatchGlobal", { query: query.trim() })}
             </p>
           )}
         </div>
@@ -341,12 +340,14 @@ function ProductPicker({
 }
 
 function Metric({ label, value, total }: { label: string; value: number; total: number }) {
+  const t = useT();
+  const { integer, percentOf } = useFormat();
   const share = total > 0 ? Math.round((value / total) * 100) : 0;
   return (
     <div className={styles.metric}>
       <span className={styles.metricLabel}>{label}</span>
-      <strong>{value.toLocaleString("en-GB")}</strong>
-      <span className={styles.metricShare}>{share}% of customers</span>
+      <strong>{integer(value)}</strong>
+      <span className={styles.metricShare}>{t("insights.sales.mix.ofCustomers", { pct: percentOf(share, 0) })}</span>
     </div>
   );
 }

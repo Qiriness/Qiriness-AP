@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { VipRule } from "@/lib/types";
+import { useFormat, useT } from "@/lib/i18n/client";
 import { useInsightsFrame } from "./InsightsFrame";
 import styles from "./VipRuleCard.module.css";
 
@@ -28,6 +29,8 @@ export function VipRuleCard({
   /** What the SAVED rule admits today, so the card has a figure before anything is typed. */
   current: Summary | null;
 }) {
+  const t = useT();
+  const { integer } = useFormat();
   const { refresh } = useInsightsFrame();
   const [minSpend, setMinSpend] = useState(rule ? String(rule.minSpend) : "");
   const [minOrders, setMinOrders] = useState(rule ? String(rule.minOrders) : "");
@@ -60,18 +63,18 @@ export function VipRuleCard({
         const payload = await response.json();
         if (id !== request.current) return;
         if (!response.ok) {
-          setError(payload.error ?? "Could not check this rule.");
+          setError(payload.error ?? t("insights.customers.vip.couldNotCheck"));
           setPreview(null);
         } else {
           setError(null);
           setPreview(payload.summary);
         }
       } catch {
-        if (id === request.current) setError("Could not check this rule.");
+        if (id === request.current) setError(t("insights.customers.vip.couldNotCheck"));
       }
     }, 350);
     return () => window.clearTimeout(timer);
-  }, [minSpend, minOrders, windowMonths, complete]);
+  }, [minSpend, minOrders, windowMonths, complete, t]);
 
   const save = async (clear = false) => {
     setSaving(true);
@@ -84,7 +87,7 @@ export function VipRuleCard({
       });
       const payload = await response.json();
       if (!response.ok) {
-        setError(payload.error ?? "Could not save the rule.");
+        setError(payload.error ?? t("insights.customers.vip.couldNotSave"));
       } else {
         setError(null);
         setSaved(true);
@@ -95,7 +98,7 @@ export function VipRuleCard({
         refresh();
       }
     } catch {
-      setError("Could not save the rule.");
+      setError(t("insights.customers.vip.couldNotSave"));
     } finally {
       setSaving(false);
     }
@@ -107,10 +110,10 @@ export function VipRuleCard({
     <section className={styles.card} aria-labelledby="vip-rule-title">
       <header className={styles.head}>
         <h2 id="vip-rule-title" className={styles.title}>
-          VIP rule
+          {t("insights.customers.vip.title")}
         </h2>
         <span className={styles.state}>
-          {rule ? (dirty ? "Unsaved changes" : "Active on the ticket queue, this panel and the agent") : "Not set — nobody is a VIP"}
+          {rule ? (dirty ? t("insights.customers.vip.unsaved") : t("insights.customers.vip.active")) : t("insights.customers.vip.notSet")}
         </span>
       </header>
 
@@ -121,9 +124,9 @@ export function VipRuleCard({
           if (complete && dirty) save();
         }}
       >
-        <span>A customer is a VIP when they have spent more than</span>
+        <span>{t("insights.customers.vip.sentence1")}</span>
         <label className={styles.field}>
-          <span className={styles.srOnly}>Minimum spend in euros</span>
+          <span className={styles.srOnly}>{t("insights.customers.vip.minSpend")}</span>
           <span className={styles.prefix} aria-hidden="true">
             €
           </span>
@@ -138,10 +141,10 @@ export function VipRuleCard({
             placeholder="300"
           />
         </label>
-        <strong className={styles.and}>and</strong>
-        <span>placed more than</span>
+        <strong className={styles.and}>{t("insights.customers.finder.and").toLowerCase()}</strong>
+        <span>{t("insights.customers.vip.sentence2")}</span>
         <label className={styles.field}>
-          <span className={styles.srOnly}>Minimum number of orders</span>
+          <span className={styles.srOnly}>{t("insights.customers.vip.minOrders")}</span>
           <input
             type="number"
             inputMode="numeric"
@@ -153,9 +156,9 @@ export function VipRuleCard({
             placeholder="2"
           />
         </label>
-        <span>orders, both in the last</span>
+        <span>{t("insights.customers.vip.sentence3")}</span>
         <label className={styles.field}>
-          <span className={styles.srOnly}>Window in months</span>
+          <span className={styles.srOnly}>{t("insights.customers.vip.window")}</span>
           <input
             type="number"
             inputMode="numeric"
@@ -167,15 +170,15 @@ export function VipRuleCard({
             className={`${styles.input} ${styles.narrow}`}
           />
         </label>
-        <span>months.</span>
+        <span>{t("insights.customers.finder.months")}</span>
 
         <div className={styles.actions}>
           <button type="submit" className={styles.save} disabled={!complete || !dirty || saving || Boolean(error)}>
-            {saving ? "Saving…" : "Save rule"}
+            {saving ? t("tickets.panels.saving") : t("insights.customers.vip.save")}
           </button>
           {rule ? (
             <button type="button" className={styles.clear} onClick={() => save(true)} disabled={saving}>
-              Remove rule
+              {t("insights.customers.vip.remove")}
             </button>
           ) : null}
         </div>
@@ -186,16 +189,16 @@ export function VipRuleCard({
           <span className={styles.error}>{error}</span>
         ) : shown ? (
           <>
-            <strong>{shown.vipCustomers.toLocaleString("en-GB")}</strong>{" "}
-            {shown.vipCustomers === 1 ? "customer qualifies" : "customers qualify"}
+            <strong>{integer(shown.vipCustomers)}</strong>{" "}
+            {t("insights.customers.vip.qualify", { count: shown.vipCustomers })}
             {shown.buyersInWindow > 0 ? (
-              <> of {shown.buyersInWindow.toLocaleString("en-GB")} who ordered in that window</>
+              <> {t("insights.customers.vip.ofWindow", { n: integer(shown.buyersInWindow) })}</>
             ) : null}
-            {dirty && rule ? " — not saved yet" : saved ? " — saved" : ""}
-            <span className={styles.note}> Shopify orders only; Amazon and Yves Rocher cannot be tied to a person.</span>
+            {dirty && rule ? ` — ${t("insights.customers.vip.notSaved")}` : saved ? ` — ${t("insights.customers.vip.saved")}` : ""}
+            <span className={styles.note}> {t("insights.customers.vip.scope")}</span>
           </>
         ) : (
-          "Fill in all three to see how many customers qualify."
+          t("insights.customers.vip.fill")
         )}
       </p>
     </section>

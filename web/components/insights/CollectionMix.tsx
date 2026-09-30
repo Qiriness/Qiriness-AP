@@ -1,5 +1,6 @@
 import type { CollectionSale } from "@/lib/types";
-import { Caption, euros } from "./InsightsKit";
+import { getFormat, getT } from "@/lib/i18n/server";
+import { Caption } from "./InsightsKit";
 import t from "./tables.module.css";
 import styles from "./CollectionMix.module.css";
 
@@ -28,10 +29,12 @@ export function CollectionMix({
   productRevenue: number;
   compareLabel: string;
 }) {
+  const tr = getT();
+  const { euros, percentOf } = getFormat();
   const named = collections.filter((c) => c.collectionId !== null);
   const uncollected = collections.find((c) => c.collectionId === null) ?? null;
   if (named.length === 0 && (!uncollected || uncollected.revenue === 0)) {
-    return <p className={t.muted}>No paid product line in this range.</p>;
+    return <p className={t.muted}>{tr("insights.sales.noPaidLine")}</p>;
   }
 
   const share = (revenue: number) => (productRevenue > 0 ? (revenue / productRevenue) * 100 : null);
@@ -43,20 +46,20 @@ export function CollectionMix({
         <table className={t.table}>
           <thead>
             <tr>
-              <th scope="col">Collection</th>
-              <th scope="col" className={t.n}>Revenue</th>
-              <th scope="col" className={t.n} title="Share of the range's paid product revenue">Share</th>
-              <th scope="col" className={t.n} title={`Change against ${compareLabel}`}>Δ</th>
+              <th scope="col">{tr("insights.sales.collection")}</th>
+              <th scope="col" className={t.n}>{tr("insights.sales.revenue")}</th>
+              <th scope="col" className={t.n} title={tr("insights.sales.shareHint")}>{tr("insights.sales.share")}</th>
+              <th scope="col" className={t.n} title={tr("insights.sales.changeAgainst", { label: compareLabel })}>Δ</th>
             </tr>
           </thead>
           <tbody>
             {named.map((collection) => (
               <tr key={collection.collectionId}>
-                <th scope="row" className={styles.name} title={`${collection.products} products sold in this collection`}>
+                <th scope="row" className={styles.name} title={tr("insights.sales.productsInCollection", { count: collection.products })}>
                   {collection.title}
                 </th>
                 <td className={t.n}>{euros(collection.revenue)}</td>
-                <td className={t.n}>{share(collection.revenue) === null ? "—" : `${share(collection.revenue)!.toFixed(1)}%`}</td>
+                <td className={t.n}>{share(collection.revenue) === null ? "—" : percentOf(share(collection.revenue)!, 1)}</td>
                 <td className={t.n}>
                   <Delta collection={collection} />
                 </td>
@@ -64,12 +67,12 @@ export function CollectionMix({
             ))}
             {uncollected && uncollected.revenue > 0 ? (
               <tr className={styles.uncollected}>
-                <th scope="row" className={styles.name} title="Products in none of the six ranges">
-                  {uncollected.title}
+                <th scope="row" className={styles.name} title={tr("insights.sales.noRangeHint")}>
+                  {tr("insights.sales.outsideRanges")}
                 </th>
                 <td className={t.n}>{euros(uncollected.revenue)}</td>
                 <td className={t.n}>
-                  {share(uncollected.revenue) === null ? "—" : `${share(uncollected.revenue)!.toFixed(1)}%`}
+                  {share(uncollected.revenue) === null ? "—" : percentOf(share(uncollected.revenue)!, 1)}
                 </td>
                 <td className={t.n}>
                   <Delta collection={uncollected} />
@@ -92,25 +95,23 @@ export function CollectionMix({
         </div>
       ) : null}
 
-      <Caption>
-        The six ranges the catalogue is managed by. A product counts in every range that carries it, so the shares
-        overlap and never add up to 100%. Share is of the period&apos;s paid product revenue; everything in none of
-        them is the last row.
-      </Caption>
+      <Caption>{tr("insights.sales.collectionNote")}</Caption>
     </>
   );
 }
 
 /** The change against the previous period, or a dash where none can be computed. */
 function Delta({ collection }: { collection: CollectionSale }) {
+  const tr = getT();
+  const { percentOf } = getFormat();
   if (collection.previousRevenue === null) return <span className={t.muted}>—</span>;
-  if (collection.previousRevenue === 0) return <span className={styles.up}>new</span>;
+  if (collection.previousRevenue === 0) return <span className={styles.up}>{tr("insights.sales.new")}</span>;
   const change = ((collection.revenue - collection.previousRevenue) / collection.previousRevenue) * 100;
-  if (Math.abs(change) < 0.05) return <span className={t.muted}>0.0%</span>;
+  if (Math.abs(change) < 0.05) return <span className={t.muted}>{percentOf(0, 1)}</span>;
   return (
     <span className={change > 0 ? styles.up : styles.down}>
       {change > 0 ? "+" : "−"}
-      {Math.abs(change).toFixed(1)}%
+      {percentOf(Math.abs(change), 1)}
     </span>
   );
 }
