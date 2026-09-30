@@ -246,3 +246,44 @@ test('no tools means no tools field at all', async () => {
   assert.equal(sent.tools, undefined);
   assert.equal(sent.tool_choice, undefined);
 });
+
+test('a model that refuses tools with reasoning is sent reasoning_effort none, and remembered', async () => {
+  const bodies = [];
+  const refusal = JSON.stringify({
+    error: { message: 'Function tools with reasoning_effort are not supported', param: 'reasoning_effort' }
+  });
+  const fetchImpl = async (_url, opts) => {
+    const body = JSON.parse(opts.body);
+    bodies.push(body);
+    if (body.tools && body.reasoning_effort !== 'none') {
+      return { ok: false, status: 400, text: async () => refusal, headers: { get: () => null } };
+    }
+    return jsonResponse({ choices: [{ message: { content: 'ok' } }] });
+  };
+  const client = createOpenAIClient({ apiKey: 'k', fetchImpl });
+  const tools = [{ type: 'function', function: { name: 't', parameters: {} } }];
+
+  await client.completeWithTools({ model: 'gpt-test-tools-1', messages: [], tools });
+  assert.equal(bodies.length, 2);
+  assert.equal(bodies[1].reasoning_effort, 'none');
+
+  // Remembered: the next call goes out right the first time.
+  await client.completeWithTools({ model: 'gpt-test-tools-1', messages: [], tools });
+  assert.equal(bodies.length, 3);
+  assert.equal(bodies[2].reasoning_effort, 'none');
+
+  // A call without tools is never given the setting.
+  await client.completeWithTools({ model: 'gpt-test-tools-1', messages: [] });
+  assert.equal(bodies[3].reasoning_effort, undefined);
+});
+
+test('a different 400 is not retried', async () => {
+  let calls = 0;
+  const fetchImpl = async () => {
+    calls += 1;
+    return { ok: false, status: 400, text: async () => JSON.stringify({ error: { param: 'messages' } }), headers: { get: () => null } };
+  };
+  const client = createOpenAIClient({ apiKey: 'k', fetchImpl });
+  await assert.rejects(client.completeWithTools({ model: 'gpt-test-tools-2', messages: [], tools: [{}] }), /400/);
+  assert.equal(calls, 1);
+});

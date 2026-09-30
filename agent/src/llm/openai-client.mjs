@@ -91,7 +91,8 @@ export function createOpenAIClient({
     return payload;
   }
 
-  async function send(body) {
+  async function send(requested) {
+    let body = withKnownToolEffort(requested);
     let attempt = 0;
     for (;;) {
       attempt += 1;
@@ -125,6 +126,13 @@ export function createOpenAIClient({
       }
 
       const detail = await response.text().catch(() => `HTTP ${response.status}`);
+      if (response.status === 400 && refusesToolsWithReasoning(body, detail)) {
+        // Not a retry of a failure: the same request in the shape this model
+        // accepts, remembered so later calls go out that way from the start.
+        NO_REASONING_WITH_TOOLS.add(body.model);
+        body = withKnownToolEffort(body);
+        continue;
+      }
       throw kinded(
         new Error(`OpenAI request failed (${response.status}): ${detail}`),
         `http_${response.status}`
@@ -251,6 +259,34 @@ export function isReasoningModel(model) {
 // (2026-09-30) any stage can land on one, so the cap is floored. Only a
 // ceiling: tokens that are not produced are not billed.
 const REASONING_MIN_COMPLETION_TOKENS = 4000;
+
+// SOME MODELS REFUSE TOOLS ALONGSIDE REASONING ON /v1/chat/completions (gpt-6-sol,
+// 2026-09-30: « Function tools with reasoning_effort are not supported … set
+// reasoning_effort to 'none' »), and they refuse it at their DEFAULT effort,
+// which we never set. Learned from the refusal rather than listed by name, so
+// the next model that does it needs no edit. Only tool-calling calls are
+// affected — the investigator and the Home chat; a JSON-only call is untouched.
+// The price: those calls run without reasoning, like the older models did.
+const NO_REASONING_WITH_TOOLS = new Set();
+
+function hasTools(body) {
+  return Array.isArray(body?.tools) && body.tools.length > 0;
+}
+
+function withKnownToolEffort(body) {
+  return hasTools(body) && NO_REASONING_WITH_TOOLS.has(body.model) && body.reasoning_effort === undefined
+    ? { ...body, reasoning_effort: 'none' }
+    : body;
+}
+
+export function refusesToolsWithReasoning(body, detail) {
+  if (!hasTools(body) || body.reasoning_effort !== undefined || NO_REASONING_WITH_TOOLS.has(body.model)) return false;
+  try {
+    return JSON.parse(detail)?.error?.param === 'reasoning_effort';
+  } catch {
+    return false;
+  }
+}
 
 function samplingParams(model, maxTokens) {
   return isReasoningModel(model)
