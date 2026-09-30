@@ -19,8 +19,11 @@ import { checkClause, codeOnly, literalsIn, read, tablesIn } from './_shared.tes
 
 const SQL = read('05_exemplars');
 
-test('it creates exactly the three exemplar tables', () => {
+test('it creates exactly the three exemplar tables and the three policy tables', () => {
   assert.deepEqual(tablesIn(SQL).sort(), [
+    'company_policies',
+    'company_policy_links',
+    'company_policy_versions',
     'support_answers',
     'support_exemplar_phrasings',
     'support_exemplars'

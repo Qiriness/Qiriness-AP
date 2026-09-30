@@ -1,0 +1,81 @@
+/* No outer spacing: the place it sits in (the canvas strip, the inspector)
+   pads it to match its own card. */
+.block {
+  display: grid;
+  gap: 0.4rem;
+}
+
+.label {
+  margin: 0;
+  font-size: var(--text-caption, 0.78rem);
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  align-items: center;
+}
+
+.none {
+  font-size: 0.85rem;
+  color: var(--text-subtle);
+}
+
+.chip,
+.chipOff,
+.chipInherited {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.15rem 0.35rem 0.15rem 0.6rem;
+  border-radius: 999px;
+  font-size: 0.82rem;
+  border: 1px solid var(--teal-100);
+  background: var(--teal-050);
+  color: var(--teal-ink);
+}
+
+.chipOff {
+  border-color: var(--border);
+  background: var(--surface);
+  color: var(--text-subtle);
+}
+
+.chipInherited {
+  padding-right: 0.6rem;
+  border-style: dashed;
+  border-color: var(--border);
+  background: transparent;
+  color: var(--text-subtle);
+}
+
+.remove {
+  border: none;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font-size: 0.95rem;
+  line-height: 1;
+  padding: 0 0.2rem;
+}
+
+.add {
+  font: inherit;
+  font-size: 0.82rem;
+  padding: 0.15rem 0.4rem;
+  border: 1px dashed var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text-muted);
+}
+
+.error {
+  margin: 0;
+  color: var(--error);
+  font-size: 0.82rem;
+}

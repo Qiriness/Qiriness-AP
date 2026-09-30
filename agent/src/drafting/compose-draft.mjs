@@ -1,4 +1,5 @@
 import { MISSING_FIELDS, toDraftingPrompt } from '../investigation/case-file.mjs';
+import { POLICY_INSTRUCTION, renderPolicy } from '../../../scripts/lib/company-policies.mjs';
 import { fillParameters } from '../../../scripts/lib/parameters.mjs';
 import { normaliseTones, toneInstructions } from '../../../scripts/lib/reply-tones.mjs';
 import { normaliseReplyLink } from '../../../scripts/lib/reply-link.mjs';
@@ -69,8 +70,40 @@ export function caseFileFromRow(row) {
     tones: tonesOf(row),
     // The link the matched rule offers, `{ url, label }`. The composed message
     // uses only the label; the URL travels to the checks and onto the draft row.
-    link: normaliseReplyLink(row?.exemplar_match?.policy?.link ?? null)
+    link: normaliseReplyLink(row?.exemplar_match?.policy?.link ?? null),
+    // Which company policies the case read, by key: `[{ key, version, source }]`.
+    // Their text is read afresh below, so an edited policy reaches the next draft.
+    companyPolicies: array(row?.company_policies)
   };
+}
+
+/**
+ * The company policies this draft may quote: the case's, by key, with their
+ * CURRENT text and its parameters filled. A policy switched off or deleted
+ * since the investigation is dropped; so is one quoting a parameter nobody has
+ * set, for the reason a skeleton is (a brace in front of the model gets copied
+ * or invented over).
+ *
+ * @param caseFile         from `caseFileFromRow`
+ * @param companyPolicies  active policies by key, loaded once per run
+ * @returns `[{ key, name, text, version, source }]`
+ */
+export function resolveCompanyPolicies(caseFile, companyPolicies = new Map(), parameters = new Map(), logger = null) {
+  const out = [];
+  for (const used of array(caseFile?.companyPolicies)) {
+    const policy = companyPolicies?.get?.(used?.key) ?? null;
+    if (!policy) {
+      logger?.warn?.('draft.company_policy_dropped', { key: used?.key ?? null, reason: 'inactive_or_missing' });
+      continue;
+    }
+    const { text, unset } = renderPolicy(policy, parameters);
+    if (unset.length > 0) {
+      logger?.warn?.('draft.company_policy_dropped', { key: used.key, reason: 'parameter_unset', unset });
+      continue;
+    }
+    out.push({ key: used.key, name: policy.name, text, version: policy.version, source: used.source ?? null });
+  }
+  return out;
 }
 
 /**
@@ -438,6 +471,10 @@ export function composeDraftingMessage({
   // promised. Null on a first message and on any thread the casework pass has
   // not read, which renders no block at all.
   caseState = null,
+  // The shop's active company policies by key, loaded once per run. Empty is
+  // safe: the case's policies are then dropped, and the reply is written from
+  // the case file alone.
+  companyPolicies = new Map(),
   logger = null
 } = {}) {
   const parts = [];
@@ -570,6 +607,19 @@ Si la réponse ne se prête pas à transmettre un code, ne pas en parler — ` +
     );
   }
 
+  // THE COMPANY'S OWN RULES FOR THIS CASE, under their own heading: what the
+  // company says (delivery times, returns, refunds), not what happens in this
+  // case — the skeleton above says that. One instruction for all of them, then
+  // each by name. After the skeleton for the reason the code and the article
+  // are: the skeleton says what the reply does, this is the material.
+  const policies = resolveCompanyPolicies(caseFile, companyPolicies, parameters, logger);
+  if (policies.length > 0) {
+    parts.push(
+      `## Politiques de l'entreprise\n\n${POLICY_INSTRUCTION}\n\n` +
+        policies.map((p) => `### ${p.name}\n${p.text}`).join('\n\n')
+    );
+  }
+
   // THE LINK A PERSON CHOSE FOR THIS CASE — AND NEVER ITS ADDRESS. Handed a URL,
   // a model pastes it: in full mid-sentence, or as markdown nothing renders (see
   // `STRUCTURAL_RULES`). So it is told only what the link opens and asked for
@@ -649,7 +699,7 @@ export const DRAFT_SCHEMA = {
  * Ids and counts rather than the content — the content is still in the rows
  * these point at, and copying it here would duplicate the case file per draft.
  */
-export function promptInputs({ caseFile, orderContext, investigationId, model, closure = null }) {
+export function promptInputs({ caseFile, orderContext, investigationId, model, closure = null, companyPolicies = null, parameters = new Map() }) {
   return {
     investigation_id: investigationId || null,
     model: model || null,
@@ -669,7 +719,18 @@ export function promptInputs({ caseFile, orderContext, investigationId, model, c
     // model's own, kept because « le client confirme avoir reçu sa commande »
     // is what makes the decision arguable.
     closes_case: closure?.closes === true,
-    closure_reason: closure?.closes ? closure.why || null : null
+    closure_reason: closure?.closes ? closure.why || null : null,
+    // Which company policies this reply was written with, and which version of
+    // each: the text itself is kept in company_policy_versions.
+    ...(companyPolicies
+      ? {
+          company_policies: resolveCompanyPolicies(caseFile, companyPolicies, parameters).map(({ key, version, source }) => ({
+            key,
+            version,
+            source
+          }))
+        }
+      : {})
   };
 }
 

@@ -2196,7 +2196,7 @@ The verdict stays `ambiguous` and `resolved_from` records what was level, so a c
 
 **This narrows « one exemplar or none, never a shortlist » above, and the reasoning there still holds.** That rule refused to hand a shortlist downstream because the choice would land « somewhere with less information ». A model reading the full opening message beside the candidates has *more* information than the embedding score, so the shortlist now goes to it — and nowhere else. The investigation still receives one situation or none.
 
-**Where it runs:** only when the matcher scored `near` (0.55–0.65) or `ambiguous`, only on the opening message, only among the matcher's own candidates (subject-filtered, top 3), and before the rules load — so the situation it picks drives the evidence collected and the rule selected, exactly as a mechanical match does. A score of 0.65+ stays mechanical; below 0.55 nothing is plausible enough to choose between.
+**Where it runs:** only when the matcher scored `near` (0.55–0.65) or `ambiguous`, only on the opening message, only among the matcher's own candidates (subject-filtered, top 3), and before the rules load — so the situation it picks drives the evidence collected and the rule selected, exactly as a mechanical match does. A score of 0.65+ stays mechanical unless the runner-up is within `minMargin` (0.05 since 2026-09-30); below 0.55 nothing is plausible enough to choose between.
 
 **Measured before it shipped**, on the 56 near misses and ties in `ticket_investigations` and the 53 existing matches as a control, every committed choice read by hand against the customer's message:
 
@@ -2266,6 +2266,8 @@ Collection halts when one answer remains, or when nothing available separates th
 That remaining 19% was a **corpus** problem, not a threshold one, and merging confirmed it: **O-09/O-10, D-03/D-04 and P-15/P-16 collapsed on 2026-08-12**, 32 exemplars → 29, and the median margin rose to **0.040** with ambiguity at **17%**. The number did not need moving.
 
 The measurement is also pessimistic by construction: it scores unfiltered across all of them, because filtering by subject would make the agreement proxy trivially 100%. Production filters first, so the real candidate pool is a handful of same-subject exemplars.
+
+**Raised to 0.05 on 2026-09-30, because what "ambiguous" costs changed.** The 0.01 cut was made when an ambiguous match was discarded. Since the situation chooser, an ambiguous match is read by a small model beside the candidates, and the rules settle it if the model says none and the tied situations answer alike (see « A near miss is settled by a model »). A wider band now costs a cheap-tier call, not the match — so the 0.01–0.05 close calls the score used to commit alone get a second reading. **The 45% the sweep predicts does not happen in production**, because production searches within the ticket's subject and the unfiltered sweep does not. Replayed through the real search on 2026-09-30, 158 opening messages with 77 at 0.65 or more: median margin **0.108**; ties under 0.01 = 5, the new 0.01–0.03 band = **3** (about 4% of matches). On those 3 the chooser kept the score's pick twice, both right when read (P-18 on a refused welcome code, D-06 on a chased re-shipment), and answered none to a customer's thank-you (« j'ai hâte de recevoir enfin ce colis ») that the score would have filed as D-36, the late-order-want-a-refund situation. 3 of 3 against the score's 2 of 3: the right direction, far too few to call a rate. The same day it went on to **0.05**, which sends 15 of the 77 (19%) to the chooser: below 0.10 would be 45%, below 0.30 94%. **The 0.03–0.05 band (10 tickets) has not been read** — the chooser agreed with 47 of 53 clear matches in the 2026-09-15 control, and whether those 6 disagreements were catches or overrides of a right match is still unknown. That is the check before going wider.
 
 ### Split on what the customer can OBSERVE, not on what the evidence turns out to be
 
@@ -3015,6 +3017,28 @@ Named `commande`, `retour`, `promo`, `produit` until 2026-08-30, which put two l
 **`other` has a tool and no family, and that is a dead end rather than an empty one.** A ticket categorised `other` may search the knowledge base, so it is investigated, and no rule can ever reach it. Nobody has decided what `other` should do; a test pins the gap by name so it stays visible and fails the day a family is added.
 
 ## Knowledge
+
+### Company policies are written once, linked by reference, and never decide a case (2026-09-30)
+
+Policy text (delivery times, where we deliver, returns, refunds) lived in two wrong places:
+- **knowledge articles** found by similarity search: « Livraisons et retours » and « Refund policy »;
+- **rule skeletons** that re-typed it. D-07 `D07_reponse_generique` spells out the delivery delays, and D-33 has two branches on `policy_answer` (`answered` vs `none/weak/unknown`) that exist only because the search can miss.
+
+The owner asked for a central library before the Rules tab. It replaces the policy articles, and **the owner writes the policies**: the library starts empty and nothing was copied from the articles.
+
+- **Deterministic, not retrieved.** A policy is read by its key, whole, not found by similarity. The question « is this the company's rule? » is not left to a score.
+- **One tool, `getPolicy(policy_key)`, not one function per policy.** Its argument is an enum of the shop's active keys, and its description lists each with its `purpose`. The model sees every policy it may read and cannot name another. This scales to 20 or 30 policies without 30 function definitions.
+- **Three ways in, all recorded** on `ticket_investigations.company_policies` (`{key, version, source}`):
+  - **situation**: linked to the matched situation, read as an opening move with no model turn, because every reply there needs it;
+  - **rule**: linked to the selected rule, attached after selection, since the rule is only known after the tool loop;
+  - **agent**: any other active policy the model fetched for a second question, e.g. a delivery problem plus « how long does it normally take? ».
+- **A policy never decides.** `getPolicy` raises no caveat, satisfies no need and moves no verdict. The policy answers « what is the company's rule? »; the rules still answer « what happens in this case? ». `policy_answer` and `searchKnowledge` stay as they were for rules not yet moved.
+- **References, never copies.** A link names the policy. Drafting reads each policy's **current** text by key, so an edit reaches the next draft of every linked situation and rule. Each version's text is kept (`company_policy_versions`), and the draft's `prompt_inputs` records the versions it used.
+- **Numbers stay in Parameters.** A policy may quote `{dispatch_days}`. One whose parameter is unset is withheld (from the tool and from the draft) rather than shown with a brace, as a skeleton is.
+- **One instruction for all of them** in the drafting prompt: use only what answers the question, do not invent, extend or contradict, and if the policy is not enough, follow the situation and rule.
+- **Naming.** The rulebook was already « policy » in the code (`policy-service.ts`, `PolicyRule`, `exemplar_match.policy`). The new thing is **company policies** in code and tables, and **Policies** on screen.
+
+**Still to do, once the policies are written:** move D-07 and D-33 onto them (link the policy to the situation, remove the re-typed text and the `policy_answer` branches, keep the fallback wording), and unapprove the articles they replace.
 
 Nothing auto-writes `knowledge_documents`; the catalog sync only fills `shopify_content_sources`. `source_type` → `manual` **is** the manual-edit lock — no separate flag, and resync is then unavailable.
 

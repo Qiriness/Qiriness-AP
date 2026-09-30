@@ -882,6 +882,9 @@ export function createCaseFileStore(supabase, { transport = CASE_FILE_TRANSPORT 
             // predates the trace. A case file always carries one, so this only
             // fires for a caller that built one without the investigation.
             findings_trace: caseFile.findingsTrace ?? null,
+            // Which company policies the case read, and why. Drafting reads each
+            // one's current text back by key.
+            company_policies: caseFile.companyPolicies ?? [],
             // Diagnostic, arrived at independently of everything above it.
             exemplar_match: exemplarMatch || {},
             dropped_claims: caseFile.droppedClaims,

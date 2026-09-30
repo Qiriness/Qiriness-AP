@@ -402,7 +402,7 @@ export async function getTicketDetail(shopId: string, ticketId: string): Promise
       reactionReport: row.reaction_report ?? null,
       investigatedAt: row.investigated_at ?? null,
     }),
-    policy: summarisePolicy(row.exemplar_match, names),
+    policy: summarisePolicy(row.exemplar_match, names, row.company_policies),
     activity: summariseActivity(row),
     caseState,
     situationOverride,
@@ -475,10 +475,23 @@ function toolLabel(value: unknown): string {
  * run genuinely used one. `match` and `similarity` are shown beside it so the
  * distinction is visible rather than implied.
  */
-function summarisePolicy(exemplarMatch: unknown, names: Map<string, string> = new Map()): TicketPolicy | null {
+function summarisePolicy(
+  exemplarMatch: unknown,
+  names: Map<string, string> = new Map(),
+  companyPoliciesRaw: unknown = []
+): TicketPolicy | null {
   if (!exemplarMatch || typeof exemplarMatch !== "object") {
     return null;
   }
+  // Keys, versions and why each was read. Never the text: that is in the library.
+  const companyPolicies = (Array.isArray(companyPoliciesRaw) ? companyPoliciesRaw : [])
+    .filter((p): p is Record<string, unknown> => Boolean(p) && typeof p === "object")
+    .map((p) => ({
+      key: String(p.key ?? ""),
+      version: Number.isInteger(p.version) ? (p.version as number) : null,
+      source: (["situation", "rule", "agent"].includes(String(p.source)) ? p.source : "agent") as "situation" | "rule" | "agent",
+    }))
+    .filter((p) => p.key);
   const match = exemplarMatch as Record<string, unknown>;
   const policy = (match.policy ?? {}) as Record<string, unknown>;
   const similarity = Number(match.similarity);
@@ -497,6 +510,7 @@ function summarisePolicy(exemplarMatch: unknown, names: Map<string, string> = ne
     situationName: situation ? names.get(situation) ?? null : null,
     nearest,
     byPerson: match.verdict === "human",
+    companyPolicies,
     match: match.verdict === "human" ? null : ((match.verdict as TicketPolicy["match"]) ?? null),
     closest: (match.closest as string) ?? null,
     similarity: Number.isFinite(similarity) ? similarity : null,

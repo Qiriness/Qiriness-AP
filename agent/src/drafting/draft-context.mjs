@@ -1,20 +1,37 @@
 import { supabaseSelect } from '../../../scripts/lib/supabase-rest-client.mjs';
 import { T } from '../../../scripts/lib/tables.mjs';
 import { toParameterMap } from '../../../scripts/lib/parameters.mjs';
+import { createCompanyPolicyRecord } from '../../../scripts/lib/company-policies.mjs';
 
 // What a drafting run reads once, before any ticket: the numbers a skeleton may
 // quote, the codes still offerable, the articles rules pin. Shared by the CLI
 // (`npm run draft`) and the worker's draft stage (stage 6), so the two cannot
 // load them differently. Each loader degrades to empty rather than failing a run.
 
-/** The three together, for one run. */
+/** The four together, for one run. */
 export async function loadDraftingContext(supabase, shopId, logger) {
-  const [parameters, offerableCodes, pinnedArticles] = await Promise.all([
+  const [parameters, offerableCodes, pinnedArticles, companyPolicies] = await Promise.all([
     loadParametersFor(supabase, shopId, logger),
     loadOfferableCodesFor(supabase, shopId, logger),
-    loadPinnedArticlesFor(supabase, shopId, logger)
+    loadPinnedArticlesFor(supabase, shopId, logger),
+    loadCompanyPoliciesFor(supabase, shopId, logger)
   ]);
-  return { parameters, offerableCodes, pinnedArticles };
+  return { parameters, offerableCodes, pinnedArticles, companyPolicies };
+}
+
+/**
+ * The shop's active company policies, by key: the current text a draft reads a
+ * case's policies from. A handful of rows, read whole once per run. A failure
+ * returns an empty map, which drops the policies rather than failing a draft.
+ */
+export async function loadCompanyPoliciesFor(supabase, shopId, logger) {
+  try {
+    const { policies } = await createCompanyPolicyRecord(supabase, { shopId }).load();
+    return new Map(policies.filter((p) => p.active).map((p) => [p.policy_key, p]));
+  } catch (error) {
+    logger?.warn?.('draft.company_policies_load_failed', { reason: error.message });
+    return new Map();
+  }
 }
 
 /**

@@ -3,6 +3,7 @@ import { createShopifyClient } from '../../../scripts/lib/shopify-admin-client.m
 import { supabaseSelect } from '../../../scripts/lib/supabase-rest-client.mjs';
 import { T } from '../../../scripts/lib/tables.mjs';
 import { toParameterMap } from '../../../scripts/lib/parameters.mjs';
+import { createCompanyPolicyRecord } from '../../../scripts/lib/company-policies.mjs';
 import { createOpenAIClient } from '../llm/openai-client.mjs';
 import { createAbandonedCheckoutLookup } from '../retrieval/abandoned-checkout.mjs';
 import { createAdviceCollections } from '../retrieval/advice-collections.mjs';
@@ -93,6 +94,12 @@ export function createInvestigationStack({
     retrieveKnowledge: createKnowledgeRetrieval({ supabase, embeddingsClient, logger }),
     checkoutLookup: buildCheckoutLookup(config, logger),
     adviceCollections: createAdviceCollections({ supabase, shopId, logger }),
+    // The shop's company policies and the parameters their text quotes, read
+    // once per run by `registry.ready()`. Lazy: `loadParameters` is defined below.
+    companyPolicies: {
+      load: () => createCompanyPolicyRecord(supabase, { shopId }).load(),
+      parameters: () => loadParameters(shopId)
+    },
     shopId,
     logger
   });
@@ -125,7 +132,7 @@ export function createInvestigationStack({
         approval_status: 'approved',
         deleted_at: { operator: 'is', value: 'null' }
       },
-      'answer_key,situation_key,when_conditions,answer_skeleton,route,ask,offer_code,knowledge_document_id,tones,link_url,link_label,checks,priority,is_fallback'
+      'id,answer_key,situation_key,when_conditions,answer_skeleton,route,ask,offer_code,knowledge_document_id,tones,link_url,link_label,checks,priority,is_fallback'
     );
     const answers = (rows || []).map(answerFromRow);
     if (answers.length === 0) return null;
@@ -254,7 +261,7 @@ export function createInvestigationStack({
         approval_status: 'approved',
         deleted_at: { operator: 'is', value: 'null' }
       },
-      'answer_key,situation_key,when_conditions,answer_skeleton,route,ask,offer_code,knowledge_document_id,tones,link_url,link_label,checks,priority,is_fallback,approval_status'
+      'id,answer_key,situation_key,when_conditions,answer_skeleton,route,ask,offer_code,knowledge_document_id,tones,link_url,link_label,checks,priority,is_fallback,approval_status'
     );
 
   /**

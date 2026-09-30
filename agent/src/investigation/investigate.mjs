@@ -24,6 +24,7 @@ import { normaliseTones } from '../../../scripts/lib/reply-tones.mjs';
 import { collectableNeeds, collectedFindings, proposeCollection } from './collection-planner.mjs';
 import { TOOL_NAMES, answerSetFor, escalationTriggers } from './investigation-rules.mjs';
 import { renderCaseDelta } from './case-delta.mjs';
+import { companyPoliciesUsed } from './company-policy-use.mjs';
 
 // The investigation agent: a categorised ticket in, a case file out.
 //
@@ -214,6 +215,16 @@ export function createInvestigator(
     // for these subjects rather than spending a turn asking for it.
     for (const move of planMoves(ticket, plan.tasks, decomposition.entities)) {
       await run.call(move.tool, move.args, 'opening_move');
+    }
+
+    // THE MATCHED SITUATION'S POLICIES, read before the model's first turn: a
+    // person linked them because every reply in this situation needs them, so
+    // the model is not left to decide whether to ask. No model call; each is
+    // one deterministic read. Any other policy stays one getPolicy call away.
+    if (names.includes(TOOL_NAMES.GET_POLICY)) {
+      for (const { policy } of registry.policiesFor?.({ situationKey: ticket.policy?.situationKey ?? null }) ?? []) {
+        await run.call(TOOL_NAMES.GET_POLICY, { policy_key: policy.policy_key }, 'opening_move');
+      }
     }
 
     const messages = [{ role: 'user', content: buildUserPrompt(ticket, plan, run, maxBodyChars) }];
@@ -421,6 +432,7 @@ export function createInvestigator(
     }
     const answer = finalCall.args;
     const escalation = escalationTriggers({ ticket, orderContext: ticket.resolvedContext || null });
+    const selection = selectPolicyForRequests(requests, run.ledger, names);
 
     return buildCaseFile({
       answer,
@@ -447,7 +459,16 @@ export function createInvestigator(
       // AFTER EVERYTHING ELSE, deliberately: the verdict, the needs and every
       // tool call are already settled by the time this runs. It reads them and
       // adds a reading; it cannot have changed them.
-      policy: selectPolicyForRequests(requests, run.ledger, names),
+      policy: selection,
+      // WHICH COMPANY POLICIES THIS CASE READ, and why: linked to a matched
+      // situation, linked to the selected rule, or fetched by the agent. Drafting
+      // reads their current text back by key.
+      companyPolicies: companyPoliciesUsed({
+        library: registry.companyPolicies?.() ?? { policies: [], links: [] },
+        requests,
+        selection,
+        ledger: run.ledger
+      }),
       // WHAT THE DOSSIER ALREADY ANSWERS, so a rule cannot put a question to a
       // customer that our own tools have settled. Derived from the same ledger
       // everything else here reads, and handed over as plain keys because

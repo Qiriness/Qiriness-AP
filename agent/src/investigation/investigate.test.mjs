@@ -1306,3 +1306,45 @@ test('a follow-up case delta sits between the message and the gathered evidence;
   await createInvestigator(plain, registry, { model: 'm' }).investigate(PRODUCT_TICKET);
   assert.doesNotMatch(plain.sent[0].messages[0].content, /Dossier connu/);
 });
+
+// --- company policies ----------------------------------------------------------
+
+test("the matched situation's policies are read before the model speaks, and the case file records why each was read", async () => {
+  const library = {
+    policies: [
+      { id: 'p1', policy_key: 'delivery_time_policy', name: 'Délais', version: 3, active: true },
+      { id: 'p2', policy_key: 'refund_policy', name: 'Remboursements', version: 1, active: true }
+    ],
+    links: [
+      { policy_id: 'p1', situation_key: 'D-07', answer_id: null },
+      { policy_id: 'p2', situation_key: null, answer_id: 'a-1' }
+    ]
+  };
+  const registry = buildRegistry({
+    [TOOL_NAMES.SEARCH_KNOWLEDGE]: async () => OK_RESULT,
+    [TOOL_NAMES.GET_POLICY]: async (args) => ({ ...OK_RESULT, data: { key: args.policy_key, version: 3 } })
+  });
+  registry.companyPolicies = () => library;
+  registry.policiesFor = ({ situationKey }) =>
+    situationKey === 'D-07' ? [{ policy: library.policies[0], source: 'situation' }] : [];
+  const openai = buildOpenAI([{ content: caseFileAnswer() }]);
+  const { investigate } = createInvestigator(openai, registry, { model: 'm' });
+
+  const caseFile = await investigate({
+    ...PRODUCT_TICKET,
+    policy: {
+      answerSet: 'orders',
+      situationKey: 'D-07',
+      answers: [{ id: 'a-1', answerKey: 'd07_delais', situationKey: 'D-07', conditions: {}, route: null, ask: [], priority: 0, isFallback: true }]
+    }
+  });
+
+  const policyCalls = registry.calls.filter((c) => c.name === TOOL_NAMES.GET_POLICY);
+  assert.deepEqual(policyCalls.map((c) => c.args), [{ policy_key: 'delivery_time_policy' }]);
+  // An opening move: the model did not have to ask for it.
+  assert.equal(caseFile.toolCalls.find((c) => c.tool === TOOL_NAMES.GET_POLICY)?.source, 'opening_move');
+  assert.deepEqual(caseFile.companyPolicies, [
+    { key: 'delivery_time_policy', version: 3, source: 'situation' },
+    { key: 'refund_policy', version: 1, source: 'rule' }
+  ]);
+});

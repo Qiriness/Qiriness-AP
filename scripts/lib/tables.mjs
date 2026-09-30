@@ -72,6 +72,9 @@ export const T = {
   MAIL_SUBSCRIPTIONS: 'mail_subscriptions',
 
   // 05_exemplars
+  COMPANY_POLICIES: 'company_policies',
+  COMPANY_POLICY_VERSIONS: 'company_policy_versions',
+  COMPANY_POLICY_LINKS: 'company_policy_links',
   SUPPORT_EXEMPLARS: 'support_exemplars',
   SUPPORT_EXEMPLAR_PHRASINGS: 'support_exemplar_phrasings',
   SUPPORT_ANSWERS: 'support_answers',
@@ -512,7 +515,7 @@ export const COLUMNS = {
   // case file says what it says — without it, a rule is a thing that happens to
   // somebody's mail with no trace anywhere a person looks.
   investigationForDetail:
-    'verdict,established,unverified,missing,handoff,candidate_order,reaction_report,investigated_at,evidence_gaps,exemplar_match,tool_calls',
+    'verdict,established,unverified,missing,handoff,candidate_order,reaction_report,investigated_at,evidence_gaps,exemplar_match,tool_calls,company_policies',
 
   /**
    * The case file as the drafting pass reads it back.
@@ -538,10 +541,13 @@ export const COLUMNS = {
    * there can reach a prompt. Selecting the column and narrowing in the mapper
    * is the cheaper half of the guarantee `tool_calls` gets by being absent:
    * there is no second copy of the skeleton to keep in step with this one.
+   *
+   * `company_policies` is keys and versions only: drafting reads each policy's
+   * current text from the library by key.
    */
   investigationForDrafting:
     'id,ticket_id,trigger_message_id,verdict,established,unverified,missing,do_not_claim,' +
-    'knowledge,handoff,investigated_at,exemplar_match',
+    'knowledge,handoff,investigated_at,exemplar_match,company_policies',
 
   /**
    * A draft as both readers need it: the dashboard rendering it for approval,

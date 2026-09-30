@@ -14,7 +14,8 @@ import {
 } from "@/lib/general-rule-choices";
 import type { GeneralRuleChoices } from "@/lib/general-rule-choices";
 import { generalRulesCovering, ruleLabel } from "@/lib/rule-labels";
-import type { PolicyRule, PolicySituation, PolicyVocabulary } from "@/lib/types";
+import type { CompanyPolicy, PolicyRule, PolicySituation, PolicyVocabulary } from "@/lib/types";
+import { LinkedPolicies } from "./LinkedPolicies";
 
 import { RuleEditor } from "./RuleEditor";
 import type { RuleEditorSeed } from "./RuleEditor";
@@ -67,11 +68,14 @@ export function RuleBook({
   initialRules,
   situations,
   vocabulary,
+  companyPolicies: initialPolicies = [],
   loadError,
 }: {
   initialRules: PolicyRule[];
   situations: PolicySituation[];
   vocabulary: PolicyVocabulary;
+  /** The company policies and their links, for the « Linked policies » blocks. */
+  companyPolicies?: CompanyPolicy[];
   loadError: string | null;
 }) {
   const t = useT();
@@ -81,6 +85,7 @@ export function RuleBook({
     situations.find((situation) => situation.answerSet === startingAnswerSet)?.key ?? SHARED;
 
   const [rules, setRules] = useState<PolicyRule[]>(initialRules);
+  const [policyLibrary, setPolicyLibrary] = useState<CompanyPolicy[]>(initialPolicies);
   const [modes, setModes] = useState<Record<string, string>>(() =>
     Object.fromEntries(situations.map((situation) => [situation.key, situation.collectionMode])),
   );
@@ -401,6 +406,16 @@ export function RuleBook({
               </div>
             </div>
 
+            {activeSituationMeta && (
+              <div className={styles.canvasPolicies}>
+                <LinkedPolicies
+                  library={policyLibrary}
+                  target={{ situationKey: activeSituationMeta.key }}
+                  onChange={setPolicyLibrary}
+                />
+              </div>
+            )}
+
             <div className={styles.flow}>
               <div className={styles.rootNode}>
                 <span className={styles.nodeIcon}>
@@ -600,7 +615,25 @@ export function RuleBook({
                 onApprove={() => approve(selectedRule)}
                 onDelete={() => remove(selectedRule)}
               />
-            ) : (
+            ) : null}
+            {selectedRule && (
+              <div className={styles.inspectorPolicies}>
+                <LinkedPolicies
+                  key={`policies:${selectedRule.id}`}
+                  library={policyLibrary}
+                  target={{ answerId: selectedRule.id }}
+                  inheritedKeys={
+                    selectedRule.situationKey
+                      ? policyLibrary
+                          .filter((p) => p.links.some((l) => l.situationKey === selectedRule.situationKey))
+                          .map((p) => p.key)
+                      : []
+                  }
+                  onChange={setPolicyLibrary}
+                />
+              </div>
+            )}
+            {selectedRule ? null : (
               <div className={styles.inspectorEmpty}>
                 <p className={styles.inspectorLabel}>{t("setup.rules.inspector")}</p>
                 <h3>{t("setup.rules.selectRule")}</h3>

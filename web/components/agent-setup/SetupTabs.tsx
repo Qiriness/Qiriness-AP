@@ -29,6 +29,9 @@ import styles from "./SetupTabs.module.css";
 // Words: `setup.tabs.<id>.label` and `.hint`.
 const TABS = [
   { href: "/agent-setup", id: "knowledge" },
+  // POLICIES BEFORE RULES: a rule links the company's policies, so the library
+  // it picks from comes first.
+  { href: "/agent-setup/policies", id: "policies" },
   { href: "/agent-setup/rules", id: "rules" },
   { href: "/agent-setup/parameters", id: "parameters" },
   { href: "/agent-setup/promotions", id: "promotions" },

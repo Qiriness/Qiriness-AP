@@ -89,6 +89,8 @@ export function normaliseConditions(raw, { warn = () => {} } = {}) {
  */
 export function answerFromRow(row) {
   return {
+    // The row's id, so a company policy linked to this one rule can be found.
+    id: row.id ?? null,
     answerKey: row.answer_key,
     situationKey: row.situation_key ?? null,
     // Normalised through the same function the authoring path validates with, so

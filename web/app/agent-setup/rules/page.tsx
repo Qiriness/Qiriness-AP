@@ -5,7 +5,8 @@ import {
   listSituations,
   policyVocabulary,
 } from "@/lib/server/policy-service";
-import type { PolicyRule, PolicySituation, PolicyVocabulary } from "@/lib/types";
+import { listCompanyPolicies } from "@/lib/server/company-policy-service";
+import type { CompanyPolicy, PolicyRule, PolicySituation, PolicyVocabulary } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
@@ -24,14 +25,16 @@ export default async function RuleBookPage() {
   let rules: PolicyRule[] = [];
   let situations: PolicySituation[] = [];
   let vocabulary: PolicyVocabulary = { needs: [], routes: [], asks: [], parameters: [], offerableCodes: [], articles: [], tones: [], checkOwners: [], checkNeeds: [] };
+  let companyPolicies: CompanyPolicy[] = [];
   let loadError: string | null = null;
 
   try {
     const shopId = await getShopId();
-    [rules, situations, vocabulary] = await Promise.all([
+    [rules, situations, vocabulary, companyPolicies] = await Promise.all([
       listRules(shopId),
       listSituations(shopId),
       policyVocabulary(shopId),
+      listCompanyPolicies(shopId),
     ]);
   } catch (error) {
     loadError = error instanceof Error ? error.message : "Failed to load the rulebook.";
@@ -42,6 +45,7 @@ export default async function RuleBookPage() {
       initialRules={rules}
       situations={situations}
       vocabulary={vocabulary}
+      companyPolicies={companyPolicies}
       loadError={loadError}
     />
   );

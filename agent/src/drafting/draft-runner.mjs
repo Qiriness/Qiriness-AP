@@ -77,6 +77,9 @@ export async function runDrafting({
   // Empty by default and safe: a pin whose document is missing here is dropped,
   // which is exactly what an unapproved or deleted article looks like.
   pinnedArticles = new Map(),
+  // The shop's active company policies by key, loaded once per run like the
+  // articles. Empty by default and safe: the case's policies are then dropped.
+  companyPolicies = new Map(),
   // Reads whether the customer's latest message closes their request.
   // ABSENT BY DEFAULT, and absence means no closure: a caller that has not
   // wired it — the rehearsal harness, every existing test — writes exactly the
@@ -168,7 +171,7 @@ export async function runDrafting({
         }),
         user: composeDraftingMessage({
           message, caseFile, orderContext, ticket, chase, parameters, offerableCodes,
-          pinnedArticles, conversation, senderDirectory, caseState,
+          pinnedArticles, conversation, senderDirectory, caseState, companyPolicies,
           signature: brandVoice.signature, closingLine: brandVoice.closingLine, logger
         }),
         schema: DRAFT_SCHEMA,
@@ -249,7 +252,9 @@ export async function runDrafting({
           caseFile,
           orderContext,
           investigationId: investigation.id,
-          model
+          model,
+          companyPolicies,
+          parameters
         }),
         model
       };

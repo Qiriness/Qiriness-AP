@@ -32,24 +32,31 @@ import {
  * 0.62 are indistinguishable at the precision these numbers actually carry, and
  * committing to the higher would be inventing confidence.
  *
- * MEASURED, AND MUCH SMALLER THAN IT LOOKS IT SHOULD BE. Over 190 real tickets
- * the median margin is 0.037, so the 0.03 this started at would have called 45%
- * of all matches ambiguous — rejecting good matches wholesale. The sweep:
+ * 0.05, BECAUSE AMBIGUOUS NO LONGER MEANS REJECTED. Over 190 real
+ * tickets the median margin is 0.037:
  *
  *   below 0.01   19% ambiguous      below 0.03   45% ambiguous
  *   below 0.02   39% ambiguous      below 0.05   58% ambiguous
  *
- * 0.01 catches genuine coin-flips and little else. The remaining 19% is a CORPUS
- * problem rather than a threshold one — 32 situations in one narrow domain sit
- * close together, and the source document already names O-09/O-10 and P-15/P-16
- * as merge candidates. Merging those should raise the margins rather than
- * needing this number moved again.
+ * It was cut from 0.03 to 0.01 when an ambiguous match was thrown away — 45%
+ * of good matches lost at 0.03. Since the situation chooser (2026-09-15) an ambiguous
+ * match goes to a model that reads the message beside the candidates, so a
+ * wider band costs a cheap call per ticket rather than the match. What 0.05
+ * buys is a second reading of the 0.01–0.05 close calls the score used to
+ * commit alone. See DECISIONS.md § "The margin is much smaller than it looks".
  *
- * Measured on an UNFILTERED search, which is pessimistic: production filters by
- * subject first, so the real candidate pool is a handful of same-subject
- * exemplars rather than all 32.
+ * The sweep above is UNFILTERED and badly pessimistic. Replayed through the
+ * real subject-filtered search on 2026-09-30 (158 opening messages, 77 at 0.65+)
+ * the median margin is 0.108. Share of matches sent to the chooser:
+ *
+ *   below 0.01    3%     below 0.05   19%     below 0.15   64%
+ *   below 0.03    6%     below 0.10   45%     below 0.30   94%
+ *
+ * On the three 0.01–0.03 tickets read by hand the chooser kept the score's pick
+ * twice and said none to a thank-you the score had filed as D-36. The 0.03–0.05
+ * band has not been read.
  */
-const DEFAULT_MIN_MARGIN = 0.01;
+const DEFAULT_MIN_MARGIN = 0.05;
 
 /** Candidates pulled before banding. Small: the corpus is dozens, not thousands. */
 const CANDIDATE_POOL = 5;

@@ -2,6 +2,8 @@
 export const en = {
   "setup.tabs.knowledge.label": "Knowledge",
   "setup.tabs.knowledge.hint": "what the agent knows",
+  "setup.tabs.policies.label": "Policies",
+  "setup.tabs.policies.hint": "the company's rules, written once",
   "setup.tabs.rules.label": "Rules",
   "setup.tabs.rules.hint": "what it does about it",
   "setup.tabs.parameters.label": "Parameters",
@@ -24,6 +26,8 @@ export const en = {
 export const fr: Record<keyof typeof en, string> = {
   "setup.tabs.knowledge.label": "Connaissances",
   "setup.tabs.knowledge.hint": "ce que l'agent sait",
+  "setup.tabs.policies.label": "Politiques",
+  "setup.tabs.policies.hint": "les règles de l'entreprise, écrites une fois",
   "setup.tabs.rules.label": "Règles",
   "setup.tabs.rules.hint": "ce qu'il en fait",
   "setup.tabs.parameters.label": "Paramètres",

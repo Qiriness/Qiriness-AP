@@ -585,6 +585,8 @@ export function buildCaseFile({
   // finding, which is the same reason `policy` and `answeredFields` arrive
   // ready-made.
   findingsTrace = [],
+  // Which company policies the case read: [{ key, version, source }].
+  companyPolicies = [],
   model = null,
   now = new Date()
 } = {}) {
@@ -733,6 +735,7 @@ export function buildCaseFile({
     // to start being written before that replay can be built, because the tool
     // `data` it is derived from does not survive the run.
     findingsTrace: Array.isArray(findingsTrace) ? findingsTrace : [],
+    companyPolicies: Array.isArray(companyPolicies) ? companyPolicies : [],
     // The rule the evidence selected, and what it did.
     //
     // `applied` REPLACED `would_change_verdict` WHEN THE ROUTE WENT LIVE, and

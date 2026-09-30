@@ -797,3 +797,17 @@
   cursor: progress;
   opacity: 0.5;
 }
+
+/* « Linked policies » under the situation header: padded like the header and
+   the flow around it, since the canvas card itself has no padding. */
+.canvasPolicies {
+  padding: 0.8rem 1rem;
+  border-bottom: 1px solid var(--border);
+}
+
+/* The same block for the selected rule, set apart from the rule's facts. */
+.inspectorPolicies {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border);
+}

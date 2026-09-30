@@ -2629,6 +2629,14 @@ function PolicySection({
         policy.route ? t("tickets.panels.policy.route", { to: policy.route.replace(/_/g, " ") }) : null,
         policy.asks.length > 0 ? t("tickets.panels.policy.ask", { items: policy.asks.join(", ").replace(/_/g, " ") }) : null,
         policy.offerCode ? t("tickets.panels.policy.offer", { code: policy.offerCode }) : null,
+        // Which company policies the case read, and why (linked or fetched).
+        policy.companyPolicies.length > 0
+          ? t("tickets.panels.policy.companyPolicies", {
+              items: policy.companyPolicies
+                .map((p) => `${p.key}${p.version ? ` v${p.version}` : ""} (${t(`tickets.panels.policy.policySource.${p.source}`)})`)
+                .join(", "),
+            })
+          : null,
       ]
         .filter(Boolean)
         .join(" · ")

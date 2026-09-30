@@ -16,6 +16,22 @@ Three sibling files carry the other halves, and this one deliberately does not d
 
 
 
+## Agent Setup: company policies (2026-09-30)
+
+- **Built:**
+  - A **Policies** tab before Rules: write a policy once (name, key, when to use it, text with parameter placeholders, active), with its versions kept.
+  - **Linked policies** on a situation and on a rule.
+  - One agent tool, `getPolicy(policy_key)`, restricted to active keys. A situation's linked policies are read before the model's first turn, a selected rule's are attached, and any other policy may be fetched by the agent.
+  - Drafts get the current text under one instruction; the case file and the draft record which policies and versions were used; the ticket page lists them.
+  - Migration 55, applied 2026-09-30. The library is empty until the owner writes it.
+- **Proven:** unit tests for the record, the tool (enum, inactive, unset parameter), the opening move, the case-file record, the drafting section and migration 55 (root 4012 pass, the same 19 old analytics failures; agent 1834/0). `tsc` and lint on `web/` pass.
+- **Not yet:** on screen, a policy written and linked, or D-07 / D-33 moved. See VALIDATION_LOG § 22.
+
+## Situation matching: tie margin 0.01 → 0.05 (2026-09-30)
+
+- **Built:** `DEFAULT_MIN_MARGIN` in `exemplar-retrieval.mjs` raised to 0.05, so a match above 0.65 whose runner-up is within 0.05 is `ambiguous` and goes to the situation chooser instead of being committed on score. Reverses the 2026-08 cut to 0.01, which was made when ambiguous meant discarded.
+- **Proven:** agent unit tests (1834/0). Replayed through the live subject-filtered search on 2026-09-30 (158 opening messages, the chooser on `gpt-6-luna`): 15 of 77 matches (19%) go to the chooser, not the ~58% the unfiltered sweep predicted, because the production median margin is 0.108. On the 3 in the 0.01–0.03 band the chooser was right all 3 times when read by hand; the score got 2, having filed a thank-you as D-36. **Not yet:** the 10 tickets in the 0.03–0.05 band read, a sample big enough to give a rate, or seen live in the worker.
+
 ## Tickets: snooze (2026-09-30)
 
 - **Built:** `ticket_snoozes` (migration 54, applied 2026-09-30); a **Snoozed** tab; a **Snooze** menu on the ticket (later today, tomorrow, a date, or until the customer / an operations partner / a colleague replies), with Unsnooze and a banner. The fold snoozes automatically after a **sent** reply of ours that leaves the next step to someone else, behind `AGENT_AUTO_SNOOZE` (off). Wakes: new mail at ingestion, the fold when the case comes back to us, a deadline sweep each poll, a person, and an order update on a partner's snooze. New parameter `customer_reply_wait_days`, set to 3 for Qiriness. Auto-close skips snoozed tickets. `npm run snooze -- --dry-run`.

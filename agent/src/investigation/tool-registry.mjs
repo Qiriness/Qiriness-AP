@@ -11,6 +11,7 @@ import { concernsFromText } from '../retrieval/concern-cues.mjs';
 import { productLines } from '../retrieval/product-lines.mjs';
 
 import { planToolNames } from './decompose-rules.mjs';
+import { policiesFor, policyCatalogue, renderPolicy } from '../../../scripts/lib/company-policies.mjs';
 import {
   CHECKOUT_WINDOW_DAYS,
   STALE_TRANSIT_DAYS,
@@ -58,6 +59,22 @@ import {
 const NO_ARGS = { type: 'object', properties: {}, required: [], additionalProperties: false };
 
 const DEFINITIONS = {
+  // THE ONE POLICY TOOL, whatever the number of policies. Its `policy_key` enum
+  // and the catalogue in its description are filled per run from the shop's
+  // active policies (`toolsFor`); this static copy is the shape.
+  [TOOL_NAMES.GET_POLICY]: {
+    description:
+      "Renvoie le texte exact d'une politique de l'entreprise (livraison, retours, remboursements…). " +
+      "À utiliser quand le client pose une question qu'une de ces politiques couvre.",
+    parameters: {
+      type: 'object',
+      properties: {
+        policy_key: { type: 'string', description: 'La clé de la politique, telle que listée.' }
+      },
+      required: ['policy_key'],
+      additionalProperties: false
+    }
+  },
   [TOOL_NAMES.SEARCH_KNOWLEDGE]: {
     description:
       'Cherche dans la base de connaissances approuvée un article qui répond à ce ticket. ' +
@@ -321,9 +338,18 @@ export function createToolRegistry({
   // collection gets the concern path it already had, unchanged. Absent, the
   // `requirements` argument simply resolves nothing.
   adviceCollections = null,
+  // OPTIONAL, like the two above: `{ load(), parameters() }`, the shop's company
+  // policies with their links, and the parameters their text may quote. Absent,
+  // or with no active policy, getPolicy is simply not offered.
+  companyPolicies = null,
   shopId,
   logger
 } = {}) {
+  // Primed by `ready()` once per run, read synchronously by `toolsFor`.
+  let policyLibrary = { policies: [], links: [] };
+  let policyParameters = new Map();
+  const activePolicies = () => policyLibrary.policies.filter((p) => p.active);
+
   /**
    * Handlers, bound per ticket.
    *
@@ -335,6 +361,39 @@ export function createToolRegistry({
    */
   function handlersFor(ticket) {
     const handlers = {
+      // A POLICY SAYS WHAT THE COMPANY'S RULE IS, NEVER WHAT HAPPENS NEXT: no
+      // caveat, no finding and no verdict comes out of this. The text is read
+      // with its parameters filled; a policy quoting an unset parameter is
+      // withheld rather than shown with a brace in it.
+      async [TOOL_NAMES.GET_POLICY](args = {}) {
+        const key = String(args.policy_key ?? '');
+        const policy = activePolicies().find((p) => p.policy_key === key) ?? null;
+        if (!policy) {
+          return {
+            outcome: 'unknown_key',
+            caveats: [],
+            promptText: 'Aucune politique active sous ce nom.',
+            data: { key, version: null }
+          };
+        }
+        const { text, unset } = renderPolicy(policy, policyParameters);
+        if (unset.length > 0) {
+          logger?.warn?.('investigation.policy_parameter_unset', { key, unset });
+          return {
+            outcome: 'incomplete',
+            caveats: [],
+            promptText: 'Cette politique ne peut pas être citée : un de ses chiffres n’est pas encore fixé.',
+            data: { key, version: policy.version, unset }
+          };
+        }
+        return {
+          outcome: 'found',
+          caveats: [],
+          promptText: `### ${policy.name}\n${text}`,
+          data: { key, version: policy.version }
+        };
+      },
+
       async [TOOL_NAMES.SEARCH_KNOWLEDGE]() {
         const result = await retrieveKnowledge(
           { subject: ticket.subject, body: ticket.text, category: ticket.category },
@@ -1217,6 +1276,27 @@ export function createToolRegistry({
      */
     async ready() {
       await adviceCollections?.active();
+      if (companyPolicies) {
+        try {
+          const [library, parameters] = await Promise.all([companyPolicies.load(), companyPolicies.parameters?.()]);
+          policyLibrary = { policies: library?.policies ?? [], links: library?.links ?? [] };
+          policyParameters = parameters ?? new Map();
+        } catch (error) {
+          // NEVER FAILS A RUN: no policy tool is offered, as before policies existed.
+          logger?.warn?.('investigation.company_policies_load_failed', { reason: error.message });
+          policyLibrary = { policies: [], links: [] };
+        }
+      }
+    },
+
+    /** The loaded library: `{ policies, links }`. Empty until `ready()`. */
+    companyPolicies() {
+      return policyLibrary;
+    },
+
+    /** The active policies a situation and its selected rules link, situation first. */
+    policiesFor(scope = {}) {
+      return policiesFor(policyLibrary, scope);
     },
 
     toolsFor(ticket = {}, { tasks = null } = {}) {
@@ -1245,6 +1325,29 @@ export function createToolRegistry({
                 ? describeRecommendProducts(adviceCollections?.cached())
                 : DEFINITIONS[name].description,
             parameters: DEFINITIONS[name].parameters
+          }
+        });
+      }
+
+      // THE POLICY TOOL goes wherever the ticket may already read the company's
+      // own texts (searchKnowledge), and only when there is a policy to read.
+      // One function whose argument is the list of keys: the model is shown
+      // every active policy with its purpose, and cannot name any other.
+      const policies = activePolicies();
+      if (handlers.has(TOOL_NAMES.SEARCH_KNOWLEDGE) && policies.length > 0) {
+        const base = DEFINITIONS[TOOL_NAMES.GET_POLICY];
+        handlers.set(TOOL_NAMES.GET_POLICY, bound[TOOL_NAMES.GET_POLICY]);
+        definitions.push({
+          type: 'function',
+          function: {
+            name: TOOL_NAMES.GET_POLICY,
+            description: `${base.description}\nPolitiques disponibles :\n${policyCatalogue(policies)}`,
+            parameters: {
+              ...base.parameters,
+              properties: {
+                policy_key: { ...base.parameters.properties.policy_key, enum: policies.map((p) => p.policy_key) }
+              }
+            }
           }
         });
       }

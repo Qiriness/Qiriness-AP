@@ -1992,3 +1992,15 @@ Built and unit-tested. Migration 54 applied 2026-09-30 and read back through Pos
 5. **Automatic snooze on send.** **Check:** with `AGENT_AUTO_SNOOZE=true` on the full worker and `customer_reply_wait_days` set, approve a reply that asks the customer something. Nothing snoozes while it waits in Outlook's Drafts. Once it is sent and read back from Sent Items, the ticket moves to Snoozed, marked « Snoozed by the agent ».
 6. **Waiting on Deret.** **Check:** a ticket where we wrote to the 3PL (a partner check opened by that message) snoozes on the partner until `partner_check_overdue_days`. A ticket whose partner check only a rule opened stays in the queue.
 7. **An order update.** **Check:** a ticket snoozed on a partner about an order wakes « Back: the order was updated » when that parcel's status changes in Shopify. A price or tag edit wakes nothing.
+
+## 22. Company policies — 2026-09-30
+
+Built and unit-tested. Migration 55 applied 2026-09-30 and read back through PostgREST: three empty tables, `company_policies` = `[]` on existing case files. The library is empty until the owner writes it.
+
+1. **Apply 55.** **Check:** the three tables exist and `ticket_investigations.company_policies` reads `[]` on existing rows. Agent Setup shows **Policies** before Rules, empty.
+2. **Write one.** **Check:** create `delivery_time_policy` with `{dispatch_days}` in its text. Save a change: version 2, and a row in `company_policy_versions`. Saving from a second tab opened before that save is refused (« changed meanwhile »).
+3. **Link it.** **Check:** on Rules → D-07, add it under Linked policies. The library's « Used by » names D-07. On a D-07 rule it shows greyed as inherited.
+4. **Situation link.** **Check:** in « Test the agent », ask « combien de temps pour être livré ? ». The transcript shows `getPolicy` as an opening move, the draft quotes the policy, and the ticket page reads « policies used: delivery_time_policy v2 (situation) ».
+5. **Fetched by the agent.** **Check:** a delivery-problem message that adds « et normalement c'est combien de jours ? » on a situation not linked to it shows `getPolicy` called by the model, with source « fetched by the agent ».
+6. **Central edit.** **Check:** change the policy's text and redraft: the new text is in the prompt, and `prompt_inputs.company_policies` has the new version.
+7. **Unset parameter.** **Check:** a policy quoting a parameter with no value is not shown to the agent or the draft, and a `policy_parameter_unset` / `company_policy_dropped` warning is logged.

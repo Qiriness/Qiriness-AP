@@ -939,3 +939,61 @@ test('no confirmed order means no claim about what was applied', async () => {
   assert.equal(result.outcome, 'not_resolved');
   assert.deepEqual(result.caveats, ['order_unconfirmed']);
 });
+
+// --- company policies ----------------------------------------------------------
+
+const POLICIES = {
+  policies: [
+    { id: 'p1', policy_key: 'delivery_time_policy', name: 'Délais', purpose: 'combien de temps', content: 'Expédié sous {dispatch_days} jours.', version: 2, active: true },
+    { id: 'p2', policy_key: 'refund_policy', name: 'Remboursements', purpose: '', content: 'Sous {returns_window_days} jours.', version: 1, active: true },
+    { id: 'p3', policy_key: 'old_policy', name: 'Ancienne', purpose: '', content: 'x', version: 1, active: false }
+  ],
+  links: []
+};
+
+async function policyRegistry(library = POLICIES) {
+  const registry = buildRegistry({
+    companyPolicies: { load: async () => library, parameters: async () => new Map([['dispatch_days', '2']]) }
+  });
+  await registry.ready();
+  return registry;
+}
+
+test('one policy tool, offered where knowledge is, whose only values are the active keys', async () => {
+  const registry = await policyRegistry();
+  const { names, definitions } = registry.toolsFor({ category: 'order', request_kind: 'question', level: 1 });
+  assert.ok(names.includes(TOOL_NAMES.GET_POLICY));
+  const definition = definitions.find((d) => d.function.name === TOOL_NAMES.GET_POLICY).function;
+  assert.deepEqual(definition.parameters.properties.policy_key.enum, ['delivery_time_policy', 'refund_policy']);
+  assert.match(definition.description, /- delivery_time_policy — Délais : combien de temps/);
+  assert.doesNotMatch(definition.description, /old_policy/);
+});
+
+test('no active policy, or no knowledge tool for the ticket, means no policy tool', async () => {
+  const empty = await policyRegistry({ policies: [], links: [] });
+  assert.ok(!empty.toolsFor({ category: 'order', request_kind: 'question', level: 1 }).names.includes(TOOL_NAMES.GET_POLICY));
+  const registry = await policyRegistry();
+  assert.deepEqual(registry.toolsFor({ category: 'order', request_kind: 'question', level: 4 }).names, []);
+});
+
+test('a policy is returned with its numbers filled; unknown, inactive or incomplete ones are not shown', async () => {
+  const registry = await policyRegistry();
+  const { handlers } = registry.toolsFor({ category: 'order', request_kind: 'question', level: 1 });
+  const getPolicy = handlers.get(TOOL_NAMES.GET_POLICY);
+  const found = await getPolicy({ policy_key: 'delivery_time_policy' });
+  assert.equal(found.outcome, 'found');
+  assert.equal(found.promptText, '### Délais\nExpédié sous 2 jours.');
+  assert.deepEqual(found.data, { key: 'delivery_time_policy', version: 2 });
+  assert.equal((await getPolicy({ policy_key: 'old_policy' })).outcome, 'unknown_key');
+  const incomplete = await getPolicy({ policy_key: 'refund_policy' });
+  assert.equal(incomplete.outcome, 'incomplete');
+  assert.doesNotMatch(incomplete.promptText, /\{/);
+  // A policy says what the rule is; it never raises a caveat.
+  assert.deepEqual(found.caveats, []);
+});
+
+test('a policy library that fails to load leaves the run without the tool, not failed', async () => {
+  const registry = buildRegistry({ companyPolicies: { load: async () => { throw new Error('down'); } } });
+  await registry.ready();
+  assert.ok(!registry.toolsFor({ category: 'order', request_kind: 'question', level: 1 }).names.includes(TOOL_NAMES.GET_POLICY));
+});

@@ -1003,6 +1003,10 @@ create table public.ticket_investigations (
   -- match accordingly.
   exemplar_match jsonb not null default '{}'::jsonb,
 
+  -- Which company policies this case read, and why:
+  -- [{ key, version, source: situation | rule | agent }].
+  company_policies jsonb not null default '[]'::jsonb,
+
   -- Why the level moved, in words. Computed from the evidence by
   -- investigation-rules, never judged by the model.
   escalation_reasons jsonb not null default '[]'::jsonb,
@@ -1097,6 +1101,9 @@ comment on column public.ticket_investigations.findings_trace is
   'The derived findings after each tool call, in call order: one entry per tool_calls entry, each { call, tool, findings }. THE REPLAY TAPE. tool_calls drops every tool''s data on purpose, and 8 of the finding derivations read it -- buyer_type, product_identity, promotion_validity, promotion_eligibility, customer_account_state, product_availability, photo_evidence, checkout_state -- so a replay over tool_calls alone would score those as absent, fire fewer rules and stop earlier, flattering rule-guided collection exactly where it is most likely to under-collect. Findings are a closed enum carrying no personal data, which is why they are safe to keep where data was correctly dropped. NULL means the row predates this column and can never be filled, since the data it derives from is gone; [] means the run made no tool calls.';
 comment on column public.ticket_investigations.exemplar_match is
   'Which support_exemplars situation this ticket matched: { verdict, exemplar_key, closest, similarity, margin, runner_up, requirement_needs }. REPORTED, NEVER ACTED ON -- nothing in the investigation reads it and the model is never told, so requirement_needs can be compared against the run''s own evidence_gaps as an independent measure. exemplar_key is the committed match and is null unless the verdict is matched; closest is the nearest situation whatever the verdict, which on a near miss is the diagnostic worth having. verdict is matched / near / weak / none / ambiguous, where ambiguous means two situations were closer together than the margin can separate. Empty when retrieval found nothing or failed -- it is best-effort and never fails a run.';
+
+comment on column public.ticket_investigations.company_policies is
+  'The company policies this case read: [{ key, version, source }], source situation (linked to the matched situation), rule (linked to the selected rule) or agent (fetched by the model with getPolicy). Drafting reads each policy''s current text by key; the version says which text the investigation saw.';
 
 comment on column public.ticket_investigations.context_ref is
   'Pointer to tickets.resolved_context (order name, customer id, whether a bundle exists) rather than a copy of it -- so personal data is not duplicated per investigation, and a rebuilt bundle is not shadowed by a stale copy.';

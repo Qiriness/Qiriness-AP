@@ -40,7 +40,11 @@ export const TOOL_NAMES = {
   VERIFY_PURCHASE: 'verifyPurchase',
   CHECK_PHOTO_EVIDENCE: 'checkPhotoEvidence',
   IDENTIFY_REACTION_PRODUCT: 'identifyReactionProduct',
-  RECOMMEND_PRODUCTS: 'recommendProducts'
+  RECOMMEND_PRODUCTS: 'recommendProducts',
+  // A company policy's text, by key (scripts/lib/company-policies.mjs). Not in
+  // any subject's list below: the registry offers it wherever searchKnowledge is
+  // offered and the shop has an active policy, with the keys as its only values.
+  GET_POLICY: 'getPolicy'
 };
 
 const T = TOOL_NAMES;

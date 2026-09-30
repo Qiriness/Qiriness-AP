@@ -29,6 +29,7 @@ import { createCustomerLookup } from '../retrieval/customer-lookup.mjs';
 
 import { checkArticle } from './article-check.mjs';
 import { createMemoryTransport } from './memory-transport.mjs';
+import { loadCompanyPoliciesFor } from '../drafting/draft-context.mjs';
 import { buildSyntheticTicket } from './synthetic-message.mjs';
 import { createTrace, createTraceUsageSink, toolEntry, traceOpenAI } from './trace.mjs';
 
@@ -460,6 +461,8 @@ export async function runRehearsal({
       // The same numbers the investigation used, so a rehearsal cannot quote a
       // returns window the live agent has no value for.
       parameters,
+      // And the same company policies, read from the real library.
+      companyPolicies: await loadCompanyPoliciesFor(supabase, shopId, logger),
       // And the same subject gate, so a rehearsal of a reaction ticket reports
       // the auto-send answer the live pass would give rather than the default.
       cosmetovigilanceDraftOnly: config.draftOnlyCosmetovigilance,

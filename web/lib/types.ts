@@ -983,6 +983,8 @@ export interface TicketPolicy {
   nearest: { key: string; name: string | null; similarity: number | null }[];
   /** True when a person chose the situation this run used. */
   byPerson: boolean;
+  /** The company policies the case read, and why: linked to the situation or the rule, or fetched by the agent. */
+  companyPolicies: { key: string; version: number | null; source: "situation" | "rule" | "agent" }[];
 }
 
 export interface TicketDetail {
@@ -2642,6 +2644,42 @@ export interface PolicyVocabulary {
 }
 
 /** A situation a rule can be keyed to. */
+/* ------------------------------------------------------- company policies */
+
+/** One link: a policy made available to a whole situation, or to one rule. */
+export interface CompanyPolicyLink {
+  id: string;
+  policyId: string;
+  /** `support_exemplars.exemplar_key`, or null when the link is to a rule. */
+  situationKey: string | null;
+  /** `support_answers.id`, or null when the link is to a situation. */
+  answerId: string | null;
+}
+
+/**
+ * A company policy (delivery times, returns, refunds…), written once and read
+ * by reference. Not the rulebook: it says what the company's rule is, never
+ * what happens in a case. `content` may quote `{parameter}` placeholders.
+ */
+export interface CompanyPolicy {
+  id: string;
+  key: string;
+  name: string;
+  /** When to use it. The agent reads this to decide whether to fetch it. */
+  purpose: string;
+  content: string;
+  active: boolean;
+  version: number;
+  updatedAt: string | null;
+  links: CompanyPolicyLink[];
+}
+
+/** What a policy link can point at, named for a person. */
+export interface CompanyPolicyTargets {
+  situations: { key: string; question: string }[];
+  rules: { id: string; answerKey: string; situationKey: string | null; answerSet: string }[];
+}
+
 export interface PolicySituation {
   key: string;
   question: string;
