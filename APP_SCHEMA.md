@@ -73,6 +73,11 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |   |       |-- tickets/[id]/overrides/route.ts # PUT « Edit case »: a person's corrections
 |   |       |                                # (saveTicketOverrides); re-folds the ticket
 |   |       |-- tickets/[id]/thread/route.ts  # GET the conversation (message bodies)
+|   |       |                                # + `reply` (can a person send here, the
+|   |       |                                # target message, their manual replies)
+|   |       |-- tickets/[id]/reply/route.ts   # POST a reply a person wrote (« Create
+|   |       |                                # draft »): queues a `manual` outbound
+|   |       |                                # action + job; sends nothing itself
 |   |       |-- tickets/[id]/attachments/[index]/route.ts
 |   |       |                                # GET one photo, proxied from the mailbox.
 |   |       |                                # The only binary response in this API;
@@ -165,7 +170,9 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |   |   |                            # TicketThreadDialog · DroppedMailTable +
 |   |   |                            # DroppedMailDialog · OrderLinkDialog (add /
 |   |   |                            # change / confirm a ticket's order) · LevelChip ·
-|   |   |                            # HappinessFace
+|   |   |                            # HappinessFace · ReplyEditor (the reply box:
+|   |   |                            # bold/italic/underline/lists/links, paste
+|   |   |                            # sanitised) + ReplyHtmlView (read-only)
 |   |   |-- agent-test/              # TestChatDialog (the rehearsal, + Reuse this
 |   |   |                            # message) · TestComposer · RunTranscript +
 |   |   |                            # StepCard (the step cards; StepCard owns the
@@ -189,7 +196,10 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |   |   |-- ticket-stats.ts      # isomorphic: summariseTickets + isClosed
 |   |   |-- draft-outbound.ts    # what Approve does, worded once for TicketsView +
 |   |   |                        # TicketThreadDialog: outbound line, button labels,
-|   |   |                        # the hand-off notice
+|   |   |                        # the hand-off notice, awaiting (grey) / delivered
+|   |   |                        # (steps aside), canComposeReply, manual reply lines
+|   |   |-- reply-html.ts        # isomorphic: the one import of scripts/lib's
+|   |   |                        # reply-html into the browser bundle
 |   |   |-- ticket-detail.ts     # pure, 3 projections: case file -> 3 blocks ·
 |   |   |                        # resolved_context -> order owner / status / tracking lines ·
 |   |   |                        # evidence_gaps -> the facts behind the findings
@@ -295,8 +305,12 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |       |                                # stamp, `markSent` (only after a confirmed
 |       |                                # send). Shop-scoped. Cannot send
 |       |-- outbound-record.mjs          # THE ONLY WRITER OF `outbound_actions`:
-|       |                                # actionFromDraft, the conditional state
-|       |                                # moves, CANCEL_REASONS. Holds no recipient
+|       |                                # actionFromDraft, actionFromManual, the
+|       |                                # conditional state moves, CANCEL_REASONS.
+|       |                                # Holds no recipient
+|       |-- reply-html.mjs               # THE REPLY HTML: sanitiseReplyHtml (rebuilds
+|       |                                # an allowlist), textToReplyHtml ([[marker]]
+|       |                                # -> link), replyHtmlToText. Browser + worker
 |       |-- mail-job-record.mjs          # THE ONLY WRITER OF `mail_jobs`: enqueue /
 |       |                                # claim (RPCs) / complete / fail, backoff,
 |       |                                # dead after MAIL_JOB_MAX_ATTEMPTS
@@ -604,8 +618,8 @@ The recurring situations, not the answers to them. Same document/chunk mechanics
 | `ticket_case_actions` | **a person settled an open check** from the ticket page: `obligation_id`, `action` (`fulfilled` / `cancelled`), `acted_by` (user id), `acted_at`. Append-only; the fold applies the latest per check (migration 43) |
 | `ticket_messages` | one per Graph message. **`actor`** (customer / support / colleague / partner, migration 41) is stamped at arrival from the direction and the sender directory through `AGENT_ACTOR_BY_LABEL`, and moves with a re-filed direction. Envelope, cleaned `body_text`, sanitised payload, `embedding vector(1536)`, the RFC 5322 reply chain (`in_reply_to` + `reference_ids[]`, captured for deduplication — only those two headers are kept, the rest is `Received` chains carrying relay IPs), and `attachments jsonb` -- part METADATA only (name, contentType, size, isInline), never bytes. **NULL means never fetched**, `[]` means fetched and empty |
 | `ticket_investigations` | **the case file**: `established` / `unverified` / `missing` / `do_not_claim` (four separate columns), `handoff`, `context_ref`, `dropped_claims`, `evidence_gaps` (what the ticket required vs what was obtained, each entry carrying the `finding` and the `details` naming WHICH product or code it is about — diagnostic, does not move the verdict), `exemplar_match` (which recurring situation this is; recorded, never acted on), `candidate_order` (**internal**: the customer's last order as a FULL bundle, same shape and builder as `resolved_context`, fetched in the order tool's unresolved branch so it can never sit beside a confirmed order. Rendered in the human brief and the dashboard under Last order headings, **never** in the drafting prompt). `reaction_report` (**cosmetovigilance only, nullable**: the product the customer BLAMES, their words for it, and the symptoms — attribution, never causation. Lifted out of the ledger by `reactionReportFrom` because `tool_calls` drops every tool's `data`. On the detail projection, deliberately **not** on the drafting one). `findings_trace` (**nullable**: the derived findings after each tool call, in call order — one entry per `tool_calls` entry, `{call, tool, findings}`, scored over the whole need vocabulary. The replay tape: `tool_calls` drops every tool's `data` and 8 of the finding derivations read it, so a replay over `tool_calls` alone would score those as absent and stop earlier. NULL means the row predates the column and can never be filled; `[]` means the run made no calls. On no projection at all). `recommendations` (**what `recommendProducts` put forward, as the tool rendered it** — one entry per type of care, with the product lines a reply quotes. Written by code off the tool ledger like `knowledge`, never by the model, and printed FIRST in the drafting prompt, before `## Établi`; migration 32). `unique(shop_id, trigger_message_id)` |
-| `ticket_drafts` | **what the agent would send**: `body_text` (the model's, never edited) beside `approved_body_text` (a reviewer's rewrite), `source_verdict` (all three — `needs_human` gets an acknowledgement), `disposition` (`terminal` = sending closes the ticket \| `intermediary` = somebody still owes an answer; derived from the verdict + the case file's `handoff`, never model-chosen, and enforced by two check constraints), `level` (1–3; level 4 is never drafted), `status` (the human decision) kept apart from `checks_passed` (the machine outcome), `auto_send_eligible` (four conditions: level 1–2, customer not visibly unhappy, checks passed, verdict not `needs_human` — plus a subject gate, `cosmetovigilance` never qualifying unless **both** `DRAFT_ONLY` and `DRAFT_ONLY_COSMETOVIGILANCE` are false), `prompt_inputs`, `review_sent_at`. **One row per case version** (migration 45): `unique(shop_id, ticket_id, case_version)`, with `trigger_event_id` (the message that produced the version) and `stale_reason` (`case_changed` \| `superseded_by_outbound`, present exactly when `status = stale`; set by the fold, never decided on, never mailed). `trigger_message_id` is indexed, no longer the key; rows from before carry no version. **Holds no recipient and cannot send.** Owned by `scripts/lib/draft-record.mjs` |
-| `outbound_actions` | **a reply we decided to send** (migration 47): `draft_id`, `case_version`, `mode` (`human_approved` \| `auto_send`), `reply_to_message_id` (the recipient is its `from_email`, read at send time; **no address stored**), `body_text` (copied), `state` approved → draft_created → send_requested → sent_confirmed, or cancelled (`cancel_reason`) / failed, `provider_draft_id` (immutable: equals the Sent Items copy's `graph_message_id`), `provider_internet_message_id`, `sent_message_id`. **One live or sent action per `(shop_id, ticket_id, case_version, action_type)`** (unique index ignoring cancelled/failed). Owned by `scripts/lib/outbound-record.mjs`; carried out only by `agent/src/outbound/outbound-runner.mjs` |
+| `ticket_drafts` | **what the agent would send**: `body_text` (the model's, never edited) beside `approved_body_text` (a reviewer's rewrite), `source_verdict` (all three — `needs_human` gets an acknowledgement), `disposition` (`terminal` = sending closes the ticket \| `intermediary` = somebody still owes an answer; derived from the verdict + the case file's `handoff`, never model-chosen, and enforced by two check constraints), `level` (1–3; level 4 is never drafted), `status` (the human decision) kept apart from `checks_passed` (the machine outcome), `auto_send_eligible` (four conditions: level 1–2, customer not visibly unhappy, checks passed, verdict not `needs_human` — plus a subject gate, `cosmetovigilance` never qualifying unless **both** `DRAFT_ONLY` and `DRAFT_ONLY_COSMETOVIGILANCE` are false), `prompt_inputs`, `review_sent_at`, `approved_body_html` (a formatted rewrite as sanitised HTML; `approved_body_text` is its text, migration 52). **One row per case version** (migration 45): `unique(shop_id, ticket_id, case_version)`, with `trigger_event_id` (the message that produced the version) and `stale_reason` (`case_changed` \| `superseded_by_outbound`, present exactly when `status = stale`; set by the fold, never decided on, never mailed). `trigger_message_id` is indexed, no longer the key; rows from before carry no version. **Holds no recipient and cannot send.** Owned by `scripts/lib/draft-record.mjs` |
+| `outbound_actions` | **a reply we decided to send** (migration 47): `draft_id` (null exactly for a `manual` reply, migration 52), `case_version`, `mode` (`human_approved` \| `auto_send` \| `manual`: a person's own reply from « Create draft », `action_type` `manual_reply`, keyed on `client_key`, not on the version), `reply_to_message_id` (the recipient is its `from_email`, read at send time; **no address stored**), `body_text` (copied) + `body_html` (what is sent, sanitised by `reply-html.mjs`; the draft's `[[marker]]` is its link), `state` approved → draft_created → send_requested → sent_confirmed, or cancelled (`cancel_reason`) / failed, `provider_draft_id` (immutable: equals the Sent Items copy's `graph_message_id`), `provider_internet_message_id`, `sent_message_id`. **One live or sent action per `(shop_id, ticket_id, case_version, action_type)`** (unique index ignoring cancelled/failed). Owned by `scripts/lib/outbound-record.mjs`; carried out only by `agent/src/outbound/outbound-runner.mjs` |
 | `ticket_draft_edits` | **append-only record of every human rewrite**, each carrying `model_body_text` — the agent's text as it stood when the edit was made, COPIED rather than referenced, because `ticket_drafts.body_text` is replaced by the next drafting run. `source` (dashboard / mailbox), `edited_by` (null until auth exists). Capture for Phase 7 memory; nothing reads it yet |
 | `email_blocklist` | per-shop sender email/domain rules + hit counts |
 | `sender_directory` | per-shop sender email/domain → `label` (internal, contractor, logistics, courier, retailer, distributor, supplier, partner, other) + free-text `note`. Read into the case file as context and by `cluster:tickets` to tell customer demand from our own mail. Replaces `INTERNAL_EMAIL_DOMAINS`. Rows are exceptions; an unlisted sender is a consumer |
@@ -761,6 +775,7 @@ Written by the worker and the CLIs, read only by the Insights panels.
 | `49_forwarding_destinations.sql` | `forwarding_destinations`, `forwarding_settings` (copied from 04). No data. Applied 2026-09-29 | 04 |
 | `50_forwarding_routing.sql` | `forwarding_settings.forward_since`, `ticket_forwards.destination_label`, `ticket_routing` (copied from 04). No data. Applied 2026-09-29 | 04, 49 |
 | `51_destination_switch.sql` | `forwarding_destinations.active_since` + its needs-an-address check (copied from 04); switches on the destinations that had an address. Applied 2026-09-29 | 49 |
+| `52_manual_replies.sql` | `outbound_actions`: `draft_id` nullable, `client_key`, `body_html`; `manual` mode + `manual_reply` type + their shape check; the version key narrowed to `reply`, `client_key` unique. `ticket_drafts.approved_body_html`. Copied from 07. No data. Applied 2026-09-30 | 07, 47 |
 | `47_outbound_actions.sql` | `outbound_actions` (copied from 07) and the new `ticket_drafts.status` comment. No data. Applied 2026-09-28 | 04, 07, 45 |
 | `46_mail_jobs.sql` | `mail_jobs`, `enqueue_mail_job()`, `claim_mail_jobs()`, `mail_subscriptions` (copied from 04). No data. Applied 2026-09-28 | 01 |
 | `45_draft_versions.sql` | `ticket_drafts`: `case_version`, `trigger_event_id`, `stale_reason`, `stale` status, key `(shop_id, ticket_id, case_version)` (the old key dropped by its columns). Copied from 07. No data. Applied 2026-09-28 | 07 |
@@ -958,9 +973,11 @@ The Support topic map reads the latest `cluster_runs` row and renders each
 
 **Detail** (`OrderDetailView`): Articles, **Promotions**, Fulfilment (shipments, tracking links, returns), Payment (totals, refunds) on the left; Tickets, Customer (name, email unless marketplace, lifetime orders/spend, VIP), Destination (coarse — no street is stored), Tags on the right; "Open in Shopify" in the header. Both pages write a `data_access_events` row (`resourceType: orders`). **Promotions** lists what was applied by name (from `orders.discount_applications`), the gifts with their value and the promotion that gave them, plain reductions, the codes used and — listed apart, never as gifts — the samples; "no promotion was applied" is rendered rather than hidden. Opened as `/orders/[id]?ticket=<uuid>` (the link on a ticket's order number), the page leads with **← Back to the ticket** to `/tickets?ticket=<uuid>`, with Orders beside it.
 
-### `/settings` — My info · Agent settings · Integrations
+### `/settings` — My info · Agent settings · Integrations · Dev info
 
-`web/app/settings/page.tsx` → `components/settings/SettingsView` (the Insights page frame, tab bar, cards and tables). Tab in the URL: `/settings`, `?tab=agents` or `?tab=integrations`; only the open tab's data is read.
+`web/app/settings/page.tsx` → `components/settings/SettingsView` (the Insights page frame, tab bar, cards and tables). Tab in the URL: `/settings`, `?tab=agents`, `?tab=integrations` or `?tab=dev`; only the open tab's data is read.
+
+- **Dev info** — developer and management only (same gate as Integrations). `components/settings/DevInfo`: architecture diagram (People → App → Data → Services, with links and live/partial/planned status) and a subscriptions table, both from the hand-kept `web/lib/dev-stack.ts` (edit it when a service, host or plan changes; `plan`/`monthly` stay null until recorded). OpenAI models and 30-day spend are live, from `getAgentRoster()`.
 
 - **Integrations** — developer and management only (`canManageIntegrations`; the tab is not drawn for contact and `/api/settings/integrations` is denied in `dashboard-auth.mjs`). `KlaviyoKeyCard` over `lib/server/integrations-service.ts` and `PUT|DELETE /api/settings/integrations/klaviyo`: the key is checked with Klaviyo (`connectKlaviyo`), then stored in Vault; the card shows `pk_…` + last 4 and the last sync.
 

@@ -2639,6 +2639,27 @@ The facts come from the database the same poll has just brought up to date, beca
 
 **Needs `Mail.ReadWrite`** for `createReply` and the PATCH, on top of `Mail.Send`. Granted 2026-09-28 (confirmed by the business; no send has exercised it yet).
 
+### An approved draft is grey until it reaches the mailbox, then a person may write their own reply (2026-09-30)
+
+Asked for on the ticket page: an approved draft should look approved (grey, no buttons) until it arrives in the mailbox, then stop being shown as a draft at all, with a « Create draft » button in its place so a person can add what the agent missed.
+
+- **« Arrived » is the action's state, not the draft's.** Grey while the outbound action is `approved` (queued, the worker has not run). From `draft_created` (in Outlook's Drafts, with `OUTBOUND_STOP_BEFORE_SEND`), `send_requested` or `sent_confirmed`, the reply is Outlook's: the panel shows one line saying where it went. While something waits, the page re-reads the thread every 15 s, and only then.
+- **« Create draft » is offered when no agent draft is waiting on a person or the worker:** none, rejected, stale, or delivered. Not while a draft is pending, so the page never holds two competing replies.
+- **A manual reply goes out the one way replies go out** (§ One component sends a reply): an `outbound_actions` row, `mode = manual`, no draft, sent by the same worker. It is threaded under the customer's latest message, and the page names that message: if the customer has written since the page loaded, the dashboard refuses it on the spot and the worker would refuse it (`customer_wrote_again`) at send time.
+- **Its pre-send check is that one question only.** No draft to withdraw, no version check, no `already_answered`: the person wrote it knowing our earlier reply had gone, which is usually why they are writing. The case version is still recorded, for the history.
+- **Not keyed on the case version.** Our own reply does not always move the version, so a second addition on one version would have collided with the first. `manual_reply` rows are left out of the version key and keyed on `client_key`, minted by the composer once per reply: a double click or a retried request is still one email.
+
+**It starts no agent work, deliberately.** Asked for explicitly, for token cost: a manual reply often carries the missing fact that settles the case. Once sent, it comes back through Sent Items like a reply typed in Outlook. The fold stales any open draft it supersedes, and drafting's `already_answered` skip keeps a new draft from being written. Nothing re-investigates on our own message; the investigation runs on the customer's next message (§ One investigation per inbound message) and reads the manual reply in the thread (§ The investigation reads the thread). The one model call it does cause is the Case Manager reading every message of ours gets since the cutover (§ The Case Manager reads every message), which records what we asked or promised so the case knows who acts next. If the reply settles the case, the person settles the checks and closes the ticket.
+
+### A reply is sent as HTML cut by one rule, and the draft's link is finally a link (2026-09-30)
+
+The reply box gained bold, italics, underline, lists and links (select words, then the link button or Ctrl+K). That made the body HTML, and HTML from a browser is not something to hand to a mailbox as it is.
+
+- **One module cuts it, `scripts/lib/reply-html.mjs`, in the editor's paste, the save path and the worker.** It **rebuilds** rather than filters: every tag in the output is written from a fixed list (`p br strong em u a ul ol li`), with no attribute but a checked `href` (https, or mailto for an address). Everything else becomes text, and script/style go with their content. It runs again in the adapter just before the provider call.
+- **The text stays the record.** `approved_body_text` / `body_text` hold the plain text of the HTML, and that is what the edit log compares (§ A human edit is recorded…). The draft's own link folds back to its `[[marker]]`, so a draft opened and saved unchanged reads as unchanged rather than as a correction.
+- **Found on the way: the send path put the literal `[[ici]]` in front of the customer.** The marker was resolved only where a draft was *rendered*; `actionFromDraft` copied the raw text. The action's HTML is now built with the marker as its link, and editing opens the marker as a real link, so the « keep the brackets » hint is gone.
+- **Not the article editor.** That one offers headings because headings cut an article into retrieval chunks (§ Knowledge); a reply has no sections, so `ReplyEditor` is its own component on the same mechanics.
+
 ---
 
 ## Drafting

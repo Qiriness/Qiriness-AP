@@ -1,5 +1,5 @@
 import { mapGraphMessage } from '../ingestion/graph-message-mapper.mjs';
-import { CursorExpiredError, assertMailProvider, replyHtml } from './mail-provider.mjs';
+import { CursorExpiredError, assertMailProvider, replyBody } from './mail-provider.mjs';
 
 /**
  * Microsoft 365 behind the MailProvider contract (mail-provider.mjs).
@@ -49,8 +49,8 @@ export function createOutlookGraphAdapter({ graphClient, mailbox = null }) {
       return graphClient.getAttachmentMetadata(id);
     },
 
-    async createReplyDraft(messageId, { bodyText, to }) {
-      const draft = await graphClient.createReplyDraft(messageId, { html: replyHtml(bodyText), toRecipients: to });
+    async createReplyDraft(messageId, { bodyText, bodyHtml = null, to }) {
+      const draft = await graphClient.createReplyDraft(messageId, { html: replyBody({ bodyText, bodyHtml }), toRecipients: to });
       return { draftId: draft.id, internetMessageId: draft.internetMessageId ?? null };
     },
 

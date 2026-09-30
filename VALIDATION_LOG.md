@@ -1968,3 +1968,15 @@ Built and unit-tested. Migration 48 applied 2026-09-29; no correction has been m
 5. **A category moved out of scope.** **Check:** move an open ticket's category to one `isInvestigable` refuses. The Save says a person answers it, `needs_investigation` stays false, and the draft is withdrawn.
 6. **The categoriser keeps a correction.** **Check:** on an overridden ticket, a customer reply re-categorises it. The column keeps the person's value, and `overrides.<field>.ai_value` holds the model's new reading.
 7. **A held state.** **Check:** set State = Open on an `awaiting_customer` ticket. The next polls leave it open. The customer writing again lets the fold move it.
+
+## 20. Manual replies and formatted replies — 2026-09-30
+
+Built and unit-tested. Migration 52 applied 2026-09-30 and read back (the four columns, both indexes; the 3 existing actions untouched). Nothing below has been done on screen or through the real mailbox.
+
+1. **The grey, then the step aside.** **Check:** with `OUTBOUND_SEND_ENABLED=true` and `OUTBOUND_STOP_BEFORE_SEND=true`, approve a draft and go back to the ticket: the draft is grey with no buttons. After the next poll (within ~15 s of it, without a reload) it is replaced by « The approved reply is in the support mailbox's Drafts folder… » and a « Create draft » button.
+2. **A manual reply, held.** **Check:** « Create draft », type a line with **bold**, a bulleted list and a link on selected words; « Draft in Outlook ». One reply draft in Outlook's Drafts: threaded under the customer's latest message, To = its `from_email`, formatting and link intact, no attributes but `href` in its HTML. `outbound_actions` has one `manual` / `manual_reply` row with `draft_id` null.
+3. **Paste.** **Check:** paste a paragraph from Word and one from a web page. The box shows only bold/italic/underline/lists/links, and the Outlook draft matches the box.
+4. **The draft's link.** **Check:** approve (without editing) a draft that carries a `[[ici]]` marker. The Outlook draft has « ici » as a link to the rule's address, not the brackets.
+5. **An unchanged edit is not an edit.** **Check:** Edit a draft with a marker, save without changing anything: no `ticket_draft_edits` row (the text folds back to the same `[[marker]]`).
+6. **No agent pass.** **Check:** after a manual reply is confirmed from Sent Items, `llm_usage` gains at most the Case Manager reading for that message (`pass = 'casework'`), and no `investigate` or `draft` row for the ticket until the customer writes again.
+7. **The customer wrote meanwhile.** **Check:** open a ticket, have the customer write, then send a manual reply from the stale page: it is refused with « The customer has written again… ».

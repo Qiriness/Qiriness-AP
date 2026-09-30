@@ -113,6 +113,9 @@ create table public.ticket_drafts (
   body_text text not null,
   -- What a human decided to send instead, when they changed it.
   approved_body_text text,
+  -- The same rewrite as the reply HTML it was written in (bold, links...),
+  -- sanitised by scripts/lib/reply-html.mjs. approved_body_text is its text.
+  approved_body_html text,
 
   -- The human lifecycle. Independent of `checks_passed` below, which is a
   -- machine outcome — a draft can be mechanically clean and still rejected, and
@@ -278,6 +281,9 @@ comment on column public.ticket_drafts.body_text is
 comment on column public.ticket_drafts.approved_body_text is
   'What a human decided to send instead. Null while a draft is untouched or was approved as written; required when status is edited.';
 
+comment on column public.ticket_drafts.approved_body_html is
+  'The reviewer''s rewrite as the reply HTML the editor produced (bold, italics, underline, lists, links), sanitised by scripts/lib/reply-html.mjs. approved_body_text holds its plain text, which is what the edit log and every reader compare. Null when the rewrite was plain text or there is none.';
+
 comment on column public.ticket_drafts.status is
   'The human decision: pending | approved | edited | rejected | sent, plus stale (set by the fold when the case moved on; see stale_reason). Independent of checks_passed, which is a machine outcome. `sent` is written only once the outbound worker has read the reply back from Sent Items (outbound_actions.sent_confirmed); this table still cannot address a customer.';
 
@@ -398,7 +404,8 @@ comment on column public.ticket_draft_edits.edited_by is
 -- ============================================================================
 --
 -- THE ONLY WAY A REPLY LEAVES. A person approving a draft (or, once DRAFT_ONLY
--- is off, the level gate) creates one row; the outbound worker
+-- is off, the level gate), or a person writing a reply of their own on the
+-- ticket page (`manual`), creates one row; the outbound worker
 -- (agent/src/outbound/outbound-runner.mjs) is the only code that turns a row
 -- into mail. The model never sends: it writes ticket_drafts, which cannot.
 --
@@ -408,6 +415,11 @@ comment on column public.ticket_draft_edits.edited_by is
 -- dashboards clicking at once all hit the key instead of producing a second
 -- email. A cancelled or failed action no longer holds the version, so a person
 -- can edit and approve again, or retry after a provider refusal.
+--
+-- A MANUAL REPLY IS NOT KEYED ON THE VERSION. A person adding what the agent
+-- missed may write twice on one case version, so `manual_reply` rows are left
+-- out of that index and keyed instead on `client_key`, the id the composer
+-- mints once per reply: a double click or a retried request is still one email.
 --
 -- THE STATES SEPARATE WHAT WE ASKED FOR FROM WHAT WE KNOW.
 --   approved        decided, nothing done at the provider yet
@@ -428,15 +440,18 @@ create table public.outbound_actions (
   id uuid primary key default gen_random_uuid(),
   shop_id uuid not null references public.shops(id) on delete cascade,
   ticket_id uuid not null references public.tickets(id) on delete cascade,
-  draft_id uuid not null references public.ticket_drafts(id) on delete cascade,
+  -- Null exactly for a manual reply: a person's own text, drafted by nobody.
+  draft_id uuid references public.ticket_drafts(id) on delete cascade,
 
   -- The case version the approved text was written against. With the ticket
   -- and the action type, the key.
   case_version integer not null,
   action_type text not null default 'reply',
   -- human_approved: a person approved or edited it. auto_send: the level gate,
-  -- only ever with DRAFT_ONLY off.
+  -- only ever with DRAFT_ONLY off. manual: a person wrote it on the ticket page.
   mode text not null,
+  -- A manual reply's idempotency key, minted by the composer once per reply.
+  client_key uuid,
   -- Who asked: the dashboard user's id, or 'agent'. Never a name or an address.
   requested_by text,
 
@@ -444,6 +459,9 @@ create table public.outbound_actions (
   reply_to_message_id uuid not null references public.ticket_messages(id) on delete cascade,
   -- The text as approved, copied: the draft's own columns can still move.
   body_text text not null,
+  -- What is sent: the reply HTML, sanitised by scripts/lib/reply-html.mjs.
+  -- Null only on rows from before it existed, which send body_text.
+  body_html text,
 
   state text not null default 'approved',
   cancel_reason text,
@@ -464,8 +482,13 @@ create table public.outbound_actions (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
 
-  constraint outbound_actions_action_type_check check (action_type in ('reply')),
-  constraint outbound_actions_mode_check check (mode in ('human_approved', 'auto_send')),
+  constraint outbound_actions_action_type_check check (action_type in ('reply', 'manual_reply')),
+  constraint outbound_actions_mode_check check (mode in ('human_approved', 'auto_send', 'manual')),
+  constraint outbound_actions_manual_shape_check check (
+    (mode = 'manual') = (action_type = 'manual_reply')
+    and (mode = 'manual') = (draft_id is null)
+    and (mode = 'manual') = (client_key is not null)
+  ),
   constraint outbound_actions_state_check check (
     state in ('approved', 'draft_created', 'send_requested', 'sent_confirmed', 'cancelled', 'failed')
   ),
@@ -477,7 +500,9 @@ create table public.outbound_actions (
 
 create unique index outbound_actions_idempotency_key
   on public.outbound_actions (shop_id, ticket_id, case_version, action_type)
-  where state not in ('cancelled', 'failed');
+  where state not in ('cancelled', 'failed') and action_type = 'reply';
+
+create unique index outbound_actions_client_key on public.outbound_actions (shop_id, client_key);
 
 create index outbound_actions_state_idx on public.outbound_actions (shop_id, state);
 
@@ -510,3 +535,12 @@ comment on column public.outbound_actions.reply_to_message_id is
 
 comment on column public.outbound_actions.provider_draft_id is
   'The provider''s id for the reply draft. With immutable ids it survives the move to Sent Items, so ingestion''s stored graph_message_id matches it exactly.';
+
+comment on column public.outbound_actions.mode is
+  'human_approved (a person approved or edited a draft) | auto_send (the level gate, only with DRAFT_ONLY off) | manual (a person wrote the reply on the ticket page; no draft, action_type manual_reply, keyed on client_key).';
+
+comment on column public.outbound_actions.client_key is
+  'A manual reply''s idempotency key, minted by the dashboard composer once per reply, so a double click or a retried request is one email. Present exactly on manual rows, which the case-version index leaves out.';
+
+comment on column public.outbound_actions.body_html is
+  'What is sent: the reply as HTML, sanitised by scripts/lib/reply-html.mjs (paragraphs, bold, italics, underline, lists, https/mailto links; no attributes but href). body_text is its plain text. Null only on rows written before the column, which are sent from body_text.';

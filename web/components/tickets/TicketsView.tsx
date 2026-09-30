@@ -25,8 +25,21 @@ import { TrackingText } from "@/components/ui/TrackingText";
 import { ATTACHMENT_REASON_KEYS, fetchAttachmentReasonKey } from "@/lib/attachment-reasons";
 import { promoteDroppedMail } from "@/lib/api/dropped-mail";
 import { knowledgeErrorMessage } from "@/lib/api/knowledge";
-import { decisionLabel, handedOffNotice, outboundLine, replyInFlight } from "@/lib/draft-outbound";
-import { actOnObligation, decideOnDraft, fetchTicketDetail, fetchTicketThread, saveTicketOverrides, setTicketStatus } from "@/lib/api/tickets";
+import {
+  awaitingDelivery,
+  awaitingWorker,
+  canComposeReply,
+  decisionLabel,
+  deliveredLine,
+  handedOffNotice,
+  manualReplyLine,
+  outboundLine,
+  replyDelivered,
+  replyInFlight,
+} from "@/lib/draft-outbound";
+import { actOnObligation, decideOnDraft, fetchTicketDetail, fetchTicketThread, saveTicketOverrides, sendManualReply, setTicketStatus } from "@/lib/api/tickets";
+import { replyHtmlIsEmpty, textToReplyHtml } from "@/lib/reply-html";
+import { ReplyEditor, ReplyHtmlView } from "./ReplyEditor";
 import { formatRelativeTime } from "@/lib/relative-time";
 import { isBacklogTicket, isClosed, summariseTickets } from "@/lib/ticket-stats";
 import type {
@@ -41,6 +54,7 @@ import type {
   TicketAttachmentFile,
   TicketDetail,
   TicketDraft,
+  TicketManualReply,
   TicketListItem,
   TicketMessage,
   TicketOrderChange,
@@ -83,7 +97,6 @@ type TicketView = "queue" | "backlog" | "irrelevant" | "closed";
 // Labels come from the dictionary: `tickets.view.sort.<key>`, `tickets.view.tab.<key>`
 // and `tickets.view.verdict.<key>`.
 
-const NEWLINE = String.fromCharCode(10);
 
 /* The draft/conversation split. `null` means the CSS default (35% of the pane);
    a number is a height the reviewer dragged to, kept per browser. */
@@ -453,6 +466,30 @@ export function TicketsView({ initialTickets, droppedMail, loadError, initialPar
     };
   }, [selectedTicket]);
 
+  // GREY UNTIL IT LANDS. An approved draft, or a person's own reply, waits on
+  // the worker; the page looks again every 15 s until it has reached the
+  // mailbox, so the draft steps aside (and « Create draft » appears) without a
+  // reload. One thread read, and only while something is actually waiting.
+  const waiting = awaitingWorker(thread);
+  const waitingTicketId = waiting ? thread?.ticketId ?? null : null;
+  useEffect(() => {
+    if (!waitingTicketId) return;
+    let live = true;
+    const timer = window.setInterval(() => {
+      fetchTicketThread(waitingTicketId)
+        .then((loaded) => {
+          if (live) setThread((current) => (current?.ticketId === loaded.ticketId ? loaded : current));
+        })
+        .catch(() => {
+          // A missed look is harmless; the next one tries again.
+        });
+    }, 15000);
+    return () => {
+      live = false;
+      window.clearInterval(timer);
+    };
+  }, [waitingTicketId]);
+
   // A bare /tickets — which is what the sidebar link opens — picks up where this
   // browser tab left off. Runs once: it answers how the page was opened.
   useEffect(() => {
@@ -633,6 +670,15 @@ export function TicketsView({ initialTickets, droppedMail, loadError, initialPar
    * a send is confirmed, and the worker may still refuse. A rejection keeps the
    * ticket on screen: somebody still has to answer it.
    */
+  /** A person queued a reply of their own: it joins the thread's list, newest first. */
+  function manualReplySent(reply: TicketManualReply) {
+    setThread((current) =>
+      current
+        ? { ...current, reply: { ...current.reply, manual: [reply, ...current.reply.manual.filter((r) => r.id !== reply.id)] } }
+        : current
+    );
+  }
+
   function draftChanged(draft: TicketDraft, decided?: "approved" | "edited" | "rejected") {
     setThread((current) => (current ? { ...current, draft } : current));
     if ((decided !== "approved" && decided !== "edited") || !selectedTicket) return;
@@ -754,6 +800,7 @@ export function TicketsView({ initialTickets, droppedMail, loadError, initialPar
           thread={thread}
           threadError={threadError}
           onDraftChange={draftChanged}
+          onManualReply={manualReplySent}
           onChangeStatus={changeStatus}
           pendingId={pendingId}
           contextOpen={contextOpen}
@@ -913,6 +960,7 @@ function TicketToolbar({
 
 /** A draft came back from the server; `decided` says which button produced it. */
 type DraftChangeHandler = (draft: TicketDraft, decided?: "approved" | "edited" | "rejected") => void;
+type ManualReplyHandler = (reply: TicketManualReply) => void;
 
 interface TicketWorkspaceProps {
   view: TicketView;
@@ -925,6 +973,7 @@ interface TicketWorkspaceProps {
   thread: TicketThread | null;
   threadError: string | null;
   onDraftChange: DraftChangeHandler;
+  onManualReply: ManualReplyHandler;
   onChangeStatus: (ticket: TicketListItem, status: "open" | "closed") => void;
   pendingId: string | null;
   contextOpen: boolean;
@@ -945,6 +994,7 @@ function TicketWorkspace({
   thread,
   threadError,
   onDraftChange,
+  onManualReply,
   onChangeStatus,
   pendingId,
   contextOpen,
@@ -967,6 +1017,7 @@ function TicketWorkspace({
             thread={thread}
             threadError={threadError}
             onDraftChange={onDraftChange}
+            onManualReply={onManualReply}
             onChangeStatus={onChangeStatus}
             pendingId={pendingId}
             onOpenContext={onOpenContext}
@@ -1080,6 +1131,7 @@ function TicketDetailWorkspace({
   thread,
   threadError,
   onDraftChange,
+  onManualReply,
   onChangeStatus,
   pendingId,
   onOpenContext,
@@ -1091,6 +1143,7 @@ function TicketDetailWorkspace({
   thread: TicketThread | null;
   threadError: string | null;
   onDraftChange: DraftChangeHandler;
+  onManualReply: ManualReplyHandler;
   onChangeStatus: (ticket: TicketListItem, status: "open" | "closed") => void;
   pendingId: string | null;
   onOpenContext: () => void;
@@ -1277,6 +1330,7 @@ function TicketDetailWorkspace({
         thread={thread}
         error={threadError}
         onDraftChange={onDraftChange}
+        onManualReply={onManualReply}
         detail={detail}
         detailError={detailError}
       />
@@ -1492,6 +1546,7 @@ function DraftResponsePanel({
   thread,
   error,
   onDraftChange,
+  onManualReply,
   detail,
   detailError,
 }: {
@@ -1500,11 +1555,13 @@ function DraftResponsePanel({
   thread: TicketThread | null;
   error: string | null;
   onDraftChange: DraftChangeHandler;
+  onManualReply: ManualReplyHandler;
   detail: TicketDetail | null;
   detailError: string | null;
 }) {
   const t = useT();
   const [editing, setEditing] = useState(false);
+  // The editor's HTML; the server sanitises it and derives the text.
   const [edited, setEdited] = useState("");
   const [saving, setSaving] = useState<null | "approved" | "edited" | "rejected">(null);
   const [decideError, setDecideError] = useState<string | null>(null);
@@ -1524,7 +1581,8 @@ function DraftResponsePanel({
     try {
       const updated = await decideOnDraft(ticket.id, {
         status,
-        approvedBody: status === "edited" ? edited : null,
+        approvedBody: null,
+        approvedBodyHtml: status === "edited" ? edited : null,
       });
       onDraftChange(updated, status);
       setEditing(false);
@@ -1544,9 +1602,9 @@ function DraftResponsePanel({
       <div className={styles.draftHead}>
         <div>
           <h3>{t("tickets.panels.draft.replyTo", { name: requesterName(ticket, t) })}</h3>
-          {draft && <p>{draftStatusText(draft, t)}</p>}
+          {draft && !replyDelivered(draft) && <p>{draftStatusText(draft, t)}</p>}
         </div>
-        {draft && (
+        {draft && !replyDelivered(draft) && (
           <div className={styles.draftLabels}>
             <span className={styles.aiDraftLabel}>{t("tickets.panels.draft.aiDraft")}</span>
             <span className={styles.draftStatus}>{t(`tickets.panels.draft.status.${draft.status}`)}</span>
@@ -1568,9 +1626,14 @@ function DraftResponsePanel({
         <p className={styles.inlineError} role="alert">{error}</p>
       ) : !thread ? (
         <DraftSkeleton />
+      ) : draft && replyDelivered(draft) ? (
+        // IN THE MAILBOX NOW. The approved reply is Outlook's from here (in
+        // Drafts, or sent), so it is no longer shown as a draft: one line says
+        // where it went, and « Create draft » below lets a person add to it.
+        <p className={styles.related} role="status">{deliveredLine(draft, t)}</p>
       ) : draft ? (
-        <>
-          {detail?.results?.action && (
+        <div className={awaitingDelivery(draft) ? styles.draftAwaiting : styles.draftLive} aria-busy={awaitingDelivery(draft) || undefined}>
+          {detail?.results?.action && !awaitingDelivery(draft) && (
             <div className={styles.requiredAction}>
               <span>{t("tickets.panels.draft.requiredBeforeSending")}</span>
               <p><span aria-hidden="true">●</span> {detail.results.action}</p>
@@ -1599,20 +1662,14 @@ function DraftResponsePanel({
           )}
 
           {editing ? (
-            <>
-              <textarea
-                className={styles.editor}
-                value={edited}
-                onChange={(event) => setEdited(event.target.value)}
-                rows={Math.min(18, Math.max(7, edited.split(NEWLINE).length + 2))}
-                aria-label={t("tickets.panels.draft.editLabel")}
-              />
-              {draft.replyLink && (
-                <p className={styles.related}>
-                  {t("tickets.panels.draft.keepBrackets", { label: draft.replyLink.label })}
-                </p>
-              )}
-            </>
+            // The draft's [[marker]] opens as the real link, so a reviewer
+            // edits what the customer will see rather than a placeholder.
+            <ReplyEditor
+              key={draft.id}
+              initialHtml={edited}
+              onChange={setEdited}
+              label={t("tickets.panels.draft.editLabel")}
+            />
           ) : (
             <pre className={styles.draftBody}>
               <TrackingText text={draft.body} parcels={thread.parcels} link={draft.replyLink} />
@@ -1622,17 +1679,21 @@ function DraftResponsePanel({
           {draft.approvedBody && (
             <div className={styles.reviewerVersion}>
               <h4>{t("tickets.panels.draft.reviewerVersion")}</h4>
-              <pre className={styles.draftBody}>
-                <TrackingText text={draft.approvedBody} parcels={thread.parcels} link={draft.replyLink} />
-              </pre>
+              {draft.approvedBodyHtml ? (
+                <ReplyHtmlView html={draft.approvedBodyHtml} />
+              ) : (
+                <pre className={styles.draftBody}>
+                  <TrackingText text={draft.approvedBody} parcels={thread.parcels} link={draft.replyLink} />
+                </pre>
+              )}
             </div>
           )}
 
           <div className={styles.draftFoot}>
             <div className={styles.draftActions}>
-              {draft.status === "stale" || replyInFlight(draft) ? null : editing ? (
+              {draft.status === "stale" || replyInFlight(draft) || awaitingDelivery(draft) ? null : editing ? (
                 <>
-                  <Button size="sm" variant="primary" loading={saving === "edited"} disabled={saving !== null || edited.trim() === ""} onClick={() => decide("edited")}>
+                  <Button size="sm" variant="primary" loading={saving === "edited"} disabled={saving !== null || replyHtmlIsEmpty(edited)} onClick={() => decide("edited")}>
                     {decisionLabel(draft, "save", t)}
                   </Button>
                   <Button size="sm" variant="secondary" disabled={saving !== null} onClick={() => setEditing(false)}>
@@ -1647,7 +1708,7 @@ function DraftResponsePanel({
                       variant="secondary"
                       disabled={saving !== null}
                       onClick={() => {
-                        setEdited(draft.approvedBody ?? draft.body);
+                        setEdited(draft.approvedBodyHtml ?? textToReplyHtml(draft.approvedBody ?? draft.body, draft.replyLink));
                         setEditing(true);
                       }}
                     >
@@ -1675,15 +1736,152 @@ function DraftResponsePanel({
           <DraftExplanation detail={detail} draft={draft} />
 
           {decideError && <p className={styles.inlineError} role="alert">{decideError}</p>}
-        </>
+        </div>
       ) : (
         <p className={styles.placeholder}>
           {t("tickets.panels.draft.none")}
         </p>
       )}
 
+      {thread && !error && (
+        <>
+          <ManualReplyStatus replies={thread.reply.manual} />
+          {canComposeReply(draft) && (
+            <ReplyComposer ticket={ticket} thread={thread} onSent={onManualReply} />
+          )}
+        </>
+      )}
+
       {detailError && <p className={styles.inlineError} role="alert">{detailError}</p>}
     </section>
+  );
+}
+
+/**
+ * The newest reply a person wrote here, while it matters: greyed with its text
+ * until the worker has put it in the mailbox, then one line. A refused one
+ * keeps its text, so it can be reused rather than typed again.
+ */
+function ManualReplyStatus({ replies }: { replies: TicketManualReply[] }) {
+  const t = useT();
+  const newest = replies[0];
+  if (!newest) return null;
+  const refused = newest.state === "cancelled" || newest.state === "failed";
+  const queued = newest.state === "approved";
+  return (
+    <div className={styles.manualReply}>
+      <p className={refused ? styles.blocked : styles.related} role="status">
+        {manualReplyLine(newest, t)}
+      </p>
+      {(queued || refused) && (
+        <div className={queued ? styles.draftAwaiting : undefined}>
+          {newest.bodyHtml ? <ReplyHtmlView html={newest.bodyHtml} /> : <pre className={styles.draftBody}>{newest.bodyText}</pre>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * « Create draft »: a reply a person writes themselves, typically to add what
+ * the agent missed. It goes out through the same worker as an approved draft
+ * (an outbound action; nothing is sent from the browser) and is threaded under
+ * the customer's latest message.
+ *
+ * IT STARTS NO AGENT WORK. Once sent it comes back from Sent Items like any
+ * reply of ours, and the next investigation — on the customer's next message —
+ * reads it in the thread. Often it is the reply that settles the case; the
+ * person then ticks off the checks and closes the ticket.
+ */
+function ReplyComposer({
+  ticket,
+  thread,
+  onSent,
+}: {
+  ticket: TicketListItem;
+  thread: TicketThread;
+  onSent: ManualReplyHandler;
+}) {
+  const t = useT();
+  // The idempotency key is minted when the box opens: a double click or a
+  // retried request sends one email, and a fresh box is a fresh reply.
+  const [open, setOpen] = useState<null | { key: string; seed: string }>(null);
+  const [html, setHtml] = useState("");
+  const [sending, setSending] = useState(false);
+  const [sendError, setSendError] = useState<string | null>(null);
+  const { sendingEnabled, holdsInDrafts, targetMessageId, manual } = thread.reply;
+  const newest = manual[0];
+
+  useEffect(() => {
+    setOpen(null);
+    setHtml("");
+    setSendError(null);
+  }, [ticket.id]);
+
+  // A reply still on its way: one at a time, so nobody sends the same addition twice.
+  if (newest && (newest.state === "approved" || newest.state === "send_requested")) return null;
+
+  function start(seed = "") {
+    setHtml(seed);
+    setSendError(null);
+    setOpen({ key: crypto.randomUUID(), seed });
+  }
+
+  async function send() {
+    if (!open || !targetMessageId) return;
+    setSending(true);
+    setSendError(null);
+    try {
+      const reply = await sendManualReply(ticket.id, { bodyHtml: html, replyToMessageId: targetMessageId, clientKey: open.key });
+      onSent(reply);
+      setOpen(null);
+      setHtml("");
+    } catch (cause) {
+      setSendError(knowledgeErrorMessage(cause));
+    } finally {
+      setSending(false);
+    }
+  }
+
+  if (!open) {
+    const blockedBy = !sendingEnabled ? t("tickets.panels.compose.off") : !targetMessageId ? t("tickets.panels.compose.noTarget") : null;
+    const refused = newest && (newest.state === "cancelled" || newest.state === "failed") ? newest : null;
+    return (
+      <div className={styles.composeStart}>
+        <span className={styles.draftActionsStart}>
+          <Button size="sm" variant="secondary" leadingIcon={<PencilIcon size={15} />} disabled={Boolean(blockedBy)} onClick={() => start()}>
+            {t("tickets.panels.compose.create")}
+          </Button>
+          {refused && !blockedBy && (
+            <Button size="sm" variant="tertiary" onClick={() => start(refused.bodyHtml ?? textToReplyHtml(refused.bodyText, null))}>
+              {t("tickets.panels.compose.copyBack")}
+            </Button>
+          )}
+        </span>
+        <p className={styles.stamp}>{blockedBy ?? t("tickets.panels.compose.createHint")}</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className={styles.composer}>
+      <h4>{t("tickets.panels.compose.title", { name: requesterName(ticket, t) })}</h4>
+      <ReplyEditor key={open.key} initialHtml={open.seed} onChange={setHtml} label={t("tickets.panels.compose.label")} disabled={sending} />
+      <div className={styles.draftActions}>
+        <span className={styles.draftActionsStart}>
+          <Button size="sm" variant="secondary" disabled={sending} onClick={() => setOpen(null)}>
+            {t("tickets.panels.draft.cancel")}
+          </Button>
+        </span>
+        <span className={styles.draftActionsEnd}>
+          <Button size="sm" variant="primary" leadingIcon={<SendIcon size={15} />} loading={sending} disabled={sending || replyHtmlIsEmpty(html)} onClick={send}>
+            {holdsInDrafts ? t("tickets.panels.compose.sendDraft") : t("tickets.panels.compose.send")}
+          </Button>
+        </span>
+      </div>
+      <p className={styles.stamp}>{t("tickets.panels.compose.afterNote")}</p>
+      {sendError && <p className={styles.inlineError} role="alert">{sendError}</p>}
+    </div>
   );
 }
 

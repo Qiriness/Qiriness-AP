@@ -44,6 +44,8 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       {
         status: status as "approved" | "edited" | "rejected",
         approvedBody: typeof body.approvedBody === "string" ? body.approvedBody : null,
+        // A formatted rewrite; the service sanitises it and derives the text.
+        approvedBodyHtml: typeof body.approvedBodyHtml === "string" ? body.approvedBodyHtml : null,
       },
       // Who asked for the send: the user's id, never a name or an address.
       session?.sub ?? null

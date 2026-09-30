@@ -6,10 +6,11 @@ import { LanguageSwitch } from "@/components/app-shell/LanguageSwitch";
 import { getFormat, getT } from "@/lib/i18n/server";
 import header from "../insights/InsightsHeader.module.css";
 import t from "../insights/tables.module.css";
+import { DevInfo } from "./DevInfo";
 import { KlaviyoKeyCard } from "./KlaviyoKeyCard";
 import styles from "./SettingsView.module.css";
 
-export type SettingsTab = "me" | "agents" | "integrations";
+export type SettingsTab = "me" | "agents" | "integrations" | "dev";
 
 export interface SettingsMe {
   name: string | null;
@@ -25,7 +26,11 @@ const TABS: { id: SettingsTab; href: string }[] = [
   { id: "me", href: "/settings" },
   { id: "agents", href: "/settings?tab=agents" },
   { id: "integrations", href: "/settings?tab=integrations" },
+  { id: "dev", href: "/settings?tab=dev" },
 ];
+
+/** Tabs drawn only for roles that manage integrations (developer, management). */
+const RESTRICTED: SettingsTab[] = ["integrations", "dev"];
 
 /**
  * Settings, built from the Insights kit — the same page frame, tab bar, cards
@@ -43,7 +48,7 @@ export function SettingsView({
   me: SettingsMe | null;
   roster: AgentRoster | null;
   klaviyo: KlaviyoStatus | { error: string } | null;
-  /** The contact team is not shown the Integrations tab (dashboard-auth.mjs). */
+  /** The contact team is not shown the Integrations or Dev info tabs (dashboard-auth.mjs). */
   canManageIntegrations: boolean;
 }) {
   const tr = getT();
@@ -55,7 +60,7 @@ export function SettingsView({
         </div>
         <nav className={header.nav} aria-label={tr("settings.sections")}>
           <ul className={header.tabs}>
-            {TABS.filter((item) => item.id !== "integrations" || canManageIntegrations).map((item) => (
+            {TABS.filter((item) => !RESTRICTED.includes(item.id) || canManageIntegrations).map((item) => (
               <li key={item.id}>
                 <Link
                   href={item.href}
@@ -70,7 +75,15 @@ export function SettingsView({
         </nav>
       </header>
 
-      {tab === "me" ? <MyInfo me={me} /> : tab === "agents" ? <AgentSettings roster={roster} /> : <Integrations klaviyo={klaviyo} />}
+      {tab === "me" ? (
+        <MyInfo me={me} />
+      ) : tab === "agents" ? (
+        <AgentSettings roster={roster} />
+      ) : tab === "dev" ? (
+        <DevInfo roster={roster} />
+      ) : (
+        <Integrations klaviyo={klaviyo} />
+      )}
     </div>
   );
 }

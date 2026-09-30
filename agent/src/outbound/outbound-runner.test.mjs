@@ -337,3 +337,46 @@ test('with DRAFT_ONLY off an eligible pending draft becomes an auto_send action 
   assert.equal(w.jobs.enqueued[0].kind, 'send_outbound');
   assert.equal(w.jobs.enqueued[0].dedupeKey, `send:${created.id}`);
 });
+
+// --- manual replies -----------------------------------------------------------
+
+const MANUAL = {
+  draft_id: null,
+  mode: 'manual',
+  action_type: 'manual_reply',
+  client_key: '0b7c2c9e-1f7a-4a57-9a7e-2d1f0f3c9a11',
+  body_text: 'Voici le suivi.',
+  body_html: '<p>Voici <strong>le suivi</strong>.</p>'
+};
+
+test('a manual reply is sent as its HTML, with no draft to read or mark', async () => {
+  // Our earlier reply already went, and the case moved: neither stops it.
+  const w = world({
+    action: MANUAL,
+    caseVersion: 7,
+    later: [{ id: 'm-ours', direction: 'outbound', actor: 'support', received_at: '2026-09-28T10:00:00Z' }]
+  });
+  const totals = await run(w);
+  assert.equal(totals.sent, 1);
+  const [, , reply] = w.calls.find(([name]) => name === 'createReplyDraft');
+  assert.equal(reply.bodyHtml, '<p>Voici <strong>le suivi</strong>.</p>');
+  assert.equal(reply.bodyText, 'Voici le suivi.');
+
+  w.actions.get('a1').state = 'send_requested';
+  w.actions.get('a1').provider_draft_id = 'AAMk-draft';
+  w.store.storedSentMessage = async () => ({ id: 'm-sent', direction: 'outbound' });
+  await confirmSentActions({ outboundRecord: w.outboundRecord, draftRecord: w.draftRecord, store: w.store });
+  assert.equal(w.actions.get('a1').state, 'sent_confirmed');
+  assert.equal(w.calls.filter(([name]) => name === 'markSent').length, 0);
+});
+
+test('a manual reply is still refused when the customer wrote after it was typed', async () => {
+  const w = world({
+    action: MANUAL,
+    later: [{ id: 'm2', direction: 'inbound', actor: 'customer', received_at: '2026-09-28T10:00:00Z' }]
+  });
+  const totals = await run(w);
+  assert.equal(totals.cancelled, 1);
+  assert.equal(w.actions.get('a1').cancel_reason, 'customer_wrote_again');
+  assert.equal(sent(w).length, 0);
+});

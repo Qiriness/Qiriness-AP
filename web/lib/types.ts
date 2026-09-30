@@ -1165,6 +1165,8 @@ export interface TicketThread {
    * Empty for a ticket with no confirmed order, which is most of them.
    */
   parcels: TicketTracking[];
+  /** Replying without a draft: whether it is possible, and what has been sent. */
+  reply: TicketReplyState;
 }
 
 /**
@@ -1179,6 +1181,8 @@ export interface TicketDraft {
   id: string;
   body: string;
   approvedBody: string | null;
+  /** The same rewrite as sanitised reply HTML, when it was written with formatting. */
+  approvedBodyHtml: string | null;
   /** The link the draft's `[[marker]]` was written about, copied at drafting time. */
   replyLink: { url: string; label: string } | null;
   /** Which kind of reply this is; decided by the case file, never by wording. */
@@ -1213,6 +1217,31 @@ export interface TicketDraft {
   holdsInDrafts: boolean;
   /** The newest outbound action for this draft: how far sending it got. */
   outbound: TicketDraftOutbound | null;
+}
+
+/**
+ * What a person may send on this ticket without a draft, and what they have.
+ * A manual reply is an outbound action with no draft (mode `manual`).
+ */
+export interface TicketReplyState {
+  /** OUTBOUND_SEND_ENABLED on this server. Without it nothing can be queued. */
+  sendingEnabled: boolean;
+  /** OUTBOUND_STOP_BEFORE_SEND: the reply stops in the Outlook Drafts folder. */
+  holdsInDrafts: boolean;
+  /** The customer message a reply would answer (the latest), or null if there is none. */
+  targetMessageId: string | null;
+  /** This ticket's manual replies, newest first. */
+  manual: TicketManualReply[];
+}
+
+export interface TicketManualReply {
+  id: string;
+  state: TicketDraftOutbound["state"];
+  reason: string | null;
+  /** Sanitised reply HTML; null on a row that has none. */
+  bodyHtml: string | null;
+  bodyText: string;
+  at: string | null;
 }
 
 /** Mirrors outbound_actions_state_check in supabase/migrations/07_drafting.sql. */

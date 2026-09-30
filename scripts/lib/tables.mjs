@@ -343,7 +343,7 @@ export const COLUMNS = {
 
   /** The thread dialog: envelope and body, both directions. */
   messageForThread:
-    'id,direction,from_name,from_email,to_emails,cc_emails,subject,body_text,has_attachments,received_at,sent_at',
+    'id,direction,actor,from_name,from_email,to_emails,cc_emails,subject,body_text,has_attachments,received_at,sent_at',
 
   /** The categoriser reads the customer's words and nothing else. */
   messageForCategorisation: 'subject,body_text,received_at',
@@ -552,7 +552,7 @@ export const COLUMNS = {
    */
   draftForReview:
     'id,ticket_id,trigger_message_id,source_verdict,disposition,level,language,subject,' +
-    'body_text,approved_body_text,status,checks,checks_passed,auto_send_eligible,model,' +
+    'body_text,approved_body_text,approved_body_html,status,checks,checks_passed,auto_send_eligible,model,' +
     // `reply_link` IS read: the dashboard puts it on the draft's [[marker]].
     'drafted_at,review_sent_at,reply_link,' +
     // Stage 6: which case version it answers, and why it went stale if it did.

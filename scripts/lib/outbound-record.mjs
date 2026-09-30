@@ -1,3 +1,4 @@
+import { replyHtmlIsEmpty, replyHtmlToText, sanitiseReplyHtml, textToReplyHtml } from './reply-html.mjs';
 import { supabaseInsert, supabaseSelect, supabaseUpdate } from './supabase-rest-client.mjs';
 import { T } from './tables.mjs';
 
@@ -21,8 +22,11 @@ import { T } from './tables.mjs';
 /** Mirrors outbound_actions_state_check; 47_outbound_actions.test.mjs asserts it. */
 export const OUTBOUND_STATES = ['approved', 'draft_created', 'send_requested', 'sent_confirmed', 'cancelled', 'failed'];
 
-/** Mirrors outbound_actions_mode_check. */
-export const OUTBOUND_MODES = ['human_approved', 'auto_send'];
+/**
+ * Mirrors outbound_actions_mode_check. `manual` is a reply a person wrote on
+ * the ticket page: no draft, action_type `manual_reply`, keyed on client_key.
+ */
+export const OUTBOUND_MODES = ['human_approved', 'auto_send', 'manual'];
 
 /** States in which an action may still produce mail. */
 export const OPEN_STATES = ['approved', 'draft_created', 'send_requested'];
@@ -34,7 +38,7 @@ export const OPEN_STATES = ['approved', 'draft_created', 'send_requested'];
 export const CANCEL_REASONS = ['case_moved', 'customer_wrote_again', 'already_answered', 'draft_withdrawn', 'auto_send_off'];
 
 const ACTION_COLUMNS =
-  'id,ticket_id,draft_id,case_version,action_type,mode,requested_by,reply_to_message_id,body_text,state,' +
+  'id,ticket_id,draft_id,case_version,action_type,mode,client_key,requested_by,reply_to_message_id,body_text,body_html,state,' +
   'cancel_reason,failure_reason,provider,provider_draft_id,provider_internet_message_id,sent_message_id,' +
   'draft_created_at,send_requested_at,confirmed_at,closed_at,created_at';
 
@@ -68,7 +72,15 @@ export function actionFromDraft(draft, { mode = 'human_approved', requestedBy = 
     ? draft.approved_body_text
     : draft.body_text;
   if (typeof bodyText !== 'string' || bodyText.trim() === '') return { error: 'empty_body' };
-  if (!OUTBOUND_MODES.includes(mode)) return { error: 'bad_mode' };
+  if (!OUTBOUND_MODES.includes(mode) || mode === 'manual') return { error: 'bad_mode' };
+  // What is sent. A formatted rewrite as it was written; otherwise the text,
+  // with the draft's [[marker]] turned into its link — sending the text alone
+  // put the literal « [[ici]] » in front of the customer.
+  const usesRewrite = bodyText !== draft.body_text;
+  const bodyHtml =
+    usesRewrite && typeof draft.approved_body_html === 'string' && draft.approved_body_html.trim() !== ''
+      ? sanitiseReplyHtml(draft.approved_body_html)
+      : textToReplyHtml(bodyText, draft.reply_link ?? null);
   return {
     row: {
       ticket_id: draft.ticket_id,
@@ -78,10 +90,47 @@ export function actionFromDraft(draft, { mode = 'human_approved', requestedBy = 
       mode,
       requested_by: requestedBy,
       reply_to_message_id: draft.trigger_message_id,
-      body_text: bodyText
+      body_text: bodyText,
+      body_html: bodyHtml
     }
   };
 }
+
+/**
+ * The row for a reply a person wrote themselves on the ticket page, or a
+ * reason it cannot be sent. Pure.
+ *
+ * NO DRAFT, AND NOT KEYED ON THE VERSION: the person is adding what the agent
+ * missed, possibly twice on one case version. `clientKey` is minted by the
+ * composer once per reply and is the idempotency key. `caseVersion` is kept
+ * for the record (what the case was when they wrote), not checked at send.
+ *
+ * @param {{ ticketId: string, replyToMessageId: string, caseVersion: number,
+ *   bodyHtml: string, clientKey: string, requestedBy?: string | null }} input
+ */
+export function actionFromManual({ ticketId, replyToMessageId, caseVersion, bodyHtml, clientKey, requestedBy = null }) {
+  if (!ticketId || !replyToMessageId) return { error: 'no_reply_target' };
+  if (!UUID.test(String(clientKey ?? ''))) return { error: 'bad_client_key' };
+  if (!Number.isInteger(caseVersion) || caseVersion < 1) return { error: 'no_case_version' };
+  const html = sanitiseReplyHtml(bodyHtml);
+  if (replyHtmlIsEmpty(html)) return { error: 'empty_body' };
+  return {
+    row: {
+      ticket_id: ticketId,
+      draft_id: null,
+      case_version: caseVersion,
+      action_type: 'manual_reply',
+      mode: 'manual',
+      client_key: clientKey,
+      requested_by: requestedBy,
+      reply_to_message_id: replyToMessageId,
+      body_text: replyHtmlToText(html),
+      body_html: html
+    }
+  };
+}
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export const REST_TRANSPORT = {
   select: supabaseSelect,
@@ -124,12 +173,19 @@ export function createOutboundRecord(supabase, { shopId, transport = REST_TRANSP
     return rows[0] ?? null;
   }
 
+  // A manual reply already recorded under this composer key.
+  async function forClientKey(clientKey) {
+    const rows = await select(supabase, T.OUTBOUND_ACTIONS, { shop_id: shopId, client_key: clientKey }, ACTION_COLUMNS, { limit: 1 });
+    return rows[0] ?? null;
+  }
+
   return {
     /**
      * Insert the action for a draft. THE KEY DECIDES, not a read beforehand:
      * a second approval of the same case version collides with the unique
      * index on (shop_id, ticket_id, case_version, action_type) over live rows
-     * and gets the existing row back with `created: false`.
+     * and gets the existing row back with `created: false`. A manual reply
+     * collides on its client_key instead, and gets its own row back.
      */
     async create(row) {
       try {
@@ -137,7 +193,8 @@ export function createOutboundRecord(supabase, { shopId, transport = REST_TRANSP
         return { created: true, action: created ?? null };
       } catch (error) {
         if (!isUniqueViolation(error)) throw error;
-        return { created: false, action: await forVersion(row.ticket_id, row.case_version) };
+        const existing = row.client_key ? await forClientKey(row.client_key) : await forVersion(row.ticket_id, row.case_version);
+        return { created: false, action: existing };
       }
     },
 
@@ -210,5 +267,5 @@ export function createOutboundRecord(supabase, { shopId, transport = REST_TRANSP
 }
 
 function isUniqueViolation(error) {
-  return /duplicate key|unique constraint|outbound_actions_idempotency_key/i.test(String(error?.message ?? ''));
+  return /duplicate key|unique constraint|outbound_actions_idempotency_key|outbound_actions_client_key/i.test(String(error?.message ?? ''));
 }

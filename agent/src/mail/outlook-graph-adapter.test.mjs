@@ -95,3 +95,20 @@ test('reply HTML escapes the text and keeps its paragraphs and line breaks, noth
     '<p>Bonjour Marie,</p>\n<p>Votre colis &lt;n°12&gt; part &quot;demain&quot; &amp; arrive<br>jeudi.</p>\n<p>Cordialement</p>'
   );
 });
+
+test('a reply with HTML is sent as that HTML, sanitised once more', async () => {
+  const calls = [];
+  const graphClient = {
+    async createReplyDraft(messageId, options) {
+      calls.push(options.html);
+      return { id: 'AAMk-draft' };
+    }
+  };
+  const adapter = createOutlookGraphAdapter({ graphClient });
+  await adapter.createReplyDraft('AAMk-customer', {
+    bodyText: 'Voir le guide',
+    bodyHtml: '<p><b>Voir</b> <a href="https://x.fr/g" onclick="x()">le guide</a><script>1</script></p>',
+    to: ['marie@example.com']
+  });
+  assert.deepEqual(calls, ['<p><strong>Voir</strong> <a href="https://x.fr/g">le guide</a></p>']);
+});

@@ -16,6 +16,15 @@ Three sibling files carry the other halves, and this one deliberately does not d
 
 
 
+## Tickets: approved replies step aside, « Create draft », formatted replies (2026-09-30)
+
+- **Built:** an approved draft is greyed, without buttons, until the worker puts it in the mailbox; then only a line says where it went. « Create draft » then opens a reply box of the person's own, sent through the same outbound worker as a `manual` action (`POST /api/tickets/[id]/reply`), threaded under the customer's latest message. The reply box (new and editing) has bold, italics, underline, lists and links. Replies are sent as HTML cut by `scripts/lib/reply-html.mjs`. The draft's `[[marker]]` now goes out as its link; before, the literal brackets were sent. Migration 52 applied 2026-09-30. A manual reply starts no agent pass.
+- **Proven:** unit tests for the sanitiser, the manual action, the pre-send check, the runner and the adapter; migration tests; `tsc` and lint on `web/`; migration 52 read back and the new columns returned through PostgREST. **Not yet:** looked at in a browser, or sent through the real mailbox. See VALIDATION_LOG § 20.
+
+## Settings → Dev info: architecture and subscriptions (2026-09-30)
+
+New tab `/settings?tab=dev` (developer and management). A diagram of the stack — Vercel dashboard, Render worker, GitHub Actions nightly sync, Supabase, Shopify, Microsoft 365, OpenAI, Klaviyo, DERET (planned) — and a subscriptions table. Data is hand-kept in `web/lib/dev-stack.ts`; plans and monthly costs are blank until entered. OpenAI models and 30-day spend are read live from the agent roster. Proven: `tsc`, lint, i18n test; not yet looked at in a browser.
+
 ## French / English interface: Home and Login (2026-09-30)
 
 - **Built:** the management chat (`components/chat/*`) and the sign-in page read the dictionary. The four starter prompts are translated too, so a French reader's click asks the model in French. Sign-in errors from `/api/auth/login` are mapped to words in the reader's language when the sentence is one of the route's known ones.

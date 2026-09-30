@@ -245,6 +245,14 @@ sink, `support_answers` being empty, and the first pass of the test chat.
     (`/api/insights/report`, Overview → Monthly sales report) and rendered by a pure function
     a job can call, but nothing emails it: the CEOs' addresses, the sender and the schedule
     (1st of the month, shop clock) are undecided.
+22. **Move the nightly Shopify sync from GitHub Actions to Render.** Not urgent. One run took
+    71 min (2026-09-11), about 2,100 min/month, at or over GitHub Free's 2,000 private-repo
+    minutes — check Billing → Actions. Plan: a separate Render Cron Job (about $1/month;
+    confirm on render.com/pricing) rather than a cron inside the worker, so polling and a
+    redeploy cannot kill it mid-sync. It needs an overlap guard (skip while an
+    `integration_events` row is `processing`) to replace the workflow's `concurrency`, and
+    the five repo secrets copied to Render. The dry-run button is lost. Then remove
+    `.github/workflows/nightly-sync.yml` and update Dev info (`web/lib/dev-stack.ts`).
 
 The target is unchanged: **auto-resolve level 1 and 2, and for level 3 assemble everything a
 human needs to act.** On the 383 categorised tickets that splits L1 32 (8%) · L2 188 (49%) ·

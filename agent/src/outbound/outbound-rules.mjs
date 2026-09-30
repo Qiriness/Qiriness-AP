@@ -23,6 +23,8 @@ import { sendableStatusesFor } from '../../../scripts/lib/outbound-record.mjs';
  * @returns {{ ok: true } | { ok: false, reason: string }}
  */
 export function preSendCheck({ action, draft, caseCurrent, replyTo, laterMessages = [], otherActions = [], draftOnly = true }) {
+  if (action.mode === 'manual') return manualCheck({ action, replyTo, laterMessages });
+
   // The approval still stands: not rejected, not gone stale under a fold. An
   // auto-send's draft must still be pending: a person who touched it owns it.
   if (!draft || !sendableStatusesFor(action.mode).includes(draft.status)) {
@@ -67,6 +69,22 @@ export function preSendCheck({ action, draft, caseCurrent, replyTo, laterMessage
     return refuse('already_answered');
   }
 
+  return { ok: true };
+}
+
+/**
+ * A REPLY A PERSON WROTE is checked for one thing only: whether the customer
+ * has written since the message it answers, which the person could not have
+ * read. There is no draft to withdraw, and the rest is the person's call —
+ * they wrote it knowing our earlier reply had gone (that is usually why they
+ * are writing: to add what it missed) and knowing where the case stood.
+ */
+function manualCheck({ action, replyTo, laterMessages }) {
+  const own = new Set([action.sent_message_id].filter(Boolean));
+  const later = laterMessages.filter((message) => message.id !== replyTo?.id && !own.has(message.id));
+  if (later.some((message) => message.direction === 'inbound' && (message.actor ?? 'customer') === 'customer')) {
+    return refuse('customer_wrote_again');
+  }
   return { ok: true };
 }
 

@@ -11,9 +11,17 @@ const squash = (text) => String(text ?? '').replace(/\s+/g, ' ').trim();
 const commentOf = (sql, table, column) =>
   sql.match(new RegExp(`comment on column public\\.${table}\\.${column} is\\s*'((?:[^']|'')*)';`))?.[1];
 
-test('47 creates the same table the baseline does, column for column', () => {
+// 52 (manual replies) added these, widened two checks and narrowed the key;
+// 52_manual_replies.test.mjs holds it to the baseline.
+const ADDED_BY_52 = ['client_key', 'body_html'];
+const WIDENED_BY_52 = ['outbound_actions_action_type_check', 'outbound_actions_mode_check'];
+
+test('47 creates the same table the baseline does, column for column, less what 52 added', () => {
   assert.ok(columnsIn(DRAFTING, 'outbound_actions').length > 0);
-  assert.deepEqual(columnsIn(SQL, 'outbound_actions'), columnsIn(DRAFTING, 'outbound_actions'));
+  assert.deepEqual(
+    columnsIn(SQL, 'outbound_actions'),
+    columnsIn(DRAFTING, 'outbound_actions').filter((column) => !ADDED_BY_52.includes(column))
+  );
 });
 
 test('47 carries the baseline checks, not retyped ones', () => {
@@ -27,6 +35,7 @@ test('47 carries the baseline checks, not retyped ones', () => {
     'outbound_actions_provider_check'
   ]) {
     assert.ok(checkClause(SQL, name), `${name} is missing from 47`);
+    if (WIDENED_BY_52.includes(name)) continue;
     assert.equal(squash(checkClause(SQL, name)), squash(checkClause(DRAFTING, name)), name);
   }
 });
@@ -45,12 +54,13 @@ test('every cancel reason the worker can write is documented on the column', () 
 
 test('one live or sent reply per case version is the key', () => {
   // Cancelled and failed rows step aside, so an edit can be approved again.
-  const key = (guard) =>
+  // 52 narrowed it to drafted replies; a manual one is keyed on client_key.
+  const key = (guard, narrowed) =>
     new RegExp(
-      `create unique index ${guard}outbound_actions_idempotency_key\\s+on public\\.outbound_actions \\(shop_id, ticket_id, case_version, action_type\\)\\s+where state not in \\('cancelled', 'failed'\\);`
+      `create unique index ${guard}outbound_actions_idempotency_key\\s+on public\\.outbound_actions \\(shop_id, ticket_id, case_version, action_type\\)\\s+where state not in \\('cancelled', 'failed'\\)${narrowed ? " and action_type = 'reply'" : ''};`
     );
-  assert.match(DRAFTING, key(''));
-  assert.match(SQL, key('if not exists '));
+  assert.match(DRAFTING, key('', true));
+  assert.match(SQL, key('if not exists ', false));
 });
 
 test('no recipient is stored', () => {

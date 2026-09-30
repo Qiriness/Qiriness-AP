@@ -8,7 +8,9 @@ import { useT } from "@/lib/i18n/client";
 import type { Translate } from "@/lib/i18n/translate";
 import { formatRelativeTime } from "@/lib/relative-time";
 import { TrackingText } from "@/components/ui/TrackingText";
-import { decisionLabel, outboundLine, replyInFlight } from "@/lib/draft-outbound";
+import { awaitingDelivery, decisionLabel, deliveredLine, outboundLine, replyDelivered, replyInFlight } from "@/lib/draft-outbound";
+import { replyHtmlIsEmpty, textToReplyHtml } from "@/lib/reply-html";
+import { ReplyEditor, ReplyHtmlView } from "./ReplyEditor";
 import type { TicketListItem, TicketMessage, TicketThread, TicketTracking } from "@/lib/types";
 import styles from "./TicketThreadDialog.module.css";
 
@@ -47,7 +49,6 @@ interface TicketThreadDialogProps {
  * and are least meant to be one.
  */
 /** Written as a constant because a literal newline escape cannot survive a JSX attribute. */
-const NEWLINE = String.fromCharCode(10);
 
 const DRAFT_HEADING_KEYS = ["answerable", "needs_customer_input", "needs_human"];
 
@@ -89,7 +90,9 @@ export function TicketThreadDialog({ ticket, onClose }: TicketThreadDialogProps)
       // record a correction nobody made.
       const updated = await decideOnDraft(ticket.id, {
         status,
-        approvedBody: status === "edited" ? edited : null,
+        approvedBody: null,
+        // The editor's HTML; the server sanitises it and derives the text.
+        approvedBodyHtml: status === "edited" ? edited : null,
       });
       setThread((current) => (current ? { ...current, draft: updated } : current));
       setEditing(false);
@@ -138,8 +141,11 @@ export function TicketThreadDialog({ ticket, onClose }: TicketThreadDialogProps)
           </p>
         )}
         <h3 className={styles.heading}>{t(`tickets.dialogs.thread.heading.${DRAFT_HEADING_KEYS.includes(thread?.draft?.sourceVerdict ?? "") ? thread?.draft?.sourceVerdict : "answerable"}`)}</h3>
-        {thread?.draft ? (
-          <>
+        {thread?.draft && replyDelivered(thread.draft) ? (
+          // In the mailbox now (Drafts, or sent): Outlook's, no longer a draft here.
+          <p className={styles.stamp} role="status">{deliveredLine(thread.draft, t)}</p>
+        ) : thread?.draft ? (
+          <div className={awaitingDelivery(thread.draft) ? styles.awaiting : styles.live} aria-busy={awaitingDelivery(thread.draft) || undefined}>
             {/* The failed checks go ABOVE the text. A reviewer who reads a
                 fluent draft first has already decided it is fine by the time a
                 warning underneath it arrives. */}
@@ -150,26 +156,21 @@ export function TicketThreadDialog({ ticket, onClose }: TicketThreadDialogProps)
               </p>
             )}
             {/* THE MODEL'S TEXT IS NEVER EDITED IN PLACE. Opening the editor
-                copies it into a textarea; saving writes the rewrite to a
-                separate column and appends the pair to the edit log, so what
-                the agent wrote stays readable beside what a person sent. */}
+                copies it in as formatted text (its [[marker]] as the real
+                link); saving writes the rewrite to separate columns and appends
+                the pair to the edit log, so what the agent wrote stays readable
+                beside what a person sent. */}
             {editing ? (
-              <textarea
-                className={styles.editor}
-                value={edited}
-                onChange={(event) => setEdited(event.target.value)}
-                rows={Math.min(24, Math.max(8, edited.split(NEWLINE).length + 2))}
-                aria-label={t("tickets.panels.draft.editLabel")}
+              <ReplyEditor
+                key={thread.draft.id}
+                initialHtml={edited}
+                onChange={setEdited}
+                label={t("tickets.panels.draft.editLabel")}
               />
             ) : (
               <pre className={styles.draft}>
                 <TrackingText text={thread.draft.body} parcels={thread.parcels} link={thread.draft.replyLink} />
               </pre>
-            )}
-            {editing && thread.draft.replyLink && (
-              <p className={styles.stamp}>
-                {t("tickets.panels.draft.keepBrackets", { label: thread.draft.replyLink.label })}
-              </p>
             )}
             {/* The model's text stays above; a reviewer's rewrite is shown as a
                 second block rather than replacing it, because the difference
@@ -177,13 +178,17 @@ export function TicketThreadDialog({ ticket, onClose }: TicketThreadDialogProps)
             {thread.draft.approvedBody && (
               <>
                 <h3 className={styles.heading}>{t("tickets.panels.draft.reviewerVersion")}</h3>
-                <pre className={styles.draft}>
-                  <TrackingText
-                    text={thread.draft.approvedBody}
-                    parcels={thread.parcels}
-                    link={thread.draft.replyLink}
-                  />
-                </pre>
+                {thread.draft.approvedBodyHtml ? (
+                  <ReplyHtmlView html={thread.draft.approvedBodyHtml} />
+                ) : (
+                  <pre className={styles.draft}>
+                    <TrackingText
+                      text={thread.draft.approvedBody}
+                      parcels={thread.parcels}
+                      link={thread.draft.replyLink}
+                    />
+                  </pre>
+                )}
               </>
             )}
             {/* What happens when this is sent, said in the review surface rather
@@ -205,14 +210,14 @@ export function TicketThreadDialog({ ticket, onClose }: TicketThreadDialogProps)
             {/* The three decisions a person can reach by reading. With sending
                 on, approving (or saving an edit) also sends — the buttons say
                 so. Once a reply may be out, there is nothing left to decide. */}
-            {!replyInFlight(thread.draft) && (
+            {!replyInFlight(thread.draft) && !awaitingDelivery(thread.draft) && (
             <div className={styles.actions}>
               {editing ? (
                 <>
                   <button
                     type="button"
                     className={styles.primary}
-                    disabled={saving !== null || edited.trim() === ""}
+                    disabled={saving !== null || replyHtmlIsEmpty(edited)}
                     onClick={() => decide("edited")}
                   >
                     {saving === "edited" ? t("tickets.panels.saving") : decisionLabel(thread.draft, "save", t)}
@@ -235,7 +240,11 @@ export function TicketThreadDialog({ ticket, onClose }: TicketThreadDialogProps)
                       // Seeded with the reviewer's own version when there is
                       // one — editing an edit continues from where they left
                       // off, not from the agent's text again.
-                      setEdited(thread.draft?.approvedBody ?? thread.draft?.body ?? "");
+                      const current = thread.draft;
+                      setEdited(
+                        current?.approvedBodyHtml ??
+                          textToReplyHtml(current?.approvedBody ?? current?.body ?? "", current?.replyLink)
+                      );
                       setEditing(true);
                     }}
                   >
@@ -277,7 +286,7 @@ export function TicketThreadDialog({ ticket, onClose }: TicketThreadDialogProps)
                 {thread.draft.status !== "pending" ? ` · ${t(`tickets.panels.draft.status.${thread.draft.status}`)}` : ""}
               </p>
             )}
-          </>
+          </div>
         ) : (
           /* Not an error and not an empty result. Every verdict is drafted now,
              so the remaining cases are a ticket nothing has investigated yet and

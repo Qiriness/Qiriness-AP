@@ -40,7 +40,8 @@ import { parseTrackingCandidates } from "../../../agent/src/resolution/tracking-
 import { normaliseTrackingNumber } from "../../../scripts/lib/tracking-number.mjs";
 import { parseEmailForDisplay } from "../../../scripts/lib/email-display.mjs";
 import { createDraftRecord } from "../../../scripts/lib/draft-record.mjs";
-import { OPEN_STATES, actionFromDraft, createOutboundRecord } from "../../../scripts/lib/outbound-record.mjs";
+import { OPEN_STATES, actionFromDraft, actionFromManual, createOutboundRecord } from "../../../scripts/lib/outbound-record.mjs";
+import { replyHtmlIsEmpty, replyHtmlToText, sanitiseReplyHtml } from "../../../scripts/lib/reply-html.mjs";
 import { createMailJobRecord, sendDedupeKey } from "../../../scripts/lib/mail-job-record.mjs";
 import {
   listTicketAttachments,
@@ -87,6 +88,7 @@ import type {
   TicketOverrideField,
   TicketOverrideResult,
   TicketOverrides,
+  TicketManualReply,
 } from "../types";
 
 function getSupabaseClient() {
@@ -532,6 +534,7 @@ export async function getTicketThread(shopId: string, ticketId: string): Promise
 
   const messages = (messageRows as any[]).map((row) => mapMessageRow(row, directory)).sort(byTimeAsc);
   const draft = draftRow ? mapDraftRow(draftRow, latestActionFor(actions, draftRow.id)) : null;
+  const replyTarget = replyTargetOf(messageRows as any[]);
 
   // The confirmed order's parcels come through the same projection the detail
   // panel reads, so a number linked in the Order block and the same number
@@ -567,7 +570,112 @@ export async function getTicketThread(shopId: string, ticketId: string): Promise
     draft,
     messages,
     parcels,
+    reply: {
+      sendingEnabled: sendOnApprove(),
+      holdsInDrafts: process.env.OUTBOUND_STOP_BEFORE_SEND === "true",
+      targetMessageId: replyTarget?.id ?? null,
+      manual: (Array.isArray(actions) ? actions : []).filter((action) => action.mode === "manual").map(mapManualReply),
+    },
   };
+}
+
+/**
+ * The message a person's own reply answers: the customer's latest. The
+ * outbound worker refuses the reply if the customer writes again after it
+ * (`customer_wrote_again`), so it must be the newest one the person could read.
+ * `actor` is stamped at arrival; a row from before it falls back to direction.
+ */
+function replyTargetOf(rows: any[]): any | null {
+  const customer = rows.filter(
+    (row) => row.direction === "inbound" && (row.actor ?? "customer") === "customer" && row.from_email
+  );
+  customer.sort((a, b) => (Date.parse(a.received_at ?? a.sent_at ?? "") || 0) - (Date.parse(b.received_at ?? b.sent_at ?? "") || 0));
+  return customer[customer.length - 1] ?? null;
+}
+
+function mapManualReply(action: any): TicketManualReply {
+  return {
+    id: action.id,
+    state: action.state,
+    reason: action.cancel_reason ?? action.failure_reason ?? null,
+    bodyHtml: action.body_html ? sanitiseReplyHtml(action.body_html) : null,
+    bodyText: action.body_text ?? "",
+    at: action.closed_at ?? action.send_requested_at ?? action.draft_created_at ?? action.created_at ?? null,
+  };
+}
+
+/**
+ * A reply a person wrote on the ticket page, typically to add what the
+ * agent's reply missed. Queued exactly like an approved draft (an outbound
+ * action and a job; the worker sends it), with no draft behind it.
+ *
+ * WHAT IT DELIBERATELY DOES NOT DO: start any agent pass. Once sent it comes
+ * back through Sent Items like a reply typed in Outlook: the fold stales any
+ * open draft it supersedes, drafting sees the customer already answered, and
+ * the next investigation (only on the customer's next message) reads it in the
+ * thread. Nothing is re-investigated on the strength of our own reply; a person
+ * who has said enough settles the checks and closes the ticket themselves.
+ */
+export async function sendManualReply(
+  shopId: string,
+  ticketId: string,
+  input: { bodyHtml: string; replyToMessageId: string; clientKey: string },
+  requestedBy: string | null = null
+): Promise<TicketManualReply> {
+  if (!sendOnApprove()) {
+    throw new KnowledgeValidationError("Sending is switched off on this server.");
+  }
+  const html = sanitiseReplyHtml(input.bodyHtml);
+  if (replyHtmlIsEmpty(html)) {
+    throw new KnowledgeValidationError("The reply is empty.");
+  }
+
+  const record = getRecord(shopId);
+  const [ticketRow, messageRows, caseRows] = await Promise.all([
+    record.findForThread(ticketId),
+    record.thread(ticketId),
+    supabaseSelect(getSupabaseClient(), T.CASE_CURRENT, { ticket_id: ticketId, shop_id: shopId }, "version", { limit: 1 }),
+  ]);
+  if (!ticketRow) throw new KnowledgeNotFoundError(`Ticket not found: ${ticketId}`);
+
+  // The page names the message it showed as the latest. If the customer has
+  // written since, the person has not read it: refused now, rather than
+  // cancelled by the worker a minute later.
+  const target = replyTargetOf(messageRows as any[]);
+  if (!target) {
+    throw new KnowledgeValidationError("There is no customer message on this ticket to reply to.");
+  }
+  if (target.id !== input.replyToMessageId) {
+    throw new KnowledgeValidationError(
+      "The customer has written again since this page was loaded. Reload the conversation before sending."
+    );
+  }
+
+  // Recorded, not checked at send: what the case was when the person wrote.
+  // A ticket the fold has not reached yet is version 1, the fold's first.
+  const version = Number((caseRows as any[])?.[0]?.version ?? 1);
+  const built = actionFromManual({
+    ticketId,
+    replyToMessageId: target.id,
+    caseVersion: Number.isInteger(version) && version >= 1 ? version : 1,
+    bodyHtml: html,
+    clientKey: input.clientKey,
+    requestedBy,
+  });
+  if (built.error || !built.row) {
+    throw new KnowledgeValidationError(`This reply cannot be sent (${built.error}).`);
+  }
+
+  const { created, action } = await getOutboundRecord(shopId).create(built.row);
+  if (!action) throw new Error("The reply was not recorded.");
+  if (created) {
+    await getMailJobRecord(shopId).enqueue({
+      kind: "send_outbound",
+      dedupeKey: sendDedupeKey(action.id),
+      payload: { outboundActionId: action.id },
+    });
+  }
+  return mapManualReply(action);
 }
 
 /**
@@ -587,7 +695,7 @@ export async function getTicketThread(shopId: string, ticketId: string): Promise
 export async function decideOnDraft(
   shopId: string,
   ticketId: string,
-  decision: { status: "approved" | "edited" | "rejected"; approvedBody: string | null },
+  decision: { status: "approved" | "edited" | "rejected"; approvedBody: string | null; approvedBodyHtml?: string | null },
   requestedBy: string | null = null
 ): Promise<TicketDraft> {
   const record = getDraftRecord(shopId);
@@ -626,9 +734,21 @@ export async function decideOnDraft(
     await outbound.cancel(live.id, "draft_withdrawn");
   }
 
+  // A formatted rewrite arrives as HTML. It is sanitised here, and its text
+  // (with the draft's own link folded back to its [[marker]]) is what the edit
+  // log compares, so a draft opened and saved unchanged is not an edit.
+  let approvedBody = decision.approvedBody;
+  let approvedBodyHtml: string | null = null;
+  if (decision.status === "edited" && typeof decision.approvedBodyHtml === "string") {
+    approvedBodyHtml = sanitiseReplyHtml(decision.approvedBodyHtml);
+    approvedBody = replyHtmlToText(approvedBodyHtml, { link: current.reply_link ?? null });
+    if (!approvedBody) throw new KnowledgeValidationError("The reply is empty.");
+  }
+
   await record.decide(current.id, {
     status: decision.status,
-    approvedBodyText: decision.approvedBody,
+    approvedBodyText: approvedBody,
+    approvedBodyHtml,
     // The dashboard is the only source today. A review copy edited in Outlook is
     // the intended second one, and the column already accepts it.
     source: "dashboard",
@@ -951,6 +1071,7 @@ function mapDraftRow(row: any, action: any | null = null): TicketDraft {
     id: row.id,
     body: row.body_text ?? "",
     approvedBody: row.approved_body_text ?? null,
+    approvedBodyHtml: row.approved_body_html ? sanitiseReplyHtml(row.approved_body_html) : null,
     // The link the draft's [[marker]] was written about, copied at drafting time.
     replyLink:
       row.reply_link && typeof row.reply_link.url === "string" && typeof row.reply_link.label === "string"

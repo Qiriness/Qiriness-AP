@@ -277,9 +277,13 @@ export function createDraftRecord(supabase, { shopId, transport = REST_TRANSPORT
      */
     /**
      * @param {string} draftId
-     * @param {{ status: string, approvedBodyText?: string | null, source?: string }} decision
+     * `approvedBodyHtml` is the same rewrite as the editor's reply HTML, when
+     * it was written with formatting; the caller has sanitised it and derived
+     * `approvedBodyText` from it, and the text is what the edit log compares.
+     *
+     * @param {{ status: string, approvedBodyText?: string | null, approvedBodyHtml?: string | null, source?: string }} decision
      */
-    async decide(draftId, { status, approvedBodyText = null, source = 'dashboard' }) {
+    async decide(draftId, { status, approvedBodyText = null, approvedBodyHtml = null, source = 'dashboard' }) {
       if (!DECISIONS.includes(status)) {
         throw new Error(
           `decide() takes one of ${DECISIONS.join(', ')}; got ${JSON.stringify(status)}.`
@@ -338,7 +342,8 @@ export function createDraftRecord(supabase, { shopId, transport = REST_TRANSPORT
         status,
         // Carried on `approved` too when the reviewer supplied one, and null on
         // `rejected`: a rejected draft has no approved text by definition.
-        approved_body_text: status === 'rejected' ? null : approvedBodyText
+        approved_body_text: status === 'rejected' ? null : approvedBodyText,
+        approved_body_html: status === 'rejected' || !approvedBodyText ? null : approvedBodyHtml
       });
     },
 

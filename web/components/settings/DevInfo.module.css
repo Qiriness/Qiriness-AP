@@ -1,0 +1,225 @@
+/* Settings → Dev info: the architecture diagram and status marks. */
+
+.diagram {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--space-6);
+}
+
+.lane {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+/* The flow arrow between two lanes. */
+.lane + .lane::before {
+  content: "→";
+  position: absolute;
+  top: 0.1rem;
+  left: calc(-1 * var(--space-6));
+  width: var(--space-6);
+  text-align: center;
+  font-size: var(--text-lg);
+  color: var(--border-strong);
+}
+
+.laneTitle {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0 0 var(--space-1);
+  font-size: var(--text-caption);
+  font-weight: var(--weight-semibold);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.step {
+  display: inline-grid;
+  place-items: center;
+  width: 1.25rem;
+  height: 1.25rem;
+  border-radius: var(--radius-pill);
+  background: var(--teal-050);
+  color: var(--teal-ink);
+  font-size: var(--text-caption);
+}
+
+.node {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--success);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+}
+
+.node.partial {
+  border-left-color: var(--warning);
+}
+
+.node.planned {
+  border-left-color: var(--border-strong);
+  border-style: dashed;
+  border-left-style: solid;
+  background: var(--surface-sunken);
+}
+
+.nodeHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.nodeName {
+  font-weight: var(--weight-semibold);
+  color: var(--text-strong);
+}
+
+.nodeRole {
+  margin-top: calc(-1 * var(--space-2));
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+.host {
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: var(--text-caption);
+  color: var(--teal-ink);
+  overflow-wrap: anywhere;
+}
+
+.chips,
+.links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.chip {
+  display: inline-block;
+  padding: 1px var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--canvas);
+  font-size: var(--text-caption);
+  color: var(--text-default);
+  white-space: nowrap;
+}
+
+.model {
+  border-color: var(--teal-100);
+  background: var(--teal-050);
+  color: var(--teal-ink);
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+}
+
+.links {
+  flex-direction: column;
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--mist-050);
+}
+
+.link {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-1);
+  font-size: var(--text-sm);
+  color: var(--text-default);
+}
+
+.linkPlanned {
+  color: var(--text-subtle);
+  text-decoration: line-through dashed;
+}
+
+.via {
+  margin-left: auto;
+  font-size: var(--text-caption);
+  color: var(--text-subtle);
+}
+
+.status {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--text-sm);
+  white-space: nowrap;
+}
+
+.dot {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: var(--radius-pill);
+}
+
+.dot_live {
+  background: var(--success);
+}
+
+.dot_partial {
+  background: var(--warning);
+}
+
+.dot_planned {
+  border: 1px solid var(--text-subtle);
+}
+
+.legend {
+  display: inline-flex;
+  gap: var(--space-4);
+}
+
+.bill_usage {
+  border-color: var(--info-100);
+  background: var(--info-050);
+  color: var(--info);
+}
+
+.bill_flat {
+  border-color: var(--teal-100);
+  background: var(--teal-050);
+  color: var(--teal-ink);
+}
+
+.bill_free {
+  border-color: var(--success-100);
+  background: var(--success-050);
+  color: var(--success);
+}
+
+.bill_shop {
+  border-color: var(--gold-100);
+  color: var(--gold-strong);
+}
+
+@media (max-width: 900px) {
+  .diagram {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .lane + .lane::before {
+    content: none;
+  }
+}
+
+@media (max-width: 560px) {
+  .diagram {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .legend {
+    flex-wrap: wrap;
+    gap: var(--space-2);
+  }
+}

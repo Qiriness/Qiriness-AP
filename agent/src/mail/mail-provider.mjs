@@ -40,11 +40,14 @@
  *   One page of changes. A SAVED cursor the provider refuses throws `CursorExpiredError`.
  * @property {(id: string) => Promise<MailItem|null>} getMessage
  * @property {(id: string) => Promise<object[]|null>} getAttachmentMetadata  metadata only, never bytes
- * @property {(messageId: string, reply: { bodyText: string, to: string[] }) => Promise<{ draftId: string, internetMessageId: string|null }>} createReplyDraft
+ * @property {(messageId: string, reply: { bodyText: string, bodyHtml?: string|null, to: string[] }) => Promise<{ draftId: string, internetMessageId: string|null }>} createReplyDraft
+ *   `bodyHtml` is sent when present (sanitised again by the adapter); `bodyText` is the fallback.
  * @property {(draftId: string) => Promise<void>} sendDraft
  * @property {(ref: { draftId: string }) => Promise<SentState>} findSentMessage
  *   Before any retry of a send: `sent` (it went), `draft` (it did not), `missing` (gone either way).
  */
+
+import { sanitiseReplyHtml } from '../../../scripts/lib/reply-html.mjs';
 
 export const MAIL_FOLDERS = ['inbox', 'sentitems'];
 
@@ -90,4 +93,13 @@ export function replyHtml(bodyText) {
     .split(/\n{2,}/)
     .map((paragraph) => `<p>${escape(paragraph).replace(/\n/g, '<br>')}</p>`)
     .join('\n');
+}
+
+/**
+ * The body a provider sends: the action's HTML, sanitised once more at the
+ * last step (scripts/lib/reply-html.mjs), or the text when there is none.
+ */
+export function replyBody({ bodyText, bodyHtml = null }) {
+  if (typeof bodyHtml === 'string' && bodyHtml.trim() !== '') return sanitiseReplyHtml(bodyHtml);
+  return replyHtml(bodyText);
 }

@@ -42,7 +42,8 @@ export async function confirmSentActions({ outboundRecord, draftRecord, store, l
     if (!stored) continue;
     if (await outboundRecord.markConfirmed(action.id, { sentMessageId: stored.id })) {
       totals.confirmed += 1;
-      await draftRecord.markSent(action.draft_id);
+      // A manual reply has no draft to mark.
+      if (action.draft_id) await draftRecord.markSent(action.draft_id);
       logger?.info?.('outbound.sent_confirmed', { shopId, actionId: action.id, ticketId: action.ticket_id });
     }
   }
@@ -155,6 +156,9 @@ export async function runOutbound({
 
     const draft = await provider.createReplyDraft(replyTo.graph_message_id, {
       bodyText: action.body_text,
+      // Null only on actions from before replies were HTML; the adapter
+      // falls back to the text then.
+      bodyHtml: action.body_html ?? null,
       to: [replyTo.from_email]
     });
     // Another holder moved the row meanwhile: its draft is the one that
@@ -210,7 +214,7 @@ export async function runOutbound({
 
   async function gatherFacts(action) {
     const [draft, caseCurrent, replyTo, otherActions] = await Promise.all([
-      store.draft(action.draft_id),
+      action.draft_id ? store.draft(action.draft_id) : null,
       store.caseCurrent(action.ticket_id),
       store.message(action.reply_to_message_id),
       outboundRecord.forTicket(action.ticket_id)

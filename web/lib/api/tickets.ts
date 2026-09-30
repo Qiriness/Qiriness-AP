@@ -9,6 +9,7 @@ import type {
   TicketCaseState,
   TicketDetail,
   TicketDraft,
+  TicketManualReply,
   TicketListItem,
   TicketOrderChange,
   TicketOverrideChanges,
@@ -84,7 +85,7 @@ export async function setTicketStatus(
  */
 export async function decideOnDraft(
   ticketId: string,
-  decision: { status: "approved" | "edited" | "rejected"; approvedBody?: string | null },
+  decision: { status: "approved" | "edited" | "rejected"; approvedBody?: string | null; approvedBodyHtml?: string | null },
 ): Promise<TicketDraft> {
   const response = await fetch(`/api/tickets/${ticketId}/draft`, {
     method: "PATCH",
@@ -97,6 +98,27 @@ export async function decideOnDraft(
     throw new KnowledgeApiError(body?.error || `Request failed (${response.status}).`, response.status);
   }
   return body.draft as TicketDraft;
+}
+
+/**
+ * Queues a reply a person wrote themselves. `clientKey` is minted once per
+ * reply by the composer, so a double click or a retried request is one email.
+ */
+export async function sendManualReply(
+  ticketId: string,
+  reply: { bodyHtml: string; replyToMessageId: string; clientKey: string },
+): Promise<TicketManualReply> {
+  const response = await fetch(`/api/tickets/${ticketId}/reply`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(reply),
+  });
+
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new KnowledgeApiError(body?.error || `Request failed (${response.status}).`, response.status);
+  }
+  return body.reply as TicketManualReply;
 }
 
 /** The order a person typed, before they commit to linking it. */

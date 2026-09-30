@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { actionFromDraft, createOutboundRecord } from './outbound-record.mjs';
+import { actionFromDraft, actionFromManual, createOutboundRecord } from './outbound-record.mjs';
 import { T } from './tables.mjs';
 
 const DRAFT = {
@@ -26,8 +26,61 @@ test('an approved draft becomes the row to insert, keyed on its case version', (
     mode: 'human_approved',
     requested_by: 'user-1',
     reply_to_message_id: 'm1',
-    body_text: 'Texte du modèle'
+    body_text: 'Texte du modèle',
+    body_html: '<p>Texte du modèle</p>'
   });
+});
+
+test("the draft's link marker is sent as its link, never as brackets", () => {
+  const link = { url: 'https://qiriness.com/guide', label: 'le guide' };
+  const { row } = actionFromDraft({ ...DRAFT, body_text: 'Cliquez [[ici]].', reply_link: link });
+  assert.equal(row.body_text, 'Cliquez [[ici]].');
+  assert.equal(row.body_html, '<p>Cliquez <a href="https://qiriness.com/guide">ici</a>.</p>');
+});
+
+test('a formatted rewrite is sent as written, sanitised again', () => {
+  const { row } = actionFromDraft({
+    ...DRAFT,
+    status: 'edited',
+    approved_body_text: 'Texte relu',
+    approved_body_html: '<p onclick="x()"><b>Texte</b> relu</p>'
+  });
+  assert.equal(row.body_text, 'Texte relu');
+  assert.equal(row.body_html, '<p><strong>Texte</strong> relu</p>');
+});
+
+const KEY = '0b7c2c9e-1f7a-4a57-9a7e-2d1f0f3c9a11';
+
+test('a manual reply has no draft, is keyed on the composer key, and carries its text', () => {
+  const { row } = actionFromManual({
+    ticketId: 't1',
+    replyToMessageId: 'm9',
+    caseVersion: 4,
+    bodyHtml: '<div>Bonjour,</div><div>Voici <a href="https://x.fr/suivi">le suivi</a>.</div>',
+    clientKey: KEY,
+    requestedBy: 'user-1'
+  });
+  assert.deepEqual(row, {
+    ticket_id: 't1',
+    draft_id: null,
+    case_version: 4,
+    action_type: 'manual_reply',
+    mode: 'manual',
+    client_key: KEY,
+    requested_by: 'user-1',
+    reply_to_message_id: 'm9',
+    body_text: 'Bonjour,\n\nVoici le suivi (https://x.fr/suivi).',
+    body_html: '<p>Bonjour,</p><p>Voici <a href="https://x.fr/suivi">le suivi</a>.</p>'
+  });
+});
+
+test('a manual reply that cannot be sent says why', () => {
+  const base = { ticketId: 't1', replyToMessageId: 'm9', caseVersion: 1, bodyHtml: '<p>ok</p>', clientKey: KEY };
+  assert.equal(actionFromManual({ ...base, bodyHtml: '<div><br></div>' }).error, 'empty_body');
+  assert.equal(actionFromManual({ ...base, clientKey: 'x' }).error, 'bad_client_key');
+  assert.equal(actionFromManual({ ...base, replyToMessageId: null }).error, 'no_reply_target');
+  assert.equal(actionFromManual({ ...base, caseVersion: 0 }).error, 'no_case_version');
+  assert.equal(actionFromDraft({ ...DRAFT }, { mode: 'manual' }).error, 'bad_mode');
 });
 
 test('the reviewer\'s version is what goes, when there is one', () => {

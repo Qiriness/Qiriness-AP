@@ -99,3 +99,14 @@ test('every reason the check can give is a declared cancel reason', () => {
   for (const c of cases) reasons.add(preSendCheck(c).reason);
   for (const reason of reasons) assert.ok(CANCEL_REASONS.includes(reason), reason);
 });
+
+test('a manual reply is checked only for a customer message it could not have read', () => {
+  const manual = { id: 'a2', mode: 'manual', case_version: 3, sent_message_id: null };
+  const ours = [{ id: 'm-ours', direction: 'outbound', actor: 'support', received_at: '2026-09-28T10:00:00Z' }];
+  assert.deepEqual(
+    preSendCheck(facts({ action: manual, draft: null, caseCurrent: { version: 9 }, laterMessages: ours, otherActions: [{ id: 'a1', state: 'sent_confirmed', case_version: 3 }] })),
+    { ok: true }
+  );
+  const customer = [{ id: 'm2', direction: 'inbound', actor: 'customer', received_at: '2026-09-28T10:00:00Z' }];
+  assert.deepEqual(preSendCheck(facts({ action: manual, draft: null, laterMessages: customer })), { ok: false, reason: 'customer_wrote_again' });
+});
