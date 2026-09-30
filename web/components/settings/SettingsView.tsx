@@ -226,19 +226,28 @@ function AgentRow({ row, roster, canChooseModels }: { row: AgentRosterRow; roste
         ) : (
           <span className={t.muted}>—</span>
         )}
-        <span className={t.sub}>
-          {row.modelSource === "configured" ? `${tr("settings.notRun")} · ` : ""}
-          {row.otherModels.length > 0 ? `${tr("settings.alsoRan", { models: row.otherModels.join(", ") })} · ` : ""}
-          {row.chosenModel ? tr("settings.models.chosen") : row.envVar}
-        </span>
-        {row.chosenModel && row.chosenModel !== row.model ? (
-          <span className={t.sub}>{tr("settings.models.pending", { model: row.chosenModel })}</span>
-        ) : null}
-        {row.chosenModel && row.defaultModel && row.chosenModel !== row.defaultModel ? (
+        {row.modelSource === "chosen" ? <span className={styles.chosen}>{tr("settings.models.chosen")}</span> : null}
+        {row.modelSource === "chosen" ? (
+          <>
+            <span className={t.sub}>
+              {row.ranModels.length === 0
+                ? tr("settings.models.notYet")
+                : row.otherModels.length > 0
+                  ? tr("settings.models.ranOn", { models: row.otherModels.join(", ") })
+                  : tr("settings.models.running")}
+            </span>
+            <span className={t.sub}>
+              {row.defaultModel ? `${tr("settings.models.default", { model: row.defaultModel })} · ` : ""}
+              {row.envVar}
+            </span>
+          </>
+        ) : (
           <span className={t.sub}>
-            {tr("settings.models.default", { model: row.defaultModel })} · {row.envVar}
+            {row.modelSource === "configured" ? `${tr("settings.notRun")} · ` : ""}
+            {row.otherModels.length > 0 ? `${tr("settings.alsoRan", { models: row.otherModels.join(", ") })} · ` : ""}
+            {row.envVar}
           </span>
-        ) : null}
+        )}
         {canChooseModels && row.editable ? (
           <AgentModelPicker
             agent={row.id}

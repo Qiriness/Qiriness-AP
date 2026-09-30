@@ -66,3 +66,15 @@
   font-weight: var(--weight-medium);
   color: var(--text-strong);
 }
+
+.chosen {
+  display: inline-block;
+  margin-left: var(--space-2);
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-sm);
+  background: var(--teal-soft, color-mix(in srgb, var(--teal) 14%, transparent));
+  font-size: var(--text-xs, 0.75rem);
+  font-weight: var(--weight-semibold);
+  color: var(--teal);
+  vertical-align: middle;
+}

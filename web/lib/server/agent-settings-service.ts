@@ -14,9 +14,10 @@
  * Test-chat runs are in neither and are not counted.
  *
  * A MODEL CAN BE CHOSEN HERE (2026-09-30): a row in `agent_models` overrides
- * the env var, and the worker picks it up on its next poll. The model column
- * still leads with what ran, so a change shows as "chosen" until calls on the
- * new model arrive.
+ * the env var, and the worker picks it up on its next poll. A chosen model
+ * LEADS the model column — it is what the agent is set to, and leading with
+ * the past 30 days made a choice look ignored. What ran is shown beneath it.
+ * With nothing chosen the column leads with what ran, as before.
  *
  * Server-only.
  */
@@ -37,11 +38,13 @@ export interface AgentRosterRow {
   id: string;
   name: string;
   job: string;
-  /** The most-called model in the window, else the configured one; null when turned off. */
+  /** The chosen model, else the most-called in the window, else the configured one; null when turned off. */
   model: string | null;
-  modelSource: "observed" | "configured" | "off";
-  /** Other models seen in the window — a model change mid-window shows here. */
+  modelSource: "chosen" | "observed" | "configured" | "off";
+  /** Models seen in the window other than `model` — a model change shows here. */
   otherModels: string[];
+  /** Every model seen in the window, most-called first. */
+  ranModels: string[];
   envVar: string;
   /** Chosen in Settings (`agent_models`); overrides the env var. */
   chosenModel: string | null;
@@ -201,9 +204,10 @@ function toRow(
     id: agent.id,
     name: agent.name,
     job: agent.job,
-    model: ranked[0] ?? (chosen || configured || null),
-    modelSource: ranked.length > 0 ? "observed" : off ? "off" : "configured",
-    otherModels: ranked.slice(1),
+    model: chosen || ranked[0] || configured || null,
+    modelSource: chosen ? "chosen" : ranked.length > 0 ? "observed" : off ? "off" : "configured",
+    otherModels: ranked.filter((model) => model !== (chosen || ranked[0])),
+    ranModels: ranked,
     envVar: agent.envVar,
     chosenModel: chosen ?? null,
     defaultModel: configured || null,
