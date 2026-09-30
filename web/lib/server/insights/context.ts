@@ -38,6 +38,21 @@ export interface InsightsContext {
 
 export type SearchParams = Record<string, string | string[] | undefined>;
 
+/**
+ * Just the freshness pills, for a page outside Insights (Tickets). The same
+ * RPC and the same `describeFreshness` as the panels, so the two agree.
+ * Never throws: a page must not fail because this line could not be read.
+ */
+export async function readFreshnessItems(shopId: string, now: Date = new Date()): Promise<FreshnessItem[]> {
+  try {
+    const row = await callRpcOne<Record<string, string | null>>(RPC.INSIGHTS_FRESHNESS, { p_shop: shopId });
+    return describeFreshness(row, now) as FreshnessItem[];
+  } catch (error) {
+    console.warn("freshness unreadable", (error as Error).message);
+    return [];
+  }
+}
+
 const first = (value: string | string[] | undefined) => (Array.isArray(value) ? value[0] : value);
 
 export async function resolveInsightsContext(searchParams: SearchParams = {}): Promise<InsightsContext> {

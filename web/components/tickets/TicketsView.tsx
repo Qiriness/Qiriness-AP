@@ -86,6 +86,8 @@ interface TicketsViewProps {
   initialTickets: TicketListItem[];
   droppedMail: DroppedMail[];
   loadError: string | null;
+  /** Rendered on the server at the header's right: the freshness pills. */
+  headerAside?: ReactNode;
   /** The page's query string: which tab, filters and ticket to open on. */
   initialParams?: Record<string, string | string[] | undefined>;
 }
@@ -315,7 +317,7 @@ function statusClass(ticket: TicketListItem): string {
   return styles.statusNeutral;
 }
 
-export function TicketsView({ initialTickets, droppedMail, loadError, initialParams }: TicketsViewProps) {
+export function TicketsView({ initialTickets, droppedMail, loadError, initialParams, headerAside }: TicketsViewProps) {
   const t = useT();
   const locale = useLocale();
   const [initialState] = useState(() =>
@@ -715,6 +717,7 @@ export function TicketsView({ initialTickets, droppedMail, loadError, initialPar
           <h1 className={styles.title}>{t("nav.tickets")}</h1>
           <TicketsMetrics stats={stats} />
         </div>
+        {headerAside ? <div className={styles.headerAside}>{headerAside}</div> : null}
       </header>
 
       {(actionError || actionNotice) && (

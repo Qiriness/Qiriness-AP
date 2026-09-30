@@ -2186,3 +2186,20 @@
   color: var(--text-strong);
   font-size: var(--text-body);
 }
+
+/* The freshness pills sit at the header's right, like Insights'. */
+.pageHeader {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2) var(--space-4);
+}
+
+.headerAside {
+  margin-inline-start: auto;
+}
+
+.headerAside ul {
+  justify-content: flex-end;
+}

@@ -135,6 +135,8 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |   |   |                            # was answered": each query, its SQL and rows) ·
 |   |   |                            # ChatMarkdown (answers as React, never HTML)
 |   |   |-- ui/                      # Button · StatusChip · Dialog (modal shell) ·
+|   |   |                            # FreshnessStrip (Orders / Email / Nightly sync
+|   |   |                            # pills: Insights header + Tickets header) ·
 |   |   |                            # TrackingText (tracking numbers -> carrier links,
 |   |   |                            # used by every surface showing a number in prose)
 |   |   |-- settings/                # SettingsView (Insights kit: tabs, cards, tables) ·

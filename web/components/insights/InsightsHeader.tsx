@@ -1,6 +1,6 @@
 import type { Freshness, InsightsPanel, InsightsRange, InsightsScope, PlatformId } from "@/lib/types";
 import { getT } from "@/lib/i18n/server";
-import { freshnessLine } from "@/lib/insights-labels";
+import { FreshnessStrip } from "@/components/ui/FreshnessStrip";
 import { FilterBar } from "./FilterBar";
 import { InsightsNav } from "./InsightsNav";
 import { LiveRefresh } from "./LiveRefresh";
@@ -43,27 +43,7 @@ export function InsightsHeader({
       <InsightsNav active={active} panels={panels} />
       {range ? <FilterBar range={range} platform={platform} scope={scope} months={months} /> : null}
       {freshness && freshness.items.length > 0 ? (
-        <ul className={styles.freshness} aria-label={t("insights.shell.freshnessLabel")}>
-          {freshness.items.map((item) => {
-            const line = freshnessLine(item, t);
-            return (
-              <li
-                key={item.id}
-                className={`${styles.fresh} ${styles[`fresh_${item.tone}`]}`}
-                title={item.at ? new Date(item.at).toUTCString() : undefined}
-              >
-                <span className={styles.freshDot} aria-hidden="true" />
-                <strong>{line.label}</strong> {line.text}
-              </li>
-            );
-          })}
-          {tzFallback ? (
-            <li className={`${styles.fresh} ${styles.fresh_info}`}>
-              <span className={styles.freshDot} aria-hidden="true" />
-              <strong>{t("insights.shell.days")}</strong> {t("insights.shell.utcNote")}
-            </li>
-          ) : null}
-        </ul>
+        <FreshnessStrip items={freshness.items} tzFallback={tzFallback} />
       ) : null}
     </header>
   );

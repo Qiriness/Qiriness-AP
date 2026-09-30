@@ -16,6 +16,10 @@ Three sibling files carry the other halves, and this one deliberately does not d
 
 
 
+## Tickets: freshness pills in the header (2026-09-30)
+
+The Insights line (Orders synced · Email last message · Nightly sync) now also sits top right on /tickets. One component, `components/ui/FreshnessStrip`, for both pages, fed by the same `insights_freshness` RPC (`readFreshnessItems`, which never fails the page). Proven: `tsc`, lint; not looked at in a browser.
+
 ## Tickets: approved replies step aside, « Create draft », formatted replies (2026-09-30)
 
 - **Built:** an approved draft is greyed, without buttons, until the worker puts it in the mailbox; then only a line says where it went. « Create draft » then opens a reply box of the person's own, sent through the same outbound worker as a `manual` action (`POST /api/tickets/[id]/reply`), threaded under the customer's latest message. The reply box (new and editing) has bold, italics, underline, lists and links. Replies are sent as HTML cut by `scripts/lib/reply-html.mjs`. The draft's `[[marker]]` now goes out as its link; before, the literal brackets were sent. Migration 52 applied 2026-09-30. A manual reply starts no agent pass.

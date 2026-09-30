@@ -1,0 +1,60 @@
+.freshness {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.fresh {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px var(--space-3);
+  border-radius: var(--radius-pill);
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+  background: var(--surface);
+  border: 1px solid var(--border);
+}
+
+.fresh strong {
+  font-weight: var(--weight-semibold);
+  color: var(--text-default);
+}
+
+.freshDot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--stone);
+}
+
+.fresh_ok .freshDot {
+  background: var(--success);
+}
+
+.fresh_info .freshDot {
+  background: var(--info);
+}
+
+.fresh_warn {
+  border-color: var(--warning-100);
+  background: var(--warning-050);
+  color: var(--priority-medium-ink);
+}
+
+.fresh_warn .freshDot {
+  background: var(--warning);
+}
+
+.fresh_error {
+  border-color: var(--error-100);
+  background: var(--error-050);
+  color: var(--priority-high-ink);
+}
+
+.fresh_error .freshDot {
+  background: var(--error);
+}

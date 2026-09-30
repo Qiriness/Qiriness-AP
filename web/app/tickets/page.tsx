@@ -7,6 +7,9 @@ import type { DroppedMail, TicketListItem } from "@/lib/types";
 import { navBadgeCounts } from "@/lib/server/conversation-badge";
 import { timed } from "@/lib/server/timing";
 import { logDashboardAccess } from "@/lib/server/access-log";
+import { readFreshnessItems } from "@/lib/server/insights/context";
+import { FreshnessStrip } from "@/components/ui/FreshnessStrip";
+import type { FreshnessItem } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
@@ -36,6 +39,7 @@ export default async function TicketsPage({
   let tickets: TicketListItem[] = [];
   let droppedMail: DroppedMail[] = [];
   let loadError: string | null = null;
+  let freshness: FreshnessItem[] = [];
 
   try {
     const shopId = await getShopId();
@@ -47,7 +51,12 @@ export default async function TicketsPage({
     // routed threads were the back office working customer returns, three of
     // them open at L3 behind a nav item nobody opened. The sidebar badge is what
     // answers that now. See DECISIONS.md § Tickets dashboard.
-    [tickets, droppedMail] = await timed("tickets list", Promise.all([listTickets(shopId), listDroppedMail(shopId)]));
+    // How current the mail and the syncs are, the same pills Insights shows:
+    // a queue is only as current as the last mail read. Read beside the list.
+    [tickets, droppedMail, freshness] = await timed(
+      "tickets list",
+      Promise.all([listTickets(shopId), listDroppedMail(shopId), readFreshnessItems(shopId)])
+    );
     await logDashboardAccess({
       shopId,
       action: "view",
@@ -67,6 +76,7 @@ export default async function TicketsPage({
         droppedMail={droppedMail}
         loadError={loadError}
         initialParams={searchParams}
+        headerAside={<FreshnessStrip items={freshness} />}
       />
     </AppShell>
   );
