@@ -10,6 +10,58 @@ Three sibling files carry the other halves, and this one deliberately does not d
 
 ---
 
+
+
+
+
+
+
+## French / English interface: Home and Login (2026-09-30)
+
+- **Built:** the management chat (`components/chat/*`) and the sign-in page read the dictionary. The four starter prompts are translated too, so a French reader's click asks the model in French. Sign-in errors from `/api/auth/login` are mapped to words in the reader's language when the sentence is one of the route's known ones.
+- **Not done / to know:** the sign-in page uses the default (French) or the `qos_lang` cookie from an earlier visit; there is no language switch there, because saving the choice needs a session. The chat's SQL, results and the model's answer are as the model wrote them.
+- **This completes the screens.** `tsc`, a clean `next build`, 54 tests and the key check (1,933 keys) pass; none of it has been read on screen.
+
+## French / English interface: Orders, Settings, Conversations (2026-09-30)
+
+- **Built:** the Orders list and order page (`components/orders/*`), Settings (My info, Agent settings, Integrations, the Klaviyo key card) and the Conversations page read the dictionary (`messages/pages-orders.ts`, `pages-settings.ts`). **Settings → My info now has a Language card** with the FR | EN switch; it is the same component as the user menu (`components/app-shell/LanguageSwitch.tsx`), kept mounted when the menu closes so a switch in progress is not lost. Role names are shared keys (`role.*`).
+- **Shopify status words:** the services word each status once in English (`Partially fulfilled`), so `lib/order-enums.ts` maps the label back to a key (`orderEnum.PARTIALLY_FULFILLED`, `status.*`) and prints the label itself when it has no translation; nothing in the services changed.
+- **Still English:** dates baked by the services (`Placed`, `Shipped`, `Cancelled …` — `dateTime()` in `orders-service.ts`), the agent names and jobs in Settings → Agent settings, the long captions on that tab, and server error sentences.
+- **Checked:** the `/api/preferences/locale` route is on no role's denied list (`dashboard-auth.mjs`), so every role can switch. `tsc`, a clean `next build` and the key check (1,871 keys) pass; nothing was read on screen.
+
+## French / English interface: Agent Setup (2026-09-30)
+
+- **Built:** the tab bar, header, Knowledge (library, article and brand-voice workspaces, pickers, editor toolbar), Parameters, Promotions, Collections, Recommendations, Senders, Forwarding, the Rules screen and rule editor, and the test chat's controls read the dictionary (`web/lib/i18n/messages/setup-*.ts`). In French the sidebar item is **« Config Agent »**; English stays « Agent Setup ». Article statuses and core-topic names are shared keys (`articleStatus.*`, `coreTopic.*`); `StatusChip` words go through `<Tx>`.
+- **Left in English on purpose (long wording, decided with the owner):** the explanatory paragraphs (tab ledes, intros, callouts, hints, the "how a rule is chosen" recap, delete warnings, the long placeholders). Also as written: rule text and keys, situation names, the rule vocabulary (needs, findings, asks, routes, tones), parameter labels and descriptions, knowledge articles and brand voice, forwarding templates and the FR/EN acknowledgement wording, and the test chat's run transcript (the agent's own trace).
+- **Known gap:** "Updated 2h ago" on articles comes from `knowledge-mapper.ts`, which words the age in English before the screen sees it.
+- **Proven:** `tsc`, a clean `next build`, and the scripted key check (1,708 keys). Not read on screen; French wording is unreviewed.
+
+## Dictionary trim (2026-09-30)
+
+- The browser now receives only the active language's dictionary: the root layout passes `DICTIONARIES[locale]` to `I18nProvider`, and `useT` reads it from context instead of importing both. First load fell from 180 to 157 kB on `/tickets` and from 172 to 129 kB on `/insights/sales`. Server code (`getT`) still imports both. Proven by `tsc` and a clean build; not by a browser.
+
+## French / English interface: Insights (2026-09-30)
+
+- **Built:** all seven panels (Overview, Sales, Customers, Marketing & funnel, Fulfilment, Support, AI agent), the shell (tabs, filter bar, freshness strip, pins, live refresh, report download), the charts and the Segment Finder / VIP rule read the dictionary (`web/lib/i18n/messages/insights-*.ts`, ~700 strings). Numbers, money, percentages and axis ticks follow the language (`1 234,50 €` / `€1,234.50`), hand-built so server and browser print the same characters (`lib/insights-format.ts`, now taking a locale; `useFormat()` / `getFormat()` bind it).
+- **Periods:** the shared range module (`scripts/lib/insights-range.mjs`, also read by the monthly report) still words periods in English, so the dashboard rebuilds them from the range's fields in `lib/insights-labels.ts` (range and comparison labels, bucket labels, freshness lines, country names). `InsightsPage` swaps them into the context once, so no panel handles it. Series points carry their `grain` so charts relabel themselves.
+- **Reasons are keys:** a `blockedReason`, a panel notice or a scope reason is now a dictionary key when the service knows the sentence (`insights.blocked.marketplace`, `insights.marketing.klaviyo*`, `insights.sales.notice*`); the screen translates it and prints anything else as it came (raw Shopify errors).
+- **Segment Finder:** description and validation errors are rebuilt/mapped client-side (`lib/segment-messages.ts`); `segment-finder.mjs` is unchanged.
+- **Proven:** `tsc`, a clean `next build`, the i18n and shared-module tests (54 pass), and a scripted check that every `t("…")` / `"insights.…"` key exists (1,338 keys). **Not proven:** nobody has read the French on screen or checked for hydration warnings in a browser; the wording is unreviewed.
+- **Still English:** the rule-based "Management signals" text (`sales-overview.mjs`, shared with the report), the monthly report itself, product/collection/campaign names (data), server error messages, page `<title>`s, and Orders / Agent setup / Settings / Home / Login. The client bundle now ships both dictionaries (about +40 kB first load); shipping only the active one is the obvious trim.
+
+## French / English interface: Tickets and Conversations (2026-09-29)
+
+- **Built:** every string in `web/components/tickets/*` (list, detail, draft panel, context rail, Irrelevant tab, dialogs, `/conversations`) and the sidebar badges now read from the dictionary. Messages live in `web/lib/i18n/messages/` (`shared.ts` for enum labels reused across screens: category, status, level, team, order/delivery state, needs, sender, time; `tickets-view|panels|dialogs.ts` for the screens). `lib/relative-time.ts` and `lib/draft-outbound.ts` take `t`; dates and numbers go through `lib/i18n/format.ts`.
+- **Server strings:** ticket activity events now carry `tool` / `verdict` codes (`TicketActivityEvent`) that the screen translates; the English `title` stays as the fallback.
+- **Proven:** `tsc`, `next build`, `node --test` (i18n + attachment reasons, 10 pass), and a scripted check that every `t("…")` key used in the tickets components exists in the dictionary. **Not proven:** nobody has read the French on screen; the wording is mine and unreviewed (see `web/lib/i18n/GLOSSARY.md`).
+- **Deliberately still English:** what the agent wrote per ticket (headline, findings, action, situation names, `detail.facts` labels and lines from `lib/ticket-detail.ts`), the server-side load-error sentences, and page `<title>`s. `TicketStatCards.tsx` is not rendered anywhere and was not converted.
+
+## French / English interface, foundation (2026-09-29)
+
+- **Built:** `web/lib/i18n/` (dictionary, `t()`, plurals, locale-aware formatters), a **FR | EN** switch in the user menu, `PUT /api/preferences/locale`, `<html lang>` from the choice, and the sidebar + top bar translated. Default French. See `DECISIONS.md § Interface language`.
+- **Proven:** `tsc`, `next build` and `web/lib/i18n/i18n.test.mjs` (3 tests: default, plurals, FR/EN formatting). **Not yet checked in a browser** (no browser checks unless asked), and the `user_metadata.locale` round trip to Supabase is unproven against the real project.
+- **Not done:** Tickets, Insights and the rest are still English. `tsconfig.json` gained `allowImportingTsExtensions` so the pure i18n files load under `node --test`.
+
 ## A switch per destination (2026-09-29)
 
 - **Each destination has its own on/off switch** on the Forwarding page, beside the global one. `forwarding_destinations.active_since` (migration 51): switched on at a moment, it receives only mail received after it; off keeps the address and description.

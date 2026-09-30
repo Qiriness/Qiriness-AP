@@ -104,6 +104,19 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |   |       |                                 # · articles/[id]/resync
 |   |       `-- agent-test/                   # run (NDJSON stream, writes no ticket) ·
 |   |                                         # runs · runs/[id] (ideal answer)
+|   |-- lib/i18n/                          # UI language (fr default, en): locales.ts (choice,
+|   |                                      # cookie `qos_lang`) · en.ts (owns the keys) ·
+|   |                                      # fr.ts (typed against en) · translate.ts (params,
+|   |                                      # plurals) · format.ts (numbers, money, dates) ·
+|   |                                      # server.ts getT() · client.tsx useT()/useLocale().
+|   |                                      # PUT /api/preferences/locale sets the cookie and
+|   |                                      # user_metadata.locale; sign-in restores it
+|   |                                      # messages/ holds the strings: shared.ts (enum labels: category,
+|   |                                      # status, level, team, need, sender, time) + tickets-*.ts +
+|   |                                      # insights-*.ts. lib/insights-labels.ts words periods,
+|   |                                      # buckets and freshness; lib/segment-messages.ts the
+|   |                                      # Segment Finder. Insights numbers: useFormat()/getFormat()
+|   |                                      # Screens pick keys; services return codes, not sentences
 |   |-- components/
 |   |   |-- icons.tsx                # inline SVG icon set
 |   |   |-- app-shell/               # AppShell (top bar + drawer; fetches /api/auth/me
