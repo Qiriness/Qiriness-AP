@@ -12,16 +12,15 @@ import {
   type ChatStreamLine,
   type ChatTurnView,
 } from "@/lib/chat-types";
+import { useFormat, useLocale, useT } from "@/lib/i18n/client";
+import { intlTag } from "@/lib/i18n/locales";
+import type { InsightsFormat } from "@/lib/insights-format";
+import type { Translate } from "@/lib/i18n/translate";
 import { ChatTurn, PendingTurn } from "./ChatTurn";
 import styles from "./ChatView.module.css";
 
-/** Starting points, each answerable from the chat views. Clicking one asks it. */
-const EXAMPLES = [
-  "Revenue last month by sales channel, vs the month before",
-  "Top 10 products by units sold in the last 30 days",
-  "Median shipping time per month this year",
-  "Support tickets per category since the mailbox sync began",
-];
+/** Starting points, each answerable from the chat views. Clicking one asks it (in the reader's language: `home.example.<n>`). */
+const EXAMPLE_COUNT = 4;
 
 const TITLE_CHARS = 80;
 /** Conversations open as tabs when the page loads; the rest are in History. */
@@ -46,9 +45,9 @@ function errorMessage(error: unknown, fallback: string) {
   return error instanceof Error && error.message ? error.message : fallback;
 }
 
-function formatUsd(value: number) {
+function formatUsd(value: number, f: InsightsFormat) {
   // Cents hide most single questions, so small amounts keep a third decimal.
-  return `$${value < 1 ? value.toFixed(3) : value.toFixed(2)}`;
+  return `$${f.decimal(value, value < 1 ? 3 : 2)}`;
 }
 
 /**
@@ -56,18 +55,18 @@ function formatUsd(value: number) {
  * on the server at read time. A turn whose model has no rate is counted apart
  * rather than as free — the same rule `estimateCost` follows.
  */
-function spendLabel(turns: ChatTurnView[]) {
-  if (turns.length === 0) return "This conversation: $0.000";
+function spendLabel(turns: ChatTurnView[], t: Translate, f: InsightsFormat) {
+  if (turns.length === 0) return t("home.spendEmpty", { amount: `$${f.decimal(0, 3)}` });
   const priced = turns.filter((turn) => turn.costUsd !== null);
   const total = priced.reduce((sum, turn) => sum + (turn.costUsd ?? 0), 0);
-  const questions = `${turns.length} question${turns.length === 1 ? "" : "s"}`;
+  const questions = t("home.questions", { count: turns.length, n: turns.length });
   const unpriced = turns.length - priced.length;
-  if (priced.length === 0) return `This conversation: cost not priced · ${questions}`;
-  return `This conversation: ${formatUsd(total)} · ${questions}${unpriced ? ` (${unpriced} not priced)` : ""}`;
+  if (priced.length === 0) return t("home.spendUnpriced", { questions });
+  return t("home.spend", { amount: formatUsd(total, f), questions, unpriced: unpriced ? ` ${t("home.unpricedN", { n: unpriced })}` : "" });
 }
 
-function formatDate(iso: string) {
-  return new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+function formatDate(iso: string, locale: "fr" | "en") {
+  return new Date(iso).toLocaleDateString(intlTag(locale), { day: "numeric", month: "short" });
 }
 
 function titleFrom(question: string) {
@@ -84,6 +83,9 @@ function titleFrom(question: string) {
  * a conversation reads it back from the server rather than from memory here.
  */
 export function ChatView({ initialConversations, readiness, loadError }: ChatViewProps) {
+  const t = useT();
+  const f = useFormat();
+  const locale = useLocale();
   const [conversations, setConversations] = useState(initialConversations);
   const [openIds, setOpenIds] = useState<string[]>(() =>
     initialConversations.slice(0, INITIAL_TABS).map((conversation) => conversation.id)
@@ -141,10 +143,10 @@ export function ChatView({ initialConversations, readiness, loadError }: ChatVie
     try {
       const response = await fetch(`/api/chat/conversations/${id}`, { cache: "no-store" });
       const body = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(body.error ?? "Could not load the conversation.");
+      if (!response.ok) throw new Error(body.error ?? t("home.couldNotLoad"));
       setTurns(body.conversation.turns);
     } catch (caught) {
-      setError(errorMessage(caught, "Could not load the conversation."));
+      setError(errorMessage(caught, t("home.couldNotLoad")));
     } finally {
       setLoadingThread(false);
     }
@@ -198,7 +200,7 @@ export function ChatView({ initialConversations, readiness, loadError }: ChatVie
       });
       if (!response.ok || !response.body) {
         const body = await response.json().catch(() => ({}));
-        throw new Error(body.error ?? `The request failed (${response.status}).`);
+        throw new Error(body.error ?? t("home.requestFailed", { status: response.status }));
       }
 
       const reader = response.body.getReader();
@@ -231,10 +233,10 @@ export function ChatView({ initialConversations, readiness, loadError }: ChatVie
         }
       }
       if (!answered) {
-        throw new Error("The connection closed before the answer arrived. Reopen the conversation in a moment: it may have been saved.");
+        throw new Error(t("home.connectionClosed"));
       }
     } catch (caught) {
-      setError(errorMessage(caught, "The question could not be answered."));
+      setError(errorMessage(caught, t("home.couldNotAnswer")));
       // Give the question back, so a retry is one keypress.
       setDraft((current) => current || question);
     } finally {
@@ -244,10 +246,10 @@ export function ChatView({ initialConversations, readiness, loadError }: ChatVie
 
   return (
     <div className={styles.page}>
-      <h1 className={styles.srOnly}>Ask the data</h1>
+      <h1 className={styles.srOnly}>{t("home.title")}</h1>
       <div className={styles.panel}>
         <div className={styles.tabBar}>
-          <div className={styles.tabs} role="tablist" aria-label="Conversations">
+          <div className={styles.tabs} role="tablist" aria-label={t("nav.conversations")}>
             <div className={`${styles.tab} ${activeId === null ? styles.tabActive : ""}`}>
               <button
                 type="button"
@@ -258,11 +260,11 @@ export function ChatView({ initialConversations, readiness, loadError }: ChatVie
                 disabled={busy}
               >
                 <PlusIcon size={14} />
-                <span className={styles.tabLabel}>New chat</span>
+                <span className={styles.tabLabel}>{t("home.newChat")}</span>
               </button>
             </div>
             {openIds.map((id) => {
-              const title = titles.get(id) ?? "Conversation";
+              const title = titles.get(id) ?? t("home.conversation");
               return (
                 <div key={id} className={`${styles.tab} ${id === activeId ? styles.tabActive : ""}`}>
                   <button
@@ -281,7 +283,7 @@ export function ChatView({ initialConversations, readiness, loadError }: ChatVie
                     className={styles.tabClose}
                     onClick={() => closeTab(id)}
                     disabled={busy && id === activeId}
-                    aria-label={`Close ${title}`}
+                    aria-label={t("home.close", { title })}
                   >
                     <CloseIcon size={13} />
                   </button>
@@ -291,7 +293,7 @@ export function ChatView({ initialConversations, readiness, loadError }: ChatVie
           </div>
 
           <div className={styles.tabBarEnd}>
-            <span className={styles.beta}>Beta</span>
+            <span className={styles.beta}>{t("nav.beta")}</span>
             <div className={styles.historyWrap} ref={historyRoot}>
               <button
                 type="button"
@@ -302,12 +304,12 @@ export function ChatView({ initialConversations, readiness, loadError }: ChatVie
                 disabled={busy}
               >
                 <ClockIcon size={15} />
-                <span className={styles.historyLabel}>History</span>
+                <span className={styles.historyLabel}>{t("home.history")}</span>
               </button>
               {historyOpen && (
                 <div className={styles.historyMenu} role="menu">
                   {conversations.length === 0 ? (
-                    <p className={styles.historyEmpty}>No conversations yet. They are kept here, visible only to you.</p>
+                    <p className={styles.historyEmpty}>{t("home.historyEmpty")}</p>
                   ) : (
                     conversations.map((conversation) => (
                       <button
@@ -318,7 +320,7 @@ export function ChatView({ initialConversations, readiness, loadError }: ChatVie
                         onClick={() => openConversation(conversation.id)}
                       >
                         <span className={styles.historyTitle}>{conversation.title}</span>
-                        <span className={styles.historyDate}>{formatDate(conversation.updatedAt)}</span>
+                        <span className={styles.historyDate}>{formatDate(conversation.updatedAt, locale)}</span>
                       </button>
                     ))
                   )}
@@ -334,7 +336,7 @@ export function ChatView({ initialConversations, readiness, loadError }: ChatVie
               <div className={styles.notice} role="alert">
                 <AlertIcon size={16} />
                 <div>
-                  <strong>The chat is not set up on this server yet.</strong>
+                  <strong>{t("home.notSetUp")}</strong>
                   <ul>
                     {readiness.problems.map((problem) => (
                       <li key={problem}>{problem}</li>
@@ -344,21 +346,20 @@ export function ChatView({ initialConversations, readiness, loadError }: ChatVie
               </div>
             )}
 
-            {loadingThread && <p className={styles.muted}>Loading the conversation…</p>}
+            {loadingThread && <p className={styles.muted}>{t("home.loadingConversation")}</p>}
 
             {showEmpty && (
               <div className={styles.empty}>
                 <span className={styles.emptyIcon}>
                   <SparkleIcon size={22} />
                 </span>
-                <h2 className={styles.emptyTitle}>What would you like to know?</h2>
+                <h2 className={styles.emptyTitle}>{t("home.emptyTitle")}</h2>
                 <p className={styles.emptyText}>
-                  Ask about sales, orders, fulfilment, customers, products, promotions or support. Answers are worked
-                  out with SQL on the live data, from totals only, and each one shows the queries behind it.
+                  {t("home.emptyText")}
                 </p>
-                <p className={styles.promptsLabel}>Try these prompts:</p>
+                <p className={styles.promptsLabel}>{t("home.tryPrompts")}</p>
                 <div className={styles.prompts}>
-                  {EXAMPLES.map((example) => (
+                  {Array.from({ length: EXAMPLE_COUNT }, (_, i) => t(`home.example.${i + 1}`)).map((example) => (
                     <button
                       key={example}
                       type="button"
@@ -407,26 +408,26 @@ export function ChatView({ initialConversations, readiness, loadError }: ChatVie
                   ask(draft);
                 }
               }}
-              placeholder={activeId ? "Ask a follow-up" : "Ask something"}
+              placeholder={activeId ? t("home.followUp") : t("home.askSomething")}
               rows={1}
               maxLength={MAX_QUESTION_CHARS}
               disabled={!readiness.ready || busy}
-              aria-label="Your question"
+              aria-label={t("home.yourQuestion")}
             />
             <button
               type="submit"
               className={styles.send}
               disabled={!readiness.ready || busy || !draft.trim()}
-              aria-label={busy ? "Answering…" : "Send"}
+              aria-label={busy ? t("home.answering") : t("home.send")}
             >
               {busy ? <span className={styles.sendSpinner} aria-hidden="true" /> : <ArrowRightIcon size={16} />}
             </button>
           </form>
           <div className={styles.footnote}>
-            <span className={styles.spend} title="Model cost of this conversation, priced from llm-rates.mjs (USD, list prices)">
-              {spendLabel(turns)}
+            <span className={styles.spend} title={t("home.spendHint")}>
+              {spendLabel(turns, t, f)}
             </span>
-            <span>{readiness.model} · Enter to send, Shift+Enter for a new line</span>
+            <span>{readiness.model} · {t("home.enterHint")}</span>
           </div>
         </div>
       </div>

@@ -4,19 +4,19 @@ import { getAgentRoster } from "@/lib/server/agent-settings-service";
 import { getSession } from "@/lib/server/auth";
 import { navBadgeCounts } from "@/lib/server/conversation-badge";
 import { getKlaviyoStatus } from "@/lib/server/integrations-service";
-import { ROLE_LABELS, canAccessPath, canManageIntegrations } from "../../../scripts/lib/dashboard-auth.mjs";
+import { canAccessPath, canManageIntegrations } from "../../../scripts/lib/dashboard-auth.mjs";
 
 export const dynamic = "force-dynamic";
 
 /** The areas "My info" reports access to, in sidebar order. */
 const AREAS = [
-  { label: "Home chat", path: "/home" },
-  { label: "Tickets", path: "/tickets" },
-  { label: "Conversations", path: "/conversations" },
-  { label: "Orders", path: "/orders" },
-  { label: "Insights — Overview, Sales, Marketing & sales report", path: "/insights/sales" },
-  { label: "Insights — other panels", path: "/insights/fulfilment" },
-  { label: "Agent Setup", path: "/agent-setup" },
+  { id: "home", path: "/home" },
+  { id: "tickets", path: "/tickets" },
+  { id: "conversations", path: "/conversations" },
+  { id: "orders", path: "/orders" },
+  { id: "insightsMoney", path: "/insights/sales" },
+  { id: "insightsOther", path: "/insights/fulfilment" },
+  { id: "agentSetup", path: "/agent-setup" },
 ];
 
 /**
@@ -43,8 +43,8 @@ export default async function SettingsPage({ searchParams }: { searchParams?: { 
     ? {
         name: user.displayName,
         email: user.email,
-        roleLabel: ROLE_LABELS[user.role] ?? user.role,
-        access: AREAS.map((area) => ({ label: area.label, allowed: canAccessPath(user.role, area.path) })),
+        role: user.role,
+        access: AREAS.map((area) => ({ id: area.id, allowed: canAccessPath(user.role, area.path) })),
       }
     : null;
 

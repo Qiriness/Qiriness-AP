@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { useLocale, useT } from "@/lib/i18n/client";
+import { intlTag, type Locale } from "@/lib/i18n/locales";
 import type { KlaviyoStatus } from "@/lib/server/integrations-service";
 import { Button } from "../ui/Button";
 import t from "../insights/tables.module.css";
@@ -9,8 +11,8 @@ import styles from "./KlaviyoKeyCard.module.css";
 
 const ENDPOINT = "/api/settings/integrations/klaviyo";
 
-const when = (iso: string | null) =>
-  iso ? new Date(iso).toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" }) : null;
+const when = (iso: string | null, locale: Locale) =>
+  iso ? new Date(iso).toLocaleString(intlTag(locale), { dateStyle: "medium", timeStyle: "short" }) : null;
 
 /**
  * Where the Klaviyo private key is pasted. The field is write-only: once saved
@@ -19,6 +21,8 @@ const when = (iso: string | null) =>
  * typo is refused here rather than failing the next nightly.
  */
 export function KlaviyoKeyCard({ status }: { status: KlaviyoStatus }) {
+  const t2 = useT();
+  const locale = useLocale();
   const router = useRouter();
   const [key, setKey] = useState("");
   const [editing, setEditing] = useState(!status.connected);
@@ -36,14 +40,14 @@ export function KlaviyoKeyCard({ status }: { status: KlaviyoStatus }) {
       });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) {
-        setError(payload?.error ?? `Failed (HTTP ${response.status})`);
+        setError(payload?.error ?? t2("settings.klaviyo.failed", { status: response.status }));
         return;
       }
       setKey("");
       setEditing(method === "DELETE");
       router.refresh();
     } catch {
-      setError("The dashboard could not be reached.");
+      setError(t2("settings.klaviyo.unreachable"));
     } finally {
       setBusy(null);
     }
@@ -53,25 +57,25 @@ export function KlaviyoKeyCard({ status }: { status: KlaviyoStatus }) {
     <div className={styles.card}>
       {status.connected ? (
         <dl className={styles.facts}>
-          <dt>Private key</dt>
+          <dt>{t2("settings.klaviyo.privateKey")}</dt>
           <dd>
             <span className={styles.key}>pk_…{status.keyHint}</span>
-            <span className={styles.connected}>Connected</span>
+            <span className={styles.connected}>{t2("settings.klaviyo.connected")}</span>
           </dd>
-          <dt>Saved</dt>
-          <dd>{when(status.savedAt)}</dd>
-          <dt>Last sync</dt>
+          <dt>{t2("settings.klaviyo.saved")}</dt>
+          <dd>{when(status.savedAt, locale)}</dd>
+          <dt>{t2("settings.klaviyo.lastSync")}</dt>
           <dd>
             {status.lastSyncAt ? (
               <>
-                {when(status.lastSyncAt)}{" "}
+                {when(status.lastSyncAt, locale)}{" "}
                 <span className={status.lastSyncStatus === "failed" ? styles.failed : styles.ok}>
-                  {status.lastSyncStatus === "failed" ? "Failed" : "OK"}
+                  {status.lastSyncStatus === "failed" ? t2("settings.klaviyo.syncFailed") : "OK"}
                 </span>
                 {status.lastSyncError ? <span className={t.sub}>{status.lastSyncError}</span> : null}
               </>
             ) : (
-              <span className={t.muted}>Not yet — flows and campaigns arrive with the next nightly sync</span>
+              <span className={t.muted}>{t2("settings.klaviyo.notYet")}</span>
             )}
           </dd>
         </dl>
@@ -86,7 +90,7 @@ export function KlaviyoKeyCard({ status }: { status: KlaviyoStatus }) {
           }}
         >
           <label className={styles.label} htmlFor="klaviyo-key">
-            {status.connected ? "Replace the private key" : "Private API key"}
+            {status.connected ? t2("settings.klaviyo.replaceKey") : t2("settings.klaviyo.apiKey")}
           </label>
           <div className={styles.row}>
             <input
@@ -100,11 +104,11 @@ export function KlaviyoKeyCard({ status }: { status: KlaviyoStatus }) {
               onChange={(event) => setKey(event.target.value)}
             />
             <Button type="submit" variant="primary" loading={busy === "save"} disabled={!key.trim() || busy !== null}>
-              Check and save
+              {t2("settings.klaviyo.checkSave")}
             </Button>
             {status.connected ? (
               <Button variant="tertiary" onClick={() => setEditing(false)} disabled={busy !== null}>
-                Cancel
+                {t2("tickets.panels.draft.cancel")}
               </Button>
             ) : null}
           </div>
@@ -116,10 +120,10 @@ export function KlaviyoKeyCard({ status }: { status: KlaviyoStatus }) {
       ) : (
         <div className={styles.row}>
           <Button onClick={() => setEditing(true)} disabled={busy !== null}>
-            Replace key
+            {t2("settings.klaviyo.replace")}
           </Button>
           <Button variant="danger" loading={busy === "remove"} disabled={busy !== null} onClick={() => void send("DELETE")}>
-            Remove key
+            {t2("settings.klaviyo.remove")}
           </Button>
         </div>
       )}

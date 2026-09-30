@@ -3,6 +3,8 @@ import type { ReactNode } from "react";
 import { CrownIcon, ExternalLinkIcon } from "@/components/icons";
 import { Card } from "@/components/insights/InsightsKit";
 import { Flag } from "@/components/insights/Flag";
+import { getFormat, getT } from "@/lib/i18n/server";
+import { enumText } from "@/lib/order-enums";
 import type { OrderDetail } from "@/lib/types";
 import styles from "./OrderDetailView.module.css";
 
@@ -24,6 +26,7 @@ export function OrderDetailView({
   /** Set when a ticket sent the reader here: the way back to that ticket. */
   backToTicketId?: string | null;
 }) {
+  const t = getT();
   return (
     <div className={styles.page}>
       {backToTicketId ? (
@@ -31,15 +34,15 @@ export function OrderDetailView({
         // the work is. `/tickets?ticket=` reopens that ticket, not just the queue.
         <span className={styles.backRow}>
           <Link href={`/tickets?ticket=${backToTicketId}`} className={styles.back}>
-            ← Back to the ticket
+            ← {t("orders.detail.backToTicket")}
           </Link>
           <Link href="/orders" className={styles.backMuted}>
-            Orders
+            {t("nav.orders")}
           </Link>
         </span>
       ) : (
         <Link href="/orders" className={styles.back}>
-          ← Orders
+          ← {t("nav.orders")}
         </Link>
       )}
 
@@ -54,19 +57,19 @@ export function OrderDetailView({
           <header className={styles.header}>
             <div className={styles.titleRow}>
               <h1 className={styles.title}>{order.name}</h1>
-              {order.financialLabel ? <span className={styles.chip}>{order.financialLabel}</span> : null}
+              {order.financialLabel ? <span className={styles.chip}>{enumText(t, order.financialLabel)}</span> : null}
               {/* An emptied order's pill would only repeat the Cancelled chip or
                   the Refunded payment chip beside it. */}
               {order.fulfillmentStatus !== "CANCELLED" && order.fulfillmentStatus !== "REFUNDED" ? (
                 <span className={styles.chip} data-status={order.fulfillmentStatus}>
-                  {order.fulfillmentLabel}
+                  {enumText(t, order.fulfillmentLabel)}
                 </span>
               ) : null}
-              {order.cancelledLabel ? <span className={`${styles.chip} ${styles.chipAlert}`}>Cancelled</span> : null}
-              {order.returnLabel ? <span className={styles.chip}>{order.returnLabel}</span> : null}
+              {order.cancelledLabel ? <span className={`${styles.chip} ${styles.chipAlert}`}>{t("orderEnum.CANCELLED")}</span> : null}
+              {order.returnLabel ? <span className={styles.chip}>{enumText(t, order.returnLabel)}</span> : null}
               {order.adminUrl ? (
                 <a className={styles.shopify} href={order.adminUrl} target="_blank" rel="noreferrer">
-                  Open in Shopify <ExternalLinkIcon size={14} />
+                  {t("orders.detail.openShopify")} <ExternalLinkIcon size={14} />
                 </a>
               ) : null}
             </div>
@@ -74,7 +77,7 @@ export function OrderDetailView({
               {order.placedLabel} · {order.platformLabel}
               {order.channelLabel && order.channelLabel !== order.platformLabel ? ` (${order.channelLabel})` : ""}
               {order.cancelledLabel
-                ? ` · Cancelled ${order.cancelledLabel}${order.cancelReason ? ` — ${order.cancelReason}` : ""}`
+                ? ` · ${t("orders.detail.cancelledOn", { when: order.cancelledLabel })}${order.cancelReason ? ` — ${enumText(t, order.cancelReason)}` : ""}`
                 : ""}
             </p>
           </header>
@@ -91,7 +94,7 @@ export function OrderDetailView({
               <CustomerCard order={order} />
               <DestinationCard order={order} />
               {order.tags.length > 0 ? (
-                <Card title="Tags">
+                <Card title={t("orders.detail.tags")}>
                   <ul className={styles.tags}>
                     {order.tags.map((tag) => (
                       <li key={tag} className={styles.tag}>
@@ -110,21 +113,22 @@ export function OrderDetailView({
 }
 
 function ArticlesCard({ order }: { order: OrderDetail }) {
+  const t = getT();
   return (
-    <Card title="Articles" aside={`${order.units} ${order.units === 1 ? "item" : "items"}`}>
+    <Card title={t("orders.articles")} aside={t("insights.fulfilment.open.items", { count: order.units })}>
       {order.lineItems.length === 0 ? (
-        <p className={styles.empty}>This order holds no line items.</p>
+        <p className={styles.empty}>{t("orders.detail.noLines")}</p>
       ) : (
         <div className={styles.tableWrap}>
           <table className={styles.table}>
             <thead>
               <tr>
-                <th scope="col">Product</th>
+                <th scope="col">{t("insights.inventory.product")}</th>
                 <th scope="col" className={styles.n}>
-                  Qty
+                  {t("orders.detail.qty")}
                 </th>
                 <th scope="col" className={styles.n}>
-                  Total
+                  {t("orders.total")}
                 </th>
               </tr>
             </thead>
@@ -135,14 +139,14 @@ function ArticlesCard({ order }: { order: OrderDetail }) {
                     <span className={styles.productTitle}>{item.title}</span>
                     {item.variantTitle || item.sku ? (
                       <span className={styles.sub}>
-                        {[item.variantTitle, item.sku ? `SKU ${item.sku}` : null].filter(Boolean).join(" · ")}
+                        {[item.variantTitle, item.sku ? `${t("orders.detail.sku")} ${item.sku}` : null].filter(Boolean).join(" · ")}
                       </span>
                     ) : null}
                   </td>
                   <td className={styles.n}>
                     {item.currentQuantity}
                     {item.currentQuantity < item.quantity ? (
-                      <span className={styles.sub}>{item.quantity - item.currentQuantity} removed</span>
+                      <span className={styles.sub}>{t("orders.detail.removed", { n: item.quantity - item.currentQuantity })}</span>
                     ) : null}
                   </td>
                   <td className={styles.n}>
@@ -171,19 +175,20 @@ function ArticlesCard({ order }: { order: OrderDetail }) {
  * disappearing: a support agent needs to see that nothing was applied.
  */
 function PromotionsCard({ order }: { order: OrderDetail }) {
+  const t = getT();
   const { applied, gifts, reductions, samples, codes, totalLabel } = order.promotions;
   const nothing = applied.length === 0 && gifts.length === 0 && reductions.length === 0;
 
   return (
-    <Card title="Promotions" aside={totalLabel ? `${totalLabel} off` : undefined}>
+    <Card title={t("setup.tabs.promotions.label")} aside={totalLabel ? t("orders.detail.off", { amount: totalLabel }) : undefined}>
       {nothing ? (
-        <p className={styles.empty}>No promotion, discount or gift was applied to this order.</p>
+        <p className={styles.empty}>{t("orders.detail.noPromo")}</p>
       ) : (
         <ul className={styles.stack}>
           {applied.map((promotion, index) => (
             <li key={`applied-${index}`} className={styles.shipment}>
               <div className={styles.shipmentHead}>
-                <strong>{promotion.name ?? "Promotion"}</strong>
+                <strong>{promotion.name ?? t("orders.detail.promotion")}</strong>
                 {promotion.valueLabel ? <span className={styles.chip}>{promotion.valueLabel}</span> : null}
                 {promotion.kind ? <span className={styles.sub}>{promotion.kind}</span> : null}
               </div>
@@ -192,8 +197,8 @@ function PromotionsCard({ order }: { order: OrderDetail }) {
           {gifts.map((gift, index) => (
             <li key={`gift-${index}`} className={styles.shipment}>
               <div className={styles.shipmentHead}>
-                <strong>Gift · {gift.title}</strong>
-                {gift.valueLabel ? <span className={styles.chip}>worth {gift.valueLabel}</span> : null}
+                <strong>{t("orders.detail.gift")} · {gift.title}</strong>
+                {gift.valueLabel ? <span className={styles.chip}>{t("orders.detail.worth", { amount: gift.valueLabel })}</span> : null}
               </div>
               {gift.promotion ? <p className={styles.sub}>{gift.promotion}</p> : null}
             </li>
@@ -212,9 +217,9 @@ function PromotionsCard({ order }: { order: OrderDetail }) {
 
       <Facts
         rows={[
-          ["Codes used", codes.length > 0 ? codes.join(", ") : null],
+          [t("orders.detail.codesUsed"), codes.length > 0 ? codes.join(", ") : null],
           // Never counted as a gift: these were never priced.
-          ["Samples included", samples.length > 0 ? samples.join(", ") : null],
+          [t("orders.detail.samples"), samples.length > 0 ? samples.join(", ") : null],
         ]}
       />
     </Card>
@@ -222,51 +227,52 @@ function PromotionsCard({ order }: { order: OrderDetail }) {
 }
 
 function FulfilmentCard({ order }: { order: OrderDetail }) {
+  const t = getT();
   return (
-    <Card title="Fulfilment" aside={order.fulfillmentLabel}>
+    <Card title={t("insights.panel.fulfilment")} aside={enumText(t, order.fulfillmentLabel)}>
       {order.fulfilments.length === 0 ? (
         <p className={styles.empty}>
           {order.cancelledLabel
-            ? "Cancelled before it shipped."
+            ? t("orders.detail.cancelledBefore")
             : order.fulfillmentStatus === "REFUNDED"
-              ? "Refunded before it shipped."
-              : "Not shipped yet."}
+              ? t("orders.detail.refundedBefore")
+              : t("insights.fulfilment.notShipped")}
         </p>
       ) : (
         <ul className={styles.stack}>
           {order.fulfilments.map((f) => (
             <li key={f.id} className={styles.shipment}>
               <div className={styles.shipmentHead}>
-                <strong>{f.name ?? "Shipment"}</strong>
-                <span className={styles.chip}>{f.statusLabel}</span>
+                <strong>{f.name ?? t("orders.detail.shipment")}</strong>
+                <span className={styles.chip}>{enumText(t, f.statusLabel)}</span>
               </div>
               <Facts
                 rows={[
-                  ["Shipped", f.createdLabel],
-                  ["Delivered", f.deliveredLabel],
+                  [t("insights.fulfilment.shipped"), f.createdLabel],
+                  [t("orderEnum.DELIVERED"), f.deliveredLabel],
                 ]}
               />
               {f.tracking.length > 0 ? (
                 <ul className={styles.tracking}>
-                  {f.tracking.map((t, i) => (
-                    <li key={`${t.number ?? "tracking"}-${i}`}>
-                      <span className={styles.carrier}>{t.company ?? "Carrier"}</span>
-                      {t.number ? (
-                        t.url ? (
-                          <a href={t.url} target="_blank" rel="noreferrer" className={styles.trackingNumber}>
-                            {t.number}
+                  {f.tracking.map((tk, i) => (
+                    <li key={`${tk.number ?? "tracking"}-${i}`}>
+                      <span className={styles.carrier}>{tk.company ?? t("insights.fulfilment.carrier")}</span>
+                      {tk.number ? (
+                        tk.url ? (
+                          <a href={tk.url} target="_blank" rel="noreferrer" className={styles.trackingNumber}>
+                            {tk.number}
                           </a>
                         ) : (
-                          <span className={styles.trackingNumber}>{t.number}</span>
+                          <span className={styles.trackingNumber}>{tk.number}</span>
                         )
                       ) : (
-                        <span className={styles.muted}>No tracking number</span>
+                        <span className={styles.muted}>{t("orders.detail.noTrackingNumber")}</span>
                       )}
                     </li>
                   ))}
                 </ul>
               ) : (
-                <p className={styles.muted}>No tracking on this shipment.</p>
+                <p className={styles.muted}>{t("orders.detail.noTracking")}</p>
               )}
             </li>
           ))}
@@ -275,13 +281,13 @@ function FulfilmentCard({ order }: { order: OrderDetail }) {
 
       {order.returns.length > 0 ? (
         <div className={styles.subsection}>
-          <h3 className={styles.subTitle}>Returns</h3>
+          <h3 className={styles.subTitle}>{t("orders.detail.returns")}</h3>
           <ul className={styles.stack}>
             {order.returns.map((r) => (
               <li key={r.id} className={styles.line}>
-                <span>{r.name ?? "Return"}</span>
+                <span>{r.name ?? t("orders.detail.return")}</span>
                 <span className={styles.muted}>
-                  {r.statusLabel}
+                  {enumText(t, r.statusLabel)}
                   {r.createdLabel ? ` · ${r.createdLabel}` : ""}
                 </span>
               </li>
@@ -294,23 +300,24 @@ function FulfilmentCard({ order }: { order: OrderDetail }) {
 }
 
 function PaymentCard({ order }: { order: OrderDetail }) {
+  const t = getT();
   return (
-    <Card title="Payment" aside={order.financialLabel ?? undefined}>
+    <Card title={t("orders.detail.payment")} aside={order.financialLabel ? enumText(t, order.financialLabel) : undefined}>
       <dl className={styles.money}>
         {order.money.map((line) => (
           <div key={line.label} className={line.strong ? styles.moneyStrong : styles.moneyRow}>
-            <dt>{line.label}</dt>
+            <dt>{enumText(t, line.label, "orderMoney")}</dt>
             <dd>{line.value}</dd>
           </div>
         ))}
       </dl>
       {order.refunds.length > 0 ? (
         <div className={styles.subsection}>
-          <h3 className={styles.subTitle}>Refunds</h3>
+          <h3 className={styles.subTitle}>{t("orders.detail.refunds")}</h3>
           <ul className={styles.stack}>
             {order.refunds.map((r) => (
               <li key={r.id} className={styles.line}>
-                <span className={styles.muted}>{r.createdLabel ?? "Date unknown"}</span>
+                <span className={styles.muted}>{r.createdLabel ?? t("orders.detail.dateUnknown")}</span>
                 <span>{r.amountLabel ?? "—"}</span>
               </li>
             ))}
@@ -322,24 +329,23 @@ function PaymentCard({ order }: { order: OrderDetail }) {
 }
 
 function TicketsCard({ order }: { order: OrderDetail }) {
-  const open = order.tickets.filter((t) => t.open).length;
+  const t = getT();
+  const open = order.tickets.filter((ticket) => ticket.open).length;
   return (
-    <Card title="Tickets" aside={order.tickets.length > 0 ? `${open} open` : undefined}>
+    <Card title={t("nav.tickets")} aside={order.tickets.length > 0 ? t("orders.detail.openN", { n: open }) : undefined}>
       {order.tickets.length === 0 ? (
-        <p className={styles.empty}>
-          No ticket is linked to this order. A ticket links once the agent confirms the order number it quotes.
-        </p>
+        <p className={styles.empty}>{t("orders.detail.noTickets")}</p>
       ) : (
         <ul className={styles.stack}>
-          {order.tickets.map((t) => (
-            <li key={t.id} className={styles.ticket} data-band={t.open ? t.band : undefined}>
+          {order.tickets.map((ticket) => (
+            <li key={ticket.id} className={styles.ticket} data-band={ticket.open ? ticket.band : undefined}>
               <Link href="/tickets" className={styles.ticketSubject}>
-                {t.subject || "(no subject)"}
+                {ticket.subject || t("tickets.view.noSubject")}
               </Link>
               <span className={styles.sub}>
-                {t.statusLabel}
-                {t.level ? ` · Level ${t.level}` : ""}
-                {t.open ? ` · ${t.band} priority (${t.score})` : ""}
+                {enumText(t, ticket.statusLabel)}
+                {ticket.level ? ` · ${t(`level.${ticket.level}`)}` : ""}
+                {ticket.open ? ` · ${t("orders.detail.priorityScore", { band: t(`tickets.view.priority.${ticket.band}`).toLowerCase(), score: ticket.score })}` : ""}
               </span>
             </li>
           ))}
@@ -350,15 +356,17 @@ function TicketsCard({ order }: { order: OrderDetail }) {
 }
 
 function CustomerCard({ order }: { order: OrderDetail }) {
+  const t = getT();
+  const { integer } = getFormat();
   const customer = order.customer;
   return (
-    <Card title="Customer">
+    <Card title={t("insights.fulfilment.open.customer")}>
       {customer ? (
         <>
           <p className={styles.customerName}>
-            {customer.name ?? <span className={styles.muted}>No name on file</span>}
+            {customer.name ?? <span className={styles.muted}>{t("insights.fulfilment.open.noName")}</span>}
             {customer.isVip ? (
-              <span className={styles.vip} title="VIP customer">
+              <span className={styles.vip} title={t("tickets.panels.vip")}>
                 <CrownIcon size={14} /> VIP
               </span>
             ) : null}
@@ -366,18 +374,18 @@ function CustomerCard({ order }: { order: OrderDetail }) {
           {customer.email ? (
             <p className={styles.email}>{customer.email}</p>
           ) : (
-            <p className={styles.muted}>Marketplace buyer — no real address on file.</p>
+            <p className={styles.muted}>{t("orders.detail.marketplaceBuyer")}</p>
           )}
           <Facts
             rows={[
-              ["Orders", customer.ordersCount === null ? null : customer.ordersCount.toLocaleString("en-GB")],
-              ["Total spent", customer.spentLabel],
+              [t("insights.overview.orders"), customer.ordersCount === null ? null : integer(customer.ordersCount)],
+              [t("insights.customers.totalSpent"), customer.spentLabel],
             ]}
           />
         </>
       ) : (
         <>
-          <p className={styles.muted}>No customer account is linked to this order.</p>
+          <p className={styles.muted}>{t("orders.detail.noAccount")}</p>
           {order.maskedEmail ? <p className={styles.email}>{order.maskedEmail}</p> : null}
         </>
       )}
@@ -386,9 +394,10 @@ function CustomerCard({ order }: { order: OrderDetail }) {
 }
 
 function DestinationCard({ order }: { order: OrderDetail }) {
+  const t = getT();
   const d = order.destination;
   return (
-    <Card title="Destination">
+    <Card title={t("orders.destination")}>
       {d ? (
         <div className={styles.destination}>
           {d.countryCode ? <Flag code={d.countryCode} /> : null}
@@ -398,7 +407,7 @@ function DestinationCard({ order }: { order: OrderDetail }) {
           </div>
         </div>
       ) : (
-        <p className={styles.empty}>No shipping address on this order.</p>
+        <p className={styles.empty}>{t("orders.detail.noAddress")}</p>
       )}
     </Card>
   );

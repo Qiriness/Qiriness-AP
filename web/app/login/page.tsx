@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { safeNextPath } from "../../../scripts/lib/dashboard-auth.mjs";
 import { getSession } from "@/lib/server/auth";
+import { getT } from "@/lib/i18n/server";
 import { LoginForm } from "./LoginForm";
 import styles from "./login.module.css";
 
@@ -15,6 +16,7 @@ export const metadata: Metadata = {
 export default async function LoginPage({ searchParams }: { searchParams: { next?: string } }) {
   const next = safeNextPath(searchParams.next);
   if (await getSession()) redirect(next);
+  const t = getT();
 
   return (
     <main className={styles.page}>
@@ -23,8 +25,8 @@ export default async function LoginPage({ searchParams }: { searchParams: { next
           <span className={styles.wordmark}>Qiriness</span>
           <span className={styles.brandSub}>Support&nbsp;OS</span>
         </div>
-        <h1 className={styles.title}>Sign in</h1>
-        <p className={styles.lede}>Use the email address your account was created with.</p>
+        <h1 className={styles.title}>{t("login.signIn")}</h1>
+        <p className={styles.lede}>{t("login.lede")}</p>
         <LoginForm next={next} />
       </div>
     </main>

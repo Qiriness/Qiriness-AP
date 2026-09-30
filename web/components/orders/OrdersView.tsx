@@ -7,21 +7,13 @@ import { CrownIcon, SearchIcon } from "@/components/icons";
 import { fulfillmentStatusLabel, normaliseSearch } from "../../../scripts/lib/order-list-query.mjs";
 import { Flag } from "@/components/insights/Flag";
 import { GroupSelect, Segmented } from "@/components/insights/Segmented";
+import { useFormat, useT } from "@/lib/i18n/client";
+import { enumText } from "@/lib/order-enums";
 import type { OrderListPage, OrderListRow } from "@/lib/types";
 import styles from "./OrdersView.module.css";
 
 type Scope = "global" | "country";
 type Who = "all" | "vip";
-
-const SCOPES: { id: Scope; label: string }[] = [
-  { id: "global", label: "Global" },
-  { id: "country", label: "By country" },
-];
-
-const WHO: { id: Who; label: string }[] = [
-  { id: "all", label: "All customers" },
-  { id: "vip", label: "VIP only" },
-];
 
 /**
  * Every order, newest first, as the Shopify admin lists them.
@@ -35,6 +27,8 @@ const WHO: { id: Who; label: string }[] = [
  * ring can be trusted when present and says nothing when absent.
  */
 export function OrdersView({ page, loadError }: { page: OrderListPage | null; loadError: string | null }) {
+  const t = useT();
+  const { integer } = useFormat();
   const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams();
@@ -60,11 +54,13 @@ export function OrdersView({ page, loadError }: { page: OrderListPage | null; lo
   return (
     <div className={styles.page}>
       <header className={styles.header}>
-        <h1 className={styles.title}>Orders</h1>
+        <h1 className={styles.title}>{t("nav.orders")}</h1>
         {page ? (
           <p className={styles.subtitle}>
-            {page.total.toLocaleString("en-GB")} {page.total === 1 ? "order" : "orders"}
-            {isFiltered(page) ? " match these filters" : ""} · as of the last Shopify sync
+            {isFiltered(page)
+              ? t("orders.matchFilters", { count: page.total, n: integer(page.total) })
+              : t("orders.count", { count: page.total, n: integer(page.total) })}{" "}
+            · {t("orders.asOfSync")}
           </p>
         ) : null}
       </header>
@@ -83,33 +79,33 @@ export function OrdersView({ page, loadError }: { page: OrderListPage | null; lo
             <div className={pending ? styles.pending : undefined}>
               {page.query.vip && !page.vipRuleSet ? (
                 <p className={styles.empty}>
-                  No VIP rule is set, so nobody is a VIP yet.{" "}
-                  <Link href="/insights/customers">Set one on Customers</Link>.
+                  {t("insights.fulfilment.open.noRule")}{" "}
+                  <Link href="/insights/customers">{t("insights.fulfilment.open.setOne")}</Link>.
                 </p>
               ) : page.rows.length === 0 ? (
                 <p className={styles.empty}>
-                  {page.query.search ? `No order matches “${page.query.search}”.` : "No order matches these filters."}
+                  {page.query.search ? t("orders.noMatchQuery", { query: page.query.search }) : t("orders.noMatch")}
                 </p>
               ) : (
                 <div className={styles.tableWrap}>
                   <table className={styles.table}>
                     <thead>
                       <tr>
-                        <th scope="col">Order</th>
-                        <th scope="col">Date</th>
-                        <th scope="col">Name</th>
+                        <th scope="col">{t("insights.sales.mix.orderShort")}</th>
+                        <th scope="col">{t("orders.date")}</th>
+                        <th scope="col">{t("orders.name")}</th>
                         <th scope="col" className={styles.n}>
-                          Total
+                          {t("orders.total")}
                         </th>
-                        <th scope="col">Fulfilment status</th>
-                        <th scope="col" className={styles.n} title="Days since the order was placed, while it waits to ship">
-                          Delay
+                        <th scope="col">{t("orders.fulfilmentStatus")}</th>
+                        <th scope="col" className={styles.n} title={t("orders.delayHint")}>
+                          {t("orders.delay")}
                         </th>
                         <th scope="col" className={styles.n}>
-                          Articles
+                          {t("orders.articles")}
                         </th>
-                        <th scope="col">Carrier</th>
-                        <th scope="col">Destination</th>
+                        <th scope="col">{t("insights.fulfilment.carrier")}</th>
+                        <th scope="col">{t("orders.destination")}</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -129,7 +125,7 @@ export function OrdersView({ page, loadError }: { page: OrderListPage | null; lo
                   <span className={styles.ring} data-band="medium" />
                   <span className={styles.ring} data-band="low" />
                 </span>
-                A ringed name has an open ticket on that order, in its queue priority colour.
+                {t("orders.ringLegend")}
               </p>
               <Pager page={page} navigate={navigate} pending={pending} />
             </footer>
@@ -149,6 +145,16 @@ function Filters({
   navigate: (patch: Record<string, string | null>) => void;
   pending: boolean;
 }) {
+  const t = useT();
+  const { integer } = useFormat();
+  const SCOPES: { id: Scope; label: string }[] = [
+    { id: "global", label: t("insights.sales.global") },
+    { id: "country", label: t("insights.sales.byCountryTab") },
+  ];
+  const WHO: { id: Who; label: string }[] = [
+    { id: "all", label: t("insights.sales.allCustomers") },
+    { id: "vip", label: t("insights.sales.vipOnly") },
+  ];
   const { query, facets } = page;
   const scope: Scope = query.country ? "country" : "global";
   // THE ACTIVE STATUS IS ALWAYS AN OPTION. Facets list only statuses some order
@@ -166,16 +172,16 @@ function Filters({
       <SearchBox value={query.search} onSearch={(text) => navigate({ q: text })} />
 
       <label className={styles.field}>
-        <span className={styles.srOnly}>Fulfilment status</span>
+        <span className={styles.srOnly}>{t("orders.fulfilmentStatus")}</span>
         <select
           className={styles.select}
           value={query.status ?? ""}
           onChange={(event) => navigate({ status: event.target.value || null })}
         >
-          <option value="">All fulfilment statuses</option>
+          <option value="">{t("orders.allStatuses")}</option>
           {statuses.map((f) => (
             <option key={f.value} value={f.value}>
-              {f.label} — {f.orders.toLocaleString("en-GB")}
+              {enumText(t, f.label)} — {integer(f.orders)}
             </option>
           ))}
         </select>
@@ -185,20 +191,20 @@ function Filters({
         <Segmented
           options={SCOPES}
           value={scope}
-          label="Destination"
+          label={t("orders.destination")}
           onChange={(next) =>
             navigate({ country: next === "global" ? null : query.country ?? facets.countries[0]?.value ?? null })
           }
         />
         {scope === "country" ? (
           <GroupSelect
-            label="Country"
+            label={t("insights.sales.country")}
             value={query.country ?? ""}
             onChange={(value) => navigate({ country: value })}
             groups={facets.countries.map((c) => ({
               key: c.value,
               label: c.label,
-              hint: `${c.orders.toLocaleString("en-GB")} orders`,
+              hint: t("insights.sales.ordersCount", { count: c.orders }),
             }))}
           />
         ) : null}
@@ -207,7 +213,7 @@ function Filters({
       <Segmented
         options={WHO}
         value={query.vip ? "vip" : "all"}
-        label="Customers"
+        label={t("insights.sales.customers")}
         onChange={(next) => navigate({ vip: next === "vip" ? "true" : null })}
       />
     </div>
@@ -226,6 +232,7 @@ const SEARCH_DEBOUNCE_MS = 350;
  * reason other than this box's own last search (a Back button, a shared link).
  */
 function SearchBox({ value, onSearch }: { value: string | null; onSearch: (text: string | null) => void }) {
+  const t = useT();
   const [text, setText] = useState(value ?? "");
   const lastSent = useRef<string | null>(value);
 
@@ -258,8 +265,8 @@ function SearchBox({ value, onSearch }: { value: string | null; onSearch: (text:
         type="search"
         className={styles.searchInput}
         value={text}
-        placeholder="Search order, customer, email or tracking number"
-        aria-label="Search orders"
+        placeholder={t("orders.searchPlaceholder")}
+        aria-label={t("orders.search")}
         onChange={(event) => setText(event.target.value)}
         onKeyDown={(event) => {
           if (event.key === "Enter") submit(text);
@@ -274,6 +281,7 @@ function SearchBox({ value, onSearch }: { value: string | null; onSearch: (text:
 }
 
 function OrderRow({ row, onOpen }: { row: OrderListRow; onOpen: (orderId: string) => void }) {
+  const t = useT();
   return (
     <tr
       className={styles.row}
@@ -288,17 +296,17 @@ function OrderRow({ row, onOpen }: { row: OrderListRow; onOpen: (orderId: string
         <Link href={`/orders/${row.orderId}`} className={styles.orderLink}>
           {row.name}
         </Link>
-        {row.cancelled ? <span className={styles.cancelled}>Cancelled</span> : null}
+        {row.cancelled ? <span className={styles.cancelled}>{t("orderEnum.CANCELLED")}</span> : null}
       </th>
       <td className={styles.date}>{row.placedLabel}</td>
       <td>
-        <span className={`${styles.name} ${styles.ring}`} data-band={row.ticket?.band} title={ticketNote(row)}>
-          <span className={styles.nameText}>{row.customerName ?? <span className={styles.muted}>No customer</span>}</span>
-          {row.ticket ? <span className={styles.srOnly}>{ticketNote(row)}</span> : null}
+        <span className={`${styles.name} ${styles.ring}`} data-band={row.ticket?.band} title={ticketNote(row, t)}>
+          <span className={styles.nameText}>{row.customerName ?? <span className={styles.muted}>{t("orders.noCustomer")}</span>}</span>
+          {row.ticket ? <span className={styles.srOnly}>{ticketNote(row, t)}</span> : null}
           {row.isVip ? (
-            <span className={styles.crown} title="VIP customer">
+            <span className={styles.crown} title={t("tickets.panels.vip")}>
               <CrownIcon size={14} />
-              <span className={styles.srOnly}>VIP customer</span>
+              <span className={styles.srOnly}>{t("tickets.panels.vip")}</span>
             </span>
           ) : null}
         </span>
@@ -307,20 +315,20 @@ function OrderRow({ row, onOpen }: { row: OrderListRow; onOpen: (orderId: string
       <td>
         <span className={styles.status} data-status={row.fulfillmentStatus}>
           <span className={styles.statusDot} aria-hidden="true" />
-          {row.fulfillmentLabel}
+          {enumText(t, row.fulfillmentLabel)}
         </span>
       </td>
       <td className={styles.n}>
         {row.delayDays === null ? (
           <span className={styles.muted}>—</span>
         ) : (
-          <span className={row.late ? styles.late : styles.delay} title={row.late ? "Waiting 3 days or more" : undefined}>
-            {row.delayDays} {row.delayDays === 1 ? "day" : "days"}
+          <span className={row.late ? styles.late : styles.delay} title={row.late ? t("orders.lateHint") : undefined}>
+            {t("insights.fulfilment.open.days", { count: row.delayDays })}
           </span>
         )}
       </td>
       <td className={styles.n}>
-        {row.units} {row.units === 1 ? "item" : "items"}
+        {t("insights.fulfilment.open.items", { count: row.units })}
       </td>
       <td>{row.carrier ?? <span className={styles.muted}>—</span>}</td>
       <td>
@@ -331,20 +339,21 @@ function OrderRow({ row, onOpen }: { row: OrderListRow; onOpen: (orderId: string
 }
 
 function Destination({ row }: { row: OrderListRow }) {
+  const t = useT();
   const place = [row.city, row.country].filter(Boolean).join(", ");
   return (
     <span className={styles.destination}>
       {row.countryCode ? <Flag code={row.countryCode} /> : null}
-      <span className={styles.place}>{place || <span className={styles.muted}>No destination</span>}</span>
+      <span className={styles.place}>{place || <span className={styles.muted}>{t("orders.noDestination")}</span>}</span>
     </span>
   );
 }
 
 /** The ring's tooltip and screen-reader text, or undefined when there is no open ticket. */
-function ticketNote(row: OrderListRow): string | undefined {
+function ticketNote(row: OrderListRow, t: (key: string, params?: Record<string, string | number>) => string): string | undefined {
   const mark = row.ticket;
   if (!mark) return undefined;
-  return `${mark.openTickets} open ${mark.openTickets === 1 ? "ticket" : "tickets"} on this order — ${mark.band} priority`;
+  return t("orders.ticketNote", { count: mark.openTickets, band: t(`tickets.view.priority.${mark.band}`).toLowerCase() });
 }
 
 function Pager({
@@ -356,6 +365,8 @@ function Pager({
   navigate: (patch: Record<string, string | null>) => void;
   pending: boolean;
 }) {
+  const t = useT();
+  const { integer } = useFormat();
   const { total, pageSize, query } = page;
   const last = Math.max(1, Math.ceil(total / pageSize));
   const from = total === 0 ? 0 : (query.page - 1) * pageSize + 1;
@@ -363,18 +374,18 @@ function Pager({
   const goTo = (n: number) => navigate({ page: n > 1 ? String(n) : null });
 
   return (
-    <nav className={styles.pager} aria-label="Pages">
+    <nav className={styles.pager} aria-label={t("orders.pages")}>
       <span className={styles.range}>
-        {from.toLocaleString("en-GB")}–{to.toLocaleString("en-GB")} of {total.toLocaleString("en-GB")}
+        {t("orders.range", { from: integer(from), to: integer(to), total: integer(total) })}
       </span>
       <button type="button" className={styles.pageBtn} disabled={pending || query.page <= 1} onClick={() => goTo(query.page - 1)}>
-        Previous
+        {t("orders.previous")}
       </button>
       <span className={styles.pageOf}>
-        Page {query.page} of {last}
+        {t("orders.pageOf", { page: query.page, last })}
       </span>
       <button type="button" className={styles.pageBtn} disabled={pending || query.page >= last} onClick={() => goTo(query.page + 1)}>
-        Next
+        {t("orders.next")}
       </button>
     </nav>
   );

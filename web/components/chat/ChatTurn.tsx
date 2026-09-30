@@ -1,41 +1,39 @@
 import type { ChatQueryView, ChatTurnStatus, ChatTurnView } from "@/lib/chat-types";
 import { MAX_STEPS } from "../../../scripts/lib/chat-agent-loop.mjs";
+import { useFormat, useT } from "@/lib/i18n/client";
+import type { InsightsFormat } from "@/lib/insights-format";
+import type { Translate } from "@/lib/i18n/translate";
 import { ChatMarkdown } from "./ChatMarkdown";
 import styles from "./ChatTurn.module.css";
 
-const STATUS_LABEL: Record<Exclude<ChatTurnStatus, "ok">, string> = {
-  step_limit: "Stopped at the step limit",
-  empty: "No answer",
-  error: "Failed",
-  running: "Did not finish",
-};
+// Status words: `home.status.<status>`.
 
 /** Rows of a query result drawn under an answer; the rest are counted, not shown. */
 const RESULT_ROWS_SHOWN = 20;
 
-const plural = (n: number, one: string, many: string) => `${n.toLocaleString("en-GB")} ${n === 1 ? one : many}`;
-
-function metaLine(turn: ChatTurnView): string {
-  const parts = [plural(turn.steps, "step", "steps"), plural(turn.queries.length, "query", "queries")];
-  if (turn.durationMs !== null) parts.push(`${(turn.durationMs / 1000).toFixed(1)} s`);
-  parts.push(`${(turn.inputTokens + turn.outputTokens).toLocaleString("en-GB")} tokens`);
-  parts.push(turn.costUsd === null ? "cost not priced" : `$${turn.costUsd.toFixed(3)}`);
+function metaLine(turn: ChatTurnView, t: Translate, f: InsightsFormat): string {
+  const parts = [t("home.steps", { count: turn.steps, n: f.integer(turn.steps) }), t("home.queries", { count: turn.queries.length, n: f.integer(turn.queries.length) })];
+  if (turn.durationMs !== null) parts.push(`${f.decimal(turn.durationMs / 1000, 1)} s`);
+  parts.push(t("home.tokens", { n: f.integer(turn.inputTokens + turn.outputTokens) }));
+  parts.push(turn.costUsd === null ? t("home.notPriced") : `$${f.decimal(turn.costUsd, 3)}`);
   parts.push(turn.model);
   return parts.join(" · ");
 }
 
 export function ChatTurn({ turn }: { turn: ChatTurnView }) {
+  const t = useT();
+  const f = useFormat();
   return (
     <article className={styles.turn}>
       <p className={styles.question}>{turn.question}</p>
       <div className={styles.answer}>
-        {turn.status !== "ok" && <span className={styles.status}>{STATUS_LABEL[turn.status]}</span>}
+        {turn.status !== "ok" && <span className={styles.status}>{t(`home.status.${turn.status}`)}</span>}
         {turn.answer ? (
           <ChatMarkdown text={turn.answer} />
         ) : (
-          <p className={styles.errorText}>{turn.error ?? "No answer was produced."}</p>
+          <p className={styles.errorText}>{turn.error ?? t("home.noAnswerProduced")}</p>
         )}
-        <p className={styles.meta}>{metaLine(turn)}</p>
+        <p className={styles.meta}>{metaLine(turn, t, f)}</p>
         <QueryList queries={turn.queries} />
       </div>
     </article>
@@ -51,17 +49,19 @@ interface PendingTurnProps {
 
 /** The turn being answered: what has run so far, and what is running now. */
 export function PendingTurn({ question, step, running, queries }: PendingTurnProps) {
+  const t = useT();
+  const f = useFormat();
   return (
     <article className={styles.turn} aria-live="polite">
       <p className={styles.question}>{question}</p>
       <div className={styles.answer}>
         <p className={styles.progress}>
           <span className={styles.spinner} aria-hidden="true" />
-          {running ? "Running a query…" : step > 0 ? `Working — step ${step} of ${MAX_STEPS}` : "Starting…"}
+          {running ? t("home.runningQuery") : step > 0 ? t("home.working", { step, max: MAX_STEPS }) : t("home.starting")}
         </p>
         {queries.map((query, index) => (
           <p key={index} className={styles.progressQuery}>
-            {query.ok ? "✓" : "✗"} {summary(query)}
+            {query.ok ? "✓" : "✗"} {summary(query, t, f)}
           </p>
         ))}
         {running && <pre className={styles.sql}>{running}</pre>}
@@ -70,22 +70,24 @@ export function PendingTurn({ question, step, running, queries }: PendingTurnPro
   );
 }
 
-function summary(query: ChatQueryView): string {
+function summary(query: ChatQueryView, t: Translate, f: InsightsFormat): string {
   const outcome = query.ok
-    ? `${plural(query.rowCount, "row", "rows")}${query.truncated ? ", cut off at 1,000" : ""}`
-    : "refused or failed";
-  return `Step ${query.step} · ${outcome} · ${Math.round(query.durationMs)} ms`;
+    ? `${t("home.rows", { count: query.rowCount, n: f.integer(query.rowCount) })}${query.truncated ? `, ${t("home.cutOff")}` : ""}`
+    : t("home.refused");
+  return `${t("home.step", { n: query.step })} · ${outcome} · ${Math.round(query.durationMs)} ms`;
 }
 
 function QueryList({ queries }: { queries: ChatQueryView[] }) {
+  const t = useT();
+  const f = useFormat();
   if (queries.length === 0) return null;
   return (
     <details className={styles.details}>
-      <summary>How this was answered · {plural(queries.length, "query", "queries")}</summary>
+      <summary>{t("home.howAnswered")} · {t("home.queries", { count: queries.length, n: f.integer(queries.length) })}</summary>
       <div className={styles.queries}>
         {queries.map((query, index) => (
           <section key={index} className={styles.query}>
-            <p className={`${styles.queryHead} ${query.ok ? "" : styles.queryFailed}`}>{summary(query)}</p>
+            <p className={`${styles.queryHead} ${query.ok ? "" : styles.queryFailed}`}>{summary(query, t, f)}</p>
             <pre className={styles.sql}>{query.sql}</pre>
             {query.error && <p className={styles.errorText}>{query.error}</p>}
             {query.ok && query.columns.length > 0 && <ResultTable query={query} />}
@@ -103,6 +105,8 @@ function formatCell(value: unknown): string {
 }
 
 function ResultTable({ query }: { query: ChatQueryView }) {
+  const t = useT();
+  const f = useFormat();
   const rows = query.rows.slice(0, RESULT_ROWS_SHOWN);
   return (
     <>
@@ -128,7 +132,7 @@ function ResultTable({ query }: { query: ChatQueryView }) {
       </div>
       {query.rowCount > rows.length && (
         <p className={styles.meta}>
-          Showing {rows.length} of {query.rowCount.toLocaleString("en-GB")} rows.
+          {t("home.showing", { shown: rows.length, total: f.integer(query.rowCount) })}
         </p>
       )}
     </>
