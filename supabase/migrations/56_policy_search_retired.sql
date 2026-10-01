@@ -8,6 +8,9 @@
 --     investigation scored from a knowledge search. Removed from the need
 --     vocabulary (agent/src/investigation/evidence-rules.mjs); here it is taken
 --     out of the situations that declared it, then out of the check.
+--   * and `policy_attached` joins the vocabulary: whether the situation's
+--     linked policy reached the case (attached / not_attached), which the
+--     policy-question rules branch on so a deleted policy has a fallback.
 --   * the « Core setup » knowledge checklist: five slots on knowledge_documents
 --     (order_policies, confidentiality, delivery_returns, locations, faqs), all
 --     empty. Only `brand` (the Brand voice) remains.
@@ -38,7 +41,7 @@ alter table public.support_exemplars
       'promotion_identity', 'promotion_validity', 'promotion_eligibility',
       'customer_identity', 'customer_account_state', 'customer_history',
       'purchase_verified', 'photo_evidence', 'reaction_product',
-      'brand_answer', 'checkout_state', 'other_fact'
+      'brand_answer', 'policy_attached', 'checkout_state', 'other_fact'
     ]::text[]
   );
 

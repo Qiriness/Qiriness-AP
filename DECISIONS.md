@@ -3045,7 +3045,11 @@ The owner asked for a central library before the Rules tab. It replaces the poli
 With 15 policies written and 36 links made, the owner asked to remove what stood in for them:
 
 - **`policy_answer` is no longer a need.** It scored « what an approved policy says » from a knowledge search. A policy is now read by key, and it never sets a finding. The need is gone from `evidence-rules.mjs`, from the 20 situations that declared it (migration 56) and from the need labels.
-- **Three rules still named it** (D-33 × 2, D-07's draft). `normaliseConditions` drops an unknown need, so they read as unconditional. D-33's live rule was already the one that fired on almost every ticket (its « documented » twin is a draft), so live behaviour is unchanged until those rules are rewritten.
+- **A policy question branches on `policy_attached`, not on what the policy says.** Asked for by the owner: one branch for « the policy is attached », one fallback for the day it is switched off or deleted. The finding is `attached` only when a policy linked to the matched situation was read as an opening move (a policy the agent fetched for a side question does not count), otherwise `not_attached`. It describes availability, never content, so « a policy never decides » still holds. The collector never proposes `getPolicy` (it has no key to give it).
+- **The four rules that named `policy_answer` were moved** (2026-10-01, before → after printed and kept in the session):
+  - **D-33:** `d33_livraison_documentee` is now approved, on `attached`, answering the named country from the policy with « say we will confirm » when the country is not named. `d33_livraison_non_documentee` stays approved, on `not_attached`, routing to a person.
+  - **D-07:** `d07_delais` is on `attached`, giving the delays as the policy states them. `D07_reponse_generique` (the owner's, already in parameters) is now approved, on `not_attached`, as the fallback.
+  - **Live change:** D-33 questions are now answered from the policy instead of always going to a person.
 - **`searchKnowledge` stays** for product properties and brand questions (`product_property`, `brand_answer`), which are not policies.
 - **The « Core setup » checklist is gone** from Knowledge: five empty slots (order policies, delivery & returns, confidentiality, locations, FAQs). No article held one. `core_topic` keeps only `brand`, the Brand voice every draft is written with.
 

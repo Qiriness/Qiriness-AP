@@ -1068,3 +1068,14 @@ test('a subject with no declared floor is ungoverned, not complete', () => {
   // what a good answer needs.
   assert.equal(responseComplete('other', [{ need: 'brand_answer', state: 'satisfied', finding: 'answered' }]), false);
 });
+
+test("policy_attached reads whether the situation's policy reached the case, and only that", () => {
+  const found = (source) => ({ id: 'p1', tool: TOOL_NAMES.GET_POLICY, outcome: 'found', source });
+  const finding = (ledger) => findingsOf(resolveNeeds(['policy_attached'], ledger, ALL_TOOLS)).policy_attached;
+  assert.equal(finding([found('opening_move')]), 'attached');
+  // Fetched by the agent for a side question: not the situation's policy.
+  assert.equal(finding([found('model')]), 'not_attached');
+  // Deleted or switched off: nothing was read, and the fallback branch fires.
+  assert.equal(finding([]), 'not_attached');
+  assert.equal(finding([{ ...found('opening_move'), outcome: 'unknown_key' }]), 'not_attached');
+});

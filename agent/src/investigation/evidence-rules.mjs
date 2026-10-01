@@ -312,6 +312,17 @@ const NEEDS = {
   // knowledge articles) was removed 2026-10-01: the company's policies are read
   // by key with getPolicy (scripts/lib/company-policies.mjs) and a policy never
   // sets a finding. DECISIONS.md § Company policies.
+  //
+  // WHETHER THE SITUATION'S POLICY REACHED THE CASE, not what it says. A rule
+  // for a policy question branches on this: `attached` answers from the policy,
+  // `not_attached` is the fallback for the day a policy is switched off or
+  // deleted. Only a policy read as an opening move counts (one linked to the
+  // matched situation); one the agent fetched for a side question does not.
+  policy_attached: {
+    label: "si la politique de l'entreprise prévue pour ce cas a été jointe au dossier",
+    satisfiedBy: [{ tool: TOOL_NAMES.GET_POLICY, outcomes: ['found'], satisfies: (entry) => entry.source === 'opening_move' }],
+    asksCustomer: null
+  },
   brand_answer: {
     label: 'ce que dit la marque (philosophie, hanbang, sourcing)',
     satisfiedBy: [{ tool: TOOL_NAMES.SEARCH_KNOWLEDGE, outcomes: ['answerable'] }],
@@ -498,6 +509,14 @@ const FINDINGS = {
     }
   },
   brand_answer: { values: KNOWLEDGE_FINDINGS, derive: deriveKnowledge },
+  policy_attached: {
+    // `unknown` is in every vocabulary; this one never derives it (no read is `not_attached`).
+    values: ['attached', 'not_attached', 'unknown'],
+    derive: (entries) =>
+      entries.some((e) => e?.tool === TOOL_NAMES.GET_POLICY && e.outcome === 'found' && e.source === 'opening_move')
+        ? 'attached'
+        : 'not_attached'
+  },
 
   promotion_identity: {
     values: ['resolved', 'none', 'unknown'],

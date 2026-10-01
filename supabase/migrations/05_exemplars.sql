@@ -126,7 +126,7 @@ create table public.support_exemplars (
       'promotion_identity', 'promotion_validity', 'promotion_eligibility',
       'customer_identity', 'customer_account_state', 'customer_history',
       'purchase_verified', 'photo_evidence', 'reaction_product',
-      'brand_answer', 'checkout_state', 'other_fact'
+      'brand_answer', 'policy_attached', 'checkout_state', 'other_fact'
     ]::text[]
   )
 );

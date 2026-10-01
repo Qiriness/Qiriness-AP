@@ -2007,7 +2007,9 @@ Built and unit-tested. Migration 55 applied 2026-09-30 and read back through Pos
 
 ## 23. Policy search path and « Core setup » retired — 2026-10-01
 
-1. **Apply 56.** **Check:** no row of `support_exemplars` has `policy_answer` in `requirement_needs`; saving an article with a non-brand `core_topic` is refused.
+1. **Apply 56.** Done 2026-10-01: no situation declares `policy_answer` any more (read back). **Check:** saving an article with a non-brand `core_topic` is refused.
 2. **Knowledge list.** **Check:** with more articles than fit, the left list scrolls inside its panel, and the last article and « Create new » can be reached. No « Core setup » section; the Brand voice section is still there; « Other » is the last group.
 3. **Delete a tested article.** **Check:** an article used in a « Test the agent » run deletes without an error, and the run stays in its history with no article verdict.
-4. **D-33 before its rewrite.** **Check:** a « Livrez-vous en Suisse ? » ticket still routes to a person (the live rule now matches without its condition), with `delivery_location_policy` read as an opening move.
+4. **D-33 with its policy.** **Check:** in « Test the agent », « Livrez-vous en Suisse ? » reads `delivery_location_policy` as an opening move, selects `d33_livraison_documentee`, and the draft answers on Switzerland only.
+5. **The fallback.** **Check:** switch `delivery_location_policy` off and ask again: `d33_livraison_non_documentee` is selected and the ticket goes to a person. Switch it back on.
+6. **D-07.** **Check:** « Quels sont vos délais ? » selects `d07_delais` with `dispatch_time_policy` attached; with it off, `D07_reponse_generique` (which also offers a code and the newsletter).

@@ -21,11 +21,12 @@ Three sibling files carry the other halves, and this one deliberately does not d
 - **Built:**
   - `policy_answer` removed from the need vocabulary. Policies reach the agent by key only; `searchKnowledge` stays for product and brand questions.
   - The « Core setup » checklist removed from Knowledge; `core_topic` is `brand` only.
-  - Migration 56 (not applied): strips `policy_answer` from 20 situations and narrows both checks.
+  - Migration 56, applied 2026-10-01: strips `policy_answer` from 20 situations, adds `policy_attached`, and narrows both checks.
+  - New need `policy_attached` (`attached` / `not_attached`). D-33 and D-07's four rules branch on it: answer from the policy, or a fallback when it is gone. D-33 now answers instead of always handing off.
   - The Knowledge article list scrolls inside its panel. The pane was not a flex container, so the list overflowed instead of scrolling.
   - « Other » is the last article group.
   - Articles a test run had tested can be deleted again; the empty « Untitled article » that could not be deleted is gone.
-- **Proven:** agent 1834/0; root 4031 pass (the same 19 old analytics failures); `tsc` and lint on `web/`. **Not yet:** migration 56 applied; D-33 / D-07 rules rewritten; looked at on screen.
+- **Proven:** agent 1834/0; root 4031 pass (the same 19 old analytics failures); `tsc` and lint on `web/`. **Not yet:** looked at on screen; a D-33 or D-07 ticket run end to end.
 
 ## Agent Setup: company policies (2026-09-30)
 
