@@ -98,8 +98,8 @@ test('inference maps representative pages to the expected category', () => {
   assert.equal(inferKnowledgeCategory('FAQ', 'faq', ''), 'faq');
 });
 
-test('the fallback is the taxonomy catch-all', () => {
-  assert.equal(FALLBACK_CATEGORY, 'other');
+test('the fallback is a general FAQ, not the ticket catch-all', () => {
+  assert.equal(FALLBACK_CATEGORY, 'faq');
   assert.ok(isKnowledgeCategory(FALLBACK_CATEGORY));
-  assert.equal(inferKnowledgeCategory('', '', ''), 'other');
+  assert.equal(inferKnowledgeCategory('', '', ''), 'faq');
 });

@@ -9,7 +9,7 @@
 //                   material, neither a question nor a problem.
 //
 // So "order_problem" is not a stored value: it is (subject: order, kind: problem).
-// Keeping them apart is what lets knowledge stay at 16 categories while tickets
+// Keeping them apart is what lets knowledge stay at 15 categories while tickets
 // express every question/problem/contact variant.
 
 /** What the email or article is about. Shared by tickets and knowledge. */
@@ -37,8 +37,18 @@ export const SUBJECTS = [
  */
 export const KNOWLEDGE_ONLY_SUBJECTS = ['faq', 'brand_story'];
 
-/** Article categories: every subject, plus the two knowledge-only shapes. */
-export const KNOWLEDGE_CATEGORIES = [...SUBJECTS, ...KNOWLEDGE_ONLY_SUBJECTS];
+/**
+ * Subjects a ticket can carry but an article cannot. `other` is the categoriser's
+ * catch-all; an article with no named subject is a general FAQ (`faq`), so the
+ * catch-all would only be a second name for it (removed 2026-10-01).
+ */
+export const TICKET_ONLY_SUBJECTS = ['other'];
+
+/** Article categories: every subject but the catch-all, plus the two knowledge-only shapes. */
+export const KNOWLEDGE_CATEGORIES = [
+  ...SUBJECTS.filter((subject) => !TICKET_ONLY_SUBJECTS.includes(subject)),
+  ...KNOWLEDGE_ONLY_SUBJECTS
+];
 
 /** Ticket subjects: the shared subjects only. */
 export const TICKET_SUBJECTS = SUBJECTS;

@@ -35,13 +35,40 @@ test('feature_item sections also produce exactly one chunk', () => {
   assert.equal(chunks.length, 1);
 });
 
-test('legacy sections with no unit_type keep token-packed splitting behavior', () => {
+test('an FAQ section under the ceiling stays one chunk, past the old 450-token packing size', () => {
+  // ~830 tokens: one question, its rewordings and a long answer.
   const text = longText();
   const documentRow = {
     id: 'doc-3',
-    title: 'Policy',
-    category: 'privacy',
+    title: 'Commandes',
+    category: 'order',
+    sections: [{ heading: 'Où en est ma commande ?', text, order: 0 }]
+  };
+
+  const chunks = buildKnowledgeChunks(documentRow);
+  assert.equal(chunks.length, 1);
+  assert.equal(chunks[0].chunk_text, text);
+});
+
+test('a section past the FAQ ceiling is not FAQ-shaped and is token-packed', () => {
+  const text = `${longText()} ${longText()}`;
+  const documentRow = {
+    id: 'doc-3b',
+    title: 'Conditions générales',
+    category: 'legal_privacy',
     sections: [{ heading: 'Section', text, order: 0 }]
+  };
+
+  const chunks = buildKnowledgeChunks(documentRow);
+  assert.ok(chunks.length > 1, `expected multiple chunks, got ${chunks.length}`);
+});
+
+test('a brand story is not an FAQ and keeps token-packed splitting', () => {
+  const documentRow = {
+    id: 'doc-3c',
+    title: 'La Marque',
+    category: 'brand_story',
+    sections: [{ heading: 'Section', text: longText(), order: 0 }]
   };
 
   const chunks = buildKnowledgeChunks(documentRow);

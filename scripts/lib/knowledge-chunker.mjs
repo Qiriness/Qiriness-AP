@@ -7,6 +7,20 @@ const DEFAULT_MAX_TOKENS = 450;
 // long answer never gets split mid-question.
 const WHOLE_UNIT_TYPES = new Set(['faq_item', 'feature_item']);
 
+// Every article but a brand story is an FAQ (2026-10-01): one heading per
+// question, its rewordings and its answer underneath. That section is the unit
+// a ticket should match, so it stays whole. Splitting it would leave the second
+// half carrying the heading but none of the rewordings. Above this ceiling the
+// section is not FAQ-shaped (a long imported page), and is token-packed as before.
+const FAQ_UNIT_MAX_TOKENS = 1200;
+
+function isWholeUnit(documentRow, section, text) {
+  if (WHOLE_UNIT_TYPES.has(section.unit_type)) {
+    return true;
+  }
+  return documentRow.category !== 'brand_story' && approximateTokenCount(text) <= FAQ_UNIT_MAX_TOKENS;
+}
+
 export function buildKnowledgeChunks(documentRow, options = {}) {
   const maxTokens = options.maxTokens || DEFAULT_MAX_TOKENS;
   const chunks = [];
@@ -16,7 +30,7 @@ export function buildKnowledgeChunks(documentRow, options = {}) {
 
   for (const section of sections) {
     const sectionText = section.text || '';
-    const chunkTexts = WHOLE_UNIT_TYPES.has(section.unit_type)
+    const chunkTexts = isWholeUnit(documentRow, section, sectionText)
       ? (sectionText ? [sectionText] : [])
       : splitText(sectionText, maxTokens);
 

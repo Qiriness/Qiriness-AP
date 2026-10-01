@@ -80,11 +80,8 @@ export function ArticleLibrary({
   // one category — a single "Support" heading over every item adds a label
   // with no organizing value.
   const groupByCategory = categoryGroups.size >= 2;
-  // « Other » last: it is the catch-all, read after the named groups.
-  const orderedCategories = [
-    ...KNOWLEDGE_CATEGORIES.filter((c) => c !== "other" && categoryGroups.has(c)),
-    ...(categoryGroups.has("other") ? (["other"] as KnowledgeCategory[]) : []),
-  ];
+  // Named FAQs first, then General FAQ, then Brand story — the list order.
+  const orderedCategories = KNOWLEDGE_CATEGORIES.filter((c) => categoryGroups.has(c));
 
   const showEmptyState = isFiltering && articles.length === 0;
 
@@ -174,7 +171,7 @@ export function ArticleLibrary({
               {orderedCategories.map((category) => (
                 <CollapsibleSection
                   key={category}
-                  title={t(`category.${category}`)}
+                  title={t(`articleCategory.${category}`)}
                   meta={`${categoryGroups.get(category)?.length ?? 0}`}
                 >
                   {(categoryGroups.get(category) ?? []).map((article) => (

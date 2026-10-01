@@ -5,6 +5,7 @@ import {
   SUBJECTS,
   KNOWLEDGE_ONLY_SUBJECTS,
   KNOWLEDGE_CATEGORIES,
+  TICKET_ONLY_SUBJECTS,
   TICKET_SUBJECTS,
   REQUEST_KINDS,
   CONFIDENCE_LEVELS,
@@ -29,16 +30,19 @@ test('subjects and kinds are the agreed vocabulary', () => {
   assert.deepEqual(KNOWLEDGE_ONLY_SUBJECTS, ['faq', 'brand_story']);
 });
 
-test('knowledge categories are the subjects plus the knowledge-only shapes', () => {
-  assert.equal(KNOWLEDGE_CATEGORIES.length, 16);
-  for (const subject of SUBJECTS) {
-    assert.ok(KNOWLEDGE_CATEGORIES.includes(subject), `${subject} should be a knowledge category`);
+test('knowledge categories are the subjects but the catch-all, plus the knowledge-only shapes', () => {
+  assert.equal(KNOWLEDGE_CATEGORIES.length, 15);
+  // The shared-vocabulary guarantee: every named ticket subject is a valid
+  // knowledge category, so a ticket's subject is always a usable retrieval filter.
+  for (const subject of TICKET_SUBJECTS.filter((s) => !TICKET_ONLY_SUBJECTS.includes(s))) {
+    assert.ok(isKnowledgeCategory(subject), `${subject} should be a knowledge category`);
   }
-  // The shared-vocabulary guarantee: every ticket subject is a valid knowledge
-  // category, so a ticket's subject is always a usable retrieval filter.
-  for (const subject of TICKET_SUBJECTS) {
-    assert.ok(isKnowledgeCategory(subject));
-  }
+});
+
+test('other is a ticket subject but not an article category: unnamed articles are general FAQs', () => {
+  assert.deepEqual(TICKET_ONLY_SUBJECTS, ['other']);
+  assert.ok(isSubject('other'));
+  assert.equal(isKnowledgeCategory('other'), false);
 });
 
 test('faq and brand_story are knowledge-only, never ticket subjects', () => {

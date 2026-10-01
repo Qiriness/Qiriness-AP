@@ -78,7 +78,6 @@ export const KNOWLEDGE_CATEGORIES: KnowledgeCategory[] = [
   "b2b",
   "partner_collaboration",
   "careers",
-  "other",
   "faq",
   "brand_story",
 ];
@@ -87,12 +86,14 @@ export const KNOWLEDGE_CATEGORIES: KnowledgeCategory[] = [
  * The subjects a *ticket* can carry — the 14 the categoriser assigns, without
  * the two knowledge-only shapes. `faq` and `brand_story` describe reference
  * material, not something anyone emails support about, so they can never be a
- * forwarding target. Mirrors the check constraint in
- * supabase/migrations/04_support.sql.
+ * forwarding target. `other`, the categoriser's catch-all, is a ticket subject
+ * only: an article with no named subject is a general FAQ. Mirrors the check
+ * constraint in supabase/migrations/04_support.sql.
  */
-export const TICKET_CATEGORIES: KnowledgeCategory[] = KNOWLEDGE_CATEGORIES.filter(
-  (category) => category !== "faq" && category !== "brand_story"
-);
+export const TICKET_CATEGORIES: KnowledgeCategory[] = [
+  ...KNOWLEDGE_CATEGORIES.filter((category) => category !== "faq" && category !== "brand_story"),
+  "other",
+];
 
 /** Mirrors REQUEST_KINDS in scripts/lib/support-taxonomy.mjs. */
 export const REQUEST_KINDS = ["question", "problem", "complaint", "contact"] as const;

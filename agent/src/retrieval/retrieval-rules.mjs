@@ -6,6 +6,11 @@ import { isShopNotificationSubject } from '../../../scripts/lib/embeddings/embed
 // the embedding call lives in the service; everything judgemental is here, so it
 // can be argued with and tested.
 
+const ALWAYS_SEARCHED = ['faq', 'brand_story'];
+
+/** Subjects whose FAQs answer each other's tickets. A subject sits in one group at most. */
+const SEARCH_GROUPS = [['order', 'delivery', 'promotions']];
+
 /**
  * Which categories are worth searching for a ticket of this subject.
  *
@@ -40,29 +45,27 @@ import { isShopNotificationSubject } from '../../../scripts/lib/embeddings/embed
  * Searched for every subject, like `faq`, because a brand question arrives under
  * whatever subject the categoriser gave the surrounding email.
  *
- * `other` JOINED THEM 2026-08-31, AND THE REASON IS WHAT THE CATEGORY MEANS.
- * The taxonomy defines it as « rien de ce qui précède » — so an article filed
- * there is by definition one whose subject the taxonomy could not name, and
- * restricting it to tickets the categoriser also gave up on is the narrowest
- * possible audience for the broadest possible content.
+ * `other` WAS SEARCHED TOO (2026-08-31) AND IS NO LONGER AN ARTICLE CATEGORY
+ * (2026-10-01). It was added so an article whose subject could not be named stayed
+ * reachable: « Nos Points de Vente » sat there while « où puis-je acheter votre
+ * crème à Paris ? » arrived as `product`. Articles are now FAQs, and the unnamed
+ * one is the General FAQ (`faq`), already searched for every subject. A ticket
+ * can still be `other`; it searches the shared categories, as a missing subject does.
  *
- * FOUND BY A REAL MISS. « Nos Points de Vente » — eight embedded chunks listing
- * the shops that stock the brand — sat in `other` while « où puis-je acheter
- * votre crème à Paris ? » arrived as `product`, so the one article that answered
- * it was the one the filter hid. That article has since been recategorised, and
- * this is the guard against the next one: a mis-filed article should cost
- * relevance, not reachability.
- *
- * IT COSTS NOTHING TODAY. `other` holds one empty draft, so the list is longer
- * and the result set is not — and an unembedded draft is unreachable anyway.
+ * ORDER, DELIVERY AND PROMOTIONS SEARCH EACH OTHER (2026-10-01, asked by the
+ * owner). The categoriser splits them on wording a customer does not choose: « ma
+ * commande n'est pas arrivée » lands under either of the first two, and « mon code
+ * promo n'a pas marché sur ma commande » under either of the last two. A strict
+ * filter would hide an Order FAQ from a delivery ticket asking the same thing.
  */
 export function categoriesToSearch(subject) {
   const category = String(subject || '').trim();
-  const always = ['faq', 'brand_story', 'other'];
-  if (!category || always.includes(category)) {
-    return always;
+  if (!category || category === 'other' || ALWAYS_SEARCHED.includes(category)) {
+    return [...ALWAYS_SEARCHED];
   }
-  return [category, ...always];
+  const group = SEARCH_GROUPS.find((members) => members.includes(category)) ?? [];
+  const siblings = group.filter((member) => member !== category);
+  return [category, ...siblings, ...ALWAYS_SEARCHED];
 }
 
 /**

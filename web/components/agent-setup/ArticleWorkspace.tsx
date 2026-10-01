@@ -6,6 +6,7 @@ import { RichTextEditor } from "./RichTextEditor";
 import { SourcePageSelect } from "./SourcePageSelect";
 import { CategorySelect } from "./CategorySelect";
 import { ProductAttachSelect } from "./ProductAttachSelect";
+import { FaqWritingGuide } from "./FaqWritingGuide";
 import { WorkspaceActions } from "./WorkspaceActions";
 import { WorkspaceHeader } from "./WorkspaceHeader";
 import { EditorFooter } from "./EditorFooter";
@@ -115,9 +116,10 @@ export function ArticleWorkspace({
 
           {/* Under the category, because the two answer different questions and
               are read together: the category decides WHEN this article is
-              searched, the products decide WHAT it resolves to once found. An
-              article filed outside `faq` is only searched for tickets of its own
-              subject, and attaching a product does not change that. */}
+              searched, the products decide WHAT it resolves to once found. A
+              General FAQ or Brand story is searched for every ticket; Order,
+              Delivery and Promotions FAQs for each other's; any other only for
+              its own subject. Attaching a product does not change that. */}
           <div className={styles.categoryRow}>
             <ProductAttachSelect
               // REMOUNTED PER ARTICLE, like the editor above it. This workspace is
@@ -143,6 +145,8 @@ export function ArticleWorkspace({
           <label className={styles.label} htmlFor="article-content-hint">
             {t("setup.knowledge.content")}
           </label>
+          {/* Every article but a brand story is an FAQ. */}
+          {article.category !== "brand_story" && <FaqWritingGuide />}
           {article.sourcePageId && (
             <p className={styles.syncWarning}>
               <AlertIcon size={14} />

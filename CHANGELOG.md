@@ -16,6 +16,17 @@ Three sibling files carry the other halves, and this one deliberately does not d
 
 
 
+## Knowledge articles become FAQs (2026-10-01)
+
+- **Built:**
+  - Article categories read « <subject> FAQ » (« Order FAQ », « Product FAQ »…); `faq` reads « General FAQ »; Brand story is unchanged. Ticket labels are untouched.
+  - `other` is no longer an article category: removed from the picker, `KNOWLEDGE_CATEGORIES` (both copies) and `knowledge_documents_category_check` (migration 58, applied to dev; 0 rows moved). New articles and unplaceable imports default to General FAQ.
+  - `categoriesToSearch`: order, delivery and promotions tickets search all three of those FAQs; `other` is dropped from the always-searched set.
+  - FAQ sections stay one chunk up to 1,200 tokens; brand stories keep the 450-token packing. No existing chunk changed.
+  - « How to write an FAQ » button in the article editor (hidden on brand stories): one question per Heading 2, 2–3 rewordings as plain lines, a short answer, rules go in Policies; EN and FR.
+  - The same guide as a popup from the top right of the Knowledge page, above « Test the agent » (`FaqGuideDialog`, on the shared `Dialog`).
+- **Proven:** retrieval 274/0; chunker, taxonomy and category tests pass; migration 58 tests pass and the live constraint matches; root suite 4114 pass (the same 19 old analytics failures); `tsc` and lint on `web/`. **Not yet:** the panel and labels seen in the browser; a retrieval eval run with the new groups (`npm run eval:diagnose`).
+
 ## Knowledge: policy search path and « Core setup » retired; list scrolls (2026-10-01)
 
 - **Built:**

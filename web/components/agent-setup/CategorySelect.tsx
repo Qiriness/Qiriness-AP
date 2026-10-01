@@ -72,7 +72,7 @@ export function CategorySelect({ value, onChange }: CategorySelectProps) {
         onClick={() => setOpen((o) => !o)}
         onKeyDown={onKeyDown}
       >
-        <span className={styles.triggerText}>{t(`category.${value}`)}</span>
+        <span className={styles.triggerText}>{t(`articleCategory.${value}`)}</span>
         <ChevronDownIcon
           size={17}
           className={`${styles.chevron} ${open ? styles.chevronOpen : ""}`}
@@ -95,7 +95,7 @@ export function CategorySelect({ value, onChange }: CategorySelectProps) {
                 onMouseEnter={() => setActiveIndex(i)}
                 onClick={() => choose(category)}
               >
-                {t(`category.${category}`)}
+                {t(`articleCategory.${category}`)}
               </li>
             );
           })}

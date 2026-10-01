@@ -87,14 +87,15 @@ create table public.knowledge_documents (
   -- category is chosen, and the check only rejects values outside the list.
   -- Includes the two knowledge-only shapes (faq, brand_story) that are never
   -- ticket subjects — nobody emails support "an FAQ", and brand story is
-  -- drafting context. `scripts/lib/support-taxonomy.mjs` is the other copy of
+  -- drafting context. Excludes the ticket catch-all `other`: an article with
+  -- no named subject is a general FAQ. `scripts/lib/support-taxonomy.mjs` is the other copy of
   -- this list; a check constraint cannot import a module, so the migration
   -- tests are what stop the two drifting apart.
   constraint knowledge_documents_category_check check (
     category is null or category in (
       'order', 'delivery', 'return_exchange', 'product', 'product_stock', 'payment',
       'account', 'promotions', 'cosmetovigilance', 'legal_privacy', 'b2b',
-      'partner_collaboration', 'careers', 'other', 'faq', 'brand_story'
+      'partner_collaboration', 'careers', 'faq', 'brand_story'
     )
   )
 );
@@ -163,7 +164,7 @@ comment on column public.knowledge_documents.source_metadata is
   'Small sanitized source metadata snapshot. Do not store full page HTML or unnecessary raw payloads here.';
 
 comment on column public.knowledge_documents.category is
-  'Article subject, from the shared support taxonomy in scripts/lib/support-taxonomy.mjs. The same 14 subjects the ticket categoriser assigns, plus the knowledge-only shapes faq and brand_story. Tickets additionally carry a request_kind; an article is reference material and has no kind.';
+  'Article subject, from the shared support taxonomy in scripts/lib/support-taxonomy.mjs. Every article but a brand story is an FAQ, shown as « <subject> FAQ »: the ticket subjects except the catch-all other, plus the knowledge-only shapes faq (General FAQ) and brand_story. Tickets additionally carry a request_kind; an article is reference material and has no kind.';
 
 -- ---------------------------------------------------------------- knowledge_chunks
 

@@ -196,6 +196,9 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |   |                                # ArticleLibrary (left pane) · ArticleWorkspace +
 |   |                                # BrandVoiceWorkspace (right pane) · RichTextEditor ·
 |   |                                # WorkspaceHeader EditorFooter CategorySelect
+|   |                                # (labels « <subject> FAQ ») · FaqWritingGuide
+|   |                                # (« How to write an FAQ »: inline panel in the
+|   |                                # editor + FaqGuideDialog popup from SetupHeader) ·
 |   |                                # SourcePageSelect ChipList Toast (and friends)
 |   |-- lib/
 |   |   |-- session-cookies.ts   # writes/clears qos_at + qos_rt (the session
@@ -480,9 +483,10 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |   |   |                        # spam-audit (rows, body cap/clock, retention purge) ·
 |   |   |                        # spam-body-backfill · attachment-backfill
 |   |   |-- pipeline/            # categorise (classify-only) · categorise-runner
-|   |   |-- retrieval/           # retrieval-rules (categoriesToSearch: the subject
-|   |   |                        #   plus faq + brand_story + other, all three
-|   |   |                        #   cross-subject) · knowledge-retrieval (dense 20
+|   |   |-- retrieval/           # retrieval-rules (categoriesToSearch: the subject,
+|   |   |                        #   its search group — order/delivery/promotions —
+|   |   |                        #   then faq + brand_story for every subject) ·
+|   |   |                        #   knowledge-retrieval (dense 20
 |   |   |                        #   + lexical 20, fused by rank, banded three ways) ·
 |   |   |                        # exemplar-{rules,retrieval} (which situation is this) ·
 |   |   |                        # situation-chooser (a small model settles a near
@@ -810,6 +814,7 @@ Written by the worker and the CLIs, read only by the Insights panels.
 | `49_forwarding_destinations.sql` | `forwarding_destinations`, `forwarding_settings` (copied from 04). No data. Applied 2026-09-29 | 04 |
 | `50_forwarding_routing.sql` | `forwarding_settings.forward_since`, `ticket_forwards.destination_label`, `ticket_routing` (copied from 04). No data. Applied 2026-09-29 | 04, 49 |
 | `51_destination_switch.sql` | `forwarding_destinations.active_since` + its needs-an-address check (copied from 04); switches on the destinations that had an address. Applied 2026-09-29 | 49 |
+| `58_faq_articles.sql` | narrows `knowledge_documents_category_check`: `other` is no longer an article category (a ticket subject only); any article/chunk under it moves to `faq`. Copied from 03. None moved. Applied 2026-10-01 | 03 |
 | `56_policy_search_retired.sql` | Removes `policy_answer` from `support_exemplars.requirement_needs` (data: 20 situations) and from its check, adds `policy_attached`; narrows `knowledge_documents.core_topic` to `brand`. Copied from 03 and 05. Applied 2026-10-01 | 03, 05, 33 |
 | `55_company_policies.sql` | `company_policies`, `company_policy_versions`, `company_policy_links` (copied from 05) + `ticket_investigations.company_policies`. No data (the library starts empty). Applied 2026-09-30 | 04, 05 |
 | `54_ticket_snoozes.sql` | `ticket_snoozes` (copied from 04). No data. Applied 2026-09-30 | 04 |
@@ -909,7 +914,7 @@ Env: `CHAT_DB_URL` (the role's pooler URL; unset = the page says so and nothing 
 
 **Which product an article is about** (`ProductAttachSelect` in the article workspace, over `PATCH /api/knowledge/articles/[id]`; the catalogue comes from the existing `/api/recommendations`). Writes `knowledge_documents.product_ids`, denormalised onto `knowledge_chunks` by `buildKnowledgeChunks` the same way `category` is, and returned by both retrieval RPCs. `agent/src/retrieval/product-from-knowledge.mjs` turns a retrieved chunk's tag into an identity, and `evidence-rules.mjs` reads it from one helper (`productFromArticles`) shared by `product_identity`'s `satisfiedBy` and its `derive`, so the need and the finding cannot disagree. Deliberately NOT in `content_hash`: retagging rewrites chunk rows without re-embedding a word.
 
-> `category` and `product_ids` answer different questions — the first decides **when** an article is searched (`categoriesToSearch` = the ticket's subject plus `faq`/`brand_story`/`other`), the second decides **what it resolves to** once found. Attaching a product does not make an article reachable from another subject.
+> `category` and `product_ids` answer different questions — the first decides **when** an article is searched (`categoriesToSearch` = the ticket's subject, the other two of order/delivery/promotions when it is one of them, plus `faq`/`brand_story`), the second decides **what it resolves to** once found. Attaching a product does not make an article reachable from another subject.
 
 **What we can advise on** (`/agent-setup/collections` → `components/agent-setup/CollectionList`, over `lib/server/collections-service.ts`, `/api/collections` and `/api/collections/[id]`). All 175 Shopify collections, searchable, with a switch and an axis (`concern` / `category`) per row writing `advice_collections.is_active` / `axis` / `note` — the three columns on that synced table this app owns. A **Sync from Shopify** button (`POST /api/collections/sync`) runs the collections sync on demand and returns the refreshed list — it cannot switch anything on. **Activation is its own endpoint** (`PATCH`), separate from the axis and note (`PUT`), the same split `setRuleApproval` keeps: switching a collection on is what lets its products reach a customer. **An axis is required to go live and cannot be cleared while live** — a `category` is a group of products the answer offers and a `concern` ranks products inside those groups, so a collection with neither cannot be placed; refused from both directions. Nothing is active by default: a product sits in 18–30 collections, most of them seasonal (`Black Friday` 92 products) or diagnostic-quiz output.
 

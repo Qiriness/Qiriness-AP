@@ -12,35 +12,42 @@ import {
 } from './retrieval-rules.mjs';
 
 test('a ticket searches its own subject plus the cross-subject ones', () => {
-  assert.deepEqual(categoriesToSearch('product'), ['product', 'faq', 'brand_story', 'other']);
-  assert.deepEqual(categoriesToSearch('account'), ['account', 'faq', 'brand_story', 'other']);
+  assert.deepEqual(categoriesToSearch('product'), ['product', 'faq', 'brand_story']);
+  assert.deepEqual(categoriesToSearch('account'), ['account', 'faq', 'brand_story']);
 });
 
 test('the always-searched categories are not duplicated when they ARE the subject', () => {
-  assert.deepEqual(categoriesToSearch('faq'), ['faq', 'brand_story', 'other']);
-  assert.deepEqual(categoriesToSearch('brand_story'), ['faq', 'brand_story', 'other']);
-  assert.deepEqual(categoriesToSearch('other'), ['faq', 'brand_story', 'other']);
+  assert.deepEqual(categoriesToSearch('faq'), ['faq', 'brand_story']);
+  assert.deepEqual(categoriesToSearch('brand_story'), ['faq', 'brand_story']);
 });
 
 test('a missing subject still searches the shared categories rather than everything', () => {
   // Searching all categories on a null subject would quietly turn a
   // mis-categorised ticket into a library-wide scan.
-  assert.deepEqual(categoriesToSearch(null), ['faq', 'brand_story', 'other']);
-  assert.deepEqual(categoriesToSearch('  '), ['faq', 'brand_story', 'other']);
+  assert.deepEqual(categoriesToSearch(null), ['faq', 'brand_story']);
+  assert.deepEqual(categoriesToSearch('  '), ['faq', 'brand_story']);
 });
 
-test('`other` is reachable from every subject, because of what it means', () => {
-  // The taxonomy defines it as « rien de ce qui précède », so an article filed
-  // there is one whose subject could not be named — restricting it to tickets
-  // the categoriser also gave up on is the narrowest audience for the broadest
-  // content.
-  //
-  // THE MISS THAT PROMPTED IT: « Nos Points de Vente », eight embedded chunks
-  // listing the stockists, sat in `other` while « où puis-je acheter votre crème
-  // à Paris ? » arrived as `product`. The one article that answered it was the
-  // one the filter hid.
-  for (const subject of ['product', 'delivery', 'order', 'promotions', 'cosmetovigilance']) {
-    assert.ok(categoriesToSearch(subject).includes('other'), `${subject} cannot reach other`);
+test('an `other` ticket searches the shared categories: no article is filed under other', () => {
+  assert.deepEqual(categoriesToSearch('other'), ['faq', 'brand_story']);
+  for (const subject of ['product', 'order', 'account', null]) {
+    assert.ok(!categoriesToSearch(subject).includes('other'), String(subject));
+  }
+});
+
+test('order, delivery and promotions tickets each reach all three FAQs, own subject first', () => {
+  // The categoriser splits these on wording the customer does not choose: « ma
+  // commande n'est pas arrivée » is order or delivery depending on the phrasing.
+  assert.deepEqual(categoriesToSearch('order'), ['order', 'delivery', 'promotions', 'faq', 'brand_story']);
+  assert.deepEqual(categoriesToSearch('delivery'), ['delivery', 'order', 'promotions', 'faq', 'brand_story']);
+  assert.deepEqual(categoriesToSearch('promotions'), ['promotions', 'order', 'delivery', 'faq', 'brand_story']);
+});
+
+test('the group does not leak into other subjects', () => {
+  for (const subject of ['product', 'payment', 'return_exchange']) {
+    for (const member of ['order', 'delivery', 'promotions']) {
+      assert.ok(!categoriesToSearch(subject).includes(member), `${subject} reaches ${member}`);
+    }
   }
 });
 

@@ -241,9 +241,9 @@ export async function createArticle(
       shopify_source_id: null,
       handle: null,
       title,
-      // "other" is the taxonomy's catch-all; the old "general" is no longer a
-      // valid category and would now fail knowledge_documents_category_check.
-      category: input.category || "other",
+      // A new article is a general FAQ until it is filed. "other" is a ticket
+      // subject only and would fail knowledge_documents_category_check.
+      category: input.category || "faq",
       core_topic: input.coreTopic || null,
       locale: "fr",
       status: null,

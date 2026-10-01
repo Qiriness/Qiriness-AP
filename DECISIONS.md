@@ -3055,6 +3055,19 @@ With 15 policies written and 36 links made, the owner asked to remove what stood
 
 **Found on the way:** an article that a « Test the agent » run had tested could not be deleted. The FK sets the run's `expect_document_id` to null, but `agent_test_runs_article_verdict_needs_document_check` refuses a verdict with no article. `deleteArticle` now clears that run's verdict first; the run itself is kept.
 
+### Knowledge articles are FAQs, one question per heading (2026-10-01)
+
+With the company's rules in Policies, the owner asked for the knowledge base to hold FAQ articles only, with Brand story kept as it is.
+
+- **Labels, not new values.** The stored category is still the shared subject, so a ticket's subject still filters straight into its articles. On screen an article category reads « Order FAQ », « Product FAQ »…, `faq` reads « General FAQ » and `brand_story` « Brand story » (`articleCategory.*`). `category.*` stays the ticket label.
+- **`other` is no longer an article category.** It is the categoriser's catch-all, so it stays a ticket subject (`TICKET_ONLY_SUBJECTS`). An article with no named subject is a General FAQ, which every ticket already searches. The new-article default, the mapper fallback and the import inference fallback are `faq`. Migration 58 narrowed the check; no article was filed under `other`.
+- **The format** (the « How to write an FAQ » panel in the article editor): one question per Heading 2, as a customer asks it; 2–3 real rewordings underneath as plain lines; then a short answer. It works because of how articles are embedded: every heading starts a section, and each chunk is embedded as `title + heading + body`. So the question and its rewordings travel with the answer, as a situation's example messages do. Rewordings as sub-headings would each become a chunk with no answer, which is why the panel says plain lines.
+- **An FAQ section stays one chunk.** Every section of a non-brand-story article is a whole unit up to 1,200 tokens (`knowledge-chunker.mjs`). The 450-token packing would split a long answer and leave the second half with the heading but none of the rewordings. Past the ceiling, a section is not FAQ-shaped (a long imported page) and is packed as before. On 2026-10-01 every section over 450 tokens was in a brand story, so no existing chunk changed.
+- **Order, delivery and promotions search each other** (asked by the owner). The categoriser splits them on wording the customer does not choose: « ma commande n'est pas arrivée » can be filed as order or delivery. So a ticket in any of the three searches all three, its own first, then `faq` and `brand_story`. Other subjects search only their own (`SEARCH_GROUPS` in `retrieval-rules.mjs`).
+- **An FAQ does not restate a policy.** The panel says so: delivery times, returns and refunds live in Policies and are read by key (§ Company policies are written once…).
+
+**Known gap, not acted on:** a Product FAQ is only searched for product tickets. « Le masque LED n'était pas dans mon colis » (in « Masque LED Visage — Questions fréquentes », still filed `faq`) is a delivery question. Filed as Product FAQ, it would be hidden from the delivery tickets that ask it. Move such a question to an Order FAQ rather than widening the group.
+
 Nothing auto-writes `knowledge_documents`; the catalog sync only fills `shopify_content_sources`. `source_type` → `manual` **is** the manual-edit lock — no separate flag, and resync is then unavailable.
 
 The one fixed slot is the Brand voice (`core_topic = 'brand'`): shown as a placeholder until created, never a database row before then. The « Core setup » checklist was removed 2026-10-01 (§ The search path to policies…).

@@ -37,8 +37,12 @@ const PRIMARY_CATEGORY_RULES = [
 
 export { KNOWLEDGE_CATEGORIES };
 
-/** Fallback when nothing matches. Also the taxonomy's catch-all subject. */
-export const FALLBACK_CATEGORY = 'other';
+/**
+ * Fallback when nothing matches: a general FAQ. Articles have no catch-all of
+ * their own since 2026-10-01 — `other` is a ticket subject only — and `faq` is
+ * searched for every ticket, so an unplaceable page stays reachable.
+ */
+export const FALLBACK_CATEGORY = 'faq';
 
 export function inferKnowledgeCategory(...values) {
   const primary = normalize(values.slice(0, 2).filter(Boolean).join(' '));
