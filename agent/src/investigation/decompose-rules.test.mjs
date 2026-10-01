@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
+  followUpMoves,
   ENTITY_TYPES,
   MAX_OPENING_MOVES,
   MAX_TASKS,
@@ -107,8 +108,23 @@ test('entities are deduped, trimmed and bucketed', () => {
 
 test('unknown entity buckets are dropped, known ones always present', () => {
   const e = normaliseEntities({ shoe_sizes: ['42'], order_numbers: ['1'] });
-  assert.deepEqual(Object.keys(e).sort(), [...ENTITY_TYPES].sort());
+  assert.deepEqual(Object.keys(e).sort(), [...ENTITY_TYPES, 'offers'].sort());
   assert.equal(e.shoe_sizes, undefined);
+});
+
+test('described offers are clamped to the vocabulary identification matches on', () => {
+  const e = normaliseEntities({
+    offers: [
+      { mechanic: 'gift', threshold: 65, percentage: null, product: 'le masque or' },
+      { mechanic: 'loyalty_points', threshold: 'beaucoup', percentage: -3, product: '' }
+    ]
+  });
+  assert.deepEqual(e.offers, [
+    { mechanic: 'gift', threshold: 65, percentage: null, product: 'le masque or' },
+    // An unknown mechanic is « unclear », never dropped silently; nonsense numbers are « not said ».
+    { mechanic: 'unclear', threshold: null, percentage: null, product: null }
+  ]);
+  assert.deepEqual(normaliseEntities({}).offers, []);
 });
 
 test('an absurdly long "entity" is rejected', () => {
@@ -217,15 +233,75 @@ test('a split runs the opening moves of BOTH subjects', () => {
   const moves = planMoves(TICKET, SPLIT, {});
   const tools = moves.map((m) => m.tool);
   assert.ok(tools.includes(TOOL_NAMES.LOOKUP_PRODUCT));
-  assert.ok(tools.includes(TOOL_NAMES.EXTRACT_PROMOTION_CODES));
+  assert.ok(tools.includes(TOOL_NAMES.IDENTIFY_PROMOTION));
 });
 
-test('the code extractor always gets the RAW email, never a paraphrase', () => {
+test('promotion identification always gets the RAW email, never a paraphrase', () => {
   // A paraphrase is exactly where a literal code stops being present, and the
   // extractor matches against the real store list.
   const ticket = { ...TICKET, text: 'Bonjour, le code BIENVENUE10 ne marche pas.' };
-  const move = planMoves(ticket, SPLIT, {}).find((m) => m.tool === TOOL_NAMES.EXTRACT_PROMOTION_CODES);
+  const move = planMoves(ticket, SPLIT, {}).find((m) => m.tool === TOOL_NAMES.IDENTIFY_PROMOTION);
   assert.match(move.args.text, /BIENVENUE10/);
+});
+
+test('identification carries the decomposer’s reading of codes and offers', () => {
+  const offers = [{ mechanic: 'free_shipping', threshold: 70, percentage: null, product: null }];
+  const move = planMoves(TICKET, SPLIT, { codes: ['NEWYEAR26'], offers }).find(
+    (m) => m.tool === TOOL_NAMES.IDENTIFY_PROMOTION
+  );
+  assert.deepEqual(move.args.codes, ['NEWYEAR26']);
+  assert.deepEqual(move.args.offers, offers);
+});
+
+test('an order ticket describing an offer gets identification; one that does not, does not', () => {
+  // Measured 2026-10-01: charged gifts and unapplied free shipping were filed
+  // `order`, where no promotion tool ever ran.
+  const order = { ...TICKET, category: 'order', request_kind: 'problem', level: 2 };
+  const task = [{ question: 'x', category: 'order', request_kind: 'problem' }];
+  const gift = [{ mechanic: 'gift', threshold: 65, percentage: null, product: 'masque' }];
+
+  const withOffer = planMoves(order, task, { codes: [], offers: gift }).map((m) => m.tool);
+  assert.ok(withOffer.includes(TOOL_NAMES.IDENTIFY_PROMOTION));
+
+  const without = planMoves(order, task, { codes: [], offers: [] }).map((m) => m.tool);
+  assert.ok(!without.includes(TOOL_NAMES.IDENTIFY_PROMOTION), 'no offer mentioned, nothing spent');
+});
+
+test('an identified offer and a known code are each checked against the basket, an ambiguous match is not', () => {
+  const ledger = [
+    {
+      tool: TOOL_NAMES.IDENTIFY_PROMOTION,
+      data: {
+        offers: [
+          { matched: { title: 'Masque Or offert' }, candidates: [] },
+          { matched: null, candidates: ['A', 'B'] }
+        ],
+        knownCodes: ['QIRINESS20'],
+        codes: ['QIRINESS20', 'NOPE']
+      }
+    }
+  ];
+  const allowed = [TOOL_NAMES.IDENTIFY_PROMOTION, TOOL_NAMES.CHECK_PROMOTION_OUTCOME];
+  assert.deepEqual(followUpMoves(ledger, allowed).map((m) => m.args.promotion), ['Masque Or offert', 'QIRINESS20']);
+
+  // Where the code lookup is allowed, a typed code is looked up first — or
+  // promotion_validity stays unknown and the reply asks for the code given.
+  const withLookup = followUpMoves(ledger, [...allowed, TOOL_NAMES.LOOKUP_PROMOTION]);
+  assert.deepEqual(withLookup[0], { tool: TOOL_NAMES.LOOKUP_PROMOTION, args: { code: 'QIRINESS20' } });
+  assert.equal(withLookup.filter((m) => m.tool === TOOL_NAMES.LOOKUP_PROMOTION).length, 1, 'the unknown code NOPE is not looked up');
+
+  // A gift left open between candidates is asked of the order instead.
+  const open = [{ tool: TOOL_NAMES.IDENTIFY_PROMOTION, data: { offers: [{ mechanic: 'gift', matched: null, candidates: ['A', 'B'] }], knownCodes: [] } }];
+  assert.deepEqual(followUpMoves(open, allowed).map((m) => m.args.promotion), ['']);
+  assert.deepEqual(followUpMoves(ledger, [TOOL_NAMES.IDENTIFY_PROMOTION]), [], 'not without the tool');
+  assert.deepEqual(followUpMoves([], allowed), []);
+});
+
+test('a subject without the tool never gets identification, whatever was mentioned', () => {
+  const account = { ...TICKET, category: 'account', request_kind: 'problem', level: 2 };
+  const task = [{ question: 'x', category: 'account', request_kind: 'problem' }];
+  const moves = planMoves(account, task, { codes: ['QIRINESS10'], offers: [] }).map((m) => m.tool);
+  assert.ok(!moves.includes(TOOL_NAMES.IDENTIFY_PROMOTION));
 });
 
 test('the semantic matchers get the sub-question, not the whole email', () => {

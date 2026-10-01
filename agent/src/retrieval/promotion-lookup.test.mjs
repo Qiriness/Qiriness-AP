@@ -46,7 +46,9 @@ const ACTIVE = {
   title: 'QIRINESS20',
   status: 'ACTIVE',
   summary: '20% off',
-  codes: [{ code: 'QIRINESS20', usage_count: 3 }]
+  codes: [{ code: 'QIRINESS20', usage_count: 3 }],
+  // Listed only because an operator cleared it (offerable_in_replies).
+  offerable_in_replies: true
 };
 
 const BULK = {
@@ -54,7 +56,8 @@ const BULK = {
   title: 'Welcome bulk',
   status: 'ACTIVE',
   summary: '10% off',
-  codes: bulkCodes(600)
+  codes: bulkCodes(600),
+  offerable_in_replies: true
 };
 
 /** A lookup over a fixed set of rows, plus the teardown for its fetch stub. */
@@ -109,7 +112,8 @@ test('the listing is bounded even when every offer is distinct', async () => {
     title: `Offer ${i}`,
     status: 'ACTIVE',
     summary: 's',
-    codes: []
+    codes: [],
+    offerable_in_replies: true
   }));
   const { lookup, restore } = lookupOver(many);
   try {
@@ -132,6 +136,28 @@ test('inactive and out-of-window promotions are not listed', async () => {
   try {
     const { promotions } = await lookup.listActive({ now });
     assert.deepEqual(promotions.map((p) => p.title), ['QIRINESS20']);
+  } finally { restore(); }
+});
+
+test('an automatic offer an operator kept out of replies is not listed', async () => {
+  const shipping = {
+    id: 'p20',
+    title: 'Frais de port offerts dès 70€',
+    method: 'automatic',
+    discount_type: 'DiscountAutomaticFreeShipping',
+    discount_classes: ['SHIPPING'],
+    status: 'ACTIVE',
+    codes: []
+  };
+  const { lookup, restore } = lookupOver([
+    ACTIVE,
+    shipping,
+    { ...shipping, id: 'p21', title: 'Masque offert', describable_in_replies: false }
+  ]);
+  try {
+    const { promotions } = await lookup.listActive();
+    assert.deepEqual(promotions.map((p) => p.title).sort(), ['Frais de port offerts dès 70€', 'QIRINESS20']);
+    assert.equal(promotions.find((p) => p.method === 'automatic').mechanic, 'free_shipping');
   } finally { restore(); }
 });
 
@@ -247,4 +273,379 @@ test('a product with no offer at all comes back empty rather than guessing', asy
   } finally {
     restore();
   }
+});
+
+// --- which promotion a message is about ---------------------------------------
+//
+// Fixtures shaped like the live offers of 2026-10-01: free shipping from 70 €
+// (France only), gifts that are all masks, a 3+1, and the welcome codes.
+
+const NOW = new Date('2026-10-01T12:00:00Z');
+
+const auto = (id, title, discount_type, rule_snapshot, extra = {}) => ({
+  id,
+  title,
+  method: 'automatic',
+  discount_type,
+  discount_classes: discount_type.endsWith('FreeShipping') ? ['SHIPPING'] : ['PRODUCT'],
+  status: 'ACTIVE',
+  summary: title,
+  codes: [],
+  rule_snapshot,
+  ...extra
+});
+const giftRule = (amount, product) => ({
+  customer_buys: { amount },
+  customer_gets: { percentage: 1, quantity: 1, items: { scope: 'products', products: [{ id: product, title: product }] } }
+});
+
+const SHIPPING = auto('a1', 'Frais de port offerts à partir de 70€', 'DiscountAutomaticFreeShipping', {
+  minimum_requirement: { type: 'subtotal', amount: '70.0' },
+  destination: { scope: 'countries', countries: ['FR'] }
+});
+const VITAMINE = auto('a2', 'wrap vitaminé Offert dès 65€', 'DiscountAutomaticBxgy', giftRule('65.0', 'Masque Exfoliant Grenade Citron'));
+const OR = auto('a3', 'Masque Or offert', 'DiscountAutomaticBxgy', giftRule('1.0', "Masque Repulpant Wrap d'Or"));
+const ECLAT = auto('a4', 'MASQUE ÉCLAT OFFERT', 'DiscountAutomaticBxgy', giftRule('1.0', 'Masque Visage Wrap Éclat'));
+const THREE_PLUS_ONE = auto('a5', '3+1 Offert : 3 masques achetés', 'DiscountAutomaticBxgy', {
+  customer_buys: { quantity: '3' },
+  customer_gets: { percentage: 1, quantity: 1 }
+});
+const WELCOME = {
+  id: 'c1',
+  title: 'BIENVENUEQIRINESS',
+  method: 'code',
+  discount_type: 'DiscountCodeBasic',
+  discount_classes: ['PRODUCT'],
+  status: 'ACTIVE',
+  summary: '20% off 55 products',
+  codes: [{ code: 'BIENVENUEQIRINESS', usage_count: 4 }],
+  rule_snapshot: { customer_gets: { percentage: 0.2 } }
+};
+const NEWYEAR = {
+  ...WELCOME,
+  id: 'c2',
+  title: 'NEWYEAR26',
+  status: 'EXPIRED',
+  summary: '30% off',
+  codes: [{ code: 'NEWYEAR26' }],
+  rule_snapshot: { customer_gets: { percentage: 0.3 } }
+};
+
+const SHOP = [SHIPPING, VITAMINE, OR, ECLAT, THREE_PLUS_ONE, WELCOME, NEWYEAR];
+const offer = (mechanic, { threshold = null, percentage = null, product = null } = {}) => ({ mechanic, threshold, percentage, product });
+
+test('free shipping not applied on 72 € is the automatic shipping offer', async () => {
+  // 0e0ee123: « ma commande fait 72 €, et pourtant des frais de livraison ».
+  const { lookup, restore } = lookupOver(SHOP);
+  try {
+    const result = await lookup.identify({
+      text: 'ma commande fait 72 €, livraison gratuite à compter de 70 €',
+      offers: [offer('free_shipping', { threshold: 70 })],
+      now: NOW
+    });
+    assert.equal(result.kind, 'automatic');
+    assert.equal(result.offers[0].match.title, SHIPPING.title);
+    assert.equal(result.offers[0].match.mechanic, 'free_shipping');
+    assert.match(result.promptText, /s'applique seule, sans code/);
+  } finally { restore(); }
+});
+
+test('a threshold the customer misquotes is matched anyway, and the gap is said', async () => {
+  // ffd38002: an email promised free shipping from 49 €; Shopify applies 70 €.
+  const { lookup, restore } = lookupOver(SHOP);
+  try {
+    const result = await lookup.identify({ text: 'livraison offerte dès 49 €', offers: [offer('free_shipping', { threshold: 49 })], now: NOW });
+    assert.equal(result.kind, 'automatic');
+    assert.deepEqual(result.offers[0].match.thresholdNote, { said: 49, actual: 70 });
+    assert.match(result.promptText, /seuil de 49 € ; le seuil réel de cette offre est 70 €/);
+  } finally { restore(); }
+});
+
+test('a gift is picked out of several masks by its threshold or its name', async () => {
+  const { lookup, restore } = lookupOver(SHOP);
+  try {
+    // b474f63b: « un masque de 6,23 € qui était offert à partir de 65 € ».
+    const byThreshold = await lookup.identify({ text: 'x', offers: [offer('gift', { threshold: 65, product: 'masque' })], now: NOW });
+    assert.equal(byThreshold.offers[0].match.title, VITAMINE.title);
+
+    // « le masque or offert » — « masque » is in every gift and counts for nothing.
+    const byName = await lookup.identify({ text: 'x', offers: [offer('gift', { product: 'le masque or' })], now: NOW });
+    assert.equal(byName.offers[0].match.title, OR.title);
+  } finally { restore(); }
+});
+
+test('« un masque offert » is an automatic gift even when which gift is open, and says between which', async () => {
+  // The kind is settled, the offer is not: 5836ab80, d6d0d1c3 and their like.
+  const { lookup, restore } = lookupOver(SHOP);
+  try {
+    const result = await lookup.identify({ text: 'x', offers: [offer('gift', { product: 'masque' })], now: NOW });
+    assert.equal(result.kind, 'automatic');
+    assert.equal(result.offers[0].match, null);
+    assert.ok(result.offers[0].candidates.length >= 2);
+    assert.match(result.promptText, /sans pouvoir trancher/);
+  } finally { restore(); }
+});
+
+test('3+1 is the multi-buy offer', async () => {
+  const { lookup, restore } = lookupOver(SHOP);
+  try {
+    const result = await lookup.identify({ text: "l'offre 3+1 sur les masques", offers: [offer('multi_buy', { product: 'masques' })], now: NOW });
+    assert.equal(result.kind, 'automatic');
+    assert.equal(result.offers[0].match.title, THREE_PLUS_ONE.title);
+  } finally { restore(); }
+});
+
+test('a typed code is a code, in any case and spacing the customer used', async () => {
+  // 3b64e768 typed « Newyear26 »: the uppercase scan misses it, the decomposer does not.
+  const { lookup, restore } = lookupOver(SHOP);
+  try {
+    const result = await lookup.identify({ text: 'avec code Newyear26 la remise ne passe pas', codes: ['Newyear26'], now: NOW });
+    assert.equal(result.kind, 'code');
+    assert.deepEqual(result.codes.map((c) => c.code), ['NEWYEAR26']);
+  } finally { restore(); }
+});
+
+test('with a reading, a product name that is also a code is not a code', async () => {
+  // 1d5445ac: « WRAP ECLAT commandé 3 reçu 4 » — WRAP is a real code here.
+  const wrap = { ...WELCOME, id: 'c3', title: 'WRAP', codes: [{ code: 'WRAP' }] };
+  const { lookup, restore } = lookupOver([...SHOP, wrap]);
+  try {
+    const read = await lookup.identify({ text: 'WRAP ECLAT commandé 3 reçu 4', codes: [], offers: [offer('multi_buy')], now: NOW });
+    assert.equal(read.kind, 'automatic');
+    // No reading at all: the scan is the fallback, and it is crude on purpose.
+    const bare = await lookup.identify({ text: 'WRAP ECLAT commandé 3 reçu 4', now: NOW });
+    assert.equal(bare.kind, 'code');
+  } finally { restore(); }
+});
+
+test('a typed code the shop does not hold is kept, marked unknown', async () => {
+  // 36211a3b typed a wheel-of-fortune code that was never synced.
+  const { lookup, restore } = lookupOver(SHOP);
+  try {
+    const result = await lookup.identify({ text: 'les 10% de la roue 9FM7BQFZ', codes: ['9FM7BQFZ'], now: NOW });
+    assert.equal(result.kind, 'code');
+    assert.equal(result.codes[0].known, false);
+    assert.match(result.promptText, /n'existe pas dans la boutique/);
+  } finally { restore(); }
+});
+
+test('a stated percentage excludes an offer of another percentage', async () => {
+  // 1e3d9dcb: « -20 % » once matched a past 25 % automatic offer.
+  const quarter = auto('a9', '25% offerts sans minimum', 'DiscountAutomaticBasic', { customer_gets: { percentage: 0.25 } });
+  const { lookup, restore } = lookupOver([quarter, WELCOME]);
+  try {
+    const result = await lookup.identify({ text: 'les 20% ne passent pas', offers: [offer('percent_off', { percentage: 20 })], now: NOW });
+    assert.equal(result.kind, 'code');
+    assert.equal(result.offers[0].match, null);
+  } finally { restore(); }
+});
+
+test('a code the decomposer reports but the message does not contain is refused', async () => {
+  const { lookup, restore } = lookupOver(SHOP);
+  try {
+    const result = await lookup.identify({ text: 'mon code ne marche pas', codes: ['BIENVENUEQIRINESS'], now: NOW });
+    assert.equal(result.kind, 'none');
+  } finally { restore(); }
+});
+
+test('« les 20 % de la première commande » is a code the customer never typed', async () => {
+  // No automatic offer gives 20 %, so the codes that do are named — and not chosen between.
+  const { lookup, restore } = lookupOver(SHOP);
+  try {
+    const result = await lookup.identify({ text: 'les 20% ne passent pas', offers: [offer('percent_off', { percentage: 20 })], now: NOW });
+    assert.equal(result.kind, 'code');
+    assert.deepEqual(result.codeCandidates.map((c) => c.code), ['BIENVENUEQIRINESS']);
+    assert.match(result.promptText, /Ne pas supposer lequel/);
+  } finally { restore(); }
+});
+
+test('a code and an automatic offer in one message is both', async () => {
+  const { lookup, restore } = lookupOver(SHOP);
+  try {
+    const result = await lookup.identify({
+      text: 'le code BIENVENUEQIRINESS et le masque or offert',
+      offers: [offer('gift', { product: 'masque or' })],
+      now: NOW
+    });
+    assert.equal(result.kind, 'both');
+  } finally { restore(); }
+});
+
+test('an offer that matches nothing in the shop is none, said plainly', async () => {
+  const { lookup, restore } = lookupOver([WELCOME]);
+  try {
+    const result = await lookup.identify({ text: 'le cabas offert dès 59 €', offers: [offer('gift', { threshold: 59, product: 'cabas' })], now: NOW });
+    assert.equal(result.kind, 'none');
+    assert.match(result.promptText, /Aucune offre de la boutique ne correspond/);
+  } finally { restore(); }
+});
+
+test('an automatic offer switched off is identified but flagged, and a long-ended one is not a candidate', async () => {
+  const hidden = { ...SHIPPING, describable_in_replies: false };
+  const ended = { ...THREE_PLUS_ONE, status: 'EXPIRED', ends_at: '2025-01-01T00:00:00Z' };
+  const { lookup, restore } = lookupOver([hidden, ended]);
+  try {
+    const shipping = await lookup.identify({ text: 'x', offers: [offer('free_shipping')], now: NOW });
+    assert.equal(shipping.offers[0].match.describable, false);
+    assert.match(shipping.promptText, /ne pas la décrire au client/);
+
+    const multi = await lookup.identify({ text: 'x', offers: [offer('multi_buy')], now: NOW });
+    assert.equal(multi.kind, 'none');
+  } finally { restore(); }
+});
+
+// --- why an identified promotion did or did not apply -------------------------
+
+const orderBasket = (lines, applied = []) => ({
+  source: 'order',
+  at: '2026-07-12T07:00:00Z',
+  countryCode: 'FR',
+  lines,
+  applied,
+  codes: []
+});
+const paidLine = (productId, price, paid = price) => ({ productId, title: productId, quantity: 1, price, paid });
+
+test('#6452: the offer asked about was applied, but the charged free item names another — that one is reported', async () => {
+  const vitamine = { ...VITAMINE, rule_snapshot: { ...VITAMINE.rule_snapshot, customer_buys: { amount: '65.0', items: { scope: 'all' } } } };
+  const or = { ...OR, rule_snapshot: { ...OR.rule_snapshot, customer_buys: { amount: '1.0', items: { scope: 'all' } } } };
+  const { lookup, restore } = lookupOver([vitamine, or]);
+  try {
+    const basket = orderBasket(
+      [paidLine("Masque Repulpant Wrap d'Or", 6.23), paidLine('Masque Exfoliant Grenade Citron', 6.23, 0), paidLine('lotion', 79.33)],
+      [VITAMINE.title]
+    );
+    const result = await lookup.outcome({ ref: VITAMINE.title, basket });
+    assert.equal(result.promotion.title, OR.title);
+    assert.equal(result.instead, VITAMINE.title);
+    assert.equal(result.outcome, 'conditions_met');
+    assert.match(result.promptText, /a bien été appliquée ; l'article facturé relève d'une autre offre/);
+
+    // Asked with no reference at all, the order still names it.
+    const open = await lookup.outcome({ ref: '', basket });
+    assert.equal(open.promotion.title, OR.title);
+    assert.equal(open.instead, null);
+  } finally { restore(); }
+});
+
+test('an outcome reference that resolves to nothing is refused, not approximated', async () => {
+  const { lookup, restore } = lookupOver(SHOP);
+  try {
+    const result = await lookup.outcome({ ref: 'Masque Or', basket: null });
+    assert.equal(result.found, false);
+  } finally { restore(); }
+});
+
+// --- named only if usable, ranked by use --------------------------------------
+
+/** A lookup whose three reads — promotions, orders, collections — answer separately. */
+function lookupOverTables({ promotions = [], orders = [], collections = [] }) {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url, init) => {
+    const from = Number(String(init?.headers?.Range || '0-999').split('-')[0]);
+    const path = String(url);
+    const table = path.includes('/orders') ? orders : path.includes('/advice_collections') ? collections : promotions;
+    const rows = from === 0 ? table : [];
+    return { ok: true, status: 200, async json() { return rows; }, async text() { return JSON.stringify(rows); } };
+  };
+  const lookup = createPromotionLookup({ supabase: { baseUrl: 'https://example.test/rest/v1', key: 'k' }, shopId: 's1', logger: null });
+  return { lookup, restore: () => { globalThis.fetch = originalFetch; } };
+}
+
+const PARTNER = { id: 'p40', title: 'LAPFAM26', method: 'code', status: 'ACTIVE', summary: '50% off', codes: [{ code: 'LAPFAM26' }], offerable_in_replies: false };
+const GIFT_OR = {
+  id: 'a40',
+  title: 'Masque Or offert',
+  method: 'automatic',
+  discount_type: 'DiscountAutomaticBxgy',
+  discount_classes: ['PRODUCT'],
+  status: 'ACTIVE',
+  summary: 'Spend €1.00, get 1 item free',
+  codes: [],
+  rule_snapshot: {
+    customer_buys: { amount: '1.0', items: { scope: 'products', products: [{ id: 'gid://shopify/Product/1' }, { id: 'gid://shopify/Product/2' }] } },
+    customer_gets: { percentage: 1, quantity: 1, items: { scope: 'products', products: [{ id: 'gid://shopify/Product/91' }] } }
+  }
+};
+const MONODOSE = 'gid://shopify/Collection/474641695002';
+const THREE_ONE = {
+  ...GIFT_OR,
+  id: 'a41',
+  title: '3+1 Offert',
+  summary: 'Buy 3 items, get 1 item free',
+  rule_snapshot: {
+    customer_buys: { quantity: '3', items: { scope: 'collections', collections: [{ id: MONODOSE }] } },
+    customer_gets: { percentage: 1, quantity: 1, items: { scope: 'collections', collections: [{ id: MONODOSE }] } }
+  }
+};
+const SHIP = {
+  id: 'a42',
+  title: 'Frais de port offerts',
+  method: 'automatic',
+  discount_type: 'DiscountAutomaticFreeShipping',
+  discount_classes: ['SHIPPING'],
+  status: 'ACTIVE',
+  summary: 'Free shipping • Minimum purchase of €70.00',
+  codes: [],
+  rule_snapshot: { minimum_requirement: { type: 'subtotal', amount: '70.0' } }
+};
+const usedBy = (name, n) => Array.from({ length: n }, () => ({ discount_applications: [{ name }], discount_codes: [] }));
+
+test('a code nobody cleared is counted, never named — partner rates stay out of the prompt', async () => {
+  const { lookup, restore } = lookupOverTables({ promotions: [ACTIVE, PARTNER, SHIP] });
+  try {
+    const { promotions, withheld } = await lookup.listActive();
+    assert.deepEqual(promotions.map((p) => p.title).sort(), ['Frais de port offerts', 'QIRINESS20']);
+    assert.equal(withheld, 1);
+    assert.ok(!JSON.stringify(promotions).includes('LAPFAM26'));
+  } finally { restore(); }
+});
+
+test('the active list is ranked by orders in the last 30 days', async () => {
+  const orders = [...usedBy('QIRINESS20', 2), ...usedBy('Frais de port offerts', 9)];
+  const { lookup, restore } = lookupOverTables({ promotions: [ACTIVE, SHIP], orders });
+  try {
+    const { promotions } = await lookup.listActive();
+    assert.deepEqual(promotions.map((p) => p.title), ['Frais de port offerts', 'QIRINESS20']);
+    assert.equal(promotions[0].recentUses, 9);
+  } finally { restore(); }
+});
+
+test('an automatic offer is « on » the products that earn it and the one it gives', async () => {
+  const { lookup, restore } = lookupOverTables({ promotions: [GIFT_OR, SHIP] });
+  try {
+    const onBuy = await lookup.offersForProduct('gid://shopify/Product/2');
+    assert.deepEqual(onBuy.specific.map((p) => p.title), ['Masque Or offert']);
+    assert.equal(onBuy.specific[0].kind, 'automatic');
+    assert.deepEqual(onBuy.general.map((p) => p.title), ['Frais de port offerts'], 'free shipping is about the order');
+
+    const onGift = await lookup.offersForProduct('gid://shopify/Product/91');
+    assert.deepEqual(onGift.specific.map((p) => p.title), ['Masque Or offert']);
+  } finally { restore(); }
+});
+
+test('a collection-scoped offer needs the synced membership, and is ranked against the rest', async () => {
+  const collections = [{ shopify_collection_id: MONODOSE, product_ids: ['gid://shopify/Product/50', 'gid://shopify/Product/2'], products_synced_at: '2026-10-01' }];
+  const orders = [...usedBy('3+1 Offert', 7), ...usedBy('Masque Or offert', 61)];
+  const { lookup, restore } = lookupOverTables({ promotions: [GIFT_OR, THREE_ONE], orders, collections });
+  try {
+    const { specific } = await lookup.offersForProduct('gid://shopify/Product/2');
+    assert.deepEqual(specific.map((p) => p.title), ['Masque Or offert', '3+1 Offert'], 'most used first');
+  } finally { restore(); }
+
+  const unsynced = lookupOverTables({ promotions: [THREE_ONE] });
+  try {
+    const { specific, general } = await unsynced.lookup.offersForProduct('gid://shopify/Product/50');
+    assert.equal(specific.length + general.length, 0, 'unknown membership is left out, not guessed');
+  } finally { unsynced.restore(); }
+});
+
+test('an automatic offer switched off, or a code not cleared, is not offered on a product', async () => {
+  const hidden = { ...GIFT_OR, describable_in_replies: false };
+  const partnerOnProduct = { ...PARTNER, rule_snapshot: { customer_gets: { items: { scope: 'products', products: [{ id: 'gid://shopify/Product/2' }] } } } };
+  const { lookup, restore } = lookupOverTables({ promotions: [hidden, partnerOnProduct] });
+  try {
+    const { specific, general } = await lookup.offersForProduct('gid://shopify/Product/2');
+    assert.equal(specific.length + general.length, 0);
+  } finally { restore(); }
 });

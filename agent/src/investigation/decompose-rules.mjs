@@ -1,5 +1,7 @@
 import { REQUEST_KINDS, TICKET_SUBJECTS } from '../../../scripts/lib/support-taxonomy.mjs';
 
+import { DESCRIBED_MECHANIC_KEYS } from '../retrieval/promotion-lookup.mjs';
+
 import { ENABLED_SUBJECTS, TOOL_NAMES, allowedTools, openingMoves, requiredEvidence } from './investigation-rules.mjs';
 
 // Turning one email into the separate tasks it actually contains — the pure half.
@@ -30,6 +32,9 @@ export const MAX_TASKS = 3;
 
 /** Entity buckets the router can actually act on. Anything else is dropped. */
 export const ENTITY_TYPES = ['order_numbers', 'products', 'codes'];
+
+/** Offers one email describes, at most. Three is already a complaint about a whole sale. */
+export const MAX_OFFER_MENTIONS = 3;
 
 /**
  * Normalises a model's raw decomposition into something safe to route.
@@ -99,6 +104,29 @@ export function normaliseEntities(raw = {}) {
       cleaned.push(text);
     }
     out[type] = cleaned;
+  }
+  out.offers = normaliseOffers(raw?.offers);
+  return out;
+}
+
+/**
+ * The offers the customer described, clamped to the vocabulary
+ * `identifyPromotion` matches on. Numbers that are not numbers become null —
+ * an absent threshold is "not said", never zero.
+ */
+export function normaliseOffers(raw) {
+  const out = [];
+  for (const offer of Array.isArray(raw) ? raw : []) {
+    if (!offer || typeof offer !== 'object') continue;
+    const number = (value) => (typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : null);
+    const product = String(offer.product ?? '').trim();
+    out.push({
+      mechanic: DESCRIBED_MECHANIC_KEYS.includes(offer.mechanic) ? offer.mechanic : 'unclear',
+      threshold: number(offer.threshold),
+      percentage: number(offer.percentage),
+      product: product && product.length <= 120 ? product : null
+    });
+    if (out.length >= MAX_OFFER_MENTIONS) break;
   }
   return out;
 }
@@ -241,11 +269,13 @@ export function planMoves(ticket = {}, tasks = [], entities = {}, { limit = MAX_
   const split = tasks.length > 1;
 
   for (const task of tasks) {
-    for (const move of openingMoves({ ...ticket, category: task.category, request_kind: task.request_kind })) {
+    for (const move of withPromotionMove(ticket, task, entities)) {
       const args =
         split && SEMANTIC_MATCHERS.has(move.tool)
           ? { ...move.args, question: focusedText(task, entities) }
-          : move.args;
+          : move.tool === TOOL_NAMES.IDENTIFY_PROMOTION
+            ? promotionArgs(ticket, entities)
+            : move.args;
 
       const key = `${move.tool}:${JSON.stringify(args)}`;
       if (seen.has(key)) continue;
@@ -257,6 +287,81 @@ export function planMoves(ticket = {}, tasks = [], entities = {}, { limit = MAX_
   }
 
   return moves;
+}
+
+/**
+ * A task's opening moves, plus `identifyPromotion` wherever the customer
+ * mentions a code or describes an offer and the task's subject may use it.
+ *
+ * THIS IS WHERE AN AUTOMATIC-OFFER COMPLAINT FILED UNDER `order` GETS SEEN.
+ * Measured 2026-10-01: « le masque offert dès 65 € a été facturé », « frais de
+ * port facturés sur 260 € » and their like were filed `order`, `delivery` or
+ * `product_stock`, where nothing looked at promotions. The decomposer's own
+ * reading decides, so an order ticket that mentions no offer costs nothing.
+ */
+function withPromotionMove(ticket, task, entities = {}) {
+  const scoped = { ...ticket, category: task.category, request_kind: task.request_kind };
+  const moves = openingMoves(scoped);
+  if (moves.some((move) => move.tool === TOOL_NAMES.IDENTIFY_PROMOTION)) return moves;
+
+  const mentioned = (entities.codes?.length ?? 0) > 0 || (entities.offers?.length ?? 0) > 0;
+  const allowed = allowedTools(task.category, task.request_kind, ticket.level ?? 1).includes(TOOL_NAMES.IDENTIFY_PROMOTION);
+  return mentioned && allowed ? [...moves, { tool: TOOL_NAMES.IDENTIFY_PROMOTION, args: {} }] : moves;
+}
+
+/** The RAW text, as for code extraction, plus what the decomposer read. */
+function promotionArgs(ticket, entities = {}) {
+  return {
+    text: String(ticket.text || ''),
+    codes: entities.codes ?? [],
+    offers: entities.offers ?? []
+  };
+}
+
+/** At most this many promotions get an outcome check per ticket. */
+export const MAX_OUTCOME_CHECKS = 2;
+
+/**
+ * The calls that follow from what the opening moves FOUND.
+ *
+ * Opening moves are planned before anything runs, so they cannot pass along
+ * what identification returns. This is the one deterministic chain: each
+ * promotion `identifyPromotion` pinned down — a matched automatic offer by its
+ * title, a typed code the shop holds — gets `checkPromotionOutcome`. Having
+ * the model ask for it would be a turn spent reaching a foregone conclusion.
+ *
+ * Nothing is chained from an ambiguous match: checking one of five candidate
+ * gifts would evaluate an offer the customer may not mean.
+ */
+export function followUpMoves(ledger = [], allowedNames = [], { limit = MAX_OUTCOME_CHECKS } = {}) {
+  // A TYPED CODE IS LOOKED UP, as extraction once led the model to do. Without
+  // it `promotion_validity` stays unknown on a ticket that named its code, and
+  // the « aucun code identifié » rule asks the customer for the code they gave.
+  const lookups = allowedNames.includes(TOOL_NAMES.LOOKUP_PROMOTION)
+    ? [...new Set(ledger.filter((e) => e?.tool === TOOL_NAMES.IDENTIFY_PROMOTION).flatMap((e) => e.data?.knownCodes || []))]
+        .slice(0, limit)
+        .map((code) => ({ tool: TOOL_NAMES.LOOKUP_PROMOTION, args: { code } }))
+    : [];
+  if (!allowedNames.includes(TOOL_NAMES.CHECK_PROMOTION_OUTCOME)) return lookups;
+  const refs = [];
+  for (const entry of ledger) {
+    if (entry?.tool !== TOOL_NAMES.IDENTIFY_PROMOTION) continue;
+    for (const offer of entry.data?.offers || []) {
+      if (offer?.matched?.title) refs.push(offer.matched.title);
+      // A gift the customer described but identification could not pin among
+      // several: the ORDER may name it, by the free item that was charged. The
+      // empty reference asks the tool for exactly that, and nothing else.
+      else if (offer?.mechanic === 'gift' && (offer.candidates?.length ?? 0) > 0) refs.push('');
+    }
+    for (const code of entry.data?.knownCodes || []) refs.push(code);
+  }
+  return [
+    ...lookups,
+    ...[...new Set(refs)].slice(0, limit).map((promotion) => ({
+      tool: TOOL_NAMES.CHECK_PROMOTION_OUTCOME,
+      args: { promotion }
+    }))
+  ];
 }
 
 /**

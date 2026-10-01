@@ -1,6 +1,7 @@
 import { amount, days } from '../../../scripts/lib/parameters.mjs';
 import { amountAboveConsumerCeiling, deriveBuyerType } from './trade-signals.mjs';
 import { orderStates, toOrderContextText } from '../resolution/order-context.mjs';
+import { basketFromCheckout, basketFromOrder } from '../retrieval/promotion-outcome.mjs';
 
 import { toPromptText as photoPromptText } from './photo-evidence.mjs';
 
@@ -10,7 +11,7 @@ import { careGroupsInText } from '../retrieval/care-cues.mjs';
 import { concernsFromText } from '../retrieval/concern-cues.mjs';
 import { productLines } from '../retrieval/product-lines.mjs';
 
-import { planToolNames } from './decompose-rules.mjs';
+import { normaliseOffers, planToolNames } from './decompose-rules.mjs';
 import { policiesFor, policyCatalogue, renderPolicy } from '../../../scripts/lib/company-policies.mjs';
 import {
   CHECKOUT_WINDOW_DAYS,
@@ -119,6 +120,61 @@ const DEFINITIONS = {
       type: 'object',
       properties: { text: { type: 'string' } },
       required: ['text'],
+      additionalProperties: false
+    }
+  },
+  [TOOL_NAMES.IDENTIFY_PROMOTION]: {
+    description:
+      'Identifie la promotion dont parle le client : un CODE qu’il a saisi, ou une OFFRE ' +
+      'AUTOMATIQUE qui s’applique seule (livraison offerte, cadeau dès un montant, 3+1, remise). ' +
+      'Décris chaque offre comme le client la décrit ; la correspondance avec la boutique est ' +
+      'faite ici, jamais devinée.',
+    parameters: {
+      type: 'object',
+      properties: {
+        codes: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Les codes que le client a écrits, tels quels.'
+        },
+        offers: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              mechanic: {
+                type: 'string',
+                enum: ['free_shipping', 'gift', 'multi_buy', 'percent_off', 'amount_off', 'unclear']
+              },
+              threshold: { type: ['number', 'null'] },
+              percentage: { type: ['number', 'null'] },
+              product: { type: ['string', 'null'] }
+            },
+            required: ['mechanic', 'threshold', 'percentage', 'product'],
+            additionalProperties: false
+          }
+        }
+      },
+      required: ['codes', 'offers'],
+      additionalProperties: false
+    }
+  },
+  [TOOL_NAMES.CHECK_PROMOTION_OUTCOME]: {
+    description:
+      'Dit pourquoi UNE promotion identifiée s’est appliquée ou non à la commande du ticket, ' +
+      'ou à défaut au dernier panier abandonné du client : seuil, pays de livraison, articles ' +
+      'concernés, article offert absent du panier, cumul impossible avec une autre promotion.',
+    parameters: {
+      type: 'object',
+      properties: {
+        promotion: {
+          type: 'string',
+          description:
+            'Le code, ou le titre exact de l’offre tel que donné par identifyPromotion. Vide : ' +
+            'l’offre dont l’article offert a été facturé sur la commande.'
+        }
+      },
+      required: ['promotion'],
       additionalProperties: false
     }
   },
@@ -519,6 +575,81 @@ export function createToolRegistry({
         };
       },
 
+      // ALWAYS THE TICKET'S OWN TEXT, whatever `args.text` says: a code counts
+      // only if it is in the message, and the message is not the model's to
+      // supply. The offers ARE a reading of the message — the decomposer's, or
+      // the model's — and are matched against the shop here, never trusted.
+      async [TOOL_NAMES.IDENTIFY_PROMOTION](args = {}) {
+        const result = await promotionLookup.identify({
+          text: String(ticket.text || ''),
+          // No list means no reading was made, and the tool falls back to
+          // scanning the message itself; an empty list is a reading of "none".
+          codes: Array.isArray(args.codes) ? args.codes.map(String) : null,
+          offers: normaliseOffers(args.offers)
+        });
+        return {
+          outcome: result.kind,
+          caveats: result.kind === 'none' ? [] : ['basket_unseeable'],
+          promptText: result.promptText,
+          data: {
+            kind: result.kind,
+            codes: result.codes.map((c) => c.code),
+            // Codes the shop holds — the only ones an outcome can be checked for.
+            knownCodes: result.codes.filter((c) => c.known).map((c) => c.code),
+            offers: result.offers.map((o) => ({
+              mechanic: o.mention.mechanic,
+              matched: o.match ? { key: o.match.promotionKey, title: o.match.title, mechanic: o.match.mechanic, status: o.match.status } : null,
+              candidates: o.candidates.map((c) => c.title)
+            })),
+            codeCandidates: result.codeCandidates.map((c) => c.code || c.title)
+          }
+        };
+      },
+
+      // THE ORDER FIRST, the abandoned checkout only when there is none: a
+      // placed order is what the customer is complaining about, and the
+      // checkout is a snapshot of a basket that may since have changed.
+      async [TOOL_NAMES.CHECK_PROMOTION_OUTCOME](args = {}) {
+        let basket = null;
+        if (ticket.shopify_order_number && ticket.resolvedContext?.order) {
+          basket = basketFromOrder(ticket.resolvedContext.order);
+        } else if (checkoutLookup) {
+          const identified = await customerLookup.lookupCustomer({ ticket });
+          const email = identified.found ? identified.customer?.email || null : null;
+          if (email) {
+            const found = await checkoutLookup({ email, since: new Date(Date.now() - CHECKOUT_WINDOW_DAYS * 86_400_000) });
+            if (found?.found) basket = basketFromCheckout(found.checkout);
+          }
+        }
+
+        const result = await promotionLookup.outcome({ ref: String(args.promotion || ''), basket });
+        if (!result.found) {
+          return {
+            outcome: 'not_found',
+            caveats: [],
+            promptText: result.promptText,
+            data: { found: false, outcome: null }
+          };
+        }
+        return {
+          outcome: result.outcome,
+          caveats: result.basketSource === 'order' ? [] : ['basket_unseeable'],
+          promptText: result.promptText,
+          // Reasons and ids only: the French stays in promptText.
+          data: {
+            found: true,
+            outcome: result.outcome,
+            promotion: result.promotion?.title ?? null,
+            // Set when the order's charged free item named a different offer
+            // from the one asked about — the reply must say which.
+            instead: result.instead ?? null,
+            mechanic: result.mechanic,
+            basket: result.basketSource,
+            checks: result.checks.map((c) => ({ id: c.id, status: c.status, reason: c.reason ?? null, with: c.with ?? null }))
+          }
+        };
+      },
+
       async [TOOL_NAMES.LOOKUP_PROMOTION](args = {}) {
         // THE CODE MUST BE THE CUSTOMER'S, not the model's.
         //
@@ -604,6 +735,13 @@ export function createToolRegistry({
           };
         }
         const { specific, general } = await promotionLookup.offersForProduct(product.shopifyProductId);
+        // MOST USED FIRST, in both lists: the lookup ranks by orders in the
+        // last 30 days. The order is the signal; the count is never shown.
+        const offerLine = (p) =>
+          p.kind === 'automatic'
+            ? `- « ${p.title} » (offre automatique, sans code) : ${p.summary || p.title}`
+            : `- ${p.code || p.title} : ${p.summary || p.title}`;
+        const generalLines = general.slice(0, 5).map(offerLine);
         if (specific.length > 0) {
           return {
             outcome: 'found',
@@ -611,16 +749,21 @@ export function createToolRegistry({
             // rides with it — see `promotion_limits_internal`.
             caveats: ['basket_unseeable', 'promotion_limits_internal'],
             promptText:
-              `Offre propre à ${product.title} :\n` +
-              specific.map((p) => `- ${p.code || p.title} : ${p.summary || p.title}`).join('\n'),
-            data: { product: product.title, specific, general }
+              `Offre propre à ${product.title}, la plus utilisée en premier :\n` +
+              specific.map(offerLine).join('\n') +
+              (generalLines.length > 0 ? `\nOffres générales en cours :\n${generalLines.join('\n')}` : ''),
+            // `specificKind` is the TOP offer's kind, which the finding branches
+            // on: a code is given exactly, an automatic offer has no code to give.
+            data: { product: product.title, specific, general, specificKind: specific[0].kind }
           };
         }
         if (general.length > 0) {
           return {
             outcome: 'general',
             caveats: ['basket_unseeable', 'promotion_limits_internal'],
-            promptText: `Aucune offre propre à ${product.title}. Des remises générales existent.`,
+            promptText:
+              `Aucune offre propre à ${product.title}. Offres générales en cours, la plus utilisée en premier :\n` +
+              generalLines.join('\n'),
             data: { product: product.title, specific: [], general }
           };
         }
@@ -633,15 +776,21 @@ export function createToolRegistry({
       },
 
       async [TOOL_NAMES.LIST_ACTIVE_PROMOTIONS]() {
-        const { promotions, total, truncated } = await promotionLookup.listActive();
+        const { promotions, total, truncated, withheld = 0 } = await promotionLookup.listActive();
         // A discount with many codes has no single code to name — each belongs
         // to one customer. Say how many exist instead, which is the fact that
         // actually answers "why can't you just give me one?".
+        // An automatic offer says so: it needs no code and applies itself, which
+        // is the first thing to tell a customer who is looking for one to type.
         const line = (p) =>
           p.code
             ? `- ${p.code} : ${p.summary || p.title}`
             : `- ${p.title} : ${p.summary || p.title}` +
-              (p.codeCount > 1 ? ` (code personnel, ${p.codeCount} générés)` : '');
+              (p.method === 'automatic'
+                ? ' (offre automatique, sans code)'
+                : p.codeCount > 1
+                  ? ` (code personnel, ${p.codeCount} générés)`
+                  : '');
 
         return {
           outcome: promotions.length > 0 ? 'found' : 'none',
@@ -649,7 +798,8 @@ export function createToolRegistry({
           promptText:
             promotions.length > 0
               ? promotions.map(line).join('\n') +
-                (truncated ? `\n(…${total - promotions.length} autres offres actives non listées)` : '')
+                (truncated ? `\n(…${total - promotions.length} autres offres actives non listées)` : '') +
+                (withheld > 0 ? `\n(${withheld} autres codes actifs ne sont pas proposables en réponse : ne pas les citer.)` : '')
               : 'Aucune promotion active actuellement.',
           data: { count: promotions.length, total }
         };

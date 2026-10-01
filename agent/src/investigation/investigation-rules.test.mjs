@@ -68,7 +68,10 @@ test('the exact tool set for each enabled subject', () => {
   assert.deepEqual(allowedTools('product_stock', 'question', 2), [
     TOOL_NAMES.LOOKUP_STOCK,
     TOOL_NAMES.LOOKUP_PRODUCT,
-    TOOL_NAMES.LOOKUP_PRODUCT_OFFER
+    TOOL_NAMES.LOOKUP_PRODUCT_OFFER,
+    // Added 2026-10-01: « le cadeau est en rupture » lands here.
+    TOOL_NAMES.IDENTIFY_PROMOTION,
+    TOOL_NAMES.CHECK_PROMOTION_OUTCOME
   ]);
   assert.deepEqual(allowedTools('account', 'problem', 2), [
     TOOL_NAMES.LOOKUP_CUSTOMER,
@@ -164,7 +167,7 @@ test('opening moves gather the deterministic evidence before any model turn', ()
   });
 
   assert.deepEqual(promotions.map((m) => m.tool), [
-    TOOL_NAMES.EXTRACT_PROMOTION_CODES,
+    TOOL_NAMES.IDENTIFY_PROMOTION,
     TOOL_NAMES.LOOKUP_CUSTOMER
   ]);
   assert.equal(promotions[0].args.text, 'le code BIENVENUE10 ne marche pas');

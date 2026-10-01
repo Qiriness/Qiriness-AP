@@ -16,6 +16,7 @@
  * Uses the SERVICE ROLE key. Never import from a client component.
  */
 
+import { promotionMechanic } from "../../../scripts/lib/promotion-mechanic.mjs";
 import { loadConfig } from "../../../scripts/lib/sync-config.mjs";
 import {
   createSupabaseClient,
@@ -24,7 +25,7 @@ import {
 } from "../../../scripts/lib/supabase-rest-client.mjs";
 
 import { KnowledgeNotFoundError, KnowledgeValidationError } from "./knowledge-errors";
-import type { OfferableCode, PromotionChoice } from "../types";
+import type { AutomaticOffer, OfferableCode, PromotionChoice, PromotionMechanic } from "../types";
 
 const TABLE = "promotions";
 
@@ -32,6 +33,10 @@ const COLUMNS =
   "promotion_key,title,codes,short_summary,summary,status,method,starts_at,ends_at," +
   "usage_limit,discount_usage_count,applies_once_per_customer,combines_with,discount_classes," +
   "offerable_in_replies";
+
+const AUTOMATIC_COLUMNS =
+  "promotion_key,title,discount_type,discount_classes,rule_snapshot,summary,short_summary," +
+  "status,ends_at,combines_with,describable_in_replies";
 
 function getSupabaseClient() {
   return createSupabaseClient(loadConfig(process.env as Record<string, string | undefined>));
@@ -142,11 +147,7 @@ function toChoice(row: Record<string, unknown>): PromotionChoice | null {
     return null;
   }
 
-  const combines = (row.combines_with ?? {}) as Record<string, unknown>;
-  const blocked: string[] = [];
-  if (combines.order_discounts === false) blocked.push("order discounts");
-  if (combines.product_discounts === false) blocked.push("product discounts");
-  if (combines.shipping_discounts === false) blocked.push("shipping discounts");
+  const blocked = blockedCombinations(row);
 
   const limit = row.usage_limit === null || row.usage_limit === undefined ? null : Number(row.usage_limit);
   const used = Number(row.discount_usage_count ?? 0);
@@ -161,8 +162,78 @@ function toChoice(row: Record<string, unknown>): PromotionChoice | null {
     summary: String(row.short_summary ?? row.summary ?? "").trim() || null,
     endsAt: (row.ends_at as string) ?? null,
     oncePerCustomer: row.applies_once_per_customer === true,
-    stacksWith: blocked.length === 0 ? null : blocked,
+    stacksWith: blocked,
     usage: { used, limit },
     offerable: row.offerable_in_replies === true,
+  };
+}
+
+/** What a discount cannot be combined with, from Shopify's `combines_with`; null when nothing. */
+function blockedCombinations(row: Record<string, unknown>): string[] | null {
+  const combines = (row.combines_with ?? {}) as Record<string, unknown>;
+  const blocked: string[] = [];
+  if (combines.order_discounts === false) blocked.push("order discounts");
+  if (combines.product_discounts === false) blocked.push("product discounts");
+  if (combines.shipping_discounts === false) blocked.push("shipping discounts");
+  return blocked.length === 0 ? null : blocked;
+}
+
+/**
+ * Every active AUTOMATIC offer, each describable to customers unless switched off.
+ *
+ * The opposite default to codes, deliberately: an automatic offer is advertised
+ * on the site and applies itself, so describing it hands nobody a key. Its
+ * label comes from Shopify's structure, never its title — nobody maintains it.
+ */
+export async function listAutomaticOffers(shopId: string): Promise<AutomaticOffer[]> {
+  const rows = (await supabaseSelect(
+    getSupabaseClient(),
+    TABLE,
+    { shop_id: shopId, status: "ACTIVE", method: "automatic", deleted_at: { operator: "is", value: "null" } },
+    AUTOMATIC_COLUMNS
+  )) as Record<string, unknown>[];
+
+  return (rows ?? []).map(toAutomaticOffer).sort((a, b) => a.title.localeCompare(b.title));
+}
+
+/** Lets support describe one automatic offer, or keeps it out of replies. */
+export async function setOfferDescribable(
+  shopId: string,
+  promotionKey: string,
+  describable: boolean
+): Promise<AutomaticOffer> {
+  if (!promotionKey.trim()) {
+    throw new KnowledgeValidationError("A promotion key is required.");
+  }
+
+  // `method: automatic` in the filter: this switch has no meaning on a code,
+  // whose offerability is `setPromotionOfferable`'s.
+  const rows = (await supabaseUpdate(
+    getSupabaseClient(),
+    TABLE,
+    { shop_id: shopId, promotion_key: promotionKey, method: "automatic" },
+    { describable_in_replies: describable },
+    { select: AUTOMATIC_COLUMNS }
+  )) as Record<string, unknown>[];
+
+  const updated = (rows ?? [])[0];
+  if (!updated) {
+    throw new KnowledgeNotFoundError(`No automatic offer found for ${promotionKey}.`);
+  }
+  return toAutomaticOffer(updated);
+}
+
+function toAutomaticOffer(row: Record<string, unknown>): AutomaticOffer {
+  return {
+    promotionKey: String(row.promotion_key),
+    title: String(row.title ?? row.promotion_key),
+    mechanic: promotionMechanic(row) as PromotionMechanic,
+    // The long summary here, unlike codes: for an automatic offer the
+    // conditions ARE the offer (« Minimum purchase of €70.00 • For France »).
+    summary: String(row.summary ?? row.short_summary ?? "").trim() || null,
+    endsAt: (row.ends_at as string) ?? null,
+    stacksWith: blockedCombinations(row),
+    // `!== false`: the column defaults to true, and so does its absence.
+    describable: row.describable_in_replies !== false,
   };
 }

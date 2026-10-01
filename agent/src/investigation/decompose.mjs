@@ -1,6 +1,8 @@
 import { REQUEST_KINDS, TICKET_SUBJECTS } from '../../../scripts/lib/support-taxonomy.mjs';
 
-import { MAX_TASKS, normaliseDecomposition } from './decompose-rules.mjs';
+import { DESCRIBED_MECHANIC_KEYS } from '../retrieval/promotion-lookup.mjs';
+
+import { MAX_OFFER_MENTIONS, MAX_TASKS, normaliseDecomposition } from './decompose-rules.mjs';
 import { NEED_KEYS, needLabel, normaliseNeeds } from './evidence-rules.mjs';
 
 // Reads one email and answers two questions before any tool runs: WHAT IS BEING
@@ -52,11 +54,28 @@ const DECOMPOSITION_SCHEMA = {
     entities: {
       type: 'object',
       additionalProperties: false,
-      required: ['order_numbers', 'products', 'codes'],
+      required: ['order_numbers', 'products', 'codes', 'offers'],
       properties: {
         order_numbers: { type: 'array', items: { type: 'string' } },
         products: { type: 'array', items: { type: 'string' } },
-        codes: { type: 'array', items: { type: 'string' } }
+        codes: { type: 'array', items: { type: 'string' } },
+        // The offers the customer DESCRIBES, as they describe them. Matched to the
+        // shop's promotions by code (`identifyPromotion`), never by this model.
+        offers: {
+          type: 'array',
+          maxItems: MAX_OFFER_MENTIONS,
+          items: {
+            type: 'object',
+            additionalProperties: false,
+            required: ['mechanic', 'threshold', 'percentage', 'product'],
+            properties: {
+              mechanic: { type: 'string', enum: [...DESCRIBED_MECHANIC_KEYS] },
+              threshold: { type: ['number', 'null'] },
+              percentage: { type: ['number', 'null'] },
+              product: { type: ['string', 'null'] }
+            }
+          }
+        }
       }
     }
   }
@@ -82,6 +101,12 @@ const SYSTEM_PROMPT = [
   "- order_numbers : uniquement des numéros de commande explicites (#4854, « commande n° 3985 »). Une date, un montant, un code postal ou une référence interne commençant par Q00 ne sont PAS des numéros de commande. Dans le doute, laisse vide.",
   '- products : les noms de produits cités, tels quels.',
   '- codes : les codes promotionnels cités, tels quels.',
+  "- offers : chaque offre ou avantage que le client évoque SANS forcément citer de code, tel qu'il le décrit (au plus " + MAX_OFFER_MENTIONS + ') :',
+  '  - mechanic : free_shipping (livraison / frais de port offerts), gift (un cadeau ou un produit offert, avec ou sans montant d’achat — « le cadeau est facturé », « un cadeau exclusif », « le masque offert dès 65 € »), multi_buy (« 3 achetés, le 4e offert »), percent_off (une remise en %), amount_off (une remise en €), unclear (une offre dont on ne sait pas la nature).',
+  '  - threshold : le montant d’achat évoqué (« dès 65 € » → 65), sinon null.',
+  '  - percentage : le pourcentage évoqué (« -20 % » → 20), sinon null.',
+  '  - product : le produit offert ou concerné, dans les mots du client, sinon null.',
+  "  Un code cité va dans codes, pas ici. Si le client n'évoque aucune offre, laisse offers vide.",
   '',
   'needs : ce qu’une bonne réponse devra pouvoir AFFIRMER pour traiter ce message.',
   "Choisis uniquement dans cette liste, et uniquement ce qui est vraiment nécessaire — pas tout ce qui pourrait servir :",

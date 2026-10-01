@@ -17,6 +17,7 @@ const NEED_LABELS: Record<string, string> = {
   promotion_identity: "Which promotion is this",
   promotion_validity: "Whether the code is live",
   promotion_eligibility: "Whether this order qualifies",
+  promotion_outcome: "Why the promotion did or did not apply",
   product_identity: "Which product is this",
   product_property: "A fact about the product",
   product_availability: "Whether it is in stock",

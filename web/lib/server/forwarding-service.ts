@@ -14,6 +14,7 @@
  * read or write. Never import this from a client component.
  */
 
+import { cache } from "react";
 import { loadConfig } from "../../../scripts/lib/sync-config.mjs";
 import {
   createSupabaseClient,
@@ -30,6 +31,7 @@ import {
   normaliseAckSettings,
   normaliseDestination,
 } from "../../../scripts/lib/forwarding-destinations.mjs";
+import { forwardingTag } from "../../../scripts/lib/forwarding-tag.mjs";
 import { KnowledgeNotFoundError, KnowledgeValidationError } from "./knowledge-errors";
 import type {
   ForwardingAckSettings,
@@ -39,6 +41,7 @@ import type {
   ForwardTiming,
   KnowledgeCategory,
   RequestKind,
+  TicketForwarding,
 } from "../types";
 
 const DESTINATION_COLUMNS =
@@ -256,3 +259,50 @@ function toDestination(row: DestinationRow): ForwardingDestination {
     activeSince: row.active_since,
   };
 }
+
+/** Answers « is this ticket being handed to a colleague? » for one queue row. */
+export type ForwardingFacts = (ticketId: string, category: string | null) => TicketForwarding | null;
+
+export const NO_FORWARDING: ForwardingFacts = () => null;
+
+/**
+ * The forwarding tag for every ticket in the shop, read once per request: the
+ * switch, the destinations, the router's decisions and the attempts — four small
+ * reads whatever the list size. The tag itself is `forwardingTag`
+ * (scripts/lib/forwarding-tag.mjs), which only reports what the pass decided or did.
+ */
+export const readForwardingFacts = cache(async (shopId: string): Promise<ForwardingFacts> => {
+  const supabase = getSupabaseClient();
+  const [settings, destinations, routing, forwards] = (await Promise.all([
+    supabaseSelect(supabase, T.FORWARDING_SETTINGS, { shop_id: shopId }, "forward_since"),
+    supabaseSelectAll(supabase, T.FORWARDING_DESTINATIONS, { shop_id: shopId }, DESTINATION_COLUMNS),
+    supabaseSelectAll(
+      supabase,
+      T.TICKET_ROUTING,
+      { shop_id: shopId, outcome: "forward" },
+      "ticket_id,outcome,category,destination_id,destination_label"
+    ),
+    supabaseSelectAll(supabase, T.TICKET_FORWARDS, { shop_id: shopId }, "ticket_id,status,destination_label,created_at"),
+  ])) as [{ forward_since: string | null }[] | null, DestinationRow[], any[], any[]];
+
+  const switchedOn = Boolean(settings?.[0]?.forward_since);
+  const routingByTicket = new Map(routing.map((row) => [row.ticket_id, row]));
+  const forwardsByTicket = new Map<string, any[]>();
+  for (const row of forwards) {
+    forwardsByTicket.set(row.ticket_id, [...(forwardsByTicket.get(row.ticket_id) ?? []), row]);
+  }
+  const destinationById = new Map(destinations.map((row) => [row.id, row]));
+
+  return (ticketId, category) => {
+    const route = routingByTicket.get(ticketId) ?? null;
+    const attempts = forwardsByTicket.get(ticketId) ?? [];
+    if (!route && attempts.length === 0) return null;
+    return forwardingTag({
+      ticketCategory: category,
+      routing: route,
+      forwards: attempts,
+      destination: route?.destination_id ? destinationById.get(route.destination_id) ?? null : null,
+      switchedOn,
+    }) as TicketForwarding | null;
+  };
+});

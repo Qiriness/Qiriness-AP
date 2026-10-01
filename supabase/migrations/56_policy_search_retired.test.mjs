@@ -12,15 +12,19 @@ const squash = (text) => String(text ?? '').replace(/\s+/g, ' ').trim();
 const NEEDS = 'support_exemplars_requirement_needs_check';
 const SLOTS = 'knowledge_documents_core_topic_check';
 
-test('56 carries the baseline checks, not retyped ones', () => {
-  for (const [name, baseline] of [[NEEDS, EXEMPLARS], [SLOTS, KNOWLEDGE]]) {
-    assert.ok(checkClause(SQL, name), name);
-    assert.equal(squash(checkClause(SQL, name)), squash(checkClause(baseline, name)), name);
-  }
+// 56 WAS THE HEAD OF THE NEEDS CHECK UNTIL 58 added `promotion_outcome`
+// (2026-10-01). An applied migration is not edited to keep up: 56 is the
+// baseline of its day, which is today's baseline minus what 58 added.
+const ADDED_BY_58 = ['promotion_outcome'];
+const minus = (list, gone) => list.filter((item) => !gone.includes(item));
+
+test('56 carries the baseline checks of its day, not retyped ones', () => {
+  assert.equal(squash(checkClause(SQL, SLOTS)), squash(checkClause(KNOWLEDGE, SLOTS)));
+  assert.deepEqual(literalsIn(checkClause(SQL, NEEDS)), minus(literalsIn(checkClause(EXEMPLARS, NEEDS)), ADDED_BY_58));
 });
 
 test('the head of the needs check is the code vocabulary, and policy_answer is gone from both', () => {
-  assert.deepEqual(literalsIn(checkClause(SQL, NEEDS)), [...NEED_KEYS].sort());
+  assert.deepEqual(literalsIn(checkClause(SQL, NEEDS)), minus([...NEED_KEYS], ADDED_BY_58).sort());
   assert.ok(!NEED_KEYS.includes('policy_answer'));
 });
 

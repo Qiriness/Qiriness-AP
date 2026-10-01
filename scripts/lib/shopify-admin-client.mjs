@@ -40,6 +40,7 @@ export const ORDER_RETURN_PAGE_SIZE = 10;
 /** Promotions on one order. Ten is far above anything this shop has ever run. */
 export const ORDER_DISCOUNT_PAGE_SIZE = 10;
 export const DISCOUNT_CODE_PAGE_SIZE = 100;
+export const DISCOUNT_ITEM_PAGE_SIZE = 250;
 
 /**
  * Collections per page, and products per collection.
@@ -571,6 +572,10 @@ const DISCOUNT_ITEMS_FIELDS = `#graphql
               }
               ... on DiscountProducts {
                 products(first: 20) {
+                  pageInfo {
+                    hasNextPage
+                    endCursor
+                  }
                   nodes {
                     id
                     title
@@ -579,11 +584,30 @@ const DISCOUNT_ITEMS_FIELDS = `#graphql
               }
               ... on DiscountCollections {
                 collections(first: 20) {
+                  pageInfo {
+                    hasNextPage
+                    endCursor
+                  }
                   nodes {
                     id
                     title
                   }
                 }
+              }
+`;
+
+// WHERE A SHIPPING DISCOUNT APPLIES. Only the type name used to be stored, so
+// "free shipping from 70 EUR" read as worldwide while Shopify applied it to
+// France alone — and a customer abroad with a 260 EUR basket could not be told
+// why they were charged shipping.
+const DESTINATION_SELECTION_FIELDS = `#graphql
+              __typename
+              ... on DiscountCountryAll {
+                allCountries
+              }
+              ... on DiscountCountries {
+                countries
+                includeRestOfWorld
               }
 `;
 
@@ -614,6 +638,26 @@ const CUSTOMER_GETS_FIELDS = `#graphql
                     currencyCode
                   }
                   appliesOnEachItem
+                }
+                # A buy-X-get-Y reward: HOW MANY items, and how much off them.
+                # Without it « 1 article offert » and « -50 % sur le 2e » were
+                # the same empty value.
+                ... on DiscountOnQuantity {
+                  quantity {
+                    quantity
+                  }
+                  effect {
+                    __typename
+                    ... on DiscountPercentage {
+                      percentage
+                    }
+                    ... on DiscountAmount {
+                      amount {
+                        amount
+                        currencyCode
+                      }
+                    }
+                  }
                 }
               }
               items {
@@ -793,7 +837,7 @@ const DISCOUNTS_QUERY = `#graphql
               count
             }
             destinationSelection {
-              __typename
+              ${DESTINATION_SELECTION_FIELDS}
             }
             minimumRequirement {
               ${MINIMUM_REQUIREMENT_FIELDS}
@@ -912,7 +956,7 @@ const DISCOUNTS_QUERY = `#graphql
               shippingDiscounts
             }
             destinationSelection {
-              __typename
+              ${DESTINATION_SELECTION_FIELDS}
             }
             minimumRequirement {
               ${MINIMUM_REQUIREMENT_FIELDS}
@@ -1027,6 +1071,60 @@ const DISCOUNT_CODES_QUERY = `#graphql
     }
   }
 `;
+
+// The discount types that carry each leg. `customerBuys` exists only on the
+// buy-X-get-Y types; asking for it on the others is a schema error.
+const DISCOUNT_ITEM_LEG_TYPES = {
+  customerGets: ['DiscountCodeBasic', 'DiscountCodeBxgy', 'DiscountAutomaticBasic', 'DiscountAutomaticBxgy'],
+  customerBuys: ['DiscountCodeBxgy', 'DiscountAutomaticBxgy']
+};
+
+/**
+ * The rest of one leg's product or collection list, past the first page the
+ * discount listing carries.
+ *
+ * Built per leg rather than fetched in the listing at full size: the listing
+ * asks for every discount at once, and 250 products under each of them would
+ * spend the query-cost budget on the minority of discounts whose list is long.
+ * Only one of `products` / `collections` exists on a given items value, so one
+ * cursor serves both selections.
+ */
+function buildDiscountItemsQuery(leg) {
+  const types = DISCOUNT_ITEM_LEG_TYPES[leg];
+  if (!types) {
+    throw new Error(`Unknown discount item leg: ${leg}`);
+  }
+  const fragments = types.map((type) => `
+        ... on ${type} {
+          ${leg} {
+            items {
+              __typename
+              ... on DiscountProducts {
+                products(first: $itemFirst, after: $after) {
+                  pageInfo { hasNextPage endCursor }
+                  nodes { id title }
+                }
+              }
+              ... on DiscountCollections {
+                collections(first: $itemFirst, after: $after) {
+                  pageInfo { hasNextPage endCursor }
+                  nodes { id title }
+                }
+              }
+            }
+          }
+        }`).join('');
+  return `#graphql
+  query DiscountItemsPage($id: ID!, $itemFirst: Int!, $after: String) {
+    discountNode(id: $id) {
+      id
+      discount {
+        __typename${fragments}
+      }
+    }
+  }
+`;
+}
 
 export async function createShopifyClient(config) {
   const token = config.shopifyToken || await requestShopifyAccessToken(config);
@@ -1323,6 +1421,28 @@ export async function fetchDiscountRedeemCodePage(shopify, discountNodeId, curso
   });
 
   return data.discountNode?.discount?.codes || {
+    nodes: [],
+    pageInfo: {
+      hasNextPage: false,
+      endCursor: null
+    }
+  };
+}
+
+/**
+ * One further page of a discount leg's products or collections.
+ * `leg` is `customerGets` or `customerBuys`; returns the connection, or an
+ * empty one when the discount no longer has that leg.
+ */
+export async function fetchDiscountItemsPage(shopify, discountNodeId, leg, cursor) {
+  const data = await shopifyGraphql(shopify, buildDiscountItemsQuery(leg), {
+    id: discountNodeId,
+    after: cursor,
+    itemFirst: DISCOUNT_ITEM_PAGE_SIZE
+  });
+
+  const items = data.discountNode?.discount?.[leg]?.items;
+  return items?.products || items?.collections || {
     nodes: [],
     pageInfo: {
       hasNextPage: false,

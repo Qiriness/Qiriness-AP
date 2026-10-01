@@ -534,6 +534,20 @@ export interface TicketListItem {
   snooze: TicketSnooze | null;
   /** The last wake in the past 24 hours, so a ticket that just came back is marked. */
   lastWake: TicketWake | null;
+  /** Handed, or about to be handed, to a colleague by the forwarding pass. Null when not. */
+  forwarding: TicketForwarding | null;
+}
+
+/** Mirrors FORWARDING_TAG_STATES in scripts/lib/forwarding-tag.mjs. */
+export type ForwardingTagState = "after_first_reply" | "pending" | "failed" | "forwarded";
+
+/** The forwarding tag on a queue row (scripts/lib/forwarding-tag.mjs). */
+export interface TicketForwarding {
+  /** The destination's label, e.g. « Cosmétovigilance ». */
+  destination: string | null;
+  state: ForwardingTagState;
+  /** When the latest forward went; null until one has. */
+  at: string | null;
 }
 
 /* ------------------------------------------------------- snooze */
@@ -2516,6 +2530,35 @@ export interface AdviceCollection {
 /** The curated subset, as the reply screen sees it. Same shape, minus the flag. */
 export type OfferableCode = Omit<PromotionChoice, "offerable" | "promotionKey">;
 
+/** What a promotion does — derived from Shopify's structure, see scripts/lib/promotion-mechanic.mjs. */
+export type PromotionMechanic =
+  | "free_shipping"
+  | "gift"
+  | "multi_buy"
+  | "order_discount"
+  | "product_discount"
+  | "app"
+  | "unknown";
+
+/**
+ * One active AUTOMATIC offer, as the promotions screen shows it.
+ *
+ * Unlike a code there is nothing to hand out: the offer is advertised and
+ * applies itself, so `describable` defaults to true and an operator only ever
+ * switches it OFF.
+ */
+export interface AutomaticOffer {
+  promotionKey: string;
+  title: string;
+  mechanic: PromotionMechanic;
+  /** Shopify's own summary, conditions included ("Minimum purchase of €70.00 • For France"). */
+  summary: string | null;
+  endsAt: string | null;
+  /** What it cannot be combined with, or null — same reading as PromotionChoice.stacksWith. */
+  stacksWith: string[] | null;
+  describable: boolean;
+}
+
 /**
  * One policy rule — a row of `support_answers`.
  *
@@ -2660,6 +2703,15 @@ export interface PolicySituation {
    * yet still shows the evidence it branches on rather than every need there is.
    */
   requirementNeeds: string[];
+  /** Where this situation's tickets are forwarded while forwarding is on; null when they stay. */
+  forwarding: SituationForwarding | null;
+}
+
+/** situationForwarding in scripts/lib/forwarding-tag.mjs: the worker's plan for a situation's category. */
+export interface SituationForwarding {
+  /** `fixed`: always this destination. `choose`: the agent picks one of these, or keeps the ticket. */
+  route: "fixed" | "choose";
+  destinations: { label: string; timing: ForwardTiming }[];
 }
 
 /**

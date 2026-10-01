@@ -27,6 +27,108 @@ Three sibling files carry the other halves, and this one deliberately does not d
   - The same guide as a popup from the top right of the Knowledge page, above « Test the agent » (`FaqGuideDialog`, on the shared `Dialog`).
 - **Proven:** retrieval 274/0; chunker, taxonomy and category tests pass; migration 58 tests pass and the live constraint matches; root suite 4114 pass (the same 19 old analytics failures); `tsc` and lint on `web/`. **Not yet:** the panel and labels seen in the browser; a retrieval eval run with the new groups (`npm run eval:diagnose`).
 
+## Cosmetovigilance on its policy; forwarded tickets tagged (2026-10-01)
+
+- **Built:**
+  - The cosmetovigilance rules branch on `policy_attached`, as D-33 does. CV-01, CV-02 and CV-04 each have two rules on `attached` (product named or not) that answer from `product_reaction_complaint_policy` only: product and batch number, place of purchase, an optional photo, what happens next for each purchase route, and see a specialist if symptoms persist. Each also has a `not_attached` fallback that hands over to a person. CV-03 has both branches too. 11 rows written to `support_answers`; `reaction_signalee` is unchanged.
+  - The « stop / layering / cautious reintroduction » advice is gone: the policy does not contain it.
+  - The ticket queue tags a ticket the forwarding pass is handing to a colleague: after first reply, pending, failed, or forwarded. A chip on the row and a line under the header. The Rules page tags a situation whose category is forwarded, in the rail and under the canvas title (`situationForwarding`, the worker's `planRoute`); 4 of 40 today, CV-01 to CV-04. `scripts/lib/forwarding-tag.mjs`, `readForwardingFacts` in `forwarding-service.ts`, `ForwardingTag.tsx`.
+- **Proven:** rule selection checked offline for every situation, policy state and product state. A rehearsal selected the attached CV-01 rule with every check passing. forwarding-tag 10/0; agent 1835/0; root 4044 pass (the same 19 old analytics failures); `tsc` and lint on `web/`. **Not yet:** the tag seen on a real ticket; the fallback rehearsed with the policy switched off (VALIDATION_LOG 24).
+
+## Promotions: offers named only if usable, ranked by use; P-21 drafts (2026-10-01)
+
+- **Built:**
+  - `listActivePromotions` names only offerable codes and describable automatic offers; the rest are counted, not named.
+  - `lookupProductOffer` includes automatic offers, on the products that earn them and the one they give.
+  - Both lists are ranked by orders in the last 30 days (`loadRecentUsage`).
+  - `product_offer` gains `specific_automatic`; `specific` still means a code.
+  - P-21 drafts: new `p21_offre_auto_produit`, rewritten `p21_offre_en_cours`. The approved `p21_offre_produit` is unchanged.
+- **Proven:**
+  - Agent 1887/0.
+  - Live:
+    - The Monodose mask gets the 3+1, the LED mask `UKLED20`.
+    - The active list leads with Masque Or (61) and wrap vitaminé (59), with 19 codes withheld.
+  - P-21 enumerated: each `product_offer` value selects one rule.
+- **Not yet:**
+  - Drafts unapproved.
+  - The free-shipping usage gap (1,659 lifetime against 16 recent) is unexplained.
+
+## Promotions: rules for code vs automatic offers, as drafts (2026-10-01)
+
+- **Built:**
+  - 12 draft rules in the `promotions` set. Nine are shared and branch on `promotion_identity` × `promotion_outcome`; three are keyed to P-18.
+    - `aucun_code_identifie_code_seul` is the fix for the approved `aucun_code_identifie`. Approve one and withdraw the other together.
+  - The promotions rulebook opens whenever identification found a promotion, not only by category.
+  - A typed code is looked up deterministically after identification.
+- **Proven:**
+  - Every identity × outcome × validity combination under P-18, P-17 and no situation (360 cases) simulated: one rule or none, no ties.
+  - Both sets validated with the rule editor's own checks.
+  - Agent 1881/0.
+- **Not yet:**
+  - No rule approved: the live agent is unchanged until someone approves them.
+  - Wording not reviewed by the team.
+  - No end-to-end draft run on a real ticket.
+
+## Promotions: why an offer did or did not apply (2026-10-01)
+
+- **Built:**
+  - `promotion-outcome.mjs` (pure) and the `checkPromotionOutcome` tool. They check one promotion against the ticket's order, or else the last abandoned checkout: dates, delivery country, qualifying items, threshold (before and after discounts), the free item being in the basket, and combination with what else applied.
+  - It is chained automatically after `identifyPromotion`.
+  - A charged free item on the order names the offer when the customer's description pointed elsewhere.
+  - New need `promotion_outcome`. Migration 58, applied 2026-10-01, widens the situations' needs check.
+  - The collections sync also fills collections an active promotion is scoped to. Run 2026-10-01: « Masques Monodose », 10 products.
+  - Ticket panel labels for the new need.
+- **Proven:**
+  - Agent 1879/0; root 4157 pass (the same 19 old analytics failures); `tsc` and lint on `web/`.
+  - 49 real tickets with a confirmed order:
+    - #7072 free shipping refused as `outside_destination`.
+    - #4687 and #3440 as `expired`.
+    - #4977 « produits offerts manquants » as `applied`, which makes it a packing problem.
+    - All three #6452 tickets reach « Masque Or offert » `conditions_met`.
+- **Not yet:**
+  - Gifts left out of the basket or out of stock get no outcome.
+  - A 3+1 applied to one product of several reads `applied`.
+  - No rule branches on `promotion_outcome`.
+
+## Promotions: a ticket is identified as code or automatic offer (2026-10-01)
+
+- **Built:**
+  - `identifyPromotion` (`promotion-lookup.mjs` `identify`) matches the codes a customer typed and the offers they describe against the shop.
+    - It covers both kinds: codes, and automatic offers (free shipping, gift, 3+1, % or € off).
+    - The decomposer now reports described offers in `entities.offers`.
+  - The tool is the promotions opening move. It also runs on `order`, `delivery`, `payment` and `product_stock` tickets when an offer or code is mentioned.
+  - `promotion_identity` now takes `code` / `automatic` / `both` / `ambiguous` / `none` / `unknown`, and its details name the matched offers.
+  - The ticket panel shows the matched offers, or the candidates.
+- **Proven:**
+  - Agent 1856/0; root 4117 pass (the same 19 old analytics failures); `tsc` and lint on `web/`.
+  - Real decomposer plus matcher over 39 real promotion tickets: 35 agree with the hand label.
+- **Not yet:**
+  - No rule branches on the new values. P-18's « aucun code identifié » can still ask a free-shipping complaint for a code.
+  - The two « le cadeau … » misses are the decomposer's.
+
+## Promotions: offers labelled by what they do; automatic offers on the setup screen (2026-10-01)
+
+- **Built:**
+  - `scripts/lib/promotion-mechanic.mjs` labels every promotion from Shopify's structure: free shipping, gift, multi-buy, order or product discount, app. The title is never read, and nobody maintains the labels.
+  - The sync fetches the reward of a buy-X-get-Y offer (`DiscountOnQuantity`): how many items, and how much off them.
+  - Migration 57, applied 2026-10-01: `promotions.describable_in_replies`, default true. All 331 rows took the default.
+  - `/agent-setup/promotions` gains an « Automatic offers » list. Each offer shows its label, Shopify's summary and what it cannot be combined with. Its switch keeps the offer out of replies.
+  - `listActivePromotions` skips switched-off offers and marks the rest « offre automatique, sans code ».
+- **Proven:**
+  - Read-only run against live Shopify: all 331 discounts labelled, none `unknown`. The six gift and multi-buy offers report their item as free.
+  - Root 4075 pass (the same 19 old analytics failures); agent 1836/0; `tsc` and lint on `web/`.
+- **Not yet:**
+  - The screen has not been looked at.
+  - The reward value reaches `promotions` at the next sync.
+
+## Promotions sync: complete product lists, shipping destinations (2026-10-01)
+
+- **Built:**
+  - The discount sync fetches every product and collection a discount is scoped to. It used to stop at 20 without noticing. `expandDiscountItemPages` in `sync-shopify-promotions.mjs` follows the list only where Shopify says it continues, via `fetchDiscountItemsPage`.
+  - `rule_snapshot.destination` stores where a shipping discount applies (`all`, or country codes plus `include_rest_of_world`).
+  - First step of the code-vs-automatic promotion work. Measured beforehand: about as many automatic-offer tickets (gifts, 3+1, free shipping, sales) as code tickets, mostly filed outside `promotions`.
+- **Proven:** new mapper and expansion tests pass. Read-only run against live Shopify: wrap vitaminé 20 → 98 products, Masque Or 20 → 97, QIRINESS20 20 → 94, BIENVENUEQIRINESS 20 → 55; free shipping from 70 € → `FR` only. Synced to `promotions` 2026-10-01 (331 discounts); stored lists match, and the operator's `offerable_in_replies` choices survived the sync.
+
 ## Knowledge: policy search path and « Core setup » retired; list scrolls (2026-10-01)
 
 - **Built:**

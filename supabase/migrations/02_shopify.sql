@@ -805,6 +805,15 @@ create table public.promotions (
   -- a support reply one mis-click away; an operator has to say which codes may
   -- leave the building.
   offerable_in_replies boolean not null default false,
+  -- MAY SUPPORT DESCRIBE THIS AUTOMATIC OFFER TO A CUSTOMER? Local, the second
+  -- column Shopify does not own, and kept off the mapper for the same reason.
+  --
+  -- DEFAULT TRUE, the opposite of the column above, because the risk is the
+  -- opposite. An automatic offer is advertised on the site and applies itself:
+  -- describing « frais de port offerts dès 70 € » hands nobody a key, it
+  -- explains what the customer already saw. An operator switches one off only
+  -- to keep an offer out of replies. Meaningless on a code promotion.
+  describable_in_replies boolean not null default true,
   rule_snapshot jsonb not null default '{}'::jsonb,
   source_metadata jsonb not null default '{}'::jsonb,
   synced_at timestamptz not null default now(),
@@ -888,6 +897,9 @@ comment on column public.promotions.codes is
 
 comment on column public.promotions.offerable_in_replies is
   'LOCAL, not from Shopify: may support offer this code to a customer? Survives the sync because mapPromotionRow does not write it and the upsert merges duplicates -- nothing may ever add this key to the mapper. Defaults to false because "all active codes" includes a 100%-off product code and two partner rates on this shop, and a picker offering those is one mis-click from a free order.';
+
+comment on column public.promotions.describable_in_replies is
+  'LOCAL, not from Shopify: may support describe this AUTOMATIC offer (free shipping, gift with purchase, multi-buy) to a customer? Survives the sync like offerable_in_replies -- mapPromotionRow never writes it. Defaults to true because an automatic offer is advertised on the site and applies itself, so explaining it hands out nothing; an operator turns one off to keep it out of replies. Ignored on code promotions, which offerable_in_replies governs.';
 
 comment on column public.promotions.applies_once_per_customer is
   'Shopify appliesOncePerCustomer flag for manual filtering of customer-specific or one-use promotions.';

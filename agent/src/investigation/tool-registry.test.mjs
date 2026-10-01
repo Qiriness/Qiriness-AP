@@ -35,6 +35,20 @@ function buildRegistry(overrides = {}) {
       async extractCodes() {
         return ['BIENVENUE10'];
       },
+      async identify() {
+        return { kind: 'code', codes: [{ code: 'BIENVENUE10', known: true }], offers: [], codeCandidates: [], promptText: 'Type : code' };
+      },
+      async outcome() {
+        return {
+          found: true,
+          promotion: { title: 'BIENVENUE10' },
+          outcome: 'undetermined',
+          mechanic: 'order_discount',
+          basketSource: null,
+          checks: [{ id: 'basket', status: 'unknown' }],
+          promptText: '# « BIENVENUE10 » — impossible de trancher'
+        };
+      },
       async lookupPromotion() {
         return {
           found: true,

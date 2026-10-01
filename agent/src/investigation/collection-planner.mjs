@@ -85,6 +85,12 @@ export function argsFor(tool, { ticket = {}, ledger = [] } = {}) {
     case TOOL_NAMES.EXTRACT_PROMOTION_CODES:
       return text ? { text } : null;
 
+    // Typed codes only: the planner has no reading of the described offers,
+    // and inventing one would be fabricating evidence. The opening move, which
+    // has the decomposer's reading, is where described offers are matched.
+    case TOOL_NAMES.IDENTIFY_PROMOTION:
+      return text ? {} : null;
+
     // CHAINED, and the chain is why `DEPENDENCIES` puts `promotion_identity`
     // ahead of `promotion_validity`: the code has to be extracted before the
     // promotion can be looked up.
@@ -105,11 +111,11 @@ export function argsFor(tool, { ticket = {}, ledger = [] } = {}) {
   }
 }
 
-/** The first code `extractPromotionCodes` actually found in the message. */
+/** The first code the customer typed, as extraction or identification found it. */
 function firstExtractedCode(ledger = []) {
   for (let i = ledger.length - 1; i >= 0; i -= 1) {
     const entry = ledger[i];
-    if (entry?.tool !== TOOL_NAMES.EXTRACT_PROMOTION_CODES) continue;
+    if (entry?.tool !== TOOL_NAMES.EXTRACT_PROMOTION_CODES && entry?.tool !== TOOL_NAMES.IDENTIFY_PROMOTION) continue;
     const codes = entry.data?.codes;
     if (Array.isArray(codes) && codes.length > 0) {
       return String(codes[0]);

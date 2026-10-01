@@ -194,3 +194,77 @@ test('the mapper never writes offerable_in_replies', () => {
   );
   assert.ok(!('offerable_in_replies' in row), 'the sync would reset the operator’s choices');
 });
+
+test('a free-shipping discount stores the countries it applies to', () => {
+  const [row] = mapPromotionRows({
+    id: 'gid://shopify/DiscountAutomaticNode/9',
+    discount: {
+      __typename: 'DiscountAutomaticFreeShipping',
+      title: 'Frais de port offerts à partir de 70€',
+      status: 'ACTIVE',
+      destinationSelection: { __typename: 'DiscountCountries', countries: ['FR'], includeRestOfWorld: false },
+      minimumRequirement: {
+        __typename: 'DiscountMinimumSubtotal',
+        greaterThanOrEqualToSubtotal: { amount: '70.0', currencyCode: 'EUR' }
+      }
+    }
+  }, 'shop-id', '2026-10-01T00:00:00Z');
+
+  assert.deepEqual(row.rule_snapshot.destination, {
+    scope: 'countries',
+    countries: ['FR'],
+    include_rest_of_world: false
+  });
+  assert.equal(row.rule_snapshot.destination_selection_type, 'DiscountCountries');
+});
+
+test('a worldwide free-shipping discount says so, and a non-shipping one has no destination', () => {
+  const [worldwide] = mapPromotionRows({
+    id: 'gid://shopify/DiscountCodeNode/10',
+    discount: {
+      __typename: 'DiscountCodeFreeShipping',
+      title: 'LIVRAISONQ',
+      status: 'ACTIVE',
+      destinationSelection: { __typename: 'DiscountCountryAll', allCountries: true }
+    }
+  }, 'shop-id', '2026-10-01T00:00:00Z');
+  assert.deepEqual(worldwide.rule_snapshot.destination, { scope: 'all' });
+
+  const [basic] = mapPromotionRows({
+    id: 'gid://shopify/DiscountCodeNode/11',
+    discount: { __typename: 'DiscountCodeBasic', title: 'QIRINESS10', status: 'ACTIVE' }
+  }, 'shop-id', '2026-10-01T00:00:00Z');
+  assert.ok(!('destination' in basic.rule_snapshot));
+});
+
+test('the mapper never writes describable_in_replies either', () => {
+  // Same invariant as offerable_in_replies: the operator's choice to keep an
+  // automatic offer out of replies survives the sync only because it is absent.
+  const [row] = mapPromotionRows({
+    id: 'gid://shopify/DiscountAutomaticNode/12',
+    discount: { __typename: 'DiscountAutomaticFreeShipping', title: 'Frais de port offerts', status: 'ACTIVE' }
+  }, 'shop-id', '2026-10-01T00:00:00Z');
+  assert.ok(!('describable_in_replies' in row), 'the sync would reset the operator’s choices');
+});
+
+test('a buy-X-get-Y reward stores how many items and how much off them', () => {
+  const [row] = mapPromotionRows({
+    id: 'gid://shopify/DiscountAutomaticNode/13',
+    discount: {
+      __typename: 'DiscountAutomaticBxgy',
+      title: 'Masque offert dès 65€',
+      status: 'ACTIVE',
+      customerBuys: { value: { __typename: 'DiscountPurchaseAmount', amount: '65.0' } },
+      customerGets: {
+        value: {
+          __typename: 'DiscountOnQuantity',
+          quantity: { quantity: '1' },
+          effect: { __typename: 'DiscountPercentage', percentage: 1 }
+        }
+      }
+    }
+  }, 'shop-id', '2026-10-01T00:00:00Z');
+  assert.equal(row.rule_snapshot.customer_gets.percentage, 1);
+  assert.equal(row.rule_snapshot.customer_gets.quantity, 1);
+  assert.equal(row.rule_snapshot.customer_buys.amount, '65.0');
+});

@@ -9,6 +9,7 @@ import {
   planBudget,
   planEvidence,
   planMoves,
+  followUpMoves,
   planTasks
 } from './decompose-rules.mjs';
 import {
@@ -216,6 +217,11 @@ export function createInvestigator(
     for (const move of planMoves(ticket, plan.tasks, decomposition.entities)) {
       await run.call(move.tool, move.args, 'opening_move');
     }
+    // What the opening moves found decides the next deterministic call: an
+    // identified promotion is checked against the order or basket.
+    for (const move of followUpMoves(run.ledger, names)) {
+      await run.call(move.tool, move.args, 'opening_move');
+    }
 
     // THE MATCHED SITUATION'S POLICIES, read before the model's first turn: a
     // person linked them because every reply in this situation needs them, so
@@ -397,7 +403,7 @@ export function createInvestigator(
     // EVERY REQUEST THIS EMAIL CARRIES, each with its own rulebook and situation.
     // Resolved after the loop for the same reason the policy is selected there:
     // nothing about collection depends on it, so it cannot have steered the run.
-    const requests = await resolveRequests({ ticket, plan, policyForRequest, logger });
+    const requests = await resolveRequests({ ticket, plan, policyForRequest, logger, ledger: run.ledger });
 
     const final = await openai.completeWithTools({
       model,
@@ -524,7 +530,7 @@ export function createInvestigator(
  * loaded and situation-matched by the runner, and re-matching it here would spend
  * an embedding to reach the same answer less accurately.
  */
-async function resolveRequests({ ticket, plan, policyForRequest, logger }) {
+async function resolveRequests({ ticket, plan, policyForRequest, logger, ledger = [] }) {
   const primary = ticket.policy ?? null;
   const requests = primary ? [{ ...primary, question: null }] : [];
   if (!policyForRequest) return requests;
@@ -534,7 +540,13 @@ async function resolveRequests({ ticket, plan, policyForRequest, logger }) {
     ...plan.tasks.map((task) => ({ category: task.category, question: task.question })),
     // The categoriser's second axis, with the whole email as its text: there is no
     // sub-question to match on when the decomposer did not produce one.
-    { category: ticket.secondary_category, question: null }
+    { category: ticket.secondary_category, question: null },
+    // THE EVIDENCE'S OWN AXIS. Measured 2026-10-01: « le masque offert a été
+    // facturé » and « frais de port facturés sur 260 € » were filed `order`
+    // with no second subject, so the promotions rules never opened — while
+    // `identifyPromotion` had found the offer. A promotion found in the
+    // message is a promotions request, whatever the categoriser labelled it.
+    ...(promotionFound(ledger) ? [{ category: 'promotions', question: null }] : [])
   ];
 
   for (const candidate of candidates) {
@@ -563,6 +575,13 @@ async function resolveRequests({ ticket, plan, policyForRequest, logger }) {
   }
 
   return requests;
+}
+
+/** Whether identification found a code or an offer in the message. */
+export function promotionFound(ledger = []) {
+  return ledger.some(
+    (entry) => entry?.tool === TOOL_NAMES.IDENTIFY_PROMOTION && ['code', 'automatic', 'both', 'ambiguous'].includes(entry.outcome)
+  );
 }
 
 /**

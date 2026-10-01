@@ -41,6 +41,7 @@ import { actOnObligation, decideOnDraft, fetchTicketDetail, fetchTicketThread, s
 import { replyHtmlIsEmpty, textToReplyHtml } from "@/lib/reply-html";
 import { ReplyEditor, ReplyHtmlView } from "./ReplyEditor";
 import { SnoozeBanner, SnoozeChip, SnoozeControl, type SnoozeChange } from "./SnoozeControl";
+import { ForwardingBanner, ForwardingChip } from "./ForwardingTag";
 import { NO_DELAYS, isSnoozed, type SnoozeDelays } from "@/lib/snooze";
 import { formatRelativeTime } from "@/lib/relative-time";
 import { isBacklogTicket, isClosed, summariseTickets } from "@/lib/ticket-stats";
@@ -1185,6 +1186,7 @@ function TicketListPane({
                 <span className={styles.itemMeta}>
                   <span>{ticket.category ? t(`category.${ticket.category}`) : t("tickets.panels.uncategorised")}</span>
                   <SnoozeChip ticket={ticket} />
+                  <ForwardingChip forwarding={ticket.forwarding} />
                   <TicketLevelBadge ticket={ticket} />
                 </span>
               </button>
@@ -1355,6 +1357,7 @@ function TicketDetailWorkspace({
       </div>
 
       {ticket.snooze && <SnoozeBanner snooze={ticket.snooze} />}
+      {ticket.forwarding && <ForwardingBanner forwarding={ticket.forwarding} />}
 
       {detail?.results?.action && (
         <p className={styles.nextAction} title={detail.results.action}>

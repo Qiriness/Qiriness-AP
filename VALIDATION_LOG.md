@@ -2013,3 +2013,14 @@ Built and unit-tested. Migration 55 applied 2026-09-30 and read back through Pos
 4. **D-33 with its policy.** **Check:** in « Test the agent », « Livrez-vous en Suisse ? » reads `delivery_location_policy` as an opening move, selects `d33_livraison_documentee`, and the draft answers on Switzerland only.
 5. **The fallback.** **Check:** switch `delivery_location_policy` off and ask again: `d33_livraison_non_documentee` is selected and the ticket goes to a person. Switch it back on.
 6. **D-07.** **Check:** « Quels sont vos délais ? » selects `d07_delais` with `dispatch_time_policy` attached; with it off, `D07_reponse_generique` (which also offers a code and the newsletter).
+
+## 24. Cosmetovigilance on its policy, and the forwarding tag — 2026-10-01
+
+Rules written to `support_answers` 2026-10-01 (11 rows; the previous rows are kept in the session's scratchpad). Selection checked offline for every situation × `policy_attached` × `reaction_product`; one rehearsal of « rougeurs et irritations » selected `reaction_conduite_a_tenir` with every check passing. The tag is unit-tested; no ticket carries a routing decision yet, so it has not been seen on real data.
+
+1. **The fallback.** **Check:** switch `product_reaction_complaint_policy` off, rehearse the same message: `cv01_reaction_sans_politique` is selected, the verdict is `needs_human`, and the draft asks nothing and gives no advice. Switch it back on.
+2. **No product named, severe.** **Check:** « j'ai eu une grosse réaction, je veux être remboursée » with no product: `reaction_grave_produit_a_preciser`, asking product, batch number and place of purchase in one message, with no promise of a refund.
+3. **CV-03.** **Check:** « je suis enceinte, puis-je utiliser le sérum ? » selects `conseil_etat_de_sante`, answers nothing about the condition, and recommends a specialist.
+4. **The first real cosmetovigilance ticket since the switch.** **Check:** the queue row shows « To Cosmétovigilance after first reply » before our reply; after a person sends it, the next poll forwards it and the row shows « Forwarded to Cosmétovigilance ». The ticket stays in the queue with its status unchanged.
+5. **On screen.** **Check:** the chip fits a narrow list row next to the level badge, and the banner sits under the snooze banner.
+6. **Situations tagged on the Rules page.** **Check:** in the cosmetovigilance set, CV-01 to CV-04 each show « To Cosmétovigilance after 1st reply » in the rail and the sentence under the title. Switch the Cosmétovigilance destination off: the tags go after a reload. No other set shows one.

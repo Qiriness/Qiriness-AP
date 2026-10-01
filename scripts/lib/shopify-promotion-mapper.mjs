@@ -101,6 +101,7 @@ function buildRuleSnapshot(discount) {
     customer_gets: buildCustomerGets(discount.customerGets),
     customer_buys: buildCustomerBuys(discount.customerBuys),
     customer_selection: buildCustomerSelection(discount.customerSelection),
+    destination: buildDestination(discount.destinationSelection),
     maximum_shipping_price: discount.maximumShippingPrice || null,
     app_discount_type: discount.appDiscountType
       ? {
@@ -142,11 +143,16 @@ function buildCustomerGets(customerGets) {
     return null;
   }
   const value = customerGets.value || {};
+  // A buy-X-get-Y reward nests its value one level down, under `effect`, with
+  // the number of items beside it. Flattened to the same keys so a reader asks
+  // one question — "how much off?" — whatever the discount type.
+  const effect = value.effect || {};
   return stripUndefined({
-    percentage: value.percentage ?? undefined,
-    amount: value.amount?.amount ?? undefined,
-    currency: value.amount?.currencyCode ?? undefined,
+    percentage: value.percentage ?? effect.percentage ?? undefined,
+    amount: value.amount?.amount ?? effect.amount?.amount ?? undefined,
+    currency: value.amount?.currencyCode ?? effect.amount?.currencyCode ?? undefined,
     applies_on_each_item: value.appliesOnEachItem ?? undefined,
+    quantity: integerValue(value.quantity?.quantity) ?? undefined,
     items: buildDiscountItems(customerGets.items)
   });
 }
@@ -213,6 +219,29 @@ function buildCustomerSelection(selection) {
     // Ids only, never emails or names: this is a promotion rule snapshot, not a
     // customer record.
     return { scope: 'customers', customer_count: selection.customers.length };
+  }
+  return { scope: 'unknown' };
+}
+
+/**
+ * Where a shipping discount applies, as country codes. The summary text says
+ * "For France", but text is for people; an eligibility check compares the
+ * order's destination against a list. `include_rest_of_world` is Shopify's
+ * "and every country not listed" switch, kept because it inverts the meaning.
+ */
+function buildDestination(selection) {
+  if (!selection || !selection.__typename) {
+    return undefined;
+  }
+  if (selection.allCountries) {
+    return { scope: 'all' };
+  }
+  if (Array.isArray(selection.countries)) {
+    return {
+      scope: 'countries',
+      countries: selection.countries,
+      include_rest_of_world: Boolean(selection.includeRestOfWorld)
+    };
   }
   return { scope: 'unknown' };
 }

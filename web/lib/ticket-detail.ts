@@ -403,6 +403,13 @@ function describeDetails(need: unknown, details: any): string[] {
     case "promotion_identity": {
       const codes: string[] = Array.isArray(details.codes) ? details.codes : [];
       if (codes.length > 0) lines.push(codes.join(", "));
+      // Automatic offers by name — what the person would otherwise open Shopify for.
+      const offers: string[] = Array.isArray(details.offers) ? details.offers : [];
+      for (const offer of offers) lines.push(`Automatic offer: ${offer}`);
+      const candidates: string[] = Array.isArray(details.candidates) ? details.candidates : [];
+      if (offers.length === 0 && candidates.length > 0) {
+        lines.push(`One of: ${candidates.join(", ")}`);
+      }
       break;
     }
 
@@ -415,6 +422,20 @@ function describeDetails(need: unknown, details: any): string[] {
       for (const failed of Array.isArray(details.failedChecks) ? details.failedChecks : []) {
         const label = PROMOTION_CHECK_LABELS[String(failed?.check)] ?? nonEmpty(failed?.check);
         if (label) lines.push(`Blocked: ${label}`);
+      }
+      break;
+    }
+
+    // Which offer, checked on which basket, and what stopped it.
+    case "promotion_outcome": {
+      const promotion = nonEmpty(details.promotion);
+      if (promotion) {
+        lines.push(details.basket === "checkout" ? `${promotion} — on the last abandoned basket` : promotion);
+      }
+      for (const failed of Array.isArray(details.failedChecks) ? details.failedChecks : []) {
+        const reason = OUTCOME_REASON_LABELS[String(failed?.reason)] ?? nonEmpty(failed?.reason);
+        const other = nonEmpty(failed?.with);
+        if (reason) lines.push(other ? `${reason}: ${other}` : reason);
       }
       break;
     }
@@ -437,6 +458,16 @@ function describeDetails(need: unknown, details: any): string[] {
 }
 
 /** Why a code was refused, in the panel's words rather than the agent's key. */
+/** `promotion_outcome` reasons, from agent/src/retrieval/promotion-outcome.mjs. */
+const OUTCOME_REASON_LABELS: Record<string, string> = {
+  expired: "the offer was not running",
+  outside_destination: "delivery country not covered",
+  not_combinable: "does not combine with",
+  items_not_qualifying: "no qualifying item in the basket",
+  below_threshold: "below the threshold",
+  reward_not_in_basket: "the free item was not in the basket",
+};
+
 const PROMOTION_CHECK_LABELS: Record<string, string> = {
   minimum: "basket below the minimum",
   window: "outside the offer dates",

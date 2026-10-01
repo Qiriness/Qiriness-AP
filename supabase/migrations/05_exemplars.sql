@@ -123,7 +123,7 @@ create table public.support_exemplars (
       'order_identity', 'order_state', 'order_promotion', 'delivery_state', 'dispatch_state',
       'delivery_delay_state', 'payment_state',
       'refund_state', 'return_eligibility', 'buyer_type',
-      'promotion_identity', 'promotion_validity', 'promotion_eligibility',
+      'promotion_identity', 'promotion_validity', 'promotion_eligibility', 'promotion_outcome',
       'customer_identity', 'customer_account_state', 'customer_history',
       'purchase_verified', 'photo_evidence', 'reaction_product',
       'brand_answer', 'policy_attached', 'checkout_state', 'other_fact'

@@ -3,6 +3,7 @@ import { pathToFileURL } from 'node:url';
 import { parseArgs, loadConfig, loadEnv } from './lib/sync-config.mjs';
 import {
   createShopifyClient,
+  fetchDiscountItemsPage,
   fetchDiscountRedeemCodePage,
   fetchDiscountPage,
   fetchShop
@@ -55,7 +56,10 @@ export async function runShopifyPromotionsSync({ args, shopify, supabase, shopRo
 
   do {
     const page = await fetchDiscountPage(shopify, args, cursor);
-    const discountNodes = await expandDiscountCodePages(shopify, page.discountNodes.nodes);
+    const withCodes = await expandDiscountCodePages(shopify, page.discountNodes.nodes);
+    const discountNodes = await expandDiscountItemPages(withCodes, (id, leg, after) => (
+      fetchDiscountItemsPage(shopify, id, leg, after)
+    ));
     const promotionRows = discountNodes.flatMap((node) => (
       mapPromotionRows(node, shopRow.id, syncedAt)
     ));
@@ -165,6 +169,59 @@ async function expandDiscountCodePages(shopify, discountNodes) {
         }
       }
     });
+  }
+
+  return expanded;
+}
+
+const DISCOUNT_ITEM_LEGS = ['customerGets', 'customerBuys'];
+
+/**
+ * Completes every product and collection list a discount is scoped to.
+ *
+ * The listing carries the first 20 of each, and that page used to be the whole
+ * story: measured 2026-10-01, the « wrap vitaminé offert dès 65 € » gift
+ * qualified on exactly 20 products — the cap, not the rule — so "does your
+ * basket qualify?" would have been answered against a list that silently
+ * stopped. Only a list Shopify says continues is fetched again, so a discount
+ * scoped to everything costs nothing extra.
+ *
+ * `fetchPage(discountNodeId, leg, cursor)` returns the next connection; passed
+ * in so this can be tested without Shopify.
+ */
+export async function expandDiscountItemPages(discountNodes, fetchPage) {
+  const expanded = [];
+
+  for (const discountNode of discountNodes) {
+    let discount = discountNode.discount;
+    for (const leg of DISCOUNT_ITEM_LEGS) {
+      const items = discount?.[leg]?.items;
+      const field = items?.products ? 'products' : items?.collections ? 'collections' : null;
+      const connection = field ? items[field] : null;
+      if (!connection?.pageInfo?.hasNextPage) {
+        continue;
+      }
+
+      const nodes = [...(connection.nodes || [])];
+      let cursor = connection.pageInfo.endCursor;
+      while (cursor) {
+        const page = await fetchPage(discountNode.id, leg, cursor);
+        nodes.push(...(page.nodes || []));
+        cursor = page.pageInfo?.hasNextPage ? page.pageInfo.endCursor : null;
+      }
+
+      discount = {
+        ...discount,
+        [leg]: {
+          ...discount[leg],
+          items: {
+            ...items,
+            [field]: { nodes, pageInfo: { hasNextPage: false, endCursor: null } }
+          }
+        }
+      };
+    }
+    expanded.push(discount === discountNode.discount ? discountNode : { ...discountNode, discount });
   }
 
   return expanded;

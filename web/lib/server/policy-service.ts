@@ -26,6 +26,7 @@ import {
   supabaseUpsert,
 } from "../../../scripts/lib/supabase-rest-client.mjs";
 import { T } from "../../../scripts/lib/tables.mjs";
+import { situationForwarding } from "../../../scripts/lib/forwarding-tag.mjs";
 import {
   auditAnswerSet,
   normaliseConditions as normaliseConditionsRaw,
@@ -62,7 +63,7 @@ const normaliseConditions = normaliseConditionsRaw as (
   raw: unknown,
   options?: { warn?: (message: string) => void },
 ) => Record<string, string[]>;
-import type { PolicyRule, PolicyVocabulary, RuleCheck } from "../types";
+import type { PolicyRule, PolicyVocabulary, RuleCheck, SituationForwarding } from "../types";
 
 function getSupabaseClient() {
   return createSupabaseClient(loadConfig(process.env as Record<string, string | undefined>));
@@ -217,14 +218,29 @@ export async function listSituations(
     answerSet: string | null;
     collectionMode: string;
     requirementNeeds: string[];
+    forwarding: SituationForwarding | null;
   }[]
 > {
-  const rows = (await supabaseSelect(
-    getSupabaseClient(),
-    T.SUPPORT_EXEMPLARS,
-    { shop_id: shopId, deleted_at: { operator: "is", value: "null" } },
-    "exemplar_key,canonical_question,category,answer_set,collection_mode,requirement_needs",
-  )) as Record<string, unknown>[];
+  const supabase = getSupabaseClient();
+  // The forwarding switch and destinations ride along so each situation can say
+  // where its tickets go (scripts/lib/forwarding-tag.mjs, the worker's own plan).
+  const [rows, settings, destinations] = (await Promise.all([
+    supabaseSelect(
+      supabase,
+      T.SUPPORT_EXEMPLARS,
+      { shop_id: shopId, deleted_at: { operator: "is", value: "null" } },
+      "exemplar_key,canonical_question,category,request_kind,answer_set,collection_mode,requirement_needs",
+    ),
+    supabaseSelect(supabase, T.FORWARDING_SETTINGS, { shop_id: shopId }, "forward_since"),
+    supabaseSelect(
+      supabase,
+      T.FORWARDING_DESTINATIONS,
+      { shop_id: shopId },
+      "label,forward_email,active_since,categories,request_kinds,match_description,timing,position",
+    ),
+  ])) as [Record<string, unknown>[], { forward_since: string | null }[] | null, Record<string, unknown>[] | null];
+  const switchedOn = Boolean(settings?.[0]?.forward_since);
+  const ordered = [...(destinations ?? [])].sort((a, b) => Number(a.position ?? 0) - Number(b.position ?? 0));
 
   return rows
     .map((row) => ({
@@ -236,6 +252,12 @@ export async function listSituations(
       requirementNeeds: Array.isArray(row.requirement_needs)
         ? (row.requirement_needs as unknown[]).map(String)
         : [],
+      forwarding: situationForwarding({
+        category: (row.category as string) ?? null,
+        requestKind: (row.request_kind as string) ?? null,
+        destinations: ordered,
+        switchedOn,
+      }) as SituationForwarding | null,
     }))
     .sort((a, b) => a.key.localeCompare(b.key));
 }

@@ -137,9 +137,15 @@ async function syncMembership({ args, shopify, supabase, shopRow, syncedAt }) {
     'id,shopify_collection_id,handle,title'
   );
 
+  // THE THIRD REASON: an active promotion scoped to the collection. « 3+1
+  // Offert » qualifies on « Masques Monodose », which nobody switched on for
+  // advice, so whether a basket qualified could not be answered (2026-10-01).
+  // Read from the promotions sync, which runs before this one in the nightly.
+  const promoted = await promotionCollections({ supabase, shopRow });
+
   // One pass per collection, whichever list it came from.
   const wanted = new Map();
-  for (const collection of [...(active || []), ...(ranges || [])]) wanted.set(collection.id, collection);
+  for (const collection of [...(active || []), ...(ranges || []), ...promoted]) wanted.set(collection.id, collection);
 
   let refreshed = 0;
   let products = 0;
@@ -166,6 +172,47 @@ async function syncMembership({ args, shopify, supabase, shopRow, syncedAt }) {
   }
 
   return { refreshed, products };
+}
+
+/**
+ * The collections an ACTIVE promotion's rule is scoped to, as advice rows.
+ * Exported for the test; reads the stored rule, so it needs no Shopify call.
+ */
+export function collectionIdsOfPromotions(promotions = []) {
+  const ids = new Set();
+  for (const promotion of promotions) {
+    const rules = promotion?.rule_snapshot || {};
+    for (const items of [rules.customer_buys?.items, rules.customer_gets?.items]) {
+      if (items?.scope !== 'collections') continue;
+      for (const collection of items.collections || []) {
+        if (collection?.id) ids.add(collection.id);
+      }
+    }
+  }
+  return [...ids];
+}
+
+async function promotionCollections({ supabase, shopRow }) {
+  const promotions = await supabaseSelectAll(
+    supabase,
+    T.PROMOTIONS,
+    { shop_id: shopRow.id, status: 'ACTIVE', deleted_at: { operator: 'is', value: 'null' } },
+    'rule_snapshot'
+  );
+  const ids = collectionIdsOfPromotions(promotions || []);
+  if (ids.length === 0) return [];
+  return (
+    (await supabaseSelectAll(
+      supabase,
+      T.ADVICE_COLLECTIONS,
+      {
+        shop_id: shopRow.id,
+        shopify_collection_id: { operator: 'in', value: `(${ids.map((id) => `"${id}"`).join(',')})` },
+        deleted_at: { operator: 'is', value: 'null' }
+      },
+      'id,shopify_collection_id,handle,title'
+    )) || []
+  );
 }
 
 /** One collection's live product GIDs, paged. */

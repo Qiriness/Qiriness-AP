@@ -32,6 +32,12 @@ export const TOOL_NAMES = {
   LOOKUP_STOCK: 'lookupStock',
   LOOKUP_PRODUCT_OFFER: 'lookupProductOffer',
   EXTRACT_PROMOTION_CODES: 'extractPromotionCodes',
+  // Which promotion a message is about, code or automatic offer — see
+  // promotion-lookup.mjs `identify`. Supersedes extraction as the opening move.
+  IDENTIFY_PROMOTION: 'identifyPromotion',
+  // Why one identified promotion did or did not apply to the order or the last
+  // abandoned basket — threshold, destination, items, reward, combination.
+  CHECK_PROMOTION_OUTCOME: 'checkPromotionOutcome',
   LOOKUP_PROMOTION: 'lookupPromotion',
   LIST_ACTIVE_PROMOTIONS: 'listActivePromotions',
   GET_ORDER_CONTEXT: 'getOrderContext',
@@ -130,8 +136,14 @@ const TOOLS_BY_SUBJECT = {
     T.RECOMMEND_PRODUCTS,
     T.LOOKUP_PRODUCT_OFFER
   ],
-  product_stock: [T.LOOKUP_STOCK, T.LOOKUP_PRODUCT, T.LOOKUP_PRODUCT_OFFER],
+  // `identifyPromotion` ADDED 2026-10-01 here and across the order family: a gift
+  // out of stock lands in product_stock, a charged gift or unapplied free
+  // shipping in order, delivery or payment. It runs only when the decomposer
+  // read a code or an offer in the message (`planMoves`).
+  product_stock: [T.LOOKUP_STOCK, T.LOOKUP_PRODUCT, T.LOOKUP_PRODUCT_OFFER, T.IDENTIFY_PROMOTION, T.CHECK_PROMOTION_OUTCOME],
   promotions: [
+    T.IDENTIFY_PROMOTION,
+    T.CHECK_PROMOTION_OUTCOME,
     T.EXTRACT_PROMOTION_CODES,
     T.LOOKUP_PROMOTION,
     T.LIST_ACTIVE_PROMOTIONS,
@@ -164,6 +176,8 @@ const TOOLS_BY_SUBJECT = {
   order: [
     T.GET_ORDER_CONTEXT,
     T.CHECK_ORDER_PROMOTION,
+    T.IDENTIFY_PROMOTION,
+    T.CHECK_PROMOTION_OUTCOME,
     T.LOOKUP_CUSTOMER,
     T.SEARCH_KNOWLEDGE,
     T.VERIFY_PURCHASE,
@@ -172,13 +186,15 @@ const TOOLS_BY_SUBJECT = {
   ],
   delivery: [
     T.GET_ORDER_CONTEXT,
+    T.IDENTIFY_PROMOTION,
+    T.CHECK_PROMOTION_OUTCOME,
     T.LOOKUP_CUSTOMER,
     T.SEARCH_KNOWLEDGE,
     T.VERIFY_PURCHASE,
     // A parcel that arrived smashed is a photo case as much as a broken bottle is.
     T.CHECK_PHOTO_EVIDENCE
   ],
-  payment: [T.GET_ORDER_CONTEXT, T.LOOKUP_CUSTOMER, T.SEARCH_KNOWLEDGE, T.VERIFY_PURCHASE],
+  payment: [T.GET_ORDER_CONTEXT, T.LOOKUP_CUSTOMER, T.SEARCH_KNOWLEDGE, T.VERIFY_PURCHASE, T.IDENTIFY_PROMOTION, T.CHECK_PROMOTION_OUTCOME],
   return_exchange: [
     T.GET_ORDER_CONTEXT,
     T.LOOKUP_CUSTOMER,
@@ -446,7 +462,9 @@ export function openingMoves(ticket = {}) {
       add(T.LOOKUP_STOCK, { question: text });
       break;
     case 'promotions':
-      add(T.EXTRACT_PROMOTION_CODES, { text });
+      // Codes AND described offers. Its arguments are filled by `planMoves`
+      // from the decomposition; called bare it still extracts typed codes.
+      add(T.IDENTIFY_PROMOTION, { text });
       // The newsletter welcome code is the single biggest cluster in the inbox
       // and its commonest cause is the customer not actually being subscribed —
       // a check that needs the customer row and nothing else.

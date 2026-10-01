@@ -741,6 +741,118 @@ All of it derived from the table, none of it guessed, and none of it reaching a 
 
 So P-15 cannot name a code, and the rule does not try. It confirms the subscription and leaves the offer to a person, which is also the answer to the harder question: *which* code. That is a commercial decision per ticket, not a constant.
 
+**Superseded in part, measured 2026-10-01:** `BIENVENUEQIRINESS` is `ACTIVE` again with no end date, and since 2026-09-24 a per-subscriber welcome discount (`BIENVENUE_QS20`, one unique code, valid 9 days) is being issued. The P-15 rule was written for a shop with no welcome code and has to be revisited against this.
+
+### A discount's product list is the whole list, and a shipping discount knows its countries (2026-10-01)
+
+The discount listing asked for the first 20 products or collections of each leg and never asked whether there were more. **Twenty was the cap, not the rule.** Measured against live Shopify: « wrap vitaminé offert dès 65 € » qualifies on **98** products and was stored with 20, « Masque Or offert » 97, `QIRINESS20` 94, `BIENVENUEQIRINESS` 55. Every eligibility answer built on those lists — "does your basket qualify for the gift?", "is this product covered by the code?" — would have been wrong for most of the catalogue, and wrong silently, because a short list looks exactly like a narrow promotion.
+
+**The listing keeps its 20; the rest is fetched per discount, only when Shopify says the list continues.** Fetching 250 under every discount in the listing would spend the query-cost budget on the minority whose lists are long. Same shape as the redeem-code follow-up beside it.
+
+**`rule_snapshot.destination` is the country list, as codes.** Only the type name was stored, so « Frais de port offerts à partir de 70 € » read as worldwide while Shopify applies it to `FR` alone. Real tickets complain of shipping charged on 260 € and 74,50 € baskets; the destination is what separates "under the threshold" from "outside France". `include_rest_of_world` is kept because it inverts the list's meaning.
+
+### What an offer does is derived, and an automatic offer is describable by default (2026-10-01)
+
+**The label is Shopify's structure, never the title.** `promotion-mechanic.mjs` reads the discount type, its classes and the stored rule: a shipping type is `free_shipping`; a buy-X-get-Y on a spend threshold is a `gift`, on a quantity a `multi_buy`; a basic discount is `order_discount` or `product_discount` by its class; an app's is `app`. Titles are free text that differ per shop and language, so a label read from them would need maintaining, which the owner ruled out. Run over all 331 live discounts, none came out `unknown`, and every active one matched what its title says without the title being read.
+
+**The reward value had to be fetched first.** A buy-X-get-Y keeps it under `DiscountOnQuantity.effect`, which the query never asked for, so all six gift offers stored an empty reward and « 1 article offert » could not be told from « -50 % sur le 2e ». Percentages are fractions on a discount (`QIRINESS20` 0.2, a free item 1), unlike an order's discount application.
+
+**`describable_in_replies` defaults to TRUE, the opposite of `offerable_in_replies` (decided by the owner).** The risk is opposite. A code is a key, and nothing in the data separates a public code from a partner's 50 %, so a person opts each one in. An automatic offer is advertised on the site and applies itself, so describing it hands out nothing. It explains what the customer already saw. An operator switches one off only to keep it out of replies. Same survival mechanism: the mapper never writes it, and a test asserts that.
+
+`listActivePromotions` drops a switched-off automatic offer and marks the rest « offre automatique, sans code ». Most automatic-offer tickets are a customer looking for something to type.
+
+### A promotions ticket is identified as code or automatic offer before anything else (2026-10-01)
+
+`identifyPromotion` replaces code extraction as the promotions opening move. It reads two things.
+
+- **The codes the customer typed.** A code counts only if it appears in the message as a word.
+- **The offers the customer describes.** The decomposer already reads the email, and now also reports each offer described there: its mechanic (free shipping, gift, multi-buy, % or € off), the threshold, the percentage and the product, copied rather than inferred.
+
+The match against the shop is done in code, never by the model.
+
+**When the decomposer has read the email, its codes decide; the uppercase scan is only the fallback.** « WRAP ECLAT commandé 3 » made the scan report the real code `WRAP`, which is also a product name, on two 3+1 tickets. A typed code the shop does not hold is kept and marked unknown, because « code introuvable » is an answer.
+
+**Matching rules:**
+- **Mechanic** filters candidates.
+- **Percentage** filters too, because it is the advertised number: « -20 % » once matched a past 25 % offer.
+- **Threshold** only ranks. Customers misquote it (« dès 49 € » for a 70 € offer), and the gap is reported to the model.
+- **Gift names** are weighted by how rare each word is across the candidates, so « masque » and « offert », shared by every gift, count for nothing. No stop-word list is needed, so no language is assumed.
+- **Recently ended offers** (120 days) are candidates too, because a complaint arrives after the offer it is about.
+
+**The kind is not which offer.** « Un masque offert » while five mask gifts run is unmistakably an automatic gift; which one is open. `promotion_identity` therefore carries the KIND: `code` / `automatic` / `both` / `ambiguous` / `none` / `unknown`. `ambiguous` is kept for the one doubt that changes the answer, code or automatic offer. The candidates travel in the details. This replaced `resolved`, which no rule branched on.
+
+**It runs wherever the complaint lands.** `order`, `delivery`, `payment` and `product_stock` carry the tool, and it runs as an opening move only when the decomposer read a code or an offer. An order ticket about a parcel costs nothing.
+
+**Measured on 39 real tickets** (code, gift, 3+1 and free-shipping complaints, each evaluated as of its own date): 35 matched the hand label, after fixes for the product-name codes, the percentage filter and the kind/offer split. Two of the four misses are the decomposer reading no offer in « le cadeau est facturé » / « le cadeau est en rupture ». The prompt now names those phrasings, and the misses held anyway.
+
+**Not yet: rules.** P-18's `aucun_code_identifie` branches on `promotion_validity: unknown`, which is also what an automatic-offer ticket produces, so it can still ask a free-shipping complaint for a code. Rules branching on `promotion_identity` are the rules phase.
+
+### Why an offer did not apply is read off the order, and the order can overrule the customer (2026-10-01)
+
+`checkPromotionOutcome` takes one identified promotion and one basket and returns a single reason. The basket is the ticket's confirmed order, or else the customer's last abandoned checkout. The reasons are `applied`, `expired`, `outside_destination`, `not_combinable`, `items_not_qualifying`, `below_threshold`, `reward_not_in_basket`, `conditions_met` and `undetermined`. It becomes the need `promotion_outcome` (migration 58). It runs straight after identification, before the model's first turn, for each offer or known code identification pinned down, two at most.
+
+**The first failing reason is THE reason, in a fixed order.** Expiry comes first, because nothing else matters for an offer that was not running. Then destination, combination, qualifying items, threshold, and the missing reward.
+
+**What cannot be seen is never concluded:**
+- **Threshold:** a spend is measured both before and after discounts, because which one Shopify uses is not in the data. If the two sit on opposite sides of the threshold, the answer is `undetermined`.
+- **Collections:** one whose membership was never synced is `undetermined`. The collections sync now also fills collections an active promotion depends on, which put « Masques Monodose » (the 3+1) in reach: 10 products.
+- **Checkout:** an abandoned checkout cannot say which automatic offers it carried.
+
+**A free item is the customer's to add.** The 3+1 makes the fourth item free; it does not add it. A gift is added with « je le veux ». A qualifying basket without the reward is `reward_not_in_basket`: that is the cause, not a failure of the offer. A gift never counts towards the spend that earns it.
+
+**`conditions_met` hands the ticket to a person.** It means every checkable condition held and Shopify still did not apply the offer. That is the « Masque Or offert » charged on #6328 and #6452: two gifts that are set to combine, combined on 18 orders, and did not combine on these. Nothing in the data explains it, and saying "not combinable" would be inventing a rule the settings contradict.
+
+**The order can overrule the customer's description.** On #6452 the customer quoted « dès 65 € », which identifies « wrap vitaminé ». That offer WAS applied; the line charged was the Wrap d'Or, the free item of « Masque Or offert ». A charged free item on the order therefore takes over whenever the asked-about offer was applied, or no offer was pinned. The reply is told that the quoted offer applied and the charged item belongs to another. This uses product-scoped rewards only: a 3+1 reward cannot be told from an ordinary paid line of the collection.
+
+**Measured on the 49 tickets with a confirmed order that mention an offer:**
+- **Free shipping refused:** #7072 is `outside_destination` (an English-speaking customer, angry about « free shipping over €70 »).
+- **Offers that had ended:** the Saint-Valentin gift sought after ordering (#4687) and the cabas offer (ended 2025-11-21, order 2025-12-04, #3440) are `expired`.
+- **Packing, not promotion:** « il me manque les produits offerts » on a 3+1 (#4977) is `applied`. The promotion landed, so the cause is in the parcel.
+- **Charged gifts:** all three #6452 tickets reach « Masque Or offert », `conditions_met`.
+
+**Limits, stated:**
+- A gift the customer left out of the basket, or one out of stock, leaves no charged line, so nothing is checked.
+- A 3+1 applied once reads `applied` even when the complaint is that it applied to one product of three (#2798).
+
+### Promotion answers branch on the kind and the outcome, and are shared, not per situation (2026-10-01)
+
+**Twelve rules, written as drafts.** Approval is a person's decision, and only approved rules load.
+
+**Nine shared rules (no situation)**, each on `promotion_identity` (automatic / both, or code where it applies) × `promotion_outcome`:
+- **Answered directly:** outside destination, below threshold, no qualifying item, not combinable, expired, and the offer's conditions explained when no verdict is possible.
+- **Routed to a person:** the free item not in the basket (sending it now is their call), applied-yet-complaining (almost always the parcel), and conditions met.
+
+**Shared because the answer does not depend on how the request was phrased.** « Frais de port facturés hors de France » is the same answer under P-17, P-18 or no matched situation at all. So no new situation was created for « 3+1 non appliqué » or « livraison offerte non appliquée »: the shared rules answer them wherever they land, including where the matcher found nothing.
+
+**A situation-keyed rule outranks every shared one** (`selectAnswer`, before depth). That is why P-18 needed three keyed drafts:
+- `p18_code_non_cumulable` and `p18_code_applique` let the outcome speak on a code ticket. Without them, « le code est actif » would win even when the order says it did not combine, or did apply.
+- `aucun_code_identifie_code_seul` replaces the approved `aucun_code_identifie`. That rule branched on `promotion_validity: unknown` alone, which is also what every automatic-offer ticket produces, so it asked a free-shipping complaint for a code. **Approve the replacement and withdraw the original together.** While both are approved, the original still matches automatic tickets.
+
+**Enumerated before writing, as « Specificity outranks priority » asks.** Every identity × outcome × validity combination under P-18, P-17 and no situation (360 cases) selects exactly one rule or none, with no ties. The two gaps the first enumeration found are fixed: a code's outcome being shadowed by « code actif », and `both` with no verdict selecting nothing. An `ambiguous` identity selects nothing on purpose: whether it is a code or an offer is the doubt a person resolves.
+
+**The rulebook now opens on evidence, not only on category.** `resolveRequests` adds the promotions set whenever `identifyPromotion` found a code or offer. « Le masque offert a été facturé » filed `order` with no second subject used to reach no promotion rule at all.
+
+**A typed code is looked up deterministically** (`followUpMoves`). Identification replaced extraction, and extraction was what led the model to `lookupPromotion`. Without that lookup, `promotion_validity` stayed unknown on a ticket that named its code, and « aucun code identifié » would ask for the code just given.
+
+### Offers are named only if a reply may use them, and ranked by recent use (2026-10-01)
+
+**The active list used to name every single-code offer**, partner rates included: `LAPFAM26` at 50 %, `PENILLEAU2025` at 26 %, and the 100 %-off `WRAP`. They sat in front of the model on every promotions ticket, one turn from a draft. Rules only ever hand out offerable codes, but nothing stopped the model repeating a code it had read.
+
+`listActive` and `offersForProduct` now name only what a reply may use: codes an operator cleared (`offerable_in_replies`), and automatic offers not switched off (`describable_in_replies`). The rest are COUNTED (« 19 autres codes actifs ne sont pas proposables ») and never named.
+
+**Ranked by orders in the last 30 days, not by Shopify's lifetime count.** The two disagree. Free shipping counts 1,659 lifetime against 16 in the last 30 days, a gap still to explain. Masque Or (61) and wrap vitaminé (59) lead the recent count. Recent use says what customers take NOW. The count is a ranking only; rules forbid quoting it.
+
+**Automatic offers now count as offers on a product.** An offer is « on » a product if the product earns it (a gift's or a 3+1's buy side) or is what it gives. The existing ten-other-products line still decides « specific » against « general ». Measured live:
+- The Monodose mask's specific offer is the 3+1.
+- The LED mask's is `UKLED20`.
+- Lotion Exquise has none of its own. The gifts qualify on about 97 products, so they are general for it.
+
+**`product_offer` gained `specific_automatic`, and `specific` still means a code.** The approved P-21 rule on `specific` says « donner le code EXACTEMENT », which is wrong for an offer with no code. Splitting the value keeps that rule meaning what it says, rather than editing approved wording. The top-ranked specific offer decides which value applies.
+
+**P-21 drafts:**
+- `p21_offre_auto_produit` (new): describe the offer, say there is no code, and say the free item must be added to the basket.
+- `p21_offre_en_cours` (rewritten draft): lead with the most-used running offer, one or two at most, then the configured code. Its old text said « pas d'offre en cours » whenever no code was in the dossier, which is never true while automatic offers run.
+
 ### `offerable_in_replies` is the one column on a synced table that is ours
 
 Of the 14 active single-code promotions, one is **100% off a product**, and two are partner rates of 50% and 26%; six further promotions carry 600 single-use bulk codes each. A picker showing "all active codes" puts a free order one mis-click from a support reply, and nothing in the data separates the welcome code from a partner's rate — not the discount type, not the size, not the title.
@@ -1572,6 +1684,8 @@ So the model says which product the customer **blames** and the tool resolves th
 
 ### The cosmetovigilance rules answer, and a person still releases them
 
+**Superseded 2026-10-01** (§ *Cosmetovigilance answers from its policy…*): the rules now branch on `policy_attached`, and the stop / layering / cautious-reintroduction protocol below is gone, because the company's policy does not contain it.
+
 **Seven rules, 2026-08-30**, replacing "one rule that refuses to answer" — which stays as the catch-all beneath them.
 
 The protocol itself — stop using the product, check whether several were layered, reintroduce cautiously once symptoms have gone — is now a rule's **skeleton** rather than a knowledge article retrieved by similarity. That was the point of the layer: an instruction fetched by cosine distance is an instruction that arrives or does not depending on how the customer phrased their email.
@@ -2019,6 +2133,16 @@ So `active_since` works like `forward_since`: null is off, otherwise the moment 
 A rehearsal (`--since`) treats destinations that are on as on since the rehearsal date, or it would show nothing.
 
 **The French service name carries its own preposition** (« au service comptabilité »). A template writing « à {service} » produced « à le service comptabilité » in the first test; the contraction depends on the noun, so it belongs with the noun.
+
+### A ticket being forwarded is tagged in the queue (2026-10-01)
+
+Forwarding never changes the ticket's status, so a forwarded ticket looked like any other. The owner asked for it to be marked. The tag (`scripts/lib/forwarding-tag.mjs`) reads only what the pass left: its decision (`ticket_routing`) and its attempts (`ticket_forwards`). It never works the route out again, so it cannot promise a forward the pass would not make.
+
+- **Forwarded** stays shown once anything has been sent, even if the destination or the switch is turned off later: a colleague has the mail either way.
+- **Before anything is sent**, it shows only while the decision would still be acted on: the switch is on, the destination is on, and the ticket's category is still the one the decision was taken on (a changed category is decided again by the next pass).
+- **« After first reply »** is its own state, because a cosmetovigilance ticket waits there until a person sends our reply. Whoever reads the queue should know that sending that reply hands the thread on.
+
+**The Rules page tags situations too** (asked for the same day). A situation is tagged when the worker's own `planRoute`, run on the situation's category and request kind, would forward it, and only while the master switch is on. The tag describes the category, because forwarding never reads the situation: a reaction ticket filed under `product` matches CV-01 and is still not forwarded. On 2026-10-01: CV-01 to CV-04, all « To Cosmétovigilance after 1st reply »; no situation sits in `careers` or `partner_collaboration`.
 
 ### `unique(ticket_message_id)` is what makes the pass safe to re-run
 
@@ -3052,6 +3176,18 @@ With 15 policies written and 36 links made, the owner asked to remove what stood
   - **Live change:** D-33 questions are now answered from the policy instead of always going to a person.
 - **`searchKnowledge` stays** for product properties and brand questions (`product_property`, `brand_answer`), which are not policies.
 - **The « Core setup » checklist is gone** from Knowledge: five empty slots (order policies, delivery & returns, confidentiality, locations, FAQs). No article held one. `core_topic` keeps only `brand`, the Brand voice every draft is written with.
+
+### Cosmetovigilance answers from its policy, and says nothing the policy does not (2026-10-01)
+
+The owner asked for every cosmetovigilance rule to work the way D-33 does. The trigger: a rehearsed « rougeurs et irritations » reply told the customer how to start using the product again (« reprise prudente… petite quantité… »). That came from the rule skeletons written 2026-08-30 (§ *The cosmetovigilance rules answer…*). `product_reaction_complaint_policy` says none of it. The policy asks for the product and batch number, the reaction (a photo if the customer is willing) and the place of purchase. It says what happens next for an online purchase and for a distributor's, and it recommends a specialist if symptoms persist or worsen.
+
+- **Each of CV-01, CV-02 and CV-04 has three rules.** With the policy `attached`, one rule where the product is named and one where it is not (`reaction_product` as before). These answer from the policy only, and the skeleton forbids any advice it does not contain: stopping the product, resuming it, any care. With `not_attached`, one fallback that acknowledges the report, hands it to a person (`needs_human`) and asks nothing. The attached rules keep their old keys, so earlier case files still name them.
+- **The attached rules ask what the policy asks**: `lot_number` and `purchase_channel`, plus `reaction_product_name` when no product was named. CV-01 used to ask nothing when the product was known; the policy asks for the batch number on every report, so it does too. CV-02 and CV-04 keep « the team is handling it, nothing promised ».
+- **CV-03 (« can I use this given my health? ») gets the same two branches**, both `needs_human`. The policy is about reactions that have happened, so only its « see a specialist » is reused.
+- **Product unknown and the catch-all are unchanged.** `reaction_product = unknown` still falls to `reaction_signalee`, as does a ticket matched to no situation: no situation means no policy read as an opening move.
+- **Forwarding is untouched by all of this.** It goes by the ticket's category, never its situation, so every cosmetovigilance ticket, in any branch, goes to the Cosmétovigilance destination once our first reply is out. A reaction filed under another category is not forwarded.
+
+Rehearsed on the same message afterwards: CV-01, policy attached, `reaction_conduite_a_tenir`. The reply asks for the product, batch number and place of purchase, invites a photo, explains both purchase routes and recommends a specialist. Every check passed; the old reply had failed `no_unsuitability_claim` on « déconseillée ».
 
 **Found on the way:** an article that a « Test the agent » run had tested could not be deleted. The FK sets the run's `expect_document_id` to null, but `agent_test_runs_article_verdict_needs_document_check` refuses a verdict with no article. `deleteArticle` now clears that run's verdict first; the run itself is kept.
 

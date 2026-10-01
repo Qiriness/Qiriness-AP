@@ -6,6 +6,7 @@ import { AlertIcon, CheckCircleIcon, DotIcon, PlusIcon } from "@/components/icon
 import { Button } from "@/components/ui/Button";
 import { knowledgeErrorMessage } from "@/lib/api/knowledge";
 import { useT } from "@/lib/i18n/client";
+import type { Translate } from "@/lib/i18n/translate";
 import { deleteRule, saveRule, setCollectionMode, setRuleApproval } from "@/lib/api/policy";
 import {
   branchChoiceKey,
@@ -14,7 +15,7 @@ import {
 } from "@/lib/general-rule-choices";
 import type { GeneralRuleChoices } from "@/lib/general-rule-choices";
 import { generalRulesCovering, ruleLabel } from "@/lib/rule-labels";
-import type { CompanyPolicy, PolicyRule, PolicySituation, PolicyVocabulary } from "@/lib/types";
+import type { CompanyPolicy, PolicyRule, PolicySituation, PolicyVocabulary, SituationForwarding } from "@/lib/types";
 import { LinkedPolicies } from "./LinkedPolicies";
 
 import { RuleEditor } from "./RuleEditor";
@@ -342,6 +343,11 @@ export function RuleBook({
                       <span className={styles.badge}>{count}</span>
                     </span>
                     <span className={styles.situationQuestion}>{situation.question}</span>
+                    {situation.forwarding && (
+                      <span className={styles.forwardingTag} title={forwardingText(situation.forwarding, t, "sentence")}>
+                        {forwardingText(situation.forwarding, t, "chip")}
+                      </span>
+                    )}
                   </button>
                 );
               })}
@@ -359,6 +365,12 @@ export function RuleBook({
                   {activeSituationMeta?.question ??
                     "Rules for every situation in the set. They apply whenever no situation rule matches."}
                 </p>
+                {activeSituationMeta?.forwarding && (
+                  <p className={styles.forwardingNote}>
+                    <span className={styles.forwardingTag}>{forwardingText(activeSituationMeta.forwarding, t, "chip")}</span>
+                    {forwardingText(activeSituationMeta.forwarding, t, "sentence")}
+                  </p>
+                )}
               </div>
               <div className={styles.canvasStats} aria-label={t("setup.rules.summary")}>
                 <span>{t("setup.rules.situationRules", { n: specificRuleCount })}</span>
@@ -1013,4 +1025,20 @@ function actionSummary(rule: PolicyRule): string {
   }
   if (rule.offerCode) return `answer it, give ${rule.offerCode}`;
   return "answer it, leave verdict alone";
+}
+
+/**
+ * Where a situation's tickets are forwarded, as a chip or a sentence. The plan
+ * is the worker's own (situationForwarding, scripts/lib/forwarding-tag.mjs);
+ * forwarding follows the ticket's category, so this describes the situation's.
+ */
+function forwardingText(forwarding: SituationForwarding, t: Translate, form: "chip" | "sentence"): string {
+  const prefix = form === "chip" ? "setup.rules.forwarding" : "setup.rules.forwarding.sentence";
+  if (forwarding.route === "choose") {
+    return t(`${prefix}.choose`, { destinations: forwarding.destinations.map((d) => d.label).join(" / ") });
+  }
+  const [only] = forwarding.destinations;
+  return t(only.timing === "after_first_reply" ? `${prefix}.fixedAfterReply` : `${prefix}.fixed`, {
+    destination: only.label,
+  });
 }

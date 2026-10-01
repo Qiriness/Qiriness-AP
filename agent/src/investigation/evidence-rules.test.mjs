@@ -269,6 +269,32 @@ test('promotion_validity separates expired from not-yet-started', () => {
   assert.equal(finding('promotion_validity', withWindow('not_yet_started')), 'not_yet_started');
 });
 
+test('a specific offer is a code unless its top-ranked offer is automatic', () => {
+  const offer = (specificKind) => [{ id: 't1', tool: TOOL_NAMES.LOOKUP_PRODUCT_OFFER, outcome: 'found', data: { specificKind } }];
+  assert.equal(finding('product_offer', offer('code')), 'specific', 'the approved code rule keeps its meaning');
+  assert.equal(finding('product_offer', offer(undefined)), 'specific');
+  assert.equal(finding('product_offer', offer('automatic')), 'specific_automatic');
+});
+
+test('promotion_identity carries the kind, from identification or the old extraction', () => {
+  const identified = (outcome) => [{ id: 't1', tool: TOOL_NAMES.IDENTIFY_PROMOTION, outcome, data: { kind: outcome } }];
+  assert.equal(finding('promotion_identity', identified('automatic')), 'automatic');
+  assert.equal(finding('promotion_identity', identified('ambiguous')), 'ambiguous');
+  const extracted = [{ id: 't1', tool: TOOL_NAMES.EXTRACT_PROMOTION_CODES, outcome: 'found', data: { codes: ['X'] } }];
+  assert.equal(finding('promotion_identity', extracted), 'code');
+});
+
+test('promotion_outcome is the first checked promotion, and undetermined does not satisfy', () => {
+  const check = (id, outcome) => ({ id, tool: TOOL_NAMES.CHECK_PROMOTION_OUTCOME, outcome, data: { found: true, outcome, checks: [] } });
+  assert.equal(finding('promotion_outcome', [check('t1', 'reward_not_in_basket'), check('t2', 'applied')]), 'reward_not_in_basket');
+  assert.equal(finding('promotion_outcome', []), 'unknown');
+
+  const [undetermined] = resolveNeeds(['promotion_outcome'], [check('t1', 'undetermined')], [TOOL_NAMES.CHECK_PROMOTION_OUTCOME]);
+  assert.notEqual(undetermined.state, 'satisfied');
+  const [settled] = resolveNeeds(['promotion_outcome'], [check('t1', 'below_threshold')], [TOOL_NAMES.CHECK_PROMOTION_OUTCOME]);
+  assert.equal(settled.state, 'satisfied');
+});
+
 test('promotion_validity reads not_found ahead of any check', () => {
   const ledger = [
     { id: 't1', tool: TOOL_NAMES.LOOKUP_PROMOTION, outcome: 'not_found', data: { found: false } }

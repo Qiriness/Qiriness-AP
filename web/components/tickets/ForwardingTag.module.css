@@ -1,0 +1,30 @@
+.chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  border-radius: var(--radius-pill);
+  background: var(--teal-050);
+  color: var(--teal-ink);
+  font-size: 11px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px var(--space-2);
+  margin: 0;
+  padding: 6px var(--space-3);
+  border-radius: var(--radius-sm);
+  background: var(--teal-050);
+  color: var(--text-default);
+  font-size: 13px;
+}
+
+.chip.failed,
+.banner.failed {
+  background: var(--error-050);
+  color: var(--error);
+}

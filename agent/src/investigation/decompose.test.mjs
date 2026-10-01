@@ -129,7 +129,7 @@ test('the schema caps the task count as well as the normaliser', () => {
 test('the schema admits no entity bucket the router cannot act on', () => {
   const entities = DECOMPOSITION_SCHEMA.properties.entities;
   assert.equal(entities.additionalProperties, false);
-  assert.deepEqual(Object.keys(entities.properties).sort(), ['codes', 'order_numbers', 'products']);
+  assert.deepEqual(Object.keys(entities.properties).sort(), ['codes', 'offers', 'order_numbers', 'products']);
 });
 
 test('the prompt tells the model that one request is the normal case', () => {

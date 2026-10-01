@@ -17,12 +17,14 @@ const CONSTRAINT = 'support_exemplars_requirement_needs_check';
 // which is today's baseline plus the one need 56 retired.
 const RETIRED_BY_56 = ['policy_answer'];
 const ADDED_BY_56 = ['policy_attached'];
+// And 58 added `promotion_outcome` after it (2026-10-01).
+const ADDED_BY_58 = ['promotion_outcome'];
 const minus = (list, gone) => list.filter((item) => !gone.includes(item));
 
 test('33 carries the baseline check of its day, not a retyped one', () => {
   const clause = checkClause(SQL, CONSTRAINT);
   assert.ok(clause, 'the check is missing from 33');
-  assert.deepEqual(literalsIn(clause), [...minus(literalsIn(checkClause(EXEMPLARS, CONSTRAINT)), ADDED_BY_56), ...RETIRED_BY_56].sort());
+  assert.deepEqual(literalsIn(clause), [...minus(literalsIn(checkClause(EXEMPLARS, CONSTRAINT)), [...ADDED_BY_56, ...ADDED_BY_58]), ...RETIRED_BY_56].sort());
 });
 void squash;
 
@@ -37,7 +39,7 @@ test('the baseline allows the new need, beside the ones it already had', () => {
 
 test('what 33 allowed is the code vocabulary plus what 56 retired', () => {
   // 56_policy_search_retired.test.mjs pins the head to the code vocabulary now.
-  assert.deepEqual(literalsIn(checkClause(SQL, CONSTRAINT)), [...minus(NEED_KEYS, ADDED_BY_56), ...RETIRED_BY_56].sort());
+  assert.deepEqual(literalsIn(checkClause(SQL, CONSTRAINT)), [...minus(NEED_KEYS, [...ADDED_BY_56, ...ADDED_BY_58]), ...RETIRED_BY_56].sort());
 });
 
 test('it only widens: no table, no data, nothing dropped but the constraint', () => {

@@ -60,6 +60,7 @@ import { isAnonymousMarketplaceBuyer } from "../../../agent/src/resolution/order
 import { KnowledgeNotFoundError, KnowledgeValidationError } from "./knowledge-errors";
 import { loadTicketPriority } from "./ticket-priority-service";
 import { NO_SNOOZE, readSnoozeFacts } from "./snooze-service";
+import { NO_FORWARDING, readForwardingFacts, type ForwardingFacts } from "./forwarding-service";
 import type { SnoozeFacts } from "./snooze-service";
 import { getCaseState, refoldTicket } from "./case-state-service";
 import { isInvestigable } from "../../../agent/src/investigation/investigation-rules.mjs";
@@ -152,10 +153,11 @@ function partitionBySender(
   directory: any,
   vipTickets: Set<string>,
   priority: PriorityRead,
-  snoozes: Map<string, SnoozeFacts> = new Map()
+  snoozes: Map<string, SnoozeFacts> = new Map(),
+  forwarding: ForwardingFacts = NO_FORWARDING
 ) {
   const mapped = rows
-    .map((row) => mapTicketRow(row, directory, vipTickets, priority.byTicket.get(row.id), priority.at, snoozes.get(row.id)))
+    .map((row) => mapTicketRow(row, directory, vipTickets, priority.byTicket.get(row.id), priority.at, snoozes.get(row.id), forwarding))
     .sort(byPriorityThenLastActivityDesc);
   return {
     tickets: mapped.filter((ticket) => !ticket.isOwnSide),
@@ -165,13 +167,14 @@ function partitionBySender(
 
 export async function listTickets(shopId: string): Promise<TicketListItem[]> {
   const rows = await readQueue(shopId) as any[];
-  const [directory, vipTickets, priority, snoozes] = await Promise.all([
+  const [directory, vipTickets, priority, snoozes, forwarding] = await Promise.all([
     readSenderDirectory(shopId),
     loadVipTickets(shopId),
     readPriority(shopId),
-    readSnoozeFacts(shopId)
+    readSnoozeFacts(shopId),
+    readForwardingFacts(shopId)
   ]);
-  return partitionBySender(rows, directory, vipTickets, priority, snoozes).tickets;
+  return partitionBySender(rows, directory, vipTickets, priority, snoozes, forwarding).tickets;
 }
 
 /** The other half: threads one of our own addresses opened. */
@@ -954,14 +957,15 @@ export async function changeTicketOrder(
   });
   if (!row) throw changedMeanwhile;
 
-  const [vipTickets, detail, priority, snoozes] = await Promise.all([
+  const [vipTickets, detail, priority, snoozes, forwarding] = await Promise.all([
     loadVipTickets(shopId, [ticketId]),
     getTicketDetail(shopId, ticketId),
     loadTicketPriority(shopId, [row]),
     readSnoozeFacts(shopId),
+    readForwardingFacts(shopId),
   ]);
   return {
-    ticket: mapTicketRow(row, undefined, vipTickets, priority.byTicket.get(ticketId), priority.at, snoozes.get(ticketId)),
+    ticket: mapTicketRow(row, undefined, vipTickets, priority.byTicket.get(ticketId), priority.at, snoozes.get(ticketId), forwarding),
     detail,
     reinvestigation: "needs_investigation" in columns ? "queued" : "not_queued",
   };
@@ -1221,8 +1225,8 @@ export async function setTicketStatus(
     throw new KnowledgeNotFoundError(`Ticket not found: ${ticketId}`);
   }
 
-  const [priority, snoozes] = await Promise.all([loadTicketPriority(shopId, [row]), readSnoozeFacts(shopId)]);
-  return mapTicketRow(row, undefined, vipTickets, priority.byTicket.get(ticketId), priority.at, snoozes.get(ticketId));
+  const [priority, snoozes, forwarding] = await Promise.all([loadTicketPriority(shopId, [row]), readSnoozeFacts(shopId), readForwardingFacts(shopId)]);
+  return mapTicketRow(row, undefined, vipTickets, priority.byTicket.get(ticketId), priority.at, snoozes.get(ticketId), forwarding);
 }
 
 /**
@@ -1249,8 +1253,8 @@ export async function getTicketListItem(
     throw new KnowledgeNotFoundError(`Ticket not found: ${ticketId}`);
   }
 
-  const [priority, snoozes] = await Promise.all([loadTicketPriority(shopId, [row]), readSnoozeFacts(shopId)]);
-  return mapTicketRow(row, directory, vipTickets, priority.byTicket.get(ticketId), priority.at, snoozes.get(ticketId));
+  const [priority, snoozes, forwarding] = await Promise.all([loadTicketPriority(shopId, [row]), readSnoozeFacts(shopId), readForwardingFacts(shopId)]);
+  return mapTicketRow(row, directory, vipTickets, priority.byTicket.get(ticketId), priority.at, snoozes.get(ticketId), forwarding);
 }
 
 /** Highest priority first, newest activity breaking ties. */
@@ -1294,7 +1298,8 @@ function mapTicketRow(
   vipTickets: Set<string> = new Set(),
   priorityFacts?: PriorityFacts,
   priorityAt: Date = new Date(),
-  snoozeFacts: SnoozeFacts = NO_SNOOZE
+  snoozeFacts: SnoozeFacts = NO_SNOOZE,
+  forwarding: ForwardingFacts = NO_FORWARDING
 ): TicketListItem {
   const customer = mapCustomer(row, vipTickets);
   // THE ADDRESS STOPS HERE. `requester_email` is read from the view so this
@@ -1359,6 +1364,7 @@ function mapTicketRow(
     lastMessageAt: row.last_message_at,
     snooze: snoozeFacts.snooze,
     lastWake: snoozeFacts.lastWake,
+    forwarding: forwarding(row.id, row.category ?? null),
   };
 }
 

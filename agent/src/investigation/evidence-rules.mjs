@@ -206,9 +206,17 @@ const NEEDS = {
   },
 
   // --- promotions ------------------------------------------------------------
+  // CODE OR AUTOMATIC OFFER, and which one. Widened 2026-10-01: it used to mean
+  // "which code", so a complaint about free shipping or a gift — no code at all
+  // — could only ever read as unidentified, and the reply asked for a code.
+  // `ambiguous` does not satisfy: several offers fit, and choosing is the doubt
+  // the case file must keep.
   promotion_identity: {
-    label: 'de quel code promotionnel il s’agit',
-    satisfiedBy: [{ tool: TOOL_NAMES.EXTRACT_PROMOTION_CODES, outcomes: ['found'] }],
+    label: 'de quelle promotion il s’agit : un code saisi ou une offre automatique',
+    satisfiedBy: [
+      { tool: TOOL_NAMES.IDENTIFY_PROMOTION, outcomes: ['code', 'automatic', 'both'] },
+      { tool: TOOL_NAMES.EXTRACT_PROMOTION_CODES, outcomes: ['found'] }
+    ],
     asksCustomer: 'promotion_code'
   },
   promotion_validity: {
@@ -250,6 +258,34 @@ const NEEDS = {
     // would launder the one gap the promotion tool exists to be honest about.
     satisfiedBy: [{ tool: TOOL_NAMES.LOOKUP_PROMOTION, outcomes: ['eligible', 'blocked'] }],
     asksCustomer: null
+  },
+
+  // WHY THE PROMOTION DID OR DID NOT APPLY, against the order or the last
+  // abandoned basket. Added 2026-10-01 for the automatic offers — « livraison
+  // facturée sur 72 € », « le masque offert a été facturé », « 3 masques et pas
+  // de 4e » — whose answer is a threshold, a country, a missing reward or a
+  // combination, none of which `promotion_eligibility` (a code's checks) names.
+  //
+  // `undetermined` does not satisfy: no basket, or a condition the data cannot
+  // settle. The order number is what closes it most often.
+  promotion_outcome: {
+    label: 'pourquoi la promotion s’est appliquée ou non à la commande ou au panier',
+    satisfiedBy: [
+      {
+        tool: TOOL_NAMES.CHECK_PROMOTION_OUTCOME,
+        outcomes: [
+          'applied',
+          'expired',
+          'outside_destination',
+          'not_combinable',
+          'items_not_qualifying',
+          'below_threshold',
+          'reward_not_in_basket',
+          'conditions_met'
+        ]
+      }
+    ],
+    asksCustomer: 'shopify_order_number'
   },
 
   // --- customer --------------------------------------------------------------
@@ -518,12 +554,21 @@ const FINDINGS = {
         : 'not_attached'
   },
 
+  // WHAT KIND OF PROMOTION, which is what separates the answers: a code is
+  // checked and can be refused; an automatic offer applies itself, is
+  // advertised, and fails on a threshold, a destination or a combination.
+  // `resolved` is gone with the widening — nothing branched on it — and the
+  // old extraction tool reads as `code`.
   promotion_identity: {
-    values: ['resolved', 'none', 'unknown'],
+    values: ['code', 'automatic', 'both', 'ambiguous', 'none', 'unknown'],
     derive(entries) {
+      const identified = lastByTool(entries, TOOL_NAMES.IDENTIFY_PROMOTION);
+      if (identified) {
+        return FINDINGS.promotion_identity.values.includes(identified.outcome) ? identified.outcome : 'unknown';
+      }
       const entry = lastByTool(entries, TOOL_NAMES.EXTRACT_PROMOTION_CODES);
       if (!entry) return 'unknown';
-      if (entry.outcome === 'found') return 'resolved';
+      if (entry.outcome === 'found') return 'code';
       if (entry.outcome === 'none') return 'none';
       return 'unknown';
     }
@@ -558,6 +603,29 @@ const FINDINGS = {
       if (!entry) return 'unknown';
       const verdict = entry.data?.verdict ?? null;
       return FINDINGS.promotion_eligibility.values.includes(verdict) ? verdict : 'unknown';
+    }
+  },
+
+  // THE FIRST CHECK DECIDES: identification lists matched offers before typed
+  // codes, and the opening chain checks them in that order, so the first
+  // outcome is about the offer the customer described.
+  promotion_outcome: {
+    values: [
+      'applied',
+      'expired',
+      'outside_destination',
+      'not_combinable',
+      'items_not_qualifying',
+      'below_threshold',
+      'reward_not_in_basket',
+      'conditions_met',
+      'undetermined',
+      'unknown'
+    ],
+    derive(entries) {
+      const entry = entries.find((e) => e?.tool === TOOL_NAMES.CHECK_PROMOTION_OUTCOME && e.data?.found);
+      if (!entry) return 'unknown';
+      return FINDINGS.promotion_outcome.values.includes(entry.outcome) ? entry.outcome : 'unknown';
     }
   },
 
@@ -634,12 +702,15 @@ const FINDINGS = {
     }
   },
 
+  // specific IS A CODE, as it always was, so the approved P-21 rule that says
+  // « donner le code EXACTEMENT » keeps meaning what it says. Since automatic
+  // offers count too (2026-10-01), one with no code to give is its own value.
   product_offer: {
-    values: ['specific', 'general_only', 'none', 'unknown'],
+    values: ['specific', 'specific_automatic', 'general_only', 'none', 'unknown'],
     derive(entries) {
       const entry = lastByTool(entries, TOOL_NAMES.LOOKUP_PRODUCT_OFFER);
       if (!entry) return 'unknown';
-      if (entry.outcome === 'found') return 'specific';
+      if (entry.outcome === 'found') return entry.data?.specificKind === 'automatic' ? 'specific_automatic' : 'specific';
       if (entry.outcome === 'general') return 'general_only';
       if (entry.outcome === 'none') return 'none';
       return 'unknown';
@@ -925,13 +996,31 @@ const DETAILS = {
   product_property: (entries) => detailsFromKnowledge(entries),
   brand_answer: (entries) => detailsFromKnowledge(entries),
 
+  // The codes typed and the offers matched, by name: what a person picking the
+  // ticket up would otherwise open Shopify to find.
   promotion_identity: (entries) => {
+    const identified = lastByTool(entries, TOOL_NAMES.IDENTIFY_PROMOTION);
+    if (identified) {
+      const codes = identified.data?.codes || [];
+      const offers = (identified.data?.offers || []).map((o) => o.matched?.title).filter(Boolean);
+      const candidates = (identified.data?.offers || []).flatMap((o) => o.candidates || []);
+      if (codes.length === 0 && offers.length === 0 && candidates.length === 0) return null;
+      return { kind: identified.data?.kind ?? null, codes, offers, candidates };
+    }
     const entry = lastByTool(entries, TOOL_NAMES.EXTRACT_PROMOTION_CODES);
     const codes = entry?.data?.codes || [];
     return codes.length > 0 ? { codes } : null;
   },
 
   promotion_validity: (entries) => detailsFromPromotion(entries),
+  // Which offer, on what basket, and what stopped it — the « why » a person
+  // would otherwise reconstruct in Shopify.
+  promotion_outcome: (entries) => {
+    const entry = entries.find((e) => e?.tool === TOOL_NAMES.CHECK_PROMOTION_OUTCOME && e.data?.found);
+    if (!entry) return null;
+    const failed = (entry.data.checks || []).filter((c) => c.status === 'fail').map((c) => ({ check: c.id, reason: c.reason, with: c.with }));
+    return { promotion: entry.data.promotion, basket: entry.data.basket, failedChecks: failed };
+  },
   promotion_eligibility: (entries) => detailsFromPromotion(entries),
 
   customer_identity: (entries) => detailsFromCustomer(entries),
@@ -1107,7 +1196,11 @@ export function findingValues(need) {
  */
 function promotionIdentified(entries = []) {
   return entries.some(
-    (entry) => entry?.tool === TOOL_NAMES.EXTRACT_PROMOTION_CODES && entry.outcome === 'found'
+    (entry) =>
+      (entry?.tool === TOOL_NAMES.EXTRACT_PROMOTION_CODES && entry.outcome === 'found') ||
+      // A typed code, specifically: a matched AUTOMATIC offer is identified too,
+      // but the listing says nothing about any one code's state.
+      (entry?.tool === TOOL_NAMES.IDENTIFY_PROMOTION && (entry.data?.codes?.length ?? 0) > 0)
   );
 }
 
@@ -1152,6 +1245,7 @@ const DEPENDENCIES = {
   checkout_state: { requires: ['customer_identity'] },
 
   promotion_validity: { requires: ['promotion_identity'] },
+  promotion_outcome: { requires: ['promotion_identity'] },
   promotion_eligibility: {
     requires: ['promotion_validity'],
     moot: { promotion_validity: ['expired', 'not_yet_started', 'inactive', 'not_found'] }

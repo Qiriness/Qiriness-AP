@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { createInvestigator } from './investigate.mjs';
+import { createInvestigator, promotionFound } from './investigate.mjs';
 import { FINALIZE_TOOL_NAME } from './case-file.mjs';
 import { TOOL_NAMES } from './investigation-rules.mjs';
 
@@ -404,7 +404,7 @@ test('a split email runs the opening moves of BOTH its subjects', async () => {
   const registry = buildPlanningRegistry({
     [TOOL_NAMES.LOOKUP_PRODUCT]: async () => OK_RESULT,
     [TOOL_NAMES.SEARCH_KNOWLEDGE]: async () => OK_RESULT,
-    [TOOL_NAMES.EXTRACT_PROMOTION_CODES]: async () => OK_RESULT,
+    [TOOL_NAMES.IDENTIFY_PROMOTION]: async () => OK_RESULT,
     [TOOL_NAMES.LOOKUP_CUSTOMER]: async () => OK_RESULT
   });
   const decomposer = buildDecomposer({
@@ -420,7 +420,7 @@ test('a split email runs the opening moves of BOTH its subjects', async () => {
 
   const tools = registry.calls.map((c) => c.name);
   assert.ok(tools.includes(TOOL_NAMES.LOOKUP_PRODUCT));
-  assert.ok(tools.includes(TOOL_NAMES.EXTRACT_PROMOTION_CODES));
+  assert.ok(tools.includes(TOOL_NAMES.IDENTIFY_PROMOTION));
   // The registry was asked to scope by the plan, not by the ticket alone.
   assert.equal(registry.boundFor.length, 2);
 });
@@ -1347,4 +1347,36 @@ test("the matched situation's policies are read before the model speaks, and the
     { key: 'delivery_time_policy', version: 3, source: 'situation' },
     { key: 'refund_policy', version: 1, source: 'rule' }
   ]);
+});
+
+test('a promotion found in the message opens the promotions rulebook, whatever the subject', async () => {
+  // « le masque offert a été facturé » filed `order` with no second subject:
+  // the promotions rules never opened while identification had found the offer.
+  const registry = buildRegistry({
+    [TOOL_NAMES.LOOKUP_PRODUCT]: async () => OK_RESULT,
+    [TOOL_NAMES.SEARCH_KNOWLEDGE]: async () => OK_RESULT,
+    [TOOL_NAMES.IDENTIFY_PROMOTION]: async () => ({
+      outcome: 'automatic',
+      caveats: [],
+      promptText: 'Type : automatic',
+      data: { kind: 'automatic', codes: [], knownCodes: [], offers: [] }
+    })
+  });
+  const openai = buildOpenAI([
+    { toolCalls: [{ id: 'c1', name: TOOL_NAMES.IDENTIFY_PROMOTION, args: { codes: [], offers: [] }, argsError: null }] },
+    { content: caseFileAnswer() }
+  ]);
+  const { investigate } = createInvestigator(openai, registry, {
+    model: 'm',
+    policyForRequest: async ({ answerSet }) => (answerSet === 'promotions' ? alwaysRule('promotions', 'promo_rule') : null)
+  });
+
+  const caseFile = await investigate({ ...PRODUCT_TICKET, policy: alwaysRule('products', 'product_rule') });
+  assert.deepEqual(caseFile.policy.per_request.map((r) => r.answer_set), ['products', 'promotions']);
+});
+
+test('promotionFound reads identification only, and not a message that named nothing', () => {
+  assert.equal(promotionFound([{ tool: TOOL_NAMES.IDENTIFY_PROMOTION, outcome: 'code' }]), true);
+  assert.equal(promotionFound([{ tool: TOOL_NAMES.IDENTIFY_PROMOTION, outcome: 'none' }]), false);
+  assert.equal(promotionFound([{ tool: TOOL_NAMES.LOOKUP_PRODUCT, outcome: 'found' }]), false);
 });
