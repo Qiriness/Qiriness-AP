@@ -295,6 +295,13 @@ test('promotion_outcome is the first checked promotion, and undetermined does no
   assert.equal(settled.state, 'satisfied');
 });
 
+test('a refused code is validity unknown, never not_found', () => {
+  // c8ef367a: the customer typed no code, the model's guess was refused, and
+  // « votre code n'existe pas » followed.
+  const ledger = [{ id: 't1', tool: TOOL_NAMES.LOOKUP_PROMOTION, outcome: 'no_code_in_message', data: { found: null } }];
+  assert.equal(finding('promotion_validity', ledger), 'unknown');
+});
+
 test('promotion_validity reads not_found ahead of any check', () => {
   const ledger = [
     { id: 't1', tool: TOOL_NAMES.LOOKUP_PROMOTION, outcome: 'not_found', data: { found: false } }

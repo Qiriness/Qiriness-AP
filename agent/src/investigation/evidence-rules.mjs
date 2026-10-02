@@ -582,6 +582,10 @@ const FINDINGS = {
     derive(entries) {
       const entry = lastByTool(entries, TOOL_NAMES.LOOKUP_PROMOTION);
       if (!entry) return 'unknown';
+      // A REFUSED argument settles nothing: the code was not in the message, so
+      // it was never looked up, and « votre code n'existe pas » would be said
+      // about a code the customer never gave (c8ef367a, 2026-09-13).
+      if (entry.outcome === 'no_code_in_message') return 'unknown';
       if (entry.outcome === 'not_found' || entry.data?.found === false) return 'not_found';
 
       const checks = entry.data?.checks || [];

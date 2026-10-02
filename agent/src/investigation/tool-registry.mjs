@@ -673,26 +673,33 @@ export function createToolRegistry({
         // `listActivePromotions` stays the honest path for "is there another
         // offer I could give this customer", which is a real support move.
         const code = String(args.code || '');
-        const result = await promotionLookup.lookupPromotion(code, {
-          customer: ticket.customer || null
-        });
 
-        // ONLY THE `not_found` CASE IS REINTERPRETED, which is what makes the
-        // rule safe. A code the shop really has resolves regardless of how the
-        // customer punctuated it, and a genuine typo the customer typed still
-        // reports `not_found` with suggestions — the useful answer. What is
-        // refused is a string that exists in neither the shop NOR the message,
-        // which is the only shape a fabricated argument can take.
-        if (!result.found && code && !appearsAsToken(code, ticket.text)) {
+        // ANY CODE NOT IN THE MESSAGE IS REFUSED, whether or not the shop holds
+        // it (2026-10-01). Only unknown codes used to be refused, and that let
+        // through the worse case: a REAL code the customer never wrote. Three of
+        // the four P-18 runs (71f9fdc2, 66d921a7, 576f4de9 — « les 20 % ne
+        // s'appliquent pas », no code typed) recorded `promotion_validity:
+        // active` for a code the model chose, and the reply confirmed « votre
+        // code existe et est actif » about a code nobody had quoted. A code the
+        // customer DESCRIBED is identification's to list as candidates, never
+        // the model's to pick. A typo the customer typed still reaches the
+        // lookup and gets its not-found answer with suggestions.
+        if (code && !appearsAsToken(code, ticket.text)) {
           return {
             outcome: 'no_code_in_message',
             caveats: ['basket_unseeable'],
             promptText:
-              `Le code « ${code} » n'existe pas et n'apparaît pas dans le message du client. ` +
-              'Demande-lui le code exact, ou consulte les promotions actives.',
-            data: { found: false, verdict: 'undetermined', code: null, checks: [], rejected: code }
+              `Le code « ${code} » n'apparaît pas dans le message du client : il n'est pas vérifié. ` +
+              'Ne pas en parler comme du code du client ; lui demander le code exact.',
+            // `found: null`, not false: nothing was looked up, so nothing was
+            // NOT found. evidence-rules reads this outcome as validity unknown.
+            data: { found: null, verdict: 'undetermined', code: null, checks: [], rejected: code }
           };
         }
+
+        const result = await promotionLookup.lookupPromotion(code, {
+          customer: ticket.customer || null
+        });
         const verdict = result.eligibility?.verdict || 'undetermined';
         return {
           outcome: result.found ? verdict : 'not_found',
@@ -1704,5 +1711,7 @@ function appearsAsToken(code, text) {
   if (needle.length === 0) {
     return false;
   }
-  return haystack.split(/\s+/).some((token) => flatten(token) === needle);
+  // One word, or two adjacent ones: « PANIER 10 » is the customer's PANIER10.
+  const words = haystack.split(/\s+/).map(flatten).filter(Boolean);
+  return words.some((w, i) => w === needle || (i + 1 < words.length && w + words[i + 1] === needle));
 }

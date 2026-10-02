@@ -35,6 +35,20 @@ Three sibling files carry the other halves, and this one deliberately does not d
   - The ticket queue tags a ticket the forwarding pass is handing to a colleague: after first reply, pending, failed, or forwarded. A chip on the row and a line under the header. The Rules page tags a situation whose category is forwarded, in the rail and under the canvas title (`situationForwarding`, the worker's `planRoute`); 4 of 40 today, CV-01 to CV-04. `scripts/lib/forwarding-tag.mjs`, `readForwardingFacts` in `forwarding-service.ts`, `ForwardingTag.tsx`.
 - **Proven:** rule selection checked offline for every situation, policy state and product state. A rehearsal selected the attached CV-01 rule with every check passing. forwarding-tag 10/0; agent 1835/0; root 4044 pass (the same 19 old analytics failures); `tsc` and lint on `web/`. **Not yet:** the tag seen on a real ticket; the fallback rehearsed with the policy switched off (VALIDATION_LOG 24).
 
+## Promotions: P-18 rebuilt kind-first, as drafts; the lookup refuses codes not in the message (2026-10-01)
+
+- **Built:**
+  - 14 P-18 drafts as a tree: kind, then validity for codes, then outcome under an active code. They replace the four approved validity-only rules; approve and withdraw together.
+    - The draft `aucun_code_identifie_code_seul` is superseded and removed.
+  - `lookupPromotion` refuses ANY code absent from the message, before looking it up; the refusal reads as validity `unknown`, never `not_found`.
+  - Two-word codes are accepted.
+  - P-18's needs: `promotion_eligibility` replaced by `promotion_outcome`, in the source file and the row.
+- **Proven:**
+  - 360 combinations: one rule each, no ties, no gaps.
+  - Agent 1890/0.
+- **Not yet:**
+  - Drafts unapproved; the four approved rules are still live.
+
 ## Promotions: offers named only if usable, ranked by use; P-21 drafts (2026-10-01)
 
 - **Built:**

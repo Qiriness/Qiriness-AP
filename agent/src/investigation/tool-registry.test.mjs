@@ -1011,3 +1011,47 @@ test('a policy library that fails to load leaves the run without the tool, not f
   await registry.ready();
   assert.ok(!registry.toolsFor({ category: 'order', request_kind: 'question', level: 1 }).names.includes(TOOL_NAMES.GET_POLICY));
 });
+
+test('a REAL code the customer never wrote is refused too, before any lookup', async () => {
+  // 66d921a7: « les 20 % ne s'appliquent pas », no code typed — yet validity came
+  // back `active` for a code the model chose, and the reply confirmed it.
+  let looked = 0;
+  const registry = buildRegistry({
+    promotionLookup: {
+      async lookupPromotion() {
+        looked += 1;
+        return { found: true, code: 'BIENVENUEQIRINESS', eligibility: { verdict: 'eligible', checks: [] }, promptText: 'x' };
+      },
+      async extractCodes() { return []; },
+      async offersForProduct() { return { specific: [], general: [] }; },
+      async listActive() { return { promotions: [], total: 0, truncated: false }; }
+    }
+  });
+  const { handlers } = registry.toolsFor({
+    category: 'promotions',
+    request_kind: 'problem',
+    level: 2,
+    text: 'Bonjour, pour une 1ère commande les 20% ne s appliquent pas ?'
+  });
+
+  const result = await handlers.get(TOOL_NAMES.LOOKUP_PROMOTION)({ code: 'BIENVENUEQIRINESS' });
+  assert.equal(result.outcome, 'no_code_in_message');
+  assert.equal(looked, 0, 'never looked up');
+  assert.equal(result.data.found, null, 'nothing was looked up, so nothing was not found');
+});
+
+test('a code typed as two words is the customer’s code', async () => {
+  const registry = buildRegistry({
+    promotionLookup: {
+      async lookupPromotion() {
+        return { found: true, code: 'PANIER10', eligibility: { verdict: 'eligible', checks: [] }, promptText: 'x' };
+      },
+      async extractCodes() { return []; },
+      async offersForProduct() { return { specific: [], general: [] }; },
+      async listActive() { return { promotions: [], total: 0, truncated: false }; }
+    }
+  });
+  const { handlers } = registry.toolsFor({ category: 'promotions', request_kind: 'problem', level: 2, text: 'le code PANIER 10 ne marche pas' });
+  const result = await handlers.get(TOOL_NAMES.LOOKUP_PROMOTION)({ code: 'PANIER10' });
+  assert.notEqual(result.outcome, 'no_code_in_message');
+});

@@ -554,7 +554,7 @@ commerciale, prise par une personne.
 - « j'essaie de faire une première commande, je me doute que je ne peux pas bénéficier des 20% de 1er commande sur des articles soldés ? »
 - « puis-je l'utiliser sur les soldes ? » _(extrait — la première moitié du message est sur P-15)_
 
-**needs** `promotion_identity`, `promotion_validity`, `promotion_eligibility`
+**needs** `promotion_identity`, `promotion_validity`, `promotion_outcome`
 **exemplaires** → jeu `promo`
 
 > **Rewritten 2026-08-12. It used to ask « puis-je cumuler plusieurs offres ? »

@@ -834,6 +834,30 @@ The match against the shop is done in code, never by the model.
 
 **A typed code is looked up deterministically** (`followUpMoves`). Identification replaced extraction, and extraction was what led the model to `lookupPromotion`. Without that lookup, `promotion_validity` stayed unknown on a ticket that named its code, and « aucun code identifié » would ask for the code just given.
 
+### P-18 decides the kind first; "unknown" is never an answer (2026-10-01)
+
+**The approved P-18 rules branched on `promotion_validity` alone**, which made validity the first question for every « ça ne s'applique pas » ticket. Two of its leaves were wrong for that reason.
+
+- **`unknown` was a terminal answer for three different states.** A discount described but not typed (« les 20 % ») needs a request for the code. A message naming no promotion needs « which offer? ». An automatic offer has no code to validate at all. One rule asked all three for a code. In this vocabulary `unknown` means "the evidence did not settle it", and a rule that answers on it answers without knowing.
+- **`not_found` could be about a code the customer never gave.** On `c8ef367a` the model looked up a code of its own. The guard refused it but returned `found: false`, and the finding read that as `not_found`, so « le code que vous citez n'existe pas » went to someone who had cited none.
+
+**The tree now:**
+1. **Kind** (`promotion_identity`) comes first.
+   - none / unknown: ask what code or offer they mean, and give the configured code.
+   - ambiguous: ask whether they mean a code or a displayed offer. No code is given.
+   - automatic / both: the shared outcome rules.
+2. **Validity**, for codes only.
+   - unknown (described, not typed): ask for the exact code, and give one.
+   - not_found: `code_introuvable`.
+   - expired, inactive, not yet started: `code_plus_utilisable`.
+3. **Outcome**, under an active code. Each settled outcome has its own leaf. « Code actif » keeps only `undetermined` / `unknown`, the one case where its « nous ne voyons pas son panier » is true.
+
+Approved wording is reused verbatim where the leaf means the same thing. **14 drafts.** The 360 identity × validity × outcome combinations select one rule each, with no ties and no gaps. **To go live**, approve the 14 and withdraw `aucun_code_identifie`, `code_introuvable`, `code_plus_utilisable` and `code_actif_ne_sapplique_pas` in the same sitting.
+
+**The lookup now refuses any code not in the message, before looking it up**, not only codes the shop lacks. Three of the four P-18 runs (`71f9fdc2`, `66d921a7`, `576f4de9`, none with a typed code) recorded `promotion_validity: active` for a code the model chose. A described code is identification's to list as candidates, never the model's to pick. A refusal carries `found: null` and reads as `unknown`, never `not_found`. Two adjacent words count as one code (« PANIER 10 »).
+
+**P-18's declared needs** went from `promotion_eligibility` to `promotion_outcome`, in `Email-Example-Queries.md` and in the row. No rule ever read eligibility, and the outcome answers the same question against the real basket.
+
 ### Offers are named only if a reply may use them, and ranked by recent use (2026-10-01)
 
 **The active list used to name every single-code offer**, partner rates included: `LAPFAM26` at 50 %, `PENILLEAU2025` at 26 %, and the 100 %-off `WRAP`. They sat in front of the model on every promotions ticket, one turn from a draft. Rules only ever hand out offerable codes, but nothing stopped the model repeating a code it had read.
