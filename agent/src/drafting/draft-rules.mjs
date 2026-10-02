@@ -291,16 +291,46 @@ export function draftDecision({ investigation, ticket, conversation = [], caseTa
  * guard. Passing `cosmetovigilanceDraftOnly: false` is the deliberate act of
  * turning it off, and `DRAFT_ONLY` must be off too — the two are a conjunction.
  */
-export function autoSendEligible({
+export function autoSendEligible(input = {}) {
+  return autoSendBlockers(input).length === 0;
+}
+
+/**
+ * Every reason this draft may not send itself, as `{ reason, detail }`.
+ *
+ * A LIST RATHER THAN THE FIRST NO, because it is stored on the draft
+ * (`ticket_drafts.auto_send_blockers`) and shown to the reviewer: « the customer
+ * mentions glaucoma » is what they need to check, and a level that would also
+ * have held it says nothing about that.
+ *
+ * TWO SUBJECT GATES SINCE 2026-10-02, beside the category one, because the
+ * category one missed ticket ba09c1ae — a glaucoma question filed `product`:
+ * - `health_topic`: the customer's own words name a health condition, a
+ *   treatment or a body state (`health-topic.mjs`). Whatever the category,
+ *   level or situation.
+ * - `situation`: the draft answers a situation marked « never send
+ *   automatically » (`support_exemplars.never_auto_send`), whatever category
+ *   the ticket was filed under.
+ */
+export function autoSendBlockers({
   level,
   happiness,
   checksPassed,
   verdict,
   category = null,
-  cosmetovigilanceDraftOnly = true
+  cosmetovigilanceDraftOnly = true,
+  healthTerms = [],
+  heldSituations = []
 } = {}) {
+  const blockers = [];
   if (category === 'cosmetovigilance' && cosmetovigilanceDraftOnly) {
-    return false;
+    blockers.push({ reason: 'cosmetovigilance', detail: null });
+  }
+  if (healthTerms.length > 0) {
+    blockers.push({ reason: 'health_topic', detail: healthTerms.map((term) => term.replace(/\*$/, '')).join(', ') });
+  }
+  if (heldSituations.length > 0) {
+    blockers.push({ reason: 'situation', detail: heldSituations.join(', ') });
   }
   // AN ACKNOWLEDGEMENT IS NEVER AUTO-SENT, whatever its level. The verdict says
   // a person owns the next move, and the first thing that person needs is the
@@ -308,17 +338,74 @@ export function autoSendEligible({
   // the customer has already read. It is also the draft written from the least
   // evidence — 7 of the 49 rest on no established fact at all.
   if (verdict === 'needs_human') {
-    return false;
+    blockers.push({ reason: 'needs_human', detail: null });
   }
   if (!AUTO_SEND_LEVELS.includes(level)) {
-    return false;
+    blockers.push({ reason: 'level', detail: level ?? null });
   }
   // Unknown feeling is not a happy one. The categoriser writes `happiness` on
   // every ticket it reads, so null here means it never read this one.
   if (!Number.isInteger(happiness) || happiness > AUTO_SEND_MAX_UNHAPPINESS) {
-    return false;
+    blockers.push({ reason: 'unhappy', detail: happiness ?? null });
   }
-  return checksPassed === true;
+  if (checksPassed !== true) {
+    blockers.push({ reason: 'checks_failed', detail: null });
+  }
+  return blockers;
+}
+
+/**
+ * The needs that say WHERE THE PARCEL IS. A rule branching on one of them, or a
+ * situation declaring one, is a « where is my parcel » question.
+ *
+ * NOT `dispatch_state`: it answers « has it left yet », and a parcel that has
+ * not left has no number to give.
+ */
+export const PARCEL_NEEDS = ['delivery_state', 'delivery_delay_state'];
+
+/**
+ * Does this reply answer « where is my parcel »? Read by the tracking-number
+ * check (draft-checks.mjs), which should demand the number only then.
+ *
+ * THE SELECTED RULE FIRST, because it is what the reply is built on: a rule
+ * whose conditions read where the parcel is was chosen because that is the
+ * question. When no rule was selected, the situations' declared needs.
+ *
+ * `scope` comes from the drafting store, once per run:
+ * `{ parcelRules: Set<'answer_set/answer_key'>, parcelSituations: Set<key> }`.
+ * Null when the caller cannot read it, which returns undefined: the check then
+ * falls back to the category, as before.
+ */
+export function isParcelQuestion({ exemplarMatch = null, caseState = null, scope = null } = {}) {
+  if (!scope) return undefined;
+  const policy = exemplarMatch?.policy ?? null;
+  const selected = [
+    policy?.answer_key ? `${policy.answer_set}/${policy.answer_key}` : null,
+    ...(policy?.per_request ?? []).map((request) =>
+      request?.answer_key ? `${request.answer_set}/${request.answer_key}` : null
+    )
+  ].filter(Boolean);
+  if (selected.length > 0) {
+    return selected.some((key) => scope.parcelRules.has(key));
+  }
+  return situationKeysOf({ exemplarMatch, caseState }).some((key) => scope.parcelSituations.has(key));
+}
+
+/**
+ * Every situation this case file answers: the match, each request's selection
+ * when a message held several, and the casework reading's.
+ *
+ * ALL OF THEM, because a reply answering two requests is held if either is: a
+ * delivery question and a reaction in one message is one reply.
+ */
+export function situationKeysOf({ exemplarMatch = null, caseState = null } = {}) {
+  const keys = [
+    exemplarMatch?.exemplar_key,
+    exemplarMatch?.policy?.situation_key,
+    ...(exemplarMatch?.policy?.per_request ?? []).map((request) => request?.situation_key),
+    caseState?.situation_key
+  ];
+  return [...new Set(keys.filter((key) => typeof key === 'string' && key))];
 }
 
 /**

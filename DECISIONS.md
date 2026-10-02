@@ -1832,6 +1832,28 @@ The questions now travel whenever the FINAL verdict is `needs_customer_input`, w
 
 It **defaults to excluded**, so a caller that has not wired the config gets the safe answer rather than the permissive one. A second subject wanting this should turn the pair into a list rather than add a third boolean.
 
+**It never fired until 2026-10-02.** `COLUMNS.ticketForDrafting` never selected `category`, so `ticket.category` was undefined on every real draft. No cosmetovigilance draft had been written, so nothing was marked sendable that should not have been. The same omission had silenced `tracking_number_given`.
+
+### The parcel number is a warning, and only on « where is my parcel » (2026-10-02)
+
+Switched on by the `category` fix, `tracking_number_given` would have failed 19 of the live drafts, and about half asked something a parcel number does not answer: « was my discount applied » (#6913), a cancellation, an item missing from a parcel already received, a gift that will not add to the basket.
+
+- **Scoped by the question.** It runs when the rule answering the draft branches on where the parcel is (`delivery_state`, `delivery_delay_state`), or, with no rule selected, when the matched situation declares one of those needs (`isParcelQuestion`). Read from the business's own rules and situations once per run, so no key is named in code. Not `dispatch_state`: a parcel that has not left has no number. On the 19: 7 warned, all « shipped, where is it ».
+- **A warning, not a failure** (the owner's call). `severity: 'warning'`: it never makes `checks_passed` false, never shows « Not sendable », never stops a send or an auto-send. It shows amber above the draft and as an entry in the Activity tab. A reply without the number is weaker, not wrong.
+- **No order, no check.** The numbers come from the confirmed order's bundle; with none there is nothing to demand.
+
+### A health condition never sends itself (2026-10-02)
+
+Ticket `ba09c1ae`, « Le masque Led Visage est-il déconseillé pour une personne ayant un GLAUCOME ? », was filed `product`, level 1. The chooser saw only product situations, so CV-03 was never a candidate and no situation matched. Every gate would have let it send. The draft happened to be right; one saying « oui, sans problème » would have gone out the same way.
+
+**Two subject holds, beside the category one, in `autoSendBlockers`:**
+- **`health_topic`**: the customer's own words name a health condition, a treatment or a body state (`drafting/health-topic.mjs`, word list in `health-terms.mjs`). It reads their inbound messages up to the one being answered, quotes stripped, colleagues' and partners' notes excluded. **Never the draft**: a wrong reply needs no medical word to be wrong. Whatever the category, level or situation.
+- **`situation`**: the draft answers a situation a person marked « never sends itself » on the Rules page (`support_exemplars.never_auto_send`). Any situation the case file answers counts: the match, each request's selection, the casework reading. CV-01 to CV-04 are marked. A switch, not a list of keys in code, because which situations are this sensitive is the business's call.
+
+**The draft is still written.** Only sending it is a person's job. The reasons are stored on the draft (`ticket_drafts.auto_send_blockers`, every reason, not the first) and the subject holds are shown above the text, like failed checks, so the reviewer reads the draft for the right thing.
+
+**Wide on purpose.** A false positive costs a person reading a draft; a miss is medical advice nobody checked. Measured over every inbound customer message (1,116, 857 tickets): 10 tickets flagged, all a real health mention or harmless (a job application naming « état de santé »; « elle ne présente aucune allergie »). Two terms were cut for what they caught: English `allerg*` (« allergènes », the labelling-regulation mail) and `medecin*` (« médecine traditionnelle », a marketing pitch).
+
 ### The matched situation is recorded and acted on by nothing
 
 Exemplar retrieval runs beside the investigation, on the message that triggered the run, and its result reaches `ticket_investigations.exemplar_match` and nowhere else. `investigate()` is never told; a test asserts the key never appears in its input.

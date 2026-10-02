@@ -84,6 +84,12 @@ create table public.support_exemplars (
   -- saved anything also lost something. Re-run `report:collection-replay` before
   -- setting this anywhere.
   collection_suppresses boolean not null default false,
+  -- WHETHER A DRAFT ANSWERING THIS SITUATION MAY EVER SEND ITSELF. Off by
+  -- default; a person sets it on the Rules page for a situation where a wrong
+  -- reply is not the same size of mistake (adverse reactions, health). Read by the
+  -- drafting pass whatever category the ticket was filed under, which is the
+  -- point: a reaction filed `product` still matches its situation.
+  never_auto_send boolean not null default false,
   locale text not null default 'fr',
   approval_status text not null default 'draft',
   -- Measured demand from `npm run cluster:tickets`: how many real messages sat
@@ -158,6 +164,9 @@ comment on table public.support_exemplars is
 
 comment on column public.support_exemplars.exemplar_key is
   'Stable human handle from the source analysis (P-16, D-01). Unique per shop, so a re-import updates the existing row rather than creating a second one.';
+
+comment on column public.support_exemplars.never_auto_send is
+  'Set by a person on the Rules page: a draft answering this situation is written but never sends itself, whatever the ticket''s level or category. The drafting pass records it as an auto_send_blockers entry (reason situation).';
 
 comment on column public.support_exemplars.choose_rule is
   'When to choose this situation over its neighbours, and when not to: one line, shown to the situation chooser beside the candidate''s question and phrasings when the matcher could not separate them (near miss or tie). Authored on the **choose_rule** line of Email-Example-Queries.md. Never embedded and never read by the matcher''s score.';

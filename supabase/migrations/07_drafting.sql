@@ -145,6 +145,11 @@ create table public.ticket_drafts (
   -- "how often would L1 have been right" is the question the graduation of
   -- auto-send turns on, and it cannot be answered retrospectively.
   auto_send_eligible boolean not null default false,
+  -- WHY IT MAY NOT, as `[{ reason, detail }]` (draftRules.autoSendBlockers):
+  -- health_topic, situation, cosmetovigilance, needs_human, level, unhappy,
+  -- checks_failed. Empty exactly when auto_send_eligible is true. Shown to the
+  -- reviewer, because « the customer mentions glaucoma » is what they check.
+  auto_send_blockers jsonb not null default '[]'::jsonb,
 
   -- What went into the prompt: which knowledge chunks cleared the answerable
   -- band, which exemplar matched, whether an order bundle was rendered. The
@@ -292,6 +297,9 @@ comment on column public.ticket_drafts.checks is
 
 comment on column public.ticket_drafts.auto_send_eligible is
   'Whether the level gate would have auto-sent this had DRAFT_ONLY been off. Recorded from the start while nothing auto-sends, because how often L1/L2 would have been right is the question graduating auto-send turns on, and it cannot be answered retrospectively.';
+
+comment on column public.ticket_drafts.auto_send_blockers is
+  'Why this draft may not send itself, as [{ reason, detail }]: health_topic (the customer names a health condition; detail lists the words), situation (a never_auto_send situation; detail lists the keys), cosmetovigilance, needs_human, level, unhappy, checks_failed. Empty exactly when auto_send_eligible is true.';
 
 comment on column public.ticket_drafts.prompt_inputs is
   'What went into the prompt: the knowledge chunks that cleared the answerable band, the matched exemplar, whether an order bundle was rendered. Makes "why did it say that" answerable without re-running the pass.';

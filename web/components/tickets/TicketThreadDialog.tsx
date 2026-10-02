@@ -8,7 +8,7 @@ import { useT } from "@/lib/i18n/client";
 import type { Translate } from "@/lib/i18n/translate";
 import { formatRelativeTime } from "@/lib/relative-time";
 import { TrackingText } from "@/components/ui/TrackingText";
-import { awaitingDelivery, decisionLabel, deliveredLine, outboundLine, replyDelivered, replyInFlight } from "@/lib/draft-outbound";
+import { autoSendHoldLines, awaitingDelivery, decisionLabel, deliveredLine, outboundLine, replyDelivered, replyInFlight } from "@/lib/draft-outbound";
 import { replyHtmlIsEmpty, textToReplyHtml } from "@/lib/reply-html";
 import { ReplyEditor, ReplyHtmlView } from "./ReplyEditor";
 import type { TicketListItem, TicketMessage, TicketThread, TicketTracking } from "@/lib/types";
@@ -173,6 +173,16 @@ export function TicketThreadDialog({ ticket, onClose }: TicketThreadDialogProps)
                 {thread.draft.failedChecks.join("; ") || t("tickets.panels.draft.seeRecord")}.
               </p>
             )}
+            {(thread.draft.warnings ?? []).map((detail) => (
+              <p key={detail} className={styles.caution} role="status">
+                {t("tickets.panels.draft.warning", { detail })}
+              </p>
+            ))}
+            {autoSendHoldLines(thread.draft, t).map((line) => (
+              <p key={line} className={styles.blocked} role="status">
+                {line}
+              </p>
+            ))}
             {/* THE MODEL'S TEXT IS NEVER EDITED IN PLACE. Opening the editor
                 copies it in as formatted text (its [[marker]] as the real
                 link); saving writes the rewrite to separate columns and appends

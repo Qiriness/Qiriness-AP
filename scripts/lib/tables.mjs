@@ -315,8 +315,12 @@ export const COLUMNS = {
   // `duplicate_of_ticket_id` travels so the pass can skip a ticket linked as a
   // duplicate — the whole point of the link is that one customer does not get
   // two replies to one message.
+  // `category` WAS MISSING until 2026-10-02, so the cosmetovigilance auto-send
+  // gate (`autoSendBlockers`) and the category-aware draft checks read undefined
+  // on every real draft. No cosmetovigilance draft had been written, so nothing
+  // was marked sendable that should not have been.
   ticketForDrafting:
-    'id,subject,status,level,language,happiness,requester_name,resolved_context,' +
+    'id,subject,status,category,level,language,happiness,requester_name,resolved_context,' +
     'duplicate_of_ticket_id,related_ticket_id,related_score,sender_label,case_id,' +
     // The poll gate (stage 6): a ticket still owed a pass is not drafted yet.
     'needs_categorisation,needs_investigation',
@@ -579,7 +583,7 @@ export const COLUMNS = {
    */
   draftForReview:
     'id,ticket_id,trigger_message_id,source_verdict,disposition,level,language,subject,' +
-    'body_text,approved_body_text,approved_body_html,status,checks,checks_passed,auto_send_eligible,model,' +
+    'body_text,approved_body_text,approved_body_html,status,checks,checks_passed,auto_send_eligible,auto_send_blockers,model,' +
     // `reply_link` IS read: the dashboard puts it on the draft's [[marker]].
     'drafted_at,review_sent_at,reply_link,' +
     // Stage 6: which case version it answers, and why it went stale if it did.

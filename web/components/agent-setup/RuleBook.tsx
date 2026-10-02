@@ -8,7 +8,7 @@ import { linkPolicy } from "@/lib/api/company-policies";
 import { knowledgeErrorMessage } from "@/lib/api/knowledge";
 import { useT } from "@/lib/i18n/client";
 import type { Translate } from "@/lib/i18n/translate";
-import { deleteRule, saveRule, setCollectionMode, setRuleApproval } from "@/lib/api/policy";
+import { deleteRule, saveRule, setCollectionMode, setNeverAutoSend, setRuleApproval } from "@/lib/api/policy";
 import {
   branchChoiceKey,
   loadGeneralRuleChoices,
@@ -90,6 +90,9 @@ export function RuleBook({
   const [policyLibrary, setPolicyLibrary] = useState<CompanyPolicy[]>(initialPolicies);
   const [modes, setModes] = useState<Record<string, string>>(() =>
     Object.fromEntries(situations.map((situation) => [situation.key, situation.collectionMode])),
+  );
+  const [held, setHeld] = useState<Record<string, boolean>>(() =>
+    Object.fromEntries(situations.map((situation) => [situation.key, situation.neverAutoSend])),
   );
   const [editing, setEditing] = useState<EditorState | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -227,6 +230,14 @@ export function RuleBook({
     await run(`mode:${key}`, async () => {
       await setCollectionMode(key, next);
       setModes((prev) => ({ ...prev, [key]: next }));
+    });
+  }
+
+  async function toggleHeld(key: string) {
+    const next = !held[key];
+    await run(`hold:${key}`, async () => {
+      await setNeverAutoSend(key, next);
+      setHeld((prev) => ({ ...prev, [key]: next }));
     });
   }
 
@@ -413,6 +424,29 @@ export function RuleBook({
                       {modes[activeSituationMeta.key] === "rule_directed"
                         ? t("setup.rules.rulesCollect")
                         : t("setup.rules.modelCollects")}
+                    </span>
+                  </label>
+                )}
+                {/* WHETHER ITS DRAFTS MAY EVER SEND THEMSELVES. Same switch
+                    shape as the one beside it. On: the draft is still written
+                    and a person sends it, whatever the ticket's level or the
+                    category it was filed under (draft-rules.mjs
+                    `autoSendBlockers`, reason `situation`). */}
+                {activeSituationMeta && (
+                  <label className={styles.modeSwitch}>
+                    <input
+                      type="checkbox"
+                      className={styles.modeSwitchInput}
+                      checked={held[activeSituationMeta.key] === true}
+                      disabled={busy === `hold:${activeSituationMeta.key}`}
+                      onChange={() => toggleHeld(activeSituationMeta.key)}
+                      aria-label={t("setup.rules.holdLabel", { key: activeSituationMeta.key })}
+                    />
+                    <span className={styles.modeSwitchTrack} aria-hidden="true">
+                      <span className={styles.modeSwitchKnob} />
+                    </span>
+                    <span className={styles.modeSwitchState}>
+                      {held[activeSituationMeta.key] ? t("setup.rules.neverSends") : t("setup.rules.maySend")}
                     </span>
                   </label>
                 )}

@@ -10,6 +10,23 @@ Three sibling files carry the other halves, and this one deliberately does not d
 
 ---
 
+## Health questions never send themselves; the cosmetovigilance gate actually fires (2026-10-02)
+
+- **Why:** ticket `ba09c1ae` (« déconseillé … GLAUCOME ? ») was filed `product`, level 1, matched no situation, and every auto-send gate would have let its draft go. DECISIONS.md § *A health condition never sends itself*.
+- **Health-topic hold:** `drafting/health-topic.mjs` reads what the customer wrote (their inbound messages up to the one answered, quotes stripped, colleagues excluded) against a word list in `health-terms.mjs` (five languages, data only). A hit holds the draft whatever the category, level or situation. Over 1,116 customer messages it flags 10 tickets, all real or harmless.
+- **Per-situation switch:** « never sends itself » on the Rules page, beside the collection switch (`support_exemplars.never_auto_send`). Set on CV-01 to CV-04.
+- **Reasons stored and shown:** `autoSendEligible` is now `autoSendBlockers().length === 0`; every reason is saved in `ticket_drafts.auto_send_blockers`, and the health, situation and cosmetovigilance holds are shown above the draft in the ticket panel and the thread dialog. `draft -- --dry-run` prints them.
+- **Bug fixed:** `COLUMNS.ticketForDrafting` never selected `category`, so the cosmetovigilance auto-send gate and the `tracking_number_given` check were dead on every real draft since drafting began.
+- **The parcel-number check is now a warning, and only on « where is my parcel » replies** (DECISIONS.md § *The parcel number is a warning*). It runs when the selected rule branches on `delivery_state` / `delivery_delay_state`, or the situation declares it; it never fails a draft or stops a send. Shown amber above the draft (« Check before sending: … ») and as « Draft warning » in the Activity tab. On the 19 live drafts it would have failed by category, it warns on 7, all shipped-parcel questions.
+- **Corpus fix:** P-22's moved Spanish variant had been imported as French (`_(es, …)_` is not a language marker); now `_(es — …)_`, re-translated from Spanish, re-imported and embedded. A stale P-20 translation removed.
+- **Migration 63, applied.** Two columns, no data written; the CV switches were set afterwards.
+- **Proven:**
+  - `ba09c1ae` re-drafted in a dry run: written, and held with `health_topic (glaucome, deconseille)`;
+  - the drafting store reads CV-01 to CV-04 back as held;
+  - root (4,427) and agent (1,991) tests pass, and the web typecheck is clean.
+
+  The Rules switch and the ticket-panel lines were not clicked through in a browser. Nothing auto-sends today (`DRAFT_ONLY=true`).
+
 ## Order situations: O-14 / P-20 / P-22 redrawn, rules collect, general rules writable from the editor (2026-10-02)
 
 - **Situation boundaries:** O-14 is now any change to the *purchased* products of a placed order (add, remove, swap, size/shade/quantity). Free items are P-22 before the parcel arrives and P-20 after it, whether they are samples, gifts or anything else offered. D-02's « do not choose » now names gifts too. Titles, choose_rules and variants rewritten in `Email-Example-Queries.md`; every new variant is a real message (#3895, #2707, #4765, #5137, and four undated-order ones). Forgotten free samples moved from O-14 to P-22.

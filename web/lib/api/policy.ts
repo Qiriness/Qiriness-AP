@@ -85,6 +85,17 @@ export async function setCollectionMode(
   );
 }
 
+/** Marks one situation « never send automatically », or clears it. */
+export async function setNeverAutoSend(
+  key: string,
+  neverAutoSend: boolean,
+): Promise<{ key: string; neverAutoSend: boolean }> {
+  return request<{ key: string; neverAutoSend: boolean }>(
+    `/api/policy/situations/${encodeURIComponent(key)}`,
+    { method: "PATCH", body: JSON.stringify({ neverAutoSend }) },
+  );
+}
+
 export async function deleteRule(id: string): Promise<void> {
   await request<{ ok: boolean }>(`/api/policy/rules/${id}`, { method: "DELETE" });
 }

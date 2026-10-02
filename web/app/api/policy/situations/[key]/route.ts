@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
-import { getShopId, setCollectionMode } from "@/lib/server/policy-service";
+import { getShopId, setCollectionMode, setNeverAutoSend } from "@/lib/server/policy-service";
 import { knowledgeErrorResponse } from "@/lib/server/knowledge-errors";
 
 export const dynamic = "force-dynamic";
@@ -20,6 +20,12 @@ export async function PATCH(request: NextRequest, { params }: { params: { key: s
   try {
     const shopId = await getShopId();
     const body = await request.json();
+    // The other per-situation switch: whether its drafts may ever send
+    // themselves. Its own field, so flipping one never touches the other.
+    if (typeof body?.neverAutoSend === "boolean") {
+      await setNeverAutoSend(shopId, params.key, body.neverAutoSend);
+      return NextResponse.json({ key: params.key, neverAutoSend: body.neverAutoSend });
+    }
     const mode = body?.collectionMode === "rule_directed" ? "rule_directed" : "model";
     await setCollectionMode(shopId, params.key, mode);
     return NextResponse.json({ key: params.key, collectionMode: mode });

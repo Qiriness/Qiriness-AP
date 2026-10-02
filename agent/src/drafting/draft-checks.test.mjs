@@ -11,6 +11,7 @@ import {
   checksPassed,
   failedChecks,
   runDraftChecks,
+  warningChecks,
   withoutHedgedDelivery
 } from './draft-checks.mjs';
 
@@ -874,6 +875,30 @@ test('the parcel check stays out of subjects the parcel is not the question in',
   // And no parcel means nothing to pass on, whatever the subject.
   const none = runDraftChecks({ body: clean, signature: SIGNATURE, category: 'delivery', parcels: [] });
   assert.equal(none.some((c) => c.check === 'tracking_number_given'), false);
+});
+
+test('a withheld parcel number is a warning: shown, never a failed draft', () => {
+  const checks = runDraftChecks({
+    body: clean,
+    signature: SIGNATURE,
+    category: 'delivery',
+    parcels: [{ number: '6C21108711964', carrier: 'Colissimo' }],
+    parcelQuestion: true
+  });
+  assert.equal(checksPassed(checks), true, 'it does not stop a send or auto-send');
+  assert.deepEqual(failedChecks(checks), []);
+  assert.deepEqual(warningChecks(checks), ['the dossier holds 6C21108711964 and the reply names no parcel number']);
+});
+
+test('the question decides, not the category: #6913 asks about a discount, not a parcel', () => {
+  const parcels = [{ number: '6C21200949494', carrier: 'Colissimo' }];
+  const has = (checks) => checks.some((c) => c.check === 'tracking_number_given');
+  // An order ticket whose reply is not about where the parcel is.
+  assert.equal(has(runDraftChecks({ body: clean, signature: SIGNATURE, category: 'order', parcels, parcelQuestion: false })), false);
+  // A « where is my parcel » reply is held to it whatever the category.
+  assert.equal(has(runDraftChecks({ body: clean, signature: SIGNATURE, category: 'order', parcels, parcelQuestion: true })), true);
+  // Still nothing to demand without a connected order: no parcel, no check.
+  assert.equal(has(runDraftChecks({ body: clean, signature: SIGNATURE, category: 'order', parcels: [], parcelQuestion: true })), false);
 });
 
 test('a closing reply is not failed for skipping the delay apology', () => {

@@ -109,6 +109,8 @@ export function createDraftRecord(supabase, { shopId, transport = REST_TRANSPORT
       checks = [],
       checksPassed = false,
       autoSendEligible = false,
+      // Why it may not send itself, as `{ reason, detail }` (draft-rules.mjs).
+      autoSendBlockers = [],
       promptInputs = {},
       // The `{ url, label }` the draft's [[marker]] was written about, or null.
       replyLink = null,
@@ -137,6 +139,7 @@ export function createDraftRecord(supabase, { shopId, transport = REST_TRANSPORT
             checks,
             checks_passed: Boolean(checksPassed),
             auto_send_eligible: Boolean(autoSendEligible),
+            auto_send_blockers: Array.isArray(autoSendBlockers) ? autoSendBlockers : [],
             prompt_inputs: promptInputs,
             reply_link: replyLink,
             model,

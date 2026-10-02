@@ -218,6 +218,7 @@ export async function listSituations(
     category: string | null;
     answerSet: string | null;
     collectionMode: string;
+    neverAutoSend: boolean;
     requirementNeeds: string[];
     forwarding: SituationForwarding | null;
   }[]
@@ -230,7 +231,7 @@ export async function listSituations(
       supabase,
       T.SUPPORT_EXEMPLARS,
       { shop_id: shopId, deleted_at: { operator: "is", value: "null" } },
-      "exemplar_key,canonical_question,category,request_kind,answer_set,collection_mode,requirement_needs",
+      "exemplar_key,canonical_question,category,request_kind,answer_set,collection_mode,never_auto_send,requirement_needs",
     ),
     supabaseSelect(supabase, T.FORWARDING_SETTINGS, { shop_id: shopId }, "forward_since"),
     supabaseSelect(
@@ -250,6 +251,7 @@ export async function listSituations(
       category: (row.category as string) ?? null,
       answerSet: (row.answer_set as string) ?? null,
       collectionMode: (row.collection_mode as string) ?? "model",
+      neverAutoSend: row.never_auto_send === true,
       requirementNeeds: Array.isArray(row.requirement_needs)
         ? (row.requirement_needs as unknown[]).map(String)
         : [],
@@ -472,6 +474,22 @@ export async function setCollectionMode(
     T.SUPPORT_EXEMPLARS,
     { shop_id: shopId, exemplar_key: exemplarKey },
     { collection_mode: mode },
+  );
+}
+
+/**
+ * Marks one situation « never send automatically », or clears it.
+ *
+ * PER SITUATION, SET BY A PERSON, like the collection mode: a draft answering a
+ * marked situation is still written, and never sends itself whatever the
+ * ticket's level or category (draft-rules.mjs `autoSendBlockers`).
+ */
+export async function setNeverAutoSend(shopId: string, exemplarKey: string, neverAutoSend: boolean): Promise<void> {
+  await supabaseUpdate(
+    getSupabaseClient(),
+    T.SUPPORT_EXEMPLARS,
+    { shop_id: shopId, exemplar_key: exemplarKey },
+    { never_auto_send: neverAutoSend === true },
   );
 }
 

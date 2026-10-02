@@ -1267,6 +1267,17 @@ export interface TicketDraft {
   checksPassed: boolean;
   /** One entry per failed check, for the reviewer to see what was caught. */
   failedChecks: string[];
+  /**
+   * Checks that found something worth a look and do not fail the draft
+   * (`severity: 'warning'`), e.g. a parcel number we hold that the reply leaves out.
+   */
+  warnings: string[];
+  /**
+   * Why this draft can never send itself, limited to the subject holds a reviewer
+   * acts on (`ticket_drafts.auto_send_blockers`): the customer names a health
+   * condition, the situation is marked never-auto-send, or it is cosmetovigilance.
+   */
+  autoSendHolds: { reason: "health_topic" | "situation" | "cosmetovigilance"; detail: string | null }[];
   /** ISO timestamp of when it was written. */
   draftedAt: string | null;
   /** Whether approving sends the reply (OUTBOUND_SEND_ENABLED on this server). */
@@ -2760,6 +2771,8 @@ export interface PolicySituation {
   answerSet: string | null;
   /** 'model' (today's behaviour) or 'rule_directed' (the rules may collect). */
   collectionMode: string;
+  /** A draft answering this situation is written but never sends itself (`support_exemplars.never_auto_send`). */
+  neverAutoSend: boolean;
   /**
    * The needs this situation's answer rests on (`support_exemplars.requirement_needs`).
    * The rule editor opens its conditions on these, so a situation with no rules

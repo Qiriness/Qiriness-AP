@@ -129,7 +129,7 @@ async function main() {
     gates,
     cutoverAt,
     estimateOnly,
-    onDraft: ({ ticket, estimate, sourceVerdict, level, language, checksPassed, failedChecks, bodyText, caseVersion }) => {
+    onDraft: ({ ticket, estimate, sourceVerdict, level, language, checksPassed, failedChecks, warnings = [], bodyText, caseVersion, autoSendBlockers = [] }) => {
       if (estimate) {
         console.log(`  ${ticket.id} · ${sourceVerdict} · niveau ${level ?? '?'} · version ${caseVersion ?? '?'} → would be drafted`);
         return;
@@ -144,6 +144,15 @@ async function main() {
           console.log(`      ✗ ${failure}`);
         }
       }
+      for (const warning of warnings) {
+        console.log(`      ⚠ ${warning}`);
+      }
+      // Why it would not send itself, were auto-send on (draft-rules.mjs).
+      console.log(
+        autoSendBlockers.length === 0
+          ? '      envoi auto : possible'
+          : `      envoi auto : bloqué — ${autoSendBlockers.map((b) => (b.detail == null ? b.reason : `${b.reason} (${b.detail})`)).join(' · ')}`
+      );
       if (show) {
         console.log(`\n${indent(bodyText)}\n`);
       }

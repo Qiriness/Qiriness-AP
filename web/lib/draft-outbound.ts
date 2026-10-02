@@ -147,3 +147,20 @@ export function handedOffNotice(draft: TicketDraft, name: string, t: Translate):
   if (draft.holdsInDrafts) return t("tickets.panels.handoff.queuedDrafts", { name });
   return t("tickets.panels.handoff.queuedSend", { name });
 }
+
+/**
+ * Why this draft can never send itself, one line per hold, for a reviewer.
+ *
+ * SHOWN ABOVE THE TEXT like the failed checks, and for the same reason: « the
+ * customer mentions glaucoma » is what to read the draft for, and it has to be
+ * in front of the reviewer before a fluent reply has convinced them.
+ */
+export function autoSendHoldLines(draft: TicketDraft, t: Translate): string[] {
+  return (draft.autoSendHolds ?? []).map((hold) =>
+    hold.reason === "health_topic"
+      ? t("tickets.panels.draft.holdHealth", { terms: hold.detail ?? "" })
+      : hold.reason === "situation"
+        ? t("tickets.panels.draft.holdSituation", { keys: hold.detail ?? "" })
+        : t("tickets.panels.draft.holdCosmetovigilance"),
+  );
+}

@@ -27,6 +27,7 @@ import { promoteDroppedMail } from "@/lib/api/dropped-mail";
 import { knowledgeErrorMessage } from "@/lib/api/knowledge";
 import {
   awaitingDelivery,
+  autoSendHoldLines,
   awaitingWorker,
   canComposeReply,
   decisionLabel,
@@ -1560,7 +1561,10 @@ function ConversationThread({ thread, error }: { thread: TicketThread | null; er
   );
 }
 
-type ActivityKind = "inbound" | "outbound" | "lookup" | "investigation" | "draft";
+// `linked`: an email on another thread of the same case (61_cases.sql), in the
+// feed so the case reads as one story, in its own colour so it is never taken
+// for this thread's mail.
+type ActivityKind = "inbound" | "outbound" | "linked" | "lookup" | "investigation" | "draft" | "warning";
 
 type ActivityItem = {
   id: string;
@@ -1573,9 +1577,11 @@ type ActivityItem = {
 const ACTIVITY_ICONS: Record<ActivityKind, (props: { size?: number }) => ReactNode> = {
   inbound: MailInIcon,
   outbound: SendIcon,
+  linked: MailInIcon,
   lookup: SearchIcon,
   investigation: SparkleIcon,
   draft: PencilIcon,
+  warning: AlertIcon,
 };
 
 function ActivityTimeline({
@@ -1680,6 +1686,26 @@ function activityItems(detail: TicketDetail, thread: TicketThread, t: Translate)
     };
   });
 
+  // The case's other threads, both directions, named by their subject.
+  const linked: ActivityItem[] = (thread.case?.threads ?? [])
+    .filter((row) => !row.isThisThread)
+    .flatMap((row) =>
+      row.messages.map((message) => {
+        const inbound = message.direction === "inbound";
+        const name = senderDisplayName(message, t);
+        const subject = row.subject ?? t("tickets.panels.linked.noSubject");
+        return {
+          id: `linked-${message.id}`,
+          at: message.at,
+          title: inbound
+            ? t("tickets.panels.activityFeed.linkedReceived", { who: name, subject })
+            : t("tickets.panels.activityFeed.linkedSent", { who: name, subject }),
+          detail: messageSnippet(message, t),
+          kind: "linked" as const,
+        };
+      })
+    );
+
   const draft: ActivityItem[] = thread.draft
     ? [{
         id: `draft-${thread.draft.id}`,
@@ -1687,7 +1713,16 @@ function activityItems(detail: TicketDetail, thread: TicketThread, t: Translate)
         title: t("tickets.panels.activityFeed.draftGenerated"),
         detail: draftStatusText(thread.draft, t),
         kind: "draft",
-      }]
+      },
+      // Each warning beside the draft it is about, at the same time: worth a
+      // look, never blocking (draft-checks.mjs `warningChecks`).
+      ...(thread.draft.warnings ?? []).map((warning, index) => ({
+        id: `draft-warning-${thread.draft!.id}-${index}`,
+        at: thread.draft!.draftedAt,
+        title: t("tickets.panels.activityFeed.draftWarning"),
+        detail: warning,
+        kind: "warning" as const,
+      }))]
     : [];
 
   const agentEvents: ActivityItem[] = detail.activity.map((event) => {
@@ -1705,7 +1740,7 @@ function activityItems(detail: TicketDetail, thread: TicketThread, t: Translate)
       : event;
   });
 
-  return [...messages, ...agentEvents, ...draft].sort(
+  return [...messages, ...linked, ...agentEvents, ...draft].sort(
     (a, b) => (Date.parse(a.at ?? "") || 0) - (Date.parse(b.at ?? "") || 0)
   );
 }
@@ -1846,6 +1881,20 @@ function DraftResponsePanel({
               {draft.failedChecks.join("; ") || t("tickets.panels.draft.seeRecord")}.
             </p>
           )}
+
+          {draft.status !== "stale" &&
+            (draft.warnings ?? []).map((detail) => (
+              <p key={detail} className={styles.caution} role="status">
+                {t("tickets.panels.draft.warning", { detail })}
+              </p>
+            ))}
+
+          {draft.status !== "stale" &&
+            autoSendHoldLines(draft, t).map((line) => (
+              <p key={line} className={styles.blocked} role="status">
+                {line}
+              </p>
+            ))}
 
           {editing ? (
             // The draft's [[marker]] opens as the real link, so a reviewer

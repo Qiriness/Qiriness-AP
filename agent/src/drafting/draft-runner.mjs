@@ -3,14 +3,18 @@ import { COLUMNS, T } from '../../../scripts/lib/tables.mjs';
 import { caseTimeline } from '../../../scripts/lib/case-reply-target.mjs';
 
 import { brandVoiceProblem, composeSystemPrompt } from './brand-voice.mjs';
-import { checksPassed, failedChecks, runDraftChecks } from './draft-checks.mjs';
+import { checksPassed, failedChecks, runDraftChecks, warningChecks } from './draft-checks.mjs';
 import {
-  autoSendEligible,
+  autoSendBlockers,
   closureAllowed,
   describesChase,
   draftDecision,
-  replyLanguage
+  PARCEL_NEEDS,
+  isParcelQuestion,
+  replyLanguage,
+  situationKeysOf
 } from './draft-rules.mjs';
+import { healthTopicOf } from './health-topic.mjs';
 import {
   DRAFT_SCHEMA,
   caseFileFromRow,
@@ -69,6 +73,14 @@ export async function runDrafting({
   // DEFAULT, so a caller that has not wired `config.draftOnlyCosmetovigilance`
   // still records the safe answer rather than the permissive one.
   cosmetovigilanceDraftOnly = true,
+  // Situations marked « never send automatically » (`support_exemplars.never_auto_send`).
+  // Null means « read them from the store », once per run; a store without the
+  // read (the rehearsal's) holds none, which is how drafting behaved before.
+  heldSituations = null,
+  // Which rules and situations answer « where is my parcel », for the
+  // tracking-number check (`isParcelQuestion`). Null means « read them from the
+  // store », once per run; a store without the read falls back to the category.
+  parcelScope = null,
   // Which discount codes are still offerable, loaded once per run by the caller
   // like `parameters`. Empty by default, which drops every offer rather than
   // sending a code nobody checked — the safe direction for the one field in a
@@ -107,6 +119,10 @@ export async function runDrafting({
   }
 
   const candidates = await store.claimable({ shopId, limit, ticketId, redraft, gates, cutoverAt });
+  const held =
+    heldSituations ?? (candidates.length > 0 && store.heldSituations ? await store.heldSituations(shopId) : new Set());
+  const parcelScopeForRun =
+    parcelScope ?? (candidates.length > 0 && store.parcelScope ? await store.parcelScope(shopId) : null);
   const totals = { considered: candidates.length, drafted: 0, skipped: 0, failed: 0 };
   const skippedBy = {};
   const skip = (reason) => {
@@ -212,12 +228,28 @@ export async function runDrafting({
         // never given.
         parcels: orderContext?.order?.delivery?.tracking || [],
         category: ticket.category,
+        // Whether the reply answers « where is my parcel »: only then is the
+        // number we hold owed to the customer.
+        parcelQuestion: isParcelQuestion({ exemplarMatch: investigation.exemplar_match, caseState, scope: parcelScopeForRun }),
         // The link the prompt described, so the check cannot demand a marker the
         // model was never told to write.
         replyLink: caseFile.link,
         closing: closure.closes
       });
       const passed = checksPassed(checks);
+      const blockers = autoSendBlockers({
+        level: ticket.level,
+        happiness: ticket.happiness,
+        checksPassed: passed,
+        verdict: investigation.verdict,
+        category: ticket.category,
+        cosmetovigilanceDraftOnly,
+        // What the customer wrote, never the draft: see health-topic.mjs.
+        healthTerms: healthTopicOf({ conversation, message, triggerMessageId: investigation.trigger_message_id }),
+        heldSituations: situationKeysOf({ exemplarMatch: investigation.exemplar_match, caseState }).filter((key) =>
+          held.has(key)
+        )
+      });
 
       const draft = {
         ticketId: ticket.id,
@@ -240,14 +272,8 @@ export async function runDrafting({
         replyLink: caseFile.link ?? null,
         checks,
         checksPassed: passed,
-        autoSendEligible: autoSendEligible({
-          level: ticket.level,
-          happiness: ticket.happiness,
-          checksPassed: passed,
-          verdict: investigation.verdict,
-          category: ticket.category,
-          cosmetovigilanceDraftOnly
-        }),
+        autoSendEligible: blockers.length === 0,
+        autoSendBlockers: blockers,
         promptInputs: promptInputs({
           closure,
           caseFile,
@@ -265,7 +291,7 @@ export async function runDrafting({
       }
 
       totals.drafted += 1;
-      onDraft?.({ ...draft, ticket, failedChecks: failedChecks(checks) });
+      onDraft?.({ ...draft, ticket, failedChecks: failedChecks(checks), warnings: warningChecks(checks) });
     } catch (error) {
       // A model failure is one ticket's problem. Recorded and stepped over, so a
       // rate limit on ticket 3 does not cost the other 88.
@@ -399,6 +425,50 @@ export function caseTargetOf(caseRow) {
 
 export function createDraftingStore(supabase, { caseStateStore = null } = {}) {
   return {
+    /** The situations marked « never send automatically », as a Set of keys. */
+    async heldSituations(shopId) {
+      const rows = await supabaseSelect(
+        supabase,
+        T.SUPPORT_EXEMPLARS,
+        { shop_id: shopId, never_auto_send: true, deleted_at: { operator: 'is', value: 'null' } },
+        'exemplar_key'
+      );
+      return new Set((rows || []).map((row) => row.exemplar_key));
+    },
+
+    /**
+     * The live rules that branch on where the parcel is, and the situations that
+     * declare it, for `isParcelQuestion`. Read from the rules and situations the
+     * business wrote, so nothing here names a key.
+     */
+    async parcelScope(shopId) {
+      const [rules, situations] = await Promise.all([
+        supabaseSelect(
+          supabase,
+          T.SUPPORT_ANSWERS,
+          { shop_id: shopId, approval_status: 'approved', deleted_at: { operator: 'is', value: 'null' } },
+          'answer_set,answer_key,when_conditions'
+        ),
+        supabaseSelect(
+          supabase,
+          T.SUPPORT_EXEMPLARS,
+          { shop_id: shopId, deleted_at: { operator: 'is', value: 'null' } },
+          'exemplar_key,requirement_needs'
+        )
+      ]);
+      const readsParcel = (needs) => needs.some((need) => PARCEL_NEEDS.includes(need));
+      return {
+        parcelRules: new Set(
+          (rules || [])
+            .filter((row) => readsParcel(Object.keys(row.when_conditions || {})))
+            .map((row) => `${row.answer_set}/${row.answer_key}`)
+        ),
+        parcelSituations: new Set(
+          (situations || []).filter((row) => readsParcel(row.requirement_needs || [])).map((row) => row.exemplar_key)
+        )
+      };
+    },
+
     async claimable({ shopId, limit, ticketId = null, redraft = false, gates = 'manual', cutoverAt = null }) {
       const filters = {
         shop_id: shopId,

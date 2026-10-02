@@ -370,9 +370,12 @@ export function runDraftChecks({
   // The parcels on this ticket's CONFIRMED order, as `resolved_context` holds
   // them. Empty for the ticket with no confirmed order, which is most of them.
   parcels = [],
-  // The ticket's subject. Read by one check, to know whether this reply is about
-  // where a parcel is.
+  // The ticket's subject. The fallback for `parcelQuestion` below.
   category = null,
+  // Whether this reply answers « where is my parcel » (draft-rules.mjs
+  // `isParcelQuestion`). Undefined from a caller that cannot tell, which falls
+  // back to the category, as before 2026-10-02.
+  parcelQuestion = undefined,
   // The `{ url, label }` the matched rule offered, or null. Read by the two link
   // checks: one marker when there is a link, none when there is not.
   replyLink = null,
@@ -479,17 +482,28 @@ export function runDraftChecks({
   // number, so this fires on nearly every dispatched order ticket. The four that
   // do not are why the SKELETON must stay conditional — an instruction to give a
   // number the dossier lacks is how one gets invented.
+  //
+  // SCOPED BY THE QUESTION, NOT THE SUBJECT, since 2026-10-02. The category made
+  // it fire on every order ticket with a parcel: of 19 live drafts it would have
+  // failed, about half asked something a parcel number does not answer — « was my
+  // discount applied » (#6913), cancel my order, an item missing from a parcel
+  // already received. A warning wrong that often is one the desk learns to skip.
   const numbers = (Array.isArray(parcels) ? parcels : [])
     .map((parcel) => String(parcel?.number ?? '').trim())
     .filter(Boolean);
+  const aboutTheParcel = parcelQuestion ?? PARCEL_SUBJECTS.includes(category);
 
-  if (numbers.length > 0 && PARCEL_SUBJECTS.includes(category)) {
+  if (numbers.length > 0 && aboutTheParcel) {
     // Spaces stripped on both sides: a model that writes « 6C21 1087 11964 » has
     // passed the number on, and failing that would be pedantry about whitespace.
     const packed = text.replace(/\s+/g, '');
     const given = numbers.filter((number) => packed.includes(number.replace(/\s+/g, '')));
     checks.push({
       check: 'tracking_number_given',
+      // A WARNING, NOT A FAILURE (decided 2026-10-02): a reply without the
+      // number is weaker, not wrong, so it is shown to the reviewer and never
+      // stops a send or marks the draft not sendable. See `checksPassed`.
+      severity: 'warning',
       passed: given.length > 0,
       detail:
         given.length > 0
@@ -696,12 +710,25 @@ export function runDraftChecks({
  * found" and not "this is correct".
  */
 export function checksPassed(checks = []) {
-  return checks.every((check) => check.passed !== false);
+  return checks.every((check) => check.passed !== false || isWarning(check));
 }
 
-/** The failures, as a reviewer needs to read them. */
+/** The failures, as a reviewer needs to read them. Warnings are not failures. */
 export function failedChecks(checks = []) {
-  return checks.filter((check) => check.passed === false).map((check) => check.detail);
+  return checks.filter((check) => check.passed === false && !isWarning(check)).map((check) => check.detail);
+}
+
+/**
+ * The warnings: checks that found something worth a look and do not fail the
+ * draft (`severity: 'warning'`). Shown to the reviewer, never a reason it may not
+ * send, and never a reason it may not send itself.
+ */
+export function warningChecks(checks = []) {
+  return checks.filter((check) => check.passed === false && isWarning(check)).map((check) => check.detail);
+}
+
+function isWarning(check) {
+  return check?.severity === 'warning';
 }
 
 /**

@@ -233,6 +233,56 @@ test('the same draft for an unhappy customer is not', async () => {
   assert.equal(h.saved[0].autoSendEligible, false);
 });
 
+test('a clean draft records no blockers', async () => {
+  const h = harness();
+  await runDrafting(h.args);
+  assert.deepEqual(h.saved[0].autoSendBlockers, []);
+});
+
+test('ba09c1ae: a level 1 product question naming glaucoma is drafted and held', async () => {
+  const body = 'Bonjour,\n\nLe masque Led Visage est il déconseillé pour une personne ayant un GLAUCOME ?\n\nCordialement';
+  const h = harness({
+    candidates: [
+      {
+        ...CANDIDATE,
+        ticket: { ...CANDIDATE.ticket, level: 1, category: 'product' },
+        message: { ...CANDIDATE.message, body_text: body },
+        conversation: [{ id: 'message-1', direction: 'inbound', actor: 'customer', body_text: body, received_at: '2026-09-25T16:26:48Z' }]
+      }
+    ]
+  });
+  const totals = await runDrafting(h.args);
+  assert.equal(totals.drafted, 1, 'the draft is still written');
+  assert.equal(h.saved[0].autoSendEligible, false);
+  assert.deepEqual(h.saved[0].autoSendBlockers, [{ reason: 'health_topic', detail: 'glaucome, deconseille' }]);
+});
+
+test('a situation marked never-auto-send holds the draft whatever its category', async () => {
+  const h = harness({
+    candidates: [
+      {
+        ...CANDIDATE,
+        ticket: { ...CANDIDATE.ticket, category: 'product' },
+        investigation: { ...CANDIDATE.investigation, exemplar_match: { exemplar_key: 'CV-01' } }
+      }
+    ]
+  });
+  await runDrafting({ ...h.args, heldSituations: new Set(['CV-01']) });
+  assert.equal(h.saved[0].autoSendEligible, false);
+  assert.deepEqual(h.saved[0].autoSendBlockers, [{ reason: 'situation', detail: 'CV-01' }]);
+});
+
+test('held situations are read from the store once per run', async () => {
+  const h = harness({ candidates: [CANDIDATE, { ...CANDIDATE, investigation: { ...CANDIDATE.investigation, id: 'investigation-2', ticket_id: 'ticket-2' }, ticket: { ...CANDIDATE.ticket, id: 'ticket-2' } }] });
+  let reads = 0;
+  h.args.store.heldSituations = async () => {
+    reads += 1;
+    return new Set();
+  };
+  await runDrafting(h.args);
+  assert.equal(reads, 1);
+});
+
 // --- failure isolation -------------------------------------------------------
 
 test('one model failure does not cost the rest of the batch', async () => {

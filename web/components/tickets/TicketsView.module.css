@@ -1045,6 +1045,19 @@
   color: var(--text-strong);
 }
 
+.activity_linked .activityIcon {
+  border-color: var(--warning-100);
+  background: var(--warning-050);
+  color: var(--warning);
+}
+
+/* Another thread's mail: amber, and a rule down its side, so it is read as
+   context from elsewhere in the case and never as this thread's. */
+.activity_linked .activityText {
+  padding-left: var(--space-2);
+  border-left: 2px solid var(--warning-100);
+}
+
 .activity_lookup .activityIcon {
   border-color: var(--info-100);
   background: var(--info-050);
@@ -1061,6 +1074,12 @@
   border-color: var(--teal);
   background: var(--teal);
   color: #fff;
+}
+
+.activity_warning .activityIcon {
+  border-color: var(--warning-100);
+  background: var(--warning-050);
+  color: var(--warning);
 }
 
 .activityText {
@@ -1537,6 +1556,19 @@
   border-color: var(--error-100);
   background: var(--error-050);
   color: var(--error);
+}
+
+/* A check that found something worth a look and does not block the send:
+   amber, so it reads as « read this » and never as « this cannot go ». */
+.caution {
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--warning-100);
+  border-radius: var(--radius);
+  background: var(--warning-050);
+  color: var(--text-strong);
+  font-size: var(--text-caption);
+  line-height: 1.5;
 }
 
 .related {

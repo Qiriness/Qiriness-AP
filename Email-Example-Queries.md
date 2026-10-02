@@ -698,7 +698,7 @@ commerciale, prise par une personne.
 - « Je voulais simplement préciser que le masque Qiriness offert/validé n'apparaît pas sur ma commande. Si possible, pourriez-vous vérifier et ne pas oublier de l'ajouter à mon colis ? » _(2026-08-27)_
 - « Suite à la commande de plus de 70€ que je viens de passer, la trousse cocooning ne m'a pas été offerte, pouvez vous y remédier ? » _(2025-11-14)_
 - « J'ai effectué une commande hier et j'ai oublié de rajouter les trois échantillons offerts. Pourriez-vous les ajouter s'il vous plaît. » _(2026-06-30)_
-- « He olvidado pedir las tres muestras de regalo, no sé si es posible que me las adjunten a mi pedido. » _(es, 2026-06-26)_
+- « He olvidado pedir las tres muestras de regalo, no sé si es posible que me las adjunten a mi pedido. » _(es — 2026-06-26)_
 
 **needs** `order_identity`, `order_promotion`
 **politiques liées** `promotion_discount_policy`

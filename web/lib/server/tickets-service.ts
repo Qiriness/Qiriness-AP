@@ -1201,8 +1201,18 @@ function mapDraftRow(row: any, action: any | null = null): TicketDraft {
     // Only the failures: a reviewer needs to know what was caught, not to read
     // a list of everything that was fine.
     failedChecks: checks
-      .filter((check) => check && check.passed === false)
+      .filter((check) => check && check.passed === false && check.severity !== "warning")
       .map((check) => String(check.detail ?? check.check ?? "unnamed check")),
+    // Shown, never blocking: a check marked `severity: 'warning'` does not fail
+    // the draft (draft-checks.mjs `checksPassed`).
+    warnings: checks
+      .filter((check) => check && check.passed === false && check.severity === "warning")
+      .map((check) => String(check.detail ?? check.check ?? "unnamed check")),
+    // Only the subject holds: level, mood and failed checks are shown elsewhere
+    // or are not the reviewer's to act on.
+    autoSendHolds: (Array.isArray(row.auto_send_blockers) ? row.auto_send_blockers : [])
+      .filter((b: any) => b && (b.reason === "health_topic" || b.reason === "situation" || b.reason === "cosmetovigilance"))
+      .map((b: any) => ({ reason: b.reason, detail: b.detail == null ? null : String(b.detail) })),
     draftedAt: row.drafted_at ?? null,
     sendsOnApprove: sendOnApprove(),
     holdsInDrafts: process.env.OUTBOUND_STOP_BEFORE_SEND === "true",

@@ -4416,15 +4416,6 @@
         "language": "de",
         "text": "Für eine erste #5907 Bestellung habe ich mein Muster nicht erhalten ?"
       },
-      "2:fr": {
-        "index": 120,
-        "sourceIndex": 2,
-        "sourceLanguage": "es",
-        "sourceText": "He olvidado pedir las tres muestras de regalo…",
-        "sourceHash": "15f6f3111a604e0aaa5eccf50dadc174cf3ebc63b8d26bb5fec94f41fdc10823",
-        "language": "fr",
-        "text": "j'ai oublié de demander les trois échantillons gratuits…"
-      },
       "2:en": {
         "index": 121,
         "sourceIndex": 2,
@@ -4933,37 +4924,37 @@
         "language": "de",
         "text": "Ich habe gestern eine Bestellung aufgegeben und vergessen, die drei Gratisproben hinzuzufügen. Könnten Sie sie bitte hinzufügen."
       },
+      "8:fr": {
+        "index": 180,
+        "sourceIndex": 8,
+        "sourceLanguage": "es",
+        "sourceText": "He olvidado pedir las tres muestras de regalo, no sé si es posible que me las adjunten a mi pedido.",
+        "sourceHash": "19186edc6eff4deefbca628830d5a7d21621cab40b54e9778acaaacb985eb798",
+        "language": "fr",
+        "text": "J'ai oublié de demander les trois échantillons gratuits, je ne sais pas s'il est possible de les joindre à ma commande."
+      },
       "8:en": {
         "index": 181,
         "sourceIndex": 8,
-        "sourceLanguage": "fr",
+        "sourceLanguage": "es",
         "sourceText": "He olvidado pedir las tres muestras de regalo, no sé si es posible que me las adjunten a mi pedido.",
         "sourceHash": "19186edc6eff4deefbca628830d5a7d21621cab40b54e9778acaaacb985eb798",
         "language": "en",
-        "text": "I forgot to ask for the three free samples, I don't know if it's possible to add them to my order"
-      },
-      "8:es": {
-        "index": 182,
-        "sourceIndex": 8,
-        "sourceLanguage": "fr",
-        "sourceText": "He olvidado pedir las tres muestras de regalo, no sé si es posible que me las adjunten a mi pedido.",
-        "sourceHash": "19186edc6eff4deefbca628830d5a7d21621cab40b54e9778acaaacb985eb798",
-        "language": "es",
-        "text": "Olvidé pedir las tres muestras de regalo, no sé si es posible que me las adjunten a mi pedido."
+        "text": "I forgot to ask for the three free samples, I don't know if it's possible to add them to my order."
       },
       "8:it": {
         "index": 183,
         "sourceIndex": 8,
-        "sourceLanguage": "fr",
+        "sourceLanguage": "es",
         "sourceText": "He olvidado pedir las tres muestras de regalo, no sé si es posible que me las adjunten a mi pedido.",
         "sourceHash": "19186edc6eff4deefbca628830d5a7d21621cab40b54e9778acaaacb985eb798",
         "language": "it",
-        "text": "Ho dimenticato di chiedere i tre campioni omaggio, non so se è possibile aggiungerli al mio ordine."
+        "text": "Ho dimenticato di chiedere i tre campioni omaggio, non so se è possibile che me li aggiungano al mio ordine."
       },
       "8:de": {
         "index": 184,
         "sourceIndex": 8,
-        "sourceLanguage": "fr",
+        "sourceLanguage": "es",
         "sourceText": "He olvidado pedir las tres muestras de regalo, no sé si es posible que me las adjunten a mi pedido.",
         "sourceHash": "19186edc6eff4deefbca628830d5a7d21621cab40b54e9778acaaacb985eb798",
         "language": "de",
