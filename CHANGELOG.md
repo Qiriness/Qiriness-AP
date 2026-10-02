@@ -11,6 +11,13 @@ Three sibling files carry the other halves, and this one deliberately does not d
 ---
 
 
+## Rulebook: migrated order-identity rules can be edited again (2026-10-02)
+
+- **Fixed:** Rulebook rows now pass through the agent's `answerFromRow` normalizer before reaching the editor. Migration 59 deliberately retained legacy `order_identity: none` beside its five replacements for deployment compatibility; the dashboard previously submitted that hidden value unchanged, so saving D-01 failed with `« none » is not a finding of order_identity`.
+- Save-time validation remains strict. The compatibility value is removed only while reading stored rows into the current UI contract; new invalid findings are still refused.
+- **Proven:** focused mapper regression test with the migration-59 six-value shape; rule-selection and migration-59 suites; dashboard typecheck and production build.
+
+
 
 
 

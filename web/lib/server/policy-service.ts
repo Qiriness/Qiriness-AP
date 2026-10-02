@@ -42,6 +42,7 @@ import { REPLY_TONES, TONE_KEYS } from "../../../scripts/lib/reply-tones.mjs";
 import { MAX_LINK_LABEL, isReplyLinkUrl } from "../../../scripts/lib/reply-link.mjs";
 import { checkProblems, normaliseChecks } from "../../../agent/src/casework/rule-checks.mjs";
 import { needLabel } from "../need-labels";
+import { mapPolicyRule } from "./policy-rule-mapper.mjs";
 
 import { listPinnableArticles } from "./knowledge-service";
 import { listOfferableCodes } from "./promotions-service";
@@ -475,29 +476,7 @@ export async function setCollectionMode(
 }
 
 function mapRule(row: Record<string, unknown>): PolicyRule {
-  return {
-    id: String(row.id),
-    answerSet: String(row.answer_set),
-    answerKey: String(row.answer_key),
-    situationKey: (row.situation_key as string) ?? null,
-    conditions: (row.when_conditions as Record<string, string[]>) ?? {},
-    answerSkeleton: (row.answer_skeleton as string) ?? null,
-    route: (row.route as string) ?? null,
-    // Tolerates the singular column a row may predate the list change with.
-    ask: Array.isArray(row.ask) ? (row.ask as string[]) : row.ask ? [String(row.ask)] : [],
-    offerCode: (row.offer_code as string) ?? null,
-    knowledgeDocumentId: (row.knowledge_document_id as string) ?? null,
-    tones: Array.isArray(row.tones) ? (row.tones as unknown[]).map(String) : [],
-    link:
-      typeof row.link_url === "string" && typeof row.link_label === "string"
-        ? { url: row.link_url, label: row.link_label }
-        : null,
-    checks: normaliseChecks(row.checks) as RuleCheck[],
-    priority: Number(row.priority ?? 0),
-    isFallback: Boolean(row.is_fallback),
-    approvalStatus: String(row.approval_status ?? "draft"),
-    updatedAt: (row.updated_at as string) ?? null,
-  };
+  return mapPolicyRule(row) as PolicyRule;
 }
 
 /** Shared rules first within a set, then by key — the order they are read in. */
