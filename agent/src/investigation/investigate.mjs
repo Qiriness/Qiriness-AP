@@ -27,6 +27,7 @@ import { collectableNeeds, collectedFindings, proposeCollection } from './collec
 import { TOOL_NAMES, answerSetFor, escalationTriggers } from './investigation-rules.mjs';
 import { renderCaseDelta } from './case-delta.mjs';
 import { companyPoliciesUsed } from './company-policy-use.mjs';
+import { LATEST_CUSTOMER_MARK, LATEST_MARK } from './investigation-runner.mjs';
 
 // The investigation agent: a categorised ticket in, a case file out.
 //
@@ -944,6 +945,26 @@ function createRun({ ticket, handlers, maxToolCalls, logger, onToolCall = null }
   };
 }
 
+/**
+ * What the text is called, by what it holds.
+ *
+ * « Message du client » headed every text until 2026-10-02, including threads
+ * where the newest message was Deret's or a colleague's. The lone customer
+ * message keeps it, byte for byte. A thread names its two marks and says what
+ * each one is for.
+ */
+const TEXT_HEADINGS = {
+  single_customer: 'Message du client :',
+  single_other: 'Message reçu (il ne vient pas du client : voir l’expéditeur) :',
+  thread:
+    'Fil de la conversation, du plus ancien au plus récent. ' +
+    `« ${LATEST_MARK} » dit où en est le dossier : ce peut être le client, un collègue, ` +
+    'un prestataire ou notre propre réponse. ' +
+    `La demande à traiter est en principe dans « ${LATEST_CUSTOMER_MARK} », ou dans ` +
+    `« ${LATEST_MARK} » quand c’est le client qui l’a écrit. Les messages plus anciens ` +
+    'sont l’historique :'
+};
+
 function buildUserPrompt(ticket, plan, run, maxBodyChars) {
   const checklist = planEvidence(plan.tasks)
     .map((item) => `- ${item.label}`)
@@ -963,11 +984,7 @@ function buildUserPrompt(ticket, plan, run, maxBodyChars) {
     lines.push(`Expéditeur : ${sender}`);
   }
 
-  lines.push(
-    '',
-    'Message du client :',
-    String(ticket.text || '').slice(0, maxBodyChars) || '(vide)'
-  );
+  lines.push('', TEXT_HEADINGS[ticket.textKind] ?? TEXT_HEADINGS.single_customer, String(ticket.text || '').slice(0, maxBodyChars) || '(vide)');
 
   // AFTER THE MESSAGE, BEFORE ANY EVIDENCE: the model reads what the customer
   // wrote, then what the case already holds, and only then what the opening

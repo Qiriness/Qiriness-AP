@@ -63,10 +63,10 @@ test('the thread is rendered with each sender named, and the trigger only once',
   });
 
   assert.match(prompt, /\[client — 2026-08-01\]/);
-  assert.match(prompt, /\[Qiriness — 2026-08-02\]/);
+  assert.match(prompt, /\[nous \(service client\) — 2026-08-02\]/);
   // A colleague's note read as the customer answering would strike a question
   // off the list, and it would never be asked again.
-  assert.match(prompt, /\[collègue \(LAP Groupe\) — 2026-08-04\]/);
+  assert.match(prompt, /\[collègue — 2026-08-04\]/);
   assert.equal(prompt.split('oui, rien chez les voisins').length - 1, 1);
 });
 

@@ -16,6 +16,11 @@ Three sibling files carry the other halves, and this one deliberately does not d
 
 
 
+## Investigation transcript: time, the message to act on, no company names (2026-10-02)
+
+- **Built:** transcript labels carry date and time in shop time (`loadShopTimeZone`); the newest message is marked « DERNIER MESSAGE DU FIL » and the newest customer message, when different, « DERNIER MESSAGE DU CLIENT »; both are always kept within the budget; the heading names what the text is (customer message, someone else's, or a thread). Sender roles are generic nouns (« nous (service client) », « collègue »), and `distributor`/`supplier`/`partner`/`other` no longer fall back to « client » (also in the closure check). Applies to the Case Manager, closure and drafting history too, which share the labels.
+- **Proven:** agent suite 1926/1926, new tests for each. **Not yet:** a live investigation read with the new marks.
+
 ## A customer's address given when we asked for it links them (2026-10-02)
 
 - **Built:** customer resolution, when the sender's address finds nobody, reads what the customer wrote after we asked for `account_email`/`purchase_email` (`record.addressAnswersByTicket`) and links the one customer those addresses lead to (`matched_by: reply_email`; two customers → no link). A new message re-runs the ticket at once. `lookupCustomer` falls back to `tickets.customer_id`, so a linked customer is no longer reported to the model as unknown.

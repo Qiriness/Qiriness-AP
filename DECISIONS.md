@@ -393,6 +393,19 @@ Run after the order-resolution bug above. Every reader of the first or a capped 
 | customer resolution and `lookupCustomer` | the sender's address only | **fixed, the safer version:** an address given in a reply counts only after we asked for one (§ An address given when we asked for one may link the customer) |
 | case manager, drafting | whole thread | fine |
 
+### The investigation transcript: times, two marks, and nouns (2026-10-02)
+
+Decided with the user after asking whether the investigation can tell who wrote what, and the latest message from the history.
+
+- **Date and time, in shop time** (`[client — 2026-09-28 17:10]`, from `shops.iana_timezone`, UTC if unset). The date alone could not order three messages written the same day.
+- **Two messages are marked.** « DERNIER MESSAGE DU FIL » is the newest message, whoever wrote it (Deret, a colleague, our own reply): it says where the case stands. « DERNIER MESSAGE DU CLIENT » is the newest customer message, where the request most likely is. When they are the same message it carries one mark. The marks are words in the label, so no message is printed twice.
+- **Both marked messages are always kept.** They are budgeted before the rest. The newest message may take at most half of what is left while a separate customer message waits, so a long Deret reply cannot push the customer's question out.
+- **The heading says what the text is.** « Message du client » only for a lone customer message, byte for byte as before (the common case). « Message reçu (il ne vient pas du client…) » for a lone message from someone else. A thread is « Fil de la conversation… », with a line saying what each mark is for.
+- **Generic nouns, no company names.** Our replies are « nous (service client) », colleagues « collègue ». The company stays in the directory, and the header names the domain. The transcript still never renders a domain, because these labels also reach the drafting prompt.
+- **Every directory label has a role.** `distributor`, `supplier`, `partner` and `other` fell back to `customer`, both in the label and in `senderRole`, which the closure check reads.
+
+**The trigger is unchanged**: the case file is still keyed to the newest received message. The marks change what the model is shown, not which message a run belongs to.
+
 #### TO DO — before drafting joins the worker poll
 
 Drafting is **not** in the poll today. It runs only through `npm run draft`, so a re-investigation updates the case file at once and the draft only at the next manual run. When drafting becomes automatic, both cases below have to hold:

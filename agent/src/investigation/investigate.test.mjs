@@ -1380,3 +1380,23 @@ test('promotionFound reads identification only, and not a message that named not
   assert.equal(promotionFound([{ tool: TOOL_NAMES.IDENTIFY_PROMOTION, outcome: 'none' }]), false);
   assert.equal(promotionFound([{ tool: TOOL_NAMES.LOOKUP_PRODUCT, outcome: 'found' }]), false);
 });
+
+test('the text is headed by what it is: a customer message, someone else’s, or a thread', async () => {
+  const heading = async (textKind) => {
+    const registry = buildRegistry({
+      [TOOL_NAMES.LOOKUP_PRODUCT]: async () => OK_RESULT,
+      [TOOL_NAMES.SEARCH_KNOWLEDGE]: async () => OK_RESULT
+    });
+    const openai = buildOpenAI([{ content: caseFileAnswer() }]);
+    const { investigate } = createInvestigator(openai, registry, { model: 'm' });
+    await investigate({ ...PRODUCT_TICKET, ...(textKind ? { textKind } : {}) });
+    return openai.sent[0].messages[0].content;
+  };
+
+  assert.match(await heading(undefined), /Message du client :/);
+  assert.match(await heading('single_other'), /Message reçu \(il ne vient pas du client/);
+  const thread = await heading('thread');
+  assert.match(thread, /Fil de la conversation/);
+  assert.match(thread, /DERNIER MESSAGE DU CLIENT/);
+  assert.doesNotMatch(thread, /Message du client :/);
+});

@@ -4,7 +4,7 @@ import { createCaseStateRecord } from '../../scripts/lib/case-state-record.mjs';
 
 import { loadAgentConfig, assertGraphConfig } from './config.mjs';
 import { logger } from './lib/logger.mjs';
-import { resolveShopId } from './lib/shop.mjs';
+import { loadShopTimeZone, resolveShopId } from './lib/shop.mjs';
 import { createGraphClient } from './ingestion/graph-client.mjs';
 import { createSupabaseMessageStore } from './ingestion/ticket-writer.mjs';
 import { createBlocklistStore } from './ingestion/blocklist-store.mjs';
@@ -562,6 +562,8 @@ async function main() {
         // Reloaded each poll, like the blocklist, so a sender labelled in the
         // table a minute ago is context on this poll rather than the next.
         senderDirectory,
+        // The transcript's timestamps are in shop time.
+        timeZone: await loadShopTimeZone(supabase, shopId),
         retrieveExemplar: investigation.retrieveExemplar,
         // Null when AGENT_SITUATION_CHOOSER_MODEL is empty: near misses then keep
         // no situation, as they did before the chooser existed.

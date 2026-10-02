@@ -4,7 +4,7 @@ import { createCaseStateRecord } from '../../../scripts/lib/case-state-record.mj
 
 import { loadAgentConfig } from '../config.mjs';
 import { logger } from '../lib/logger.mjs';
-import { resolveShopId } from '../lib/shop.mjs';
+import { loadShopTimeZone, resolveShopId } from '../lib/shop.mjs';
 import { toDraftingPrompt, toHumanBrief } from '../investigation/case-file.mjs';
 import { summariseNeeds } from '../investigation/evidence-rules.mjs';
 import { createInvestigationStack } from '../investigation/create-investigation.mjs';
@@ -120,6 +120,7 @@ async function main() {
     limit,
     anyStatus: includeClosed,
     ticketId,
+    timeZone: await loadShopTimeZone(supabase, shopId),
     // The same directory the worker loads, so a dry run reproduces what the
     // worker would have shown the model rather than a context-free version of it.
     senderDirectory: await senderDirectoryStore.load(shopId, {

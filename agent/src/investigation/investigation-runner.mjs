@@ -4,7 +4,7 @@ import { COLUMNS, T } from '../../../scripts/lib/tables.mjs';
 import { attemptsSoFar } from '../../../scripts/lib/ticket-record.mjs';
 import { splitQuotedReply } from '../../../scripts/lib/quoted-reply.mjs';
 
-import { OWN_SIDE_LABELS, emptySenderDirectory, senderRoleName } from '../ingestion/sender-directory.mjs';
+import { OWN_SIDE_LABELS, emptySenderDirectory, senderRole, senderRoleName } from '../ingestion/sender-directory.mjs';
 
 import { TICKET_STATUS_BY_VERDICT } from './case-file.mjs';
 import { summariseNeeds } from './evidence-rules.mjs';
@@ -54,6 +54,8 @@ export async function runInvestigation({
   // `situationPlan`. Absent by default, and absent (or null) means the matcher
   // runs on the opening message exactly as it did before the case state existed.
   planSituation = null,
+  // The shop's IANA zone, for the transcript's timestamps. UTC when unknown.
+  timeZone = 'UTC',
   // The case-file store owns `ticket_investigations` and nothing else; the
   // ticket record owns the row this pass moves through the queue. They were one
   // object before, which is how a ticket patch ended up being written here, in
@@ -290,7 +292,7 @@ export async function runInvestigation({
     let caseFile;
     try {
       caseFile = await investigate(
-        buildInput(ticket, messages, senderDirectory, exemplarMatch.requirement_needs, policy, parameters, conversation, caseDelta)
+        buildInput(ticket, messages, senderDirectory, exemplarMatch.requirement_needs, policy, parameters, conversation, caseDelta, timeZone)
       );
     } catch (error) {
       await handleFailure({ record, ticket, error, counts, logger, dryRun });
@@ -470,13 +472,43 @@ async function handleFailure({ record, ticket, error, counts, logger, dryRun }) 
  * the quote begin" has one answer in this codebase rather than two. It is never
  * shown to the model.
  */
-/** `2026-07-15`, and deliberately not a French long date. */
-function transcriptDate(message) {
+/**
+ * `2026-07-15 14:32`, in the shop's time zone, and deliberately not a French
+ * long date.
+ *
+ * THE TIME WAS ADDED 2026-10-02. A date alone could not order three messages
+ * written the same day, nor show that a customer answered twenty minutes after
+ * us. Shop time rather than UTC, because « reçu à 9h » is what a person at the
+ * shop would say. An unknown or missing zone falls back to UTC.
+ */
+function transcriptDate(message, timeZone = 'UTC') {
   const at = message?.received_at || message?.sent_at;
   if (!at) return null;
   const date = new Date(at);
-  return Number.isNaN(date.getTime()) ? null : date.toISOString().slice(0, 10);
+  if (Number.isNaN(date.getTime())) return null;
+  try {
+    return STAMP(timeZone).format(date);
+  } catch {
+    return STAMP('UTC').format(date);
+  }
 }
+
+// `sv-SE` formats as `2026-07-15 14:32`, the one locale whose default is ISO-shaped.
+const STAMP = (timeZone) =>
+  new Intl.DateTimeFormat('sv-SE', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23'
+  });
+
+// The markers the model is told about in the prompt (investigate.mjs). Words in
+// the label rather than a separate block, so each message's text appears once.
+export const LATEST_MARK = 'DERNIER MESSAGE DU FIL';
+export const LATEST_CUSTOMER_MARK = 'DERNIER MESSAGE DU CLIENT';
 
 // WHO SPOKE, from the directory rather than from the direction. Rendering every
 // inbound message as « client » put a colleague's note and the 3PL's status
@@ -485,10 +517,10 @@ function transcriptDate(message) {
 //
 // The address is used to resolve the role and never rendered, which is the rule
 // this file already follows for `sender`.
-function transcriptLabel(message, senderDirectory) {
+function transcriptLabel(message, senderDirectory, { timeZone, mark = null } = {}) {
   const who = senderRoleName(message, senderDirectory);
-  const date = transcriptDate(message);
-  return date ? `[${who} — ${date}]` : `[${who}]`;
+  const date = transcriptDate(message, timeZone);
+  return `[${[who, date, mark].filter(Boolean).join(' — ')}]`;
 }
 
 /**
@@ -510,8 +542,18 @@ function transcriptLabel(message, senderDirectory) {
  * order confirmation carries the number and the address together; quoted history
  * inside OUR replies is our own text coming back, which is the noise the split
  * exists to remove.
+ *
+ * TWO MESSAGES ARE MARKED, AND NEITHER IS EVER DROPPED (2026-10-02). The newest
+ * message of the thread says where the case stands. It can be Deret's answer, a
+ * colleague's note or our own reply. The newest CUSTOMER message is where the
+ * request most likely is. When they are the same message it carries one mark.
+ * Before this, the model had to infer both from the order of the messages,
+ * under a heading calling the whole thread « Message du client ».
+ *
+ * `kind` tells the prompt which heading fits: `single_customer` (the 133-in-172
+ * case, rendered bare as before), `single_other`, or `thread`.
  */
-function renderConversation(conversation, inbound, senderDirectory) {
+function renderConversation(conversation, inbound, senderDirectory, { timeZone = 'UTC' } = {}) {
   const rows = conversation?.length > 0 ? conversation : inbound;
   const parts = rows.map((message) => ({ message, ...splitQuotedReply(message?.body_text || '') }));
 
@@ -524,42 +566,69 @@ function renderConversation(conversation, inbound, senderDirectory) {
       .slice(0, MAX_TEXT_CHARS) || null;
 
   const spoken = parts.filter((part) => part.own);
+  const isCustomer = (part) => senderRole(part.message, senderDirectory) === 'customer';
   if (spoken.length <= 1) {
-    return { text: (spoken[0]?.own || '').slice(0, MAX_TEXT_CHARS), quotedText };
+    return {
+      text: (spoken[0]?.own || '').slice(0, MAX_TEXT_CHARS),
+      quotedText,
+      kind: spoken[0] && !isCustomer(spoken[0]) ? 'single_other' : 'single_customer'
+    };
   }
 
-  const rendered = [];
+  const latest = spoken.length - 1;
+  let latestCustomer = -1;
+  for (let index = latest; index >= 0; index -= 1) {
+    if (isCustomer(spoken[index])) {
+      latestCustomer = index;
+      break;
+    }
+  }
+  // One mark when they are the same message: its « client » label already says
+  // whose it is.
+  const marks = new Map([[latest, LATEST_MARK]]);
+  if (latestCustomer >= 0 && latestCustomer !== latest) marks.set(latestCustomer, LATEST_CUSTOMER_MARK);
+
   // The budget is charged for everything that ends up in the string, not just
   // for bodies: the separators between messages, the truncation marker, and the
   // line announcing what was dropped. Counted loosely, the render overshot
-  // MAX_TEXT_CHARS by the overhead it had not paid for — small here, and the
-  // kind of cap that is wrong by more the longer the thread gets.
+  // MAX_TEXT_CHARS by the overhead it had not paid for.
+  //
+  // THE MARKED MESSAGES ARE PAID FOR FIRST, then everything else newest first.
+  // The newest message may take at most half of what is left while a separate
+  // customer message still waits, so a long Deret reply cannot push out the
+  // customer's question.
   let remaining = MAX_TEXT_CHARS - DROPPED_LINE_RESERVE;
-  let dropped = 0;
+  const pinned = latestCustomer >= 0 && latestCustomer !== latest ? [latest, latestCustomer] : [latest];
+  const order = [...pinned];
+  for (let index = latest; index >= 0; index -= 1) {
+    if (!pinned.includes(index)) order.push(index);
+  }
 
-  for (let index = spoken.length - 1; index >= 0; index -= 1) {
+  const bodies = new Map();
+  for (const index of order) {
     const part = spoken[index];
-    const head = `${transcriptLabel(part.message, senderDirectory)}\n`;
-    const overhead = head.length + (rendered.length > 0 ? SEPARATOR.length : 0);
+    const head = `${transcriptLabel(part.message, senderDirectory, { timeZone, mark: marks.get(index) })}\n`;
+    const overhead = head.length + SEPARATOR.length;
     // A label with nothing under it tells the model less than an honest count of
     // what it cannot see, so a message that cannot fit its own header is dropped
     // rather than rendered empty.
-    if (remaining - overhead <= 0) {
-      dropped = index + 1;
-      break;
-    }
-    const room = remaining - overhead;
+    if (remaining - overhead <= 0) continue;
+    const share = index === latest && pinned.length > 1 ? Math.floor(remaining / 2) : remaining;
+    const room = share - overhead;
+    if (room <= 0) continue;
     const truncated = part.own.length > room;
     const body = truncated ? part.own.slice(0, Math.max(0, room - TRUNCATION_MARKER.length)) : part.own;
-    rendered.unshift(`${head}${body}${truncated ? TRUNCATION_MARKER : ''}`);
+    bodies.set(index, `${head}${body}${truncated ? TRUNCATION_MARKER : ''}`);
     remaining -= overhead + body.length + (truncated ? TRUNCATION_MARKER.length : 0);
   }
 
+  const rendered = spoken.map((_, index) => bodies.get(index)).filter(Boolean);
+  const dropped = spoken.length - rendered.length;
   if (dropped > 0) {
     rendered.unshift(`[… ${dropped} message(s) plus ancien(s) non inclus]`);
   }
 
-  return { text: rendered.join(SEPARATOR), quotedText };
+  return { text: rendered.join(SEPARATOR), quotedText, kind: 'thread' };
 }
 
 /**
@@ -579,17 +648,21 @@ function buildInput(
   policy = null,
   parameters = new Map(),
   conversation = messages,
-  caseDelta = null
+  caseDelta = null,
+  timeZone = 'UTC'
 ) {
   const first = messages[0];
   const latest = messages.length > 1 ? messages[messages.length - 1] : null;
-  const { text, quotedText } = renderConversation(conversation, messages, senderDirectory);
+  const { text, quotedText, kind } = renderConversation(conversation, messages, senderDirectory, { timeZone });
 
   return {
     id: ticket.id,
     subject: ticket.subject,
     text,
     quotedText,
+    // Which heading the prompt gives the text: a lone customer message, a lone
+    // message from someone else, or a thread with its two marks.
+    textKind: kind,
     category: ticket.category,
     request_kind: ticket.request_kind,
     level: ticket.level,

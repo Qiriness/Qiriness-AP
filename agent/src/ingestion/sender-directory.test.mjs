@@ -141,7 +141,7 @@ test('a role is resolved per MESSAGE, not per thread', () => {
 test('our own side is read from the direction, whatever the address says', () => {
   const directory = buildSenderDirectory([]);
   assert.equal(senderRole({ direction: 'outbound', from_email: 'x@gmail.com' }, directory), 'qiriness');
-  assert.equal(senderRoleName({ direction: 'outbound' }, directory), 'Qiriness');
+  assert.equal(senderRoleName({ direction: 'outbound' }, directory), 'nous (service client)');
 });
 
 test('an unclassified sender is a member of the public, which is the safe direction', () => {
@@ -159,4 +159,19 @@ test('a label with no display name falls back to customer rather than rendering 
   ]);
   assert.equal(senderRole({ direction: 'inbound', from_email: 'x@weird.example' }, directory), 'customer');
   assert.ok(Object.values(SENDER_ROLES).every((name) => typeof name === 'string' && name.length > 0));
+});
+
+test('every label the directory allows has a role, so none falls back to the customer', () => {
+  const directory = buildSenderDirectory([
+    { pattern_type: 'domain', pattern: 'partner.example', label: 'partner', note: null },
+    { pattern_type: 'domain', pattern: 'supplier.example', label: 'supplier', note: null }
+  ]);
+  assert.equal(senderRole({ from_email: 'a@partner.example' }, directory), 'partner');
+  assert.equal(senderRoleName({ from_email: 'a@supplier.example' }, directory), 'fournisseur');
+  // The labels the table's check allows (04_support.sql).
+  for (const label of ['internal', 'contractor', 'logistics', 'courier', 'retailer', 'distributor', 'supplier', 'partner', 'other']) {
+    assert.ok(SENDER_ROLES[label], label);
+  }
+  // No company name in a role.
+  assert.ok(!Object.values(SENDER_ROLES).some((name) => /Qiriness|LAP/i.test(name)));
 });

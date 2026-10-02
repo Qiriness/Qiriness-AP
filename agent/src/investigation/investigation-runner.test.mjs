@@ -172,9 +172,10 @@ test('our own replies reach the model, labelled and in order', async () => {
 
   assert.equal(
     seen.text,
-    '[client — 2026-08-01]\ncolis non reçu\n\n' +
-      '[Qiriness — 2026-08-02]\navez-vous vu vos voisins ?\n\n' +
-      '[client — 2026-08-03]\noui, rien chez eux'
+    '[client — 2026-08-01 09:00]\ncolis non reçu\n\n' +
+      '[nous (service client) — 2026-08-02 09:00]\navez-vous vu vos voisins ?\n\n' +
+      // The newest message is the customer's: one mark, not two.
+      '[client — 2026-08-03 09:00 — DERNIER MESSAGE DU FIL]\noui, rien chez eux'
   );
   // The case file is still keyed to the customer's latest word, never ours.
   assert.equal(store.saved[0].triggerMessageId, 'm3');
@@ -220,7 +221,7 @@ test('the budget is spent newest first, so the oldest message gives way', async 
   assert.match(text, /toujours rien$/);
   // The newest reply survives whole; the opening message is the one cut.
   assert.ok(text.includes('… (message tronqué)'));
-  assert.ok(text.indexOf('… (message tronqué)') < text.indexOf('[Qiriness'));
+  assert.ok(text.indexOf('… (message tronqué)') < text.indexOf('[nous (service client)'));
   assert.ok(text.length <= 12000);
 });
 
@@ -1101,6 +1102,73 @@ test('a colleague in the transcript is labelled a colleague, not the customer', 
       { pattern_type: 'domain', pattern: 'lap-groupe.com', label: 'internal', note: null }
     ])
   });
-  assert.match(seen.text, /\[collègue \(LAP Groupe\)[^\]]*\]\nje relance/);
+  assert.match(seen.text, /\[collègue[^\]]*\]\nje relance/);
   assert.match(seen.text, /\[client[^\]]*\]\noù est mon colis/);
+});
+
+// --- what to act on: the newest message, and the newest customer message -----
+
+async function threadSeen(messages, extra = {}) {
+  let seen;
+  const store = buildStore({ messages });
+  await runInvestigation({
+    ...wire(store),
+    investigate: async (input) => {
+      seen = input;
+      return caseFile();
+    },
+    shopId: 's1',
+    ...extra
+  });
+  return seen;
+}
+
+const DERET = buildSenderDirectory([{ pattern_type: 'domain', pattern: 'deret.fr', label: 'logistics', note: null }]);
+
+test('timestamps carry the time, in the shop’s zone', async () => {
+  const seen = await threadSeen(
+    [
+      { id: 'm1', direction: 'inbound', body_text: 'colis non reçu', received_at: '2026-08-01T09:00:00Z' },
+      { id: 'm2', direction: 'outbound', body_text: 'nous regardons', received_at: '2026-08-01T09:20:00Z' }
+    ],
+    { timeZone: 'Europe/Paris' }
+  );
+  assert.match(seen.text, /\[client — 2026-08-01 11:00 — DERNIER MESSAGE DU CLIENT\]/);
+  assert.match(seen.text, /\[nous \(service client\) — 2026-08-01 11:20 — DERNIER MESSAGE DU FIL\]/);
+});
+
+test('a Deret reply after the customer: both are marked, and the thread is not called the customer’s', async () => {
+  const seen = await threadSeen(
+    [
+      { id: 'm1', direction: 'inbound', from_email: 'marie@gmail.com', body_text: 'où est mon colis ?', received_at: '2026-08-01T09:00:00Z' },
+      { id: 'm2', direction: 'inbound', from_email: 'agent@deret.fr', body_text: 'colis en retour', received_at: '2026-08-02T09:00:00Z' }
+    ],
+    { senderDirectory: DERET }
+  );
+  assert.match(seen.text, /\[client — [^\]]* — DERNIER MESSAGE DU CLIENT\]\noù est mon colis/);
+  assert.match(seen.text, /\[prestataire logistique — [^\]]* — DERNIER MESSAGE DU FIL\]\ncolis en retour/);
+  assert.equal(seen.textKind, 'thread');
+});
+
+test('the customer’s message survives a reply long enough to fill the budget', async () => {
+  const seen = await threadSeen(
+    [
+      { id: 'm1', direction: 'inbound', from_email: 'marie@gmail.com', body_text: 'ancien', received_at: '2026-08-01T09:00:00Z' },
+      { id: 'm2', direction: 'inbound', from_email: 'marie@gmail.com', body_text: 'ma question précise', received_at: '2026-08-02T09:00:00Z' },
+      { id: 'm3', direction: 'inbound', from_email: 'agent@deret.fr', body_text: 'x'.repeat(20000), received_at: '2026-08-03T09:00:00Z' }
+    ],
+    { senderDirectory: DERET }
+  );
+  assert.match(seen.text, /DERNIER MESSAGE DU CLIENT\]\nma question précise/);
+  assert.match(seen.text, /DERNIER MESSAGE DU FIL\]\nx+\n… \(message tronqué\)/);
+  assert.ok(seen.text.length <= 12000);
+});
+
+test('a lone message from someone other than the customer says so', async () => {
+  const seen = await threadSeen(
+    [{ id: 'm1', direction: 'inbound', from_email: 'agent@deret.fr', body_text: 'colis en retour', received_at: '2026-08-02T09:00:00Z' }],
+    { senderDirectory: DERET }
+  );
+  assert.equal(seen.textKind, 'single_other');
+  assert.equal(seen.text, 'colis en retour', 'still rendered bare');
 });

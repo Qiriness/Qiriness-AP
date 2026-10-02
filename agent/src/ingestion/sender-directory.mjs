@@ -78,14 +78,29 @@ export const OWN_SIDE_LABELS = ['internal', 'contractor', 'logistics'];
  * member of the public until the directory says otherwise, so a sender nobody
  * has classified is read as demand rather than quietly discounted.
  */
+//
+// GENERIC NOUNS, NO COMPANY NAMES (2026-10-02). « Qiriness » and « collègue (LAP
+// Groupe) » were literals, so another shop's colleagues would have been
+// introduced as somebody else's. Which company it is lives in the directory, not
+// here.
+//
+// EVERY DIRECTORY LABEL HAS A ROLE. `distributor`, `supplier`, `partner` and
+// `other` were allowed by the table's check and missing here, so
+// `senderRole` fell back to `customer` for them: a partner's message would
+// have been rendered « client » and read by the closure check as a customer
+// closing their own request.
 export const SENDER_ROLES = {
-  qiriness: 'Qiriness',
+  qiriness: 'nous (service client)',
   customer: 'client',
-  internal: 'collègue (LAP Groupe)',
+  internal: 'collègue',
   logistics: 'prestataire logistique',
   courier: 'transporteur',
   contractor: 'prestataire',
-  retailer: 'revendeur'
+  retailer: 'revendeur',
+  distributor: 'distributeur',
+  supplier: 'fournisseur',
+  partner: 'partenaire',
+  other: 'correspondant connu'
 };
 
 // `directory` defaults to null rather than to `emptySenderDirectory`, which is
@@ -100,7 +115,14 @@ export function senderRole(message, directory = null) {
   return label && SENDER_ROLES[label] ? label : 'customer';
 }
 
-/** The role as a reader sees it: « client », « collègue (LAP Groupe) », … */
+/**
+ * The role as a reader sees it: « client », « collègue », « prestataire
+ * logistique », …
+ *
+ * A NOUN, NEVER A DOMAIN. These labels reach the drafting prompt too, and a
+ * domain there is one a reply can quote. Which company it is stays in the
+ * directory, and the investigation's header names it (`describeSender`).
+ */
 export function senderRoleName(message, directory = null) {
   return SENDER_ROLES[senderRole(message, directory)];
 }

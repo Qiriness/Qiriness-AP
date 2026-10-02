@@ -54,7 +54,7 @@ test('both directions are rendered, labelled and dated', () => {
   assert.equal(
     renderThread(CONVERSATION),
     '[client — 2026-08-01]\ncolis non reçu\n\n' +
-      '[Qiriness — 2026-08-02]\navez-vous vu vos voisins ?\n\n' +
+      '[nous (service client) — 2026-08-02]\navez-vous vu vos voisins ?\n\n' +
       '[client — 2026-08-03]\noui, rien chez eux'
   );
 });
@@ -77,7 +77,7 @@ test('each message says WHO sent it, not merely which direction', () => {
   );
 
   assert.ok(rendered.includes('[client — 2026-08-01]'));
-  assert.ok(rendered.includes('[collègue (LAP Groupe) — 2026-08-02]'));
+  assert.ok(rendered.includes('[collègue — 2026-08-02]'));
   assert.ok(rendered.includes('[prestataire logistique — 2026-08-03]'));
   // The address resolves the role and is never rendered.
   assert.ok(!rendered.includes('lap-groupe.com'));
