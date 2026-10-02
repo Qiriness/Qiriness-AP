@@ -1,4 +1,4 @@
-import { CAVEATS, MISSING_FIELDS } from '../investigation/case-file.mjs';
+import { CAVEATS, MISSING_FIELDS, askSentence } from '../investigation/case-file.mjs';
 import { findLinkMarkers, normaliseReplyLink } from '../../../scripts/lib/reply-link.mjs';
 
 // What is checked against the drafted text, in code.
@@ -516,7 +516,7 @@ export function runDraftChecks({
   if (mustAsk) {
     for (const field of missing) {
       const key = field?.field;
-      const ask = MISSING_FIELDS[key]?.ask;
+      const ask = askSentence(field);
       if (!ask) {
         continue;
       }

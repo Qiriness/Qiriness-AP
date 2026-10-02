@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { reinvestigationColumns, runOrderResolution } from './order-resolution-runner.mjs';
+import { createOrderResolutionStore, reinvestigationColumns, runOrderResolution } from './order-resolution-runner.mjs';
+import { hashIdentifier } from '../../../scripts/lib/compliance-audit.mjs';
 
 const HASH_A = 'a'.repeat(64);
 const HASH_B = 'b'.repeat(64);
@@ -330,4 +331,108 @@ test('a person’s status is never reopened, and an uninvestigated ticket needs 
     assert.deepEqual(reinvestigationColumns({ status, investigated_at: at }), {}, status);
   }
   assert.deepEqual(reinvestigationColumns({ status: 'open', investigated_at: null }), {});
+});
+
+// --- the customer's later replies --------------------------------------------
+
+const ORDER_ADDRESS = 'acheteuse@example.com';
+
+function withLater(store, later) {
+  return { ...store, async laterInboundByTicket() { return new Map(Object.entries(later)); } };
+}
+
+test('an address given in a later reply confirms the order the first message quoted', async () => {
+  // « Pourriez-vous confirmer l'adresse utilisée pour la commande ? » is
+  // answered in message two. Reading the first message alone left the order a
+  // mismatch however often the customer answered.
+  const store = buildStore({
+    pending: [{ ticket: TICKET, text: 'ma commande #4854 n’est pas arrivée' }],
+    orders: [{ order_number: 4854, name: '#4854', customer_email_hash: hashIdentifier(ORDER_ADDRESS) }]
+  });
+  const record = withLater(store, { t1: [`Bonjour, c’est ${ORDER_ADDRESS}`] });
+
+  const totals = await runOrderResolution({ store, record, shopId: 's1' });
+
+  assert.equal(totals.confirmed, 1);
+  assert.equal(store.written[0].resolution.verifiedBy, 'message_email');
+});
+
+test('an order number given in a later reply is resolved', async () => {
+  const store = buildStore({
+    pending: [{ ticket: TICKET, text: 'où en est ma commande ?' }],
+    orders: [{ order_number: 4854, name: '#4854', customer_email_hash: HASH_A }]
+  });
+  const record = withLater(store, { t1: ['Voici le numéro : #4854'] });
+
+  const totals = await runOrderResolution({ store, record, shopId: 's1' });
+
+  assert.equal(totals.confirmed, 1);
+  assert.equal(store.written[0].resolution.orderName, '#4854');
+});
+
+test('without the later-message reader the first message alone is used, as before', async () => {
+  const store = buildStore({
+    pending: [{ ticket: TICKET, text: 'ma commande #4854' }],
+    orders: [{ order_number: 4854, name: '#4854', customer_email_hash: HASH_B }]
+  });
+
+  const totals = await runOrderResolution({ store, record: store, shopId: 's1' });
+
+  assert.equal(totals.mismatch, 1);
+});
+
+test('the order a mismatch found is recorded, so the reply can name it', () => {
+  const columns = createOrderResolutionStore(null).buildResolutionColumns(
+    { id: 't1', metadata: {} },
+    { status: 'mismatch', orderName: '#4854', orderFound: true, candidates: ['#4854'] }
+  );
+  assert.equal(columns.metadata.order_resolution.found_order_name, '#4854');
+  assert.equal(columns.shopify_order_number, undefined, 'still never written');
+
+  const absent = createOrderResolutionStore(null).buildResolutionColumns(
+    { id: 't1', metadata: {} },
+    { status: 'not_found', orderName: '#9999', orderFound: false, candidates: ['#9999'] }
+  );
+  assert.equal(absent.metadata.order_resolution.found_order_name, null, 'no order, no name');
+});
+
+test('a reference that led nowhere is flagged apart from no reference at all', async () => {
+  const store = buildStore({ pending: [{ ticket: TICKET, text: 'ma commande Q0026200336' }] });
+  await runOrderResolution({ store, record: store, shopId: 's1' });
+  assert.equal(store.written[0].resolution.unmatchedReference, true);
+
+  const none = buildStore({ pending: [{ ticket: TICKET, text: 'une question' }] });
+  await runOrderResolution({ store: none, record: none, shopId: 's1' });
+  assert.equal(none.written[0].resolution.unmatchedReference, false);
+});
+
+test('a number found only in a later reply never names somebody else’s order', async () => {
+  // Our auto-reply's « exemple # 5012 » came back in a reply whose quote went
+  // undetected. As a mismatch it would have told the customer we found #5012.
+  const store = buildStore({
+    pending: [{ ticket: TICKET, text: 'une question sur ma commande' }],
+    orders: [{ order_number: 5012, name: '#5012', customer_email_hash: HASH_B }]
+  });
+  const record = withLater(store, { t1: ['précisez le numéro (exemple # 5012)'] });
+
+  const totals = await runOrderResolution({ store, record, shopId: 's1' });
+
+  assert.equal(totals.no_candidate, 1);
+  assert.equal(totals.mismatch, 0);
+});
+
+test('a number confirmed in a later reply outranks one the first message could not tie', async () => {
+  const store = buildStore({
+    pending: [{ ticket: TICKET, text: 'ma commande #4854' }],
+    orders: [
+      { order_number: 4854, name: '#4854', customer_email_hash: HASH_B },
+      { order_number: 4860, name: '#4860', customer_email_hash: HASH_A }
+    ]
+  });
+  const record = withLater(store, { t1: ['pardon, c’est la #4860'] });
+
+  const totals = await runOrderResolution({ store, record, shopId: 's1' });
+
+  assert.equal(totals.confirmed, 1);
+  assert.equal(store.written[0].resolution.orderName, '#4860');
 });

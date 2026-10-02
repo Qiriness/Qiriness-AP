@@ -51,6 +51,15 @@ asking *"où est ma commande"* retrieves a **draft reply** as though it were pol
   leave the exemplar until the tool exists. (Same discipline as `checkout_state`
   in `evidence-rules.mjs`: listed, unwired, so the report argues for building it.)
 
+### The choose rule
+
+One line under each entry's metadata: `**choose_rule** Choose when … Do not choose …`.
+It is not embedded and never moves the score. When the matcher cannot separate two
+situations (a near miss, or a tie inside the margin), the situation chooser is shown
+each candidate's rule beside its question and phrasings, and told to apply it over
+any resemblance in wording. Imported into `support_exemplars.choose_rule`
+(migration 57); an entry without the line clears it.
+
 ### Declaring a phrasing's language
 
 A variant is French unless its annotation opens with a language code:
@@ -113,6 +122,7 @@ Referenced by the entries below so each state is written once.
 
 ### D-01 · Où en est ma commande ? Je l'ai passée il y a plusieurs semaines et je ne l'ai toujours pas reçue.
 `delivery` · `problem` · **19 msgs** — largest single cluster · 🟢 partial
+**choose_rule** Choose when the customer has not received an order and is primarily asking where it is or for its delivery status. Do not choose if tracking says delivered, tracking is specifically stuck, the carrier has declared it lost, the order has not yet been dispatched, or the customer is explicitly requesting refund/reshipment because of the delay.
 
 **Variantes réelles**
 - « j'ai passé deux commandes fin juin et je n'ai toujours pas reçu mes articles »
@@ -132,6 +142,7 @@ Referenced by the entries below so each state is written once.
 
 ### D-02 · Il manque un article dans le colis que j'ai reçu.
 `delivery` · `problem` · **12 msgs** · 🟢
+**choose_rule** Choose when the customer received the parcel but one or more ordered items are missing. Do not choose for missing free samples or when the customer received the wrong product.
 
 **Variantes réelles**
 - « J'ai effectué une commande #5953 et je viens de recevoir mon colis. Il manque un article »
@@ -150,6 +161,7 @@ Referenced by the entries below so each state is written once.
 
 ### D-03 · Ma commande est indiquée comme livrée mais je n'ai rien reçu.
 `delivery` · `problem` · **10 msgs** · cohesion 0.84 — very tight · 🔒 carrier API
+**choose_rule** Choose when tracking or the carrier says the parcel was delivered but the customer says they did not receive it, including delivery to the wrong address or neighbour. Do not choose for a parcel merely delayed, stuck in transit, or officially declared lost.
 
 **Variantes réelles**
 - « Je viens de voir que mon colis a été livré dans ma boîte aux lettres mais il n'y a rien »
@@ -183,6 +195,7 @@ Referenced by the entries below so each state is written once.
 
 ### D-05 · Le suivi de mon colis n'a pas bougé depuis plusieurs jours.
 `delivery` · `problem` · **2 msgs** · 🔒 carrier API
+**choose_rule** Choose when a shipment has tracking but the tracking status has remained unchanged or stuck for several days. Do not choose if the order has not been dispatched, is marked delivered, or the carrier has officially declared it lost.
 
 **Variantes réelles**
 - « La commande est bloquée depuis deux semaines. Le statut n'a pas changé sur le site GLS »
@@ -197,6 +210,7 @@ Referenced by the entries below so each state is written once.
 
 ### D-37 · Le transporteur a déclaré mon colis perdu et me renvoie vers vous.
 `delivery` · `problem` · **2 msgs** — un seul incident, deux tickets · 🟢 partial
+**choose_rule** Choose only when the carrier has explicitly confirmed that the parcel is lost, normally after an investigation or claim, and refers the customer back to the sender. Do not choose when the customer merely suspects the parcel is lost because it is late.
 
 **Variantes réelles**
 - « Colissimo a perdu mon colis, ci joins leurs message après réclamation »
@@ -275,6 +289,7 @@ Referenced by the entries below so each state is written once.
 
 ### D-06 · Mon colis est revenu chez vous — pouvez-vous le réexpédier ?
 `delivery` · `problem` · **2 msgs** · 🟢
+**choose_rule** Choose when a parcel has been returned to Qiriness or the sender and the customer asks about its re-expedition or what happens next. Do not choose for a return initiated by the customer.
 
 **Variantes réelles**
 - « Vous avez tenté de me joindre concernant ma commande qui est revenue chez vous »
@@ -291,6 +306,7 @@ Referenced by the entries below so each state is written once.
 
 ### D-07 · Quels sont vos délais de préparation et de livraison ?
 `delivery` · `question` · _no cluster — see note_ · 🟢
+**choose_rule** Choose when the customer is asking about normal preparation, dispatch or delivery times. Do not choose when they are asking for the status of a specific delayed or unshipped order, or whether Qiriness ships to their country.
 
 **Variantes réelles**
 - « J'ai passé une commande, le 29 courant, sur votre site pour la 1ère fois et j'aimerais savoir quel est votre délai moyen pour préparation et expédition ? »
@@ -321,6 +337,7 @@ Referenced by the entries below so each state is written once.
 
 ### D-08 · J'ai reçu un produit qui ne correspond pas à ce que j'avais commandé.
 `delivery` · `problem` · **2 msgs** (ES) · 🟢
+**choose_rule** Choose when the customer received a different product from the one they ordered. Do not choose when an ordered item is missing or when the correct product was received but is defective.
 
 **Variantes réelles**
 - « Mi pedido num. 6298 ha venido erróneo, el producto "CARESSE TEMPS SUBLIME NUIT"… »  _(es)_
@@ -336,6 +353,7 @@ Referenced by the entries below so each state is written once.
 
 ### D-33 · Livrez-vous dans mon pays ? Votre site n'accepte pas mon adresse à l'étranger.
 `delivery` · `question` · _no cluster — from the review folder, 2026-08-12_ · 🟢
+**choose_rule** Choose when the customer asks whether Qiriness delivers to a country or destination, or cannot select/use their foreign address during checkout. Do not choose for post-purchase delivery problems or a separate dispute about customs charges.
 
 **Variantes réelles**
 - « Malheureusement, votre boutique en ligne ne fonctionne pas avec mon adresse allemande. Quelles autres options pouvez-vous me proposer pour obtenir des produits Qiriness ? »
@@ -380,6 +398,7 @@ Referenced by the entries below so each state is written once.
 
 ### D-36 · Ma commande a beaucoup de retard — si elle n'arrive pas, je préfère être remboursé(e) ou en recevoir une autre.
 `delivery` · `problem` · **2 msgs** · 🟢
+**choose_rule** Choose when an order is late or missing and the customer explicitly asks for a refund, replacement or reshipment if it does not arrive. Do not choose when they are only asking where the order is.
 
 **Variantes réelles**
 - « la poste nous a prevenu d'un peu de retard, mon colis n'est toujours pas la, une semaine plus tard, j'ai besoin de mes produits. Je souhaiterai un remboursement si mon colis n'arrive pas d'ici samedi »
@@ -404,6 +423,7 @@ commerciale, prise par une personne.
 
 ### O-09 · Ma commande n'est toujours pas expédiée. Quel est le délai entre la commande et l'expédition ?
 `order` · `problem` · **22 msgs** · 🟢
+**choose_rule** Choose when an existing order has not yet been processed or dispatched, including cases where payment was taken or confirmation received but nothing has shipped. Do not choose once the parcel has been dispatched.
 
 **Variantes réelles**
 - « Je constate que ma commande #6686 du 28 juillet 2026 n'est toujours pas traitée »
@@ -457,6 +477,7 @@ commerciale, prise par une personne.
 
 ### O-12 · Je me suis trompé(e) d'adresse de livraison — pouvez-vous la modifier ?
 `order` · `problem` · **7 msgs** · 🟢
+**choose_rule** Choose when the customer wants to change or correct the delivery address of an order already placed.
 
 **Variantes réelles**
 - « je viens de passer une commande je vous remercie de l'envoyer au 12 allée Jacques Bainvi… »
@@ -474,6 +495,7 @@ commerciale, prise par une personne.
 
 ### O-13 · Je souhaite annuler ma commande.
 `order` · `problem` · **3 msgs** · 🟢
+**choose_rule** Choose when the customer explicitly asks to cancel an order that has already been placed.
 
 **Variantes réelles**
 - « Je souhaite annuler ma commande. Pourriez-vous faire le nécessaire svp ? »
@@ -489,6 +511,7 @@ commerciale, prise par une personne.
 
 ### O-14 · Puis-je ajouter un article à une commande déjà passée ?
 `order` · `question` · **2 msgs** · 🟢
+**choose_rule** Choose when the customer wants to add a product, sample or other item to an order that has already been placed.
 
 **Variantes réelles**
 - « J'ai effectué une commande hier et j'ai oublié de rajouter les trois échantillons »
@@ -509,6 +532,7 @@ commerciale, prise par une personne.
 
 ### P-15 · Je me suis inscrit(e) à la newsletter pour la remise de 20 % mais je n'ai jamais reçu le code.
 `promotions` · `problem` · **14 msgs** — biggest single-issue cluster in the corpus · 🟢
+**choose_rule** Choose when the customer registered for the newsletter or welcome offer but never received the promotional code. Do not choose when they already have a code but it does not work.
 
 **Variantes réelles**
 - « je suis inscrite à newsletter pour bénéficier de la remise de 20 %. Mais je ne reçois pas de code de réduction, comment avoir la remise de ma 1ère commande lors de paiement ? »
@@ -550,6 +574,7 @@ commerciale, prise par une personne.
 
 ### P-17 · Le masque offert ne s'ajoute pas à mon panier quand je clique sur « je le veux ».
 `order` / `promotions` · `problem` · **9 msgs** across two clusters · 🔒 `checkout_state`
+**choose_rule** Choose when a promotional gift should be added during checkout but cannot be added, disappears, or becomes chargeable. Do not choose when the order is already completed and the customer is asking whether a gift was applied.
 
 **Variantes réelles**
 - « on m'offre un masque gratuit lors de ma commande mais quand je clique sur "je le veux" »
@@ -566,6 +591,7 @@ commerciale, prise par une personne.
 
 ### P-18 · Mon code promotionnel ne fonctionne pas : la remise ne s'applique pas à ma commande.
 `promotions` · `problem` · **5 msgs** · 🟢 / 🔒 for `panier_invisible`
+**choose_rule** Choose when a promotional code exists but does not apply, is rejected, or the customer asks whether their basket is eligible for it. Do not choose when the customer never received the code, when a displayed promotional price is wrong without a code, or when checking a completed order.
 
 **Variantes réelles**
 - « je souhaite passer une commande mais la promo de 20% pour la première commande ne s'applique pas ? et je n arrive pas à vous joindre par téléphone…. »
@@ -608,6 +634,7 @@ commerciale, prise par une personne.
 
 ### P-19 · Le prix promotionnel affiché sur le site n'est pas celui appliqué au paiement.
 `promotions` · `problem` · **3 msgs** · already `covered by faq (0.61)` · 🟢
+**choose_rule** Choose when a promotional product price displayed on the site differs from the price shown at checkout or payment, without the problem being an entered promotional code. Do not choose for additional fees or a promo code that fails.
 
 **Variantes réelles**
 - « j'aimerai vous commander votre offre EAU QI prix promo 37,80 €. Le prix de 54 € n'est pas… »
@@ -623,6 +650,7 @@ commerciale, prise par une personne.
 
 ### P-20 · Je n'ai pas reçu les échantillons offerts avec ma commande.
 `order` / `promotions` · `problem` · **4 msgs** · 🟢
+**choose_rule** Choose when free samples expected with an order were missing. Do not choose for a missing purchased item or for checking whether a separate promotional gift or discount was applied.
 
 **Variantes réelles**
 - « Pour une première #5907 commande, je n'ai pas reçu mon échantillon ? »
@@ -638,6 +666,7 @@ commerciale, prise par une personne.
 
 ### P-21 · Avez-vous une offre ou un code promotionnel en cours ?
 `promotions` · `question` · 🟢
+**choose_rule** Choose when the customer is asking whether any current promotion, discount or promotional code is available, either generally or for a specific product. Do not choose when troubleshooting an offer they already have.
 
 **Variantes réelles**
 - « avez-vous une offre ou un code promotionnel dont je pourrais bénéficier ? » _(ticket d'ancrage, 2026-09-04)_
@@ -656,6 +685,7 @@ commerciale, prise par une personne.
 
 ### P-22 · Ma promotion ou mon cadeau a-t-il bien été appliqué à ma commande ? Pouvez-vous vérifier ?
 `order` / `promotions` · `problem` · **2 msgs** · 🟢
+**choose_rule** Choose when an order has already been placed and the customer wants confirmation that a discount, promotion or promotional gift was actually applied. Do not choose for a checkout problem before the order is completed.
 
 **Variantes réelles**
 - « J'avais vu qu'un cadeau exclusif était offert, mais je ne le trouve pas dans ma commande. » _(#6827, 2026-08-20)_
@@ -679,6 +709,7 @@ commerciale, prise par une personne.
 
 ### R-21 · Comment retourner un produit ? Je ne trouve pas l'adresse de retour.
 `return_exchange` · `question` · **5 msgs** (EN, cohesion 0.89) · 🟢
+**choose_rule** Choose when the customer wants to know how or where to return a product, including the return address, label or drop-off process. Do not choose when the main question is who pays the return costs or when the refund will arrive.
 
 **Variantes réelles**
 - « Hi, accidently ordered the wrong products. How can I return? I do not see a return address on the… »  _(en)_
@@ -696,6 +727,7 @@ commerciale, prise par une personne.
 
 ### R-22 · Les frais de retour sont-ils à ma charge ou remboursés ?
 `return_exchange` · `question` · **3 msgs** · 🟢 · **follow-up register**
+**choose_rule** Choose when the main question is whether return shipping costs are paid or reimbursed by Qiriness or by the customer. Do not choose for general instructions on how to return an item.
 
 **Variantes réelles**
 - « il y aura t il un remboursement des frais d'envoi ? Car je ne suis pas responsable si le produit a un problème » _(extrait — « pourquoi je ne peux pas le déposer au magasin ? » est sur R-21)_
@@ -736,6 +768,7 @@ commerciale, prise par une personne.
 
 ### R-23 · Sous quel délai suis-je remboursé(e) après réception de mon retour ?
 `return_exchange` · `question` · **4 msgs** (ES) · 🔒 `remboursement_en_cours`
+**choose_rule** Choose when the customer has already returned the product and asks when the refund will be processed or why it has not yet arrived. Do not choose when they are still asking how to make the return.
 
 **Variantes réelles**
 - « Hasta la fecha no he recibido contestación a mi correo de reclamación »  _(es)_
@@ -756,6 +789,7 @@ commerciale, prise par une personne.
 
 ### PR-24 · Vos produits sont-ils vegan et non testés sur les animaux ?
 `product` · `question` · **5 msgs** · 🟢 — crispest question in the whole set
+**choose_rule** Choose when the customer asks whether Qiriness products are vegan, cruelty-free or tested on animals.
 
 **Variantes réelles**
 - « Je souhaiterais savoir si vos produits (gamme active énergie notamment) sont vegans »
@@ -772,6 +806,7 @@ commerciale, prise par une personne.
 
 ### PR-25 · Quelle routine me conseillez-vous pour mon type de peau ?
 `product` · `question` · **3 msgs** · currently **NO ARTICLE** · 🟢
+**choose_rule** Choose when the customer wants personalised product or routine recommendations based on their skin type, age or cosmetic concerns. Do not choose when they are specifically asking for the Qiriness equivalent of another brand's product or asking about a medical condition.
 
 **Variantes réelles**
 - « J'aimerais avoir des conseils personnalisés pour ma routine svp merci »
@@ -787,6 +822,7 @@ commerciale, prise par une personne.
 
 ### PR-26 · Mon masque LED ne se recharge plus / la batterie ne tient pas.
 `product` · `problem` · **2 msgs** · 🟢
+**choose_rule** Choose when the LED mask has a charging, battery or power-related malfunction. Do not choose for questions about how a mask feature works or its technical specifications.
 
 **Variantes réelles**
 - « j'ai acheté un masque led fast masque qiriness, celui-ci ne se charge plus »
@@ -803,6 +839,7 @@ commerciale, prise par une personne.
 
 ### PR-27 · À quoi sert le mode pulsé du masque LED ?
 `product` · `question` · **2 msgs** · 🟢
+**choose_rule** Choose when the customer specifically asks what the pulsed mode of the LED mask does or how that mode is intended to be used. Do not choose for technical specifications or a malfunction.
 
 **Variantes réelles**
 - « Pouvez-vous me dire à quoi sert le mode pulsé sur le masque qiriness que je viens d'acquérir »
@@ -818,6 +855,7 @@ commerciale, prise par une personne.
 ### PR-29 · Avez-vous l'équivalent de ce produit d'une autre marque ?
 
 `product` · `question` · **1 msg** — pre-purchase · 🟢
+**choose_rule** Choose when the customer names or describes a product from another brand and asks for the closest Qiriness equivalent or alternative. Do not choose for general routine advice without an external reference product.
 
 **Variantes réelles**
 - « Avez-vous l'équivalence de Wrinkle power - Serum anti rides ? Ce produit que j'ai acheté sur téléshopping de TF1 est vraiment merveilleux »
@@ -840,6 +878,7 @@ commerciale, prise par une personne.
 
 ### PR-28 · Quelles sont les caractéristiques du masque LED (longueurs d'onde, irradiance, durée de séance) ?
 `product` · `question` · **3 msgs** — pre-purchase · 🟢
+**choose_rule** Choose when the customer asks for technical specifications of the LED mask such as wavelength, irradiance, fluence, power or session duration. Do not choose for questions about the purpose of a specific mode or for a malfunction.
 
 **Variantes réelles**
 - « Je m'intéresse de près à votre Masque LED visage et je souhaiterais quelques précisions »
@@ -855,6 +894,7 @@ commerciale, prise par une personne.
 
 ### S-34 · Le produit ou le cadeau est en rupture de stock — dois-je attendre, ou sera-t-il envoyé plus tard ?
 `product_stock` · `question` · _no cluster — from the review folder, 2026-08-12_ · 🟢
+**choose_rule** Choose when a product or promotional gift is explicitly out of stock and the customer asks whether to wait, order anyway or expect it later. Do not choose when a gift is available but simply fails to enter the basket.
 
 **Variantes réelles**
 - « je souhaite commander 2 produits qui sont actuellement dans mon panier, or, le cadeau pour ces deux produits de la même gamme est en rupture de stock. Dois-je attendre qu'il soit à nouveau en stock pour passer ma commande, où sera-t-il envoyé ultérieurement ? »
@@ -892,6 +932,7 @@ about whether we *know* the answer, not about what the stock actually is
 
 ### A-29 · Je n'arrive pas à réinitialiser mon mot de passe ni à me connecter.
 `account` · `problem` · **5 msgs** · ✅ **ALREADY WORKS — retrieves at 0.61–0.62**
+**choose_rule** Choose when the customer cannot log in, access their account or successfully reset their password. Do not choose when they want the account deleted.
 
 > **This is the control, not a task.** It is the only question in the set that
 > already clears the answerable bar against the existing library, and therefore
@@ -907,6 +948,7 @@ about whether we *know* the answer, not about what the stock actually is
 
 ### A-35 · Je souhaite supprimer mon compte client.
 `account` · `problem` · _no cluster_
+**choose_rule** Choose when the customer explicitly asks to delete, close or permanently deactivate their customer account.
 
 **Variantes réelles**
 - « Bonjour, pouvez-vous supprimer mon compte s'il vous plaît ? »
@@ -930,6 +972,7 @@ about whether we *know* the answer, not about what the stock actually is
 
 ### PA-30 · Comment obtenir une facture pour ma commande ?
 `payment` · `question` · **6 msgs** — check the B2B/consumer split first · 🟢
+**choose_rule** Choose when the customer asks for an invoice or how to obtain an invoice for an order. Do not choose for payment failure or unexpected charges.
 
 **Variantes réelles**
 - « Réf. client : C0000294 — Je vous prie de bien vouloir me faire parvenir la facture… »
@@ -948,6 +991,7 @@ about whether we *know* the answer, not about what the stock actually is
 
 ### PA-31 · Des frais supplémentaires apparaissent au moment du paiement.
 `payment` · `problem` · **2 msgs** · 🟢
+**choose_rule** Choose when unexpected additional fees or charges appear during checkout or payment. Do not choose when the difference is specifically a promotional price or a discount code failing to apply.
 
 **Variantes réelles**
 - « au moment de payer (73 euros) il y a des frais supplémentaires demandés »
@@ -963,6 +1007,7 @@ about whether we *know* the answer, not about what the stock actually is
 
 ### PA-32 · Je n'arrive pas à finaliser le paiement de ma commande.
 `payment` · `problem` · **2 msgs** (NL) · currently **NO ARTICLE** · 🟢
+**choose_rule** Choose when the customer cannot complete or finalise payment for an order. Do not choose when payment works but unexpected fees appear or a promotional discount is missing.
 
 **Variantes réelles**
 - « Kan geen bestelling plaatsen, is er iets mis ofzo? »  _(nl)_
@@ -994,6 +1039,7 @@ about whether we *know* the answer, not about what the stock actually is
 
 ### CV-01 · J'ai eu des rougeurs ou des boutons après avoir utilisé un produit.
 `cosmetovigilance` · `problem` · **1 msgs** · 🟢
+**choose_rule** Choose when the customer reports a skin reaction after using a product, such as redness, spots, itching, irritation or discomfort, without a clearly severe reaction or explicit request for refund or compensation.
 
 **Variantes réelles**
 - « J'ai voulu essayer une autre gamme la crème d'exception qui malheureusement m'a provoqué des rougeurs et boutons sur les joues, le nez et le front. Je vous précise avoir une peau mature très sensible et déshydratée »
@@ -1021,6 +1067,7 @@ about whether we *know* the answer, not about what the stock actually is
 
 ### CV-02 · J'ai eu une réaction sévère et je demande un remboursement.
 `cosmetovigilance` · `problem` · **1 msgs** · 🟢
+**choose_rule** Choose when the customer describes a clearly severe adverse reaction and also requests a refund, especially where symptoms are serious, medical attention was needed, or normal activity was significantly affected. Do not choose for a non-severe reaction with a general compensation request.
 
 **Variantes réelles**
 - « After using the product, I experienced a serious reaction. The reaction has been so severe that I have not been able to step out of my home due to the condition of my skin. Given the adverse reaction caused by your product, I expect a full refund at the earliest »  _(en)_
@@ -1055,6 +1102,7 @@ about whether we *know* the answer, not about what the stock actually is
 
 ### CV-04 · J'ai eu une réaction et je demande un remboursement ou un dédommagement.
 `cosmetovigilance` · `problem` · **1 msg**
+**choose_rule** Choose when the customer reports a reaction and explicitly asks for money, a refund, compensation or another commercial remedy, but the message does not clearly establish the severe-reaction characteristics of CV-02.
 
 **Variantes réelles**
 - « Given the adverse reaction caused by your product, I expect a full refund at the earliest »  _(en)_
@@ -1082,6 +1130,7 @@ about whether we *know* the answer, not about what the stock actually is
 
 ### CV-03 · Puis-je utiliser ce produit compte tenu de mon état de santé ?
 `cosmetovigilance` · `problem` · **1 msgs** · 🟢
+**choose_rule** Choose when the customer asks before use whether a product is safe or appropriate given a health condition, pregnancy, breastfeeding, treatment, previous surgery or possible contraindication. Do not choose when a reaction has already occurred.
 
 **Variantes réelles**
 - « je viens d'acquérir un masque Qiriness. pouvez vous me dire quels sont les effets secondaires pour les yeux. D'autre part j'ai été opérée il y a plusieurs années, j'espère qu'il n'y a pas de risque » _(generalised — see the note below)_

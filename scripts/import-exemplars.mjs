@@ -222,6 +222,8 @@ async function write({ supabase, shopId, usable, pruneTranslations }) {
     category: e.category,
     request_kind: e.requestKind,
     requirement_needs: e.requirementNeeds,
+    // The document is the source: an entry without the line clears the rule.
+    choose_rule: e.chooseRule ?? null,
     demand_message_count: e.demandMessageCount,
     source_note: e.sourceNote
     // approval_status is deliberately absent: the column default is `draft`, and

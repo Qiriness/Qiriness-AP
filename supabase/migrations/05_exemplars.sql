@@ -34,6 +34,9 @@ create table public.support_exemplars (
   -- a re-import updates rather than duplicates.
   exemplar_key text not null,
   canonical_question text not null,
+  -- When to pick this situation and when not to, for the situation chooser
+  -- (agent/src/retrieval/situation-chooser.mjs). Prose, never embedded.
+  choose_rule text,
   category text,
   request_kind text,
   -- WHAT ANSWERING THIS REQUIRES, from the investigation's closed vocabulary.
@@ -155,6 +158,9 @@ comment on table public.support_exemplars is
 
 comment on column public.support_exemplars.exemplar_key is
   'Stable human handle from the source analysis (P-16, D-01). Unique per shop, so a re-import updates the existing row rather than creating a second one.';
+
+comment on column public.support_exemplars.choose_rule is
+  'When to choose this situation over its neighbours, and when not to: one line, shown to the situation chooser beside the candidate''s question and phrasings when the matcher could not separate them (near miss or tie). Authored on the **choose_rule** line of Email-Example-Queries.md. Never embedded and never read by the matcher''s score.';
 
 comment on column public.support_exemplars.requirement_needs is
   'The facts a correct reply must rest on, from the closed vocabulary in agent/src/investigation/evidence-rules.mjs. Declared here as a second source alongside the per-ticket needs the decomposition model emits; which one wins is deliberately not settled in the schema.';

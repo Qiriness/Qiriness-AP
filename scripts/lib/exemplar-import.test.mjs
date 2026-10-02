@@ -281,3 +281,25 @@ test('the real corpus declares exactly the foreign phrasings it holds', async ()
     `unread language markers: ${warnings.join('; ')}`
   );
 });
+
+test('the choose_rule line is read as one line, and its absence is null', () => {
+  const [withRule, without] = parseExemplarDocument(`
+### D-33 · Livrez-vous dans mon pays ?
+\`delivery\` · \`question\` · 🟢
+**choose_rule** Choose when the customer asks whether Qiriness delivers to a country.   Do not choose for customs disputes.
+
+**Variantes réelles**
+- « Do you ship to Germany? »  _(en)_
+
+**needs** _(aucun)_
+
+### D-07 · Quels sont vos délais ?
+\`delivery\` · \`question\` · 🟢
+
+**needs** \`brand_answer\`
+`);
+  assert.equal(withRule.chooseRule, 'Choose when the customer asks whether Qiriness delivers to a country. Do not choose for customs disputes.');
+  // The line is not a phrasing and not part of the note.
+  assert.equal(withRule.phrasings.filter((p) => /Choose when/.test(p.text ?? p)).length, 0);
+  assert.equal(without.chooseRule, null);
+});

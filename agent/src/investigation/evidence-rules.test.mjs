@@ -827,11 +827,11 @@ test('order_identity resolves to a value, so a rule can tell "which order" from 
   // keyed on that pair asks the customer for a number already in hand.
   const resolved = [{ id: 't1', tool: TOOL_NAMES.GET_ORDER_CONTEXT, outcome: 'found', data: {} }];
   const unresolved = [
-    { id: 't1', tool: TOOL_NAMES.GET_ORDER_CONTEXT, outcome: 'not_resolved', data: {} }
+    { id: 't1', tool: TOOL_NAMES.GET_ORDER_CONTEXT, outcome: 'not_resolved', data: { identity: 'no_number_unknown_sender' } }
   ];
 
   assert.equal(finding('order_identity', resolved), 'resolved');
-  assert.equal(finding('order_identity', unresolved), 'none');
+  assert.equal(finding('order_identity', unresolved), 'no_number_unknown_sender');
   // Both report `order_state: unknown`, which is exactly why the pair was
   // indistinguishable before this finding existed.
   assert.equal(finding('order_state', resolved), 'unknown');
@@ -944,7 +944,7 @@ test('a designed gap is one only an attempted need may claim', () => {
   assert.equal(isDesignedGap('product_identity', 'ambiguous', 'attempted'), true);
   assert.equal(isDesignedGap('product_identity', 'ambiguous', 'satisfied'), false);
   assert.equal(isDesignedGap('product_identity', 'ambiguous', 'not_attempted'), false);
-  assert.equal(isDesignedGap('order_identity', 'none', 'attempted'), false);
+  assert.equal(isDesignedGap('order_identity', 'other_email', 'attempted'), false);
 });
 
 test('closability reads the question before the state, and the finding before both', () => {

@@ -15,6 +15,7 @@ import {
 import {
   NEED_KEYS,
   fieldsAlreadyAnswered,
+  fieldsAskedInstead,
   findingsOf,
   reactionReportFrom,
   resolveNeeds,
@@ -482,6 +483,11 @@ export function createInvestigator(
       answeredFields: [
         ...fieldsAlreadyAnswered(findingsOf(resolveNeeds(declaredNeeds, run.ledger, names)))
       ],
+      // The order-identity situation's half of the same decision: the number
+      // we hold becomes a question for the address, and that question names
+      // the order the customer gave.
+      askedInstead: fieldsAskedInstead(findingsOf(resolveNeeds(declaredNeeds, run.ledger, names))),
+      askDetails: askDetailsFrom(run.ledger),
       // An anonymous marketplace buyer has no record under any address, so
       // asking which one they used can only stall the reply.
       unaskableFields: ticket.orderBuyerAnonymous ? ['purchase_email', 'account_email'] : [],
@@ -575,6 +581,23 @@ async function resolveRequests({ ticket, plan, policyForRequest, logger, ledger 
   }
 
   return requests;
+}
+
+/**
+ * Extra keys for `missing` entries: the order the address question is about.
+ *
+ * Read off the order tool's ledger entry, set only while the order is found
+ * and its owner unconfirmed. Plain keys, because `case-file.mjs` imports
+ * nothing.
+ */
+export function askDetailsFrom(ledger = []) {
+  const entry = [...ledger].reverse().find((e) => e?.tool === TOOL_NAMES.GET_ORDER_CONTEXT);
+  const order = entry?.data?.foundOrderName;
+  const situation = entry?.data?.identity;
+  if (!order || (situation !== 'other_email' && situation !== 'other_email_same_name')) {
+    return {};
+  }
+  return { purchase_email: { order } };
 }
 
 /** Whether identification found a code or an offer in the message. */

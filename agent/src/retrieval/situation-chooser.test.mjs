@@ -104,6 +104,31 @@ test('the prompt shows the message and each candidate with its phrasings', () =>
   assert.match(user, /\[D-07\] Quels sont vos délais/);
 });
 
+test('each candidate carries its choose rule, above its phrasings', () => {
+  const user = buildChooserUser({
+    subject: 'Colis',
+    body: 'Le transporteur dit que mon colis est perdu',
+    candidates: CANDIDATES,
+    variantsByKey: new Map([['D-36', ['a']]]),
+    chooseRulesByKey: new Map([['D-36', 'Choose when the customer asks for a refund. Do not choose when only asking where it is.']])
+  });
+  assert.match(user, /\[D-36\] [^\n]*\n  Règle de choix : Choose when the customer asks for a refund\. Do not choose[^\n]*\n  - « a »/);
+  // A situation with no rule simply shows none.
+  assert.doesNotMatch(user, /\[D-07\][^\n]*\n  Règle de choix/);
+});
+
+test('the loader reads each situation\'s choose rule beside its phrasings', async () => {
+  const load = createVariantLoader({
+    selectExemplars: async () => [
+      { id: 'e1', exemplar_key: 'D-01', canonical_question: 'Où ?', choose_rule: '  Choose when… ' },
+      { id: 'e2', exemplar_key: 'D-02', canonical_question: 'Quoi ?', choose_rule: null }
+    ],
+    selectPhrasings: async () => []
+  });
+  const loaded = await load();
+  assert.deepEqual([...loaded.chooseRules], [['D-01', 'Choose when…']]);
+});
+
 test('the variant loader keeps authored phrasings in order, skips the canonical, and caches', async () => {
   let loads = 0;
   let clock = 0;
@@ -121,7 +146,7 @@ test('the variant loader keeps authored phrasings in order, skips the canonical,
     now: () => clock
   });
 
-  assert.deepEqual((await load()).get('D-01'), ['first', 'second']);
+  assert.deepEqual((await load()).variants.get('D-01'), ['first', 'second']);
   clock += 60_000;
   await load();
   assert.equal(loads, 1, 'reused inside the cache window');

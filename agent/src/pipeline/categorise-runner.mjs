@@ -30,8 +30,6 @@ const DEFAULT_BATCH_LIMIT = 25;
 // attempts it is categorised by fallback instead, which keeps one poison ticket
 // from occupying a batch slot forever.
 const MAX_ATTEMPTS = 3;
-// Enough thread context for the categoriser; the first and last are what it uses.
-const MESSAGES_PER_TICKET = 10;
 // How many superseded label sets to keep on the ticket. Enough to see a
 // trajectory (where the thread started, how it escalated) without the metadata
 // column growing without bound on a long-running conversation.
@@ -61,7 +59,13 @@ export async function runCategorisation({
   const pending = await record.claim('categorisation', { limit, ticketId });
 
   for (const ticket of pending) {
-    const messages = await record.inboundMessages(ticket.id, { limit: MESSAGES_PER_TICKET });
+    // THE FIRST AND THE LATEST, which are all the categoriser reads. This used
+    // to read the first 10 oldest-first, so on a thread with 11+ inbound
+    // messages (7 on 2026-10-02, the longest 30 messages) the « latest » it
+    // labelled was the 10th: a re-categorisation woken by a new reply never
+    // saw that reply.
+    const inbound = await record.inboundMessages(ticket.id);
+    const messages = inbound.length > 2 ? [inbound[0], inbound[inbound.length - 1]] : inbound;
     if (messages.length === 0) {
       // Nothing from the customer (a thread where we hold only our own replies,
       // because the customer's original fell outside the ingested window). There

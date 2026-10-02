@@ -1,5 +1,6 @@
 
 import { TOOL_NAMES } from './investigation-rules.mjs';
+import { ORDER_IDENTITY_SITUATIONS } from '../resolution/order-identity.mjs';
 import { productFromKnowledge } from '../retrieval/product-from-knowledge.mjs';
 
 /**
@@ -757,13 +758,21 @@ const FINDINGS = {
   // Derived from the tool's own outcome, which already draws the line: `found`
   // against `not_resolved`. Same shape as `promotion_identity`, for the same
   // reason — an identity is a value an answer branches on, not just a gap.
+  //
+  // `none` WAS SPLIT INTO FIVE on 2026-10-02 (see `order-identity.mjs`). It
+  // asked for the number and the address on every unconfirmed ticket, including
+  // one where the customer had just quoted the order from another mailbox. The
+  // resolver already knew which case it was; nothing below it could see that.
   order_identity: {
-    values: ['resolved', 'none', 'unknown'],
+    values: [...ORDER_IDENTITY_SITUATIONS, 'unknown'],
     derive(entries) {
       const entry = lastByTool(entries, TOOL_NAMES.GET_ORDER_CONTEXT);
       if (!entry) return 'unknown';
       if (entry.outcome === 'found') return 'resolved';
-      if (entry.outcome === 'not_resolved') return 'none';
+      const identity = entry.data?.identity;
+      if (entry.outcome === 'not_resolved' && ORDER_IDENTITY_SITUATIONS.includes(identity)) {
+        return identity;
+      }
       return 'unknown';
     }
   },
@@ -1287,7 +1296,10 @@ const DEPENDENCIES = {
  * something already in the dossier.
  */
 const ASK_ANSWERED_BY = {
-  order_identity: ['resolved'],
+  // The two `other_email` values hold the number: the customer quoted it and
+  // the order exists. Only its owner is open, which `ORDER_SITUATION_ASKS`
+  // turns into the question for the address.
+  order_identity: ['resolved', 'other_email_same_name', 'other_email'],
   promotion_identity: ['resolved'],
   product_identity: ['resolved'],
   customer_identity: ['resolved'],
@@ -1322,7 +1334,39 @@ export function fieldsAlreadyAnswered(findings = {}) {
       answered.add(field);
     }
   }
+  for (const field of ORDER_SITUATION_ASKS[findings.order_identity]?.alsoAnswered || []) {
+    answered.add(field);
+  }
   return answered;
+}
+
+/**
+ * What each order-identity situation does to the two order questions.
+ *
+ * `alsoAnswered` covers a second field, which `ASK_ANSWERED_BY` (one field per
+ * need) cannot. A confirmed order settles the address as well as the number.
+ * A known sender settles the address: once they give the number, their own
+ * address is checked against it.
+ *
+ * `instead` swaps a question that is already answered for the one still open.
+ * When the order was found under another address, a rule asking « quel est le
+ * numéro de commande ? » wants the order identified. That is done, and the
+ * question left is which address placed it. Dropping the number without
+ * asking the address would stall the ticket.
+ */
+const ORDER_SITUATION_ASKS = {
+  resolved: { alsoAnswered: ['purchase_email'] },
+  no_number_known_sender: { alsoAnswered: ['purchase_email'] },
+  other_email_same_name: { instead: { shopify_order_number: 'purchase_email' } },
+  other_email: { instead: { shopify_order_number: 'purchase_email' } }
+};
+
+/**
+ * `{ answered field: field to ask instead }` for this dossier. Plain keys, like
+ * `fieldsAlreadyAnswered`, because `case-file.mjs` imports nothing.
+ */
+export function fieldsAskedInstead(findings = {}) {
+  return { ...(ORDER_SITUATION_ASKS[findings.order_identity]?.instead || {}) };
 }
 
 export function needRequires(key) {

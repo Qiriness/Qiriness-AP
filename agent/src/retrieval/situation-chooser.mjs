@@ -39,6 +39,7 @@ Règles :
 - Une situation couvre la demande même quand le client la formule comme une question (« comment bénéficier de… ? ») plutôt que comme un problème (« … ne fonctionne pas »).
 - Ignore les emails cités en dessous (notifications transporteur, confirmations Shopify, réponses précédentes) et les signatures : seul ce que le client écrit compte.
 - Le message peut être dans n'importe quelle langue.
+- Une situation peut porter une « Règle de choix » (« Choose when… Do not choose… ») : applique-la. Elle prime sur la ressemblance des formulations et dit quand NE PAS choisir la situation.
 - Si aucune situation ne correspond clairement, réponds "none". Un mauvais choix coûte plus cher que "none".
 - "reason" : une phrase courte, en français, qui ne cite que ce que le message dit.`;
 
@@ -54,11 +55,13 @@ export function chooserSchema(keys) {
   };
 }
 
-export function buildChooserUser({ subject, body, candidates, variantsByKey = new Map() }) {
+export function buildChooserUser({ subject, body, candidates, variantsByKey = new Map(), chooseRulesByKey = new Map() }) {
   const blocks = candidates.map((candidate) => {
     const variants = (variantsByKey.get(candidate.exemplarKey) ?? []).slice(0, VARIANTS_PER_CANDIDATE);
+    const rule = chooseRulesByKey.get(candidate.exemplarKey) ?? null;
     return [
       `[${candidate.exemplarKey}] ${candidate.question ?? ''}`.trim(),
+      ...(rule ? [`  Règle de choix : ${rule}`] : []),
       ...variants.map((text) => `  - « ${text} »`)
     ].join('\n');
   });
@@ -94,12 +97,20 @@ export function createSituationChooser(openai, { model, loadVariants = null, log
       return { choice: null, reason: null, model, candidates: [] };
     }
 
-    // Phrasings make the candidates legible, and the choice is still possible
-    // without them — so a failed load narrows the prompt rather than the run.
+    // Phrasings and choose rules make the candidates legible, and the choice is
+    // still possible without them — so a failed load narrows the prompt rather
+    // than the run. A loader returning a bare Map is phrasings only.
     let variantsByKey = new Map();
+    let chooseRulesByKey = new Map();
     if (loadVariants) {
       try {
-        variantsByKey = (await loadVariants()) ?? new Map();
+        const loaded = await loadVariants();
+        if (loaded instanceof Map) {
+          variantsByKey = loaded;
+        } else {
+          variantsByKey = loaded?.variants ?? new Map();
+          chooseRulesByKey = loaded?.chooseRules ?? new Map();
+        }
       } catch (error) {
         logger?.warn?.('situation_chooser.variants_failed', { reason: error.message });
       }
@@ -108,7 +119,7 @@ export function createSituationChooser(openai, { model, loadVariants = null, log
     const answer = await openai.completeJson({
       model,
       system: SITUATION_CHOOSER_SYSTEM,
-      user: buildChooserUser({ subject, body, candidates: usable, variantsByKey }),
+      user: buildChooserUser({ subject, body, candidates: usable, variantsByKey, chooseRulesByKey }),
       schema: chooserSchema(keys),
       schemaName: 'situation_choice',
       maxTokens: 200,
@@ -126,7 +137,8 @@ export function createSituationChooser(openai, { model, loadVariants = null, log
 }
 
 /**
- * The authored phrasings of every live situation, keyed by exemplar key, cached.
+ * The authored phrasings and the choose rule of every live situation, keyed by
+ * exemplar key, cached: `{ variants: Map<key, string[]>, chooseRules: Map<key, string> }`.
  *
  * AUTHORED ONLY (`phrasing_index < 100`): the translations say the same thing in
  * four more languages, and showing them would multiply the prompt to tell the
@@ -147,6 +159,9 @@ export function createVariantLoader({ selectExemplars, selectPhrasings, now = ()
     const keyById = new Map((exemplars ?? []).map((row) => [row.id, row.exemplar_key]));
     const canonicalById = new Map((exemplars ?? []).map((row) => [row.id, row.canonical_question]));
 
+    const chooseRules = new Map(
+      (exemplars ?? []).filter((row) => row.choose_rule?.trim()).map((row) => [row.exemplar_key, row.choose_rule.trim()])
+    );
     const byKey = new Map();
     const ordered = [...(phrasings ?? [])].sort((a, b) => a.phrasing_index - b.phrasing_index);
     for (const row of ordered) {
@@ -158,7 +173,7 @@ export function createVariantLoader({ selectExemplars, selectPhrasings, now = ()
       byKey.set(key, list);
     }
 
-    cached = byKey;
+    cached = { variants: byKey, chooseRules };
     loadedAt = now();
     return cached;
   };

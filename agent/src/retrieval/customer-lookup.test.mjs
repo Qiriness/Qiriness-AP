@@ -261,3 +261,20 @@ test('the log line carries no personal data', async (t) => {
   assert.ok(!serialised.includes('marie.martin'));
   assert.ok(!serialised.includes('Marie Martin'));
 });
+
+test('a ticket already linked to a customer is answered from that link', async (t) => {
+  // Linked by a confirmed order or by the address the customer gave us, while
+  // the address they write from is unknown. The model used to be told to ask
+  // which address the account was under.
+  const sb = buildSupabase();
+  t.after(sb.restore);
+
+  const lookup = createCustomerLookup({ supabase: sb.client, shopId: 's1', audit: false });
+  const result = await lookup.lookupCustomer({
+    ticket: { requester_email_hash: hashIdentifier('inconnu@example.test'), customer_id: 'c1' }
+  });
+
+  assert.equal(result.found, true);
+  assert.equal(result.matchedBy, 'customer_id');
+  assert.equal(result.customerId, 'c1');
+});

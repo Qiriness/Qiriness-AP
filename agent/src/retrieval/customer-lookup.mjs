@@ -223,8 +223,17 @@ export function createCustomerLookup({ supabase, shopId, logger, audit = true })
         customer = await this.findByEmailHash(hash);
         matchedBy = customer ? 'email_hash' : null;
       }
+      // THE TICKET'S OWN LINK, when the sender's address finds nobody. A ticket
+      // can be linked another way: a confirmed order, or the address the
+      // customer gave when we asked for it (customer resolution). Without this,
+      // the model was told « aucune fiche client… c'est la question à lui
+      // poser » on a ticket whose customer was already known, and asked again.
+      if (!customer && ticket?.customer_id) {
+        customer = await fetchById(ticket.customer_id);
+        matchedBy = customer ? 'customer_id' : null;
+      }
 
-      if (!email && !hash) {
+      if (!email && !hash && !ticket?.customer_id) {
         logger?.info?.('customer.lookup', { found: false, reason: 'no_identifier' });
         return {
           found: false,

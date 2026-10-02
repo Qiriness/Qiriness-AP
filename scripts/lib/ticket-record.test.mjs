@@ -471,3 +471,33 @@ test('setCaseStatus answers null when the ticket moved on', async () => {
   const record = createTicketRecord({}, { shopId: SHOP, transport });
   assert.equal(await record.setCaseStatus({ id: 't1', status: 'open' }, 'resolved', {}), null);
 });
+
+test('address answers are the customer’s own words after we asked for an address', async () => {
+  const record = createTicketRecord({}, {
+    shopId: 's1',
+    transport: {
+      async select() { return []; },
+      async selectAll(_c, table, filters) {
+        if (table === 'ticket_case_state') {
+          // Only the reading that named the field we filtered on.
+          return filters.pending_customer_inputs.value === '["purchase_email"]'
+            ? [{ ticket_id: 't1', read_at: '2026-09-28T13:03:09.335+00:00' }]
+            : [];
+        }
+        return [
+          { ticket_id: 't1', received_at: '2026-09-28T11:48:55+00:00', body_text: 'avant : ancienne@example.test' },
+          { ticket_id: 't1', received_at: '2026-09-28T15:10:25+00:00', body_text: 'c’est moi@example.test\n\nLe 28 sept. 2026, contact a écrit :\n> quelle adresse ?' },
+          { ticket_id: 't2', received_at: '2026-09-28T15:10:25+00:00', body_text: 'jamais demandé : x@example.test' }
+        ];
+      },
+      async insert() { return []; },
+      async update() { return []; },
+      async updateById() { return {}; }
+    }
+  });
+
+  const answers = await record.addressAnswersByTicket(['t1', 't2']);
+
+  assert.deepEqual([...answers.keys()], ['t1'], 'nothing for a ticket we never asked');
+  assert.deepEqual(answers.get('t1'), ['c’est moi@example.test'], 'only after the ask, quote cut');
+});

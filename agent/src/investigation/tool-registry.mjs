@@ -1,6 +1,7 @@
 import { amount, days } from '../../../scripts/lib/parameters.mjs';
 import { amountAboveConsumerCeiling, deriveBuyerType } from './trade-signals.mjs';
 import { orderStates, toOrderContextText } from '../resolution/order-context.mjs';
+import { orderIdentitySituation } from '../resolution/order-identity.mjs';
 import { basketFromCheckout, basketFromOrder } from '../retrieval/promotion-outcome.mjs';
 
 import { toPromptText as photoPromptText } from './photo-evidence.mjs';
@@ -918,6 +919,15 @@ export function createToolRegistry({
         // knows something the model must not describe. It travels as a
         // prohibition, never as a sentence — see `delivery_unscanned`.
         const unscanned = Boolean(confirmed && context?.signals?.awaitingCarrierScan);
+        // Supplied by the runner off the resolution pass. Derived here only for
+        // a caller that builds its own ticket (tests, rehearsals): no metadata
+        // there, so it falls to the sender alone.
+        const identity =
+          ticket.orderIdentity ??
+          orderIdentitySituation({
+            shopifyOrderNumber: ticket.shopify_order_number,
+            customerId: ticket.customer_id
+          });
 
         return {
           outcome: confirmed ? 'found' : 'not_resolved',
@@ -927,7 +937,7 @@ export function createToolRegistry({
           ],
           promptText: confirmed
             ? toOrderContextText(context)
-            : 'Aucune commande confirmée n’est rattachée à ce ticket.',
+            : unconfirmedOrderText(identity),
           // THE STATES TRAVEL IN `data`, NEVER IN `promptText`. A finding is
           // derived from structure and never from prose (see evidence-rules), so
           // a policy rule branching on "has it shipped" needs the answer as a
@@ -939,6 +949,12 @@ export function createToolRegistry({
           data: {
             confirmed,
             orderName: ticket.shopify_order_number || null,
+            // Which order-identity situation, for the `order_identity` finding.
+            // `foundOrderName` is the order the customer's reference led to
+            // while its owner is unconfirmed. The question for the address
+            // names it, so the customer is not asked for a number they gave.
+            identity: identity.situation,
+            foundOrderName: confirmed ? null : identity.orderName,
             states: confirmed
               ? orderStates(context, {
                   staleTransitDays: STALE_TRANSIT_DAYS,
@@ -1651,6 +1667,36 @@ function namedAmountOverCeiling(ticket) {
   const ceiling = amount(ticket?.parameters, 'consumer_order_ceiling');
   if (ceiling == null) return null;
   return amountAboveConsumerCeiling(ticket?.text ?? '', Number(ceiling));
+}
+
+/**
+ * What the model is told when no order is confirmed: which situation it is.
+ *
+ * It used to be one sentence for all of them, so the model could not tell an
+ * order found under another address from no order number at all, and listed
+ * both questions. The order's contents stay out until ownership is
+ * confirmed. Only its number, which the customer gave us, is named.
+ */
+function unconfirmedOrderText({ situation, orderName } = {}) {
+  const base = 'Aucune commande confirmée n’est rattachée à ce ticket.';
+  switch (situation) {
+    case 'other_email':
+    case 'other_email_same_name':
+      return (
+        `${base} La commande ${orderName || 'citée par le client'} existe, mais elle est ` +
+        'enregistrée sous une autre adresse e-mail que celle de l’expéditeur. Le numéro est ' +
+        'connu : ne pas le redemander. Il manque seulement l’adresse e-mail utilisée pour ' +
+        'cette commande. Son contenu reste inaccessible tant qu’elle n’est pas confirmée.'
+      );
+    case 'number_not_found':
+      return `${base} La référence donnée par le client ne correspond à aucune commande de la boutique.`;
+    case 'no_number_known_sender':
+      return `${base} Le client n’a donné aucun numéro de commande ; son adresse e-mail est connue de la boutique.`;
+    case 'no_number_unknown_sender':
+      return `${base} Le client n’a donné aucun numéro de commande, et son adresse e-mail n’est associée à aucun client.`;
+    default:
+      return base;
+  }
 }
 
 /**

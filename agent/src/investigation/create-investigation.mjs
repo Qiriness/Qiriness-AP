@@ -201,7 +201,7 @@ export function createInvestigationStack({
               supabase,
               T.SUPPORT_EXEMPLARS,
               { shop_id: shopId, deleted_at: { operator: 'is', value: 'null' } },
-              'id,exemplar_key,canonical_question'
+              'id,exemplar_key,canonical_question,choose_rule'
             ),
           // Authored phrasings only: translations sit at 100 and above.
           selectPhrasings: () =>

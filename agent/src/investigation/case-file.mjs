@@ -86,7 +86,14 @@ export const MISSING_FIELDS = {
   },
   purchase_email: {
     label: 'l’adresse e-mail de la commande',
-    ask: 'Avec quelle adresse e-mail la commande a-t-elle été passée ?'
+    ask: 'Avec quelle adresse e-mail la commande a-t-elle été passée ?',
+    // WHEN WE HOLD THE ORDER AND NOT ITS OWNER. The customer quoted the number
+    // from another mailbox, so the question names the order they gave. Asking
+    // « quelle commande ? » again was the failure.
+    askAbout: (order) =>
+      `Nous avons bien retrouvé la commande ${order}, mais elle n’est pas enregistrée sous ` +
+      'l’adresse e-mail de ce message. Pourriez-vous nous confirmer l’adresse e-mail ' +
+      'utilisée pour passer cette commande ?'
   },
   // SEPARATE FROM `purchase_email`, WHICH ASKS ABOUT AN ORDER. On an account
   // ticket the order is not the subject and may not exist at all — the customer
@@ -196,6 +203,17 @@ export const MISSING_FIELDS = {
   // there was room for the missing item is visible in it. The surviving sentence
   // asked for the one thing that case does not have.
 };
+
+/**
+ * The sentence that asks for one `missing` entry. An entry naming an `order`
+ * gets the field's `askAbout` wording when it has one, and the plain `ask`
+ * otherwise.
+ */
+export function askSentence(entry) {
+  const field = MISSING_FIELDS[entry?.field];
+  if (!field) return null;
+  return entry.order && field.askAbout ? field.askAbout(entry.order) : field.ask;
+}
 
 /**
  * Caveats a tool call can raise, and the prohibition each one produces.
@@ -575,6 +593,13 @@ export function buildCaseFile({
   // like `candidateOrder` and for the same reason: this module imports nothing.
   // Read where a rule's `ask` is applied, below.
   answeredFields = [],
+  // `{ answered field: field to ask instead }`, from `fieldsAskedInstead`. Today
+  // only the order number becoming the address, when the order was found under
+  // another one.
+  askedInstead = {},
+  // `{ field: extra keys for its missing entry }`. Today `{ purchase_email:
+  // { order: '#6668' } }`, so the address question names the order.
+  askDetails = {},
   // `MISSING_FIELDS` keys no customer answer could help with, removed from
   // `missing` whoever put them there — the model or a rule. Today only the two
   // address questions, on an anonymous marketplace order.
@@ -665,15 +690,31 @@ export function buildCaseFile({
     // reach a customer, but the answer there is to run the tool rather than to
     // drop the question, and this module cannot run tools. `evidenceGaps` keeps
     // reporting it as `not_attempted`, where it stays visible.
-    const answered = new Set(Array.isArray(answeredFields) ? answeredFields : []);
     for (const field of policyAsks(policy)) {
-      if (answered.has(field)) {
-        continue;
-      }
       if (!missing.some((entry) => entry.field === field)) {
         missing.push({ field });
       }
     }
+  }
+
+  // NEVER ASK FOR WHAT WE HOLD, WHOEVER PROPOSED IT. This used to filter only
+  // the rule's asks, so the model could still list the order number on a ticket
+  // whose order had been found under another address. One pass now covers
+  // both. An answered field with a replacement becomes that replacement: we
+  // hold the number but not the owner, so the address is asked instead.
+  const answered = new Set(Array.isArray(answeredFields) ? answeredFields : []);
+  const instead = askedInstead && typeof askedInstead === 'object' ? askedInstead : {};
+  for (let i = missing.length - 1; i >= 0; i -= 1) {
+    const field = missing[i].field;
+    if (!answered.has(field)) continue;
+    missing.splice(i, 1);
+    const replacement = instead[field];
+    if (replacement && !answered.has(replacement) && !missing.some((entry) => entry.field === replacement)) {
+      missing.push({ field: replacement });
+    }
+  }
+  for (const entry of missing) {
+    Object.assign(entry, askDetails?.[entry.field] || {});
   }
 
   // After the rule's asks have joined, so neither source can put one back. The
@@ -832,7 +873,7 @@ ${establishedLines(caseFile)}`
   if (caseFile.missing.length > 0) {
     parts.push(
       '## À demander au client\n' +
-        caseFile.missing.map((m) => `- ${MISSING_FIELDS[m.field].ask}`).join('\n')
+        caseFile.missing.map((m) => `- ${askSentence(m)}`).join('\n')
     );
   }
 

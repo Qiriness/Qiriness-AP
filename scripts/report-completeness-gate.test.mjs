@@ -148,7 +148,7 @@ test('decision completeness is null when no rule set loaded, not false', () => {
 
   const answers = [
     { answerKey: 'a', situationKey: null, conditions: normaliseConditions({ order_identity: ['resolved'] }), isFallback: false },
-    { answerKey: 'b', situationKey: null, conditions: normaliseConditions({ order_identity: ['none'] }), isFallback: false }
+    { answerKey: 'b', situationKey: null, conditions: normaliseConditions({ order_identity: ['no_number_unknown_sender'] }), isFallback: false }
   ];
   const sets = new Map([['orders', answers]]);
 

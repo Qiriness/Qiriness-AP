@@ -182,6 +182,13 @@ export function createOrderResolutionStore(supabase) {
             email_status: resolution.emailStatus || null,
             confirmation_markers: resolution.confirmationMarkers ?? null,
             detail: resolution.detail,
+            // THE ORDER THE REFERENCE LED TO, even when ownership is unproven.
+            // The column stays null on a mismatch. Without this, the
+            // investigation could not tell « we have #6668 but not your
+            // address » from « no order number at all », so it asked for both.
+            // Null when no order with that reference exists.
+            found_order_name: resolution.orderFound ? resolution.orderName || null : null,
+            unmatched_reference: resolution.unmatchedReference === true,
             candidates: resolution.candidates,
             resolved_at: new Date().toISOString()
           }
@@ -212,9 +219,27 @@ export async function runOrderResolution({ store, record, shopId, logger, dryRun
     record.findAwaitingOrderNumber(),
     record.firstInboundByTicket()
   ]);
-  const pending = tickets
-    .filter((ticket) => textByTicket.has(ticket.id))
-    .map((ticket) => ({ ticket, text: textByTicket.get(ticket.id) }));
+  // THE CUSTOMER'S LATER REPLIES COUNT TOO, their own words only. When we ask
+  // « quelle adresse e-mail avez-vous utilisée pour la commande ? » or « quel
+  // est votre numéro de commande ? », the answer is message two, and a pass that
+  // read the first message alone could never take it. Optional on `record`, so
+  // an older double keeps the first-message behaviour.
+  //
+  // THEY MAY CONFIRM, NEVER ACCUSE. Their addresses join the address check.
+  // A number found only in them counts only if it confirms. Quote detection
+  // misses some clients (Italian « ha scritto: »), so a later "own" text can
+  // still carry our reply. Measured 2026-10-02: one carried our auto-reply's
+  // « exemple # 5012 ». A confirmation is safe whatever the source, because the
+  // order belongs to the sender or to an address they wrote. A mismatch would
+  // name a stranger's order back to the customer.
+  const withText = tickets.filter((ticket) => textByTicket.has(ticket.id));
+  const laterByTicket =
+    (await record.laterInboundByTicket?.(withText.map((ticket) => ticket.id))) ?? new Map();
+  const pending = withText.map((ticket) => ({
+    ticket,
+    text: textByTicket.get(ticket.id),
+    laterText: (laterByTicket.get(ticket.id) || []).join('\n\n')
+  }));
   const totals = {
     considered: pending.length,
     [CONFIRMED]: 0,
@@ -231,16 +256,22 @@ export async function runOrderResolution({ store, record, shopId, logger, dryRun
   // the whole pass instead of one per ticket that quotes a parcel.
   const allNumbers = new Set();
   const allTracking = new Set();
-  const parsed = pending.map(({ ticket, text }) => {
+  const parsed = pending.map(({ ticket, text, laterText }) => {
     const candidates = shopifyOrderCandidates(text);
-    for (const candidate of candidates) {
+    const firstNumbers = new Set(candidates.map((candidate) => candidate.orderNumber));
+    const laterCandidates = laterText
+      ? shopifyOrderCandidates(laterText).filter((candidate) => !firstNumbers.has(candidate.orderNumber))
+      : [];
+    for (const candidate of [...candidates, ...laterCandidates]) {
       allNumbers.add(candidate.orderNumber);
     }
     const tracking = candidates.length === 0 ? parseTrackingCandidates(text) : [];
     for (const candidate of tracking) {
       allTracking.add(candidate.trackingNumber);
     }
-    return { ticket, text, candidates, tracking };
+    // Every address the customer wrote, in any message: an address only ever confirms.
+    const emailHashes = [...new Set([...messageEmailHashes(text), ...messageEmailHashes(laterText)])];
+    return { ticket, text, candidates, laterCandidates, tracking, emailHashes };
   });
 
   const { byNumber, customersById } = await store.loadOrders(shopId, [...allNumbers]);
@@ -256,10 +287,31 @@ export async function runOrderResolution({ store, record, shopId, logger, dryRun
   // case nothing is ever called out of range — an empty store has no opinion.
   const range = await store.loadOrderNumberRange?.(shopId);
 
-  for (const { ticket, text, candidates, tracking } of parsed) {
+  for (const { ticket, text, candidates, laterCandidates, tracking, emailHashes } of parsed) {
     let resolution;
 
-    if (candidates.length === 0) {
+    // Numbers from later replies, kept only where they confirm (see above).
+    const laterConfirmed = laterCandidates
+      .map((candidate) => {
+        const order = byNumber.get(candidate.orderNumber) || null;
+        const customer = order?.customer_id ? customersById.get(order.customer_id) : null;
+        return {
+          ...verifyOrder({ order, ticket, customer, messageEmailHashes: emailHashes }),
+          detail: `Matched on the order number ${candidate.raw}, given in a later reply.`,
+          orderNumber: candidate.orderNumber,
+          orderName: order?.name || toOrderName(candidate.orderNumber),
+          orderFound: Boolean(order),
+          raw: candidate.raw
+        };
+      })
+      .filter((result) => result.status === CONFIRMED);
+
+    if (candidates.length === 0 && laterConfirmed.length > 0) {
+      resolution = {
+        ...chooseResolution(laterConfirmed),
+        candidates: laterConfirmed.map((result) => result.raw)
+      };
+    } else if (candidates.length === 0) {
       // THE PARCEL NUMBER IS THE SECOND WAY IN. Somebody chasing a delivery
       // usually has the tracking number and not the order number — it is what
       // our dispatch mail put in front of them and what the carrier's site asks
@@ -282,7 +334,7 @@ export async function runOrderResolution({ store, record, shopId, logger, dryRun
             order,
             ticket,
             customer,
-            messageEmailHashes: messageEmailHashes(text)
+            messageEmailHashes: emailHashes
           });
           return {
             ...verdict,
@@ -291,7 +343,8 @@ export async function runOrderResolution({ store, record, shopId, logger, dryRun
                 ? `Matched on the tracking number ${candidate.raw}.`
                 : `${verdict.detail} Found from the tracking number ${candidate.raw}.`,
             orderNumber: order.order_number,
-            orderName: order.name
+            orderName: order.name,
+            orderFound: true
           };
         });
 
@@ -314,6 +367,9 @@ export async function runOrderResolution({ store, record, shopId, logger, dryRun
             : others.length
               ? `No Shopify order number; the message quotes ${others[0].raw} (${others[0].format}).`
               : 'No order number in the message.',
+          // A reference WAS given and led nowhere, which wants « vérifiez ce
+          // numéro » rather than « donnez-nous votre numéro ».
+          unmatchedReference: unmatchedTracking || others.length > 0,
           candidates: unmatchedTracking
             ? tracking.map((c) => c.raw)
             : others.map((c) => c.raw),
@@ -321,9 +377,6 @@ export async function runOrderResolution({ store, record, shopId, logger, dryRun
         };
       }
     } else {
-      // Hashed once per ticket rather than per candidate: the addresses in the
-      // message do not change between the numbers quoted in it.
-      const emailHashes = messageEmailHashes(text);
       const results = candidates.map((candidate) => {
         const order = byNumber.get(candidate.orderNumber) || null;
         const customer = order?.customer_id ? customersById.get(order.customer_id) : null;
@@ -340,10 +393,16 @@ export async function runOrderResolution({ store, record, shopId, logger, dryRun
           ...verdict,
           detail: describeAgainstRange(verdict, candidate.orderNumber, order, range),
           orderNumber: candidate.orderNumber,
-          orderName: order?.name || toOrderName(candidate.orderNumber)
+          orderName: order?.name || toOrderName(candidate.orderNumber),
+          orderFound: Boolean(order)
         };
       });
-      resolution = { ...chooseResolution(results), candidates: candidates.map((c) => c.raw) };
+      // A number the customer confirmed later outranks one the first message
+      // could not tie to them: they corrected it, or gave the right one.
+      resolution = {
+        ...chooseResolution([...results, ...laterConfirmed]),
+        candidates: [...candidates.map((c) => c.raw), ...laterConfirmed.map((r) => r.raw)]
+      };
 
       // Recorded only on the path that needs explaining. The count does not gate
       // anything (see confirmation-evidence.mjs) — it is the discriminator a

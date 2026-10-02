@@ -280,6 +280,18 @@ The lookup's process-wide hash index is dropped once per pass that has work, so 
 
 The customer-resolution pass links it from the requester's own address on any ticket; order-context links it from a confirmed order. The second never overwrites a value already there, and both are keyed on the same requester hash, so they agree by construction.
 
+### An address given when we asked for one may link the customer (2026-10-02)
+
+A third way in, decided by the user after the audit below: when the sender's own address finds nobody, customer resolution reads the customer's own words in inbound messages received **after** the first case-state reading that put `account_email` or `purchase_email` in `pending_customer_inputs` (`record.addressAnswersByTicket`). If the addresses there lead to **exactly one** customer, the ticket is linked, `matched_by: reply_email`.
+
+**Only after we asked**, which is the safer of the two versions offered. An address that merely appears in a thread is a forward, a signature or a colleague: the 7 unlinked tickets carrying a known customer's address in a later message on 2026-10-02 were all staff forwards. **Exactly one**, because « j'ai deux adresses » is what the account question was written for, and two customers is a question for a person. **The sender's own address still wins.**
+
+A new message since the last attempt re-runs the ticket at once instead of after the 24-hour back-off (`last_message_at`), or the answer would wait a day while the customer was asked again.
+
+**`lookupCustomer` falls back to `tickets.customer_id`** when the sender's address finds nobody (`matchedBy: customer_id`). Without it a ticket linked by a confirmed order or by a reply still told the model « aucune fiche client… c'est la question à lui poser ». This is the one place the two meanings above can differ: an order confirmed through `message_email` links its buyer, who may not be the sender.
+
+Replayed on the test ticket `c3efeb4e` as if unlinked, it links the customer that had been linked by hand. On live data, no unlinked ticket qualifies today.
+
 ---
 
 ## Order resolution
@@ -335,6 +347,51 @@ Two gaps, both closed:
 Checked end to end on the three tickets with neither `requeue` nor `--redraft`: resolution confirmed all three by email and reopened and queued them, then the investigation and drafting passes picked them up by themselves.
 
 **How often a ticket is investigated.** There is no fixed cap: once per new inbound message (through the categoriser), plus **at most once** more when an order is confirmed after the case file was built (once the number is written, the ticket is never resolved again), plus any manual `tickets:requeue` / `investigate --backfill`. A failed run retries up to 3 times, and those retries complete the same investigation. A new message and a late confirmation in the same poll raise the same flag, so they cost one investigation.
+
+### The customer's later replies are read, and may only confirm (2026-10-02)
+
+**Found by the user.** We asked a customer who wrote from another address which address the order was placed with. They answered in the next message, and nothing happened: resolution read `ticket_first_inbound` and nothing else. The same was true of « quel est votre numéro de commande ? » answered by « #6789 ».
+
+Resolution now also reads every later inbound message. Only the customer's own words count (`splitQuotedReply(...).own`, through `record.laterInboundByTicket`), and only on threads with a second inbound message (one grouped query on `ticket_message_counts` first). The addresses in those messages join the address check.
+
+**A number found only in a later message counts only if it CONFIRMS.** Quote detection misses some mail clients (Italian « Il … ha scritto: » is not a marker), so a later "own" text can still carry our reply. Measured by dry run on 2026-10-02: one ticket picked up « exemple # 5012 » from our auto-reply and would have become a `mismatch` on #5012. A mismatch is not harmless any more, because the reply now names the order it found (below). A confirmation is safe whatever text it came from, because the order belongs to the sender or to an address they wrote. When the first message's number is a mismatch and a later number confirms, the later one wins: the customer corrected it.
+
+Measured over 492 unlinked tickets: **5 become confirmed** (4 by the sender's own address, 1 by an address in a later message) and nothing else moves.
+
+### `order_identity` names the situation, not just "unconfirmed" (2026-10-02)
+
+`none` covered every unconfirmed ticket, so the 15 approved rules on it all asked for the number **and** the address. That included the ticket where the customer had just quoted #6668 from another mailbox. The resolver knew which case it was; nothing below it could see it.
+
+`none` is split into five values (`agent/src/resolution/order-identity.mjs`), read off `metadata.order_resolution` and `customer_id`:
+
+| value | means | asked |
+| --- | --- | --- |
+| `no_number_known_sender` | no reference; the sender is a customer | the number |
+| `no_number_unknown_sender` | no reference; nobody under this address | the number and the address |
+| `number_not_found` | a reference that leads to no order (typo, `Q00…`, unknown parcel) | the number |
+| `other_email_same_name` | the order exists under another address, same name | the address, naming the order |
+| `other_email` | the order exists under another address | the address, naming the order |
+
+**To support it, resolution records the order it found** (`found_order_name`) even when ownership is unproven, and whether a reference led nowhere (`unmatched_reference`). The column is still written only on a confirmation.
+
+**Code trims the questions, whatever the rule says.** `fieldsAlreadyAnswered` treats the address as known on `resolved` and `no_number_known_sender`, and the number as known on both `other_email` values. `fieldsAskedInstead` turns an answered number into the address question, so a rule asking only for the number still asks the one thing open. The address question names the order (`purchase_email.askAbout`). The rule text for each situation is the merchant's, written in the Rulebook.
+
+**The model's own questions are filtered too.** `buildCaseFile` used to filter only the rule's asks, so the model could still list the order number on a ticket whose order was found. One pass now covers both.
+
+**Migration 59 keeps `none` beside the five.** `normaliseConditions` drops a value it does not know, and a condition left empty makes the rule fire on every ticket. With both present, code from either side of the change reads the rule the same way. The Rulebook drops `none` when a rule is next saved.
+
+### Audit: which passes read only part of a thread (2026-10-02)
+
+Run after the order-resolution bug above. Every reader of the first or a capped set of messages, and what it should read:
+
+| reader | reads | verdict |
+| --- | --- | --- |
+| order resolution | first message | **fixed** above |
+| situation match, retailer check | opening message | intended (§ the matcher reads the opening message), **but** the investigation capped the thread to its newest 10 rows, so on 11 threads (longest 30) "opening" was a mid-thread reply. **Fixed:** no cap; the model's text is still budgeted by characters, newest first |
+| categoriser | first + latest | intended, **but** it read the first 10 inbound oldest-first, so on 7 threads "latest" was the 10th. **Fixed:** first + true latest |
+| investigation transcript labels | every message | **bug, fixed:** `transcriptLabel` was called without the sender directory, so colleagues and Deret were rendered « client », the failure that labelling was added to stop |
+| customer resolution and `lookupCustomer` | the sender's address only | **fixed, the safer version:** an address given in a reply counts only after we asked for one (§ An address given when we asked for one may link the customer) |
+| case manager, drafting | whole thread | fine |
 
 #### TO DO — before drafting joins the worker poll
 
@@ -2339,6 +2396,15 @@ The condition now compares what the rules **do**: identical conditions, route, a
 **The pick is lexicographic on the exemplar key, and that is the whole of the determinism.** The scores are precisely what could not be trusted to order these two; breaking the tie with them would return a different situation whenever re-embedding nudged 0.660 and 0.655 past each other. `CV-02` before `CV-04` is arbitrary — arbitrary and fixed is the point, and it is only reached once the two have been proved to answer the same. On the real severe-reaction ticket, tied at 0.0051, it selects the lower-scoring CV-02; add a rule naming CV-04 and it goes back to unresolved.
 
 The verdict stays `ambiguous` and `resolved_from` records what was level, so a corpus review still sees the pair asking to be merged. Overwriting it with `matched` would erase the only evidence that the embeddings cannot separate them.
+
+### The chooser is told when to choose each situation, not only what it sounds like (2026-10-02)
+
+The chooser decided from wording alone: a canonical question and up to three phrasings per candidate. Situations whose phrasings sound alike (D-01 / D-05 / D-37, P-17 / P-22, CV-01 / CV-04) could only be told apart by what the customer literally wrote.
+
+- **One line per situation, `choose_rule`** (« Choose when … Do not choose … »), written by the owner for all 40. It sits in `Email-Example-Queries.md` under each entry's metadata and in `support_exemplars.choose_rule` (migration 57).
+- **The chooser sees it** beside each candidate's question and phrasings, and is told to apply it over any resemblance in wording, including when NOT to choose.
+- **It never moves the score.** It is not embedded; the matcher's bands, margin and the rules-based tie check are unchanged. The rule only matters on a near miss or a tie.
+- **The document is the source.** The importer writes the column from the line, so an entry without one clears it.
 
 ### A near miss is settled by a model, and it went live without a shadow phase (2026-09-15)
 

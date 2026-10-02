@@ -457,3 +457,20 @@ test('a person’s category and level survive a re-categorisation; the model’s
   assert.equal(patch.overrides.level.ai_value, 3);
   assert.equal(patch.overrides.level.set_by, 'u1');
 });
+
+test('on a long thread the categoriser reads the first message and the true latest', async () => {
+  // It used to read the first 10 oldest-first, so on 11+ inbound messages the
+  // « latest » was the 10th and the reply that woke it was never read.
+  const bodies = Array.from({ length: 12 }, (_, i) => ({ body_text: `message ${i + 1}` }));
+  const record = fakeStore({ tickets: [ticket()], messages: { t1: bodies } });
+  let seen;
+  await runCategorisation({
+    record,
+    categorise: async (arg) => {
+      seen = arg;
+      return verdict();
+    },
+    logger: { info() {} }
+  });
+  assert.deepEqual(seen.messages.map((m) => m.body_text), ['message 1', 'message 12']);
+});

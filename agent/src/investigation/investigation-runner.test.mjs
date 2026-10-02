@@ -1058,3 +1058,49 @@ test('without a reading about this message there is no case delta', async () => 
   });
   assert.equal(seen[0], null);
 });
+
+test('on a thread longer than ten messages the opening message is still the first one', async () => {
+  // The conversation used to be capped to its newest 10 rows, so on a long
+  // thread `messages[0]` was a mid-thread reply. A retailer opening a 12-message
+  // thread was then read as whoever wrote message 3.
+  const thread = [
+    { id: 'm1', body_text: 'commande magasin', from_email: 'service@nocibe.fr' },
+    ...Array.from({ length: 11 }, (_, i) => ({ id: `m${i + 2}`, body_text: 'suite', from_email: 'marie@gmail.com' }))
+  ];
+  const store = buildStore({
+    tickets: [{ ...TICKET, category: 'delivery', request_kind: 'problem', level: 2 }],
+    messages: thread
+  });
+  const counts = await runInvestigation({
+    ...wire(store),
+    investigate: async () => caseFile(),
+    shopId: 's1',
+    senderDirectory: buildSenderDirectory([
+      { pattern_type: 'domain', pattern: 'nocibe.fr', label: 'retailer', note: null }
+    ])
+  });
+  assert.equal(counts.skipped, 1);
+});
+
+test('a colleague in the transcript is labelled a colleague, not the customer', async () => {
+  let seen;
+  const store = buildStore({
+    messages: [
+      { id: 'm1', body_text: 'où est mon colis ?', from_email: 'marie@gmail.com' },
+      { id: 'm2', body_text: 'je relance le transporteur', from_email: 'tom@lap-groupe.com' }
+    ]
+  });
+  await runInvestigation({
+    ...wire(store),
+    investigate: async (input) => {
+      seen = input;
+      return caseFile();
+    },
+    shopId: 's1',
+    senderDirectory: buildSenderDirectory([
+      { pattern_type: 'domain', pattern: 'lap-groupe.com', label: 'internal', note: null }
+    ])
+  });
+  assert.match(seen.text, /\[collègue \(LAP Groupe\)[^\]]*\]\nje relance/);
+  assert.match(seen.text, /\[client[^\]]*\]\noù est mon colis/);
+});

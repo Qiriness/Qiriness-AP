@@ -222,3 +222,84 @@ test('the log line carries counts only', async () => {
   assert.equal(logged[0].fields.linked, 1);
   assert.ok(!JSON.stringify(logged).includes(MARIE_HASH), 'not even the hash belongs in the log');
 });
+
+// --- the address the customer gave when we asked -----------------------------
+
+const WROTE_FROM = hashIdentifier('autre.adresse@example.test');
+
+function answeringLookup(known) {
+  return {
+    refresh() {},
+    async lookupCustomer({ ticket, emailHash }) {
+      const customerId = known[emailHash || ticket.requester_email_hash] || null;
+      return customerId
+        ? { found: true, matchedBy: 'email_hash', customerId }
+        : { found: false, reason: 'no_match', customerId: null };
+    }
+  };
+}
+
+function withAnswers(store, answers) {
+  return Object.assign(store, { async addressAnswersByTicket() { return new Map(Object.entries(answers)); } });
+}
+
+const FROM_ELSEWHERE = { ...TICKET, requester_email_hash: WROTE_FROM };
+
+test('an address given in answer to our question links the customer', async () => {
+  const store = withAnswers(buildStore([FROM_ELSEWHERE]), {
+    t1: ['Bonjour, mon compte est sous marie.martin@example.test']
+  });
+  const totals = await runCustomerResolution({
+    record: store,
+    lookup: answeringLookup({ [MARIE_HASH]: 'c1' }),
+    shopId: 's1',
+    now: NOW
+  });
+  assert.equal(totals.linked, 1);
+  assert.equal(store.saved[0].resolution.customerId, 'c1');
+  assert.equal(store.saved[0].resolution.matchedBy, 'reply_email');
+  // Recorded against the sender's address, so the back-off still reads it.
+  assert.equal(store.saved[0].resolution.emailHash, WROTE_FROM);
+});
+
+test('two addresses on two different customers link nobody', async () => {
+  const store = withAnswers(buildStore([FROM_ELSEWHERE]), {
+    t1: ['soit marie.martin@example.test soit paul@example.test']
+  });
+  const totals = await runCustomerResolution({
+    record: store,
+    lookup: answeringLookup({ [MARIE_HASH]: 'c1', [hashIdentifier('paul@example.test')]: 'c2' }),
+    shopId: 's1',
+    now: NOW
+  });
+  assert.equal(totals.no_match, 1);
+  assert.equal(store.saved[0].resolution.customerId, null);
+});
+
+test('the sender’s own address wins over an answer', async () => {
+  const store = withAnswers(buildStore([TICKET]), { t1: ['paul@example.test'] });
+  await runCustomerResolution({
+    record: store,
+    lookup: answeringLookup({ [MARIE_HASH]: 'c1', [hashIdentifier('paul@example.test')]: 'c2' }),
+    shopId: 's1',
+    now: NOW
+  });
+  assert.equal(store.saved[0].resolution.customerId, 'c1');
+  assert.equal(store.saved[0].resolution.matchedBy, 'email_hash');
+});
+
+test('a new message since the last attempt is retried at once, not after a day', async () => {
+  const attempted = new Date(NOW.getTime() - 60 * 1000).toISOString();
+  const previous = { status: 'no_match', email_hash: WROTE_FROM, attempted_at: attempted };
+  const quiet = { ...FROM_ELSEWHERE, metadata: { customer_resolution: previous }, last_message_at: attempted };
+  const replied = { ...quiet, id: 't2', last_message_at: NOW.toISOString() };
+
+  const totals = await runCustomerResolution({
+    record: buildStore([quiet, replied]),
+    lookup: answeringLookup({}),
+    shopId: 's1',
+    now: NOW
+  });
+  assert.equal(totals.deferred, 1);
+  assert.equal(totals.no_match, 1);
+});

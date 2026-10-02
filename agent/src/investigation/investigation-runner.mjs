@@ -14,6 +14,7 @@ import { normaliseConditions, resolveSituationTie,
 import { ENABLED_SUBJECTS, answerSetFor, isInvestigable, isTradeSender } from './investigation-rules.mjs';
 import { summarisePhotoEvidence } from './photo-evidence.mjs';
 import { caseDeltaFrom } from './case-delta.mjs';
+import { orderIdentitySituation } from '../resolution/order-identity.mjs';
 
 // The batch pass that investigates categorised tickets, mirroring
 // `categorise-runner.mjs` in every structural respect — because the problems are
@@ -35,7 +36,6 @@ import { caseDeltaFrom } from './case-delta.mjs';
 
 const DEFAULT_BATCH_LIMIT = 10;
 const MAX_ATTEMPTS = 3;
-const MESSAGES_PER_TICKET = 10;
 // The budget for the whole rendered transcript, not for one message. It was
 // 4,000 when the read was two inbound bodies; a thread carries our replies too,
 // and an outbound body is 1,758 characters on average against 3.2 KB per ticket
@@ -150,8 +150,12 @@ export async function runInvestigation({
     // filtered immediately below: the sender check, the situation match, the
     // trigger message, the photo sweep and the clock. Only the text the model
     // reads widened.
+    // NO MESSAGE CAP. It kept the newest 10 rows, so on a longer thread (11 on
+    // 2026-10-02, the longest 30) `messages[0]` was no longer the opening
+    // message. The situation was then matched, and the retailer check run,
+    // against a mid-thread reply. The model's text is still bounded, by
+    // `renderConversation`'s character budget, newest first.
     const conversation = await record.conversation(ticket.id, {
-      limit: MESSAGES_PER_TICKET,
       columns: COLUMNS.threadForInvestigation
     });
     // `!== 'outbound'` rather than `=== 'inbound'`, because of how the two fail.
@@ -535,7 +539,7 @@ function renderConversation(conversation, inbound, senderDirectory) {
 
   for (let index = spoken.length - 1; index >= 0; index -= 1) {
     const part = spoken[index];
-    const head = `${transcriptLabel(part.message)}\n`;
+    const head = `${transcriptLabel(part.message, senderDirectory)}\n`;
     const overhead = head.length + (rendered.length > 0 ? SEPARATOR.length : 0);
     // A label with nothing under it tells the model less than an honest count of
     // what it cannot see, so a message that cannot fit its own header is dropped
@@ -600,6 +604,15 @@ function buildInput(
       ticket.metadata?.order_resolution?.buyer_anonymous === true ||
       // Written before the flag existed (#6059, #6308).
       ticket.metadata?.order_resolution?.verified_by === 'marketplace_order_number',
+    // WHICH ORDER-IDENTITY SITUATION this is: no number, a number leading
+    // nowhere, or an order found under another address. It becomes the
+    // `order_identity` finding the rules branch on, and decides which question
+    // is worth asking. A plain value, so the tools never read `metadata`.
+    orderIdentity: orderIdentitySituation({
+      shopifyOrderNumber: ticket.shopify_order_number,
+      resolution: ticket.metadata?.order_resolution ?? null,
+      customerId: ticket.customer_id
+    }),
     // What this sender is to us, or null for an ordinary consumer. THE ADDRESS
     // IS NOT CARRIED — only the label, the note and the pattern that matched,
     // which is a company domain rather than personal data.

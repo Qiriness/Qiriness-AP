@@ -300,6 +300,24 @@ test('an unresolved order reports itself rather than assembling a bundle', async
   const result = await handlers.get(TOOL_NAMES.GET_ORDER_CONTEXT)({});
   assert.equal(result.outcome, 'not_resolved');
   assert.deepEqual(result.caveats, ['order_unconfirmed']);
+  // No metadata on a hand-built ticket: the sender alone decides.
+  assert.equal(result.data.identity, 'no_number_unknown_sender');
+});
+
+test('an order found under another address is named, and its number not asked for', async () => {
+  const { handlers } = buildRegistry().toolsFor({
+    category: 'delivery',
+    request_kind: 'problem',
+    level: 2,
+    orderIdentity: { situation: 'other_email', orderName: '#6668' }
+  });
+
+  const result = await handlers.get(TOOL_NAMES.GET_ORDER_CONTEXT)({});
+  assert.equal(result.outcome, 'not_resolved');
+  assert.equal(result.data.identity, 'other_email');
+  assert.equal(result.data.foundOrderName, '#6668');
+  assert.match(result.promptText, /#6668 existe/);
+  assert.match(result.promptText, /ne pas le redemander/);
 });
 
 test('every caveat the registry can emit is one case-file knows how to render', async () => {

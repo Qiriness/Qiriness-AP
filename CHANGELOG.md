@@ -16,6 +16,27 @@ Three sibling files carry the other halves, and this one deliberately does not d
 
 
 
+## A customer's address given when we asked for it links them (2026-10-02)
+
+- **Built:** customer resolution, when the sender's address finds nobody, reads what the customer wrote after we asked for `account_email`/`purchase_email` (`record.addressAnswersByTicket`) and links the one customer those addresses lead to (`matched_by: reply_email`; two customers → no link). A new message re-runs the ticket at once. `lookupCustomer` falls back to `tickets.customer_id`, so a linked customer is no longer reported to the model as unknown.
+- **Proven:** agent suite 1920/1920 (runner, record and lookup tests); replayed on `c3efeb4e` it links the customer linked there by hand; dry run on 337 unlinked tickets: none qualifies today. **Not yet:** a live account ticket where the customer answers our address question.
+
+## Partial-thread readers audited; three fixed (2026-10-02)
+
+- **Built:** the investigation reads the whole conversation (was the newest 10 rows, which lost the opening message on 11 threads); the categoriser reads the first and the true latest inbound message (was the 10th on 7 threads); transcript labels use the sender directory (every inbound message was « client »). Audit table in DECISIONS § Audit: which passes read only part of a thread.
+- **Proven:** agent suite 1915/1915, with a test per fix. **Open at the time:** an address given in a reply was not used to find the customer; built in the entry above.
+
+## Order identity: later replies read; five situations instead of `none` (2026-10-02)
+
+- **Built:**
+  - Order resolution reads the customer's own words in every later inbound message (`record.laterInboundByTicket`, only on threads with 2+ inbound messages). An address given there confirms the order; a number given there counts only if it confirms.
+  - `metadata.order_resolution` records `found_order_name` (the order a reference led to, even unconfirmed) and `unmatched_reference`.
+  - `order_identity` values: `resolved`, `no_number_known_sender`, `no_number_unknown_sender`, `number_not_found`, `other_email_same_name`, `other_email` (`none` removed). They appear in the Rulebook as conditions; the rule text per situation is to be written there.
+  - Code trims the questions to the situation, for the rule's asks and the model's alike: known sender → number only; order found under another address → the address only, naming the order (« Nous avons bien retrouvé la commande #6668… »).
+  - `getOrderContext` tells the model which situation it is and, when found, the order number, with « ne pas le redemander ».
+  - Migration 59: the 16 rules on `order_identity: none` also carry the five new values (`none` kept). Applied.
+- **Proven:** agent suite 1912/1912; migration 59 tests; root suite the same 19 old analytics failures. Dry run over 492 unlinked tickets: 5 newly confirmed, all by ownership, nothing else moved; the one false hit seen (« exemple # 5012 » from our auto-reply) is now refused. On the test ticket that exposed it (`c3efeb4e`, « Order Problem - TEST », linked to #7093 by hand), a dry run of the new resolver confirms #7093 from the third message (`message_email`); the old one says `no_candidate`. Its first replies asking for both were right: the sender matched no customer (`no_number_unknown_sender`). **Not yet:** a live investigation + draft on an `other_email` ticket; the Rulebook showing the new values in the browser.
+
 ## Knowledge articles become FAQs (2026-10-01)
 
 - **Built:**
@@ -142,6 +163,14 @@ Three sibling files carry the other halves, and this one deliberately does not d
   - `rule_snapshot.destination` stores where a shipping discount applies (`all`, or country codes plus `include_rest_of_world`).
   - First step of the code-vs-automatic promotion work. Measured beforehand: about as many automatic-offer tickets (gifts, 3+1, free shipping, sales) as code tickets, mostly filed outside `promotions`.
 - **Proven:** new mapper and expansion tests pass. Read-only run against live Shopify: wrap vitaminé 20 → 98 products, Masque Or 20 → 97, QIRINESS20 20 → 94, BIENVENUEQIRINESS 20 → 55; free shipping from 70 € → `FR` only. Synced to `promotions` 2026-10-01 (331 discounts); stored lists match, and the operator's `offerable_in_replies` choices survived the sync.
+
+## Situations: a choose rule for the chooser (2026-10-02)
+
+- **Built:**
+  - `support_exemplars.choose_rule` (migration 57, applied) with the owner's 40 rules written in.
+  - A `**choose_rule**` line under each entry of `Email-Example-Queries.md`, read by the importer.
+  - The situation chooser shows each candidate's rule and is told to apply it, including when not to choose.
+- **Proven:** chooser, parser and migration tests; all 40 rules read back from the database. **Not yet:** a near miss or tie seen settled with a rule.
 
 ## Knowledge: policy search path and « Core setup » retired; list scrolls (2026-10-01)
 

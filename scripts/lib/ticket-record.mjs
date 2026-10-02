@@ -6,6 +6,7 @@ import {
   supabaseUpdateById
 } from './supabase-rest-client.mjs';
 import { COLUMNS, T, V } from './tables.mjs';
+import { splitQuotedReply } from './quoted-reply.mjs';
 
 /**
  * The ticket row, and the only module that writes it.
@@ -91,6 +92,8 @@ export const PASSES = {
 };
 
 const IS_NULL = { operator: 'is', value: 'null' };
+/** The questions whose answer is an address (MISSING_FIELDS keys). */
+const ADDRESS_QUESTIONS = ['account_email', 'purchase_email'];
 const NOT_NULL = { operator: 'not.is', value: 'null' };
 const IS_TRUE = { operator: 'is', value: 'true' };
 const IS_FALSE = { operator: 'is', value: 'false' };
@@ -852,8 +855,10 @@ export function createTicketRecord(supabase, { shopId, transport = REST_TRANSPOR
      * a cap on an ascending read drops the most recent, which on a long thread
      * is precisely the part the pass was woken up for — and the reader would
      * then depend on the transport honouring `order` to be correct at all. The
-     * longest thread in the corpus is 9 messages against a cap of 10, so the
-     * saving was never real and the fragility would have been.
+     * longest thread in the corpus was 9 messages against a cap of 10, so the
+     * saving was never real and the fragility would have been. By 2026-10-02 it
+     * was 30, and the investigation stopped passing a cap: a capped read loses
+     * the opening message, which the situation match reads.
      */
     async conversation(ticketId, { limit, columns = COLUMNS.threadForInvestigation } = {}) {
       const rows = await select(
@@ -883,6 +888,126 @@ export function createTicketRecord(supabase, { shopId, transport = REST_TRANSPOR
         { order: 'ticket_id.asc' }
       );
       return new Map(rows.map((row) => [row.ticket_id, `${row.subject || ''}\n${row.body_text || ''}`]));
+    },
+
+    /**
+     * Every inbound message AFTER the first, as the customer's own words only.
+     *
+     * For order resolution's address check, never its number parse. « Pourriez-
+     * vous confirmer l'adresse de la commande ? » is answered in message two, and
+     * reading the first message alone meant the answer never counted. The quoted
+     * part is cut because it is our own question coming back, plus the old
+     * thread whose order numbers `ticket_first_inbound` exists to keep out.
+     * A wholly quoted message (a bare forward) is kept whole, as
+     * `splitQuotedReply` does. A forwarded confirmation is still evidence.
+     */
+    /**
+     * The customer's own words after we asked them for an address.
+     *
+     * For customer resolution: an address the customer gives in a reply may
+     * identify them, but only once WE ASKED for one (`account_email` or
+     * `purchase_email`). An address that merely appears in a thread (a forward,
+     * a colleague, a signature) proves nothing about who is writing.
+     */
+    async addressAnswersByTicket(ticketIds = []) {
+      // WHEN WE ASKED. The first case-state reading whose pending inputs name
+      // an address question. That reading is written as our question goes
+      // out, so it dates the ask.
+      const askedAt = new Map();
+      for (let i = 0; i < ticketIds.length; i += 50) {
+        const ids = ticketIds.slice(i, i + 50);
+        for (const field of ADDRESS_QUESTIONS) {
+          const rows = await selectAll(
+            supabase,
+            T.TICKET_CASE_STATE,
+            {
+              shop_id: shopId,
+              ticket_id: { operator: 'in', value: `(${ids.join(',')})` },
+              pending_customer_inputs: { operator: 'cs', value: JSON.stringify([field]) }
+            },
+            'ticket_id,read_at',
+            { order: 'read_at.asc' }
+          );
+          for (const row of rows) {
+            const previous = askedAt.get(row.ticket_id);
+            const at = Date.parse(row.read_at);
+            if (Number.isFinite(at) && (!previous || at < previous)) askedAt.set(row.ticket_id, at);
+          }
+        }
+      }
+      if (askedAt.size === 0) return new Map();
+
+      // WHAT CAME BACK. The customer's own words in every inbound message after
+      // the ask. A quoted part is our question coming back.
+      const asked = [...askedAt.keys()];
+      const answers = new Map();
+      for (let i = 0; i < asked.length; i += 50) {
+        const ids = asked.slice(i, i + 50);
+        const rows = await selectAll(
+          supabase,
+          T.TICKET_MESSAGES,
+          {
+            shop_id: shopId,
+            ticket_id: { operator: 'in', value: `(${ids.join(',')})` },
+            direction: 'inbound',
+            deleted_at: IS_NULL
+          },
+          'ticket_id,body_text,received_at',
+          { order: 'received_at.asc' }
+        );
+        for (const row of rows) {
+          if (!(Date.parse(row.received_at) > askedAt.get(row.ticket_id))) continue;
+          const list = answers.get(row.ticket_id) || [];
+          list.push(splitQuotedReply(row.body_text || '').own || '');
+          answers.set(row.ticket_id, list);
+        }
+      }
+      return answers;
+    },
+
+    async laterInboundByTicket(ticketIds = []) {
+      // Only threads with a second inbound message are read, found with one
+      // grouped query first. Most tickets have one inbound message, and the
+      // bodies are the largest thing this database holds.
+      const wanted = new Set(ticketIds);
+      const counts = await selectAll(
+        supabase,
+        V.TICKET_MESSAGE_COUNTS,
+        { shop_id: shopId, inbound_count: { operator: 'gt', value: 1 } },
+        'ticket_id',
+        { order: 'ticket_id.asc' }
+      );
+      const threads = counts.map((row) => row.ticket_id).filter((id) => wanted.has(id));
+
+      const byTicket = new Map();
+      // Chunked so the `in` list stays well inside a URL.
+      for (let i = 0; i < threads.length; i += 50) {
+        const ids = threads.slice(i, i + 50);
+        const rows = await selectAll(
+          supabase,
+          T.TICKET_MESSAGES,
+          {
+            shop_id: shopId,
+            ticket_id: { operator: 'in', value: `(${ids.join(',')})` },
+            direction: 'inbound',
+            deleted_at: IS_NULL
+          },
+          'ticket_id,body_text,received_at',
+          { order: 'received_at.asc' }
+        );
+        for (const row of rows) {
+          const list = byTicket.get(row.ticket_id) || [];
+          list.push(row.body_text || '');
+          byTicket.set(row.ticket_id, list);
+        }
+      }
+      const later = new Map();
+      for (const [ticketId, bodies] of byTicket) {
+        if (bodies.length > 1) {
+          later.set(ticketId, bodies.slice(1).map((body) => splitQuotedReply(body).own || ''));
+        }
+      }
+      return later;
     },
 
     /** The whole conversation, both directions — what the thread dialog shows. */

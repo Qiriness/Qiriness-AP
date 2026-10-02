@@ -550,7 +550,13 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |   |   |                        #   order, via orders.tracking_numbers) ·
 |   |   |                        # confirmation-evidence (every address in the
 |   |   |                        #   message, as hashes; no template parsing) ·
-|   |   |                        # order-verification · order-resolution-runner ·
+|   |   |                        # order-verification · order-resolution-runner
+|   |   |                        #   (first message + the customer's own words in
+|   |   |                        #   later ones, via laterInboundByTicket; later
+|   |   |                        #   numbers count only when they confirm) ·
+|   |   |                        # order-identity (the order_identity situation:
+|   |   |                        #   no number known/unknown sender, number not
+|   |   |                        #   found, other_email[_same_name]) ·
 |   |   |                        # (checkOrderPromotion reads the bundle promotions
 |   |   |                        #  block: gifts, reductions, samples) ·
 |   |   |                        # order-context + order-context-runner
@@ -826,9 +832,11 @@ Written by the worker and the CLIs, read only by the Insights panels.
 | `49_forwarding_destinations.sql` | `forwarding_destinations`, `forwarding_settings` (copied from 04). No data. Applied 2026-09-29 | 04 |
 | `50_forwarding_routing.sql` | `forwarding_settings.forward_since`, `ticket_forwards.destination_label`, `ticket_routing` (copied from 04). No data. Applied 2026-09-29 | 04, 49 |
 | `51_destination_switch.sql` | `forwarding_destinations.active_since` + its needs-an-address check (copied from 04); switches on the destinations that had an address. Applied 2026-09-29 | 49 |
+| `59_order_identity_situations.sql` | data only: rules whose `when_conditions.order_identity` names `none` also name its five replacements (`none` kept so old and new code agree). 16 rules. Applied 2026-10-02 | 05 |
 | `58_promotion_outcome_need.sql` | widens `support_exemplars.requirement_needs` by `promotion_outcome` (why a promotion applied or not). Copied from 05; head of the needs check since. No data. Applied 2026-10-01 | 05, 56 |
 | `57_describable_offers.sql` | adds `promotions.describable_in_replies` (default true), the automatic-offer counterpart of `offerable_in_replies`. Copied from 02. No data. Applied 2026-10-01 | 02 |
 | `58_faq_articles.sql` | narrows `knowledge_documents_category_check`: `other` is no longer an article category (a ticket subject only); any article/chunk under it moves to `faq`. Copied from 03. None moved. Applied 2026-10-01 | 03 |
+| `57_situation_choose_rule.sql` | `support_exemplars.choose_rule` (copied from 05): when to pick a situation and when not to, shown to the situation chooser. No data in the migration; the 40 rules were written from `Email-Example-Queries.md` after it. Applied 2026-10-02 | 05 |
 | `56_policy_search_retired.sql` | Removes `policy_answer` from `support_exemplars.requirement_needs` (data: 20 situations) and from its check, adds `policy_attached`; narrows `knowledge_documents.core_topic` to `brand`. Copied from 03 and 05. Applied 2026-10-01 | 03, 05, 33 |
 | `55_company_policies.sql` | `company_policies`, `company_policy_versions`, `company_policy_links` (copied from 05) + `ticket_investigations.company_policies`. No data (the library starts empty). Applied 2026-09-30 | 04, 05 |
 | `54_ticket_snoozes.sql` | `ticket_snoozes` (copied from 04). No data. Applied 2026-09-30 | 04 |
@@ -1065,7 +1073,7 @@ Run `npm run ingest:once` or `npm start` from `agent/`. One poll runs every pass
 | 5b | **Related link** (post-embedding, consumers only): cosine ≥ 0.90 from the same sender inside 30 days → context + cross-ticket chase. Never suppresses | `ingestion/related-rules.mjs` |
 | 6 | **Gate 2** (LLM, new conversations only): drops `spam` **and** `irrelevant`; fails open | `ingestion/spam-classifier.mjs` |
 | 7 | flush gate decisions (with body on a block) to `spam_audit` | `ingestion/spam-audit.mjs` |
-| 8 | **Customer resolution** — needs no category, order number or LLM key | `resolution/customer-resolution-runner.mjs` |
+| 8 | **Customer resolution** — needs no category, order number or LLM key; the sender's address, else the address the customer gave after we asked for one (`record.addressAnswersByTicket`) | `resolution/customer-resolution-runner.mjs` |
 | 8a | **Casework** (LLM) — two paths. (1) Customer follow-ups on tickets with a case file, as before, now also reading `effect` and the checks opened/cleared. (2) **Our messages and colleagues'/partners' received after the mailbox cutover** (`runOtherMessageCasework`), oldest first per ticket, adding what we `asked` and the checks opened/cleared; owners limited by `obligationOwners`. Original path: what the newest message changed. Claims only a ticket that ALREADY has a case file and whose newest inbound message has no reading, so a genuinely new case matches nothing. Writes `ticket_case_state` | `casework/case-runner.mjs` |
 | 9 | **Categorisation** (LLM) — 25/poll, oldest first, selects on the pending flag. **Skips the call on a `continuation`** and re-completes the existing labels, so the pass still clears the flag and raises `needs_investigation` | `pipeline/categorise-runner.mjs` |
 | 10 | **Order resolution** then **order context** — no LLM, no category needed. **Before the investigation, and that is load-bearing**: `getOrderContext` READS `tickets.resolved_context` rather than querying, so an investigation that ran first could not see an order however clearly the customer quoted it | `resolution/order-*-runner.mjs` |

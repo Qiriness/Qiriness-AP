@@ -78,6 +78,8 @@ const MESSAGE_COUNT = /\*\*(\d+)\s*msgs?\*\*/i;
 const VARIANT = /^[-*]\s+«\s*([\s\S]+?)\s*»\s*(?:_\(([^)]*)\)_)?\s*$/;
 
 const NEEDS_LINE = /^\*\*needs\*\*\s*(.+)$/i;
+/** `**choose_rule** Choose when … Do not choose …` — one line, for the situation chooser. */
+const CHOOSE_RULE_LINE = /^\*\*choose_rule\*\*\s*(.+)$/i;
 const VARIANTS_HEADING = /^\*\*Variantes\s+réelles\*\*/i;
 
 /**
@@ -127,6 +129,7 @@ function parseBlock(block, warn) {
     category,
     requestKind,
     requirementNeeds: parseNeeds(block, warn),
+    chooseRule: parseChooseRule(block),
     demandMessageCount: parseCount(block),
     phrasings: parsePhrasings(block, warn),
     // Everything the taxonomy could not hold, kept as prose rather than dropped:
@@ -190,6 +193,12 @@ function parseNeeds(block, warn) {
     }
   }
   return kept;
+}
+
+/** The situation's choose rule, or null when the entry has none. */
+function parseChooseRule(block) {
+  const line = block.lines.find((l) => CHOOSE_RULE_LINE.test(l.trim()));
+  return line ? collapse(CHOOSE_RULE_LINE.exec(line.trim())[1]) : null;
 }
 
 function parseCount(block) {

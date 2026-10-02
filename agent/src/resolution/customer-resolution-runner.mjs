@@ -1,4 +1,5 @@
 import { hashIdentifier } from '../../../scripts/lib/compliance-audit.mjs';
+import { messageEmailHashes } from './confirmation-evidence.mjs';
 
 // Fills `tickets.customer_id` from the address the ticket was opened with.
 //
@@ -58,6 +59,35 @@ export const RETRY_AFTER_MS = 24 * 60 * 60 * 1000;
 const LINKED = 'linked';
 const NO_MATCH = 'no_match';
 const NOT_A_CUSTOMER_ADDRESS = 'not_a_customer_address';
+/** Linked from the address the customer gave when we asked for one. */
+export const REPLY_EMAIL = 'reply_email';
+
+/**
+ * The customer an ANSWER to our address question identifies, or null.
+ *
+ * THE SENDER'S OWN ADDRESS COMES FIRST and this runs only when it found nobody.
+ * The texts are only what the customer wrote after we asked « sous quelle
+ * adresse… ? » (`record.addressAnswersByTicket`), so an address that merely
+ * sits in a thread (a forward, a signature, a colleague) never gets here.
+ *
+ * EXACTLY ONE CUSTOMER, or nothing. « j'ai deux adresses » is the case the
+ * account question was written for, and two addresses on two different
+ * customers is a question for a person, not a pick.
+ */
+async function customerFromAnswer({ lookup, texts = [], emailHash, skipHashes }) {
+  const hashes = new Set();
+  for (const text of texts || []) {
+    for (const hash of messageEmailHashes(text)) {
+      if (hash !== emailHash && !skipHashes.has(hash)) hashes.add(hash);
+    }
+  }
+  const found = new Set();
+  for (const hash of hashes) {
+    const result = await lookup.lookupCustomer({ emailHash: hash });
+    if (result.found && result.customerId) found.add(result.customerId);
+  }
+  return found.size === 1 ? [...found][0] : null;
+}
 
 // The store this file used to define is now the shared ticket record:
 // `findUnlinked` is `record.findUnlinkedCustomers` and `recordResolution` is
@@ -101,6 +131,10 @@ export async function runCustomerResolution({
   // something to look up — the rebuild is a scan.
   lookup.refresh?.();
 
+  // What customers wrote after we asked them for an address. Optional on
+  // `record`, so an older double resolves on the sender's address alone.
+  const answers = (await record.addressAnswersByTicket?.(pending.map((ticket) => ticket.id))) ?? new Map();
+
   for (const ticket of pending) {
     const attemptedAt = now.toISOString();
     const emailHash = ticket.requester_email_hash;
@@ -112,10 +146,13 @@ export async function runCustomerResolution({
       resolution = { status: NOT_A_CUSTOMER_ADDRESS, matchedBy: null, customerId: null, emailHash, attemptedAt };
     } else {
       const result = await lookup.lookupCustomer({ ticket });
+      const answered = result.found
+        ? null
+        : await customerFromAnswer({ lookup, texts: answers.get(ticket.id), emailHash, skipHashes });
       resolution = {
-        status: result.found ? LINKED : NO_MATCH,
-        matchedBy: result.matchedBy ?? null,
-        customerId: result.customerId ?? null,
+        status: result.found || answered ? LINKED : NO_MATCH,
+        matchedBy: result.found ? result.matchedBy ?? null : answered ? REPLY_EMAIL : null,
+        customerId: result.found ? result.customerId ?? null : answered,
         emailHash,
         attemptedAt
       };
@@ -155,6 +192,13 @@ function shouldAttempt(ticket, now) {
   }
   const attemptedAt = Date.parse(previous.attempted_at || '');
   if (!Number.isFinite(attemptedAt)) {
+    return true;
+  }
+  // A message since the last attempt may be the answer to our address
+  // question, and waiting a day for it is a day the customer is asked again.
+  // It also moves on our own replies, which costs one extra lookup each.
+  const lastMessageAt = Date.parse(ticket.last_message_at || '');
+  if (Number.isFinite(lastMessageAt) && lastMessageAt > attemptedAt) {
     return true;
   }
   return now.getTime() - attemptedAt >= RETRY_AFTER_MS;
