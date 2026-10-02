@@ -658,6 +658,23 @@
   padding-top: var(--space-4);
 }
 
+/* THE LINKED THREADS TAB IS AMBER, like linked mail in the Activity tab, so
+   another thread's messages never read as this thread's. Done by re-pointing
+   the teal tokens inside the section: the message blocks it reuses keep their
+   own styles and simply pick up amber. */
+.linkedSection {
+  --teal: var(--warning);
+  --teal-strong: var(--warning-strong);
+  --teal-ink: var(--warning-ink);
+  --teal-050: var(--warning-050);
+  --teal-100: var(--warning-100);
+  --border-teal: var(--warning-100);
+}
+
+.middleTabs .linkedTabActive::after {
+  background: var(--warning);
+}
+
 .linkedThread {
   display: grid;
   gap: var(--space-2);

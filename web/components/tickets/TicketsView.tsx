@@ -1416,7 +1416,7 @@ function TicketDetailWorkspace({
             type="button"
             role="tab"
             aria-selected={middleTab === "linked"}
-            className={middleTab === "linked" ? styles.middleTabActive : undefined}
+            className={middleTab === "linked" ? `${styles.middleTabActive} ${styles.linkedTabActive}` : undefined}
             onClick={() => setMiddleTab("linked")}
           >
             {t("tickets.panels.linked.tab")}
@@ -1485,7 +1485,7 @@ function LinkedThreads({
   const day = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString(locale, { day: "numeric", month: "short" }) : "—");
 
   return (
-    <section className={styles.threadSection} aria-label={t("tickets.panels.linked.label")}>
+    <section className={`${styles.threadSection} ${styles.linkedSection}`} aria-label={t("tickets.panels.linked.label")}>
       <div className={styles.sectionHead}>
         <h3>{t("tickets.panels.linked.tab")}</h3>
         <span>{t("tickets.panels.linked.hint")}</span>

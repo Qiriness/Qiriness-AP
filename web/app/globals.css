@@ -30,6 +30,8 @@
   --warning: #d97706;
   --warning-050: #fdf5ea;
   --warning-100: #f5e2c4;
+  --warning-strong: #b45309; /* hover/active on amber */
+  --warning-ink: #92400e; /* text on faint amber tints */
   --error: #dc2626;
   --error-050: #fef2f2;
   --error-100: #f6d5d5;

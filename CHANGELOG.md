@@ -10,6 +10,10 @@ Three sibling files carry the other halves, and this one deliberately does not d
 
 ---
 
+## Linked threads tab is amber (2026-10-02)
+
+- The « Linked threads » tab and its messages are amber instead of teal, matching linked mail in the Activity tab, so another thread's mail never reads as this thread's. Done by re-pointing the teal tokens inside the section (`.linkedSection`); new tokens `--warning-strong` and `--warning-ink` in `globals.css`. Typecheck clean; not looked at in a browser.
+
 ## Health questions never send themselves; the cosmetovigilance gate actually fires (2026-10-02)
 
 - **Why:** ticket `ba09c1ae` (« déconseillé … GLAUCOME ? ») was filed `product`, level 1, matched no situation, and every auto-send gate would have let its draft go. DECISIONS.md § *A health condition never sends itself*.
