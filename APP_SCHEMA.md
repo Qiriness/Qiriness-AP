@@ -1137,6 +1137,7 @@ From `agent/`. Every pass has a standalone runner, most with `:dry-run`.
 | `actors:backfill[:dry-run] [-- --recompute]` | fill `ticket_messages.actor` on rows stored before migration 41 (empty rows only unless `--recompute`) |
 | `fold:once [-- --limit N] [--all] [--no-status]` | the fold pass alone: no mailbox read, no model call; moves statuses unless `--no-status` |
 | `cases:link` / `cases:link:dry-run` | the `link` pass alone, on `pending` threads (`--limit=N`); the dry run decides and writes nothing |
+| `cases:link -- --open [--dry-run] [--with-model]` | a one-off backfill: re-decides the Queue and Backlog threads, plus their customers' earlier threads in the link window, oldest first and each against earlier threads only. A thread already sharing a case is skipped. `--with-model` asks the Case Linker even while `CASE_LINKER_ENABLED` is off |
 | `cases:targets` | recompute every case's reply target — run once after migration 61 |
 | `cases:replay [-- --with-model] [--limit=N]` | **read-only**: every stored thread decided as if it had just arrived (only earlier threads are candidates); counts by method and lists every link and every ambiguous thread with its candidates. `--with-model` asks the Case Linker on the ambiguous ones (costs calls). The check before `CASE_LINKER_ENABLED=true` |
 | `case-status [-- --apply]` | the status moves stage 5c would make from the stored folds; a dry run unless `--apply` |

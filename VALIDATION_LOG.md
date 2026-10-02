@@ -74,6 +74,10 @@ Built and unit-tested; migration 61 tried twice on the committed baseline in a t
      - correctly, the accountant (eaa9d635) and another order's return (ee493c1a);
      - debatably, 4f810722 from e59dbd5b, the « cannot pay » cart reply.
    - **The only wrong links left are the same 4 supplier ones** (GLS per parcel, « Avis de paiement »). The sender directory was not changed (user's call).
+   **Backfill 2026-10-02**: `cases:link -- --open --with-model`.
+   - Scope: the 53 Queue and Backlog threads plus 15 earlier threads of the same customers.
+   - Result: 15 linked (3 tracking, 12 model); 1003 → 988 cases.
+   - Every link is one already checked by hand above: the alternance applicant's 7 threads, the LED-mask eye shield (3), the shipping-cost complaint (3), 6889, « Problème réception commande », the added product, the 20 % first order, and « choix de livraison ».
 4. **Only then `CASE_LINKER_ENABLED=true`.**
 5. **A real split thread.** The next customer who writes again on a new thread about the same order:
    - the `link` pass logs `cases.decided` (`order_family` or `tracking`);

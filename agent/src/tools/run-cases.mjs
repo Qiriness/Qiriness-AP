@@ -1,5 +1,5 @@
 import { createSupabaseClient, supabaseSelectAll } from '../../../scripts/lib/supabase-rest-client.mjs';
-import { T } from '../../../scripts/lib/tables.mjs';
+import { COLUMNS, T } from '../../../scripts/lib/tables.mjs';
 import { createTicketRecord } from '../../../scripts/lib/ticket-record.mjs';
 import { createCaseRecord } from '../../../scripts/lib/case-record.mjs';
 import { createSnoozeRecord } from '../../../scripts/lib/snooze-record.mjs';
@@ -7,7 +7,7 @@ import { createSnoozeRecord } from '../../../scripts/lib/snooze-record.mjs';
 import { loadAgentConfig } from '../config.mjs';
 import { resolveShopId } from '../lib/shop.mjs';
 import { createSenderDirectoryStore } from '../ingestion/sender-directory.mjs';
-import { createCaseLinkStore, runCaseLinking } from '../cases/case-linker-runner.mjs';
+import { CASE_LINK_WINDOW_DAYS, createCaseLinkStore, runCaseLinking } from '../cases/case-linker-runner.mjs';
 import { decideLink } from '../cases/case-link-rules.mjs';
 import { createCaseLinker } from '../cases/case-linker-model.mjs';
 import { createOpenAIClient } from '../llm/openai-client.mjs';
@@ -17,6 +17,10 @@ import { noopUsageSink } from '../llm/usage-sink.mjs';
 //
 //   npm run cases:link             # the `link` pass, once, on pending threads
 //   npm run cases:link:dry-run     # what it would decide, nothing written
+//   npm run cases:link -- --open [--dry-run] [--with-model]
+//                                  # the Queue and Backlog threads and their customers'
+//                                  # earlier threads, re-decided once
+//                                  # (they predate 61 and were marked decided)
 //   npm run cases:targets          # recompute every case's reply target
 //   npm run cases:replay           # the rules over the stored corpus, read-only
 //   npm run cases:replay -- --with-model   # ...asking the Case Linker on ambiguous threads (costs calls)
@@ -30,6 +34,7 @@ const args = process.argv.slice(2);
 const command = args[0];
 const dryRun = args.includes('--dry-run');
 const withModel = args.includes('--with-model');
+const openOnly = args.includes('--open');
 const limitArg = args.find((arg) => arg.startsWith('--limit='));
 const limit = limitArg ? Number(limitArg.split('=')[1]) : null;
 
@@ -49,7 +54,7 @@ async function main() {
   if (command === 'targets') return targets({ supabase, shopId, cases });
   if (command === 'link') return link({ supabase, shopId, tickets, cases, senderDirectory, config });
   if (command === 'replay') return replay({ supabase, shopId, tickets, cases, senderDirectory, config });
-  throw new Error('Usage: run-cases.mjs <link|targets|replay> [--dry-run] [--with-model] [--limit=N]');
+  throw new Error('Usage: run-cases.mjs <link|targets|replay> [--dry-run] [--open] [--with-model] [--limit=N]');
 }
 
 async function targets({ supabase, shopId, cases }) {
@@ -63,9 +68,24 @@ async function targets({ supabase, shopId, cases }) {
 }
 
 async function link({ supabase, shopId, tickets, cases, senderDirectory, config }) {
-  const linkCase = linkerFor(config);
+  const linkCase = linkerFor(config, { force: withModel });
+  const snoozes = createSnoozeRecord(supabase, { shopId });
+  const storeFor = (before = null) => createCaseLinkStore(supabase, { shopId, tickets, cases, senderDirectory, snoozes, before });
+  let store = storeFor();
+  if (openOnly) {
+    // --open: the Queue and Backlog threads, already `decided` by migration 61,
+    // decided again as if each had just arrived (against the customer's
+    // EARLIER threads only, as `replay` checked). Oldest first, so a thread
+    // linked here is in its case when a later one is decided.
+    const open = await openThreads({ supabase, shopId });
+    store = {
+      ...store,
+      pending: async () => open,
+      contextFor: (ticket, options) => storeFor(ticket.first_message_at).contextFor(ticket, options)
+    };
+  }
   const result = await runCaseLinking({
-    store: createCaseLinkStore(supabase, { shopId, tickets, cases, senderDirectory, snoozes: createSnoozeRecord(supabase, { shopId }) }),
+    store,
     cases,
     linkCase,
     dryRun,
@@ -76,6 +96,47 @@ async function link({ supabase, shopId, tickets, cases, senderDirectory, config 
   for (const decision of decisions.filter((d) => d.decision === 'link' || d.method === 'model_off')) {
     console.log(`  ${decision.method.padEnd(14)} ${decision.ticketId} -> ${decision.toCaseId}  candidates=${decision.candidates.length}`);
   }
+}
+
+/**
+ * What the dashboard's Queue and Backlog show between them: consumer threads
+ * (no `sender_label`) not resolved or closed and not snoozed. PLUS each of
+ * those customers' earlier threads within the link window, closed ones
+ * included: decided oldest first, they are in their case by the time the open
+ * thread is decided, so the open thread joins the whole case and not one
+ * fragment of it. Moving a closed thread changes its case only (linking
+ * reopens nothing it did not investigate).
+ *
+ * A thread already sharing a case (a duplicate folded in by 61) is left
+ * alone: re-deciding one would move it out of its case, away from the rest.
+ */
+async function openThreads({ supabase, shopId }) {
+  const live = { shop_id: shopId, deleted_at: { operator: 'is', value: 'null' }, sender_label: { operator: 'is', value: 'null' } };
+  const rows = await supabaseSelectAll(supabase, T.TICKETS, live, COLUMNS.ticketForCaseLink, { order: 'first_message_at.asc' });
+  const snoozed = new Set(
+    (await supabaseSelectAll(supabase, T.TICKET_SNOOZES, { shop_id: shopId, woke_at: { operator: 'is', value: 'null' } }, 'ticket_id')).map((row) => row.ticket_id)
+  );
+  const isOpen = (row) => !['resolved', 'closed'].includes(row.status) && !snoozed.has(row.id);
+  const open = rows.filter((row) => row.first_message_at && isOpen(row)).slice(0, limit ?? undefined);
+
+  // The earliest open thread of each customer, and how far back that reaches.
+  const reach = new Map();
+  for (const row of open) {
+    if (!row.requester_email_hash || reach.has(row.requester_email_hash)) continue;
+    reach.set(row.requester_email_hash, Date.parse(row.first_message_at) - CASE_LINK_WINDOW_DAYS * 86400000);
+  }
+  const threadsPerCase = new Map();
+  for (const row of rows) threadsPerCase.set(row.case_id, (threadsPerCase.get(row.case_id) ?? 0) + 1);
+
+  const openIds = new Set(open.map((row) => row.id));
+  const selected = rows.filter((row) => {
+    if (!row.first_message_at || threadsPerCase.get(row.case_id) > 1) return false;
+    if (openIds.has(row.id)) return true;
+    const from = reach.get(row.requester_email_hash);
+    return from !== undefined && Date.parse(row.first_message_at) >= from && !isOpen(row);
+  });
+  console.log(`${open.length} Queue and Backlog threads; ${selected.length - selected.filter((r) => openIds.has(r.id)).length} earlier threads of the same customers; ${open.filter((r) => threadsPerCase.get(r.case_id) > 1).length} open threads skipped (already share a case).`);
+  return selected;
 }
 
 async function replay({ supabase, shopId, tickets, cases, senderDirectory, config }) {
