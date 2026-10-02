@@ -7,6 +7,13 @@ Message counts are the measured demand behind each question, not an estimate.
 Internal, contractor and logistics senders are excluded via `sender_directory`,
 so these counts are customers only.
 
+> **Refreshed 2026-10-02 against the live database.** Questions and variants match
+> `support_exemplars` for all 40 live situations. `policy_answer` is gone (retired
+> 2026-10-01, migration 56): a situation's company policies are now read by key and
+> listed under **politiques liées** — linked to the whole situation, or to one
+> _(règle …)_. Policies are edited in Agent Setup → Policies, not here. O-11 was
+> removed from this document (merged into O-09, deleted in the database since 2026-08-29).
+
 ---
 
 ## How an entry is structured, and why
@@ -96,7 +103,7 @@ Referenced by the entries below so each state is written once.
 ### `produit` — product questions
 | State | Reachable |
 |---|---|
-| `reponse_dans_la_base` | 🟢 `policy_answer` / `product_property` satisfied |
+| `reponse_dans_la_base` | 🟢 `product_property` satisfied |
 | `produit_ambigu` | 🟢 `lookupProduct` → ambiguous, must ask |
 | `aucune_source` | 🟢 → `needs_human`, claim nothing |
 
@@ -132,7 +139,8 @@ Referenced by the entries below so each state is written once.
 - « J'ai reçu ce jour ma commande numéro #6748. J'ai payé pour 4 produits mais je n'ai pas reçu la totalité. Il m'en manque un »
 - « je viens de recevoir mon colis, 2 boites de galets étaient ouvertes et il manque 1 galet dans chacune » _(near miss 0.644, 2026-09-15)_
 
-**needs** `order_identity`, `order_state`, `policy_answer`
+**needs** `order_identity`, `order_state`
+**politiques liées** `damaged_wrong_missing_item_policy`
 **exemplaires** → jeu `commande` (+ un état `article_manquant_confirme`)
 
 **Contenu stable** _(à rédiger)_
@@ -150,6 +158,7 @@ Referenced by the entries below so each state is written once.
 - « J'ai passé une commande qui n'a jamais été livrée. Sur le site il est inscrit livré, je n'ai jamais reçu mes produits » _(near miss 0.636, matched D-01 instead, 2026-09-15)_
 
 **needs** `order_identity`, `delivery_state`
+**politiques liées** `colis_perdu_policy`
 **exemplaires** → jeu `commande`, état `livree_contestee`
 
 > **D-04 merged in, 2026-08-12.** It was never a different situation, only a more
@@ -197,6 +206,7 @@ Referenced by the entries below so each state is written once.
 - « Suite à ma réclamation, GLS a clôturé le dossier et déclare le colis perdu. Que proposez-vous pour ma commande ? » _(authored — aucune perte GLS écrite par un client dans le corpus, voir la note)_
 
 **needs** `order_identity`, `delivery_state`, `refund_state`
+**politiques liées** `colis_perdu_policy`
 **exemplaires** → jeu `commande`, état `perdue_reclamation`
 
 > **Écrit sur une réponse qui serait partie, 2026-09-21.** Les deux messages sont
@@ -271,6 +281,7 @@ Referenced by the entries below so each state is written once.
 - « Je n'ai pas de nouvelles depuis 1 semaine au sujet de la réexpédition de ma commande — pourriez-vous vérifier que vos services s'en occupent ? »
 
 **needs** `order_identity`, `order_state`
+**politiques liées** `dispatch_time_policy`
 **exemplaires** → jeu `commande`
 
 **Contenu stable** _(à rédiger)_
@@ -299,7 +310,8 @@ Referenced by the entries below so each state is written once.
 > **D-33**, which has real mail of its own; this entry keeps the timing half,
 > which is the one every order-status question quietly depends on.
 
-**needs** `policy_answer`
+**needs** _(aucun — la réponse vient de la politique liée)_
+**politiques liées** `dispatch_time_policy`, `shipping_cost_policy`
 **exemplaires** → jeu `produit`, état `reponse_dans_la_base`
 
 **Contenu stable** _(à rédiger)_
@@ -313,7 +325,8 @@ Referenced by the entries below so each state is written once.
 **Variantes réelles**
 - « Mi pedido num. 6298 ha venido erróneo, el producto "CARESSE TEMPS SUBLIME NUIT"… »  _(es)_
 
-**needs** `order_identity`, `product_identity`, `policy_answer`
+**needs** `order_identity`, `product_identity`
+**politiques liées** `damaged_wrong_missing_item_policy`
 **exemplaires** → jeu `retour`
 
 **Contenu stable** _(à rédiger)_
@@ -354,7 +367,8 @@ Referenced by the entries below so each state is written once.
 > française ») — that is a tax argument, not a delivery question, and it is left
 > out as too rare to author against.
 
-**needs** `policy_answer`
+**needs** _(aucun — la réponse vient de la politique liée)_
+**politiques liées** `delivery_location_policy`, `delivery_time_policy`
 **exemplaires** → jeu `produit`, état `reponse_dans_la_base`
 
 **Contenu stable** _(à rédiger)_
@@ -362,7 +376,7 @@ Referenced by the entries below so each state is written once.
 
 ---
 
-# Commande — 4 questions · 65 messages
+# Commande — 5 questions · 65 messages
 
 ### D-36 · Ma commande a beaucoup de retard — si elle n'arrive pas, je préfère être remboursé(e) ou en recevoir une autre.
 `delivery` · `problem` · **2 msgs** · 🟢
@@ -372,6 +386,7 @@ Referenced by the entries below so each state is written once.
 - « J'ai commandé une crème qui devait être livrée le 10 juillet, mais je ne l'ai toujours pas reçue. Si elle ne peut pas être livrée, pourriez-vous simplement en renvoyer une nouvelle à l'adresse que j'ai indiquée ? »
 
 **needs** `order_identity`, `delivery_state`, `refund_state`
+**politiques liées** `refund_policy`, `return_policy`
 **exemplaires** → jeu `commande`
 
 **Contenu stable** _(à rédiger)_
@@ -400,7 +415,8 @@ commerciale, prise par une personne.
 - « Je n'ai pas de nouvelles de ma commande du 30 juillet dernier. Mon compte a été débité. » _(near miss 0.643, 2026-09-15)_
 - « Je me demande pourquoi ma dernière commande n'est pas traitée car c'est pour un cadeau semaine prochaine » _(near miss 0.635, 2026-09-15)_
 
-**needs** `order_identity`, `order_state`, `payment_state`, `policy_answer`
+**needs** `order_identity`, `order_state`, `payment_state`
+**politiques liées** `dispatch_time_policy`, `delivery_time_policy`
 **exemplaires** → jeu `commande`, état `non_expediee`
 
 > **O-10 merged in, 2026-08-12.** It was split from this on the theory that the
@@ -448,6 +464,7 @@ commerciale, prise par une personne.
 - « nouvelle adresse pour recevoir mon coli car ma commande est l'ancienne adresse » _(objet du message — le corps est notre réponse)_
 
 **needs** `order_identity`, `order_state`
+**politiques liées** `address_change_policy`
 **exemplaires** → jeu `commande` — the answer hinges on `non_expediee` vs already dispatched
 
 **Contenu stable** _(à rédiger)_
@@ -461,7 +478,8 @@ commerciale, prise par une personne.
 **Variantes réelles**
 - « Je souhaite annuler ma commande. Pourriez-vous faire le nécessaire svp ? »
 
-**needs** `order_identity`, `order_state`, `policy_answer`
+**needs** `order_identity`, `order_state`
+**politiques liées** `order_cancellation_policy`
 **exemplaires** → jeu `commande`
 
 **Contenu stable** _(à rédiger)_
@@ -476,6 +494,7 @@ commerciale, prise par une personne.
 - « J'ai effectué une commande hier et j'ai oublié de rajouter les trois échantillons »
 
 **needs** `order_identity`, `order_state`
+**politiques liées** `order_modification_policy`
 **exemplaires** → jeu `commande`
 
 **Contenu stable** _(à rédiger)_
@@ -483,7 +502,7 @@ commerciale, prise par une personne.
 
 ---
 
-# Promotions — 5 questions · 21 messages
+# Promotions — 7 questions · 21 messages
 
 > The crispest, highest-volume group and entirely within your control — worth
 > writing first even though delivery ranks above it.
@@ -500,6 +519,7 @@ commerciale, prise par une personne.
 - « Je voudrais savoir pourquoi je n ai pas reçu de code pour les -20% pour la 1ere commande alors que je me suis inscrite » _(extrait — la question « puis-je l'utiliser sur les soldes ? » qui suit est sur P-18)_
 
 **needs** `customer_account_state`, `promotion_validity`
+**politiques liées** `promotion_discount_policy`
 **exemplaires** → jeu `promo`, état `code_non_recu`
 
 > **Narrowed to the code never arriving, 2026-08-12** — and this partly reverses
@@ -555,6 +575,7 @@ commerciale, prise par une personne.
 - « puis-je l'utiliser sur les soldes ? » _(extrait — la première moitié du message est sur P-15)_
 
 **needs** `promotion_identity`, `promotion_validity`, `promotion_outcome`
+**politiques liées** `promotion_discount_policy`
 **exemplaires** → jeu `promo`
 
 > **Rewritten 2026-08-12. It used to ask « puis-je cumuler plusieurs offres ? »
@@ -592,6 +613,7 @@ commerciale, prise par une personne.
 - « j'aimerai vous commander votre offre EAU QI prix promo 37,80 €. Le prix de 54 € n'est pas… »
 
 **needs** `promotion_validity`, `product_property`
+**politiques liées** `promotion_discount_policy`
 **exemplaires** → jeu `promo`
 
 **Contenu stable** — partially covered already; check before rewriting
@@ -606,7 +628,7 @@ commerciale, prise par une personne.
 - « Pour une première #5907 commande, je n'ai pas reçu mon échantillon ? »
 - « He olvidado pedir las tres muestras de regalo… »  _(es)_
 
-**needs** `order_identity`, `policy_answer`
+**needs** `order_identity`
 **exemplaires** → jeu `promo`
 
 **Contenu stable** _(à rédiger)_
@@ -623,6 +645,7 @@ commerciale, prise par une personne.
 - « J'attends une promotion avant de passer commande : en avez-vous une en ce moment ? » _(reformulée : le CHANGELOG décrit cette variante sans la citer — voir VALIDATION_LOG item 12)_
 
 **needs** `product_offer`
+**politiques liées** `promotion_discount_policy`
 **exemplaires** → jeu `promo`
 
 **Contenu stable** — `p21_offre_produit` (offre propre au produit) et
@@ -641,6 +664,7 @@ commerciale, prise par une personne.
 - « J'ai commandé pendant l'offre, est-ce que la remise a bien été appliquée ? »
 
 **needs** `order_identity`, `order_promotion`
+**politiques liées** `promotion_discount_policy`
 **exemplaires** → jeu `promo`
 
 **Contenu stable** _(à rédiger)_
@@ -661,7 +685,8 @@ commerciale, prise par une personne.
 - « Pourquoi je ne peux pas le déposer au magasin ? » _(extrait — la question sur les frais de retour qui l'accompagne est sur R-22)_
 - « Vous n'avez d'étiquette pour le retour ? »
 
-**needs** `return_eligibility`, `policy_answer`
+**needs** `return_eligibility`
+**politiques liées** `return_policy`, `refund_policy`
 **exemplaires** → jeu `retour`
 
 **Contenu stable** _(à rédiger)_
@@ -700,7 +725,8 @@ commerciale, prise par une personne.
 > PR-26 without distinguishing faulty from unwanted. That is an answer-side
 > condition on `return_eligibility`, and it is the open question below.
 
-**needs** `policy_answer`, `return_eligibility`
+**needs** `return_eligibility`
+**politiques liées** `refund_policy`, `return_policy`
 **exemplaires** → jeu `retour`
 
 **Contenu stable** _(à rédiger)_
@@ -714,7 +740,8 @@ commerciale, prise par une personne.
 **Variantes réelles**
 - « Hasta la fecha no he recibido contestación a mi correo de reclamación »  _(es)_
 
-**needs** `refund_state`, `policy_answer`
+**needs** `refund_state`
+**politiques liées** `return_policy`, `refund_policy`
 **exemplaires** → jeu `retour`
 
 **Contenu stable** _(à rédiger)_
@@ -722,7 +749,7 @@ commerciale, prise par une personne.
 
 ---
 
-# Produits et disponibilité — 6 questions · 22 messages
+# Produits et disponibilité — 7 questions · 22 messages
 
 > Five are subject `product`; **S-34 is `product_stock`**, a different subject in
 > the taxonomy and the only entry that carries it.
@@ -766,7 +793,7 @@ commerciale, prise par une personne.
 - « je suis très déçue de la batterie qui tient… »
 - « une cliente de notre magasin a acheté un masque LED au mois de juin et n'arrive plus à recharger l'appareil » _(near miss 0.631 — written by a retailer on the customer's behalf, 2026-09-15)_
 
-**needs** `product_identity`, `product_property`, `policy_answer`
+**needs** `product_identity`, `product_property`
 **exemplaires** → jeu `produit` + `retour` (warranty path)
 
 **Contenu stable** _(à rédiger)_
@@ -851,6 +878,7 @@ commerciale, prise par une personne.
 > simply not there to give.
 
 **needs** `product_identity`, `product_availability`, `promotion_eligibility`
+**politiques liées** `promotion_discount_policy`
 **exemplaires** → jeu `produit` — needs a new state, `rupture_de_stock`; the
 existing three (`reponse_dans_la_base`, `produit_ambigu`, `aucune_source`) are
 about whether we *know* the answer, not about what the stock actually is
@@ -860,28 +888,7 @@ about whether we *know* the answer, not about what the stock actually is
 
 ---
 
-# Compte et paiement — 4 questions · 17 messages
-
-### O-11 · J'ai reçu la confirmation de commande puis plus aucune nouvelle.
-`order` · `problem` · **4 msgs**
-
-**Variantes réelles**
-- « Commande R4F8FH09J — J'ai passé une commande le 24 mai et ai reçu la confirmation à la fin… »
-
-**needs** `order_identity`, `order_state`
-**exemplaires** → jeu `commande`
-
-**Contenu stable** _(à rédiger)_
->
-
-> **Written back into this document on 2026-09-03, having lived only in the
-> database.** It was approved, embedded and matching real tickets while being
-> invisible to anyone reading the corpus here. The importer never deletes an
-> exemplar that has left the document, so a row authored elsewhere survives every
-> import in silence — which is how the document came to show 34 of the 37
-> situations the agent actually uses.
-
----
+# Compte et paiement — 5 questions · 17 messages
 
 ### A-29 · Je n'arrive pas à réinitialiser mon mot de passe ni à me connecter.
 `account` · `problem` · **5 msgs** · ✅ **ALREADY WORKS — retrieves at 0.61–0.62**
@@ -895,7 +902,7 @@ about whether we *know* the answer, not about what the stock actually is
 - « Bonjour je n'arrive pas à réinitialiser mon mot de passe »
 - « Impossible de me connecter à mon compte même en changeant le mot de passe »
 
-**needs** `customer_account_state`, `policy_answer`
+**needs** `customer_account_state`
 ---
 
 ### A-35 · Je souhaite supprimer mon compte client.
@@ -907,7 +914,7 @@ about whether we *know* the answer, not about what the stock actually is
 - « Merci de fermer mon compte définitivement. »
 - « Bonjour, je voudrais que vous supprimiez le compte enregistré à mon nom. »
 
-**needs** `customer_account_state`, `policy_answer`
+**needs** `customer_account_state`
 **exemplaires** → jeu `compte`
 
 **Contenu stable** _(à rédiger)_
@@ -928,7 +935,7 @@ about whether we *know* the answer, not about what the stock actually is
 - « Réf. client : C0000294 — Je vous prie de bien vouloir me faire parvenir la facture… »
 - « Je ne reçois aucune facture de votre laboratoire. Pourriez-vous m'indiquer la démarche »
 
-**needs** `order_identity`, `policy_answer`
+**needs** `order_identity`
 **exemplaires** → jeu `commande`
 
 > Some of this cluster was `lap-groupe.com` before the sender directory landed.
@@ -945,7 +952,8 @@ about whether we *know* the answer, not about what the stock actually is
 **Variantes réelles**
 - « au moment de payer (73 euros) il y a des frais supplémentaires demandés »
 
-**needs** `policy_answer`, `payment_state`
+**needs** `payment_state`
+**politiques liées** `shipping_cost_policy`, `payment_policy`, `promotion_discount_policy`
 **exemplaires** → jeu `promo` / `commande`
 
 **Contenu stable** _(à rédiger)_
@@ -960,7 +968,8 @@ about whether we *know* the answer, not about what the stock actually is
 - « Kan geen bestelling plaatsen, is er iets mis ofzo? »  _(nl)_
 - « wil iets anders bestellen en hang elke keer vast bij de betaling »  _(nl)_
 
-**needs** `payment_state`, `policy_answer`
+**needs** `payment_state`
+**politiques liées** `payment_policy`
 **exemplaires** → jeu `commande`
 
 **Contenu stable** _(à rédiger)_
@@ -968,7 +977,7 @@ about whether we *know* the answer, not about what the stock actually is
 
 ---
 
-# Cosmétovigilance — 3 questions · 3 messages
+# Cosmétovigilance — 4 questions · 3 messages
 
 > **Read the split before writing here.** Eight tickets carried this subject and
 > only three belong to it: four were physically defective products — masks
@@ -994,7 +1003,8 @@ about whether we *know* the answer, not about what the stock actually is
 - « Je pense être allergique à un ingrédient de votre crème, que me conseillez-vous ? » _(authored)_
 - « J'ai eu de petits boutons après deux utilisations. Dois-je arrêter le produit ou continuer ? » _(authored)_
 
-**needs** `customer_identity`, `product_identity`, `policy_answer`
+**needs** `customer_identity`, `product_identity`
+**politiques liées** `product_reaction_complaint_policy`
 **exemplaires** → jeu `cosmetovigilance`
 
 > **The mild end, and it does not look like a complaint.** The real message thanks
@@ -1020,7 +1030,8 @@ about whether we *know* the answer, not about what the stock actually is
 - « Réaction violente, je ne peux plus sortir de chez moi. Que comptez-vous faire ? » _(authored)_
 - « Votre produit m'a abîmé la peau, je demande le remboursement et je compte le faire savoir » _(authored)_
 
-**needs** `customer_identity`, `product_identity`, `purchase_verified`, `policy_answer`
+**needs** `customer_identity`, `product_identity`, `purchase_verified`
+**politiques liées** `product_reaction_complaint_policy`
 **exemplaires** → jeu `cosmetovigilance`
 
 > **Separate from CV-01 because the answer is separate.** A mild reaction wants
@@ -1053,7 +1064,8 @@ about whether we *know* the answer, not about what the stock actually is
 - « Après cette réaction je demande le remboursement, et je compte le faire savoir »
 - « Quelle compensation proposez-vous après ce que votre produit m'a causé ? »
 
-**needs** `customer_identity`, `product_identity`, `purchase_verified`, `policy_answer`
+**needs** `customer_identity`, `product_identity`, `purchase_verified`
+**politiques liées** `product_reaction_complaint_policy`
 **exemplaires** → jeu `cosmetovigilance`
 
 **Contenu stable** _(à rédiger)_
@@ -1079,7 +1091,8 @@ about whether we *know* the answer, not about what the stock actually is
 - « Y a-t-il des contre-indications à utiliser le masque LED ? » _(authored)_
 - « Je suis sous traitement pour la peau, puis-je utiliser vos produits en même temps ? » _(authored)_
 
-**needs** `product_identity`, `policy_answer`
+**needs** `product_identity`
+**politiques liées** `product_reaction_complaint_policy`
 **exemplaires** → jeu `cosmetovigilance`
 
 > **Asked BEFORE use, which is what makes it its own situation.** Nothing has gone
