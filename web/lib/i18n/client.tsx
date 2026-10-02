@@ -5,6 +5,7 @@ import type { ReactNode } from "react";
 import { DEFAULT_LOCALE, type Locale } from "./locales";
 import { makeInsightsFormat, type InsightsFormat } from "../insights-format";
 import { makeTranslate, type Dictionary, type Params, type Translate } from "./translate";
+import { marketplaceList, shopLabel, useShop } from "../shop-context";
 
 /**
  * The locale and its ONE dictionary. The server picks the dictionary and hands it
@@ -26,7 +27,15 @@ export function useLocale(): Locale {
 
 export function useT(): Translate {
   const { locale, messages } = useContext(LocaleContext);
-  return useMemo(() => makeTranslate(locale, messages, {}), [locale, messages]);
+  // `{store}` in any string is the shop's name, `{marketplaces}` its
+  // marketplaces' names (shop-context.tsx).
+  const shop = useShop();
+  const store = shopLabel(shop);
+  const marketplaces = marketplaceList(shop, locale);
+  return useMemo(
+    () => makeTranslate(locale, messages, {}, { store, marketplaces }),
+    [locale, messages, store, marketplaces]
+  );
 }
 
 /** The Insights formatters bound to the UI language: `const { euros } = useFormat()`. */

@@ -197,6 +197,27 @@ export function createForwardingStore(supabase) {
       return out;
     },
 
+    /**
+     * Whether ANOTHER thread of this ticket's case was already acknowledged
+     * (61_cases.sql): a customer who splits one problem across two threads is
+     * acknowledged once, not once per thread.
+     */
+    async caseAcknowledged(ticketId) {
+      const [ticket] = await supabaseSelect(supabase, T.TICKETS, { id: ticketId }, 'id,case_id', { limit: 1 });
+      if (!ticket?.case_id) return false;
+      const threads = await supabaseSelectAll(supabase, T.TICKETS, { case_id: ticket.case_id }, 'id');
+      const others = threads.map((row) => row.id).filter((id) => id !== ticketId);
+      if (others.length === 0) return false;
+      const sent = await supabaseSelect(
+        supabase,
+        T.TICKET_ROUTING,
+        { ticket_id: { operator: 'in', value: `(${others.join(',')})` }, ack_state: 'sent' },
+        'ticket_id',
+        { limit: 1 }
+      );
+      return sent.length > 0;
+    },
+
     /** The router's decision, one row per ticket, replaced when re-decided. */
     async recordRouting(shopId, ticket, decision) {
       const [row] = await supabaseUpsert(

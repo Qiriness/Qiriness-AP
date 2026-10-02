@@ -66,7 +66,12 @@ export async function writeIngestedMessages(
   // actorFor       (optional): (message) => customer | support | colleague |
   // partner, stamped on each message once its direction is settled
   // (casework/actors.mjs). Without it the column stays null, as before.
-  { triage, audit, embedMessage, detectDuplicate, detectRelated, senderLabel, attachOnly = false, isCandidate, mailbox, actorFor, logger } = {}
+  // cases          (optional): the case record (scripts/lib/case-record.mjs).
+  // With it, a new conversation opens its own case, a duplicate JOINS its
+  // original's case rather than being silenced, and a new message wakes the
+  // snoozes of every thread of its case. Without it (older tests' fakes),
+  // tickets are created as before.
+  { triage, audit, embedMessage, detectDuplicate, detectRelated, senderLabel, attachOnly = false, isCandidate, mailbox, actorFor, cases, logger } = {}
 ) {
   const counts = {
     ticketsCreated: 0,
@@ -75,6 +80,7 @@ export async function writeIngestedMessages(
     removed: 0,
     llmSpamFiltered: 0,
     duplicatesLinked: 0,
+    casesCreated: 0,
     relatedLinked: 0,
     skippedNoTicket: 0,
     skippedCopies: 0,
@@ -83,7 +89,7 @@ export async function writeIngestedMessages(
     openersCorrected: 0,
     directionsCorrected: 0
   };
-  const identity = { store, senderLabel, isCandidate, mailbox, actorFor, logger };
+  const identity = { store, senderLabel, isCandidate, mailbox, actorFor, cases, logger };
 
   // WHICH OF THESE MESSAGES WE ALREADY HOLD, asked once for the whole page.
   //
@@ -132,12 +138,13 @@ export async function writeIngestedMessages(
 
     const isNewMessage = !knownMessageIds.has(item.graphMessageId ?? item.message?.graph_message_id);
 
-    const ticketId = await resolveTicket(
+    const resolved = await resolveTicket(
       record, shopId, item, triage, counts, audit, detectDuplicate, senderLabel, logger, isNewMessage, identity
     );
-    if (ticketId === null) {
+    if (resolved === null) {
       continue; // dropped by the LLM spam pass — never written
     }
+    const { id: ticketId, caseId } = resolved;
 
     const message = { ...item.message, ticket_id: ticketId, shop_id: shopId };
     // AFTER the direction is final: a staff reply re-filed as ours is support.
@@ -166,6 +173,22 @@ export async function writeIngestedMessages(
         }
       } catch (error) {
         logger?.warn?.('ingest.snooze_wake_failed', { ticketId, error: error.message });
+      }
+      // THE CASE, NOT ONLY THE THREAD. A customer who writes on a new thread
+      // about a case snoozed on an older one is the case coming back: every
+      // thread of it wakes.
+      if (cases && caseId && typeof cases.threads === 'function') {
+        try {
+          const siblings = (await cases.threads(caseId, 'id')).filter((thread) => thread.id !== ticketId);
+          for (const sibling of siblings) {
+            if (await store.wakeSnooze(shopId, sibling.id, wakeReason)) {
+              counts.snoozesWoken += 1;
+              logger?.info?.('ingest.snooze_woken', { ticketId: sibling.id, reason: wakeReason, byThread: ticketId });
+            }
+          }
+        } catch (error) {
+          logger?.warn?.('ingest.case_snooze_wake_failed', { ticketId, error: error.message });
+        }
       }
     }
 
@@ -437,7 +460,7 @@ async function resolveTicket(
     // emptiness check that used to be here is the record's now, because every
     // caller of it wanted the same thing.
     await record.recordMessageArrival(existing.id, patch);
-    return existing.id;
+    return { id: existing.id, caseId: existing.case_id ?? null };
   }
 
   // New conversation: run the LLM spam pass (if configured) before creating
@@ -477,6 +500,13 @@ async function resolveTicket(
   // in the address. Null for a consumer, which is the ordinary case.
   const ownSide = senderLabel?.(item.message?.from_email) ?? null;
 
+  // EVERY THREAD HAS A CASE, and a new conversation opens its own. Whether it
+  // continues an older case is decided once, later in the poll, when its
+  // subject and order are known (agent/src/cases/). The duplicate rules below
+  // are the exception: they are certain enough to decide here.
+  const opened = identity?.cases ? await identity.cases.create() : null;
+  if (opened) counts.casesCreated += 1;
+
   const inserted = await record.create({
     graph_conversation_id: conversation.graph_conversation_id,
     subject: conversation.subject,
@@ -484,15 +514,21 @@ async function resolveTicket(
     requester_name: conversation.requester_name,
     sender_label: ownSide,
     first_message_at: conversation.message_at,
-    last_message_at: conversation.message_at
+    last_message_at: conversation.message_at,
+    ...(opened ? { case_id: opened.id, case_link_state: 'pending' } : {})
   });
   counts.ticketsCreated += 1;
 
   // THE TICKET IS CREATED FIRST AND LINKED SECOND, never merged away. A wrong
-  // merge cannot be undone; a wrong link is a column somebody clears. The
+  // merge cannot be undone; a wrong link is a row somebody moves back. The
   // message is stored on its own ticket either way, so nothing is lost if the
-  // detection is wrong — what the link changes is that the drafting queue skips
-  // it, which is the harm being prevented: one customer, two replies.
+  // detection is wrong.
+  //
+  // WITH CASES, A DUPLICATE JOINS ITS ORIGINAL'S CASE instead of being
+  // silenced. The case's reply target then picks ONE message to answer -- the
+  // newest unanswered one, on whichever thread -- so one customer still gets
+  // one reply, and it goes on the thread they last wrote on. Without the case
+  // record (older callers), the duplicate link is written as before.
   //
   // AFTER creation because the rules compare against OTHER tickets, and running
   // before would leave the new one invisible to a later arrival in the same
@@ -501,6 +537,23 @@ async function resolveTicket(
     try {
       const hit = await detectDuplicate(item);
       if (hit?.ticketId && hit.ticketId !== inserted.id) {
+        if (opened && hit.caseId && hit.caseId !== opened.id) {
+          await identity.cases.applyDecision({
+            ticketId: inserted.id,
+            fromCaseId: opened.id,
+            toCaseId: hit.caseId,
+            method: hit.reason,
+            candidates: [{ case_id: hit.caseId, reasons: [hit.reason] }]
+          });
+          counts.duplicatesLinked += 1;
+          logger?.info?.('ingest.duplicate_joined_case', {
+            ticketId: inserted.id,
+            duplicateOf: hit.ticketId,
+            caseId: hit.caseId,
+            reason: hit.reason
+          });
+          return { id: inserted.id, caseId: hit.caseId };
+        }
         await record.linkDuplicate(inserted.id, {
           ofTicketId: hit.ticketId,
           reason: hit.reason
@@ -523,7 +576,7 @@ async function resolveTicket(
     }
   }
 
-  return inserted.id;
+  return { id: inserted.id, caseId: opened?.id ?? inserted.case_id ?? null };
 }
 
 /**

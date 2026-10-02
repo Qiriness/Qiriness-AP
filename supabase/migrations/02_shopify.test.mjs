@@ -5,16 +5,19 @@ import { checkClause, definitionOf, literalsIn, read, tablesIn } from './_shared
 
 const sql = read('02_shopify');
 
-test('creates exactly the seven tables it documents', () => {
+test('creates exactly the eight tables it documents', () => {
   // Six snapshots, plus `advice_collections` — which is a snapshot of Shopify's
   // collections AND the team's decisions about them, so it lives here with the
-  // rest of the Shopify mirror rather than in the analytics file.
+  // rest of the Shopify mirror rather than in the analytics file — and
+  // `sales_channels`, the merchant's reading of Shopify's sales channels
+  // (which of them are marketplaces; migration 60).
   assert.deepEqual(tablesIn(sql).sort(), [
     'advice_collections',
     'customers',
     'orders',
     'products',
     'promotions',
+    'sales_channels',
     'shopify_content_sources',
     'shopify_metaobjects'
   ]);

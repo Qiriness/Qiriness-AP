@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react";
 import type { InsightsRange, InsightsScope, PlatformId } from "@/lib/types";
-import { PLATFORMS, RANGE_PRESETS } from "../../../scripts/lib/insights-range.mjs";
+import { RANGE_PRESETS } from "../../../scripts/lib/insights-range.mjs";
+import { useShop } from "@/lib/shop-context";
 import { useT } from "@/lib/i18n/client";
 import { useInsightsFrame } from "./InsightsFrame";
 import styles from "./InsightsHeader.module.css";
@@ -36,6 +37,7 @@ export function FilterBar({
   months: { id: string; label: string }[];
 }) {
   const t = useT();
+  const shop = useShop();
   const { navigate, pending } = useInsightsFrame();
   const fromDay = range.from.slice(0, 10);
   const today = range.now.slice(0, 10);
@@ -105,9 +107,12 @@ export function FilterBar({
             disabled={!scope.platform}
             onChange={(event) => navigate({ platform: event.target.value === "all" ? null : event.target.value })}
           >
-            {PLATFORMS.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.id === "all" ? t("insights.filter.allPlatforms") : p.label}
+            {/* The shop's own store, then its marketplaces (Setup -> Sales channels). */}
+            <option value="all">{t("insights.filter.allPlatforms")}</option>
+            <option value="shopify">Shopify</option>
+            {shop.marketplaces.map((m) => (
+              <option key={m.key} value={m.key}>
+                {m.label}
               </option>
             ))}
           </select>

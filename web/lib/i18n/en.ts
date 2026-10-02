@@ -21,7 +21,7 @@ export const en = {
   "nav.soon": "Soon",
   "nav.availableSoon": "Available soon",
   "nav.collapse": "Collapse",
-  "nav.openStore": "Open the Qiriness store",
+  "nav.openStore": "Open the {store} store",
   "nav.shopifyStore": "Shopify store",
   "nav.closeNavigation": "Close navigation",
   "nav.openNavigation": "Open navigation",

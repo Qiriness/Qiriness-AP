@@ -185,9 +185,11 @@ test('no candidates at all yields a clean verdict', () => {
 const AMAZON_ORDER = { customer_email_hash: HASH_A, customer_id: 'c1', sales_channel_handle: 'amazon' };
 const ANONYMOUS = { display_name: 'Anonymous Customer', first_name: 'Anonymous', last_name: 'Customer', anonymous: true };
 const CUSTOMER_TICKET = { requester_email_hash: HASH_B, requester_name: 'Joachim Randt' };
+// The shop's marketplace handles, as `sales_channels` gives them.
+const MARKETPLACE = ['amazon'];
 
 test('an anonymous Amazon order quoted as the only order number is confirmed, and labelled as such', () => {
-  const r = verifyOrder({ order: AMAZON_ORDER, ticket: CUSTOMER_TICKET, customer: ANONYMOUS, soleOrderNumber: true });
+  const r = verifyOrder({ order: AMAZON_ORDER, ticket: CUSTOMER_TICKET, customer: ANONYMOUS, soleOrderNumber: true, marketplaceHandles: MARKETPLACE });
   assert.equal(r.status, CONFIRMED);
   assert.equal(r.verifiedBy, BY_MARKETPLACE_ORDER_NUMBER, 'ownership was not checked, and that stays visible');
   assert.equal(r.suggestedAction, undefined, 'asking for the purchase email is pointless here');
@@ -206,7 +208,8 @@ test('a web order with a different email is still a mismatch, even with the flag
     order: { ...AMAZON_ORDER, sales_channel_handle: 'online_store' },
     ticket: CUSTOMER_TICKET,
     customer: { ...ANONYMOUS },
-    soleOrderNumber: true
+    soleOrderNumber: true,
+    marketplaceHandles: MARKETPLACE
   });
   assert.equal(r.status, MISMATCH, 'the placeholder only counts on a marketplace channel');
 });
@@ -218,7 +221,8 @@ test('a marketplace order with a real named buyer is not waved through', () => {
     order: { customer_email_hash: null, customer_id: 'c1', sales_channel_handle: 'connect-dev-1' },
     ticket: CUSTOMER_TICKET,
     customer: { display_name: 'Audrey Regnier', anonymous: false },
-    soleOrderNumber: true
+    soleOrderNumber: true,
+    marketplaceHandles: MARKETPLACE
   });
   assert.equal(r.status, NOT_FOUND);
 });
@@ -228,7 +232,8 @@ test('the sender’s own email still outranks the marketplace path', () => {
     order: AMAZON_ORDER,
     ticket: { ...CUSTOMER_TICKET, requester_email_hash: HASH_A },
     customer: ANONYMOUS,
-    soleOrderNumber: true
+    soleOrderNumber: true,
+    marketplaceHandles: MARKETPLACE
   });
   assert.equal(r.verifiedBy, BY_SENDER_EMAIL);
 });
@@ -250,4 +255,11 @@ test('only the exact Amazon placeholder counts as anonymous', () => {
   );
   assert.equal(isAnonymousPlaceholder({}), false);
   assert.equal(isAnonymousPlaceholder(), false);
+});
+
+test('with no marketplace configured, the anonymous-buyer path stays closed', () => {
+  // `sales_channels` empty: no handle is a marketplace, so the placeholder buyer
+  // proves nothing and the order is an ordinary mismatch.
+  const r = verifyOrder({ order: AMAZON_ORDER, ticket: CUSTOMER_TICKET, customer: ANONYMOUS, soleOrderNumber: true });
+  assert.equal(r.status, MISMATCH);
 });

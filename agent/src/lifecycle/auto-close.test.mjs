@@ -202,3 +202,28 @@ test('the unactioned backlog is counted apart from the exempt', async () => {
   assert.equal(totals.exempt, 2, 'both are spared');
   assert.equal(totals.awaitingHuman, 1, 'but only one of them is a backlog');
 });
+
+// --- cases (61_cases.sql) ----------------------------------------------------
+
+test('a thread is not idle while another thread of its case is active', async () => {
+  const { shouldAutoClose, caseFactsFor } = await import('./auto-close.mjs');
+  const now = new Date('2026-10-02T00:00:00Z');
+  const old = { id: 'A', status: 'open', level: 2, last_message_at: '2026-08-01T00:00:00Z', case_id: 'k' };
+  const active = { id: 'B', status: 'open', level: 2, last_message_at: '2026-09-30T00:00:00Z', case_id: 'k' };
+  assert.equal(shouldAutoClose(old, { now }), true, 'alone, it is idle');
+  const caseFacts = caseFactsFor(old, [old, active]);
+  assert.equal(shouldAutoClose(old, { now, caseFacts }), false);
+});
+
+test('an exemption anywhere in the case holds every thread of it', async () => {
+  const { shouldAutoClose, caseFactsFor } = await import('./auto-close.mjs');
+  const now = new Date('2026-10-02T00:00:00Z');
+  const old = { id: 'A', status: 'open', level: 2, last_message_at: '2026-08-01T00:00:00Z' };
+  const human = { id: 'B', status: 'awaiting_human', level: 2, last_message_at: '2026-08-01T00:00:00Z' };
+  const severe = { id: 'C', status: 'open', level: 4, last_message_at: '2026-08-01T00:00:00Z' };
+  assert.equal(shouldAutoClose(old, { now, caseFacts: caseFactsFor(old, [old, human]) }), false);
+  assert.equal(shouldAutoClose(old, { now, caseFacts: caseFactsFor(old, [old, severe]) }), false);
+  assert.equal(shouldAutoClose(old, { now, caseFacts: caseFactsFor(old, [old, { ...human, id: 'D' }], new Set()) }), false);
+  // A finished sibling holds nothing.
+  assert.equal(shouldAutoClose(old, { now, caseFacts: caseFactsFor(old, [old, { ...human, status: 'closed' }]) }), true);
+});

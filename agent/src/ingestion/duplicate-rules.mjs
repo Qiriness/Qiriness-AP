@@ -18,6 +18,12 @@
 // legitimately open a delivery ticket and then a refund ticket about a single
 // order, and linking those would silence the second. It stays out until
 // something measures how often that shape is a duplicate rather than a sequel.
+//
+// THE CASE LINKER NOW HANDLES THAT SHAPE, WITHOUT SILENCING (migration 61):
+// same order + a compatible issue family puts the two threads in one case, and
+// the case's reply target answers the newest message. With the case record
+// wired, a hit here also JOINS the original's case rather than writing
+// `duplicate_of_ticket_id` (ticket-writer.mjs). DECISIONS § Cases.
 
 /** How far apart two identical messages can be and still be one double-post. */
 export const IDENTICAL_BODY_WINDOW_MS = 60 * 60 * 1000;
@@ -48,7 +54,8 @@ export function normaliseBody(value) {
  *                       carrying `ticket_id`, `internet_message_id`, `body_text`
  *                       and a timestamp. The caller does the narrowing; this
  *                       decides.
- * @returns { ticketId, reason } or null
+ * @returns { ticketId, caseId, reason } or null -- `caseId` is the matched
+ *          ticket's case, when the pool carried it
  */
 export function findDuplicate({ candidate, priorMessages = [] } = {}) {
   if (!candidate) {
@@ -67,7 +74,7 @@ export function findDuplicate({ candidate, priorMessages = [] } = {}) {
       (message) => message.internet_message_id && chain.has(message.internet_message_id)
     );
     if (linked?.ticket_id) {
-      return { ticketId: linked.ticket_id, reason: 'reply_chain' };
+      return { ticketId: linked.ticket_id, caseId: linked.case_id ?? null, reason: 'reply_chain' };
     }
   }
 
@@ -85,7 +92,7 @@ export function findDuplicate({ candidate, priorMessages = [] } = {}) {
         withinWindow(candidate.received_at, message.received_at)
     );
     if (twin?.ticket_id) {
-      return { ticketId: twin.ticketId ?? twin.ticket_id, reason: 'identical_body' };
+      return { ticketId: twin.ticketId ?? twin.ticket_id, caseId: twin.case_id ?? null, reason: 'identical_body' };
     }
   }
 
@@ -142,15 +149,16 @@ export function createDuplicateLookup({ supabase, shopId, select, windowDays = 3
           deleted_at: { operator: 'is', value: 'null' },
           last_message_at: { operator: 'gte', value: since }
         },
-        'id'
+        'id,case_id'
       );
       if (tickets.length === 0) {
         return [];
       }
+      const caseOf = new Map(tickets.map((t) => [t.id, t.case_id ?? null]));
 
       // Their inbound messages. Only what the rules read: no bodies of ours, no
       // addresses, no vectors.
-      return select(
+      const messages = await select(
         supabase,
         'ticket_messages',
         {
@@ -160,6 +168,8 @@ export function createDuplicateLookup({ supabase, shopId, select, windowDays = 3
         },
         'ticket_id,internet_message_id,body_text,received_at'
       );
+      // Each message carries its thread's case, so a hit can join that case.
+      return messages.map((message) => ({ ...message, case_id: caseOf.get(message.ticket_id) ?? null }));
     }
   };
 }

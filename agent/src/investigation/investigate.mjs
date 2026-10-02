@@ -28,6 +28,7 @@ import { TOOL_NAMES, answerSetFor, escalationTriggers } from './investigation-ru
 import { renderCaseDelta } from './case-delta.mjs';
 import { companyPoliciesUsed } from './company-policy-use.mjs';
 import { LATEST_CUSTOMER_MARK, LATEST_MARK } from './investigation-runner.mjs';
+import { serviceClientOf } from '../../../scripts/lib/company.mjs';
 
 // The investigation agent: a categorised ticket in, a case file out.
 //
@@ -61,9 +62,13 @@ const DEFAULT_MAX_TOOL_CALLS = 6;
 const PLANNER_MODEL_RESERVE = 2;
 const DEFAULT_MAX_TURNS = 4;
 
-const SYSTEM_PROMPT = [
-  "Tu es l'agent d'enquête du service client de Qiriness, une marque de soin de la peau.",
-  '',
+// The first line names the company, from the shop and its parameters
+// (`scripts/lib/company.mjs`). It was « … de Qiriness, une marque de soin de la
+// peau », a literal another shop would have inherited.
+const systemPrompt = (company) =>
+  [`Tu es l'agent d'enquête du ${serviceClientOf(company)}.`, '', SYSTEM_PROMPT_RULES].join('\n');
+
+const SYSTEM_PROMPT_RULES = [
   "TU N'ÉCRIS JAMAIS AU CLIENT. Tu prépares un dossier qu'un autre agent, ou un humain, utilisera pour répondre.",
   "Ne rédige aucune formule de politesse, aucune phrase de réponse, aucune excuse.",
   '',
@@ -108,6 +113,8 @@ export function createInvestigator(
     // off by a person in the dashboard, and the whole layer is turned off by an
     // env flag without a deploy.
     plannerEnabled = true,
+    // { name, description } from `loadCompany`. Absent: a generic first line.
+    company = null,
     logger,
     // Every tool result, as it is recorded — the ledger entry WHOLE, including
     // the French `promptText` the model was handed and the `data` the model
@@ -123,6 +130,8 @@ export function createInvestigator(
     onToolCall = null
   } = {}
 ) {
+  const SYSTEM_PROMPT = systemPrompt(company);
+
   /**
    * @param ticket {{ id, subject, text, category, request_kind, level,
    *                  requester_email_hash, shopify_order_number, resolvedContext }}

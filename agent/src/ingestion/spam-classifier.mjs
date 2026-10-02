@@ -1,3 +1,4 @@
+import { serviceClientOf } from '../../../scripts/lib/company.mjs';
 // LLM spam classifier — the second pass after the deterministic blocklist. Runs
 // on new-conversation mail before it is written, so classified spam is dropped
 // and never stored. Fails OPEN: any error keeps the email (never lose genuine mail).
@@ -15,15 +16,17 @@ const CLASSIFICATION_SCHEMA = {
 // Context is written in French (the mailbox is mostly French). The label *values*
 // stay English because they are code enums (keep | spam | irrelevant); only the
 // instructions are French.
-const SYSTEM_PROMPT = [
-  "Tu es un filtre anti-spam pour la boîte de réception du service client de Qiriness, une marque de soin de la peau. La plupart des e-mails sont en français.",
+// The company is named from the shop and its parameters (`scripts/lib/company.mjs`).
+// It was a literal in three lines below.
+const systemPrompt = (company) => [
+  `Tu es un filtre anti-spam pour la boîte de réception du ${serviceClientOf(company)}. La plupart des e-mails sont en français.`,
   "Classe chaque e-mail avec exactement une étiquette :",
   "- \"spam\" : e-mails non sollicités, démarchage commercial, prospection SEO/netlinking, propositions d'essai gratuit d'un produit (e-mails de vente), rapports DMARC, hameçonnage, arnaques, publicité sans rapport.",
   "- \"irrelevant\" : pas du spam, mais sans rapport avec le support client : notifications automatiques de systèmes ou de prestataires (paiement, publicité, hébergement), newsletters simplement reçues par la marque, e-mails de test, accusés de réception automatiques.",
-  "ATTENTION : un e-mail interne (entre collègues de Qiriness) qui concerne un CLIENT — relance d'une cliente, numéro de suivi à transmettre, décision de remboursement, demande de réinitialisation de mot de passe — n'est PAS irrelevant : c'est du travail client transmis en interne, à garder. N'utilise irrelevant que si aucun client n'est concerné.",
-  "- \"keep\" : tout message légitime que le support doit voir — questions ou problèmes concernant un produit, une commande ou Qiriness en général ; livraison et retours ; réclamations ; conseils produit ; e-mails B2B financiers ou logistiques (par ex. facture manquante, avis de problème de stock ou d'inventaire) ; propositions d'influenceurs ou de collaboration, y compris candidatures et offres d'emploi (« je suis influenceur/influenceuse dans ce domaine », CV joint, portfolio, etc.).",
+  "ATTENTION : un e-mail interne (entre collègues de l’entreprise) qui concerne un CLIENT — relance d'une cliente, numéro de suivi à transmettre, décision de remboursement, demande de réinitialisation de mot de passe — n'est PAS irrelevant : c'est du travail client transmis en interne, à garder. N'utilise irrelevant que si aucun client n'est concerné.",
+  "- \"keep\" : tout message légitime que le support doit voir — questions ou problèmes concernant un produit, une commande ou la marque en général ; livraison et retours ; réclamations ; conseils produit ; e-mails B2B financiers ou logistiques (par ex. facture manquante, avis de problème de stock ou d'inventaire) ; propositions d'influenceurs ou de collaboration, y compris candidatures et offres d'emploi (« je suis influenceur/influenceuse dans ce domaine », CV joint, portfolio, etc.).",
   "Indice : un expéditeur au nom d'une personne réelle (prénom + nom) avec une adresse grand public (gmail.com, outlook.com, hotmail.fr, yahoo.fr, etc.) est en général un client — à garder.",
-  "Expéditeurs de confiance connus : mailer@shopify.com (notifications Qiriness/Shopify) et les personnes physiques.",
+  "Expéditeurs de confiance connus : mailer@shopify.com (notifications Shopify de la boutique) et les personnes physiques.",
   "En cas de doute, choisis \"keep\". Ne classe jamais en \"spam\" un e-mail potentiellement authentique d'un client.",
   "Donne toujours un \"reason\" : une seule ligne très courte (12 mots maximum) justifiant l'étiquette.",
   "Si tu choisis \"keep\" par précaution, sans être réellement certain que l'e-mail est légitime, écris exactement \"unsure\" comme reason."
@@ -43,8 +46,9 @@ const SYSTEM_PROMPT = [
 // dropping them would have destroyed live level-3 cases.
 export function createSpamClassifier(
   openai,
-  { model, dropLabels = ['spam', 'irrelevant'], logger, maxBodyChars = 2000 } = {}
+  { model, dropLabels = ['spam', 'irrelevant'], logger, maxBodyChars = 2000, company = null } = {}
 ) {
+  const SYSTEM_PROMPT = systemPrompt(company);
   const drop = new Set(dropLabels);
 
   async function triage(item) {

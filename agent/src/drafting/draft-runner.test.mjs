@@ -372,3 +372,11 @@ test('a reader that says the case is not closed changes nothing', async () => {
   assert.match(h.calls[0].system, /Objectif : résoudre entièrement la demande/);
   assert.equal(h.saved[0].promptInputs.closes_case, false);
 });
+
+test('the case gate turns on only once the case target has been computed', async () => {
+  const { caseTargetOf } = await import('./draft-runner.mjs');
+  assert.equal(caseTargetOf(undefined), undefined);
+  assert.equal(caseTargetOf({ latest_actionable_inbound_message_id: null, target_computed_at: null }), undefined);
+  assert.equal(caseTargetOf({ latest_actionable_inbound_message_id: null, target_computed_at: '2026-10-02T00:00:00Z' }), null);
+  assert.equal(caseTargetOf({ latest_actionable_inbound_message_id: 'm1', target_computed_at: '2026-10-02T00:00:00Z' }), 'm1');
+});

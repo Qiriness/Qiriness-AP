@@ -21,6 +21,106 @@
 -- Requires: 01_foundation.sql (shops) and 02_shopify.sql (customers).
 -- ============================================================================
 
+-- ---------------------------------------------------------------- cases
+
+-- THE CUSTOMER'S PROBLEM, as opposed to the email thread it arrived on.
+-- Message -> thread (`tickets`, one per Graph conversation) -> case. Several
+-- threads may point at one case; threads are never merged or deleted, and each
+-- message stays on the thread it arrived on.
+--
+-- Created with its first ticket, one case per new conversation. A thread joins
+-- an older case only through agent/src/cases/ (deterministic rules first, a
+-- model only between a handful of candidates), and every decision is recorded
+-- in `case_links`.
+--
+-- THE REPLY TARGET IS CODE'S, NEVER A MODEL'S: the newest customer message in
+-- the case that no later message of ours answers, on whichever thread it
+-- arrived (scripts/lib/case-reply-target.mjs). Only its thread is drafted.
+--
+-- The two pointers below are plain uuids, not foreign keys: `tickets`
+-- references this table, so a key back would be a cycle the baseline cannot
+-- state without an `alter table`. The writer recomputes both whenever the case
+-- changes, and every reader treats a pointer to nothing as « no target ».
+create table public.cases (
+  id uuid primary key default gen_random_uuid(),
+  shop_id uuid not null references public.shops(id) on delete cascade,
+
+  -- `requester hash | order number | issue family`, when all three are known.
+  -- A strong signal for linking, never the only one: a message may name no
+  -- order, and one order can carry two unrelated problems.
+  case_key text,
+  issue_family text,
+
+  -- Where the reply goes: the message, and the thread holding it. Null when
+  -- every customer message in the case has been answered.
+  latest_actionable_inbound_message_id uuid,
+  reply_thread_id uuid,
+  target_computed_at timestamptz,
+
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index cases_shop_idx on public.cases (shop_id);
+
+create index cases_shop_key_idx on public.cases (shop_id, case_key) where case_key is not null;
+
+create trigger cases_set_updated_at
+before update on public.cases
+for each row execute function public.set_updated_at();
+
+alter table public.cases enable row level security;
+
+comment on table public.cases is
+  'The customer''s problem, above the email threads it arrived on: several tickets may share a case_id, nothing is merged. Created with its first ticket; linked only by agent/src/cases/ and recorded in case_links. Holds the reply target, chosen by code (case-reply-target.mjs). Written only by scripts/lib/case-record.mjs.';
+comment on column public.cases.latest_actionable_inbound_message_id is
+  'The newest customer message in the case that no later message of ours answers, on any of its threads. Null when everything is answered. Not a foreign key (tickets references this table); a pointer to nothing reads as no target.';
+comment on column public.cases.reply_thread_id is
+  'The ticket holding latest_actionable_inbound_message_id: the only thread of the case that is drafted and replied on.';
+
+-- ---------------------------------------------------------------- issue families
+
+-- Which subjects and situations belong to which family of problems, and which
+-- family may turn into which. CONFIGURATION, per shop: a delivery that becomes
+-- a refund is one case here, and another business may draw the line elsewhere.
+-- Read by agent/src/cases/case-link-rules.mjs; a model is never asked.
+create table public.issue_family_members (
+  id uuid primary key default gen_random_uuid(),
+  shop_id uuid not null references public.shops(id) on delete cascade,
+  -- `subject`: a tickets.category value. `situation`: a support_exemplars key.
+  member_kind text not null,
+  member_key text not null,
+  family_key text not null,
+  created_at timestamptz not null default now(),
+
+  constraint issue_family_members_kind_check check (member_kind in ('subject', 'situation')),
+  constraint issue_family_members_unique unique (shop_id, member_kind, member_key)
+);
+
+alter table public.issue_family_members enable row level security;
+
+comment on table public.issue_family_members is
+  'Per shop: the issue family each ticket subject and each situation belongs to (DELIVERY, ORDER_CHANGE, REFUND_RETURN...). Case linking reads it; a subject or situation with no row has no family and is never linked on family grounds.';
+
+-- A family that may become another within one case (delivery late -> parcel
+-- lost -> refund). A family is always compatible with itself; the table holds
+-- only the moves between two.
+create table public.issue_family_transitions (
+  id uuid primary key default gen_random_uuid(),
+  shop_id uuid not null references public.shops(id) on delete cascade,
+  from_family text not null,
+  to_family text not null,
+  created_at timestamptz not null default now(),
+
+  constraint issue_family_transitions_unique unique (shop_id, from_family, to_family),
+  constraint issue_family_transitions_not_self_check check (from_family <> to_family)
+);
+
+alter table public.issue_family_transitions enable row level security;
+
+comment on table public.issue_family_transitions is
+  'Per shop: a case about from_family may continue as to_family (a late delivery becoming a refund). Directed; a family is always compatible with itself and needs no row.';
+
 -- ---------------------------------------------------------------- tickets
 
 -- One row per Graph conversation, not per email.
@@ -53,6 +153,12 @@ create table public.tickets (
   shop_id uuid not null references public.shops(id) on delete cascade,
 
   graph_conversation_id text not null,
+  -- THE CASE THIS THREAD BELONGS TO. Every thread has one: a new conversation
+  -- opens its own, and the linker (agent/src/cases/) may move the thread into an
+  -- older case of the same customer. `case_link_state` is `pending` until that
+  -- decision is made, once, and `decided` after.
+  case_id uuid not null references public.cases(id) on delete restrict,
+  case_link_state text not null default 'pending',
   subject text,
   status text not null default 'open',
 
@@ -164,6 +270,7 @@ create table public.tickets (
 
   constraint tickets_overrides_object_check check (jsonb_typeof(overrides) = 'object'),
   constraint tickets_shop_conversation_unique unique (shop_id, graph_conversation_id),
+  constraint tickets_case_link_state_check check (case_link_state in ('pending', 'decided')),
   constraint tickets_status_check check (
     status in (
       'open',
@@ -277,6 +384,13 @@ create table public.tickets (
 
 create index tickets_shop_status_idx on public.tickets (shop_id, status);
 
+-- Every thread of one case, and the linker's queue.
+create index tickets_case_idx on public.tickets (case_id);
+
+create index tickets_case_link_pending_idx
+  on public.tickets (shop_id)
+  where case_link_state = 'pending';
+
 -- The drafting queue's exclusion, and the "what was linked to this" read.
 create index tickets_duplicate_of_idx
   on public.tickets (duplicate_of_ticket_id)
@@ -332,10 +446,37 @@ before update on public.tickets
 for each row
 execute function public.set_updated_at();
 
+-- A TICKET INSERTED WITHOUT A CASE OPENS ONE. The worker creates the case
+-- itself (scripts/lib/case-record.mjs); this is the net under every other
+-- writer -- above all a worker still running code from before 61, whose
+-- inserts would otherwise fail the NOT NULL and stall ingestion. The thread
+-- stays `pending`, so the link pass still decides it.
+create or replace function public.tickets_open_case()
+returns trigger
+language plpgsql
+set search_path = public
+as $$
+begin
+  if new.case_id is null then insert into public.cases (shop_id) values (new.shop_id) returning id into new.case_id; end if;
+  return new;
+end;
+$$;
+
+create trigger tickets_open_case
+before insert on public.tickets
+for each row
+execute function public.tickets_open_case();
+
 alter table public.tickets enable row level security;
 
 comment on table public.tickets is
   'Support conversations for the agent email workflow. One ticket per Microsoft Graph conversationId; the categorising agent fills category, request_kind, level, responsible_team, and the resolved Shopify order number. Access through the service-role worker only until dashboard roles and policies are implemented.';
+
+comment on column public.tickets.case_id is
+  'The case this thread belongs to. A new conversation opens its own case; the case linker (agent/src/cases/) may move the thread into an older case of the same customer, recorded in case_links. Threads are never merged: several tickets share a case_id.';
+
+comment on column public.tickets.case_link_state is
+  'pending until the case linker has decided, once, whether this thread continues an older case; decided after. Tickets that predate cases were marked decided by 61_cases.sql.';
 
 comment on column public.tickets.duplicate_of_ticket_id is
   'The ticket this one duplicates, set by deterministic rules only: an identical body from the same sender within an hour, or an RFC reply chain pointing at a message already stored. LINKED, NEVER MERGED -- both threads stay whole and a person decides. The drafting queue skips a linked ticket, which is what stops one customer receiving two replies.';
@@ -1423,6 +1564,58 @@ comment on column public.ticket_snoozes.wake_at is
 comment on column public.ticket_snoozes.wake_reason is
   'Why it came back: a new message by actor, the deadline, a person, the case moving to us (case_changed) or to nobody (resolved), or an order update.';
 
+-- ---------------------------------------------------------------- case_links
+
+-- EVERY CASE-LINKING DECISION, append-only: which thread, from which case to
+-- which, by what rule, and what the candidates were. A new case is a decision
+-- too and is recorded, so « why was this not linked » has an answer. The
+-- model's raw answer is kept when one was asked.
+create table public.case_links (
+  id uuid primary key default gen_random_uuid(),
+  shop_id uuid not null references public.shops(id) on delete cascade,
+  ticket_id uuid not null references public.tickets(id) on delete cascade,
+  -- The case the thread was in before, and the one it is in after. Equal for a
+  -- new case. Not foreign keys: an emptied case is deleted and its id stays
+  -- here as history.
+  from_case_id uuid not null,
+  to_case_id uuid not null,
+  decision text not null,
+  method text not null,
+  -- [{ case_id, reasons: [...] }] as retrieved. Ids and reasons only, no text.
+  candidates jsonb not null default '[]'::jsonb,
+  model text,
+  model_answer text,
+  decided_at timestamptz not null default now(),
+
+  constraint case_links_decision_check check (decision in ('link', 'new_case')),
+  constraint case_links_method_check check (
+    method in (
+      'first_contact',
+      'reply_chain',
+      'identical_body',
+      'tracking',
+      'order_family',
+      'unique_match',
+      'model',
+      'model_off',
+      'no_candidates',
+      'excluded_sender',
+      'backfill'
+    )
+  ),
+  constraint case_links_candidates_array_check check (jsonb_typeof(candidates) = 'array'),
+  constraint case_links_shape_check check ((decision = 'link') = (from_case_id <> to_case_id))
+);
+
+create index case_links_ticket_idx on public.case_links (ticket_id, decided_at desc);
+
+alter table public.case_links enable row level security;
+
+comment on table public.case_links is
+  'Append-only: every case-linking decision, a new case included, with the rule (method) and the candidates considered. Written only by scripts/lib/case-record.mjs.';
+comment on column public.case_links.method is
+  'first_contact (no other case for this customer) · reply_chain / identical_body (the duplicate rules) · tracking / order_family / unique_match (deterministic identifiers) · model (the Case Linker chose) · model_off (ambiguous, model switched off, so a new case) · no_candidates · excluded_sender (a listed sender or one of our own threads) · backfill (61_cases.sql).';
+
 -- ---------------------------------------------------------------- ticket_overrides
 --
 -- 48_ticket_overrides.sql carries a populated database to it; 48's test asserts
@@ -1775,7 +1968,7 @@ create table public.agent_models (
   updated_at timestamptz not null default now(),
   primary key (shop_id, agent),
   constraint agent_models_agent_check check (
-    agent in ('spam', 'categorise', 'situation', 'decompose', 'investigate', 'draft', 'chat')
+    agent in ('spam', 'categorise', 'situation', 'decompose', 'investigate', 'draft', 'chat', 'case_link')
   ),
   constraint agent_models_model_check check (model ~ '^[A-Za-z0-9][A-Za-z0-9._:-]{0,99}$')
 );
@@ -2271,6 +2464,124 @@ revoke all on public.ticket_first_inbound from anon, authenticated;
 comment on view public.ticket_first_inbound is
   'One row per ticket: its earliest inbound message, already stripped of quoted reply chains by ingestion. Read by order resolution, which needs the customer''s own words rather than the thread.';
 
+-- -------------------------------------------------------- case_message_counts
+
+-- ticket_message_counts, one level up: every message of every live thread of a
+-- case. What the queue's priority reads once a case spans several threads --
+-- a customer who wrote twice on two threads has written four times, not twice.
+create view public.case_message_counts
+with (security_invoker = true) as
+  select
+    t.shop_id as shop_id,
+    t.case_id as case_id,
+    count(distinct t.id) as thread_count,
+    count(m.id) as message_count,
+    count(m.id) filter (where m.direction = 'inbound') as inbound_count,
+    max(m.received_at) filter (where m.direction = 'inbound') as latest_inbound_at,
+    max(m.sent_at) filter (where m.direction = 'outbound') as latest_outbound_at,
+    max(t.last_message_at) as last_activity_at
+  from public.tickets t
+  left join public.ticket_messages m on m.ticket_id = t.id and m.deleted_at is null
+  where t.deleted_at is null
+  group by t.shop_id, t.case_id;
+
+revoke all on public.case_message_counts from anon, authenticated;
+
+comment on view public.case_message_counts is
+  'Message counts and inbound/outbound activity per case, over every live thread in it, soft-deleted messages excluded. The case-level twin of ticket_message_counts, read by the queue''s priority.';
+
+-- ------------------------------------------------------------------ case_facts
+
+-- ONE ROW PER CASE, for everything that counts cases rather than threads: the
+-- queue's case columns and the Insights support figures. The rules for folding
+-- several threads into one row live here, once:
+--   what it is about   the EARLIEST thread's labels (what the customer first
+--                      came about -- the situation is matched on the opening
+--                      message for the same reason)
+--   how serious, how   the highest level and the worst mood of any thread
+--   unhappy
+--   status             awaiting_human if any thread is; resolved/closed only
+--                      when every thread is; otherwise the most recently
+--                      active open thread's
+--   lead               the reply thread when it is live, else the most
+--                      recently active thread
+--   first reply        the case's first inbound message to our first outbound
+--                      after it, on any thread
+create view public.case_facts
+with (security_invoker = true) as
+  select
+    k.id as case_id,
+    k.shop_id as shop_id,
+    case when a.has_reply_thread then k.reply_thread_id else a.latest_ticket_id end as lead_ticket_id,
+    a.thread_count as thread_count,
+    a.category as category,
+    a.secondary_category as secondary_category,
+    a.request_kind as request_kind,
+    a.level as level,
+    a.happiness as happiness,
+    case
+      when a.any_awaiting_human then 'awaiting_human'
+      when a.all_finished then case when a.any_resolved then 'resolved' else 'closed' end
+      else coalesce(a.open_status, 'open')
+    end as status,
+    a.customer_id as customer_id,
+    a.shopify_order_number as shopify_order_number,
+    a.first_message_at as first_message_at,
+    a.last_message_at as last_message_at,
+    fi.first_inbound_at as first_inbound_at,
+    o.first_outbound_at as first_outbound_at,
+    extract(epoch from (o.first_outbound_at - fi.first_inbound_at)) / 3600.0 as reply_hours
+  from public.cases k
+  join lateral (
+    select
+      count(*) as thread_count,
+      coalesce(bool_or(t.id = k.reply_thread_id), false) as has_reply_thread,
+      (array_agg(t.id order by t.last_message_at desc nulls last))[1] as latest_ticket_id,
+      (array_agg(t.category order by t.first_message_at asc nulls last))[1] as category,
+      (array_agg(t.secondary_category order by t.first_message_at asc nulls last))[1] as secondary_category,
+      (array_agg(t.request_kind order by t.first_message_at asc nulls last))[1] as request_kind,
+      max(t.level) as level,
+      max(t.happiness) as happiness,
+      bool_or(t.status = 'awaiting_human') as any_awaiting_human,
+      bool_and(t.status in ('resolved', 'closed')) as all_finished,
+      bool_or(t.status = 'resolved') as any_resolved,
+      (array_agg(t.status order by t.last_message_at desc nulls last)
+        filter (where t.status not in ('resolved', 'closed')))[1] as open_status,
+      (array_agg(t.customer_id order by (t.id = k.reply_thread_id) desc nulls last, t.last_message_at desc nulls last)
+        filter (where t.customer_id is not null))[1] as customer_id,
+      (array_agg(t.shopify_order_number order by (t.id = k.reply_thread_id) desc nulls last, t.last_message_at desc nulls last)
+        filter (where t.shopify_order_number is not null))[1] as shopify_order_number,
+      min(t.first_message_at) as first_message_at,
+      max(t.last_message_at) as last_message_at
+    from public.tickets t
+    where t.case_id = k.id
+      and t.deleted_at is null
+  ) a on a.thread_count > 0
+  left join lateral (
+    select min(m.received_at) as first_inbound_at
+    from public.ticket_messages m
+    join public.tickets t on t.id = m.ticket_id
+    where t.case_id = k.id
+      and t.deleted_at is null
+      and m.direction = 'inbound'
+      and m.deleted_at is null
+  ) fi on true
+  left join lateral (
+    select min(coalesce(m.sent_at, m.received_at)) as first_outbound_at
+    from public.ticket_messages m
+    join public.tickets t on t.id = m.ticket_id
+    where t.case_id = k.id
+      and t.deleted_at is null
+      and m.direction = 'outbound'
+      and m.deleted_at is null
+      and coalesce(m.sent_at, m.received_at) > fi.first_inbound_at
+  ) o on true;
+
+revoke all on public.case_facts from anon, authenticated;
+
+comment on view public.case_facts is
+  'One row per case with at least one live thread: the earliest thread''s subject, the highest level and worst mood of any thread, a status folded across threads, the lead thread (the reply thread, else the most recently active), and the case''s first-reply time across threads. Read by the queue and by the Insights support figures, which count cases.';
+
 -- -------------------------------------------------------------- ticket_queue
 
 -- The dashboard queue, as one row per ticket.
@@ -2340,11 +2651,30 @@ with (security_invoker = true) as
     -- A person's corrections (48_ticket_overrides.sql): the queue marks an
     -- overridden row and pins a priority band a person chose. Appended last for
     -- the reason above.
-    t.overrides as overrides
+    t.overrides as overrides,
+    -- THE CASE (61_cases.sql), appended for the same reason. The queue shows
+    -- one row per case, its lead thread, and ranks it on the case's facts:
+    -- every customer message on every thread, the case's unanswered wait, the
+    -- highest level and the folded status.
+    t.case_id as case_id,
+    coalesce(cf.lead_ticket_id = t.id, true) as is_case_lead,
+    coalesce(cn.thread_count, 1) as case_thread_count,
+    coalesce(cn.message_count, 0) as case_message_count,
+    coalesce(cn.inbound_count, 0) as case_inbound_count,
+    case
+      when cn.latest_inbound_at is not null
+        and (cn.latest_outbound_at is null or cn.latest_inbound_at > cn.latest_outbound_at)
+      then cn.latest_inbound_at
+      else null
+    end as case_waiting_since,
+    cf.level as case_level,
+    cf.status as case_status
   from public.tickets t
   left join public.customers c on c.id = t.customer_id
   left join public.ticket_message_counts n on n.ticket_id = t.id
   left join public.ticket_first_inbound f on f.ticket_id = t.id
+  left join public.case_message_counts cn on cn.case_id = t.case_id
+  left join public.case_facts cf on cf.case_id = t.case_id
   where t.deleted_at is null;
 
 revoke all on public.ticket_queue from anon, authenticated;

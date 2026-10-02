@@ -45,59 +45,10 @@ const PRESET_SHAPE = {
 const MAX_CUSTOM_DAYS = 366 * 5;
 
 // --- platforms --------------------------------------------------------------
-
-/**
- * Which sales channel handles make up each platform.
- *
- * A BUSINESS JUDGEMENT, SO IT LIVES HERE AND NOT IN SQL. Yves Rocher is not a
- * handle at all: it is the Mirakl Connect channel (`connect-dev-1`), and every
- * one of its orders is tagged `Yves Rocher FR`. Shopify is defined as every
- * channel that is NOT a marketplace — the online store, draft orders and the Shop
- * app — so a new first-party channel lands in Shopify rather than in nothing.
- */
-export const MARKETPLACE_CHANNELS = Object.freeze({
-  amazon: Object.freeze(['amazon']),
-  yves_rocher: Object.freeze(['connect-dev-1'])
-});
-
-const ALL_MARKETPLACE_HANDLES = Object.freeze(Object.values(MARKETPLACE_CHANNELS).flat());
-
-export const PLATFORMS = Object.freeze([
-  { id: 'all', label: 'All platforms' },
-  { id: 'shopify', label: 'Shopify' },
-  { id: 'amazon', label: 'Amazon' },
-  { id: 'yves_rocher', label: 'Yves Rocher' }
-]);
-
-export const DEFAULT_PLATFORM = 'all';
-
-/** The channel arguments the ranged SQL functions take, for one platform. */
-export function channelFilter(platform) {
-  if (platform === 'amazon' || platform === 'yves_rocher') {
-    return { channels: [...MARKETPLACE_CHANNELS[platform]], notChannels: null };
-  }
-  if (platform === 'shopify') return { channels: null, notChannels: [...ALL_MARKETPLACE_HANDLES] };
-  return { channels: null, notChannels: null };
-}
-
-/** The platform a channel handle belongs to. */
-export function platformOfChannel(handle) {
-  for (const [platform, handles] of Object.entries(MARKETPLACE_CHANNELS)) {
-    if (handles.includes(handle)) return platform;
-  }
-  return 'shopify';
-}
-
-/** True for a platform whose buyers are minted one customer per order. */
-export function isMarketplacePlatform(platform) {
-  return platform === 'amazon' || platform === 'yves_rocher';
-}
-
-export { ALL_MARKETPLACE_HANDLES };
-
-export function parsePlatform(value) {
-  return PLATFORMS.some((p) => p.id === value) ? value : DEFAULT_PLATFORM;
-}
+//
+// The marketplaces and the platform filter moved to `marketplaces.mjs`, read
+// from `sales_channels` (migration 60). They were constants here naming this
+// shop's two marketplaces.
 
 // --- wall-clock arithmetic ----------------------------------------------------
 

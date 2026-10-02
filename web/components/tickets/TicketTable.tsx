@@ -210,6 +210,22 @@ export function TicketTable({
                           open it. Which ticket it duplicates is a question
                           answered by opening it — the row only needs to say
                           "not this one". */}
+                      {/* A case of several threads (61_cases.sql): the lead row
+                          says how many; another thread of it says it is not
+                          where the reply goes. */}
+                      {ticket.isCaseLead && ticket.caseThreadCount > 1 && (
+                        <span
+                          className={styles.duplicateChip}
+                          title={t("tickets.dialogs.table.caseThreadsHint", { n: ticket.caseThreadCount })}
+                        >
+                          {t("tickets.dialogs.table.caseThreads", { n: ticket.caseThreadCount })}
+                        </span>
+                      )}
+                      {!ticket.isCaseLead && (
+                        <span className={styles.duplicateChip} title={t("tickets.dialogs.table.linkedThreadHint")}>
+                          {t("tickets.dialogs.table.linkedThread")}
+                        </span>
+                      )}
                       {ticket.isDuplicate && (
                         <span
                           className={styles.duplicateChip}

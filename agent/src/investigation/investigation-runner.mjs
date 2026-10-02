@@ -117,7 +117,10 @@ export async function runInvestigation({
   // reason: a small map, and rebuilding it per ticket turns a lookup into a
   // query. Absent by default, which resolves every parameter to null and every
   // state that depends on one to `unknown`.
-  parameters = new Map()
+  parameters = new Map(),
+  // The case record (scripts/lib/case-record.mjs). OPTIONAL: without it each
+  // thread is investigated on its own, exactly as before cases existed.
+  cases = null
 } = {}) {
   const counts = {
     considered: 0,
@@ -157,16 +160,37 @@ export async function runInvestigation({
     // message. The situation was then matched, and the retailer check run,
     // against a mid-thread reply. The model's text is still bounded, by
     // `renderConversation`'s character budget, newest first.
-    const conversation = await record.conversation(ticket.id, {
-      columns: COLUMNS.threadForInvestigation
-    });
+    //
+    // THE WHOLE CASE, when the thread belongs to one with several threads
+    // (61_cases.sql). A customer who writes « toujours rien » on a new thread is
+    // investigated with the first thread's history in front of the model. Only
+    // the TEXT widens: the inbound subset below stays this thread's own, so the
+    // situation match, the trigger message and the clock are unchanged.
+    //
+    // ONE THREAD OF A CASE IS INVESTIGATED: the one the case's reply goes to.
+    // Another thread of the same case is skipped, as a duplicate was, because
+    // its case file would be about a message nobody will answer.
+    const caseRow = cases && ticket.case_id ? await cases.find(ticket.case_id) : null;
+    if (caseRow?.reply_thread_id && caseRow.reply_thread_id !== ticket.id) {
+      if (!dryRun) {
+        await record.skip('investigation', ticket.id);
+      }
+      counts.skipped += 1;
+      logger?.info?.('investigate.not_reply_thread', { ticketId: ticket.id, caseId: ticket.case_id });
+      continue;
+    }
+    const conversation = caseRow
+      ? await cases.conversation(ticket.case_id, { columns: COLUMNS.threadForInvestigation })
+      : await record.conversation(ticket.id, { columns: COLUMNS.threadForInvestigation });
     // `!== 'outbound'` rather than `=== 'inbound'`, because of how the two fail.
     // A row whose direction did not travel — a projection that lost the column,
     // a caller wiring its own read — stays in the inbound set, and the pass
     // degrades to exactly the behaviour it had before it could see our replies.
     // The strict test would empty the set instead and skip the ticket, which is
     // a customer's mail disappearing to fix a column.
-    const messages = conversation.filter((message) => message.direction !== 'outbound');
+    const messages = conversation.filter(
+      (message) => message.direction !== 'outbound' && (!message.ticket_id || message.ticket_id === ticket.id)
+    );
     if (messages.length === 0) {
       if (!dryRun) {
         await record.skip('investigation', ticket.id);
@@ -509,6 +533,18 @@ const STAMP = (timeZone) =>
 // the label rather than a separate block, so each message's text appears once.
 export const LATEST_MARK = 'DERNIER MESSAGE DU FIL';
 export const LATEST_CUSTOMER_MARK = 'DERNIER MESSAGE DU CLIENT';
+/**
+ * A message from ANOTHER thread of the same case (61_cases.sql). The case is
+ * one transcript, in email-time order; the mark keeps two conversations from
+ * reading as one, and names the other thread by its subject.
+ */
+export const OTHER_THREAD_MARK = 'AUTRE FIL DU DOSSIER';
+
+function threadMark(message, ticketId) {
+  if (!ticketId || !message?.ticket_id || message.ticket_id === ticketId) return null;
+  const subject = String(message.subject ?? '').trim();
+  return subject ? `${OTHER_THREAD_MARK} : « ${subject.slice(0, 80)} »` : OTHER_THREAD_MARK;
+}
 
 // WHO SPOKE, from the directory rather than from the direction. Rendering every
 // inbound message as « client » put a colleague's note and the 3PL's status
@@ -553,7 +589,7 @@ function transcriptLabel(message, senderDirectory, { timeZone, mark = null } = {
  * `kind` tells the prompt which heading fits: `single_customer` (the 133-in-172
  * case, rendered bare as before), `single_other`, or `thread`.
  */
-function renderConversation(conversation, inbound, senderDirectory, { timeZone = 'UTC' } = {}) {
+function renderConversation(conversation, inbound, senderDirectory, { timeZone = 'UTC', ticketId = null } = {}) {
   const rows = conversation?.length > 0 ? conversation : inbound;
   const parts = rows.map((message) => ({ message, ...splitQuotedReply(message?.body_text || '') }));
 
@@ -607,7 +643,8 @@ function renderConversation(conversation, inbound, senderDirectory, { timeZone =
   const bodies = new Map();
   for (const index of order) {
     const part = spoken[index];
-    const head = `${transcriptLabel(part.message, senderDirectory, { timeZone, mark: marks.get(index) })}\n`;
+    const mark = [marks.get(index), threadMark(part.message, ticketId)].filter(Boolean).join(' — ') || null;
+    const head = `${transcriptLabel(part.message, senderDirectory, { timeZone, mark })}\n`;
     const overhead = head.length + SEPARATOR.length;
     // A label with nothing under it tells the model less than an honest count of
     // what it cannot see, so a message that cannot fit its own header is dropped
@@ -653,7 +690,7 @@ function buildInput(
 ) {
   const first = messages[0];
   const latest = messages.length > 1 ? messages[messages.length - 1] : null;
-  const { text, quotedText, kind } = renderConversation(conversation, messages, senderDirectory, { timeZone });
+  const { text, quotedText, kind } = renderConversation(conversation, messages, senderDirectory, { timeZone, ticketId: ticket?.id ?? null });
 
   return {
     id: ticket.id,

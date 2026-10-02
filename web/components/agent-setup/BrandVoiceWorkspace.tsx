@@ -9,6 +9,7 @@ import { WorkspaceHeader } from "./WorkspaceHeader";
 import { EditorFooter } from "./EditorFooter";
 import { LockIcon } from "@/components/icons";
 import { useT } from "@/lib/i18n/client";
+import { shopLabel, useShop } from "@/lib/shop-context";
 import styles from "./ArticleWorkspace.module.css";
 import voiceStyles from "./BrandVoiceWorkspace.module.css";
 
@@ -68,6 +69,7 @@ export function BrandVoiceWorkspace({
   onDelete,
 }: BrandVoiceWorkspaceProps) {
   const t = useT();
+  const shop = useShop();
   const voiceProfile = article.voiceProfile ?? EMPTY_VOICE_PROFILE;
 
   return (
@@ -153,7 +155,7 @@ export function BrandVoiceWorkspace({
             className={voiceStyles.voiceTextarea}
             value={voiceProfile.signature}
             onChange={(e) => onSignatureChange(e.target.value)}
-            placeholder={"Bien cordialement,\nLe service client Qiriness"}
+            placeholder={`Bien cordialement,\nLe service client ${shopLabel(shop)}`}
             rows={3}
             aria-label={t("setup.brand.signature")}
           />

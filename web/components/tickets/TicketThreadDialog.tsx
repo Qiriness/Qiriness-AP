@@ -135,7 +135,25 @@ export function TicketThreadDialog({ ticket, onClose }: TicketThreadDialogProps)
         {/* Below the duplicate banner and visually calmer than it, because the
             two say opposite things: that one means do not act, this one means
             read the earlier thread first. Never suppresses the draft. */}
-        {thread?.relatedTo && !thread?.duplicateOf && (
+        {/* THE CASE'S THREADS (61_cases.sql): every thread the customer wrote
+            about this problem on, and which one the reply goes to. Replaces the
+            related line, which said the same thing about one earlier thread. */}
+        {thread?.case && (
+          <div className={styles.related}>
+            <strong>{t("tickets.dialogs.thread.caseHeading")}</strong>
+            <ul>
+              {thread.case.threads.map((row) => (
+                <li key={row.ticketId}>
+                  « {row.subject ?? "—"} » · {row.firstMessageAt?.slice(0, 10) ?? "—"}
+                  {row.isThisThread ? ` · ${t("tickets.dialogs.thread.caseThis")}` : ""}
+                  {row.isReplyThread ? ` · ${t("tickets.dialogs.thread.caseReply")}` : ""}
+                  {row.linkedBy ? ` · ${t("tickets.dialogs.thread.caseLinkedBy", { method: row.linkedBy })}` : ""}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+        {thread?.relatedTo && !thread?.case && !thread?.duplicateOf && (
           <p className={styles.related}>
             {t("tickets.dialogs.thread.related")}
           </p>
@@ -343,7 +361,7 @@ function senderIdentity(message: TicketMessage, outbound: boolean, t: Translate)
   const email = message.fromEmail?.trim() ?? "";
 
   // Nothing at all: the direction is the only thing left to say who this was.
-  if (!name && !email) return { name: outbound ? "Qiriness" : t("tickets.panels.unknownSender"), email: null };
+  if (!name && !email) return { name: outbound ? t("tickets.panels.role.qiriness") : t("tickets.panels.unknownSender"), email: null };
   // The address is the identity — as a name on its own, not repeated beside it.
   if (!name) return { name: email, email: null };
   if (!email) return { name, email: null };

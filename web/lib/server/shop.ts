@@ -23,6 +23,8 @@ export interface ShopRow {
   ianaTimezone: string | null;
   /** Shopify's shop name, null until the first shop sync. Signs the forwarding acknowledgement. */
   shopName: string | null;
+  /** Where customers go (Shopify's primary domain), null until the first shop sync. */
+  storefrontUrl: string | null;
 }
 
 const TTL_MS = 5 * 60 * 1000;
@@ -54,8 +56,15 @@ async function readShop(): Promise<ShopRow | null> {
     createSupabaseClient(config),
     T.SHOPS,
     { shop_domain: config.shopDomain },
-    "id,iana_timezone,shop_name"
-  )) as { id: string; iana_timezone: string | null; shop_name: string | null }[];
+    "id,iana_timezone,shop_name,storefront_url"
+  )) as { id: string; iana_timezone: string | null; shop_name: string | null; storefront_url: string | null }[];
   const row = rows?.[0];
-  return row?.id ? { id: row.id, ianaTimezone: row.iana_timezone ?? null, shopName: row.shop_name ?? null } : null;
+  return row?.id
+    ? {
+        id: row.id,
+        ianaTimezone: row.iana_timezone ?? null,
+        shopName: row.shop_name ?? null,
+        storefrontUrl: row.storefront_url ?? null
+      }
+    : null;
 }

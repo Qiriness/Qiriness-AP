@@ -145,9 +145,11 @@ function report(overrides = {}) {
 }
 
 test('the report is one self-contained HTML document', () => {
-  const html = renderSalesReport(report());
+  const html = renderSalesReport({ ...report(), companyName: 'Boutique Exemple' });
   assert.match(html, /^<!doctype html>/);
-  assert.match(html, /<title>Qiriness — Sales report, August 2026<\/title>/);
+  // The shop's name, from the data: it was a literal.
+  assert.match(html, /<title>Boutique Exemple — Sales report, August 2026<\/title>/);
+  assert.doesNotMatch(renderSalesReport(report()), /Qiriness/);
   // Nothing loaded from anywhere: it has to open from an email attachment.
   assert.doesNotMatch(html, /<script src|<link |https?:\/\//);
   // And no script at all: a phone's attachment preview runs none, so every

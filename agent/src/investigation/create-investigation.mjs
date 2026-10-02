@@ -63,7 +63,9 @@ export function createInvestigationStack({
   openai: injectedOpenAI = null,
   embeddingsClient: injectedEmbeddings = null,
   // Passed straight through to the investigator. See `investigate.mjs`.
-  onToolCall = null
+  onToolCall = null,
+  // { name, description } from `loadCompany`, for the first line of the prompt.
+  company = null
 } = {}) {
   if (!config?.openaiApiKey) {
     return null;
@@ -164,6 +166,7 @@ export function createInvestigationStack({
   };
 
   const { investigate } = createInvestigator(openai, registry, {
+    company,
     model: config.investigatorModel,
     maxToolCalls: config.investigationMaxToolCalls,
     maxTurns: config.investigationMaxTurns,

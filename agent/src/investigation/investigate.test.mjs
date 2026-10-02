@@ -1400,3 +1400,19 @@ test('the text is headed by what it is: a customer message, someone else’s, or
   assert.match(thread, /DERNIER MESSAGE DU CLIENT/);
   assert.doesNotMatch(thread, /Message du client :/);
 });
+
+test('the instructions name the shop from its data, never a company written in code', async () => {
+  const run = async (company) => {
+    const registry = buildRegistry({
+      [TOOL_NAMES.LOOKUP_PRODUCT]: async () => OK_RESULT,
+      [TOOL_NAMES.SEARCH_KNOWLEDGE]: async () => OK_RESULT
+    });
+    const openai = buildOpenAI([{ content: caseFileAnswer() }]);
+    const { investigate } = createInvestigator(openai, registry, { model: 'm', company });
+    await investigate(PRODUCT_TICKET);
+    return openai.sent[0].system;
+  };
+  const named = await run({ name: 'Boutique Exemple', description: 'une marque de bougies' });
+  assert.match(named, /^Tu es l'agent d'enquête du service client de Boutique Exemple, une marque de bougies\./);
+  assert.doesNotMatch(await run(null), /Qiriness/);
+});

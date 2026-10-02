@@ -5,7 +5,7 @@ import type { SearchParams } from "@/lib/server/insights/context";
 
 export const dynamic = "force-dynamic";
 
-export const metadata = { title: "AI agent · Insights · Qiriness Support OS" };
+export const metadata = { title: "AI agent · Insights" };
 
 export default function AgentInsightsPage({ searchParams }: { searchParams: SearchParams }) {
   return (

@@ -103,6 +103,12 @@ export function loadAgentConfig(env = loadEnv(REPO_ROOT)) {
     // the message beside the candidates — a constrained 1-of-3-or-none, the cheap
     // tier's job. Set to an empty string to turn it off: near misses then keep no
     // situation, which is what they did before it existed.
+    // The Case Linker: picks one of a few candidate cases, or none, for a thread
+    // the deterministic rules could not place. A constrained 1-of-n, the cheap
+    // tier. OFF unless CASE_LINKER_ENABLED=true: until it is on, an ambiguous
+    // thread opens a new case and its candidates are logged (DECISIONS § Cases).
+    caseLinkerModel: env.AGENT_CASE_LINK_MODEL || 'gpt-4o-mini',
+    caseLinkerEnabled: env.CASE_LINKER_ENABLED === 'true',
     situationChooserModel:
       env.AGENT_SITUATION_CHOOSER_MODEL === undefined ? 'gpt-4o-mini' : env.AGENT_SITUATION_CHOOSER_MODEL,
     // Investigation is the first stage that CHOOSES what to do, so it is the

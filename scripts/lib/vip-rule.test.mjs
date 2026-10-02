@@ -38,8 +38,11 @@ test('the sentence states both conditions and the window', () => {
   assert.equal(describeVipRule(null), 'No VIP rule is set');
 });
 
-test('every VIP read leaves out the marketplaces', () => {
-  const args = vipArgs('shop-1', { minSpend: 300, minOrders: 2, windowMonths: 12 });
-  assert.deepEqual(args.p_not_channels, ['amazon', 'connect-dev-1']);
+test('every VIP read leaves out the shop’s marketplaces, and only those', () => {
+  // The handles are the shop's (`sales_channels`, read by the loaders below).
+  const args = vipArgs('shop-1', { minSpend: 300, minOrders: 2, windowMonths: 12 }, ['market-a', 'connect-b']);
+  assert.deepEqual(args.p_not_channels, ['market-a', 'connect-b']);
   assert.equal(args.p_min_orders, 2);
+  // A shop with no marketplaces excludes nothing.
+  assert.deepEqual(vipArgs('shop-1', { minSpend: 300, minOrders: 2, windowMonths: 12 }).p_not_channels, []);
 });

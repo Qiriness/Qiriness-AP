@@ -2,6 +2,14 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { resolveRange } from './insights-range.mjs';
+import { buildMarketplaces } from './marketplaces.mjs';
+
+// The rows below are real ShopifyQL output, so the marketplaces carry the names
+// Shopify Analytics gives them. Configured in Setup -> Sales channels.
+const MARKETPLACES = buildMarketplaces([
+  { platform_key: 'amazon', label: 'Amazon', handles: ['amazon'], analytics_names: ['marketplace connect'], position: 0 },
+  { platform_key: 'yves_rocher', label: 'Yves Rocher', handles: ['connect-dev-1'], analytics_names: ['mirakl connect'], position: 1 }
+]);
 import {
   bucketKeyOf,
   handleFromPath,
@@ -232,7 +240,7 @@ test('the money ladder folds onto the platform filter, and AOV is recomputed not
     { sales_channel: 'Mirakl Connect', gross_sales: '29.9', discounts: '0', returns: '0', net_sales: '29.9', taxes: '0', total_sales: '29.9', orders: '1', average_order_value: '29.9' }
   ];
 
-  const all = foldSalesLadder(rows, 'all');
+  const all = foldSalesLadder(rows, 'all', MARKETPLACES);
   assert.equal(Math.round(all.totalSales * 100) / 100, 10242.28);
   assert.equal(all.orders, 152);
   // Shopify's own AOV, weighted by each channel's orders — 53.88 in the admin.
@@ -240,14 +248,14 @@ test('the money ladder folds onto the platform filter, and AOV is recomputed not
   // Discounts and returns arrive negative and are kept as magnitudes.
   assert.ok(all.discounts > 0);
 
-  const shopify = foldSalesLadder(rows, 'shopify');
+  const shopify = foldSalesLadder(rows, 'shopify', MARKETPLACES);
   assert.equal(shopify.totalSales, 9900.44);
   assert.equal(shopify.orders, 142);
-  const amazon = foldSalesLadder(rows, 'amazon');
+  const amazon = foldSalesLadder(rows, 'amazon', MARKETPLACES);
   assert.equal(amazon.totalSales, 311.94);
-  assert.equal(foldSalesLadder(rows, 'yves_rocher').totalSales, 29.9);
+  assert.equal(foldSalesLadder(rows, 'yves_rocher', MARKETPLACES).totalSales, 29.9);
   // Nothing on that platform is null, never a ladder of zeros.
-  assert.equal(foldSalesLadder([], 'all'), null);
+  assert.equal(foldSalesLadder([], 'all', MARKETPLACES), null);
 });
 
 test("AOV is Shopify's column weighted by orders, which is not always (gross - discounts) / orders", () => {
@@ -256,11 +264,11 @@ test("AOV is Shopify's column weighted by orders, which is not always (gross - d
     { sales_channel: 'Online Store', gross_sales: '1000', discounts: '-100', orders: '10', average_order_value: '89' },
     { sales_channel: 'Mirakl Connect', gross_sales: '50', discounts: '0', orders: '2', average_order_value: '25' }
   ];
-  assert.equal(foldSalesLadder(rows, 'all').averageOrderValue, (89 * 10 + 25 * 2) / 12);
-  assert.equal(foldSalesLadder(rows, 'shopify').averageOrderValue, 89);
+  assert.equal(foldSalesLadder(rows, 'all', MARKETPLACES).averageOrderValue, (89 * 10 + 25 * 2) / 12);
+  assert.equal(foldSalesLadder(rows, 'shopify', MARKETPLACES).averageOrderValue, 89);
   // Without the column, the formula is the fallback.
   const bare = rows.map(({ average_order_value, ...rest }) => rest);
-  assert.equal(foldSalesLadder(bare, 'all').averageOrderValue, (1050 - 100) / 12);
+  assert.equal(foldSalesLadder(bare, 'all', MARKETPLACES).averageOrderValue, (1050 - 100) / 12);
 });
 
 test('a window that is not whole days is stated to the second, on the shop clock', () => {
@@ -279,12 +287,12 @@ test('a window that is not whole days is stated to the second, on the shop clock
 });
 
 test('a channel nobody has mapped counts as Shopify, as the handle rule does', () => {
-  assert.equal(platformOfSalesChannel('Online Store'), 'shopify');
-  assert.equal(platformOfSalesChannel('Point of Sale'), 'shopify');
-  assert.equal(platformOfSalesChannel('Draft Orders'), 'shopify');
-  assert.equal(platformOfSalesChannel('Marketplace Connect'), 'amazon');
-  assert.equal(platformOfSalesChannel('mirakl connect'), 'yves_rocher');
-  assert.equal(platformOfSalesChannel(null), 'shopify');
+  assert.equal(platformOfSalesChannel('Online Store', MARKETPLACES), 'shopify');
+  assert.equal(platformOfSalesChannel('Point of Sale', MARKETPLACES), 'shopify');
+  assert.equal(platformOfSalesChannel('Draft Orders', MARKETPLACES), 'shopify');
+  assert.equal(platformOfSalesChannel('Marketplace Connect', MARKETPLACES), 'amazon');
+  assert.equal(platformOfSalesChannel('mirakl connect', MARKETPLACES), 'yves_rocher');
+  assert.equal(platformOfSalesChannel(null, MARKETPLACES), 'shopify');
 });
 
 test('landing pages are typed by Shopify, not matched on URL strings', () => {
@@ -357,7 +365,7 @@ test("the sales series folds onto the platform, and a bucket's AOV is Shopify's 
     // An empty bucket comes back with a null channel and a null AOV.
     { day: '2026-09-19', sales_channel: null, net_sales: '0', orders: '0', average_order_value: null }
   ];
-  const all = foldSalesSeries(rows, range, 'all');
+  const all = foldSalesSeries(rows, range, 'all', MARKETPLACES);
   assert.equal(all.netSales.get('2026-09-18T00:00:00'), 379.54 + 29.9);
   assert.equal(all.orders.get('2026-09-18T00:00:00'), 5);
   assert.equal(all.aov.get('2026-09-18T00:00:00'), (94.885 * 4 + 29.9) / 5);
@@ -365,7 +373,7 @@ test("the sales series folds onto the platform, and a bucket's AOV is Shopify's 
   assert.equal(all.aov.has('2026-09-19T00:00:00'), false);
   assert.equal(all.netSales.get('2026-09-19T00:00:00'), 0);
 
-  const shopify = foldSalesSeries(rows, range, 'shopify');
+  const shopify = foldSalesSeries(rows, range, 'shopify', MARKETPLACES);
   assert.equal(shopify.netSales.get('2026-09-18T00:00:00'), 379.54);
   assert.equal(shopify.aov.get('2026-09-18T00:00:00'), 94.885);
 });
@@ -375,7 +383,7 @@ test('the platform mix is Shopify net sales per platform, every platform whateve
     { sales_channel: 'Online Store', gross_sales: '100', discounts: '-10', returns: '0', net_sales: '90', taxes: '0', total_sales: '90', orders: '2', average_order_value: '45' },
     { sales_channel: 'Marketplace Connect', gross_sales: '40', discounts: '0', returns: '0', net_sales: '40', taxes: '0', total_sales: '40', orders: '1', average_order_value: '40' }
   ];
-  assert.deepEqual(platformMix(rows), [
+  assert.deepEqual(platformMix(rows, MARKETPLACES), [
     { platform: 'shopify', label: 'Shopify', netSales: 90, orders: 2 },
     { platform: 'amazon', label: 'Amazon', netSales: 40, orders: 1 },
     { platform: 'yves_rocher', label: 'Yves Rocher', netSales: 0, orders: 0 }

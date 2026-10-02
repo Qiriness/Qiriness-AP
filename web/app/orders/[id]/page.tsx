@@ -9,7 +9,7 @@ import type { OrderDetail } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
-export const metadata = { title: "Order · Qiriness Support OS" };
+export const metadata = { title: "Order" };
 
 /** Only our own ticket ids come back as a link, never an arbitrary destination. */
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

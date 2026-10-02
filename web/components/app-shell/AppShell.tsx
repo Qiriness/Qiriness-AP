@@ -8,6 +8,7 @@ import { Sidebar } from "./Sidebar";
 import { UserMenu, type Me } from "./UserMenu";
 import { HelpIcon } from "@/components/icons";
 import { useT } from "@/lib/i18n/client";
+import { shopLabel, useShop } from "@/lib/shop-context";
 import styles from "./AppShell.module.css";
 
 interface AppShellProps {
@@ -35,6 +36,7 @@ export function AppShell({ activeHref, children, openConversations, openTickets,
   const [me, setMe] = useState<Me | null>(null);
   const router = useRouter();
   const t = useT();
+  const shop = useShop();
   const [pending, startTransition] = useTransition();
   const [target, setTarget] = useState<{ href: string; label: string } | null>(null);
 
@@ -135,8 +137,8 @@ export function AppShell({ activeHref, children, openConversations, openTickets,
           </button>
 
           <Image
-            src="/brand/q-qiriness.png"
-            alt="Qiriness"
+            src="/brand/logo.png"
+            alt={shopLabel(shop)}
             width={28}
             height={28}
             className={styles.topbarBrand}

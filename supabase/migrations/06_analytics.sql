@@ -106,7 +106,7 @@ create table public.llm_usage (
   -- a check constraint cannot import a module, so 06_analytics.test.mjs is what
   -- stops the two drifting apart.
   constraint llm_usage_pass_check check (
-    pass in ('spam', 'categorise', 'decompose', 'situation', 'investigate', 'draft', 'embed', 'other')
+    pass in ('spam', 'categorise', 'decompose', 'situation', 'investigate', 'draft', 'embed', 'case_link', 'other')
   ),
   constraint llm_usage_input_tokens_check check (input_tokens >= 0),
   -- Deliberately NOT `<= input_tokens`. Usage is bookkeeping riding beside real
@@ -751,10 +751,14 @@ comment on view public.support_purchase_by_category is
 -- service; encoding it here would freeze a rule that changes with the business
 -- into a schema object, and would put a second definition of VIP in the codebase
 -- the first time it moved.
+--
+-- ONE ROW PER CASE, not per thread (61_cases.sql): a customer who wrote about
+-- one problem on two threads is one complaint. ticket_id is the case's lead
+-- thread, kept under its old name so the panel's contract does not move.
 create view public.customer_ticket_facts
 with (security_invoker = true) as
   select
-    t.id as ticket_id,
+    t.lead_ticket_id as ticket_id,
     t.shop_id as shop_id,
     t.category as category,
     t.level as level,
@@ -769,15 +773,14 @@ with (security_invoker = true) as
     c.last_order_at as last_order_at,
     c.on_email_marketing_list as on_email_marketing_list,
     c.default_address_country_code as country_code
-  from public.tickets t
+  from public.case_facts t
   join public.customers c on c.id = t.customer_id
-  where t.deleted_at is null
-    and c.deleted_at is null;
+  where c.deleted_at is null;
 
 revoke all on public.customer_ticket_facts from anon, authenticated;
 
 comment on view public.customer_ticket_facts is
-  'One row per ticket linked to a customer, with that customer''s segment, lifetime spend and marketing state joined on. Bounded by ticket count, so the service reads it whole and applies the VIP rule in JavaScript rather than the view asserting one.';
+  'One row per CASE linked to a customer (ticket_id is its lead thread), with that customer''s segment, lifetime spend and marketing state joined on. Bounded by ticket count, so the service reads it whole and applies the VIP rule in JavaScript rather than the view asserting one.';
 
 -- --------------------------------------------------- customer_segment_totals
 
@@ -1394,10 +1397,10 @@ as $$
     count(*) filter (where t.happiness >= 3),
     count(*) filter (where t.happiness = 4),
     count(*) filter (where t.level = 3),
-    count(*) filter (where r.reply_hours is not null),
-    percentile_cont(0.5) within group (order by r.reply_hours),
-    percentile_cont(0.9) within group (order by r.reply_hours),
-    count(*) filter (where r.reply_hours is not null and r.reply_hours <= 24),
+    count(*) filter (where t.reply_hours is not null),
+    percentile_cont(0.5) within group (order by t.reply_hours),
+    percentile_cont(0.9) within group (order by t.reply_hours),
+    count(*) filter (where t.reply_hours is not null and t.reply_hours <= 24),
     count(*) filter (where t.customer_id is not null and coalesce(c.number_of_orders, 0) > 0),
     count(*) filter (where t.customer_id is not null and coalesce(c.number_of_orders, 0) = 0),
     count(*) filter (where t.customer_id is null),
@@ -1408,11 +1411,9 @@ as $$
     count(distinct c.id) filter (
       where coalesce(c.number_of_orders, 0) = 0 and c.on_email_marketing_list is true
     )
-  from public.tickets t
-  left join public.ticket_reply_times r on r.ticket_id = t.id
+  from public.case_facts t
   left join public.customers c on c.id = t.customer_id
   where t.shop_id = p_shop
-    and t.deleted_at is null
     and t.first_message_at >= (p_from at time zone p_tz)
     and t.first_message_at < (p_to at time zone p_tz);
 $$;
@@ -1421,7 +1422,7 @@ revoke all on function public.insights_support_summary from public, anon, authen
 grant execute on function public.insights_support_summary to service_role;
 
 comment on function public.insights_support_summary is
-  'One row for a date range, on first_message_at: ticket volume and mood, first-reply timing over the tickets that can be timed, and who wrote in by whether an online purchase is visible (tickets, then distinct people and their reachability).';
+  'One row for a date range, on first_message_at: CASE volume and mood (case_facts: several threads of one customer problem count once; the output columns keep the name tickets), first-reply timing over the cases that can be timed, and who wrote in by whether an online purchase is visible (tickets, then distinct people and their reachability).';
 
 -- ----------------------------------------------------------- support: series
 
@@ -1447,12 +1448,10 @@ as $$
     date_trunc(p_grain, t.first_message_at at time zone p_tz),
     count(*),
     count(*) filter (where t.happiness >= 3),
-    count(*) filter (where r.reply_hours is not null),
-    percentile_cont(0.5) within group (order by r.reply_hours)
-  from public.tickets t
-  left join public.ticket_reply_times r on r.ticket_id = t.id
+    count(*) filter (where t.reply_hours is not null),
+    percentile_cont(0.5) within group (order by t.reply_hours)
+  from public.case_facts t
   where t.shop_id = p_shop
-    and t.deleted_at is null
     and t.first_message_at >= (p_from at time zone p_tz)
     and t.first_message_at < (p_to at time zone p_tz)
   group by 1
@@ -1463,7 +1462,7 @@ revoke all on function public.insights_support_series from public, anon, authent
 grant execute on function public.insights_support_series to service_role;
 
 comment on function public.insights_support_series is
-  'Tickets, unhappy tickets and median first reply per wall-clock bucket, on first_message_at. Non-empty buckets only.';
+  'Cases (case_facts; the column keeps the name tickets), unhappy cases and median first reply per wall-clock bucket, on the case''s first_message_at. Non-empty buckets only.';
 
 -- ------------------------------------------------------- support: categories
 
@@ -1501,10 +1500,9 @@ as $$
     count(*) filter (where t.customer_id is not null and coalesce(c.number_of_orders, 0) > 0),
     count(*) filter (where t.customer_id is not null and coalesce(c.number_of_orders, 0) = 0),
     count(*) filter (where t.customer_id is null)
-  from public.tickets t
+  from public.case_facts t
   left join public.customers c on c.id = t.customer_id
   where t.shop_id = p_shop
-    and t.deleted_at is null
     and t.first_message_at >= (p_from at time zone p_tz)
     and t.first_message_at < (p_to at time zone p_tz)
   group by 1
@@ -1515,7 +1513,7 @@ revoke all on function public.insights_support_categories from public, anon, aut
 grant execute on function public.insights_support_categories to service_role;
 
 comment on function public.insights_support_categories is
-  'Volume, mood and purchase state per subject for a date range, on first_message_at. Fourteen rows at most.';
+  'Case volume, mood and purchase state per subject (the case''s earliest thread) for a date range, on first_message_at. Fourteen rows at most.';
 
 -- ------------------------------------------------------------ agent: funnel
 

@@ -1,3 +1,4 @@
+import { loadCompany } from '../../../scripts/lib/company.mjs';
 import { createDraftRecord } from '../../../scripts/lib/draft-record.mjs';
 import { createTicketRecord } from '../../../scripts/lib/ticket-record.mjs';
 import { COLUMNS, T, V } from '../../../scripts/lib/tables.mjs';
@@ -132,6 +133,9 @@ export async function runRehearsal({
   // lookup, `OWN_SIDE_LABELS` only) is what stops a rehearsal from being kinder
   // to a test address than the worker would be.
   const senderDirectory = await loadDirectory(supabase, shopId, config, logger);
+  // The same company facts the worker names in its prompts. Null when they
+  // cannot be read: the prompts then fall back to a generic first line.
+  const company = await loadCompany(supabase, shopId).catch(() => null);
   const directoryEntry = built.identity.email
     ? senderDirectory.lookup(built.identity.email)
     : null;
@@ -158,7 +162,7 @@ export async function runRehearsal({
 
   if (runGate) {
     const mark = since();
-    const { triage } = createSpamClassifier(openai, { model: config.triageModel, logger });
+    const { triage } = createSpamClassifier(openai, { model: config.triageModel, logger, company });
     const verdict = await triage({ message: built.message });
     summary.gateOutcome = verdict.spam ? 'blocked' : 'kept';
     emit('gate', {
@@ -221,7 +225,7 @@ export async function runRehearsal({
     // ---- categorisation ----------------------------------------------------
 
     const mark = since();
-    const { categorise } = createCategoriser(openai, { model: config.categoriserModel });
+    const { categorise } = createCategoriser(openai, { model: config.categoriserModel, company });
     const categorisation = await runCategorisation({
       record, categorise, logger, limit: 1, ticketId
     });
@@ -340,6 +344,7 @@ export async function runRehearsal({
       logger,
       customerLookup,
       usageSink,
+      company,
       // The same wrapped client, so the investigation's turns are recorded with
       // everything else rather than through a second, untraced one.
       openai,

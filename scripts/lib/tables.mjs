@@ -32,6 +32,7 @@
 export const T = {
   // 01_foundation
   SHOPS: 'shops',
+  SALES_CHANNELS: 'sales_channels',
   INTEGRATION_EVENTS: 'integration_events',
   PRIVACY_REQUESTS: 'privacy_requests',
   DATA_ACCESS_EVENTS: 'data_access_events',
@@ -50,6 +51,9 @@ export const T = {
   KNOWLEDGE_CHUNKS: 'knowledge_chunks',
 
   // 04_support
+  CASES: 'cases',
+  ISSUE_FAMILY_MEMBERS: 'issue_family_members',
+  ISSUE_FAMILY_TRANSITIONS: 'issue_family_transitions',
   TICKETS: 'tickets',
   TICKET_MESSAGES: 'ticket_messages',
   EMAIL_BLOCKLIST: 'email_blocklist',
@@ -61,6 +65,7 @@ export const T = {
   TICKET_CASE_ACTIONS: 'ticket_case_actions',
   TICKET_OVERRIDES: 'ticket_overrides',
   TICKET_SNOOZES: 'ticket_snoozes',
+  CASE_LINKS: 'case_links',
   CATEGORY_FORWARDING: 'category_forwarding',
   TICKET_FORWARDS: 'ticket_forwards',
   FORWARDING_DESTINATIONS: 'forwarding_destinations',
@@ -142,6 +147,8 @@ export const V = {
   // 04_support
   TICKET_MESSAGE_COUNTS: 'ticket_message_counts',
   TICKET_FIRST_INBOUND: 'ticket_first_inbound',
+  CASE_MESSAGE_COUNTS: 'case_message_counts',
+  CASE_FACTS: 'case_facts',
   TICKET_QUEUE: 'ticket_queue',
 
   // 06_analytics — every Insights panel figure comes from one of these, because
@@ -256,7 +263,11 @@ export const COLUMNS = {
     'requester_name,requester_email,shopify_order_number,first_message_at,last_message_at,' +
     'duplicate_of_ticket_id,duplicate_reason,sender_label,' +
     'customer_display_name,customer_first_name,customer_last_name,customer_rfm_group,' +
-    'message_count,inbound_count,waiting_since,overrides',
+    'message_count,inbound_count,waiting_since,overrides,' +
+    // The case (61_cases.sql): the queue shows one row per case and ranks it
+    // on the case's facts, not the thread's.
+    'case_id,is_case_lead,case_thread_count,case_message_count,case_inbound_count,case_waiting_since,' +
+    'case_level,case_status',
 
   /**
    * What the categoriser needs: the previous reading, to ratchet against, and
@@ -278,7 +289,7 @@ export const COLUMNS = {
   // handed unless the column comes back with it.
   ticketForInvestigation:
     'id,subject,status,category,secondary_category,request_kind,level,customer_id,requester_email_hash,' +
-    'shopify_order_number,resolved_context,metadata,duplicate_of_ticket_id,overrides',
+    'shopify_order_number,resolved_context,metadata,duplicate_of_ticket_id,overrides,case_id',
 
   /** Customer resolution: an address hash and somewhere to record the attempt. */
   ticketForCustomerResolution: 'id,customer_id,requester_email_hash,metadata,last_message_at',
@@ -306,7 +317,7 @@ export const COLUMNS = {
   // two replies to one message.
   ticketForDrafting:
     'id,subject,status,level,language,happiness,requester_name,resolved_context,' +
-    'duplicate_of_ticket_id,related_ticket_id,related_score,sender_label,' +
+    'duplicate_of_ticket_id,related_ticket_id,related_score,sender_label,case_id,' +
     // The poll gate (stage 6): a ticket still owed a pass is not drafted yet.
     'needs_categorisation,needs_investigation',
 
@@ -315,14 +326,22 @@ export const COLUMNS = {
    * categoriser is not closed out of that queue — see auto-close.mjs.
    */
   ticketForAutoClose:
-    'id,status,level,last_message_at,subject,deleted_at,metadata,needs_categorisation',
+    'id,status,level,last_message_at,subject,deleted_at,metadata,needs_categorisation,case_id',
+
+  /**
+   * The case linker (agent/src/cases/): who wrote, what about, which order,
+   * and the case the thread is in now. No bodies: the message is read apart.
+   */
+  ticketForCaseLink:
+    'id,case_id,subject,status,investigated_at,category,request_kind,requester_email_hash,customer_id,sender_label,' +
+    'shopify_order_number,resolved_context,first_message_at,last_message_at,duplicate_of_ticket_id',
 
   /**
    * Ingestion's view of an existing thread. `status` is read so a reply can
    * reopen a ticket auto-close retired.
    */
   ticketForConversation:
-    'id,status,subject,first_message_at,last_message_at,requester_email_hash,requester_name',
+    'id,status,subject,first_message_at,last_message_at,requester_email_hash,requester_name,case_id',
 
   /** The dashboard's detail panel reads the bundle, not the whole row. */
   // `metadata` for `order_resolution.verified_by`: the panel says when the buyer
@@ -645,6 +664,7 @@ export const PROJECTION_SOURCE = {
   ticketForOrderResolution: T.TICKETS,
   ticketForOrderContext: T.TICKETS,
   ticketForAutoClose: T.TICKETS,
+  ticketForCaseLink: T.TICKETS,
   ticketForConversation: T.TICKETS,
   ticketForDetail: T.TICKETS,
   ticketForOrderLink: T.TICKETS,

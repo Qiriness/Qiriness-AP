@@ -43,6 +43,7 @@ import { INVENTORY_STATUS_LABELS, averageOrderValue, revenueBridge, revenueDrive
  *
  * @typedef {{
  *   month: string, label: string, inProgress: boolean, generatedAt: string, timezone: string,
+ *   companyName: string|null (`shops.shop_name`; it was a literal in the title),
  *   modes: { mom: ReportMode, yoy: ReportMode, six: ReportMode },
  *   trend: { key: string, label: string, revenue: number | null, orders: number | null }[],
  *   platforms: { label: string, revenue: number, orders: number }[],
@@ -794,7 +795,7 @@ export function renderSalesReport(data) {
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Qiriness — Sales report, ${escapeHtml(data.label)}</title>
+<title>${escapeHtml(data.companyName || 'Sales report')} — Sales report, ${escapeHtml(data.label)}</title>
 <style>${STYLE}</style>
 </head>
 <body>
@@ -802,7 +803,7 @@ export function renderSalesReport(data) {
   ${MODES.map((key, i) => `<input class="state" type="radio" name="cmp" id="cmp-${key}"${i === 0 ? ' checked' : ''}>`).join('')}
   ${VIEWS.map(([key], i) => `<input class="state" type="radio" name="view" id="nav-${key}"${i === 0 ? ' checked' : ''}>`).join('')}
   <header class="topbar">
-    <div><div class="eyebrow">Qiriness · E-commerce</div><h1>Sales Performance</h1><div class="subtitle">${escapeHtml(data.label)}${data.inProgress ? ' (in progress)' : ''} · monthly management report</div></div>
+    <div><div class="eyebrow">${escapeHtml(data.companyName ? `${data.companyName} · E-commerce` : 'E-commerce')}</div><h1>Sales Performance</h1><div class="subtitle">${escapeHtml(data.label)}${data.inProgress ? ' (in progress)' : ''} · monthly management report</div></div>
     <div class="controls">
       <div class="segmented" id="compareControls"><label for="cmp-mom" title="${momLabel}">MoM</label><label for="cmp-yoy" title="${yoyLabel}">YoY</label><label for="cmp-six" title="${sixLabel}">6M on 6M</label></div>
       <span class="stamp">Generated ${escapeHtml(stamp)}</span>
@@ -814,7 +815,7 @@ ${overview(data)}
 ${customersAndProducts(data)}
 ${marketing(data)}
 ${operations(data)}
-  <p class="foot">Qiriness Support OS · ${escapeHtml(data.label)} in the shop's timezone (${escapeHtml(data.timezone)}). Profitability is not reported: cost of goods, shipping cost and ad spend do not reach this app.</p>
+  <p class="foot">${escapeHtml(data.companyName ? `${data.companyName} Support OS` : 'Support OS')} · ${escapeHtml(data.label)} in the shop's timezone (${escapeHtml(data.timezone)}). Profitability is not reported: cost of goods, shipping cost and ad spend do not reach this app.</p>
 </main>
 </body>
 </html>

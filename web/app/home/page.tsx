@@ -10,7 +10,7 @@ import { canUseManagementChat, fallbackPath } from "../../../scripts/lib/dashboa
 
 export const dynamic = "force-dynamic";
 
-export const metadata = { title: "Home · Qiriness Support OS" };
+export const metadata = { title: "Home" };
 
 /**
  * Home — the management chat (beta). Management and Developer only.

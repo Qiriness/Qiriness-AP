@@ -403,3 +403,14 @@ test('a dry run decides everything, the router included, but sends and records n
   assert.equal(store.calls.forwards.length, 0);
   assert.equal(store.calls.acks.length, 0);
 });
+
+test('a thread whose case was already acknowledged on another thread is not acknowledged again', async () => {
+  const store = buildStore({ pending: [item({})] });
+  store.caseAcknowledged = async () => true;
+  const provider = buildProvider();
+  const totals = await runForwarding({ store, graphClient: buildGraph(), provider, shopId: 's' });
+  assert.equal(totals.forwarded, 1, 'the mail itself still goes');
+  assert.equal(provider.replies.length, 0);
+  assert.equal(totals.ackSkipped, 1);
+  assert.deepEqual(store.calls.acks.map((a) => [a.state, a.error]), [['skipped', 'case_acknowledged']]);
+});

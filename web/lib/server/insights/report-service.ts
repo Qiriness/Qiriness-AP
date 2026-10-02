@@ -20,7 +20,6 @@
 import { RPC } from "../../../../scripts/lib/tables.mjs";
 import { SALES_COLLECTION_HANDLES } from "../../../../scripts/lib/sales-collections.mjs";
 import {
-  ALL_MARKETPLACE_HANDLES,
   bucketLabel,
   fromKey,
   monthLabel,
@@ -32,6 +31,7 @@ import {
 } from "../../../../scripts/lib/insights-range.mjs";
 import type { InsightsRange, PlatformSplit } from "../../types";
 import { orderArgs, rangeArgs, resolveInsightsContext, type InsightsContext } from "./context";
+import { getShop } from "../shop";
 import { liveChannels, liveFunnel, liveLandingTypes, liveTotals, salesFor, sessionTotalsForWindows } from "./analytics";
 import { getInventoryExceptions } from "./inventory";
 import { getPromotions } from "./marketing-service";
@@ -100,9 +100,9 @@ function productTables(rows: Record<string, unknown>[], previousRows: Record<str
 }
 
 /** The platform split of one window's revenue, for the sales mix. */
-function platformsOf(rows: Record<string, unknown>[] | null) {
+function platformsOf(rows: Record<string, unknown>[] | null, marketplaces: InsightsContext["marketplaces"]) {
   return rows
-    ? foldPlatforms(rows).map((p: PlatformSplit) => ({ label: p.label, revenue: p.revenue, orders: p.orders }))
+    ? foldPlatforms(rows, marketplaces).map((p: PlatformSplit) => ({ label: p.label, revenue: p.revenue, orders: p.orders }))
     : null;
 }
 
@@ -309,7 +309,7 @@ export async function buildSalesReport(month: string) {
       comparison: periods.mom,
       products: productTables(productRows, previousProductRows),
       collections: collectionRows.map((row) => mapReportCollection(row, previousCollectionRows)),
-      platforms: platformsOf(channelRows),
+      platforms: platformsOf(channelRows, ctx.marketplaces),
     },
     yoy: {
       label: "YoY",
@@ -321,7 +321,7 @@ export async function buildSalesReport(month: string) {
       comparison: periods.yoy,
       products: productTables(productRows, yoyProductRows),
       collections: collectionRows.map((row) => mapReportCollection(row, yoyCollectionRows)),
-      platforms: platformsOf(channelRows),
+      platforms: platformsOf(channelRows, ctx.marketplaces),
     },
     six: {
       label: "6M on 6M",
@@ -334,7 +334,7 @@ export async function buildSalesReport(month: string) {
       collections: sixCollectionRows
         ? sixCollectionRows.map((row) => mapReportCollection(row, sixPreviousCollectionRows))
         : null,
-      platforms: platformsOf(sixChannelRows),
+      platforms: platformsOf(sixChannelRows, ctx.marketplaces),
     },
   };
 
@@ -344,6 +344,7 @@ export async function buildSalesReport(month: string) {
     inProgress: range.currentKey !== null,
     generatedAt: ctx.renderedAt,
     timezone: ctx.tz,
+    companyName: (await getShop())?.shopName ?? null,
     modes,
     periods,
     // TWO YEARS of monthly buckets. The chart draws the last twelve and lays
@@ -356,7 +357,7 @@ export async function buildSalesReport(month: string) {
       orders: trendOrders[i].value,
     })),
     trendMonths: 12,
-    platforms: platformsOf(channelRows) ?? [],
+    platforms: platformsOf(channelRows, ctx.marketplaces) ?? [],
     promotions,
     funnel: funnel.blockedReason ? [] : funnel.value,
     channels: channels.blockedReason ? [] : channels.value,
@@ -403,7 +404,7 @@ async function readPeriod(ctx: InsightsContext, window: Window) {
     callRpcOne<Record<string, unknown>>(RPC.INSIGHTS_CUSTOMER_MIX, {
       ...orderArgs(ctx, window),
       p_channels: null,
-      p_not_channels: [...ALL_MARKETPLACE_HANDLES],
+      p_not_channels: [...ctx.marketplaces.handles],
     }),
     callRpcOne<Record<string, unknown>>(RPC.INSIGHTS_MARKETING_SUMMARY, rangeArgs(ctx, window)),
   ]);

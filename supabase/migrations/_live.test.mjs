@@ -102,20 +102,24 @@ test('the baseline applies, and its projections return what they claim', { skip 
        values ($1, 'gid://c/1', 'Ada Lovelace', 'Ada', 'Lovelace', 'CHAMPIONS') returning id`,
       [shop.id]
     );
+    // Every thread has a case (61_cases.sql); each of these is its own.
+    const newCase = async () =>
+      (await client.query(`insert into ${schema}.cases (shop_id) values ($1) returning id`, [shop.id])).rows[0].id;
+    const liveCase = await newCase();
     const { rows: [live] } = await client.query(
-      `insert into ${schema}.tickets (shop_id, graph_conversation_id, subject, customer_id, status)
-       values ($1, 'conv-live', 'Où est ma commande ?', $2, 'open') returning id`,
-      [shop.id, customer.id]
+      `insert into ${schema}.tickets (shop_id, graph_conversation_id, subject, customer_id, status, case_id)
+       values ($1, 'conv-live', 'Où est ma commande ?', $2, 'open', $3) returning id`,
+      [shop.id, customer.id, liveCase]
     );
     const { rows: [archived] } = await client.query(
-      `insert into ${schema}.tickets (shop_id, graph_conversation_id, subject, status, archived_at)
-       values ($1, 'conv-archived', 'Archivé', 'open', now()) returning id`,
-      [shop.id]
+      `insert into ${schema}.tickets (shop_id, graph_conversation_id, subject, status, archived_at, case_id)
+       values ($1, 'conv-archived', 'Archivé', 'open', now(), $2) returning id`,
+      [shop.id, await newCase()]
     );
     const { rows: [erased] } = await client.query(
-      `insert into ${schema}.tickets (shop_id, graph_conversation_id, subject, deleted_at)
-       values ($1, 'conv-erased', 'Effacé', now()) returning id`,
-      [shop.id]
+      `insert into ${schema}.tickets (shop_id, graph_conversation_id, subject, deleted_at, case_id)
+       values ($1, 'conv-erased', 'Effacé', now(), $2) returning id`,
+      [shop.id, await newCase()]
     );
 
     const message = (ticketId, id, direction, receivedAt, body, deleted = null) =>
@@ -206,6 +210,63 @@ test('the baseline applies, and its projections return what they claim', { skip 
       assert.equal(Number(unlinked.message_count), 0);
       assert.equal(Number(unlinked.inbound_count), 0);
       assert.equal(unlinked.waiting_since, null);
+    });
+
+    await t.test('a case of two threads is one row in case_facts, and one lead in the queue', async () => {
+      // The customer writes again on a NEW thread, later, about the same
+      // problem: the second thread joins the first one's case.
+      const { rows: [second] } = await client.query(
+        `insert into ${schema}.tickets (shop_id, graph_conversation_id, subject, customer_id, status, case_id, level, happiness)
+         values ($1, 'conv-second', 'Toujours rien', $2, 'open', $3, 3, 4) returning id`,
+        [shop.id, customer.id, liveCase]
+      );
+      await client.query(
+        `insert into ${schema}.ticket_messages
+           (ticket_id, shop_id, graph_message_id, graph_conversation_id, direction, subject, body_text, received_at)
+         values ($1, $2, 'm-second', 'conv-second', 'inbound', 'Toujours rien', 'je relance', '2026-01-05T09:00:00Z')`,
+        [second.id, shop.id]
+      );
+      await client.query(
+        `update ${schema}.tickets set first_message_at = '2026-01-05T09:00:00Z', last_message_at = '2026-01-05T09:00:00Z' where id = $1`,
+        [second.id]
+      );
+      await client.query(
+        `update ${schema}.tickets set first_message_at = '2026-01-01T09:00:00Z', last_message_at = '2026-01-03T09:00:00Z' where id = $1`,
+        [live.id]
+      );
+      await client.query(`update ${schema}.cases set reply_thread_id = $1 where id = $2`, [second.id, liveCase]);
+
+      const { rows: facts } = await client.query(`select * from ${schema}.case_facts where case_id = $1`, [liveCase]);
+      assert.equal(facts.length, 1);
+      assert.equal(Number(facts[0].thread_count), 2);
+      assert.equal(facts[0].lead_ticket_id, second.id, 'the reply thread leads the case');
+      assert.equal(facts[0].level, 3, 'the highest level of any thread');
+      assert.equal(facts[0].happiness, 4, 'the worst mood of any thread');
+      assert.equal(facts[0].status, 'open');
+      // First inbound (01-02) to our first reply after it: none, ours was before.
+      assert.equal(facts[0].reply_hours, null);
+
+      const { rows: queue } = await client.query(
+        `select id, is_case_lead, case_thread_count, case_inbound_count, case_level, case_waiting_since
+         from ${schema}.ticket_queue where case_id = $1`,
+        [liveCase]
+      );
+      assert.equal(queue.length, 2);
+      const lead = queue.find((row) => row.is_case_lead);
+      assert.equal(lead.id, second.id);
+      assert.equal(queue.filter((row) => row.is_case_lead).length, 1, 'exactly one lead per case');
+      assert.equal(Number(lead.case_thread_count), 2);
+      // Two inbound on the first thread, one on the second: the case's chase count.
+      assert.equal(Number(lead.case_inbound_count), 3);
+      assert.ok(lead.case_waiting_since, 'the case still waits on us');
+
+      // Insights count the case once, not its two threads. The archived ticket
+      // has no first_message_at and falls in no range.
+      const { rows: [summary] } = await client.query(
+        `select tickets from ${schema}.insights_support_summary($1, '2025-12-01', '2026-02-01', 'UTC')`,
+        [shop.id]
+      );
+      assert.equal(Number(summary.tickets), 1, 'two threads of one case are one case');
     });
 
     await t.test('order_number_range reports the live extremes, in one row', async () => {

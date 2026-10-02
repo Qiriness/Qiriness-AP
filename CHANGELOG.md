@@ -16,6 +16,60 @@ Three sibling files carry the other halves, and this one deliberately does not d
 
 
 
+## Cases: several email threads, one customer problem (2026-10-02)
+
+- **Built:**
+  - **Schema.** Migration 61 (not applied; copied into baselines 04/06):
+    - `cases`, `case_links` and `issue_family_members` + `issue_family_transitions` (seeded);
+    - `tickets.case_id` + `case_link_state`;
+    - `case_message_counts` and `case_facts`;
+    - the queue's case columns, and the Insights support functions + `customer_ticket_facts` on cases;
+    - `case_link` in `agent_models` / `llm_usage`;
+    - `chat.tickets.case_id`.
+  - **Shared modules.** `scripts/lib/case-record.mjs` and `case-reply-target.mjs`.
+  - **The `link` pass** (`agent/src/cases/`), between `context` and `investigate`. Its rules are deterministic, and the Case Linker is off unless `CASE_LINKER_ENABLED=true`.
+  - **Ingestion.** A new conversation opens a case. A duplicate joins its original's case. The related link is no longer written. A new message wakes every snooze of the case.
+  - **Investigation and drafting** read the whole case, with other threads marked. Only the reply thread is investigated, and `not_reply_target` skips the rest of drafting.
+  - **Sending.** `preSendCheck` reads later messages across the case.
+  - **Lifecycle.** Auto-close, the forwarding acknowledgement and priority all work per case.
+  - **Dashboard.**
+    - the queue shows one row per case, with « Show every thread of a case », « N threads » and « Linked thread »;
+    - the thread dialog lists the case's threads, and a manual reply is refused on a thread that is not the reply thread;
+    - Insights labels say « Cases ».
+  - **CLIs.** `cases:link`, `cases:targets`, `cases:replay`.
+- **Proven:**
+  - agent suite 1969/1969; root suite 4367/4367 (the 19 old analytics failures were line endings of the working copy, cleared);
+  - web `tsc` clean;
+  - migration 61 applied twice to the committed baseline in a throwaway schema (duplicate chains joined to their root, idempotent, projections answer), then dropped;
+  - `_live.test.mjs` checks a two-thread case in `case_facts`, the queue and `insights_support_summary`.
+- **Applied 2026-10-02** (3.5 s) after two fixes:
+  - a flagged duplicate never holds the target;
+  - trigger `tickets_open_case`, so a worker on the old code keeps ingesting;
+  - mutual duplicate pairs are joined into one case.
+
+  Read back: 1015 tickets → 1003 cases, 0 without a case, 12 backfill links, every duplicate in its original's case, queue 1003 leads, `insights_support_summary` counts cases.
+- **Not yet:**
+  - the new worker and dashboard code deployed (the deployed worker runs old code; the trigger keeps its inserts working);
+  - `cases:replay` run on real mail;
+  - the queue and dialog seen in the browser.
+
+  See VALIDATION_LOG item 36 and DECISIONS § Cases.
+
+## Marketplaces configured in Setup, not in code (2026-10-02)
+
+- **Built:** `sales_channels` (migration 60, applied; baseline 02) with `platform_key`, `label`, `handles`, `analytics_names`; `scripts/lib/marketplaces.mjs` replaces `MARKETPLACE_CHANNELS`, `ALL_MARKETPLACE_HANDLES`, `PLATFORMS` and `MARKETPLACE_SALES_CHANNELS` in every consumer (Insights services and filter, orders, VIP rule, order resolution, chat prompt, `chat.vip_customer_rows()`); twelve UI strings say `{marketplaces}`; Setup → Sales channels (`SalesChannelList`, `/api/sales-channels`) lists every handle in the orders beside the configured marketplaces. This shop's Amazon and Yves Rocher rows inserted.
+- **Proven:** agent suite 1928/1928; root suite the same 19 old analytics failures, with new `marketplaces.test.mjs` and `60_sales_channels.test.mjs`; `tsc` and lint clean; order resolution dry run unchanged. **Not yet:** the Setup screen and Insights filter seen in the browser; `next build` (dev server running).
+
+## The dashboard names the shop from its data (2026-10-02)
+
+- **Built:** `web/lib/shop-context.tsx` (`ShopProvider`, `useShop`, `shopLabel`), filled by the root layout from `getShop()` (now with `storefrontUrl`); a title template « %s · <shop> Support OS » replaces the literal suffix on 16 pages; `useT` resolves `{store}` to the shop's name (`makeTranslate` takes defaults); sidebar store link and name, logo alt texts, login wordmark, outbound sender name in the ticket thread, the support mailbox as a recipient, the brand-voice placeholder and the demo data no longer say Qiriness. Logo renamed `brand/logo.png`.
+- **Proven:** `tsc` and lint clean; root suite the same 19 old failures. **Not yet:** seen in the browser; `next build` not run (the dev server holds `.next`). **Open:** the marketplace list (see DECISIONS).
+
+## Company name and partners read from data (2026-10-02)
+
+- **Built:** `scripts/lib/company.mjs` (`loadCompany`, `serviceClientOf`); the shop's name (`shops.shop_name`) and two new text parameters, `company_description` and `logistics_provider_name`, replace the literals in the investigation, categorisation and spam-filter prompts, the label on our replies, the priority reasons, the management chat prompt and the sales report. The draft check and brand-voice notice no longer name the company at all. Parameter descriptions no longer carry « Qiriness: N ». Both parameters set for this shop to the old literal values, so the prompts are unchanged.
+- **Proven:** agent suite 1927/1927; root suite the same 19 old analytics failures; `tsc` and lint on `web/` clean; a test caught « du le service client » before it shipped. **Open:** the web dashboard's own literals (page titles, store link, logo alt, reply name in the thread) and `MARKETPLACE_CHANNELS`.
+
 ## Investigation transcript: time, the message to act on, no company names (2026-10-02)
 
 - **Built:** transcript labels carry date and time in shop time (`loadShopTimeZone`); the newest message is marked « DERNIER MESSAGE DU FIL » and the newest customer message, when different, « DERNIER MESSAGE DU CLIENT »; both are always kept within the budget; the heading names what the text is (customer message, someone else's, or a thread). Sender roles are generic nouns (« nous (service client) », « collègue »), and `distributor`/`supplier`/`partner`/`other` no longer fall back to « client » (also in the closure check). Applies to the Case Manager, closure and drafting history too, which share the labels.

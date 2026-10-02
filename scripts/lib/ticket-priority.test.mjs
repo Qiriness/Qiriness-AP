@@ -33,10 +33,15 @@ test('pre-fulfilment address, cancellation and modification branches are High', 
   }
 });
 
-test('not dispatched requests Deret verification and does not claim changes remain possible', () => {
+test('not dispatched requests the logistics provider’s verification and does not claim changes remain possible', () => {
+  const named = determinePriorityBand(
+    plain({ situationKey: 'O-12', orderState: 'not_dispatched', logisticsProvider: 'Entrepôt Exemple' })
+  );
+  assert.match(named.reason, /whether Entrepôt Exemple can still intervene/i);
+  assert.doesNotMatch(named.reason, /can be changed|still possible/i);
+  // Unset: a generic noun, never a company this code happens to know.
   const { reason } = determinePriorityBand(plain({ situationKey: 'O-12', orderState: 'not_dispatched' }));
-  assert.match(reason, /whether Deret can still intervene/i);
-  assert.doesNotMatch(reason, /can be changed|still possible/i);
+  assert.match(reason, /whether the logistics provider can still intervene/i);
 });
 
 test('missing fulfilment information preserves provisional urgency', () => {
@@ -163,4 +168,13 @@ test('a band a person pinned holds, except over level 4', () => {
   assert.equal(determinePriorityBand({ level: 1, pinnedBand: 'high' }).band, 'high');
   assert.equal(determinePriorityBand({ level: 4, pinnedBand: 'low' }).band, 'high');
   assert.equal(determinePriorityBand({ level: 1, pinnedBand: 'bogus' }).band, determinePriorityBand({ level: 1 }).band);
+});
+
+test('a case of two threads is ranked on every customer message across both (61_cases.sql)', () => {
+  // Two customer messages on each thread: the thread alone says 2, the case says 4.
+  const contacts = (inboundCount) =>
+    explainPriority(plain({ inboundCount }), NOW).parts.find((part) => part.factor === 'contacts').points;
+  assert.equal(contacts(2), contactPoints(2));
+  assert.equal(contacts(4), contactPoints(4));
+  assert.ok(scorePriority(plain({ inboundCount: 4 }), NOW) > scorePriority(plain({ inboundCount: 2 }), NOW));
 });

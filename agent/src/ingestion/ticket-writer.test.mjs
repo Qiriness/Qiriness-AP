@@ -976,3 +976,97 @@ test('a failed wake never fails ingestion', async () => {
   assert.equal(counts.messagesIngested, 1);
   assert.equal(counts.snoozesWoken, 0);
 });
+
+// ---------------------------------------------------------------- cases
+
+function createFakeCases() {
+  const created = [];
+  const decisions = [];
+  const threadsByCase = new Map();
+  return {
+    created,
+    decisions,
+    threadsByCase,
+    async create() {
+      const row = { id: `case-${created.length + 1}` };
+      created.push(row);
+      return row;
+    },
+    async applyDecision(decision) {
+      decisions.push(decision);
+      return { decision: 'link', caseId: decision.toCaseId };
+    },
+    async threads(caseId) {
+      return threadsByCase.get(caseId) ?? [];
+    }
+  };
+}
+
+test('a new conversation opens its own case, pending a link decision', async () => {
+  const store = createFakeStore();
+  const cases = createFakeCases();
+  const counts = await writeIngestedMessages(
+    store,
+    store,
+    'shop-1',
+    [
+      mappedMessage({ id: 'm1', conversationId: 'c1', at: '2026-07-24T10:00:00Z' }),
+      mappedMessage({ id: 'm2', conversationId: 'c1', at: '2026-07-24T11:00:00Z' })
+    ],
+    { cases }
+  );
+  assert.equal(counts.casesCreated, 1, 'a reply on the same thread opens no second case');
+  const ticket = [...store.tickets.values()][0];
+  assert.equal(ticket.case_id, 'case-1');
+  assert.equal(ticket.case_link_state, 'pending');
+});
+
+test('a duplicate joins its original case instead of being silenced', async () => {
+  const store = createFakeStore();
+  store.linkDuplicate = async () => assert.fail('with cases, no duplicate link is written');
+  const cases = createFakeCases();
+  const counts = await writeIngestedMessages(
+    store,
+    store,
+    'shop-1',
+    [mappedMessage({ id: 'm1', conversationId: 'c-new', at: '2026-07-24T10:00:00Z' })],
+    {
+      cases,
+      detectDuplicate: async () => ({ ticketId: 'ticket-old', caseId: 'case-old', reason: 'reply_chain' })
+    }
+  );
+  assert.equal(counts.duplicatesLinked, 1);
+  assert.deepEqual(cases.decisions, [
+    {
+      ticketId: 'ticket-1',
+      fromCaseId: 'case-1',
+      toCaseId: 'case-old',
+      method: 'reply_chain',
+      candidates: [{ case_id: 'case-old', reasons: ['reply_chain'] }]
+    }
+  ]);
+});
+
+test('a new customer message wakes the snoozes of every thread of its case', async () => {
+  const store = createFakeStore();
+  const woken = [];
+  store.wakeSnooze = async (_shop, ticketId, reason) => {
+    woken.push([ticketId, reason]);
+    return true;
+  };
+  store.tickets.set('shop-1|c1', { id: 'ticket-a', shop_id: 'shop-1', case_id: 'case-9', status: 'open' });
+  const cases = createFakeCases();
+  cases.threadsByCase.set('case-9', [{ id: 'ticket-a' }, { id: 'ticket-b' }]);
+
+  await writeIngestedMessages(
+    store,
+    store,
+    'shop-1',
+    [mappedMessage({ id: 'm-new', conversationId: 'c1', at: '2026-07-24T10:00:00Z' })],
+    { cases }
+  );
+  assert.deepEqual(woken, [
+    ['ticket-a', 'customer_message'],
+    ['ticket-b', 'customer_message']
+  ]);
+});

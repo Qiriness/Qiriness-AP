@@ -29,6 +29,7 @@ export const USAGE_PASSES = Object.freeze([
   'investigate',
   'draft',
   'embed',
+  'case_link',
   'other'
 ]);
 

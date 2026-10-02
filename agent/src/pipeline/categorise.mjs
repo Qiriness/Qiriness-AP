@@ -28,6 +28,7 @@
 // human review set is labelled blind). Stability is bought in the runner instead,
 // where the level ratchet stops a re-run walking a ticket backwards.
 
+import { serviceClientOf } from '../../../scripts/lib/company.mjs';
 import {
   TICKET_SUBJECTS,
   REQUEST_KINDS,
@@ -141,9 +142,15 @@ const SIGNALS_PROMPT = [
   "IMPORTANT : happiness et level sont indépendants. Un client furieux qui demande seulement où est son colis reste un level 2 : sa colère se met dans happiness, pas dans level. À l'inverse un client parfaitement aimable qui demande un remboursement est un level 3 avec un happiness 2."
 ].join('\n');
 
-const SYSTEM_PROMPT = [
-  "Tu es l'agent de catégorisation du service client de Qiriness, une marque de soin de la peau. La plupart des e-mails sont en français.",
-  '',
+// The first line names the company (`scripts/lib/company.mjs`); it was a literal.
+const systemPrompt = (company) =>
+  [
+    `Tu es l'agent de catégorisation du ${serviceClientOf(company)}. La plupart des e-mails sont en français.`,
+    '',
+    SYSTEM_PROMPT_RULES
+  ].join('\n');
+
+const SYSTEM_PROMPT_RULES = [
   "Tu classes chaque e-mail sur DEUX axes séparés : le sujet (de quoi il s'agit) et le type de demande (ce que veut l'expéditeur).",
   '',
   'Sujets possibles (category) :',
@@ -187,7 +194,8 @@ const SYSTEM_PROMPT = [
   "N'invente aucune information et ne réponds pas au client : tu ne fais que classer."
 ].join('\n');
 
-export function createCategoriser(openai, { model, maxBodyChars = 3000 } = {}) {
+export function createCategoriser(openai, { model, maxBodyChars = 3000, company = null } = {}) {
+  const SYSTEM_PROMPT = systemPrompt(company);
   /**
    * @param {{subject?: string, messages: Array<{subject?: string, body_text?: string, received_at?: string}>}} input
    * @param {{ticketId?: string|null}} [context]

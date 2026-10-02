@@ -32,6 +32,7 @@ export const AGENT_MODEL_KEYS = Object.freeze({
   decompose: 'decomposerModel',
   investigate: 'investigatorModel',
   draft: 'draftingModel',
+  case_link: 'caseLinkerModel',
   chat: null
 });
 

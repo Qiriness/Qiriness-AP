@@ -122,7 +122,7 @@ export const PARAMETERS = {
     description:
       'Working days since our last message to the customer. A chase within it, while a ' +
       'colleague or partner check is open and nothing new has arrived, gets no reply: the ' +
-      'owner of the check acts next. Past it, a holding reply is due. Qiriness: 5 (2026-09-26).',
+      'owner of the check acts next. Past it, a holding reply is due.',
     usedBy: 'the case fold (who acts next) and, from stage 6, drafting'
   },
   colleague_check_overdue_days: {
@@ -130,7 +130,7 @@ export const PARAMETERS = {
     label: 'When is a check a colleague owes overdue?',
     description:
       'Working days after the check was opened. Overdue is an alert on the ticket only: ' +
-      'it never escalates, reassigns or clears anything. Qiriness: 2 (2026-09-26).',
+      'it never escalates, reassigns or clears anything.',
     usedBy: 'the ticket page (open checks) and snooze (a case waiting on a colleague wakes then)'
   },
   partner_check_overdue_days: {
@@ -138,7 +138,7 @@ export const PARAMETERS = {
     label: 'When is a check an operations partner owes overdue?',
     description:
       'Working days after the check was opened (a 3PL or a carrier). An alert only, like ' +
-      'the colleague delay. Qiriness: 3 (2026-09-26).',
+      'the colleague delay.',
     usedBy: 'the ticket page (open checks) and snooze (a case waiting on a partner wakes then)'
   },
   customer_reply_wait_days: {
@@ -147,7 +147,7 @@ export const PARAMETERS = {
     description:
       'Working days after our reply was sent. A case waiting on the customer is snoozed ' +
       'out of the queue and comes back then if they have not written. Unset: such cases ' +
-      'are never snoozed automatically. Qiriness: 3 (2026-09-30).',
+      'are never snoozed automatically.',
     usedBy: 'snooze (the deadline of a case waiting on the customer)'
   },
   returns_address: {
@@ -157,6 +157,27 @@ export const PARAMETERS = {
       'The address a return goes to. Held here rather than repeated in every rule ' +
       'that needs it, so moving warehouse is one edit.',
     usedBy: 'every returns rule'
+  },
+  // WHAT THE COMPANY IS AND WHO SHIPS FOR IT. Written into the agents' prompts
+  // and the dashboard's priority reasons, where they used to be literals
+  // (« Qiriness, une marque de soin de la peau », « Deret »). The company's NAME
+  // is not here: it is Shopify's `shop_name`, synced onto `shops`.
+  company_description: {
+    kind: 'text',
+    label: 'What does the company do, in a few words (in French)?',
+    description:
+      'Completes « le service client de <nom de la boutique>, … » at the top of the ' +
+      'agents\' instructions, e.g. « une marque de soin de la peau ». Unset: the ' +
+      'agents are told the shop\'s name only.',
+    usedBy: 'the investigation, categorisation and spam-filter instructions'
+  },
+  logistics_provider_name: {
+    kind: 'text',
+    label: 'Who prepares and ships the orders?',
+    description:
+      'The warehouse or logistics provider, by name. Used in the reasons the queue ' +
+      'gives for a ticket\'s priority. Unset: « the logistics provider ».',
+    usedBy: 'ticket priority reasons'
   }
 };
 

@@ -20,14 +20,11 @@
 import { RPC, T } from "../../../scripts/lib/tables.mjs";
 import { supabaseHeaders, supabaseRpc, supabaseSelect } from "../../../scripts/lib/supabase-rest-client.mjs";
 import {
-  ALL_MARKETPLACE_HANDLES,
-  PLATFORMS,
   formatDay,
-  isMarketplacePlatform,
   isValidTimeZone,
-  platformOfChannel,
   wallClock,
 } from "../../../scripts/lib/insights-range.mjs";
+import { getMarketplaces } from "./marketplaces";
 import { loadVipCustomers, loadVipRule } from "../../../scripts/lib/vip-rule.mjs";
 import {
   ORDER_PAGE_SIZE,
@@ -96,18 +93,19 @@ const DETAIL_COLUMNS = [
 
 export async function listOrders(shopId: string, query: OrderListQuery): Promise<OrderListPage> {
   const supabase = getSupabaseClient();
-  const [tz, rule, facetRows, tickets] = await Promise.all([
+  const [tz, rule, facetRows, tickets, marketplaces] = await Promise.all([
     shopTimeZone(supabase, shopId),
     loadVipRule(supabase, shopId),
     supabaseRpc(supabase, RPC.ORDERS_LIST_FACETS, { p_shop: shopId }),
     listTicketsWithOrders(shopId),
+    getMarketplaces(),
   ]);
 
   const vip = {
     p_min_spend: rule?.minSpend ?? null,
     p_min_orders: rule?.minOrders ?? null,
     p_window_months: rule?.windowMonths ?? null,
-    p_vip_not_channels: [...ALL_MARKETPLACE_HANDLES],
+    p_vip_not_channels: [...marketplaces.handles],
   };
   const readPage = async (q: OrderListQuery): Promise<Row[]> => {
     const rows = await supabaseRpc(supabase, RPC.ORDERS_LIST, { p_shop: shopId, ...vip, ...orderListArgs(q) });
@@ -190,7 +188,8 @@ export async function getOrderDetail(shopId: string, orderId: string): Promise<O
   const order = orders?.[0];
   if (!order) return null;
 
-  const platform = platformOfChannel(String(order.sales_channel_handle ?? ""));
+  const marketplaces = await getMarketplaces();
+  const platform = marketplaces.platformOfChannel(String(order.sales_channel_handle ?? ""));
   const currency = (order.currency_code as string | null) ?? null;
   const customer = await loadCustomer(supabase, shopId, order.shopify_customer_id);
   const vips = customer && rule ? await loadVipCustomers(supabase, shopId, rule, [customer.id]) : new Map();
@@ -213,7 +212,7 @@ export async function getOrderDetail(shopId: string, orderId: string): Promise<O
     placedLabel: dateTime(order.processed_at, tz) ?? "—",
     cancelledLabel: dateTime(order.cancelled_at, tz),
     cancelReason: order.cancel_reason ? enumLabel(order.cancel_reason) : null,
-    platformLabel: PLATFORMS.find((p) => p.id === platform)?.label ?? platform,
+    platformLabel: marketplaces.labelOf(platform),
     channelLabel: (order.sales_channel as string | null) ?? null,
     financialLabel: order.financial_status ? enumLabel(order.financial_status) : null,
     fulfillmentStatus: fulfilment.status,
@@ -266,7 +265,7 @@ export async function getOrderDetail(shopId: string, orderId: string): Promise<O
           name: customer.name,
           // A marketplace buyer's record holds a placeholder address
           // (example.com, mail.codisto.com) that would read as real.
-          email: isMarketplacePlatform(platform) ? null : customer.email,
+          email: marketplaces.isMarketplace(platform) ? null : customer.email,
           isVip: vips.has(customer.id),
           ordersCount: customer.ordersCount,
           spentLabel: money(customer.spent, customer.spentCurrency ?? currency),

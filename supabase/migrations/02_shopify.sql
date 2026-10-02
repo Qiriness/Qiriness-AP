@@ -1006,3 +1006,52 @@ $$;
 
 comment on function public.order_number_range is
   'Lowest and highest order_number this shop has issued, as one row. Replaces a pair of asc/desc limit-1 reads from agent/src/resolution/order-resolution-runner.mjs. Both values are null on a shop with no synced orders, which the caller reads as "we cannot judge whether a quoted number is ours" rather than as a range of zero.';
+
+-- ------------------------------------------------------------ sales_channels
+
+-- THE MARKETPLACES THIS SHOP SELLS ON, one row each.
+--
+-- A marketplace is a set of Shopify sales channel handles (`orders.sales_channel_handle`)
+-- shown under one name: Amazon is `amazon`, Yves Rocher is the Mirakl Connect
+-- channel `connect-dev-1`. Every handle NOT listed here is the shop's own store,
+-- so a new first-party channel lands in Shopify rather than in nothing.
+--
+-- WHY A TABLE. The list used to be a constant in code, a literal in SQL and a
+-- dozen sentences in the UI, all naming this shop's two marketplaces. Another
+-- shop has other marketplaces. Edited in Setup → Sales channels.
+--
+-- What depends on it: the Insights platform filter, every per-person figure
+-- (marketplaces mint one customer per order, so their buyers are left out), the
+-- VIP rule, the anonymous-buyer rule in order resolution, and the management chat.
+create table public.sales_channels (
+  id uuid primary key default gen_random_uuid(),
+  shop_id uuid not null references public.shops(id) on delete cascade,
+  -- The platform's id in URLs and filters (`?platform=amazon`). Never changes.
+  platform_key text not null,
+  -- What the dashboard and the agents call it.
+  label text not null,
+  -- The Shopify sales channel handles that make up this marketplace.
+  handles text[] not null default '{}',
+  -- The names Shopify Analytics (ShopifyQL `sales_channel`) gives the same
+  -- marketplace, lower case: « marketplace connect », « mirakl connect ».
+  analytics_names text[] not null default '{}',
+  position integer not null default 0,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  constraint sales_channels_key_shape_check check (
+    platform_key ~ '^[a-z][a-z0-9_]{1,40}$' and platform_key not in ('all', 'shopify')
+  )
+);
+
+create unique index sales_channels_shop_key_unique
+  on public.sales_channels (shop_id, platform_key);
+
+create trigger sales_channels_set_updated_at
+before update on public.sales_channels
+for each row
+execute function public.set_updated_at();
+
+alter table public.sales_channels enable row level security;
+
+comment on table public.sales_channels is
+  'The marketplaces this shop sells on: a name and the Shopify sales channel handles behind it. Every handle not listed is the shop''s own store. Marketplaces mint one customer per order, so their buyers are left out of every per-person figure. Edited in Setup -> Sales channels.';

@@ -4,6 +4,7 @@ import {
 } from '../../../scripts/lib/supabase-rest-client.mjs';
 import { RPC, T } from '../../../scripts/lib/tables.mjs';
 import { reinvestigationColumns } from '../../../scripts/lib/order-link.mjs';
+import { loadMarketplaces } from '../../../scripts/lib/marketplaces.mjs';
 
 import { countConfirmationMarkers, messageEmailHashes } from './confirmation-evidence.mjs';
 import { shopifyOrderCandidates, parseOrderCandidates, toOrderName } from './order-number-parser.mjs';
@@ -36,6 +37,9 @@ import {
 
 export function createOrderResolutionStore(supabase) {
   return {
+    /** The shop's marketplaces, from `sales_channels`. */
+    loadMarketplaces: (shopId) => loadMarketplaces(supabase, shopId),
+
     // `findUnresolved` left this store: the tickets are now
     // `record.findAwaitingOrderNumber()` and the customer's opening words are
     // `record.firstInboundByTicket()`, which reads the `ticket_first_inbound`
@@ -286,6 +290,9 @@ export async function runOrderResolution({ store, record, shopId, logger, dryRun
   // Asked once per pass, not per ticket. Null on an empty catalogue, in which
   // case nothing is ever called out of range — an empty store has no opinion.
   const range = await store.loadOrderNumberRange?.(shopId);
+  // The shop's marketplace handles, for the anonymous-buyer rule. Optional on
+  // `store`: without it no order is a marketplace order.
+  const marketplaceHandles = (await store.loadMarketplaces?.(shopId))?.handles ?? [];
 
   for (const { ticket, text, candidates, laterCandidates, tracking, emailHashes } of parsed) {
     let resolution;
@@ -387,7 +394,8 @@ export async function runOrderResolution({ store, record, shopId, logger, dryRun
           messageEmailHashes: emailHashes,
           // The parser deduplicates by number, so a thread repeating `6059` in
           // every quoted reply is still one order.
-          soleOrderNumber: candidates.length === 1
+          soleOrderNumber: candidates.length === 1,
+          marketplaceHandles
         });
         return {
           ...verdict,

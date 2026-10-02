@@ -64,7 +64,10 @@ export const INCREMENTAL_FILES = [
   '36_collection_sales',
   '37_collection_handles',
   '38_storefront_months',
-  '39_klaviyo'
+  '39_klaviyo',
+  // Listed because it replaces three functions 11 first carried; the files
+  // between 39 and 61 replace none of them.
+  '61_cases'
 ];
 
 export const read = (name) => readFileSync(new URL(`./${name}.sql`, import.meta.url), 'utf8');

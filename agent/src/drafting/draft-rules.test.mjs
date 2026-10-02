@@ -387,3 +387,26 @@ test('a colleague or partner writing on a customer thread gets no customer-voice
   // A row stored before the actor column is drafted exactly as before.
   assert.equal(draftDecision({ investigation, ticket: {}, conversation: conversation(null) }).draft, true);
 });
+
+// --- cases (61_cases.sql) ----------------------------------------------------
+
+test('a case file keyed to anything but the case reply target is not drafted', () => {
+  const investigation = { verdict: 'answerable', missing: [], trigger_message_id: 'a1' };
+  assert.deepEqual(draftDecision({ investigation, ticket: { level: 2 }, caseTarget: 'b1' }), {
+    draft: false,
+    reason: 'not_reply_target'
+  });
+  // Nothing owed in the case: nothing to draft.
+  assert.equal(draftDecision({ investigation, ticket: { level: 2 }, caseTarget: null }).reason, 'not_reply_target');
+  assert.equal(draftDecision({ investigation, ticket: { level: 2 }, caseTarget: 'a1' }).draft, true);
+  // Never computed: no case gate, as before cases.
+  assert.equal(draftDecision({ investigation, ticket: { level: 2 }, caseTarget: undefined }).draft, true);
+});
+
+test('a reply on ANOTHER thread of the case answers the customer', () => {
+  const conversation = [
+    { id: 'b1', ticket_id: 'B', direction: 'inbound', received_at: '2026-09-10T09:00:00Z' },
+    { id: 'a9', ticket_id: 'A', direction: 'outbound', received_at: '2026-09-11T09:00:00Z' }
+  ];
+  assert.equal(answeredSince({ conversation, triggerMessageId: 'b1' }), true);
+});

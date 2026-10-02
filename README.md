@@ -106,6 +106,10 @@ below. `llm_usage` holds 2174 calls.
 
 ## Next Steps
 
+**Cases (2026-10-02):** apply migration 61, run `npm run cases:targets` and then
+`npm run cases:replay` in `agent/`, and read every link it lists before setting
+`CASE_LINKER_ENABLED=true` (`VALIDATION_LOG.md` item 36, `DECISIONS.md` § Cases).
+
 **Queue priority:** run the live sampling check in `VALIDATION_LOG.md` item 30
 before treating the new action-window bands as operationally proven. In
 particular, verify pre/post-fulfilment changes and the 3 / 3 / 6 working-day

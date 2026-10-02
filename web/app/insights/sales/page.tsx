@@ -5,7 +5,7 @@ import type { SearchParams } from "@/lib/server/insights/context";
 
 export const dynamic = "force-dynamic";
 
-export const metadata = { title: "Sales · Insights · Qiriness Support OS" };
+export const metadata = { title: "Sales · Insights" };
 
 export default function SalesInsightsPage({ searchParams }: { searchParams: SearchParams }) {
   // The product card's selection and filters live in the URL like every other

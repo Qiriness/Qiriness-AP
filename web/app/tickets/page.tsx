@@ -17,7 +17,7 @@ export const dynamic = "force-dynamic";
 
 // The root layout's title is the Agent Setup one; without this the browser tab
 // would name the wrong surface.
-export const metadata = { title: "Tickets · Qiriness Support OS" };
+export const metadata = { title: "Tickets" };
 
 /**
  * Tickets. Four sections over two tables: Queue, Backlog and Closed all come

@@ -39,6 +39,9 @@ const TABS = [
   { href: "/agent-setup/recommendations", id: "recommendations" },
   { href: "/agent-setup/forwarding", id: "forwarding" },
   { href: "/agent-setup/senders", id: "senders" },
+  // Which Shopify sales channels are marketplaces: the Insights platforms and
+  // every per-person figure depend on it.
+  { href: "/agent-setup/sales-channels", id: "salesChannels" },
 ];
 
 export function SetupTabs() {

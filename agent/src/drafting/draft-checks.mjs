@@ -74,7 +74,7 @@ export const MECHANICAL_PROHIBITIONS = {
   customer_unknown: {
     label: 'suppose un compte ou un historique client',
     pattern:
-      /\b(votre compte (?:client|Qiriness)?(?: indique| montre| affiche)|vos commandes précédentes|votre historique (?:de commandes|d['’]achats))\b/i
+      /\b(votre compte(?: \S+)?(?: indique| montre| affiche)|vos commandes précédentes|votre historique (?:de commandes|d['’]achats))\b/i
   },
   // CHECKED RATHER THAN ADVISORY, which is the harder choice and the right one.
   // « Ne rien inventer sur ce point » has no signature and is listed as

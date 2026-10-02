@@ -149,6 +149,9 @@ export async function runFold({
   statusMap = null,
   keepOpenLevels = [],
   autoSnooze = false,
+  // (ticketIds) => void, once, with every ticket folded this run: the worker
+  // recomputes the reply target of their cases (61_cases.sql).
+  onFolded = null,
   logger,
   now = () => new Date()
 }) {
@@ -158,8 +161,10 @@ export async function runFold({
   const holdingDays = ids.length > 0 && store.holdingDays ? await store.holdingDays() : null;
   const snoozing = autoSnooze && ids.length > 0 && store.snoozes && store.ticket;
   const parameters = snoozing && store.parameters ? await store.parameters() : new Map();
+  const foldedIds = [];
   for (const ticketId of ids) {
     totals.considered += 1;
+    foldedIds.push(ticketId);
     try {
       const { messages, caseFiles, readings, previous, actions, overrides = null } = await store.inputs(ticketId);
       const actorOfMessage = (m) => m.actor ?? actorFor(m);
@@ -247,6 +252,13 @@ export async function runFold({
     } catch (error) {
       totals.failed += 1;
       logger?.warn?.('fold.ticket_failed', { ticketId, message: error.message });
+    }
+  }
+  if (onFolded && foldedIds.length > 0) {
+    try {
+      await onFolded(foldedIds);
+    } catch (error) {
+      logger?.warn?.('fold.after_failed', { message: error.message });
     }
   }
   return totals;

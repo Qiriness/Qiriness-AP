@@ -1,6 +1,12 @@
 // Is this new ticket the same ONGOING CONVERSATION as one we already hold —
 // without being a duplicate of it?
 //
+// SINCE MIGRATION 61 THE WORKER NO LONGER WRITES THIS LINK. A thread that
+// continues another now joins its CASE (agent/src/cases/), and the cosine below
+// is reused there for retrieval only: it can make a case a candidate, never
+// link it (DECISIONS § Cases). `related:backfill` still writes the old column
+// by hand; nothing in drafting reads it any more.
+//
 // THE DISTINCTION IS THE WHOLE MODULE. `duplicate-rules.mjs` answers "is this
 // the same message twice", deterministically, and its consequence is silence:
 // a linked ticket gets no draft. This answers a weaker question with a weaker

@@ -10,7 +10,7 @@ import { parseOrderListQuery } from "../../../scripts/lib/order-list-query.mjs";
 
 export const dynamic = "force-dynamic";
 
-export const metadata = { title: "Orders · Qiriness Support OS" };
+export const metadata = { title: "Orders" };
 
 /**
  * Orders — every Shopify order, as the Shopify admin lists them, so looking one

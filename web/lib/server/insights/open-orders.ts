@@ -21,12 +21,7 @@
 import { RPC } from "../../../../scripts/lib/tables.mjs";
 import { loadConfig } from "../../../../scripts/lib/sync-config.mjs";
 import {
-  ALL_MARKETPLACE_HANDLES,
-  PLATFORMS,
-  channelFilter,
   formatDay,
-  isMarketplacePlatform,
-  platformOfChannel,
   wallClock,
 } from "../../../../scripts/lib/insights-range.mjs";
 import { loadVipRule } from "../../../../scripts/lib/vip-rule.mjs";
@@ -42,14 +37,14 @@ const DAY_MS = 86_400_000;
 export async function getOpenOrders(ctx: InsightsContext): Promise<{ orders: OpenOrder[]; vipRuleSet: boolean }> {
   const supabase = getSupabaseClient();
   const rule = await loadVipRule(supabase, ctx.shopId);
-  const { channels, notChannels } = channelFilter(ctx.platform);
+  const { channels, notChannels } = ctx.marketplaces.channelFilter(ctx.platform);
 
   const rows = await callRpc<Record<string, unknown>>(RPC.OPEN_ORDERS, {
     p_shop: ctx.shopId,
     p_min_spend: rule?.minSpend ?? null,
     p_min_orders: rule?.minOrders ?? null,
     p_window_months: rule?.windowMonths ?? null,
-    p_vip_not_channels: [...ALL_MARKETPLACE_HANDLES],
+    p_vip_not_channels: [...ctx.marketplaces.handles],
     p_channels: channels,
     p_not_channels: notChannels,
   });
@@ -62,7 +57,7 @@ export async function getOpenOrders(ctx: InsightsContext): Promise<{ orders: Ope
     orders: rows.map((row) => {
       const placedAt = String(row.processed_at);
       const daysWaiting = Math.max(0, Math.floor((now - Date.parse(placedAt)) / DAY_MS));
-      const platform = platformOfChannel(String(row.channel ?? "")) as PlatformId;
+      const platform = ctx.marketplaces.platformOfChannel(String(row.channel ?? "")) as PlatformId;
       const legacyId = (row.legacy_resource_id as string | null) ?? null;
       return {
         orderId: String(row.order_id),
@@ -74,13 +69,13 @@ export async function getOpenOrders(ctx: InsightsContext): Promise<{ orders: Ope
         daysWaiting,
         late: daysWaiting >= LATE_AFTER_DAYS,
         platform,
-        platformLabel: PLATFORMS.find((p) => p.id === platform)?.label ?? platform,
+        platformLabel: ctx.marketplaces.labelOf(platform),
         channelLabel: (row.channel_label as string | null) ?? null,
         status: String(row.fulfillment_status ?? ""),
         total: count(row.total_price),
         units: count(row.units),
         customerName: (row.customer_name as string | null) ?? null,
-        email: isMarketplacePlatform(platform) ? null : ((row.customer_email as string | null) ?? null),
+        email: ctx.marketplaces.isMarketplace(platform) ? null : ((row.customer_email as string | null) ?? null),
         isVip: row.is_vip === true,
       };
     }),

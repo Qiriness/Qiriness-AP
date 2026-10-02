@@ -333,6 +333,20 @@ export function createTicketRecord(supabase, { shopId, transport = REST_TRANSPOR
       return patch(ticketId, { customer_id: null });
     },
 
+    /**
+     * Puts a thread in a case, or marks its case decided. The DECISION is
+     * agent/src/cases/'s and is recorded by scripts/lib/case-record.mjs, which
+     * calls this: `tickets` keeps one writer.
+     */
+    // `columns`: what moving the thread changes beside it, e.g. sending it back
+    // through the investigation so the case file reads the whole case.
+    async setCase(ticketId, { caseId, state = 'decided', columns = {} }) {
+      if (!caseId) {
+        throw new Error('setCase requires a case: every thread belongs to one.');
+      }
+      return patch(ticketId, { ...columns, case_id: caseId, case_link_state: state });
+    },
+
     async clearRelated(ticketId) {
       return patch(ticketId, {
         related_ticket_id: null,
@@ -694,6 +708,20 @@ export function createTicketRecord(supabase, { shopId, transport = REST_TRANSPOR
       );
     },
 
+    /**
+     * Threads whose case has not been decided, once their labels and order
+     * passes are done: the case linker's queue. Oldest first, like the others.
+     */
+    async findAwaitingCaseLink({ limit = 200 } = {}) {
+      return selectAll(
+        supabase,
+        T.TICKETS,
+        live({ case_link_state: 'pending', needs_categorisation: false }),
+        COLUMNS.ticketForCaseLink,
+        { limit, order: OLDEST_FIRST }
+      );
+    },
+
     /** Tickets with no order number yet. */
     async findAwaitingOrderNumber({ limit = 500 } = {}) {
       return selectAll(
@@ -805,7 +833,7 @@ export function createTicketRecord(supabase, { shopId, transport = REST_TRANSPOR
         supabase,
         T.TICKETS,
         live({ id: ticketId }),
-        'id,subject,duplicate_of_ticket_id,duplicate_reason,related_ticket_id,related_score,resolved_context',
+        'id,subject,duplicate_of_ticket_id,duplicate_reason,related_ticket_id,related_score,resolved_context,case_id',
         { limit: 1 }
       );
       return rows[0] || null;

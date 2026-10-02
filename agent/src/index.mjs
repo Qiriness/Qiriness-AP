@@ -5,6 +5,7 @@ import { createCaseStateRecord } from '../../scripts/lib/case-state-record.mjs';
 import { loadAgentConfig, assertGraphConfig } from './config.mjs';
 import { logger } from './lib/logger.mjs';
 import { loadShopTimeZone, resolveShopId } from './lib/shop.mjs';
+import { loadCompany } from '../../scripts/lib/company.mjs';
 import { createGraphClient } from './ingestion/graph-client.mjs';
 import { createSupabaseMessageStore } from './ingestion/ticket-writer.mjs';
 import { createBlocklistStore } from './ingestion/blocklist-store.mjs';
@@ -12,7 +13,9 @@ import { OWN_SIDE_LABELS, createSenderDirectoryStore } from './ingestion/sender-
 import { actorOf, obligationOwners } from './casework/actors.mjs';
 import { createCaseCurrentStore, runFold } from './casework/case-current-store.mjs';
 import { createDuplicateLookup, findDuplicate } from './ingestion/duplicate-rules.mjs';
-import { createRelatedLookup, findRelated } from './ingestion/related-rules.mjs';
+import { createCaseRecord } from '../../scripts/lib/case-record.mjs';
+import { createCaseLinkStore, runCaseLinking } from './cases/case-linker-runner.mjs';
+import { createCaseLinker } from './cases/case-linker-model.mjs';
 import { exemptKnownSenders } from './ingestion/known-senders.mjs';
 import { createSupabaseSpamAuditStore } from './ingestion/spam-audit.mjs';
 import { CURSOR_KEYS, runDeltaPoll, createSupabaseCursorStore } from './ingestion/delta-poller.mjs';
@@ -94,6 +97,7 @@ const PIPELINE_STAGES = [
   'categorise',
   'orders',
   'context',
+  'link',
   'investigate',
   'fold',
   'draft',
@@ -140,6 +144,9 @@ async function main() {
   // owns the flags, the filters, the lifecycle timestamps and the metadata
   // trail. See scripts/lib/ticket-record.mjs.
   const record = createTicketRecord(supabase, { shopId });
+  // THE CASE above the thread (61_cases.sql): created with each new
+  // conversation, linked by the `link` pass, and holding the reply target.
+  const caseRecord = createCaseRecord(supabase, { shopId, tickets: record });
   const caseStateRecord = createCaseStateRecord(supabase, { shopId });
   const store = createSupabaseMessageStore(supabase);
   const caseCurrentStore = createCaseCurrentStore(supabase, { shopId });
@@ -175,6 +182,9 @@ async function main() {
   // Stage 6: the drafting pass in the poll. Null unless DRAFT_IN_POLL=true and a
   // key is set, and null means the stage is skipped, as before.
   let drafting = null;
+  // The Case Linker: null unless CASE_LINKER_ENABLED=true and a key is set.
+  // Null means an ambiguous thread opens its own case, its candidates logged.
+  let caseLinker = null;
   // ONE buffer for the whole process, drained at the end of every poll. It is
   // created here, outside the `openaiApiKey` branch, so the flush at the end of
   // the poll can be unconditional: with no key there are no model calls, the
@@ -195,11 +205,15 @@ async function main() {
   // with those choices applied; everything else keeps reading `config`.
   let models = config;
   let modelsSignature = null;
+  let company = null;
   const buildModelStages = () => {
     const openai = createOpenAIClient({ apiKey: config.openaiApiKey, usageSink: usage.sink });
-    triage = createSpamClassifier(openai, { model: models.triageModel, logger }).triage;
-    categorise = createCategoriser(openai, { model: models.categoriserModel }).categorise;
+    triage = createSpamClassifier(openai, { model: models.triageModel, logger, company }).triage;
+    categorise = createCategoriser(openai, { model: models.categoriserModel, company }).categorise;
     destinationChooser = createDestinationChooser(openai, { model: models.routerModel });
+    caseLinker = config.caseLinkerEnabled && models.caseLinkerModel
+      ? createCaseLinker(openai, { model: models.caseLinkerModel })
+      : null;
     // `AGENT_CASEWORK_MODEL=` (empty) leaves this null, which turns the stage
     // off — the switch is the absence of the reader, not a flag inside it.
     readCaseFor = models.caseworkModel ? { openai, model: models.caseworkModel } : null;
@@ -230,7 +244,8 @@ async function main() {
       config: models,
       logger,
       customerLookup,
-      usageSink: usage.sink
+      usageSink: usage.sink,
+      company
     });
   };
   // Picks up a model chosen in Settings. A table that cannot be read (migration
@@ -245,8 +260,17 @@ async function main() {
         return;
       }
     }
+    // WHO THE COMPANY IS, named in the agents' first line (scripts/lib/company.mjs).
+    // Part of the signature, so editing the description in Setup rebuilds the
+    // prompts on the next poll the way a model change does. A failed read
+    // keeps what is running.
+    try {
+      company = await loadCompany(supabase, shopId);
+    } catch (error) {
+      logger.warn('agent.company_load_failed', { shopId, error: error.message });
+    }
     const next = withAgentModels(config, chosen);
-    const signature = modelSignature(next);
+    const signature = `${modelSignature(next)}|${JSON.stringify(company)}`;
     if (signature === modelsSignature) return;
     const before = modelsSignature;
     models = next;
@@ -300,12 +324,6 @@ async function main() {
     const senderDirectory = await senderDirectoryStore.load(shopId, {
       supportMailbox: config.graph.mailbox
     });
-    const relatedLookup = createRelatedLookup({
-      supabase,
-      shopId,
-      select: supabaseSelect,
-      senderDirectory
-    });
 
     // A SENDER WE HAVE WRITTEN DOWN IS NEVER SPAM, applied to both gates at once.
     // Four emails from directory addresses were dropped before this existed —
@@ -340,25 +358,11 @@ async function main() {
             before: item.conversation?.message_at
           })
         }),
-      // The weaker link, and deliberately the opposite consequence: this one
-      // never suppresses a draft, it adds the fact that the customer has written
-      // before — and, when we never answered, that they are still waiting.
-      //
-      // The directory is loaded once per poll and shared, like the blocklist: a
-      // sender labelled a retailer a minute ago is excluded on this poll rather
-      // than the next.
-      detectRelated: async ({ ticketId, message, requesterEmailHash }) => {
-        const { priorMessages, outboundAt } = await relatedLookup.priorMessages({
-          requesterEmailHash,
-          fromEmail: message.from_email,
-          before: message.received_at
-        });
-        return findRelated({
-          candidate: { ...message, ticket_id: ticketId },
-          priorMessages,
-          outboundAt
-        });
-      },
+      // Every new conversation opens its own case; a duplicate joins its
+      // original's. The embedding-based related link is no longer written: a
+      // similar message is now a candidate for the `link` pass, which decides
+      // (DECISIONS § Cases).
+      cases: caseRecord,
       // Stamped at ticket creation from the address that opened the thread.
       // Only the labels that mean "us" — a retailer or a courier is a real
       // external correspondent and their mail is real work.
@@ -546,6 +550,33 @@ async function main() {
       }
     }
 
+    // CASE LINKING, after the order passes (the order, the parcel and the subject
+    // are what it decides on) and before the investigation (which then reads the
+    // whole case). Deterministic first; the Case Linker only between a few
+    // candidates, and only when switched on.
+    if (runsThrough('link')) {
+      try {
+        const linked = await runCaseLinking({
+          store: createCaseLinkStore(supabase, {
+            shopId,
+            tickets: record,
+            cases: caseRecord,
+            senderDirectory,
+            snoozes: snoozeRecord
+          }),
+          cases: caseRecord,
+          linkCase: caseLinker,
+          logger
+        });
+        if (linked.examined > 0) {
+          const { decisions, ...summary } = linked;
+          logger.info('cases.link_pass', { shopId, ...summary });
+        }
+      } catch (error) {
+        logger.warn('cases.link_pass_failed', { shopId, error: error.message });
+      }
+    }
+
     // Investigation runs after categorisation and after the two order passes, and
     // consumes all three in the same poll: the categoriser raises
     // `needs_investigation` as it clears its own flag, and the order passes have
@@ -580,7 +611,9 @@ async function main() {
         // or matched on the new request when the Case Manager read one. Wired
         // only while the casework pass is on — with it off there is no case state
         // to plan from, and the opening message is matched as before.
-        planSituation: readCaseFor ? createSituationPlanner(supabase, { shopId, caseStateRecord, logger }) : null
+        planSituation: readCaseFor ? createSituationPlanner(supabase, { shopId, caseStateRecord, logger }) : null,
+        // The whole case in the transcript, and only its reply thread investigated.
+        cases: caseRecord
       });
       if (investigated.considered > 0) {
         logger.info('investigate.pass', { shopId, ...investigated });
@@ -600,6 +633,8 @@ async function main() {
         statusMap: config.caseStatusByNextActor,
         keepOpenLevels: [...AUTO_CLOSE_EXEMPT_LEVELS],
         autoSnooze: config.autoSnooze,
+        // Where each touched case's reply goes, recomputed from all its threads.
+        onFolded: (ticketIds) => caseRecord.refreshTargetsForTickets(ticketIds),
         logger
       });
       if (folded.considered > 0) {
@@ -710,7 +745,7 @@ async function main() {
     // the timestamps this poll just advanced, so a thread that received a reply
     // seconds ago is never retired by the same pass that ingested it.
     if (runsThrough('close')) {
-      const autoClosed = await runAutoClose({ record, shopId, logger, snoozes: snoozeRecord });
+      const autoClosed = await runAutoClose({ record, shopId, logger, snoozes: snoozeRecord, cases: caseRecord });
       if (autoClosed.closed > 0 || autoClosed.failed > 0) {
         logger.info('lifecycle.auto_close.pass', { shopId, ...autoClosed });
       }

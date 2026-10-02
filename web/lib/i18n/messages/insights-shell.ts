@@ -72,7 +72,7 @@ export const en = {
   "insights.pin.full": "Two rows are pinned — unpin one first",
   "insights.pin.unpinRow": "Unpin this row",
   "insights.pin.pinRow": "Pin this row to the top",
-  "insights.customers.platformReason": "Per-person figures leave out Amazon and Yves Rocher, which create one customer per order",
+  "insights.customers.platformReason": "Per-person figures leave out {marketplaces}, which create one customer per order",
 } as const;
 
 export const fr: Record<keyof typeof en, string> = {
@@ -148,5 +148,5 @@ export const fr: Record<keyof typeof en, string> = {
   "insights.pin.full": "Deux lignes sont épinglées — désépinglez-en une d'abord",
   "insights.pin.unpinRow": "Désépingler cette ligne",
   "insights.pin.pinRow": "Épingler cette ligne en haut",
-  "insights.customers.platformReason": "Les chiffres par personne excluent Amazon et Yves Rocher, qui créent un client par commande",
+  "insights.customers.platformReason": "Les chiffres par personne excluent {marketplaces}, qui créent un client par commande",
 };

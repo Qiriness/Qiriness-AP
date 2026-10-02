@@ -26,7 +26,7 @@ test('In-Reply-To naming a stored message links the conversation', () => {
     candidate: { in_reply_to: '<first@qiriness.com>', body_text: 'autre chose', received_at: at('2026-08-05T09:00:00Z') },
     priorMessages: [PRIOR]
   });
-  assert.deepEqual(hit, { ticketId: 'ticket-1', reason: 'reply_chain' });
+  assert.deepEqual(hit, { ticketId: 'ticket-1', caseId: null, reason: 'reply_chain' });
 });
 
 test('a References chain links it too, not only the direct parent', () => {
@@ -70,7 +70,7 @@ test('the real case: identical text one second apart', () => {
     candidate: { body_text: PRIOR.body_text, received_at: at('2026-07-31T14:27:58Z') },
     priorMessages: [PRIOR]
   });
-  assert.deepEqual(hit, { ticketId: 'ticket-1', reason: 'identical_body' });
+  assert.deepEqual(hit, { ticketId: 'ticket-1', caseId: null, reason: 'identical_body' });
 });
 
 test('identical text days later is a chase, not a duplicate', () => {

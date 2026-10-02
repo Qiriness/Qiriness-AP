@@ -40,6 +40,53 @@ these.
 as its own item: `llm_usage` (item 14), `categorisation_review` (item 15), and
 `category_forwarding` / `ticket_forwards` (item 1).
 
+## 36. Cases: linking, the reply target and the queue — 2026-10-02
+
+Built and unit-tested; migration 61 tried twice on the committed baseline in a throwaway schema, not applied to the live database. DECISIONS § Cases.
+
+1. **Apply 61.** **Done 2026-10-02**: 1003 cases for 1015 tickets, 0 null, every duplicate in its original's case, 3 mutual pairs joined; `cases:targets` run. **Check (again after deploying the new code):**
+   - `select count(*) from tickets where case_id is null` = 0;
+   - every former `duplicate_of_ticket_id` row shares its original's case, with a `backfill` row in `case_links`;
+   - the queue loads with one row per case.
+2. **Replay before anything links live.** `npm run cases:replay`. **Check:** read EVERY `LINK` and `AMBIGUOUS` it lists against the two threads. A wrong `order_family` link is a rule to narrow; an ambiguous pair that is plainly one problem is the Case Linker's case. Record the counts by method here.
+   **Done 2026-10-02** (1015 threads, cumulative replay):
+   - Counts: `first_contact` 624, `excluded_sender` 179, `no_candidates` 131, `tracking` 32, ambiguous 49.
+   - All 32 links checked against the database: same requester and same order on 31. The one without an order number, `d20935c0`, names order 5137 and its parcel in the body.
+   - Ambiguous, in three kinds:
+     - plain follow-ups of one problem (5011 rétractation, 4806 « pacco non ricevuto », masque LED, the alternance applicant). The pre-July threads among them have no order number, because they predate order resolution;
+     - supplier and partner mail with no `sender_label` (GLS invoice requests per parcel, Silgan, « Avis de paiement »), which should stay apart;
+     - family-only candidates.
+   - The replay's first version judged each thread against the stored cases, so a third thread on one parcel read ambiguous. It is now cumulative (`caseOf`).
+3. **The model, offline.** `npm run cases:replay -- --with-model` on the ambiguous ones. **Check:** every `LINK` it returns is right by hand. Any doubt means it stays off.
+   **Run 2026-10-02 (gpt-4o-mini): stays off.** Of 49 ambiguous threads, the model linked 38 and kept 11 apart.
+   - Links: 34 right, 4 wrong. The wrong ones are all supplier mail: GLS invoice requests for different parcels, and separate « Avis de paiement » with different amounts.
+   - Kept apart: 2 right, 9 missed. 5 of the missed are near-identical resends (eba0bd01/63c6917f, b013e715/7e2683cc, 5834aaff/d809c3a8, eee8cffb/5d2cf322, 1fac0575/8190f15c).
+   - Cause: the model never sees a candidate's text. Its « Résumé » is only subjects and states, mostly « Nouveau message de client le … », so it guesses.
+   - Before a rerun:
+     - give each candidate an excerpt of its customer's opening message;
+     - put the supplier senders in the sender directory.
+
+   **Rerun 2026-10-02 with a 400-character excerpt of each candidate's opening message (`CANDIDATE_OPENING_CHARS`)**:
+   - 46 linked, 3 kept apart.
+   - All 9 misses now link, including the five resends, the half-empty pot together with « Produit défectueux », and order #6115.
+   - The shipping-cost thread now joins the complaint itself (4f810722) instead of the abandoned-cart reply.
+   - Kept apart:
+     - correctly, the accountant (eaa9d635) and another order's return (ee493c1a);
+     - debatably, 4f810722 from e59dbd5b, the « cannot pay » cart reply.
+   - **The only wrong links left are the same 4 supplier ones** (GLS per parcel, « Avis de paiement »). The sender directory was not changed (user's call).
+4. **Only then `CASE_LINKER_ENABLED=true`.**
+5. **A real split thread.** The next customer who writes again on a new thread about the same order:
+   - the `link` pass logs `cases.decided` (`order_family` or `tracking`);
+   - the old thread leaves the queue behind the new one, which shows « 2 threads »;
+   - the investigation transcript marks « AUTRE FIL DU DOSSIER »;
+   - the draft is written on the new thread and opens with the apology when the first went unanswered.
+6. **Insights.** **Check:** Support volume for a month falls by the number of threads linked in it, and no further.
+7. **On screen.** **Check:**
+   - the « Show every thread of a case » toggle;
+   - the « Linked thread » chip;
+   - the thread dialog's « Threads of this case » list;
+   - « Create draft » refused on a thread that is not the reply thread.
+
 ## 35. Team forwarding: built, rehearsed, off — 2026-09-29
 
 Migrations 49 and 50 applied; seven destinations configured (Défectueux switched off). `forward:dry-run -- --since=2026-07-01` routed the live data as the business described. Nothing has been sent: `forward_since` is null and `ticket_forwards` holds 0 rows.

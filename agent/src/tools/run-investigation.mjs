@@ -5,6 +5,7 @@ import { createCaseStateRecord } from '../../../scripts/lib/case-state-record.mj
 import { loadAgentConfig } from '../config.mjs';
 import { logger } from '../lib/logger.mjs';
 import { loadShopTimeZone, resolveShopId } from '../lib/shop.mjs';
+import { loadCompany } from '../../../scripts/lib/company.mjs';
 import { toDraftingPrompt, toHumanBrief } from '../investigation/case-file.mjs';
 import { summariseNeeds } from '../investigation/evidence-rules.mjs';
 import { createInvestigationStack } from '../investigation/create-investigation.mjs';
@@ -81,7 +82,8 @@ async function main() {
     shopId,
     config,
     logger,
-    usageSink: usage.sink
+    usageSink: usage.sink,
+    company: await loadCompany(supabase, shopId)
   });
   const senderDirectoryStore = createSenderDirectoryStore(supabase);
 

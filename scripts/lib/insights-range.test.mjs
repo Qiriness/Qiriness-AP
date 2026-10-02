@@ -6,15 +6,12 @@ import {
   bucketKeys,
   bucketLabel,
   change,
-  channelFilter,
   fillSeries,
   fromKey,
   grainForSpan,
   lastCompleteMonth,
   monthOptions,
   yearEarlier,
-  parsePlatform,
-  platformOfChannel,
   RANGE_PRESETS,
   resolveRange,
   truncate,
@@ -214,15 +211,7 @@ test('change is null where no honest percentage exists', () => {
   assert.equal(change(null, 3), null);
 });
 
-test('platforms map to channel handles, with Shopify as everything that is not a marketplace', () => {
-  assert.deepEqual(channelFilter('amazon'), { channels: ['amazon'], notChannels: null });
-  assert.deepEqual(channelFilter('yves_rocher'), { channels: ['connect-dev-1'], notChannels: null });
-  assert.deepEqual(channelFilter('shopify'), { channels: null, notChannels: ['amazon', 'connect-dev-1'] });
-  assert.deepEqual(channelFilter('all'), { channels: null, notChannels: null });
-  assert.equal(platformOfChannel('shop-72'), 'shopify');
-  assert.equal(platformOfChannel('connect-dev-1'), 'yves_rocher');
-  assert.equal(parsePlatform('ebay'), 'all');
-});
+// The platform tests moved to marketplaces.test.mjs with the platforms themselves.
 
 test('axis labels suit the grain', () => {
   assert.equal(bucketLabel('2026-09-11T14:00:00', 'hour'), '14:00');

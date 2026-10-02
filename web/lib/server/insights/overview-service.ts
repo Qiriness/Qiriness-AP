@@ -87,7 +87,7 @@ export async function getOverviewPanel(ctx: InsightsContext): Promise<OverviewPa
     orders: toSeries(ctx.range, seriesRows, (row) => row?.orders ?? 0, coverage),
     // A bucket with no order has no average, not an average of zero.
     aov: toSeries(ctx.range, seriesRows, (row) => (row && row.orders > 0 ? row.revenue / row.orders : null), coverage),
-    platforms: foldPlatforms(channelRows),
+    platforms: foldPlatforms(channelRows, ctx.marketplaces),
     topProducts: products.slice(0, TOP_PRODUCTS),
     productRevenue: products.reduce((sum, p) => sum + p.revenue, 0),
     inventory,

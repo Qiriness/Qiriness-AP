@@ -1,6 +1,6 @@
 /** Generated messages (insights-sales); edit freely. */
 export const en = {
-  "insights.sales.noticeMarketplaceVip": "Marketplace buyers are never VIPs: Amazon and Yves Rocher create a new customer for every order.",
+  "insights.sales.noticeMarketplaceVip": "Marketplace buyers are never VIPs: {marketplaces} create a new customer for every order.",
   "insights.sales.noticeNoVipRule": "No VIP rule is set, so nobody is a VIP yet. Set one on Insights → Customers, or show all customers.",
   "insights.sales.per.hour": "per hour",
   "insights.sales.per.day": "per day",
@@ -94,7 +94,7 @@ export const en = {
   "insights.sales.mix.nobody": "Nobody in this group bought it, so there is nothing to count orders over.",
   "insights.sales.mix.orderedWith": "Ordered with",
   "insights.sales.mix.noOthers": "Nobody who bought this product bought another paid product in this range.",
-  "insights.sales.mix.caption": "Out of {n} Shopify customers who ordered in this range{group}; Amazon and Yves Rocher orders are not counted.",
+  "insights.sales.mix.caption": "Out of {n} Shopify customers who ordered in this range{group}; orders from {marketplaces} are not counted.",
   "insights.sales.mix.captionCountry": "Only orders delivered to {country} are counted, including for “ordered with”.",
   "insights.sales.mix.captionVip": "VIP follows the shop's rule over its own window, not this range.",
   "insights.sales.mix.captionEnd": "Free items (samples, promotional masques) are ignored, so a sample alongside the product still counts as buying only this product. “Ordered with” covers the whole range, not just the same order. The chart counts its buyers only — everyone else is the “did not order it” figure above — and one order carrying two jars is one order, as on Customers → Customers by number of orders.",
@@ -106,7 +106,7 @@ export const en = {
 } as const;
 
 export const fr: Record<keyof typeof en, string> = {
-  "insights.sales.noticeMarketplaceVip": "Les acheteurs des marketplaces ne sont jamais VIP : Amazon et Yves Rocher créent un nouveau client à chaque commande.",
+  "insights.sales.noticeMarketplaceVip": "Les acheteurs des marketplaces ne sont jamais VIP : {marketplaces} créent un nouveau client à chaque commande.",
   "insights.sales.noticeNoVipRule": "Aucune règle VIP n'est définie : personne n'est VIP pour l'instant. Définissez-en une dans Analyses → Clients, ou affichez tous les clients.",
   "insights.sales.per.hour": "par heure",
   "insights.sales.per.day": "par jour",
@@ -200,7 +200,7 @@ export const fr: Record<keyof typeof en, string> = {
   "insights.sales.mix.nobody": "Personne dans ce groupe ne l'a acheté : il n'y a rien à compter.",
   "insights.sales.mix.orderedWith": "Commandé avec",
   "insights.sales.mix.noOthers": "Aucun acheteur de ce produit n'a acheté un autre produit payé sur cette période.",
-  "insights.sales.mix.caption": "Sur {n} clients Shopify ayant commandé sur cette période{group} ; les commandes Amazon et Yves Rocher ne sont pas comptées.",
+  "insights.sales.mix.caption": "Sur {n} clients Shopify ayant commandé sur cette période{group} ; les commandes de {marketplaces} ne sont pas comptées.",
   "insights.sales.mix.captionCountry": "Seules les commandes livrées en {country} sont comptées, y compris pour « commandé avec ».",
   "insights.sales.mix.captionVip": "Le statut VIP suit la règle de la boutique sur sa propre fenêtre, pas sur cette période.",
   "insights.sales.mix.captionEnd": "Les articles gratuits (échantillons, masques promotionnels) sont ignorés : un échantillon avec le produit compte donc comme l'achat de ce seul produit. « Commandé avec » couvre toute la période, pas seulement la même commande. Le graphique ne compte que ses acheteurs — tous les autres sont dans le chiffre « ne l'ont pas commandé » ci-dessus — et une commande contenant deux pots compte pour une commande, comme dans Clients → Clients par nombre de commandes.",

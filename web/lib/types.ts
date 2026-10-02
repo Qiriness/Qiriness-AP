@@ -416,6 +416,24 @@ export interface SenderDirectoryView {
   supportMailboxDomain: string | null;
 }
 
+/** One marketplace the shop sells on (`sales_channels`). */
+export interface SalesChannel {
+  id: string;
+  /** Its id in URLs and filters; never changes. */
+  platformKey: string;
+  label: string;
+  /** Shopify sales channel handles (`orders.sales_channel_handle`). */
+  handles: string[];
+  /** The names Shopify Analytics gives the same marketplace, lower case. */
+  analyticsNames: string[];
+}
+
+/** Setup -> Sales channels: the marketplaces, and every handle the orders carry. */
+export interface SalesChannelsView {
+  channels: SalesChannel[];
+  observedHandles: { handle: string; shopifyLabel: string | null; orders: number; marketplace: string | null }[];
+}
+
 /** The gloss behind each score, used as the face's tooltip. */
 export const TICKET_HAPPINESS_MEANINGS: Record<TicketHappiness, string> = {
   1: "Happy",
@@ -468,6 +486,16 @@ export interface TicketListItem {
    * queue knows before they read one.
    */
   isDuplicate: boolean;
+  /**
+   * The customer case this thread belongs to (61_cases.sql). Several threads
+   * can share one: the queue shows one row per case, its lead thread (the one
+   * the reply goes to), ranked on the case's facts.
+   */
+  caseId: string | null;
+  /** How many live threads the case has; 1 for a thread alone in its case. */
+  caseThreadCount: number;
+  /** Whether this thread represents its case in the queue. */
+  isCaseLead: boolean;
   /**
    * True when the opener is `internal`, `contractor`, `logistics` or `courier` —
    * the labels that mean "this is not customer demand". Such threads leave the
@@ -1182,6 +1210,11 @@ export interface TicketThread {
    * customer was never answered it is why the reply opens with an apology.
    */
   relatedTo: { ticketId: string; score: number } | null;
+  /**
+   * The case this thread belongs to, when it spans several threads
+   * (61_cases.sql). Null for a thread alone in its case, which is most.
+   */
+  case: TicketCaseThreads | null;
   draft: TicketDraft | null;
   messages: TicketMessage[];
   /**
@@ -1251,6 +1284,24 @@ export interface TicketDraft {
  * What a person may send on this ticket without a draft, and what they have.
  * A manual reply is an outbound action with no draft (mode `manual`).
  */
+/** The threads of one customer case, and which one the reply goes to. */
+export interface TicketCaseThreads {
+  caseId: string;
+  /** The thread holding the newest unanswered customer message; null when nothing is owed. */
+  replyThreadId: string | null;
+  threads: Array<{
+    ticketId: string;
+    subject: string | null;
+    firstMessageAt: string | null;
+    lastMessageAt: string | null;
+    status: string;
+    isThisThread: boolean;
+    isReplyThread: boolean;
+    /** How the thread joined the case (case_links.method), when it was linked. */
+    linkedBy: string | null;
+  }>;
+}
+
 export interface TicketReplyState {
   /** OUTBOUND_SEND_ENABLED on this server. Without it nothing can be queued. */
   sendingEnabled: boolean;
@@ -1258,6 +1309,11 @@ export interface TicketReplyState {
   holdsInDrafts: boolean;
   /** The customer message a reply would answer (the latest), or null if there is none. */
   targetMessageId: string | null;
+  /**
+   * Set when this thread's case replies on ANOTHER thread (61_cases.sql): a
+   * reply written here would be the case's second. Null otherwise.
+   */
+  replyElsewhere: { ticketId: string; subject: string | null } | null;
   /** This ticket's manual replies, newest first. */
   manual: TicketManualReply[];
 }
@@ -1392,7 +1448,8 @@ export type BucketState = "measured" | "partial" | "missing";
 /** How a chart or tile formats its values. Components format; services don't. */
 export type ValueUnit = "count" | "euro" | "hours" | "percent" | "usd" | "tokens";
 
-export type PlatformId = "all" | "shopify" | "amazon" | "yves_rocher";
+/** `all`, `shopify` (the shop's own store), or a marketplace key from `sales_channels`. */
+export type PlatformId = string;
 
 /** The resolved range, as `resolveRange` in scripts/lib/insights-range.mjs returns it. */
 export interface InsightsRange {

@@ -108,7 +108,7 @@ function rest() {
 interface ChatState {
   url: string;
   pool: ReturnType<typeof createChatPool>;
-  schema?: { text: string; timezone: string; at: number };
+  schema?: { text: string; timezone: string; companyName: string | null; at: number };
 }
 
 /**
@@ -126,10 +126,20 @@ async function chatContext() {
   }
   if (!state.schema || Date.now() - state.schema.at > SCHEMA_TTL_MS) {
     const text = await loadSchemaText(state.pool);
-    const shop = await state.pool.query("select iana_timezone from chat.shop where iana_timezone is not null limit 1");
-    state.schema = { text, timezone: shop.rows[0]?.iana_timezone ?? "UTC", at: Date.now() };
+    const shop = await state.pool.query("select iana_timezone, shop_name from chat.shop limit 1");
+    state.schema = {
+      text,
+      timezone: shop.rows[0]?.iana_timezone ?? "UTC",
+      companyName: shop.rows[0]?.shop_name ?? null,
+      at: Date.now()
+    };
   }
-  return { pool: state.pool, schemaText: state.schema.text, timezone: state.schema.timezone };
+  return {
+    pool: state.pool,
+    schemaText: state.schema.text,
+    timezone: state.schema.timezone,
+    companyName: state.schema.companyName ?? null
+  };
 }
 
 function todayIn(timezone: string): string {
@@ -281,11 +291,11 @@ export async function askQuestion({
   let patch: Record<string, unknown>;
 
   try {
-    const { pool, schemaText, timezone } = await chatContext();
+    const { pool, schemaText, timezone, companyName } = await chatContext();
     const result = await runChatTurn({
       client: createOpenAIClient({ apiKey: process.env.OPENAI_API_KEY }),
       model,
-      system: buildSystemPrompt({ schemaText, today: todayIn(timezone), timezone }),
+      system: buildSystemPrompt({ schemaText, today: todayIn(timezone), timezone, companyName }),
       history: buildHistory(
         earlier.map((turn) => ({ question: turn.question, answer: turn.answer ?? "", queries: turn.queries }))
       ),

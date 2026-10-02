@@ -23,7 +23,6 @@ import { KLAVIYO_RPC, RPC, T } from "../../../../scripts/lib/tables.mjs";
 import { readKlaviyoConnection } from "../../../../scripts/lib/klaviyo-sync.mjs";
 import { summariseKlaviyoMessages } from "../../../../scripts/lib/klaviyo-reports.mjs";
 import { supabaseSelect } from "../../../../scripts/lib/supabase-rest-client.mjs";
-import { ALL_MARKETPLACE_HANDLES, isMarketplacePlatform } from "../../../../scripts/lib/insights-range.mjs";
 import type { KlaviyoMessageRow, KlaviyoPerformance, MarketingPanel, PromotionRow } from "../../types";
 import { orderArgs, rangeArgs, type InsightsContext } from "./context";
 import { liveChannels, liveFunnel, liveLandingTypes, liveProductPages, liveTotals } from "./analytics";
@@ -83,15 +82,15 @@ async function productTitlesByHandle(shopId: string): Promise<Map<string, string
 
 /**
  * Promotions in the range, full price last. On a marketplace the new-customer
- * column is null: every Amazon or Yves Rocher buyer is a new record per order.
+ * column is null: every marketplace buyer is a new record per order.
  */
 export async function getPromotions(ctx: InsightsContext, window = ctx.range): Promise<PromotionRow[]> {
   const rows = await callRpc<Record<string, unknown>>(RPC.INSIGHTS_PROMOTIONS, {
     ...orderArgs(ctx, window),
-    p_people_not_channels: [...ALL_MARKETPLACE_HANDLES],
+    p_people_not_channels: [...ctx.marketplaces.handles],
     p_limit: PROMOTIONS,
   });
-  const marketplace = isMarketplacePlatform(ctx.platform);
+  const marketplace = ctx.marketplaces.isMarketplace(ctx.platform);
   const mapped = rows.map(
     (row): PromotionRow => ({
       name: (row.promotion as string | null) ?? null,
@@ -117,7 +116,7 @@ function klaviyoBlocked(blockedReason: string, lastSyncAt: string | null = null)
  * Klaviyo's to show. A failed read blocks this card alone, never the panel.
  */
 async function getKlaviyoPerformance(ctx: InsightsContext): Promise<KlaviyoPerformance> {
-  if (isMarketplacePlatform(ctx.platform)) {
+  if (ctx.marketplaces.isMarketplace(ctx.platform)) {
     return klaviyoBlocked("insights.marketing.klaviyoMarketplace");
   }
   try {

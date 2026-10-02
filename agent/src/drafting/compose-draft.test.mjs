@@ -498,3 +498,20 @@ test('a key nothing recognises never reaches the prompt', () => {
   });
   assert.ok(!prompt.includes('invented_key'));
 });
+
+test('a case of several threads: the history is the case, the other thread marked', () => {
+
+  const text = composeDraftingMessage({
+    message: { id: 'b1', body_text: 'toujours rien', direction: 'inbound' },
+    caseFile: caseFileFromRow(ROW),
+    conversation: [
+      { id: 'a1', ticket_id: 'A', direction: 'inbound', body_text: 'où est ma commande ?', received_at: '2026-09-01T09:00:00Z' },
+      { id: 'a2', ticket_id: 'A', direction: 'outbound', body_text: 'elle part demain', received_at: '2026-09-02T09:00:00Z' },
+      { id: 'b1', ticket_id: 'B', direction: 'inbound', body_text: 'toujours rien', received_at: '2026-09-10T09:00:00Z' }
+    ]
+  });
+  const rendered = typeof text === 'string' ? text : JSON.stringify(text);
+  assert.match(rendered, /Ce que nous avons déjà répondu dans ce dossier/);
+  assert.match(rendered, /autre fil/);
+  assert.match(rendered, /elle part demain/);
+});

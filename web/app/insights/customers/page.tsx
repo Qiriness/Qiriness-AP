@@ -7,7 +7,7 @@ import type { SearchParams } from "@/lib/server/insights/context";
 
 export const dynamic = "force-dynamic";
 
-export const metadata = { title: "Customers · Insights · Qiriness Support OS" };
+export const metadata = { title: "Customers · Insights" };
 
 /**
  * The customer base today (a snapshot), plus what customers did in the selected

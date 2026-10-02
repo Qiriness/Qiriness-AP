@@ -1,5 +1,6 @@
 import { supabaseSelect, supabaseSelectAll } from '../../../scripts/lib/supabase-rest-client.mjs';
 import { COLUMNS, T } from '../../../scripts/lib/tables.mjs';
+import { caseTimeline } from '../../../scripts/lib/case-reply-target.mjs';
 
 import { brandVoiceProblem, composeSystemPrompt } from './brand-voice.mjs';
 import { checksPassed, failedChecks, runDraftChecks } from './draft-checks.mjs';
@@ -114,7 +115,7 @@ export async function runDrafting({
   };
 
   for (const candidate of candidates) {
-    const { investigation, ticket, message, orderContext, thread = [], conversation = [], caseState = null } = candidate;
+    const { investigation, ticket, message, orderContext, thread = [], conversation = [], caseState = null, caseTarget } = candidate;
     const caseCurrent = candidate.caseCurrent ?? null;
 
     if (gates === 'poll') {
@@ -125,7 +126,7 @@ export async function runDrafting({
       }
     }
 
-    const decision = draftDecision({ investigation, ticket, conversation });
+    const decision = draftDecision({ investigation, ticket, conversation, caseTarget });
     if (!decision.draft) {
       skip(decision.reason);
       continue;
@@ -386,6 +387,16 @@ async function selectInBatches(supabase, table, column, ids, filters, columns, o
   return (await Promise.all(pages)).flat();
 }
 
+/**
+ * The message a case's reply goes to, or null when nothing is owed; undefined
+ * when the case's target has never been computed, which turns the case gate
+ * off rather than refusing every draft.
+ */
+export function caseTargetOf(caseRow) {
+  if (!caseRow || !caseRow.target_computed_at) return undefined;
+  return caseRow.latest_actionable_inbound_message_id ?? null;
+}
+
 export function createDraftingStore(supabase, { caseStateStore = null } = {}) {
   return {
     async claimable({ shopId, limit, ticketId = null, redraft = false, gates = 'manual', cutoverAt = null }) {
@@ -519,51 +530,48 @@ export function createDraftingStore(supabase, { caseStateStore = null } = {}) {
         thread.push(envelope);
         threadByTicket.set(envelope.ticket_id, thread);
       }
-      // THE TICKET'S OWN MAIL, kept aside before the related-ticket merge below.
-      // `thread` exists to answer whether the customer was left waiting, and for
-      // that question a sibling ticket's envelopes belong in it. The transcript
-      // is a different question — what did WE say on THIS thread — and a second
-      // conversation spliced into it would read as one. The merge rebuilds the
-      // array rather than mutating it, so this map keeps the unmerged rows.
-      const conversationByTicket = new Map(threadByTicket);
-
-      // THE CHASE THAT SPANS TWO TICKETS. `describesChase` finds the longest run
-      // of consecutive inbound messages, which is exactly the right question and
-      // the wrong scope: a customer who writes again under a new conversation id
-      // opens a SECOND ticket, and each thread on its own shows one lonely
-      // inbound with nothing to notice.
+      // THE CASE, NOT ONLY THE THREAD (61_cases.sql). A customer who writes
+      // again under a new conversation id is in the same case, and the draft is
+      // written with every thread of it in view: what we already said on the
+      // first thread, whether we left them waiting across both (`describesChase`
+      // reads the merged rows, which is what the related-ticket merge did before
+      // it), and whether a reply on the other thread already answered them
+      // (`answeredSince`). This replaces the related-ticket merge: the related
+      // link is no longer written, a link between threads is the case.
       //
-      // Merging the related ticket's envelopes in makes the existing rule see
-      // the conversation the customer thinks they are having. Measured on the
-      // corpus: 4 customers wrote again, were never answered, and are currently
-      // drafted to with no apology.
-      //
-      // Envelopes only, and only for a ticket that already carries a link — the
-      // link is set by `related-rules.mjs`, which never fires for a sender
-      // listed in `sender_directory`.
-      const relatedIds = tickets.map((row) => row.related_ticket_id).filter(Boolean);
-      if (relatedIds.length > 0) {
-        const relatedEnvelopes = await selectInBatches(
-          supabase,
-          T.TICKET_MESSAGES,
-          'ticket_id',
-          relatedIds,
-          {},
-          COLUMNS.messageEnvelopesForDrafting
-        );
-        const byRelated = new Map();
-        for (const envelope of relatedEnvelopes) {
-          const list = byRelated.get(envelope.ticket_id) || [];
-          list.push(envelope);
-          byRelated.set(envelope.ticket_id, list);
+      // Each row keeps its `ticket_id`, so the prompt marks the other threads.
+      const caseIds = [...new Set(tickets.map((row) => row.case_id).filter(Boolean))];
+      const caseById = new Map();
+      if (caseIds.length > 0) {
+        const [caseRows, siblings] = await Promise.all([
+          selectInBatches(supabase, T.CASES, 'id', caseIds, { shop_id: shopId }, 'id,latest_actionable_inbound_message_id,reply_thread_id,target_computed_at'),
+          selectInBatches(supabase, T.TICKETS, 'case_id', caseIds, { shop_id: shopId, deleted_at: { operator: 'is', value: 'null' } }, 'id,case_id,subject')
+        ]);
+        for (const row of caseRows) caseById.set(row.id, row);
+        const claimedIds = new Set(claimed.map((row) => row.ticket_id));
+        const otherIds = siblings.filter((row) => !claimedIds.has(row.id)).map((row) => row.id);
+        const otherMessages = otherIds.length
+          ? await selectInBatches(supabase, T.TICKET_MESSAGES, 'ticket_id', otherIds, {}, COLUMNS.threadForDrafting)
+          : [];
+        const messagesByTicket = new Map(threadByTicket);
+        for (const row of otherMessages) {
+          const list = messagesByTicket.get(row.ticket_id) || [];
+          list.push(row);
+          messagesByTicket.set(row.ticket_id, list);
+        }
+        const threadsByCase = new Map();
+        for (const row of siblings) {
+          const list = threadsByCase.get(row.case_id) || [];
+          list.push(row.id);
+          threadsByCase.set(row.case_id, list);
         }
         for (const ticket of tickets) {
-          const earlier = byRelated.get(ticket.related_ticket_id);
-          if (earlier?.length) {
-            threadByTicket.set(ticket.id, [...earlier, ...(threadByTicket.get(ticket.id) || [])]);
-          }
+          const ids = threadsByCase.get(ticket.case_id) || [];
+          if (ids.length < 2) continue;
+          threadByTicket.set(ticket.id, caseTimeline(ids.flatMap((id) => messagesByTicket.get(id) || [])));
         }
       }
+      const conversationByTicket = threadByTicket;
 
       return claimed
         .map((investigation) => ({
@@ -579,6 +587,10 @@ export function createDraftingStore(supabase, { caseStateStore = null } = {}) {
           // renders no block and leaves the prompt exactly as it was.
           caseState: caseStateByTicket.get(investigation.ticket_id) || null,
           conversation: conversationByTicket.get(investigation.ticket_id) || [],
+          // Where the case's reply goes. `undefined` when the case's target was
+          // never computed (`cases:targets` not run yet): no case gate then,
+          // rather than every draft refused.
+          caseTarget: caseTargetOf(caseById.get(ticketById.get(investigation.ticket_id)?.case_id)),
           // `case_current`: the version this draft is written against (stage 6).
           caseCurrent: caseByTicket.get(investigation.ticket_id) || null
         }))

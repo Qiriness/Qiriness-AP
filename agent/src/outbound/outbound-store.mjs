@@ -72,13 +72,28 @@ export function createOutboundStore(supabase, { shopId, select = supabaseSelect 
       return rows[0] ?? null;
     },
 
-    /** The ticket's messages received after `after`, oldest first. */
+    /**
+     * The messages received after `after` on EVERY thread of the ticket's case,
+     * oldest first (61_cases.sql). A customer who writes again on another
+     * thread of the case, or a colleague who answers there, is the same
+     * « wrote again » / « already answered » as on this thread: `preSendCheck`
+     * reads them unchanged. A ticket with no case reads its own thread.
+     */
     async messagesAfter(ticketId, after) {
       if (!after) return [];
+      const [ticket] = await select(supabase, T.TICKETS, { id: ticketId, shop_id: shopId }, 'id,case_id', { limit: 1 });
+      const threads = ticket?.case_id
+        ? await select(supabase, T.TICKETS, { case_id: ticket.case_id, shop_id: shopId, deleted_at: { operator: 'is', value: 'null' } }, 'id')
+        : [];
+      const ids = [...new Set([ticketId, ...threads.map((row) => row.id)])];
       return select(
         supabase,
         T.TICKET_MESSAGES,
-        { ticket_id: ticketId, shop_id: shopId, received_at: { operator: 'gt', value: after } },
+        {
+          ticket_id: ids.length === 1 ? ticketId : { operator: 'in', value: `(${ids.join(',')})` },
+          shop_id: shopId,
+          received_at: { operator: 'gt', value: after }
+        },
         MESSAGE_COLUMNS,
         { order: 'received_at.asc' }
       );

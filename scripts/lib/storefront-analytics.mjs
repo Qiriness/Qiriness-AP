@@ -30,7 +30,8 @@
  * Pure: query strings in, rows out. The I/O is web/lib/server/insights/analytics.ts.
  */
 
-import { PLATFORMS, fromKey, toKey, truncate, wallClock } from './insights-range.mjs';
+import { fromKey, toKey, truncate, wallClock } from './insights-range.mjs';
+import { NO_MARKETPLACES } from './marketplaces.mjs';
 
 /**
  * The sessions columns this store answers, measured rather than assumed.
@@ -83,20 +84,6 @@ export const SALES_LADDER = Object.freeze([
   'average_order_value'
 ]);
 
-/**
- * The ShopifyQL `sales_channel` names that are marketplaces, so the ladder can
- * be folded onto the platform filter.
- *
- * SAME RULE AS `insights-range.mjs`: a marketplace is named, and Shopify is
- * everything else, so a new first-party channel lands in Shopify rather than in
- * nothing. Verified against August 2026, where the channel split reproduces our
- * own platform split exactly: Online Store 9,900.44, Marketplace Connect
- * 311.94 (our Amazon), Mirakl Connect 29.90 (our Yves Rocher).
- */
-export const MARKETPLACE_SALES_CHANNELS = Object.freeze({
-  amazon: Object.freeze(['marketplace connect']),
-  yves_rocher: Object.freeze(['mirakl connect'])
-});
 
 /**
  * EVERY SESSIONS QUERY CARRIES THIS, and it is the difference between a figure
@@ -289,9 +276,9 @@ export function salesSeriesQuery(range) {
  * Net sales and orders sum; AOV is Shopify's per row, weighted by its orders —
  * the same rule as the ladder, so a bucket's AOV is the AOV card's definition.
  */
-export function foldSalesSeries(rows = [], range, platform = 'all') {
+export function foldSalesSeries(rows = [], range, platform = 'all', marketplaces = NO_MARKETPLACES) {
   const kept = rows
-    .filter((row) => platform === 'all' || platformOfSalesChannel(row.sales_channel) === platform)
+    .filter((row) => platform === 'all' || platformOfSalesChannel(row.sales_channel, marketplaces) === platform)
     .map((row) => {
       const orders = toNumber(row.orders) ?? 0;
       const aov = toNumber(row.average_order_value);
@@ -310,20 +297,20 @@ export function foldSalesSeries(rows = [], range, platform = 'all') {
  * every platform, whatever the filter, as the platform mix card has always
  * shown. Shopify's own figures, so the shares sum to the Net sales card.
  */
-export function platformMix(rows = []) {
-  return PLATFORMS.filter((p) => p.id !== 'all').map((p) => {
-    const ladder = foldSalesLadder(rows, p.id);
+export function platformMix(rows = [], marketplaces = NO_MARKETPLACES) {
+  return marketplaces.platforms.filter((p) => p.id !== 'all').map((p) => {
+    const ladder = foldSalesLadder(rows, p.id, marketplaces);
     return { platform: p.id, label: p.label, netSales: ladder?.netSales ?? 0, orders: ladder?.orders ?? 0 };
   });
 }
 
-/** Which platform a ShopifyQL sales channel belongs to. */
-export function platformOfSalesChannel(channel) {
-  const name = String(channel ?? '').trim().toLowerCase();
-  for (const [platform, names] of Object.entries(MARKETPLACE_SALES_CHANNELS)) {
-    if (names.includes(name)) return platform;
-  }
-  return 'shopify';
+/**
+ * Which platform a ShopifyQL sales channel belongs to: a marketplace by the
+ * Analytics names on its `sales_channels` row (« marketplace connect » for
+ * this shop's Amazon), and the shop's own store for everything else.
+ */
+export function platformOfSalesChannel(channel, marketplaces = NO_MARKETPLACES) {
+  return marketplaces.platformOfAnalyticsChannel(channel);
 }
 
 /**
@@ -340,8 +327,8 @@ export function platformOfSalesChannel(channel) {
  * and are kept as positive magnitudes here, because every card renders them as
  * deductions.
  */
-export function foldSalesLadder(rows = [], platform = 'all') {
-  const wanted = (row) => platform === 'all' || platformOfSalesChannel(row.sales_channel) === platform;
+export function foldSalesLadder(rows = [], platform = 'all', marketplaces = NO_MARKETPLACES) {
+  const wanted = (row) => platform === 'all' || platformOfSalesChannel(row.sales_channel, marketplaces) === platform;
   const kept = rows.filter(wanted);
   if (kept.length === 0) return null;
 

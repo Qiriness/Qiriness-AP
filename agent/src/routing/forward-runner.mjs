@@ -289,6 +289,13 @@ export async function runForwarding({
       internalDomains
     });
     if (plan.action === 'none') return;
+    // ONCE PER CASE: another thread of the same customer problem was already
+    // acknowledged, so this one is not (61_cases.sql).
+    if (plan.action !== 'skip' && typeof store.caseAcknowledged === 'function' && (await store.caseAcknowledged(ticket.id))) {
+      totals.ackSkipped += 1;
+      if (!dryRun) await store.recordAck(ticket.id, { state: 'skipped', error: 'case_acknowledged' });
+      return;
+    }
     if (plan.action === 'skip') {
       totals.ackSkipped += 1;
       if (!dryRun) await store.recordAck(ticket.id, { state: 'skipped', error: plan.reason });

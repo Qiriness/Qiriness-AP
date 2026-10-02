@@ -6,6 +6,7 @@ import { checkClause, codeOnly, columnsIn, literalsIn, read } from './_shared.te
 
 const SQL = read('48_ticket_overrides');
 const SUPPORT = read('04_support');
+const CASES = read('61_cases');
 
 const squash = (text) => String(text ?? '').replace(/\s+/g, ' ').trim();
 const selectList = (sql) => squash(codeOnly(sql).match(/view public\.ticket_queue[\s\S]*?where t\.deleted_at is null;/)?.[0]);
@@ -25,7 +26,10 @@ test('the baseline declares the column 48 adds, and the view carries it last', (
   assert.ok(columnsIn(SUPPORT, 'tickets').includes('overrides'));
   assert.match(SQL, /add column if not exists overrides jsonb not null default '\{\}'::jsonb/);
   assert.match(selectList(SQL), /t\.overrides as overrides from public\.tickets t/);
-  assert.equal(selectList(SQL).replace(/^create or replace/, 'create'), selectList(SUPPORT).replace(/^create or replace/, 'create'));
+  // 61 (cases) has since appended its columns after this one: 61 is the step
+  // that must match the baseline now, and 48 stays the historical step it was.
+  assert.match(selectList(SUPPORT), /t.overrides as overrides, t.case_id as case_id/);
+  assert.equal(selectList(CASES).replace(/^create or replace/, 'create'), selectList(SUPPORT).replace(/^create or replace/, 'create'));
 });
 
 test('it is idempotent and writes no data', () => {

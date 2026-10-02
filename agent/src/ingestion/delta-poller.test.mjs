@@ -592,3 +592,15 @@ test('a Sent Items cursor never writes the cutover; dropping links with no folde
   const inboxOnly = withoutLinks({ [CURSOR_KEYS.deltaLink]: 'd', [CURSOR_KEYS.sentDeltaLink]: 's' }, 'inbox');
   assert.deepEqual(inboxOnly, { [CURSOR_KEYS.sentDeltaLink]: 's' });
 });
+
+test('the case record reaches the writer: a new conversation opens its case', async () => {
+  const store = fakeStore();
+  const opened = [];
+  const cases = { create: async () => (opened.push(1), { id: `case-${opened.length}` }) };
+  const graphClient = fakeGraphClient([
+    { messages: [graphMessage('m1', 'c1', 'marie@example.com')], nextLink: null, deltaLink: 'https://graph/d' }
+  ]);
+  await runDeltaPoll({ graphClient, store, record: store, cursorStore: fakeCursorStore(null), shopId: 'shop-1', cases });
+  assert.equal(opened.length, 1);
+  assert.equal([...store.tickets.values()][0].case_id, 'case-1');
+});

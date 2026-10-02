@@ -352,6 +352,9 @@ export function TicketsView({
   const [category, setCategory] = useState<KnowledgeCategory | "all">(initialState.category);
   const [sender, setSender] = useState<SenderFilter>(initialState.sender);
   const [sort, setSort] = useState<SortOrder>(initialState.sort);
+  // One row per case (61_cases.sql): another thread of a case is hidden behind
+  // its lead unless asked for. Off by default, never stored.
+  const [showLinkedThreads, setShowLinkedThreads] = useState(false);
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionNotice, setActionNotice] = useState<string | null>(null);
@@ -370,7 +373,10 @@ export function TicketsView({
 
   const stats = useMemo(() => summariseTickets(tickets), [tickets]);
   // Queue and Backlog: live and not snoozed. A snoozed ticket waits in its own tab.
-  const openTickets = useMemo(() => tickets.filter((ticket) => !isClosed(ticket) && !isSnoozed(ticket)), [tickets]);
+  const openTickets = useMemo(
+    () => tickets.filter((ticket) => !isClosed(ticket) && !isSnoozed(ticket) && (showLinkedThreads || ticket.isCaseLead !== false)),
+    [tickets, showLinkedThreads]
+  );
 
   const levelCounts = useMemo(() => {
     const counts = { all: openTickets.length, "4": 0, "3": 0, "2": 0, "1": 0, uncategorised: 0 };
@@ -819,6 +825,8 @@ export function TicketsView({
           onSenderChange={setSender}
           sort={sort}
           onSortChange={setSort}
+          showLinkedThreads={showLinkedThreads}
+          onShowLinkedThreadsChange={setShowLinkedThreads}
         />
       </div>
 
@@ -916,6 +924,8 @@ interface TicketToolbarProps {
   onSenderChange: (value: "all" | "consumer" | "business") => void;
   sort: SortOrder;
   onSortChange: (value: SortOrder) => void;
+  showLinkedThreads: boolean;
+  onShowLinkedThreadsChange: (value: boolean) => void;
 }
 
 function TicketToolbar({
@@ -931,6 +941,8 @@ function TicketToolbar({
   onSenderChange,
   sort,
   onSortChange,
+  showLinkedThreads,
+  onShowLinkedThreadsChange,
 }: TicketToolbarProps) {
   const t = useT();
   const ticketView = activeView === "queue" || activeView === "backlog";
@@ -1011,6 +1023,15 @@ function TicketToolbar({
                 </option>
               ))}
             </select>
+          </label>
+
+          <label className={styles.selectLabel}>
+            <input
+              type="checkbox"
+              checked={showLinkedThreads}
+              onChange={(event) => onShowLinkedThreadsChange(event.target.checked)}
+            />
+            <span>{t("tickets.view.filter.linkedThreads")}</span>
           </label>
         </>
       )}
@@ -1707,7 +1728,16 @@ function DraftResponsePanel({
         </p>
       )}
 
-      {thread?.relatedTo && !thread.duplicateOf && (
+      {/* A CASE OF SEVERAL THREADS (61_cases.sql) replaces the related line:
+          it says the agent read every thread, and where the reply goes. */}
+      {thread?.case && !thread.duplicateOf && (
+        <p className={styles.related}>
+          {thread.reply.replyElsewhere
+            ? t("tickets.panels.draft.caseElsewhere", { n: thread.case.threads.length, subject: thread.reply.replyElsewhere.subject ?? "—" })
+            : t("tickets.panels.draft.caseThreads", { n: thread.case.threads.length })}
+        </p>
+      )}
+      {thread?.relatedTo && !thread.case && !thread.duplicateOf && (
         <p className={styles.related}>{t("tickets.panels.draft.related")}</p>
       )}
 
@@ -1933,7 +1963,13 @@ function ReplyComposer({
   }
 
   if (!open) {
-    const blockedBy = !sendingEnabled ? t("tickets.panels.compose.off") : !targetMessageId ? t("tickets.panels.compose.noTarget") : null;
+    const blockedBy = !sendingEnabled
+      ? t("tickets.panels.compose.off")
+      : thread.reply.replyElsewhere
+        ? t("tickets.panels.compose.replyElsewhere", { subject: thread.reply.replyElsewhere.subject ?? "—" })
+        : !targetMessageId
+          ? t("tickets.panels.compose.noTarget")
+          : null;
     const refused = newest && (newest.state === "cancelled" || newest.state === "failed") ? newest : null;
     return (
       <div className={styles.composeStart}>
@@ -3139,7 +3175,7 @@ function senderDisplayName(message: TicketMessage, t: Translate): string {
   if (message.role === "qiriness") {
     const stored = message.fromName?.trim().toLowerCase() ?? "";
     if (!stored || stored === "contact" || stored.includes("service client") || stored.includes("support")) {
-      return "Qiriness";
+      return t("tickets.panels.role.qiriness");
     }
   }
   return senderIdentity(message, message.direction === "outbound", t).name;
@@ -3232,7 +3268,7 @@ function senderIdentity(message: TicketMessage, outbound: boolean, t: Translate)
   const name = message.fromName?.trim() ?? "";
   const email = message.fromEmail?.trim() ?? "";
 
-  if (!name && !email) return { name: outbound ? "Qiriness" : t("tickets.panels.unknownSender"), email: null };
+  if (!name && !email) return { name: outbound ? t("tickets.panels.role.qiriness") : t("tickets.panels.unknownSender"), email: null };
   if (!name) return { name: email, email: null };
   if (!email) return { name, email: null };
   return { name, email: name.toLowerCase() === email.toLowerCase() ? null : email };

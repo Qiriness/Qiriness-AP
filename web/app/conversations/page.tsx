@@ -8,7 +8,7 @@ import type { TicketListItem } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
-export const metadata = { title: "Conversations · Qiriness Support OS" };
+export const metadata = { title: "Conversations" };
 
 /**
  * Conversations — threads one of OUR OWN addresses opened: a colleague

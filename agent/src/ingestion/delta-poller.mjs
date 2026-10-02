@@ -54,6 +54,8 @@ export async function runDeltaPoll({
   isCandidate,
   // message → actor, stamped on each stored message (casework/actors.mjs).
   actorFor,
+  // The case record: a new conversation opens its own case (61_cases.sql).
+  cases,
   // `inbox` or `sentitems`. Sent Items mail is ours by definition, and may only
   // join a thread that already has a ticket: outbound mail adds to a case, it
   // never opens one (codex_plans/Case_State_Plan.md, stage 2).
@@ -144,6 +146,7 @@ export async function runDeltaPoll({
       isCandidate,
       mailbox,
       actorFor,
+      cases,
       attachOnly: folder === 'sentitems',
       logger
     });

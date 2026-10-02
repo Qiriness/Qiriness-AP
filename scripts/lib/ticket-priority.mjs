@@ -120,6 +120,15 @@ function hasImminentDeadline(ticket) {
  * Deret can still change the order; the reason deliberately says to check.
  * Missing fulfilment state keeps a known change request provisionally High.
  */
+/**
+ * Who ships, by name, for the reasons below. The `logistics_provider_name`
+ * parameter, carried on the facts; « Deret » was a literal here.
+ */
+function logisticsProvider(ticket) {
+  const name = String(ticket?.logisticsProvider ?? '').trim();
+  return name || 'the logistics provider';
+}
+
 export function determinePriorityBand(ticket) {
   if (Number(ticket.level) === 4) {
     return { band: 'high', reason: 'Level 4 safety or legal escalation.' };
@@ -141,7 +150,10 @@ export function determinePriorityBand(ticket) {
 
   if (!completed && currentActionWindow(ticket)) {
     if (ticket.orderState === 'not_dispatched') {
-      return { band: 'high', reason: 'Pre-fulfilment change requested; check immediately whether Deret can still intervene.' };
+      return {
+        band: 'high',
+        reason: `Pre-fulfilment change requested; check immediately whether ${logisticsProvider(ticket)} can still intervene.`
+      };
     }
     if (!ticket.orderState || ticket.orderState === 'unknown') {
       return { band: 'high', reason: 'Change request with unknown fulfilment state; identify and check the order promptly.' };
@@ -171,7 +183,9 @@ export function determinePriorityBand(ticket) {
   ) {
     return {
       band: 'medium',
-      reason: 'Relevant non-receipt case is beyond the configured delivery proxy threshold; Deret verification remains required.'
+      reason:
+        'Relevant non-receipt case is beyond the configured delivery proxy threshold; ' +
+        `${logisticsProvider(ticket)} verification remains required.`
     };
   }
   if (

@@ -16,7 +16,7 @@ import {
   StoreIcon,
   TicketIcon,
 } from "@/components/icons";
-import { TEAM_MEMBER } from "@/lib/demo-data";
+import { shopLabel, useShop } from "@/lib/shop-context";
 import { canUseManagementChat } from "../../../scripts/lib/dashboard-auth.mjs";
 import { useT } from "@/lib/i18n/client";
 import type { MessageKey } from "@/lib/i18n/en";
@@ -99,6 +99,9 @@ export function Sidebar({
   role = null,
 }: SidebarProps) {
   const t = useT();
+  // The shop's name and storefront, from `shops` (shop-context.tsx). Both were
+  // literals: « Qiriness » and https://qiriness.com.
+  const shop = useShop();
   // Tickets is the queue to work, so it gets the warning colour; Conversations and
   // Orders are grey, present but not competing with it.
   const badges: Record<string, { count: number; key: string; muted: boolean }> = {
@@ -114,8 +117,8 @@ export function Sidebar({
     >
       <div className={styles.brand}>
         <Image
-          src="/brand/q-qiriness.png"
-          alt="Qiriness"
+          src="/brand/logo.png"
+          alt={shopLabel(shop)}
           width={32}
           height={32}
           className={styles.mark}
@@ -185,7 +188,7 @@ export function Sidebar({
       <div className={styles.footer}>
         <a
           className={styles.store}
-          href="https://qiriness.com"
+          href={shop.storefrontUrl ?? undefined}
           target="_blank"
           rel="noreferrer noopener"
           title={t("nav.openStore")}
@@ -195,7 +198,7 @@ export function Sidebar({
           </span>
           {!collapsed && (
             <span className={styles.storeText}>
-              <span className={styles.storeName}>{TEAM_MEMBER.store}</span>
+              <span className={styles.storeName}>{shopLabel(shop)}</span>
               <span className={styles.storeMeta}>{t("nav.shopifyStore")}</span>
             </span>
           )}

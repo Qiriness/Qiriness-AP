@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { ALL_MARKETPLACE_HANDLES } from '../../scripts/lib/insights-range.mjs';
 import { codeOnly, read } from './_shared.test.mjs';
 
 const CODE = codeOnly(read('21_chat_vip'));
@@ -26,12 +25,9 @@ test('it applies the rule through vip_customers(), never a copy of it', () => {
   assert.doesNotMatch(body, /public\.orders|public\.customers/);
 });
 
-test('it excludes exactly the marketplaces vip-rule.mjs excludes', () => {
-  const literal = functionBody().match(/array\[([^\]]*)\]/);
-  assert.ok(literal, 'no marketplace array');
-  const handles = [...literal[1].matchAll(/'([^']+)'/g)].map((m) => m[1]);
-  assert.deepEqual(handles.sort(), [...ALL_MARKETPLACE_HANDLES].sort());
-});
+// Its literal marketplace list (`array['amazon', 'connect-dev-1']`) is
+// superseded by 60, which reads the handles from `sales_channels`; the test of
+// what is excluded lives in 60_sales_channels.test.mjs.
 
 test('only the chat role may call it or read the view', () => {
   assert.match(CODE, /revoke all on function chat\.vip_customer_rows\(\) from public, anon, authenticated;/);

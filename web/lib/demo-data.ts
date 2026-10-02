@@ -6,6 +6,5 @@
 
 export const TEAM_MEMBER = {
   name: "Support team",
-  initials: "QS",
-  store: "Qiriness",
+  initials: "ST",
 };

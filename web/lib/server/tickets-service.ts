@@ -36,6 +36,7 @@ import {
   emptySenderDirectory
 } from "../../../agent/src/ingestion/sender-directory.mjs";
 import { createTicketRecord } from "../../../scripts/lib/ticket-record.mjs";
+import { createCaseRecord } from "../../../scripts/lib/case-record.mjs";
 import { parseTrackingCandidates } from "../../../agent/src/resolution/tracking-number-parser.mjs";
 import { normaliseTrackingNumber } from "../../../scripts/lib/tracking-number.mjs";
 import { parseEmailForDisplay } from "../../../scripts/lib/email-display.mjs";
@@ -67,6 +68,7 @@ import { isInvestigable } from "../../../agent/src/investigation/investigation-r
 import { listSituations } from "./policy-service";
 import { OVERRIDE_SOURCES, overrideChange, overridesOf } from "../../../scripts/lib/ticket-overrides.mjs";
 import type { PriorityFacts, PriorityRead } from "./ticket-priority-service";
+import { loadMarketplaces } from "../../../scripts/lib/marketplaces.mjs";
 import { summariseFacts, summariseInvestigation, summariseOrderContext } from "../ticket-detail";
 import type {
   InvestigationVerdict,
@@ -92,6 +94,7 @@ import type {
   TicketOverrideResult,
   TicketOverrides,
   TicketManualReply,
+  TicketCaseThreads,
 } from "../types";
 
 function getSupabaseClient() {
@@ -109,6 +112,50 @@ function getSupabaseClient() {
  */
 function getRecord(shopId: string) {
   return createTicketRecord(getSupabaseClient(), { shopId });
+}
+
+/** The case above the thread (61_cases.sql): read here, written by the worker. */
+function getCaseRecord(shopId: string) {
+  return createCaseRecord(getSupabaseClient(), { shopId, tickets: getRecord(shopId) });
+}
+
+/**
+ * The threads of this ticket's case, and where its reply goes. Null for a
+ * thread alone in its case. A case whose target was never computed names no
+ * reply thread, which leaves the manual reply as it was before cases.
+ */
+async function readCaseThreads(shopId: string, ticketId: string, caseId: string | null): Promise<TicketCaseThreads | null> {
+  if (!caseId) return null;
+  const cases = getCaseRecord(shopId);
+  const [caseRow, threads] = await Promise.all([cases.find(caseId), cases.threads(caseId)]);
+  if (!caseRow || threads.length < 2) return null;
+  const decisions = await cases.decisionsFor(threads.map((row: any) => row.id));
+  const linkedBy = new Map<string, string>();
+  for (const row of decisions as any[]) {
+    if (row.decision === "link" && !linkedBy.has(row.ticket_id)) linkedBy.set(row.ticket_id, row.method);
+  }
+  const replyThreadId = caseRow.target_computed_at ? caseRow.reply_thread_id ?? null : null;
+  return {
+    caseId,
+    replyThreadId,
+    threads: (threads as any[]).map((row) => ({
+      ticketId: row.id,
+      subject: row.subject ?? null,
+      firstMessageAt: row.first_message_at ?? null,
+      lastMessageAt: row.last_message_at ?? null,
+      status: row.status,
+      isThisThread: row.id === ticketId,
+      isReplyThread: row.id === replyThreadId,
+      linkedBy: linkedBy.get(row.id) ?? null,
+    })),
+  };
+}
+
+/** The other thread a case replies on, or null when it is this one (or unknown). */
+function replyElsewhereOf(caseThreads: TicketCaseThreads | null, ticketId: string) {
+  if (!caseThreads?.replyThreadId || caseThreads.replyThreadId === ticketId) return null;
+  const thread = caseThreads.threads.find((row) => row.ticketId === caseThreads.replyThreadId);
+  return { ticketId: caseThreads.replyThreadId, subject: thread?.subject ?? null };
 }
 
 // The list projection lives in the schema contract now (COLUMNS.ticketQueue),
@@ -233,7 +280,9 @@ export async function countOpenThreads(
   const snoozes = await readSnoozeFacts(shopId);
   const { tickets, conversations } = partitionBySender(rows, directory, new Set(), noPriorityRead, snoozes);
   // A snoozed ticket needs nobody until it wakes, so it does not light the badge.
-  const open = (ticket: TicketListItem) => ticket.status !== "closed" && ticket.status !== "resolved" && !ticket.snooze;
+  // One per case (61_cases.sql): another thread of a case is behind its lead.
+  const open = (ticket: TicketListItem) =>
+    ticket.status !== "closed" && ticket.status !== "resolved" && !ticket.snooze && ticket.isCaseLead;
   return {
     openTickets: tickets.filter(open).length,
     openConversations: conversations.filter(open).length
@@ -562,7 +611,10 @@ export async function getTicketThread(shopId: string, ticketId: string): Promise
 
   const messages = (messageRows as any[]).map((row) => mapMessageRow(row, directory)).sort(byTimeAsc);
   const draft = draftRow ? mapDraftRow(draftRow, latestActionFor(actions, draftRow.id)) : null;
-  const replyTarget = replyTargetOf(messageRows as any[]);
+  const caseThreads = await readCaseThreads(shopId, ticketId, ticketRow.case_id ?? null);
+  const replyElsewhere = replyElsewhereOf(caseThreads, ticketId);
+  // A case replies on one thread: on any other, there is nothing to reply to.
+  const replyTarget = replyElsewhere ? null : replyTargetOf(messageRows as any[]);
 
   // The confirmed order's parcels come through the same projection the detail
   // panel reads, so a number linked in the Order block and the same number
@@ -595,6 +647,7 @@ export async function getTicketThread(shopId: string, ticketId: string): Promise
           score: Number(ticketRow.related_score ?? 0),
         }
       : null,
+    case: caseThreads,
     draft,
     messages,
     parcels,
@@ -602,6 +655,7 @@ export async function getTicketThread(shopId: string, ticketId: string): Promise
       sendingEnabled: sendOnApprove(),
       holdsInDrafts: process.env.OUTBOUND_STOP_BEFORE_SEND === "true",
       targetMessageId: replyTarget?.id ?? null,
+      replyElsewhere,
       manual: (Array.isArray(actions) ? actions : []).filter((action) => action.mode === "manual").map(mapManualReply),
     },
   };
@@ -669,6 +723,15 @@ export async function sendManualReply(
   // The page names the message it showed as the latest. If the customer has
   // written since, the person has not read it: refused now, rather than
   // cancelled by the worker a minute later.
+  // THE CASE REPLIES ON ONE THREAD (61_cases.sql). A reply typed on another
+  // thread of the same case would be the customer's second answer, on a
+  // conversation they have moved on from.
+  const elsewhere = replyElsewhereOf(await readCaseThreads(shopId, ticketId, ticketRow.case_id ?? null), ticketId);
+  if (elsewhere) {
+    throw new KnowledgeValidationError(
+      `This customer's case is answered on another thread${elsewhere.subject ? ` (« ${elsewhere.subject} »)` : ""}. Reply from there.`
+    );
+  }
   const target = replyTargetOf(messageRows as any[]);
   if (!target) {
     throw new KnowledgeValidationError("There is no customer message on this ticket to reply to.");
@@ -864,7 +927,8 @@ async function loadOrderForLink(shopId: string, orderNumber: number) {
   return {
     order,
     context: full ? buildOrderContext(full, customer) : null,
-    anonymous: isAnonymousMarketplaceBuyer(order, customer),
+    // The shop's marketplace handles (`sales_channels`): with none, no buyer is a marketplace placeholder.
+    anonymous: isAnonymousMarketplaceBuyer(order, customer, [...(await loadMarketplaces(supabase, shopId)).handles]),
   };
 }
 
@@ -1168,7 +1232,7 @@ function mapMessageRow(row: any, directory: any): TicketMessage {
           .map((email) => recipientRole(String(email ?? ""), directory))
           .filter((label): label is string => Boolean(label))
       ),
-    ].filter((label) => !(role === "qiriness" && label === "Qiriness")),
+    ].filter((label) => !(role === "qiriness" && label === ownMailboxLabel(directory))),
     hasAttachments: Boolean(row.has_attachments),
     // Our own replies carry `sent_at` and nothing else; inbound carries
     // `received_at`. One column would leave half the thread undated.
@@ -1185,11 +1249,16 @@ function messageRole(row: any, directory: any): TicketMessage["role"] {
   return "customer";
 }
 
+/** Our support mailbox as a recipient: the shop's name (`shops.shop_name`, on the directory). */
+function ownMailboxLabel(directory: any): string {
+  return directory?.companyName || "Support";
+}
+
 function recipientRole(email: string, directory: any): string | null {
   const normalised = email.trim().toLowerCase();
   if (!normalised) return null;
   const mailbox = String(process.env.SUPPORT_MAILBOX ?? "").trim().toLowerCase();
-  if (mailbox && normalised === mailbox) return "Qiriness";
+  if (mailbox && normalised === mailbox) return ownMailboxLabel(directory);
   const label = directory.lookup(normalised)?.label ?? null;
   if (label === "internal" || label === "contractor") return "Internal";
   if (label === "logistics" || label === "courier") return "Logistics";
@@ -1312,11 +1381,16 @@ function mapTicketRow(
   // duplicates is answered by opening it.
   const isDuplicate = Boolean(row.duplicate_of_ticket_id);
   const level = row.level === null || row.level === undefined ? null : (Number(row.level) as TicketLevel);
+  // THE CASE'S FACTS RANK THE ROW (61_cases.sql). A customer who wrote twice on
+  // two threads has written four times, the case waits since its own oldest
+  // unanswered message, and is as serious as its most serious thread. A row
+  // from before the view carried them falls back to the thread's.
+  const caseLevel = row.case_level === null || row.case_level === undefined ? level : (Number(row.case_level) as TicketLevel);
   const priorityScore = scorePriority({
-    level,
-    waitingSince: row.waiting_since ?? null,
-    inboundCount: Number(row.inbound_count ?? 0),
-    status: row.status,
+    level: caseLevel,
+    waitingSince: row.case_id ? row.case_waiting_since ?? null : row.waiting_since ?? null,
+    inboundCount: Number((row.case_id ? row.case_inbound_count : row.inbound_count) ?? 0),
+    status: row.case_status ?? row.status,
     // A band a person pinned in « Edit case ». The score still climbs inside it.
     pinnedBand: overridesOf(row).priority?.value ?? null,
     ...priorityFacts,
@@ -1344,6 +1418,10 @@ function mapTicketRow(
     senderLabel: (senderEntry?.label as TicketListItem["senderLabel"]) ?? null,
     senderNote: senderEntry?.note ?? null,
     isDuplicate,
+    caseId: row.case_id ?? null,
+    caseThreadCount: Number(row.case_thread_count ?? 1),
+    // A row with no case facts (an older view) is its own lead.
+    isCaseLead: row.is_case_lead !== false,
     // Null requester_email — a ticket with no stored inbound message — is NOT
     // non-demand. Eleven tickets are in that state, and defaulting them out of
     // the queue would hide customer mail on the strength of a missing join.

@@ -7,7 +7,7 @@
  */
 
 import { loadConfig } from "../../../scripts/lib/sync-config.mjs";
-import { days, toParameterMap } from "../../../scripts/lib/parameters.mjs";
+import { days, text, toParameterMap } from "../../../scripts/lib/parameters.mjs";
 import {
   createSupabaseClient,
   supabaseSelect,
@@ -23,6 +23,8 @@ export type PriorityFacts = {
   dispatchExcessWorkingDays: number | null;
   deliveryExcessWorkingDays: number | null;
   actionCompleted: boolean;
+  // The `logistics_provider_name` parameter, named in the priority reasons.
+  logisticsProvider: string | null;
 };
 
 export type PriorityRead = { at: Date; byTicket: Map<string, PriorityFacts> };
@@ -125,6 +127,7 @@ export async function loadTicketPriority(shopId: string, rows: any[]): Promise<P
     franceDelivery: days(parameters, "france_delivery_days") ?? DEFAULTS.franceDelivery,
     abroadDelivery: days(parameters, "abroad_delivery_days") ?? DEFAULTS.abroadDelivery
   };
+  const logisticsProvider = text(parameters, "logistics_provider_name");
   const latestInvestigation = newestByTicket(investigations, "investigated_at");
   const latestCaseState = newestByTicket(caseStates, "read_at");
   const ordersByName = new Map(orders.map((order) => [String(order.name), order]));
@@ -163,9 +166,53 @@ export async function loadTicketPriority(shopId: string, rows: any[]): Promise<P
       deliveryExcessWorkingDays: orderState === "dispatched"
         ? excessWorkingDays(context?.order?.delivery?.dispatchedAt, at, deliveryThreshold)
         : 0,
-      actionCompleted: row.status === "resolved" || row.status === "closed"
+      actionCompleted: (row.case_status ?? row.status) === "resolved" || (row.case_status ?? row.status) === "closed",
+      logisticsProvider
     });
   }
 
-  return { at, byTicket };
+  return { at, byTicket: withCaseFacts(rows, byTicket, latestInvestigation) };
+}
+
+/**
+ * A CASE IS RANKED ON ITS CURRENT SITUATION (61_cases.sql). The lead thread of
+ * a case is often the newest one — « toujours rien » on a new thread — and may
+ * not be investigated yet, or carry no order. Its situation and order facts
+ * then come from the most recently investigated thread of the same case, so a
+ * chase about a lost parcel is ranked as a lost parcel, not as a routine
+ * question. A thread's own facts, when it has a situation, always win.
+ */
+export function withCaseFacts(
+  rows: any[],
+  byTicket: Map<string, PriorityFacts>,
+  latestInvestigation: Map<string, any> = new Map()
+): Map<string, PriorityFacts> {
+  const byCase = new Map<string, any[]>();
+  for (const row of rows) {
+    if (!row.case_id) continue;
+    const list = byCase.get(row.case_id) ?? [];
+    list.push(row);
+    byCase.set(row.case_id, list);
+  }
+  for (const threads of byCase.values()) {
+    if (threads.length < 2) continue;
+    const donor = threads
+      .filter((row) => byTicket.get(row.id)?.situationKey)
+      .sort(
+        (a, b) =>
+          (Date.parse(latestInvestigation.get(b.id)?.investigated_at ?? "") || 0) -
+          (Date.parse(latestInvestigation.get(a.id)?.investigated_at ?? "") || 0)
+      )[0];
+    if (!donor) continue;
+    const donated = byTicket.get(donor.id)!;
+    for (const row of threads) {
+      const own = byTicket.get(row.id);
+      if (own?.situationKey) continue;
+      byTicket.set(row.id, {
+        ...donated,
+        actionCompleted: (row.case_status ?? row.status) === "resolved" || (row.case_status ?? row.status) === "closed"
+      });
+    }
+  }
+  return byTicket;
 }

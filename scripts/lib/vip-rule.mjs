@@ -17,7 +17,7 @@
  * as Shopify's — see customer-segments.mjs.
  */
 
-import { ALL_MARKETPLACE_HANDLES } from './insights-range.mjs';
+import { loadMarketplaces } from './marketplaces.mjs';
 import { supabaseRpc, supabaseSelect, supabaseUpdateById } from './supabase-rest-client.mjs';
 import { RPC, T } from './tables.mjs';
 
@@ -65,15 +65,23 @@ export function describeVipRule(rule) {
   return `More than ${spend} spent and more than ${rule.minOrders} ${rule.minOrders === 1 ? 'order' : 'orders'} in ${window}`;
 }
 
-/** The arguments every VIP function takes. Marketplaces mint a customer per order, so they never count. */
-export function vipArgs(shopId, rule) {
+/**
+ * The arguments every VIP function takes. Marketplaces mint a customer per
+ * order, so they never count: `notChannels` is the shop's marketplace handles.
+ */
+export function vipArgs(shopId, rule, notChannels = []) {
   return {
     p_shop: shopId,
     p_min_spend: rule.minSpend,
     p_min_orders: rule.minOrders,
     p_window_months: rule.windowMonths,
-    p_not_channels: [...ALL_MARKETPLACE_HANDLES]
+    p_not_channels: [...notChannels]
   };
+}
+
+/** `vipArgs` with the shop's marketplace handles read from `sales_channels`. */
+async function vipArgsFor(supabase, shopId, rule) {
+  return vipArgs(shopId, rule, (await loadMarketplaces(supabase, shopId)).handles);
 }
 
 // --- reads ---------------------------------------------------------------------
@@ -97,7 +105,7 @@ export async function loadVipRule(supabase, shopId) {
 export async function loadVipTicketIds(supabase, shopId, rule, ticketIds = null) {
   if (!rule) return new Set();
   if (Array.isArray(ticketIds) && ticketIds.length === 0) return new Set();
-  const rows = await supabaseRpc(supabase, RPC.VIP_TICKETS, { ...vipArgs(shopId, rule), p_ticket_ids: ticketIds });
+  const rows = await supabaseRpc(supabase, RPC.VIP_TICKETS, { ...(await vipArgsFor(supabase, shopId, rule)), p_ticket_ids: ticketIds });
   return new Set((rows ?? []).map((row) => row.ticket_id));
 }
 
@@ -105,7 +113,7 @@ export async function loadVipTicketIds(supabase, shopId, rule, ticketIds = null)
 export async function loadVipCustomers(supabase, shopId, rule, customerIds) {
   const out = new Map();
   if (!rule || !customerIds?.length) return out;
-  const rows = await supabaseRpc(supabase, RPC.VIP_CUSTOMERS, { ...vipArgs(shopId, rule), p_customer_ids: customerIds });
+  const rows = await supabaseRpc(supabase, RPC.VIP_CUSTOMERS, { ...(await vipArgsFor(supabase, shopId, rule)), p_customer_ids: customerIds });
   for (const row of rows ?? []) {
     out.set(row.customer_id, { orders: Number(row.orders), spend: Number(row.spend) });
   }
@@ -115,7 +123,7 @@ export async function loadVipCustomers(supabase, shopId, rule, customerIds) {
 /** How many customers a rule admits, and how many ordered at all in its window. */
 export async function summariseVipRule(supabase, shopId, rule) {
   if (!rule) return null;
-  const rows = await supabaseRpc(supabase, RPC.VIP_SUMMARY, vipArgs(shopId, rule));
+  const rows = await supabaseRpc(supabase, RPC.VIP_SUMMARY, await vipArgsFor(supabase, shopId, rule));
   const row = rows?.[0] ?? {};
   return { vipCustomers: Number(row.vip_customers ?? 0), buyersInWindow: Number(row.buyers_in_window ?? 0) };
 }

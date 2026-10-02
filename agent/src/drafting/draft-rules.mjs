@@ -177,7 +177,7 @@ export function closureAllowed(investigation) {
   return !investigation.handoff;
 }
 
-export function draftDecision({ investigation, ticket, conversation = [] } = {}) {
+export function draftDecision({ investigation, ticket, conversation = [], caseTarget = undefined } = {}) {
   if (!investigation) {
     return { draft: false, reason: 'no_case_file' };
   }
@@ -207,6 +207,15 @@ export function draftDecision({ investigation, ticket, conversation = [] } = {})
   // thing worth watching — it says how often the queue is behind the people.
   if (answeredSince({ conversation, triggerMessageId: investigation.trigger_message_id })) {
     return { draft: false, reason: 'already_answered' };
+  }
+  // NOT THE CASE'S REPLY TARGET (61_cases.sql). A case may span several
+  // threads; its reply goes to the newest customer message no later message of
+  // ours answers, on whichever thread (case-reply-target.mjs). A case file
+  // keyed to any other message is answering something the case has moved past,
+  // and drafting it would put two replies in front of one customer.
+  // `undefined` means the target was never computed: no gate, as before cases.
+  if (caseTarget !== undefined && caseTarget !== investigation.trigger_message_id) {
+    return { draft: false, reason: 'not_reply_target' };
   }
   if (ticket?.sender_label) {
     return { draft: false, reason: 'internal_sender' };

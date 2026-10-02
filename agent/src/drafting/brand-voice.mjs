@@ -272,7 +272,7 @@ export function brandVoiceProblem(voice) {
   if (voice.approvalStatus !== 'approved') {
     return (
       `The Brand voice article is "${voice.approvalStatus}", not approved. ` +
-      'Approving it is the sign-off that this is how Qiriness sounds; drafting will not ' +
+      'Approving it is the sign-off that this is how the brand sounds; drafting will not ' +
       'run against an unapproved voice.'
     );
   }

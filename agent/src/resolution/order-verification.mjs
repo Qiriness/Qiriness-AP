@@ -11,7 +11,6 @@
 // So a number is only accepted when the order's own contact hash matches the
 // ticket's, and everything weaker is labelled as such.
 
-import { ALL_MARKETPLACE_HANDLES } from '../../../scripts/lib/insights-range.mjs';
 
 export const CONFIRMED = 'confirmed';
 /** Name agrees, but the email is absent or different — corroboration, not proof. */
@@ -56,7 +55,10 @@ export function verifyOrder({
   ticket,
   customer = null,
   messageEmailHashes = [],
-  soleOrderNumber = false
+  soleOrderNumber = false,
+  // The shop's marketplace handles (`sales_channels`). Empty: no order is a
+  // marketplace order, and the anonymous-buyer path stays closed.
+  marketplaceHandles = []
 } = {}) {
   if (!order) {
     return { status: NOT_FOUND, verifiedBy: null, detail: 'No order with that number in this shop.' };
@@ -141,7 +143,7 @@ export function verifyOrder({
   // placeholder buyer (a web order always has a real one), and exactly one order
   // number quoted as such — a thread naming three orders is not about the one
   // that happens to be anonymous, and a tracking number is not passed in.
-  if (soleOrderNumber && isAnonymousMarketplaceOrder(order, customer)) {
+  if (soleOrderNumber && isAnonymousMarketplaceOrder(order, customer, marketplaceHandles)) {
     return {
       status: CONFIRMED,
       verifiedBy: BY_MARKETPLACE_ORDER_NUMBER,
@@ -223,14 +225,14 @@ export function isAnonymousPlaceholder({ first_name, last_name, email } = {}) {
  * The same question for a caller holding the raw customer row rather than the
  * store's flag — the dashboard, when a person links an order by hand.
  */
-export function isAnonymousMarketplaceBuyer(order, customer) {
-  return isAnonymousMarketplaceOrder(order, { anonymous: isAnonymousPlaceholder(customer || {}) });
+export function isAnonymousMarketplaceBuyer(order, customer, marketplaceHandles = []) {
+  return isAnonymousMarketplaceOrder(order, { anonymous: isAnonymousPlaceholder(customer || {}) }, marketplaceHandles);
 }
 
-function isAnonymousMarketplaceOrder(order, customer) {
-  return (
-    ALL_MARKETPLACE_HANDLES.includes(order?.sales_channel_handle) && customer?.anonymous === true
-  );
+// The marketplace handles come from `sales_channels` (marketplaces.mjs). With
+// none, no order is a marketplace order and this path stays closed.
+function isAnonymousMarketplaceOrder(order, customer, marketplaceHandles = []) {
+  return marketplaceHandles.includes(order?.sales_channel_handle) && customer?.anonymous === true;
 }
 
 function joinName(customer) {

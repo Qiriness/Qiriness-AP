@@ -12,12 +12,7 @@
  */
 
 import { RPC } from "../../../../scripts/lib/tables.mjs";
-import {
-  ALL_MARKETPLACE_HANDLES,
-  PLATFORMS,
-  isMarketplacePlatform,
-  platformOfChannel,
-} from "../../../../scripts/lib/insights-range.mjs";
+import type { Marketplaces } from "../marketplaces";
 import type {
   CollectionSale,
   CountrySale,
@@ -80,7 +75,7 @@ export async function getSalesPanel(
   bestProductsRequest: BestProductsRequest = { vipOnly: false }
 ): Promise<SalesPanel> {
   const coverage = ordersCoverage(ctx);
-  const marketplace = isMarketplacePlatform(ctx.platform);
+  const marketplace = ctx.marketplaces.isMarketplace(ctx.platform);
   const comparable = previousCovered(ctx.range, coverage);
 
   const [
@@ -175,7 +170,7 @@ export async function getSalesPanel(
     revenue: toSeries(ctx.range, seriesRows, (row) => row?.revenue ?? 0, coverage),
     orders: toSeries(ctx.range, seriesRows, (row) => row?.orders ?? 0, coverage),
     customerMix: mixRow ? mapMix(mixRow) : null,
-    platforms: foldPlatforms(channelRows),
+    platforms: foldPlatforms(channelRows, ctx.marketplaces),
     products: bestProducts,
     countries,
     collections: collectionRows.map((row) => mapCollection(row, previousCollection)),
@@ -193,7 +188,7 @@ export async function getSalesPanel(
 function mixArgs(ctx: InsightsContext) {
   const base = orderArgs(ctx);
   if (ctx.platform === "all") {
-    return { ...base, p_channels: null, p_not_channels: [...ALL_MARKETPLACE_HANDLES] };
+    return { ...base, p_channels: null, p_not_channels: [...ctx.marketplaces.handles] };
   }
   return base;
 }
@@ -214,17 +209,17 @@ function mapMix(row: Record<string, unknown>): CustomerMix {
   };
 }
 
-/** Channel handles -> the three platforms, in a fixed order so a colour always means one platform. */
-export function foldPlatforms(rows: Record<string, unknown>[]): PlatformSplit[] {
+/** Channel handles -> the shop's platforms, in a fixed order so a colour always means one platform. */
+export function foldPlatforms(rows: Record<string, unknown>[], marketplaces: Marketplaces): PlatformSplit[] {
   const totals = new Map<PlatformId, { orders: number; revenue: number }>();
   for (const row of rows) {
-    const platform = platformOfChannel(String(row.channel ?? "")) as PlatformId;
+    const platform = marketplaces.platformOfChannel(String(row.channel ?? "")) as PlatformId;
     const entry = totals.get(platform) ?? { orders: 0, revenue: 0 };
     entry.orders += count(row.orders);
     entry.revenue += count(row.revenue);
     totals.set(platform, entry);
   }
-  return PLATFORMS.filter((p) => p.id !== "all").map((p) => ({
+  return marketplaces.platforms.filter((p) => p.id !== "all").map((p) => ({
     platform: p.id as PlatformId,
     label: p.label,
     orders: totals.get(p.id as PlatformId)?.orders ?? 0,
@@ -309,7 +304,7 @@ async function getBestProducts(
     p_min_spend: rule.minSpend,
     p_min_orders: rule.minOrders,
     p_window_months: rule.windowMonths,
-    p_vip_not_channels: [...ALL_MARKETPLACE_HANDLES],
+    p_vip_not_channels: [...ctx.marketplaces.handles],
   };
   const [productRows, byRevenue, byOrders] = await Promise.all([
     callRpc<Record<string, unknown>>(RPC.INSIGHTS_PRODUCT_SALES, { ...orderArgs(ctx), ...vip }),
@@ -411,7 +406,7 @@ async function getProductCustomerMix(
     p_min_spend: rule?.minSpend ?? null,
     p_min_orders: rule?.minOrders ?? null,
     p_window_months: rule?.windowMonths ?? null,
-    p_vip_not_channels: [...ALL_MARKETPLACE_HANDLES],
+    p_vip_not_channels: [...ctx.marketplaces.handles],
   };
   const [rows, frequencyRows] = await Promise.all([
     callRpc<Record<string, unknown>>(RPC.INSIGHTS_PRODUCT_CUSTOMER_MIX, args),

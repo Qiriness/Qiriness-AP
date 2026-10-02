@@ -15,9 +15,9 @@ export const en = {
   "insights.kit.loadingNote": "Loading from Shopify Analytics… a long range can take up to a minute while Shopify's rate limit resets.",
   "insights.kit.noData": "no data",
   "insights.kit.panelError": "This panel could not load.",
-  "insights.blocked.marketplace": "Not measured for a marketplace: Shopify Analytics counts storefront traffic, and Amazon and Yves Rocher orders never touch the storefront.",
+  "insights.blocked.marketplace": "Not measured for a marketplace: Shopify Analytics counts storefront traffic, and orders from {marketplaces} never touch the storefront.",
   "insights.blocked.rateLimit": "Shopify Analytics' rate limit had no room for this within the time allowed. It frees up every minute — reload to try again.",
-  "insights.blocked.marketplaceBuyers": "Not measured on a marketplace: Amazon and Yves Rocher create a new customer for every order, so no buyer can be seen buying anything else.",
+  "insights.blocked.marketplaceBuyers": "Not measured on a marketplace: {marketplaces} create a new customer for every order, so no buyer can be seen buying anything else.",
 } as const;
 
 export const fr: Record<keyof typeof en, string> = {
@@ -36,7 +36,7 @@ export const fr: Record<keyof typeof en, string> = {
   "insights.kit.loadingNote": "Chargement depuis Shopify Analytics… une longue période peut prendre jusqu'à une minute, le temps que la limite de Shopify se réinitialise.",
   "insights.kit.noData": "pas de données",
   "insights.kit.panelError": "Ce panneau n'a pas pu se charger.",
-  "insights.blocked.marketplace": "Non mesuré pour une marketplace : Shopify Analytics compte le trafic de la boutique en ligne, et les commandes Amazon et Yves Rocher ne passent jamais par elle.",
+  "insights.blocked.marketplace": "Non mesuré pour une marketplace : Shopify Analytics compte le trafic de la boutique en ligne, et les commandes de {marketplaces} ne passent jamais par elle.",
   "insights.blocked.rateLimit": "La limite de débit de Shopify Analytics n'a pas laissé de place dans le temps imparti. Elle se libère chaque minute — rechargez pour réessayer.",
-  "insights.blocked.marketplaceBuyers": "Non mesuré sur une marketplace : Amazon et Yves Rocher créent un nouveau client à chaque commande, on ne peut donc voir aucun acheteur acheter autre chose.",
+  "insights.blocked.marketplaceBuyers": "Non mesuré sur une marketplace : {marketplaces} créent un nouveau client à chaque commande, on ne peut donc voir aucun acheteur acheter autre chose.",
 };

@@ -1172,3 +1172,55 @@ test('a lone message from someone other than the customer says so', async () => 
   assert.equal(seen.textKind, 'single_other');
   assert.equal(seen.text, 'colis en retour', 'still rendered bare');
 });
+
+// --- cases: several threads, one case (61_cases.sql) -------------------------
+
+function fakeCases({ replyThreadId, conversation }) {
+  return {
+    async find(caseId) {
+      return { id: caseId, reply_thread_id: replyThreadId };
+    },
+    async conversation() {
+      return conversation;
+    }
+  };
+}
+
+test('the reply thread is investigated against the whole case, other threads marked', async () => {
+  let seen;
+  const ticketId = TICKET.id;
+  const store = buildStore({ tickets: [{ ...TICKET, case_id: 'k1' }] });
+  await runInvestigation({
+    ...wire(store),
+    investigate: async (input) => {
+      seen = input;
+      return caseFile();
+    },
+    shopId: 's1',
+    cases: fakeCases({
+      replyThreadId: ticketId,
+      conversation: [
+        { id: 'a1', ticket_id: 'other', subject: 'Où est ma commande ?', direction: 'inbound', body_text: 'ma commande #5832 ?', received_at: '2026-08-01T09:00:00Z', from_email: 'marie@gmail.com' },
+        { id: 'a2', ticket_id: 'other', subject: 'RE: Où est ma commande ?', direction: 'outbound', body_text: 'elle part demain', received_at: '2026-08-02T09:00:00Z' },
+        { id: 'm2', ticket_id: ticketId, subject: 'Toujours rien', direction: 'inbound', body_text: 'toujours rien reçu', received_at: '2026-08-10T09:00:00Z', from_email: 'marie@gmail.com' }
+      ]
+    })
+  });
+  assert.match(seen.text, /AUTRE FIL DU DOSSIER : « Où est ma commande \? »\]\nma commande #5832/);
+  assert.match(seen.text, /elle part demain/);
+  assert.match(seen.text, /toujours rien reçu/);
+  // The trigger stays on this thread: the case file is keyed to its message.
+  assert.equal(store.saved[0].triggerMessageId, 'm2');
+});
+
+test('another thread of the case is skipped: its reply goes elsewhere', async () => {
+  const store = buildStore({ tickets: [{ ...TICKET, case_id: 'k1' }] });
+  const counts = await runInvestigation({
+    ...wire(store),
+    investigate: async () => assert.fail('a thread nobody will answer is not investigated'),
+    shopId: 's1',
+    cases: fakeCases({ replyThreadId: 'some-other-thread', conversation: [] })
+  });
+  assert.equal(counts.skipped, 1);
+  assert.equal(store.saved.length, 0);
+});

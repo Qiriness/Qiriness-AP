@@ -124,7 +124,11 @@ export function senderRole(message, directory = null) {
  * directory, and the investigation's header names it (`describeSender`).
  */
 export function senderRoleName(message, directory = null) {
-  return SENDER_ROLES[senderRole(message, directory)];
+  const role = senderRole(message, directory);
+  // OUR OWN REPLIES CARRY THE SHOP'S NAME, from `shops.shop_name` through the
+  // directory (`load`). « Qiriness » was a literal here.
+  if (role === 'qiriness' && directory?.companyName) return directory.companyName;
+  return SENDER_ROLES[role];
 }
 
 /**
@@ -132,8 +136,10 @@ export function senderRoleName(message, directory = null) {
  * @param supportMailbox  the support address, whose own domain is internal by
  *   definition. Derived rather than required as a row, so a fresh install is
  *   never wrong about itself and nobody has to remember to add it.
+ * @param companyName  the shop's name, the label on our own replies. Null: the
+ *   generic « nous (service client) ».
  */
-export function buildSenderDirectory(rows = [], { supportMailbox = null } = {}) {
+export function buildSenderDirectory(rows = [], { supportMailbox = null, companyName = null } = {}) {
   const own = normalizeDomain(supportMailbox ? supportMailbox.split('@').pop() : null);
   const all = own
     ? [
@@ -149,6 +155,7 @@ export function buildSenderDirectory(rows = [], { supportMailbox = null } = {}) 
 
   return {
     size: index.size,
+    companyName: String(companyName ?? '').trim() || null,
 
     /**
      * @returns {{ label, note, pattern, matched } | null} null for an unlisted
@@ -188,13 +195,11 @@ export function createSenderDirectoryStore(supabase) {
      *   address every real caller passes.
      */
     async load(shopId, { supportMailbox = null } = {}) {
-      const rows = await supabaseSelect(
-        supabase,
-        'sender_directory',
-        { shop_id: shopId },
-        'pattern_type,pattern,label,note'
-      );
-      return buildSenderDirectory(rows, { supportMailbox });
+      const [rows, shops] = await Promise.all([
+        supabaseSelect(supabase, 'sender_directory', { shop_id: shopId }, 'pattern_type,pattern,label,note'),
+        supabaseSelect(supabase, 'shops', { id: shopId }, 'shop_name')
+      ]);
+      return buildSenderDirectory(rows, { supportMailbox, companyName: shops[0]?.shop_name ?? null });
     },
 
     /**

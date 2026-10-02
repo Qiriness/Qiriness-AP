@@ -16,7 +16,7 @@
  */
 
 import { RPC } from "../../../../scripts/lib/tables.mjs";
-import { ALL_MARKETPLACE_HANDLES } from "../../../../scripts/lib/insights-range.mjs";
+import { getMarketplaces } from "../marketplaces";
 import {
   SEGMENT_MEMBER_LIMIT,
   describeSegment,
@@ -29,7 +29,7 @@ import { callRpc, count } from "./shared";
 export async function findSegment(shopId: string, segment: SegmentDefinition): Promise<SegmentFinderResult> {
   const rows = await callRpc<Record<string, unknown>>(
     RPC.CUSTOMER_SEGMENT_FIND,
-    segmentArgs(shopId, segment, [...ALL_MARKETPLACE_HANDLES], SEGMENT_MEMBER_LIMIT)
+    segmentArgs(shopId, segment, [...(await getMarketplaces()).handles], SEGMENT_MEMBER_LIMIT)
   );
   const head = rows[0] ?? {};
   const members: SegmentMember[] = rows

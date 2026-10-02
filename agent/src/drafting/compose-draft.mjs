@@ -215,13 +215,21 @@ function renderHistory(conversation, triggerMessage, { signature = '', closingLi
     return null;
   }
 
+  // A CASE OF SEVERAL THREADS (61_cases.sql): the history is the case's, and a
+  // message from another thread says so, so two conversations never read as one.
+  const threadId =
+    triggerMessage?.ticket_id ?? (conversation || []).find((row) => row?.id === triggerId)?.ticket_id ?? null;
+  const spansThreads = Boolean(threadId) && earlier.some((entry) => entry.row.ticket_id && entry.row.ticket_id !== threadId);
+  const where = spansThreads ? 'dans ce dossier (plusieurs fils de messages)' : 'sur ce fil';
+  const otherThread = (row) => (spansThreads && row.ticket_id && row.ticket_id !== threadId ? ' — autre fil' : '');
+
   const sent = earlier.filter((entry) => entry.row.direction === 'outbound');
   const received = earlier.filter((entry) => entry.row.direction !== 'outbound');
   const blocks = [];
 
   if (sent.length > 0) {
     blocks.push(
-      `# Ce que nous avons déjà répondu sur ce fil\n\n` +
+      `# Ce que nous avons déjà répondu ${where}\n\n` +
         `Historique de nos propres messages, du plus ancien au plus récent. ` +
         `C’est un RAPPEL DE CE QUI A DÉJÀ ÉTÉ DIT, jamais un modèle à recopier : ` +
         `aucune phrase ci-dessous ne doit être reprise telle quelle, et ce qui y figure ` +
@@ -230,17 +238,17 @@ function renderHistory(conversation, triggerMessage, { signature = '', closingLi
         `disent ce que cette réponse-ci a le droit de faire.\n\n` +
         `À en tirer : ne pas redemander ce qui y est déjà demandé, ne pas réexpliquer ` +
         `ce qui y est déjà expliqué, et ne jamais contredire ce qui y est promis.\n\n` +
-        withinBudget(sent, senderDirectory).join('\n\n')
+        withinBudget(sent, senderDirectory, otherThread).join('\n\n')
     );
   }
 
   if (received.length > 0) {
     blocks.push(
-      `# Messages précédents reçus sur ce fil\n\n` +
+      `# Messages précédents reçus ${where}\n\n` +
         `Ce qui est arrivé dans la boîte avant le message ci-dessous. Chaque message ` +
         `est précédé de son émetteur : la réponse s’adresse au CLIENT, et un message ` +
         `d’un collègue ou d’un prestataire n’est là que pour le contexte.\n\n` +
-        withinBudget(received, senderDirectory).join('\n\n')
+        withinBudget(received, senderDirectory, otherThread).join('\n\n')
     );
   }
 
@@ -280,7 +288,7 @@ function stripSignOff(body, { signature = '', closingLine = '' } = {}) {
 }
 
 /** Newest first until the budget runs out; anything older is named, not cut. */
-function withinBudget(entries, senderDirectory) {
+function withinBudget(entries, senderDirectory, markOf = () => '') {
   const rendered = [];
   let remaining = MAX_HISTORY_CHARS;
   let dropped = 0;
@@ -289,7 +297,7 @@ function withinBudget(entries, senderDirectory) {
     const { row, own } = entries[index];
     // WHO, then when. A date alone left a colleague's note and the 3PL's status
     // update indistinguishable from the customer's own words.
-    const head = `**${senderRoleName(row, senderDirectory)} — ${historyDate(row) || 'date inconnue'}**\n`;
+    const head = `**${senderRoleName(row, senderDirectory)} — ${historyDate(row) || 'date inconnue'}${markOf(row)}**\n`;
     if (remaining - head.length - own.length <= 0) {
       dropped = index + 1;
       break;

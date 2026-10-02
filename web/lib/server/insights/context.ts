@@ -11,12 +11,11 @@
 import { RPC } from "../../../../scripts/lib/tables.mjs";
 import { loadConfig } from "../../../../scripts/lib/sync-config.mjs";
 import {
-  channelFilter,
   isValidTimeZone,
   monthOptions,
-  parsePlatform,
   resolveRange,
 } from "../../../../scripts/lib/insights-range.mjs";
+import { getMarketplaces, type Marketplaces } from "../marketplaces";
 import { describeFreshness } from "../../../../scripts/lib/insights-freshness.mjs";
 import type { Freshness, FreshnessItem, InsightsRange, PlatformId } from "../../types";
 import { getShop } from "../shop";
@@ -29,6 +28,8 @@ export interface InsightsContext {
   tzFallback: boolean;
   range: InsightsRange;
   platform: PlatformId;
+  /** The shop's marketplaces (`sales_channels`): the platform filter's choices and their handles. */
+  marketplaces: Marketplaces;
   freshness: Freshness;
   /** When this render read the database — what "Updated" on the page means. */
   renderedAt: string;
@@ -68,9 +69,10 @@ export async function resolveInsightsContext(searchParams: SearchParams = {}): P
 
   // Freshness first: "All time" starts at the first synced order, which only
   // this row knows. It needs nothing from the range, so the order costs nothing.
-  const freshnessRow = await callRpcOne<Record<string, string | null>>(RPC.INSIGHTS_FRESHNESS, {
-    p_shop: shop.id,
-  });
+  const [freshnessRow, marketplaces] = await Promise.all([
+    callRpcOne<Record<string, string | null>>(RPC.INSIGHTS_FRESHNESS, { p_shop: shop.id }),
+    getMarketplaces(),
+  ]);
 
   const range = resolveRange(
     {
@@ -87,7 +89,8 @@ export async function resolveInsightsContext(searchParams: SearchParams = {}): P
     tz,
     tzFallback,
     range,
-    platform: parsePlatform(first(searchParams.platform)) as PlatformId,
+    platform: marketplaces.parsePlatform(first(searchParams.platform)) as PlatformId,
+    marketplaces,
     freshness: {
       items: describeFreshness(freshnessRow, now) as FreshnessItem[],
       ordersFrom: freshnessRow?.first_order_at ?? null,
@@ -112,6 +115,6 @@ export function orderArgs(
   window: { from: string; to: string } = ctx.range,
   platform: PlatformId = ctx.platform
 ) {
-  const { channels, notChannels } = channelFilter(platform);
+  const { channels, notChannels } = ctx.marketplaces.channelFilter(platform);
   return { ...rangeArgs(ctx, window), p_channels: channels, p_not_channels: notChannels };
 }
