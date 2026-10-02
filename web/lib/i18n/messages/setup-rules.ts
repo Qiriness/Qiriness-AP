@@ -99,6 +99,8 @@ export const en = {
   "setup.rules.discard": "Discard",
   "setup.rules.keepEditing": "Keep editing",
   "setup.rules.useGeneralButton": "Use general rule",
+  "setup.rules.newGeneral": "Write a new general rule",
+  "setup.rules.noGeneralYet": "There is no general rule in {set} yet.",
   "setup.rules.saveDraft": "Save as draft",
 } as const;
 
@@ -202,5 +204,7 @@ export const fr: Record<keyof typeof en, string> = {
   "setup.rules.discard": "Abandonner",
   "setup.rules.keepEditing": "Continuer à modifier",
   "setup.rules.useGeneralButton": "Utiliser la règle générale",
+  "setup.rules.newGeneral": "Rédiger une nouvelle règle générale",
+  "setup.rules.noGeneralYet": "Il n'y a pas encore de règle générale dans {set}.",
   "setup.rules.saveDraft": "Enregistrer en brouillon",
 };

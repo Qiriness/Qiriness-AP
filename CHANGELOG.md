@@ -10,6 +10,14 @@ Three sibling files carry the other halves, and this one deliberately does not d
 
 ---
 
+## Order situations: O-14 / P-20 / P-22 redrawn, rules collect, general rules writable from the editor (2026-10-02)
+
+- **Situation boundaries:** O-14 is now any change to the *purchased* products of a placed order (add, remove, swap, size/shade/quantity). Free items are P-22 before the parcel arrives and P-20 after it, whether they are samples, gifts or anything else offered. D-02's « do not choose » now names gifts too. Titles, choose_rules and variants rewritten in `Email-Example-Queries.md`; every new variant is a real message (#3895, #2707, #4765, #5137, and four undated-order ones). Forgotten free samples moved from O-14 to P-22.
+- **No real message asks to remove or swap a product**, so that half of O-14 rests on its choose_rule alone.
+- **Collection:** O-09, O-12, O-13, O-14, P-17, P-20, P-22 set to `rule_directed`, in the database. `collection_suppresses` unchanged (off).
+- **Rule editor:** « Use a general rule » used to only pick an existing general rule, and was hidden when the set had none. It now always shows on a new situation rule and offers « Write a new general rule », which keeps the picked findings and drops the situation.
+- **Proven:** import and embed ran (60 phrasings embedded, approvals unchanged); the mode change was read back; `tsc --noEmit` clean. The editor change was not clicked through in a browser. The chooser was not re-evaluated on the new boundaries.
+
 ## Cases: linked threads tab, live lead, same customer within 14 days (2026-10-02)
 
 - **New « Linked threads » tab** next to Conversation and Activity, on any thread whose case has others. It shows each other thread (subject, status, dates, how it joined, « the reply goes here ») and its mail, read-only. The queue shows one row per case, so this is where the hidden threads are read.

@@ -184,7 +184,9 @@ export function RuleEditor({
   }, [rules, answerSet, conditions]);
   const chosenIsDraft = (candidate: PolicyRule | null) =>
     Boolean(candidate && candidate.approvalStatus !== "approved");
-  const offerGeneral = !rule && Boolean(situationKey) && setGeneralRules.length > 0 && Boolean(onUseGeneralRule);
+  // OFFERED EVEN WHEN THE SET HAS NO GENERAL RULE YET: ticking it is how somebody
+  // looking for one says so, and it is where a new one is started from.
+  const offerGeneral = !rule && Boolean(situationKey) && Boolean(onUseGeneralRule);
   const chosenGeneralRule =
     setGeneralRules.find((item) => item.id === generalRuleId) ?? setGeneralRules[0] ?? null;
   const chosenCoversPicked = chosenGeneralRule ? coversPicked(chosenGeneralRule) : false;
@@ -257,8 +259,9 @@ export function RuleEditor({
   const situation = situations.find((item) => item.key === situationKey) ?? null;
   // A GENERAL RULE STARTED FROM A SITUATION'S CANVAS still opens its conditions
   // on that situation's needs: it applies everywhere, but it was written to
-  // answer something that situation branches on.
-  const contextKey = seed?.contextSituationKey ?? null;
+  // answer something that situation branches on. That holds too for a rule
+  // opened on a situation and switched to general with « Write a new general rule ».
+  const contextKey = seed?.contextSituationKey ?? seed?.situationKey ?? null;
   const contextSituation =
     situation ?? (contextKey ? situations.find((item) => item.key === contextKey) ?? null : null);
 
@@ -425,7 +428,10 @@ export function RuleEditor({
                   <b>{t("setup.rules.useGeneral")}</b> — {t("setup.rules.useGeneralText", { key: situation?.key ?? t("setup.rules.situation").toLowerCase() })}
                 </span>
               </label>
-              {useGeneral && (
+              {useGeneral && setGeneralRules.length === 0 && (
+                <p className={styles.hint}>{t("setup.rules.noGeneralYet", { set: answerSet || "—" })}</p>
+              )}
+              {useGeneral && setGeneralRules.length > 0 && (
                 <label className={styles.field}>
                   <span className={styles.label}>{t("setup.rules.generalRule")}</span>
                   <select
@@ -462,6 +468,24 @@ export function RuleEditor({
                     Nothing is saved. Untick to write a {situation?.key ?? "situation"} rule instead.
                   </span>
                 </label>
+              )}
+              {/* WRITING ONE, not only picking one. The rule keeps the findings
+                  picked below and drops the situation, so it saves as a general
+                  rule of this set; its conditions still open on this situation's
+                  needs. */}
+              {useGeneral && (
+                <div>
+                  <button
+                    type="button"
+                    className={styles.linkButton}
+                    onClick={() => {
+                      setSituationKey("");
+                      setUseGeneral(false);
+                    }}
+                  >
+                    {t("setup.rules.newGeneral")}
+                  </button>
+                </div>
               )}
             </section>
           )}
