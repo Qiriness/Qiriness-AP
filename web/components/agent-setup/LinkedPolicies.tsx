@@ -9,13 +9,19 @@ import type { CompanyPolicy, CompanyPolicyLink } from "@/lib/types";
 
 import styles from "./LinkedPolicies.module.css";
 
-export type PolicyTarget = { situationKey: string; answerId?: never } | { answerId: string; situationKey?: never };
+export type PolicyTarget =
+  | { situationKey: string; answerId?: never; pendingKeys?: never }
+  | { answerId: string; situationKey?: never; pendingKeys?: never }
+  /** A rule not saved yet: the picks are held by the editor and linked once it has an id. */
+  | { pendingKeys: string[]; onPendingChange: (keys: string[]) => void; situationKey?: never; answerId?: never };
 
 /**
  * « Linked policies » on a situation or on one rule: the company policies that
  * reach every reply there. A link is a reference, so editing the policy in the
  * library changes it here too. A rule also shows, greyed, what it inherits from
- * its situation. Links save at once: there is nothing else to fill in.
+ * its situation. Links save at once: there is nothing else to fill in — except
+ * on a rule not saved yet, which has no id to link to, so its picks wait for
+ * the rule's first save (`pendingKeys`).
  */
 export function LinkedPolicies({
   library,
@@ -37,13 +43,21 @@ export function LinkedPolicies({
 
   const matches = (link: CompanyPolicyLink) =>
     target.situationKey ? link.situationKey === target.situationKey : link.answerId === target.answerId;
-  const linked = library.flatMap((policy) => policy.links.filter(matches).map((link) => ({ policy, link })));
-  const linkedKeys = new Set(linked.map(({ policy }) => policy.key));
+  const linked = target.pendingKeys
+    ? []
+    : library.flatMap((policy) => policy.links.filter(matches).map((link) => ({ policy, link })));
+  const pending = target.pendingKeys ? library.filter((p) => target.pendingKeys.includes(p.key)) : [];
+  const linkedKeys = new Set([...linked.map(({ policy }) => policy.key), ...pending.map((p) => p.key)]);
   const inherited = library.filter((p) => inheritedKeys.includes(p.key) && !linkedKeys.has(p.key));
   const addable = library.filter((p) => p.active && !linkedKeys.has(p.key) && !inheritedKeys.includes(p.key));
 
   async function add(key: string) {
     if (!key) return;
+    if (target.pendingKeys) {
+      target.onPendingChange([...target.pendingKeys, key]);
+      setAdding("");
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
@@ -74,12 +88,25 @@ export function LinkedPolicies({
     <div className={styles.block}>
       <p className={styles.label}>{t("setup.policies.linked")}</p>
       <div className={styles.chips}>
-        {linked.length === 0 && inherited.length === 0 && <span className={styles.none}>{t("setup.policies.noneLinked")}</span>}
+        {linked.length === 0 && pending.length === 0 && inherited.length === 0 && <span className={styles.none}>{t("setup.policies.noneLinked")}</span>}
         {linked.map(({ policy, link }) => (
           <span key={link.id} className={policy.active ? styles.chip : styles.chipOff} title={policy.purpose || policy.key}>
             {policy.name}
             {!policy.active && ` (${t("setup.policies.off")})`}
             <button type="button" className={styles.remove} disabled={busy} aria-label={t("setup.policies.unlink", { name: policy.name })} onClick={() => remove(link)}>
+              ×
+            </button>
+          </span>
+        ))}
+        {pending.map((policy) => (
+          <span key={policy.key} className={styles.chip} title={policy.purpose || policy.key}>
+            {policy.name}
+            <button
+              type="button"
+              className={styles.remove}
+              aria-label={t("setup.policies.unlink", { name: policy.name })}
+              onClick={() => target.pendingKeys && target.onPendingChange(target.pendingKeys.filter((k) => k !== policy.key))}
+            >
               ×
             </button>
           </span>

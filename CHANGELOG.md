@@ -11,6 +11,13 @@ Three sibling files carry the other halves, and this one deliberately does not d
 ---
 
 
+## Rule editor: link a policy where you pick the article (2026-10-02)
+
+- **Added:** the rule editor's Reply card has a « Linked policies » field beside « Answer from an article ». It writes the same `company_policy_links` rows as the inspector's block. Before this, a rule's policies could only be linked from the right-hand inspector, and the editor never showed them.
+- An existing rule's links save as soon as you pick them. A new rule has no id yet, so its picks are held, count as unsaved work, and are linked right after its first save. If a link fails, the error shows on the page; the rule itself stays saved.
+- The situation's own policies show greyed, as in the inspector. O-12, for example, already gets « Modification d'adresse » from its situation.
+- **Proven:** dashboard typecheck and lint only. There are no component tests for these screens, and it was not clicked through in the browser.
+
 ## Rulebook: migrated order-identity rules can be edited again (2026-10-02)
 
 - **Fixed:** Rulebook rows now pass through the agent's `answerFromRow` normalizer before reaching the editor. Migration 59 deliberately retained legacy `order_identity: none` beside its five replacements for deployment compatibility; the dashboard previously submitted that hidden value unchanged, so saving D-01 failed with `« none » is not a finding of order_identity`.

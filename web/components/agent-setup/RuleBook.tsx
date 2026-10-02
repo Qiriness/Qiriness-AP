@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import { AlertIcon, CheckCircleIcon, DotIcon, PlusIcon } from "@/components/icons";
 import { Button } from "@/components/ui/Button";
+import { linkPolicy } from "@/lib/api/company-policies";
 import { knowledgeErrorMessage } from "@/lib/api/knowledge";
 import { useT } from "@/lib/i18n/client";
 import type { Translate } from "@/lib/i18n/translate";
@@ -667,6 +668,8 @@ export function RuleBook({
           situations={situations}
           rules={rules}
           vocabulary={vocabulary}
+          policyLibrary={policyLibrary}
+          onPolicyLibraryChange={setPolicyLibrary}
           generalRules={editing.generalRules ?? []}
           onUseGeneralRule={(rule, branches) => {
             // Recorded for the canvas in this browser, never sent to the agent
@@ -681,7 +684,7 @@ export function RuleBook({
             setEditing(null);
           }}
           onClose={() => setEditing(null)}
-          onSave={async (payload) => {
+          onSave={async (payload, policyKeys) => {
             const saved = await saveRule(payload);
             setRules((prev) => {
               const without = prev.filter((rule) => rule.id !== saved.id);
@@ -689,6 +692,23 @@ export function RuleBook({
             });
             setSelectedRuleId(saved.id);
             setEditing(null);
+            // A new rule's picked policies, now that it has an id. The rule is
+            // already saved, so a failed link is reported on the page rather than
+            // thrown back into a closed editor; the inspector shows what took.
+            const links = await Promise.allSettled(
+              policyKeys.map((policyKey) => linkPolicy({ policyKey, answerId: saved.id }))
+            );
+            const made = links.flatMap((r) => (r.status === "fulfilled" ? [r.value] : []));
+            if (made.length > 0) {
+              setPolicyLibrary((prev) =>
+                prev.map((p) => {
+                  const mine = made.filter((link) => link.policyId === p.id);
+                  return mine.length > 0 ? { ...p, links: [...p.links, ...mine] } : p;
+                })
+              );
+            }
+            const failed = links.find((r) => r.status === "rejected");
+            if (failed) setError(knowledgeErrorMessage(failed.reason));
           }}
         />
       )}

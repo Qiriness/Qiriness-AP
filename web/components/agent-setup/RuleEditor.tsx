@@ -9,8 +9,9 @@ import { useT } from "@/lib/i18n/client";
 import type { SaveRulePayload } from "@/lib/api/policy";
 import { isReplyLinkUrl } from "@/lib/reply-links";
 import { ruleLabel } from "@/lib/rule-labels";
-import type { PolicyRule, PolicySituation, PolicyVocabulary, RuleCheck } from "@/lib/types";
+import type { CompanyPolicy, PolicyRule, PolicySituation, PolicyVocabulary, RuleCheck } from "@/lib/types";
 
+import { LinkedPolicies } from "./LinkedPolicies";
 import styles from "./RuleEditor.module.css";
 
 /** As `MAX_CHECK_STEPS` in agent/src/casework/rule-checks.mjs, which refuses more on save. */
@@ -100,6 +101,8 @@ export function RuleEditor({
   situations,
   rules,
   vocabulary,
+  policyLibrary,
+  onPolicyLibraryChange,
   generalRules = [],
   onUseGeneralRule,
   onClose,
@@ -112,6 +115,9 @@ export function RuleEditor({
   /** Every rule, so the conditions can open on what this situation branches on. */
   rules: PolicyRule[];
   vocabulary: PolicyVocabulary;
+  /** The company policies, with their links — the same library the rulebook's blocks show. */
+  policyLibrary: CompanyPolicy[];
+  onPolicyLibraryChange: (next: CompanyPolicy[]) => void;
   /** Live general rules already answering the branch this editor was opened from. */
   generalRules?: PolicyRule[];
   /**
@@ -120,7 +126,8 @@ export function RuleEditor({
    */
   onUseGeneralRule?: (rule: PolicyRule, branches: { need: string; finding: string }[]) => void;
   onClose: () => void;
-  onSave: (payload: SaveRulePayload) => Promise<void>;
+  /** `policyKeys`: what to link once a NEW rule has an id. Empty for an existing rule, whose links save at once. */
+  onSave: (payload: SaveRulePayload, policyKeys: string[]) => Promise<void>;
 }) {
   const t = useT();
   const titleId = useId();
@@ -136,6 +143,7 @@ export function RuleEditor({
   const [ask, setAsk] = useState<string[]>(rule?.ask ?? []);
   const [offerCode, setOfferCode] = useState(rule?.offerCode ?? "");
   const [knowledgeDocumentId, setKnowledgeDocumentId] = useState(rule?.knowledgeDocumentId ?? "");
+  const [pendingPolicyKeys, setPendingPolicyKeys] = useState<string[]>([]);
   const [tones, setTones] = useState<string[]>(rule?.tones ?? []);
   const [linkUrl, setLinkUrl] = useState(rule?.link?.url ?? "");
   const [linkLabel, setLinkLabel] = useState(rule?.link?.label ?? "");
@@ -216,7 +224,8 @@ export function RuleEditor({
     });
   }
   const [initialSnapshot] = useState(snapshot);
-  const dirty = snapshot !== initialSnapshot;
+  // A new rule's picked policies are unsaved work too; an existing rule's links are already saved.
+  const dirty = snapshot !== initialSnapshot || pendingPolicyKeys.length > 0;
 
   // CLOSING NEVER DISCARDS WORK SILENTLY. Escape and a backdrop click are the
   // two ways a panel gets closed by accident, and a half-written skeleton is
@@ -335,7 +344,7 @@ export function RuleEditor({
     setSaving(true);
     setError(null);
     try {
-      await onSave(payload);
+      await onSave(payload, rule ? [] : pendingPolicyKeys);
     } catch (caught) {
       setError(knowledgeErrorMessage(caught));
     } finally {
@@ -937,6 +946,35 @@ export function RuleEditor({
                     </label>
                   )}
                 </div>
+
+                {/* THE POLICIES THIS RULE ANSWERS FROM. Links, not a column: the same
+                    company_policy_links the inspector edits, so an existing rule's
+                    links save at once; a new rule's wait for its first save. */}
+                {policyLibrary.length > 0 && (
+                  <div className={styles.field}>
+                    <LinkedPolicies
+                      library={policyLibrary}
+                      target={
+                        rule
+                          ? { answerId: rule.id }
+                          : { pendingKeys: pendingPolicyKeys, onPendingChange: setPendingPolicyKeys }
+                      }
+                      inheritedKeys={
+                        situationKey
+                          ? policyLibrary
+                              .filter((p) => p.links.some((l) => l.situationKey === situationKey))
+                              .map((p) => p.key)
+                          : []
+                      }
+                      onChange={onPolicyLibraryChange}
+                    />
+                    <span className={styles.hint}>
+                      {rule
+                        ? "Saved as you pick. Greyed: linked to the whole situation."
+                        : "Linked when the rule is saved. Greyed: linked to the whole situation."}
+                    </span>
+                  </div>
+                )}
               </section>
             </>
           )}
