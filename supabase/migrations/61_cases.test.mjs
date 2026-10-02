@@ -66,10 +66,19 @@ test('every ticket has a case in the baseline, and the column comes in nullable,
 });
 
 test('the case views and the queue are copied from 04, byte for byte', () => {
-  for (const view of ['case_message_counts', 'case_facts', 'ticket_queue']) {
+  for (const view of ['case_message_counts', 'ticket_queue']) {
     assert.ok(viewOf(SUPPORT, view), view);
     assert.equal(viewOf(SQL, view), viewOf(SUPPORT, view), view);
   }
+  // case_facts was re-stated by 62 (the lead prefers a live thread): 61's
+  // copy is the version before it, and differs from 04 by that alone.
+  const before62 = viewOf(SQL, 'case_facts');
+  assert.equal(
+    before62
+      .replace('a.latest_ticket_id end as lead_ticket_id', 'a.fallback_lead_id end as lead_ticket_id')
+      .replace("array_agg(t.id order by t.last_message_at desc nulls last))[1] as latest_ticket_id", "array_agg(t.id order by (t.status not in ('resolved', 'closed')) desc, t.last_message_at desc nulls last))[1] as fallback_lead_id"),
+    viewOf(SUPPORT, 'case_facts')
+  );
   // case_facts before the queue that reads it.
   assert.ok(SQL.indexOf('view public.case_facts') < SQL.indexOf('view public.ticket_queue'));
 });

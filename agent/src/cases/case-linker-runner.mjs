@@ -33,18 +33,30 @@ export const MAX_CANDIDATES = 5;
 /** How much of a candidate case's opening customer message the Case Linker reads. */
 export const CANDIDATE_OPENING_CHARS = 400;
 
+/**
+ * A customer who writes again within this many days is probably writing about
+ * the same thing: their other cases that recent are candidates, for the model
+ * to judge. Chosen at 14 (not 3) on purpose: if it is NOT the same thing, it
+ * is a fair test of the Case Linker.
+ */
+export const RECENT_SAME_CUSTOMER_DAYS = 14;
+
 /** Why a case was retrieved, strongest first: the ranking and the audit both read it. */
-export const CANDIDATE_REASONS = Object.freeze(['same_tracking', 'same_order', 'similar_message', 'compatible_family']);
+export const CANDIDATE_REASONS = Object.freeze(['same_tracking', 'same_order', 'similar_message', 'compatible_family', 'recent_same_customer']);
 
 /**
  * The customer's plausible cases, ranked, cut to MAX_CANDIDATES.
  *
  * PLAUSIBLE means at least one reason: the same parcel, the same order, a
- * message the embedding scores as the same conversation, or a family this
- * thread's family may continue. A case that is merely recent and from the same
- * person is not a candidate: the same sender never links on its own.
+ * message the embedding scores as the same conversation, a family this
+ * thread's family may continue, or the same customer active on it within
+ * RECENT_SAME_CUSTOMER_DAYS. That last one only makes a case a CANDIDATE: no
+ * rule links on it (case-link-rules.mjs needs an order or a parcel), so the
+ * same sender still never links on its own; with the model off it is logged
+ * and the thread is a new case.
  */
 export function plausibleCandidates({ thread, cases, transitions = [], similarity = new Map() }) {
+  const at = Date.parse(thread.at ?? '');
   const order = thread.orderNumber ? String(thread.orderNumber).replace(/^#/, '') : null;
   const tracking = new Set(thread.trackingNumbers ?? []);
   const scored = [];
@@ -54,6 +66,10 @@ export function plausibleCandidates({ thread, cases, transitions = [], similarit
     if (order && (candidate.orderNumbers ?? []).map((n) => String(n).replace(/^#/, '')).includes(order)) reasons.push('same_order');
     if ((similarity.get(candidate.caseId) ?? 0) >= RELATED_THRESHOLD) reasons.push('similar_message');
     if (compatibleFamilies(candidate.family, thread.family, transitions)) reasons.push('compatible_family');
+    const last = Date.parse(candidate.lastMessageAt ?? '');
+    if (Number.isFinite(at) && Number.isFinite(last) && at - last <= RECENT_SAME_CUSTOMER_DAYS * 86400000) {
+      reasons.push('recent_same_customer');
+    }
     if (reasons.length === 0) continue;
     scored.push({ ...candidate, reasons });
   }
@@ -208,7 +224,9 @@ export function createCaseLinkStore(supabase, { shopId, tickets, cases, senderDi
         hasPriorCases: false,
         orderNumber: order,
         trackingNumbers: [],
-        family: familyOf({ subject: ticket.category }, families)
+        family: familyOf({ subject: ticket.category }, families),
+        // When the thread began: how recent another case of the customer is.
+        at: ticket.first_message_at ?? now().toISOString()
       };
 
       if (excluded || !ticket.requester_email_hash) {

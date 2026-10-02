@@ -142,7 +142,7 @@ Referenced by the entries below so each state is written once.
 
 ### D-02 · Il manque un article dans le colis que j'ai reçu.
 `delivery` · `problem` · **12 msgs** · 🟢
-**choose_rule** Choose when the customer received the parcel but one or more ordered items are missing. Do not choose for missing free samples or when the customer received the wrong product.
+**choose_rule** Choose when the customer received the parcel but one or more ordered items are missing. Do not choose for missing free samples, gifts or other complimentary items, or when the customer received the wrong product.
 
 **Variantes réelles**
 - « J'ai effectué une commande #5953 et je viens de recevoir mon colis. Il manque un article »
@@ -509,12 +509,14 @@ commerciale, prise par une personne.
 
 ---
 
-### O-14 · Puis-je ajouter un article à une commande déjà passée ?
+### O-14 · Puis-je modifier une commande déjà passée (ajouter, retirer ou changer un article) ?
 `order` · `question` · **2 msgs** · 🟢
-**choose_rule** Choose when the customer wants to add a product, sample or other item to an order that has already been placed.
+**choose_rule** Choose when the customer wants to change the purchased products of an order that has already been placed: add, remove or swap a product, or change a size, shade or quantity. Do not choose when the item in question is a free sample, gift or other complimentary item, when they want to change the delivery address, or when they want to cancel the whole order.
 
 **Variantes réelles**
-- « J'ai effectué une commande hier et j'ai oublié de rajouter les trois échantillons »
+- « J'ai fait une commande sur votre site, j'ai oublié de mettre un produit dans ma commande est-ce que je peux le rajouter. » _(2026-09-19)_
+- « Je souhaite rajouter un produit à ma commande » _(#4765, 2026-02-13)_
+- « Je viens de m'apercevoir que l'article kit mask commandé en 3 fois au lieu de 4 […] n'a pas été pris en compte. Je voudrais […] que vous rajoutiez le kit en un exemplaire supplémentaire » _(#5137, 2026-04-05)_
 
 **needs** `order_identity`, `order_state`
 **politiques liées** `order_modification_policy`
@@ -648,13 +650,14 @@ commerciale, prise par une personne.
 
 ---
 
-### P-20 · Je n'ai pas reçu les échantillons offerts avec ma commande.
+### P-20 · Je n'ai pas reçu les échantillons ou le cadeau offerts avec ma commande.
 `order` / `promotions` · `problem` · **4 msgs** · 🟢
-**choose_rule** Choose when free samples expected with an order were missing. Do not choose for a missing purchased item or for checking whether a separate promotional gift or discount was applied.
+**choose_rule** Choose when the customer has received their parcel and a free sample, promotional gift or other complimentary item that should have come with the order is not in it. Do not choose before the parcel has arrived, when the customer is checking whether a gift, sample or discount was applied to the order or asking for one to be added, or when a purchased item is missing.
 
 **Variantes réelles**
 - « Pour une première #5907 commande, je n'ai pas reçu mon échantillon ? »
-- « He olvidado pedir las tres muestras de regalo… »  _(es)_
+- « J'ai reçu ma commande aujourd'hui […] Juste une chose. Mes échantillons était pas dans mon paquet. » _(#3895, 2026-01-10)_
+- « Mais dans le colis et sur le bon de commande on me dit que le Gua Sha est en cadeau et la trousse que je devais avoir en cadeau je ne l'ai pas eue ! » _(#2707, 2025-11-09)_
 
 **needs** `order_identity`
 **exemplaires** → jeu `promo`
@@ -683,15 +686,19 @@ commerciale, prise par une personne.
 
 ---
 
-### P-22 · Ma promotion ou mon cadeau a-t-il bien été appliqué à ma commande ? Pouvez-vous vérifier ?
+### P-22 · Ma promotion, mon cadeau ou mes échantillons ont-ils bien été pris en compte dans ma commande ? Pouvez-vous vérifier ?
 `order` / `promotions` · `problem` · **2 msgs** · 🟢
-**choose_rule** Choose when an order has already been placed and the customer wants confirmation that a discount, promotion or promotional gift was actually applied. Do not choose for a checkout problem before the order is completed.
+**choose_rule** Choose when an order has already been placed and the customer wants confirmation that a discount or promotion was applied, or — before the parcel has arrived — that a complimentary item (gift, free sample or other offered item) is included, including asking for a forgotten or missing one to be added. Do not choose for a checkout problem before the order is completed, when the parcel has already arrived without the complimentary item, or when the customer wants to add, remove or change a purchased product.
 
 **Variantes réelles**
 - « J'avais vu qu'un cadeau exclusif était offert, mais je ne le trouve pas dans ma commande. » _(#6827, 2026-08-20)_
 - « Je n'ai pas eu les 20% de réduction annoncés pour ma première commande. » _(#6913, 2026-09-08)_
 - « Le code promo n'apparaît pas sur ma facture, a-t-il bien été pris en compte ? »
 - « J'ai commandé pendant l'offre, est-ce que la remise a bien été appliquée ? »
+- « Je voulais simplement préciser que le masque Qiriness offert/validé n'apparaît pas sur ma commande. Si possible, pourriez-vous vérifier et ne pas oublier de l'ajouter à mon colis ? » _(2026-08-27)_
+- « Suite à la commande de plus de 70€ que je viens de passer, la trousse cocooning ne m'a pas été offerte, pouvez vous y remédier ? » _(2025-11-14)_
+- « J'ai effectué une commande hier et j'ai oublié de rajouter les trois échantillons offerts. Pourriez-vous les ajouter s'il vous plaît. » _(2026-06-30)_
+- « He olvidado pedir las tres muestras de regalo, no sé si es posible que me las adjunten a mi pedido. » _(es, 2026-06-26)_
 
 **needs** `order_identity`, `order_promotion`
 **politiques liées** `promotion_discount_policy`

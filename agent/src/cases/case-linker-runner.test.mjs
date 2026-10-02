@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
+import { decideLink } from './case-link-rules.mjs';
 import { MAX_CANDIDATES, createCaseLinkStore, plausibleCandidates, runCaseLinking, situationOf } from './case-linker-runner.mjs';
 
 const FAMILIES = { subjects: { delivery: 'DELIVERY' }, situations: {}, transitions: [['DELIVERY', 'REFUND_RETURN']] };
@@ -84,13 +85,18 @@ test('a dry run decides and writes nothing', async () => {
   assert.equal(applied.length, 0);
 });
 
-test('the same sender alone never makes a case a candidate', () => {
+test('the same sender is a candidate within 14 days, never beyond, and never links on its own', () => {
+  const old = { caseId: 'k-old', family: 'DELIVERY', orderNumbers: [], trackingNumbers: [], lastMessageAt: '2026-09-01T10:00:00Z' };
+  const recent = { caseId: 'k-recent', family: 'DELIVERY', orderNumbers: [], trackingNumbers: [], lastMessageAt: '2026-09-20T10:00:00Z' };
   const candidates = plausibleCandidates({
-    thread: thread({ orderNumber: null, family: 'PRODUCT' }),
-    cases: [{ caseId: 'k1', family: 'DELIVERY', orderNumbers: [], trackingNumbers: [] }],
+    thread: thread({ orderNumber: null, family: 'PRODUCT', at: '2026-09-25T14:28:00Z' }),
+    cases: [old, recent],
     transitions: FAMILIES.transitions
   });
-  assert.deepEqual(candidates, []);
+  assert.deepEqual(candidates.map((c) => [c.caseId, c.reasons]), [['k-recent', ['recent_same_customer']]]);
+  // A candidate, not a link: no order and no parcel, so the rules call it ambiguous.
+  const outcome = decideLink({ thread: thread({ orderNumber: null, family: 'PRODUCT' }), candidates, transitions: FAMILIES.transitions });
+  assert.equal(outcome.decision, 'ambiguous');
 });
 
 test('candidates are ranked by the strength of their reason and capped', () => {

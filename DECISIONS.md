@@ -2887,7 +2887,7 @@ The `link` pass (`agent/src/cases/`) decides once per new thread, after categori
 | who the customer is | `requester_email_hash`, **never `customer_id` or a name** (marketplace orders mint one synthetic customer per order; the hash is what the duplicate and related lookups were measured on) | |
 | listed sender or one of our own threads | `sender_directory`, `sender_label` | new case (`excluded_sender`): a retailer's weekly order template is the false positive § *The semantic tier, revisited* measured |
 | no other case of this customer in 60 days | query | new case (`first_contact`): no retrieval, no model |
-| candidates | other cases sharing the parcel, the order, a family this one may continue, or a message the embedding scores ≥ 0.90; at most 5. **The same sender alone never makes a case a candidate** | |
+| candidates | other cases sharing the parcel, the order, a family this one may continue, or a message the embedding scores ≥ 0.90, **or the same customer active on it within 14 days** (`recent_same_customer`); at most 5. A candidate is not a link: no rule links without an order or a parcel, so the same sender still never links on its own | |
 | same tracking number on exactly one candidate, no contradicting order | rule | link (`tracking`) |
 | same order on exactly one candidate of a compatible family | rule | link (`order_family`) |
 | the only candidate on this order/parcel, family unknown on one side | rule | link (`unique_match`) |
@@ -2929,7 +2929,17 @@ Every decision is a `case_links` row, a new case included, with the candidates a
 
 ### Everything that counted threads counts cases
 
-- **The queue** shows one row per case, its lead thread (the reply thread, else the most recently active), ranked on the case:
+**Same customer within 14 days is a candidate (2026-10-02).** This reverses « the same sender alone never makes a case a candidate ». On 25 Sep one customer opened five threads in five hours about one checkout problem. One of them, `f7f66386` (« I have changed my phone number three times »), shared no order, parcel, wording or subject family with the others, so it was decided `no_candidates` and the model never saw it.
+- Now another case of the same customer active within `RECENT_SAME_CUSTOMER_DAYS` (14) is a candidate.
+- **It is still not a link.** The rules link only on an order or a parcel. With the model off the thread is a new case, logged with the candidate; with it on, the Case Linker decides.
+- **14 days, not 72 hours, by the owner's choice.** A customer who writes twice within two weeks is probably writing about the same thing. When they are not, it is a fair test of the model.
+
+**A case with a live thread never leads with a finished one (62, 2026-10-02).** The lead was the reply thread, else the most recently active thread.
+- **The failure:** `cddd49b6` and `93d7d9c3` are the same question, sent 5 minutes apart. We answered the second and resolved it, and the first stayed `awaiting_human`. Nothing was owed, so the case led with the resolved thread and went to Closed, with the awaiting thread hidden behind it.
+- **Now:** the lead is the reply thread, else the most recently active thread still live, else the most recent.
+- **Not done, on purpose:** linking still writes no status. A thread like `cddd49b6`, whose question was answered on its twin, comes back to the queue, and a person closes it. That only happens with statuses from before cases (the backfill): live, a thread that joins a case is new and owed a reply, so it leads.
+
+- **The queue** shows one row per case, its lead thread (the reply thread, else the most recently active thread still live, else the most recently active), ranked on the case:
   - every customer message on every thread (`contactPoints`);
   - the case's unanswered wait;
   - the highest level and the folded status;

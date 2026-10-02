@@ -146,7 +146,7 @@ linked is never requested again.
 | | already shipped | **Ask** what they want (it went to the original address) |
 | O-13 cancel | already shipped | **Reply now**: explain the return instead |
 | | not shipped | **Person**: support cancels. **⚠** no rule exists for this branch |
-| O-14 add an item | not shipped | **Person**: support |
+| O-14 change a purchased item (add, remove, swap) | not shipped | **Person**: support |
 | | shipped | **Reply now**: suggest a new order |
 | D-07 « how long does delivery take? » | always | **Reply now**: 3 days to dispatch, then 3 FR / 6 abroad |
 | D-33 « do you deliver to my country? » | always | **Person**: support (no approved article; don't guess) |
@@ -161,10 +161,10 @@ linked is never requested again.
 | | code active but not applying | **Reply now**: explain why (e.g. not cumulative with the sale) |
 | | code not found / none quoted | **Ask**: the exact code |
 | P-19 promo price not applied | always | **Ask** for details |
-| P-20 free samples missing | order found | **Reply now** |
+| P-20 free sample or gift missing from delivered parcel | order found | **Reply now** |
 | | order unknown | **Ask**: order number |
 | P-21 « any offer on? » | an offer exists for that product | **Reply now** with the code |
-| P-22 « was my promo applied? » | yes (gift/discount found) | **Reply now**: say yes, name it |
+| P-22 « was my promo, gift or sample applied? » (before delivery) | yes (gift/discount found) | **Reply now**: say yes, name it |
 | | nothing on the order | **Person**: support, `order_promotion` |
 | P-17 free gift won't go in the basket | basket found | **Person**: support |
 | | basket not visible | **Ask**: purchase email |

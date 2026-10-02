@@ -1253,7 +1253,9 @@ function TicketDetailWorkspace({
   const frameRef = useRef<HTMLDivElement>(null);
   const headerRef = useRef<HTMLElement>(null);
   const [draftHeight, setDraftHeight] = useState<number | null>(readDraftHeight);
-  const [middleTab, setMiddleTab] = useState<"conversation" | "activity">("conversation");
+  const [middleTab, setMiddleTab] = useState<"conversation" | "activity" | "linked">("conversation");
+  // The case's other threads, when this thread is one of several (61_cases.sql).
+  const linkedThreads = thread?.case?.threads.filter((row) => !row.isThisThread) ?? [];
 
   useEffect(() => {
     setMiddleTab("conversation");
@@ -1408,12 +1410,26 @@ function TicketDetailWorkspace({
           {t("tickets.panels.activity")}
           {detail && thread && <span>{activityItems(detail, thread, t).length}</span>}
         </button>
+        {linkedThreads.length > 0 && (
+          <button
+            type="button"
+            role="tab"
+            aria-selected={middleTab === "linked"}
+            className={middleTab === "linked" ? styles.middleTabActive : undefined}
+            onClick={() => setMiddleTab("linked")}
+          >
+            {t("tickets.panels.linked.tab")}
+            <span>{linkedThreads.length}</span>
+          </button>
+        )}
       </div>
       </header>
 
       <div className={styles.conversationArea}>
         {middleTab === "conversation" ? (
           <ConversationThread thread={thread} error={threadError} />
+        ) : middleTab === "linked" && thread && linkedThreads.length > 0 ? (
+          <LinkedThreads threads={linkedThreads} parcels={thread.parcels} />
         ) : (
           <ActivityTimeline detail={detail} thread={thread} error={detailError || threadError} />
         )}
@@ -1445,6 +1461,57 @@ function TicketDetailWorkspace({
         detailError={detailError}
       />
     </div>
+  );
+}
+
+/**
+ * THE CASE'S OTHER THREADS, read from the thread being worked. The queue shows
+ * one row per case, so a thread linked into it (often an older one, or a
+ * duplicate the customer sent again) is not in the list; this is where its
+ * mail is read. Read-only: the reply goes on the case's reply thread.
+ */
+function LinkedThreads({
+  threads,
+  parcels,
+}: {
+  threads: NonNullable<TicketThread["case"]>["threads"];
+  parcels: TicketTracking[];
+}) {
+  const t = useT();
+  const locale = useLocale();
+  // Newest first: the thread most likely to matter is the latest one.
+  const ordered = [...threads].sort((a, b) => String(b.lastMessageAt ?? "").localeCompare(String(a.lastMessageAt ?? "")));
+  const day = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString(locale, { day: "numeric", month: "short" }) : "—");
+
+  return (
+    <section className={styles.threadSection} aria-label={t("tickets.panels.linked.label")}>
+      <div className={styles.sectionHead}>
+        <h3>{t("tickets.panels.linked.tab")}</h3>
+        <span>{t("tickets.panels.linked.hint")}</span>
+      </div>
+      {ordered.map((row) => (
+        <section key={row.ticketId} className={styles.linkedThread} aria-label={row.subject ?? t("tickets.panels.linked.noSubject")}>
+          <header className={styles.linkedThreadHead}>
+            <strong>{row.subject ?? t("tickets.panels.linked.noSubject")}</strong>
+            <span>
+              {t(`status.${row.status}`)} · {day(row.firstMessageAt)}
+              {row.lastMessageAt && row.lastMessageAt.slice(0, 10) !== row.firstMessageAt?.slice(0, 10) ? ` → ${day(row.lastMessageAt)}` : ""}
+              {row.linkedBy ? ` · ${t(`tickets.panels.linked.method.${row.linkedBy}`)}` : ""}
+            </span>
+            {row.isReplyThread && <em>{t("tickets.panels.linked.replyHere")}</em>}
+          </header>
+          {row.messages.length === 0 ? (
+            <p className={styles.linkedThreadEmpty}>{t("tickets.panels.thread.emptyTitle")}</p>
+          ) : (
+            <ol className={styles.messages}>
+              {row.messages.map((message) => (
+                <MessageBlock key={message.id} message={message} parcels={parcels} />
+              ))}
+            </ol>
+          )}
+        </section>
+      ))}
+    </section>
   );
 }
 

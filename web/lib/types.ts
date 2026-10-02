@@ -1299,6 +1299,12 @@ export interface TicketCaseThreads {
     isReplyThread: boolean;
     /** How the thread joined the case (case_links.method), when it was linked. */
     linkedBy: string | null;
+    /**
+     * The thread's messages, oldest first: read in the « Linked threads » tab
+     * of the thread being viewed. Empty for the thread being viewed itself,
+     * whose messages are the Conversation tab.
+     */
+    messages: TicketMessage[];
   }>;
 }
 

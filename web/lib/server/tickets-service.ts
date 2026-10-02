@@ -124,12 +124,30 @@ function getCaseRecord(shopId: string) {
  * thread alone in its case. A case whose target was never computed names no
  * reply thread, which leaves the manual reply as it was before cases.
  */
-async function readCaseThreads(shopId: string, ticketId: string, caseId: string | null): Promise<TicketCaseThreads | null> {
+async function readCaseThreads(
+  shopId: string,
+  ticketId: string,
+  caseId: string | null,
+  { withMessages = false, directory = null }: { withMessages?: boolean; directory?: any } = {}
+): Promise<TicketCaseThreads | null> {
   if (!caseId) return null;
   const cases = getCaseRecord(shopId);
   const [caseRow, threads] = await Promise.all([cases.find(caseId), cases.threads(caseId)]);
   if (!caseRow || threads.length < 2) return null;
-  const decisions = await cases.decisionsFor(threads.map((row: any) => row.id));
+  const record = getRecord(shopId);
+  // The other threads' mail, for the « Linked threads » tab. A case is a
+  // handful of threads (seven at most today), so one read each is fine.
+  const [decisions, otherMessages] = await Promise.all([
+    cases.decisionsFor(threads.map((row: any) => row.id)),
+    withMessages
+      ? Promise.all(
+          (threads as any[]).map(async (row) =>
+            row.id === ticketId ? [row.id, []] : [row.id, ((await record.thread(row.id)) as any[]).map((m) => mapMessageRow(m, directory)).sort(byTimeAsc)]
+          )
+        )
+      : Promise.resolve([]),
+  ]);
+  const messagesOf = new Map<string, TicketMessage[]>(otherMessages as Array<[string, TicketMessage[]]>);
   const linkedBy = new Map<string, string>();
   for (const row of decisions as any[]) {
     if (row.decision === "link" && !linkedBy.has(row.ticket_id)) linkedBy.set(row.ticket_id, row.method);
@@ -147,6 +165,7 @@ async function readCaseThreads(shopId: string, ticketId: string, caseId: string 
       isThisThread: row.id === ticketId,
       isReplyThread: row.id === replyThreadId,
       linkedBy: linkedBy.get(row.id) ?? null,
+      messages: messagesOf.get(row.id) ?? [],
     })),
   };
 }
@@ -611,7 +630,7 @@ export async function getTicketThread(shopId: string, ticketId: string): Promise
 
   const messages = (messageRows as any[]).map((row) => mapMessageRow(row, directory)).sort(byTimeAsc);
   const draft = draftRow ? mapDraftRow(draftRow, latestActionFor(actions, draftRow.id)) : null;
-  const caseThreads = await readCaseThreads(shopId, ticketId, ticketRow.case_id ?? null);
+  const caseThreads = await readCaseThreads(shopId, ticketId, ticketRow.case_id ?? null, { withMessages: true, directory });
   const replyElsewhere = replyElsewhereOf(caseThreads, ticketId);
   // A case replies on one thread: on any other, there is nothing to reply to.
   const replyTarget = replyElsewhere ? null : replyTargetOf(messageRows as any[]);

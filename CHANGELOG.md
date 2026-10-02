@@ -10,6 +10,20 @@ Three sibling files carry the other halves, and this one deliberately does not d
 
 ---
 
+## Cases: linked threads tab, live lead, same customer within 14 days (2026-10-02)
+
+- **New « Linked threads » tab** next to Conversation and Activity, on any thread whose case has others. It shows each other thread (subject, status, dates, how it joined, « the reply goes here ») and its mail, read-only. The queue shows one row per case, so this is where the hidden threads are read.
+- **Migration 62, applied:** with nothing owed, a case leads with its latest thread still live. `cddd49b6` (awaiting_human) had gone to Closed behind its resolved twin. Afterwards, no case led with a finished thread while it had a live one.
+- **Candidates:** another case of the same customer active within 14 days is now a candidate (`recent_same_customer`). It still needs the model or an order or parcel to link.
+- **Case Linker input:** it now reads 400 characters of each candidate's opening message. In the model replay, results went from 34 right / 4 wrong links and 9 missed to 42 right / 4 wrong and 1 debatable miss. The 4 wrong are supplier mail (GLS, santediscount).
+- **Backfill:** `cases:link -- --open [--with-model]` re-decides the Queue and Backlog threads and their customers' earlier threads. Two runs gave 18 links; 1003 → 985 cases.
+- **Proven:**
+  - migration 62 applied and checked by query;
+  - every backfill link read by hand;
+  - agent, root and migration tests pass, and the web typecheck is clean.
+
+  The tab was not clicked through in a browser.
+
 
 ## Rule editor: link a policy where you pick the article (2026-10-02)
 

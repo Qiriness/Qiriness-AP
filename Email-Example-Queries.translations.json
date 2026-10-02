@@ -3510,73 +3510,145 @@
         "index": 101,
         "sourceIndex": 0,
         "sourceLanguage": "fr",
-        "sourceText": "Puis-je ajouter un article à une commande déjà passée ?",
-        "sourceHash": "6a6c641749364e7545803b2a6d12af26b4e3c218d4c2626da9849dd4f4162587",
+        "sourceText": "Puis-je modifier une commande déjà passée (ajouter, retirer ou changer un article) ?",
+        "sourceHash": "9a029e679e44c375f3d7b5d2ce1bac25617e72e3e2e3ff99cb7952322fbd75d6",
         "language": "en",
-        "text": "Can I add an item to an order already placed?"
+        "text": "Can I change an order already placed (add, remove or change an item)?"
       },
       "0:es": {
         "index": 102,
         "sourceIndex": 0,
         "sourceLanguage": "fr",
-        "sourceText": "Puis-je ajouter un article à une commande déjà passée ?",
-        "sourceHash": "6a6c641749364e7545803b2a6d12af26b4e3c218d4c2626da9849dd4f4162587",
+        "sourceText": "Puis-je modifier une commande déjà passée (ajouter, retirer ou changer un article) ?",
+        "sourceHash": "9a029e679e44c375f3d7b5d2ce1bac25617e72e3e2e3ff99cb7952322fbd75d6",
         "language": "es",
-        "text": "¿Puedo añadir un artículo a un pedido ya realizado?"
+        "text": "¿Puedo modificar un pedido ya realizado (añadir, quitar o cambiar un artículo)?"
       },
       "0:it": {
         "index": 103,
         "sourceIndex": 0,
         "sourceLanguage": "fr",
-        "sourceText": "Puis-je ajouter un article à une commande déjà passée ?",
-        "sourceHash": "6a6c641749364e7545803b2a6d12af26b4e3c218d4c2626da9849dd4f4162587",
+        "sourceText": "Puis-je modifier une commande déjà passée (ajouter, retirer ou changer un article) ?",
+        "sourceHash": "9a029e679e44c375f3d7b5d2ce1bac25617e72e3e2e3ff99cb7952322fbd75d6",
         "language": "it",
-        "text": "Posso aggiungere un articolo a un ordine già effettuato?"
+        "text": "Posso modificare un ordine già effettuato (aggiungere, rimuovere o cambiare un articolo)?"
       },
       "0:de": {
         "index": 104,
         "sourceIndex": 0,
         "sourceLanguage": "fr",
-        "sourceText": "Puis-je ajouter un article à une commande déjà passée ?",
-        "sourceHash": "6a6c641749364e7545803b2a6d12af26b4e3c218d4c2626da9849dd4f4162587",
+        "sourceText": "Puis-je modifier une commande déjà passée (ajouter, retirer ou changer un article) ?",
+        "sourceHash": "9a029e679e44c375f3d7b5d2ce1bac25617e72e3e2e3ff99cb7952322fbd75d6",
         "language": "de",
-        "text": "Kann ich einen Artikel zu einer bereits aufgegebenen Bestellung hinzufügen?"
+        "text": "Kann ich eine bereits aufgegebene Bestellung ändern (einen Artikel hinzufügen, entfernen oder ändern)?"
       },
       "1:en": {
         "index": 111,
         "sourceIndex": 1,
         "sourceLanguage": "fr",
-        "sourceText": "J'ai effectué une commande hier et j'ai oublié de rajouter les trois échantillons",
-        "sourceHash": "270f301d88e5195d94784bbfb7baa255cf6c7062d4c1f526ef3a8295ad37aab8",
+        "sourceText": "J'ai fait une commande sur votre site, j'ai oublié de mettre un produit dans ma commande est-ce que je peux le rajouter.",
+        "sourceHash": "26802476811618def6d2ce6eb2d36da88f20515312bbe08a02560bf0a3630656",
         "language": "en",
-        "text": "I placed an order yesterday and forgot to add the three samples"
+        "text": "I made an order on your site, I forgot to put a product in my order can I add it."
       },
       "1:es": {
         "index": 112,
         "sourceIndex": 1,
         "sourceLanguage": "fr",
-        "sourceText": "J'ai effectué une commande hier et j'ai oublié de rajouter les trois échantillons",
-        "sourceHash": "270f301d88e5195d94784bbfb7baa255cf6c7062d4c1f526ef3a8295ad37aab8",
+        "sourceText": "J'ai fait une commande sur votre site, j'ai oublié de mettre un produit dans ma commande est-ce que je peux le rajouter.",
+        "sourceHash": "26802476811618def6d2ce6eb2d36da88f20515312bbe08a02560bf0a3630656",
         "language": "es",
-        "text": "Hice un pedido ayer y olvidé añadir las tres muestras"
+        "text": "Hice un pedido en su sitio, olvidé poner un producto en mi pedido puedo añadirlo"
       },
       "1:it": {
         "index": 113,
         "sourceIndex": 1,
         "sourceLanguage": "fr",
-        "sourceText": "J'ai effectué une commande hier et j'ai oublié de rajouter les trois échantillons",
-        "sourceHash": "270f301d88e5195d94784bbfb7baa255cf6c7062d4c1f526ef3a8295ad37aab8",
+        "sourceText": "J'ai fait une commande sur votre site, j'ai oublié de mettre un produit dans ma commande est-ce que je peux le rajouter.",
+        "sourceHash": "26802476811618def6d2ce6eb2d36da88f20515312bbe08a02560bf0a3630656",
         "language": "it",
-        "text": "Ho fatto un ordine ieri e ho dimenticato di aggiungere i tre campioni"
+        "text": "Ho fatto un ordine sul vostro sito, ho dimenticato di mettere un prodotto nel mio ordine posso aggiungerlo."
       },
       "1:de": {
         "index": 114,
         "sourceIndex": 1,
         "sourceLanguage": "fr",
-        "sourceText": "J'ai effectué une commande hier et j'ai oublié de rajouter les trois échantillons",
-        "sourceHash": "270f301d88e5195d94784bbfb7baa255cf6c7062d4c1f526ef3a8295ad37aab8",
+        "sourceText": "J'ai fait une commande sur votre site, j'ai oublié de mettre un produit dans ma commande est-ce que je peux le rajouter.",
+        "sourceHash": "26802476811618def6d2ce6eb2d36da88f20515312bbe08a02560bf0a3630656",
         "language": "de",
-        "text": "Ich habe gestern eine Bestellung gemacht und vergessen die drei Proben hinzuzufügen"
+        "text": "Ich habe eine Bestellung auf Ihrer Seite gemacht, ich habe vergessen ein Produkt in meine Bestellung zu tun kann ich es hinzufügen."
+      },
+      "2:en": {
+        "index": 121,
+        "sourceIndex": 2,
+        "sourceLanguage": "fr",
+        "sourceText": "Je souhaite rajouter un produit à ma commande",
+        "sourceHash": "e944e9071c0974af1bf3a4e752ddf662df4f936a6c9ff1a5bf84b6cbd82e6cff",
+        "language": "en",
+        "text": "I want to add a product to my order"
+      },
+      "2:es": {
+        "index": 122,
+        "sourceIndex": 2,
+        "sourceLanguage": "fr",
+        "sourceText": "Je souhaite rajouter un produit à ma commande",
+        "sourceHash": "e944e9071c0974af1bf3a4e752ddf662df4f936a6c9ff1a5bf84b6cbd82e6cff",
+        "language": "es",
+        "text": "Quiero añadir un producto a mi pedido"
+      },
+      "2:it": {
+        "index": 123,
+        "sourceIndex": 2,
+        "sourceLanguage": "fr",
+        "sourceText": "Je souhaite rajouter un produit à ma commande",
+        "sourceHash": "e944e9071c0974af1bf3a4e752ddf662df4f936a6c9ff1a5bf84b6cbd82e6cff",
+        "language": "it",
+        "text": "Vorrei aggiungere un prodotto al mio ordine"
+      },
+      "2:de": {
+        "index": 124,
+        "sourceIndex": 2,
+        "sourceLanguage": "fr",
+        "sourceText": "Je souhaite rajouter un produit à ma commande",
+        "sourceHash": "e944e9071c0974af1bf3a4e752ddf662df4f936a6c9ff1a5bf84b6cbd82e6cff",
+        "language": "de",
+        "text": "Ich möchte ein Produkt zu meiner Bestellung hinzufügen"
+      },
+      "3:en": {
+        "index": 131,
+        "sourceIndex": 3,
+        "sourceLanguage": "fr",
+        "sourceText": "Je viens de m'apercevoir que l'article kit mask commandé en 3 fois au lieu de 4 […] n'a pas été pris en compte. Je voudrais […] que vous rajoutiez le kit en un exemplaire supplémentaire",
+        "sourceHash": "1789c0d12a48b9db23501fc431385c66de35750068cb80b74b8a6146b92c46c7",
+        "language": "en",
+        "text": "I just noticed that the kit mask ordered 3 times instead of 4 [...] was not taken into account. I would like [...] you to add the kit in one extra copy"
+      },
+      "3:es": {
+        "index": 132,
+        "sourceIndex": 3,
+        "sourceLanguage": "fr",
+        "sourceText": "Je viens de m'apercevoir que l'article kit mask commandé en 3 fois au lieu de 4 […] n'a pas été pris en compte. Je voudrais […] que vous rajoutiez le kit en un exemplaire supplémentaire",
+        "sourceHash": "1789c0d12a48b9db23501fc431385c66de35750068cb80b74b8a6146b92c46c7",
+        "language": "es",
+        "text": "Acabo de darme cuenta de que el artículo kit mask pedido en 3 veces en lugar de 4 [...] no ha sido tenido en cuenta. Quisiera [...] que añadieran el kit en un ejemplar adicional"
+      },
+      "3:it": {
+        "index": 133,
+        "sourceIndex": 3,
+        "sourceLanguage": "fr",
+        "sourceText": "Je viens de m'apercevoir que l'article kit mask commandé en 3 fois au lieu de 4 […] n'a pas été pris en compte. Je voudrais […] que vous rajoutiez le kit en un exemplaire supplémentaire",
+        "sourceHash": "1789c0d12a48b9db23501fc431385c66de35750068cb80b74b8a6146b92c46c7",
+        "language": "it",
+        "text": "Mi sono appena accorto che l'articolo kit mask ordinato in 3 volte invece di 4 [...] non è stato preso in considerazione. Vorrei [...] che aggiungeste il kit in un esemplare supplementare"
+      },
+      "3:de": {
+        "index": 134,
+        "sourceIndex": 3,
+        "sourceLanguage": "fr",
+        "sourceText": "Je viens de m'apercevoir que l'article kit mask commandé en 3 fois au lieu de 4 […] n'a pas été pris en compte. Je voudrais […] que vous rajoutiez le kit en un exemplaire supplémentaire",
+        "sourceHash": "1789c0d12a48b9db23501fc431385c66de35750068cb80b74b8a6146b92c46c7",
+        "language": "de",
+        "text": "Ich habe gerade bemerkt, dass der Artikel kit mask 3 mal statt 4 bestellt […] nicht berücksichtigt wurde. Ich möchte […] dass Sie das Kit um ein zusätzliches Exemplar ergänzen"
       }
     },
     "P-15": {
@@ -4276,37 +4348,37 @@
         "index": 101,
         "sourceIndex": 0,
         "sourceLanguage": "fr",
-        "sourceText": "Je n'ai pas reçu les échantillons offerts avec ma commande.",
-        "sourceHash": "41071957e717df53777561a7f348f24e4155d7f564cf35fee6bc8ae26bb942d2",
+        "sourceText": "Je n'ai pas reçu les échantillons ou le cadeau offerts avec ma commande.",
+        "sourceHash": "7f1c118613fdea44e164656e41108c70a0ecddcb47ad08b6bc362a4d32f138f6",
         "language": "en",
-        "text": "I didn't receive the samples offered with my order."
+        "text": "I didn't get the samples or the gift offered with my order"
       },
       "0:es": {
         "index": 102,
         "sourceIndex": 0,
         "sourceLanguage": "fr",
-        "sourceText": "Je n'ai pas reçu les échantillons offerts avec ma commande.",
-        "sourceHash": "41071957e717df53777561a7f348f24e4155d7f564cf35fee6bc8ae26bb942d2",
+        "sourceText": "Je n'ai pas reçu les échantillons ou le cadeau offerts avec ma commande.",
+        "sourceHash": "7f1c118613fdea44e164656e41108c70a0ecddcb47ad08b6bc362a4d32f138f6",
         "language": "es",
-        "text": "No he recibido las muestras ofrecidas con mi pedido."
+        "text": "No he recibido las muestras o el regalo ofrecidos con mi pedido."
       },
       "0:it": {
         "index": 103,
         "sourceIndex": 0,
         "sourceLanguage": "fr",
-        "sourceText": "Je n'ai pas reçu les échantillons offerts avec ma commande.",
-        "sourceHash": "41071957e717df53777561a7f348f24e4155d7f564cf35fee6bc8ae26bb942d2",
+        "sourceText": "Je n'ai pas reçu les échantillons ou le cadeau offerts avec ma commande.",
+        "sourceHash": "7f1c118613fdea44e164656e41108c70a0ecddcb47ad08b6bc362a4d32f138f6",
         "language": "it",
-        "text": "Non ho ricevuto i campioni offerti con il mio ordine"
+        "text": "Non ho ricevuto i campioni o il regalo offerti con il mio ordine."
       },
       "0:de": {
         "index": 104,
         "sourceIndex": 0,
         "sourceLanguage": "fr",
-        "sourceText": "Je n'ai pas reçu les échantillons offerts avec ma commande.",
-        "sourceHash": "41071957e717df53777561a7f348f24e4155d7f564cf35fee6bc8ae26bb942d2",
+        "sourceText": "Je n'ai pas reçu les échantillons ou le cadeau offerts avec ma commande.",
+        "sourceHash": "7f1c118613fdea44e164656e41108c70a0ecddcb47ad08b6bc362a4d32f138f6",
         "language": "de",
-        "text": "Ich habe die Proben nicht mit meiner Bestellung erhalten."
+        "text": "Ich habe die Proben oder das Geschenk nicht mit meiner Bestellung erhalten."
       },
       "1:en": {
         "index": 111,
@@ -4356,29 +4428,74 @@
       "2:en": {
         "index": 121,
         "sourceIndex": 2,
-        "sourceLanguage": "es",
-        "sourceText": "He olvidado pedir las tres muestras de regalo…",
-        "sourceHash": "15f6f3111a604e0aaa5eccf50dadc174cf3ebc63b8d26bb5fec94f41fdc10823",
+        "sourceLanguage": "fr",
+        "sourceText": "J'ai reçu ma commande aujourd'hui […] Juste une chose. Mes échantillons était pas dans mon paquet.",
+        "sourceHash": "bf38588020ebd1d29b3b3cf5da75920458cefffee8519fe1e06dcac5434f5817",
         "language": "en",
-        "text": "I forgot to order the three free samples…"
+        "text": "I got my order today [...] Just one thing. My samples weren't in my package."
+      },
+      "2:es": {
+        "index": 122,
+        "sourceIndex": 2,
+        "sourceLanguage": "fr",
+        "sourceText": "J'ai reçu ma commande aujourd'hui […] Juste une chose. Mes échantillons était pas dans mon paquet.",
+        "sourceHash": "bf38588020ebd1d29b3b3cf5da75920458cefffee8519fe1e06dcac5434f5817",
+        "language": "es",
+        "text": "Recibí mi pedido hoy [...] Solo una cosa. Mis muestras no estaban en mi paquete."
       },
       "2:it": {
         "index": 123,
         "sourceIndex": 2,
-        "sourceLanguage": "es",
-        "sourceText": "He olvidado pedir las tres muestras de regalo…",
-        "sourceHash": "15f6f3111a604e0aaa5eccf50dadc174cf3ebc63b8d26bb5fec94f41fdc10823",
+        "sourceLanguage": "fr",
+        "sourceText": "J'ai reçu ma commande aujourd'hui […] Juste une chose. Mes échantillons était pas dans mon paquet.",
+        "sourceHash": "bf38588020ebd1d29b3b3cf5da75920458cefffee8519fe1e06dcac5434f5817",
         "language": "it",
-        "text": "Ho dimenticato di chiedere i tre campioni omaggio…"
+        "text": "Ho ricevuto il mio ordine oggi [...] Solo una cosa. I miei campioni non erano nel mio pacco."
       },
       "2:de": {
         "index": 124,
         "sourceIndex": 2,
-        "sourceLanguage": "es",
-        "sourceText": "He olvidado pedir las tres muestras de regalo…",
-        "sourceHash": "15f6f3111a604e0aaa5eccf50dadc174cf3ebc63b8d26bb5fec94f41fdc10823",
+        "sourceLanguage": "fr",
+        "sourceText": "J'ai reçu ma commande aujourd'hui […] Juste une chose. Mes échantillons était pas dans mon paquet.",
+        "sourceHash": "bf38588020ebd1d29b3b3cf5da75920458cefffee8519fe1e06dcac5434f5817",
         "language": "de",
-        "text": "Ich habe vergessen, die drei Gratisproben zu bestellen…"
+        "text": "Ich habe meine Bestellung heute erhalten [...] Nur eine Sache. Meine Proben waren nicht in meinem Paket."
+      },
+      "3:en": {
+        "index": 131,
+        "sourceIndex": 3,
+        "sourceLanguage": "fr",
+        "sourceText": "Mais dans le colis et sur le bon de commande on me dit que le Gua Sha est en cadeau et la trousse que je devais avoir en cadeau je ne l'ai pas eue !",
+        "sourceHash": "b317c1f2e78bf168fcbf444abc5e7fdb1cdeca2544c713284d5db689657d8134",
+        "language": "en",
+        "text": "But in the package and on the order form it says the Gua Sha is a gift and the pouch I was supposed to get as a gift I didn't get it!"
+      },
+      "3:es": {
+        "index": 132,
+        "sourceIndex": 3,
+        "sourceLanguage": "fr",
+        "sourceText": "Mais dans le colis et sur le bon de commande on me dit que le Gua Sha est en cadeau et la trousse que je devais avoir en cadeau je ne l'ai pas eue !",
+        "sourceHash": "b317c1f2e78bf168fcbf444abc5e7fdb1cdeca2544c713284d5db689657d8134",
+        "language": "es",
+        "text": "Pero en el paquete y en el albarán me dicen que el Gua Sha es de regalo y el neceser que debía tener de regalo no lo he recibido !"
+      },
+      "3:it": {
+        "index": 133,
+        "sourceIndex": 3,
+        "sourceLanguage": "fr",
+        "sourceText": "Mais dans le colis et sur le bon de commande on me dit que le Gua Sha est en cadeau et la trousse que je devais avoir en cadeau je ne l'ai pas eue !",
+        "sourceHash": "b317c1f2e78bf168fcbf444abc5e7fdb1cdeca2544c713284d5db689657d8134",
+        "language": "it",
+        "text": "Ma nel pacco e sulla bolla mi si dice che il Gua Sha è in regalo e la pochette che dovevo avere in regalo non l'ho avuta!"
+      },
+      "3:de": {
+        "index": 134,
+        "sourceIndex": 3,
+        "sourceLanguage": "fr",
+        "sourceText": "Mais dans le colis et sur le bon de commande on me dit que le Gua Sha est en cadeau et la trousse que je devais avoir en cadeau je ne l'ai pas eue !",
+        "sourceHash": "b317c1f2e78bf168fcbf444abc5e7fdb1cdeca2544c713284d5db689657d8134",
+        "language": "de",
+        "text": "Aber im Paket und auf dem Bestellschein steht, dass der Gua Sha ein Geschenk ist und das Etui, das ich als Geschenk bekommen sollte, habe ich nicht bekommen!"
       }
     },
     "P-21": {
@@ -4532,37 +4649,37 @@
         "index": 101,
         "sourceIndex": 0,
         "sourceLanguage": "fr",
-        "sourceText": "Ma promotion ou mon cadeau a-t-il bien été appliqué à ma commande ? Pouvez-vous vérifier ?",
-        "sourceHash": "f37627953c74efd87352ba646aaa6c041f38a37a532fcce0f1472cc9fa4d0ce5",
+        "sourceText": "Ma promotion, mon cadeau ou mes échantillons ont-ils bien été pris en compte dans ma commande ? Pouvez-vous vérifier ?",
+        "sourceHash": "738875b5198320f7d7550b77540c10f810c812b1364b5e6f8a2a5137396efaf8",
         "language": "en",
-        "text": "Was my promotion or gift applied to my order? Can you check?"
+        "text": "Were my promotion, gift or samples included in my order? Can you check?"
       },
       "0:es": {
         "index": 102,
         "sourceIndex": 0,
         "sourceLanguage": "fr",
-        "sourceText": "Ma promotion ou mon cadeau a-t-il bien été appliqué à ma commande ? Pouvez-vous vérifier ?",
-        "sourceHash": "f37627953c74efd87352ba646aaa6c041f38a37a532fcce0f1472cc9fa4d0ce5",
+        "sourceText": "Ma promotion, mon cadeau ou mes échantillons ont-ils bien été pris en compte dans ma commande ? Pouvez-vous vérifier ?",
+        "sourceHash": "738875b5198320f7d7550b77540c10f810c812b1364b5e6f8a2a5137396efaf8",
         "language": "es",
-        "text": "¿Se aplicó bien mi promoción o mi regalo a mi pedido? ¿Puede verificar?"
+        "text": "¿Mi promoción, mi regalo o mis muestras fueron bien tomados en cuenta en mi pedido? ¿Puede verificar?"
       },
       "0:it": {
         "index": 103,
         "sourceIndex": 0,
         "sourceLanguage": "fr",
-        "sourceText": "Ma promotion ou mon cadeau a-t-il bien été appliqué à ma commande ? Pouvez-vous vérifier ?",
-        "sourceHash": "f37627953c74efd87352ba646aaa6c041f38a37a532fcce0f1472cc9fa4d0ce5",
+        "sourceText": "Ma promotion, mon cadeau ou mes échantillons ont-ils bien été pris en compte dans ma commande ? Pouvez-vous vérifier ?",
+        "sourceHash": "738875b5198320f7d7550b77540c10f810c812b1364b5e6f8a2a5137396efaf8",
         "language": "it",
-        "text": "La mia promozione o il mio regalo è stato applicato al mio ordine? Puoi verificare?"
+        "text": "La mia promozione, il mio regalo o i miei campioni sono stati presi in considerazione nel mio ordine? Puoi verificare?"
       },
       "0:de": {
         "index": 104,
         "sourceIndex": 0,
         "sourceLanguage": "fr",
-        "sourceText": "Ma promotion ou mon cadeau a-t-il bien été appliqué à ma commande ? Pouvez-vous vérifier ?",
-        "sourceHash": "f37627953c74efd87352ba646aaa6c041f38a37a532fcce0f1472cc9fa4d0ce5",
+        "sourceText": "Ma promotion, mon cadeau ou mes échantillons ont-ils bien été pris en compte dans ma commande ? Pouvez-vous vérifier ?",
+        "sourceHash": "738875b5198320f7d7550b77540c10f810c812b1364b5e6f8a2a5137396efaf8",
         "language": "de",
-        "text": "Wurde meine Promotion oder mein Geschenk auf meine Bestellung angewendet? Können Sie das überprüfen?"
+        "text": "Wurden meine Promotion, mein Geschenk oder meine Proben in meiner Bestellung berücksichtigt? Können Sie das überprüfen?"
       },
       "1:en": {
         "index": 111,
@@ -4707,6 +4824,150 @@
         "sourceHash": "f1c047867a06d0e380a166fc37d34b9bdf7fa2f144fe2a7830a67644f24a6b7d",
         "language": "de",
         "text": "Ich habe während des Angebots bestellt, wurde der Rabatt angewendet?"
+      },
+      "5:en": {
+        "index": 151,
+        "sourceIndex": 5,
+        "sourceLanguage": "fr",
+        "sourceText": "Je voulais simplement préciser que le masque Qiriness offert/validé n'apparaît pas sur ma commande. Si possible, pourriez-vous vérifier et ne pas oublier de l'ajouter à mon colis ?",
+        "sourceHash": "6218bafbcc6ba4c134ae3ef0fa8c16c2f4681fd18736fed044b410a048444c1f",
+        "language": "en",
+        "text": "I just wanted to say that the Qiriness mask offered/validated doesn't show on my order if possible could you check and not forget to add it to my package"
+      },
+      "5:es": {
+        "index": 152,
+        "sourceIndex": 5,
+        "sourceLanguage": "fr",
+        "sourceText": "Je voulais simplement préciser que le masque Qiriness offert/validé n'apparaît pas sur ma commande. Si possible, pourriez-vous vérifier et ne pas oublier de l'ajouter à mon colis ?",
+        "sourceHash": "6218bafbcc6ba4c134ae3ef0fa8c16c2f4681fd18736fed044b410a048444c1f",
+        "language": "es",
+        "text": "Solo quería aclarar que la mascarilla Qiriness ofrecida/validada no aparece en mi pedido. Si es posible, ¿podrían verificar y no olviden agregarla a mi paquete?"
+      },
+      "5:it": {
+        "index": 153,
+        "sourceIndex": 5,
+        "sourceLanguage": "fr",
+        "sourceText": "Je voulais simplement préciser que le masque Qiriness offert/validé n'apparaît pas sur ma commande. Si possible, pourriez-vous vérifier et ne pas oublier de l'ajouter à mon colis ?",
+        "sourceHash": "6218bafbcc6ba4c134ae3ef0fa8c16c2f4681fd18736fed044b410a048444c1f",
+        "language": "it",
+        "text": "Volevo solo precisare che la maschera Qiriness offerta/validata non appare nel mio ordine. Se possibile, potreste verificare e non dimenticare di aggiungerla al mio pacco?"
+      },
+      "5:de": {
+        "index": 154,
+        "sourceIndex": 5,
+        "sourceLanguage": "fr",
+        "sourceText": "Je voulais simplement préciser que le masque Qiriness offert/validé n'apparaît pas sur ma commande. Si possible, pourriez-vous vérifier et ne pas oublier de l'ajouter à mon colis ?",
+        "sourceHash": "6218bafbcc6ba4c134ae3ef0fa8c16c2f4681fd18736fed044b410a048444c1f",
+        "language": "de",
+        "text": "Ich wollte nur klarstellen, dass die Qiriness Maske angeboten/bestätigt nicht auf meiner Bestellung erscheint. Wenn möglich, könnten Sie bitte überprüfen und nicht vergessen, es zu meinem Paket hinzuzufügen?"
+      },
+      "6:en": {
+        "index": 161,
+        "sourceIndex": 6,
+        "sourceLanguage": "fr",
+        "sourceText": "Suite à la commande de plus de 70€ que je viens de passer, la trousse cocooning ne m'a pas été offerte, pouvez vous y remédier ?",
+        "sourceHash": "8d52728bc2d7b640c8a685cc9acdf2ae72af4115ab71343c411f36a64a0d19a1",
+        "language": "en",
+        "text": "Following the order over 70€ I just placed, the cocooning kit wasn't offered to me, can you fix it?"
+      },
+      "6:es": {
+        "index": 162,
+        "sourceIndex": 6,
+        "sourceLanguage": "fr",
+        "sourceText": "Suite à la commande de plus de 70€ que je viens de passer, la trousse cocooning ne m'a pas été offerte, pouvez vous y remédier ?",
+        "sourceHash": "8d52728bc2d7b640c8a685cc9acdf2ae72af4115ab71343c411f36a64a0d19a1",
+        "language": "es",
+        "text": "Después del pedido de más de 70€ que acabo de hacer, no me han ofrecido el neceser cocooning, ¿pueden solucionarlo?"
+      },
+      "6:it": {
+        "index": 163,
+        "sourceIndex": 6,
+        "sourceLanguage": "fr",
+        "sourceText": "Suite à la commande de plus de 70€ que je viens de passer, la trousse cocooning ne m'a pas été offerte, pouvez vous y remédier ?",
+        "sourceHash": "8d52728bc2d7b640c8a685cc9acdf2ae72af4115ab71343c411f36a64a0d19a1",
+        "language": "it",
+        "text": "A seguito dell'ordine di oltre 70€ che ho appena fatto, il kit cocooning non mi è stato offerto, potete rimediare?"
+      },
+      "6:de": {
+        "index": 164,
+        "sourceIndex": 6,
+        "sourceLanguage": "fr",
+        "sourceText": "Suite à la commande de plus de 70€ que je viens de passer, la trousse cocooning ne m'a pas été offerte, pouvez vous y remédier ?",
+        "sourceHash": "8d52728bc2d7b640c8a685cc9acdf2ae72af4115ab71343c411f36a64a0d19a1",
+        "language": "de",
+        "text": "Nach der Bestellung von über 70€, die ich gerade aufgegeben habe, wurde mir das Cocooning-Set nicht angeboten, können Sie das beheben?"
+      },
+      "7:en": {
+        "index": 171,
+        "sourceIndex": 7,
+        "sourceLanguage": "fr",
+        "sourceText": "J'ai effectué une commande hier et j'ai oublié de rajouter les trois échantillons offerts. Pourriez-vous les ajouter s'il vous plaît.",
+        "sourceHash": "b866f6bbf1edfe7f8205c443baf352b8d8335f2cc888136d41902ed7c6d272c6",
+        "language": "en",
+        "text": "I placed an order yesterday and forgot to add the three free samples. Could you add them please"
+      },
+      "7:es": {
+        "index": 172,
+        "sourceIndex": 7,
+        "sourceLanguage": "fr",
+        "sourceText": "J'ai effectué une commande hier et j'ai oublié de rajouter les trois échantillons offerts. Pourriez-vous les ajouter s'il vous plaît.",
+        "sourceHash": "b866f6bbf1edfe7f8205c443baf352b8d8335f2cc888136d41902ed7c6d272c6",
+        "language": "es",
+        "text": "Hice un pedido ayer y olvidé añadir las tres muestras gratis. Podrían añadirlas por favor"
+      },
+      "7:it": {
+        "index": 173,
+        "sourceIndex": 7,
+        "sourceLanguage": "fr",
+        "sourceText": "J'ai effectué une commande hier et j'ai oublié de rajouter les trois échantillons offerts. Pourriez-vous les ajouter s'il vous plaît.",
+        "sourceHash": "b866f6bbf1edfe7f8205c443baf352b8d8335f2cc888136d41902ed7c6d272c6",
+        "language": "it",
+        "text": "Ho effettuato un ordine ieri e ho dimenticato di aggiungere i tre campioni offerti. Potreste aggiungerli per favore"
+      },
+      "7:de": {
+        "index": 174,
+        "sourceIndex": 7,
+        "sourceLanguage": "fr",
+        "sourceText": "J'ai effectué une commande hier et j'ai oublié de rajouter les trois échantillons offerts. Pourriez-vous les ajouter s'il vous plaît.",
+        "sourceHash": "b866f6bbf1edfe7f8205c443baf352b8d8335f2cc888136d41902ed7c6d272c6",
+        "language": "de",
+        "text": "Ich habe gestern eine Bestellung aufgegeben und vergessen, die drei Gratisproben hinzuzufügen. Könnten Sie sie bitte hinzufügen."
+      },
+      "8:en": {
+        "index": 181,
+        "sourceIndex": 8,
+        "sourceLanguage": "fr",
+        "sourceText": "He olvidado pedir las tres muestras de regalo, no sé si es posible que me las adjunten a mi pedido.",
+        "sourceHash": "19186edc6eff4deefbca628830d5a7d21621cab40b54e9778acaaacb985eb798",
+        "language": "en",
+        "text": "I forgot to ask for the three free samples, I don't know if it's possible to add them to my order"
+      },
+      "8:es": {
+        "index": 182,
+        "sourceIndex": 8,
+        "sourceLanguage": "fr",
+        "sourceText": "He olvidado pedir las tres muestras de regalo, no sé si es posible que me las adjunten a mi pedido.",
+        "sourceHash": "19186edc6eff4deefbca628830d5a7d21621cab40b54e9778acaaacb985eb798",
+        "language": "es",
+        "text": "Olvidé pedir las tres muestras de regalo, no sé si es posible que me las adjunten a mi pedido."
+      },
+      "8:it": {
+        "index": 183,
+        "sourceIndex": 8,
+        "sourceLanguage": "fr",
+        "sourceText": "He olvidado pedir las tres muestras de regalo, no sé si es posible que me las adjunten a mi pedido.",
+        "sourceHash": "19186edc6eff4deefbca628830d5a7d21621cab40b54e9778acaaacb985eb798",
+        "language": "it",
+        "text": "Ho dimenticato di chiedere i tre campioni omaggio, non so se è possibile aggiungerli al mio ordine."
+      },
+      "8:de": {
+        "index": 184,
+        "sourceIndex": 8,
+        "sourceLanguage": "fr",
+        "sourceText": "He olvidado pedir las tres muestras de regalo, no sé si es posible que me las adjunten a mi pedido.",
+        "sourceHash": "19186edc6eff4deefbca628830d5a7d21621cab40b54e9778acaaacb985eb798",
+        "language": "de",
+        "text": "Ich habe vergessen, die drei Gratisproben zu bestellen, ich weiß nicht, ob es möglich ist, sie meiner Bestellung beizufügen."
       }
     },
     "PA-30": {

@@ -2504,7 +2504,10 @@ comment on view public.case_message_counts is
 --                      when every thread is; otherwise the most recently
 --                      active open thread's
 --   lead               the reply thread when it is live, else the most
---                      recently active thread
+--                      recently active thread still live (not resolved or
+--                      closed), else the most recently active. A case with a
+--                      thread still open never leads with a finished one: the
+--                      queue shows lead rows only, so it would vanish (62)
 --   first reply        the case's first inbound message to our first outbound
 --                      after it, on any thread
 create view public.case_facts
@@ -2512,7 +2515,7 @@ with (security_invoker = true) as
   select
     k.id as case_id,
     k.shop_id as shop_id,
-    case when a.has_reply_thread then k.reply_thread_id else a.latest_ticket_id end as lead_ticket_id,
+    case when a.has_reply_thread then k.reply_thread_id else a.fallback_lead_id end as lead_ticket_id,
     a.thread_count as thread_count,
     a.category as category,
     a.secondary_category as secondary_category,
@@ -2536,7 +2539,7 @@ with (security_invoker = true) as
     select
       count(*) as thread_count,
       coalesce(bool_or(t.id = k.reply_thread_id), false) as has_reply_thread,
-      (array_agg(t.id order by t.last_message_at desc nulls last))[1] as latest_ticket_id,
+      (array_agg(t.id order by (t.status not in ('resolved', 'closed')) desc, t.last_message_at desc nulls last))[1] as fallback_lead_id,
       (array_agg(t.category order by t.first_message_at asc nulls last))[1] as category,
       (array_agg(t.secondary_category order by t.first_message_at asc nulls last))[1] as secondary_category,
       (array_agg(t.request_kind order by t.first_message_at asc nulls last))[1] as request_kind,
@@ -2580,7 +2583,7 @@ with (security_invoker = true) as
 revoke all on public.case_facts from anon, authenticated;
 
 comment on view public.case_facts is
-  'One row per case with at least one live thread: the earliest thread''s subject, the highest level and worst mood of any thread, a status folded across threads, the lead thread (the reply thread, else the most recently active), and the case''s first-reply time across threads. Read by the queue and by the Insights support figures, which count cases.';
+  'One row per case with at least one live thread: the earliest thread''s subject, the highest level and worst mood of any thread, a status folded across threads, the lead thread (the reply thread, else the most recently active thread still live, else the most recently active), and the case''s first-reply time across threads. Read by the queue and by the Insights support figures, which count cases.';
 
 -- -------------------------------------------------------------- ticket_queue
 
