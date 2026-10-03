@@ -10,6 +10,12 @@ Three sibling files carry the other halves, and this one deliberately does not d
 
 ---
 
+## Casework and closure calls are costed under their own pass (2026-10-03)
+
+- **Why:** the first live poll with the casework stage on (Render `--stop-after=categorise --also=send`, 2026-10-03 08:50 UTC) recorded its 13 Case Manager calls in `llm_usage` as `other`. The call sites already said `casework` / `closure`; the check constraint and `USAGE_PASSES` did not list them, so the sink fell back to `other`.
+- Migration `64_casework_usage_pass.sql` widens `llm_usage_pass_check` (baseline `06_analytics.sql` updated to match); `usage-sink.mjs` lists both passes. **Applied to the live database first** — a worker emitting `casework` against the old constraint would lose each poll's whole usage flush. The 13 earlier rows stay `other`.
+- Tests: 64's clause equals the baseline and the sink's list; 61's test now checks its passes are kept by the baseline rather than equal to it. Full suite 4,458 pass. Not yet seen on a live row: needs this commit deployed to Render and a poll with casework work.
+
 ## An automatic snooze follows the party the case waits on (2026-10-03)
 
 - **Why:** `ticket_snoozes.waiting_for` was fixed at the send. A case snoozed on the customer that later waited on a partner kept `customer`, so an order update never woke it and its deadline was the wrong one. DECISIONS.md § Snooze.

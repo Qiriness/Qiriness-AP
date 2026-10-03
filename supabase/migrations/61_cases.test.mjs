@@ -42,7 +42,11 @@ test('61 creates the same tables the baseline does, column for column', () => {
     assert.ok(checkClause(SQL, name), name);
     assert.equal(squash(checkClause(SQL, name)), squash(checkClause(SUPPORT, name)), name);
   }
-  assert.equal(squash(checkClause(SQL, 'llm_usage_pass_check')), squash(checkClause(ANALYTICS, 'llm_usage_pass_check')));
+  // 61 widened the pass list to include case_link; later migrations (64) widen
+  // it again, so the baseline must hold every pass 61 allowed, not exactly them.
+  const passes61 = literalsIn(checkClause(SQL, 'llm_usage_pass_check'));
+  const passesBaseline = literalsIn(checkClause(ANALYTICS, 'llm_usage_pass_check'));
+  for (const pass of passes61) assert.ok(passesBaseline.includes(pass), pass);
 });
 
 test('the values the database accepts are the values the code writes', () => {
