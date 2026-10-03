@@ -283,7 +283,7 @@ export interface RuleInput {
   /** A page the reply offers and what it opens, or null. Both halves, https only. */
   link: { url: string; label: string } | null;
   /** The checks the rule opens, in order. Owners limited to what the brand has. */
-  checks?: RuleCheck[];
+  checks: RuleCheck[];
   priority: number;
   isFallback: boolean;
   approvalStatus: string;

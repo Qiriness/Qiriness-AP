@@ -63,6 +63,9 @@ export async function POST(request: NextRequest) {
         body.link && typeof body.link === "object"
           ? { url: String(body.link.url ?? ""), label: String(body.link.label ?? "") }
           : null,
+      // Passed through unshaped: `checkProblems` in saveRule refuses a bad step
+      // in words, where coercing here would quietly drop it.
+      checks: Array.isArray(body.checks) ? body.checks : [],
       priority: Number(body.priority ?? 0),
       isFallback: body.isFallback === true,
       // NEVER APPROVED BY A SAVE. A rule reaches live mail only through the
