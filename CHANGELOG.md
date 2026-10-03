@@ -10,6 +10,12 @@ Three sibling files carry the other halves, and this one deliberately does not d
 
 ---
 
+## An automatic snooze follows the party the case waits on (2026-10-03)
+
+- **Why:** `ticket_snoozes.waiting_for` was fixed at the send. A case snoozed on the customer that later waited on a partner kept `customer`, so an order update never woke it and its deadline was the wrong one. DECISIONS.md § Snooze.
+- `snooze-rule.mjs` returns `retarget` when an open **automatic** snooze's case moves to a different waiting party and is still only waiting; it wakes (`case_changed`, or `deadline`) when the switch made it work, left no delay, or the new deadline has passed. The eligibility checks are shared with the first snooze (`whyNotWaiting`). `snooze-record.retarget` updates the open auto row in place; the fold counts `retargeted`.
+- Tests: rule (both directions, the four wake cases, manual and same-party left alone), the record's write and refusals, and the fold wiring. Agent suite 2,003 pass. Not proven on real data: `ticket_snoozes` has 0 rows and `AGENT_AUTO_SNOOZE` is not on locally.
+
 ## Linked threads tab is amber (2026-10-02)
 
 - The « Linked threads » tab and its messages are amber instead of teal, matching linked mail in the Activity tab, so another thread's mail never reads as this thread's. Done by re-pointing the teal tokens inside the section (`.linkedSection`); new tokens `--warning-strong` and `--warning-ink` in `globals.css`. Typecheck clean; not looked at in a browser.

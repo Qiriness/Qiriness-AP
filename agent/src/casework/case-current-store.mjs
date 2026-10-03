@@ -103,7 +103,8 @@ export function createCaseCurrentStore(supabase, { shopId }) {
       open: (ticketId) => snoozes.open(ticketId),
       autoSnoozedOn: (ticketId, messageId) => snoozes.autoSnoozedOn(ticketId, messageId),
       snooze: (row) => snoozes.snooze(row),
-      wake: (ticketId, reason, options) => snoozes.wake(ticketId, reason, options)
+      wake: (ticketId, reason, options) => snoozes.wake(ticketId, reason, options),
+      retarget: (snoozeId, change) => snoozes.retarget(snoozeId, change)
     },
 
     async save(row) {
@@ -155,7 +156,7 @@ export async function runFold({
   logger,
   now = () => new Date()
 }) {
-  const totals = { considered: 0, folded: 0, versionsRaised: 0, statusesMoved: 0, draftsStaled: 0, snoozed: 0, woken: 0, failed: 0 };
+  const totals = { considered: 0, folded: 0, versionsRaised: 0, statusesMoved: 0, draftsStaled: 0, snoozed: 0, retargeted: 0, woken: 0, failed: 0 };
   // `ticketIds`: fold exactly these, now (the dashboard, after a person acts).
   const ids = ticketIds ?? (await store.staleTicketIds(limit, { all }));
   const holdingDays = ids.length > 0 && store.holdingDays ? await store.holdingDays() : null;
@@ -242,10 +243,21 @@ export async function runFold({
           } else if (error) {
             logger?.warn?.('fold.snooze_refused', { ticketId, error });
           }
+        } else if (decision.action === 'retarget') {
+          const retargeted = await store.snoozes.retarget(decision.snoozeId, {
+            waitingFor: decision.waitingFor,
+            wakeAt: decision.wakeAt,
+            caseVersion: version,
+            now: new Date(at)
+          });
+          if (retargeted) {
+            totals.retargeted += 1;
+            logger?.info?.('fold.snooze_retargeted', { ticketId, waitingFor: decision.waitingFor, wakeAt: retargeted.wake_at });
+          }
         } else if (decision.action === 'wake') {
           if (await store.snoozes.wake(ticketId, decision.reason, { wokenBy: 'agent', at: new Date(at) })) {
             totals.woken += 1;
-            logger?.info?.('fold.woken', { ticketId, reason: decision.reason, nextActor: state.next_actor });
+            logger?.info?.('fold.woken', { ticketId, reason: decision.reason, detail: decision.detail, nextActor: state.next_actor });
           }
         }
       }

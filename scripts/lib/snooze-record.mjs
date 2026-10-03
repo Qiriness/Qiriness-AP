@@ -178,6 +178,36 @@ export function createSnoozeRecord(supabase, { shopId, transport = REST_TRANSPOR
       return Array.isArray(rows) && rows.length > 0 ? rows[0] : null;
     },
 
+    /**
+     * Point an open automatic snooze at the party the case now waits on, with
+     * that party's deadline. In place, not a wake and a new row: nothing came
+     * back to the queue, so the Snoozed tab must not show it returning. The
+     * trigger message stays, so the edge-trigger index still holds. Returns
+     * the updated row, or null when it was no longer open or not automatic.
+     * @param {string} snoozeId
+     * @param {{ waitingFor: string, wakeAt: string | Date, caseVersion?: number | null, now?: Date }} change
+     */
+    async retarget(snoozeId, { waitingFor, wakeAt, caseVersion = null, now = new Date() }) {
+      if (!WAITING_FOR.includes(waitingFor) || waitingFor === 'date') {
+        throw new Error(`retarget takes customer, colleague or partner; got ${JSON.stringify(waitingFor)}.`);
+      }
+      const wake = new Date(wakeAt ?? '');
+      if (!Number.isFinite(wake.getTime()) || wake.getTime() <= now.getTime()) {
+        throw new Error(`retarget needs a deadline after now; got ${JSON.stringify(wakeAt)}.`);
+      }
+      if (wake.getTime() - now.getTime() > MAX_SNOOZE_DAYS * 86_400_000) {
+        throw new Error(`retarget deadline is past ${MAX_SNOOZE_DAYS} days.`);
+      }
+      const rows = await update(
+        supabase,
+        T.TICKET_SNOOZES,
+        { shop_id: shopId, id: snoozeId, source: 'auto', woke_at: { operator: 'is', value: 'null' } },
+        { waiting_for: waitingFor, wake_at: wake.toISOString(), case_version: Number.isInteger(caseVersion) ? caseVersion : null },
+        { select: SNOOZE_COLUMNS }
+      );
+      return Array.isArray(rows) && rows.length > 0 ? rows[0] : null;
+    },
+
     /** Open snoozes whose deadline has passed, oldest first. */
     async due({ now = new Date(), limit = 200 } = {}) {
       return select(

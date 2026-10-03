@@ -105,3 +105,55 @@ test('a snoozed case wakes when it comes back to us or ends, and only on that ch
   // « Follow up Friday » on a case that was already ours stays snoozed.
   assert.equal(decide({ openSnooze: open, previous: { ...BEFORE, next_actor: 'support' }, state: ours }).reason, 'already_snoozed');
 });
+
+// Snoozed on the customer after « we're asking the carrier »; then our message
+// to Deret went out and the fold now says the partner acts next.
+const ON_CUSTOMER = { id: 's1', source: 'auto', waiting_for: 'customer', trigger_message_id: 'm-ours' };
+const WAS_CUSTOMER = { as_of_message_id: 'm-ours', next_actor: 'customer' };
+const ASKED_DERET = {
+  ...SENT,
+  as_of_message_id: 'm-deret',
+  as_of_at: '2026-09-30T09:58:00Z',
+  next_actor: 'partner',
+  obligations: [{ id: 'o-m-deret-0', owner: 'partner', status: 'pending', opened_by: 'm-deret' }]
+};
+const switchTo = (over = {}) => decide({ openSnooze: ON_CUSTOMER, previous: WAS_CUSTOMER, state: ASKED_DERET, ...over });
+
+test('an automatic snooze follows the case to the party it now waits on, with that party\'s deadline', () => {
+  assert.deepEqual(switchTo(), {
+    action: 'retarget',
+    snoozeId: 's1',
+    waitingFor: 'partner',
+    wakeAt: new Date('2026-10-05T09:58:00Z') // 3 working days, partner_check_overdue_days
+  });
+  // And back the other way: partner → customer takes the customer delay.
+  const toCustomer = switchTo({
+    openSnooze: { ...ON_CUSTOMER, waiting_for: 'partner' },
+    previous: { as_of_message_id: 'm-deret', next_actor: 'partner' },
+    state: { ...SENT, as_of_message_id: 'm-ours-2', next_actor: 'customer' }
+  });
+  assert.equal(toCustomer.action, 'retarget');
+  assert.equal(toCustomer.waitingFor, 'customer');
+  assert.deepEqual(toCustomer.wakeAt, new Date('2026-10-07T09:55:00Z'));
+});
+
+test('a party switch that turned the case into work wakes it rather than retargeting', () => {
+  // A partner check a rule opened: nobody has written to Deret about it yet.
+  const unsent = { ...ASKED_DERET, obligations: [{ id: 'o1', owner: 'partner', status: 'pending', opened_by: 'rule' }] };
+  assert.deepEqual(switchTo({ state: unsent }), { action: 'wake', reason: 'case_changed', detail: 'request_not_sent' });
+  // A check of ours.
+  const ours = { ...ASKED_DERET, obligations: [{ id: 'o2', owner: 'support', status: 'pending', opened_by: 'm-deret' }] };
+  assert.deepEqual(switchTo({ state: ours }), { action: 'wake', reason: 'case_changed', detail: 'support_owes_a_check' });
+  // The shop never set a delay for the new party: it is not snoozed automatically.
+  const noPartnerDelay = new Map([['customer_reply_wait_days', '5']]);
+  assert.deepEqual(switchTo({ parameters: noPartnerDelay }), { action: 'wake', reason: 'case_changed', detail: 'no_deadline' });
+  // The new party's deadline has already passed.
+  assert.deepEqual(switchTo({ now: new Date('2026-10-06T10:00:00Z') }), { action: 'wake', reason: 'deadline' });
+});
+
+test('a person\'s snooze, or one already on the new party, is not retargeted', () => {
+  assert.equal(switchTo({ openSnooze: { ...ON_CUSTOMER, source: 'manual' } }).reason, 'already_snoozed');
+  assert.equal(switchTo({ openSnooze: { ...ON_CUSTOMER, waiting_for: 'partner' } }).reason, 'already_snoozed');
+  // No change of party on this fold: nothing to follow.
+  assert.equal(switchTo({ previous: { ...WAS_CUSTOMER, next_actor: 'partner' } }).reason, 'already_snoozed');
+});

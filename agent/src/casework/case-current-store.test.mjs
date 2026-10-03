@@ -175,8 +175,13 @@ function snoozeStore(previous, messages, { open = null, snoozedOn = false } = {}
     wake: async (ticketId, reason) => {
       store.woken.push({ ticketId, reason });
       return { id: 's1' };
+    },
+    retarget: async (snoozeId, change) => {
+      store.retargeted.push({ snoozeId, ...change });
+      return { id: snoozeId, waiting_for: change.waitingFor, wake_at: change.wakeAt.toISOString() };
     }
   };
+  store.retargeted = [];
   return store;
 }
 
@@ -213,4 +218,24 @@ test('a snoozed case the fold hands back to us is woken', async () => {
   const totals = await runFold({ store, shopId: 's', actorFor: () => 'customer', autoSnooze: true });
   assert.equal(totals.woken, 1);
   assert.deepEqual(store.woken, [{ ticketId: 't1', reason: 'case_changed' }]);
+});
+
+test('a snoozed case the fold now reads as waiting on someone else has its snooze retargeted, not woken', async () => {
+  // Snoozed on the customer; the fold now says the customer still owes us, but
+  // the open snooze names a partner.
+  const store = snoozeStore({ version: 1, as_of_message_id: 'b', next_actor: 'support' }, answered, {
+    open: { id: 's1', source: 'auto', waiting_for: 'partner', trigger_message_id: 'x' }
+  });
+  store.inputs = async () => ({
+    messages: answered,
+    caseFiles: [{ trigger_message_id: 'b', verdict: 'needs_customer_input', missing: [{ field: 'order_number' }] }],
+    readings: [],
+    previous: { version: 1, as_of_message_id: 'b', next_actor: 'partner' }
+  });
+  const totals = await runFold({ store, shopId: 's', actorFor: () => 'customer', autoSnooze: true, now: () => new Date('2026-09-30T10:00:00Z') });
+  assert.equal(totals.retargeted, 1);
+  assert.equal(totals.woken, 0);
+  assert.equal(store.retargeted[0].snoozeId, 's1');
+  assert.equal(store.retargeted[0].waitingFor, 'customer');
+  assert.equal(store.retargeted[0].wakeAt.toISOString(), '2026-10-07T09:00:00.000Z');
 });

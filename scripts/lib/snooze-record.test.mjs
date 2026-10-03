@@ -114,6 +114,24 @@ test('a wake is conditional on the snooze being open, and names why', async () =
   await assert.rejects(record.wake('t1', 'felt_like_it'), /customer_message/);
 });
 
+test('a retarget rewrites only an open automatic snooze, in place, and refuses a bad party or deadline', async () => {
+  const rec = recorder({ updated: [{ id: 's1', waiting_for: 'partner' }] });
+  const record = createSnoozeRecord({}, { shopId: 'shop-1', transport: rec.transport });
+  const result = await record.retarget('s1', { waitingFor: 'partner', wakeAt: '2026-10-05T10:00:00Z', caseVersion: 4, now: NOW });
+  assert.deepEqual(result, { id: 's1', waiting_for: 'partner' });
+  const [call] = rec.calls;
+  assert.equal(call.kind, 'update');
+  assert.deepEqual(call.filters, { shop_id: 'shop-1', id: 's1', source: 'auto', woke_at: { operator: 'is', value: 'null' } });
+  assert.deepEqual(call.patch, { waiting_for: 'partner', wake_at: '2026-10-05T10:00:00.000Z', case_version: 4 });
+
+  await assert.rejects(record.retarget('s1', { waitingFor: 'date', wakeAt: '2026-10-05T10:00:00Z', now: NOW }), /customer, colleague or partner/);
+  await assert.rejects(record.retarget('s1', { waitingFor: 'partner', wakeAt: '2026-09-29T10:00:00Z', now: NOW }), /after now/);
+  await assert.rejects(record.retarget('s1', { waitingFor: 'partner', wakeAt: '2027-01-30T10:00:00Z', now: NOW }), /60 days/);
+  // Woken or made manual meanwhile: nothing matched, nothing changed.
+  const gone = createSnoozeRecord({}, { shopId: 'shop-1', transport: recorder({ updated: [] }).transport });
+  assert.equal(await gone.retarget('s1', { waitingFor: 'partner', wakeAt: '2026-10-05T10:00:00Z', now: NOW }), null);
+});
+
 test('waking a ticket that is not snoozed is a no-op, not an error', async () => {
   const record = createSnoozeRecord({}, { shopId: 'shop-1', transport: recorder({ updated: [] }).transport });
   assert.equal(await record.wake('t1', 'deadline'), null);
