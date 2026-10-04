@@ -127,6 +127,10 @@ const TOOLS_BY_SUBJECT = {
   // that one answers « parle-moi de CE produit », this one answers « lequel me
   // conseillez-vous » — and the second has no product to look up until it has
   // recommended one.
+  // `getOrderContext` ADDED 2026-10-04 for PR-38 (a product broken or
+  // defective): those tickets are filed `product`, situations are matched by
+  // subject, and the situation asks for the order first — which nothing on
+  // this subject could establish. It reads the stored order bundle only.
   product: [
     T.SEARCH_KNOWLEDGE,
     T.LOOKUP_PRODUCT,
@@ -134,7 +138,8 @@ const TOOLS_BY_SUBJECT = {
     T.VERIFY_PURCHASE,
     T.CHECK_PHOTO_EVIDENCE,
     T.RECOMMEND_PRODUCTS,
-    T.LOOKUP_PRODUCT_OFFER
+    T.LOOKUP_PRODUCT_OFFER,
+    T.GET_ORDER_CONTEXT
   ],
   // `identifyPromotion` ADDED 2026-10-01 here and across the order family: a gift
   // out of stock lands in product_stock, a charged gift or unapplied free

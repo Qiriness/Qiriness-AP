@@ -844,6 +844,46 @@ commerciale, prise par une personne.
 
 ---
 
+### PR-38 · Mon produit est arrivé cassé, ou il est défectueux / ne fonctionne pas.
+`product` · `problem` · _from 3 tickets with no situation, 2026-10-04 (3e28483f, 2aa6604e, a0465150), and 34 more found by searching the mail_ · 🟢
+**choose_rule** Choose when a product the customer has is broken, damaged, leaking or opened on arrival, or defective: a pump that delivers nothing, a missing or detached part, a device or remote that does not work, a texture or smell unlike usual. Do not choose when the product received is not the one ordered (D-08), when an item is missing from the parcel (D-02), when the skin reacted to the product (CV-01), or when the LED mask will not charge or its battery does not hold (PR-26).
+
+**Variantes réelles**
+- « en ouvrant la boîte ce matin j'ai eu la très mauvaise surprise de découvrir que le pot était ouvert, de la crème partout dans la boîte et autour du pot ! Je vous adresse les photos ci-jointes. »  _(3e28483f)_
+- « Je me suis rendue compte qu'il manquait le fil transparent permettant d'acheminer le contenu (voir photo en PJ). Je pense qu'il est défectueux... pourriez-vous me le confirmer et m'en renvoyer un ? »  _(2aa6604e — the team later confirmed this pump works without a tube)_
+- « Il s'agit d'un pot de crème Qiriness Temps Sublime Light. Référence sous le pot T167YHA. Comme mentionné par téléphone la texture et l'odeur ne sont absolument pas du tout les mêmes que d'habitude. »  _(a0465150 — the message as written: a batch reference and little else)_
+- « j'ai acheté le masque wrap d'or hier que j'ai l'habitude d'utiliser. Il était complètement cassé. J'ai la référence. »  _(626284d3)_
+- « Alors qu'il en reste encore un peu plus de la moitié, la pompe ne fonctionne plus et le sérum ne sort plus de l'embout. Que pouvons-nous faire dans ce cas ? »  _(093fe4f3)_
+- « Malheureusement, elle me l'a rendu car il ne diffuse aucune odeur et, en plus, le flacon fuit. Je souhaiterais donc connaître la marche à suivre afin de trouver une solution à ce problème. »  _(92ea2c39 — bought at Nocibé)_
+- « je voulais vous signaler un problème récurrent avec le bouchon du flacon pompe Caresse Regard Sublime : il est difficile à emboîter et lorsque le flacon tombe, le bouchon se casse. »  _(530fbed6)_
+- « J'accuse bonne réception ce jour de la télécommande. Je viens de la tester et cette dernière ne fonctionne pas. »  _(27669d6a)_
+- « j'ai certes acheté chez un revendeur mais c'est bien votre produit qui est défectueux et inutilisable »  _(cad3673b — bought from a retailer)_
+
+**needs** `order_identity`, `product_identity`, `photo_evidence`
+**politiques liées** `damaged_wrong_missing_item_policy`, `retailer_order_policy`
+**exemplaires** → jeu `produit`
+
+> **At the 10-phrasing ceiling** (`MAX_AUTHORED_PHRASINGS`), so a new variant replaces
+> one. Swapped out 2026-10-04 to make room for a leak, a broken cap and a batch-reference
+> message: « Le flacon Qiriness anti-âge homme ne fonctionne pas… » (6125fac1) and « le
+> tube intérieur s'est désolidarisé de la pompe… » (f04131e9). Pumps stay covered by the
+> two above.
+
+> **The order first, then the product, then the photos.** A customer with no order
+> number is asked for it, and told that a product bought elsewhere than our site is
+> taken up with that retailer. Once the order and the product are known, the photos
+> are asked for. The lot number is asked for whenever the customer is asked anything,
+> and never on its own. Photos received go to a person, who decides on a
+> replacement, a re-shipment or a refund — nothing is offered before that.
+>
+> **`getOrderContext` was added to the `product` tools for this situation** (2026-10-04):
+> these tickets are filed `product`, and without it the order could never be identified.
+
+**Contenu stable** _(à rédiger)_
+>
+
+---
+
 ### PR-27 · À quoi sert le mode pulsé du masque LED ?
 `product` · `question` · **2 msgs** · 🟢
 **choose_rule** Choose when the customer specifically asks what the pulsed mode of the LED mask does or how that mode is intended to be used. Do not choose for technical specifications or a malfunction.

@@ -1308,6 +1308,16 @@ Without the carrier feed nothing ever reports a scan, so every dispatched parcel
 
 This is also why three proposed condition-only parcel rules were NOT written: two would have been dead on arrival and the third would have fired on one order in two thousand.
 
+### A broken or defective product is its own situation, filed under product (2026-10-04)
+
+PR-38 exists because three tickets matched nothing: a pot open in its box (3e28483f), a pump with no tube (2aa6604e), a cream whose texture and smell had changed (a0465150). Searching the mail found 34 more, mostly pumps that stop delivering mid-bottle. D-08 (wrong product) and D-02 (missing item) are `delivery` situations, and these tickets are filed `product`. Situations are matched only within the ticket's own subject, so a delivery situation could never reach them.
+
+- **The order comes first, and the `product` tools could not reach it.** `getOrderContext` was added to the product subject. It reads the stored order bundle and costs nothing on a product question that never calls it.
+- **A retailer purchase is said, not asked.** The question asking for the order number also says that a product bought elsewhere is taken up with that retailer (`retailer_order_policy`). That avoids asking « où l'avez-vous acheté ? » first and costing a round trip.
+- **The lot number rides along and never branches.** `lot_number` is in every question's `ask` (asks are unioned and deduplicated), and no rule waits for it.
+- **Photos go to a person; nothing is offered before.** `damaged_wrong_missing_item_policy` lists replacement, re-shipment, refund or a gesture, chosen after verification, and `pr38_photo_recue` routes to `needs_human` saying exactly that.
+- **2aa6604e is the warning.** The « missing » tube was by design, and the team resent a serum anyway before finding that out. A person looking at the photo is the step that catches it.
+
 ### A declared loss is a different situation from a suspected one (2026-09-21)
 
 D-37 exists because the reply was already wrong and nobody could see it. A

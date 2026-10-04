@@ -28,6 +28,26 @@ Three sibling files carry the other halves, and this one deliberately does not d
 - On Insights → Fulfilment, the customer's name in « Orders waiting to ship » is ringed red / orange / green when an open ticket names that order, exactly as on Orders: same loader (`order-ticket-marks.ts`), same tooltip, same legend under the table. On 2026-10-04 that is #7129 and #7131 of the 8 waiting.
 - **Not checked in the browser**: typecheck and lint pass.
 
+## PR-38: a product broken or defective (2026-10-04)
+
+- **New situation PR-38, imported as a draft** (`Email-Example-Queries.md`): a product arrived broken, damaged or leaking, or is defective (pump, missing part, device, texture or smell). Built from 3 tickets that matched nothing (3e28483f, 2aa6604e, a0465150) plus real phrasings from 34 more found in the mail. `collection_mode: rule_directed`, `answer_set: products`. Before importing, the document was diffed against the database: PR-38 was the only difference.
+- **7 draft rules** take the order first, then the product, then the photos:
+  - No order: ask for the number (+ the e-mail when the sender is unknown), and say that a product bought from a retailer is taken up with that retailer.
+  - Order under another e-mail: ask for that e-mail.
+  - Order but no product: ask which product.
+  - Order and product, no photo: ask for photos.
+  - Photos received: a person checks them before any replacement, re-shipment or refund.
+  - Every question also asks for the lot number. A base rule routes anything else to a person.
+  - 168 combinations, no ties, every branch reachable.
+- **`getOrderContext` added to the `product` tools.** These tickets are filed `product`, situations are matched by subject, and without it the order could never be identified.
+- **Not proven:** the situation has no vectors until it's approved and `embed:exemplars` is run. Embedded in memory, its phrasings score 0.757 and 0.643 on the two `product` tickets, ahead of every approved situation, but only 0.535 on the uncategorised a0465150, where PR-29 (0.603) wins. These scores are flattering, since the phrasings come from these tickets.
+- **Translated into en/es/it/de** (40 phrasings, `translate:exemplars --exemplar=PR-38`, reviewed in the diff: only additions) and imported. PR-38 was **approved by the owner and embedded 2026-10-04** (50 phrasings). The live matcher puts it first on 3e28483f (0.757) and 2aa6604e (0.643, a near miss for the chooser). It doesn't reach the top 3 on a0465150, where PR-29 (0.603) leads. `pr38_defaut_signale` is still a draft.
+- **Three variants swapped** (PR-38 sits at the 10-phrasing ceiling): a leak (92ea2c39), a broken cap (530fbed6), and a0465150 as actually written (batch reference first), replacing two of the four pump variants. Translated, imported, re-embedded (15 phrasings). Replayed over the stored opening-message vectors of 954 tickets, the winner changed on 14:
+  - **Into the match band (≥ 0.65), all right:** a0465150 0.788, 92ea2c39 0.679, 5ced0e4e 0.667 (defective bottle, was CV-01).
+  - **Into the chooser band (0.55–0.65):** 51e37fac 0.639 (pot under-filled, seal pushed in, was D-08; right), 80e00c96 0.625 (smell changed, batch code; right), and **a5ec7a20 0.565, a fragrance question: wrong**, now left to the chooser and the choose_rule.
+  - **Lost:** 6125fac1 (pump, its variant removed), now D-36 0.563 just ahead of PR-38 0.561, both in the chooser band.
+  - The other 7 changes are below 0.55 and select nothing either way.
+
 ## A missing gift carries its stock now (2026-10-04)
 
 - **`checkPromotionOutcome` now reports the stock of the free item today**, read from the product sync. It shows in the prompt as « Stock actuel de l'article offert : « Wrap d'Or » en stock », and in the case file as the new need `promotion_reward_stock` (`in_stock` / `partial` / `out_of_stock` / `no_reward` / `unknown`). Rules can branch on it to choose between sending the gift and offering a replacement.

@@ -63,7 +63,10 @@ test('the exact tool set for each enabled subject', () => {
     TOOL_NAMES.RECOMMEND_PRODUCTS,
     // Added 2026-09-04: « avez-vous une offre sur ce produit » is a product
     // question whose answer lives in the promotions table.
-    TOOL_NAMES.LOOKUP_PRODUCT_OFFER
+    TOOL_NAMES.LOOKUP_PRODUCT_OFFER,
+    // Added 2026-10-04: PR-38 (broken or defective product) asks for the
+    // order first, and these tickets are filed `product`.
+    TOOL_NAMES.GET_ORDER_CONTEXT
   ]);
   assert.deepEqual(allowedTools('product_stock', 'question', 2), [
     TOOL_NAMES.LOOKUP_STOCK,

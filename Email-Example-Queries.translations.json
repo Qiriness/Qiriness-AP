@@ -6041,6 +6041,368 @@
         "text": "Ich kenne eine Handcreme von Garnier, haben Sie eine für empfindliche Haut?"
       }
     },
+    "PR-38": {
+      "0:en": {
+        "index": 101,
+        "sourceIndex": 0,
+        "sourceLanguage": "fr",
+        "sourceText": "Mon produit est arrivé cassé, ou il est défectueux / ne fonctionne pas.",
+        "sourceHash": "e618f7714b6af3a344d186626444ddab28116bcf655f3ae9f7484d5d4fe8b074",
+        "language": "en",
+        "text": "My product arrived broken, or it's defective / doesn't work"
+      },
+      "0:es": {
+        "index": 102,
+        "sourceIndex": 0,
+        "sourceLanguage": "fr",
+        "sourceText": "Mon produit est arrivé cassé, ou il est défectueux / ne fonctionne pas.",
+        "sourceHash": "e618f7714b6af3a344d186626444ddab28116bcf655f3ae9f7484d5d4fe8b074",
+        "language": "es",
+        "text": "Mi producto llegó roto, o está defectuoso / no funciona."
+      },
+      "0:it": {
+        "index": 103,
+        "sourceIndex": 0,
+        "sourceLanguage": "fr",
+        "sourceText": "Mon produit est arrivé cassé, ou il est défectueux / ne fonctionne pas.",
+        "sourceHash": "e618f7714b6af3a344d186626444ddab28116bcf655f3ae9f7484d5d4fe8b074",
+        "language": "it",
+        "text": "Il mio prodotto è arrivato rotto, o è difettoso / non funziona."
+      },
+      "0:de": {
+        "index": 104,
+        "sourceIndex": 0,
+        "sourceLanguage": "fr",
+        "sourceText": "Mon produit est arrivé cassé, ou il est défectueux / ne fonctionne pas.",
+        "sourceHash": "e618f7714b6af3a344d186626444ddab28116bcf655f3ae9f7484d5d4fe8b074",
+        "language": "de",
+        "text": "Mein Produkt ist kaputt angekommen, oder es ist defekt / funktioniert nicht."
+      },
+      "1:en": {
+        "index": 111,
+        "sourceIndex": 1,
+        "sourceLanguage": "fr",
+        "sourceText": "en ouvrant la boîte ce matin j'ai eu la très mauvaise surprise de découvrir que le pot était ouvert, de la crème partout dans la boîte et autour du pot ! Je vous adresse les photos ci-jointes.",
+        "sourceHash": "563389ac2415e1e28c487a53bf9f49a86748c1e4b35d4d1df77ee9abf751e807",
+        "language": "en",
+        "text": "opening the box this morning i had the very bad surprise to find the jar was open, cream everywhere in the box and around the jar ! I send you the photos attached."
+      },
+      "1:es": {
+        "index": 112,
+        "sourceIndex": 1,
+        "sourceLanguage": "fr",
+        "sourceText": "en ouvrant la boîte ce matin j'ai eu la très mauvaise surprise de découvrir que le pot était ouvert, de la crème partout dans la boîte et autour du pot ! Je vous adresse les photos ci-jointes.",
+        "sourceHash": "563389ac2415e1e28c487a53bf9f49a86748c1e4b35d4d1df77ee9abf751e807",
+        "language": "es",
+        "text": "al abrir la caja esta mañana tuve la muy mala sorpresa de descubrir que el tarro estaba abierto, crema por toda la caja y alrededor del tarro ! Les envío las fotos adjuntas."
+      },
+      "1:it": {
+        "index": 113,
+        "sourceIndex": 1,
+        "sourceLanguage": "fr",
+        "sourceText": "en ouvrant la boîte ce matin j'ai eu la très mauvaise surprise de découvrir que le pot était ouvert, de la crème partout dans la boîte et autour du pot ! Je vous adresse les photos ci-jointes.",
+        "sourceHash": "563389ac2415e1e28c487a53bf9f49a86748c1e4b35d4d1df77ee9abf751e807",
+        "language": "it",
+        "text": "aprendo la scatola stamattina ho avuto la brutta sorpresa di scoprire che il barattolo era aperto, crema ovunque nella scatola e intorno al barattolo ! Vi mando le foto allegate."
+      },
+      "1:de": {
+        "index": 114,
+        "sourceIndex": 1,
+        "sourceLanguage": "fr",
+        "sourceText": "en ouvrant la boîte ce matin j'ai eu la très mauvaise surprise de découvrir que le pot était ouvert, de la crème partout dans la boîte et autour du pot ! Je vous adresse les photos ci-jointes.",
+        "sourceHash": "563389ac2415e1e28c487a53bf9f49a86748c1e4b35d4d1df77ee9abf751e807",
+        "language": "de",
+        "text": "als ich heute morgen die Schachtel öffnete, hatte ich die sehr böse Überraschung, dass der Tiegel offen war, Creme überall in der Schachtel und um den Tiegel herum! Ich sende Ihnen die Fotos im Anhang."
+      },
+      "2:en": {
+        "index": 121,
+        "sourceIndex": 2,
+        "sourceLanguage": "fr",
+        "sourceText": "Je me suis rendue compte qu'il manquait le fil transparent permettant d'acheminer le contenu (voir photo en PJ). Je pense qu'il est défectueux... pourriez-vous me le confirmer et m'en renvoyer un ?",
+        "sourceHash": "a43632d94474ba3161e19f581c3f35ad0bd61e4ee5062c33d15c14f541920aa7",
+        "language": "en",
+        "text": "I realized the transparent thread to deliver the content is missing (see photo attached). I think it's defective... could you confirm and send me another one?"
+      },
+      "2:es": {
+        "index": 122,
+        "sourceIndex": 2,
+        "sourceLanguage": "fr",
+        "sourceText": "Je me suis rendue compte qu'il manquait le fil transparent permettant d'acheminer le contenu (voir photo en PJ). Je pense qu'il est défectueux... pourriez-vous me le confirmer et m'en renvoyer un ?",
+        "sourceHash": "a43632d94474ba3161e19f581c3f35ad0bd61e4ee5062c33d15c14f541920aa7",
+        "language": "es",
+        "text": "Me di cuenta de que faltaba el hilo transparente que permite transportar el contenido (ver foto adjunta). Creo que está defectuoso... ¿podrían confirmármelo y enviarme uno nuevo?"
+      },
+      "2:it": {
+        "index": 123,
+        "sourceIndex": 2,
+        "sourceLanguage": "fr",
+        "sourceText": "Je me suis rendue compte qu'il manquait le fil transparent permettant d'acheminer le contenu (voir photo en PJ). Je pense qu'il est défectueux... pourriez-vous me le confirmer et m'en renvoyer un ?",
+        "sourceHash": "a43632d94474ba3161e19f581c3f35ad0bd61e4ee5062c33d15c14f541920aa7",
+        "language": "it",
+        "text": "Mi sono resa conto che mancava il filo trasparente per trasportare il contenuto (vedi foto in allegato). Penso che sia difettoso... potreste confermarmelo e inviarmene un altro?"
+      },
+      "2:de": {
+        "index": 124,
+        "sourceIndex": 2,
+        "sourceLanguage": "fr",
+        "sourceText": "Je me suis rendue compte qu'il manquait le fil transparent permettant d'acheminer le contenu (voir photo en PJ). Je pense qu'il est défectueux... pourriez-vous me le confirmer et m'en renvoyer un ?",
+        "sourceHash": "a43632d94474ba3161e19f581c3f35ad0bd61e4ee5062c33d15c14f541920aa7",
+        "language": "de",
+        "text": "Mir ist aufgefallen, dass der transparente Faden fehlt, der den Inhalt transportiert (siehe Foto im Anhang). Ich denke, er ist defekt... könnten Sie mir das bestätigen und mir einen neuen schicken?"
+      },
+      "3:en": {
+        "index": 131,
+        "sourceIndex": 3,
+        "sourceLanguage": "fr",
+        "sourceText": "Il s'agit d'un pot de crème Qiriness Temps Sublime Light. Référence sous le pot T167YHA. Comme mentionné par téléphone la texture et l'odeur ne sont absolument pas du tout les mêmes que d'habitude.",
+        "sourceHash": "3e1dcb1f5da35de6bdefcb805d604dd3adca6169334e0a785643943610ac9178",
+        "language": "en",
+        "text": "This is a jar of Qiriness Temps Sublime Light cream. Reference under the jar T167YHA. As mentioned by phone the texture and smell are absolutely not at all the same as usual."
+      },
+      "3:es": {
+        "index": 132,
+        "sourceIndex": 3,
+        "sourceLanguage": "fr",
+        "sourceText": "Il s'agit d'un pot de crème Qiriness Temps Sublime Light. Référence sous le pot T167YHA. Comme mentionné par téléphone la texture et l'odeur ne sont absolument pas du tout les mêmes que d'habitude.",
+        "sourceHash": "3e1dcb1f5da35de6bdefcb805d604dd3adca6169334e0a785643943610ac9178",
+        "language": "es",
+        "text": "Se trata de un tarro de crema Qiriness Temps Sublime Light. Referencia bajo el tarro T167YHA. Como se mencionó por teléfono la textura y el olor no son en absoluto los mismos de siempre."
+      },
+      "3:it": {
+        "index": 133,
+        "sourceIndex": 3,
+        "sourceLanguage": "fr",
+        "sourceText": "Il s'agit d'un pot de crème Qiriness Temps Sublime Light. Référence sous le pot T167YHA. Comme mentionné par téléphone la texture et l'odeur ne sont absolument pas du tout les mêmes que d'habitude.",
+        "sourceHash": "3e1dcb1f5da35de6bdefcb805d604dd3adca6169334e0a785643943610ac9178",
+        "language": "it",
+        "text": "Si tratta di un vasetto di crema Qiriness Temps Sublime Light. Riferimento sotto il vasetto T167YHA. Come detto al telefono la texture e l'odore non sono assolutamente per niente gli stessi di solito."
+      },
+      "3:de": {
+        "index": 134,
+        "sourceIndex": 3,
+        "sourceLanguage": "fr",
+        "sourceText": "Il s'agit d'un pot de crème Qiriness Temps Sublime Light. Référence sous le pot T167YHA. Comme mentionné par téléphone la texture et l'odeur ne sont absolument pas du tout les mêmes que d'habitude.",
+        "sourceHash": "3e1dcb1f5da35de6bdefcb805d604dd3adca6169334e0a785643943610ac9178",
+        "language": "de",
+        "text": "Es handelt sich um einen Tiegel Qiriness Temps Sublime Light Creme. Referenz unter dem Tiegel T167YHA. Wie telefonisch erwähnt, sind die Textur und der Geruch absolut nicht die gleichen wie sonst."
+      },
+      "4:en": {
+        "index": 141,
+        "sourceIndex": 4,
+        "sourceLanguage": "fr",
+        "sourceText": "j'ai acheté le masque wrap d'or hier que j'ai l'habitude d'utiliser. Il était complètement cassé. J'ai la référence.",
+        "sourceHash": "28edad02ce04bc4c57bd9d49e750ca2ac2ffa3cd0614428ab39529907601a796",
+        "language": "en",
+        "text": "I bought the masque wrap d'or yesterday that I usually use. It was completely broken. I have the reference."
+      },
+      "4:es": {
+        "index": 142,
+        "sourceIndex": 4,
+        "sourceLanguage": "fr",
+        "sourceText": "j'ai acheté le masque wrap d'or hier que j'ai l'habitude d'utiliser. Il était complètement cassé. J'ai la référence.",
+        "sourceHash": "28edad02ce04bc4c57bd9d49e750ca2ac2ffa3cd0614428ab39529907601a796",
+        "language": "es",
+        "text": "compré la mascarilla wrap d'or ayer que suelo usar. estaba completamente rota. tengo la referencia."
+      },
+      "4:it": {
+        "index": 143,
+        "sourceIndex": 4,
+        "sourceLanguage": "fr",
+        "sourceText": "j'ai acheté le masque wrap d'or hier que j'ai l'habitude d'utiliser. Il était complètement cassé. J'ai la référence.",
+        "sourceHash": "28edad02ce04bc4c57bd9d49e750ca2ac2ffa3cd0614428ab39529907601a796",
+        "language": "it",
+        "text": "ho comprato il masque wrap d'or ieri che uso di solito. era completamente rotto. ho la referenza."
+      },
+      "4:de": {
+        "index": 144,
+        "sourceIndex": 4,
+        "sourceLanguage": "fr",
+        "sourceText": "j'ai acheté le masque wrap d'or hier que j'ai l'habitude d'utiliser. Il était complètement cassé. J'ai la référence.",
+        "sourceHash": "28edad02ce04bc4c57bd9d49e750ca2ac2ffa3cd0614428ab39529907601a796",
+        "language": "de",
+        "text": "ich habe gestern die Maske wrap d'or gekauft die ich normalerweise benutze. Sie war komplett kaputt. Ich habe die Referenz."
+      },
+      "5:en": {
+        "index": 151,
+        "sourceIndex": 5,
+        "sourceLanguage": "fr",
+        "sourceText": "Alors qu'il en reste encore un peu plus de la moitié, la pompe ne fonctionne plus et le sérum ne sort plus de l'embout. Que pouvons-nous faire dans ce cas ?",
+        "sourceHash": "0cb5496658603f9a769604250a2c9f84ece8356c8bdbbbae40466f0e3c249df8",
+        "language": "en",
+        "text": "While there's still a bit more than half left, the pump doesn't work anymore and the serum doesn't come out of the nozzle. What can we do in this case?"
+      },
+      "5:es": {
+        "index": 152,
+        "sourceIndex": 5,
+        "sourceLanguage": "fr",
+        "sourceText": "Alors qu'il en reste encore un peu plus de la moitié, la pompe ne fonctionne plus et le sérum ne sort plus de l'embout. Que pouvons-nous faire dans ce cas ?",
+        "sourceHash": "0cb5496658603f9a769604250a2c9f84ece8356c8bdbbbae40466f0e3c249df8",
+        "language": "es",
+        "text": "Aunque todavía queda un poco más de la mitad, la bomba ya no funciona y el suero ya no sale de la boquilla. ¿Qué podemos hacer en este caso?"
+      },
+      "5:it": {
+        "index": 153,
+        "sourceIndex": 5,
+        "sourceLanguage": "fr",
+        "sourceText": "Alors qu'il en reste encore un peu plus de la moitié, la pompe ne fonctionne plus et le sérum ne sort plus de l'embout. Que pouvons-nous faire dans ce cas ?",
+        "sourceHash": "0cb5496658603f9a769604250a2c9f84ece8356c8bdbbbae40466f0e3c249df8",
+        "language": "it",
+        "text": "Mentre ne resta ancora un po' più della metà, la pompa non funziona più e il siero non esce più dall'erogatore. Cosa possiamo fare in questo caso?"
+      },
+      "5:de": {
+        "index": 154,
+        "sourceIndex": 5,
+        "sourceLanguage": "fr",
+        "sourceText": "Alors qu'il en reste encore un peu plus de la moitié, la pompe ne fonctionne plus et le sérum ne sort plus de l'embout. Que pouvons-nous faire dans ce cas ?",
+        "sourceHash": "0cb5496658603f9a769604250a2c9f84ece8356c8bdbbbae40466f0e3c249df8",
+        "language": "de",
+        "text": "Obwohl noch etwas mehr als die Hälfte übrig ist, funktioniert die Pumpe nicht mehr und das Serum kommt nicht mehr aus der Düse. Was können wir in diesem Fall tun?"
+      },
+      "6:en": {
+        "index": 161,
+        "sourceIndex": 6,
+        "sourceLanguage": "fr",
+        "sourceText": "Malheureusement, elle me l'a rendu car il ne diffuse aucune odeur et, en plus, le flacon fuit. Je souhaiterais donc connaître la marche à suivre afin de trouver une solution à ce problème.",
+        "sourceHash": "ba15197eb94af9f146f6607e1f88f80d161343282853651366a56d4e7127333a",
+        "language": "en",
+        "text": "Unfortunately, she returned it to me because it doesn't emit any scent and, on top of that, the bottle leaks. I would like to know the steps to take to find a solution to this problem."
+      },
+      "6:es": {
+        "index": 162,
+        "sourceIndex": 6,
+        "sourceLanguage": "fr",
+        "sourceText": "Malheureusement, elle me l'a rendu car il ne diffuse aucune odeur et, en plus, le flacon fuit. Je souhaiterais donc connaître la marche à suivre afin de trouver une solution à ce problème.",
+        "sourceHash": "ba15197eb94af9f146f6607e1f88f80d161343282853651366a56d4e7127333a",
+        "language": "es",
+        "text": "Desafortunadamente, ella me lo devolvió porque no difunde ningún olor y, además, el frasco gotea. Por lo tanto, me gustaría saber los pasos a seguir para encontrar una solución a este problema."
+      },
+      "6:it": {
+        "index": 163,
+        "sourceIndex": 6,
+        "sourceLanguage": "fr",
+        "sourceText": "Malheureusement, elle me l'a rendu car il ne diffuse aucune odeur et, en plus, le flacon fuit. Je souhaiterais donc connaître la marche à suivre afin de trouver une solution à ce problème.",
+        "sourceHash": "ba15197eb94af9f146f6607e1f88f80d161343282853651366a56d4e7127333a",
+        "language": "it",
+        "text": "Purtroppo, me l'ha restituito perché non diffonde alcun odore e, inoltre, il flacone perde. Vorrei quindi sapere come procedere per trovare una soluzione a questo problema."
+      },
+      "6:de": {
+        "index": 164,
+        "sourceIndex": 6,
+        "sourceLanguage": "fr",
+        "sourceText": "Malheureusement, elle me l'a rendu car il ne diffuse aucune odeur et, en plus, le flacon fuit. Je souhaiterais donc connaître la marche à suivre afin de trouver une solution à ce problème.",
+        "sourceHash": "ba15197eb94af9f146f6607e1f88f80d161343282853651366a56d4e7127333a",
+        "language": "de",
+        "text": "Leider hat sie es mir zurückgegeben, weil es keinen Duft verströmt und außerdem die Flasche undicht ist. Ich möchte daher wissen, wie ich dieses Problem lösen kann."
+      },
+      "7:en": {
+        "index": 171,
+        "sourceIndex": 7,
+        "sourceLanguage": "fr",
+        "sourceText": "je voulais vous signaler un problème récurrent avec le bouchon du flacon pompe Caresse Regard Sublime : il est difficile à emboîter et lorsque le flacon tombe, le bouchon se casse.",
+        "sourceHash": "56c8db911efd9ab32067977b36e835f60da1ca2327c11015d946b9c7d938c67f",
+        "language": "en",
+        "text": "i wanted to report a recurring problem with the cap of the Caresse Regard Sublime pump bottle: it's hard to fit and when the bottle falls, the cap breaks."
+      },
+      "7:es": {
+        "index": 172,
+        "sourceIndex": 7,
+        "sourceLanguage": "fr",
+        "sourceText": "je voulais vous signaler un problème récurrent avec le bouchon du flacon pompe Caresse Regard Sublime : il est difficile à emboîter et lorsque le flacon tombe, le bouchon se casse.",
+        "sourceHash": "56c8db911efd9ab32067977b36e835f60da1ca2327c11015d946b9c7d938c67f",
+        "language": "es",
+        "text": "quería señalar un problema recurrente con el tapón del frasco bomba Caresse Regard Sublime: es difícil de encajar y cuando el frasco cae, el tapón se rompe."
+      },
+      "7:it": {
+        "index": 173,
+        "sourceIndex": 7,
+        "sourceLanguage": "fr",
+        "sourceText": "je voulais vous signaler un problème récurrent avec le bouchon du flacon pompe Caresse Regard Sublime : il est difficile à emboîter et lorsque le flacon tombe, le bouchon se casse.",
+        "sourceHash": "56c8db911efd9ab32067977b36e835f60da1ca2327c11015d946b9c7d938c67f",
+        "language": "it",
+        "text": "volevo segnalarvi un problema ricorrente con il tappo del flacone pompa Caresse Regard Sublime: è difficile da incastrare e quando il flacone cade, il tappo si rompe."
+      },
+      "7:de": {
+        "index": 174,
+        "sourceIndex": 7,
+        "sourceLanguage": "fr",
+        "sourceText": "je voulais vous signaler un problème récurrent avec le bouchon du flacon pompe Caresse Regard Sublime : il est difficile à emboîter et lorsque le flacon tombe, le bouchon se casse.",
+        "sourceHash": "56c8db911efd9ab32067977b36e835f60da1ca2327c11015d946b9c7d938c67f",
+        "language": "de",
+        "text": "ich wollte Ihnen ein wiederkehrendes Problem mit dem Verschluss der Flasche mit Pumpe Caresse Regard Sublime melden: er ist schwer zu befestigen und wenn die Flasche fällt, bricht der Verschluss."
+      },
+      "8:en": {
+        "index": 181,
+        "sourceIndex": 8,
+        "sourceLanguage": "fr",
+        "sourceText": "J'accuse bonne réception ce jour de la télécommande. Je viens de la tester et cette dernière ne fonctionne pas.",
+        "sourceHash": "8880b4a194a041f79412dedc5a42d4b0e47915313fbf796ea1d9515c0e3ca45d",
+        "language": "en",
+        "text": "I acknowledge receipt today of the remote control. I just tested it and it doesn't work."
+      },
+      "8:es": {
+        "index": 182,
+        "sourceIndex": 8,
+        "sourceLanguage": "fr",
+        "sourceText": "J'accuse bonne réception ce jour de la télécommande. Je viens de la tester et cette dernière ne fonctionne pas.",
+        "sourceHash": "8880b4a194a041f79412dedc5a42d4b0e47915313fbf796ea1d9515c0e3ca45d",
+        "language": "es",
+        "text": "Acuso buena recepción hoy del control remoto. Acabo de probarlo y este último no funciona."
+      },
+      "8:it": {
+        "index": 183,
+        "sourceIndex": 8,
+        "sourceLanguage": "fr",
+        "sourceText": "J'accuse bonne réception ce jour de la télécommande. Je viens de la tester et cette dernière ne fonctionne pas.",
+        "sourceHash": "8880b4a194a041f79412dedc5a42d4b0e47915313fbf796ea1d9515c0e3ca45d",
+        "language": "it",
+        "text": "Accuso buona ricezione oggi del telecomando. L'ho appena testato e quest'ultimo non funziona."
+      },
+      "8:de": {
+        "index": 184,
+        "sourceIndex": 8,
+        "sourceLanguage": "fr",
+        "sourceText": "J'accuse bonne réception ce jour de la télécommande. Je viens de la tester et cette dernière ne fonctionne pas.",
+        "sourceHash": "8880b4a194a041f79412dedc5a42d4b0e47915313fbf796ea1d9515c0e3ca45d",
+        "language": "de",
+        "text": "Ich bestätige den Erhalt der Fernbedienung heute. Ich habe sie gerade getestet und sie funktioniert nicht."
+      },
+      "9:en": {
+        "index": 191,
+        "sourceIndex": 9,
+        "sourceLanguage": "fr",
+        "sourceText": "j'ai certes acheté chez un revendeur mais c'est bien votre produit qui est défectueux et inutilisable",
+        "sourceHash": "8918edfe62279b8ba9dd9c1e004dff58a90506184f1e7fa10df99fdd030be1f4",
+        "language": "en",
+        "text": "I did buy from a reseller but it's your product that's defective and unusable"
+      },
+      "9:es": {
+        "index": 192,
+        "sourceIndex": 9,
+        "sourceLanguage": "fr",
+        "sourceText": "j'ai certes acheté chez un revendeur mais c'est bien votre produit qui est défectueux et inutilisable",
+        "sourceHash": "8918edfe62279b8ba9dd9c1e004dff58a90506184f1e7fa10df99fdd030be1f4",
+        "language": "es",
+        "text": "ciertamente compré a un revendedor pero es su producto el que está defectuoso e inutilizable"
+      },
+      "9:it": {
+        "index": 193,
+        "sourceIndex": 9,
+        "sourceLanguage": "fr",
+        "sourceText": "j'ai certes acheté chez un revendeur mais c'est bien votre produit qui est défectueux et inutilisable",
+        "sourceHash": "8918edfe62279b8ba9dd9c1e004dff58a90506184f1e7fa10df99fdd030be1f4",
+        "language": "it",
+        "text": "ho certamente comprato da un rivenditore ma è proprio il vostro prodotto che è difettoso e inutilizzabile"
+      },
+      "9:de": {
+        "index": 194,
+        "sourceIndex": 9,
+        "sourceLanguage": "fr",
+        "sourceText": "j'ai certes acheté chez un revendeur mais c'est bien votre produit qui est défectueux et inutilisable",
+        "sourceHash": "8918edfe62279b8ba9dd9c1e004dff58a90506184f1e7fa10df99fdd030be1f4",
+        "language": "de",
+        "text": "ich habe zwar bei einem Händler gekauft aber es ist Ihr Produkt das defekt und unbrauchbar ist"
+      }
+    },
     "R-21": {
       "0:en": {
         "index": 101,
