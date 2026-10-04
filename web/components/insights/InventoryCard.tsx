@@ -12,16 +12,17 @@ const STATUS_CLASS: Record<InventoryStatus, string> = {
 };
 
 /**
- * Active products out of stock or running low, at the rate units left over the
- * last `windowDays`. A snapshot, like the orders waiting to ship: the range
- * does not cut it. There is no replenishment column — no purchase orders
- * reach this app — so nothing claims stock is on its way.
+ * Active products out of stock, running low at the rate units left over the
+ * last `windowDays`, or under `minStockUnits` units whatever that rate. A
+ * snapshot, like the orders waiting to ship: the range does not cut it. There
+ * is no replenishment column — no purchase orders reach this app — so nothing
+ * claims stock is on its way.
  */
 export function InventoryTable({ inventory, limit }: { inventory: InventoryExceptions; limit?: number }) {
   const tr = getT();
   const { integer } = getFormat();
   if (inventory.items.length === 0) {
-    return <p className={t.muted}>{tr("insights.inventory.none", { days: inventory.windowDays })}</p>;
+    return <p className={t.muted}>{tr("insights.inventory.none", { days: inventory.windowDays, units: inventory.minStockUnits })}</p>;
   }
   const rows = limit ? inventory.items.slice(0, limit) : inventory.items;
   return (

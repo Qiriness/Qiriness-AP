@@ -20,6 +20,12 @@ export const INVENTORY_WINDOW_DAYS = 30;
  */
 export const INVENTORY_MAX_COVER_DAYS = 30;
 
+/**
+ * Units below which an active product is listed whatever its cover: a slow
+ * seller with a handful left is one order from out, and its long cover hides it.
+ */
+export const INVENTORY_MIN_STOCK_UNITS = 50;
+
 const STATUS_LIMITS = Object.freeze([
   { status: 'critical', maxDays: 7 },
   { status: 'low', maxDays: 14 },
@@ -36,14 +42,17 @@ export const INVENTORY_STATUS_LABELS = Object.freeze({
 /**
  * One product's standing. Nothing on the shelf is `out` whatever the rate —
  * including a product nobody bought in the window, which has no cover to
- * compute and is still unsellable. Null when it is not an exception at all.
+ * compute and is still unsellable. Otherwise cover sets the status; past a
+ * month of cover, or with no cover at all, a product under
+ * INVENTORY_MIN_STOCK_UNITS is `watch`. Null when it is not an exception.
  */
 export function inventoryStatus(stock, coverDays) {
   if (stock === null || stock === undefined || !Number.isFinite(Number(stock))) return null;
   if (Number(stock) <= 0) return 'out';
-  if (coverDays === null || coverDays === undefined || !Number.isFinite(Number(coverDays))) return null;
-  const limit = STATUS_LIMITS.find((l) => Number(coverDays) <= l.maxDays);
-  return limit ? limit.status : null;
+  const hasCover = coverDays !== null && coverDays !== undefined && Number.isFinite(Number(coverDays));
+  const limit = hasCover ? STATUS_LIMITS.find((l) => Number(coverDays) <= l.maxDays) : undefined;
+  if (limit) return limit.status;
+  return Number(stock) < INVENTORY_MIN_STOCK_UNITS ? 'watch' : null;
 }
 
 // --- revenue ------------------------------------------------------------------

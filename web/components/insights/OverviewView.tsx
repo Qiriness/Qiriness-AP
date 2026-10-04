@@ -149,7 +149,7 @@ export function OverviewView({ panel, compareLabel }: { panel: OverviewPanel; co
 
       <Grid min={26} pin="stock-report" label={t("insights.overview.stockRow")}>
         <Card title={t("insights.overview.inventory")} span={2} aside={<span>{inventoryAside(panel.inventory, t)}</span>}>
-          <InventoryTable inventory={panel.inventory} limit={6} />
+          <InventoryTable inventory={panel.inventory} />
         </Card>
         <Card title={t("insights.overview.report")}>
           <p className={styles.muted}>{t("insights.overview.reportNote")}</p>

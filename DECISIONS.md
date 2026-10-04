@@ -901,8 +901,28 @@ The match against the shop is done in code, never by the model.
 - **Charged gifts:** all three #6452 tickets reach « Masque Or offert », `conditions_met`.
 
 **Limits, stated:**
-- A gift the customer left out of the basket, or one out of stock, leaves no charged line, so nothing is checked.
+- A gift the customer left out of the basket, or one out of stock, leaves no charged line, so nothing is checked. (The stock is now reported, for the remedy rather than the cause: see « A missing gift's remedy reads today's stock » below.)
 - A 3+1 applied once reads `applied` even when the complaint is that it applied to one product of three (#2798).
+
+### A missing gift's remedy reads today's stock (2026-10-04)
+
+**Asked by the owner.** When a gift is missing, from the basket or from the parcel, the fix is to send it, or to offer something in its place when it is gone. Which of the two depends on the stock **when the ticket is answered**, not on the order date. So the order-date question this file once raised ("was it out of stock then?") is not the one that matters, and a snapshot from the last product sync is the right source.
+
+- **New need `promotion_reward_stock`:** `in_stock` / `partial` / `out_of_stock` / `no_reward` / `unknown`. `checkPromotionOutcome` computes it for every outcome, not only `reward_not_in_basket`. « Il me manque les produits offerts » on an `applied` 3+1 (#4977) needs it just as much.
+- **Which product:** a reward line on the order if there is one. Otherwise the gift product(s) the offer names. For a 3+1, it is the qualifying lines, because the « +1 » is one more of what was bought. `partial` is a 3+1 over a mixed basket, or a two-product gift, where only some of the candidates can be sent.
+- **In stock means `buildStock().purchasable`**, the rule already used for stock questions: an archived product or a -1 count is never in stock. A product row that can't be found makes the whole answer `unknown`. A free item scoped only by variant (two expired gifts) or a collection that was never synced is also `unknown`, never guessed.
+- **It reads the same first outcome check as `promotion_outcome`**, through `firstOutcomeCheck`, so the two facts always describe the same offer. It is satisfied even when the outcome is `undetermined`, because the offer itself names the gift.
+- **No rule uses it yet.** What to send instead, and whether a person approves it, is the merchant's decision in the Rulebook. It is not code.
+
+Measured 2026-10-04 on the live offers: 15 are gifts or 3+1s, and 12 name their reward product(s) directly. Every current reward product is in stock; the lowest is the Gua Sha, at 19.
+
+**Samples get the same treatment: need `sample_stock`** (`in_stock` / `partial` / `out_of_stock` / `no_samples` / `unknown`), read by `checkOrderPromotion` for P-20 « je n'ai pas reçu mes échantillons ».
+- **Samples are order lines, not something we can't see.** Over 90 days, 287 of 754 orders carried 722 sample lines, all with a `product_id`, spread over 7 `SAMPLE PRODUCT`s, all with tracked stock (the lowest is BB Crème Light, at 141). `buildPromotions` now keeps each sample's `productId`. An order bundle stored before that has none, which reads `unknown` until the order pass rebuilds it.
+- **The order says what was meant to be packed, not what arrived.** A sample listed on the order doesn't prove it was in the parcel.
+- **One reader, `stock-by-id.mjs`, for gifts and samples alike.** "Can it be sent?" must mean the same thing for both. Samples are not excluded there, unlike every customer-facing product lookup, because being sent in a parcel is exactly what they are for.
+- **The approved rule `p20_echantillons_manquants` claimed samples are not order lines.** That premise was wrong, and the corrected text is in CHANGELOG (2026-10-04).
+- **P-20 is « les échantillons OU le cadeau », so the gifts get their own fact: `order_gift_stock`** (`no_gifts` in place of `no_samples`). The gift lines come from the same `checkOrderPromotion` call. A rule that branches on `sample_stock` alone offers to resend samples to a customer who is missing a gift. And no rule can tell which item is missing; only the customer's message says. So the P-20 rule (`p20_offerts_manquants_stock`) requires both facts to be known and keeps one route, `needs_human`. Its text handles each item the customer says is missing: send it if it's in stock, otherwise ask alternative or wait.
+- **Collection:** P-20 is rule-directed, so the samples' stock is collected only once a rule branches on `sample_stock`. Declaring the need on the situation alone would not make the planner fetch it.
 
 ### Promotion answers branch on the kind and the outcome, and are shared, not per situation (2026-10-01)
 
@@ -3433,6 +3453,17 @@ With the company's rules in Policies, the owner asked for the knowledge base to 
 
 **Known gap, not acted on:** a Product FAQ is only searched for product tickets. « Le masque LED n'était pas dans mon colis » (in « Masque LED Visage — Questions fréquentes », still filed `faq`) is a delivery question. Filed as Product FAQ, it would be hidden from the delivery tickets that ask it. Move such a question to an Order FAQ rather than widening the group.
 
+### « Format as FAQ » arranges an article, it does not write one (2026-10-04)
+
+The Optimize button was a client-side stub that only removed empty paragraphs. The owner asked for it to put an article into the FAQ format above, as a formatter rather than a text generator, and cheaply.
+
+- **The model answers with block numbers, not text.** The article is split into numbered blocks (a heading, a line, a whole list or table); the model says which block is each question, which are its rewordings and which answer it; `scripts/lib/faq-format.mjs` rebuilds the HTML from the original blocks. An answer therefore comes out word for word, links and lists included. Every index is checked: one out of range or already used is ignored, so a bad plan can misplace a block but never duplicate or drop one.
+- **The one thing it may write is a missing question.** A topic under a label (« Livraison ») or under no heading gets a question written from its answer, because a section without a question heading is not an FAQ entry. A heading the plan did not use is dropped: a label with no text of its own was already skipped by `htmlToSections`, so no chunk changes.
+- **It never writes rewordings.** The guide says to take them from real emails; invented ones would look real and steer retrieval. The toast counts the questions that have none.
+- **Nothing is lost.** A content block the plan did not place is kept ahead of the first question and counted in the toast.
+- **Formats the editor, saves nothing.** The result lands unsaved, demotes an approved article like any edit, and waits for Save. Hidden on the brand voice (the drafting prompt) and on Brand story (not an FAQ).
+- **Model: `gpt-6-luna`**, the cheapest on the rate card ($0.10 in / $0.50 out per 1M), overridable with `KNOWLEDGE_FORMAT_MODEL`. Placing blocks is classification, not writing. Measured 2026-10-04 on the two largest real articles: « Masque LED Visage — Questions fréquentes » (46 blocks) cost 2,105 + 842 tokens, about $0.0006; « FAQ » (35 blocks, imported with H3s) 1,509 + 702. Both came out as 12 H2 questions with every answer unchanged. Recorded in `llm_usage` as pass `other`: a pass of its own would need the check constraint widened, for a click.
+
 Nothing auto-writes `knowledge_documents`; the catalog sync only fills `shopify_content_sources`. `source_type` → `manual` **is** the manual-edit lock — no separate flag, and resync is then unavailable.
 
 The one fixed slot is the Brand voice (`core_topic = 'brand'`): shown as a placeholder until created, never a database row before then. The « Core setup » checklist was removed 2026-10-01 (§ The search path to policies…).
@@ -3829,6 +3860,7 @@ Asked for by the owner: the Shopify admin's order list, inside the app, so looki
 - **Facets come from the data, grouped on the list's own filter expressions**, so each option's count is exactly what selecting it returns — all 17 checked against the live table. Today that is only `FULFILLED` (5,977) and `UNFULFILLED` (31), plus 14 countries and one order with no destination (`??`); a status Shopify adds later appears without a code change.
 - **VIP is `vip_customers()`**, never compared in TypeScript — the same rule as the queue, the Customers panel and `open_orders()`.
 - **The carrier is `order_fulfilment_timing`'s derivation** (lowest tracking company through `normalise_carrier()`), so a row and the Fulfilment carrier table cannot name different carriers. A test pins both.
+- **The ring also marks the Fulfilment panel's orders waiting to ship (2026-10-04, at the owner's request)**, from the same `loadOrderTicketMarks`, with the same tooltip and legend. An unshipped order somebody has written about is the one to ship first, and two colour rules for one order would contradict each other. On 2026-10-04, 2 of the 8 waiting orders had an open ticket.
 - **Fulfilment status was drawn neutral, then given a light amber dot at the owner's request (same day).** The first version kept colour for the ticket ring alone. Amber marks an order not yet fulfilled; it is pale (#ffd98a on #e8a93a) so it does not read as the orange ring, and local to the page because gold belongs to VIP and `--warning` is the orange ramp.
 
 ### An order emptied before it shipped says Cancelled or Refunded, not Unfulfilled (2026-09-18)
@@ -4505,7 +4537,7 @@ Built from the owner's example report, which ran on mock data. **Every figure on
 
 ### Stock is now; its cover is read at a fixed window (2026-09-22)
 
-The inventory card lists **active** products out of stock or with at most 30 days of cover. Stock is `products.available_stock` at the last product sync — a snapshot, like the orders waiting to ship, so **the date range does not cut it**, and the month-end report says it is today's stock. Cover is read at the rate units left over **the last 30 days whatever range is selected**, so "5 days of cover" means one thing on every panel; **free lines count**, because a sample leaves the shelf like a sale, and all channels count, because it is one warehouse. Out of stock ≤ 0, critical ≤ 7 days, low ≤ 14, watch ≤ 30 — words and thresholds in `sales-overview.mjs`, SQL takes only the cut-off. A product that sold nothing has no cover and is listed only when it is out. There is no replenishment column: no purchase order reaches the app, and "planned" would be a claim.
+The inventory card lists **active** products out of stock, with at most 30 days of cover, **or with fewer than 50 units whatever their cover** (added 2026-10-04 at 30 units, raised to 50 the same day at the owner's request: three slow sellers at 3, 17 and 19 units were missing while the card showed only the five out of stock; a handful of units is one order from out, and a long cover hid them). Such a product reads **Watch**, unless its cover already places it higher. Every listed product is shown — no cap on the Overview card or in the report. Stock is `products.available_stock` at the last product sync — a snapshot, like the orders waiting to ship, so **the date range does not cut it**, and the month-end report says it is today's stock. Cover is read at the rate units left over **the last 30 days whatever range is selected**, so "5 days of cover" means one thing on every panel; **free lines count**, because a sample leaves the shelf like a sale, and all channels count, because it is one warehouse. Out of stock ≤ 0, critical ≤ 7 days, low ≤ 14, watch ≤ 30 — words and thresholds in `sales-overview.mjs`, SQL takes only the cut-off. A product that sold nothing has no cover and is listed only when it is out or under 50 units. The unit floor is `INVENTORY_MIN_STOCK_UNITS`, beside the cover cut-off; SQL takes both as arguments. There is no replenishment column: no purchase order reaches the app, and "planned" would be a claim.
 
 ### The monthly report is static HTML, rendered by a pure function (2026-09-22)
 

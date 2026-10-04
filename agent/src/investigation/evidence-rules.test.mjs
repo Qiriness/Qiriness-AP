@@ -295,6 +295,68 @@ test('promotion_outcome is the first checked promotion, and undetermined does no
   assert.equal(settled.state, 'satisfied');
 });
 
+test('sample_stock reads the order check, and an unreadable sample leaves it open', () => {
+  const check = (outcome, stock, products = []) => ({
+    id: 't1',
+    tool: TOOL_NAMES.CHECK_ORDER_PROMOTION,
+    outcome,
+    data: { applied: outcome === 'applied', sampleStock: { stock, products } }
+  });
+  const tools = [TOOL_NAMES.CHECK_ORDER_PROMOTION];
+
+  const [gone] = resolveNeeds(['sample_stock'], [check('none', 'out_of_stock', [{ title: 'BB Crème Light - échantillons', inStock: false }])], tools);
+  assert.equal(gone.state, 'satisfied');
+  assert.equal(gone.finding, 'out_of_stock');
+  assert.deepEqual(gone.details.products, [{ title: 'BB Crème Light - échantillons', inStock: false }]);
+
+  // Nothing to resend is an answer, worded for the person writing the rule.
+  assert.equal(finding('sample_stock', [check('applied', 'none')]), 'no_samples');
+
+  const [open] = resolveNeeds(['sample_stock'], [check('applied', 'unknown')], tools);
+  assert.notEqual(open.state, 'satisfied');
+  assert.equal(open.finding, 'unknown');
+  assert.equal(finding('sample_stock', []), 'unknown');
+});
+
+test('order_gift_stock is the gifts on the order, read beside the samples', () => {
+  const check = (giftStock) => ({
+    id: 't1',
+    tool: TOOL_NAMES.CHECK_ORDER_PROMOTION,
+    outcome: 'applied',
+    data: { applied: true, sampleStock: { stock: 'in_stock', products: [] }, giftStock }
+  });
+  const [gift] = resolveNeeds(['order_gift_stock'], [check({ stock: 'out_of_stock', products: [{ title: 'Sauna Visage', inStock: false }] })], [TOOL_NAMES.CHECK_ORDER_PROMOTION]);
+  assert.equal(gift.state, 'satisfied');
+  assert.equal(gift.finding, 'out_of_stock');
+  assert.deepEqual(gift.details.products, [{ title: 'Sauna Visage', inStock: false }]);
+  assert.equal(finding('order_gift_stock', [check({ stock: 'none', products: [] })]), 'no_gifts');
+  assert.equal(finding('order_gift_stock', [check({ stock: 'unknown', products: [] })]), 'unknown');
+});
+
+test('promotion_reward_stock reads the same first check, and settles even when the outcome does not', () => {
+  const check = (id, outcome, stock, products = []) => ({
+    id,
+    tool: TOOL_NAMES.CHECK_PROMOTION_OUTCOME,
+    outcome,
+    data: { found: true, outcome, promotion: 'Masque Or offert', checks: [], reward: { stock, products } }
+  });
+  const tools = [TOOL_NAMES.CHECK_PROMOTION_OUTCOME];
+
+  // The gift is named by the offer, so its stock is known with no verdict on why.
+  const [gone] = resolveNeeds(['promotion_reward_stock'], [check('t1', 'undetermined', 'out_of_stock', [{ title: "Wrap d'Or", inStock: false }])], tools);
+  assert.equal(gone.state, 'satisfied');
+  assert.equal(gone.finding, 'out_of_stock');
+  assert.deepEqual(gone.details.products, [{ title: "Wrap d'Or", inStock: false }]);
+
+  // A later check about another offer does not speak for the ticket.
+  const [first] = resolveNeeds(['promotion_reward_stock'], [check('t1', 'applied', 'unknown'), check('t2', 'reward_not_in_basket', 'in_stock')], tools);
+  assert.equal(first.finding, 'unknown');
+  assert.notEqual(first.state, 'satisfied');
+
+  assert.equal(finding('promotion_reward_stock', [check('t1', 'applied', 'no_reward')]), 'no_reward');
+  assert.equal(finding('promotion_reward_stock', []), 'unknown');
+});
+
 test('a refused code is validity unknown, never not_found', () => {
   // c8ef367a: the customer typed no code, the model's guess was refused, and
   // « votre code n'existe pas » followed.

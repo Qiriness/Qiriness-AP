@@ -8,6 +8,8 @@ import { formatDayL } from "@/lib/insights-labels";
 import { Segmented } from "./Segmented";
 import t from "./tables.module.css";
 import styles from "./OpenOrders.module.css";
+// The ring is the Orders page's own, so an order reads the same on both.
+import ordersCss from "../orders/OrdersView.module.css";
 
 type View = "vip" | "all";
 
@@ -19,6 +21,10 @@ type View = "vip" | "all";
  * up (a marketplace buyer can never be a VIP: they are a new customer record
  * per order). Three days or more is red, the same line the dispatch figures
  * above are held to.
+ *
+ * THE RING ON THE NAME is the Orders page's: an open ticket on that order, in
+ * its queue band's colour. No ring says nothing — a ticket that never quoted
+ * the order number leaves none.
  */
 export function OpenOrders({ orders, vipRuleSet }: { orders: OpenOrder[]; vipRuleSet: boolean }) {
   const tr = useT();
@@ -32,6 +38,7 @@ export function OpenOrders({ orders, vipRuleSet }: { orders: OpenOrder[]; vipRul
   const rows = view === "vip" ? orders.filter((o) => o.isVip) : orders;
   const late = rows.filter((o) => o.late).length;
   const vipCount = orders.filter((o) => o.isVip).length;
+  const ringed = rows.some((o) => o.ticket);
 
   return (
     <div className={styles.wrap}>
@@ -80,7 +87,10 @@ export function OpenOrders({ orders, vipRuleSet }: { orders: OpenOrder[]; vipRul
               {rows.map((o) => (
                 <tr key={o.orderId} className={o.late ? styles.lateRow : undefined}>
                   <th scope="row">
-                    {o.customerName ?? <span className={t.muted}>{tr("insights.fulfilment.open.noName")}</span>}
+                    <span className={ordersCss.ring} data-band={o.ticket?.band} title={ticketNote(o, tr)}>
+                      {o.customerName ?? <span className={t.muted}>{tr("insights.fulfilment.open.noName")}</span>}
+                      {o.ticket ? <span className={ordersCss.srOnly}>{ticketNote(o, tr)}</span> : null}
+                    </span>
                     {o.isVip ? <span className={styles.vip}>VIP</span> : null}
                   </th>
                   <td>{o.email ? <span className={styles.email}>{o.email}</span> : <span className={t.muted}>—</span>}</td>
@@ -118,8 +128,25 @@ export function OpenOrders({ orders, vipRuleSet }: { orders: OpenOrder[]; vipRul
           </table>
         </div>
       )}
+
+      {ringed ? (
+        <p className={ordersCss.legend}>
+          <span className={ordersCss.legendSwatches} aria-hidden="true">
+            <span className={ordersCss.ring} data-band="high" />
+            <span className={ordersCss.ring} data-band="medium" />
+            <span className={ordersCss.ring} data-band="low" />
+          </span>
+          {tr("orders.ringLegend")}
+        </p>
+      ) : null}
     </div>
   );
+}
+
+/** The ring's tooltip and screen-reader text, as on the Orders page. */
+function ticketNote(o: OpenOrder, tr: (key: string, params?: Record<string, string | number>) => string): string | undefined {
+  if (!o.ticket) return undefined;
+  return tr("orders.ticketNote", { count: o.ticket.openTickets, band: tr(`tickets.view.priority.${o.ticket.band}`).toLowerCase() });
 }
 
 function statusLabel(status: string, tr: (key: string) => string): string {

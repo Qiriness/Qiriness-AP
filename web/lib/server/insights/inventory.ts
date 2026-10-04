@@ -14,6 +14,7 @@ import { RPC } from "../../../../scripts/lib/tables.mjs";
 import { fromKey, toKey } from "../../../../scripts/lib/insights-range.mjs";
 import {
   INVENTORY_MAX_COVER_DAYS,
+  INVENTORY_MIN_STOCK_UNITS,
   INVENTORY_WINDOW_DAYS,
   inventoryStatus,
 } from "../../../../scripts/lib/sales-overview.mjs";
@@ -30,6 +31,7 @@ export async function getInventoryExceptions(ctx: InsightsContext): Promise<Inve
     p_to: to,
     p_tz: ctx.tz,
     p_max_cover_days: INVENTORY_MAX_COVER_DAYS,
+    p_max_stock_units: INVENTORY_MIN_STOCK_UNITS,
   });
 
   const items: InventoryException[] = [];
@@ -51,5 +53,5 @@ export async function getInventoryExceptions(ctx: InsightsContext): Promise<Inve
       status,
     });
   }
-  return { items, windowDays: INVENTORY_WINDOW_DAYS, syncedAt };
+  return { items, windowDays: INVENTORY_WINDOW_DAYS, minStockUnits: INVENTORY_MIN_STOCK_UNITS, syncedAt };
 }

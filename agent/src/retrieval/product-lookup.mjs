@@ -2,6 +2,7 @@ import { supabaseSelectAll } from '../../../scripts/lib/supabase-rest-client.mjs
 
 import { buildProductIndex, matchProduct } from './product-matching.mjs';
 import { buildProductContext, buildStock, toPromptText } from './product-context.mjs';
+import { readStockByShopifyIds } from './stock-by-id.mjs';
 
 /**
  * Renders one product, or several with the ambiguity stated up front.
@@ -115,6 +116,14 @@ export function createProductLookup({ supabase, shopId, logger }) {
   }
 
   return {
+    /**
+     * Stock of products already named by id — an order's samples. Samples
+     * included, unlike every matcher here: being sent is what they are for.
+     */
+    stockByShopifyIds(ids = []) {
+      return readStockByShopifyIds(supabase, shopId, ids);
+    },
+
     /**
      * The product a message is about, as the CATALOGUE identifies it.
      *

@@ -1,7 +1,15 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { OUTCOMES, basketFromCheckout, basketFromOrder, combinable, evaluateOutcome } from './promotion-outcome.mjs';
+import {
+  OUTCOMES,
+  basketFromCheckout,
+  basketFromOrder,
+  combinable,
+  evaluateOutcome,
+  rewardProductIds,
+  rewardStock
+} from './promotion-outcome.mjs';
 
 // Rows shaped like the live offers of 2026-10-01; baskets like the real orders
 // behind the tickets named in each test.
@@ -177,4 +185,35 @@ test('every outcome is in the closed vocabulary', () => {
   ]) {
     assert.ok(OUTCOMES.includes(r.outcome));
   }
+});
+
+// --- the free item: which product, and whether it can be sent now ----------
+
+test('a gift on the order is the item; a gift left out is the one the offer names', () => {
+  assert.deepEqual(rewardProductIds({ promotion: OR, basket: order([line(1, 40), line(91, 6.23, 0)]) }), [P(91)]);
+  assert.deepEqual(rewardProductIds({ promotion: OR, basket: order([line(1, 40)]) }), [P(91)]);
+  assert.deepEqual(rewardProductIds({ promotion: OR, basket: null }), [P(91)]);
+});
+
+test('a 3+1 rewards one more of what qualified, and an unsynced collection names nothing', () => {
+  const members = new Map([[MONODOSE, new Set([P(10), P(11), P(12)])]]);
+  // « commandé 3 reçu 3 et non 4 » — the 4th is one of the masks bought.
+  assert.deepEqual(rewardProductIds({ promotion: THREE_PLUS_ONE, basket: order([line(10, 6, 6, 3)]), members }), [P(10)]);
+  assert.deepEqual(rewardProductIds({ promotion: THREE_PLUS_ONE, basket: order([line(1, 40)]), members }), [P(10), P(11), P(12)]);
+  assert.equal(rewardProductIds({ promotion: THREE_PLUS_ONE, basket: order([line(10, 6, 6, 3)]) }), null);
+});
+
+test('an offer with no free item has no reward, which is not the same as unknown', () => {
+  assert.deepEqual(rewardProductIds({ promotion: SHIPPING, basket: order([line(1, 40)]) }), []);
+  assert.deepEqual(rewardProductIds({ promotion: QIRINESS20, basket: null }), []);
+  assert.equal(rewardStock([]), 'no_reward');
+  assert.equal(rewardStock(null), 'unknown');
+});
+
+test('the stock answer: all, some or none sendable — and a missing product row is unknown', () => {
+  const ids = [P(10), P(11)];
+  assert.equal(rewardStock(ids, [{ id: P(10), purchasable: true }, { id: P(11), purchasable: true }]), 'in_stock');
+  assert.equal(rewardStock(ids, [{ id: P(10), purchasable: true }, { id: P(11), purchasable: false }]), 'partial');
+  assert.equal(rewardStock(ids, [{ id: P(10), purchasable: false }, { id: P(11), purchasable: false }]), 'out_of_stock');
+  assert.equal(rewardStock(ids, [{ id: P(10), purchasable: true }]), 'unknown');
 });

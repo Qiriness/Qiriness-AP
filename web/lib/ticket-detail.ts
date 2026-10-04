@@ -376,7 +376,10 @@ function describeDetails(need: unknown, details: any): string[] {
       break;
     }
 
-    case "product_availability": {
+    case "product_availability":
+    case "promotion_reward_stock":
+    case "sample_stock":
+    case "order_gift_stock": {
       const products: any[] = Array.isArray(details.products) ? details.products : [];
       for (const product of products) {
         const title = nonEmpty(product?.title);
@@ -494,6 +497,10 @@ const FINDING_LABELS: Record<string, string> = {
   undetermined: "undetermined",
   in_stock: "in stock",
   out_of_stock: "out of stock",
+  partial: "partly in stock",
+  no_reward: "no free item",
+  no_samples: "no samples on the order",
+  no_gifts: "no gifts on the order",
   resolved: "resolved",
   ambiguous: "ambiguous",
   none: "none",

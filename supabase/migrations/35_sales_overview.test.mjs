@@ -35,11 +35,21 @@ test('35 carries the three functions and nothing else', () => {
   assert.deepEqual(created, FUNCTIONS);
 });
 
+// insights_inventory_exceptions is SUPERSEDED BY 65, which adds
+// `p_max_stock_units`; 35's copy is the record of what was applied on
+// 2026-09-22, and 65's test compares the current one against 06.
 test('35 copies each function from 06 rather than retyping it', () => {
-  for (const name of FUNCTIONS) {
+  for (const name of ['insights_sales_overview', 'insights_promotions']) {
     assert.ok(statementOf(SQL, name), name);
     assert.equal(statementOf(SQL, name), statementOf(ANALYTICS, name), name);
   }
+});
+
+test("35's stock function is the five-argument shape 65 replaced", () => {
+  const statement = statementOf(SQL, 'insights_inventory_exceptions');
+  assert.ok(statement);
+  assert.match(statement, /p_max_cover_days numeric\n\)/);
+  assert.doesNotMatch(statement, /p_max_stock_units/);
 });
 
 test('the web reaches them through tables.mjs', () => {

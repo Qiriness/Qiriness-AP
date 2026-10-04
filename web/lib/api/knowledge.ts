@@ -76,6 +76,18 @@ export async function resyncArticle(id: string): Promise<Article> {
   return mapArticleResponse(article);
 }
 
+export interface FaqFormatResult {
+  content: string;
+  questions: number;
+  withoutRewordings: number;
+  unplaced: number;
+}
+
+/** Rearranges content into the FAQ shape. Writes nothing; the caller puts it in the editor. */
+export async function formatAsFaq(payload: { title: string; content: string }): Promise<FaqFormatResult> {
+  return request<FaqFormatResult>("/api/knowledge/format", { method: "POST", body: JSON.stringify(payload) });
+}
+
 export async function deleteArticle(id: string): Promise<void> {
   await request<void>(`/api/knowledge/articles/${id}`, { method: "DELETE" });
 }

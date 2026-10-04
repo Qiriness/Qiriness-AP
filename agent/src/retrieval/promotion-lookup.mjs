@@ -1,7 +1,8 @@
 import { promotionMechanic } from '../../../scripts/lib/promotion-mechanic.mjs';
 import { supabaseSelectAll } from '../../../scripts/lib/supabase-rest-client.mjs';
 
-import { evaluateOutcome } from './promotion-outcome.mjs';
+import { evaluateOutcome, rewardProductIds, rewardStock } from './promotion-outcome.mjs';
+import { readStockByShopifyIds } from './stock-by-id.mjs';
 import { evaluateEligibility, findPromotionByCode, normaliseCode } from './promotion-rules.mjs';
 
 // The promotion tool: everything support needs to answer "pourquoi mon code ne
@@ -101,6 +102,25 @@ export function createPromotionLookup({ supabase, shopId, logger }) {
       }
     }
     return found;
+  }
+
+  /**
+   * Whether the offer's free item can be sent now: its products' stock at the
+   * last product sync, read through `buildStock` so a draft or a -1 count is
+   * never "in stock". A read that fails is `unknown`, never a refusal of the
+   * outcome it is attached to.
+   */
+  async function loadRewardStock(ids) {
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return { stock: rewardStock(ids), products: [] };
+    }
+    try {
+      const products = await readStockByShopifyIds(supabase, shopId, ids);
+      return { stock: rewardStock(ids, products), products };
+    } catch (error) {
+      logger?.warn?.('promotion.reward_stock_failed', { reason: error.message });
+      return { stock: 'unknown', products: [] };
+    }
   }
 
   /**
@@ -420,7 +440,7 @@ export function createPromotionLookup({ supabase, shopId, logger }) {
         const names = [...(basket?.applied || []), ...(basket?.codes || [])];
         const others = rows.filter((row) => row.id !== promotion.id && names.some((n) => resolveRef(n, [row])));
         const members = await loadMembers([promotion, ...others].flatMap((row) => collectionsOf(row)));
-        return evaluateOutcome({ promotion, basket, others, members });
+        return { ...evaluateOutcome({ promotion, basket, others, members }), members };
       };
 
       // THE ORDER NAMES THE OFFER WHEN THE CUSTOMER DID NOT. A free item that
@@ -443,12 +463,19 @@ export function createPromotionLookup({ supabase, shopId, logger }) {
         return { found: false, ref: '', promptText: 'Aucune promotion identifiée, et aucun article offert facturé sur la commande.' };
       }
 
-      logger?.info?.('promotion.outcome', { outcome: result.outcome, mechanic: result.mechanic, basket: result.basketSource, instead: Boolean(instead) });
-      const text = renderOutcome(promotion, result);
+      // THE FREE ITEM'S STOCK NOW, whatever the outcome: a gift missing from
+      // the basket or from the parcel is put right by sending it, and whether
+      // it can be sent is today's stock, not the stock on the order date.
+      const { members, ...outcome } = result;
+      const reward = await loadRewardStock(rewardProductIds({ promotion, basket, members }));
+
+      logger?.info?.('promotion.outcome', { outcome: outcome.outcome, mechanic: outcome.mechanic, basket: outcome.basketSource, instead: Boolean(instead), reward: reward.stock });
+      const text = renderOutcome(promotion, outcome, reward);
       return {
         found: true,
         promotion: describe(promotion),
-        ...result,
+        ...outcome,
+        reward,
         instead,
         promptText: instead
           ? `L'offre « ${instead} » a bien été appliquée ; l'article facturé relève d'une autre offre.\n${text}`
@@ -596,7 +623,7 @@ const OUTCOME_FR = {
  * For the model: the verdict first, then the facts behind it, then — on their
  * own line — what could not be checked. A doubt is never folded into a fact.
  */
-function renderOutcome(promotion, result) {
+function renderOutcome(promotion, result, reward = null) {
   const lines = [`# « ${promotion.title} » — ${OUTCOME_FR[result.outcome] || result.outcome}`];
   lines.push(
     result.basketSource === 'order'
@@ -624,9 +651,19 @@ function renderOutcome(promotion, result) {
       lines.push(`- Ne se cumule pas avec « ${c.with} », déjà appliquée.`);
     }
   }
+  if (reward && reward.stock !== 'no_reward') lines.push(renderRewardStock(reward));
   const unknown = result.checks.filter((c) => c.status === 'unknown').map((c) => CHECK_FR[c.id] || c.id);
   if (unknown.length > 0) lines.push(`Non vérifiable : ${unknown.join(', ')}.`);
   return lines.join('\n');
+}
+
+/** Today's stock of the free item — what decides whether it can be sent. */
+function renderRewardStock(reward) {
+  if (reward.stock === 'unknown' || reward.products.length === 0) {
+    return "Stock actuel de l'article offert : impossible à établir.";
+  }
+  const items = reward.products.map((p) => `« ${p.title} » ${p.purchasable ? 'en stock' : 'indisponible'}`);
+  return `Stock actuel de l'article offert : ${items.join(', ')}.`;
 }
 
 const CHECK_FR = {

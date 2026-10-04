@@ -564,9 +564,10 @@ const PROMOTED_ORDER = {
     { kind: 'automatic', name: 'Sauna Visage offert', percentage: 100, amount: null, target_type: 'LINE_ITEM' }
   ],
   line_items: [
-    { title: 'Caresse Regard Sublime - échantillon', original_total: 0, discounted_total: 0, discounts: [] },
+    { title: 'Caresse Regard Sublime - échantillon', product_id: 'gid://shopify/Product/9093900000001', original_total: 0, discounted_total: 0, discounts: [] },
     {
       title: 'Sauna Visage/Bain Vapeur - 6 Galets Aromatiques',
+      product_id: 'gid://shopify/Product/9093893849370',
       original_total: 20.9,
       discounted_total: 0,
       discounts: [{ amount: 20.9, name: 'Sauna Visage offert' }]
@@ -582,7 +583,8 @@ test('a gift is a line whose price went to zero, and it is named with its promot
     {
       title: 'Sauna Visage/Bain Vapeur - 6 Galets Aromatiques',
       value: 20.9,
-      promotions: ['Sauna Visage offert']
+      promotions: ['Sauna Visage offert'],
+      productId: 'gid://shopify/Product/9093893849370'
     }
   ]);
   assert.equal(promotions.total, 20.9);
@@ -591,7 +593,7 @@ test('a gift is a line whose price went to zero, and it is named with its promot
 
 test('a sample is never a gift: it was never priced', () => {
   const { promotions } = buildOrderContext(PROMOTED_ORDER, CUSTOMER, { now: NOW }).order;
-  assert.deepEqual(promotions.samples, [{ title: 'Caresse Regard Sublime - échantillon' }]);
+  assert.deepEqual(promotions.samples, [{ title: 'Caresse Regard Sublime - échantillon', productId: 'gid://shopify/Product/9093900000001' }]);
   assert.equal(
     promotions.gifts.some((gift) => gift.title.includes('échantillon')),
     false

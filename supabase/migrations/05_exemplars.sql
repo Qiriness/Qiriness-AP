@@ -133,6 +133,7 @@ create table public.support_exemplars (
       'delivery_delay_state', 'payment_state',
       'refund_state', 'return_eligibility', 'buyer_type',
       'promotion_identity', 'promotion_validity', 'promotion_eligibility', 'promotion_outcome',
+      'promotion_reward_stock', 'sample_stock', 'order_gift_stock',
       'customer_identity', 'customer_account_state', 'customer_history',
       'purchase_verified', 'photo_evidence', 'reaction_product',
       'brand_answer', 'policy_attached', 'checkout_state', 'other_fact'

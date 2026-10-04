@@ -8,7 +8,8 @@
  * states.
  *
  * VIP COMES FROM THE SHOP'S RULE through `open_orders()` -> `vip_customers()`,
- * never compared here.
+ * never compared here. THE TICKET RING is the Orders page's, from
+ * ../order-ticket-marks.ts.
  *
  * PERSONAL DATA: names and email addresses are read here and rendered on the
  * page, as the Customers call list does, so the card carries the same warning.
@@ -25,6 +26,8 @@ import {
   wallClock,
 } from "../../../../scripts/lib/insights-range.mjs";
 import { loadVipRule } from "../../../../scripts/lib/vip-rule.mjs";
+import { orderNumberKey } from "../../../../scripts/lib/order-list-query.mjs";
+import { loadOrderTicketMarks } from "../order-ticket-marks";
 import type { OpenOrder, PlatformId } from "../../types";
 import type { InsightsContext } from "./context";
 import { callRpc, count, getSupabaseClient } from "./shared";
@@ -36,7 +39,7 @@ const DAY_MS = 86_400_000;
 
 export async function getOpenOrders(ctx: InsightsContext): Promise<{ orders: OpenOrder[]; vipRuleSet: boolean }> {
   const supabase = getSupabaseClient();
-  const rule = await loadVipRule(supabase, ctx.shopId);
+  const [rule, marks] = await Promise.all([loadVipRule(supabase, ctx.shopId), loadOrderTicketMarks(ctx.shopId)]);
   const { channels, notChannels } = ctx.marketplaces.channelFilter(ctx.platform);
 
   const rows = await callRpc<Record<string, unknown>>(RPC.OPEN_ORDERS, {
@@ -77,6 +80,7 @@ export async function getOpenOrders(ctx: InsightsContext): Promise<{ orders: Ope
         customerName: (row.customer_name as string | null) ?? null,
         email: ctx.marketplaces.isMarketplace(platform) ? null : ((row.customer_email as string | null) ?? null),
         isVip: row.is_vip === true,
+        ticket: marks.get(orderNumberKey(row.order_name) ?? "") ?? null,
       };
     }),
   };

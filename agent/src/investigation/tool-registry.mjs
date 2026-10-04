@@ -3,6 +3,7 @@ import { amountAboveConsumerCeiling, deriveBuyerType } from './trade-signals.mjs
 import { orderStates, toOrderContextText } from '../resolution/order-context.mjs';
 import { orderIdentitySituation } from '../resolution/order-identity.mjs';
 import { basketFromCheckout, basketFromOrder } from '../retrieval/promotion-outcome.mjs';
+import { stockOfAll } from '../retrieval/stock-by-id.mjs';
 
 import { toPromptText as photoPromptText } from './photo-evidence.mjs';
 
@@ -408,6 +409,31 @@ export function createToolRegistry({
   const activePolicies = () => policyLibrary.policies.filter((p) => p.active);
 
   /**
+   * Whether the order's free items — its samples, or its gifts — can be sent
+   * again now: what P-20 « je n'ai pas reçu les échantillons ou le cadeau » is
+   * put right with. An item stored before the bundle kept its product id
+   * cannot be looked up, so the answer is `unknown`, and a failed read is
+   * too: it never fails the order check.
+   */
+  async function readItemStock(items = []) {
+    if (items.length === 0) return { stock: 'none', products: [] };
+    const ids = items.map((item) => item.productId || null);
+    if (ids.some((id) => !id) || typeof productLookup?.stockByShopifyIds !== 'function') {
+      return { stock: 'unknown', products: [] };
+    }
+    try {
+      const products = await productLookup.stockByShopifyIds(ids);
+      return {
+        stock: stockOfAll([...new Set(ids)], products),
+        products: products.map((p) => ({ title: p.title, inStock: Boolean(p.purchasable) }))
+      };
+    } catch (error) {
+      logger?.warn?.('tool.item_stock_failed', { reason: error.message });
+      return { stock: 'unknown', products: [] };
+    }
+  }
+
+  /**
    * Handlers, bound per ticket.
    *
    * Each returns the same envelope:
@@ -646,6 +672,11 @@ export function createToolRegistry({
             instead: result.instead ?? null,
             mechanic: result.mechanic,
             basket: result.basketSource,
+            // The free item's stock now — whether a missing gift can be sent.
+            reward: {
+              stock: result.reward?.stock ?? 'unknown',
+              products: (result.reward?.products || []).map((p) => ({ title: p.title, inStock: Boolean(p.purchasable) }))
+            },
             checks: result.checks.map((c) => ({ id: c.id, status: c.status, reason: c.reason ?? null, with: c.with ?? null }))
           }
         };
@@ -841,6 +872,8 @@ export function createToolRegistry({
         const reductions = promotions.reductions || [];
         const applied = promotions.applied || [];
         const samples = promotions.samples || [];
+        const sampleStock = await readItemStock(samples);
+        const giftStock = await readItemStock(gifts);
         const lines = [];
 
         for (const gift of gifts) {
@@ -849,6 +882,7 @@ export function createToolRegistry({
               `${gift.promotions.length > 0 ? ` — promotion « ${gift.promotions.join(', ')} »` : ''}.`
           );
         }
+        if (gifts.length > 0) lines.push(itemStockText('des cadeaux', giftStock).trim());
         for (const reduction of reductions) {
           lines.push(
             `Remise sur ${reduction.title} : -${reduction.off} €` +
@@ -877,14 +911,16 @@ export function createToolRegistry({
               'Aucune promotion, remise ou cadeau n’a été appliqué à cette commande.' +
               (samples.length > 0
                 ? ` La commande contient ${samples.length} échantillon(s) — ce ne sont pas des cadeaux liés à une promotion : ${samples.map((sample) => sample.title).join(', ')}.`
-                : ''),
-            data: { applied: false, gifts: 0, reductions: 0, samples: samples.length }
+                : '') +
+              itemStockText('des échantillons', sampleStock),
+            data: { applied: false, gifts: 0, reductions: 0, samples: samples.length, sampleStock, giftStock }
           };
         }
 
         if (samples.length > 0) {
           lines.push(
-            `Échantillons inclus (jamais facturés, hors promotion) : ${samples.map((sample) => sample.title).join(', ')}.`
+            `Échantillons inclus (jamais facturés, hors promotion) : ${samples.map((sample) => sample.title).join(', ')}.` +
+              itemStockText('des échantillons', sampleStock)
           );
         }
 
@@ -897,6 +933,8 @@ export function createToolRegistry({
             gifts: gifts.length,
             reductions: reductions.length,
             samples: samples.length,
+            sampleStock,
+            giftStock,
             names: applied.map((promotion) => promotion.name).filter(Boolean)
           }
         };
@@ -1667,6 +1705,19 @@ function namedAmountOverCeiling(ticket) {
   const ceiling = amount(ticket?.parameters, 'consumer_order_ceiling');
   if (ceiling == null) return null;
   return amountAboveConsumerCeiling(ticket?.text ?? '', Number(ceiling));
+}
+
+/**
+ * Today's stock of the order's samples or gifts, for the model; empty when
+ * there are none. `which` is « des échantillons » or « des cadeaux ».
+ */
+function itemStockText(which, itemStock) {
+  if (!itemStock || itemStock.stock === 'none') return '';
+  if (itemStock.stock === 'unknown' || itemStock.products.length === 0) {
+    return `\nStock actuel ${which} : impossible à établir.`;
+  }
+  const items = itemStock.products.map((p) => `« ${p.title} » ${p.inStock ? 'en stock' : 'indisponible'}`);
+  return `\nStock actuel ${which} : ${items.join(', ')}.`;
 }
 
 /**

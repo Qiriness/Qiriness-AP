@@ -68,6 +68,7 @@ test('every code-callable tool gets the arguments its schema requires', () => {
     TOOL_NAMES.LOOKUP_CUSTOMER,
     TOOL_NAMES.LIST_ACTIVE_PROMOTIONS,
     TOOL_NAMES.GET_ORDER_CONTEXT,
+    TOOL_NAMES.CHECK_ORDER_PROMOTION,
     TOOL_NAMES.VERIFY_PURCHASE,
     TOOL_NAMES.CHECK_PHOTO_EVIDENCE
   ]) {

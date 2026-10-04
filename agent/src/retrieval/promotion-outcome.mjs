@@ -1,5 +1,7 @@
 import { promotionMechanic } from '../../../scripts/lib/promotion-mechanic.mjs';
 
+import { stockOfAll } from './stock-by-id.mjs';
+
 // WHY A PROMOTION DID OR DID NOT APPLY to one basket — an order, or the last
 // abandoned checkout. Pure: rows and basket in, verdict out.
 //
@@ -191,6 +193,54 @@ export function evaluateOutcome({ promotion, basket, others = [], members = new 
   // Every condition held and Shopify did not apply it — or, on a checkout, it
   // would have. Either way a person looks: nothing here explains a refusal.
   return { outcome: 'conditions_met', mechanic, checks, basketSource: basket.source };
+}
+
+/**
+ * Which products the offer's free item can be, for checking whether one can
+ * still be sent.
+ *
+ * THE BASKET FIRST: a reward line on the order IS the item (« reçu sans le
+ * Wrap d'Or » names a line that exists). Otherwise the offer's own reward scope:
+ * a gift names its product(s); a 3+1 rewards one more of what qualified, so the
+ * qualifying lines are the candidates. `[]` when the mechanic has no free item;
+ * `null` when the item cannot be named (a collection never synced, a reward
+ * scoped by variant only, « all »).
+ */
+export function rewardProductIds({ promotion, basket, members = new Map() }) {
+  const mechanic = promotionMechanic(promotion);
+  if (mechanic !== 'gift' && mechanic !== 'multi_buy') return [];
+  const getsItems = promotion?.rule_snapshot?.customer_gets?.items ?? null;
+  if (!getsItems || getsItems.scope === 'all') return null;
+
+  const test = scopeTest(getsItems, members);
+  const inBasket = test && basket ? [...new Set(basket.lines.filter((l) => l.productId && test(l)).map((l) => l.productId))] : [];
+  if (inBasket.length > 0) return inBasket;
+
+  if (getsItems.scope === 'products') {
+    const ids = (getsItems.products || []).map((p) => p.id).filter(Boolean);
+    return ids.length > 0 ? ids : null;
+  }
+  if (getsItems.scope === 'collections' && test) {
+    const ids = (getsItems.collections || []).flatMap((c) => [...(members.get(c.id) || [])]);
+    return ids.length > 0 ? [...new Set(ids)] : null;
+  }
+  return null;
+}
+
+/**
+ * Whether the free item can be sent TODAY — stock now, not at the order date,
+ * because what it decides is the remedy: send the missing gift, or offer
+ * something in its place.
+ *
+ * `products` are `{ id, purchasable }` for the ids `rewardProductIds` named;
+ * an id with no product row makes the answer `unknown` rather than a guess.
+ * `partial`: several items could be the reward and only some are in stock.
+ */
+export const REWARD_STOCK = Object.freeze(['in_stock', 'partial', 'out_of_stock', 'no_reward', 'unknown']);
+
+export function rewardStock(ids, products = []) {
+  const stock = stockOfAll(ids, products);
+  return stock === 'none' ? 'no_reward' : stock;
 }
 
 /**

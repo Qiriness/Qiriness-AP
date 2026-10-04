@@ -371,6 +371,7 @@ export async function buildSalesReport(month: string) {
         status: i.status,
       })),
       windowDays: inventory.windowDays,
+      minStockUnits: inventory.minStockUnits,
       syncedAt: inventory.syncedAt,
     },
     carriers: carrierRows.map((row) => ({

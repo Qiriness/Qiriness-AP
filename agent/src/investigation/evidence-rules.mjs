@@ -2,6 +2,23 @@
 import { TOOL_NAMES } from './investigation-rules.mjs';
 import { ORDER_IDENTITY_SITUATIONS } from '../resolution/order-identity.mjs';
 import { productFromKnowledge } from '../retrieval/product-from-knowledge.mjs';
+import { OUTCOMES as PROMOTION_OUTCOMES, REWARD_STOCK } from '../retrieval/promotion-outcome.mjs';
+
+/** `unknown` is the one value that leaves the free item's stock open. */
+const REWARD_STOCK_SETTLED = REWARD_STOCK.filter((value) => value !== 'unknown');
+
+/** What `checkOrderPromotion` reports for the order's samples (`stockOfAll`). */
+const SAMPLE_STOCK_SETTLED = ['in_stock', 'partial', 'out_of_stock', 'none'];
+
+/**
+ * THE FIRST OUTCOME CHECK SPEAKS for the ticket: identification lists the
+ * offer the customer described first. `promotion_outcome` and
+ * `promotion_reward_stock` both read this one entry, so they cannot describe
+ * two different offers.
+ */
+function firstOutcomeCheck(entries) {
+  return entries.find((e) => e?.tool === TOOL_NAMES.CHECK_PROMOTION_OUTCOME && e.data?.found) ?? null;
+}
 
 /**
  * Which product a retrieved ARTICLE says the question was about.
@@ -287,6 +304,54 @@ const NEEDS = {
       }
     ],
     asksCustomer: 'shopify_order_number'
+  },
+
+  // WHETHER THE ORDER'S SAMPLES CAN BE SENT AGAIN NOW. Added 2026-10-04 with
+  // `promotion_reward_stock`, for P-20 « je n'ai pas reçu mes échantillons »:
+  // a sample is an order line that was never priced (`buildPromotions`), its
+  // product carries real stock, and resending it depends on that stock today.
+  sample_stock: {
+    label: 'si les échantillons de la commande sont en stock aujourd’hui (pour les renvoyer)',
+    satisfiedBy: [
+      {
+        tool: TOOL_NAMES.CHECK_ORDER_PROMOTION,
+        outcomes: ['applied', 'none'],
+        satisfies: (entry) => SAMPLE_STOCK_SETTLED.includes(entry.data?.sampleStock?.stock)
+      }
+    ],
+    asksCustomer: 'shopify_order_number'
+  },
+
+  // THE SAME FOR THE ORDER'S GIFTS — lines a promotion reduced to zero. P-20
+  // is « les échantillons OU LE CADEAU », so a sample answer alone would offer
+  // to resend samples to a customer missing a gift.
+  order_gift_stock: {
+    label: 'si les cadeaux de la commande sont en stock aujourd’hui (pour les renvoyer)',
+    satisfiedBy: [
+      {
+        tool: TOOL_NAMES.CHECK_ORDER_PROMOTION,
+        outcomes: ['applied', 'none'],
+        satisfies: (entry) => SAMPLE_STOCK_SETTLED.includes(entry.data?.giftStock?.stock)
+      }
+    ],
+    asksCustomer: 'shopify_order_number'
+  },
+
+  // WHETHER THE FREE ITEM CAN BE SENT NOW. Added 2026-10-04: a gift missing
+  // from the basket or the parcel is put right by sending it, or by offering
+  // something in its place when it is gone — and which is TODAY's stock, not
+  // the order date's. Read off the same check as `promotion_outcome`, so an
+  // `undetermined` outcome can still settle it: the gift is named by the offer.
+  promotion_reward_stock: {
+    label: 'si l’article offert est en stock aujourd’hui (pour l’envoyer ou le remplacer)',
+    satisfiedBy: [
+      {
+        tool: TOOL_NAMES.CHECK_PROMOTION_OUTCOME,
+        outcomes: [...PROMOTION_OUTCOMES],
+        satisfies: (entry, entries) => entry === firstOutcomeCheck(entries) && REWARD_STOCK_SETTLED.includes(entry.data?.reward?.stock)
+      }
+    ],
+    asksCustomer: null
   },
 
   // --- customer --------------------------------------------------------------
@@ -628,9 +693,38 @@ const FINDINGS = {
       'unknown'
     ],
     derive(entries) {
-      const entry = entries.find((e) => e?.tool === TOOL_NAMES.CHECK_PROMOTION_OUTCOME && e.data?.found);
+      const entry = firstOutcomeCheck(entries);
       if (!entry) return 'unknown';
       return FINDINGS.promotion_outcome.values.includes(entry.outcome) ? entry.outcome : 'unknown';
+    }
+  },
+
+  // `no_samples`: the order carried none, so there is nothing to resend.
+  sample_stock: {
+    values: ['in_stock', 'partial', 'out_of_stock', 'no_samples', 'unknown'],
+    derive(entries) {
+      const stock = lastByTool(entries, TOOL_NAMES.CHECK_ORDER_PROMOTION)?.data?.sampleStock?.stock;
+      if (stock === 'none') return 'no_samples';
+      return SAMPLE_STOCK_SETTLED.includes(stock) ? stock : 'unknown';
+    }
+  },
+  // `no_gifts`: no line on the order was reduced to zero by a promotion.
+  order_gift_stock: {
+    values: ['in_stock', 'partial', 'out_of_stock', 'no_gifts', 'unknown'],
+    derive(entries) {
+      const stock = lastByTool(entries, TOOL_NAMES.CHECK_ORDER_PROMOTION)?.data?.giftStock?.stock;
+      if (stock === 'none') return 'no_gifts';
+      return SAMPLE_STOCK_SETTLED.includes(stock) ? stock : 'unknown';
+    }
+  },
+
+  // `partial`: several items could be the reward (a 3+1 over a mixed basket)
+  // and only some are in stock. `no_reward`: the offer has no free item.
+  promotion_reward_stock: {
+    values: [...REWARD_STOCK],
+    derive(entries) {
+      const stock = firstOutcomeCheck(entries)?.data?.reward?.stock;
+      return REWARD_STOCK.includes(stock) ? stock : 'unknown';
     }
   },
 
@@ -1029,10 +1123,25 @@ const DETAILS = {
   // Which offer, on what basket, and what stopped it — the « why » a person
   // would otherwise reconstruct in Shopify.
   promotion_outcome: (entries) => {
-    const entry = entries.find((e) => e?.tool === TOOL_NAMES.CHECK_PROMOTION_OUTCOME && e.data?.found);
+    const entry = firstOutcomeCheck(entries);
     if (!entry) return null;
     const failed = (entry.data.checks || []).filter((c) => c.status === 'fail').map((c) => ({ check: c.id, reason: c.reason, with: c.with }));
     return { promotion: entry.data.promotion, basket: entry.data.basket, failedChecks: failed };
+  },
+  // Which samples, and whether each is in stock now.
+  sample_stock: (entries) => {
+    const products = lastByTool(entries, TOOL_NAMES.CHECK_ORDER_PROMOTION)?.data?.sampleStock?.products || [];
+    return products.length > 0 ? { products } : null;
+  },
+  order_gift_stock: (entries) => {
+    const products = lastByTool(entries, TOOL_NAMES.CHECK_ORDER_PROMOTION)?.data?.giftStock?.products || [];
+    return products.length > 0 ? { products } : null;
+  },
+  // Which free item, and whether each candidate is in stock now.
+  promotion_reward_stock: (entries) => {
+    const entry = firstOutcomeCheck(entries);
+    const products = entry?.data?.reward?.products || [];
+    return products.length > 0 ? { promotion: entry.data.promotion, products } : null;
   },
   promotion_eligibility: (entries) => detailsFromPromotion(entries),
 
@@ -1259,6 +1368,9 @@ const DEPENDENCIES = {
 
   promotion_validity: { requires: ['promotion_identity'] },
   promotion_outcome: { requires: ['promotion_identity'] },
+  promotion_reward_stock: { requires: ['promotion_identity'] },
+  sample_stock: { requires: ['order_identity'] },
+  order_gift_stock: { requires: ['order_identity'] },
   promotion_eligibility: {
     requires: ['promotion_validity'],
     moot: { promotion_validity: ['expired', 'not_yet_started', 'inactive', 'not_found'] }

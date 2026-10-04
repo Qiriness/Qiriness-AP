@@ -6,6 +6,7 @@ import { CORE_TOPIC_DEFAULT_CATEGORY, CORE_TOPIC_LABELS, EMPTY_VOICE_PROFILE } f
 import {
   createArticle,
   deleteArticle,
+  formatAsFaq,
   knowledgeErrorMessage,
   resyncArticle,
   updateArticle,
@@ -21,8 +22,6 @@ import { Toast, type ToastMessage, type ToastVariant } from "./Toast";
 import { useT } from "@/lib/i18n/client";
 import styles from "./AgentSetup.module.css";
 
-const OPTIMIZE_MS = 1300;
-
 interface AgentSetupProps {
   initialArticles: Article[];
   initialSources: ShopifySource[];
@@ -33,14 +32,6 @@ function wordsIn(html: string): number {
   const text = html.replace(/<[^>]*>/g, " ").replace(/&nbsp;/g, " ");
   const trimmed = text.trim();
   return trimmed ? trimmed.split(/\s+/).length : 0;
-}
-
-/** Client-only placeholder for the future AI "optimize" feature — no backend endpoint exists yet. */
-function tidyContent(html: string): string {
-  return html
-    .replace(/<p>\s*(&nbsp;)?\s*<\/p>/g, "")
-    .replace(/[ \t]{2,}/g, " ")
-    .trim();
 }
 
 export function AgentSetup({ initialArticles, initialSources, loadError }: AgentSetupProps) {
@@ -66,6 +57,9 @@ export function AgentSetup({ initialArticles, initialSources, loadError }: Agent
     null,
   );
 
+  // A format call outlives a switch of article; its result must not land on the next one.
+  const selectedIdRef = useRef(selectedId);
+  selectedIdRef.current = selectedId;
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
   const toastId = useRef(0);
 
@@ -228,23 +222,31 @@ export function AgentSetup({ initialArticles, initialSources, loadError }: Agent
     }
   }
 
-  // Wired identically to the real Save/Approve/Delete handlers below, but this one is
-  // a client-only stub (see tidyContent) — replace its body, not its wiring, once a real
-  // optimize endpoint exists.
-  function handleOptimize() {
+  // « Format as FAQ ». Formats the editor's content as it stands, saved or not,
+  // and lands the result in the editor unsaved: it is an edit like any other,
+  // so it demotes an approved article and waits for Save.
+  async function handleOptimize() {
     if (!selected || optimizing) return;
-    const id = selected.id;
+    const { id, title, content, status } = selected;
     setOptimizing(true);
-    later(() => {
-      const current = articles.find((a) => a.id === id);
-      const tidied = current ? tidyContent(current.content) : "";
-      patchArticle(id, { content: tidied });
+    try {
+      const result = await formatAsFaq({ title, content });
+      if (selectedIdRef.current !== id) return;
+      patchArticle(id, status === "approved" ? { content: result.content, status: "draft" } : { content: result.content });
       bumpEditor(id);
-      setWordCount(wordsIn(tidied));
-      setOptimizing(false);
+      setWordCount(wordsIn(result.content));
       setSaveState("unsaved");
-      showToast(t("setup.knowledge.toast.tidied"), "info");
-    }, OPTIMIZE_MS);
+      const notes = [t("setup.knowledge.toast.formatted", { count: result.questions })];
+      if (result.withoutRewordings > 0) {
+        notes.push(t("setup.knowledge.toast.formattedNoRewordings", { count: result.withoutRewordings }));
+      }
+      if (result.unplaced > 0) notes.push(t("setup.knowledge.toast.formattedUnplaced", { count: result.unplaced }));
+      showToast(notes.join(" "), "info");
+    } catch (error) {
+      showToast(knowledgeErrorMessage(error), "error");
+    } finally {
+      if (selectedIdRef.current === id) setOptimizing(false);
+    }
   }
 
   async function handleApprove() {
@@ -395,7 +397,6 @@ export function AgentSetup({ initialArticles, initialSources, loadError }: Agent
                   onSignatureChange={handleSignatureChange}
                   onGeneralContextChange={handleContentChange}
                   onSave={handleSave}
-                  onOptimize={handleOptimize}
                   onApprove={handleApprove}
                   onUnapprove={handleUnapprove}
                   onDelete={handleDelete}
@@ -418,7 +419,7 @@ export function AgentSetup({ initialArticles, initialSources, loadError }: Agent
                   onProductIdsChange={handleProductIdsChange}
                   onResync={handleResync}
                   onSave={handleSave}
-                  onOptimize={handleOptimize}
+                  onOptimize={selected.category === "brand_story" ? undefined : handleOptimize}
                   onApprove={handleApprove}
                   onUnapprove={handleUnapprove}
                   onDelete={handleDelete}

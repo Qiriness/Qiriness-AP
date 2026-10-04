@@ -1073,3 +1073,78 @@ test('a code typed as two words is the customer’s code', async () => {
   const result = await handlers.get(TOOL_NAMES.LOOKUP_PROMOTION)({ code: 'PANIER10' });
   assert.notEqual(result.outcome, 'no_code_in_message');
 });
+
+// --- the samples' stock now ---------------------------------------------------
+
+const SAMPLE_A = 'gid://shopify/Product/9001';
+const SAMPLE_B = 'gid://shopify/Product/9002';
+const sampleTicket = (samples) => ({
+  ...PROMOTED_TICKET,
+  shopify_order_number: '#6913',
+  resolvedContext: {
+    order: { name: '#6913', promotions: { applied: [], codes: [], total: 0, gifts: [], reductions: [], samples } }
+  }
+});
+const withStock = (rows) =>
+  buildRegistry({
+    productLookup: {
+      async stockByShopifyIds(ids) {
+        return rows.filter((row) => ids.includes(row.id));
+      }
+    }
+  });
+
+test('the samples on the order carry their stock now, so a reply knows whether they can be resent', async () => {
+  const registry = withStock([
+    { id: SAMPLE_A, title: 'BB Crème Medium - échantillon', purchasable: true },
+    { id: SAMPLE_B, title: 'BB Crème Light - échantillons', purchasable: false }
+  ]);
+  const { handlers } = registry.toolsFor(sampleTicket([
+    { title: 'BB Crème Medium - échantillon', productId: SAMPLE_A },
+    { title: 'BB Crème Light - échantillons', productId: SAMPLE_B }
+  ]));
+  const result = await handlers.get(TOOL_NAMES.CHECK_ORDER_PROMOTION)({});
+
+  assert.equal(result.data.sampleStock.stock, 'partial');
+  assert.deepEqual(result.data.sampleStock.products, [
+    { title: 'BB Crème Medium - échantillon', inStock: true },
+    { title: 'BB Crème Light - échantillons', inStock: false }
+  ]);
+  assert.match(result.promptText, /Stock actuel des échantillons : « BB Crème Medium - échantillon » en stock, « BB Crème Light - échantillons » indisponible/);
+});
+
+test('a sample stored without its product id is unknown, and no samples is none', async () => {
+  const registry = withStock([]);
+  const old = await registry.toolsFor(sampleTicket([{ title: 'Mini soin' }])).handlers.get(TOOL_NAMES.CHECK_ORDER_PROMOTION)({});
+  assert.equal(old.data.sampleStock.stock, 'unknown');
+  assert.match(old.promptText, /Stock actuel des échantillons : impossible à établir/);
+
+  const empty = await registry.toolsFor(sampleTicket([])).handlers.get(TOOL_NAMES.CHECK_ORDER_PROMOTION)({});
+  assert.equal(empty.data.sampleStock.stock, 'none');
+  assert.doesNotMatch(empty.promptText, /Stock actuel/);
+});
+
+test('P-20 is samples OR the gift: the order check reports the gifts\' stock beside the samples\'', async () => {
+  const GIFT = 'gid://shopify/Product/9093893849370';
+  const registry = withStock([
+    { id: SAMPLE_A, title: 'BB Crème Medium - échantillon', purchasable: true },
+    { id: GIFT, title: 'Sauna Visage/Bain Vapeur - 6 Galets Aromatiques', purchasable: false }
+  ]);
+  const ticket = sampleTicket([{ title: 'BB Crème Medium - échantillon', productId: SAMPLE_A }]);
+  ticket.resolvedContext.order.promotions = {
+    ...ticket.resolvedContext.order.promotions,
+    applied: [{ name: 'Sauna Visage offert' }],
+    gifts: [{ title: 'Sauna Visage/Bain Vapeur - 6 Galets Aromatiques', value: 20.9, promotions: ['Sauna Visage offert'], productId: GIFT }]
+  };
+  const result = await registry.toolsFor(ticket).handlers.get(TOOL_NAMES.CHECK_ORDER_PROMOTION)({});
+
+  assert.equal(result.outcome, 'applied');
+  assert.equal(result.data.giftStock.stock, 'out_of_stock');
+  assert.equal(result.data.sampleStock.stock, 'in_stock');
+  assert.match(result.promptText, /Stock actuel des cadeaux : « Sauna Visage\/Bain Vapeur - 6 Galets Aromatiques » indisponible/);
+  assert.match(result.promptText, /Stock actuel des échantillons : « BB Crème Medium - échantillon » en stock/);
+
+  // No gift on the order is said as none, not unknown.
+  const none = await registry.toolsFor(sampleTicket([])).handlers.get(TOOL_NAMES.CHECK_ORDER_PROMOTION)({});
+  assert.equal(none.data.giftStock.stock, 'none');
+});

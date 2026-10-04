@@ -20,11 +20,20 @@ test('cover sets the status, and a month of cover is not an exception', () => {
   assert.equal(inventoryStatus(10, 7), 'critical');
   assert.equal(inventoryStatus(10, 7.1), 'low');
   assert.equal(inventoryStatus(10, 14), 'low');
-  assert.equal(inventoryStatus(10, 29.9), 'watch');
-  assert.equal(inventoryStatus(10, 45), null);
-  // Stock that is not moving has no cover, so it is not at risk.
-  assert.equal(inventoryStatus(10, null), null);
+  assert.equal(inventoryStatus(60, 29.9), 'watch');
+  assert.equal(inventoryStatus(60, 45), null);
+  // Plenty on the shelf and not moving: no cover, not at risk.
+  assert.equal(inventoryStatus(60, null), null);
   assert.equal(inventoryStatus(null, 3), null);
+});
+
+test('under 50 units is listed whatever the cover, as watch', () => {
+  assert.equal(inventoryStatus(49, 45), 'watch');
+  assert.equal(inventoryStatus(3, null), 'watch');
+  assert.equal(inventoryStatus(50, 45), null);
+  assert.equal(inventoryStatus(50, null), null);
+  // Short cover still outranks the floor.
+  assert.equal(inventoryStatus(3, 2.5), 'critical');
 });
 
 test('AOV is net revenue over paid orders, and has no value without an order', () => {

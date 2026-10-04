@@ -11,7 +11,7 @@ interface WorkspaceActionsProps {
   deleting: boolean;
   status: ArticleStatus;
   onSave: () => void;
-  onOptimize: () => void;
+  onOptimize?: () => void;
   onApprove: () => void;
   onUnapprove: () => void;
   onDelete: () => void;
@@ -71,16 +71,19 @@ export function WorkspaceActions({
         {saveState === "saved" ? t("setup.knowledge.saved") : t("setup.knowledge.saveDraft")}
       </Button>
 
-      <Button
-        variant="secondary"
-        block
-        leadingIcon={<SparkleIcon size={16} />}
-        onClick={onOptimize}
-        loading={optimizing}
-        disabled={saveState === "saving"}
-      >
-        {optimizing ? t("setup.knowledge.optimizing") : t("setup.knowledge.optimize")}
-      </Button>
+      {/* Absent where the FAQ shape does not apply: the brand voice and a brand story. */}
+      {onOptimize && (
+        <Button
+          variant="secondary"
+          block
+          leadingIcon={<SparkleIcon size={16} />}
+          onClick={onOptimize}
+          loading={optimizing}
+          disabled={saveState === "saving"}
+        >
+          {optimizing ? t("setup.knowledge.optimizing") : t("setup.knowledge.optimize")}
+        </Button>
+      )}
 
       <Button
         variant="primary"

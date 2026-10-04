@@ -115,7 +115,8 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |   |       |                                  # while unset). GET ?month= -> the same
 |   |       |                                  # report, for the worker's monthly mail
 |   |       |-- knowledge/                   # shopify-sources · articles · articles/[id]
-|   |       |                                 # · articles/[id]/resync
+|   |       |                                 # · articles/[id]/resync · format (« Format as
+|   |       |                                 # FAQ », stateless, writes nothing)
 |   |       `-- agent-test/                   # run (NDJSON stream, writes no ticket) ·
 |   |                                         # runs · runs/[id] (ideal answer)
 |   |-- lib/i18n/                          # UI language (fr default, en): locales.ts (choice,
@@ -234,6 +235,8 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |   |       |                    # ticket-priority-service (bulk latest situation +
 |   |       |                    # current order/threshold facts for the pure scorer) ·
 |   |       |                    # orders-service (orders_list page + one order) ·
+|   |       |                    # order-ticket-marks (the ticket ring, per order:
+|   |       |                    # Orders + Fulfilment's waiting orders) ·
 |   |       |                    # chat-service (Home's chat: wires the loop, writes
 |   |       |                    # the chat_* log, owner-only reads) ·
 |   |       |                    # dropped-mail-service · knowledge-errors ·
@@ -382,6 +385,8 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |       |                                # runtime text naming the company reads it
 |       |-- sync-config.mjs              # CLI + env parsing, loadEnv
 |       |-- hash.mjs collections.mjs html-to-text.mjs text-cleaning.mjs
+|       |-- faq-format.mjs               # pure: « Format as FAQ » — article -> numbered blocks,
+|       |                                # model plan (block indices) -> rebuilt FAQ HTML
 |       |-- quoted-reply.mjs             # strips reply chains
 |       |-- email-display.mjs            # display-only split of a stored body: new text / quoted / forwarded / signature
 |       |-- forwarding-tag.mjs           # pure: the queue's forwarding tag off ticket_routing + ticket_forwards (after first reply / pending / failed / forwarded), and situationForwarding for the Rules rail (planRoute on a situation)
@@ -539,7 +544,14 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |   |   |                        #   tool, chained after identification) ·
 |   |   |                        # promotion-outcome (pure: promotion + order or
 |   |   |                        #   abandoned basket -> applied / expired /
-|   |   |                        #   outside_destination / not_combinable / ...) ·
+|   |   |                        #   outside_destination / not_combinable / ...;
+|   |   |                        #   rewardProductIds + rewardStock: the free
+|   |   |                        #   item, and whether it is in stock now ->
+|   |   |                        #   need promotion_reward_stock) ·
+|   |   |                        # stock-by-id (stock of products named by id —
+|   |   |                        #   a gift, an order's samples; one reader so
+|   |   |                        #   both mean the same "in stock"; samples NOT
+|   |   |                        #   excluded) ·
 |   |   |                        # abandoned-checkout (the ONLY view of a basket;
 |   |   |                        #   live Shopify Admin, never synced; a tool
 |   |   |                        #   since 2026-09-16, see checkout_state) ·
@@ -762,8 +774,8 @@ figure is now read over a date range: `insights_orders_summary` / `_series` /
 `insights_freshness` (when each source last moved), and — for Overview, Marketing
 and the report — `insights_sales_overview` (paid units, discounts, discounted vs
 full-price revenue), `insights_promotions` (per promotion name, plus full price)
-`insights_inventory_exceptions` (active products out of stock or low; stock
-now, rate over a window) and `insights_collection_sales` (per collection, or
+`insights_inventory_exceptions` (active products out of stock, low on cover, or
+under a unit floor; stock now, rate over a window) and `insights_collection_sales` (per collection, or
 just the ranges `p_handles` names). One convention: the range as
 wall-clock `timestamp`s plus `p_tz`, half-open; series take `p_grain` and return
 only non-empty buckets; order functions take `p_channels` / `p_not_channels`.
@@ -868,7 +880,11 @@ Written by the worker and the CLIs, read only by the Insights panels.
 | `64_casework_usage_pass.sql` | widens `llm_usage_pass_check` by `casework` and `closure` (copied from 06), which the sink was recording as `other`. No data. **Applied 2026-10-03** — before the worker that emits them | 06 |
 | `62_case_lead.sql` | `case_facts` re-stated, copied from 04: with nothing owed, a case's lead is its most recently active thread **still live**, not just the most recent. **Applied 2026-10-02** | 61 |
 | `59_order_identity_situations.sql` | data only: rules whose `when_conditions.order_identity` names `none` also name its five replacements (`none` kept so old and new code agree). 16 rules. Applied 2026-10-02 | 05 |
-| `58_promotion_outcome_need.sql` | widens `support_exemplars.requirement_needs` by `promotion_outcome` (why a promotion applied or not). Copied from 05; head of the needs check since. No data. Applied 2026-10-01 | 05, 56 |
+| `65_inventory_stock_floor.sql` | drops 35's five-argument `insights_inventory_exceptions()` and recreates it with `p_max_stock_units`, so the stock card also lists every active product under the unit floor (`INVENTORY_MIN_STOCK_UNITS`, 50) whatever its cover. Copied from 06. No table, no data. **Applied 2026-10-04** | 01, 02, 06 |
+| `68_order_gift_stock_need.sql` | widens `support_exemplars.requirement_needs` by `order_gift_stock` (whether the order's gift lines are in stock now). Copied from 05; head of the needs check since. No data. Applied 2026-10-04 | 05, 67 |
+| `67_sample_stock_need.sql` | widens `support_exemplars.requirement_needs` by `sample_stock` (whether the order's samples are in stock now). Copied from 05; head of the needs check until 68. No data. Applied 2026-10-04 | 05, 66 |
+| `66_promotion_reward_stock_need.sql` | widens `support_exemplars.requirement_needs` by `promotion_reward_stock` (whether the free item is in stock now). Copied from 05; head of the needs check until 67. No data. Applied 2026-10-04 | 05, 58 |
+| `58_promotion_outcome_need.sql` | widens `support_exemplars.requirement_needs` by `promotion_outcome` (why a promotion applied or not). Copied from 05; head of the needs check until 66. No data. Applied 2026-10-01 | 05, 56 |
 | `57_describable_offers.sql` | adds `promotions.describable_in_replies` (default true), the automatic-offer counterpart of `offerable_in_replies`. Copied from 02. No data. Applied 2026-10-01 | 02 |
 | `58_faq_articles.sql` | narrows `knowledge_documents_category_check`: `other` is no longer an article category (a ticket subject only); any article/chunk under it moves to `faq`. Copied from 03. None moved. Applied 2026-10-01 | 03 |
 | `57_situation_choose_rule.sql` | `support_exemplars.choose_rule` (copied from 05): when to pick a situation and when not to, shown to the situation chooser. No data in the migration; the 40 rules were written from `Email-Example-Queries.md` after it. Applied 2026-10-02 | 05 |
@@ -958,6 +974,7 @@ Env: `CHAT_DB_URL` (the role's pooler URL; unset = the page says so and nothing 
 - `GET|POST knowledge/articles` — list; create empty, or resolve a `sourceId`'s live content
 - `PATCH knowledge/articles/:id` — converts `source_type` to `manual`; demotes `approved` → `in_review` on a text change; re-embeds inline (best-effort)
 - `POST knowledge/articles/:id/resync` — 400 once `manual`. `DELETE` — hard delete, chunks cascade
+- `POST knowledge/format` — « Format as FAQ » (the old Optimize button): `{title, content}` in, the content rearranged by `scripts/lib/faq-format.mjs` out, plus counts (questions, without rewordings, unplaced). Stores nothing; the editor shows it unsaved. Model `KNOWLEDGE_FORMAT_MODEL`, default `gpt-6-luna`; usage logged to `llm_usage` as pass `other`. Hidden on the brand voice and on Brand story articles
 
 **Parameters** (`/agent-setup/parameters` → `components/agent-setup/ParameterList`, over `lib/server/parameters-service.ts`). One number held once, so a rule comparing against it, an article stating it and a skeleton quoting it cannot disagree — the failure that argued for it was live: two approved articles gave two different returns windows. **The catalogue is code** (`scripts/lib/parameters.mjs`) and only the values are data, so the screen offers exactly the parameters something reads; rows are created on demand. **Every value starts null**, which is a real state each reader handles. No approval step, unlike a rule: a parameter is a fact rather than a behaviour. Two of them are a pair: `france_delivery_days` and `abroad_delivery_days` are the same window for different destinations, picked on the order's `country_code`, and either one unset leaves `delivery_delay_state` `unknown` for the destinations it covers rather than for all of them — which is why `POWERED_BY` in `policy-service.ts` maps a state to a LIST of parameters and the editor names which is missing.
 
@@ -1049,7 +1066,7 @@ across). The server re-renders; nothing is aggregated in the browser.
 | **Overview** | yes (the stock card is "now") | yes | orders summary + series (revenue, orders, AOV), `insights_sales_overview` (units, discounts), orders by channel, product sales (top 5), `insights_inventory_exceptions`; **every money figure from one live ShopifyQL ladder** (`liveSales` / `liveSalesSeries` in `analytics.ts`: net sales, orders, AOV, refund rate = returns ÷ gross sales, the trend, the drivers, the signals, net sales per session, the platform mix; our orders only as a labelled fallback); **sessions and conversion from stored months + live**; each card streamed in on its own (Suspense); units and top products from our orders; signals + bridge + drivers from `sales-overview.mjs`; the report download (`ReportDownload`, months that have ended) |
 | **Marketing & funnel** | yes | yes (newsletter always Shopify) | orders summary, `insights_sales_overview`, `insights_promotions`, the newsletter rows (churn, movement, capture — moved here from Customers), and **ShopifyQL** (`analytics.ts`, each card streamed in on its own): the four-step funnel, acquisition channels, landing-page types and the busiest product pages (named from `products.handle`); **Klaviyo** from `insights_klaviyo_messages` (open rate first: tiles over every flow and campaign in the range, table of those with ≥ 1 click and ≥ 50 recipients sorted by open rate; blocked when not connected, not yet synced, or on a marketplace). Product VIEWS stay blocked — no metric; Paid / Social blocked — not connected |
 | **Sales** | yes | yes | orders summary + series + by channel + by country, customer mix (marketplaces excluded), product sales, country product sales (re-read over VIP customers' orders with `?bestVip=1`), product pairs, and the "Who buys this product" card (`insights_product_customer_mix` + `insights_product_orders_per_customer` for `?product=`, both on the same arguments, optionally `?mixCountry=` and `?mixVip=1`, marketplaces excluded; `ProductCustomerMixCard` with a searchable product picker and its buyers-by-order-count chart) |
-| **Fulfilment** | yes (the open-orders list and the stock card are "now") | yes | orders summary + series, fulfilment buckets + carriers, `open_orders()` (orders waiting to ship, VIP-marked, with name + email — `open-orders.ts`), `insights_inventory_exceptions` (`inventory.ts`) |
+| **Fulfilment** | yes (the open-orders list and the stock card are "now") | yes | orders summary + series, fulfilment buckets + carriers, `open_orders()` (orders waiting to ship, VIP-marked, with name + email, the name ringed by open ticket as on Orders — `open-orders.ts`), `insights_inventory_exceptions` (`inventory.ts`) |
 | **Support** | yes | no — tickets have none | support summary + series + categories, orders summary (contact-rate denominator), the latest `cluster_runs` for the topic map (all-time, with a Rebuild button) |
 | **Customers** | the activity rows only (the base is a snapshot) | no — people, so always Shopify | `customer_segment_totals` + `customer_ticket_facts` + `customer-segments.mjs`; orders per customer (`customer-activity-service.ts`; the newsletter and capture rows moved to Marketing & funnel on 2026-09-23 — the order-count columns are folded by `order-frequency.ts`, shared with the Sales product card so both charts cut the tail at 10+ the same way); the Segment Finder under the base cards, on demand through `POST /api/insights/segment-finder` -> `segment-finder-service.ts` -> `customer_segment_find()` |
 | **AI agent** | yes | no | llm usage + series + ticket stats (priced by `llm-rates.mjs`), agent funnel + situation picking (`insights_agent_situations`) + verdicts + blockers |
@@ -1078,7 +1095,7 @@ The Support topic map reads the latest `cluster_runs` row and renders each
 
 `web/app/orders/` → `web/components/orders/`, over `lib/server/orders-service.ts`. Replaced the "Knowledge — Soon" sidebar item. Open to every role.
 
-**List** (`OrdersView`): Order · Date · Name (+ crown when VIP) · Total · Fulfilment status (amber dot until fulfilled) · Delay (whole days waiting to ship, red at 3+, blank once not waiting) · Articles · Carrier · Destination. A search box (order name, buyer name or email, tracking number; debounced) plus filters for fulfilment status, Global / By country, and All customers / VIP only; with the page number they live in the query string (`?q= ?status= ?country= ?vip= ?page=`, parsed by `order-list-query.mjs`) and the server re-renders. 50 rows per page, paged and counted by `orders_list()`. **The customer name is ringed** red / orange / green when an open ticket is confirmed against that order (`tickets.shopify_order_number`), in the most urgent ticket's queue band — read off `listTicketsWithOrders`, folded by `ticketMarksByOrder`, never re-scored. A row opens `/orders/[id]`.
+**List** (`OrdersView`): Order · Date · Name (+ crown when VIP) · Total · Fulfilment status (amber dot until fulfilled) · Delay (whole days waiting to ship, red at 3+, blank once not waiting) · Articles · Carrier · Destination. A search box (order name, buyer name or email, tracking number; debounced) plus filters for fulfilment status, Global / By country, and All customers / VIP only; with the page number they live in the query string (`?q= ?status= ?country= ?vip= ?page=`, parsed by `order-list-query.mjs`) and the server re-renders. 50 rows per page, paged and counted by `orders_list()`. **The customer name is ringed** red / orange / green when an open ticket is confirmed against that order (`tickets.shopify_order_number`), in the most urgent ticket's queue band — read off `listTicketsWithOrders`, folded by `ticketMarksByOrder` (both in `lib/server/order-ticket-marks.ts`, which the Fulfilment panel's waiting orders share), never re-scored. A row opens `/orders/[id]`.
 
 **Detail** (`OrderDetailView`): Articles, **Promotions**, Fulfilment (shipments, tracking links, returns), Payment (totals, refunds) on the left; Tickets, Customer (name, email unless marketplace, lifetime orders/spend, VIP), Destination (coarse — no street is stored), Tags on the right; "Open in Shopify" in the header. Both pages write a `data_access_events` row (`resourceType: orders`). **Promotions** lists what was applied by name (from `orders.discount_applications`), the gifts with their value and the promotion that gave them, plain reductions, the codes used and — listed apart, never as gifts — the samples; "no promotion was applied" is rendered rather than hidden. Opened as `/orders/[id]?ticket=<uuid>` (the link on a ticket's order number), the page leads with **← Back to the ticket** to `/tickets?ticket=<uuid>`, with Orders beside it.
 

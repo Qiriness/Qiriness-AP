@@ -137,7 +137,7 @@ function report(overrides = {}) {
       { channel: 'klaviyo', sessions: null, revenue: 401.54, orders: 5, conversionRate: null, revenuePerSession: null }
     ],
     channelsBlockedReason: null,
-    inventory: { items: [{ title: 'Serum X', stock: 0, unitsOut: 22, coverDays: 0, status: 'out' }], windowDays: 30, syncedAt: '2026-09-01T05:00:00Z' },
+    inventory: { items: [{ title: 'Serum X', stock: 0, unitsOut: 22, coverDays: 0, status: 'out' }], windowDays: 30, minStockUnits: 30, syncedAt: '2026-09-01T05:00:00Z' },
     carriers: [{ carrier: 'Colissimo', shipments: 80, p50Hours: 20, over72h: 3 }],
     signals: [{ tone: 'good', title: 'Revenue grew 25.0% vs July 2026', detail: '' }],
     ...overrides

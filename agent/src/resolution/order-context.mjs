@@ -144,7 +144,9 @@ export function buildPromotions(order) {
     const names = allocations.map((allocation) => allocation.name).filter(Boolean);
 
     if (was > 0 && paid === 0) {
-      gifts.push({ title, value: amount(was), promotions: names });
+      // The id, as for a sample: a gift missing from the parcel is sent again
+      // if there is one to send.
+      gifts.push({ title, value: amount(was), promotions: names, productId: item.product_id || null });
     } else if (allocations.length > 0) {
       reductions.push({
         title,
@@ -152,7 +154,9 @@ export function buildPromotions(order) {
         promotions: names
       });
     } else if (was === 0 && paid === 0) {
-      samples.push({ title });
+      // The id is what makes its stock readable: a sample missing from the
+      // parcel is put right by sending it again, if there is one to send.
+      samples.push({ title, productId: item.product_id || null });
     }
   }
 

@@ -539,12 +539,12 @@ test('an outcome reference that resolves to nothing is refused, not approximated
 // --- named only if usable, ranked by use --------------------------------------
 
 /** A lookup whose three reads — promotions, orders, collections — answer separately. */
-function lookupOverTables({ promotions = [], orders = [], collections = [] }) {
+function lookupOverTables({ promotions = [], orders = [], collections = [], products = [] }) {
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async (url, init) => {
     const from = Number(String(init?.headers?.Range || '0-999').split('-')[0]);
     const path = String(url);
-    const table = path.includes('/orders') ? orders : path.includes('/advice_collections') ? collections : promotions;
+    const table = path.includes('/orders') ? orders : path.includes('/advice_collections') ? collections : path.includes('/products') ? products : promotions;
     const rows = from === 0 ? table : [];
     return { ok: true, status: 200, async json() { return rows; }, async text() { return JSON.stringify(rows); } };
   };
@@ -647,5 +647,49 @@ test('an automatic offer switched off, or a code not cleared, is not offered on 
   try {
     const { specific, general } = await lookup.offersForProduct('gid://shopify/Product/2');
     assert.equal(specific.length + general.length, 0);
+  } finally { restore(); }
+});
+
+// --- the free item's stock now ------------------------------------------------
+
+const giftOrder = (lines) => ({ source: 'order', at: '2026-07-12T07:00:00Z', countryCode: 'FR', lines, applied: [], codes: [] });
+const orLine = (id, price, paid = price) => ({ productId: `gid://shopify/Product/${id}`, title: `p${id}`, quantity: 1, price, paid });
+
+test('a gift left out of the basket carries its stock now, so the reply knows whether it can be sent', async () => {
+  const products = [{ shopify_product_id: 'gid://shopify/Product/91', title: "Masque Repulpant Wrap d'Or", status: 'active', available_stock: 907, deleted_at: null }];
+  const { lookup, restore } = lookupOverTables({ promotions: [GIFT_OR], products });
+  try {
+    const result = await lookup.outcome({ ref: GIFT_OR.title, basket: giftOrder([orLine(1, 40)]) });
+    assert.equal(result.outcome, 'reward_not_in_basket');
+    assert.equal(result.reward.stock, 'in_stock');
+    assert.match(result.promptText, /Stock actuel de l'article offert : « Masque Repulpant Wrap d'Or » en stock/);
+  } finally { restore(); }
+});
+
+test('a gift at -1 or archived is not sendable, whatever the count says', async () => {
+  for (const row of [{ status: 'active', available_stock: -1 }, { status: 'archived', available_stock: 50 }]) {
+    const products = [{ shopify_product_id: 'gid://shopify/Product/91', title: "Wrap d'Or", deleted_at: null, ...row }];
+    const { lookup, restore } = lookupOverTables({ promotions: [GIFT_OR], products });
+    try {
+      const result = await lookup.outcome({ ref: GIFT_OR.title, basket: giftOrder([orLine(1, 40)]) });
+      assert.equal(result.reward.stock, 'out_of_stock', JSON.stringify(row));
+      assert.match(result.promptText, /« Wrap d'Or » indisponible/);
+    } finally { restore(); }
+  }
+});
+
+test('an offer with no free item says nothing about stock; an unreadable product is unknown', async () => {
+  const ship = await (async () => {
+    const { lookup, restore } = lookupOverTables({ promotions: [SHIP] });
+    try { return await lookup.outcome({ ref: SHIP.title, basket: giftOrder([orLine(1, 40)]) }); } finally { restore(); }
+  })();
+  assert.equal(ship.reward.stock, 'no_reward');
+  assert.doesNotMatch(ship.promptText, /Stock actuel/);
+
+  const { lookup, restore } = lookupOverTables({ promotions: [GIFT_OR], products: [] });
+  try {
+    const result = await lookup.outcome({ ref: GIFT_OR.title, basket: giftOrder([orLine(1, 40)]) });
+    assert.equal(result.reward.stock, 'unknown');
+    assert.match(result.promptText, /impossible à établir/);
   } finally { restore(); }
 });

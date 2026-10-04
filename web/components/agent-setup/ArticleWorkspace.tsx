@@ -33,7 +33,7 @@ interface ArticleWorkspaceProps {
   onProductIdsChange: (productIds: string[]) => void;
   onResync: () => void;
   onSave: () => void;
-  onOptimize: () => void;
+  onOptimize?: () => void;
   onApprove: () => void;
   onUnapprove: () => void;
   onDelete: () => void;

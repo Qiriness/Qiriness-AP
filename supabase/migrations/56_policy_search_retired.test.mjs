@@ -16,15 +16,19 @@ const SLOTS = 'knowledge_documents_core_topic_check';
 // (2026-10-01). An applied migration is not edited to keep up: 56 is the
 // baseline of its day, which is today's baseline minus what 58 added.
 const ADDED_BY_58 = ['promotion_outcome'];
+// And 66 added `promotion_reward_stock` (2026-10-04).
+const ADDED_BY_66 = ['promotion_reward_stock'];
+const ADDED_BY_67 = ['sample_stock'];
+const ADDED_BY_68 = ['order_gift_stock'];
 const minus = (list, gone) => list.filter((item) => !gone.includes(item));
 
 test('56 carries the baseline checks of its day, not retyped ones', () => {
   assert.equal(squash(checkClause(SQL, SLOTS)), squash(checkClause(KNOWLEDGE, SLOTS)));
-  assert.deepEqual(literalsIn(checkClause(SQL, NEEDS)), minus(literalsIn(checkClause(EXEMPLARS, NEEDS)), ADDED_BY_58));
+  assert.deepEqual(literalsIn(checkClause(SQL, NEEDS)), minus(literalsIn(checkClause(EXEMPLARS, NEEDS)), [...ADDED_BY_58, ...ADDED_BY_66, ...ADDED_BY_67, ...ADDED_BY_68]));
 });
 
 test('the head of the needs check is the code vocabulary, and policy_answer is gone from both', () => {
-  assert.deepEqual(literalsIn(checkClause(SQL, NEEDS)), minus([...NEED_KEYS], ADDED_BY_58).sort());
+  assert.deepEqual(literalsIn(checkClause(SQL, NEEDS)), minus([...NEED_KEYS], [...ADDED_BY_58, ...ADDED_BY_66, ...ADDED_BY_67, ...ADDED_BY_68]).sort());
   assert.ok(!NEED_KEYS.includes('policy_answer'));
 });
 

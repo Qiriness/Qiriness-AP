@@ -29,7 +29,7 @@ interface BrandVoiceWorkspaceProps {
   onSignatureChange: (signature: string) => void;
   onGeneralContextChange: (html: string, wordCount: number) => void;
   onSave: () => void;
-  onOptimize: () => void;
+  onOptimize?: () => void;
   onApprove: () => void;
   onUnapprove: () => void;
   onDelete: () => void;

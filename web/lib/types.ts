@@ -1613,6 +1613,8 @@ export interface OpenOrder {
   /** Null for marketplace buyers, whose record carries a placeholder address. */
   email: string | null;
   isVip: boolean;
+  /** Open tickets on this order, as on the Orders page; null when none. */
+  ticket: OrderTicketMark | null;
 }
 
 // --- Orders page ---------------------------------------------------------------
@@ -1941,6 +1943,8 @@ export interface InventoryExceptions {
   items: InventoryException[];
   /** The window the rate is read over, in days. */
   windowDays: number;
+  /** Under this many units a product is listed whatever its cover. */
+  minStockUnits: number;
   /** When the products were last synced — how current "stock" is. */
   syncedAt: string | null;
 }

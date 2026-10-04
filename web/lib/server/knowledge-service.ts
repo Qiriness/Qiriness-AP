@@ -34,6 +34,9 @@ import { createEmbeddingsClient } from "../../../scripts/lib/embeddings/openai-e
 import { embedChunks, toVectorLiteral } from "../../../scripts/lib/embeddings/embed-chunks.mjs";
 import { htmlToText, htmlToSections, sectionsToHtml } from "../../../scripts/lib/html-to-text.mjs";
 import { hashJson } from "../../../scripts/lib/hash.mjs";
+import { FAQ_FORMAT_SCHEMA, buildFormatPrompt, renderFaq, splitIntoBlocks } from "../../../scripts/lib/faq-format.mjs";
+import { createOpenAIClient } from "../../../agent/src/llm/openai-client.mjs";
+import { createShopUsageRecording } from "../../../agent/src/llm/usage-store.mjs";
 import { stripUndefined } from "../../../scripts/lib/collections.mjs";
 import {
   createSupabaseClient,
@@ -424,6 +427,58 @@ export async function resyncArticle(shopId: string, articleId: string): Promise<
 
   const catalogIdByKey = await buildCatalogIdMap(shopId);
   return mapArticleRow(saved, catalogIdByKey);
+}
+
+/** The « Format as FAQ » model: a cheap one, since it only places blocks (DECISIONS.md § Knowledge). */
+export const DEFAULT_FAQ_FORMAT_MODEL = "gpt-6-luna";
+/** Past this the article is not one FAQ but a pasted site; formatting it in one call is not worth trying. */
+const FAQ_FORMAT_MAX_BLOCKS = 400;
+
+export interface FaqFormatResult {
+  content: string;
+  questions: number;
+  withoutRewordings: number;
+  unplaced: number;
+}
+
+/**
+ * Rearranges an article's HTML into the FAQ shape (scripts/lib/faq-format.mjs).
+ * Takes the editor's current content rather than the stored row, so unsaved
+ * edits are formatted too, and writes nothing: the result goes back into the
+ * editor for the team to read and save.
+ */
+export async function formatArticleAsFaq(
+  shopId: string,
+  { title, content }: { title: string; content: string }
+): Promise<FaqFormatResult> {
+  const blocks = splitIntoBlocks(content);
+  if (blocks.length === 0) throw new KnowledgeValidationError("The article is empty: there is nothing to format.");
+  if (blocks.length > FAQ_FORMAT_MAX_BLOCKS) {
+    throw new KnowledgeValidationError(
+      `The article has ${blocks.length} paragraphs, more than the ${FAQ_FORMAT_MAX_BLOCKS} that can be formatted at once. Split it into one article per topic first.`
+    );
+  }
+
+  const config = getConfig();
+  if (!config.openaiApiKey) throw new KnowledgeValidationError("OPENAI_API_KEY is not set.");
+  const usage = createShopUsageRecording({ supabase: getSupabaseClient(), shopId });
+  const client = createOpenAIClient({ apiKey: config.openaiApiKey, usageSink: usage.sink });
+  const { system, user } = buildFormatPrompt(blocks, { title });
+  try {
+    const plan = await client.completeJson({
+      model: process.env.KNOWLEDGE_FORMAT_MODEL || DEFAULT_FAQ_FORMAT_MODEL,
+      system,
+      user,
+      schema: FAQ_FORMAT_SCHEMA,
+      schemaName: "faq_format",
+      maxTokens: 8000,
+      pass: "other",
+    });
+    const { html, ...counts } = renderFaq(blocks, plan);
+    return { content: html, ...counts };
+  } finally {
+    await usage.flush();
+  }
 }
 
 export async function deleteArticle(shopId: string, articleId: string): Promise<void> {

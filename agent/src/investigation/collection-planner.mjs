@@ -70,6 +70,10 @@ export function argsFor(tool, { ticket = {}, ledger = [] } = {}) {
     case TOOL_NAMES.LOOKUP_CUSTOMER:
     case TOOL_NAMES.LIST_ACTIVE_PROMOTIONS:
     case TOOL_NAMES.GET_ORDER_CONTEXT:
+    // ADDED 2026-10-04: it reads the stored order bundle and takes nothing, yet
+    // was missing here, so `order_promotion` (P-22) and `sample_stock` (P-20)
+    // were only ever collected when the model happened to call it.
+    case TOOL_NAMES.CHECK_ORDER_PROMOTION:
     case TOOL_NAMES.VERIFY_PURCHASE:
     case TOOL_NAMES.CHECK_PHOTO_EVIDENCE:
       return {};

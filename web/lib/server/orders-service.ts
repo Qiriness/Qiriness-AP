@@ -7,9 +7,8 @@
  *
  * VIP COMES FROM THE SHOP'S RULE through `vip_customers()`, never compared here.
  *
- * THE TICKET RING is the queue's own judgement, not a second one: each ticket
- * arrives from `listTicketsWithOrders` carrying the `priorityBand` /tickets
- * shows, and `ticketMarksByOrder` only folds them per order.
+ * THE TICKET RING is the queue's own judgement, not a second one — see
+ * ./order-ticket-marks.ts, which the Fulfilment panel's waiting orders share.
  *
  * PERSONAL DATA: names on the list; name and email on one order, as the
  * Fulfilment panel's waiting orders show them. Both pages log the access.
@@ -34,7 +33,6 @@ import {
   fulfillmentStatusLabel,
   orderListArgs,
   orderNumberKey,
-  ticketMarksByOrder,
 } from "../../../scripts/lib/order-list-query.mjs";
 import { euros } from "../insights-format";
 import { isClosed } from "../ticket-stats";
@@ -45,11 +43,11 @@ import type {
   OrderListQuery,
   OrderListRow,
   OrderTicketMark,
-  TicketListItem,
 } from "../types";
 import { LATE_AFTER_DAYS, adminOrdersUrl } from "./insights/open-orders";
 import { getSupabaseClient } from "./insights/shared";
 import { getShop } from "./shop";
+import { loadOrderTicketMarks } from "./order-ticket-marks";
 import { listTicketsWithOrders } from "./tickets-service";
 import { buildPromotions } from "../../../agent/src/resolution/order-context.mjs";
 
@@ -93,11 +91,11 @@ const DETAIL_COLUMNS = [
 
 export async function listOrders(shopId: string, query: OrderListQuery): Promise<OrderListPage> {
   const supabase = getSupabaseClient();
-  const [tz, rule, facetRows, tickets, marketplaces] = await Promise.all([
+  const [tz, rule, facetRows, marks, marketplaces] = await Promise.all([
     shopTimeZone(supabase, shopId),
     loadVipRule(supabase, shopId),
     supabaseRpc(supabase, RPC.ORDERS_LIST_FACETS, { p_shop: shopId }),
-    listTicketsWithOrders(shopId),
+    loadOrderTicketMarks(shopId),
     getMarketplaces(),
   ]);
 
@@ -120,8 +118,6 @@ export async function listOrders(shopId: string, query: OrderListQuery): Promise
     served = { ...query, page: 1 };
     rows = await readPage(served);
   }
-
-  const marks = ticketMarksByOrder(tickets.map(ticketFacts)) as Map<string, OrderTicketMark>;
 
   return {
     rows: rows.map((row) => mapListRow(row, tz, marks)),
@@ -287,14 +283,6 @@ export async function getOrderDetail(shopId: string, orderId: string): Promise<O
 }
 
 // --- mapping -----------------------------------------------------------------
-
-function ticketFacts(ticket: TicketListItem) {
-  return {
-    orderNumber: ticket.orderNumber,
-    open: !isClosed(ticket),
-    band: ticket.priorityBand,
-  };
-}
 
 function mapListRow(row: Row, tz: string, marks: Map<string, OrderTicketMark>): OrderListRow {
   const key = orderNumberKey(row.order_number) ?? orderNumberKey(row.order_name);

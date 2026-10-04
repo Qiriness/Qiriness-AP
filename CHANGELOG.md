@@ -10,6 +10,42 @@ Three sibling files carry the other halves, and this one deliberately does not d
 
 ---
 
+## « Optimize draft » is now « Format as FAQ » (2026-10-04)
+
+- The button in the article editor puts the article into the FAQ format of « How to write an FAQ »: one Heading 2 per question, its rewordings as plain lines, then the answer. It arranges the existing text and keeps every answer word for word. It writes a question only for a topic that has none, and never writes rewordings (DECISIONS.md § « Format as FAQ » arranges an article…).
+- `POST /api/knowledge/format`, `scripts/lib/faq-format.mjs` (tests in `faq-format.test.mjs`). Model `gpt-6-luna` by default (`KNOWLEDGE_FORMAT_MODEL`), about $0.0006 for the largest real article.
+- The result lands in the editor unsaved; the toast says how many questions, how many lack rewordings and how many paragraphs could not be placed. The button is gone from the brand voice and Brand story articles.
+- **Proven:** run without saving on « Masque LED Visage — Questions fréquentes » and « FAQ ». Both came out as 12 questions with the answers unchanged. **Not checked in the browser**: typecheck and tests pass.
+
+## The stock card lists every active product under 50 units (2026-10-04)
+
+- **Inventory exceptions now lists active products with fewer than 50 units, whatever their cover** (first set at 30, raised to 50 the same day), beside those out of stock or with at most 30 days of cover. They read « Watch ». On 2026-10-04 that adds Coffret Énergie Lift (3), Peignoir Blanc Cocooning (17) and Gua Sha Quartz Rose (19) to the five out of stock.
+- The Overview card no longer stops at 6 rows, and the monthly report no longer stops at 10.
+- Migration `65_inventory_stock_floor.sql` adds `p_max_stock_units` to `insights_inventory_exceptions()`. **Applied 2026-10-04.**
+
+## Orders waiting to ship carry the ticket ring (2026-10-04)
+
+- On Insights → Fulfilment, the customer's name in « Orders waiting to ship » is ringed red / orange / green when an open ticket names that order, exactly as on Orders: same loader (`order-ticket-marks.ts`), same tooltip, same legend under the table. On 2026-10-04 that is #7129 and #7131 of the 8 waiting.
+- **Not checked in the browser**: typecheck and lint pass.
+
+## A missing gift carries its stock now (2026-10-04)
+
+- **`checkPromotionOutcome` now reports the stock of the free item today**, read from the product sync. It shows in the prompt as « Stock actuel de l'article offert : « Wrap d'Or » en stock », and in the case file as the new need `promotion_reward_stock` (`in_stock` / `partial` / `out_of_stock` / `no_reward` / `unknown`). Rules can branch on it to choose between sending the gift and offering a replacement.
+- The gift is the one on the order, otherwise the one the offer names; for a 3+1, it is the qualifying lines. See `DECISIONS.md` « A missing gift's remedy reads today's stock ».
+- Migration `66_promotion_reward_stock_need.sql` widens the situations' needs check. **Applied 2026-10-04.**
+- **Samples too: need `sample_stock`**, read by `checkOrderPromotion` from the order's samples (`buildPromotions` now keeps each sample's `productId`). The prompt shows it as « Stock actuel des échantillons : … ». The gift and sample checks share one reader, `agent/src/retrieval/stock-by-id.mjs`. Migration `67_sample_stock_need.sql` was **applied 2026-10-04**.
+- **The P-20 rule `p20_echantillons_manquants` has a false premise and is not yet corrected in the database.** It says samples aren't order lines, but every one of the 722 sample lines in the last 90 days is an order line with a product id. Old text, kept here in case the edit needs undoing: « Le client dit ne pas avoir reçu les échantillons offerts. NOUS NE POUVONS PAS LE VÉRIFIER : les échantillons ne figurent pas comme articles de la commande, donc ni leur présence ni leur absence n'est lisible dans le dossier. Accuser réception, dire qu'une personne regarde, et ne rien promettre — ni renvoi, ni geste commercial, ni explication de l'absence. Ne pas laisser entendre que le client s'est trompé. »
+- **15 draft rules** carry `promotion_discount_policy`'s last paragraph (and what the owner added on 2026-10-04): if the item is in stock, it is sent; if it isn't, the customer is asked whether they want an alternative or would rather wait for the restock. Each draft is the approved rule's conditions **plus** the stock fact, so `unknown` stock still gets today's wording:
+  - Gift left out of the basket: `offre_auto_article_offert_absent_{en_stock,rupture}` and `p18_code_article_offert_absent_{en_stock,rupture}`.
+  - Gift applied but missing from the parcel: `offre_appliquee_reclamation_{en_stock,rupture}` and `p18_code_applique_{en_stock,rupture}`. They only talk about sending or stock if the customer reports the gift missing, and both route to a person.
+  - P-17, gift won't add to the basket (out of stock only, one per checkout branch): `p17_cadeau_rupture`, `p17_panier_retrouve_cadeau_rupture`, `p17_panier_introuvable_cadeau_rupture`.
+  - S-34: `s34_cadeau_{en_stock,rupture}`.
+  - P-20: `p20_echantillons_en_stock` and `p20_echantillons_rupture` (`partial` included in the second). **These handle samples only, and P-20 also covers gifts**, so they're superseded by `p20_offerts_manquants_stock` (draft): it requires `order_identity: resolved` plus both `sample_stock` and the new **`order_gift_stock`** to be known, routes to a person, and handles only the items the customer says are missing. `p20_echantillons_rupture` was approved before this was found and is live; it should be withdrawn.
+- **`order_gift_stock`**: `checkOrderPromotion` now reads the stock of the order's gift lines too (gifts keep their `productId`) and prints « Stock actuel des cadeaux : … ». Migration `68_order_gift_stock_need.sql` was **applied 2026-10-04**.
+  - Checked against the agent's own validation and enumerated for ties over every combination of the facts they touch. No ties were introduced. **One existing tie** surfaced: in P-18, `p18_promotion_automatique` and `code_actif_ne_sapplique_pas` both match an automatic offer with validity `active`.
+- **`checkOrderPromotion` is now callable by the planner** (`argsFor`). It takes no arguments but was missing from that list, so `order_promotion` (P-22) and `sample_stock` (P-20) were only collected when the model happened to call it.
+- **Not proven:** none of the drafts is approved, and no real ticket has been re-run. Every current reward product and sample is in stock, so `out_of_stock` has only been exercised in tests.
+
 ## GPT-6 models are priced (2026-10-04)
 
 - **Why:** since 2026-09-30 Settings runs seven agents on `gpt-6-luna` / `gpt-6-sol` (`agent_models`), and neither was in `llm-rates.mjs`, so their spend showed as unknown on Insights and Settings.

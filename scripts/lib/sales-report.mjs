@@ -51,7 +51,7 @@ import { INVENTORY_STATUS_LABELS, averageOrderValue, revenueBridge, revenueDrive
  *   funnel: { key: string, label: string, value: number | null, ofEntry: number | null, ofPrevious: number | null }[],
  *   channels: { channel: string, sessions: number | null, revenue: number | null, orders: number | null, conversionRate: number | null, revenuePerSession: number | null }[],
  *   channelsBlockedReason: string | null,
- *   inventory: { items: { title: string, stock: number, unitsOut: number, coverDays: number | null, status: string }[], windowDays: number, syncedAt: string | null },
+ *   inventory: { items: { title: string, stock: number, unitsOut: number, coverDays: number | null, status: string }[], windowDays: number, minStockUnits: number, syncedAt: string | null },
  *   carriers: { carrier: string, shipments: number, p50Hours: number | null, over72h: number }[],
  *   signals: { tone: string, title: string, detail: string }[]
  * }} SalesReportData
@@ -704,14 +704,13 @@ function operations(data) {
   return `<section class="view" id="view-operations"><h2 class="view-title">Operations</h2>
 ${perMode(data, (mode) => opsCards(mode))}
 <div class="grid3">
-  <article class="card panel"><div class="panel-head"><div><h2>Inventory exceptions</h2><div class="hint">Active products, stock as of ${escapeHtml(synced)} · cover at the last ${inv.windowDays} days' rate</div></div></div>
+  <article class="card panel"><div class="panel-head"><div><h2>Inventory exceptions</h2><div class="hint">Active products, stock as of ${escapeHtml(synced)} · cover at the last ${inv.windowDays} days' rate · every product under ${inv.windowDays} days of cover or ${inv.minStockUnits} units</div></div></div>
     ${inv.items.length ? `<div class="table-wrap"><table><thead><tr><th>Product</th><th>Stock</th><th>Days</th><th>Status</th></tr></thead><tbody>${inv.items
-      .slice(0, 10)
       .map(
         (i) =>
           `<tr><td><b>${escapeHtml(i.title)}</b></td><td>${num(i.stock)}</td><td>${i.coverDays === null ? '—' : Math.floor(i.coverDays)}</td><td><span class="pill ${statusClass(i.status)}">${escapeHtml(INVENTORY_STATUS_LABELS[i.status] ?? i.status)}</span></td></tr>`
       )
-      .join('')}</tbody></table></div>` : `<p class="muted">No active product is out of stock or under ${inv.windowDays} days of cover.</p>`}
+      .join('')}</tbody></table></div>` : `<p class="muted">No active product is out of stock, under ${inv.windowDays} days of cover or under ${inv.minStockUnits} units.</p>`}
     <div class="footer-note">Stock is now, not at month end: Shopify keeps no stock history this app reads. No replenishment is shown — purchase orders do not reach it.</div></article>
   <article class="card panel"><div class="panel-head"><div><h2>Carrier performance</h2><div class="hint">Dispatch by carrier · delivery not measured yet</div></div></div>
     ${data.carriers.length ? `<div class="table-wrap"><table><thead><tr><th>Carrier</th><th>Shipments</th><th>Share</th><th>Median to ship</th><th>After 3 days</th></tr></thead><tbody>${data.carriers

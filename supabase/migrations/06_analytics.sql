@@ -2529,8 +2529,9 @@ comment on function public.insights_promotions is
 
 -- ----------------------------------------------- fulfilment: stock at risk
 
--- Active products that are out of stock, or will be within p_max_cover_days at
--- the rate they left the warehouse over [p_from, p_to).
+-- Active products that are out of stock, will be within p_max_cover_days at
+-- the rate they left the warehouse over [p_from, p_to), or hold fewer than
+-- p_max_stock_units whatever the rate.
 --
 -- STOCK IS NOW, THE RATE IS A WINDOW. `products.available_stock` is the sum of
 -- the variants' inventory at the last product sync; the rate is every unit that
@@ -2539,13 +2540,16 @@ comment on function public.insights_promotions is
 -- "low" starts, are the caller's judgement.
 --
 -- Bounded by the catalogue. A product that sold nothing has no cover to
--- compute, so it appears only when it is out of stock.
+-- compute, so it appears only when it is out of stock or under the unit floor;
+-- a slow seller with months of cover still appears under the floor, because a
+-- handful of units is one order away from out.
 create or replace function public.insights_inventory_exceptions(
   p_shop uuid,
   p_from timestamp,
   p_to timestamp,
   p_tz text,
-  p_max_cover_days numeric
+  p_max_cover_days numeric,
+  p_max_stock_units integer
 )
 returns table (
   product_id text,
@@ -2604,14 +2608,15 @@ as $$
   from measured m
   where m.available_stock <= 0
      or (m.cover is not null and m.cover <= p_max_cover_days)
-  order by coalesce(m.cover, 0), m.units desc, m.title;
+     or m.available_stock < p_max_stock_units
+  order by m.available_stock > 0, m.cover nulls last, m.available_stock, m.units desc, m.title;
 $$;
 
 revoke all on function public.insights_inventory_exceptions from public, anon, authenticated;
 grant execute on function public.insights_inventory_exceptions to service_role;
 
 comment on function public.insights_inventory_exceptions is
-  'Active products out of stock, or with at most p_max_cover_days of cover at the rate units (free lines included, all channels) left over [p_from, p_to). Stock is products.available_stock as of the last product sync.';
+  'Active products out of stock, with at most p_max_cover_days of cover at the rate units (free lines included, all channels) left over [p_from, p_to), or with fewer than p_max_stock_units in stock. Stock is products.available_stock as of the last product sync.';
 
 -- ------------------------------------------------- sales: by collection
 
