@@ -134,14 +134,18 @@ test('the default table is frozen, so a caller cannot reprice it globally', () =
   assert.ok(Object.isFrozen(DEFAULT_MODEL_RATES));
 });
 
-test('the defaults cover exactly the models the project calls', () => {
+test('the defaults cover exactly the models the project calls or offers', () => {
   // agent/src/config.mjs: triage + categoriser + decomposer on mini,
   // investigator on gpt-4o, embeddings on text-embedding-3-small; and the
-  // management chat's default model (web/lib/server/chat-service.ts).
+  // management chat's default model (web/lib/server/chat-service.ts); and the
+  // GPT-6 family, picked per agent in Settings (agent_models) since 2026-09-30.
   assert.deepEqual(Object.keys(DEFAULT_MODEL_RATES).sort(), [
     'gpt-4o',
     'gpt-4o-mini',
     'gpt-5.2',
+    'gpt-6-astra',
+    'gpt-6-luna',
+    'gpt-6-sol',
     'text-embedding-3-small'
   ]);
 });

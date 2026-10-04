@@ -10,6 +10,12 @@ Three sibling files carry the other halves, and this one deliberately does not d
 
 ---
 
+## GPT-6 models are priced (2026-10-04)
+
+- **Why:** since 2026-09-30 Settings runs seven agents on `gpt-6-luna` / `gpt-6-sol` (`agent_models`), and neither was in `llm-rates.mjs`, so their spend showed as unknown on Insights and Settings.
+- `DEFAULT_MODEL_RATES` gains `gpt-6-luna` (0.10 / 0.01 cached / 0.50), `gpt-6-sol` (2 / 0.20 / 10) and `gpt-6-astra` (10 / 1 / 50), USD per 1M, Standard tier, read from developers.openai.com/api/docs/pricing on 2026-10-04. Applied at read time, so history since 09-30 is priced too.
+- Not automatic: OpenAI publishes no pricing API. A newly picked model is still unpriced until it is added here or to `LLM_RATES`.
+
 ## Casework and closure calls are costed under their own pass (2026-10-03)
 
 - **Why:** the first live poll with the casework stage on (Render `--stop-after=categorise --also=send`, 2026-10-03 08:50 UTC) recorded its 13 Case Manager calls in `llm_usage` as `other`. The call sites already said `casework` / `closure`; the check constraint and `USAGE_PASSES` did not list them, so the sink fell back to `other`.

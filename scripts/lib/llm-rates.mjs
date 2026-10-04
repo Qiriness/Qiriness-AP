@@ -24,9 +24,10 @@ export const RATE_UNIT_TOKENS = 1_000_000;
 /**
  * VERIFY AGAINST CURRENT OPENAI PRICING.
  *
- * Only the three models this project actually calls (see agent/src/config.mjs):
- * the triage and categorisation tier, the investigation tier, and the embedding
- * model. A model absent from this table is not free — see `estimateCost`.
+ * The env defaults (agent/src/config.mjs: the cheap tier, the investigation
+ * tier, the embedding model), the chat's default, and the models picked per
+ * agent in Settings (`agent_models`). A model absent from this table is not
+ * free — see `estimateCost`.
  */
 export const DEFAULT_MODEL_RATES = Object.freeze({
   // Investigation tier.
@@ -38,6 +39,13 @@ export const DEFAULT_MODEL_RATES = Object.freeze({
   // cached rate: the chat's prompt is mostly cached, so pricing it at the full
   // input rate would overstate a conversation several times over.
   'gpt-5.2': { input: 1.75, cachedInput: 0.175, output: 14 },
+  // The GPT-6 family, chosen per agent in Settings since 2026-09-30 (luna for
+  // the cheap tier, sol for the investigator and the chat). Standard tier, read
+  // from developers.openai.com/api/docs/pricing on 2026-10-04. Astra is listed
+  // so that picking it in Settings is priced from the first call.
+  'gpt-6-luna': { input: 0.1, cachedInput: 0.01, output: 0.5 },
+  'gpt-6-sol': { input: 2, cachedInput: 0.2, output: 10 },
+  'gpt-6-astra': { input: 10, cachedInput: 1, output: 50 },
   // Embeddings have no completion half, so `output` is 0 rather than absent —
   // an absent field would read as "unpriced" in `estimateCost`, which is a
   // different statement from "this model cannot produce output tokens".
