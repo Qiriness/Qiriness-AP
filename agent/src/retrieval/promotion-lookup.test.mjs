@@ -448,6 +448,35 @@ test('a code the decomposer reports but the message does not contain is refused'
   } finally { restore(); }
 });
 
+test('424b4702: a campaign name in prose is not a code, so the gift it came with is still found', async () => {
+  const { lookup, restore } = lookupOver(SHOP);
+  try {
+    const result = await lookup.identify({
+      text: "pourriez-vous rajouter le masque éclat ? avec la promo octobre rose j'aurais dû avoir ce masque",
+      codes: ['octobre rose'],
+      offers: [offer('gift', { product: 'masque éclat' })],
+      now: NOW
+    });
+    assert.deepEqual(result.codes, []);
+    assert.equal(result.kind, 'automatic');
+    assert.doesNotMatch(result.promptText, /OCTOBREROSE/);
+  } finally { restore(); }
+});
+
+test('the phrase guard leaves real codes alone: capitals, one word, or a code the shop holds', async () => {
+  const { lookup, restore } = lookupOver(SHOP);
+  try {
+    // Unknown but typed as a code: kept, so « code introuvable » can be said.
+    const caps = await lookup.identify({ text: 'mon code PANIER 10 ne marche pas', codes: ['PANIER 10'], now: NOW });
+    assert.deepEqual(caps.codes.map((c) => [c.code, c.known]), [['PANIER10', false]]);
+    const oneWord = await lookup.identify({ text: 'le code octobrerose ne marche pas', codes: ['octobrerose'], now: NOW });
+    assert.deepEqual(oneWord.codes.map((c) => [c.code, c.known]), [['OCTOBREROSE', false]]);
+    // Known, even typed in lowercase across two words.
+    const known = await lookup.identify({ text: 'le code bienvenue qiriness est refusé', codes: ['bienvenue qiriness'], now: NOW });
+    assert.deepEqual(known.codes.map((c) => [c.code, c.known]), [['BIENVENUEQIRINESS', true]]);
+  } finally { restore(); }
+});
+
 test('« les 20 % de la première commande » is a code the customer never typed', async () => {
   // No automatic offer gives 20 %, so the codes that do are named — and not chosen between.
   const { lookup, restore } = lookupOver(SHOP);

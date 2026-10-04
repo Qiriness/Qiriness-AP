@@ -360,11 +360,19 @@ export function createPromotionLookup({ supabase, shopId, logger }) {
       //
       // A typed code the shop does NOT hold is kept, marked unknown: « code
       // introuvable » is an answer, and the message is still about a code.
+      //
+      // EXCEPT A CAMPAIGN NAME IN PROSE (2026-10-04). Ticket 424b4702: « la
+      // promo octobre rose » came back from the decomposer as a code, and the
+      // case file then established « le code OCTOBREROSE n'existe pas » for a
+      // customer who never typed one. Unknown, two words, all lowercase as
+      // written is a phrase, not a code. A real code typed with a space
+      // (« PANIER 10 ») is known, or written in capitals, and stays.
       const typed = new Map();
       const candidates = Array.isArray(codes) ? codes : await extractCodes(text);
       for (const raw of candidates) {
         if (!appearsInText(raw, text)) continue;
         const { promotion } = findPromotionByCode(raw, flat);
+        if (!promotion && writtenAsPhrase(raw, text)) continue;
         const code = normaliseCode(promotion?.code ?? raw);
         if (code && !typed.has(code)) typed.set(code, promotion ?? null);
       }
@@ -823,6 +831,27 @@ function appearsInText(code, text) {
   if (!needle) return false;
   const words = String(text || '').split(/\s+/).map(flatten).filter(Boolean);
   return words.some((w, i) => w === needle || (i + 1 < words.length && w + words[i + 1] === needle));
+}
+
+/**
+ * Whether the message writes this "code" as ordinary words: across two words,
+ * with no capital letter, as `appearsInText` would find it. « promo octobre
+ * rose » is; « PANIER 10 », « Newyear26 » and « octobrerose » are not.
+ */
+function writtenAsPhrase(code, text) {
+  const flatten = (value) => String(value).toUpperCase().replace(/[^A-Z0-9]/g, '');
+  const needle = flatten(code);
+  if (!needle) return false;
+  const words = String(text || '').split(/\s+/).filter(Boolean);
+  const flat = words.map(flatten);
+  if (flat.some((w) => w === needle)) return false;
+  for (let i = 0; i + 1 < words.length; i += 1) {
+    if (flat[i] && flat[i] + flat[i + 1] === needle) {
+      const written = `${words[i]} ${words[i + 1]}`;
+      if (written === written.toLowerCase()) return true;
+    }
+  }
+  return false;
 }
 
 const MECHANIC_FR = {
