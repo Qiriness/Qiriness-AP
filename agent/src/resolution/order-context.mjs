@@ -1,3 +1,4 @@
+import { orderSignatureHash } from '../../../scripts/lib/order-signature.mjs';
 import { workingDaysBetween } from '../lib/working-days.mjs';
 import { buildCustomerContext } from '../retrieval/customer-context.mjs';
 
@@ -31,6 +32,16 @@ export function buildOrderContext(order, customer = null, { now = new Date() } =
 
   return {
     resolvedAt: new Date(now).toISOString(),
+    // WHICH VERSION OF THE ORDER THIS IS, as Shopify stamped it. The context pass
+    // rebuilds a bundle whose order now carries a different stamp — compared for
+    // equality, never as « newer than resolvedAt », because a sync can land after
+    // the build with a change Shopify made before it. Never shown to the model.
+    sourceUpdatedAt: order.shopify_updated_at || null,
+    // WHAT A CUSTOMER WOULD NOTICE about that version (order-signature.mjs):
+    // fulfilment, payment, cancellation, parcels. The pre-send check refuses an
+    // approved reply when the order's differs — a tag edit moves the stamp above
+    // but not this, and must not cancel a send.
+    sourceSignature: orderSignatureHash(order),
     order: {
       name: order.name,
       number: order.order_number ?? null,

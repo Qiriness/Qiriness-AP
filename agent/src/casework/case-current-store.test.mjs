@@ -23,6 +23,20 @@ test('a ticket is folded when it has never been, or has moved since', () => {
   assert.deepEqual(ids, ['new', 'mail', 'caseFile', 'reading']);
 });
 
+test('a fact drift recorded after the last fold counts as movement', () => {
+  const ids = staleTickets({
+    tickets: [
+      { id: 'drifted', last_message_at: '2026-09-20T10:00:00Z', fact_drift_at: '2026-09-22T10:00:00Z' },
+      { id: 'old', last_message_at: '2026-09-20T10:00:00Z', fact_drift_at: '2026-09-20T12:00:00Z' }
+    ],
+    current: [
+      { ticket_id: 'drifted', folded_at: '2026-09-21T10:00:00Z' },
+      { ticket_id: 'old', folded_at: '2026-09-21T10:00:00Z' }
+    ]
+  });
+  assert.deepEqual(ids, ['drifted']);
+});
+
 function fakeStore(inputs) {
   const saved = [];
   return {

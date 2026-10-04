@@ -1224,3 +1224,14 @@ test('another thread of the case is skipped: its reply goes elsewhere', async ()
   assert.equal(counts.skipped, 1);
   assert.equal(store.saved.length, 0);
 });
+
+test('a run the change router queued is measured at the router’s clock, never earlier than the customer wrote', async () => {
+  const { clockOf } = await import('./investigation-runner.mjs');
+  assert.equal(clockOf('2026-09-28T10:00:00Z', '2026-10-04T10:00:00Z'), '2026-10-04T10:00:00Z');
+  // The customer writing after the router ran moves the clock on again.
+  assert.equal(clockOf('2026-10-05T10:00:00Z', '2026-10-04T10:00:00Z'), '2026-10-05T10:00:00Z');
+  // Not routed: the customer's message, as before.
+  assert.equal(clockOf('2026-09-28T10:00:00Z', null), '2026-09-28T10:00:00Z');
+  assert.equal(clockOf(null, '2026-10-04T10:00:00Z'), '2026-10-04T10:00:00Z');
+  assert.equal(clockOf(null, null), null);
+});

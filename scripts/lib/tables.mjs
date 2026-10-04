@@ -323,7 +323,9 @@ export const COLUMNS = {
     'id,subject,status,category,level,language,happiness,requester_name,resolved_context,' +
     'duplicate_of_ticket_id,related_ticket_id,related_score,sender_label,case_id,' +
     // The poll gate (stage 6): a ticket still owed a pass is not drafted yet.
-    'needs_categorisation,needs_investigation',
+    'needs_categorisation,needs_investigation,' +
+    // What moved under the case file (change-router.mjs).
+    'fact_drift',
 
   /**
    * Auto-close. `needs_categorisation` is read so a ticket still queued for the
@@ -570,7 +572,10 @@ export const COLUMNS = {
    */
   investigationForDrafting:
     'id,ticket_id,trigger_message_id,verdict,established,unverified,missing,do_not_claim,' +
-    'knowledge,handoff,investigated_at,exemplar_match,company_policies',
+    'knowledge,handoff,investigated_at,exemplar_match,company_policies,' +
+    // Which evidence ids are order-bundle calls, so a claim resting on the
+    // bundle alone can be left out once the order has moved (fact_drift).
+    'tool_calls',
 
   /**
    * A draft as both readers need it: the dashboard rendering it for approval,
@@ -634,7 +639,10 @@ export const COLUMNS = {
     // leaves it out of what the model is shown.
     'customer_email_masked,' +
     'delivered_at,return_refund_opened_at,return_refund_completed_at,' +
-    'processed_at,shopify_created_at,shopify_updated_at',
+    'processed_at,shopify_created_at,shopify_updated_at,' +
+    // The material signature reads it (order-signature.mjs); a bundle hashed
+    // without it would never match the order and refuse every send.
+    'tracking_numbers',
 
   /**
    * The embedding determinism quadruple, plus whatever composes the input.

@@ -15,7 +15,7 @@ import type { TicketDraft, TicketDraftOutbound, TicketManualReply, TicketThread 
  */
 
 /** Why the worker did not send. Keys: CANCEL_REASONS; unknown reasons print raw. */
-const KNOWN_NOT_SENT_REASONS = ["case_moved", "customer_wrote_again", "already_answered", "draft_withdrawn", "auto_send_off"];
+const KNOWN_NOT_SENT_REASONS = ["case_moved", "customer_wrote_again", "already_answered", "draft_withdrawn", "auto_send_off", "facts_pending"];
 
 /** How far sending got, or null when nothing was asked. */
 export function outboundLine(outbound: TicketDraftOutbound | null, t: Translate): string | null {

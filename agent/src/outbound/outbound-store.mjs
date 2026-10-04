@@ -1,5 +1,6 @@
 import { supabaseSelect } from '../../../scripts/lib/supabase-rest-client.mjs';
 import { T } from '../../../scripts/lib/tables.mjs';
+import { ORDER_SIGNATURE_COLUMNS, orderSignatureHash } from '../../../scripts/lib/order-signature.mjs';
 
 const MESSAGE_COLUMNS = 'id,ticket_id,graph_message_id,internet_message_id,direction,actor,from_email,received_at';
 const DRAFT_COLUMNS =
@@ -60,6 +61,33 @@ export function createOutboundStore(supabase, { shopId, select = supabaseSelect 
         'draft_id'
       );
       return new Set(rows.map((row) => row.draft_id));
+    },
+
+    /**
+     * Whether the ticket's order moved in a way a customer would notice since
+     * its bundle was built: the bundle's `sourceSignature` against the order's
+     * own now. A bundle with no signature (built before it existed) or no order
+     * reads as not moved: the check refuses on evidence, never on its absence.
+     */
+    async orderMoved(ticketId) {
+      const tickets = await select(
+        supabase,
+        T.TICKETS,
+        { id: ticketId, shop_id: shopId },
+        'shopify_order_number,signature:resolved_context->>sourceSignature',
+        { limit: 1 }
+      );
+      const ticket = tickets[0];
+      if (!ticket?.shopify_order_number || !ticket.signature) return false;
+      const orders = await select(
+        supabase,
+        T.ORDERS,
+        { shop_id: shopId, name: ticket.shopify_order_number, deleted_at: { operator: 'is', value: 'null' } },
+        ORDER_SIGNATURE_COLUMNS,
+        { limit: 1 }
+      );
+      if (!orders[0]) return false;
+      return orderSignatureHash(orders[0]) !== ticket.signature;
     },
 
     async caseCurrent(ticketId) {

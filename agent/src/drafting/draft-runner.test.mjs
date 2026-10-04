@@ -430,3 +430,28 @@ test('the case gate turns on only once the case target has been computed', async
   assert.equal(caseTargetOf({ latest_actionable_inbound_message_id: null, target_computed_at: '2026-10-02T00:00:00Z' }), null);
   assert.equal(caseTargetOf({ latest_actionable_inbound_message_id: 'm1', target_computed_at: '2026-10-02T00:00:00Z' }), 'm1');
 });
+
+test('a redraft after an order moved leaves out the claims resting on the old bundle alone', async () => {
+  const { staleOrderClaims, withoutClaims } = await import('./draft-runner.mjs');
+  const { caseFileFromRow } = await import('./compose-draft.mjs');
+  const investigation = {
+    investigated_at: '2026-09-28T15:17:59Z',
+    tool_calls: [{ id: 't1', tool: 'getOrderContext' }, { id: 't2', tool: 'searchKnowledge' }],
+    established: [
+      { claim: 'La commande n’est pas encore expédiée.', evidence_ids: ['t1'] },
+      { claim: 'La commande contient la crème, qui se conserve 12 mois.', evidence_ids: ['t1', 't2'] },
+      { claim: 'Le sérum convient aux peaux sensibles.', evidence_ids: ['t2'] }
+    ]
+  };
+  const drift = { changed: { order_state: { from: 'not_dispatched', to: 'dispatched' } }, case_file_at: '2026-09-28T15:17:59Z' };
+
+  const stale = staleOrderClaims({ ticket: { fact_drift: drift }, investigation });
+  assert.deepEqual(stale.map((c) => c.claim), ['La commande n’est pas encore expédiée.']);
+  const caseFile = withoutClaims(caseFileFromRow(investigation), stale);
+  assert.equal(caseFile.established.length, 2);
+
+  // No drift, or a drift measured against an older case file: the case file whole.
+  assert.deepEqual(staleOrderClaims({ ticket: { fact_drift: null }, investigation }), []);
+  const newer = { ...investigation, investigated_at: '2026-10-04T17:00:00Z' };
+  assert.deepEqual(staleOrderClaims({ ticket: { fact_drift: drift }, investigation: newer }), []);
+});

@@ -63,6 +63,7 @@
     "actors:backfill": "node src/tools/run-actor-backfill.mjs",
     "actors:backfill:dry-run": "node src/tools/run-actor-backfill.mjs --dry-run",
     "fold:once": "node src/tools/run-fold.mjs",
+    "route:once": "node src/tools/run-route.mjs",
     "case-status": "node src/tools/run-case-status.mjs",
     "snooze": "node src/tools/run-snooze.mjs",
     "requester:repair": "node src/tools/run-requester-repair.mjs",

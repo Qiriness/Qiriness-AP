@@ -10,6 +10,20 @@ Three sibling files carry the other halves, and this one deliberately does not d
 
 ---
 
+## A changed order is routed to the cheapest action that keeps the reply true (2026-10-04)
+
+- **The order bundle is rebuilt whenever Shopify has a newer version.** `context` now also rebuilds a bundle whose order carries a different `shopify_updated_at` than the one it was built from (`sourceUpdatedAt`, stamped on every bundle). Before, a bundle was built once, and a new customer message on `c3efeb4e` (#7093, fulfilled 2026-09-29) was still investigated against « not dispatched ».
+- **New `route` pass** (no model), between `link` and `investigate`: `casework/change-router.mjs` + `change-router-runner.mjs`. For open tickets we owe a reply on, it measures the order states at `now`, compares them with the latest case file and replays its stored rule selection (`selectAnswer`):
+  - **rule moved** → re-investigate (`needs_investigation`, clocked at the router's time);
+  - **rule holds but the reply rests on the moved fact** → `tickets.fact_drift`: the fold raises the version, the drafts go stale, the redraft drops the case file's order-only claims;
+  - **otherwise** → nothing.
+
+  Waiting on anyone else → nothing. `npm run route:once [-- --dry-run]`.
+- **`preSendCheck` refuses `facts_pending`** when the order's material signature (fulfilment, payment, cancellation, parcels; `scripts/lib/order-signature.mjs`, shared with the snooze wake) differs from the bundle's.
+- `orderStatesAt` (`investigation/order-states-at.mjs`) is the one parameter block for the investigation and the router.
+- Migration `69_fact_drift.sql`: `tickets.fact_drift`, plus the `facts_pending` cancel reason on the column comment. **Applied 2026-10-04**; `context:build` then rebuilt all 207 bundles (a second run: 0 outdated), and `c3efeb4e` now reads `FULFILLED` / `dispatched`.
+- **Proven:** unit tests only (`change-router*.test.mjs`, fold, drafting, outbound, order context, migration 69). Full suite: 4,620 pass. The 3 failures in `61_cases` / `62_case_lead` also fail on a clean checkout of HEAD. **Not run against the live database**: VALIDATION_LOG item 37.
+
 ## « Optimize draft » is now « Format as FAQ » (2026-10-04)
 
 - The button in the article editor puts the article into the FAQ format of « How to write an FAQ »: one Heading 2 per question, its rewordings as plain lines, then the answer. It arranges the existing text and keeps every answer word for word. It writes a question only for a topic that has none, and never writes rewordings (DECISIONS.md § « Format as FAQ » arranges an article…).

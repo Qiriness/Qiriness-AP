@@ -134,3 +134,12 @@ test('a sent reply is confirmed straight after the mailbox read, before the fold
   const fold = SOURCE.indexOf('runFold({');
   assert.ok(sent > 0 && confirm > sent && confirm < fold);
 });
+
+test('the change router runs after the bundle is rebuilt and before the investigation', () => {
+  // It compares the bundle `context` just rebuilt; a re-investigation it queues
+  // must run in the same poll; the fold after both turns its drift into a version.
+  const stages = executedStages();
+  assert.ok(stages.indexOf('context') < stages.indexOf('route'));
+  assert.ok(stages.indexOf('route') < stages.indexOf('investigate'));
+  assert.ok(stages.indexOf('route') < stages.indexOf('fold'));
+});

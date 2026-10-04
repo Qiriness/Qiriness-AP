@@ -1,3 +1,4 @@
+import { ORDER_SIGNATURE_COLUMNS, orderSignature } from './order-signature.mjs';
 import { createSnoozeRecord } from './snooze-record.mjs';
 import { supabaseSelect } from './supabase-rest-client.mjs';
 import { T } from './tables.mjs';
@@ -15,28 +16,14 @@ import { T } from './tables.mjs';
  */
 
 /** The columns `materialOrderChange` compares, as the orders table stores them. */
-export const ORDER_WAKE_COLUMNS = 'name,fulfillment_status,financial_status,cancelled_at,tracking_numbers,fulfillments';
-
-function signature(order) {
-  if (!order) return null;
-  const parcels = (Array.isArray(order.fulfillments) ? order.fulfillments : [])
-    .map((f) => `${f?.id ?? ''}:${f?.status ?? ''}:${f?.display_status ?? ''}:${f?.delivered_at ?? ''}`)
-    .sort();
-  return JSON.stringify({
-    fulfillment: order.fulfillment_status ?? null,
-    financial: order.financial_status ?? null,
-    cancelled: order.cancelled_at ?? null,
-    tracking: [...(order.tracking_numbers ?? [])].sort(),
-    parcels
-  });
-}
+export const ORDER_WAKE_COLUMNS = ORDER_SIGNATURE_COLUMNS;
 
 /** Whether the stored order and the new row differ in anything that could end a wait. */
 export function materialOrderChange(stored, next) {
   if (!next) return false;
   // A first sight of an order changes nothing a snoozed ticket could be waiting on.
   if (!stored) return false;
-  return signature(stored) !== signature(next);
+  return orderSignature(stored) !== orderSignature(next);
 }
 
 /**

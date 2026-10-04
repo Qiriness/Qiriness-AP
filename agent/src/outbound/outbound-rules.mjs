@@ -19,10 +19,11 @@ import { sendableStatusesFor } from '../../../scripts/lib/outbound-record.mjs';
  * @param {object|null} facts.replyTo     the ticket_messages row being answered
  * @param {object[]} facts.laterMessages  the ticket's messages received after replyTo
  * @param {object[]} facts.otherActions   the ticket's other outbound actions
+ * @param {boolean} facts.orderMoved      the order's material signature differs from the bundle's
  * @param {boolean} facts.draftOnly       config.draftOnly
  * @returns {{ ok: true } | { ok: false, reason: string }}
  */
-export function preSendCheck({ action, draft, caseCurrent, replyTo, laterMessages = [], otherActions = [], draftOnly = true }) {
+export function preSendCheck({ action, draft, caseCurrent, replyTo, laterMessages = [], otherActions = [], orderMoved = false, draftOnly = true }) {
   if (action.mode === 'manual') return manualCheck({ action, replyTo, laterMessages });
 
   // The approval still stands: not rejected, not gone stale under a fold. An
@@ -39,6 +40,15 @@ export function preSendCheck({ action, draft, caseCurrent, replyTo, laterMessage
   // The case this text was written against is still the case.
   if (!caseCurrent || caseCurrent.version !== action.case_version) {
     return refuse('case_moved');
+  }
+
+  // The order moved in a way the customer would notice (shipped, cancelled,
+  // refunded) and the pipeline has not yet read it: the case version cannot
+  // have caught up, so the version check above cannot see it. Covers the
+  // sync-only worker, which sends without rebuilding anything, and an order
+  // update landing between two polls (DECISIONS § Change router).
+  if (orderMoved) {
+    return refuse('facts_pending');
   }
 
   const own = new Set([action.sent_message_id].filter(Boolean));

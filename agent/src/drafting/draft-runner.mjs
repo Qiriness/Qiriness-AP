@@ -1,6 +1,7 @@
 import { supabaseSelect, supabaseSelectAll } from '../../../scripts/lib/supabase-rest-client.mjs';
 import { COLUMNS, T } from '../../../scripts/lib/tables.mjs';
 import { caseTimeline } from '../../../scripts/lib/case-reply-target.mjs';
+import { driftCurrentFor, orderSourcedClaims } from '../casework/change-router.mjs';
 
 import { brandVoiceProblem, composeSystemPrompt } from './brand-voice.mjs';
 import { checksPassed, failedChecks, runDraftChecks, warningChecks } from './draft-checks.mjs';
@@ -155,7 +156,13 @@ export async function runDrafting({
       continue;
     }
 
-    const caseFile = caseFileFromRow(investigation);
+    // ORDER CLAIMS THE ORDER HAS SINCE CONTRADICTED. When the change router found
+    // the rule still holds but an order state moved (a redraft, not a new case
+    // file), the case file's sentences about the order describe the order as it
+    // was. They are left out, and the « Commande concernée » section — rebuilt
+    // from the current bundle — states it as it is (DECISIONS § Change router).
+    const staleClaims = staleOrderClaims({ ticket, investigation });
+    const caseFile = withoutClaims(caseFileFromRow(investigation), staleClaims);
     const language = replyLanguage(ticket);
     // DOES THIS MESSAGE CLOSE THE CASE? The code gate runs first and costs
     // nothing: with a question outstanding or a point sitting with a colleague,
@@ -274,15 +281,19 @@ export async function runDrafting({
         checksPassed: passed,
         autoSendEligible: blockers.length === 0,
         autoSendBlockers: blockers,
-        promptInputs: promptInputs({
-          closure,
-          caseFile,
-          orderContext,
-          investigationId: investigation.id,
-          model,
-          companyPolicies,
-          parameters
-        }),
+        promptInputs: {
+          ...promptInputs({
+            closure,
+            caseFile,
+            orderContext,
+            investigationId: investigation.id,
+            model,
+            companyPolicies,
+            parameters
+          }),
+          // So a reviewer can see the case file was not read whole.
+          ...(staleClaims.length > 0 ? { dropped_order_claims: staleClaims.length } : {})
+        },
         model
       };
 
@@ -338,6 +349,24 @@ export function pollGate({ caseCurrent, ticket, investigation, conversation = []
   if (!Number.isFinite(cutover) || !trigger || time(trigger) < cutover) return { ok: false, reason: 'before_cutover' };
   if (trigger.actor !== 'customer') return { ok: false, reason: 'not_customer_trigger' };
   return { ok: true, reason: null };
+}
+
+/**
+ * The case file's established claims the order has moved past: only when the
+ * ticket carries a drift measured against THIS case file (a newer case file was
+ * written from the new order and holds), and only the claims resting on the
+ * order bundle alone (`orderSourcedClaims`).
+ */
+export function staleOrderClaims({ ticket, investigation }) {
+  if (!driftCurrentFor(ticket?.fact_drift, investigation)) return [];
+  return orderSourcedClaims(investigation);
+}
+
+/** The case file without these claims, compared by identity. */
+export function withoutClaims(caseFile, claims) {
+  if (claims.length === 0) return caseFile;
+  const drop = new Set(claims.map((claim) => claim?.claim));
+  return { ...caseFile, established: caseFile.established.filter((entry) => !drop.has(entry?.claim)) };
 }
 
 /**

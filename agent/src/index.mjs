@@ -43,6 +43,7 @@ import { createInvestigationStack } from './investigation/create-investigation.m
 import { runInvestigation } from './investigation/investigation-runner.mjs';
 import { createOrderResolutionStore, runOrderResolution } from './resolution/order-resolution-runner.mjs';
 import { createOrderContextStore, runOrderContext } from './resolution/order-context-runner.mjs';
+import { createChangeRouterStore, runChangeRouter } from './casework/change-router-runner.mjs';
 import { createForwardingStore } from './routing/forwarding-store.mjs';
 import { runForwarding } from './routing/forward-runner.mjs';
 import { createDestinationChooser } from './routing/destination-router.mjs';
@@ -98,6 +99,7 @@ const PIPELINE_STAGES = [
   'orders',
   'context',
   'link',
+  'route',
   'investigate',
   'fold',
   'draft',
@@ -150,6 +152,7 @@ async function main() {
   const caseStateRecord = createCaseStateRecord(supabase, { shopId });
   const store = createSupabaseMessageStore(supabase);
   const caseCurrentStore = createCaseCurrentStore(supabase, { shopId });
+  const changeRouterStore = createChangeRouterStore(supabase, { shopId });
   const snoozeRecord = createSnoozeRecord(supabase, { shopId });
   const cursorStore = createSupabaseCursorStore(supabase);
   // The narrow candidate pool duplicate detection decides against: one sender's
@@ -574,6 +577,22 @@ async function main() {
         }
       } catch (error) {
         logger.warn('cases.link_pass_failed', { shopId, error: error.message });
+      }
+    }
+
+    // THE CHANGE ROUTER, after `context` (it reads the bundle that pass just
+    // rebuilt) and before `investigate` (a re-investigation it queues runs in
+    // this poll). No model: it asks whether an order state that moved, or a
+    // window that elapsed, changes the rule the case file followed, and records
+    // the drift the fold turns into a new version. DECISIONS § Change router.
+    if (runsThrough('route')) {
+      try {
+        const routed = await runChangeRouter({ store: changeRouterStore, shopId, logger });
+        if (routed.redraft > 0 || routed.reinvestigate > 0 || routed.skipped) {
+          logger.info('route.pass', { shopId, ...routed });
+        }
+      } catch (error) {
+        logger.warn('route.pass_failed', { shopId, error: error.message });
       }
     }
 

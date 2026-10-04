@@ -536,7 +536,7 @@ comment on column public.outbound_actions.state is
   'approved | draft_created | send_requested | sent_confirmed | cancelled | failed. send_requested is written BEFORE the send call and means "maybe sent": the worker asks the mailbox before any retry. sent_confirmed only once ingestion has stored the sent mail.';
 
 comment on column public.outbound_actions.cancel_reason is
-  'Which pre-send check refused: case_moved, customer_wrote_again, already_answered, draft_withdrawn, auto_send_off. Present exactly when state is cancelled.';
+  'Which pre-send check refused: case_moved, customer_wrote_again, already_answered, draft_withdrawn, auto_send_off, facts_pending (the order moved materially and the pipeline has not read it yet; 69_fact_drift.sql). Present exactly when state is cancelled.';
 
 comment on column public.outbound_actions.reply_to_message_id is
   'The customer message this reply answers. The recipient is its from_email, read at send time; no address is stored here.';

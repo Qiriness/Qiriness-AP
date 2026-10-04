@@ -677,6 +677,15 @@ function renderConversation(conversation, inbound, senderDirectory, { timeZone =
  * question that was already answered, and the model would only ask when it
  * thought to.
  */
+/** The later of the customer's last message and the router's clock; either may be absent. */
+export function clockOf(receivedAt, routedAt) {
+  const received = Date.parse(receivedAt ?? '');
+  const routed = Date.parse(routedAt ?? '');
+  if (!Number.isFinite(routed)) return receivedAt;
+  if (!Number.isFinite(received)) return routedAt;
+  return routed > received ? routedAt : receivedAt;
+}
+
 function buildInput(
   ticket,
   messages,
@@ -751,7 +760,12 @@ function buildInput(
     // for a week is asking about the week, and `received_at` is already loaded
     // (`COLUMNS.messageForInvestigation`). Null when the column is empty, and the
     // reader falls back to the wall clock rather than to no state at all.
-    latestInboundAt: (latest || first)?.received_at ?? null,
+    //
+    // MOVED FORWARD WHEN THE CHANGE ROUTER QUEUED THIS RUN. The router measured
+    // the order at its own clock and found the rule no longer holds; measuring
+    // again at the message time would find it holding, and the router would queue
+    // the same run every poll (DECISIONS § Change router).
+    latestInboundAt: clockOf((latest || first)?.received_at ?? null, ticket?.metadata?.change_router?.at ?? null),
     // COMPUTED OVER EVERY INBOUND MESSAGE, not just the two that make up `text`.
     // A customer often writes "le flacon est cassé" and attaches the photo in a
     // second mail; taking only the first and latest would miss it whenever the

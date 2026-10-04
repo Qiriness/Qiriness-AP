@@ -752,6 +752,21 @@ export function createTicketRecord(supabase, { shopId, transport = REST_TRANSPOR
     },
 
     /**
+     * Tickets whose bundle is already built, with the order version it was built
+     * from (`source_updated_at`, read out of the bundle). The context pass
+     * rebuilds the ones whose order now carries another (DECISIONS § Change router).
+     */
+    async findBuiltContext({ limit = 1000 } = {}) {
+      return selectAll(
+        supabase,
+        T.TICKETS,
+        live({ shopify_order_number: NOT_NULL, context_resolved_at: NOT_NULL }),
+        `${COLUMNS.ticketForOrderContext},source_updated_at:resolved_context->>sourceUpdatedAt`,
+        { limit }
+      );
+    },
+
+    /**
      * Tickets nobody has touched since `cutoff`.
      *
      * The status and date narrowing happens here and the level exemption in

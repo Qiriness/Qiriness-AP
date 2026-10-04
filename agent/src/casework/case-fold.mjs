@@ -243,7 +243,10 @@ export function foldCase({
   // ticket_case_actions rows: { obligation_id, action, acted_by, acted_at }
   actions = [],
   // tickets.overrides: a person's corrections. Only the version fields count.
-  overrides = null
+  overrides = null,
+  // tickets.fact_drift: order states that moved under the latest case file
+  // (change-router.mjs). Only what moved and against which case file count.
+  factDrift = null
 } = {}) {
   const thread = orderedThread(messages);
   const position = new Map(thread.map((message, index) => [message.id, index]));
@@ -340,7 +343,20 @@ export function foldCase({
     next_actor: next,
     resolved: next === 'nobody'
   };
-  return { ...state, material_hash: materialHash(state, versionMaterial(overrides)) };
+  return { ...state, material_hash: materialHash(state, versionMaterial(overrides), driftMaterial(factDrift)) };
+}
+
+/**
+ * The part of a drift the version turns on: which states moved, and against
+ * which case file. Never `checked_at`, so the router re-finding the same drift
+ * on the next poll moves nothing. Null when there is none.
+ */
+export function driftMaterial(factDrift) {
+  if (!factDrift?.changed || Object.keys(factDrift.changed).length === 0) return null;
+  const changed = Object.keys(factDrift.changed)
+    .sort()
+    .map((key) => [key, factDrift.changed[key]?.from ?? null, factDrift.changed[key]?.to ?? null]);
+  return { changed, case_file_at: factDrift.case_file_at ?? null };
 }
 
 /**
@@ -349,7 +365,7 @@ export function foldCase({
  * whether it is resolved. Never timestamps or ids, so a thank-you that changes
  * nothing leaves the version, and any draft written against it, alone.
  */
-export function materialHash(state, overrides = null) {
+export function materialHash(state, overrides = null, drift = null) {
   const material = {
     pending: [...(state.pending_customer_inputs ?? [])].map(String).sort(),
     commitments: (state.commitments ?? []).map((c) => JSON.stringify(c)).sort(),
@@ -361,7 +377,11 @@ export function materialHash(state, overrides = null) {
     // changes what the reply must say, so drafts written before it go stale and
     // the pre-send check refuses them (`case_moved`). ADDED ONLY WHEN PRESENT:
     // a key on every ticket would change every hash and stale every draft.
-    ...(overrides ? { overrides } : {})
+    ...(overrides ? { overrides } : {}),
+    // A FACT THE CASE FILE WAS DECIDED ON MOVED (DECISIONS § Change router): the
+    // reply must say something else, so drafts written before it go stale and
+    // the pre-send check refuses them. Added only when present, like overrides.
+    ...(drift ? { drift } : {})
   };
   return createHash('sha256').update(JSON.stringify(material)).digest('hex').slice(0, 32);
 }

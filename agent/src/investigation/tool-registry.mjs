@@ -1,6 +1,7 @@
-import { amount, days } from '../../../scripts/lib/parameters.mjs';
+import { amount } from '../../../scripts/lib/parameters.mjs';
 import { amountAboveConsumerCeiling, deriveBuyerType } from './trade-signals.mjs';
-import { orderStates, toOrderContextText } from '../resolution/order-context.mjs';
+import { toOrderContextText } from '../resolution/order-context.mjs';
+import { orderStatesAt } from './order-states-at.mjs';
 import { orderIdentitySituation } from '../resolution/order-identity.mjs';
 import { basketFromCheckout, basketFromOrder } from '../retrieval/promotion-outcome.mjs';
 import { stockOfAll } from '../retrieval/stock-by-id.mjs';
@@ -17,7 +18,6 @@ import { normaliseOffers, planToolNames } from './decompose-rules.mjs';
 import { policiesFor, policyCatalogue, renderPolicy } from '../../../scripts/lib/company-policies.mjs';
 import {
   CHECKOUT_WINDOW_DAYS,
-  STALE_TRANSIT_DAYS,
   TOOL_NAMES,
   allowedTools
 } from './investigation-rules.mjs';
@@ -994,41 +994,21 @@ export function createToolRegistry({
             identity: identity.situation,
             foundOrderName: confirmed ? null : identity.orderName,
             states: confirmed
-              ? orderStates(context, {
-                  staleTransitDays: STALE_TRANSIT_DAYS,
-                  // FROM THE MERCHANT, NOT FROM CODE. The stale-transit
-                  // threshold above is a measurement this codebase made; the
-                  // returns window is a policy only the shop can state, and its
-                  // two approved articles disagree about it. Undecided arrives
-                  // here as null and resolves `unknown`, never a default.
-                  returnsWindowDays: days(ticket.parameters, 'returns_window_days'),
-                  // Same contract as the returns window: the shop's number, or
-                  // null and a finding of `unknown`. Never a default — a
-                  // dispatch promise is the merchant's to make.
-                  dispatchDays: days(ticket.parameters, 'dispatch_days'),
-                  // TWO WINDOWS FOR THE SECOND LEG, picked on the shipping
-                  // country by `deliveryDelayState`. Same contract again: either
-                  // unset resolves `delivery_delay_state` to `unknown` for the
-                  // destinations it covers, and those tickets keep the answer
-                  // `expediee_sans_scan` gives them today.
-                  franceDeliveryDays: days(ticket.parameters, 'france_delivery_days'),
-                  abroadDeliveryDays: days(ticket.parameters, 'abroad_delivery_days'),
-                  // THE CLOCK IS THE CUSTOMER'S MESSAGE, NOT THE PASS.
-                  //
-                  // Every state below that compares a date against `now` is
-                  // answering "how did this stand when they wrote", and until
-                  // now it answered "how does this stand at the moment the
-                  // worker ran". Identical on live mail, and wrong on every
-                  // replay: re-running the corpus reads tickets whose orders are
-                  // months old as months overdue, which would have made
-                  // `delivery_delay_state` fire on almost all of them and made
-                  // the eval that measures it meaningless.
-                  //
-                  // Falls back to the wall clock when a message carries no
-                  // `received_at`, because a missing date must not silently turn
-                  // every order state into `unknown`.
-                  now: ticket.latestInboundAt ? new Date(ticket.latestInboundAt) : new Date()
-                })
+              ? // The parameter block lives in `order-states-at.mjs`, shared with
+                // the change router so the two cannot read different thresholds.
+                //
+                // THE CLOCK IS THE CUSTOMER'S MESSAGE, NOT THE PASS. Every
+                // time-based state answers "how did this stand when they wrote".
+                // Identical on live mail, and wrong on every replay: re-running
+                // the corpus would read orders months old as months overdue.
+                // `latestInboundAt` is moved forward to the router's clock when
+                // the change router queued this run (investigation-runner.mjs),
+                // because then the question IS how it stands now.
+                //
+                // Falls back to the wall clock when a message carries no
+                // `received_at`, because a missing date must not silently turn
+                // every order state into `unknown`.
+                orderStatesAt(context, ticket.parameters, ticket.latestInboundAt ? new Date(ticket.latestInboundAt) : new Date())
               : null,
             // WHO IS ASKING, carried by this tool because confirming the order
             // is the same step that answers it. A pharmacy asking for an

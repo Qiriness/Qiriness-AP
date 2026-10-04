@@ -265,10 +265,16 @@ create table public.tickets (
   -- the pipeline's. See scripts/lib/ticket-overrides.mjs and 48_ticket_overrides.sql.
   overrides jsonb not null default '{}'::jsonb,
 
+  -- The change router's record of order states that moved since the latest case
+  -- file. Null until something moves. See agent/src/casework/change-router.mjs
+  -- and 69_fact_drift.sql.
+  fact_drift jsonb,
+
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
 
   constraint tickets_overrides_object_check check (jsonb_typeof(overrides) = 'object'),
+  constraint tickets_fact_drift_object_check check (fact_drift is null or jsonb_typeof(fact_drift) = 'object'),
   constraint tickets_shop_conversation_unique unique (shop_id, graph_conversation_id),
   constraint tickets_case_link_state_check check (case_link_state in ('pending', 'decided')),
   constraint tickets_status_check check (
@@ -483,6 +489,9 @@ comment on column public.tickets.duplicate_of_ticket_id is
 
 comment on column public.tickets.overrides is
   'A person''s corrections, per field: { value, ai_value, set_by, set_at, source }. The column of an overridden field holds the person''s value; ai_value keeps the pipeline''s, and the categoriser keeps it current. Empty object when nothing is overridden.';
+
+comment on column public.tickets.fact_drift is
+  'The change router''s record of order states that moved since the latest case file: { changed: { state: { from, to } }, outcome (redraft | reinvestigate), reason, case_file_at, checked_at }. Null until something moves. The fold hashes it, so a drift raises the case version once.';
 
 comment on column public.tickets.sender_label is
   'The sender_directory label of the address that OPENED this thread, when that address is one of ours -- internal (qiriness.com, lap-groupe.com), contractor, or logistics (the 3PL running the warehouse). Null means a consumer, the ordinary case. Set deterministically at ticket creation from the address, never by a model: who wrote to us is a fact we hold before any pass runs. The drafting queue skips a labelled ticket, because a customer-voice reply addressed to a colleague is never the right output; investigation still runs, because a colleague chasing a real order still needs the order facts gathered for whoever picks it up.';

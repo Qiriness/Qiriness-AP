@@ -101,3 +101,63 @@ test('an order with no customer row still produces a bundle', async () => {
   assert.equal(store.saved[0].context.customer, null);
   assert.equal(store.saved[0].context.order.name, '#1006');
 });
+
+// --- Outdated bundles (DECISIONS § Change router) ---------------------------
+
+function buildRefreshStore({ awaiting = [], built = [], stamps = new Map() } = {}) {
+  const store = buildStore({ tickets: awaiting });
+  store.findBuiltContext = async () => built;
+  store.orderUpdatedAt = async () => stamps;
+  return store;
+}
+
+const BUILT = { ...TICKET, id: 't2', context_resolved_at: '2026-09-28T10:00:00Z', source_updated_at: '2026-09-28T09:00:00+00:00' };
+
+test('a bundle whose order carries a newer Shopify stamp is rebuilt', async () => {
+  const store = buildRefreshStore({ built: [BUILT], stamps: new Map([['#1006', '2026-09-29T14:32:44+00:00']]) });
+  const totals = await runOrderContext({ store, record: store, shopId: 's1' });
+  assert.equal(totals.outdated, 1);
+  assert.equal(store.saved[0].ticket.id, 't2');
+});
+
+test('a bundle built from the order version still current is left alone', async () => {
+  // Same instant, different spelling: compared as times, not as strings.
+  const store = buildRefreshStore({ built: [BUILT], stamps: new Map([['#1006', '2026-09-28T09:00:00Z']]) });
+  const totals = await runOrderContext({ store, record: store, shopId: 's1' });
+  assert.equal(totals.outdated, 0);
+  assert.equal(store.saved.length, 0);
+});
+
+test('a sync landing after the build is caught even though Shopify stamped it earlier', async () => {
+  // Changed in Shopify at 09:30, built here at 10:00 from the 09:00 version,
+  // synced at 12:00: « newer than the build » would miss it.
+  const store = buildRefreshStore({ built: [BUILT], stamps: new Map([['#1006', '2026-09-28T09:30:00Z']]) });
+  const totals = await runOrderContext({ store, record: store, shopId: 's1' });
+  assert.equal(totals.outdated, 1);
+});
+
+test('a bundle built before the stamp existed is rebuilt once', async () => {
+  const store = buildRefreshStore({ built: [{ ...BUILT, source_updated_at: null }], stamps: new Map([['#1006', '2026-09-28T09:00:00Z']]) });
+  await runOrderContext({ store, record: store, shopId: 's1' });
+  assert.equal(store.saved.length, 1);
+  assert.equal(store.saved[0].context.sourceUpdatedAt, null, 'the fixture order has no stamp');
+});
+
+test('an order no longer stored is not counted as outdated', async () => {
+  const store = buildRefreshStore({ built: [BUILT], stamps: new Map() });
+  const totals = await runOrderContext({ store, record: store, shopId: 's1' });
+  assert.equal(totals.outdated, 0);
+});
+
+test('--refresh does not double-count the outdated ones', async () => {
+  const store = buildRefreshStore({ awaiting: [TICKET], built: [BUILT], stamps: new Map([['#1006', '2026-09-29T00:00:00Z']]) });
+  const totals = await runOrderContext({ store, record: store, shopId: 's1', refresh: true });
+  assert.equal(totals.considered, 1);
+  assert.equal(totals.outdated, 0);
+});
+
+test('the bundle records the order version it was built from', async () => {
+  const store = buildStore({ tickets: [TICKET], orders: [{ ...ORDER, shopify_updated_at: '2026-09-29T14:32:44Z' }] });
+  await runOrderContext({ store, record: store, shopId: 's1' });
+  assert.equal(store.saved[0].context.sourceUpdatedAt, '2026-09-29T14:32:44Z');
+});

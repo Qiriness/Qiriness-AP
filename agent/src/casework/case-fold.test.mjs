@@ -211,3 +211,22 @@ test('a person’s correction raises the version; no correction leaves every has
   assert.notEqual(corrected.material_hash, plain.material_hash);
   assert.equal(nextVersion({ version: 4, material_hash: plain.material_hash }, corrected), 5);
 });
+
+test('a fact drift raises the version once; re-finding it, or none at all, moves nothing', () => {
+  const messages = [{ id: 'm1', direction: 'inbound', actor: 'customer', received_at: '2026-09-29T08:00:00Z' }];
+  const plain = foldCase({ messages });
+  assert.equal(foldCase({ messages, factDrift: null }).material_hash, plain.material_hash);
+  assert.equal(foldCase({ messages, factDrift: { changed: {} } }).material_hash, plain.material_hash);
+  const drift = {
+    changed: { order_state: { from: 'not_dispatched', to: 'dispatched' } },
+    outcome: 'redraft',
+    case_file_at: '2026-09-28T15:17:59Z',
+    checked_at: '2026-10-04T10:00:00Z'
+  };
+  const drifted = foldCase({ messages, factDrift: drift });
+  assert.notEqual(drifted.material_hash, plain.material_hash);
+  assert.equal(nextVersion({ version: 6, material_hash: plain.material_hash }, drifted), 7);
+  // Only the check time moved: the same version.
+  const again = foldCase({ messages, factDrift: { ...drift, checked_at: '2026-10-04T10:05:00Z' } });
+  assert.equal(again.material_hash, drifted.material_hash);
+});

@@ -11,8 +11,16 @@ import { buildOrderContext } from './order-context.mjs';
 //
 // A SNAPSHOT, AND RE-RESOLVABLE. `context_resolved_at` records when the bundle
 // was built. An order moves — dispatched, delivered, refunded — so a bundle from
-// last week is a fact about last week, and `--refresh` rebuilds any ticket whose
-// order has been updated since. Storing it rather than querying live is what
+// last week is a fact about last week. Every pass therefore rebuilds the bundles
+// whose order has changed since: the bundle records the `shopify_updated_at` it
+// was built from (`sourceUpdatedAt`), and a different one on the order row means
+// a newer version arrived, by webhook or by the nightly sync — neither needs to
+// know about tickets. NOT `orders.updated_at`: the nightly sync rewrites all
+// 6,133 orders, so that clock would rebuild every bundle every night. NOT
+// « shopify_updated_at > context_resolved_at »: a sync can land after the build
+// carrying a change Shopify made before it. `--refresh` still rebuilds every one.
+// Rebuilding is free; what a changed order MEANS for the ticket is the change
+// router's question (casework/change-router.mjs), not this pass's. Storing it rather than querying live is what
 // stops a drafting agent making five queries per reply, and what makes the reply
 // reviewable afterwards: you can see exactly what it was told.
 
@@ -20,6 +28,9 @@ import { buildOrderContext } from './order-context.mjs';
 // `buildOrderContext`, so a column added for one and missed by the other would
 // produce two bundles of different shapes from one function.
 const ORDER_COLUMNS = COLUMNS.orderForContext;
+
+/** Order names per `in.()` request. */
+const NAME_BATCH = 100;
 
 const CUSTOMER_COLUMNS = [
   'id', 'display_name', 'first_name', 'last_name', 'email', 'locale',
@@ -34,6 +45,30 @@ export function createOrderContextStore(supabase) {
     // now, with the same `refresh` widening. What this store keeps is the orders
     // and the customers behind them.
 
+
+    /**
+     * Each order's Shopify version stamp (`shopify_updated_at`), by display name. Two columns,
+     * batched: the list travels in the URL (the HTTP 414 of 2026-09-27).
+     */
+    async orderUpdatedAt(shopId, orderNames) {
+      const updated = new Map();
+      const names = [...new Set(orderNames.filter(Boolean))];
+      for (let index = 0; index < names.length; index += NAME_BATCH) {
+        const batch = names.slice(index, index + NAME_BATCH);
+        const rows = await supabaseSelectAll(
+          supabase,
+          T.ORDERS,
+          {
+            shop_id: shopId,
+            name: { operator: 'in', value: `(${batch.map(quote).join(',')})` },
+            deleted_at: { operator: 'is', value: 'null' }
+          },
+          'name,shopify_updated_at'
+        );
+        for (const row of rows) updated.set(row.name, row.shopify_updated_at);
+      }
+      return updated;
+    },
 
     /** Orders by display name (`#1006`), plus the customers they belong to. */
     async loadOrders(shopId, orderNames) {
@@ -83,8 +118,10 @@ export async function runOrderContext({
   now = new Date(),
   onResult
 } = {}) {
-  const tickets = await record.findAwaitingContext({ refresh });
-  const totals = { considered: tickets.length, resolved: 0, order_missing: 0 };
+  const awaiting = await record.findAwaitingContext({ refresh });
+  const outdated = refresh ? [] : await findOutdated({ store, record, shopId });
+  const tickets = [...awaiting, ...outdated];
+  const totals = { considered: tickets.length, resolved: 0, order_missing: 0, outdated: outdated.length };
 
   // One batched order+customer load for the whole pass.
   const names = [...new Set(tickets.map((t) => t.shopify_order_number).filter(Boolean))];
@@ -113,6 +150,33 @@ export async function runOrderContext({
 
   logger?.info?.('order.context', { shopId, ...totals });
   return totals;
+}
+
+/**
+ * Built bundles the order has moved past: the order row carries a different
+ * Shopify stamp than the one the bundle was built from. Optional on the store and the record, so a caller
+ * without them (a test, a rehearsal) keeps the build-once behaviour.
+ */
+async function findOutdated({ store, record, shopId }) {
+  if (!record.findBuiltContext || !store.orderUpdatedAt) return [];
+  const built = await record.findBuiltContext();
+  if (built.length === 0) return [];
+  const updatedAt = await store.orderUpdatedAt(shopId, built.map((ticket) => ticket.shopify_order_number));
+  return built.filter((ticket) =>
+    updatedAt.has(ticket.shopify_order_number) &&
+    contextOutdated(ticket.source_updated_at, updatedAt.get(ticket.shopify_order_number))
+  );
+}
+
+/**
+ * Whether a bundle built from the order version `builtFrom` is behind the
+ * order's current `current`. A bundle with no stamp (built before the stamp
+ * existed) is behind once, and then carries one.
+ */
+export function contextOutdated(builtFrom, current) {
+  const at = Date.parse(current ?? '');
+  if (!Number.isFinite(at)) return false;
+  return Date.parse(builtFrom ?? '') !== at;
 }
 
 /** PostgREST `in.()` needs quoting for values carrying a `#`. */

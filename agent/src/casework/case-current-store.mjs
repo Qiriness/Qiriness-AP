@@ -39,6 +39,8 @@ export function staleTickets({ tickets = [], current = [], readings = [], action
       const moved = Math.max(
         Date.parse(ticket.last_message_at ?? '') || 0,
         Date.parse(ticket.investigated_at ?? '') || 0,
+        // The change router recorded a fact that moved under the case file.
+        Date.parse(ticket.fact_drift_at ?? '') || 0,
         lastReading.get(ticket.id) ?? 0
       );
       return moved > at;
@@ -58,7 +60,12 @@ export function createCaseCurrentStore(supabase, { shopId }) {
   return {
     async staleTicketIds(limit, { all = false } = {}) {
       const [tickets, current, readings, actions] = await Promise.all([
-        supabaseSelectAll(supabase, T.TICKETS, { shop_id: shopId, deleted_at: { operator: 'is', value: 'null' } }, 'id,last_message_at,investigated_at,overrides'),
+        supabaseSelectAll(
+          supabase,
+          T.TICKETS,
+          { shop_id: shopId, deleted_at: { operator: 'is', value: 'null' } },
+          'id,last_message_at,investigated_at,overrides,fact_drift_at:fact_drift->>checked_at'
+        ),
         // Keyed by ticket, with no `id` column for the default paging order.
         supabaseSelectAll(supabase, T.CASE_CURRENT, { shop_id: shopId }, 'ticket_id,folded_at', { order: 'ticket_id.asc' }),
         supabaseSelectAll(supabase, T.TICKET_CASE_STATE, { shop_id: shopId }, 'ticket_id,read_at'),
@@ -86,9 +93,17 @@ export function createCaseCurrentStore(supabase, { shopId }) {
         ),
         supabaseSelect(supabase, T.CASE_CURRENT, { ticket_id: ticketId }, 'version,material_hash,as_of_message_id,next_actor'),
         supabaseSelect(supabase, T.TICKET_CASE_ACTIONS, { ticket_id: ticketId }, 'obligation_id,action,acted_by,acted_at'),
-        supabaseSelect(supabase, T.TICKETS, { id: ticketId, shop_id: shopId }, 'overrides')
+        supabaseSelect(supabase, T.TICKETS, { id: ticketId, shop_id: shopId }, 'overrides,fact_drift')
       ]);
-      return { messages, caseFiles, readings, previous: previous[0] ?? null, actions, overrides: overridesOf(ticketRows[0]) };
+      return {
+        messages,
+        caseFiles,
+        readings,
+        previous: previous[0] ?? null,
+        actions,
+        overrides: overridesOf(ticketRows[0]),
+        factDrift: ticketRows[0]?.fact_drift ?? null
+      };
     },
 
     /** The holding interval, in working days, or null when the shop has not set it. */
@@ -167,9 +182,9 @@ export async function runFold({
     totals.considered += 1;
     foldedIds.push(ticketId);
     try {
-      const { messages, caseFiles, readings, previous, actions, overrides = null } = await store.inputs(ticketId);
+      const { messages, caseFiles, readings, previous, actions, overrides = null, factDrift = null } = await store.inputs(ticketId);
       const actorOfMessage = (m) => m.actor ?? actorFor(m);
-      const state = foldCase({ messages, caseFiles, readings, actions, overrides, holdingDays, actorFor: actorOfMessage });
+      const state = foldCase({ messages, caseFiles, readings, actions, overrides, factDrift, holdingDays, actorFor: actorOfMessage });
       const version = nextVersion(previous, state);
       if (previous && version !== previous.version) totals.versionsRaised += 1;
       const at = now().toISOString();

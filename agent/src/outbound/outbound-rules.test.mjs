@@ -36,6 +36,15 @@ test('the case moved since the text was written', () => {
   assert.deepEqual(preSendCheck(facts({ caseCurrent: null })), { ok: false, reason: 'case_moved' });
 });
 
+test('the order moved materially and the pipeline has not read it yet', () => {
+  assert.deepEqual(preSendCheck(facts({ orderMoved: true })), { ok: false, reason: 'facts_pending' });
+  // A moved case is the more telling reason, and is named first.
+  assert.deepEqual(preSendCheck(facts({ orderMoved: true, caseCurrent: { version: 4 } })), { ok: false, reason: 'case_moved' });
+  // A person's own reply is theirs to send.
+  const manual = { id: 'a2', mode: 'manual', case_version: 3, sent_message_id: null };
+  assert.deepEqual(preSendCheck(facts({ action: manual, draft: null, orderMoved: true })), { ok: true });
+});
+
 test('the customer wrote again after the message being answered', () => {
   const later = [{ id: 'm2', direction: 'inbound', actor: 'customer', received_at: '2026-09-28T10:00:00Z' }];
   assert.deepEqual(preSendCheck(facts({ laterMessages: later })), { ok: false, reason: 'customer_wrote_again' });
@@ -94,7 +103,8 @@ test('every reason the check can give is a declared cancel reason', () => {
     facts({ caseCurrent: null }),
     facts({ laterMessages: [{ id: 'x', direction: 'inbound' }] }),
     facts({ laterMessages: [{ id: 'x', direction: 'outbound' }] }),
-    facts({ action: { id: 'a', mode: 'auto_send', case_version: 3 }, draft: { status: 'pending' } })
+    facts({ action: { id: 'a', mode: 'auto_send', case_version: 3 }, draft: { status: 'pending' } }),
+    facts({ orderMoved: true })
   ];
   for (const c of cases) reasons.add(preSendCheck(c).reason);
   for (const reason of reasons) assert.ok(CANCEL_REASONS.includes(reason), reason);

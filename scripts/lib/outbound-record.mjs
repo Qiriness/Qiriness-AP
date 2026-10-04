@@ -35,7 +35,7 @@ export const OPEN_STATES = ['approved', 'draft_created', 'send_requested'];
  * Why a pre-send check refused. Documented on the column; the test holds the
  * comment to this list.
  */
-export const CANCEL_REASONS = ['case_moved', 'customer_wrote_again', 'already_answered', 'draft_withdrawn', 'auto_send_off'];
+export const CANCEL_REASONS = ['case_moved', 'customer_wrote_again', 'already_answered', 'draft_withdrawn', 'auto_send_off', 'facts_pending'];
 
 const ACTION_COLUMNS =
   'id,ticket_id,draft_id,case_version,action_type,mode,client_key,requested_by,reply_to_message_id,body_text,body_html,state,' +

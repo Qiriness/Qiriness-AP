@@ -213,13 +213,15 @@ export async function runOutbound({
   }
 
   async function gatherFacts(action) {
-    const [draft, caseCurrent, replyTo, otherActions] = await Promise.all([
+    const [draft, caseCurrent, replyTo, otherActions, orderMoved] = await Promise.all([
       action.draft_id ? store.draft(action.draft_id) : null,
       store.caseCurrent(action.ticket_id),
       store.message(action.reply_to_message_id),
-      outboundRecord.forTicket(action.ticket_id)
+      outboundRecord.forTicket(action.ticket_id),
+      // A person's own reply is theirs to send; only a drafted one rests on the bundle.
+      action.mode !== 'manual' && store.orderMoved ? store.orderMoved(action.ticket_id) : false
     ]);
     const laterMessages = replyTo ? await store.messagesAfter(action.ticket_id, replyTo.received_at) : [];
-    return { draft, caseCurrent, replyTo, laterMessages, otherActions };
+    return { draft, caseCurrent, replyTo, laterMessages, otherActions, orderMoved };
   }
 }

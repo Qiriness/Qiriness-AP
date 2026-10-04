@@ -40,6 +40,15 @@ these.
 as its own item: `llm_usage` (item 14), `categorisation_review` (item 15), and
 `category_forwarding` / `ticket_forwards` (item 1).
 
+## 37. The change router: built and unit-tested, migration applied — 2026-10-04
+
+Migration 69 applied and the bundles rebuilt; the `route` pass has never run against real data. DECISIONS § Change router.
+
+1. **Apply 69** (`npm run db:apply:migration -- supabase/migrations/69_fact_drift.sql`). **Done 2026-10-04**: 0 drifts. **Still to check:** no `case_current.version` moves on the next fold.
+2. **Rebuild the bundles once** (`npm run context:build` from `agent/`): every bundle predates `sourceUpdatedAt`, so all ~207 are rebuilt on the first pass, then only those whose order changed. **Done 2026-10-04**: 207 rebuilt, all stamped; `c3efeb4e` reads `FULFILLED` / `dispatched`; a second (dry) run reported `outdated: 0`.
+3. **Dry-run the router** (`npm run route:once -- --dry-run`). **Run 2026-10-04**: 1 candidate (`409d8d71`, never folded → `none (not_our_turn)`), 0 written. The other 17 live tickets with an order are `awaiting_human` and skipped by design (14 of them have `next_actor = support`). The fold last ran 2026-09-30, so `case_current` is stale until the worker runs again. Re-run once it has. **Re-run after including `awaiting_human`**: 18 considered, 0 written — 14 `unchanged`, 3 `not_our_turn` (`c3efeb4e` waits on the customer), 1 `irrelevant` (`2c73c755`, a `promotions` case file decided before its order states were known; no rule in that set reads them and it states no order fact). Read every `redraft` / `reinvestigate` line against the ticket before running it live: each is a model call on the next poll.
+4. **Watch the send check.** With sending on, an approved reply on an order that moved since its bundle is cancelled `facts_pending`, and the next full poll either redrafts it or leaves it approved. **Check** that no `facts_pending` appears on an order that only had a tag or note edit.
+
 ## 36. Cases: linking, the reply target and the queue — 2026-10-02
 
 Built and unit-tested; migration 61 tried twice on the committed baseline in a throwaway schema, not applied to the live database. DECISIONS § Cases.
