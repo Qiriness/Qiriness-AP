@@ -621,6 +621,28 @@ export function composeDraftingMessage({
 Si la réponse ne se prête pas à transmettre un code, ne pas en parler — ` +
         `mais ne jamais en citer un différent.`
     );
+
+    // ITS CONDITIONS, FROM SHOPIFY, AND THE ONLY ONES IT HAS. Without them the
+    // drafter read the general promotion policy and stated its « peut »
+    // possibilities as this code's rules (35e0afd9: « non cumulable », false).
+    // A Set from an older caller carries no terms: say none are known.
+    const terms = offerableCodes?.get?.(offerCode) ?? [];
+    parts.push(
+      terms.length > 0
+        ? `## Conditions de ce code (Shopify)
+
+` +
+            `Ce sont les conditions réelles de ce code, et les seules à présenter comme les siennes. ` +
+            `Les donner si la réponse parle de conditions ; n'en ajouter aucune autre, ` +
+            `ni d'une politique ni d'ailleurs :
+
+` +
+            terms.map((term) => `- ${term}`).join('\n')
+        : `## Conditions de ce code
+
+` +
+            `Ses conditions ne sont pas connues ici : ne pas en énoncer comme des règles de ce code.`
+    );
   }
 
   // THE ARTICLE A PERSON CHOSE FOR THIS SITUATION, under its own heading and

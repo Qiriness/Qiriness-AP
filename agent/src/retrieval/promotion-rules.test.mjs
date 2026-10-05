@@ -5,6 +5,7 @@ import {
   FAIL,
   PASS,
   UNKNOWN,
+  describeOfferTerms,
   evaluateEligibility,
   findPromotionByCode,
   normaliseCode
@@ -369,4 +370,52 @@ test('the basket is dated from updatedAt, not the session start', () => {
     now: NOW
   });
   assert.match(r.checks.find((c) => c.id === 'basket').detail, /état du 2026-08-01/);
+});
+
+// --- the terms of a code we hand out -------------------------------------------
+
+// BIENVENUEQIRINESS as Shopify held it on 2026-10-05 (35e0afd9), products trimmed.
+const OFFERED_WELCOME = {
+  code: 'BIENVENUEQIRINESS',
+  rule_snapshot: {
+    customer_gets: { percentage: 0.2, items: { scope: 'products', products: Array.from({ length: 49 }, (_, i) => ({ id: `p${i}`, title: `P${i}` })) } },
+    customer_selection: { scope: 'segments', segments: [{ id: 's1', name: "Customers who haven't purchased" }] },
+    minimum_requirement: null
+  },
+  combines_with: { order_discounts: false, product_discounts: false, shipping_discounts: true },
+  applies_once_per_customer: false,
+  ends_at: null,
+  usage_limit: null
+};
+
+test('a code we give is described from Shopify, as the admin shows it', () => {
+  assert.deepEqual(describeOfferTerms(OFFERED_WELCOME), [
+    'Avantage : 20 % de réduction sur une sélection de 49 produit(s), pas sur toute la boutique.',
+    "Clients : réservé au segment Shopify « Customers who haven't purchased » (le dire dans la langue du client, sans rien y ajouter).",
+    "Minimum d'achat : aucun.",
+    'Cumulable avec : une remise sur la livraison.',
+    'Non cumulable avec : une autre remise produit, une remise sur la commande.'
+  ]);
+});
+
+test('only the limits that bind: an end date and once-per-customer, never « no limit »', () => {
+  const now = new Date('2026-10-05T00:00:00Z');
+  const terms = describeOfferTerms({ ...OFFERED_WELCOME, applies_once_per_customer: true, ends_at: '2026-12-31T23:00:00Z', usage_limit: 500 }, { now });
+  assert.ok(terms.includes('Une seule utilisation par client.'));
+  assert.ok(terms.includes("Valable jusqu'au 2026-12-31."));
+  assert.ok(!terms.some((t) => /limite|expir/i.test(t)));
+  assert.ok(!describeOfferTerms(OFFERED_WELCOME).some((t) => /Valable|limite/.test(t)));
+  assert.deepEqual(describeOfferTerms(null), []);
+});
+
+test('a fixed amount, a minimum and an open audience read as such', () => {
+  const terms = describeOfferTerms({
+    rule_snapshot: { customer_gets: { amount: '10.0', currency: 'EUR' }, customer_selection: { scope: 'all' }, minimum_requirement: { type: 'subtotal', amount: '50.0', currency: 'EUR' } },
+    combines_with: {}
+  });
+  assert.deepEqual(terms, [
+    'Avantage : 10.00 EUR de réduction.',
+    'Clients : ouvert à tous les clients.',
+    'Cette promotion exige un minimum de 50.00 EUR de commande.'
+  ]);
 });

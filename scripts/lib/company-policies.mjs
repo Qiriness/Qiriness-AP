@@ -35,7 +35,12 @@ export const POLICY_SOURCES = ['situation', 'rule', 'agent'];
 export const POLICY_INSTRUCTION =
   'Utilise les passages de ces politiques qui répondent à la demande du client. ' +
   "N'inclus que ce qui concerne ce qu'il a demandé. N'invente rien, n'étends pas et ne contredis pas une politique. " +
-  "Si une politique ne suffit pas à répondre, ne déduis pas de réponse : suis la conduite prévue par la situation et la règle.";
+  "Si une politique ne suffit pas à répondre, ne déduis pas de réponse : suis la conduite prévue par la situation et la règle. " +
+  // 35e0afd9 (2026-10-05): « peut ne pas s'appliquer notamment… » became three
+  // firm conditions of one code, one of them false.
+  "Une politique énonce des règles générales, pas les faits de ce cas : ce qu'elle présente comme possible " +
+  "(« peut », « notamment », « certains ») se dit au client comme une possibilité, jamais comme une certitude " +
+  "sur sa commande, son code ou son offre.";
 
 export const POLICY_COLUMNS = 'id,policy_key,name,purpose,content,active,version,updated_at,updated_by';
 export const LINK_COLUMNS = 'id,policy_id,situation_key,answer_id,created_at';

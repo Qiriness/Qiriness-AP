@@ -324,6 +324,77 @@ function evaluateCustomerSelection(selection) {
   return check('customer_selection', UNKNOWN, 'Restriction client inconnue.');
 }
 
+const STACKING_LABELS = Object.freeze({
+  product_discounts: 'une autre remise produit',
+  order_discounts: 'une remise sur la commande',
+  shipping_discounts: 'une remise sur la livraison'
+});
+
+/**
+ * The terms of a code WE hand out, as Shopify holds them, one sentence each.
+ *
+ * FOUND LIVE ON 35e0afd9 (2026-10-05). A rule gave BIENVENUEQIRINESS and told
+ * the drafter to « donner les conditions du code »; the drafter had only the
+ * shop's promotion policy, whose « peut ne pas s'appliquer notamment… » list it
+ * turned into three certainties. One of them was false: the code IS cumulable,
+ * with a delivery discount. These lines are the code's real conditions, and the
+ * only ones a reply may state as its own.
+ *
+ * WHAT BINDS, NOT WHAT IS ABSENT. No end date and no usage limit are left out,
+ * for the reason `renderPromotion` gives: « ce code n'a pas de limite » is an
+ * invitation to pass it around. No minimum IS said, because « est-ce soumis à
+ * condition ? » is the question it answers.
+ *
+ * @param promotion a `promotions` row
+ * @returns {string[]} empty when there is no row
+ */
+export function describeOfferTerms(promotion, { now = new Date() } = {}) {
+  if (!promotion) return [];
+  const rules = promotion.rule_snapshot || {};
+  const gets = rules.customer_gets || {};
+  const terms = [];
+
+  const value =
+    typeof gets.percentage === 'number'
+      ? `${Math.round(gets.percentage * 1000) / 10} % de réduction`
+      : gets.amount
+        ? `${formatMoney(gets.amount, gets.currency)} de réduction`
+        : null;
+  const items = gets.items;
+  const scope =
+    items?.scope === 'products' && items.products?.length
+      ? `sur une sélection de ${items.products.length} produit(s), pas sur toute la boutique`
+      : items?.scope === 'collections' && items.collections?.length
+        ? `sur les produits de : ${namedSample(items.collections, { render: (c) => `« ${c.title} »` })}`
+        : null;
+  if (value || scope) terms.push(`Avantage : ${[value, scope].filter(Boolean).join(' ')}.`);
+
+  const selection = rules.customer_selection;
+  if (!selection || selection.scope === 'all') {
+    terms.push('Clients : ouvert à tous les clients.');
+  } else if (selection.scope === 'segments') {
+    // Shopify's segment name, in the language the shop's admin is in: the
+    // drafter says it in the customer's language, without adding to it.
+    const names = (selection.segments || []).map((s) => `« ${s.name} »`).filter(Boolean).join(', ');
+    terms.push(`Clients : réservé au segment Shopify ${names || 'non nommé'} (le dire dans la langue du client, sans rien y ajouter).`);
+  } else if (selection.scope === 'customers') {
+    terms.push('Clients : réservé à une liste de clients nommés.');
+  }
+
+  terms.push(describeMinimum(rules.minimum_requirement, rules.customer_buys) ?? "Minimum d'achat : aucun.");
+
+  const combines = promotion.combines_with || {};
+  const can = Object.keys(STACKING_LABELS).filter((key) => combines[key] === true).map((key) => STACKING_LABELS[key]);
+  const cannot = Object.keys(STACKING_LABELS).filter((key) => combines[key] === false).map((key) => STACKING_LABELS[key]);
+  if (can.length > 0) terms.push(`Cumulable avec : ${can.join(', ')}.`);
+  if (cannot.length > 0) terms.push(`Non cumulable avec : ${cannot.join(', ')}.`);
+
+  if (promotion.applies_once_per_customer) terms.push('Une seule utilisation par client.');
+  const ends = promotion.ends_at ? new Date(promotion.ends_at) : null;
+  if (ends && Number.isFinite(ends.getTime()) && ends.getTime() > now.getTime()) terms.push(`Valable jusqu'au ${formatDate(ends)}.`);
+  return terms;
+}
+
 function formatMoney(amount, currency) {
   const value = Number(amount);
   const formatted = Number.isFinite(value) ? value.toFixed(2) : String(amount);

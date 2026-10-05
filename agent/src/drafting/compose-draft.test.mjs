@@ -515,3 +515,27 @@ test('a case of several threads: the history is the case, the other thread marke
   assert.match(rendered, /autre fil/);
   assert.match(rendered, /elle part demain/);
 });
+
+test('the code travels with its real Shopify conditions, the only ones it may be given', () => {
+  // 35e0afd9 (2026-10-05): with the code alone, the drafter took its conditions
+  // from the promotion policy's « peut » list, and « non cumulable » was false.
+  const message = composeDraftingMessage({
+    message: { subject: 'Code', body_text: 'Est-ce soumis à condition ?' },
+    caseFile: caseFileFromRow(OFFER_ROW),
+    offerableCodes: new Map([['QIRINESS20', ['Minimum d’achat : aucun.', 'Cumulable avec : une remise sur la livraison.']]])
+  });
+  const code = message.indexOf('## Code à communiquer au client');
+  const terms = message.indexOf('## Conditions de ce code (Shopify)');
+  assert.ok(code >= 0 && terms > code, 'the conditions follow the code');
+  assert.match(message, /- Cumulable avec : une remise sur la livraison\./);
+  assert.match(message, /n'en ajouter aucune autre/);
+});
+
+test('a code whose conditions are not known says so rather than leaving room to guess', () => {
+  const message = composeDraftingMessage({
+    message: { subject: 'Code', body_text: 'x' },
+    caseFile: caseFileFromRow(OFFER_ROW),
+    offerableCodes: new Set(['QIRINESS20'])
+  });
+  assert.match(message, /Ses conditions ne sont pas connues ici/);
+});

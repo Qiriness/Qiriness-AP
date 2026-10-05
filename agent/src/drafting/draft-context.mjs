@@ -2,6 +2,7 @@ import { supabaseSelect } from '../../../scripts/lib/supabase-rest-client.mjs';
 import { T } from '../../../scripts/lib/tables.mjs';
 import { toParameterMap } from '../../../scripts/lib/parameters.mjs';
 import { createCompanyPolicyRecord } from '../../../scripts/lib/company-policies.mjs';
+import { describeOfferTerms } from '../retrieval/promotion-rules.mjs';
 
 // What a drafting run reads once, before any ticket: the numbers a skeleton may
 // quote, the codes still offerable, the articles rules pin. Shared by the CLI
@@ -43,7 +44,10 @@ export async function loadCompanyPoliciesFor(supabase, shopId, logger) {
  * behaviour before skeletons existed.
  */
 /**
- * The codes a rule is still allowed to hand out, as a set of the code strings.
+ * The codes a rule is still allowed to hand out: code → its terms as Shopify
+ * holds them (`describeOfferTerms`). A Map, so `.has(code)` reads as the set it
+ * replaced, and the drafter states the code's REAL conditions instead of
+ * guessing them from the shop's general policy (35e0afd9, 2026-10-05).
  *
  * TWO CONDITIONS, BOTH REQUIRED. The promotion must be ACTIVE in Shopify, and an
  * operator must have marked it offerable — a code that expired and a code that
@@ -61,19 +65,20 @@ export async function loadOfferableCodesFor(supabase, shopId, logger) {
       supabase,
       T.PROMOTIONS,
       { shop_id: shopId, status: 'ACTIVE', offerable_in_replies: true },
-      'codes'
+      'codes,rule_snapshot,combines_with,applies_once_per_customer,ends_at'
     );
-    const codes = new Set();
+    const codes = new Map();
     for (const row of rows || []) {
+      const terms = describeOfferTerms(row);
       for (const entry of Array.isArray(row.codes) ? row.codes : []) {
         const code = String(entry?.code ?? '').trim();
-        if (code) codes.add(code);
+        if (code) codes.set(code, terms);
       }
     }
     return codes;
   } catch (error) {
     logger?.warn?.('draft.offerable_codes_load_failed', { reason: error.message });
-    return new Set();
+    return new Map();
   }
 }
 

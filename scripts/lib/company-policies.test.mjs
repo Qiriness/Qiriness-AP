@@ -121,3 +121,8 @@ test('a new policy starts at version 1 with its first version row', async () => 
   assert.equal(policy.rows[0].name, 'Remboursements');
   assert.deepEqual(version.rows[0], { shop_id: 's', policy_id: 'new', version: 1, content: 'Texte', saved_by: 'u1' });
 });
+
+test('the drafting instruction keeps a policy\'s possibilities possible', async () => {
+  const { POLICY_INSTRUCTION } = await import('./company-policies.mjs');
+  assert.match(POLICY_INSTRUCTION, /comme une possibilité, jamais comme une certitude/);
+});
