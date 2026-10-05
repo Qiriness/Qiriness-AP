@@ -181,3 +181,13 @@ test('only a declared reason can cancel', () => {
   const record = createOutboundRecord({}, { shopId: 'shop-1', transport: recorder().transport });
   assert.throws(() => record.cancel('a1', 'felt_like_it'), /case_moved/);
 });
+
+test('a refund notice is never auto-sent, however eligible it reads', async () => {
+  const { actionFromDraft } = await import('./outbound-record.mjs');
+  const notice = {
+    id: 'd1', ticket_id: 't1', trigger_message_id: 'm1', case_version: 4, status: 'pending',
+    auto_send_eligible: true, checks_passed: true, body_text: 'Bonjour', purpose: 'refund_notice'
+  };
+  assert.deepEqual(actionFromDraft(notice, { mode: 'auto_send' }), { error: 'not_eligible' });
+  assert.ok(actionFromDraft({ ...notice, status: 'approved' }, { mode: 'human_approved' }).row);
+});

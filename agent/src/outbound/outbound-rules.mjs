@@ -61,7 +61,17 @@ export function preSendCheck({ action, draft, caseCurrent, replyTo, laterMessage
 
   // Somebody already answered: a reply typed in Outlook or from a personal
   // inbox (stored outbound), or another action of ours that went or may have.
-  if (later.some((message) => message.direction === 'outbound')) {
+  //
+  // A REFUND NOTICE FOLLOWS A REPLY OF OURS BY DESIGN (DECISIONS § Refund
+  // notice): it is threaded under the customer's last message, which we have
+  // already answered. Only a message of ours written after the notice was
+  // drafted means somebody told them already.
+  const notice = draft.purpose === 'refund_notice';
+  const draftedAt = Date.parse(draft.drafted_at ?? '');
+  const ours = (message) =>
+    message.direction === 'outbound' &&
+    (!notice || !Number.isFinite(draftedAt) || Date.parse(message.received_at ?? message.sent_at ?? '') > draftedAt);
+  if (later.some(ours)) {
     return refuse('already_answered');
   }
   // Only a send for THIS case version or a newer one. A reply to an earlier

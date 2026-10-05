@@ -96,6 +96,10 @@ export const en = {
   "setup.rules.addCheck": "Add a check",
   "setup.rules.whatOpens": "What it opens",
   "setup.rules.giveCode": "Give the customer a code",
+  "setup.rules.notifyRefund": "Tell the customer when a refund is recorded",
+  "setup.rules.notifyRefundText":
+    "when Shopify records a refund on a ticket in this set that no message of ours has reported, a notice is drafted with this rule's instructions for a person to approve. Needs « refund notice window » set in Parameters, and the rule live.",
+  "setup.rules.notifyRefundTaken": "Only one rule at a time: « {key} » writes the refund notice. Turn it off there to move it here.",
   "setup.rules.noCode": "No code",
   "setup.rules.answerFromArticle": "Answer from an article",
   "setup.rules.whateverRetrieval": "Whatever retrieval finds",
@@ -204,6 +208,10 @@ export const fr: Record<keyof typeof en, string> = {
   "setup.rules.addCheck": "Ajouter une vérification",
   "setup.rules.whatOpens": "Ce qu'il ouvre",
   "setup.rules.giveCode": "Donner un code au client",
+  "setup.rules.notifyRefund": "Prévenir le client quand un remboursement est enregistré",
+  "setup.rules.notifyRefundText":
+    "quand Shopify enregistre un remboursement sur un ticket de cet ensemble sans qu’aucun de nos messages ne l’ait signalé, un message est rédigé avec les consignes de cette règle, pour validation par une personne. Nécessite la « fenêtre de notification de remboursement » dans les Paramètres, et la règle en ligne.",
+  "setup.rules.notifyRefundTaken": "Une seule règle à la fois : « {key} » rédige la notification de remboursement. La désactiver là-bas pour la déplacer ici.",
   "setup.rules.noCode": "Aucun code",
   "setup.rules.answerFromArticle": "Répondre à partir d'un article",
   "setup.rules.whateverRetrieval": "Ce que la recherche trouve",

@@ -230,3 +230,39 @@ test('a fact drift raises the version once; re-finding it, or none at all, moves
   const again = foldCase({ messages, factDrift: { ...drift, checked_at: '2026-10-04T10:05:00Z' } });
   assert.equal(again.material_hash, drifted.material_hash);
 });
+
+test('an unsent refund notice keeps the case on us, raises the version once, and lets go once we have written', () => {
+  // We answered, nobody owes anything: resolved, as the thread alone reads.
+  const thread = [
+    { id: 'c1', direction: 'inbound', actor: 'customer', received_at: '2026-09-04T12:40:17Z' },
+    { id: 's1', direction: 'outbound', actor: 'support', received_at: '2026-09-07T14:55:10Z' }
+  ];
+  const plain = foldCase({ messages: thread });
+  assert.equal(plain.next_actor, 'nobody');
+
+  const notice = { refund_ids: ['gid://shopify/Refund/1'], answer_key: 'remboursement_deja_parti', recorded_at: '2026-10-05T09:00:00Z' };
+  const pending = foldCase({ messages: thread, factDrift: { notice } });
+  assert.equal(pending.next_actor, 'support');
+  assert.equal(pending.resolved, false);
+  assert.equal(nextVersion({ version: 3, material_hash: plain.material_hash }, pending), 4);
+  // Found again on the next poll: same refunds, same version.
+  assert.equal(foldCase({ messages: thread, factDrift: { notice: { ...notice, recorded_at: '2026-10-05T09:05:00Z' } } }).material_hash, pending.material_hash);
+
+  // The notice goes out: the ordinary reading resumes, and the version holds.
+  const sent = [...thread, { id: 's2', direction: 'outbound', actor: 'support', received_at: '2026-10-05T15:00:00Z' }];
+  const after = foldCase({ messages: sent, factDrift: { notice } });
+  assert.equal(after.next_actor, 'nobody');
+  assert.equal(after.resolved, true);
+
+  // A later refund is a new notice: the version moves again.
+  const second = foldCase({ messages: sent, factDrift: { notice: { ...notice, refund_ids: [...notice.refund_ids, 'gid://shopify/Refund/2'], recorded_at: '2026-10-20T09:00:00Z' } } });
+  assert.equal(second.next_actor, 'support');
+  assert.notEqual(second.material_hash, after.material_hash);
+});
+
+test('a drift with only order states hashes exactly as before the notice existed', async () => {
+  const { driftMaterial } = await import('./case-fold.mjs');
+  const drift = { changed: { order_state: { from: 'not_dispatched', to: 'dispatched' } }, case_file_at: '2026-09-28T15:17:59Z' };
+  assert.deepEqual(driftMaterial(drift), { changed: [['order_state', 'not_dispatched', 'dispatched']], case_file_at: '2026-09-28T15:17:59Z' });
+  assert.equal(driftMaterial({ notice: { refund_ids: [] } }), null);
+});

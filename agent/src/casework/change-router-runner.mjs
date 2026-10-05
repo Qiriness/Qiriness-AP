@@ -1,11 +1,12 @@
 import { supabaseSelect, supabaseSelectAll, supabaseUpdateById } from '../../../scripts/lib/supabase-rest-client.mjs';
 import { T } from '../../../scripts/lib/tables.mjs';
-import { toParameterMap } from '../../../scripts/lib/parameters.mjs';
+import { days, toParameterMap } from '../../../scripts/lib/parameters.mjs';
 import { reinvestigationColumns } from '../../../scripts/lib/order-link.mjs';
 
 import { answerFromRow } from '../investigation/answer-selection.mjs';
+import { answerSetFor } from '../investigation/investigation-rules.mjs';
 import { orderStatesAt } from '../investigation/order-states-at.mjs';
-import { ROUTED_STATUSES, driftDiffers, factDrift, routeChange } from './change-router.mjs';
+import { ROUTED_STATUSES, driftDiffers, factDrift, noticeDue, noticeRecord, routeChange } from './change-router.mjs';
 
 // The `route` stage: every open or person-held ticket we owe a reply on, with a built order
 // bundle, asked whether what moved under its case file changes anything
@@ -22,9 +23,25 @@ import { ROUTED_STATUSES, driftDiffers, factDrift, routeChange } from './change-
 // (drafts go stale, an approval written for the old facts is refused at send).
 // On `reinvestigate`, also `needs_investigation` and a `change_router` trail
 // whose `at` becomes the investigation's clock (investigation-runner.mjs).
+//
+// AND, FIRST, THE REFUND NOTICE (DECISIONS § Refund notice): a refund recorded in
+// Shopify that no message of ours has reported, on a ticket in the marked rule's
+// answer set, whatever its status. It records `fact_drift.notice` (the fold keeps
+// the case on us until we have written) and reopens a closed or resolved ticket
+// to `awaiting_human`, so the notice the drafting pass writes is in front of a
+// person. First, so the state pass below reads the drift it may have written.
 
 const TICKET_COLUMNS =
   'id,status,needs_investigation,needs_categorisation,shopify_order_number,resolved_context,fact_drift,metadata,investigated_at';
+
+const NOTICE_TICKET_COLUMNS =
+  'id,status,category,secondary_category,shopify_order_number,fact_drift,metadata,first_message_at,last_message_at,case_id';
+
+/** A notice never reopens these: a spam thread, or one handed to a team. */
+const NEVER_NOTICED = ['spam', 'forwarded'];
+
+/** Statuses a notice reopens, so the draft is in front of a person. */
+const REOPENED_BY_NOTICE = ['closed', 'resolved'];
 
 const INVESTIGATION_COLUMNS =
   'ticket_id,investigated_at,context_ref,tool_calls,established,findings_trace,exemplar_match';
@@ -102,6 +119,78 @@ export function createChangeRouterStore(supabase, { shopId }) {
       return toParameterMap(await supabaseSelect(supabase, T.SUPPORT_PARAMETERS, { shop_id: shopId }, 'parameter_key,value'));
     },
 
+    /** The rules marked as the template for a notice, by answer set. */
+    async noticeTemplates() {
+      const rows = await supabaseSelect(
+        supabase,
+        T.SUPPORT_ANSWERS,
+        {
+          shop_id: shopId,
+          notify_on: 'refund_recorded',
+          approval_status: 'approved',
+          deleted_at: { operator: 'is', value: 'null' }
+        },
+        'answer_set,answer_key'
+      );
+      return new Map((rows || []).map((row) => [row.answer_set, row]));
+    },
+
+    /** Live tickets with an order, any status a notice may concern. */
+    async noticeCandidates() {
+      return supabaseSelectAll(
+        supabase,
+        T.TICKETS,
+        {
+          shop_id: shopId,
+          status: { operator: 'not.in', value: `(${NEVER_NOTICED.join(',')})` },
+          deleted_at: { operator: 'is', value: 'null' },
+          archived_at: { operator: 'is', value: 'null' },
+          shopify_order_number: { operator: 'not.is', value: 'null' }
+        },
+        NOTICE_TICKET_COLUMNS
+      );
+    },
+
+    /** `Map(order name → refunds)`, for the orders that have any. */
+    async refundsByOrder(orderNames) {
+      const names = [...new Set(orderNames.filter(Boolean))];
+      const byName = new Map();
+      for (let index = 0; index < names.length; index += ID_BATCH) {
+        const batch = names.slice(index, index + ID_BATCH);
+        const rows = await supabaseSelectAll(
+          supabase,
+          T.ORDERS,
+          {
+            shop_id: shopId,
+            name: { operator: 'in', value: `(${batch.map((name) => `"${String(name).replace(/"/g, '\\"')}"`).join(',')})` },
+            deleted_at: { operator: 'is', value: 'null' }
+          },
+          'name,refunds'
+        );
+        for (const row of rows) if (Array.isArray(row.refunds) && row.refunds.length > 0) byName.set(row.name, row.refunds);
+      }
+      return byName;
+    },
+
+    /**
+     * Our last message on each case, across every thread of it: a reply on a
+     * sibling thread told the customer as surely as one on this thread.
+     */
+    async lastOutboundByCase(caseIds) {
+      if (caseIds.length === 0) return new Map();
+      const threads = await inBatches(T.TICKETS, 'case_id', caseIds, 'id,case_id');
+      const caseOf = new Map(threads.map((row) => [row.id, row.case_id]));
+      const sent = await inBatches(T.TICKET_MESSAGES, 'ticket_id', [...caseOf.keys()], 'ticket_id,direction,sent_at,received_at');
+      const last = new Map();
+      for (const row of sent) {
+        if (row.direction !== 'outbound') continue;
+        const at = row.sent_at ?? row.received_at;
+        const caseId = caseOf.get(row.ticket_id);
+        if (at && (!last.has(caseId) || Date.parse(at) > Date.parse(last.get(caseId)))) last.set(caseId, at);
+      }
+      return last;
+    },
+
     async write(ticketId, columns) {
       await supabaseUpdateById(supabase, T.TICKETS, ticketId, columns);
     }
@@ -120,11 +209,8 @@ function answerSetsOf(investigation) {
  * @param dryRun   decide and report, write nothing
  * @param onResult `({ ticket, result, written })` per ticket, for the CLI
  */
-export async function runChangeRouter({ store, shopId, logger, now = new Date(), dryRun = false, onResult = null }) {
+export async function runChangeRouter({ store, shopId, logger, now = new Date(), dryRun = false, onResult = null, onNotice = null }) {
   const totals = { considered: 0, none: 0, redraft: 0, reinvestigate: 0, already_recorded: 0, written: 0, failed: 0 };
-
-  const tickets = await store.candidates();
-  if (tickets.length === 0) return totals;
 
   let parameters;
   try {
@@ -134,6 +220,11 @@ export async function runChangeRouter({ store, shopId, logger, now = new Date(),
     logger?.warn?.('route.parameters_load_failed', { shopId, reason: error.message });
     return { ...totals, skipped: 'parameters_unavailable' };
   }
+
+  totals.notices = await runNotices({ store, shopId, logger, parameters, now, dryRun, onNotice });
+
+  const tickets = await store.candidates();
+  if (tickets.length === 0) return totals;
 
   const ids = tickets.map((ticket) => ticket.id);
   const [actors, investigations] = await Promise.all([store.nextActors(ids), store.latestInvestigations(ids)]);
@@ -170,7 +261,8 @@ export async function runChangeRouter({ store, shopId, logger, now = new Date(),
         continue;
       }
 
-      const columns = { fact_drift: drift };
+      // A recorded notice survives a state drift written over it.
+      const columns = { fact_drift: ticket.fact_drift?.notice ? { ...drift, notice: ticket.fact_drift.notice } : drift };
       if (result.outcome === 'reinvestigate') {
         Object.assign(columns, reinvestigationColumns(ticket), {
           metadata: {
@@ -191,5 +283,79 @@ export async function runChangeRouter({ store, shopId, logger, now = new Date(),
     }
   }
 
+  return totals;
+}
+
+/**
+ * The refund-notice pass. Optional on the store: one without the reads (a test,
+ * a rehearsal) records no notices, which is the behaviour before they existed.
+ */
+async function runNotices({ store, shopId, logger, parameters, now, dryRun, onNotice }) {
+  const totals = { considered: 0, due: 0, written: 0, reopened: 0, failed: 0 };
+  if (!store.noticeTemplates) return totals;
+  const windowDays = days(parameters, 'refund_notice_window_days');
+  if (windowDays === null) return { ...totals, skipped: 'window_unset' };
+  const templates = await store.noticeTemplates();
+  if (templates.size === 0) return { ...totals, skipped: 'no_template' };
+
+  const templateFor = (ticket) =>
+    templates.get(answerSetFor(ticket.category)) ?? templates.get(answerSetFor(ticket.secondary_category)) ?? null;
+  const inScope = (await store.noticeCandidates()).filter((ticket) => templateFor(ticket));
+  if (inScope.length === 0) return totals;
+
+  const [refunds, lastOutbound] = await Promise.all([
+    store.refundsByOrder(inScope.map((ticket) => ticket.shopify_order_number)),
+    store.lastOutboundByCase([...new Set(inScope.map((ticket) => ticket.case_id).filter(Boolean))])
+  ]);
+
+  // ONE NOTICE PER CASE: the thread the customer wrote on last.
+  const byCase = new Map();
+  for (const ticket of inScope) {
+    if (!refunds.has(ticket.shopify_order_number)) continue;
+    const key = ticket.case_id ?? ticket.id;
+    const held = byCase.get(key);
+    if (!held || Date.parse(ticket.last_message_at ?? '') > Date.parse(held.last_message_at ?? '')) byCase.set(key, ticket);
+  }
+
+  const at = new Date(now).toISOString();
+  for (const ticket of byCase.values()) {
+    totals.considered += 1;
+    try {
+      const template = templateFor(ticket);
+      const due = noticeDue({
+        inScope: true,
+        refunds: refunds.get(ticket.shopify_order_number),
+        firstMessageAt: ticket.first_message_at,
+        lastMessageAt: ticket.last_message_at,
+        lastOutboundAt: lastOutbound.get(ticket.case_id) ?? null,
+        windowDays,
+        recorded: ticket.fact_drift?.notice ?? null
+      });
+      if (!due) continue;
+      totals.due += 1;
+
+      const notice = noticeRecord({ refundIds: due.refund_ids, template, at });
+      const columns = { fact_drift: { ...(ticket.fact_drift ?? {}), notice, checked_at: at } };
+      const reopen = REOPENED_BY_NOTICE.includes(ticket.status);
+      if (reopen) {
+        // As ingestion reopens: off a terminal status clears both timestamps.
+        Object.assign(columns, { status: 'awaiting_human', closed_at: null, resolved_at: null });
+      }
+      columns.metadata = {
+        ...(ticket.metadata && typeof ticket.metadata === 'object' ? ticket.metadata : {}),
+        change_router: { at, outcome: 'notice', reason: 'refund_notice', refund_ids: due.refund_ids, reopened_from: reopen ? ticket.status : null }
+      };
+      if (!dryRun) {
+        await store.write(ticket.id, columns);
+        totals.written += 1;
+        if (reopen) totals.reopened += 1;
+      }
+      logger?.info?.('route.notice', { shopId, ticketId: ticket.id, refunds: due.refund_ids.length, reopened: reopen });
+      onNotice?.({ ticket, notice, reopen, written: !dryRun });
+    } catch (error) {
+      totals.failed += 1;
+      logger?.warn?.('route.notice_failed', { shopId, ticketId: ticket.id, reason: error.message });
+    }
+  }
   return totals;
 }

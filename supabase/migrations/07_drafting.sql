@@ -103,6 +103,9 @@ create table public.ticket_drafts (
   -- ticket on a rule that no longer describes the reply a customer received is
   -- the one mistake here that cannot be taken back.
   disposition text not null,
+  -- `reply`, or `refund_notice`: a message of our own telling the customer a
+  -- refund was recorded (72_refund_notice.sql). Never auto-sent.
+  purpose text not null default 'reply',
 
   -- The level gate that applied, and the language the reply is written in.
   level smallint,
@@ -182,6 +185,9 @@ create table public.ticket_drafts (
   ),
   constraint ticket_drafts_disposition_check check (
     disposition in ('terminal', 'intermediary')
+  ),
+  constraint ticket_drafts_purpose_check check (
+    purpose in ('reply', 'refund_notice')
   ),
   constraint ticket_drafts_reply_link_object_check check (
     reply_link is null or jsonb_typeof(reply_link) = 'object'
@@ -279,6 +285,9 @@ comment on column public.ticket_drafts.source_verdict is
 
 comment on column public.ticket_drafts.disposition is
   'Whether sending this ends the thread. terminal = nothing expected back and nothing left to do, so the send is what closes the ticket; intermediary = the customer owes us an answer or a colleague owes them one, so sending moves the ticket to whoever is waited on and closes nothing. Derived in code from the verdict and the case file''s handoff -- never chosen by the model -- and stored so the decision travels with the text it was made about.';
+
+comment on column public.ticket_drafts.purpose is
+  'reply: an answer to the customer''s latest message. refund_notice: a message of our own telling them a refund was recorded (support_answers.notify_on). A notice is never auto-sent, and only a message of ours written after it counts as already answered.';
 
 comment on column public.ticket_drafts.body_text is
   'What the MODEL wrote, never edited in place. A human''s rewrite goes to approved_body_text, so the distance between the two stays readable as the drafting quality measure.';

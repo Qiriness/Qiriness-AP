@@ -26,6 +26,8 @@ export function mapPolicyRule(row = {}) {
     checks: answer.checks,
     priority: Number(answer.priority ?? 0),
     isFallback: answer.isFallback,
+    // The event this rule is the template for (`refund_recorded`), or null.
+    notifyOn: row.notify_on ?? null,
     approvalStatus: String(row.approval_status ?? 'draft'),
     updatedAt: row.updated_at ?? null
   };

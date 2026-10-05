@@ -1275,9 +1275,10 @@ export interface TicketDraft {
   /**
    * Why this draft can never send itself, limited to the subject holds a reviewer
    * acts on (`ticket_drafts.auto_send_blockers`): the customer names a health
-   * condition, the situation is marked never-auto-send, or it is cosmetovigilance.
+   * condition, the situation is marked never-auto-send, it is cosmetovigilance,
+   * or it is a refund notice (a message we send unasked).
    */
-  autoSendHolds: { reason: "health_topic" | "situation" | "cosmetovigilance"; detail: string | null }[];
+  autoSendHolds: { reason: "health_topic" | "situation" | "cosmetovigilance" | "refund_notice"; detail: string | null }[];
   /** ISO timestamp of when it was written. */
   draftedAt: string | null;
   /** Whether approving sends the reply (OUTBOUND_SEND_ENABLED on this server). */
@@ -2687,6 +2688,11 @@ export interface PolicyRule {
   checks: RuleCheck[];
   priority: number;
   isFallback: boolean;
+  /**
+   * The event this rule is the template for when we write to the customer
+   * unasked: `refund_recorded`, or null. At most one rule per answer set.
+   */
+  notifyOn: string | null;
   approvalStatus: string;
   updatedAt: string | null;
 }

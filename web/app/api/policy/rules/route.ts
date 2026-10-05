@@ -68,6 +68,8 @@ export async function POST(request: NextRequest) {
       checks: Array.isArray(body.checks) ? body.checks : [],
       priority: Number(body.priority ?? 0),
       isFallback: body.isFallback === true,
+      // Absent means unchanged: only the editor sends it.
+      notifyOn: "notifyOn" in body ? (body.notifyOn ? String(body.notifyOn) : null) : undefined,
       // NEVER APPROVED BY A SAVE. A rule reaches live mail only through the
       // approval endpoint, so editing one can never be the thing that switches
       // it on — the same split `import-exemplars.mjs` keeps for the same reason.

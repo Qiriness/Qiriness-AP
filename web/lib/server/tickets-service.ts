@@ -1211,7 +1211,10 @@ function mapDraftRow(row: any, action: any | null = null): TicketDraft {
     // Only the subject holds: level, mood and failed checks are shown elsewhere
     // or are not the reviewer's to act on.
     autoSendHolds: (Array.isArray(row.auto_send_blockers) ? row.auto_send_blockers : [])
-      .filter((b: any) => b && (b.reason === "health_topic" || b.reason === "situation" || b.reason === "cosmetovigilance"))
+      .filter(
+        (b: any) =>
+          b && (b.reason === "health_topic" || b.reason === "situation" || b.reason === "cosmetovigilance" || b.reason === "refund_notice"),
+      )
       .map((b: any) => ({ reason: b.reason, detail: b.detail == null ? null : String(b.detail) })),
     draftedAt: row.drafted_at ?? null,
     sendsOnApprove: sendOnApprove(),

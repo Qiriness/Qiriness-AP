@@ -10,6 +10,17 @@ Three sibling files carry the other halves, and this one deliberately does not d
 
 ---
 
+## A refund recorded in Shopify is told to the customer (2026-10-05)
+
+- **The change router finds refunds nobody has reported.** It looks at tickets in the answer set of the rule marked `notify_on = 'refund_recorded'`, in any status but spam or forwarded. A refund created after our last message on the case, and within `refund_notice_window_days` of the ticket's last message, records `fact_drift.notice`. A closed or resolved ticket is reopened to `awaiting_human`.
+- **The fold keeps the case on us until we have written**, and raises the version once. After the notice is sent the case resolves on its own unless a check is still open.
+- **The notice is drafted in the `draft` stage whatever `DRAFT_IN_POLL` says.** It uses the template rule's skeleton and a « Message à notre initiative » section, and drops the order-only claims. It is `purpose = 'refund_notice'`, never auto-sent, with a hold line for the reviewer. Also available as `npm run draft -- --gates=notice`.
+- **`preSendCheck`** counts only our messages after the notice as « already answered ».
+- **Switched on from the dashboard:** a « Tell the customer when a refund is recorded » box in the rule editor, shown only in the returns set (any set whose rules read `refund_state`) and locked on every other rule while one holds it, and `refund_notice_window_days` on Parameters.
+- **Migration `72_refund_notice.sql`** adds `support_answers.notify_on` and `ticket_drafts.purpose`. New parameter `refund_notice_window_days`. **Applied 2026-10-05**; not switched on (no rule marked, parameter unset).
+- **Proven:** unit tests only (`refund-notice.test.mjs`, `refund-notice-draft.test.mjs`, fold, outbound, migration 72). Full suite: 4,758 pass. **Not run against the live database**: VALIDATION_LOG item 39.
+- **Known gap:** refund lines are not synced, so the notice cannot name the refunded products.
+
 ## Paid Ads: a campaign table, with links (2026-10-05)
 
 - **The Paid view lists every campaign that delivered in the range**, Meta Ads and Google Ads together:

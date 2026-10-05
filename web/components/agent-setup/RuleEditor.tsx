@@ -148,6 +148,7 @@ export function RuleEditor({
   const [linkUrl, setLinkUrl] = useState(rule?.link?.url ?? "");
   const [linkLabel, setLinkLabel] = useState(rule?.link?.label ?? "");
   const [checks, setChecks] = useState<RuleCheck[]>(rule?.checks ?? []);
+  const [notifyRefund, setNotifyRefund] = useState(rule?.notifyOn === "refund_recorded");
   const [useGeneral, setUseGeneral] = useState(false);
   const [generalRuleId, setGeneralRuleId] = useState(generalRules[0]?.id ?? "");
   const [scopeOpen, setScopeOpen] = useState(() => !(rule?.answerSet ?? seed?.answerSet ?? answerSets[0]));
@@ -156,6 +157,20 @@ export function RuleEditor({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // WHERE THE REFUND NOTICE IS OFFERED: a set whose rules branch on where the
+  // refund stands (`refund_state`) — the returns set here, read from the rules
+  // rather than named. Elsewhere the box is not shown, unless this rule already
+  // carries the flag, so it can still be turned off.
+  const refundSet = rules.some(
+    (item) => item.answerSet === answerSet && Object.prototype.hasOwnProperty.call(item.conditions ?? {}, "refund_state"),
+  );
+  // ONE RULE AT A TIME: another rule in the set already writes the notice, so
+  // this box cannot be ticked until it is turned off there.
+  const refundNoticeHolder =
+    rules.find(
+      (item) => item.answerSet === answerSet && item.notifyOn === "refund_recorded" && item.id !== rule?.id,
+    ) ?? null;
+  const showRefundNotice = refundSet || notifyRefund;
   const trimmedLinkUrl = linkUrl.trim();
   const trimmedLinkLabel = linkLabel.trim();
   // EVERY GENERAL RULE IN THE SET, the ones covering what this rule branches on
@@ -211,6 +226,7 @@ export function RuleEditor({
     checks,
     priority: rule?.priority ?? 0,
     isFallback: rule?.isFallback ?? false,
+    notifyOn: notifyRefund ? "refund_recorded" : null,
   };
   const snapshot = JSON.stringify(payload);
 
@@ -970,6 +986,30 @@ export function RuleEditor({
                     </label>
                   )}
                 </div>
+
+                {/* THE REFUND NOTICE'S TEMPLATE (DECISIONS § Refund notice). Shown only in
+                    a set whose rules read `refund_state`; one rule at a time, so the box
+                    is locked while another rule holds it, and saving refuses it too. */}
+                {showRefundNotice && (
+                  <div className={styles.field}>
+                    <label className={styles.checkRow}>
+                      <input
+                        type="checkbox"
+                        checked={notifyRefund}
+                        disabled={Boolean(refundNoticeHolder) && !notifyRefund}
+                        onChange={(e) => setNotifyRefund(e.target.checked)}
+                      />
+                      <span>
+                        <b>{t("setup.rules.notifyRefund")}</b> — {t("setup.rules.notifyRefundText")}
+                      </span>
+                    </label>
+                    {refundNoticeHolder && (
+                      <p className={notifyRefund ? styles.warn : styles.hint}>
+                        {t("setup.rules.notifyRefundTaken", { key: refundNoticeHolder.answerKey })}
+                      </p>
+                    )}
+                  </div>
+                )}
 
                 {/* THE POLICIES THIS RULE ANSWERS FROM. Links, not a column: the same
                     company_policy_links the inspector edits, so an existing rule's

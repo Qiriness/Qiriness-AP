@@ -46,6 +46,15 @@ export const PARAMETERS = {
       'policy and may be shorter. Stated in "Refund policy" as 14 days.',
     usedBy: 'replies that must distinguish the legal right from the shop policy'
   },
+  refund_notice_window_days: {
+    kind: 'days',
+    label: 'How long after a ticket\'s last message is a new refund still about it?',
+    description:
+      'Calendar days. A refund recorded in Shopify within this time, on a returns ticket ' +
+      'whose customer has not been told, gets a notice drafted for a person to approve ' +
+      '(the rule marked « notify on refund »). Leave unset to send no notices.',
+    usedBy: 'the refund notice (change router)'
+  },
   refund_processing_days: {
     kind: 'days',
     label: 'Once a return is approved, how long until the refund lands?',

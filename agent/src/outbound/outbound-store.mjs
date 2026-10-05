@@ -7,7 +7,9 @@ const DRAFT_COLUMNS =
   'id,ticket_id,trigger_message_id,status,case_version,auto_send_eligible,checks_passed,body_text,approved_body_text,' +
   // What actionFromDraft builds the HTML from: the formatted rewrite, and the
   // link a [[marker]] stands for.
-  'approved_body_html,reply_link';
+  'approved_body_html,reply_link,' +
+  // A refund notice is checked against what we wrote after it was drafted.
+  'purpose,drafted_at';
 
 /**
  * The reads the outbound worker needs, and nothing else. Every write goes

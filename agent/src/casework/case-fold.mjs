@@ -332,6 +332,13 @@ export function foldCase({
     next = nextActorAfter(walk, { now, holdingDays });
   }
 
+  // A REFUND NOTICE NOT YET SENT IS OURS TO SEND (DECISIONS § Refund notice).
+  // The change router recorded a refund nobody has told the customer about; until
+  // a message of ours is newer than that record, we owe the next step, whatever
+  // the thread alone would say. Once it has gone, the ordinary reading resumes:
+  // nobody owes anything → resolved, or an open check keeps the case open.
+  if (noticePending(factDrift, thread, actorFor)) next = 'support';
+
   const state = {
     as_of_message_id: last?.id ?? null,
     as_of_at: last ? last.received_at ?? last.sent_at ?? null : null,
@@ -352,11 +359,29 @@ export function foldCase({
  * on the next poll moves nothing. Null when there is none.
  */
 export function driftMaterial(factDrift) {
-  if (!factDrift?.changed || Object.keys(factDrift.changed).length === 0) return null;
-  const changed = Object.keys(factDrift.changed)
-    .sort()
-    .map((key) => [key, factDrift.changed[key]?.from ?? null, factDrift.changed[key]?.to ?? null]);
-  return { changed, case_file_at: factDrift.case_file_at ?? null };
+  const material = {};
+  if (factDrift?.changed && Object.keys(factDrift.changed).length > 0) {
+    material.changed = Object.keys(factDrift.changed)
+      .sort()
+      .map((key) => [key, factDrift.changed[key]?.from ?? null, factDrift.changed[key]?.to ?? null]);
+    material.case_file_at = factDrift.case_file_at ?? null;
+  }
+  // A refund notice: which refunds, under which rule. Never `recorded_at`, so
+  // re-finding the same refunds moves nothing; a new refund raises the version.
+  if (Array.isArray(factDrift?.notice?.refund_ids) && factDrift.notice.refund_ids.length > 0) {
+    material.notice = { refund_ids: [...factDrift.notice.refund_ids].sort(), answer_key: factDrift.notice.answer_key ?? null };
+  }
+  return Object.keys(material).length > 0 ? material : null;
+}
+
+/**
+ * Whether a recorded refund notice is still unsent: no message of ours is newer
+ * than the moment it was recorded.
+ */
+export function noticePending(factDrift, thread = [], actorFor = defaultActorFor) {
+  const recorded = Date.parse(factDrift?.notice?.recorded_at ?? '');
+  if (!Number.isFinite(recorded)) return false;
+  return !thread.some((message) => actorFor(message) === 'support' && timeOf(message) > recorded);
 }
 
 /**

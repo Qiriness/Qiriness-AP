@@ -24,6 +24,7 @@ import { CURSOR_KEYS } from '../ingestion/delta-poller.mjs';
 //   npm run draft -- --ticket <uuid> --show  # one ticket, end to end
 //   npm run draft -- --limit 10
 //   npm run draft -- --ticket <uuid> --redraft   # overwrite an existing draft
+//   npm run draft -- --gates=notice               # the recorded refund notices
 //   npm run draft -- --dry-run --gates=poll      # what the worker would draft,
 //                                                # and what it would cost; no model call
 //
@@ -55,7 +56,9 @@ const show = args.includes('--show');
 const redraft = args.includes('--redraft');
 const limit = parseValue(args, '--limit', Number);
 const ticketId = parseValue(args, '--ticket', String);
-const gates = args.includes('--gates=poll') ? 'poll' : 'manual';
+// `--gates=notice`: the refund notices the change router recorded (DECISIONS
+// § Refund notice), each a draft for a person to approve.
+const gates = args.includes('--gates=poll') ? 'poll' : args.includes('--gates=notice') ? 'notice' : 'manual';
 const estimateOnly = dryRun && gates === 'poll';
 
 main().catch((error) => {

@@ -186,6 +186,10 @@ async function main() {
   // Stage 6: the drafting pass in the poll. Null unless DRAFT_IN_POLL=true and a
   // key is set, and null means the stage is skipped, as before.
   let drafting = null;
+  // Refund notices (DECISIONS § Refund notice): drafted whenever a key is set,
+  // NOT behind DRAFT_IN_POLL. A person approves every one, and only the change
+  // router's recorded notice queues one, so this cannot send or draft by itself.
+  let noticeDrafting = null;
   // The Case Linker: null unless CASE_LINKER_ENABLED=true and a key is set.
   // Null means an ambiguous thread opens its own case, its candidates logged.
   let caseLinker = null;
@@ -221,6 +225,12 @@ async function main() {
     // `AGENT_CASEWORK_MODEL=` (empty) leaves this null, which turns the stage
     // off — the switch is the absence of the reader, not a flag inside it.
     readCaseFor = models.caseworkModel ? { openai, model: models.caseworkModel } : null;
+    noticeDrafting = {
+      openai,
+      store: createDraftingStore(supabase, { caseStateStore: caseStateRecord }),
+      record: createDraftRecord(supabase, { shopId }),
+      brandVoice: createBrandVoiceStore(supabase)
+    };
     drafting = config.draftInPoll
       ? {
           openai,
@@ -667,7 +677,9 @@ async function main() {
     // DRAFT_IN_POLL. The gates (`pollGate`) keep it to our turn on a customer
     // message received since the mailbox cutover. Nothing is sent: a draft waits
     // for a person on the ticket page.
-    if (drafting && runsThrough('draft')) {
+    // One stage, two passes: replies (DRAFT_IN_POLL) and refund notices.
+    const draftStage = runsThrough('draft');
+    if (drafting && draftStage) {
       try {
         const cursors = (await supabaseSelect(supabase, T.SHOPS, { id: shopId }, 'sync_cursors'))[0]?.sync_cursors ?? {};
         const drafted = await runDrafting({
@@ -695,6 +707,31 @@ async function main() {
       } catch (error) {
         // An unapproved brand voice or a store failure stops this pass, not the poll.
         logger.warn('draft.pass_failed', { shopId, reason: error.message });
+      }
+    }
+
+    // REFUND NOTICES, in the draft stage whatever DRAFT_IN_POLL says: each one a
+    // draft for a person to approve, queued only by the change router.
+    if (noticeDrafting && draftStage) {
+      try {
+        const noticed = await runDrafting({
+          store: noticeDrafting.store,
+          draftRecord: noticeDrafting.record,
+          openai: noticeDrafting.openai,
+          brandVoice: await noticeDrafting.brandVoice.load(shopId),
+          shopId,
+          model: models.draftingModel,
+          ...(await loadDraftingContext(supabase, shopId, logger)),
+          senderDirectory,
+          gates: 'notice',
+          limit: config.draftPollLimit,
+          logger
+        });
+        if (noticed.considered > 0) {
+          logger.info('draft.notice_pass', { shopId, ...noticed });
+        }
+      } catch (error) {
+        logger.warn('draft.notice_pass_failed', { shopId, reason: error.message });
       }
     }
 

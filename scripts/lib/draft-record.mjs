@@ -102,6 +102,8 @@ export function createDraftRecord(supabase, { shopId, transport = REST_TRANSPORT
       investigationId,
       sourceVerdict,
       disposition,
+      // `reply`, or `refund_notice`: a message of ours, unasked (72_refund_notice.sql).
+      purpose = 'reply',
       level = null,
       language = null,
       subject = null,
@@ -132,6 +134,7 @@ export function createDraftRecord(supabase, { shopId, transport = REST_TRANSPORT
             investigation_id: investigationId,
             source_verdict: sourceVerdict,
             disposition,
+            purpose,
             level,
             language,
             subject,

@@ -33,7 +33,13 @@ async function main() {
     shopId,
     logger,
     dryRun,
-    onResult: ({ ticket, result, written }) => {
+    onNotice: ({ ticket, notice, reopen, written }) => {
+      console.log(
+        `  ${ticket.id.slice(0, 8)} ${ticket.shopify_order_number} — refund notice due (${notice.refund_ids.length} refund(s), ` +
+          `rule ${notice.answer_key})${reopen ? `, reopened from ${ticket.status}` : ''}${written ? ' [written]' : ''}`
+      );
+    },
+    onResult:({ ticket, result, written }) => {
       const moved = Object.entries(result.changed)
         .map(([state, { from, to }]) => `${state} ${from} → ${to}`)
         .join(', ');

@@ -52,6 +52,8 @@ export interface SaveRulePayload {
   checks: RuleCheck[];
   priority: number;
   isFallback: boolean;
+  /** `refund_recorded` to make this rule the refund notice's template, or null. */
+  notifyOn: string | null;
 }
 
 /**

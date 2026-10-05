@@ -224,3 +224,80 @@ function canonical(changed) {
   const entries = Object.entries(changed ?? {}).sort(([a], [b]) => a.localeCompare(b));
   return JSON.stringify(entries.map(([key, value]) => [key, value?.from ?? null, value?.to ?? null]));
 }
+
+// --- Refund notice (DECISIONS § Refund notice) ------------------------------
+//
+// A MESSAGE WE SEND UNASKED. Every other path here answers the customer; this
+// one tells them something they did not ask about: a refund recorded in Shopify
+// that no message of ours has reported. It ignores the gates above on purpose —
+// the refund usually lands after our last reply, when the case is waiting on
+// nobody or already closed.
+//
+// WHICH RULE, AND FOR WHICH TICKETS, IS DATA. `support_answers.notify_on` marks
+// the template; its answer set is the scope (a ticket qualifies when its
+// category or second subject maps to that set). The window is the shop's
+// `refund_notice_window_days`. Unset either way, nothing happens.
+
+/** The events a rule may be the template for (72_refund_notice.sql); one list, shared with the rule editor. */
+export { NOTICE_EVENTS } from '../../../scripts/lib/notice-events.mjs';
+
+/** What a draft is for (72_refund_notice.sql). */
+export const DRAFT_PURPOSES = Object.freeze(['reply', 'refund_notice']);
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Whether a refund notice is due on this ticket, and for which refunds.
+ *
+ * A refund counts when it was created:
+ *   - after the ticket's first message (one from before is not news to this case);
+ *   - after our last message on the case (we have not told them since);
+ *   - within `windowDays` of the ticket's last message (still about this ticket).
+ * Due only when one of those is not already in the recorded notice: the same
+ * refunds are never noticed twice, a later refund is.
+ *
+ * @param inScope        the ticket's subject maps to the template's answer set
+ * @param refunds        `orders.refunds`: `[{ id, created_at }]`
+ * @param firstMessageAt the ticket's first message
+ * @param lastMessageAt  the ticket's last message, either direction
+ * @param lastOutboundAt our last message on the case, or null
+ * @param windowDays     `refund_notice_window_days`; null switches it off
+ * @param recorded       the notice already recorded (`fact_drift.notice`), or null
+ * @returns `{ refund_ids }` (every untold refund, sorted) or null
+ */
+export function noticeDue({ inScope, refunds, firstMessageAt, lastMessageAt, lastOutboundAt = null, windowDays, recorded = null }) {
+  if (!inScope || !Number.isInteger(windowDays) || windowDays < 0) return null;
+  const first = Date.parse(firstMessageAt ?? '');
+  const last = Date.parse(lastMessageAt ?? '');
+  const told = Date.parse(lastOutboundAt ?? '');
+  if (!Number.isFinite(last)) return null;
+  const untold = (Array.isArray(refunds) ? refunds : [])
+    .filter((refund) => {
+      const at = Date.parse(refund?.created_at ?? '');
+      if (!refund?.id || !Number.isFinite(at)) return false;
+      if (Number.isFinite(first) && at <= first) return false;
+      if (Number.isFinite(told) && at <= told) return false;
+      return at - last <= windowDays * DAY_MS;
+    })
+    .map((refund) => refund.id)
+    .sort();
+  if (untold.length === 0) return null;
+  const already = new Set(recorded?.refund_ids ?? []);
+  if (untold.every((id) => already.has(id))) return null;
+  return { refund_ids: untold };
+}
+
+/**
+ * The notice recorded on the ticket (`fact_drift.notice`). `recorded_at` is the
+ * moment it was found: the fold keeps the case on us until a message of ours is
+ * newer than it (case-fold.mjs).
+ */
+export function noticeRecord({ event = 'refund_recorded', refundIds, template, at }) {
+  return {
+    event,
+    refund_ids: refundIds,
+    answer_set: template.answer_set,
+    answer_key: template.answer_key,
+    recorded_at: at
+  };
+}

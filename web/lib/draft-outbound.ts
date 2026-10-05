@@ -161,6 +161,8 @@ export function autoSendHoldLines(draft: TicketDraft, t: Translate): string[] {
       ? t("tickets.panels.draft.holdHealth", { terms: hold.detail ?? "" })
       : hold.reason === "situation"
         ? t("tickets.panels.draft.holdSituation", { keys: hold.detail ?? "" })
-        : t("tickets.panels.draft.holdCosmetovigilance"),
+        : hold.reason === "refund_notice"
+          ? t("tickets.panels.draft.holdRefundNotice")
+          : t("tickets.panels.draft.holdCosmetovigilance"),
   );
 }

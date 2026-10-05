@@ -319,6 +319,29 @@ function historyDate(row) {
   return Number.isNaN(date.getTime()) ? null : date.toISOString().slice(0, 10);
 }
 
+/**
+ * The section a refund notice adds (DECISIONS § Refund notice).
+ *
+ * THE PRODUCTS ARE NOT IN THE BUNDLE: a Shopify refund is synced with its
+ * amount and dates, not its lines. The skeleton may ask for them; the model is
+ * told to name them only where the case file establishes them, rather than
+ * guessing from the order's lines.
+ */
+export function noticeSection({ closing = false } = {}) {
+  return (
+    `## Message à notre initiative\n\n` +
+    `Le client ne nous a rien demandé de nouveau : son dernier message, plus haut, a déjà reçu notre réponse. ` +
+    `Ce message est écrit à notre initiative, pour l’informer qu’un remboursement vient d’être enregistré pour sa commande ` +
+    `et qu’il lui parviendra prochainement. Ne pas répondre une deuxième fois à son dernier message.\n\n` +
+    `La consigne ci-dessous a été écrite pour un client qui demande où en est son remboursement : la suivre pour la forme, ` +
+    `en lisant « le client demande » comme « nous l’informons ». Le montant et la date figurent dans la section « Commande concernée » : ` +
+    `les reprendre tels quels. Ne nommer les produits remboursés que si le dossier les établit.\n\n` +
+    (closing
+      ? `Rien d’autre n’est en attente dans ce dossier : c’est un message de clôture. Rester bref et ne rien demander.`
+      : `D’autres points restent ouverts dans ce dossier : après le remboursement, dire en une phrase ce qui reste à venir, sans rien promettre de plus que le dossier.`)
+  );
+}
+
 function resolveSkeleton(skeleton, parameters, logger) {
   if (!skeleton) {
     return null;
@@ -483,6 +506,9 @@ export function composeDraftingMessage({
   // safe: the case's policies are then dropped, and the reply is written from
   // the case file alone.
   companyPolicies = new Map(),
+  // A REFUND NOTICE: `{ closing }` when this is a message of ours, unasked
+  // (DECISIONS § Refund notice). Null for every reply, which renders nothing.
+  notice = null,
   logger = null
 } = {}) {
   const parts = [];
@@ -532,6 +558,13 @@ export function composeDraftingMessage({
   // The framing is the load-bearing part. Told to "follow this", a model returns
   // the skeleton with a greeting bolted on; told it is an internal instruction
   // about the shape of a reply, it writes one.
+  // A MESSAGE OF OUR OWN, NOT A REPLY, and said before the skeleton because the
+  // skeleton was written for a customer asking. Without this the model answers
+  // the customer's last message a second time — it is right there above.
+  if (notice) {
+    parts.push(noticeSection(notice));
+  }
+
   const skeleton = resolveSkeleton(caseFile?.answerSkeleton, parameters, logger);
   if (skeleton) {
     parts.push(

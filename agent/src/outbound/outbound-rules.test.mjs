@@ -120,3 +120,16 @@ test('a manual reply is checked only for a customer message it could not have re
   const customer = [{ id: 'm2', direction: 'inbound', actor: 'customer', received_at: '2026-09-28T10:00:00Z' }];
   assert.deepEqual(preSendCheck(facts({ action: manual, draft: null, laterMessages: customer })), { ok: false, reason: 'customer_wrote_again' });
 });
+
+test('a refund notice is not refused for the reply of ours it follows, only for one written after it', () => {
+  const ours = { id: 'm-ours', direction: 'outbound', actor: 'support', received_at: '2026-09-07T14:55:10Z' };
+  const notice = { status: 'approved', auto_send_eligible: false, purpose: 'refund_notice', drafted_at: '2026-10-05T09:10:00Z' };
+  assert.deepEqual(preSendCheck(facts({ draft: notice, laterMessages: [ours] })), { ok: true });
+  const since = { id: 'm-since', direction: 'outbound', actor: 'support', received_at: '2026-10-05T10:00:00Z' };
+  assert.deepEqual(preSendCheck(facts({ draft: notice, laterMessages: [ours, since] })), { ok: false, reason: 'already_answered' });
+  // The customer writing again still stops it.
+  const theirs = { id: 'm-c2', direction: 'inbound', actor: 'customer', received_at: '2026-10-05T10:00:00Z' };
+  assert.deepEqual(preSendCheck(facts({ draft: notice, laterMessages: [theirs] })), { ok: false, reason: 'customer_wrote_again' });
+  // A plain reply keeps the old rule.
+  assert.deepEqual(preSendCheck(facts({ laterMessages: [ours] })), { ok: false, reason: 'already_answered' });
+});

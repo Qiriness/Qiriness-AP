@@ -2,6 +2,7 @@ import { supabaseSelect, supabaseSelectAll } from '../../../scripts/lib/supabase
 import { COLUMNS, T } from '../../../scripts/lib/tables.mjs';
 import { caseTimeline } from '../../../scripts/lib/case-reply-target.mjs';
 import { driftCurrentFor, orderSourcedClaims } from '../casework/change-router.mjs';
+import { noticePending } from '../casework/case-fold.mjs';
 
 import { brandVoiceProblem, composeSystemPrompt } from './brand-voice.mjs';
 import { checksPassed, failedChecks, runDraftChecks, warningChecks } from './draft-checks.mjs';
@@ -134,6 +135,10 @@ export async function runDrafting({
   for (const candidate of candidates) {
     const { investigation, ticket, message, orderContext, thread = [], conversation = [], caseState = null, caseTarget } = candidate;
     const caseCurrent = candidate.caseCurrent ?? null;
+    // A REFUND NOTICE (DECISIONS § Refund notice): a message of ours, unasked.
+    // Its own gate and decision; everything after — the composer, the checks,
+    // the row — is the reply's, with the differences marked where they apply.
+    const notice = gates === 'notice' ? candidate.notice ?? null : null;
 
     if (gates === 'poll') {
       const gate = pollGate({ caseCurrent, ticket, investigation, conversation, cutoverAt });
@@ -142,8 +147,15 @@ export async function runDrafting({
         continue;
       }
     }
+    if (gates === 'notice') {
+      const gate = noticeGate({ caseCurrent, ticket, notice, conversation });
+      if (!gate.ok) {
+        skip(gate.reason);
+        continue;
+      }
+    }
 
-    const decision = draftDecision({ investigation, ticket, conversation, caseTarget });
+    const decision = notice ? noticeDecision(caseCurrent) : draftDecision({ investigation, ticket, conversation, caseTarget });
     if (!decision.draft) {
       skip(decision.reason);
       continue;
@@ -161,8 +173,14 @@ export async function runDrafting({
     // file), the case file's sentences about the order describe the order as it
     // was. They are left out, and the « Commande concernée » section — rebuilt
     // from the current bundle — states it as it is (DECISIONS § Change router).
-    const staleClaims = staleOrderClaims({ ticket, investigation });
-    const caseFile = withoutClaims(caseFileFromRow(investigation), staleClaims);
+    //
+    // A NOTICE DROPS THEM ALWAYS: it exists because the order moved after the
+    // case file was written, so every sentence that rested on the old bundle alone
+    // may now be false (« aucun remboursement n'est parti »).
+    const staleClaims = notice ? orderSourcedClaims(investigation) : staleOrderClaims({ ticket, investigation });
+    const baseCaseFile = withoutClaims(caseFileFromRow(investigation), staleClaims);
+    const caseFile = notice ? noticeCaseFile(baseCaseFile, notice.template) : baseCaseFile;
+    const verdict = notice ? 'answerable' : investigation.verdict;
     const language = replyLanguage(ticket);
     // DOES THIS MESSAGE CLOSE THE CASE? The code gate runs first and costs
     // nothing: with a question outstanding or a point sitting with a colleague,
@@ -170,12 +188,13 @@ export async function runDrafting({
     // Only when the dossier is clear is the message itself read — a small
     // minority of tickets, on the cheap tier.
     const closure =
-      closureReader && closureAllowed(investigation)
+      !notice && closureReader && closureAllowed(investigation)
         ? await closureReader({ message, ticketId: ticket.id, senderDirectory })
         : { closes: false, why: 'dossier non clos' };
     // Did we leave them waiting? A fact about our own conduct, computed from the
     // thread rather than inferred from the customer's tone.
-    const chase = describesChase(thread);
+    // A notice is not a late answer: nobody was left waiting for it.
+    const chase = notice ? { chased: false } : describesChase(thread);
 
     try {
       const answer = await openai.completeJson({
@@ -190,13 +209,15 @@ export async function runDrafting({
         // they need nothing more.
         system: composeSystemPrompt(brandVoice, {
           language,
-          verdict: investigation.verdict,
+          verdict,
           intent: closure.closes ? 'closing' : null
         }),
         user: composeDraftingMessage({
           message, caseFile, orderContext, ticket, chase, parameters, offerableCodes,
           pinnedArticles, conversation, senderDirectory, caseState, companyPolicies,
-          signature: brandVoice.signature, closingLine: brandVoice.closingLine, logger
+          signature: brandVoice.signature, closingLine: brandVoice.closingLine,
+          notice: notice ? { closing: decision.disposition === 'terminal' } : null,
+          logger
         }),
         schema: DRAFT_SCHEMA,
         schemaName: 'draft',
@@ -221,7 +242,7 @@ export async function runDrafting({
         body,
         doNotClaim: caseFile.doNotClaim,
         missing: caseFile.missing,
-        verdict: investigation.verdict,
+        verdict,
         chased: chase.chased,
         closingLine: brandVoice.closingLine,
         signature: brandVoice.signature,
@@ -244,7 +265,9 @@ export async function runDrafting({
         closing: closure.closes
       });
       const passed = checksPassed(checks);
-      const blockers = autoSendBlockers({
+      // NEVER AUTO-SENT (decided with the owner): a message nobody asked for is
+      // read by a person first, whatever DRAFT_ONLY says.
+      const blockers = notice ? [{ reason: 'refund_notice', detail: null }] : autoSendBlockers({
         level: ticket.level,
         happiness: ticket.happiness,
         checksPassed: passed,
@@ -266,7 +289,8 @@ export async function runDrafting({
         caseVersion: caseCurrent?.version ?? null,
         triggerEventId: caseCurrent?.as_of_message_id ?? null,
         investigationId: investigation.id,
-        sourceVerdict: investigation.verdict,
+        sourceVerdict: verdict,
+        purpose: notice ? 'refund_notice' : 'reply',
         // Derived by draftDecision from the verdict and the case file's
         // handoff, and carried here rather than recomputed at send time: it
         // decides whether sending closes the ticket.
@@ -352,6 +376,52 @@ export function pollGate({ caseCurrent, ticket, investigation, conversation = []
 }
 
 /**
+ * Whether a recorded refund notice may be drafted now: the fold has put the
+ * case on us, nothing is pending, and no message of ours has gone since the
+ * notice was recorded (then the customer was told, by us or by a person).
+ */
+export function noticeGate({ caseCurrent, ticket, notice, conversation = [] }) {
+  if (!notice?.record || !notice?.template) return { ok: false, reason: 'no_notice' };
+  if (!caseCurrent) return { ok: false, reason: 'not_folded' };
+  if (caseCurrent.next_actor !== 'support') return { ok: false, reason: 'not_our_turn' };
+  if (ticket?.needs_categorisation || ticket?.needs_investigation) return { ok: false, reason: 'pass_pending' };
+  if (!['open', 'awaiting_human'].includes(ticket?.status)) return { ok: false, reason: 'not_open' };
+  const actorOf = (message) => message?.actor ?? (message?.direction === 'outbound' ? 'support' : 'customer');
+  if (!noticePending({ notice: notice.record }, conversation, actorOf)) return { ok: false, reason: 'already_told' };
+  return { ok: true, reason: null };
+}
+
+/**
+ * Whether sending the notice ends the case: nothing asked of the customer is
+ * outstanding and no check is still open. Then it is a closing message, and
+ * `terminal`; otherwise it informs and says what is still to come.
+ */
+export function noticeDecision(caseCurrent) {
+  const pending = (caseCurrent?.pending_customer_inputs ?? []).length > 0;
+  const open = (caseCurrent?.obligations ?? []).some((obligation) => ['open', 'queued'].includes(obligation?.status));
+  return { draft: true, disposition: pending || open ? 'intermediary' : 'terminal', reason: null };
+}
+
+/**
+ * The case file as the notice reads it: the template rule's skeleton and tones
+ * in place of the case file's own rule, and nothing to ask or offer. The facts —
+ * the order section rebuilt from the current bundle, the established claims
+ * that still hold — are the case's.
+ */
+export function noticeCaseFile(caseFile, template) {
+  return {
+    ...caseFile,
+    verdict: 'answerable',
+    missing: [],
+    answerSkeleton: template?.answer_skeleton ?? null,
+    tones: Array.isArray(template?.tones) ? template.tones : [],
+    offerCode: null,
+    link: null,
+    knowledgeDocumentId: null
+  };
+}
+
+/**
  * The case file's established claims the order has moved past: only when the
  * ticket carries a drift measured against THIS case file (a newer case file was
  * written from the new order and holds), and only the claims resting on the
@@ -429,6 +499,12 @@ export function needingDraft(investigations = [], drafts = [], versions = new Ma
 
 /** Ids per `in.()` request: the list travels in the URL (the HTTP 414 of 2026-09-27). */
 const ID_BATCH = 100;
+
+/**
+ * What drafting reads of `case_current`: the version and the next actor, and,
+ * for a notice, whether anything is still owed (`noticeDecision`).
+ */
+const CASE_CURRENT_FOR_DRAFTING = 'ticket_id,version,next_actor,as_of_message_id,as_of_at,obligations,pending_customer_inputs';
 
 async function selectInBatches(supabase, table, column, ids, filters, columns, options) {
   const unique = [...new Set(ids.filter(Boolean))];
@@ -515,6 +591,39 @@ export function createDraftingStore(supabase, { caseStateStore = null } = {}) {
       // turn, and something new since the mailbox cutover. `pollGate` then
       // checks each one properly; this only has to be a superset.
       let caseRows = null;
+      // NOTICE MODE: the tickets carrying a recorded refund notice, at a case
+      // the fold has put on us. Small by construction.
+      const noticeByTicket = new Map();
+      if (gates === 'notice') {
+        const noticed = await supabaseSelectAll(
+          supabase,
+          T.TICKETS,
+          {
+            shop_id: shopId,
+            deleted_at: { operator: 'is', value: 'null' },
+            'fact_drift->notice': { operator: 'not.is', value: 'null' },
+            ...(ticketId ? { id: ticketId } : {})
+          },
+          'id,fact_drift'
+        );
+        if (noticed.length === 0) return [];
+        const templates = await this.noticeTemplates(shopId);
+        for (const row of noticed) {
+          const record = row.fact_drift?.notice ?? null;
+          const template = templates.get(`${record?.answer_set}/${record?.answer_key}`) ?? null;
+          if (record && template) noticeByTicket.set(row.id, { record, template });
+        }
+        if (noticeByTicket.size === 0) return [];
+        caseRows = await selectInBatches(
+          supabase,
+          T.CASE_CURRENT,
+          'ticket_id',
+          [...noticeByTicket.keys()],
+          { shop_id: shopId, next_actor: 'support' },
+          CASE_CURRENT_FOR_DRAFTING
+        );
+        if (caseRows.length === 0) return [];
+      }
       if (gates === 'poll') {
         const cutover = Date.parse(cutoverAt ?? '');
         if (!Number.isFinite(cutover)) return [];
@@ -527,7 +636,7 @@ export function createDraftingStore(supabase, { caseStateStore = null } = {}) {
             as_of_at: { operator: 'gte', value: new Date(cutover).toISOString() },
             ...(ticketId ? { ticket_id: ticketId } : {})
           },
-          'ticket_id,version,next_actor,as_of_message_id,as_of_at',
+          CASE_CURRENT_FOR_DRAFTING,
           { order: 'ticket_id.asc' }
         );
         if (caseRows.length === 0) return [];
@@ -578,7 +687,7 @@ export function createDraftingStore(supabase, { caseStateStore = null } = {}) {
             'ticket_id',
             latest.map((row) => row.ticket_id),
             { shop_id: shopId },
-            'ticket_id,version,next_actor,as_of_message_id,as_of_at'
+            CASE_CURRENT_FOR_DRAFTING
           ))
         ).map((row) => [row.ticket_id, row])
       );
@@ -691,11 +800,29 @@ export function createDraftingStore(supabase, { caseStateStore = null } = {}) {
           // rather than every draft refused.
           caseTarget: caseTargetOf(caseById.get(ticketById.get(investigation.ticket_id)?.case_id)),
           // `case_current`: the version this draft is written against (stage 6).
-          caseCurrent: caseByTicket.get(investigation.ticket_id) || null
+          caseCurrent: caseByTicket.get(investigation.ticket_id) || null,
+          // Notice mode only: the recorded notice and its template rule.
+          notice: noticeByTicket.get(investigation.ticket_id) ?? null
         }))
         // A soft-deleted ticket or a purged message drops out here rather than
         // reaching the model as an undefined.
         .filter((candidate) => candidate.ticket && candidate.message);
+    },
+
+    /** The rules marked as a notice template, by `answer_set/answer_key`. */
+    async noticeTemplates(shopId) {
+      const rows = await supabaseSelect(
+        supabase,
+        T.SUPPORT_ANSWERS,
+        {
+          shop_id: shopId,
+          notify_on: { operator: 'not.is', value: 'null' },
+          approval_status: 'approved',
+          deleted_at: { operator: 'is', value: 'null' }
+        },
+        'answer_set,answer_key,answer_skeleton,tones,notify_on'
+      );
+      return new Map((rows || []).map((row) => [`${row.answer_set}/${row.answer_key}`, row]));
     },
 
     /** The candidates that still need a draft for their case version, in the order they were claimed. */

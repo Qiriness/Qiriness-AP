@@ -67,6 +67,9 @@ export function actionFromDraft(draft, { mode = 'human_approved', requestedBy = 
   if (!draft) return { error: 'no_draft' };
   if (!sendableStatusesFor(mode).includes(draft.status)) return { error: 'not_approved' };
   if (mode === 'auto_send' && !(draft.auto_send_eligible && draft.checks_passed)) return { error: 'not_eligible' };
+  // A refund notice is a message nobody asked for: a person approves it, always
+  // (DECISIONS § Refund notice), whatever its eligibility says.
+  if (mode === 'auto_send' && draft.purpose === 'refund_notice') return { error: 'not_eligible' };
   if (!Number.isInteger(draft.case_version) || draft.case_version < 1) return { error: 'no_case_version' };
   const bodyText = typeof draft.approved_body_text === 'string' && draft.approved_body_text.trim() !== ''
     ? draft.approved_body_text

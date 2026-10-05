@@ -34,3 +34,9 @@ test('a migration-59 rule reaches the editor without legacy order_identity none'
   });
   assert.equal(rule.conditions.order_identity.includes('none'), false);
 });
+
+test('the refund-notice flag reaches the editor, and reads null on every other rule', () => {
+  const base = { id: 'r1', answer_set: 'returns', answer_key: 'remboursement_deja_parti', when_conditions: {}, approval_status: 'approved' };
+  assert.equal(mapPolicyRule({ ...base, notify_on: 'refund_recorded' }).notifyOn, 'refund_recorded');
+  assert.equal(mapPolicyRule(base).notifyOn, null);
+});

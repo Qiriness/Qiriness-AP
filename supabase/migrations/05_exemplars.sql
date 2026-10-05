@@ -460,6 +460,11 @@ create table public.support_answers (
   --
   -- `'[]'` means no checks: one representation, as `ask` and `tones` have.
   checks jsonb not null default '[]'::jsonb,
+  -- THE EVENT THIS RULE IS THE TEMPLATE FOR when we write to the customer
+  -- unasked, or null. `refund_recorded`: a refund created in Shopify that no
+  -- message of ours has reported, on a ticket in this rule's answer set. Marking
+  -- a rule is how a shop switches the notice on (72_refund_notice.sql).
+  notify_on text,
   -- Ordering among rows that match equally deeply. Most-specific wins first;
   -- this only breaks the tie, so authoring order never becomes load-bearing by
   -- accident.
@@ -525,6 +530,9 @@ create table public.support_answers (
   -- A list of steps, never an object or a scalar: the order is the sequence.
   constraint support_answers_checks_array_check check (
     jsonb_typeof(checks) = 'array'
+  ),
+  constraint support_answers_notify_on_check check (
+    notify_on is null or notify_on in ('refund_recorded')
   ),
   -- A rule that asks must say so in its route, or the drafting stage gets a
   -- question to ask and a verdict that does not permit asking it —
@@ -601,6 +609,9 @@ comment on column public.support_answers.link_url is
 
 comment on column public.support_answers.link_label is
   'What link_url opens, in the words the reply uses (« le guide d''utilisation »). Present exactly when link_url is.';
+
+comment on column public.support_answers.notify_on is
+  'The event this rule is the template for when we write to the customer unasked: refund_recorded (a refund created in Shopify that no message of ours has reported, on a ticket in this rule''s answer set). Null on every other rule. The change router (agent/src/casework/change-router.mjs) detects the event; the drafting pass writes the notice with this rule''s skeleton, for a person to approve.';
 
 comment on column public.support_answers.checks is
   'The checks this rule opens on a case, in order: [{owner, need}], owner support / colleague / partner, need a NEED_KEYS key. The fold (agent/src/casework/case-fold.mjs) opens the first when a case file selects this rule and each next one when the one before it is done; a step marked no longer needed ends the sequence. Copied onto the case file (exemplar_match.policy.check_sequences), so editing the rule never changes a case already opened.';

@@ -40,6 +40,16 @@ these.
 as its own item: `llm_usage` (item 14), `categorisation_review` (item 15), and
 `category_forwarding` / `ticket_forwards` (item 1).
 
+## 39. Refund notice: built and unit-tested, migration applied, not switched on — 2026-10-05
+
+DECISIONS § Refund notice. Target case: `75419781` (#6886), closed, partial refund 2026-09-25 after our 2026-09-07 reply.
+
+1. **Apply 72.** **Done 2026-10-05**: 0 rules marked, all 130 drafts `purpose = 'reply'`.
+2. **Switch it on in the dashboard:** Agent setup → Rules → `remboursement_deja_parti` → tick « Tell the customer when a refund is recorded », save, then **approve it again** (a save makes it a draft). Agent setup → Parameters → refund notice window = 60. **Check:** `select answer_key, approval_status from support_answers where notify_on is not null` returns that rule, approved.
+3. **Dry-run the router** (`npm run route:once -- --dry-run`). **Check:** `75419781` prints « refund notice due … reopened from closed », and nothing else unexpected.
+4. **Run it live, then draft** (`npm run draft -- --gates=notice`, after a fold). **Check:** `75419781` is `awaiting_human`, `case_current.next_actor = support` at a raised version, and a `refund_notice` draft exists at that version with the `refund_notice` hold.
+5. **A person reads the draft.** **Check:** it states the amount and date, does not re-answer the customer's last message, and does not invent products. After it is sent: the case resolves, and the router records nothing more for it.
+
 ## 38. Social media: Meta and Google Ads — built against fixtures, never connected — 2026-10-05
 
 Everything here was built from Meta's and Google's documented shapes and tested with dummy payloads. No app credentials exist, so no real token has ever been exchanged, and no real metric name has been checked. DECISIONS § Insights → « Social and paid ».

@@ -39,6 +39,7 @@ import {
 import { MISSING_FIELDS, VERDICTS } from "../../../agent/src/investigation/case-file.mjs";
 import { PARAMETERS } from "../../../scripts/lib/parameters.mjs";
 import { REPLY_TONES, TONE_KEYS } from "../../../scripts/lib/reply-tones.mjs";
+import { NOTICE_EVENTS } from "../../../scripts/lib/notice-events.mjs";
 import { MAX_LINK_LABEL, isReplyLinkUrl } from "../../../scripts/lib/reply-link.mjs";
 import { checkProblems, normaliseChecks } from "../../../agent/src/casework/rule-checks.mjs";
 import { needLabel } from "../need-labels";
@@ -202,7 +203,7 @@ export async function listRules(shopId: string, answerSet?: string): Promise<Pol
       ...(answerSet ? { answer_set: answerSet } : {}),
       deleted_at: { operator: "is", value: "null" },
     },
-    "id,answer_set,answer_key,situation_key,when_conditions,answer_skeleton,route,ask,offer_code,knowledge_document_id,tones,link_url,link_label,checks,priority,is_fallback,approval_status,updated_at",
+    "id,answer_set,answer_key,situation_key,when_conditions,answer_skeleton,route,ask,offer_code,knowledge_document_id,tones,link_url,link_label,checks,priority,is_fallback,notify_on,approval_status,updated_at",
   )) as Record<string, unknown>[];
 
   return rows.map(mapRule).sort(byAnswerSetThenKey);
@@ -286,6 +287,11 @@ export interface RuleInput {
   checks: RuleCheck[];
   priority: number;
   isFallback: boolean;
+  /**
+   * `refund_recorded` makes this rule the refund notice's template; null clears
+   * it; undefined leaves the column as it is (a caller that does not edit it).
+   */
+  notifyOn?: string | null;
   approvalStatus: string;
 }
 
@@ -377,6 +383,45 @@ export async function saveRule(shopId: string, input: RuleInput): Promise<Policy
   }
   const checks = normaliseChecks(input.checks ?? []);
 
+  // ONE TEMPLATE PER EVENT AND ANSWER SET (DECISIONS § Refund notice): two rules
+  // both claiming the refund notice would leave which one writes it to chance.
+  // Refused with the other rule named, rather than moved silently.
+  const notifyOn = input.notifyOn === undefined ? undefined : input.notifyOn?.trim() || null;
+  if (notifyOn && !(NOTICE_EVENTS as readonly string[]).includes(notifyOn)) {
+    throw new KnowledgeValidationError(`There is no notice called “${notifyOn}”.`);
+  }
+  if (notifyOn) {
+    // Only where it means something: a set whose rules read where the refund
+    // stands. The editor shows the box nowhere else; this refuses a caller that
+    // was not the editor.
+    const readers = (await supabaseSelect(
+      getSupabaseClient(),
+      T.SUPPORT_ANSWERS,
+      { shop_id: shopId, answer_set: answerSet, deleted_at: { operator: "is", value: "null" } },
+      "when_conditions",
+    )) as { when_conditions: Record<string, unknown> | null }[];
+    const readsRefund =
+      Object.prototype.hasOwnProperty.call(conditions ?? {}, "refund_state") ||
+      readers.some((row) => Object.prototype.hasOwnProperty.call(row.when_conditions ?? {}, "refund_state"));
+    if (!readsRefund) {
+      throw new KnowledgeValidationError(
+        `No rule in ${answerSet} reads where a refund stands, so it cannot write the refund notice.`,
+      );
+    }
+    const holders = (await supabaseSelect(
+      getSupabaseClient(),
+      T.SUPPORT_ANSWERS,
+      { shop_id: shopId, answer_set: answerSet, notify_on: notifyOn, deleted_at: { operator: "is", value: "null" } },
+      "answer_key",
+    )) as { answer_key: string }[];
+    const other = holders.find((row) => row.answer_key !== answerKey);
+    if (other) {
+      throw new KnowledgeValidationError(
+        `“${other.answer_key}” already writes the refund notice for ${answerSet}. Turn it off there first.`,
+      );
+    }
+  }
+
   const shaped = {
     answerKey,
     situationKey: input.situationKey || null,
@@ -414,6 +459,7 @@ export async function saveRule(shopId: string, input: RuleInput): Promise<Policy
         checks,
         priority: shaped.priority,
         is_fallback: shaped.isFallback,
+        ...(notifyOn === undefined ? {} : { notify_on: notifyOn }),
         approval_status: input.approvalStatus || "draft",
       },
     ],
