@@ -558,6 +558,8 @@ export interface TicketListItem {
   waitingSince: string | null;
   firstMessageAt: string | null;
   lastMessageAt: string | null;
+  /** When it was closed or resolved (the Closed section's order); null while open. */
+  closedAt: string | null;
   /** The open snooze: the ticket is out of the queue until it wakes. Null when not snoozed. */
   snooze: TicketSnooze | null;
   /** The last wake in the past 24 hours, so a ticket that just came back is marked. */

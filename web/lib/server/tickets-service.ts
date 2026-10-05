@@ -1479,6 +1479,14 @@ function mapTicketRow(
     waitingSince: row.waiting_since ?? null,
     firstMessageAt: row.first_message_at,
     lastMessageAt: row.last_message_at,
+    // The timestamp of the status it is in, the other one failing that
+    // (a closed ticket may have been resolved first).
+    closedAt:
+      row.status === "closed"
+        ? row.closed_at ?? row.resolved_at ?? null
+        : row.status === "resolved"
+          ? row.resolved_at ?? row.closed_at ?? null
+          : null,
     snooze: snoozeFacts.snooze,
     lastWake: snoozeFacts.lastWake,
     forwarding: forwarding(row.id, row.category ?? null),

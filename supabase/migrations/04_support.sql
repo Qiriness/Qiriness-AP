@@ -2681,7 +2681,11 @@ with (security_invoker = true) as
       else null
     end as case_waiting_since,
     cf.level as case_level,
-    cf.status as case_status
+    cf.status as case_status,
+    -- WHEN IT WAS CLOSED (75), appended for the reason above: the Closed
+    -- section lists the earliest closure first.
+    t.resolved_at as resolved_at,
+    t.closed_at as closed_at
   from public.tickets t
   left join public.customers c on c.id = t.customer_id
   left join public.ticket_message_counts n on n.ticket_id = t.id

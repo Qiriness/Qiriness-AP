@@ -953,6 +953,7 @@ Written by the worker and the CLIs, read only by the Insights panels.
 | `65_inventory_stock_floor.sql` | drops 35's five-argument `insights_inventory_exceptions()` and recreates it with `p_max_stock_units`, so the stock card also lists every active product under the unit floor (`INVENTORY_MIN_STOCK_UNITS`, 50) whatever its cover. Copied from 06. No table, no data. **Applied 2026-10-04** | 01, 02, 06 |
 | `73_automated_actor.sql` | `ticket_messages_actor_check` gains `automated` (an automatic reply; messages only, not `ticket_case_state` or `case_current`). Copied from 04. No data. **Applied 2026-10-05** | 04, 41 |
 | `74_agent_models_casework.sql` | `agent_models_agent_check` gains `casework` and `closure`, so both can be chosen in Settings. Copied from 04. No data. **Applied 2026-10-05** | 53, 61 |
+| `75_queue_closed_at.sql` | `ticket_queue` gains `resolved_at` and `closed_at`, appended last (the Closed section's order). Copied from 04. No data. **Applied 2026-10-05** | 61, 62 |
 | `72_refund_notice.sql` | `support_answers.notify_on` (`refund_recorded`; marks a notice template) + `ticket_drafts.purpose` (`reply` / `refund_notice`). Copied from 05 / 07. No data. **Applied 2026-10-05** | 05, 07 |
 | `71_ad_campaigns.sql` | `ad_campaigns` + `ad_campaign_days` (`CAMPAIGN_T`) and `insights_paid_campaigns()` (`CAMPAIGN_RPC`). No data. **Applied 2026-10-05** | 70 |
 | `70_social.sql` | the six social tables (`SOCIAL_T`), the Vault token functions and six reads (`SOCIAL_RPC`), and `mail_jobs_kind_check` widened to `sync_social` (copied from 04 / 46). No data. **Applied 2026-10-05** | 01, 46 |
@@ -1108,7 +1109,7 @@ Env: `CHAT_DB_URL` (the role's pooler URL; unset = the page says so and nothing 
 | **Queue** | `tickets`, status not resolved/closed, waiting less than 14 days | Close ticket |
 | **Irrelevant** | `spam_audit`, `outcome = 'blocked'`, minus the promoted, minus the cleared | **Add as ticket** · **Select → Clear** |
 | **Backlog** | `tickets`, status not resolved/closed, waiting 14+ days | Close ticket |
-| **Closed** | `tickets`, status resolved/closed | Reopen ticket |
+| **Closed** | `tickets`, status resolved/closed, earliest closure first (`closedAt` from the queue's `closed_at` / `resolved_at`, migration 75) | Reopen ticket |
 
 **Add as ticket** overturns one gate decision. `POST /api/dropped-mail/:id/promote` → `dropped-mail-service.ts` → `agent/src/ingestion/promote-dropped-mail.mjs`, which maps the `spam_audit` row into the shape `mapGraphMessage` produces and writes it through `writeIngestedMessages` — the ordinary ingestion path, so threading, idempotency, `needs_categorisation` and the reopen rule are ingestion's and not a second copy of them. The worker's next poll then categorises, resolves and investigates it like any other ticket. Disabled where the row has no stored body. **No schema change and no write to `spam_audit`**: promoted is derived — a blocked row whose `graph_message_id` now exists in `ticket_messages` — and drops out of the section on that basis.
 

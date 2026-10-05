@@ -10,6 +10,12 @@ Three sibling files carry the other halves, and this one deliberately does not d
 
 ---
 
+## Closed tickets in order of closure (2026-10-05)
+
+- The Closed section lists the earliest closure at the top, by `closed_at` (or `resolved_at` for a resolved ticket).
+- Migration 75 appends `resolved_at` and `closed_at` to `ticket_queue`. **Applied 2026-10-05.** `TicketListItem.closedAt` carries the time.
+- **Proven:** migration tests (75, and 48/61 now point at 75), web typecheck. Root suite 4,845 pass, agent suite 2,113. On the live view, all 962 closed or resolved tickets have a time: the earliest is 17 Sep 23:52, the latest 5 Oct 13:16. Not checked in the browser.
+
 ## Settling the check that blocked a snooze now snoozes (2026-10-05)
 
 - « Mark done » / « No longer needed » re-folds the ticket. If our message is the last one, the case now only waits on the customer, a colleague or a partner, and that message never auto-snoozed, it snoozes now, with that message's deadline (`settledByPerson` through `refoldTicket` → `runFold` → `snoozeDecision`).

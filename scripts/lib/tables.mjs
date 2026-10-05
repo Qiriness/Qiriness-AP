@@ -303,7 +303,9 @@ export const COLUMNS = {
     // The case (61_cases.sql): the queue shows one row per case and ranks it
     // on the case's facts, not the thread's.
     'case_id,is_case_lead,case_thread_count,case_message_count,case_inbound_count,case_waiting_since,' +
-    'case_level,case_status',
+    'case_level,case_status,' +
+    // When it was closed (75): the Closed section is ordered by it.
+    'resolved_at,closed_at',
 
   /**
    * What the categoriser needs: the previous reading, to ratchet against, and

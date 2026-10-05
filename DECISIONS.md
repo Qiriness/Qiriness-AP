@@ -2319,6 +2319,10 @@ A rehearsal (`--since`) treats destinations that are on as on since the rehearsa
 
 **The French service name carries its own preposition** (« au service comptabilité »). A template writing « à {service} » produced « à le service comptabilité » in the first test; the contraction depends on the noun, so it belongs with the noun.
 
+### The Closed section lists the earliest closure first (2026-10-05)
+
+Asked for by the owner. Before, closed tickets came in the queue view's order, so nothing ranked them. The order is by when the ticket reached the status it is in: `closed_at` for a closed ticket, `resolved_at` for a resolved one, the other failing that, and the last message if neither is set. The times come through `ticket_queue` (migration 75, appended last so the view is replaced in place) rather than a second read. On the day, all 962 closed or resolved tickets had one.
+
 ### A ticket being forwarded is tagged in the queue (2026-10-01)
 
 Forwarding never changes the ticket's status, so a forwarded ticket looked like any other. The owner asked for it to be marked. The tag (`scripts/lib/forwarding-tag.mjs`) reads only what the pass left: its decision (`ticket_routing`) and its attempts (`ticket_forwards`). It never works the route out again, so it cannot promise a forward the pass would not make.

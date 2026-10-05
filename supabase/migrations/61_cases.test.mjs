@@ -73,10 +73,14 @@ test('every ticket has a case in the baseline, and the column comes in nullable,
 });
 
 test('the case views and the queue are copied from 04, byte for byte', () => {
-  for (const view of ['case_message_counts', 'ticket_queue']) {
-    assert.ok(viewOf(SUPPORT, view), view);
-    assert.equal(viewOf(SQL, view), viewOf(SUPPORT, view), view);
-  }
+  assert.ok(viewOf(SUPPORT, 'case_message_counts'));
+  assert.equal(viewOf(SQL, 'case_message_counts'), viewOf(SUPPORT, 'case_message_counts'));
+  // ticket_queue was re-stated by 75 (closure times appended): 61's copy is the
+  // version before it, and differs from 04 by those columns alone.
+  assert.equal(
+    viewOf(SQL, 'ticket_queue'),
+    viewOf(SUPPORT, 'ticket_queue').replace(/ {4}cf\.status as case_status,\n[\s\S]*?t\.closed_at as closed_at\n/, '    cf.status as case_status\n')
+  );
   // case_facts was re-stated by 62 (the lead prefers a live thread): 61's
   // copy is the version before it, and differs from 04 by that alone.
   const before62 = viewOf(SQL, 'case_facts');

@@ -414,7 +414,12 @@ export function TicketsView({
     () => filteredOpenTickets.filter((ticket) => isBacklogTicket(ticket)),
     [filteredOpenTickets]
   );
-  const closedBase = useMemo(() => tickets.filter(isClosed), [tickets]);
+  // Earliest closure first. A row with no close time (closed before the column
+  // was kept) sorts by its last message.
+  const closedBase = useMemo(() => {
+    const closedAt = (ticket: TicketListItem) => Date.parse(ticket.closedAt ?? ticket.lastMessageAt ?? "") || 0;
+    return tickets.filter(isClosed).sort((a, b) => closedAt(a) - closedAt(b));
+  }, [tickets]);
   // Soonest back first: the top of the tab is what returns next.
   const snoozedBase = useMemo(
     () =>
