@@ -4581,7 +4581,7 @@ Built from the owner's example report, which ran on mock data. **Every figure on
 - **What moved revenue is orders × AOV.** The example split sessions × conversion × AOV; with no sessions source, the two missing factors are drawn blocked in the same list rather than dropped, so the shape of the answer is agreed before the source exists.
 - **Signals are rules, at most four, in a fixed order** — revenue, discounting, stock, dispatch — in `scripts/lib/sales-overview.mjs`, shared with the report so the two cannot word the same month differently. The late-dispatch line is the Fulfilment tile's 10%.
 - **Promotions are read by the name each order recorded** (`orders.discount_applications`). An order with two promotions is in both rows — they do not sum, and the card says so. A shipping promotion takes nothing off a line, so its discount cell reads "shipping", not €0. "New customers" is the customer-mix rule (first uncancelled order anywhere in our data), never on a marketplace.
-- **Blocked, pending a source nobody has chosen:** sessions, conversion, revenue per session, the four funnel steps above the purchase, acquisition channels, Klaviyo, paid and social. Profitability was left out at the owner's request, and nothing to compute it reaches the app anyway.
+- **Blocked, pending a source nobody has chosen:** sessions, conversion, revenue per session, the four funnel steps above the purchase, acquisition channels, Klaviyo, paid and social. (Paid and social have had a source since 2026-10-05: § Social and paid.) Profitability was left out at the owner's request, and nothing to compute it reaches the app anyway.
 
 ### Stock is now; its cover is read at a fixed window (2026-09-22)
 
@@ -4886,6 +4886,60 @@ Orders were only ever written by the nightly, so between runs the desk read a ta
 **Klaviyo's revenue is Klaviyo's attribution, not Shopify's.** It is the value of Placed Order events Klaviyo credits to its messages inside its own attribution window, so it will not equal the `klaviyo` row of Acquisition channels (Shopify's last-click referrer). On a marketplace platform the card is blocked: Klaviyo only ever sees online-store orders.
 
 **It cannot fail the night.** The nightly runs Klaviyo last and records an error in its counts instead of throwing, like storefront months; the failure is also written on `klaviyo_connections`, which is what Settings → Integrations shows.
+
+### Social and paid: OAuth tokens in Vault, counts per day, reach read live (2026-10-05)
+
+Built from the owner's mockup (`HTML_DROPFILE/qiriness_social_media_dashboard_mockup.html`). It follows the Klaviyo pattern, plus the rules below. The layout is the mockup's; every figure follows the rules here.
+
+**OAuth instead of a pasted key, and the app's credentials are not the shop's.** The rule is « connect and go ». Meta and Google Ads have no read-only key a person can paste, so the dashboard sends the person to the provider and stores what comes back.
+- **App credentials** (`META_APP_*`, `GOOGLE_OAUTH_*`) identify this application. They are the same for every shop, so they are env, on Vercel, Render and GitHub Actions.
+- **The token** belongs to the shop and goes in Vault, through service-role-only security-definer functions, as Klaviyo's key does.
+- **Missing app credentials** leave Connect disabled, with a reason that names the variables. It is never hidden.
+
+**Google Ads needs no developer token (corrected 2026-10-05, the day it was built).** It was first built requiring `GOOGLE_ADS_DEVELOPER_TOKEN`, from pre-September documentation. Google sunset developer tokens on **2026-09-09**: the API ignores the header, and access levels (Test / Basic / Standard) now belong to the **Cloud project** that owns the OAuth client, applied for in Cloud Console (Basic: brand verification, then minutes) with no manager account. Requiring the variable would have blocked Connect on a credential Google no longer issues. The header is still sent when the variable happens to be set, because it is harmless and ignored. Google's *Authorization and HTTP Headers* page still says it is required; the developer-token policy page, which states the sunset, is the newer of the two.
+
+**The state is signed AND bound to the browser.** The `state` HMAC names the provider, the shop and the person. Its nonce is also in an httpOnly Lax cookie, so a consent link lifted from one browser cannot complete in another. The return path comes from a fixed list (`social-return.ts`), never from the query string, because an open redirect on a login callback is the classic phishing link. The callback answers with a short code the screen translates. The provider's own text goes to the server log, because it can name the account.
+
+**Connecting queues a job instead of syncing inline.** A first backfill makes 100+ Graph calls and would outlive a request. The callback therefore enqueues `sync_social` on `mail_jobs` (the same lease, retries and early wake-up as the mail jobs), and the worker runs it after each mail poll.
+- Only `failed` is retried.
+- `needs_reconnect` and `skipped` cannot change on a retry.
+
+**Reach is not stored per day, because it does not add up.** Reach and accounts engaged count unique people. Thirty days of daily reach summed would overcount everyone who came back, and the result would look plausible. `social_account_days` therefore holds only additive counts.
+- **Instagram:** a range's reach is read live, where Instagram answers it directly (30 days at most, 5-minute cache).
+- **Facebook Page:** Meta gives reach only per day, so it is a dash with that reason.
+- **Engagement rate** is Σ engagement / Σ reach over posts that carry both. A post's reach is a lifetime figure for one post, so it is stored.
+
+**A metric Meta no longer answers is a null, never a zero, and never a lost night.** Meta rejects the whole request when one metric name is retired (code 100), and it retires names every version. In 2025 it replaced `impressions` with `views` and dropped several Page metrics. So:
+- The client retries a refused batch one metric at a time.
+- The refused names are logged as « not answered » and stored as null.
+- The names live in one table (`META_METRICS`), and `npm run probe:meta` checks them against a connected account.
+
+**Every upsert writes one column set.** The REST client pads a batch to the union of its rows' keys with nulls. One row carrying `followers` beside thirty without it would erase twenty-nine stored follower counts. So day metrics, follower counts, post fields and post insights are separate upserts. This is also why a post too old to re-read keeps the insights it was last given.
+
+**How far back.**
+- **Instagram account days** take one request per day, because `total_value` metrics come back as one total. The first sync reads 30 days, and each later sync reaches 30 days further back, up to a year. The aim is to keep a first connect inside Instagram's hourly call budget.
+- **Instagram follower history** is not offered by the API. A follower count is snapshotted each day from the connection on. Growth comes from Meta's follows / unfollows where Meta reports them, and otherwise from the counts at the two ends of the range.
+- **Ads:** 13 months, then the last 28 days rewritten each sync, because attribution settles late.
+
+**Paid money is never added across currencies.** With mixed currencies:
+- `paidTotals` keeps one total per currency;
+- the spend and ROAS cards are blocked with the reason;
+- the per-platform table shows each currency on its own row.
+
+Counts such as impressions and clicks still add up. Conversions and revenue are each platform's own attribution, and the panel says so. They will not match Shopify, and Meta and Google can both claim one sale.
+
+**Meta's conversion is « Purchases » (`omni_purchase`) by default.** It is a column on `social_connections`, not a constant, so a shop counting another action type changes data and leaves code alone ([[keep-it-reusable-across-companies]]).
+
+**Only counts are fetched, never a person.** That means aggregated demographics and no comment text or commenter. Captions are brand content, kept to 140 characters.
+
+**Campaigns are a second cut, not a breakdown of the first (added 2026-10-05).**
+- `ad_campaign_days` holds the same counts as `ad_days`, cut by campaign instead of by placement. The two are never joined: Meta does not answer campaign × placement in the same request without multiplying the rows, and no screen needs both.
+- The campaign read has its own backfill and its own failure. A missing migration 71, or a campaign error, costs the campaign table and not the account totals.
+- Links are built in one function (`campaignUrl`), because neither Meta nor Google documents its UI URLs and Google says they may change.
+
+**Not built:** TikTok, YouTube and Pinterest (shown « Coming soon »). The freshness strip also does not carry the providers: their sync state is the panel's own status row, read from `social_connections`.
+
+**Reusability caveat.** In Meta's Development mode, only people with a role on the Meta app can connect. That works for one company. Offering this to other companies needs Meta App Review plus Business Verification, and Google Ads Basic access with a published consent screen.
 
 ## Page speed
 

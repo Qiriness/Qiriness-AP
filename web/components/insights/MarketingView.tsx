@@ -115,7 +115,7 @@ export function MarketingView({
 
       <Grid min={26} pin="marketing-promotions" label={tr("insights.marketing.perfRow")}>
         <Card title={tr("insights.marketing.perf")} aside={<span>{tr("insights.marketing.perfAside")}</span>}>
-          <MarketingChannels klaviyo={panel.klaviyo} />
+          <MarketingChannels klaviyo={panel.klaviyo} social={panel.social} />
         </Card>
         <Card title={tr("insights.marketing.promotions")} span={2} aside={<span>{tr("insights.marketing.promotionsAside")}</span>}>
           <PromotionTable rows={panel.promotions} />

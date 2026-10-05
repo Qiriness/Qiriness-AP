@@ -9,6 +9,9 @@ import t from "../insights/tables.module.css";
 import { AgentModelPicker } from "./AgentModelPicker";
 import { DevInfo } from "./DevInfo";
 import { KlaviyoKeyCard } from "./KlaviyoKeyCard";
+import { SocialProviderCards } from "../insights/SocialProviderCard";
+import { SocialNotice } from "../insights/SocialConnectionsDialog";
+import type { SocialConnectionsStatus } from "@/lib/social-types";
 import styles from "./SettingsView.module.css";
 
 export type SettingsTab = "me" | "agents" | "integrations" | "dev";
@@ -43,6 +46,8 @@ export function SettingsView({
   me,
   roster,
   klaviyo,
+  social = null,
+  socialNotice = null,
   canManageIntegrations,
   canChooseModels,
 }: {
@@ -50,6 +55,9 @@ export function SettingsView({
   me: SettingsMe | null;
   roster: AgentRoster | null;
   klaviyo: KlaviyoStatus | { error: string } | null;
+  /** Meta and Google Ads (social-connections-service.ts); read only on the Integrations tab. */
+  social?: SocialConnectionsStatus | { error: string } | null;
+  socialNotice?: SocialNoticeValue | null;
   /** The contact team is not shown the Integrations or Dev info tabs (dashboard-auth.mjs). */
   canManageIntegrations: boolean;
   /** The contact team sees the models but cannot change them (dashboard-auth.mjs). */
@@ -86,7 +94,7 @@ export function SettingsView({
       ) : tab === "dev" ? (
         <DevInfo roster={roster} />
       ) : (
-        <Integrations klaviyo={klaviyo} />
+        <Integrations klaviyo={klaviyo} social={social} socialNotice={socialNotice} />
       )}
     </div>
   );
@@ -128,7 +136,17 @@ function MyInfo({ me }: { me: SettingsMe | null }) {
   );
 }
 
-function Integrations({ klaviyo }: { klaviyo: KlaviyoStatus | { error: string } | null }) {
+type SocialNoticeValue = { ok: true; provider: string } | { ok: false; code: string; provider: string | null };
+
+function Integrations({
+  klaviyo,
+  social,
+  socialNotice,
+}: {
+  klaviyo: KlaviyoStatus | { error: string } | null;
+  social: SocialConnectionsStatus | { error: string } | null;
+  socialNotice: SocialNoticeValue | null;
+}) {
   const tr = getT();
   if (!klaviyo) return null;
   if ("error" in klaviyo) return <PanelError message={klaviyo.error} />;
@@ -138,6 +156,18 @@ function Integrations({ klaviyo }: { klaviyo: KlaviyoStatus | { error: string } 
         <Card title="Klaviyo" aside={<span>{tr("settings.klaviyoAside")}</span>}>
           <KlaviyoKeyCard status={klaviyo} />
         </Card>
+        {social ? (
+          <Card title={tr("insights.social.connections.title")} aside={<span>{tr("insights.social.connections.meta")}</span>}>
+            {"error" in social ? (
+              <PanelError message={social.error} />
+            ) : (
+              <>
+                {socialNotice ? <SocialNotice notice={socialNotice} /> : null}
+                <SocialProviderCards initial={social} returnKey="settings" />
+              </>
+            )}
+          </Card>
+        ) : null}
       </Grid>
       <Caption>
         The nightly sync reads flow and campaign performance with this key (<code>npm run sync:klaviyo</code> runs it on demand). Revenue is what Klaviyo attributes to its own messages on Shopify&apos;s &ldquo;Placed Order&rdquo; — Klaviyo&apos;s attribution window, not the Acquisition channels card&apos;s.

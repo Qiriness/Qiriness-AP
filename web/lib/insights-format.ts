@@ -173,6 +173,8 @@ export function formatValue(unit: ValueUnit, value: number | null, locale: Local
       return usd(value, locale);
     case "tokens":
       return compactNumber(Math.round(value), locale);
+    case "multiple":
+      return `${decimal(value, 2, locale)}×`;
     default:
       return integer(value, locale);
   }
@@ -196,6 +198,8 @@ export function formatTick(unit: ValueUnit, value: number, locale: Locale = "fr"
       return `${integer(value, locale)}${locale === "fr" ? NBSP : ""}%`;
     case "tokens":
       return compactNumber(value, locale);
+    case "multiple":
+      return `${decimal(value, 1, locale)}×`;
     default:
       return integer(value, locale);
   }

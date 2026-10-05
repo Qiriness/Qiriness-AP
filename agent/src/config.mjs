@@ -40,6 +40,10 @@ export function loadAgentConfig(env = loadEnv(REPO_ROOT)) {
     jobCheckIntervalMs: Number(env.JOB_CHECK_INTERVAL_MS) || 5000,
     // Attempts before a mail job goes `dead` and is left for a person.
     mailJobMaxAttempts: Number(env.MAIL_JOB_MAX_ATTEMPTS) || 5,
+    // The environment the `sync_social` jobs read the Meta / Google app
+    // credentials from (scripts/lib/social-oauth.mjs socialAppConfig). Passed
+    // whole because that module owns which keys it needs.
+    socialEnv: env,
     // THE SEND SWITCH, OFF UNLESS SET TO `true`. With it off the outbound
     // worker claims nothing and approving a draft in the dashboard sends
     // nothing (the dashboard reads the same variable). Needs the Graph

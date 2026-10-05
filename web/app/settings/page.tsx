@@ -4,6 +4,7 @@ import { getAgentRoster } from "@/lib/server/agent-settings-service";
 import { getSession } from "@/lib/server/auth";
 import { navBadgeCounts } from "@/lib/server/conversation-badge";
 import { getKlaviyoStatus } from "@/lib/server/integrations-service";
+import { getSocialConnections } from "@/lib/server/social-connections-service";
 import { canAccessPath, canChooseAgentModels, canManageIntegrations } from "../../../scripts/lib/dashboard-auth.mjs";
 
 export const dynamic = "force-dynamic";
@@ -26,20 +27,35 @@ const AREAS = [
  * it for the OpenAI models and spend). Integrations and Dev info are not drawn
  * for the contact team, and their URLs fall back to My info for them.
  */
-export default async function SettingsPage({ searchParams }: { searchParams?: { tab?: string } }) {
+export default async function SettingsPage({
+  searchParams,
+}: {
+  searchParams?: { tab?: string; connected?: string; connect_error?: string; provider?: string };
+}) {
   const asked = searchParams?.tab;
   const [badges, user] = await Promise.all([navBadgeCounts(), getSession()]);
   const integrations = Boolean(user && canManageIntegrations(user.role));
   const tab: SettingsTab =
     asked === "agents" ? "agents" : asked === "integrations" && integrations ? "integrations" : asked === "dev" && integrations ? "dev" : "me";
-  const [roster, klaviyo] = await Promise.all([
+  const [roster, klaviyo, social] = await Promise.all([
     tab === "agents" || tab === "dev" ? getAgentRoster() : Promise.resolve(null),
     tab === "integrations"
       ? getKlaviyoStatus().catch((error: unknown) => ({
           error: error instanceof Error ? error.message : "Could not read the Klaviyo connection.",
         }))
       : Promise.resolve(null),
+    tab === "integrations"
+      ? getSocialConnections().catch((error: unknown) => ({
+          error: error instanceof Error ? error.message : "Could not read the social connections.",
+        }))
+      : Promise.resolve(null),
   ]);
+  // Where a provider sends the person back after Connect (social-return.ts).
+  const socialNotice = searchParams?.connected
+    ? { ok: true as const, provider: searchParams.connected }
+    : searchParams?.connect_error
+      ? { ok: false as const, code: searchParams.connect_error, provider: searchParams.provider ?? null }
+      : null;
 
   const me: SettingsMe | null = user
     ? {
@@ -57,6 +73,8 @@ export default async function SettingsPage({ searchParams }: { searchParams?: { 
         me={me}
         roster={roster}
         klaviyo={klaviyo}
+        social={social}
+        socialNotice={socialNotice}
         canManageIntegrations={integrations}
         canChooseModels={Boolean(user && canChooseAgentModels(user.role))}
       />

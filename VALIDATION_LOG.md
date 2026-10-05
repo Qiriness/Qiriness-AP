@@ -40,6 +40,42 @@ these.
 as its own item: `llm_usage` (item 14), `categorisation_review` (item 15), and
 `category_forwarding` / `ticket_forwards` (item 1).
 
+## 38. Social media: Meta and Google Ads — built against fixtures, never connected — 2026-10-05
+
+Everything here was built from Meta's and Google's documented shapes and tested with dummy payloads. No app credentials exist, so no real token has ever been exchanged, and no real metric name has been checked. DECISIONS § Insights → « Social and paid ».
+
+1. **Apply 70** (`npm run db:apply:migration -- supabase/migrations/70_social.sql`). **Check:**
+   - six empty tables exist;
+   - `mail_jobs_kind_check` accepts `sync_social`;
+   - `select public.insights_paid_series('<shop>', now()::timestamp - interval '30 days', now()::timestamp, 'day')` returns no rows rather than an error.
+
+   **Done 2026-10-05**, read back in a read-only transaction:
+   - all six tables exist, with 0 rows;
+   - the check reads `sync_mailbox`, `send_outbound`, `sync_social`;
+   - `insights_paid_series` and `insights_social_series` return 0 rows;
+   - `social_save_token` / `social_read_token` cannot be executed by `anon` or `authenticated`.
+2. **Set the app credentials** (README → Social connectors) on Vercel, Render and GitHub Actions. **Check:** Connections shows Connect enabled for both providers, not « credentials are not set ».
+3. **Connect Meta.** **Check:**
+   - the callback lands on `?connected=meta`;
+   - `social_accounts` lists the Page, the Instagram account and the ad account;
+   - a `sync_social` job is queued, and the worker logs `social.synced` within a few minutes.
+4. **Run `npm run probe:meta`.** **Check:** every metric in `META_METRICS` reads « answered ». Any « REFUSED » is a name to change in `scripts/lib/meta-insights.mjs`, and the panel shows a dash for it until then. Expect at least Page metrics to need attention: Meta retired several in 2025.
+5. **Compare three days** against Meta Business Suite and Ads Manager, by SQL on `social_account_days`, `social_posts` and `ad_days`:
+   - Instagram views and interactions;
+   - one Reel's views, reach and shares;
+   - ad spend and impressions per day.
+
+   **Check:** equal, or off only by Meta's late revisions inside the trailing window. Note any day-boundary offset: Meta's Page days are Pacific time.
+6. **Connect Google Ads.** **Check:**
+   - the Cloud project of the OAuth client has **Basic** access to the Google Ads API (Test access is refused on production accounts; there is no developer token since 2026-09-09);
+   - the consent screen is « In production » (in « Testing », refresh tokens die after 7 days);
+   - spend per day equals the Google Ads UI for the same dates, including a manager-account client reached through `login_customer_id`.
+7. **Reconnect path.** **Check:** revoke the app in Meta settings. The next sync marks the connection `needs_reconnect`, the status pill says so, and the nightly still succeeds.
+8. **Campaigns** (`71_ad_campaigns.sql` applied 2026-10-05: empty tables, RLS on, read service-role only).
+   - **Check:** the Paid view's Campaigns card lists the account's campaigns over 30 days, and the spend summed over campaigns equals the account spend on the same days.
+   - **Check:** a Meta campaign link opens that campaign in Ads Manager, and a Google one opens it in Google Ads. These URLs are undocumented, so any that land on the wrong page are fixed in `campaignUrl`.
+9. **Live reach.** **Check:** on Instagram over 7 days, « Accounts engaged » shows a number, and over 6 months it shows the « 30 days at most » dash.
+
 ## 37. The change router: built and unit-tested, migration applied — 2026-10-04
 
 Migration 69 applied and the bundles rebuilt; the `route` pass has never run against real data. DECISIONS § Change router.

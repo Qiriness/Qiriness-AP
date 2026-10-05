@@ -18,6 +18,7 @@ import { runShopifyContentCatalogSync } from './sync-shopify-content-catalog.mjs
 import { runShopifyCollectionsSync } from './sync-shopify-collections.mjs';
 import { runStorefrontMonthsSync } from './lib/storefront-months-sync.mjs';
 import { runKlaviyoSync } from './lib/klaviyo-sync.mjs';
+import { runSocialSync } from './lib/social-sync.mjs';
 
 if (isDirectRun()) {
   main().catch((error) => {
@@ -113,7 +114,8 @@ export async function runNightlySync({
     contentCatalog: runShopifyContentCatalogSync,
     collections: runShopifyCollectionsSync,
     storefrontMonths: runStorefrontMonthsSync,
-    klaviyo: runKlaviyoSync
+    klaviyo: runKlaviyoSync,
+    social: runSocialSync
   }
 }) {
   const customerCounts = await runners.customers({
@@ -197,6 +199,18 @@ export async function runNightlySync({
     klaviyo = { error: error instanceof Error ? error.message : String(error) };
   }
 
+  // SOCIAL AND PAID MEDIA (Meta, Google Ads), AFTER KLAVIYO, FOR THE SAME
+  // REASON: other companies' APIs, on tokens a person granted. runSocialSync
+  // never throws for a provider's failure — it writes it on social_connections,
+  // which the Connections dialog shows — so a throw here is our own bug, and it
+  // is recorded rather than allowed to fail the night.
+  let social;
+  try {
+    social = await runners.social({ supabase, shopRow, dryRun: Boolean(args.dryRun) });
+  } catch (error) {
+    social = { error: error instanceof Error ? error.message : String(error) };
+  }
+
   return {
     customers: customerCounts.customers,
     deleted_customers: customerCounts.deletedCustomers,
@@ -219,7 +233,10 @@ export async function runNightlySync({
     klaviyo_flow_days: klaviyo.flow_days ?? null,
     klaviyo_campaigns: klaviyo.campaigns ?? null,
     klaviyo_skipped: klaviyo.skipped ?? null,
-    klaviyo_error: klaviyo.error ?? null
+    klaviyo_error: klaviyo.error ?? null,
+    social_meta: social.meta?.status ?? null,
+    social_google: social.google?.status ?? null,
+    social_error: social.error ?? null
   };
 }
 

@@ -100,6 +100,15 @@ jobs:
           SHOPIFY_API_VERSION: ${{ vars.SHOPIFY_API_VERSION }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+          # Social and paid media (scripts/lib/social-sync.mjs). This app's own
+          # credentials; each shop's token is in Supabase Vault. Unset, that
+          # provider is skipped, not failed.
+          META_APP_ID: ${{ secrets.META_APP_ID }}
+          META_APP_SECRET: ${{ secrets.META_APP_SECRET }}
+          META_GRAPH_VERSION: ${{ vars.META_GRAPH_VERSION }}
+          GOOGLE_OAUTH_CLIENT_ID: ${{ secrets.GOOGLE_OAUTH_CLIENT_ID }}
+          GOOGLE_OAUTH_CLIENT_SECRET: ${{ secrets.GOOGLE_OAUTH_CLIENT_SECRET }}
+          GOOGLE_ADS_API_VERSION: ${{ vars.GOOGLE_ADS_API_VERSION }}
           APP_ENV: production
           SYNC_CRON: '0 2 * * *'
           SYNC_TIMEZONE: UTC

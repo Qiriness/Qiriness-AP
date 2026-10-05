@@ -72,6 +72,10 @@ test('runNightlySync runs customers, orders, products, promotions, content catal
       klaviyo: async () => {
         order.push('klaviyo');
         return { flow_days: 40, campaigns: 3, backfill: false };
+      },
+      social: async () => {
+        order.push('social');
+        return { meta: { status: 'ok', days: 30 } };
       }
     }
   });
@@ -86,7 +90,8 @@ test('runNightlySync runs customers, orders, products, promotions, content catal
     'contentCatalog',
     'collections',
     'storefrontMonths',
-    'klaviyo'
+    'klaviyo',
+    'social'
   ]);
   assert.deepEqual(result, {
     customers: 10,
@@ -110,7 +115,10 @@ test('runNightlySync runs customers, orders, products, promotions, content catal
     klaviyo_flow_days: 40,
     klaviyo_campaigns: 3,
     klaviyo_skipped: null,
-    klaviyo_error: null
+    klaviyo_error: null,
+    social_meta: 'ok',
+    social_google: null,
+    social_error: null
   });
 });
 
@@ -135,10 +143,14 @@ test('a failed storefront-months step is recorded, and does not fail the night',
       },
       klaviyo: async () => {
         throw new Error('Klaviyo GET /metrics/ failed: HTTP 401');
+      },
+      social: async () => {
+        throw new Error('Supabase select from social_connections failed: HTTP 503');
       }
     }
   });
   assert.equal(result.storefront_months_error, 'ShopifyQL did not answer within 300s');
   assert.equal(result.storefront_session_months, null);
   assert.equal(result.klaviyo_error, 'Klaviyo GET /metrics/ failed: HTTP 401');
+  assert.equal(result.social_error, 'Supabase select from social_connections failed: HTTP 503');
 });

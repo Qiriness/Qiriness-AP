@@ -12,9 +12,10 @@
  * cart or checkout dataset (measured 2026-09-23; see DECISIONS.md § Insights),
  * so those steps stay blocked with the reason rather than drawn as zeros.
  * Klaviyo is read from the nightly sync's tables (klaviyo_flow_days,
- * klaviyo_campaigns) through insights_klaviyo_messages. The ad platforms and
- * social are unchosen integrations; the revenue each channel is credited with
- * comes from Shopify's own attribution instead.
+ * klaviyo_campaigns) through insights_klaviyo_messages. Paid and social come
+ * from the Meta / Google Ads sync (70_social.sql) through social-service.ts —
+ * the same sums the Social media panel prints; the revenue each acquisition
+ * channel is credited with still comes from Shopify's own attribution.
  *
  * Server-only; see ./shared.ts for why nothing here pages rows.
  */
@@ -22,6 +23,7 @@
 import { KLAVIYO_RPC, RPC, T } from "../../../../scripts/lib/tables.mjs";
 import { readKlaviyoConnection } from "../../../../scripts/lib/klaviyo-sync.mjs";
 import { summariseKlaviyoMessages } from "../../../../scripts/lib/klaviyo-reports.mjs";
+import { getMarketingSocial } from "./social-service";
 import { supabaseSelect } from "../../../../scripts/lib/supabase-rest-client.mjs";
 import type { KlaviyoMessageRow, KlaviyoPerformance, MarketingPanel, PromotionRow } from "../../types";
 import { orderArgs, rangeArgs, type InsightsContext } from "./context";
@@ -53,15 +55,16 @@ export async function getMarketingPanel(ctx: InsightsContext): Promise<Marketing
     })),
   };
 
-  const [summary, figures, promotions, newsletter, klaviyo] = await Promise.all([
+  const [summary, figures, promotions, newsletter, klaviyo, social] = await Promise.all([
     getOrdersSummary(ctx),
     getSalesOverviewFigures(ctx),
     getPromotions(ctx),
     getNewsletterActivity(ctx),
     getKlaviyoPerformance(ctx),
+    getMarketingSocial(ctx),
   ]);
 
-  return { summary, live, figures, promotions, newsletter, klaviyo };
+  return { summary, live, figures, promotions, newsletter, klaviyo, social };
 }
 
 /**

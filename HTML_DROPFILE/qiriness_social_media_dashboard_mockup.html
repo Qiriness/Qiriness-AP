@@ -1,0 +1,720 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Qiriness — Social Media Insights Mockup</title>
+<style>
+  :root{
+    --bg:#f5f7f8;
+    --panel:#ffffff;
+    --line:#dfe5e7;
+    --line-2:#e9edef;
+    --text:#101418;
+    --muted:#66737a;
+    --teal:#0f8f8b;
+    --teal-soft:#e8f5f3;
+    --green:#0c9b5d;
+    --green-soft:#eaf8f0;
+    --red:#d44848;
+    --red-soft:#fceeee;
+    --amber:#b78016;
+    --shadow:0 1px 2px rgba(15,23,42,.04);
+    --radius:12px;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0;
+    font-family:Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    background:var(--bg);
+    color:var(--text);
+    font-size:14px;
+  }
+  button,select,input{font:inherit}
+  .app{min-height:100vh}
+  .topbar{
+    height:64px;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    padding:0 32px;
+    background:#fff;
+    border-bottom:1px solid var(--line);
+    position:sticky; top:0; z-index:20;
+  }
+  .brand{display:flex;align-items:center;gap:13px}
+  .brand-mark{
+    width:31px;height:31px;border-radius:9px;
+    display:grid;place-items:center;
+    background:#111;color:#fff;font-weight:750;font-size:12px;letter-spacing:.04em;
+  }
+  .brand-copy strong{display:block;font-size:16px}
+  .brand-copy span{display:block;color:var(--muted);font-size:12px;margin-top:1px}
+  .top-actions{display:flex;align-items:center;gap:10px}
+  .live{display:flex;align-items:center;gap:7px;color:var(--muted);font-size:12px}
+  .dot{width:8px;height:8px;border-radius:50%;background:#20a45c}
+  .icon-btn,.secondary-btn{
+    border:1px solid var(--line); background:#fff; color:#263238; border-radius:9px; height:36px;
+    padding:0 12px; cursor:pointer;
+  }
+  .icon-btn{width:36px;padding:0}
+  .page{padding:24px 32px 48px;max-width:1800px;margin:auto}
+  .page-title{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+  h1{font-size:27px;margin:0;letter-spacing:-.02em}
+  .nav{
+    display:flex;gap:28px;border-bottom:1px solid var(--line);margin:0 -4px 14px;padding:0 4px;
+  }
+  .nav button{
+    background:none;border:none;padding:13px 0 12px;cursor:pointer;color:#36434a;font-size:13px;
+    border-bottom:2px solid transparent;
+  }
+  .nav button.active{color:#096f72;border-bottom-color:#0e8d8a;font-weight:650}
+  .toolbar{
+    background:#fff;border:1px solid var(--line);border-radius:12px;padding:12px;
+    display:flex;justify-content:space-between;gap:16px;align-items:center;box-shadow:var(--shadow);
+  }
+  .quick-range,.right-controls,.segmented{display:flex;gap:7px;align-items:center;flex-wrap:wrap}
+  .range-btn,.mode-btn,.subtab{
+    border:none;background:transparent;border-radius:8px;padding:8px 12px;cursor:pointer;color:#36434a;font-size:12px;
+  }
+  .range-btn.active,.mode-btn.active,.subtab.active{background:var(--teal-soft);color:#08706c;font-weight:650}
+  .select, .date-input{
+    height:36px;border:1px solid var(--line);border-radius:8px;background:#fff;color:#243037;padding:0 11px;
+  }
+  #platformSelect{
+    border-color:#b9d6d5;
+    background:#fbfefe;
+    box-shadow:0 0 0 2px rgba(15,143,139,.05);
+  }
+  .date-input{width:118px}
+  .status-row{display:flex;gap:8px;flex-wrap:wrap;margin:11px 0 16px}
+  .pill{
+    display:inline-flex;align-items:center;gap:7px;border:1px solid var(--line);background:#fff;border-radius:999px;
+    color:#607078;padding:6px 10px;font-size:11px;
+  }
+  .pill .mini-dot{width:7px;height:7px;border-radius:50%;background:#1baa62}
+  .social-header{
+    display:flex;align-items:center;justify-content:space-between;gap:12px;margin:6px 0 14px;
+  }
+  .social-title{display:flex;align-items:center;gap:13px}
+  .social-title h2{margin:0;font-size:20px}
+  .mode-switch{display:flex;border:1px solid var(--line);border-radius:9px;padding:3px;background:#fff}
+  .mode-btn{padding:7px 14px}
+  .section-title{font-size:18px;margin:20px 0 12px;letter-spacing:-.01em}
+  .kpis{
+    display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:12px
+  }
+  .card{
+    background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);
+  }
+  .kpi{padding:18px 18px 16px;min-height:132px}
+  .kpi-head{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}
+  .kpi-title{color:#344149;font-size:12px;font-weight:550}
+  .info{color:#8a969c;font-size:13px}
+  .kpi-value{font-size:26px;font-weight:690;letter-spacing:-.03em;margin:15px 0 8px}
+  .delta{font-size:11px;display:flex;align-items:center;gap:7px}
+  .delta span:first-child{padding:4px 6px;border-radius:5px;font-weight:650}
+  .up{background:var(--green-soft);color:var(--green)}
+  .down{background:var(--red-soft);color:var(--red)}
+  .flat{background:#f0f2f3;color:#66737a}
+  .delta em{font-style:normal;color:#8b969b}
+  .main-grid{
+    display:grid;grid-template-columns:minmax(0,2.1fr) minmax(340px,.95fr);gap:12px;margin-top:12px
+  }
+  .panel{padding:18px}
+  .panel-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+  .panel-title{font-size:14px;font-weight:650}
+  .chart-toggle{display:flex;gap:4px;border:1px solid var(--line);padding:3px;border-radius:8px}
+  .chart-toggle button{
+    border:none;background:transparent;padding:6px 9px;border-radius:6px;font-size:11px;color:#435059;cursor:pointer
+  }
+  .chart-toggle button.active{background:var(--teal-soft);color:#08706c;font-weight:650}
+  .chart-wrap{height:305px;display:flex;align-items:center}
+  svg{width:100%;height:100%}
+  .driver{padding:11px 0;border-bottom:1px solid var(--line-2)}
+  .driver:last-child{border-bottom:0}
+  .driver-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:7px}
+  .driver-name{font-size:12px;font-weight:620}
+  .driver-sub{color:var(--muted);font-size:10px;margin-top:2px}
+  .driver-val{font-size:12px;font-weight:700}
+  .track{height:6px;background:#edf0f1;border-radius:999px;overflow:hidden}
+  .fill{height:100%;border-radius:999px;background:var(--teal)}
+  .fill.red{background:#cf3f45}
+  .helper{
+    margin-top:12px;background:#f7f9f9;border-radius:8px;padding:10px 11px;color:#536168;font-size:11px;line-height:1.5
+  }
+  .platform-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+  .platform-card{padding:16px;cursor:pointer;transition:.15s}
+  .platform-card:hover{border-color:#b7cccd;transform:translateY(-1px)}
+  .platform-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:15px}
+  .platform-id{display:flex;align-items:center;gap:9px;font-weight:650}
+  .platform-icon{
+    width:28px;height:28px;border-radius:8px;display:grid;place-items:center;background:#f3f4f4;font-size:13px;font-weight:700
+  }
+  .arrow{color:#7f8c92}
+  .mini-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px 12px}
+  .mini-label{color:#76848b;font-size:10px}
+  .mini-val{font-size:14px;font-weight:650;margin-top:3px}
+  .growth{margin-top:14px;padding-top:11px;border-top:1px solid var(--line-2);display:flex;justify-content:space-between}
+  .platform-tabs{display:flex;gap:4px;margin:0 0 12px}
+  .subtab{padding:8px 13px}
+  .demographics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-top:12px}
+  .demo-card{padding:16px;min-height:225px}
+  .bar-row{margin:12px 0}
+  .bar-label{display:flex;justify-content:space-between;font-size:11px;margin-bottom:6px}
+  .bar{height:7px;background:#edf0f1;border-radius:999px;overflow:hidden}
+  .bar > span{display:block;height:100%;background:var(--teal);border-radius:999px}
+  .table-card{margin-top:12px;overflow:hidden}
+  .table-toolbar{
+    display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid var(--line)
+  }
+  .search{height:34px;width:260px;border:1px solid var(--line);border-radius:8px;padding:0 10px}
+  table{width:100%;border-collapse:collapse;background:#fff}
+  th,td{padding:11px 13px;border-bottom:1px solid var(--line-2);text-align:left;white-space:nowrap;font-size:12px}
+  th{color:#617078;font-weight:650;background:#fbfcfc;cursor:pointer}
+  tbody tr:hover{background:#fafcfc}
+  .post-cell{display:flex;align-items:center;gap:10px;min-width:310px}
+  .thumb{width:38px;height:38px;border-radius:7px;background:linear-gradient(135deg,#eef2f3,#dce7e7);display:grid;place-items:center;color:#708188;font-size:10px}
+  .post-copy strong{display:block;max-width:230px;overflow:hidden;text-overflow:ellipsis}
+  .post-copy span{font-size:10px;color:#829097}
+  .badge{font-size:10px;border-radius:999px;padding:3px 7px;background:#f0f3f4;color:#647178}
+  .empty-paid{padding:58px;text-align:center;color:#6d7b82}
+  .connector-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+  .connector{padding:15px;display:flex;align-items:center;justify-content:space-between}
+  .connector-left{display:flex;align-items:center;gap:11px}
+  .connector-meta strong{display:block;font-size:13px}
+  .connector-meta span{font-size:11px;color:var(--muted)}
+  .status-ok{font-size:10px;color:var(--green);background:var(--green-soft);padding:4px 7px;border-radius:999px}
+  .status-off{font-size:10px;color:#7d898f;background:#f0f2f3;padding:4px 7px;border-radius:999px}
+  .modal-backdrop{position:fixed;inset:0;background:rgba(19,31,36,.28);display:none;align-items:center;justify-content:center;z-index:100}
+  .modal{width:min(740px,92vw);background:#fff;border-radius:14px;border:1px solid var(--line);box-shadow:0 16px 50px rgba(0,0,0,.12)}
+  .modal-head{display:flex;align-items:center;justify-content:space-between;padding:18px 20px;border-bottom:1px solid var(--line)}
+  .modal-body{padding:18px 20px}
+  .close{border:none;background:none;font-size:20px;cursor:pointer;color:#66737a}
+  .hidden{display:none!important}
+  .rank{font-weight:700;color:#57656c}
+  .note{color:#839198;font-size:11px}
+  @media(max-width:1200px){
+    .kpis{grid-template-columns:repeat(3,1fr)}
+    .platform-grid{grid-template-columns:repeat(2,1fr)}
+    .demographics{grid-template-columns:repeat(2,1fr)}
+  }
+  @media(max-width:840px){
+    .page{padding:18px}
+    .topbar{padding:0 18px}
+    .nav{overflow:auto}
+    .toolbar,.social-header{align-items:flex-start;flex-direction:column}
+    .kpis{grid-template-columns:repeat(2,1fr)}
+    .main-grid{grid-template-columns:1fr}
+    .platform-grid{grid-template-columns:1fr}
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-mark">QI</div>
+      <div class="brand-copy">
+        <strong>Insights</strong>
+        <span>Qiriness Commerce Intelligence</span>
+      </div>
+    </div>
+    <div class="top-actions">
+      <div class="live"><span class="dot"></span> Live · updated 23:29</div>
+      <button class="icon-btn" onclick="window.location.reload()" title="Refresh">↻</button>
+    </div>
+  </header>
+
+  <main class="page">
+    <div class="page-title">
+      <h1>Insights</h1>
+      <button class="secondary-btn" onclick="openConnections()">Connections</button>
+    </div>
+
+    <nav class="nav">
+      <button>Overview</button>
+      <button>Sales</button>
+      <button>Customers</button>
+      <button>Marketing & funnel</button>
+      <button>Fulfilment</button>
+      <button>Support</button>
+      <button class="active">Social media</button>
+      <button>AI agent</button>
+    </nav>
+
+    <section class="toolbar">
+      <div class="quick-range">
+        <button class="range-btn">Last 24 hours</button>
+        <button class="range-btn">Last 7 days</button>
+        <button class="range-btn active">Last 30 days</button>
+        <button class="range-btn">Last 6 months</button>
+        <button class="range-btn">Last year</button>
+        <button class="range-btn">All time</button>
+      </div>
+      <div class="right-controls">
+        <select class="select"><option>Month...</option><option>Week</option><option>Day</option></select>
+        <input class="date-input" value="06/09/2026" />
+        <span class="note">to</span>
+        <input class="date-input" value="05/10/2026" />
+      </div>
+    </section>
+
+    <div class="status-row">
+      <span class="pill"><span class="mini-dot"></span> Meta synced 2 h ago</span>
+      <span class="pill"><span class="mini-dot"></span> TikTok synced 4 h ago</span>
+      <span class="pill"><span class="mini-dot"></span> YouTube synced 5 h ago</span>
+      <span class="pill"><span class="mini-dot"></span> Nightly sync completed 8 h ago</span>
+    </div>
+
+    <section class="social-header">
+      <div class="social-title">
+        <h2 id="viewTitle">Cross-platform overview</h2>
+        <span class="note" id="viewSubtitle">Organic performance across connected social accounts</span>
+      </div>
+      <div class="right-controls">
+        <div style="display:flex;align-items:center;gap:8px">
+          <span style="font-size:12px;color:#66737a;font-weight:600">Platform</span>
+          <select id="platformSelect" class="select" onchange="renderView()" style="min-width:170px;font-weight:600">
+            <option value="all">All platforms</option>
+            <option value="instagram">Instagram</option>
+            <option value="facebook">Facebook</option>
+            <option value="tiktok">TikTok</option>
+            <option value="youtube">YouTube</option>
+            <option value="pinterest">Pinterest</option>
+          </select>
+        </div>
+        <div class="mode-switch">
+          <button id="organicBtn" class="mode-btn active" onclick="setMode('organic')">Organic</button>
+          <button id="paidBtn" class="mode-btn" onclick="setMode('paid')">Paid Ads</button>
+        </div>
+      </div>
+    </section>
+
+    <div id="organicView">
+      <div id="profileTabs" class="platform-tabs hidden">
+        <button class="subtab active" data-sub="profile" onclick="setSubView('profile')">Profile Summary</button>
+        <button class="subtab" data-sub="content" onclick="setSubView('content')">Content Summary</button>
+        <button class="subtab" data-sub="posts" onclick="setSubView('posts')">Post Insights</button>
+      </div>
+
+      <div id="organicMain">
+        <section class="kpis" id="organicKpis"></section>
+
+        <section class="main-grid">
+          <article class="card panel">
+            <div class="panel-head">
+              <div>
+                <div class="panel-title" id="trendTitle">Performance trend</div>
+                <div class="note">Selected period compared with previous 30 days</div>
+              </div>
+              <div class="chart-toggle">
+                <button class="active">Views</button><button>Engagement</button><button>Growth</button><button>Posts</button>
+              </div>
+            </div>
+            <div class="chart-wrap">
+              <svg viewBox="0 0 900 300" preserveAspectRatio="none" aria-label="trend chart">
+                <g stroke="#e7ecee" stroke-width="1">
+                  <line x1="35" y1="45" x2="885" y2="45"/>
+                  <line x1="35" y1="105" x2="885" y2="105"/>
+                  <line x1="35" y1="165" x2="885" y2="165"/>
+                  <line x1="35" y1="225" x2="885" y2="225"/>
+                </g>
+                <path d="M35,222 L35,190 L70,172 L105,122 L140,148 L175,112 L210,142 L245,170 L280,135 L315,90 L350,124 L385,158 L420,145 L455,106 L490,127 L525,172 L560,153 L595,80 L630,118 L665,141 L700,98 L735,129 L770,67 L805,111 L840,96 L885,128 L885,222 Z"
+                      fill="#dcefee" opacity=".78"/>
+                <path d="M35,190 L70,172 L105,122 L140,148 L175,112 L210,142 L245,170 L280,135 L315,90 L350,124 L385,158 L420,145 L455,106 L490,127 L525,172 L560,153 L595,80 L630,118 L665,141 L700,98 L735,129 L770,67 L805,111 L840,96 L885,128"
+                      fill="none" stroke="#0f8f8b" stroke-width="3"/>
+                <g fill="#0f8f8b">
+                  <circle cx="105" cy="122" r="4"/><circle cx="315" cy="90" r="4"/><circle cx="595" cy="80" r="4"/><circle cx="770" cy="67" r="4"/>
+                </g>
+                <g fill="#7f8b91" font-size="11">
+                  <text x="35" y="252">6 Sep</text><text x="185" y="252">11 Sep</text><text x="345" y="252">16 Sep</text><text x="505" y="252">21 Sep</text><text x="665" y="252">26 Sep</text><text x="830" y="252">5 Oct</text>
+                </g>
+              </svg>
+            </div>
+          </article>
+
+          <aside class="card panel">
+            <div class="panel-head">
+              <div class="panel-title" id="driverTitle">What moved social performance?</div>
+            </div>
+            <div class="driver">
+              <div class="driver-top"><div><div class="driver-name">Views</div><div class="driver-sub">Cross-platform exposure</div></div><div class="driver-val" style="color:#0a9860">+18.4%</div></div>
+              <div class="track"><div class="fill" style="width:79%"></div></div>
+            </div>
+            <div class="driver">
+              <div class="driver-top"><div><div class="driver-name">Engagement</div><div class="driver-sub">Interactions</div></div><div class="driver-val" style="color:#0a9860">+11.2%</div></div>
+              <div class="track"><div class="fill" style="width:62%"></div></div>
+            </div>
+            <div class="driver">
+              <div class="driver-top"><div><div class="driver-name">Follower growth</div><div class="driver-sub">Net audience growth</div></div><div class="driver-val" style="color:#0a9860">+6.9%</div></div>
+              <div class="track"><div class="fill" style="width:48%"></div></div>
+            </div>
+            <div class="driver">
+              <div class="driver-top"><div><div class="driver-name">Engagement rate</div><div class="driver-sub">Efficiency</div></div><div class="driver-val" style="color:#ce4348">−0.4 pts</div></div>
+              <div class="track"><div class="fill red" style="width:29%"></div></div>
+            </div>
+            <div class="helper">Views and growth improved, but engagement efficiency softened slightly. Definitions are normalized where cross-platform comparison is valid.</div>
+          </aside>
+        </section>
+
+        <section id="allPlatformsSection">
+          <h3 class="section-title">Platform performance</h3>
+          <div class="platform-grid">
+            <article class="card platform-card" onclick="selectPlatform('instagram')">
+              <div class="platform-top"><div class="platform-id"><div class="platform-icon">IG</div>Instagram</div><span class="arrow">↗</span></div>
+              <div class="mini-grid">
+                <div><div class="mini-label">Followers</div><div class="mini-val">21,419</div></div>
+                <div><div class="mini-label">Views</div><div class="mini-val">1.57M</div></div>
+                <div><div class="mini-label">Posts</div><div class="mini-val">105</div></div>
+                <div><div class="mini-label">Engagement</div><div class="mini-val">36,050</div></div>
+                <div><div class="mini-label">Rate</div><div class="mini-val">7.2%</div></div>
+                <div><div class="mini-label">Reach</div><div class="mini-val">487K</div></div>
+              </div>
+              <div class="growth"><span class="mini-label">Follower growth</span><strong style="color:#0b9a60">+2,643</strong></div>
+            </article>
+
+            <article class="card platform-card" onclick="selectPlatform('tiktok')">
+              <div class="platform-top"><div class="platform-id"><div class="platform-icon">TT</div>TikTok</div><span class="arrow">↗</span></div>
+              <div class="mini-grid">
+                <div><div class="mini-label">Followers</div><div class="mini-val">21,693</div></div>
+                <div><div class="mini-label">Views</div><div class="mini-val">312K</div></div>
+                <div><div class="mini-label">Posts</div><div class="mini-val">39</div></div>
+                <div><div class="mini-label">Engagement</div><div class="mini-val">1,056</div></div>
+                <div><div class="mini-label">Rate</div><div class="mini-val">3.1%</div></div>
+                <div><div class="mini-label">Reach</div><div class="mini-val">198K</div></div>
+              </div>
+              <div class="growth"><span class="mini-label">Follower growth</span><strong style="color:#ce4348">−54</strong></div>
+            </article>
+
+            <article class="card platform-card" onclick="selectPlatform('youtube')">
+              <div class="platform-top"><div class="platform-id"><div class="platform-icon">YT</div>YouTube</div><span class="arrow">↗</span></div>
+              <div class="mini-grid">
+                <div><div class="mini-label">Followers</div><div class="mini-val">51,700</div></div>
+                <div><div class="mini-label">Views</div><div class="mini-val">306K</div></div>
+                <div><div class="mini-label">Posts</div><div class="mini-val">47</div></div>
+                <div><div class="mini-label">Engagement</div><div class="mini-val">11,678</div></div>
+                <div><div class="mini-label">Rate</div><div class="mini-val">3.8%</div></div>
+                <div><div class="mini-label">Watch time</div><div class="mini-val">1.8K h</div></div>
+              </div>
+              <div class="growth"><span class="mini-label">Follower growth</span><strong style="color:#0b9a60">+3,233</strong></div>
+            </article>
+          </div>
+        </section>
+
+        <section id="demographicsSection" class="hidden">
+          <h3 class="section-title">Audience</h3>
+          <div class="demographics">
+            <article class="card demo-card">
+              <div class="panel-title">Gender</div>
+              <div class="bar-row"><div class="bar-label"><span>Female</span><strong>69.0%</strong></div><div class="bar"><span style="width:69%"></span></div></div>
+              <div class="bar-row"><div class="bar-label"><span>Unknown</span><strong>22.3%</strong></div><div class="bar"><span style="width:22.3%"></span></div></div>
+              <div class="bar-row"><div class="bar-label"><span>Male</span><strong>8.7%</strong></div><div class="bar"><span style="width:8.7%"></span></div></div>
+            </article>
+            <article class="card demo-card">
+              <div class="panel-title">Age</div>
+              <div class="bar-row"><div class="bar-label"><span>25–34</span><strong>41%</strong></div><div class="bar"><span style="width:41%"></span></div></div>
+              <div class="bar-row"><div class="bar-label"><span>35–44</span><strong>27%</strong></div><div class="bar"><span style="width:27%"></span></div></div>
+              <div class="bar-row"><div class="bar-label"><span>18–24</span><strong>18%</strong></div><div class="bar"><span style="width:18%"></span></div></div>
+            </article>
+            <article class="card demo-card">
+              <div class="panel-title">Top countries</div>
+              <div class="bar-row"><div class="bar-label"><span>France</span><strong>35.2%</strong></div><div class="bar"><span style="width:35%"></span></div></div>
+              <div class="bar-row"><div class="bar-label"><span>United Kingdom</span><strong>14.1%</strong></div><div class="bar"><span style="width:14%"></span></div></div>
+              <div class="bar-row"><div class="bar-label"><span>Belgium</span><strong>8.6%</strong></div><div class="bar"><span style="width:8.6%"></span></div></div>
+            </article>
+            <article class="card demo-card">
+              <div class="panel-title">Top cities</div>
+              <div class="bar-row"><div class="bar-label"><span>Paris</span><strong>18.4%</strong></div><div class="bar"><span style="width:18.4%"></span></div></div>
+              <div class="bar-row"><div class="bar-label"><span>London</span><strong>7.9%</strong></div><div class="bar"><span style="width:7.9%"></span></div></div>
+              <div class="bar-row"><div class="bar-label"><span>Lyon</span><strong>5.6%</strong></div><div class="bar"><span style="width:5.6%"></span></div></div>
+            </article>
+          </div>
+        </section>
+      </div>
+
+      <section id="postsView" class="hidden">
+        <div class="card table-card">
+          <div class="table-toolbar">
+            <div>
+              <div class="panel-title">Post Insights</div>
+              <div class="note">Rank and compare individual posts across the selected period</div>
+            </div>
+            <div class="right-controls">
+              <input id="postSearch" class="search" placeholder="Search caption or title..." oninput="filterRows()">
+              <select class="select"><option>All content types</option><option>Reel</option><option>Carousel</option><option>Image</option><option>Video</option></select>
+            </div>
+          </div>
+          <div style="overflow:auto">
+            <table id="postTable">
+              <thead>
+                <tr>
+                  <th>#</th><th>Post</th><th>Platform</th><th onclick="sortTable(3)">Views ↕</th><th onclick="sortTable(4)">Reach ↕</th>
+                  <th onclick="sortTable(5)">Engagement ↕</th><th onclick="sortTable(6)">Eng. rate ↕</th><th onclick="sortTable(7)">Likes ↕</th>
+                  <th onclick="sortTable(8)">Comments ↕</th><th onclick="sortTable(9)">Shares ↕</th><th onclick="sortTable(10)">Follows ↕</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr><td class="rank">1</td><td><div class="post-cell"><div class="thumb">REEL</div><div class="post-copy"><strong>Morning skincare ritual — 3 steps</strong><span>28 Sep · Reel</span></div></div></td><td><span class="badge">Instagram</span></td><td>18,420</td><td>14,720</td><td>1,548</td><td>8.4%</td><td>1,193</td><td>102</td><td>253</td><td>84</td></tr>
+                <tr><td class="rank">2</td><td><div class="post-cell"><div class="thumb">VID</div><div class="post-copy"><strong>What is Beauté Énergétique?</strong><span>25 Sep · Video</span></div></div></td><td><span class="badge">YouTube</span></td><td>15,802</td><td>12,960</td><td>1,102</td><td>6.9%</td><td>793</td><td>88</td><td>121</td><td>67</td></tr>
+                <tr><td class="rank">3</td><td><div class="post-cell"><div class="thumb">CAR</div><div class="post-copy"><strong>5 signs your skin needs hydration</strong><span>21 Sep · Carousel</span></div></div></td><td><span class="badge">Instagram</span></td><td>12,114</td><td>9,884</td><td>1,236</td><td>10.2%</td><td>876</td><td>114</td><td>246</td><td>49</td></tr>
+                <tr><td class="rank">4</td><td><div class="post-cell"><div class="thumb">TT</div><div class="post-copy"><strong>LED mask before / after routine</strong><span>18 Sep · Short video</span></div></div></td><td><span class="badge">TikTok</span></td><td>10,982</td><td>9,115</td><td>695</td><td>6.3%</td><td>521</td><td>74</td><td>100</td><td>31</td></tr>
+                <tr><td class="rank">5</td><td><div class="post-cell"><div class="thumb">IMG</div><div class="post-copy"><strong>Source d'Eau ingredient focus</strong><span>12 Sep · Image</span></div></div></td><td><span class="badge">Instagram</span></td><td>8,712</td><td>7,903</td><td>821</td><td>9.4%</td><td>610</td><td>91</td><td>120</td><td>27</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <div id="paidView" class="hidden">
+      <section class="kpis" id="paidKpis"></section>
+
+      <section class="main-grid">
+        <article class="card panel">
+          <div class="panel-head">
+            <div>
+              <div class="panel-title">Paid media performance</div>
+              <div class="note">Spend, traffic and attributed outcomes over time</div>
+            </div>
+            <div class="chart-toggle"><button class="active">Spend</button><button>Revenue</button><button>ROAS</button><button>Conversions</button></div>
+          </div>
+          <div class="chart-wrap">
+            <svg viewBox="0 0 900 300" preserveAspectRatio="none">
+              <g stroke="#e7ecee" stroke-width="1">
+                <line x1="35" y1="45" x2="885" y2="45"/><line x1="35" y1="105" x2="885" y2="105"/><line x1="35" y1="165" x2="885" y2="165"/><line x1="35" y1="225" x2="885" y2="225"/>
+              </g>
+              <path d="M35,205 L80,191 L125,175 L170,118 L215,146 L260,132 L305,105 L350,151 L395,145 L440,92 L485,122 L530,140 L575,84 L620,108 L665,126 L710,71 L755,115 L800,93 L845,118 L885,101"
+                    fill="none" stroke="#0f8f8b" stroke-width="3"/>
+              <g fill="#7f8b91" font-size="11"><text x="35" y="252">6 Sep</text><text x="250" y="252">13 Sep</text><text x="465" y="252">20 Sep</text><text x="680" y="252">27 Sep</text><text x="840" y="252">5 Oct</text></g>
+            </svg>
+          </div>
+        </article>
+        <aside class="card panel">
+          <div class="panel-title">Paid efficiency</div>
+          <div class="driver"><div class="driver-top"><div><div class="driver-name">ROAS</div><div class="driver-sub">Attributed revenue / spend</div></div><div class="driver-val" style="color:#0a9860">3.42x</div></div><div class="track"><div class="fill" style="width:76%"></div></div></div>
+          <div class="driver"><div class="driver-top"><div><div class="driver-name">CTR</div><div class="driver-sub">Clicks / impressions</div></div><div class="driver-val">1.84%</div></div><div class="track"><div class="fill" style="width:54%"></div></div></div>
+          <div class="driver"><div class="driver-top"><div><div class="driver-name">CPC</div><div class="driver-sub">Cost / click</div></div><div class="driver-val" style="color:#0a9860">€0.61</div></div><div class="track"><div class="fill" style="width:43%"></div></div></div>
+          <div class="driver"><div class="driver-top"><div><div class="driver-name">CPA</div><div class="driver-sub">Cost / conversion</div></div><div class="driver-val" style="color:#ce4348">€18.22</div></div><div class="track"><div class="fill red" style="width:36%"></div></div></div>
+          <div class="helper">Paid performance stays separate from organic. Attribution uses source-platform reporting and is labelled accordingly.</div>
+        </aside>
+      </section>
+    </div>
+  </main>
+</div>
+
+<div class="modal-backdrop" id="connectionModal" onclick="if(event.target===this)closeConnections()">
+  <div class="modal">
+    <div class="modal-head">
+      <div><strong>Social media connections</strong><div class="note" style="margin-top:3px">Manage social and advertising sources</div></div>
+      <button class="close" onclick="closeConnections()">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="connector-grid">
+        <div class="card connector">
+          <div class="connector-left"><div class="platform-icon">M</div><div class="connector-meta"><strong>Meta</strong><span>Instagram, Facebook & Meta Ads · synced 2 h ago</span></div></div>
+          <span class="status-ok">Connected</span>
+        </div>
+        <div class="card connector">
+          <div class="connector-left"><div class="platform-icon">TT</div><div class="connector-meta"><strong>TikTok</strong><span>Organic + Ads · synced 4 h ago</span></div></div>
+          <span class="status-ok">Connected</span>
+        </div>
+        <div class="card connector">
+          <div class="connector-left"><div class="platform-icon">YT</div><div class="connector-meta"><strong>Google / YouTube</strong><span>YouTube + Google Ads · synced 5 h ago</span></div></div>
+          <span class="status-ok">Connected</span>
+        </div>
+        <div class="card connector">
+          <div class="connector-left"><div class="platform-icon">P</div><div class="connector-meta"><strong>Pinterest</strong><span>No account connected</span></div></div>
+          <span class="status-off">Connect</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+let mode = 'organic';
+let subView = 'profile';
+
+const allKpis = [
+  ['Total engagement','49,700','↑ 11.2%','up'],
+  ['Avg engagement rate','5.86%','↓ 0.4 pts','down'],
+  ['Total views','1,904,683','↑ 18.4%','up'],
+  ['Total followers','94,863','↑ 6.3%','up'],
+  ['Growth','+5,827','↑ 6.9%','up'],
+  ['Total posts','376','↑ 9.6%','up']
+];
+
+const platformData = {
+  instagram: {
+    label:'Instagram',
+    subtitle:'Organic account performance',
+    kpis:[
+      ['Accounts engaged','2,980','↓ 46.1%','down'],
+      ['Profile visits','3,371','↓ 25.8%','down'],
+      ['Profile link taps','182','↑ 8.3%','up'],
+      ['Followers','21,419','↑ 1.5%','up'],
+      ['Follower growth','+294','↑ 619','up'],
+      ['Total posts','24','↓ 25.0%','down']
+    ]
+  },
+  facebook: {
+    label:'Facebook',
+    subtitle:'Organic page performance',
+    kpis:[
+      ['Reach','126,430','↑ 8.4%','up'],['Engagement','5,412','↑ 6.7%','up'],['Views','184,230','↑ 12.9%','up'],
+      ['Followers','17,946','↑ 0.8%','up'],['Growth','+143','↑ 12','up'],['Posts','41','↓ 4.7%','down']
+    ]
+  },
+  tiktok: {
+    label:'TikTok',
+    subtitle:'Organic account performance',
+    kpis:[
+      ['Video views','312,404','↑ 17.8%','up'],['Profile views','8,912','↑ 12.4%','up'],['Engagement','1,056','↓ 4.2%','down'],
+      ['Followers','21,693','↓ 0.2%','down'],['Follower growth','−54','↓ 72','down'],['Videos','39','↑ 11.4%','up']
+    ]
+  },
+  youtube: {
+    label:'YouTube',
+    subtitle:'Channel performance',
+    kpis:[
+      ['Views','306,349','↑ 21.6%','up'],['Watch time','1,842 h','↑ 15.9%','up'],['Engagement','11,678','↑ 9.2%','up'],
+      ['Subscribers','51,700','↑ 6.7%','up'],['Subscribers gained','+3,233','↑ 14.2%','up'],['Videos','47','↑ 4.4%','up']
+    ]
+  },
+  pinterest: {
+    label:'Pinterest',
+    subtitle:'Organic account performance',
+    kpis:[
+      ['Impressions','13,687','↑ 2.1%','up'],['Engagement','734','↑ 6.0%','up'],['Outbound clicks','402','↓ 3.2%','down'],
+      ['Followers','51','↑ 2','up'],['Saves','328','↑ 10.4%','up'],['Pins','183','↑ 16.6%','up']
+    ]
+  }
+};
+
+const paidKpis = [
+  ['Spend','€4,862','↑ 12.6%','up'],
+  ['Impressions','684,221','↑ 18.7%','up'],
+  ['Clicks','12,588','↑ 16.9%','up'],
+  ['CTR','1.84%','↓ 0.1 pts','down'],
+  ['Conversions','267','↑ 9.0%','up'],
+  ['ROAS','3.42x','↑ 7.8%','up']
+];
+
+function kpiHtml(item){
+  return `<article class="card kpi">
+    <div class="kpi-head"><span class="kpi-title">${item[0]}</span><span class="info">ⓘ</span></div>
+    <div class="kpi-value">${item[1]}</div>
+    <div class="delta"><span class="${item[3]}">${item[2]}</span><em>vs previous 30 days</em></div>
+  </article>`;
+}
+
+function setMode(next){
+  mode = next;
+  document.getElementById('organicBtn').classList.toggle('active', next==='organic');
+  document.getElementById('paidBtn').classList.toggle('active', next==='paid');
+  document.getElementById('organicView').classList.toggle('hidden', next!=='organic');
+  document.getElementById('paidView').classList.toggle('hidden', next!=='paid');
+  document.getElementById('paidKpis').innerHTML = paidKpis.map(kpiHtml).join('');
+  renderView();
+}
+
+function renderView(){
+  const platform = document.getElementById('platformSelect').value;
+  const title = document.getElementById('viewTitle');
+  const subtitle = document.getElementById('viewSubtitle');
+  const tabs = document.getElementById('profileTabs');
+  const allSection = document.getElementById('allPlatformsSection');
+  const demographics = document.getElementById('demographicsSection');
+
+  if(mode==='paid'){
+    title.textContent = platform==='all' ? 'Paid media overview' : `${platformData[platform]?.label || platform} · Paid Ads`;
+    subtitle.textContent = platform==='all' ? 'Advertising performance across connected platforms' : 'Platform-specific advertising performance';
+    return;
+  }
+
+  if(platform==='all'){
+    title.textContent='Cross-platform overview';
+    subtitle.textContent='Organic performance across connected social accounts';
+    tabs.classList.add('hidden');
+    allSection.classList.remove('hidden');
+    demographics.classList.add('hidden');
+    document.getElementById('postsView').classList.add('hidden');
+    document.getElementById('organicMain').classList.remove('hidden');
+    document.getElementById('organicKpis').innerHTML = allKpis.map(kpiHtml).join('');
+  } else {
+    const d=platformData[platform];
+    title.textContent=d.label;
+    subtitle.textContent=d.subtitle;
+    tabs.classList.remove('hidden');
+    allSection.classList.add('hidden');
+    document.getElementById('organicKpis').innerHTML = d.kpis.map(kpiHtml).join('');
+    setSubView(subView, true);
+  }
+}
+
+function setSubView(view, silent){
+  subView = view;
+  document.querySelectorAll('.subtab').forEach(x=>x.classList.toggle('active',x.dataset.sub===view));
+  const main=document.getElementById('organicMain');
+  const posts=document.getElementById('postsView');
+  const demo=document.getElementById('demographicsSection');
+
+  if(view==='posts'){
+    main.classList.add('hidden'); posts.classList.remove('hidden');
+  } else {
+    main.classList.remove('hidden'); posts.classList.add('hidden');
+    demo.classList.toggle('hidden',view!=='profile');
+    document.getElementById('allPlatformsSection').classList.add('hidden');
+  }
+}
+
+function selectPlatform(p){
+  document.getElementById('platformSelect').value=p;
+  renderView();
+  window.scrollTo({top:120,behavior:'smooth'});
+}
+
+function openConnections(){document.getElementById('connectionModal').style.display='flex'}
+function closeConnections(){document.getElementById('connectionModal').style.display='none'}
+
+function filterRows(){
+  const q=document.getElementById('postSearch').value.toLowerCase();
+  document.querySelectorAll('#postTable tbody tr').forEach(r=>{
+    r.style.display=r.innerText.toLowerCase().includes(q)?'':'none';
+  });
+}
+
+let sortAsc = false;
+function sortTable(col){
+  const tbody=document.querySelector('#postTable tbody');
+  const rows=[...tbody.querySelectorAll('tr')];
+  sortAsc=!sortAsc;
+  rows.sort((a,b)=>{
+    const av=a.children[col].innerText.replace(/[,%]/g,'');
+    const bv=b.children[col].innerText.replace(/[,%]/g,'');
+    const an=parseFloat(av), bn=parseFloat(bv);
+    if(!isNaN(an)&&!isNaN(bn)) return sortAsc?an-bn:bn-an;
+    return sortAsc?av.localeCompare(bv):bv.localeCompare(av);
+  });
+  rows.forEach((r,i)=>{r.children[0].innerText=i+1;tbody.appendChild(r)});
+}
+
+document.querySelectorAll('.range-btn').forEach(btn=>{
+  btn.addEventListener('click',()=>{
+    document.querySelectorAll('.range-btn').forEach(x=>x.classList.remove('active'));
+    btn.classList.add('active');
+  });
+});
+document.querySelectorAll('.chart-toggle button').forEach(btn=>{
+  btn.addEventListener('click',()=>{
+    [...btn.parentElement.children].forEach(x=>x.classList.remove('active'));
+    btn.classList.add('active');
+  });
+});
+
+renderView();
+setMode('organic');
+</script>
+</body>
+</html>

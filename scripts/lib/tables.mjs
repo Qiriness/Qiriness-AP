@@ -139,6 +139,42 @@ export const KLAVIYO_RPC = {
 };
 
 /**
+ * Social and paid media (Meta, Google Ads): the OAuth connections (tokens in
+ * Vault), the accounts they see, and what each earned. Created by the
+ * INCREMENTAL migration `70_social.sql`; `70_social.test.mjs` asserts these.
+ */
+export const SOCIAL_T = {
+  CONNECTIONS: 'social_connections',
+  ACCOUNTS: 'social_accounts',
+  ACCOUNT_DAYS: 'social_account_days',
+  POSTS: 'social_posts',
+  AUDIENCE: 'social_audience',
+  AD_DAYS: 'ad_days'
+};
+
+export const SOCIAL_RPC = {
+  SAVE_TOKEN: 'social_save_token',
+  READ_TOKEN: 'social_read_token',
+  CLEAR_TOKEN: 'social_clear_token',
+  SERIES: 'insights_social_series',
+  FOLLOWERS: 'insights_social_followers',
+  POSTS: 'insights_social_posts',
+  POST_TOTALS: 'insights_social_post_totals',
+  AUDIENCE: 'insights_social_audience',
+  PAID_SERIES: 'insights_paid_series'
+};
+
+/** Ad campaigns (Meta Ads, Google Ads). Created by the INCREMENTAL migration `71_ad_campaigns.sql`. */
+export const CAMPAIGN_T = {
+  CAMPAIGNS: 'ad_campaigns',
+  CAMPAIGN_DAYS: 'ad_campaign_days'
+};
+
+export const CAMPAIGN_RPC = {
+  CAMPAIGNS: 'insights_paid_campaigns'
+};
+
+/**
  * Views. Selected from exactly like tables through PostgREST, and listed apart
  * because they are read-only: a write to one of these names is a mistake the
  * database will reject, and naming them separately makes that visible here.

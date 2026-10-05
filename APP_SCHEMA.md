@@ -19,6 +19,8 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |                    # report:collection-planner · report:collection-replay
 |                    # probe:analytics (what ShopifyQL will answer)
 |                    # sync:klaviyo (flows + campaigns; key from Vault)
+|                    # sync:social (Meta + Google Ads; tokens from Vault)
+|                    # probe:meta (which Meta metric names still answer)
 |                    # db:apply:migration · test
 |-- shopify.app.toml # Shopify app scopes (all read_*)
 |-- web/
@@ -39,7 +41,9 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |   |   |-- orders/[id]/page.tsx          # Server Component: one order on cards
 |   |   |-- insights/                     # -> /insights/overview, then one route
 |   |   |                                 # per panel: overview · sales · marketing ·
-|   |   |                                 # fulfilment · support · customers · agent.
+|   |   |                                 # fulfilment · support · customers · social ·
+|   |   |                                 # agent. social also reads ?mode= ?network=
+|   |   |                                 # ?view= ?connections=1
 |   |   |                                 # Each reads ?range= (24h|7d|30d|6m|1y|all),
 |   |   |                                 # ?month=YYYY-MM or ?from=&to=, and ?platform=
 |   |   |-- settings/page.tsx             # Server Component: My info · Agent settings (?tab=agents)
@@ -97,6 +101,13 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |   |       |-- settings/integrations/klaviyo/route.ts  # GET status · PUT {key} (checked
 |   |       |                                  # with Klaviyo, then Vault) · DELETE. Never
 |   |       |                                  # returns the key. Closed to contact
+|   |       |-- settings/integrations/social/ # GET Meta + Google status · accounts/[id]
+|   |       |                                  # PATCH {enabled}. Never returns a token
+|   |       |-- settings/integrations/[provider]/  # meta|google: start (GET -> consent
+|   |       |                                  # screen, signed state + cookie) · callback
+|   |       |                                  # (code -> Vault, accounts, queues
+|   |       |                                  # sync_social) · sync (POST, Sync now) ·
+|   |       |                                  # DELETE disconnect. social-connections-service
 |   |       |-- insights/vip-rule/route.ts   # GET the rule / preview a draft count ·
 |   |       |                                  # PUT save or clear it (vip-rule.mjs)
 |   |       |-- insights/segment-finder/route.ts  # POST a segment -> matching customers
@@ -177,7 +188,12 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |   |   |                            # read; Paid/Social blocked) · InventoryCard (stock
 |   |   |                            # table, Overview + Fulfilment) · FulfilmentView ·
 |   |   |                            # OpenOrders · SupportView + TopicMap · CustomersView +
-|   |   |                            # VipRuleCard + SegmentFinder + CustomerActivityRows · AgentView
+|   |   |                            # VipRuleCard + SegmentFinder + CustomerActivityRows · AgentView ·
+|   |   |                            # SocialView (organic / paid) + SocialHeader (network,
+|   |   |                            # mode, view, status pills) + SocialTrend + PaidTrend +
+|   |   |                            # SocialPostsTable + PaidCampaignsTable (links to Ads
+|   |   |                            # Manager / Google Ads) + SocialConnectionsDialog +
+|   |   |                            # SocialProviderCard (also on Settings → Integrations)
 |   |   |-- tickets/                 # TicketsView (orchestrator) · TicketSection ·
 |   |   |                            # TicketStatCards · TicketTable · TicketDetailPanel ·
 |   |   |                            # TicketThreadDialog · DroppedMailTable +
@@ -213,6 +229,7 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |   |   |                        # + parcelsFromTrace (the run's parcels, for links)
 |   |   |-- tracking-links.ts    # isomorphic: the one import of scripts/lib's
 |   |   |                        # splitTrackingText into the browser bundle
+|   |   |-- social-types.ts      # isomorphic: the Social panel's + Connections' shapes
 |   |   |-- ticket-stats.ts      # isomorphic: summariseTickets + isClosed
 |   |   |-- draft-outbound.ts    # what Approve does, worded once for TicketsView +
 |   |   |                        # TicketThreadDialog: outbound line, button labels,
@@ -241,6 +258,9 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |   |       |                    # the chat_* log, owner-only reads) ·
 |   |       |                    # dropped-mail-service · knowledge-errors ·
 |   |       |                    # integrations-service (Klaviyo status/save/remove) ·
+|   |       |                    # social-connections-service (Meta / Google OAuth:
+|   |       |                    # start, callback, queue a sync, track, disconnect)
+|   |       |                    # + social-return (the fixed return paths) ·
 |   |       |                    # auth (getSession, re-checked not trusted) ·
 |   |       |                    # access-log (a data_access_events row per
 |   |       |                    # named-customer view, actor = the user) ·
@@ -270,7 +290,9 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |   |                             # carries its own period, products, collections
 |   |                             # and platform mix) ·
 |   |                             # marketable-contacts (CSV; consent is the
-|   |                             # query filter) · topic-map-rebuild
+|   |                             # query filter) · topic-map-rebuild · social-service
+|   |                             # (the Social panel + Marketing's Paid / Social
+|   |                             # tabs; Instagram reach read live, <= 30 days)
 |   |-- middleware.ts            # THE GATE: every page + API needs a Supabase
 |   |                            # session; refreshes the hour-old token; role
 |   |                            # rules from dashboard-auth.mjs
@@ -281,6 +303,9 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |   |-- sync-shopify-nightly.mjs         # runs them all in order, storefront months last
 |   |-- sync-storefront-months.mjs       # closed months of sessions -> Supabase (backfill / button)
 |   |-- sync-klaviyo.mjs                 # Klaviyo flows + campaigns -> Supabase (also last in the nightly)
+|   |-- sync-social.mjs                  # Meta + Google Ads -> Supabase (after Klaviyo in the nightly;
+|   |                                    # the worker runs it for sync_social jobs)
+|   |-- probe-meta.mjs                   # read-only: which META_METRICS names Meta answers
 |   |-- embed-{knowledge-chunks,ticket-messages,exemplars}.mjs  # embedding reconcilers
 |   |-- import-exemplars.mjs             # Email-Example-Queries.md -> exemplar rows
 |   |                                    # (drafts only; lib/exemplar-import.mjs parses)
@@ -438,6 +463,23 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |       |                                # rows, the card's summary (clicked rows only)
 |       |-- klaviyo-sync.mjs             # connect (check, then Vault) · disconnect ·
 |       |                                # runKlaviyoSync (backfill a year, then 59 days)
+|       |-- social-model.mjs             # isomorphic: providers, kinds, publishers,
+|       |                                # audience dimensions (70's checks mirror them),
+|       |                                # campaignUrl (the one place campaign links are built)
+|       |-- social-oauth.mjs             # app credentials from env, signed state,
+|       |                                # Meta / Google consent URLs
+|       |-- meta-client.mjs              # Graph API (appsecret_proof, rate-limit waits,
+|       |                                # a retired metric -> null, 190 -> reconnect)
+|       |-- meta-insights.mjs            # pure: META_METRICS (the one name table) +
+|       |                                # folders for days, posts, audience, ads
+|       |-- google-ads-client.mjs        # REST searchStream, refresh token, developer
+|       |                                # token, login-customer-id
+|       |-- google-ads-reports.mjs       # pure: GAQL, micros -> money, discovery
+|       |-- social-sync.mjs              # connectMeta / connectGoogle (code -> Vault +
+|       |                                # accounts) · runSocialSync (never throws;
+|       |                                # status on social_connections)
+|       |-- social-figures.mjs           # pure: organic / paid totals, series sums,
+|       |                                # drivers, never across currencies
 |       |-- shopifyql-client.mjs         # one ShopifyQL query per request; reads THROTTLED
 |       |                                # and its reset time
 |       |-- analytics-probe.mjs          # pure: the ShopifyQL probe's queries, how a
@@ -738,7 +780,7 @@ The recurring situations, not the answers to them. Same document/chunk mechanics
 | `agent_models` | the model an agent runs on, chosen in Settings (migration 53): `(shop_id, agent)` key, `agent` ∈ spam/categorise/situation/decompose/investigate/draft/chat, `model`, `updated_by`. **Overrides the env var**; no row = the env decides. Read by `scripts/lib/agent-models.mjs` — the worker every poll (`refreshModels` in `agent/src/index.mjs` rebuilds the model clients on a change), the test chat and the management chat (`currentChatModel`) |
 | `ticket_routing` | the router's decision per ticket (migration 50): `outcome` forward/keep, `method` fixed/model, `destination_id` + `destination_label`, `reason`, `model`, the `category`/`request_kind` it was taken on (re-taken when they change); and the once-per-ticket acknowledgement: `ack_state` requested/sent/failed/skipped, `ack_at`, `ack_error`, `ack_attempts` |
 | `ticket_forwards` | attempt ledger, `unique(ticket_message_id)`, `sent`/`failed` + attempt counter, snapshots `category`, `forward_email`, `destination_label` |
-| `mail_jobs` | **the durable queue** (migration 46): `sync_mailbox` (a change notification asking for a folder read) and `send_outbound` (the attempts of one outbound action). `state` queued/running/done/dead, `retry_count`, `last_error`, `last_attempt_at`, `next_attempt_at`, `locked_until` (lease). Unique `dedupe_key` among **queued** rows only. RPCs `enqueue_mail_job()` + `claim_mail_jobs()` (SKIP LOCKED; an expired lease is reclaimable and counts as an attempt). Case processing is not a kind. Owned by `scripts/lib/mail-job-record.mjs` |
+| `mail_jobs` | **the durable queue** (migration 46): `sync_mailbox` (a change notification asking for a folder read) , `send_outbound` (the attempts of one outbound action) and `sync_social` (a Meta / Google Ads sync asked for by Connect or Sync now; migration 70). `state` queued/running/done/dead, `retry_count`, `last_error`, `last_attempt_at`, `next_attempt_at`, `locked_until` (lease). Unique `dedupe_key` among **queued** rows only. RPCs `enqueue_mail_job()` + `claim_mail_jobs()` (SKIP LOCKED; an expired lease is reclaimable and counts as an attempt). Case processing is not a kind. Owned by `scripts/lib/mail-job-record.mjs` |
 | `mail_subscriptions` | one Graph change-notification subscription per shop + provider + folder: `subscription_id`, `client_state_hash` (never the secret), `expires_at`, `needs_renewal`, `last_error`. Owned by `scripts/lib/mail-subscription-record.mjs` |
 | `categorisation_review` | **testing artefact, not runtime**: hand-labelled sample scored against the agent |
 
@@ -829,6 +871,22 @@ Migration 39. Named in `KLAVIYO_T` / `KLAVIYO_RPC`, not `T` / `RPC`. See `DECISI
 | `klaviyo_save_key` / `_read_key` / `_clear_key` | security definer, `search_path ''`, **service_role only** — the only way to touch the key |
 | `insights_klaviyo_messages(p_shop, p_from, p_to, p_tz)` | flows summed over their days + campaigns by send time, in the Insights range convention |
 
+### Social and paid media
+
+Migration 70. Named in `SOCIAL_T` / `SOCIAL_RPC`. See `DECISIONS.md § Insights → Social and paid`.
+
+| Object | Holds |
+| --- | --- |
+| `social_connections` | per shop and provider (`meta` / `google`): `secret_id` (the OAuth token, in **`vault.secrets`**), `token_expires_at`, `scopes`, `conversion_action` (Meta; null = `omni_purchase`), `last_sync_at` / `_status` (`ok` · `failed` · `needs_reconnect`) / `_error` |
+| `social_accounts` | what a connection sees: `kind` (`instagram` · `facebook` · `meta_ads` · `google_ads`), `external_id`, name, handle, currency, `login_customer_id` (Google manager), `enabled` (the team's choice; reads skip disabled) |
+| `social_account_days` | per organic account and day: followers (that day's count), follows, unfollows, views, engagement, profile visits, link taps, posts — additive counts only, null = not measured |
+| `social_posts` | per post: published_at, type, 140-char caption, permalink, thumbnail, lifetime views / reach / likes / comments / shares / saves / follows / engagement |
+| `social_audience` | per Instagram account and capture day: follower counts by gender / age / country / city |
+| `ad_days` | per ad account, day and publisher: spend, impressions, clicks, conversions, conversion value, currency |
+| `ad_campaigns` · `ad_campaign_days` | migration 71 (`CAMPAIGN_T`): per campaign name / status / objective, and the same counts per campaign and day. Read by `insights_paid_campaigns` (the Paid view's campaign table) |
+| `social_save_token` / `_read_token` / `_clear_token` | security definer, `search_path ''`, **service_role only** |
+| `insights_social_series` · `_followers` · `_posts` · `_post_totals` · `_audience` · `insights_paid_series` | the panel's reads; wall-clock range, enabled accounts only |
+
 ### Compliance and audit
 
 | Table | Holds |
@@ -892,6 +950,8 @@ Written by the worker and the CLIs, read only by the Insights panels.
 | `62_case_lead.sql` | `case_facts` re-stated, copied from 04: with nothing owed, a case's lead is its most recently active thread **still live**, not just the most recent. **Applied 2026-10-02** | 61 |
 | `59_order_identity_situations.sql` | data only: rules whose `when_conditions.order_identity` names `none` also name its five replacements (`none` kept so old and new code agree). 16 rules. Applied 2026-10-02 | 05 |
 | `65_inventory_stock_floor.sql` | drops 35's five-argument `insights_inventory_exceptions()` and recreates it with `p_max_stock_units`, so the stock card also lists every active product under the unit floor (`INVENTORY_MIN_STOCK_UNITS`, 50) whatever its cover. Copied from 06. No table, no data. **Applied 2026-10-04** | 01, 02, 06 |
+| `71_ad_campaigns.sql` | `ad_campaigns` + `ad_campaign_days` (`CAMPAIGN_T`) and `insights_paid_campaigns()` (`CAMPAIGN_RPC`). No data. **Applied 2026-10-05** | 70 |
+| `70_social.sql` | the six social tables (`SOCIAL_T`), the Vault token functions and six reads (`SOCIAL_RPC`), and `mail_jobs_kind_check` widened to `sync_social` (copied from 04 / 46). No data. **Applied 2026-10-05** | 01, 46 |
 | `69_fact_drift.sql` | `tickets.fact_drift` jsonb (null until something moves; object check) + `outbound_actions.cancel_reason` comment gains `facts_pending`. Copied from 04 / 07. No data. **Applied 2026-10-04** | 04, 47 |
 | `68_order_gift_stock_need.sql` | widens `support_exemplars.requirement_needs` by `order_gift_stock` (whether the order's gift lines are in stock now). Copied from 05; head of the needs check since. No data. Applied 2026-10-04 | 05, 67 |
 | `67_sample_stock_need.sql` | widens `support_exemplars.requirement_needs` by `sample_stock` (whether the order's samples are in stock now). Copied from 05; head of the needs check until 68. No data. Applied 2026-10-04 | 05, 66 |
@@ -1060,9 +1120,9 @@ Two sections over the same `TicketTable` the queue uses — **Open** (expanded, 
 
 `countOpenThreads` (one `queue()` read, both halves of the partition — shared per request with the page's own list through React `cache`, and started beside the page's reads rather than before them) feeds the sidebar's open-count badges — Tickets in the warning colour, Conversations grey, both hidden on the collapsed rail — rendered from **every** page in the shell via `navBadgeCounts` in `lib/server/conversation-badge.ts`. The same call also returns `unfulfilledOrders` (`countOrdersAwaitingFulfilment` in `orders-service.ts`, a `count=exact` HEAD using `open_orders()`'s rule) for a grey badge on Orders; each count fails on its own. That is the mitigation for routing these off the queue at all — the arrangement failed once by being silent. See DECISIONS.md § Tickets dashboard.
 
-### `/insights` — the seven analytics panels
+### `/insights` — the eight analytics panels
 
-`web/app/insights/{overview,sales,customers,marketing,fulfilment,support,agent}/page.tsx` → `InsightsPage` (tabs in that order, from `INSIGHTS_PANELS` in `web/lib/types.ts`)
+`web/app/insights/{overview,sales,customers,marketing,fulfilment,support,social,agent}/page.tsx` → `InsightsPage` (tabs in that order, from `INSIGHTS_PANELS` in `web/lib/types.ts`)
 → one view in `web/components/insights/`, over `web/lib/server/insights/*-service.ts`.
 `/insights` redirects to `/insights/overview` (Fulfilment for the contact role).
 
@@ -1076,11 +1136,12 @@ across). The server re-renders; nothing is aggregated in the browser.
 | Panel | Range | Platform | Reads |
 | --- | --- | --- | --- |
 | **Overview** | yes (the stock card is "now") | yes | orders summary + series (revenue, orders, AOV), `insights_sales_overview` (units, discounts), orders by channel, product sales (top 5), `insights_inventory_exceptions`; **every money figure from one live ShopifyQL ladder** (`liveSales` / `liveSalesSeries` in `analytics.ts`: net sales, orders, AOV, refund rate = returns ÷ gross sales, the trend, the drivers, the signals, net sales per session, the platform mix; our orders only as a labelled fallback); **sessions and conversion from stored months + live**; each card streamed in on its own (Suspense); units and top products from our orders; signals + bridge + drivers from `sales-overview.mjs`; the report download (`ReportDownload`, months that have ended) |
-| **Marketing & funnel** | yes | yes (newsletter always Shopify) | orders summary, `insights_sales_overview`, `insights_promotions`, the newsletter rows (churn, movement, capture — moved here from Customers), and **ShopifyQL** (`analytics.ts`, each card streamed in on its own): the four-step funnel, acquisition channels, landing-page types and the busiest product pages (named from `products.handle`); **Klaviyo** from `insights_klaviyo_messages` (open rate first: tiles over every flow and campaign in the range, table of those with ≥ 1 click and ≥ 50 recipients sorted by open rate; blocked when not connected, not yet synced, or on a marketplace). Product VIEWS stay blocked — no metric; Paid / Social blocked — not connected |
+| **Marketing & funnel** | yes | yes (newsletter always Shopify) | orders summary, `insights_sales_overview`, `insights_promotions`, the newsletter rows (churn, movement, capture — moved here from Customers), and **ShopifyQL** (`analytics.ts`, each card streamed in on its own): the four-step funnel, acquisition channels, landing-page types and the busiest product pages (named from `products.handle`); **Klaviyo** from `insights_klaviyo_messages` (open rate first: tiles over every flow and campaign in the range, table of those with ≥ 1 click and ≥ 50 recipients sorted by open rate; blocked when not connected, not yet synced, or on a marketplace). Product VIEWS stay blocked — no metric; **Paid / Social** from `getMarketingSocial` (social-service.ts), blocked while not connected |
 | **Sales** | yes | yes | orders summary + series + by channel + by country, customer mix (marketplaces excluded), product sales, country product sales (re-read over VIP customers' orders with `?bestVip=1`), product pairs, and the "Who buys this product" card (`insights_product_customer_mix` + `insights_product_orders_per_customer` for `?product=`, both on the same arguments, optionally `?mixCountry=` and `?mixVip=1`, marketplaces excluded; `ProductCustomerMixCard` with a searchable product picker and its buyers-by-order-count chart) |
 | **Fulfilment** | yes (the open-orders list and the stock card are "now") | yes | orders summary + series, fulfilment buckets + carriers, `open_orders()` (orders waiting to ship, VIP-marked, with name + email, the name ringed by open ticket as on Orders — `open-orders.ts`), `insights_inventory_exceptions` (`inventory.ts`) |
 | **Support** | yes | no — tickets have none | support summary + series + categories, orders summary (contact-rate denominator), the latest `cluster_runs` for the topic map (all-time, with a Rebuild button) |
 | **Customers** | the activity rows only (the base is a snapshot) | no — people, so always Shopify | `customer_segment_totals` + `customer_ticket_facts` + `customer-segments.mjs`; orders per customer (`customer-activity-service.ts`; the newsletter and capture rows moved to Marketing & funnel on 2026-09-23 — the order-count columns are folded by `order-frequency.ts`, shared with the Sales product card so both charts cut the tail at 10+ the same way); the Segment Finder under the base cards, on demand through `POST /api/insights/segment-finder` -> `segment-finder-service.ts` -> `customer_segment_find()` |
+| **Social media** | yes (audience is "now") | no — not sales channels | `?mode=organic` (default): `insights_social_series` / `_followers` / `_post_totals` / `_posts` / `_audience` folded by `social-figures.mjs`, Instagram reach live (≤ 30 days); `?mode=paid`: `insights_paid_series`, per currency. `?network=` one kind, `?view=profile|content|posts` for one organic account. Connections dialog on `?connections=1`. Closed to contact |
 | **AI agent** | yes | no | llm usage + series + ticket stats (priced by `llm-rates.mjs`), agent funnel + situation picking (`insights_agent_situations`) + verdicts + blockers |
 
 **One panel read is not from our database.** `analytics.ts` calls Shopify
@@ -1117,7 +1178,7 @@ The Support topic map reads the latest `cluster_runs` row and renders each
 
 - **Dev info** — developer and management only (same gate as Integrations). `components/settings/DevInfo`: architecture diagram (People → App → Data → Services, with links and live/partial/planned status) and a subscriptions table, both from the hand-kept `web/lib/dev-stack.ts` (edit it when a service, host or plan changes; `plan`/`monthly` stay null until recorded). OpenAI models and 30-day spend are live, from `getAgentRoster()`.
 
-- **Integrations** — developer and management only (`canManageIntegrations`; the tab is not drawn for contact and `/api/settings/integrations` is denied in `dashboard-auth.mjs`). `KlaviyoKeyCard` over `lib/server/integrations-service.ts` and `PUT|DELETE /api/settings/integrations/klaviyo`: the key is checked with Klaviyo (`connectKlaviyo`), then stored in Vault; the card shows `pk_…` + last 4 and the last sync.
+- **Integrations** — developer and management only (`canManageIntegrations`; the tab is not drawn for contact and `/api/settings/integrations` is denied in `dashboard-auth.mjs`). `KlaviyoKeyCard` over `lib/server/integrations-service.ts` and `PUT|DELETE /api/settings/integrations/klaviyo`: the key is checked with Klaviyo (`connectKlaviyo`), then stored in Vault; the card shows `pk_…` + last 4 and the last sync. Below it, the Meta / Google Ads cards (`SocialProviderCards`, the same as the Social panel's Connections dialog; `?connected=` / `?connect_error=` on return).
 
 - **My info** — the signed-in user from `getSession()`, and which areas the role may open (`canAccessPath` in `dashboard-auth.mjs`).
 - **Agent settings** — `lib/server/agent-settings-service.ts`: one row per agent (spam, categorise, situation chooser, decompose, investigate, draft, embed from `insights_llm_usage`; the management chat from `chat_turns`), last 30 days: model (the one chosen in `agent_models`, else the most-called in the window, else the configured one from `loadAgentConfig` / `chatModel()`), calls, failed, cost via `llm-rates.mjs`. **A model can be chosen per agent** (developer and management; `canChooseAgentModels`, `/api/settings/agents` denied to contact): `AgentModelPicker` → `PUT /api/settings/agents/models` `{agent, model|null}` → `setAgentModel` → `agent_models`. The list is the OpenAI key's own `/v1/models`, filtered to chat models (`lib/server/openai-models.ts`, 10-min cache); a model not on it is refused. Not embeddings, not a stage whose env var is empty (off).

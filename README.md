@@ -53,7 +53,25 @@ Pending: ORM/DB client for app reads (scripts use `pg` + a Supabase REST client)
 
 **Shopify scopes:** `read_discounts` for promotions; `read_content`/`read_online_store_pages` and `read_legal_policies` for the content catalog; `read_themes` for the theme-template content fallback. Missing optional scopes surface as a clear import error rather than silent failure. For Shopify Dev Dashboard apps, leave `SHOPIFY_ADMIN_API_ACCESS_TOKEN` blank and the scripts request a short-lived Admin token from the client ID/secret at runtime.
 
-### Dashboard (`web/`)
+### Social connectors (Meta, Google Ads)
+
+The Insights → Social media tab connects through OAuth. Each shop's token goes to Supabase Vault. **This app's own credentials** are set once, as env vars, in three places: **Vercel** (the connect callback), **Render** (the worker's sync) and **GitHub Actions secrets** (the nightly). Until they are set, Connect is shown disabled with the missing names.
+
+1. **Meta**
+   - Create a **Business** app at developers.facebook.com and add **Facebook Login for Business** and the **Marketing API**.
+   - Permissions: `pages_show_list`, `pages_read_engagement`, `read_insights`, `instagram_basic`, `instagram_manage_insights`, `ads_read`, `business_management`.
+   - Valid OAuth redirect URI: `https://qiriness-ap.vercel.app/api/settings/integrations/meta/callback`, plus `http://localhost:3000/...` for development.
+   - Set `META_APP_ID` and `META_APP_SECRET`. `META_LOGIN_CONFIG_ID` is optional: a Login for Business configuration, used instead of the scope list.
+   - In **Development mode**, only people with a role on the app can connect. Add the person who will click Connect.
+2. **Google Ads**
+   - In a Google Cloud project, enable the **Google Ads API** and create an **OAuth client (Web application)** with the redirect URI `…/api/settings/integrations/google/callback`.
+   - Set the OAuth consent screen to **In production**. In « Testing », refresh tokens expire after 7 days.
+   - On the Google Ads API page of that **same Cloud project**, apply for **Basic access**. It needs brand verification and is then reviewed automatically within minutes. A new project starts at **Test** access, which is refused on real (production) ad accounts.
+   - **No developer token and no manager account are needed.** Google sunset developer tokens on 2026-09-09; access levels now belong to the Cloud project. A manager account matters only if the ad accounts are reached through one.
+   - Set `GOOGLE_OAUTH_CLIENT_ID` and `GOOGLE_OAUTH_CLIENT_SECRET`.
+3. Set `SOCIAL_OAUTH_STATE_SECRET` (32+ random characters) on Vercel. Set `PUBLIC_APP_URL` if the dashboard is reached through another host than the one registered.
+4. Apply `supabase/migrations/70_social.sql`, then open Insights → Social media → **Connections** and click **Connect**. The worker runs the first sync within minutes. `npm run probe:meta` lists which Meta metric names still answer.
+
 
 `cd web && npm install`, then `npm run dev` and open `http://localhost:3000` (redirects to `/agent-setup`). `npm run build`, `npm run lint`, `npm run typecheck` for checks. Set `PAGE_TIMING=1` to print how long each page's reads take to the server console. `next dev` compiles each page on first visit, so measure page speed on `npm run build && npm run start` — and stop the dev server first, since both use `web/.next`. Run the root sync scripts at least once first — the Knowledge API looks the shop up by domain and returns a clear 404 until a `shops` row and the `shopify_content_sources` catalog exist.
 
@@ -105,6 +123,8 @@ below. `llm_usage` holds 2174 calls.
 **Tests:** 2013 from the repo root, 1299 in `agent/`. Both suites pass as of 2026-09-09.
 
 ## Next Steps
+
+**Social media (2026-10-05):** register the Meta app, and the Google Cloud OAuth client with Basic access on its project (§ Social connectors above), connect both (migration 70 applied 2026-10-05), and run the checks in `VALIDATION_LOG.md` item 38. Start with `npm run probe:meta`: Meta's metric names are the most likely thing to need a change.
 
 **Cases (2026-10-02):** apply migration 61, run `npm run cases:targets` and then
 `npm run cases:replay` in `agent/`, and read every link it lists before setting

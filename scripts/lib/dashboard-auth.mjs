@@ -62,6 +62,8 @@ const DENIED = Object.freeze({
     '/insights/overview',
     '/insights/sales',
     '/insights/marketing',
+    // Ad spend and attributed revenue, beside Marketing for the same reason.
+    '/insights/social',
     '/api/insights/report',
     '/home',
     '/api/chat',

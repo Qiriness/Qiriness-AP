@@ -9,10 +9,13 @@ import { RPC, T } from './tables.mjs';
  * webhook asking for a folder to be read) and one claims (the worker), and
  * `web/` cannot import from `agent/src`.
  *
- * WHAT A JOB IS FOR. Two kinds only (04_support.sql explains why case
- * processing is not one): `sync_mailbox`, a nudge to read a folder now, and
- * `send_outbound`, the attempts of one outbound action. The job carries the
- * attempts; the business state lives elsewhere (the cursor, the action row).
+ * WHAT A JOB IS FOR. Three kinds only (04_support.sql explains why case
+ * processing is not one): `sync_mailbox`, a nudge to read a folder now,
+ * `send_outbound`, the attempts of one outbound action, and `sync_social`, a
+ * provider's social/ads sync asked for from the dashboard (70_social.sql) —
+ * the same worker, lease and retries, rather than a second queue. The job
+ * carries the attempts; the business state lives elsewhere (the cursor, the
+ * action row, the connection row).
  *
  * RETRIES. `fail` counts the attempt and pushes the job out with backoff;
  * past `maxAttempts` it goes `dead` and stays, for a person to read. A worker
@@ -21,7 +24,7 @@ import { RPC, T } from './tables.mjs';
  */
 
 /** Mirrors mail_jobs_kind_check; 46_mail_jobs.test.mjs asserts the two agree. */
-export const MAIL_JOB_KINDS = ['sync_mailbox', 'send_outbound'];
+export const MAIL_JOB_KINDS = ['sync_mailbox', 'send_outbound', 'sync_social'];
 
 /** Mirrors mail_jobs_state_check. */
 export const MAIL_JOB_STATES = ['queued', 'running', 'done', 'dead'];

@@ -10,6 +10,44 @@ Three sibling files carry the other halves, and this one deliberately does not d
 
 ---
 
+## Paid Ads: a campaign table, with links (2026-10-05)
+
+- **The Paid view lists every campaign that delivered in the range**, Meta Ads and Google Ads together:
+  - columns: spend, impressions, clicks, CTR, conversions, revenue, ROAS, CPA;
+  - sortable, searchable, and filterable to active campaigns;
+  - money in each campaign's own currency.
+
+  Each campaign opens in Meta Ads Manager or Google Ads (`campaignUrl` in `social-model.mjs`; neither platform documents these URLs).
+- **Posts show a visible ↗ link** to Instagram or Facebook. The caption already linked there.
+- **Sync:** `campaignStep` in `social-sync.mjs` reads campaign-level insights (Meta `level=campaign` + the campaign list; Google GAQL `FROM campaign`).
+  - It has its own 13-month backfill, so accounts synced before this still get their history.
+  - Its own failure is recorded without losing the account totals.
+- **Migration `71_ad_campaigns.sql`** (`ad_campaigns`, `ad_campaign_days`, `insights_paid_campaigns`). **Applied 2026-10-05**, read back in a read-only transaction: both tables empty with RLS on, the read returns 0 rows, and it is not executable by `anon` / `authenticated`.
+- **Proven:** unit tests only (root 4,719, agent 2,065), plus `tsc` and lint.
+
+## Social media: Meta and Google Ads connectors, and the Insights tab (2026-10-05)
+
+- **New Insights tab « Social media »** (`/insights/social`), built from the owner's mockup (`HTML_DROPFILE/qiriness_social_media_dashboard_mockup.html`). It has two modes:
+  - **Organic** (Instagram, Facebook Page): KPI row, trend with a metric switch, « What moved », platform cards, post insights (search, type filter, sortable) and audience demographics.
+  - **Paid Ads** (Meta Ads, Google Ads): spend, impressions, clicks, CTR, conversions, ROAS, trend, efficiency (ROAS / CTR / CPC / CPA), and a per-platform table.
+
+  The platform selector and the Organic / Paid switch are URL state (`?mode=`, `?network=`, `?view=`). The tab is closed to the contact team, like Marketing.
+- **Connect through OAuth, then the data arrives.** Connections (in the panel, and on Settings → Integrations) sends the person to Meta or Google. The callback stores the token in Vault (`social_save_token`), finds every Page, Instagram account and ad account, and queues a `sync_social` job, which the worker runs (`agent/src/social/social-job-runner.mjs`). « Sync now » queues the same job. TikTok, YouTube and Pinterest are listed as « Coming soon ».
+- **Sync** (`scripts/lib/social-sync.mjs`, clients `meta-client.mjs` / `google-ads-client.mjs`, pure folders `meta-insights.mjs` / `google-ads-reports.mjs`):
+  - Backfill on first sync: Instagram 30 days, then 30 more per run up to a year; Pages 365 days; ads 395 days.
+  - Each later sync rewrites a trailing window.
+  - A metric Meta no longer answers is stored as not measured, never zero.
+  - The sync runs last in the nightly and cannot fail it. Also `npm run sync:social`, and `npm run probe:meta` lists which metric names Meta still answers.
+- **Migration `70_social.sql`**: six tables (connections, accounts, account days, posts, audience, ad days), the Vault token functions and six ranged reads, plus `mail_jobs.kind` widened to `sync_social` (also in 04 and 46). **Applied 2026-10-05**: six empty tables, the widened check and both token functions closed to `anon` / `authenticated` were read back.
+- **Marketing panel:** the Paid and Social tabs of « Channel performance » now read the same sums instead of being blocked.
+- **Same day: Google Ads no longer needs a developer token.** Google sunset them on 2026-09-09, and access now belongs to the Cloud project of the OAuth client. Connect needs only `GOOGLE_OAUTH_CLIENT_ID` / `_SECRET`. The header is sent only if the old variable is still set (ignored by Google).
+- **Proven:** unit tests only:
+  - migration 70, OAuth state, Meta and Google clients and folders, the sync with fake clients, the figures, the worker job, the nightly
+  - root suite 4,693 pass, agent suite 2,065 pass
+  - `tsc`, `next lint` and `next build` are clean.
+
+  **Never run against a real account** — no app credentials exist yet. VALIDATION_LOG item 38.
+
 ## A changed order is routed to the cheapest action that keeps the reply true (2026-10-04)
 
 - **The order bundle is rebuilt whenever Shopify has a newer version.** `context` now also rebuilds a bundle whose order carries a different `shopify_updated_at` than the one it was built from (`sourceUpdatedAt`, stamped on every bundle). Before, a bundle was built once, and a new customer message on `c3efeb4e` (#7093, fulfilled 2026-09-29) was still investigated against « not dispatched ».

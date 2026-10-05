@@ -2228,7 +2228,7 @@ create table public.mail_jobs (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
 
-  constraint mail_jobs_kind_check check (kind in ('sync_mailbox', 'send_outbound')),
+  constraint mail_jobs_kind_check check (kind in ('sync_mailbox', 'send_outbound', 'sync_social')),
   constraint mail_jobs_state_check check (state in ('queued', 'running', 'done', 'dead')),
   constraint mail_jobs_retry_count_check check (retry_count >= 0),
   constraint mail_jobs_payload_check check (jsonb_typeof(payload) = 'object')

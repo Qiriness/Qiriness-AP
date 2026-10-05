@@ -1441,7 +1441,7 @@ export interface TicketStats {
 // the way to the component — which is what `BucketState` carries.
 
 /** Which panel is on screen. Real routes, so a panel can be linked to. */
-export type InsightsPanel = "overview" | "sales" | "marketing" | "fulfilment" | "support" | "customers" | "agent";
+export type InsightsPanel = "overview" | "sales" | "marketing" | "fulfilment" | "support" | "customers" | "social" | "agent";
 
 export const INSIGHTS_PANELS: { id: InsightsPanel; label: string; href: string }[] = [
   { id: "overview", label: "Overview", href: "/insights/overview" },
@@ -1450,6 +1450,7 @@ export const INSIGHTS_PANELS: { id: InsightsPanel; label: string; href: string }
   { id: "marketing", label: "Marketing & funnel", href: "/insights/marketing" },
   { id: "fulfilment", label: "Fulfilment", href: "/insights/fulfilment" },
   { id: "support", label: "Support", href: "/insights/support" },
+  { id: "social", label: "Social media", href: "/insights/social" },
   { id: "agent", label: "AI agent", href: "/insights/agent" },
 ];
 
@@ -1463,7 +1464,7 @@ export type Grain = "hour" | "day" | "week" | "month";
 export type BucketState = "measured" | "partial" | "missing";
 
 /** How a chart or tile formats its values. Components format; services don't. */
-export type ValueUnit = "count" | "euro" | "hours" | "percent" | "usd" | "tokens";
+export type ValueUnit = "count" | "euro" | "hours" | "percent" | "usd" | "tokens" | "multiple";
 
 /** `all`, `shopify` (the shop's own store), or a marketplace key from `sales_channels`. */
 export type PlatformId = string;
@@ -2007,6 +2008,8 @@ export interface MarketingPanel {
   newsletter: NewsletterActivity;
   /** Klaviyo flows and campaigns in the range, from the nightly sync. */
   klaviyo: KlaviyoPerformance;
+  /** Meta / Google Ads and Instagram / Facebook in the range (social-service.ts). */
+  social: import("./social-types").MarketingSocial;
 }
 
 /** One flow or campaign on the Marketing card. Rates are null when their denominator is 0. */

@@ -54,6 +54,7 @@ import { resolveInternalDomains } from '../../scripts/lib/message-audience.mjs';
 import { createOutlookGraphAdapter } from './mail/outlook-graph-adapter.mjs';
 import { manageSubscriptions } from './mail/subscription-manager.mjs';
 import { createMailJobRecord } from '../../scripts/lib/mail-job-record.mjs';
+import { runSocialJobs } from './social/social-job-runner.mjs';
 import { createMailSubscriptionRecord } from '../../scripts/lib/mail-subscription-record.mjs';
 import { createOutboundRecord } from '../../scripts/lib/outbound-record.mjs';
 import { createOutboundStore } from './outbound/outbound-store.mjs';
@@ -855,6 +856,16 @@ async function main() {
         }
       }
       throw error;
+    } finally {
+      // Social syncs someone asked for (Connect, « Sync now »): after the mail,
+      // never instead of it, and whatever the mail poll did. Its own failures
+      // are retried through the queue; nothing here can stop the loop.
+      try {
+        const social = await runSocialJobs({ jobs, supabase, shopId, env: config.socialEnv, maxAttempts: config.mailJobMaxAttempts, logger });
+        if (social.considered) logger.info('social.jobs', { shopId, ...social });
+      } catch (error) {
+        logger.warn('social.jobs_failed', { shopId, error: error.message });
+      }
     }
   };
 
@@ -866,7 +877,7 @@ async function main() {
   // Between timed polls, a due job wakes the worker early. `send_outbound`
   // counts only while sending is on: otherwise its jobs wait untouched and
   // would wake every check.
-  const wakeKinds = ['sync_mailbox', ...(config.outboundSendEnabled ? ['send_outbound'] : [])];
+  const wakeKinds = ['sync_mailbox', 'sync_social', ...(config.outboundSendEnabled ? ['send_outbound'] : [])];
   const waitForNextPoll = async (isStopping) => {
     const deadline = Date.now() + config.pollIntervalMs;
     while (!isStopping() && Date.now() < deadline) {
