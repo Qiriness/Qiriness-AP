@@ -661,7 +661,7 @@ async function regenerateChunks(supabase: any, documentRow: any): Promise<void> 
 
   await supabaseDeleteWhereIn(supabase, "knowledge_chunks", "knowledge_document_id", [documentRow.id]);
   if (merged.length > 0) {
-    await supabaseUpsert(supabase, "knowledge_chunks", merged, "knowledge_document_id,chunk_index");
+    await supabaseUpsert(supabase, "knowledge_chunks", merged, "knowledge_document_id,chunk_index", { returning: "minimal" });
   }
 }
 

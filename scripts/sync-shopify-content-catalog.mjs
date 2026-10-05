@@ -68,7 +68,7 @@ export async function runShopifyContentCatalogSync({ args, shopify, supabase, sh
   }
 
   if (rows.length > 0) {
-    await supabaseUpsert(supabase, 'shopify_content_sources', rows, 'shop_id,source_type,shopify_source_id');
+    await supabaseUpsert(supabase, 'shopify_content_sources', rows, 'shop_id,source_type,shopify_source_id', { returning: 'minimal' });
   }
 
   let deletedSources = 0;

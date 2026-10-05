@@ -123,7 +123,8 @@ async function upsertCustomerPage({ supabase, customerRows }) {
     supabase,
     'customers',
     customerRows,
-    'shop_id,shopify_customer_id'
+    'shop_id,shopify_customer_id',
+    { returning: 'minimal' }
   );
 }
 

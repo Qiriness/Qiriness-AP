@@ -41,7 +41,11 @@ import {
 } from './resolution/customer-resolution-runner.mjs';
 import { createInvestigationStack } from './investigation/create-investigation.mjs';
 import { runInvestigation } from './investigation/investigation-runner.mjs';
-import { createOrderResolutionStore, runOrderResolution } from './resolution/order-resolution-runner.mjs';
+import {
+  createOrderResolutionState,
+  createOrderResolutionStore,
+  runOrderResolution
+} from './resolution/order-resolution-runner.mjs';
 import { createOrderContextStore, runOrderContext } from './resolution/order-context-runner.mjs';
 import { createChangeRouterStore, runChangeRouter } from './casework/change-router-runner.mjs';
 import { createForwardingStore } from './routing/forwarding-store.mjs';
@@ -207,6 +211,8 @@ async function main() {
   // which the resolution pass drops itself whenever it has work to do.
   const customerLookup = createCustomerLookup({ supabase, shopId, logger });
   const orderResolutionStore = createOrderResolutionStore(supabase);
+  // Remembers what was resolved, so a poll re-reads only what changed.
+  const orderResolutionState = createOrderResolutionState();
   const orderContextStore = createOrderContextStore(supabase);
   // THE MODELS, rebuilt whenever Settings → Agent settings changes one
   // (`agent_models`, reloaded at the top of every poll). `models` is the config
@@ -393,7 +399,9 @@ async function main() {
       limit
     };
     const totals = await runDeltaPoll(ingestOptions);
-    logger.info('ingest.poll', { shopId, ...totals });
+    if (didWork(totals, ['pages'])) {
+      logger.info('ingest.poll', { shopId, ...totals });
+    }
 
     // SENT ITEMS, straight after the Inbox and before any other pass, so a poll
     // sees both halves of a thread before anything reads it
@@ -403,7 +411,9 @@ async function main() {
     // reply the Inbox already gave us. Its own cursor; the cutover stays the
     // Inbox's.
     const sentTotals = await runDeltaPoll({ ...ingestOptions, folder: 'sentitems' });
-    logger.info('ingest.poll_sent', { shopId, ...sentTotals });
+    if (didWork(sentTotals, ['pages'])) {
+      logger.info('ingest.poll_sent', { shopId, ...sentTotals });
+    }
     // Both folders are read: a queued `sync_mailbox` request is satisfied.
     await afterIngest?.();
 
@@ -439,7 +449,8 @@ async function main() {
         // The support mailbox is not a customer, whatever the customers table says.
         excludedEmails: [config.graph.mailbox].filter(Boolean)
       });
-      if (customers.considered > 0) {
+      // `considered` and `deferred` count tickets still in their back-off.
+      if (didWork(customers, ['considered', 'deferred'])) {
         logger.info('customer.resolution.pass', { shopId, ...customers });
       }
     }
@@ -512,7 +523,9 @@ async function main() {
         // completes without spending a call. Empty unless casework ran.
         labelsStillValid: (ticket) => continuations.has(ticket.id)
       });
-      logger.info('categorise.pass', { shopId, ...categorised });
+      if (didWork(categorised)) {
+        logger.info('categorise.pass', { shopId, ...categorised });
+      }
     }
 
     // ORDER RESOLUTION RUNS BEFORE THE INVESTIGATION, and that placement is the
@@ -541,9 +554,11 @@ async function main() {
         store: orderResolutionStore,
         record,
         shopId,
-        logger
+        logger,
+        state: orderResolutionState
       });
-      if (resolved.considered > 0) {
+      // Re-resolving to the stored outcome is not news.
+      if (didWork(resolved, ['considered', 'unchanged'])) {
         logger.info('order.resolution.pass', { shopId, ...resolved });
       }
     }
@@ -559,7 +574,7 @@ async function main() {
         shopId,
         logger
       });
-      if (contexts.considered > 0) {
+      if (didWork(contexts, ['considered'])) {
         logger.info('order.context.pass', { shopId, ...contexts });
       }
     }
@@ -793,7 +808,9 @@ async function main() {
           extra: config.internalEmailDomains
         })
       });
-      if (forwarded.considered > 0 || forwarded.acknowledged > 0 || forwarded.ackFailed > 0) {
+      // kept / skipped / waiting / undecided are re-derived every poll (they
+      // get no ledger row), so on their own they are not news.
+      if (didWork(forwarded, ['considered', 'kept', 'skipped', 'waiting', 'undecided'])) {
         logger.info('forward.pass', { shopId, ...forwarded });
       }
     }
@@ -963,6 +980,18 @@ async function main() {
  * flag was reached for, which on a backlog means a model bill and, worse,
  * forwarded mail — the two things the flag exists to prevent.
  */
+/**
+ * Whether a pass's totals record any work. A pass that found nothing logs
+ * nothing: at one poll a minute, the all-zero lines were most of the log volume.
+ * `ignore` names counters that move even on an idle poll (pages read, rows
+ * looked at and left alone).
+ */
+function didWork(totals, ignore = []) {
+  return Object.entries(totals || {}).some(
+    ([key, value]) => !ignore.includes(key) && typeof value === 'number' && value > 0
+  );
+}
+
 function parseStopAfter(argv) {
   const eq = argv.find((arg) => arg.startsWith('--stop-after='));
   const value = eq

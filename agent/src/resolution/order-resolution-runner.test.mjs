@@ -1,7 +1,12 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { createOrderResolutionStore, reinvestigationColumns, runOrderResolution } from './order-resolution-runner.mjs';
+import {
+  createOrderResolutionState,
+  createOrderResolutionStore,
+  reinvestigationColumns,
+  runOrderResolution
+} from './order-resolution-runner.mjs';
 import { hashIdentifier } from '../../../scripts/lib/compliance-audit.mjs';
 
 const HASH_A = 'a'.repeat(64);
@@ -435,4 +440,163 @@ test('a number confirmed in a later reply outranks one the first message could n
 
   assert.equal(totals.confirmed, 1);
   assert.equal(store.written[0].resolution.orderName, '#4860');
+});
+
+// --- only what changed is re-read, and only a new outcome is written -----------
+// 2026-10-05: every poll re-resolved ~500 tickets, read their bodies and rewrote
+// each with a fresh `resolved_at`, about 3 GB of egress a day for results that
+// had not moved.
+
+const realColumns = createOrderResolutionStore(null).buildResolutionColumns;
+
+/** A record and store pair that remembers what each pass asked for. */
+function incremental({ tickets, texts, orders = [], changedOrders = [] }) {
+  const calls = { bodies: [], links: [] };
+  const fake = {
+    calls,
+    tickets,
+    changedOrders,
+    orders,
+    async loadMarketplaces() { return { handles: [] }; },
+    async loadOrderNumberRange() { return { min: 1001, max: 6300 }; },
+    async loadOrders() {
+      return { byNumber: new Map(fake.orders.map((o) => [o.order_number, o])), customersById: new Map() };
+    },
+    async loadOrdersByTracking() { return { byTracking: new Map(), customersById: new Map() }; },
+    async changedOrderRefs() { return fake.changedOrders; },
+    buildResolutionColumns: realColumns,
+    async findAwaitingOrderNumber(options = {}) {
+      if (options.ids) return fake.tickets.filter((t) => options.ids.includes(t.id));
+      if (options.changedSince) return fake.tickets.filter((t) => t.updated_at >= options.changedSince);
+      return fake.tickets;
+    },
+    async firstInboundByTicket(ids) {
+      calls.bodies.push(ids);
+      return new Map(ids.map((id) => [id, texts[id]]));
+    },
+    async linkOrder(id, columns) {
+      calls.links.push(id);
+      fake.tickets.find((t) => t.id === id).metadata = columns.metadata;
+    }
+  };
+  return fake;
+}
+
+function clock(start = Date.parse('2026-10-05T10:00:00Z')) {
+  let at = start;
+  return { now: () => at, advance: (ms) => { at += ms; }, iso: () => new Date(at).toISOString() };
+}
+
+const TEN_MINUTES = 10 * 60 * 1000;
+// Last touched well before the first pass, outside its overlap window.
+const HOUR_AGO = '2026-10-05T09:00:00.000Z';
+
+test('an outcome identical to the stored one is not rewritten', async () => {
+  const fake = incremental({
+    tickets: [{ id: 't1', requester_email_hash: HASH_A, metadata: {} }],
+    texts: { t1: 'ma commande #4854' }
+  });
+  await runOrderResolution({ store: fake, record: fake, shopId: 's1' });
+  const again = await runOrderResolution({ store: fake, record: fake, shopId: 's1' });
+
+  assert.deepEqual(fake.calls.links, ['t1'], 'written once, not on the identical second pass');
+  assert.equal(again.unchanged, 1);
+});
+
+test('a confirmed match is always written, so a cleared column is set again', async () => {
+  const fake = incremental({
+    tickets: [{ id: 't1', requester_email_hash: HASH_A, metadata: {} }],
+    texts: { t1: 'ma commande #4854' },
+    orders: [{ order_number: 4854, name: '#4854', customer_email_hash: HASH_A }]
+  });
+  await runOrderResolution({ store: fake, record: fake, shopId: 's1' });
+  await runOrderResolution({ store: fake, record: fake, shopId: 's1' });
+  assert.deepEqual(fake.calls.links, ['t1', 't1']);
+});
+
+test('with state, a quiet poll reads no bodies and writes nothing', async () => {
+  const time = clock();
+  const state = createOrderResolutionState({ now: time.now });
+  const fake = incremental({
+    tickets: [{ id: 't1', requester_email_hash: HASH_A, metadata: {}, updated_at: HOUR_AGO }],
+    texts: { t1: 'ma commande #4854' }
+  });
+
+  const first = await runOrderResolution({ store: fake, record: fake, shopId: 's1', state });
+  assert.equal(first.full, true, 'the first pass after a start is a full one');
+
+  time.advance(TEN_MINUTES);
+  const quiet = await runOrderResolution({ store: fake, record: fake, shopId: 's1', state });
+
+  assert.equal(quiet.full, false);
+  assert.equal(quiet.considered, 0);
+  assert.equal(fake.calls.bodies.length, 1, 'bodies were read by the first pass only');
+  assert.deepEqual(fake.calls.links, ['t1']);
+});
+
+test('with state, a ticket touched since the last pass is re-resolved', async () => {
+  const time = clock();
+  const state = createOrderResolutionState({ now: time.now });
+  const ticket = { id: 't1', requester_email_hash: HASH_A, metadata: {}, updated_at: HOUR_AGO };
+  const fake = incremental({
+    tickets: [ticket],
+    texts: { t1: 'où est ma commande ?' },
+    orders: [{ order_number: 4854, name: '#4854', customer_email_hash: HASH_A }]
+  });
+  await runOrderResolution({ store: fake, record: fake, shopId: 's1', state });
+
+  time.advance(TEN_MINUTES);
+  ticket.updated_at = time.iso(); // the customer replied with the number
+  fake.calls.bodies.length = 0;
+  const record = { ...fake, async laterInboundByTicket() { return new Map([['t1', ['#4854']]]); } };
+  const after = await runOrderResolution({ store: fake, record, shopId: 's1', state });
+
+  assert.deepEqual(fake.calls.bodies, [['t1']], 'only that ticket’s body is read');
+  assert.equal(after.confirmed, 1);
+});
+
+test('with state, an order change re-resolves only the tickets that quoted it', async () => {
+  const time = clock();
+  const state = createOrderResolutionState({ now: time.now });
+  const fake = incremental({
+    tickets: [
+      { id: 't1', requester_email_hash: HASH_A, metadata: {}, updated_at: HOUR_AGO },
+      { id: 't2', requester_email_hash: HASH_A, metadata: {}, updated_at: HOUR_AGO }
+    ],
+    texts: { t1: 'ma commande #6320', t2: 'ma commande #4100' }
+  });
+  await runOrderResolution({ store: fake, record: fake, shopId: 's1', state });
+  assert.match(fake.tickets[0].metadata.order_resolution.detail, /too recent to have synced/);
+
+  // #6320 syncs. Only the ticket that quoted it is due.
+  time.advance(TEN_MINUTES);
+  fake.changedOrders = [{ order_number: 6320, tracking_numbers: [] }];
+  fake.orders = [{ order_number: 6320, name: '#6320', customer_email_hash: HASH_A }];
+  fake.calls.bodies.length = 0;
+  const after = await runOrderResolution({ store: fake, record: fake, shopId: 's1', state });
+
+  assert.deepEqual(fake.calls.bodies, [['t1']]);
+  assert.equal(after.confirmed, 1);
+});
+
+test('a number too long to be an order is never sent to the orders table', async () => {
+  // order_number is a Postgres integer; 9600053422 on a live ticket failed the
+  // query, and the pass, for everyone.
+  // A null client: any query would throw.
+  const { byNumber } = await createOrderResolutionStore(null).loadOrders('s1', [9600053422]);
+  assert.deepEqual(byNumber, new Map(), 'answered locally, no query made');
+});
+
+test('with state, a full pass still runs once a day', async () => {
+  const time = clock();
+  const state = createOrderResolutionState({ now: time.now });
+  const fake = incremental({
+    tickets: [{ id: 't1', requester_email_hash: HASH_A, metadata: {}, updated_at: HOUR_AGO }],
+    texts: { t1: 'une question' }
+  });
+  await runOrderResolution({ store: fake, record: fake, shopId: 's1', state });
+  time.advance(24 * 60 * 60 * 1000);
+  const daily = await runOrderResolution({ store: fake, record: fake, shopId: 's1', state });
+  assert.equal(daily.full, true);
+  assert.equal(daily.considered, 1);
 });

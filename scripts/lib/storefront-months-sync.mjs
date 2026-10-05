@@ -44,7 +44,8 @@ export async function runStorefrontMonthsSync({ shopify, supabase, shopRow, dryR
       supabase,
       STOREFRONT_T.SESSION_MONTHS,
       rows.map((row) => ({ ...row, fetched_at: fetchedAt })),
-      'shop_id,month'
+      'shop_id,month',
+      { returning: 'minimal' }
     );
   }
   return { months: rows.length, restated: drift.length, from: span.from.slice(0, 7), to: span.to.slice(0, 7) };

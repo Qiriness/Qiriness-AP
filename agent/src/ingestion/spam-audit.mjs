@@ -175,7 +175,7 @@ export function createSupabaseSpamAuditStore(supabase, { retentionDays = DEFAULT
       if (rows.length === 0) {
         return 0;
       }
-      await supabaseUpsert(supabase, 'spam_audit', rows, 'shop_id,graph_message_id');
+      await supabaseUpsert(supabase, 'spam_audit', rows, 'shop_id,graph_message_id', { returning: 'minimal' });
       return rows.length;
     },
 

@@ -5,6 +5,7 @@ import {
   supabaseHeaders,
   supabaseInsert,
   supabaseSelectAll,
+  supabaseUpdateById,
   supabaseUpsert
 } from './supabase-rest-client.mjs';
 
@@ -179,4 +180,35 @@ test('supabaseInsert normalizes bulk rows with missing optional keys', async () 
   const rows = JSON.parse(requests[0].body);
   assert.deepEqual(Object.keys(rows[0]).sort(), Object.keys(rows[1]).sort());
   assert.equal(rows[1].payload, null);
+});
+
+test('returning minimal asks PostgREST for no body on upserts and updates', async () => {
+  const requests = [];
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url, options) => {
+    requests.push(options);
+    return { ok: true, json: async () => { throw new Error('a minimal response has no body to parse'); } };
+  };
+  try {
+    const upserted = await supabaseUpsert(CLIENT, 'customers', [{ id: 1 }], 'id', { returning: 'minimal' });
+    const updated = await supabaseUpdateById(CLIENT, 'tickets', 't1', { status: 'open' }, { returning: 'minimal' });
+    assert.deepEqual(upserted, []);
+    assert.equal(updated, undefined);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+  assert.equal(requests[0].headers.Prefer, 'resolution=merge-duplicates,return=minimal');
+  assert.equal(requests[1].headers.Prefer, 'return=minimal');
+});
+
+test('a limited read never asks for a bigger page than it keeps', async () => {
+  const originalFetch = globalThis.fetch;
+  const requests = stubCappedServer(5000, 1000);
+  try {
+    const rows = await supabaseSelectAll(CLIENT, 'tickets', {}, 'id', { limit: 500 });
+    assert.equal(rows.length, 500);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+  assert.equal(requests[0].range, '0-499');
 });

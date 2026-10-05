@@ -195,7 +195,7 @@ export async function processOrderWebhook({
       readRetentionPolicy(shopRow)
     );
 
-    await supabaseUpsert(supabase, 'orders', [row], 'shop_id,shopify_order_id');
+    await supabaseUpsert(supabase, 'orders', [row], 'shop_id,shopify_order_id', { returning: 'minimal' });
 
     // A parcel scanned, delivered or refunded may be what a snoozed ticket was
     // waiting for. After the upsert, so the woken ticket reads the new order.

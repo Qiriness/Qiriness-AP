@@ -184,7 +184,8 @@ async function upsertOrderPage({ supabase, orderRows }) {
       supabase,
       'orders',
       orderRows,
-      'shop_id,shopify_order_id'
+      'shop_id,shopify_order_id',
+      { returning: 'minimal' }
     );
   } catch (error) {
     if (!/Could not find the '(returns|order_status)' column/i.test(error.message)) {
@@ -196,7 +197,8 @@ async function upsertOrderPage({ supabase, orderRows }) {
       supabase,
       'orders',
       orderRows.map(({ returns, order_status, ...row }) => row),
-      'shop_id,shopify_order_id'
+      'shop_id,shopify_order_id',
+      { returning: 'minimal' }
     );
   }
 }

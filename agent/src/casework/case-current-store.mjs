@@ -123,7 +123,7 @@ export function createCaseCurrentStore(supabase, { shopId }) {
     },
 
     async save(row) {
-      await supabaseUpsert(supabase, T.CASE_CURRENT, [row], 'ticket_id');
+      await supabaseUpsert(supabase, T.CASE_CURRENT, [row], 'ticket_id', { returning: 'minimal' });
     },
 
     async ticket(ticketId) {

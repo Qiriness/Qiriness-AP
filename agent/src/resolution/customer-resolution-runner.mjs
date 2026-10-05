@@ -120,8 +120,8 @@ export async function runCustomerResolution({
   const pending = tickets.filter((ticket) => shouldAttempt(ticket, now));
   totals.deferred = tickets.length - pending.length;
 
+  // Nothing due is not logged: it is every idle poll.
   if (pending.length === 0) {
-    logger?.info?.('customer.resolution', { shopId, ...totals });
     return totals;
   }
 

@@ -542,7 +542,9 @@ export function createTicketRecord(supabase, { shopId, transport = REST_TRANSPOR
 
     /** A confirmed order number, plus whatever the resolver concluded. */
     async linkOrder(ticketId, columns) {
-      return patch(ticketId, columns);
+      // Nothing reads the row back, so none is returned: a full ticket row per
+      // write was a large share of this pass's egress.
+      await updateById(supabase, T.TICKETS, ticketId, columns, { returning: 'minimal' });
     },
 
     /**
@@ -722,15 +724,37 @@ export function createTicketRecord(supabase, { shopId, transport = REST_TRANSPOR
       );
     },
 
-    /** Tickets with no order number yet. */
-    async findAwaitingOrderNumber({ limit = 500 } = {}) {
-      return selectAll(
-        supabase,
-        T.TICKETS,
-        live({ shopify_order_number: IS_NULL }),
-        COLUMNS.ticketForOrderResolution,
-        { limit }
-      );
+    /**
+     * Tickets with no order number yet, most recently active first so a full
+     * queue never starves new mail behind old UUIDs.
+     *
+     * `changedSince` narrows to rows touched since then (a new message moves
+     * `last_message_at`, hence `updated_at`); `ids` to named tickets. Both are
+     * how the worker's incremental pass avoids re-reading the whole queue.
+     */
+    async findAwaitingOrderNumber({ limit = 500, changedSince, ids } = {}) {
+      const where = live({
+        shopify_order_number: IS_NULL,
+        ...(changedSince ? { updated_at: { operator: 'gte', value: changedSince } } : {})
+      });
+      const options = { limit, order: 'last_message_at.desc.nullslast,id.asc' };
+      if (!ids) {
+        return selectAll(supabase, T.TICKETS, where, COLUMNS.ticketForOrderResolution, options);
+      }
+      const rows = [];
+      for (let i = 0; i < ids.length; i += 100) {
+        const chunk = ids.slice(i, i + 100);
+        rows.push(
+          ...(await selectAll(
+            supabase,
+            T.TICKETS,
+            { ...where, id: { operator: 'in', value: `(${chunk.join(',')})` } },
+            COLUMNS.ticketForOrderResolution,
+            options
+          ))
+        );
+      }
+      return rows;
     },
 
     /**
@@ -922,14 +946,26 @@ export function createTicketRecord(supabase, { shopId, transport = REST_TRANSPOR
      * the per-ticket pick in Postgres; this used to read every inbound body in
      * the shop and keep one per ticket in a Map.
      */
-    async firstInboundByTicket() {
-      const rows = await selectAll(
-        supabase,
-        V.TICKET_FIRST_INBOUND,
-        { shop_id: shopId },
-        'ticket_id,subject,body_text',
-        { order: 'ticket_id.asc' }
-      );
+    async firstInboundByTicket(ticketIds) {
+      // Scoped to the tickets asked about. Reading the view shop-wide sent the
+      // opening body of every ticket ever over the wire on every poll.
+      const chunks = [];
+      if (ticketIds === undefined) {
+        chunks.push({ shop_id: shopId });
+      } else {
+        for (let i = 0; i < ticketIds.length; i += 100) {
+          const ids = ticketIds.slice(i, i + 100);
+          chunks.push({ shop_id: shopId, ticket_id: { operator: 'in', value: `(${ids.join(',')})` } });
+        }
+      }
+      const rows = [];
+      for (const where of chunks) {
+        rows.push(
+          ...(await selectAll(supabase, V.TICKET_FIRST_INBOUND, where, 'ticket_id,subject,body_text', {
+            order: 'ticket_id.asc'
+          }))
+        );
+      }
       return new Map(rows.map((row) => [row.ticket_id, `${row.subject || ''}\n${row.body_text || ''}`]));
     },
 
@@ -1012,15 +1048,23 @@ export function createTicketRecord(supabase, { shopId, transport = REST_TRANSPOR
       // Only threads with a second inbound message are read, found with one
       // grouped query first. Most tickets have one inbound message, and the
       // bodies are the largest thing this database holds.
-      const wanted = new Set(ticketIds);
-      const counts = await selectAll(
-        supabase,
-        V.TICKET_MESSAGE_COUNTS,
-        { shop_id: shopId, inbound_count: { operator: 'gt', value: 1 } },
-        'ticket_id',
-        { order: 'ticket_id.asc' }
-      );
-      const threads = counts.map((row) => row.ticket_id).filter((id) => wanted.has(id));
+      // Asked per chunk of the tickets in hand, not shop-wide.
+      const threads = [];
+      for (let i = 0; i < ticketIds.length; i += 100) {
+        const ids = ticketIds.slice(i, i + 100);
+        const counts = await selectAll(
+          supabase,
+          V.TICKET_MESSAGE_COUNTS,
+          {
+            shop_id: shopId,
+            ticket_id: { operator: 'in', value: `(${ids.join(',')})` },
+            inbound_count: { operator: 'gt', value: 1 }
+          },
+          'ticket_id',
+          { order: 'ticket_id.asc' }
+        );
+        threads.push(...counts.map((row) => row.ticket_id));
+      }
 
       const byTicket = new Map();
       // Chunked so the `in` list stays well inside a URL.

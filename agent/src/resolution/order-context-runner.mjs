@@ -148,7 +148,9 @@ export async function runOrderContext({
     }
   }
 
-  logger?.info?.('order.context', { shopId, ...totals });
+  if (totals.resolved > 0 || totals.order_missing > 0) {
+    logger?.info?.('order.context', { shopId, ...totals });
+  }
   return totals;
 }
 

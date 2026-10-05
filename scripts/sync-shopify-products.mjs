@@ -85,7 +85,8 @@ export async function syncTargetMetaobjects({ args, shopify, supabase, shopId, s
     supabase,
     'shopify_metaobjects',
     dedupeRows(fullMetaobjectRows, (row) => `${row.shop_id}:${row.shopify_metaobject_id}`),
-    'shop_id,shopify_metaobject_id'
+    'shop_id,shopify_metaobject_id',
+    { returning: 'minimal' }
   );
   console.log(
     `Synced ${fullMetaobjectRows.length} metaobjects from ${targetDefinitions.length} target definitions.`
@@ -156,7 +157,8 @@ async function upsertProductPage({ supabase, productRows, metaobjectRows }) {
       supabase,
       'shopify_metaobjects',
       metaobjectRows,
-      'shop_id,shopify_metaobject_id'
+      'shop_id,shopify_metaobject_id',
+      { returning: 'minimal' }
     );
   }
 
@@ -165,7 +167,8 @@ async function upsertProductPage({ supabase, productRows, metaobjectRows }) {
       supabase,
       'products',
       productRows,
-      'shop_id,shopify_product_id'
+      'shop_id,shopify_product_id',
+      { returning: 'minimal' }
     );
   }
 }

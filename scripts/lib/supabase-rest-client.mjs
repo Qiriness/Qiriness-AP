@@ -72,7 +72,8 @@ async function supabaseFetch(url, init, attempt = 1) {
   return response;
 }
 
-export async function supabaseUpsert(client, table, rows, onConflict) {
+export async function supabaseUpsert(client, table, rows, onConflict, { returning } = {}) {
+  const minimal = returning === 'minimal';
   const normalizedRows = normalizeBulkRows(rows);
   const response = await supabaseFetch(
     `${client.baseUrl}/${table}?on_conflict=${encodeURIComponent(onConflict)}`,
@@ -80,13 +81,13 @@ export async function supabaseUpsert(client, table, rows, onConflict) {
       method: 'POST',
       headers: supabaseHeaders(client, {
         'Content-Type': 'application/json',
-        Prefer: 'resolution=merge-duplicates,return=representation'
+        Prefer: `resolution=merge-duplicates,${minimal ? 'return=minimal' : 'return=representation'}`
       }),
       body: JSON.stringify(normalizedRows)
     }
   );
 
-  const payload = await response.json().catch(() => null);
+  const payload = minimal && response.ok ? [] : await response.json().catch(() => null);
   if (!response.ok) {
     const detail = payload?.message || payload?.details || `HTTP ${response.status}`;
     throw new Error(`Supabase upsert into ${table} failed: ${detail}`);
@@ -170,7 +171,9 @@ export async function supabaseSelect(client, table, filters, select = '*', optio
 export async function supabaseSelectAll(client, table, filters, select = '*', options = {}) {
   const order = options.order || 'id.asc';
   const max = options.limit ?? Infinity;
-  const pageSize = options.pageSize || 1000;
+  // Never ask for more than the caller will keep: a limit of 500 used to fetch
+  // a full 1000-row page and throw half of it away.
+  const pageSize = Math.min(options.pageSize || 1000, max);
   const rows = [];
 
   for (let from = 0; rows.length < max; ) {
@@ -256,26 +259,30 @@ export async function supabaseUpdate(client, table, filters, row, { select } = {
   return payload;
 }
 
-export async function supabaseUpdateById(client, table, id, row) {
+// `returning: 'minimal'` asks PostgREST for no body at all. Without it every
+// PATCH downloads the whole row back, which on `tickets` (metadata, context,
+// overrides) is kilobytes per write that most callers never read.
+export async function supabaseUpdateById(client, table, id, row, { returning } = {}) {
   const searchParams = new URLSearchParams({ id: `eq.${id}` });
+  const minimal = returning === 'minimal';
   const response = await supabaseFetch(
     `${client.baseUrl}/${table}?${searchParams.toString()}`,
     {
       method: 'PATCH',
       headers: supabaseHeaders(client, {
         'Content-Type': 'application/json',
-        Prefer: 'return=representation'
+        Prefer: minimal ? 'return=minimal' : 'return=representation'
       }),
       body: JSON.stringify(row)
     }
   );
 
-  const payload = await response.json().catch(() => null);
+  const payload = minimal && response.ok ? null : await response.json().catch(() => null);
   if (!response.ok) {
     const detail = payload?.message || payload?.details || `HTTP ${response.status}`;
     throw new Error(`Supabase update ${table} failed: ${detail}`);
   }
-  return payload[0];
+  return minimal ? undefined : payload[0];
 }
 
 export async function supabaseDeleteWhereIn(client, table, column, values) {

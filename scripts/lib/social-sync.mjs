@@ -602,7 +602,7 @@ function stamp(rows, now) {
 
 async function upsertChunks(supabase, table, rows, onConflict) {
   for (let i = 0; i < rows.length; i += UPSERT_CHUNK) {
-    await supabaseUpsert(supabase, table, rows.slice(i, i + UPSERT_CHUNK), onConflict);
+    await supabaseUpsert(supabase, table, rows.slice(i, i + UPSERT_CHUNK), onConflict, { returning: 'minimal' });
   }
 }
 

@@ -133,7 +133,8 @@ async function upsertPromotionPage({ supabase, promotionRows }) {
     supabase,
     'promotions',
     promotionRows,
-    'shop_id,promotion_key'
+    'shop_id,promotion_key',
+    { returning: 'minimal' }
   );
 }
 

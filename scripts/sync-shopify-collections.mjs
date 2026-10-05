@@ -87,7 +87,7 @@ async function syncCatalogue({ args, shopify, supabase, shopRow, syncedAt }) {
     if (args.dryRun) {
       console.log(`Dry run: page contains ${rows.length} collections.`);
     } else if (rows.length > 0) {
-      await supabaseUpsert(supabase, T.ADVICE_COLLECTIONS, rows, 'shop_id,shopify_collection_id');
+      await supabaseUpsert(supabase, T.ADVICE_COLLECTIONS, rows, 'shop_id,shopify_collection_id', { returning: 'minimal' });
       console.log(`Synced ${total} collections so far.`);
     }
 

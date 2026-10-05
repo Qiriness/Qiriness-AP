@@ -778,7 +778,7 @@ export function createSupabaseMessageStore(supabase) {
     async upsertMessage(row) {
       // `(shop_id, graph_message_id)` is the idempotency key: re-ingesting a
       // delta page rewrites the row rather than adding a second.
-      await supabaseUpsert(supabase, T.TICKET_MESSAGES, [row], 'shop_id,graph_message_id');
+      await supabaseUpsert(supabase, T.TICKET_MESSAGES, [row], 'shop_id,graph_message_id', { returning: 'minimal' });
     }
   };
 }

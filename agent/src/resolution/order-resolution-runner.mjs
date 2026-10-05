@@ -35,6 +35,8 @@ import {
 // decisions; a wrong value there is worse than a null, because null is visibly
 // unknown and wrong is invisibly confident.
 
+const PG_INT_MAX = 2147483647;
+
 export function createOrderResolutionStore(supabase) {
   return {
     /** The shop's marketplaces, from `sales_channels`. */
@@ -69,8 +71,26 @@ export function createOrderResolutionStore(supabase) {
       return { min: range.min_order_number, max: range.max_order_number };
     },
 
+    /**
+     * The references of every order touched since `since`: what an incremental
+     * pass needs to tell which waiting tickets an order change could affect.
+     * Two narrow columns, no customers.
+     */
+    async changedOrderRefs(shopId, since) {
+      return supabaseSelectAll(
+        supabase,
+        T.ORDERS,
+        { shop_id: shopId, updated_at: { operator: 'gte', value: since } },
+        'order_number,tracking_numbers'
+      );
+    },
+
     /** Orders for a set of numbers, plus the customers they belong to. */
-    async loadOrders(shopId, orderNumbers) {
+    async loadOrders(shopId, allNumbers) {
+      // `order_number` is a Postgres integer. A longer « number » (a parcel or
+      // invoice reference, 9600053422 on a live ticket) cannot be an order, and
+      // sending it failed the whole query, and with it the pass, for every ticket.
+      const orderNumbers = allNumbers.filter((n) => Number.isInteger(n) && n > 0 && n <= PG_INT_MAX);
       if (orderNumbers.length === 0) {
         return { byNumber: new Map(), customersById: new Map() };
       }
@@ -213,16 +233,93 @@ export function createOrderResolutionStore(supabase) {
 // rule is in scripts/lib/order-link.mjs; re-exported for this module's callers.
 export { reinvestigationColumns };
 
-export async function runOrderResolution({ store, record, shopId, logger, dryRun = false, onResult } = {}) {
+/**
+ * Memory between passes, for the long-running worker.
+ *
+ * WHY. Until 2026-10-05 every poll re-resolved up to 500 waiting tickets from
+ * scratch, read their bodies, and rewrote every row with a fresh `resolved_at`.
+ * About 3 GB of egress a day, for results that had not changed. The outcome
+ * depends only on the ticket (its messages and requester), the orders its text
+ * names, and the shop's marketplaces. So a pass with this state re-resolves only:
+ *   · tickets whose row changed since the last pass (a new message moves
+ *     `last_message_at`, hence `updated_at`; so does a requester backfill);
+ *   · tickets quoting an order or parcel that changed since the last pass;
+ *   · everything, once a day and after a restart. That refresh catches what is
+ *     not tracked: a customer renamed, the order-number range in a `detail`.
+ * Without state (tools, rehearsal, tests) every call is a full pass, as before.
+ */
+export function createOrderResolutionState({ fullEveryMs = 24 * 60 * 60 * 1000, now = () => Date.now() } = {}) {
+  return { fullEveryMs, now, lastFullAt: null, since: null, marketplaces: null, refsByTicket: new Map() };
+}
+
+// Pass boundaries come from the worker's clock and `updated_at` from the
+// database's. The overlap absorbs skew; a ticket seen twice costs a read, never a write.
+const SINCE_OVERLAP_MS = 2 * 60 * 1000;
+
+/** The ticket ids an order change could affect, from the references each last quoted. */
+function ticketsTouchedBy(changedOrders, refsByTicket) {
+  const numbers = new Set();
+  const tracking = new Set();
+  for (const order of changedOrders) {
+    if (order.order_number != null) numbers.add(Number(order.order_number));
+    for (const parcel of order.tracking_numbers || []) tracking.add(parcel);
+  }
+  const ids = [];
+  for (const [ticketId, refs] of refsByTicket) {
+    if (refs.numbers.some((n) => numbers.has(n)) || refs.tracking.some((t) => tracking.has(t))) {
+      ids.push(ticketId);
+    }
+  }
+  return ids;
+}
+
+/** The stored outcome, minus the timestamp that made every rewrite look new. */
+function resolutionFingerprint(entry) {
+  if (!entry || typeof entry !== 'object') return null;
+  // Sorted, because jsonb hands keys back in its own order, not ours.
+  const { resolved_at: _at, ...rest } = entry;
+  return JSON.stringify(Object.fromEntries(Object.entries(rest).sort(([a], [b]) => a.localeCompare(b))));
+}
+
+async function selectTickets({ store, record, shopId, state }) {
+  if (!state) return { tickets: await record.findAwaitingOrderNumber(), full: true };
+
+  const startedAt = state.now();
+  const marketplaces = JSON.stringify((await store.loadMarketplaces?.(shopId))?.handles ?? []);
+  const full =
+    state.lastFullAt === null ||
+    startedAt - state.lastFullAt >= state.fullEveryMs ||
+    marketplaces !== state.marketplaces;
+  const since = state.since;
+  state.since = new Date(startedAt - SINCE_OVERLAP_MS).toISOString();
+  state.marketplaces = marketplaces;
+
+  if (full) {
+    state.lastFullAt = startedAt;
+    state.refsByTicket.clear();
+    // The WHOLE queue, once a day. Capped at 500 by UUID, the tail was never
+    // reached: measured 2026-10-05, 154 tickets had never been resolved and 36
+    // of them confirm an order (three of those still live).
+    return { tickets: await record.findAwaitingOrderNumber({ limit: null }), full: true };
+  }
+
+  const changed = await record.findAwaitingOrderNumber({ changedSince: since });
+  const changedOrders = (await store.changedOrderRefs?.(shopId, since)) ?? [];
+  const seen = new Set(changed.map((ticket) => ticket.id));
+  const touched = ticketsTouchedBy(changedOrders, state.refsByTicket).filter((id) => !seen.has(id));
+  const affected = touched.length ? await record.findAwaitingOrderNumber({ ids: touched }) : [];
+  return { tickets: [...changed, ...affected], full: false };
+}
+
+export async function runOrderResolution({ store, record, shopId, logger, dryRun = false, onResult, state } = {}) {
   // The tickets and the customer's opening words come from the ticket record
   // (the words through `ticket_first_inbound`, which picks one message per
-  // ticket in Postgres — this used to read every inbound body in the shop and
-  // throw all but one per ticket away). `store` keeps what it genuinely owns:
-  // the orders and the customers behind them.
-  const [tickets, textByTicket] = await Promise.all([
-    record.findAwaitingOrderNumber(),
-    record.firstInboundByTicket()
-  ]);
+  // ticket in Postgres). `store` keeps what it genuinely owns: the orders and
+  // the customers behind them. Bodies are read for the selected tickets only.
+  const { tickets, full } = await selectTickets({ store, record, shopId, state });
+  const textByTicket = tickets.length
+    ? await record.firstInboundByTicket(tickets.map((ticket) => ticket.id))
+    : new Map();
   // THE CUSTOMER'S LATER REPLIES COUNT TOO, their own words only. When we ask
   // « quelle adresse e-mail avez-vous utilisée pour la commande ? » or « quel
   // est votre numéro de commande ? », the answer is message two, and a pass that
@@ -237,8 +334,9 @@ export async function runOrderResolution({ store, record, shopId, logger, dryRun
   // order belongs to the sender or to an address they wrote. A mismatch would
   // name a stranger's order back to the customer.
   const withText = tickets.filter((ticket) => textByTicket.has(ticket.id));
-  const laterByTicket =
-    (await record.laterInboundByTicket?.(withText.map((ticket) => ticket.id))) ?? new Map();
+  const laterByTicket = withText.length
+    ? (await record.laterInboundByTicket?.(withText.map((ticket) => ticket.id))) ?? new Map()
+    : new Map();
   const pending = withText.map((ticket) => ({
     ticket,
     text: textByTicket.get(ticket.id),
@@ -251,8 +349,14 @@ export async function runOrderResolution({ store, record, shopId, logger, dryRun
     [MISMATCH]: 0,
     [NOT_FOUND]: 0,
     [NO_CANDIDATE]: 0,
-    written: 0
+    written: 0,
+    // Re-resolved to exactly what is already stored, so not rewritten.
+    unchanged: 0,
+    full
   };
+  if (pending.length === 0) {
+    return totals;
+  }
 
   // One batched order lookup for the whole pass rather than a query per ticket.
   // Tracking numbers are parsed in the same sweep — the regex is free, and
@@ -275,6 +379,10 @@ export async function runOrderResolution({ store, record, shopId, logger, dryRun
     }
     // Every address the customer wrote, in any message: an address only ever confirms.
     const emailHashes = [...new Set([...messageEmailHashes(text), ...messageEmailHashes(laterText)])];
+    state?.refsByTicket.set(ticket.id, {
+      numbers: [...candidates, ...laterCandidates].map((candidate) => Number(candidate.orderNumber)),
+      tracking: tracking.map((candidate) => candidate.trackingNumber)
+    });
     return { ticket, text, candidates, laterCandidates, tracking, emailHashes };
   });
 
@@ -426,7 +534,19 @@ export async function runOrderResolution({ store, record, shopId, logger, dryRun
     onResult?.({ ticket, resolution });
 
     if (!dryRun) {
-      await record.linkOrder(ticket.id, store.buildResolutionColumns(ticket, resolution));
+      const columns = store.buildResolutionColumns(ticket, resolution);
+      // AN UNCHANGED OUTCOME IS NOT WRITTEN. A confirmed match always is: it
+      // sets the column, and a column cleared since must be set again.
+      const same =
+        !isSafeToWrite(resolution.status) &&
+        columns.metadata?.order_resolution !== undefined &&
+        resolutionFingerprint(columns.metadata.order_resolution) ===
+          resolutionFingerprint(ticket.metadata?.order_resolution);
+      if (same) {
+        totals.unchanged += 1;
+        continue;
+      }
+      await record.linkOrder(ticket.id, columns);
       if (isSafeToWrite(resolution.status)) {
         totals.written += 1;
       }
@@ -435,7 +555,6 @@ export async function runOrderResolution({ store, record, shopId, logger, dryRun
     }
   }
 
-  logger?.info?.('order.resolution', { shopId, ...totals });
   return totals;
 }
 

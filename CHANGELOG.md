@@ -10,6 +10,21 @@ Three sibling files carry the other halves, and this one deliberately does not d
 
 ---
 
+## Egress, phase 1: order resolution re-reads only what changed (2026-10-05)
+
+- **Order resolution keeps state between polls** (`createOrderResolutionState`). It re-resolves tickets touched since the last pass, plus tickets quoting an order that changed. The whole queue is redone once a day and after a restart. An unchanged outcome is no longer written. Rule and measurements: DECISIONS.md, « Resolution re-reads only what changed ».
+- **`firstInboundByTicket(ids)` and `laterInboundByTicket(ids)` are id-scoped.** The shop-wide reads of every opening body and of `ticket_message_counts` are gone.
+- **The REST client takes `returning: 'minimal'`** on `supabaseUpdateById` and `supabaseUpsert`. It is used by `linkOrder`, the message upsert, spam audit, `case_current`, the nightly customers / orders / products / promotions / collections / content syncs, the order webhook, the Klaviyo and social syncs, and knowledge chunks. None of them read the echo.
+- **`supabaseSelectAll` never asks for a bigger page than its `limit`.** A limit of 500 used to fetch 1,000 rows and drop half.
+- **Idle polls log nothing**: `ingest.poll*`, `categorise.pass`, `customer.resolution(.pass)`, `order.context(.pass)`, `order.resolution.pass`, `forward.pass`.
+- **Fixed:**
+  - the queue starved past the first 500 UUIDs. 154 tickets were never resolved, and 36 now confirm an order;
+  - a 10-digit « order number » failed the whole `orders` query.
+- **Proven:**
+  - Tests: agent suite 2,120 pass, root suite 4,915 pass, web typecheck clean.
+  - Live dry run on 488 tickets: 303 would be skipped as unchanged. A full pass reads 3.1 MB.
+  - **Not yet measured after deploy.** Steady-state polls should read only touched tickets. Re-measure `n_tup_upd` on `tickets` over 10 minutes.
+
 ## Closed tickets in order of closure (2026-10-05)
 
 - The Closed section lists the earliest closure at the top, by `closed_at` (or `resolved_at` for a resolved ticket).

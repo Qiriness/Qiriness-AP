@@ -40,8 +40,8 @@ function recordingTransport(answers = {}) {
       calls.push({ kind: 'update', table, filters, columns, options });
       return Promise.resolve([{ id: filters.id ?? 'updated' }]);
     },
-    updateById(_client, table, id, columns) {
-      calls.push({ kind: 'updateById', table, id, columns });
+    updateById(_client, table, id, columns, options) {
+      calls.push({ kind: 'updateById', table, id, columns, options });
       return Promise.resolve({ id, ...columns });
     }
   };
@@ -353,6 +353,44 @@ test('firstInboundByTicket reads the view, one row per ticket', async () => {
   assert.equal(byTicket.get('t1'), 'Commande\n#4854');
   // A missing subject must not produce the string "null" in front of the body.
   assert.equal(byTicket.get('t2'), '\nbonjour');
+});
+
+test('firstInboundByTicket given ids reads only those tickets, in chunks', async () => {
+  // Shop-wide, this sent the opening body of every ticket ever on every poll.
+  const { transport, record } = build();
+  const ids = Array.from({ length: 150 }, (_, i) => `t${i}`);
+  await record.firstInboundByTicket(ids);
+
+  const reads = transport.calls.filter((c) => c.table === V.TICKET_FIRST_INBOUND);
+  assert.equal(reads.length, 2);
+  assert.equal(reads[0].filters.ticket_id.operator, 'in');
+  assert.ok(reads[0].filters.ticket_id.value.includes('t99'));
+  assert.ok(reads[1].filters.ticket_id.value.includes('t149'));
+});
+
+test('laterInboundByTicket asks about the tickets in hand, never the whole shop', async () => {
+  const { transport, record } = build();
+  await record.laterInboundByTicket(['t1', 't2']);
+  const counts = transport.calls.find((c) => c.table === V.TICKET_MESSAGE_COUNTS);
+  assert.equal(counts.filters.ticket_id.value, '(t1,t2)');
+
+  const empty = build();
+  await empty.record.laterInboundByTicket([]);
+  assert.equal(empty.transport.calls.length, 0, 'nothing to ask, nothing asked');
+});
+
+test('findAwaitingOrderNumber narrows to rows changed since, newest activity first', async () => {
+  const { transport, record } = build();
+  await record.findAwaitingOrderNumber({ changedSince: '2026-10-05T10:00:00Z' });
+  const call = transport.calls.at(-1);
+  assert.deepEqual(call.filters.updated_at, { operator: 'gte', value: '2026-10-05T10:00:00Z' });
+  assert.match(call.options.order, /^last_message_at\.desc/);
+});
+
+test('linkOrder does not download the row it wrote', async () => {
+  const { transport, record } = build();
+  await record.linkOrder('t1', { metadata: {} });
+  assert.deepEqual(transport.calls.at(-1).options, { returning: 'minimal' });
 });
 
 test('inboundMessages defaults to the categoriser\'s columns and never ships a vector by accident', async () => {

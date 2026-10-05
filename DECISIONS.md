@@ -358,6 +358,29 @@ Resolution now also reads every later inbound message. Only the customer's own w
 
 Measured over 492 unlinked tickets: **5 become confirmed** (4 by the sender's own address, 1 by an address in a later message) and nothing else moves.
 
+### Resolution re-reads only what changed, and writes only a new outcome (2026-10-05)
+
+**Found by the egress bill.** Every 60 s poll took up to 500 unlinked tickets, read the opening body of **every ticket in the shop**, read every later inbound body on the pending threads, and PATCHed all ~490 with `return=representation`. Each row came back whole, and every write was "new" only because of a fresh `resolved_at`. That came to about 3 GB a day, nearly all of it for results that had not moved. It also made `tickets.updated_at` meaningless.
+
+The outcome depends on the ticket (its messages and requester), the orders its text names, and the shop's marketplaces. So the worker keeps `createOrderResolutionState()` in memory and re-resolves only:
+
+- tickets whose row changed since the last pass (`updated_at`, which a new message moves through `last_message_at`);
+- tickets that quoted an order number or parcel belonging to an order changed since then (`changedOrderRefs`, two narrow columns);
+- **the whole queue** once a day, after a restart, and when the marketplaces change. This catches what is not tracked: a customer renamed, the order-number range quoted in a `detail`.
+
+The rules that go with it:
+
+- **An unchanged outcome is not written.** The stored entry is compared with `resolved_at` ignored and keys sorted, because jsonb reorders them.
+- **A confirmed match is always written**, so a column cleared since is set again, exactly as before.
+- **Bodies are read for the selected tickets only**, by id.
+- **Writes return nothing** (`returning: 'minimal'`).
+- **Without state** (tools, rehearsal, tests), every call is a full pass, as before.
+
+**Two bugs this surfaced.**
+
+- **The 500 cap starved the tail.** With no sort the queue was `id.asc`, so tickets past the first 500 UUIDs were never resolved. A dry run on 2026-10-05 found 154 never-resolved tickets, 36 of which confirm an order. Most are closed. Two are open (`e4bcf204`, `d33fda0b`) and one is `awaiting_human` (`ee493c1a`). One more `awaiting_human` (`cd82ff5a`) had a stale mismatch that now confirms through the marketplace rule. The queue is now newest-activity first, and the daily pass is uncapped.
+- **A number longer than `integer` failed the pass for everyone.** `9600053422`, on a live ticket, made the `orders` query error out. `loadOrders` now never sends a number that cannot be an order number. It reached the batch only once the order changed. Under `id.asc` it had sat in the starved tail.
+
 ### `order_identity` names the situation, not just "unconfirmed" (2026-10-02)
 
 `none` covered every unconfirmed ticket, so the 15 approved rules on it all asked for the number **and** the address. That included the ticket where the customer had just quoted #6668 from another mailbox. The resolver knew which case it was; nothing below it could see it.
