@@ -14,7 +14,8 @@
  * - embeddings: the stored vectors were made with one model, and a query
  *   embedded with another compares against them meaninglessly;
  * - the stages that are off-switched by an empty env var keep that switch in
- *   the env — a row only ever names a model, never "off".
+ *   the env — a row only ever names a model, never "off" (situation,
+ *   decompose, casework, closure).
  */
 
 import { supabaseDelete, supabaseSelect, supabaseUpsert } from './supabase-rest-client.mjs';
@@ -33,6 +34,8 @@ export const AGENT_MODEL_KEYS = Object.freeze({
   investigate: 'investigatorModel',
   draft: 'draftingModel',
   case_link: 'caseLinkerModel',
+  casework: 'caseworkModel',
+  closure: 'closureModel',
   chat: null
 });
 

@@ -18,6 +18,13 @@ import { CASE_MANAGED_STATUSES } from './case-status.mjs';
 // snoozed again until something new happens, which is what keeps a case from
 // bouncing between the queue and the Snoozed tab. The index on
 // (ticket_id, trigger_message_id) holds the same line in the database.
+//
+// ONE OTHER EDGE: A PERSON SETTLING A CHECK. « Mark done » / « No longer
+// needed » on the check that kept our sent reply from snoozing (b2789896: a
+// check of ours opened by mistake) is the moment the case starts waiting. It
+// snoozes on our last message, as the send would have, so the same index still
+// allows one automatic snooze per message of ours: a woken or unsnoozed case is
+// not snoozed again by a later action.
 
 /** Who we may be waiting on, as `case_current.next_actor` names them. */
 const WAITING_ON = ['customer', 'colleague', 'partner'];
@@ -31,6 +38,7 @@ const WAITING_ON = ['customer', 'colleague', 'partner'];
  * @param parameters the shop's parameter map (the delays)
  * @param lastCustomerAt when the customer last wrote: a person's status holds until then
  * @param keepOpenLevels levels only a person handles (4)
+ * @param settledByPerson this fold follows a person settling a check (the dashboard's re-fold)
  * @returns `{ action: 'snooze', waitingFor, wakeAt, triggerMessageId }` | `{ action: 'retarget', snoozeId, waitingFor, wakeAt }`
  *   | `{ action: 'wake', reason, detail? }` | `{ action: null, reason }`
  */
@@ -43,6 +51,7 @@ export function snoozeDecision({
   parameters = new Map(),
   lastCustomerAt = null,
   keepOpenLevels = [],
+  settledByPerson = false,
   now = new Date()
 }) {
   if (!ticket || !state) return { action: null, reason: 'no_case' };
@@ -74,7 +83,8 @@ export function snoozeDecision({
 
   const ourNewMessage =
     previous !== null && state.last_actor === 'support' && Boolean(state.as_of_message_id) && state.as_of_message_id !== previous.as_of_message_id;
-  if (!ourNewMessage) return { action: null, reason: 'no_new_message_of_ours' };
+  const settledAfterOurMessage = settledByPerson && state.last_actor === 'support' && Boolean(state.as_of_message_id);
+  if (!ourNewMessage && !settledAfterOurMessage) return { action: null, reason: 'no_new_message_of_ours' };
   if (alreadySnoozedOn) return { action: null, reason: 'already_snoozed_on_message' };
 
   const blocked = whyNotWaiting({ ticket, state, lastCustomerAt, keepOpenLevels });

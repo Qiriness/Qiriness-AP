@@ -36,12 +36,15 @@ test('61 creates the same tables the baseline does, column for column', () => {
     'case_links_method_check',
     'case_links_candidates_array_check',
     'case_links_shape_check',
-    'tickets_case_link_state_check',
-    'agent_models_agent_check'
+    'tickets_case_link_state_check'
   ]) {
     assert.ok(checkClause(SQL, name), name);
     assert.equal(squash(checkClause(SQL, name)), squash(checkClause(SUPPORT, name)), name);
   }
+  // 61 widened the agent list to include case_link; 74 widens it again.
+  const agents61 = literalsIn(checkClause(SQL, 'agent_models_agent_check'));
+  const agentsBaseline = literalsIn(checkClause(SUPPORT, 'agent_models_agent_check'));
+  for (const agent of agents61) assert.ok(agentsBaseline.includes(agent), agent);
   // 61 widened the pass list to include case_link; later migrations (64) widen
   // it again, so the baseline must hold every pass 61 allowed, not exactly them.
   const passes61 = literalsIn(checkClause(SQL, 'llm_usage_pass_check'));

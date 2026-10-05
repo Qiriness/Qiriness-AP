@@ -241,6 +241,13 @@ export function normaliseCaseReading(
   for (const row of Array.isArray(answer?.obligations_opened) ? answer.obligations_opened : []) {
     const key = `${row?.owner}|${row?.need}`;
     if (!owners.includes(row?.owner) || !NEED_KEYS.includes(row?.need) || openKeys.has(key)) continue;
+    // OUR QUESTION TO THE CUSTOMER IS NEVER A CHECK OF OURS. The prompt says so
+    // and the model still does it: on b2789896 our « pourriez-vous nous préciser
+    // le code ? » came back as a support `promotion_validity` check, which kept
+    // the case in the queue and stopped the snooze. A check of ours quoted only
+    // by questions is that question. Ours only: a question to Deret is their
+    // check, and a customer's question is a request to us.
+    if (actor === 'support' && row.owner === 'support' && onlyQuestions(row.quote)) continue;
     openKeys.add(key);
     opened.push({ owner: row.owner, need: row.need, quote: text(row.quote) });
   }
@@ -338,6 +345,12 @@ export async function readCase({
 
 function text(value) {
   return typeof value === 'string' ? value.trim() : '';
+}
+
+/** Every sentence of the quote is a question (« Nous vérifions. Pouvez-vous… ? » is not). */
+function onlyQuestions(quote) {
+  const sentences = text(quote).match(/[^.!?]+[.!?]*/g)?.map((s) => s.trim()).filter((s) => /\p{L}/u.test(s)) ?? [];
+  return sentences.length > 0 && sentences.every((s) => s.endsWith('?'));
 }
 
 function array(value) {

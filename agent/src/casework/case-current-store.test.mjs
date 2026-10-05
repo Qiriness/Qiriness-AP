@@ -219,6 +219,21 @@ test('with AGENT_AUTO_SNOOZE, our sent reply snoozes the ticket until the custom
   assert.equal(store.written[0].wake_at, '2026-10-07T09:00:00.000Z');
 });
 
+test('a re-fold after a person settled a check snoozes on our reply the previous fold had already read', async () => {
+  const store = snoozeStore({ version: 1, as_of_message_id: 'c', next_actor: 'customer' }, answered);
+  store.inputs = async () => ({
+    messages: answered,
+    caseFiles: [{ trigger_message_id: 'b', verdict: 'needs_customer_input', missing: [{ field: 'order_number' }] }],
+    readings: [],
+    previous: { version: 1, as_of_message_id: 'c', next_actor: 'customer' }
+  });
+  const fold = (settledByPerson) =>
+    runFold({ store, shopId: 's', actorFor: () => 'customer', autoSnooze: true, settledByPerson, now: () => new Date('2026-09-30T10:00:00Z') });
+  assert.equal((await fold(false)).snoozed, 0);
+  assert.equal((await fold(true)).snoozed, 1);
+  assert.equal(store.written[0].trigger_message_id, 'c');
+});
+
 test('without the switch the fold never snoozes', async () => {
   const store = snoozeStore({ version: 1, as_of_message_id: 'b', next_actor: 'support' }, answered);
   const totals = await runFold({ store, shopId: 's', actorFor: () => 'customer' });

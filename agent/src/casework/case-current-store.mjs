@@ -154,6 +154,7 @@ export function createCaseCurrentStore(supabase, { shopId }) {
  * @param statusMap next_actor → statuses (`parseCaseStatusMap`); null leaves statuses alone
  * @param keepOpenLevels levels the fold never resolves
  * @param autoSnooze snooze a case our sent reply left waiting, wake one that came back (AGENT_AUTO_SNOOZE)
+ * @param settledByPerson the dashboard re-folds after a person settled a check: that also may snooze (snooze-rule.mjs)
  */
 export async function runFold({
   store,
@@ -165,6 +166,7 @@ export async function runFold({
   statusMap = null,
   keepOpenLevels = [],
   autoSnooze = false,
+  settledByPerson = false,
   // (ticketIds) => void, once, with every ticket folded this run: the worker
   // recomputes the reply target of their cases (61_cases.sql).
   onFolded = null,
@@ -247,6 +249,7 @@ export async function runFold({
           parameters,
           lastCustomerAt,
           keepOpenLevels,
+          settledByPerson,
           now: new Date(at)
         });
         if (decision.action === 'snooze') {

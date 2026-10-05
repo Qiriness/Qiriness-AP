@@ -75,6 +75,30 @@ test('a check we owe keeps the case in the queue, whoever else we wait on', () =
   assert.equal(decide({ state: settled }).action, 'snooze');
 });
 
+test('a person settling the check that kept our sent reply in the queue snoozes it, once per message of ours', () => {
+  // b2789896: the fold had already read our reply; « Mark done » re-folds with
+  // the same newest message, which alone is not a trigger.
+  const sameMessage = { ...BEFORE, as_of_message_id: 'm-ours', next_actor: 'customer' };
+  const settled = { ...SENT, obligations: [{ id: 'o-1', owner: 'support', status: 'fulfilled', opened_by: 'm-ours' }] };
+  assert.equal(decide({ state: settled, previous: sameMessage }).reason, 'no_new_message_of_ours');
+  assert.deepEqual(decide({ state: settled, previous: sameMessage, settledByPerson: true }), {
+    action: 'snooze',
+    waitingFor: 'customer',
+    wakeAt: new Date('2026-10-07T09:55:00Z'),
+    triggerMessageId: 'm-ours'
+  });
+  // Still one automatic snooze per message of ours: a woken or unsnoozed case stays.
+  assert.equal(decide({ state: settled, previous: sameMessage, settledByPerson: true, alreadySnoozedOn: true }).reason, 'already_snoozed_on_message');
+  // Another check of ours still open keeps it in the queue.
+  const stillOwed = { ...settled, obligations: [...settled.obligations, { id: 'o-2', owner: 'support', status: 'pending', opened_by: 'm-ours' }] };
+  assert.equal(decide({ state: stillOwed, previous: sameMessage, settledByPerson: true }).reason, 'support_owes_a_check');
+  // The customer spoke last: settling a check is not waiting on them.
+  const theirs = { ...settled, last_actor: 'customer', as_of_message_id: 'm-customer', next_actor: 'support' };
+  assert.equal(decide({ state: theirs, previous: { ...BEFORE }, settledByPerson: true }).reason, 'no_new_message_of_ours');
+  // Settled after the deadline would have passed: nothing.
+  assert.equal(decide({ state: settled, previous: sameMessage, settledByPerson: true, now: new Date('2026-10-08T00:00:00Z') }).reason, 'deadline_passed');
+});
+
 test("our turn, or nobody's, is not waiting", () => {
   assert.equal(decide({ state: { ...SENT, next_actor: 'support' } }).reason, 'not_waiting');
   assert.equal(decide({ state: { ...SENT, next_actor: 'nobody' } }).reason, 'not_waiting');

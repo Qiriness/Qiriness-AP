@@ -10,6 +10,26 @@ Three sibling files carry the other halves, and this one deliberately does not d
 
 ---
 
+## Settling the check that blocked a snooze now snoozes (2026-10-05)
+
+- « Mark done » / « No longer needed » re-folds the ticket. If our message is the last one, the case now only waits on the customer, a colleague or a partner, and that message never auto-snoozed, it snoozes now, with that message's deadline (`settledByPerson` through `refoldTicket` → `runFold` → `snoozeDecision`).
+- Still one automatic snooze per message of ours. A woken or unsnoozed case is not snoozed again by a later action.
+- **Checked first on `b2789896`:** replaying the rule on its stored state gives `support_owes_a_check`. With that check removed, or marked done, it gives a snooze on the customer until 8 Oct 12:32.
+- **Requires `AGENT_AUTO_SNOOZE=true` on the dashboard**, which runs this re-fold, as well as on the worker.
+- **Proven:** rule and fold unit tests, web typecheck. Root suite 4,826 pass, agent suite 2,113. Not run live.
+
+## The Case Manager and the closure reader can be given a model in Settings (2026-10-05)
+
+- Settings → Agent settings now lists **Case Manager** (`casework`) and **Closure reader** (`closure`): their calls, cost and model, and a model picker. Before, both ran on `gpt-4o-mini` (the env default) and did not appear on the page at all.
+- Migration 74 widens `agent_models_agent_check`. **Applied 2026-10-05.** `AGENT_MODEL_KEYS` maps both onto `caseworkModel` / `closureModel`. The worker picks up a choice on its next poll. An empty env var still turns either pass off.
+- **Proven:** migration tests (74, and 53/61 now point at 74 as the latest step), web typecheck. Root suite 4,824 pass, agent suite 2,111. Not checked in the browser.
+
+## Our question to the customer no longer opens a check of ours (2026-10-05)
+
+- **Found on `b2789896`:** our sent reply asked for the promo code and the account e-mail. The Case Manager put both in `asked`, and also opened a support `promotion_validity` check that quoted the same question. The fold still said « waiting on the customer », but the snooze rule saw a check of ours open (`support_owes_a_check`), so the ticket stayed in the queue with `AGENT_AUTO_SNOOZE` on.
+- **Now** `normaliseCaseReading` drops a support check, opened by our own message, whose quote is made only of questions. A declarative sentence in the quote (« Nous vérifions… ») keeps it. A partner's check and a customer's request are left alone.
+- **Proven:** unit test with the live quote. Agent suite 2,111 pass. **Not re-applied to `b2789896`:** its stored reading still holds the check, and the snooze is edge-triggered on the send, so re-folding will not snooze it. It needs a manual snooze.
+
 ## P-15 gives the newsletter code instead of asking for it (2026-10-05)
 
 - In a situation whose rules offer one code, a customer who names no code is taken to mean it. That code is looked up, and never asked for. The case is answerable and the reply gives it with its Shopify conditions.

@@ -1978,7 +1978,7 @@ create table public.agent_models (
   updated_at timestamptz not null default now(),
   primary key (shop_id, agent),
   constraint agent_models_agent_check check (
-    agent in ('spam', 'categorise', 'situation', 'decompose', 'investigate', 'draft', 'chat', 'case_link')
+    agent in ('spam', 'categorise', 'situation', 'decompose', 'investigate', 'draft', 'chat', 'case_link', 'casework', 'closure')
   ),
   constraint agent_models_model_check check (model ~ '^[A-Za-z0-9][A-Za-z0-9._:-]{0,99}$')
 );

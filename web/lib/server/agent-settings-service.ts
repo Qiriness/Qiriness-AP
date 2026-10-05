@@ -76,6 +76,8 @@ const AGENTS = [
   { id: "decompose", name: "Decomposer", job: "Splits an email into its separate requests", envVar: "AGENT_DECOMPOSER_MODEL", configKey: "decomposerModel" },
   { id: "investigate", name: "Investigator", job: "Gathers the facts a reply needs, using tools", envVar: "AGENT_INVESTIGATOR_MODEL", configKey: "investigatorModel" },
   { id: "case_link", name: "Case linker", job: "Decides whether a new thread continues one of a few candidate cases (off unless CASE_LINKER_ENABLED=true)", envVar: "AGENT_CASE_LINK_MODEL", configKey: "caseLinkerModel" },
+  { id: "casework", name: "Case Manager", job: "Reads our replies and colleagues' or partners' messages: what was asked, which checks opened or cleared", envVar: "AGENT_CASEWORK_MODEL", configKey: "caseworkModel" },
+  { id: "closure", name: "Closure reader", job: "Decides whether a customer's message closes the request, when nothing else is owed", envVar: "AGENT_CLOSURE_MODEL", configKey: "closureModel" },
   { id: "draft", name: "Drafting", job: "Writes the reply a person reviews", envVar: "AGENT_DRAFTING_MODEL", configKey: "draftingModel" },
   { id: "embed", name: "Embeddings", job: "Turns mail and articles into vectors for search", envVar: "EMBEDDING_MODEL", configKey: "embeddingModel" },
 ] as const;

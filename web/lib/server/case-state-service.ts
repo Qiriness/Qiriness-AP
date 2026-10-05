@@ -108,7 +108,8 @@ export async function actOnObligation(
     { shop_id: shopId, ticket_id: ticketId, obligation_id: obligationId, action, acted_by: actedBy },
   ]);
 
-  await refoldTicket(shopId, ticketId);
+  // Settling the check that kept the case in the queue may snooze it now.
+  await refoldTicket(shopId, ticketId, { settledByPerson: true });
   return getCaseState(shopId, ticketId);
 }
 
@@ -117,7 +118,11 @@ export async function actOnObligation(
  * the page shows the result of a person's action without waiting for the
  * worker's next poll. A raised version stales the drafts written before it.
  */
-export async function refoldTicket(shopId: string, ticketId: string): Promise<{ versionsRaised: number; draftsStaled: number }> {
+export async function refoldTicket(
+  shopId: string,
+  ticketId: string,
+  { settledByPerson = false }: { settledByPerson?: boolean } = {}
+): Promise<{ versionsRaised: number; draftsStaled: number }> {
   const supabase = getSupabaseClient();
   // Loosely typed: TypeScript reads these JS signatures off their `null`
   // defaults and would refuse a real list or directory.
@@ -137,5 +142,6 @@ export async function refoldTicket(shopId: string, ticketId: string): Promise<{ 
     // A snoozed case a person's action hands back to us wakes here, as in the
     // worker; this re-fold would otherwise be the one that saw the change.
     autoSnooze: config.autoSnooze,
+    settledByPerson,
   });
 }

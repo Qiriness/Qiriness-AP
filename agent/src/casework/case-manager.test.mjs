@@ -107,6 +107,23 @@ test('a commitment status that is not `done` is pending, never assumed done', ()
   assert.equal(reading.commitments[0].status, 'pending');
 });
 
+test('our question to the customer is dropped as a check of ours, a promise next to it is kept', () => {
+  // b2789896: the asking sentence came back as a support check and blocked the snooze.
+  const question =
+    'Pour vérifier l’offre concernée et son application, pourriez-vous nous préciser : - Pouvez-vous nous indiquer le code promotionnel que vous avez utilisé ? - Sous quelle adresse e-mail votre compte est-il enregistré ?';
+  const opened = (quote, owner = 'support', actor = 'support') =>
+    normaliseCaseReading(
+      { ...ANSWER, obligations_opened: [{ owner, need: 'promotion_validity', quote }] },
+      { actor, owners: ['support', 'partner'] }
+    ).obligationsOpened;
+
+  assert.deepEqual(opened(question), []);
+  assert.equal(opened('Nous vérifions ce code. Pouvez-vous nous donner votre e-mail ?').length, 1);
+  assert.equal(opened('Pouvez-vous vérifier ce colis ?', 'partner').length, 1);
+  assert.equal(opened('Pouvez-vous vérifier ce code ?', 'support', 'customer').length, 1);
+  assert.equal(opened('').length, 1);
+});
+
 // --- one message, one call ----------------------------------------------------
 
 test('the call is booked against the casework pass', async () => {
