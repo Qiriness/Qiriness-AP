@@ -48,3 +48,12 @@ test('who may owe a check follows the directory: no partner on file, no partner 
   // A brand whose 3PL counts as the team: logistics is a colleague, no partner.
   assert.deepEqual(obligationOwners({ labels: ['logistics'], actorByLabel: { logistics: 'colleague' } }), ['support', 'colleague']);
 });
+
+test('an automatic reply is automated whoever sent it; our own mail stays ours', () => {
+  const ooo = { direction: 'inbound', from_email: 'marie@example.com', raw_graph_payload: { autoReply: 'subject' } };
+  assert.equal(actorOf(ooo), 'automated');
+  assert.equal(actorOf({ ...ooo, direction: 'outbound' }), 'support');
+  assert.equal(actorOf({ direction: 'inbound', actor: 'automated' }), 'automated');
+  assert.equal(actorsModule.ACTORS.includes('automated'), false, 'never a case actor');
+  assert.throws(() => parseActorMap('internal:automated'), /not an actor/);
+});

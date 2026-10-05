@@ -1,6 +1,7 @@
 import { htmlToText, normalizePlainText } from '../../../scripts/lib/html-to-text.mjs';
 import { hashIdentifier } from '../../../scripts/lib/compliance-audit.mjs';
 
+import { autoReplySignal } from './auto-reply.mjs';
 import { isNotificationSender, parseContactForm } from './contact-form.mjs';
 
 // Pure mapping from a raw Microsoft Graph message to the row fields for
@@ -72,6 +73,12 @@ export function mapGraphMessage(raw, { direction, mailbox } = {}) {
   const fromEmail = form?.email || envelopeEmail;
   const fromName = form?.name || envelopeName;
 
+  // AN OUT-OF-OFFICE ANSWERING OUR REPLY is inbound mail nobody wrote. It is
+  // kept (it is part of the thread) but filed as the `automated` actor, so it
+  // neither reopens the ticket nor moves the case (auto-reply.mjs). Inbound
+  // only: nothing we send is an auto-reply to us.
+  const autoReply = isInbound ? autoReplySignal({ headers: raw?.internetMessageHeaders, subject: raw?.subject }) : null;
+
   const message = {
     graph_message_id: raw?.id || null,
     graph_conversation_id: conversationId,
@@ -98,7 +105,7 @@ export function mapGraphMessage(raw, { direction, mailbox } = {}) {
     attachments: null,
     received_at: receivedAt,
     sent_at: sentAt,
-    raw_graph_payload: sanitizeGraphPayload(raw, form)
+    raw_graph_payload: sanitizeGraphPayload(raw, form, autoReply)
   };
 
   const conversation = {
@@ -207,7 +214,7 @@ function parseMessageIds(value) {
   return ids ? [...new Set(ids)] : [];
 }
 
-function sanitizeGraphPayload(raw, form = null) {
+function sanitizeGraphPayload(raw, form = null, autoReply = null) {
   if (!raw || typeof raw !== 'object') {
     return {};
   }
@@ -223,6 +230,9 @@ function sanitizeGraphPayload(raw, form = null) {
           }
         }
       : {}),
+    // Which signal marked it (`header:x-apple-action`, `subject`…): the
+    // evidence a person reads when asking why a message was set aside.
+    ...(autoReply ? { autoReply } : {}),
     id: raw.id ?? null,
     conversationId: raw.conversationId ?? null,
     internetMessageId: raw.internetMessageId ?? null,

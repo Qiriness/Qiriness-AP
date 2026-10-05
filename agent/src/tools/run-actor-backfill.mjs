@@ -7,7 +7,8 @@ import {
 import { loadAgentConfig } from '../config.mjs';
 import { resolveShopId } from '../lib/shop.mjs';
 import { createSenderDirectoryStore } from '../ingestion/sender-directory.mjs';
-import { actorOf } from '../casework/actors.mjs';
+import { AUTOMATED, actorOf } from '../casework/actors.mjs';
+import { autoReplySignal } from '../ingestion/auto-reply.mjs';
 
 // Fills `ticket_messages.actor` on rows stored before ingestion wrote it
 // (migration 41). The same rule ingestion applies: outbound is support, an
@@ -19,6 +20,11 @@ import { actorOf } from '../casework/actors.mjs';
 // ONLY EMPTY ROWS BY DEFAULT: an actor is a fact about when the mail arrived,
 // like sender_label, so a stored value is left alone. `--recompute` rewrites
 // every row, for after a deliberate change to the directory or the map.
+//
+// THE ONE CORRECTION A DEFAULT RUN MAKES: an automatic reply filed as someone
+// (before 2026-10-05 every out-of-office was `customer`). Not a relabel but a
+// mis-filing, so it is fixed without `--recompute`. Rows from before the
+// headers were kept are recognised by their subject only.
 
 const dryRun = process.argv.includes('--dry-run');
 const recompute = process.argv.includes('--recompute');
@@ -34,10 +40,21 @@ async function main() {
   const shopId = await resolveShopId(supabase, config.shopDomain);
   const directory = await createSenderDirectoryStore(supabase).load(shopId, { supportMailbox: config.graph.mailbox });
 
-  const rows = await supabaseSelectAll(supabase, 'ticket_messages', { shop_id: shopId }, 'id,direction,actor,from_email');
+  const rows = await supabaseSelectAll(
+    supabase,
+    'ticket_messages',
+    { shop_id: shopId },
+    'id,direction,actor,from_email,subject,auto_reply:raw_graph_payload->>autoReply'
+  );
   const changes = rows
-    .map((row) => ({ ...row, wanted: actorOf(row, directory, config.actorByLabel) }))
-    .filter((row) => (recompute ? row.actor !== row.wanted : !row.actor));
+    .map((row) => {
+      const autoReply = row.auto_reply || (row.direction === 'inbound' ? autoReplySignal({ subject: row.subject }) : null);
+      const message = autoReply ? { ...row, raw_graph_payload: { autoReply } } : row;
+      return { ...row, wanted: actorOf(message, directory, config.actorByLabel) };
+    })
+    .filter((row) =>
+      recompute ? row.actor !== row.wanted : !row.actor || (row.wanted === AUTOMATED && row.actor !== AUTOMATED)
+    );
   const byActor = changes.reduce((acc, row) => ((acc[row.wanted] = (acc[row.wanted] || 0) + 1), acc), {});
 
   console.log(`\n${dryRun ? 'DRY RUN — nothing will be written.' : 'Writing actors.'}`);

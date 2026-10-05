@@ -2,6 +2,7 @@ import { supabaseSelectAll, supabaseUpdateById, supabaseUpsert } from '../../../
 import { T } from '../../../scripts/lib/tables.mjs';
 import { hashIdentifier } from '../../../scripts/lib/compliance-audit.mjs';
 
+import { AUTOMATED, isAutoReply } from '../casework/actors.mjs';
 import { requesterFor } from './requester-repair.mjs';
 import { createSnoozeRecord, wakeReasonForActor } from '../../../scripts/lib/snooze-record.mjs';
 
@@ -164,7 +165,9 @@ export async function writeIngestedMessages(
     // New only (a re-delivery is not arrival), and inbound only: our own reply
     // is the fold's to judge. The pipeline then reads it like any other message.
     // A failed wake never fails ingestion; the deadline sweep is the backstop.
-    const wakeReason = isNewMessage && message.direction === 'inbound' ? wakeReasonForActor(message.actor ?? 'customer') : null;
+    // An automatic reply wakes nothing: it is the customer's mail client, not the customer.
+    const wakeActor = isAutoReply(message) ? AUTOMATED : message.actor ?? 'customer';
+    const wakeReason = isNewMessage && message.direction === 'inbound' ? wakeReasonForActor(wakeActor) : null;
     if (wakeReason && typeof store.wakeSnooze === 'function') {
       try {
         if (await store.wakeSnooze(shopId, ticketId, wakeReason)) {
@@ -412,7 +415,10 @@ async function resolveTicket(
     // customer writing back is what reopened 128 settled threads and re-billed
     // the categoriser for 374. `isNewMessage` is the whole guard; see the note
     // at the top of this file, and DECISIONS.md § Re-delivery is not arrival.
-    if (item.message?.direction === 'inbound' && isNewMessage) {
+    // NOT AN AUTOMATIC REPLY. An out-of-office answering ours is inbound and new,
+    // and it says nothing about the case: requeueing it re-billed both passes
+    // and reopening it undid the wait our reply had just set (auto-reply.mjs).
+    if (item.message?.direction === 'inbound' && isNewMessage && !isAutoReply(item.message)) {
       patch.needs_categorisation = true;
 
       // A customer writing back reopens the ticket. Auto-close (see

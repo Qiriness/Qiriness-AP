@@ -10,6 +10,14 @@ Three sibling files carry the other halves, and this one deliberately does not d
 
 ---
 
+## An out-of-office no longer reopens a case (2026-10-05)
+
+- **Ingestion recognises automatic replies** (`ingestion/auto-reply.mjs`): RFC 3834 and vendor headers (iCloud's `X-Apple-Action: VACATION` included), with the subject as the fallback. They are stored as the new `automated` actor, and the signal is kept in `raw_graph_payload.autoReply`.
+- **An automatic reply no longer:** requeues or reopens the ticket, wakes a snooze, counts in the fold, or becomes the trigger of the investigation, the categoriser or the Case Manager.
+- **Migration `73_automated_actor.sql`** widens `ticket_messages_actor_check`. **Applied 2026-10-05.**
+- **Backfilled:** 5 stored auto-replies re-filed (`actors:backfill`), all checked by hand. A refold of their 5 tickets moved `35e0afd9` from `open` to `resolved` (`next_actor` nobody after our P-15 reply). `055fea38`, a thread made only of a colleague's out-of-office, now folds to no actor and stays `open`.
+- **Proven:** unit tests (detector, mapper, actor, fold, writer, migration 73). Agent suite 2,095 pass; root suite 4,785 pass, and its 3 failures (61/62 « copied from 04 ») fail the same way without this change. The headers were read off the real message via Graph. **The live worker has not yet ingested a new auto-reply with this code.**
+
 ## A refund recorded in Shopify is told to the customer (2026-10-05)
 
 - **The change router finds refunds nobody has reported.** It looks at tickets in the answer set of the rule marked `notify_on = 'refund_recorded'`, in any status but spam or forwarded. A refund created after our last message on the case, and within `refund_notice_window_days` of the ticket's last message, records `fact_drift.notice`. A closed or resolved ticket is reopened to `awaiting_human`.

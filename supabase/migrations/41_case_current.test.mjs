@@ -13,9 +13,11 @@ test('41 creates the same case_current the baseline does, column for column', ()
   assert.deepEqual(columnsIn(SQL, 'case_current'), columnsIn(SUPPORT, 'case_current'));
 });
 
+// `ticket_messages_actor_check` is superseded by 73, which adds `automated`;
+// the baseline is compared against 73 in 73_automated_actor.test.mjs. 41's own
+// clause is still checked against ACTORS below.
 test('every constraint is stated identically in both files', () => {
   for (const name of [
-    'ticket_messages_actor_check',
     'case_current_last_actor_check',
     'case_current_next_actor_check',
     'case_current_pending_inputs_array_check',

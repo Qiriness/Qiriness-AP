@@ -2,6 +2,7 @@ import { supabaseSelect } from '../../../scripts/lib/supabase-rest-client.mjs';
 import { COLUMNS, T } from '../../../scripts/lib/tables.mjs';
 import { activeSituationOverride, overridesOf } from '../../../scripts/lib/ticket-overrides.mjs';
 
+import { isAutoReply } from './actors.mjs';
 import { readCase } from './case-manager.mjs';
 import { applyReading } from './case-fold.mjs';
 import { evidenceReuseFrom, orderChangedSince, pendingAfter, situationFor, situationPlan } from './case-manager-rules.mjs';
@@ -297,14 +298,17 @@ export function createCaseworkStore(supabase, { caseStateRecord }) {
         const investigation = latestInvestigation.get(ticket.id);
         if (!investigation) continue;
 
+        // The newest inbound message that is not an automatic reply: an
+        // out-of-office landing in the same poll as the customer's message would
+        // otherwise be the one read. A few rows, because they come in ones.
         const inbound = await supabaseSelect(
           supabase,
           T.TICKET_MESSAGES,
           { ticket_id: ticket.id, direction: 'inbound', deleted_at: { operator: 'is', value: 'null' } },
-          COLUMNS.messageForDrafting,
-          { order: 'received_at.desc', limit: 1 }
+          `${COLUMNS.messageForDrafting},actor`,
+          { order: 'received_at.desc', limit: 5 }
         );
-        const message = inbound[0];
+        const message = inbound.find((row) => !isAutoReply(row));
         // The message the last case file was already written from is not new.
         if (!message || message.id === investigation.trigger_message_id) continue;
 

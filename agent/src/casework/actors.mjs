@@ -19,6 +19,20 @@
 export const ACTORS = ['customer', 'support', 'colleague', 'partner'];
 export const NEXT_ACTORS = [...ACTORS, 'nobody'];
 
+// AN AUTOMATIC REPLY (an out-of-office answering ours) is a MESSAGE actor and
+// never a case actor: nobody wrote it, so it owes nothing, answers nothing and
+// is never who acts next. Stored so the thread shows it; skipped by everything
+// that asks « who spoke last » (DECISIONS.md § An automatic reply is nobody).
+// Not settable from AGENT_ACTOR_BY_LABEL: it is what the message is, not who
+// the sender is.
+export const AUTOMATED = 'automated';
+export const MESSAGE_ACTORS = [...ACTORS, AUTOMATED];
+
+/** Whether ingestion marked this message as an automatic reply (auto-reply.mjs). */
+export function isAutoReply(message) {
+  return message?.actor === AUTOMATED || Boolean(message?.raw_graph_payload?.autoReply);
+}
+
 /** The map decided for the first deployment (plan Q5), used when none is set. */
 export const DEFAULT_ACTOR_BY_LABEL = Object.freeze({
   internal: 'colleague',
@@ -69,6 +83,7 @@ export function obligationOwners({ labels = [], actorByLabel = DEFAULT_ACTOR_BY_
  */
 export function actorOf(message, directory = null, actorByLabel = DEFAULT_ACTOR_BY_LABEL) {
   if (message?.direction === 'outbound') return 'support';
+  if (isAutoReply(message)) return AUTOMATED;
   const label = directory?.lookup?.(message?.from_email)?.label ?? null;
   if (!label) return 'customer';
   return actorByLabel[label] ?? 'customer';

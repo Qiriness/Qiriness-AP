@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import { versionMaterial } from '../../../scripts/lib/ticket-overrides.mjs';
 
 import { workingDaysBetween } from '../lib/working-days.mjs';
+import { AUTOMATED } from './actors.mjs';
 import { advanceSequences, sequencesOf, startSequences } from './rule-checks.mjs';
 
 // The current state of a case, folded from what the ticket holds. Stage 4 of
@@ -248,7 +249,10 @@ export function foldCase({
   // (change-router.mjs). Only what moved and against which case file count.
   factDrift = null
 } = {}) {
-  const thread = orderedThread(messages);
+  // AN AUTOMATIC REPLY IS NOT PART OF THE CASE. It stays in the thread a person
+  // reads, but here it would be « the customer spoke last », and a reading or a
+  // case file written on it describes nothing the customer said.
+  const thread = orderedThread(messages).filter((message) => actorFor(message) !== AUTOMATED);
   const position = new Map(thread.map((message, index) => [message.id, index]));
   const at = (row) => position.get(row?.trigger_message_id);
   const inThread = (rows) => rows.filter((row) => at(row) !== undefined).sort((a, b) => at(a) - at(b));

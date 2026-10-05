@@ -2,6 +2,7 @@ import { ratchetLevel } from '../../../scripts/lib/support-taxonomy.mjs';
 import { attemptsSoFar } from '../../../scripts/lib/ticket-record.mjs';
 import { keepOverrides, overridesOf } from '../../../scripts/lib/ticket-overrides.mjs';
 
+import { isAutoReply } from '../casework/actors.mjs';
 import { normaliseCategorisation } from './categorise.mjs';
 
 // Batch pass that categorises tickets ingestion has created, and RE-categorises
@@ -64,7 +65,8 @@ export async function runCategorisation({
     // messages (7 on 2026-10-02, the longest 30 messages) the « latest » it
     // labelled was the 10th: a re-categorisation woken by a new reply never
     // saw that reply.
-    const inbound = await record.inboundMessages(ticket.id);
+    // Not an out-of-office: it is not the customer's latest word.
+    const inbound = (await record.inboundMessages(ticket.id)).filter((message) => !isAutoReply(message));
     const messages = inbound.length > 2 ? [inbound[0], inbound[inbound.length - 1]] : inbound;
     if (messages.length === 0) {
       // Nothing from the customer (a thread where we hold only our own replies,

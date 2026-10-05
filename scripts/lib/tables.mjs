@@ -411,8 +411,11 @@ export const COLUMNS = {
   messageForThread:
     'id,direction,actor,from_name,from_email,to_emails,cc_emails,subject,body_text,has_attachments,received_at,sent_at',
 
-  /** The categoriser reads the customer's words and nothing else. */
-  messageForCategorisation: 'subject,body_text,received_at',
+  /**
+   * The categoriser reads the customer's words and nothing else. `actor` so an
+   * automatic reply (an out-of-office) is not read as the latest of them.
+   */
+  messageForCategorisation: 'subject,body_text,received_at,actor',
 
   /**
    * What the detail panel needs to say what the customer attached.
@@ -517,7 +520,7 @@ export const COLUMNS = {
    * sweep and the clock. Only the TEXT handed to the model widened.
    */
   threadForInvestigation:
-    'id,subject,body_text,direction,received_at,sent_at,from_email,embedding,has_attachments,attachments',
+    'id,subject,body_text,direction,actor,received_at,sent_at,from_email,embedding,has_attachments,attachments',
 
   /**
    * The previous reading of a thread, as the casework pass builds the next one.

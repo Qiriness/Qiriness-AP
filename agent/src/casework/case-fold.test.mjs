@@ -266,3 +266,13 @@ test('a drift with only order states hashes exactly as before the notice existed
   assert.deepEqual(driftMaterial(drift), { changed: [['order_state', 'not_dispatched', 'dispatched']], case_file_at: '2026-09-28T15:17:59Z' });
   assert.equal(driftMaterial({ notice: { refund_ids: [] } }), null);
 });
+
+test('an out-of-office after our reply is not the customer speaking: the case stays with them', () => {
+  const caseFile = { trigger_message_id: 'a', verdict: 'needs_customer_input', missing: [{ field: 'promotion_code' }] };
+  const caseFileOnOoo = { trigger_message_id: 'c', verdict: 'answerable', missing: [] };
+  const messages = [msg('a', 'customer', 1), msg('b', 'support', 2), msg('c', 'automated', 3, 'inbound')];
+  const folded = foldCase({ messages, caseFiles: [caseFile, caseFileOnOoo] });
+  assert.equal(folded.last_actor, 'support');
+  assert.equal(folded.next_actor, 'customer');
+  assert.equal(folded.as_of_message_id, 'b');
+});

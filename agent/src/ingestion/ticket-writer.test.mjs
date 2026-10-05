@@ -1070,3 +1070,41 @@ test('a new customer message wakes the snoozes of every thread of its case', asy
     ['ticket-b', 'customer_message']
   ]);
 });
+
+// ----------------------------------------------------------- automatic replies
+
+function autoReply(item) {
+  item.message.raw_graph_payload = { autoReply: 'header:x-apple-action' };
+  return item;
+}
+
+test('an out-of-office neither re-queues, reopens nor wakes the ticket our reply parked', async () => {
+  // 35e0afd9, 2026-10-05: our reply at 10:37:19, the customer's vacation
+  // responder at 10:37:30, and the ticket was back in the open queue.
+  const store = snoozedStore('m1');
+  await writeIngestedMessages(store, store, 'shop-1', [mappedMessage({ id: 'm1', conversationId: 'c1', at: '2026-10-01T08:23:39Z' })]);
+  const ticket = store.tickets.get('shop-1|c1');
+  Object.assign(ticket, { status: 'awaiting_customer', needs_categorisation: false });
+
+  const actorFor = (m) => (m.raw_graph_payload?.autoReply ? 'automated' : 'customer');
+  const counts = await writeIngestedMessages(store, store, 'shop-1', [
+    autoReply(mappedMessage({ id: 'm2', conversationId: 'c1', at: '2026-10-05T10:37:30Z', subject: 'Auto reply: RE: x' }))
+  ], { actorFor });
+
+  assert.equal(ticket.status, 'awaiting_customer');
+  assert.equal(ticket.needs_categorisation, false);
+  assert.deepEqual(store.woken, []);
+  assert.equal(counts.snoozesWoken, 0);
+  assert.equal(store.messages.get('shop-1|m2').actor, 'automated', 'kept, and filed as nobody');
+  assert.equal(ticket.last_message_at, '2026-10-05T10:37:30Z', 'still part of the thread');
+});
+
+test('without an actor wired, the payload mark alone keeps the wake and the reopen away', async () => {
+  const store = snoozedStore('m1');
+  await writeIngestedMessages(store, store, 'shop-1', [mappedMessage({ id: 'm1', conversationId: 'c1', at: '2026-10-01T08:00:00Z' })]);
+  const ticket = store.tickets.get('shop-1|c1');
+  ticket.status = 'closed';
+  await writeIngestedMessages(store, store, 'shop-1', [autoReply(mappedMessage({ id: 'm2', conversationId: 'c1', at: '2026-10-05T10:00:00Z' }))]);
+  assert.equal(ticket.status, 'closed');
+  assert.deepEqual(store.woken, []);
+});

@@ -2342,6 +2342,21 @@ Asked for: a ticket nobody can act on yet should leave the queue and come back o
 
 **Measured before switching it on (dry run, 2026-09-30).** Of 1,008 tickets, 13 end with our reply on a status the fold manages. With a 5-day customer delay, 2 would have snoozed on the customer: `59869d23` and `27aa78bb`, both after we asked for the purchase channel. Only `59869d23` would still be snoozed today. `2aa6604e` (« Produit défectueux ? ») stays: a `product_property` check is ours. The rest are owed by nobody (7) or still have a pass pending (4).
 
+### An automatic reply is nobody (2026-10-05)
+
+**Found live on `35e0afd9`.** Our P-15 reply went out at 10:37:19. The customer's iCloud vacation responder answered at 10:37:30 (« je suis actuellement en congés jusqu'au 19 octobre »), and ingestion filed it as the customer. The ticket reopened, `next_actor` moved to support, both the categoriser and the investigation re-ran on the out-of-office, and the snooze our reply should have set would have been woken by it.
+
+- **Ingestion recognises it** (`ingestion/auto-reply.mjs`, pure), inbound only, headers first: `Auto-Submitted: auto-replied`, `Precedence: auto_reply`, `X-Autoreply`, `X-Autorespond`, `X-Apple-Action: VACATION`. The subject is the fallback (« Auto reply: », « Réponse automatique », « Abwesenheitsnotiz »…). **The header alone was not enough:** measured on that message, iCloud sends no `Auto-Submitted` at all. The matched signal is kept in `raw_graph_payload.autoReply`, so a person can see why a message was set aside.
+- **Replies only, never notifications.** `Auto-Submitted: auto-generated` and `Precedence: bulk` also mark machine mail, but that is a Shopify contact form, a carrier update or a newsletter, which open or feed a case.
+- **Stored, as the `automated` actor** (migration 73). It stays in the thread a person reads. It is a message actor, never a case actor: not in `ACTORS`, never `last_actor` / `next_actor`, never read by the Case Manager, and not settable from `AGENT_ACTOR_BY_LABEL`, because it is what the message is, not who the sender is.
+- **What it no longer does:**
+  - raise `needs_categorisation` or reopen the ticket;
+  - wake a snooze;
+  - count in the fold (it is filtered out before « who spoke last », and a case file or reading keyed to it drops out with it);
+  - become the investigation's trigger, the categoriser's latest message or the Case Manager's newest inbound message.
+- **History:** `actors:backfill` re-files stored auto-replies without `--recompute`, by subject, because the headers were never kept. On 2026-10-05: 5 of 2,369 messages, all checked by hand (1 customer, 4 colleagues).
+- **Known gap:** an auto-reply that opens a NEW thread (answering mail we hold no thread for) still creates a ticket. None seen so far.
+
 ### Tickets close themselves after 28 days of silence
 
 Last pass of every poll, so it sees the timestamps that poll just advanced. Without it `status` carried no information at all — every one of the 565 tickets read `open`, including threads last touched seven months ago.
@@ -3922,7 +3937,7 @@ Articles, Fulfilment, Payment on the left; Tickets, Customer, Destination, Tags 
 
 **The gap, on a real ticket.** `75419781` (#6886): our last reply on 2026-09-07, the ticket closed (`next_actor = nobody`), then a partial refund (24.43 €) recorded in Shopify on 2026-09-25. Nobody told the customer. The change router could not catch it: it acts only when we owe the next step, and never on a closed ticket. "Completed" here means **recorded in Shopify** (a refund record on the order), as the owner defined it.
 
-**A message we send unasked, so the router's gates do not apply.** A separate check (`noticeDue`, `change-router.mjs`) runs first in the `route` stage, on tickets in any status but `spam` / `forwarded`. A refund counts when it was created after the ticket's first message (one from before is not news to this case), after our last message on the case (we have not told them since), and within `refund_notice_window_days` of the ticket's last message (60, decided with the owner). The same refunds are never noticed twice; a later one is. One notice per case, on the thread written last. "Informed" is exactly « a message of ours went out after the refund ».
+**A message we send unasked, so the router's gates do not apply.** A separate check (`noticeDue`, `change-router.mjs`) runs first in the `route` stage, on tickets in any status but `spam` / `forwarded`. A refund counts when it was created after the ticket's first message (one from before is not news to this case), after our last message on the case (we have not told them since), and within `refund_notice_window_days` of the ticket's last message (45, set by the owner on 2026-10-05, replacing the 60 first discussed). The same refunds are never noticed twice; a later one is. One notice per case, on the thread written last. "Informed" is exactly « a message of ours went out after the refund ».
 
 **Which rule and which tickets is data.** `support_answers.notify_on = 'refund_recorded'` marks the template (migration 72). The owner chose `remboursement_deja_parti` for its structure. The rule's answer set is the scope: a ticket qualifies when its category or second subject maps to that set (`answerSetFor`). Unset parameter or no marked rule: nothing happens. Nothing in code names the rule, the set or the category.
 

@@ -625,7 +625,8 @@ create table public.ticket_messages (
   -- is mapped through sender_directory and AGENT_ACTOR_BY_LABEL
   -- (agent/src/casework/actors.mjs). Stored at arrival like sender_label, so
   -- relabelling the directory never rewrites history. Null on a row written
-  -- before the column; `actors:backfill` fills it.
+  -- before the column; `actors:backfill` fills it. `automated` is an automatic
+  -- reply (an out-of-office): kept in the thread, never a case actor (73).
   actor text,
   from_email text,
   from_name text,
@@ -663,7 +664,7 @@ create table public.ticket_messages (
     direction in ('inbound', 'outbound')
   ),
   constraint ticket_messages_actor_check check (
-    actor is null or actor in ('customer', 'support', 'colleague', 'partner')
+    actor is null or actor in ('customer', 'support', 'colleague', 'partner', 'automated')
   ),
   constraint ticket_messages_raw_payload_object_check check (
     jsonb_typeof(raw_graph_payload) = 'object'

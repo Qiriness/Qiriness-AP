@@ -15,6 +15,7 @@ import { ENABLED_SUBJECTS, answerSetFor, isInvestigable, isTradeSender } from '.
 import { summarisePhotoEvidence } from './photo-evidence.mjs';
 import { caseDeltaFrom } from './case-delta.mjs';
 import { orderIdentitySituation } from '../resolution/order-identity.mjs';
+import { isAutoReply } from '../casework/actors.mjs';
 
 // The batch pass that investigates categorised tickets, mirroring
 // `categorise-runner.mjs` in every structural respect — because the problems are
@@ -188,8 +189,11 @@ export async function runInvestigation({
     // degrades to exactly the behaviour it had before it could see our replies.
     // The strict test would empty the set instead and skip the ticket, which is
     // a customer's mail disappearing to fix a column.
+    // An automatic reply is never the trigger: a case file keyed to an
+    // out-of-office would describe « je suis en congés » as the customer's need.
     const messages = conversation.filter(
-      (message) => message.direction !== 'outbound' && (!message.ticket_id || message.ticket_id === ticket.id)
+      (message) =>
+        message.direction !== 'outbound' && !isAutoReply(message) && (!message.ticket_id || message.ticket_id === ticket.id)
     );
     if (messages.length === 0) {
       if (!dryRun) {

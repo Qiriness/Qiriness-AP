@@ -337,3 +337,15 @@ test('a genuine Shopify notification is still parsed', () => {
   assert.equal(conversation.requester_name, 'Delphine CADORET');
   assert.ok(message.raw_graph_payload.contactForm);
 });
+
+test('an inbound out-of-office is marked with the signal that found it; nothing we send is', () => {
+  const ooo = {
+    ...sampleMessage,
+    subject: 'Auto reply: RE: Where is my order?',
+    internetMessageHeaders: [{ name: 'X-Apple-Action', value: 'VACATION' }]
+  };
+  assert.equal(mapGraphMessage(ooo).message.raw_graph_payload.autoReply, 'header:x-apple-action');
+  assert.equal(mapGraphMessage({ ...sampleMessage, subject: 'Réponse automatique : RE: commande' }).message.raw_graph_payload.autoReply, 'subject');
+  assert.equal('autoReply' in mapGraphMessage(sampleMessage).message.raw_graph_payload, false);
+  assert.equal('autoReply' in mapGraphMessage(ooo, { direction: 'outbound' }).message.raw_graph_payload, false);
+});
