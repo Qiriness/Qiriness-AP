@@ -12,6 +12,7 @@ import { createSupabaseClient, supabaseSelect } from "../../../scripts/lib/supab
 import { T } from "../../../scripts/lib/tables.mjs";
 import { days, toParameterMap } from "../../../scripts/lib/parameters.mjs";
 import {
+  CLOSED_TICKET_STATUSES,
   FALLBACK_PARAMETER,
   WAITING_FOR,
   createSnoozeRecord,
@@ -119,8 +120,12 @@ export async function snoozeTicket(
   if (!(WAITING_FOR as readonly string[]).includes(waitingFor)) {
     throw new KnowledgeValidationError(REFUSALS.bad_waiting_for);
   }
-  const tickets = await supabaseSelect(supabase, T.TICKETS, { id: ticketId, shop_id: shopId }, "id,deleted_at", { limit: 1 });
+  const tickets = await supabaseSelect(supabase, T.TICKETS, { id: ticketId, shop_id: shopId }, "id,status,deleted_at", { limit: 1 });
   if (!tickets[0] || tickets[0].deleted_at) throw new KnowledgeNotFoundError(`Ticket not found: ${ticketId}`);
+  // Closure takes precedence: a finished ticket is not waiting for anything.
+  if ((CLOSED_TICKET_STATUSES as readonly string[]).includes(tickets[0].status)) {
+    throw new KnowledgeValidationError("This ticket is closed. Reopen it before snoozing it.");
+  }
 
   const now = new Date();
   let wakeAt: Date | string | null = request.until ?? null;
@@ -150,6 +155,16 @@ export async function snoozeTicket(
     throw new KnowledgeValidationError("This ticket is already snoozed. Wake it first to change the snooze.");
   }
   return mapSnooze(snooze as SnoozeRowShape);
+}
+
+/**
+ * A ticket was closed or resolved: its snooze ends, as `resolved`. CLOSURE
+ * TAKES PRECEDENCE OVER A SNOOZE, so the ticket neither comes back at the
+ * deadline nor hides again if someone reopens it (snooze-record.mjs).
+ */
+export async function endSnoozeOnClose(shopId: string, ticketId: string, closedBy: string | null): Promise<void> {
+  const record = createSnoozeRecord(getSupabaseClient(), { shopId });
+  await record.wake(ticketId, "resolved", { wokenBy: closedBy });
 }
 
 /** A person wakes a ticket now. Returns the wake, or null when it was not snoozed. */

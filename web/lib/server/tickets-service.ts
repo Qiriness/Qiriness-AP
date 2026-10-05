@@ -60,7 +60,7 @@ import { createOrderContextStore } from "../../../agent/src/resolution/order-con
 import { isAnonymousMarketplaceBuyer } from "../../../agent/src/resolution/order-verification.mjs";
 import { KnowledgeNotFoundError, KnowledgeValidationError } from "./knowledge-errors";
 import { loadTicketPriority } from "./ticket-priority-service";
-import { NO_SNOOZE, readSnoozeFacts } from "./snooze-service";
+import { NO_SNOOZE, endSnoozeOnClose, readSnoozeFacts } from "./snooze-service";
 import { NO_FORWARDING, readForwardingFacts, type ForwardingFacts } from "./forwarding-service";
 import type { SnoozeFacts } from "./snooze-service";
 import { getCaseState, refoldTicket } from "./case-state-service";
@@ -1312,7 +1312,9 @@ function recipientRole(email: string, directory: any): string | null {
 export async function setTicketStatus(
   shopId: string,
   ticketId: string,
-  status: "open" | "resolved" | "closed"
+  status: "open" | "resolved" | "closed",
+  // The person's user id, recorded on the snooze a closure ends.
+  changedBy: string | null = null
 ): Promise<TicketListItem> {
   // The record owns which columns a status change touches, and reads the row
   // back from `ticket_queue` — the SAME projection the list rendered. That is
@@ -1324,6 +1326,11 @@ export async function setTicketStatus(
   ]);
   if (!row) {
     throw new KnowledgeNotFoundError(`Ticket not found: ${ticketId}`);
+  }
+  // Closure takes precedence over a snooze. Before the snooze read below, so
+  // the row returned to the screen no longer carries it.
+  if (status !== "open") {
+    await endSnoozeOnClose(shopId, ticketId, changedBy);
   }
 
   const [priority, snoozes, forwarding] = await Promise.all([loadTicketPriority(shopId, [row]), readSnoozeFacts(shopId), readForwardingFacts(shopId)]);

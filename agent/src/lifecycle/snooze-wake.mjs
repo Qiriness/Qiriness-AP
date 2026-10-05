@@ -7,6 +7,10 @@
 // returns with « deadline » as the reason and a person decides (chase, close,
 // or snooze again). New information wakes a ticket elsewhere, through the
 // pipeline: new mail at ingestion, a case that came back to us in the fold.
+//
+// A CLOSED TICKET DOES NOT COME BACK. Closing ends the snooze where the ticket
+// is closed (dashboard, fold); this is the backstop for one closed some other
+// way: its due snooze ends as `resolved`, never as « snooze time reached ».
 
 /**
  * @param snoozes the snooze record (scripts/lib/snooze-record.mjs)
@@ -16,11 +20,13 @@ export async function runWakeDue({ snoozes, shopId, logger, now = new Date(), li
   const totals = { due: 0, woken: 0, failed: 0 };
   const due = await snoozes.due({ now, limit });
   totals.due = due.length;
+  const closed = due.length > 0 && snoozes.closedAmong ? await snoozes.closedAmong(due.map((row) => row.ticket_id)) : new Set();
   for (const row of due) {
     try {
       // Conditional on the snooze still being open: a message that woke it
       // since the read keeps its own reason.
-      if (await snoozes.wake(row.ticket_id, 'deadline', { wokenBy: 'agent', at: now })) totals.woken += 1;
+      const reason = closed.has(row.ticket_id) ? 'resolved' : 'deadline';
+      if (await snoozes.wake(row.ticket_id, reason, { wokenBy: 'agent', at: now })) totals.woken += 1;
     } catch (error) {
       totals.failed += 1;
       logger?.warn?.('lifecycle.snooze_wake_failed', { shopId, ticketId: row.ticket_id, message: error.message });

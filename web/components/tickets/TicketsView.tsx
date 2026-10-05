@@ -1380,7 +1380,7 @@ function TicketDetailWorkspace({
         </div>
       </div>
 
-      {ticket.snooze && <SnoozeBanner snooze={ticket.snooze} />}
+      {ticket.snooze && !isClosed(ticket) && <SnoozeBanner snooze={ticket.snooze} />}
       {ticket.forwarding && <ForwardingBanner forwarding={ticket.forwarding} />}
 
       {detail?.results?.action && (

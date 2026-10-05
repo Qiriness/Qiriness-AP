@@ -48,6 +48,14 @@ export const FALLBACK_PARAMETER = Object.freeze({
   partner: 'partner_check_overdue_days'
 });
 
+/**
+ * A ticket in one of these statuses is finished, and CLOSURE TAKES PRECEDENCE
+ * OVER A SNOOZE: closing a snoozed ticket ends its snooze (reason `resolved`),
+ * so it neither comes back at the deadline as « snooze time reached » nor hides
+ * again if someone reopens it. Mirrors the dashboard's CLOSED_STATUSES.
+ */
+export const CLOSED_TICKET_STATUSES = Object.freeze(['resolved', 'closed']);
+
 /** The longest a person may snooze a ticket for. Past that it is not waiting, it is forgotten. */
 export const MAX_SNOOZE_DAYS = 60;
 
@@ -235,6 +243,23 @@ export function createSnoozeRecord(supabase, { shopId, transport = REST_TRANSPOR
         SNOOZE_COLUMNS,
         { order: 'woke_at.desc' }
       );
+    },
+
+    /** Which of these tickets are closed (CLOSED_TICKET_STATUSES): the sweep ends their snooze as settled. */
+    async closedAmong(ticketIds = []) {
+      const ids = [...new Set(ticketIds.filter(Boolean))];
+      if (ids.length === 0) return new Set();
+      const rows = await select(
+        supabase,
+        T.TICKETS,
+        {
+          shop_id: shopId,
+          id: { operator: 'in', value: `(${ids.join(',')})` },
+          status: { operator: 'in', value: `(${CLOSED_TICKET_STATUSES.join(',')})` }
+        },
+        'id'
+      );
+      return new Set(rows.map((row) => row.id));
     },
 
     /** Whether the fold already snoozed this ticket on this message of ours. */

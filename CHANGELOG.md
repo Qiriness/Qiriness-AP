@@ -10,6 +10,14 @@ Three sibling files carry the other halves, and this one deliberately does not d
 
 ---
 
+## Closing a snoozed ticket ends its snooze (2026-10-05)
+
+- **Closure takes precedence.** A ticket moved to `resolved` / `closed` has its open snooze ended (`resolved`), whether a person closed it in the dashboard (recorded with their id) or the fold resolved it, with or without `AGENT_AUTO_SNOOZE`.
+- **Backstop:** the deadline sweep ends a due snooze on a closed ticket as `resolved` instead of « snooze time reached ».
+- **In the dashboard:** a closed ticket cannot be snoozed, and its row and page show no snooze chip or banner.
+- **Applied to the one existing case:** `35e0afd9` (resolved, with a manual snooze until 8 Oct). Its snooze was ended.
+- **Proven:** unit tests (sweep, fold, record). Agent suite 2,098 pass; root suite 4,789 pass with the same 3 known failures in 61/62; web `tsc` clean. **Not clicked through in the dashboard.**
+
 ## An out-of-office no longer reopens a case (2026-10-05)
 
 - **Ingestion recognises automatic replies** (`ingestion/auto-reply.mjs`): RFC 3834 and vendor headers (iCloud's `X-Apple-Action: VACATION` included), with the subject as the fallback. They are stored as the new `automated` actor, and the signal is kept in `raw_graph_payload.autoReply`.

@@ -136,3 +136,16 @@ test('waking a ticket that is not snoozed is a no-op, not an error', async () =>
   const record = createSnoozeRecord({}, { shopId: 'shop-1', transport: recorder({ updated: [] }).transport });
   assert.equal(await record.wake('t1', 'deadline'), null);
 });
+
+test('the sweep asks which due tickets are closed, in one shop-scoped read', async () => {
+  const rec = recorder({ selectRows: [{ id: 't2' }] });
+  const record = createSnoozeRecord({}, { shopId: 'shop-1', transport: rec.transport });
+  assert.deepEqual([...(await record.closedAmong(['t1', 't2', 't2', null]))], ['t2']);
+  assert.deepEqual(rec.calls[0].filters, {
+    shop_id: 'shop-1',
+    id: { operator: 'in', value: '(t1,t2)' },
+    status: { operator: 'in', value: '(resolved,closed)' }
+  });
+  assert.deepEqual([...(await record.closedAmong([]))], []);
+  assert.equal(rec.calls.length, 1, 'no read for nothing due');
+});

@@ -37,3 +37,12 @@ test('a snoozed ticket is not closed for silence', () => {
   assert.equal(shouldAutoClose(stale, { now: NOW }), true);
   assert.equal(shouldAutoClose(stale, { now: NOW, snoozed: true }), false);
 });
+
+test('a snooze on a ticket closed meanwhile ends as settled, never as « snooze time reached »', async () => {
+  // 35e0afd9, 2026-10-05: resolved at 10:56 with a person's snooze still open until 8 Oct.
+  const snoozes = fakeSnoozes([{ ticket_id: 'closed' }, { ticket_id: 'waiting' }]);
+  snoozes.closedAmong = async (ids) => new Set(ids.filter((id) => id === 'closed'));
+  const totals = await runWakeDue({ snoozes, shopId: 's', now: NOW });
+  assert.deepEqual(totals, { due: 2, woken: 2, failed: 0 });
+  assert.deepEqual(snoozes.woken.map((w) => [w.ticketId, w.reason]), [['closed', 'resolved'], ['waiting', 'deadline']]);
+});

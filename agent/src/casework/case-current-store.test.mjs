@@ -253,3 +253,24 @@ test('a snoozed case the fold now reads as waiting on someone else has its snooz
   assert.equal(store.retargeted[0].waitingFor, 'customer');
   assert.equal(store.retargeted[0].wakeAt.toISOString(), '2026-10-07T09:00:00.000Z');
 });
+
+test('a fold that closes a snoozed ticket ends its snooze, with automatic snoozing off', async () => {
+  const store = statusStore({ id: 't1', status: 'awaiting_customer', metadata: {} });
+  store.woken = [];
+  store.snoozes = { wake: async (ticketId, reason, options) => { store.woken.push({ ticketId, reason, ...options }); return { id: 's1' }; } };
+  const totals = await runFold({
+    store, shopId: 's', actorFor: () => 'customer', statusMap: { nobody: ['resolved'] }, autoSnooze: false,
+    now: () => new Date('2026-10-05T10:56:00Z')
+  });
+  assert.equal(totals.statusesMoved, 1);
+  assert.equal(totals.woken, 1);
+  assert.deepEqual(store.woken, [{ ticketId: 't1', reason: 'resolved', wokenBy: 'agent', at: new Date('2026-10-05T10:56:00Z') }]);
+});
+
+test('a fold that moves a ticket to a waiting status leaves its snooze alone', async () => {
+  const store = statusStore({ id: 't1', status: 'open', metadata: {} });
+  store.woken = [];
+  store.snoozes = { wake: async (ticketId, reason) => { store.woken.push({ ticketId, reason }); return { id: 's1' }; } };
+  await runFold({ store, shopId: 's', actorFor: () => 'customer', statusMap: { nobody: ['awaiting_customer'] }, autoSnooze: false });
+  assert.deepEqual(store.woken, []);
+});

@@ -3,7 +3,7 @@ import { T } from '../../../scripts/lib/tables.mjs';
 import { days, toParameterMap } from '../../../scripts/lib/parameters.mjs';
 import { createTicketRecord } from '../../../scripts/lib/ticket-record.mjs';
 import { createDraftRecord } from '../../../scripts/lib/draft-record.mjs';
-import { createSnoozeRecord, snoozeRow } from '../../../scripts/lib/snooze-record.mjs';
+import { CLOSED_TICKET_STATUSES, createSnoozeRecord, snoozeRow } from '../../../scripts/lib/snooze-record.mjs';
 
 import { foldCase, nextVersion } from './case-fold.mjs';
 import { caseStatusRecord, statusFromCase } from './case-status.mjs';
@@ -221,6 +221,15 @@ export async function runFold({
             totals.statusesMoved += 1;
             logger?.info?.('fold.status_moved', { ticketId, from: ticket.status, to: status, nextActor: state.next_actor });
             ticket = { ...ticket, status };
+            // CLOSURE TAKES PRECEDENCE OVER A SNOOZE, a person's included, and
+            // whether or not automatic snoozing is on: a settled case is not
+            // waiting for anything (snooze-record.mjs, CLOSED_TICKET_STATUSES).
+            if (CLOSED_TICKET_STATUSES.includes(status) && store.snoozes?.wake) {
+              if (await store.snoozes.wake(ticketId, 'resolved', { wokenBy: 'agent', at: new Date(at) })) {
+                totals.woken += 1;
+                logger?.info?.('fold.woken', { ticketId, reason: 'resolved', detail: 'closed', nextActor: state.next_actor });
+              }
+            }
           }
         }
       }

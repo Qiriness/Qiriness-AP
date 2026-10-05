@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import { getSession } from "@/lib/server/auth";
 import { getShopId } from "@/lib/server/knowledge-service";
 import { getTicketDetail, setTicketStatus } from "@/lib/server/tickets-service";
 import { logDashboardAccess } from "@/lib/server/access-log";
@@ -49,8 +50,9 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       );
     }
 
-    const shopId = await getShopId();
-    const ticket = await setTicketStatus(shopId, params.id, status as "open" | "resolved" | "closed");
+    const [shopId, session] = await Promise.all([getShopId(), getSession()]);
+    // The user's id, never a name or an address: it is recorded on the snooze a closure ends.
+    const ticket = await setTicketStatus(shopId, params.id, status as "open" | "resolved" | "closed", session?.sub ?? null);
     return NextResponse.json({ ticket });
   } catch (error) {
     return knowledgeErrorResponse(error);

@@ -7,6 +7,7 @@ import { intlTag } from "@/lib/i18n/locales";
 import { knowledgeErrorMessage } from "@/lib/api/knowledge";
 import { snoozeTicket, unsnoozeTicket } from "@/lib/api/tickets";
 import { fallbackFor, formatWake, laterToday, toLocalInput, tomorrowMorning, type SnoozeDelays } from "@/lib/snooze";
+import { isClosed } from "@/lib/ticket-stats";
 import type { SnoozeWaitingFor, TicketListItem, TicketSnooze, TicketWake } from "@/lib/types";
 import styles from "./SnoozeControl.module.css";
 
@@ -224,6 +225,8 @@ export function SnoozeBanner({ snooze }: { snooze: TicketSnooze }) {
 export function SnoozeChip({ ticket }: { ticket: TicketListItem }) {
   const t = useT();
   const locale = intlTag(useLocale());
+  // Closure takes precedence: a closed row says nothing about a snooze.
+  if (isClosed(ticket)) return null;
   if (ticket.snooze) {
     return (
       <span className={styles.chip} title={t(`tickets.panels.snooze.waiting.${ticket.snooze.waitingFor}`)}>
