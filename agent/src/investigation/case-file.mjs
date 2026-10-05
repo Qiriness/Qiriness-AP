@@ -721,16 +721,24 @@ export function buildCaseFile({
   // model is told as much in the lookup's result; this is the part that does not
   // depend on it listening.
   const unaskable = new Set(Array.isArray(unaskableFields) ? unaskableFields : []);
+  // A CODE THE RULE GIVES IS NEVER ASKED FOR. « Quel code avez-vous utilisé ? »
+  // to a customer the selected rule is about to give one to (P-15, 35e0afd9).
+  const offered = Boolean(policy?.offer_code);
+  if (offered) unaskable.add('promotion_code');
+  let askedOnlyForTheOffer = false;
   for (let i = missing.length - 1; i >= 0; i -= 1) {
     if (unaskable.has(missing[i].field)) {
+      if (offered && missing[i].field === 'promotion_code') askedOnlyForTheOffer = true;
       missing.splice(i, 1);
     }
   }
 
   // A verdict of "ask the customer" that names nothing to ask for is not
   // actionable by the drafting stage — it would have to invent the question.
+  // Except when the only question was the code the rule hands out: the reply
+  // gives it, so there is nothing left to ask and the case is answerable.
   if (verdict === 'needs_customer_input' && missing.length === 0) {
-    verdict = 'needs_human';
+    verdict = askedOnlyForTheOffer && established.length > 0 ? 'answerable' : 'needs_human';
   }
 
   return {

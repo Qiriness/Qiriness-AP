@@ -386,8 +386,16 @@ export function describeOfferTerms(promotion, { now = new Date() } = {}) {
   const combines = promotion.combines_with || {};
   const can = Object.keys(STACKING_LABELS).filter((key) => combines[key] === true).map((key) => STACKING_LABELS[key]);
   const cannot = Object.keys(STACKING_LABELS).filter((key) => combines[key] === false).map((key) => STACKING_LABELS[key]);
-  if (can.length > 0) terms.push(`Cumulable avec : ${can.join(', ')}.`);
-  if (cannot.length > 0) terms.push(`Non cumulable avec : ${cannot.join(', ')}.`);
+  // ONE LINE, BOTH HALVES: split in two, « non cumulable avec une autre
+  // remise » was repeated alone and read as « with nothing » (rehearsals of
+  // 35e0afd9, 2026-10-05), which is false for a code that takes free delivery.
+  if (can.length > 0 && cannot.length > 0) {
+    terms.push(`Cumul : possible avec ${can.join(', ')} ; impossible avec ${cannot.join(', ')}.`);
+  } else if (can.length > 0) {
+    terms.push(`Cumul : possible avec ${can.join(', ')}.`);
+  } else if (cannot.length > 0) {
+    terms.push(`Cumul : impossible avec ${cannot.join(', ')}.`);
+  }
 
   if (promotion.applies_once_per_customer) terms.push('Une seule utilisation par client.');
   const ends = promotion.ends_at ? new Date(promotion.ends_at) : null;

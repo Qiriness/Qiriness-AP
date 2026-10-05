@@ -31,6 +31,29 @@ import { normaliseChecks } from '../casework/rule-checks.mjs';
  * match anything — keeping it would produce an answer that silently never fires,
  * which is the failure mode hardest to notice from the outside.
  */
+/**
+ * The code the matched situation hands out, or null: the one `offer_code` its
+ * own rules carry (none, or two different ones, is null).
+ *
+ * WHY THE INVESTIGATION NEEDS IT BEFORE ANY RULE IS SELECTED. P-15 is « I signed
+ * up for the newsletter and never got my code »: the code she is asking about IS
+ * the one the situation gives, whether or not she names it. Without this the run
+ * saw five active 20 % codes, could not tell which she meant, and asked her for
+ * a code she never received (35e0afd9, 2026-10-05). Data, not a literal: the code
+ * is whatever the situation's rule offers.
+ */
+export function situationOfferCode(policy) {
+  const key = policy?.situationKey ?? null;
+  if (!key) return null;
+  const codes = new Set(
+    (policy.answers || [])
+      .filter((answer) => answer?.situationKey === key)
+      .map((answer) => String(answer?.offerCode ?? '').trim())
+      .filter(Boolean)
+  );
+  return codes.size === 1 ? [...codes][0] : null;
+}
+
 export function normaliseConditions(raw, { warn = () => {} } = {}) {
   const conditions = {};
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {

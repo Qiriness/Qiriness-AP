@@ -772,3 +772,36 @@ test('with neither facts nor a block, it still says so', () => {
   const prompt = toDraftingPrompt(buildCaseFile({ answer: { ...ANSWER, established: [] }, ledger: LEDGER }));
   assert.match(prompt, /Aucun fait n’a pu être établi/);
 });
+
+test('a code the selected rule gives is never asked for, and the case is answerable', () => {
+  // 35e0afd9: P-15 « jamais reçu le code ». The run could not tell which 20 %
+  // code she meant and asked her for it; the rule was about to give it.
+  const caseFile = buildCaseFile({
+    answer: { ...ANSWER, verdict: 'needs_customer_input', missing: [{ field: 'promotion_code' }] },
+    ledger: LEDGER,
+    policy: { answer_key: 'newsletter_code_client_connu', offer_code: 'BIENVENUEQIRINESS', route: null, ask: [] }
+  });
+  assert.deepEqual(caseFile.missing, []);
+  assert.equal(caseFile.verdict, 'answerable');
+  assert.ok(!caseFile.doNotClaim.some((line) => /code promotionnel/.test(line)));
+});
+
+test('with no code to give, a missing code is still asked for', () => {
+  const caseFile = buildCaseFile({
+    answer: { ...ANSWER, verdict: 'needs_customer_input', missing: [{ field: 'promotion_code' }] },
+    ledger: LEDGER,
+    policy: { answer_key: 'p18', offer_code: null, route: null, ask: [] }
+  });
+  assert.deepEqual(caseFile.missing.map((m) => m.field), ['promotion_code']);
+  assert.equal(caseFile.verdict, 'needs_customer_input');
+});
+
+test('another question still stands beside the code the rule gives', () => {
+  const caseFile = buildCaseFile({
+    answer: { ...ANSWER, verdict: 'needs_customer_input', missing: [{ field: 'promotion_code' }, { field: 'account_email' }] },
+    ledger: LEDGER,
+    policy: { answer_key: 'x', offer_code: 'BIENVENUEQIRINESS', route: null, ask: [] }
+  });
+  assert.deepEqual(caseFile.missing.map((m) => m.field), ['account_email']);
+  assert.equal(caseFile.verdict, 'needs_customer_input');
+});

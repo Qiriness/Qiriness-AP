@@ -1148,3 +1148,63 @@ test('P-20 is samples OR the gift: the order check reports the gifts\' stock bes
   const none = await registry.toolsFor(sampleTicket([])).handlers.get(TOOL_NAMES.CHECK_ORDER_PROMOTION)({});
   assert.equal(none.data.giftStock.stock, 'none');
 });
+
+// --- the code a situation gives -------------------------------------------------
+
+const P15_POLICY = {
+  situationKey: 'P-15',
+  answers: [{ situationKey: 'P-15', offerCode: 'BIENVENUEQIRINESS' }]
+};
+
+function situationRegistry({ identified = { kind: 'code', codes: [], offers: [], codeCandidates: [{ code: 'QIRINESS20' }, { code: 'BIENVENUEQIRINESS' }], promptText: 'plusieurs' } } = {}) {
+  const looked = [];
+  const registry = buildRegistry({
+    promotionLookup: {
+      async identify() { return identified; },
+      async lookupPromotion(code) {
+        looked.push(code);
+        return { found: true, code, eligibility: { verdict: 'undetermined', checks: [] }, promptText: 'x' };
+      },
+      async extractCodes() { return []; },
+      async offersForProduct() { return { specific: [], general: [] }; },
+      async listActive() { return { promotions: [], total: 0, truncated: false }; }
+    }
+  });
+  return { registry, looked };
+}
+
+const P15_TICKET = {
+  category: 'promotions',
+  request_kind: 'problem',
+  level: 2,
+  text: "je n'ai pas reçu les 20% de réduction, je suis inscrite à la news",
+  policy: P15_POLICY
+};
+
+test('in a situation that gives a code, a customer who typed none means that code', async () => {
+  const { registry } = situationRegistry();
+  const { handlers } = registry.toolsFor(P15_TICKET);
+  const result = await handlers.get(TOOL_NAMES.IDENTIFY_PROMOTION)({ codes: [], offers: [] });
+  assert.equal(result.outcome, 'code');
+  assert.deepEqual(result.data.knownCodes, ['BIENVENUEQIRINESS']);
+  assert.equal(result.data.fromSituation, true);
+  assert.match(result.promptText, /ne pas lui demander de code/);
+});
+
+test('a code she typed, or an automatic offer she describes, is never replaced', async () => {
+  const typed = situationRegistry({ identified: { kind: 'code', codes: [{ code: 'QIRINESS20', known: true }], offers: [], codeCandidates: [], promptText: 'x' } });
+  const fromTyped = await typed.registry.toolsFor(P15_TICKET).handlers.get(TOOL_NAMES.IDENTIFY_PROMOTION)({ codes: ['QIRINESS20'], offers: [] });
+  assert.deepEqual(fromTyped.data.knownCodes, ['QIRINESS20']);
+
+  const automatic = situationRegistry({ identified: { kind: 'automatic', codes: [], offers: [], codeCandidates: [], promptText: 'x' } });
+  const fromOffer = await automatic.registry.toolsFor(P15_TICKET).handlers.get(TOOL_NAMES.IDENTIFY_PROMOTION)({ codes: [], offers: [] });
+  assert.equal(fromOffer.outcome, 'automatic');
+});
+
+test('the situation code is looked up although she never wrote it; any other unwritten code is still refused', async () => {
+  const { registry, looked } = situationRegistry();
+  const { handlers } = registry.toolsFor(P15_TICKET);
+  assert.notEqual((await handlers.get(TOOL_NAMES.LOOKUP_PROMOTION)({ code: 'BIENVENUEQIRINESS' })).outcome, 'no_code_in_message');
+  assert.equal((await handlers.get(TOOL_NAMES.LOOKUP_PROMOTION)({ code: 'QIRINESS20' })).outcome, 'no_code_in_message');
+  assert.deepEqual(looked, ['BIENVENUEQIRINESS']);
+});

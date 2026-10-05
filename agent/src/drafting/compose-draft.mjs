@@ -633,8 +633,8 @@ Si la réponse ne se prête pas à transmettre un code, ne pas en parler — ` +
 
 ` +
             `Ce sont les conditions réelles de ce code, et les seules à présenter comme les siennes. ` +
-            `Les donner si la réponse parle de conditions ; n'en ajouter aucune autre, ` +
-            `ni d'une politique ni d'ailleurs :
+            `Les donner si la réponse parle de conditions, chacune telle qu'elle est écrite, sans la généraliser ni en retirer une moitié ; ` +
+            `n'en ajouter aucune autre, ni d'une politique ni d'ailleurs :
 
 ` +
             terms.map((term) => `- ${term}`).join('\n')

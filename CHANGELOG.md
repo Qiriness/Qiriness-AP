@@ -10,6 +10,12 @@ Three sibling files carry the other halves, and this one deliberately does not d
 
 ---
 
+## P-15 gives the newsletter code instead of asking for it (2026-10-05)
+
+- In a situation whose rules offer one code, a customer who names no code is taken to mean it. That code is looked up, and never asked for. The case is answerable and the reply gives it with its Shopify conditions.
+- The stacking condition is now one line (« Cumul : possible avec … ; impossible avec … »), so the drafter cannot drop the half that allows delivery discounts.
+- **Proven:** unit tests (situation code, identification, lookup guard, case file). Agent suite passes. 6 rehearsals of Céline's first message: all give BIENVENUEQIRINESS with its conditions. Stacking is still worded too broadly in 1 of 3 runs after the one-line change (2 of 3 before). A message naming the code goes to P-18 and gets its conditions. **Not yet seen on live mail.**
+
 ## An offered code's conditions come from Shopify (2026-10-05)
 
 - **The drafter gets the real conditions of the code a rule offers** (`describeOfferTerms`, loaded with the offerable codes): advantage and scope, eligible customers, minimum, stacking, once-per-customer, end date. They are the only conditions it may give that code.

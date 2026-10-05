@@ -393,8 +393,7 @@ test('a code we give is described from Shopify, as the admin shows it', () => {
     'Avantage : 20 % de réduction sur une sélection de 49 produit(s), pas sur toute la boutique.',
     "Clients : réservé au segment Shopify « Customers who haven't purchased » (le dire dans la langue du client, sans rien y ajouter).",
     "Minimum d'achat : aucun.",
-    'Cumulable avec : une remise sur la livraison.',
-    'Non cumulable avec : une autre remise produit, une remise sur la commande.'
+    'Cumul : possible avec une remise sur la livraison ; impossible avec une autre remise produit, une remise sur la commande.'
   ]);
 });
 

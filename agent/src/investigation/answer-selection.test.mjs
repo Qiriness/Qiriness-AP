@@ -11,6 +11,7 @@ import {
   normaliseConditions,
   resolveSituationTie,
   selectAnswer,
+  situationOfferCode,
   specificity
 } from './answer-selection.mjs';
 
@@ -583,4 +584,14 @@ test('nothing to resolve is not a resolution', () => {
   assert.equal(resolveSituationTie([answer('x', {})], tie(['CV-02'])), null);
   assert.equal(resolveSituationTie([answer('x', {})], []), null);
   assert.equal(resolveSituationTie([], undefined), null);
+});
+
+test('the situation gives one code: the one its own rules offer, or none', () => {
+  const rule = (situationKey, offerCode) => ({ situationKey, offerCode });
+  const policy = { situationKey: 'P-15', answers: [rule('P-15', 'BIENVENUEQIRINESS'), rule('P-15', null), rule('P-18', 'QIRINESS20'), rule(null, 'AUTRE')] };
+  assert.equal(situationOfferCode(policy), 'BIENVENUEQIRINESS');
+  assert.equal(situationOfferCode({ ...policy, situationKey: 'P-21' }), null, 'a situation with no code');
+  assert.equal(situationOfferCode({ ...policy, answers: [...policy.answers, rule('P-15', 'QIRINESS30')] }), null, 'two codes: not ours to pick');
+  assert.equal(situationOfferCode({ answers: policy.answers }), null, 'no situation matched');
+  assert.equal(situationOfferCode(null), null);
 });

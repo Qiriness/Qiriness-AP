@@ -15,6 +15,7 @@ import { concernsFromText } from '../retrieval/concern-cues.mjs';
 import { productLines } from '../retrieval/product-lines.mjs';
 
 import { normaliseOffers, planToolNames } from './decompose-rules.mjs';
+import { situationOfferCode } from './answer-selection.mjs';
 import { policiesFor, policyCatalogue, renderPolicy } from '../../../scripts/lib/company-policies.mjs';
 import {
   CHECKOUT_WINDOW_DAYS,
@@ -443,6 +444,10 @@ export function createToolRegistry({
    *   data       — kept for the runner (never sent to the model verbatim)
    */
   function handlersFor(ticket) {
+    // The code the matched situation gives (P-15: the newsletter code). The
+    // promotion a customer in that situation means when she names none.
+    const situationCode = situationOfferCode(ticket.policy);
+    const sameCode = (a, b) => String(a ?? '').trim().toUpperCase() === String(b ?? '').trim().toUpperCase();
     const handlers = {
       // A POLICY SAYS WHAT THE COMPANY'S RULE IS, NEVER WHAT HAPPENS NEXT: no
       // caveat, no finding and no verdict comes out of this. The text is read
@@ -614,6 +619,27 @@ export function createToolRegistry({
           codes: Array.isArray(args.codes) ? args.codes.map(String) : null,
           offers: normaliseOffers(args.offers)
         });
+        // NO CODE TYPED, IN A SITUATION THAT GIVES ONE: that code is the
+        // promotion she means. Not when she describes an automatic offer, which
+        // is a different promotion. A code she did type always wins.
+        if (situationCode && result.codes.length === 0 && result.kind !== 'automatic' && result.kind !== 'both') {
+          return {
+            outcome: 'code',
+            caveats: ['basket_unseeable'],
+            promptText:
+              'Type : code\n' +
+              `Le client ne cite pas de code. Dans cette situation, la promotion dont il parle est le code de l’offre : ${situationCode}. ` +
+              'Il n’a pas à le connaître ni à le citer : ne pas lui demander de code.',
+            data: {
+              kind: 'code',
+              codes: [situationCode],
+              knownCodes: [situationCode],
+              offers: [],
+              codeCandidates: [],
+              fromSituation: true
+            }
+          };
+        }
         return {
           outcome: result.kind,
           caveats: result.kind === 'none' ? [] : ['basket_unseeable'],
@@ -716,7 +742,9 @@ export function createToolRegistry({
         // customer DESCRIBED is identification's to list as candidates, never
         // the model's to pick. A typo the customer typed still reaches the
         // lookup and gets its not-found answer with suggestions.
-        if (code && !appearsAsToken(code, ticket.text)) {
+        // The situation's own code is not the model's invention: it is the code
+        // this situation gives, looked up so the case file holds its real state.
+        if (code && !appearsAsToken(code, ticket.text) && !sameCode(code, situationCode)) {
           return {
             outcome: 'no_code_in_message',
             caveats: ['basket_unseeable'],
