@@ -164,10 +164,12 @@ async function findOutdated({ store, record, shopId }) {
   const built = await record.findBuiltContext();
   if (built.length === 0) return [];
   const updatedAt = await store.orderUpdatedAt(shopId, built.map((ticket) => ticket.shopify_order_number));
-  return built.filter((ticket) =>
+  const behind = built.filter((ticket) =>
     updatedAt.has(ticket.shopify_order_number) &&
     contextOutdated(ticket.source_updated_at, updatedAt.get(ticket.shopify_order_number))
   );
+  // The scan above is narrow; the rebuild needs the whole row of the few behind.
+  return behind.length ? record.findBuiltContext({ ids: behind.map((ticket) => ticket.id) }) : [];
 }
 
 /**

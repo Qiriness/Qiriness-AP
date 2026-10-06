@@ -10,6 +10,23 @@ Three sibling files carry the other halves, and this one deliberately does not d
 
 ---
 
+## Egress, phase 3: the other per-poll passes run on change (2026-10-06)
+
+- **`createChangeGate`** (`agent/src/lib/change-gate.mjs`, 4 tests) wraps customer resolution, order context, the change router and auto-close. A pass runs when the newest `updated_at` of `tickets` (and `orders` where relevant) moved, or every 15 minutes. Rule: DECISIONS.md, « The other per-poll passes run on change ».
+- **The fold's `staleTicketIds` is incremental.** It reads rows changed since the last poll plus the stale carry-over, with a full scan daily and on restart.
+- **Narrower reads:**
+  - the router drops `metadata` and reads investigation jsonb for the newest run only;
+  - customer resolution reads `metadata->customer_resolution`, and `linkCustomer` merges into the stored metadata;
+  - `findBuiltContext` is narrow unless given `ids`;
+  - casework's `otherMessagesDue` reads ids first and bodies for due messages only.
+- **Test support:**
+  - the memory transport understands `alias:column->key` selects;
+  - the schema-contract test resolves them to their column.
+- **Proven:**
+  - Tests: agent 2,124 pass, root 4,939 pass.
+  - Live dry run, two consecutive polls: 723 kB, then ~0 kB.
+  - **Not yet measured after deploy.**
+
 ## Egress, phase 1: order resolution re-reads only what changed (2026-10-05)
 
 - **Order resolution keeps state between polls** (`createOrderResolutionState`). It re-resolves tickets touched since the last pass, plus tickets quoting an order that changed. The whole queue is redone once a day and after a restart. An unchanged outcome is no longer written. Rule and measurements: DECISIONS.md, « Resolution re-reads only what changed ».

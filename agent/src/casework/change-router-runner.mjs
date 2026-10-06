@@ -31,11 +31,14 @@ import { ROUTED_STATUSES, driftDiffers, factDrift, noticeDue, noticeRecord, rout
 // to `awaiting_human`, so the notice the drafting pass writes is in front of a
 // person. First, so the state pass below reads the drift it may have written.
 
+// NO `metadata` IN EITHER. It is only ever written back, with one key added,
+// and `write` merges that key into the row as it stands. Read here it was most of
+// the ~370 kB this stage downloaded on every poll, for tickets it then left alone.
 const TICKET_COLUMNS =
-  'id,status,needs_investigation,needs_categorisation,shopify_order_number,resolved_context,fact_drift,metadata,investigated_at';
+  'id,status,needs_investigation,needs_categorisation,shopify_order_number,resolved_context,fact_drift,investigated_at';
 
 const NOTICE_TICKET_COLUMNS =
-  'id,status,category,secondary_category,shopify_order_number,fact_drift,metadata,first_message_at,last_message_at,case_id';
+  'id,status,category,secondary_category,shopify_order_number,fact_drift,first_message_at,last_message_at,case_id';
 
 /** A notice never reopens these: a spam thread, or one handed to a team. */
 const NEVER_NOTICED = ['spam', 'forwarded'];
@@ -88,16 +91,21 @@ export function createChangeRouterStore(supabase, { shopId }) {
       return new Map(rows.map((row) => [row.ticket_id, row.next_actor]));
     },
 
-    /** The newest case file per ticket. */
+    /**
+     * The newest case file per ticket. Two reads: which run is newest (two small
+     * columns over every run), then the heavy jsonb of those runs only. Reading
+     * `tool_calls` and `findings_trace` for every run to keep one was ~90 kB a poll.
+     */
     async latestInvestigations(ticketIds) {
       if (ticketIds.length === 0) return new Map();
-      const rows = await inBatches(T.TICKET_INVESTIGATIONS, 'ticket_id', ticketIds, INVESTIGATION_COLUMNS);
-      const latest = new Map();
-      for (const row of rows) {
-        const held = latest.get(row.ticket_id);
-        if (!held || Date.parse(row.investigated_at ?? '') > Date.parse(held.investigated_at ?? '')) latest.set(row.ticket_id, row);
+      const runs = await inBatches(T.TICKET_INVESTIGATIONS, 'ticket_id', ticketIds, 'id,ticket_id,investigated_at');
+      const newest = new Map();
+      for (const row of runs) {
+        const held = newest.get(row.ticket_id);
+        if (!held || Date.parse(row.investigated_at ?? '') > Date.parse(held.investigated_at ?? '')) newest.set(row.ticket_id, row);
       }
-      return latest;
+      const rows = await inBatches(T.TICKET_INVESTIGATIONS, 'id', [...newest.values()].map((row) => row.id), INVESTIGATION_COLUMNS);
+      return new Map(rows.map((row) => [row.ticket_id, row]));
     },
 
     /** Approved rules of one set, as the investigation loads them. Cached for the pass. */
@@ -191,8 +199,18 @@ export function createChangeRouterStore(supabase, { shopId }) {
       return last;
     },
 
+    /**
+     * `columns.metadata` carries the keys this stage adds. They are merged into
+     * the row's metadata as read now, so every other pass's trail survives.
+     */
     async write(ticketId, columns) {
-      await supabaseUpdateById(supabase, T.TICKETS, ticketId, columns);
+      let row = columns;
+      if (columns.metadata) {
+        const [current] = await supabaseSelect(supabase, T.TICKETS, { id: ticketId, shop_id: shopId }, 'metadata');
+        const base = current?.metadata && typeof current.metadata === 'object' ? current.metadata : {};
+        row = { ...columns, metadata: { ...base, ...columns.metadata } };
+      }
+      await supabaseUpdateById(supabase, T.TICKETS, ticketId, row, { returning: 'minimal' });
     }
   };
 }

@@ -335,7 +335,10 @@ export function createCaseworkStore(supabase, { caseStateRecord }) {
      * reading yet, grouped by ticket and oldest first within each.
      */
     async otherMessagesDue({ shopId, since, limit }) {
-      const rows = await supabaseSelect(
+      // Ids first, bodies only for what is due: every one of these messages
+      // since the cutover was read with its body on every poll (~50 kB) to find,
+      // almost always, none without a reading.
+      const candidates = await supabaseSelect(
         supabase,
         T.TICKET_MESSAGES,
         {
@@ -344,11 +347,19 @@ export function createCaseworkStore(supabase, { caseStateRecord }) {
           received_at: { operator: 'gt', value: since },
           deleted_at: { operator: 'is', value: 'null' }
         },
+        'id',
+        { order: 'received_at.asc' }
+      );
+      const done = await caseStateRecord.withCaseState(candidates.map((row) => row.id));
+      const dueIds = candidates.filter((row) => !done.has(row.id)).slice(0, limit).map((row) => row.id);
+      if (dueIds.length === 0) return [];
+      const due = await supabaseSelect(
+        supabase,
+        T.TICKET_MESSAGES,
+        { shop_id: shopId, id: { operator: 'in', value: `(${dueIds.join(',')})` } },
         'id,ticket_id,subject,body_text,direction,actor,from_email,received_at,sent_at',
         { order: 'received_at.asc' }
       );
-      const done = await caseStateRecord.withCaseState(rows.map((row) => row.id));
-      const due = rows.filter((row) => !done.has(row.id)).slice(0, limit);
       const byTicket = new Map();
       for (const row of due) {
         if (!byTicket.has(row.ticket_id)) byTicket.set(row.ticket_id, []);
