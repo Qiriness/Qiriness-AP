@@ -5,6 +5,7 @@ import { getShopId } from "@/lib/server/knowledge-service";
 import { changeTicketOrder, previewTicketOrder } from "@/lib/server/tickets-service";
 import { logDashboardAccess } from "@/lib/server/access-log";
 import { knowledgeErrorResponse } from "@/lib/server/knowledge-errors";
+import { ticketsChanged } from "@/lib/server/cache-tags";
 
 export const dynamic = "force-dynamic";
 
@@ -51,6 +52,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
       { number: body?.number, expected: body?.expected ?? null, source: body?.source },
       session?.sub ?? null
     );
+    ticketsChanged();
     return NextResponse.json(change);
   } catch (error) {
     return knowledgeErrorResponse(error);

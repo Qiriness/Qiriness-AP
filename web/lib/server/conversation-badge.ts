@@ -1,3 +1,5 @@
+import { unstable_cache } from "next/cache";
+import { CACHE_TAGS } from "@/lib/server/cache-tags";
 import { getShopId } from "@/lib/server/knowledge-service";
 import { countOrdersAwaitingFulfilment } from "@/lib/server/orders-service";
 import { countOpenThreads } from "@/lib/server/tickets-service";
@@ -29,11 +31,24 @@ export async function navBadgeCounts(): Promise<NavBadgeCounts> {
   } catch {
     return { openTickets: 0, openConversations: 0, unfulfilledOrders: 0 };
   }
-  // Side by side, and each failing on its own: an orders count that could not
-  // be read must not hide the ticket badges, or the other way round.
-  const [threads, unfulfilledOrders] = await Promise.all([
-    countOpenThreads(shopId).catch(() => ({ openTickets: 0, openConversations: 0 })),
-    countOrdersAwaitingFulfilment(shopId).catch(() => 0),
-  ]);
-  return { ...threads, unfulfilledOrders };
+  return cachedCounts(shopId);
 }
+
+/**
+ * SHARED FOR A MINUTE across every page and person. Every navigation used to
+ * recount the queue. A person's own change clears it at once (`ticketsChanged`);
+ * new mail from the worker shows within the minute.
+ */
+const cachedCounts = unstable_cache(
+  async (shopId: string): Promise<NavBadgeCounts> => {
+    // Side by side, and each failing on its own: an orders count that could not
+    // be read must not hide the ticket badges, or the other way round.
+    const [threads, unfulfilledOrders] = await Promise.all([
+      countOpenThreads(shopId).catch(() => ({ openTickets: 0, openConversations: 0 })),
+      countOrdersAwaitingFulfilment(shopId).catch(() => 0),
+    ]);
+    return { ...threads, unfulfilledOrders };
+  },
+  ["nav-badge-counts"],
+  { revalidate: 60, tags: [CACHE_TAGS.tickets] }
+);

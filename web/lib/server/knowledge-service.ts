@@ -222,7 +222,14 @@ export async function listPinnableArticles(
 export async function listArticles(shopId: string): Promise<KnowledgeArticleResponse[]> {
   const supabase = getSupabaseClient();
   const [articleRows, catalogIdByKey] = await Promise.all([
-    supabaseSelect(supabase, "knowledge_documents", { shop_id: shopId }, "*"),
+    // What `mapArticleRow` reads, not `*`: the plain-text copy, the sections and
+    // the source metadata are the agent's, and doubled every Agent Setup load.
+    supabaseSelect(
+      supabase,
+      "knowledge_documents",
+      { shop_id: shopId },
+      "id,title,approval_status,content_html,category,core_topic,source_type,shopify_source_id,updated_at,synced_at,voice_profile,product_ids"
+    ),
     buildCatalogIdMap(shopId),
   ]);
 

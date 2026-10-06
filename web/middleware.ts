@@ -46,6 +46,11 @@ import { clearSession, writeSession, type SupabaseSession } from "./lib/session-
  * `/api/reports/sales` is the worker fetching the monthly report to mail it.
  * It proves itself with SALES_REPORT_SECRET, and the route answers 404 while
  * no secret is set.
+ *
+ * `/api/storefront/chat` is the storefront advisor, reached only through the
+ * Shopify app proxy. A shopper has no session; Shopify signs the query with the
+ * advisor app's secret, and the route checks that and a shop allow-list. It
+ * answers 404 while STOREFRONT_APP_CLIENT_SECRET is unset.
  */
 const PUBLIC = new Set([
   "/login",
@@ -54,6 +59,7 @@ const PUBLIC = new Set([
   "/api/webhooks/shopify",
   "/api/webhooks/graph",
   "/api/reports/sales",
+  "/api/storefront/chat",
 ]);
 
 export async function middleware(request: NextRequest) {

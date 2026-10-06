@@ -262,12 +262,18 @@ export async function listConversations(shopId: string): Promise<TicketListItem[
  * shows; the Orders page folds these per order and never re-scores them.
  */
 export async function listTicketsWithOrders(shopId: string): Promise<TicketListItem[]> {
-  const rows = await readQueue(shopId) as any[];
-  const orderRows = rows.filter((row) => row.shopify_order_number);
+  // The order-linked rows and the other threads of their cases, not the whole
+  // queue (~1 MB, 2026-10-06). The siblings are read because priority lets a
+  // thread borrow its case's situation (`withCaseFacts`), so the bands match
+  // the queue's exactly.
+  const orderRows = await getRecord(shopId).queue({ withOrderOnly: true }) as any[];
+  const caseIds = [...new Set(orderRows.map((row) => row.case_id).filter(Boolean))] as string[];
+  const siblings = caseIds.length ? await getRecord(shopId).queue({ caseIds }) as any[] : [];
+  const scored = [...new Map([...orderRows, ...siblings].map((row) => [row.id, row])).values()];
   const [directory, vipTickets, priority] = await Promise.all([
     readSenderDirectory(shopId),
     loadVipTickets(shopId),
-    readPriority(shopId)
+    loadTicketPriority(shopId, scored)
   ]);
   const { tickets, conversations } = partitionBySender(
     orderRows,
@@ -289,9 +295,10 @@ export async function listTicketsWithOrders(shopId: string): Promise<TicketListI
 export async function countOpenThreads(
   shopId: string
 ): Promise<{ openTickets: number; openConversations: number }> {
-  // One `queue()` read for both badges, over the same partition the two pages
-  // render — two separate counts would double the read on every page load.
-  const rows = await readQueue(shopId) as any[];
+  // One read for both badges, over the same partition the two pages render.
+  // Open threads only: `open` below discards every closed or resolved row, and
+  // reading them was ~1 MB on every page of the dashboard (2026-10-06).
+  const rows = await readOpenQueue(shopId) as any[];
   const directory = await readSenderDirectory(shopId);
   // Counts need only the sender partition and status. Avoid loading order and
   // investigation facts on every page merely to sort rows nobody will render.
@@ -354,6 +361,7 @@ async function loadVipTickets(shopId: string, ticketIds: string[] | null = null)
  * so the queue is exactly as fresh as it was before.
  */
 const readQueue = cache((shopId: string) => getRecord(shopId).queue());
+const readOpenQueue = cache((shopId: string) => getRecord(shopId).queue({ openOnly: true }));
 const readSenderDirectory = cache((shopId: string) => loadSenderDirectory(shopId));
 const readPriority = cache(async (shopId: string) => loadTicketPriority(shopId, await readQueue(shopId) as any[]));
 

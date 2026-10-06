@@ -54,6 +54,15 @@ const AUDIT_COLUMNS =
   "id,graph_message_id,graph_conversation_id,outcome,label,decided_by,reason," +
   "from_email,subject,body_text,body_captured_at,body_expires_at,failed_open,decided_at";
 
+/**
+ * The list's columns: what `mapDroppedMail` reads, minus the text, which the
+ * dialog reads on its own. Not the conversation id or the outcome (always
+ * « blocked » here), which nothing in the list shows.
+ */
+const LIST_COLUMNS =
+  "id,graph_message_id,label,decided_by,reason," +
+  "from_email,subject,body_captured_at,body_expires_at,failed_open,decided_at";
+
 function getSupabaseClient() {
   return createSupabaseClient(loadConfig(process.env as Record<string, string | undefined>));
 }
@@ -77,12 +86,18 @@ function getSupabaseClient() {
 export async function listDroppedMail(shopId: string): Promise<DroppedMail[]> {
   const supabase = getSupabaseClient();
 
-  const rows = (await supabaseSelectAll(
-    supabase,
-    T.SPAM_AUDIT,
-    { shop_id: shopId, outcome: { operator: "eq", value: "blocked" } },
-    AUDIT_COLUMNS
-  )) as any[];
+  const [rows, withText] = (await Promise.all([
+    supabaseSelectAll(supabase, T.SPAM_AUDIT, { shop_id: shopId, outcome: { operator: "eq", value: "blocked" } }, LIST_COLUMNS),
+    // Which rows still hold a text, as ids only: the button that promotes one
+    // needs to know, and the text itself is read when the dialog opens.
+    supabaseSelectAll(
+      supabase,
+      T.SPAM_AUDIT,
+      { shop_id: shopId, outcome: { operator: "eq", value: "blocked" }, body_text: { operator: "not.is", value: "null" } },
+      "id"
+    ),
+  ])) as [any[], any[]];
+  const hasText = new Set(withText.map((row) => row.id));
 
   const promoted = await promotedMessageIds(
     supabase,
@@ -90,20 +105,32 @@ export async function listDroppedMail(shopId: string): Promise<DroppedMail[]> {
     rows.map((row) => row.graph_message_id)
   );
 
-  const mail = rows
+  return rows
     .filter((row) => !promoted.has(row.graph_message_id))
-    .map(mapDroppedMail)
+    .map((row) => ({ ...mapDroppedMail(row), bodyLoaded: false, hasBody: hasText.has(row.id) }))
     .sort((a, b) => (Date.parse(b.decidedAt ?? "") || 0) - (Date.parse(a.decidedAt ?? "") || 0));
+}
 
-  // ONE LOOKUP FOR THE WHOLE SECTION, not one per dialog opened. A dropped mail
-  // has no ticket and no confirmed order, so the only route to a tracking link
-  // is the number in its own text — and a message the gate refused is exactly
-  // where "should this have become a ticket?" is the question, which a parcel we
-  // recognise helps answer. Shared across rows deliberately: `splitTrackingText`
-  // links only numbers a given text actually contains, so one list cannot put
-  // another mail's parcel into this one.
-  const parcels = await parcelsInText(shopId, mail.map((item) => item.body), []);
-  return parcels.length === 0 ? mail : mail.map((item) => ({ ...item, parcels }));
+/**
+ * One dropped email with its text, for the dialog: the list leaves the text out.
+ *
+ * The parcel lookup moved here with it. A dropped mail has no ticket and no
+ * confirmed order, so the only route to a tracking link is the number in its own
+ * text, and that is only worth a query once somebody opens the email.
+ */
+export async function getDroppedMail(shopId: string, auditId: string): Promise<DroppedMail> {
+  const rows = (await supabaseSelectAll(
+    getSupabaseClient(),
+    T.SPAM_AUDIT,
+    { shop_id: shopId, id: auditId, outcome: { operator: "eq", value: "blocked" } },
+    AUDIT_COLUMNS
+  )) as any[];
+  if (!rows[0]) {
+    throw new KnowledgeNotFoundError(`Dropped mail not found: ${auditId}`);
+  }
+  const mail = { ...mapDroppedMail(rows[0]), bodyLoaded: true, hasBody: rows[0].body_text != null };
+  const parcels = mail.body ? await parcelsInText(shopId, [mail.body], []) : [];
+  return { ...mail, parcels };
 }
 
 /**

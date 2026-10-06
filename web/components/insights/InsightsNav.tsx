@@ -24,6 +24,11 @@ const KEPT = ["range", "from", "to", "month", "platform"];
  * the current one straight away, the frame dims and spins, and the real
  * navigation catches up. Modified clicks (a new tab, a middle click) are left
  * to the browser, which is the point of keeping real links.
+ *
+ * THE OTHER TABS ARE PRE-LOADED. Each link prefetches its panel in full once the
+ * bar is on screen, so a click shows a page already rendered. Every figure it
+ * reads comes from the shared Insights cache (insights/shared.ts), which is what
+ * makes rendering seven panels nobody has clicked yet affordable.
  */
 export function InsightsNav({ active, panels }: { active: InsightsPanel; panels: InsightsPanel[] }) {
   const t = useT();
@@ -55,6 +60,7 @@ export function InsightsNav({ active, panels }: { active: InsightsPanel; panels:
             <li key={panel.id}>
               <Link
                 href={href}
+                prefetch={panel.id === active ? undefined : true}
                 className={`${styles.tab} ${isCurrent ? styles.tabActive : ""}`}
                 aria-current={isCurrent ? "page" : undefined}
                 onClick={(event: MouseEvent<HTMLAnchorElement>) => {

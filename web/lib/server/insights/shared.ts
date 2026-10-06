@@ -19,12 +19,45 @@
  * import this from a client component.
  */
 
+import { unstable_cache } from "next/cache";
 import { loadConfig } from "../../../../scripts/lib/sync-config.mjs";
 import {
   createSupabaseClient,
   supabaseRpc,
   supabaseSelect,
 } from "../../../../scripts/lib/supabase-rest-client.mjs";
+import { CACHE_TAGS } from "../cache-tags";
+
+/**
+ * HOW LONG A FIGURE MAY BE SERVED BEFORE IT IS RECOMPUTED (decided 2026-10-06).
+ *
+ * Every read below goes through Vercel's shared Data Cache, keyed by the
+ * function or view and its exact arguments, so every person, tab and render
+ * asking the same question shares one answer. Ranges are cut on hour or day
+ * boundaries, which is what makes the keys repeat. A stale entry is served at
+ * once and recomputed behind it. The ↻ button clears the tag.
+ *
+ * Read-only aggregates only. A token or a write never goes through here.
+ */
+export const INSIGHTS_TTL_SECONDS = 15 * 60;
+
+const cachedRpc = unstable_cache(
+  async (fn: string, args: Record<string, unknown>) => {
+    const rows = await supabaseRpc(getSupabaseClient(), fn, args);
+    return Array.isArray(rows) ? rows : [];
+  },
+  ["insights-rpc"],
+  { revalidate: INSIGHTS_TTL_SECONDS, tags: [CACHE_TAGS.insights] }
+);
+
+const cachedView = unstable_cache(
+  async (view: string, filters: Record<string, unknown>, order: string | undefined, limit: number) => {
+    const rows = await supabaseSelect(getSupabaseClient(), view, filters, "*", { order, limit });
+    return Array.isArray(rows) ? rows : [];
+  },
+  ["insights-view"],
+  { revalidate: INSIGHTS_TTL_SECONDS, tags: [CACHE_TAGS.insights] }
+);
 
 /**
  * Call one of the ranged functions (RANGED READS in 06_analytics.sql).
@@ -37,8 +70,7 @@ export async function callRpc<T = Record<string, unknown>>(
   fn: string,
   args: Record<string, unknown>
 ): Promise<T[]> {
-  const rows = await supabaseRpc(getSupabaseClient(), fn, args);
-  return Array.isArray(rows) ? (rows as T[]) : [];
+  return (await cachedRpc(fn, args)) as T[];
 }
 
 /** The one-row functions: a summary always returns exactly one row. */
@@ -69,15 +101,8 @@ export async function readView<T = Record<string, unknown>>(
   shopId: string,
   options: { order?: string; limit?: number; filters?: Record<string, unknown> } = {}
 ): Promise<T[]> {
-  const supabase = getSupabaseClient();
-  const rows = await supabaseSelect(
-    supabase,
-    view,
-    { shop_id: shopId, ...(options.filters ?? {}) },
-    "*",
-    { order: options.order, limit: options.limit ?? MAX_VIEW_ROWS }
-  );
-  return Array.isArray(rows) ? (rows as T[]) : [];
+  const filters = { shop_id: shopId, ...(options.filters ?? {}) };
+  return (await cachedView(view, filters, options.order, options.limit ?? MAX_VIEW_ROWS)) as T[];
 }
 
 /** Read a view that aggregates to a single row per shop. */

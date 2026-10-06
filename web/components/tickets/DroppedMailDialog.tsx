@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
 import { useT } from "@/lib/i18n/client";
@@ -31,8 +32,25 @@ interface DroppedMailDialogProps {
  * gets its own sentence, because "no body" alone reads as a bug in all three
  * cases and is only actionable in the first.
  */
-export function DroppedMailDialog({ mail, onClose, onPromote }: DroppedMailDialogProps) {
+export function DroppedMailDialog({ mail: listed, onClose, onPromote }: DroppedMailDialogProps) {
   const t = useT();
+  // THE TEXT IS READ WHEN THE DIALOG OPENS. The list carries none: every body
+  // on every /tickets load was 1.9 MB (2026-10-06). A row that already has its
+  // text (`bodyLoaded` absent or true) is shown as it is.
+  const [loaded, setLoaded] = useState<DroppedMail | null>(listed.bodyLoaded === false ? null : listed);
+  const [loadFailed, setLoadFailed] = useState(false);
+  useEffect(() => {
+    if (listed.bodyLoaded !== false) return;
+    let live = true;
+    fetch(`/api/dropped-mail/${encodeURIComponent(listed.id)}`)
+      .then((response) => (response.ok ? response.json() : Promise.reject(new Error(String(response.status)))))
+      .then((full: DroppedMail) => live && setLoaded(full))
+      .catch(() => live && setLoadFailed(true));
+    return () => {
+      live = false;
+    };
+  }, [listed]);
+  const mail = loaded ?? listed;
   // Captured-then-purged, distinguished from never-captured by the stamp the
   // backfill and ingestion both write. The expiry alone would not: a row whose
   // body is still live also has one.
@@ -60,7 +78,11 @@ export function DroppedMailDialog({ mail, onClose, onPromote }: DroppedMailDialo
         </p>
       )}
 
-      {mail.body ? (
+      {!loaded ? (
+        <p className={styles.placeholder}>
+          {loadFailed ? t("tickets.dialogs.dropped.loadFailed") : t("tickets.dialogs.dropped.loading")}
+        </p>
+      ) : mail.body ? (
         <>
           {/* `pre`, like the ticket thread: this is the same cleaned plain text,
               whose paragraph breaks are the only structure it has left. */}

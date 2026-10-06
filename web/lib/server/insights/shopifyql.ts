@@ -19,9 +19,12 @@
  * cards print. Server-only.
  */
 
+import { unstable_cache } from "next/cache";
 import { createShopifyClient } from "../../../../scripts/lib/shopify-admin-client.mjs";
 import { postShopifyql, retryAt } from "../../../../scripts/lib/shopifyql-client.mjs";
 import { loadConfig } from "../../../../scripts/lib/sync-config.mjs";
+import { CACHE_TAGS } from "../cache-tags";
+import { INSIGHTS_TTL_SECONDS } from "./shared";
 
 export type Row = Record<string, unknown>;
 
@@ -86,6 +89,23 @@ function client() {
  * query is wrong, never "the store was quiet"), an error, or the deadline.
  */
 export function shopifyql(query: string, priority: number, deadlineMs = DEADLINE_MS): Promise<Row[]> {
+  return sharedAnswer(query, priority, deadlineMs);
+}
+
+/**
+ * IN FRONT OF THE QUEUE, THE SHARED CACHE: one answer per query for every
+ * Vercel instance, kept as long as the other Insights reads (15 minutes, the ↻
+ * button clears it). The per-instance cache below only spared a warm instance.
+ * On serverless most renders land on a cold one, which asked Shopify again.
+ * A refusal or a timeout rejects, and a rejection is never cached.
+ */
+const sharedAnswer = unstable_cache(
+  (query: string, priority: number, deadlineMs: number) => answerLive(query, priority, deadlineMs),
+  ["insights-shopifyql"],
+  { revalidate: INSIGHTS_TTL_SECONDS, tags: [CACHE_TAGS.insights] }
+);
+
+function answerLive(query: string, priority: number, deadlineMs: number): Promise<Row[]> {
   const hit = cache.get(query);
   if (hit && Date.now() - hit.at < TTL_MS) return hit.value;
 

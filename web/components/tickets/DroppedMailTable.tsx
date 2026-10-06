@@ -121,11 +121,11 @@ export function DroppedMailTable({ mail, onPromote, pendingId }: DroppedMailTabl
                 <Button
                   size="sm"
                   variant="secondary"
-                  disabled={!item.body}
+                  disabled={!(item.body || item.hasBody)}
                   loading={pendingId === item.id}
                   onClick={() => onPromote(item)}
                   title={
-                    item.body
+                    item.body || item.hasBody
                       ? t("tickets.dialogs.dropped.promoteHint")
                       : t("tickets.panels.irrelevant.promoteNoBody")
                   }

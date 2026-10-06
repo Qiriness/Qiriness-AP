@@ -18,8 +18,27 @@ import {
 import { getMarketplaces, type Marketplaces } from "../marketplaces";
 import { describeFreshness } from "../../../../scripts/lib/insights-freshness.mjs";
 import type { Freshness, FreshnessItem, InsightsRange, PlatformId } from "../../types";
+import { unstable_cache } from "next/cache";
+import { supabaseRpc } from "../../../../scripts/lib/supabase-rest-client.mjs";
+import { CACHE_TAGS } from "../cache-tags";
 import { getShop } from "../shop";
-import { callRpcOne } from "./shared";
+import { getSupabaseClient, INSIGHTS_TTL_SECONDS } from "./shared";
+
+async function freshnessRowLive(shopId: string): Promise<Record<string, string | null> | null> {
+  const rows = await supabaseRpc(getSupabaseClient(), RPC.INSIGHTS_FRESHNESS, { p_shop: shopId });
+  return Array.isArray(rows) ? (rows[0] ?? null) : null;
+}
+
+/**
+ * The freshness row as Insights serves it: from the shared cache, WITH THE TIME
+ * IT WAS READ. That time is what the header's « Live · HH:MM » shows, so it
+ * names how old the figures on screen are rather than when the page rendered.
+ */
+const cachedFreshness = unstable_cache(
+  async (shopId: string) => ({ row: await freshnessRowLive(shopId), readAt: new Date().toISOString() }),
+  ["insights-freshness"],
+  { revalidate: INSIGHTS_TTL_SECONDS, tags: [CACHE_TAGS.insights] }
+);
 
 export interface InsightsContext {
   shopId: string;
@@ -46,7 +65,8 @@ export type SearchParams = Record<string, string | string[] | undefined>;
  */
 export async function readFreshnessItems(shopId: string, now: Date = new Date()): Promise<FreshnessItem[]> {
   try {
-    const row = await callRpcOne<Record<string, string | null>>(RPC.INSIGHTS_FRESHNESS, { p_shop: shopId });
+    // Live, not cached: the Tickets banner says how long ago mail last synced.
+    const row = await freshnessRowLive(shopId);
     return describeFreshness(row, now) as FreshnessItem[];
   } catch (error) {
     console.warn("freshness unreadable", (error as Error).message);
@@ -69,8 +89,8 @@ export async function resolveInsightsContext(searchParams: SearchParams = {}): P
 
   // Freshness first: "All time" starts at the first synced order, which only
   // this row knows. It needs nothing from the range, so the order costs nothing.
-  const [freshnessRow, marketplaces] = await Promise.all([
-    callRpcOne<Record<string, string | null>>(RPC.INSIGHTS_FRESHNESS, { p_shop: shop.id }),
+  const [{ row: freshnessRow, readAt }, marketplaces] = await Promise.all([
+    cachedFreshness(shop.id),
     getMarketplaces(),
   ]);
 
@@ -99,7 +119,8 @@ export async function resolveInsightsContext(searchParams: SearchParams = {}): P
       mailThrough: freshnessRow?.mail_synced_through ?? null,
       topicMapBuiltAt: freshnessRow?.topic_map_built_at ?? null,
     },
-    renderedAt: now.toISOString(),
+    // When the cached figures were read, not when this page rendered.
+    renderedAt: readAt,
     months: monthOptions({ tz, now, earliest: freshnessRow?.first_order_at ?? null }),
   };
 }

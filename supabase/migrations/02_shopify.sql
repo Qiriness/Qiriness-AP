@@ -134,6 +134,9 @@ create index customers_shop_last_order_at_idx on public.customers (shop_id, last
 
 create index customers_shop_deleted_at_idx on public.customers (shop_id, deleted_at);
 
+-- The newest change, for insights_freshness and the worker's change gate (77).
+create index customers_shop_updated_at_idx on public.customers (shop_id, updated_at);
+
 create index customers_tags_gin_idx on public.customers using gin (tags);
 
 create trigger customers_set_updated_at
@@ -354,6 +357,9 @@ create index orders_return_status_idx on public.orders (shop_id, return_status);
 create index orders_order_status_idx on public.orders (shop_id, order_status);
 
 create index orders_delivered_at_idx on public.orders (shop_id, delivered_at);
+
+-- The newest change, for insights_freshness and the worker's change gate (77).
+create index orders_shop_updated_at_idx on public.orders (shop_id, updated_at);
 
 create index orders_return_refund_opened_at_idx on public.orders (shop_id, return_refund_opened_at);
 

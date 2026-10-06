@@ -4,6 +4,7 @@ import { getShopId } from "@/lib/server/knowledge-service";
 import { saveTicketOverrides } from "@/lib/server/tickets-service";
 import { getSession } from "@/lib/server/auth";
 import { knowledgeErrorResponse } from "@/lib/server/knowledge-errors";
+import { ticketsChanged } from "@/lib/server/cache-tags";
 
 export const dynamic = "force-dynamic";
 
@@ -28,6 +29,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
       { changes: body?.changes, expected: body?.expected, source: body?.source },
       session?.sub ?? null
     );
+    ticketsChanged();
     return NextResponse.json(result);
   } catch (error) {
     return knowledgeErrorResponse(error);

@@ -36,8 +36,8 @@ const COLUMNS =
   "id,shopify_collection_id,handle,title,products_count,is_active,axis,note," +
   "product_ids,products_synced_at";
 
-/** The two axes the intersection can tell apart — the table's own check constraint. */
-export const AXES: CollectionAxis[] = ["concern", "category"];
+/** The axes — the table's own check constraint (migrations 27 and 77). */
+export const AXES: CollectionAxis[] = ["concern", "category", "range"];
 
 function getSupabaseClient() {
   return createSupabaseClient(loadConfig(process.env as Record<string, string | undefined>));
@@ -102,7 +102,7 @@ export async function setCollectionActive(
   const current = await readOne(shopId, id);
   if (active && !current.axis) {
     throw new KnowledgeValidationError(
-      "Choose whether this is a concern or a type of care before switching it on — " +
+      "Choose whether this is a concern, a type of care or a range before switching it on — " +
         "the agent gives up a concern before a type of care when nothing matches both."
     );
   }

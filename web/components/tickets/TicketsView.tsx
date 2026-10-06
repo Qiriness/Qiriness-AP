@@ -478,8 +478,13 @@ export function TicketsView({
     ? visibleDropped.find((mail) => mail.id === selectedDroppedId) ?? null
     : null;
 
+  // KEYED ON THE ID, not the row. Linking an order, acting on the case or
+  // snoozing replaces the row object, and each of those handlers already sets
+  // what changed; reloading on the object threw that away and read the whole
+  // detail and thread again for the same ticket.
+  const selectedTicketKey = selectedTicket?.id ?? null;
   useEffect(() => {
-    if (!selectedTicket) {
+    if (!selectedTicketKey) {
       setDetail(null);
       setThread(null);
       setDetailError(null);
@@ -493,7 +498,7 @@ export function TicketsView({
     setDetailError(null);
     setThreadError(null);
 
-    fetchTicketDetail(selectedTicket.id)
+    fetchTicketDetail(selectedTicketKey)
       .then((loaded) => {
         if (live) setDetail(loaded);
       })
@@ -501,7 +506,7 @@ export function TicketsView({
         if (live) setDetailError(knowledgeErrorMessage(cause));
       });
 
-    fetchTicketThread(selectedTicket.id)
+    fetchTicketThread(selectedTicketKey)
       .then((loaded) => {
         if (live) setThread(loaded);
       })
@@ -512,29 +517,44 @@ export function TicketsView({
     return () => {
       live = false;
     };
-  }, [selectedTicket]);
+  }, [selectedTicketKey]);
 
   // GREY UNTIL IT LANDS. An approved draft, or a person's own reply, waits on
-  // the worker; the page looks again every 15 s until it has reached the
-  // mailbox, so the draft steps aside (and « Create draft » appears) without a
-  // reload. One thread read, and only while something is actually waiting.
+  // the worker; the page looks again until it has reached the mailbox, so the
+  // draft steps aside (and « Create draft » appears) without a reload. One
+  // thread read, and only while something is actually waiting: 15 s apart at
+  // first, then further apart up to a minute, and never while the browser tab is
+  // hidden. A reply left waiting in a background tab used to read the whole
+  // thread four times a minute until somebody came back.
   const waiting = awaitingWorker(thread);
   const waitingTicketId = waiting ? thread?.ticketId ?? null : null;
   useEffect(() => {
     if (!waitingTicketId) return;
     let live = true;
-    const timer = window.setInterval(() => {
+    let delay = 15_000;
+    let timer: number | undefined;
+    const look = () => {
+      if (document.visibilityState !== "visible") {
+        timer = window.setTimeout(look, delay);
+        return;
+      }
       fetchTicketThread(waitingTicketId)
         .then((loaded) => {
           if (live) setThread((current) => (current?.ticketId === loaded.ticketId ? loaded : current));
         })
         .catch(() => {
           // A missed look is harmless; the next one tries again.
+        })
+        .finally(() => {
+          if (!live) return;
+          delay = Math.min(delay * 2, 60_000);
+          timer = window.setTimeout(look, delay);
         });
-    }, 15000);
+    };
+    timer = window.setTimeout(look, delay);
     return () => {
       live = false;
-      window.clearInterval(timer);
+      window.clearTimeout(timer);
     };
   }, [waitingTicketId]);
 

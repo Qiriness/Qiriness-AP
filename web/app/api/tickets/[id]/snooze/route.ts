@@ -5,6 +5,7 @@ import { getShopId } from "@/lib/server/knowledge-service";
 import { snoozeTicket, unsnoozeTicket } from "@/lib/server/snooze-service";
 import { knowledgeErrorResponse } from "@/lib/server/knowledge-errors";
 import type { SnoozeWaitingFor } from "@/lib/types";
+import { ticketsChanged } from "@/lib/server/cache-tags";
 
 export const dynamic = "force-dynamic";
 
@@ -33,6 +34,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       // The user's id, never a name or an address.
       session?.sub ?? null
     );
+    ticketsChanged();
     return NextResponse.json({ snooze });
   } catch (error) {
     return knowledgeErrorResponse(error);
@@ -44,6 +46,7 @@ export async function DELETE(_request: NextRequest, { params }: RouteParams) {
   try {
     const [shopId, session] = await Promise.all([getShopId(), getSession()]);
     const wake = await unsnoozeTicket(shopId, params.id, session?.sub ?? null);
+    ticketsChanged();
     return NextResponse.json({ wake });
   } catch (error) {
     return knowledgeErrorResponse(error);

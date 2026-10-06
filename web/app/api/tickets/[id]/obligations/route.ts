@@ -5,6 +5,7 @@ import { actOnObligation } from "@/lib/server/case-state-service";
 import { getTicketListItem } from "@/lib/server/tickets-service";
 import { getSession } from "@/lib/server/auth";
 import { knowledgeErrorResponse, KnowledgeValidationError } from "@/lib/server/knowledge-errors";
+import { ticketsChanged } from "@/lib/server/cache-tags";
 
 export const dynamic = "force-dynamic";
 
@@ -33,6 +34,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const shopId = await getShopId();
     const session = await getSession();
     const caseState = await actOnObligation(shopId, params.id, obligationId, action, session?.sub ?? null);
+    ticketsChanged();
     const ticket = await getTicketListItem(shopId, params.id);
     return NextResponse.json({ caseState, ticket });
   } catch (error) {

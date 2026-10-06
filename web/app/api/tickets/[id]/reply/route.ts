@@ -4,6 +4,7 @@ import { getSession } from "@/lib/server/auth";
 import { getShopId } from "@/lib/server/knowledge-service";
 import { sendManualReply } from "@/lib/server/tickets-service";
 import { knowledgeErrorResponse, KnowledgeValidationError } from "@/lib/server/knowledge-errors";
+import { ticketsChanged } from "@/lib/server/cache-tags";
 
 export const dynamic = "force-dynamic";
 
@@ -44,6 +45,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       // Who asked for the send: the user's id, never a name or an address.
       session?.sub ?? null
     );
+    ticketsChanged();
     return NextResponse.json({ reply });
   } catch (error) {
     return knowledgeErrorResponse(error);

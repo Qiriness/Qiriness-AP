@@ -40,13 +40,21 @@ export function LiveRefresh({ renderedAt }: { renderedAt: string }) {
     };
   }, [refresh]);
 
+  // The button asks for fresh figures: the cache is cleared first, then the
+  // page re-rendered. The timer above only re-renders from the cache.
+  const refreshFresh = () => {
+    fetch("/api/insights/refresh", { method: "POST" })
+      .catch(() => undefined)
+      .finally(refresh);
+  };
+
   const time = new Date(renderedAt).toLocaleTimeString(intlTag(locale), { hour: "2-digit", minute: "2-digit" });
 
   return (
     <div className={styles.live}>
       <span className={styles.liveDot} aria-hidden="true" />
       <span suppressHydrationWarning>{pending ? t("insights.shell.updating") : t("insights.shell.live", { time })}</span>
-      <button type="button" className={styles.refresh} onClick={refresh} disabled={pending} aria-label={t("insights.shell.refresh")}>
+      <button type="button" className={styles.refresh} onClick={refreshFresh} disabled={pending} aria-label={t("insights.shell.refresh")}>
         <svg width="15" height="15" viewBox="0 0 24 24" aria-hidden="true">
           <path
             d="M20 11a8 8 0 1 0-2.34 5.66M20 4v7h-7"

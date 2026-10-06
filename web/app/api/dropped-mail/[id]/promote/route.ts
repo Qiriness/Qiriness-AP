@@ -3,6 +3,7 @@ import type { NextRequest } from "next/server";
 import { getShopId } from "@/lib/server/knowledge-service";
 import { promoteDroppedMail } from "@/lib/server/dropped-mail-service";
 import { knowledgeErrorResponse } from "@/lib/server/knowledge-errors";
+import { ticketsChanged } from "@/lib/server/cache-tags";
 
 export const dynamic = "force-dynamic";
 
@@ -29,6 +30,7 @@ export async function POST(_request: NextRequest, { params }: RouteParams) {
   try {
     const shopId = await getShopId();
     const { ticket, ticketCreated } = await promoteDroppedMail(shopId, params.id);
+    ticketsChanged();
     return NextResponse.json({ ticket, ticketCreated });
   } catch (error) {
     return knowledgeErrorResponse(error);

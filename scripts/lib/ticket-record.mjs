@@ -841,8 +841,31 @@ export function createTicketRecord(supabase, { shopId, transport = REST_TRANSPOR
      * Soft-deleted rows are excluded by the view, not by this filter — a
      * compliance delete must not reach the UI even through a reader that forgot.
      */
-    async queue() {
-      return selectAll(supabase, V.TICKET_QUEUE, { shop_id: shopId }, COLUMNS.ticketQueue);
+    //
+    // `openOnly` leaves out closed and resolved threads: 974 of 1,026 rows on
+    // 2026-10-06, and all a reader that counts open work would throw away.
+    // `withOrderOnly` keeps the rows confirmed against an order, and `caseIds`
+    // the threads of those cases: what the Orders page marks, and the siblings
+    // its priority can borrow a situation from.
+    /** @param {{ openOnly?: boolean, withOrderOnly?: boolean, caseIds?: string[] | null }} [options] */
+    async queue({ openOnly = false, withOrderOnly = false, caseIds = null } = {}) {
+      const where = { shop_id: shopId };
+      if (openOnly) where.status = { operator: 'not.in', value: '(closed,resolved)' };
+      if (withOrderOnly) where.shopify_order_number = NOT_NULL;
+      if (!caseIds) return selectAll(supabase, V.TICKET_QUEUE, where, COLUMNS.ticketQueue);
+      const rows = [];
+      for (let i = 0; i < caseIds.length; i += 100) {
+        const chunk = caseIds.slice(i, i + 100);
+        rows.push(
+          ...(await selectAll(
+            supabase,
+            V.TICKET_QUEUE,
+            { ...where, case_id: { operator: 'in', value: `(${chunk.join(',')})` } },
+            COLUMNS.ticketQueue
+          ))
+        );
+      }
+      return rows;
     },
 
     queueRow,

@@ -424,6 +424,9 @@ create index tickets_customer_id_idx on public.tickets (customer_id);
 
 create index tickets_shop_last_message_at_idx on public.tickets (shop_id, last_message_at);
 
+-- The newest change, for the worker's change gate and incremental passes (77).
+create index tickets_shop_updated_at_idx on public.tickets (shop_id, updated_at);
+
 create index tickets_shop_archived_at_idx on public.tickets (shop_id, archived_at);
 
 create index tickets_retention_delete_after_idx on public.tickets (shop_id, retention_delete_after);

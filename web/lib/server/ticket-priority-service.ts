@@ -13,7 +13,7 @@ import {
   supabaseSelect,
   supabaseSelectAll,
 } from "../../../scripts/lib/supabase-rest-client.mjs";
-import { COLUMNS, T } from "../../../scripts/lib/tables.mjs";
+import { T } from "../../../scripts/lib/tables.mjs";
 import { buildOrderContext, orderStates } from "../../../agent/src/resolution/order-context.mjs";
 import { excessWorkingDays } from "../../../scripts/lib/working-days.mjs";
 
@@ -46,16 +46,34 @@ function inFilter(values: unknown[]): { operator: string; value: string } {
   return { operator: "in", value: `(${escaped.join(",")})` };
 }
 
+/**
+ * The two keys read out of `exemplar_match`, in the database: the blob is a
+ * diagnostic record (closest, runner-up, margins, needs) and only these decide
+ * the situation.
+ */
+const INVESTIGATION_SITUATION =
+  "id,ticket_id,investigated_at," +
+  "policy_situation_key:exemplar_match->policy->>situation_key,exemplar_key:exemplar_match->>exemplar_key";
+
 function situationFromInvestigation(row: any): string | null {
-  const match = row?.exemplar_match;
-  if (!match || typeof match !== "object") return null;
-  const policy = match.policy && typeof match.policy === "object" ? match.policy : {};
-  return typeof policy.situation_key === "string"
-    ? policy.situation_key
-    : typeof match.exemplar_key === "string"
-      ? match.exemplar_key
-      : null;
+  return row?.policy_situation_key ?? row?.exemplar_key ?? null;
 }
+
+/**
+ * What the order states need: delivery, dispatch and cancellation, the dates and
+ * the destination. Not the line items, refunds, returns or discounts that
+ * `orderForContext` carries for the agent. Checked on 2026-10-06: the same
+ * order state, dates and country for all 180 linked orders, 252 kB against 718.
+ */
+const ORDER_FOR_PRIORITY =
+  "id,name,order_number,customer_id," +
+  "financial_status,fulfillment_status,return_status,order_status," +
+  "cancel_reason,cancelled_at,sales_channel,source_name," +
+  "currency_code,subtotal_price,total_discounts,total_shipping_price," +
+  "total_tax,total_price,total_refunded,total_outstanding," +
+  "fulfillments,shipping_destination,customer_email_masked," +
+  "delivered_at,return_refund_opened_at,return_refund_completed_at," +
+  "processed_at,shopify_created_at,shopify_updated_at,tracking_numbers";
 
 function newestByTicket(rows: any[], timestamp: string): Map<string, any> {
   const result = new Map<string, any>();
@@ -92,7 +110,7 @@ async function selectLinkedOrders(shopId: string, names: string[]): Promise<any[
       getSupabaseClient(),
       T.ORDERS,
       { shop_id: shopId, name: inFilter(batch), deleted_at: { operator: "is", value: "null" } },
-      COLUMNS.orderForContext,
+      ORDER_FOR_PRIORITY,
       { order: "id.asc" }
     )
   ));
@@ -109,7 +127,7 @@ export async function loadTicketPriority(shopId: string, rows: any[]): Promise<P
       T.TICKET_INVESTIGATIONS,
       shopId,
       ticketIds,
-      "id,ticket_id,exemplar_match,investigated_at"
+      INVESTIGATION_SITUATION
     ),
     selectForTicketChunks(
       T.TICKET_CASE_STATE,
