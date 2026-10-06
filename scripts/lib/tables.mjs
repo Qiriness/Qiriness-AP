@@ -59,6 +59,7 @@ export const T = {
   EMAIL_BLOCKLIST: 'email_blocklist',
   SENDER_DIRECTORY: 'sender_directory',
   SPAM_AUDIT: 'spam_audit',
+  DROPPED_MAIL_CLEARS: 'dropped_mail_clears',
   TICKET_INVESTIGATIONS: 'ticket_investigations',
   TICKET_CASE_STATE: 'ticket_case_state',
   CASE_CURRENT: 'case_current',
@@ -200,6 +201,7 @@ export const V = {
   // 04_support
   TICKET_MESSAGE_COUNTS: 'ticket_message_counts',
   TICKET_FIRST_INBOUND: 'ticket_first_inbound',
+  DROPPED_MAIL_LIST: 'dropped_mail_list',
   CASE_MESSAGE_COUNTS: 'case_message_counts',
   CASE_FACTS: 'case_facts',
   TICKET_QUEUE: 'ticket_queue',

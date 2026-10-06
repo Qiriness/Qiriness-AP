@@ -32,10 +32,13 @@
 import { loadConfig } from "../../../scripts/lib/sync-config.mjs";
 import {
   createSupabaseClient,
+  supabaseDelete,
+  supabaseHeaders,
   supabaseSelectAll,
+  supabaseUpsert,
 } from "../../../scripts/lib/supabase-rest-client.mjs";
 import { createTicketRecord } from "../../../scripts/lib/ticket-record.mjs";
-import { T } from "../../../scripts/lib/tables.mjs";
+import { T, V } from "../../../scripts/lib/tables.mjs";
 import {
   OWN_SIDE_LABELS,
   createSenderDirectoryStore,
@@ -67,49 +70,103 @@ function getSupabaseClient() {
   return createSupabaseClient(loadConfig(process.env as Record<string, string | undefined>));
 }
 
-/**
- * Every blocked decision that is still a drop, most recent first.
- *
- * Filtered on `outcome = 'blocked'` rather than on `label = 'irrelevant'`: the
- * blocklist pass writes no label at all, and the `irrelevant` label predates the
- * change that made it drop, so every row currently carrying it was in fact kept.
- * Blocked is the only field that reliably means "this never became a ticket".
- *
- * MINUS THE ONES SOMEBODY PROMOTED, and that subtraction is how a promotion is
- * recorded at all. There is no `promoted_at` column, deliberately: adding one
- * means an `alter table … add column` by hand on a populated table, which the
- * baseline forbids for the same reason the drafting queue is derived rather than
- * flagged. The existence of a `ticket_messages` row with that
- * `graph_message_id` IS the record, it cannot disagree with itself, and it is
- * one query over 49 rows.
- */
-export async function listDroppedMail(shopId: string): Promise<DroppedMail[]> {
-  const supabase = getSupabaseClient();
+/** Rows per page of the Irrelevant list. */
+export const DROPPED_PAGE_SIZE = 200;
 
-  const [rows, withText] = (await Promise.all([
-    supabaseSelectAll(supabase, T.SPAM_AUDIT, { shop_id: shopId, outcome: { operator: "eq", value: "blocked" } }, LIST_COLUMNS),
-    // Which rows still hold a text, as ids only: the button that promotes one
-    // needs to know, and the text itself is read when the dialog opens.
-    supabaseSelectAll(
-      supabase,
-      T.SPAM_AUDIT,
-      { shop_id: shopId, outcome: { operator: "eq", value: "blocked" }, body_text: { operator: "not.is", value: "null" } },
-      "id"
-    ),
-  ])) as [any[], any[]];
-  const hasText = new Set(withText.map((row) => row.id));
-
-  const promoted = await promotedMessageIds(
-    supabase,
-    shopId,
-    rows.map((row) => row.graph_message_id)
-  );
-
-  return rows
-    .filter((row) => !promoted.has(row.graph_message_id))
-    .map((row) => ({ ...mapDroppedMail(row), bodyLoaded: false, hasBody: hasText.has(row.id) }))
-    .sort((a, b) => (Date.parse(b.decidedAt ?? "") || 0) - (Date.parse(a.decidedAt ?? "") || 0));
+export interface DroppedMailPage {
+  items: DroppedMail[];
+  /** Every row the list holds for this search, not just this page. */
+  total: number;
+  /** How many blocked emails people have cleared: what « restore » brings back. */
+  cleared: number;
 }
+
+/**
+ * One page of the Irrelevant list, newest first, from `dropped_mail_list`
+ * (78_dropped_mail_list.sql). The view leaves out what a person cleared and what
+ * was already promoted to a ticket, and carries `has_body` instead of the text,
+ * so the page is one request with its count. It read every blocked decision and
+ * their text on every /tickets load until 2026-10-06 (1.9 MB).
+ *
+ * `query` searches subject, sender and reason in the database, since the client
+ * only holds the pages it has loaded.
+ */
+export async function listDroppedMailPage(
+  shopId: string,
+  { offset = 0, query = "" }: { offset?: number; query?: string } = {}
+): Promise<DroppedMailPage> {
+  const client = getSupabaseClient();
+  const params = new URLSearchParams({
+    select: LIST_COLUMNS + ",has_body",
+    shop_id: `eq.${shopId}`,
+    order: "decided_at.desc,id.asc",
+  });
+  // PostgREST's own syntax is in the value, so its separators are taken out of
+  // what a person typed rather than escaped.
+  const term = query.replace(/[,()"*\\]/g, " ").trim();
+  if (term) {
+    params.set("or", `(subject.ilike."*${term}*",from_email.ilike."*${term}*",reason.ilike."*${term}*")`);
+  }
+  const from = Math.max(0, Math.floor(offset));
+  const [response, cleared] = await Promise.all([
+    fetch(`${client.baseUrl}/${V.DROPPED_MAIL_LIST}?${params.toString()}`, {
+      // Load-bearing: Next caches Server Component fetches by URL otherwise.
+      cache: "no-store",
+      headers: supabaseHeaders(client, {
+        Prefer: "count=exact",
+        "Range-Unit": "items",
+        Range: `${from}-${from + DROPPED_PAGE_SIZE - 1}`,
+      }),
+    }),
+    countClearedMail(shopId),
+  ]);
+  const rows = (await response.json().catch(() => null)) as any[] | null;
+  if (!response.ok || !Array.isArray(rows)) {
+    throw new Error(`Reading the dropped mail failed: HTTP ${response.status}`);
+  }
+  const total = Number(response.headers.get("content-range")?.split("/")[1]);
+  return {
+    items: rows.map((row) => ({ ...mapDroppedMail(row), bodyLoaded: false, hasBody: Boolean(row.has_body) })),
+    total: Number.isFinite(total) ? total : rows.length,
+    cleared,
+  };
+}
+
+async function countClearedMail(shopId: string): Promise<number> {
+  const client = getSupabaseClient();
+  const params = new URLSearchParams({ select: "spam_audit_id", shop_id: `eq.${shopId}` });
+  const response = await fetch(`${client.baseUrl}/${T.DROPPED_MAIL_CLEARS}?${params.toString()}`, {
+    method: "HEAD",
+    cache: "no-store",
+    headers: supabaseHeaders(client, { Prefer: "count=exact" }),
+  });
+  const total = Number(response.headers.get("content-range")?.split("/")[1]);
+  return response.ok && Number.isFinite(total) ? total : 0;
+}
+
+/**
+ * Clears blocked emails out of the Irrelevant list for everyone in the shop.
+ * The decision record in `spam_audit` is untouched; `restoreClearedMail` undoes it.
+ */
+export async function clearDroppedMail(shopId: string, auditIds: string[], clearedBy: string | null): Promise<number> {
+  const ids = [...new Set(auditIds.filter((id) => typeof id === "string" && UUID.test(id)))];
+  if (ids.length === 0) return 0;
+  await supabaseUpsert(
+    getSupabaseClient(),
+    T.DROPPED_MAIL_CLEARS,
+    ids.map((id) => ({ shop_id: shopId, spam_audit_id: id, cleared_by: clearedBy })),
+    "shop_id,spam_audit_id",
+    { returning: "minimal" }
+  );
+  return ids.length;
+}
+
+/** Brings every cleared email back into the list. */
+export async function restoreClearedMail(shopId: string): Promise<void> {
+  await supabaseDelete(getSupabaseClient(), T.DROPPED_MAIL_CLEARS, { shop_id: shopId });
+}
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
  * One dropped email with its text, for the dialog: the list leaves the text out.
@@ -131,51 +188,6 @@ export async function getDroppedMail(shopId: string, auditId: string): Promise<D
   const mail = { ...mapDroppedMail(rows[0]), bodyLoaded: true, hasBody: rows[0].body_text != null };
   const parcels = mail.body ? await parcelsInText(shopId, [mail.body], []) : [];
   return { ...mail, parcels };
-}
-
-/**
- * Which of these dropped messages are already stored as ticket messages.
- *
- * One `in.()` query, not one per row. The candidate set is bounded by the
- * blocked decisions (49 on this corpus) rather than by the mailbox, which is
- * what makes the derived approach affordable — the same reasoning as
- * `withoutDrafts()`.
- */
-/** Ids per request: a Graph id is ~76 characters, more once URL-encoded, so 50 stay well under 8 KB. */
-const PROMOTED_BATCH = 50;
-
-async function promotedMessageIds(
-  supabase: unknown,
-  shopId: string,
-  graphMessageIds: string[]
-): Promise<Set<string>> {
-  const ids = graphMessageIds.filter(Boolean);
-  if (ids.length === 0) {
-    return new Set();
-  }
-
-  // IN BATCHES, because the list is in the URL. The « 49 » above had become 851
-  // by 2026-09-27, about 64 KB of ids, and the server refused the request
-  // (HTTP 414), which took the whole Tickets page down with it.
-  const batches: string[][] = [];
-  for (let index = 0; index < ids.length; index += PROMOTED_BATCH) {
-    batches.push(ids.slice(index, index + PROMOTED_BATCH));
-  }
-  const pages = await Promise.all(
-    batches.map((batch) =>
-      supabaseSelectAll(
-        supabase,
-        T.TICKET_MESSAGES,
-        {
-          shop_id: shopId,
-          graph_message_id: { operator: "in", value: `(${batch.map((id) => `"${id}"`).join(",")})` },
-        },
-        "graph_message_id"
-      )
-    )
-  );
-
-  return new Set((pages.flat() as any[]).map((row) => row.graph_message_id));
 }
 
 /**

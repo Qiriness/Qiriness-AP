@@ -10,6 +10,39 @@ Three sibling files carry the other halves, and this one deliberately does not d
 
 ---
 
+## Egress, phase 4: the dashboard reads what it shows; Insights is cached and pre-loaded (2026-10-06)
+
+- **Sidebar badges:** `queue({ openOnly: true })` (52 rows, 50 kB instead of 993 kB on every page), shared for 60 s (`unstable_cache`, tag `tickets`), and cleared by `ticketsChanged()` in the 7 dashboard routes that change a ticket.
+- **Irrelevant list:** no email text. `GET /api/dropped-mail/[id]` serves the dialog, `hasBody` comes from an id-only read, and the unused columns are gone.
+- **Priority:**
+  - only the two situation keys out of `exemplar_match` (38 kB instead of 256 kB, same situation for 193 of 193 runs);
+  - a slim order projection (252 kB instead of 718 kB, same state, dates and country for 180 of 180 orders).
+- **Orders marks:** order-linked threads plus their case siblings, not the whole queue.
+- **Insights:**
+  - `callRpc`, `readView`, the freshness row and ShopifyQL go through Vercel's Data Cache (15 min, tag `insights`).
+  - The ↻ button clears it (`POST /api/insights/refresh`).
+  - « Live · HH:MM » shows when the figures were read.
+  - The other tabs are prefetched in full.
+- **Ticket detail:**
+  - It reloads on the selected id, not the row object.
+  - The waiting-reply poll backs off from 15 s to 60 s and skips hidden tabs.
+- **Agent Setup article list:** named columns instead of `*` (40 kB instead of 128 kB).
+- **`77_updated_at_indexes.sql`:** `(shop_id, updated_at)` on customers, orders and tickets, for the cold 12 s `insights_freshness` and the worker's change gate.
+- **Closed tickets load when the Closed tab opens.**
+  - `listTickets(…, { scope })`, `countClosedTickets` and `GET /api/tickets/closed`.
+  - A deep link to a closed ticket is read on its own.
+  - /tickets drops from ~1 MB of queue to 51 kB.
+- **The Irrelevant list is paged** through `78_dropped_mail_list.sql`: `dropped_mail_clears` plus the view `dropped_mail_list`.
+  - `GET /api/dropped-mail?offset=&q=` serves 200 rows a page with the total, and searches server-side.
+  - `POST` / `DELETE /api/dropped-mail/clears` clear for the shop and restore.
+  - localStorage clears are moved to the server once.
+  - The preview reads the text on selection.
+- **Proven:**
+  - Migrations 77 and 78 are applied. The indexes are used, and `insights_freshness` takes 151 ms.
+  - Live, the view equals the old logic (1,272 rows, 1,171 with text), and the closed count equals the tab's rows (847).
+  - Web typecheck, lint, production build, and the size and equivalence checks above.
+  - **Not yet:** deployed, timed in a browser.
+
 ## Egress, phase 3: the other per-poll passes run on change (2026-10-06)
 
 - **`createChangeGate`** (`agent/src/lib/change-gate.mjs`, 4 tests) wraps customer resolution, order context, the change router and auto-close. A pass runs when the newest `updated_at` of `tickets` (and `orders` where relevant) moved, or every 15 minutes. Rule: DECISIONS.md, « The other per-poll passes run on change ».

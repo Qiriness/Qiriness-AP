@@ -27,10 +27,11 @@ import { loadVipRule, loadVipTicketIds } from "../../../scripts/lib/vip-rule.mjs
 import { priorityBand, scorePriority } from "../../../scripts/lib/ticket-priority.mjs";
 import {
   createSupabaseClient,
+  supabaseHeaders,
   supabaseInsert,
   supabaseSelect,
 } from "../../../scripts/lib/supabase-rest-client.mjs";
-import { COLUMNS, T } from "../../../scripts/lib/tables.mjs";
+import { COLUMNS, T, V } from "../../../scripts/lib/tables.mjs";
 import {
   createSenderDirectoryStore,
   emptySenderDirectory
@@ -231,16 +232,65 @@ function partitionBySender(
   };
 }
 
-export async function listTickets(shopId: string): Promise<TicketListItem[]> {
-  const rows = await readQueue(shopId) as any[];
+/**
+ * The Tickets list. `scope` reads one half of it: `open` is what /tickets
+ * renders, `closed` what its Closed tab fetches when opened (974 of 1,026 rows
+ * on 2026-10-06, read on every visit until then).
+ */
+export async function listTickets(
+  shopId: string,
+  { scope = "all" }: { scope?: "all" | "open" | "closed" } = {}
+): Promise<TicketListItem[]> {
+  const rows = (scope === "open"
+    ? await readOpenQueue(shopId)
+    : scope === "closed"
+      ? await getRecord(shopId).queue({ closedOnly: true })
+      : await readQueue(shopId)) as any[];
   const [directory, vipTickets, priority, snoozes, forwarding] = await Promise.all([
     readSenderDirectory(shopId),
     loadVipTickets(shopId),
-    readPriority(shopId),
+    scope === "all" ? readPriority(shopId) : priorityWithCaseSiblings(shopId, rows),
     readSnoozeFacts(shopId),
     readForwardingFacts(shopId)
   ]);
   return partitionBySender(rows, directory, vipTickets, priority, snoozes, forwarding).tickets;
+}
+
+/**
+ * Priority for part of the queue, scored as it is over the whole of it: a thread
+ * can borrow its case's situation from another thread of the case
+ * (`withCaseFacts`), so the case siblings are read too, for scoring only.
+ */
+async function priorityWithCaseSiblings(shopId: string, rows: any[]): Promise<PriorityRead> {
+  const caseIds = [...new Set(rows.map((row) => row.case_id).filter(Boolean))] as string[];
+  const siblings = caseIds.length ? ((await getRecord(shopId).queue({ caseIds })) as any[]) : [];
+  return loadTicketPriority(shopId, [...new Map([...rows, ...siblings].map((row) => [row.id, row])).values()]);
+}
+
+/**
+ * How many threads the Closed tab holds, without reading them: the same rows as
+ * `listTickets(…, { scope: "closed" })` (closed or resolved, not one of our own
+ * addresses), counted by a `count=exact` HEAD.
+ */
+export async function countClosedTickets(shopId: string): Promise<number> {
+  const client = getSupabaseClient();
+  const params = new URLSearchParams({
+    select: "id",
+    shop_id: `eq.${shopId}`,
+    status: "in.(closed,resolved)",
+    sender_label: "is.null",
+  });
+  const response = await fetch(`${client.baseUrl}/${V.TICKET_QUEUE}?${params.toString()}`, {
+    method: "HEAD",
+    // Load-bearing: Next caches Server Component fetches by URL otherwise.
+    cache: "no-store",
+    headers: supabaseHeaders(client, { Prefer: "count=exact" }),
+  });
+  const total = Number(response.headers.get("content-range")?.split("/")[1]);
+  if (!response.ok || !Number.isFinite(total)) {
+    throw new Error(`Counting closed tickets failed: HTTP ${response.status}`);
+  }
+  return total;
 }
 
 /** The other half: threads one of our own addresses opened. */

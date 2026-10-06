@@ -89,6 +89,15 @@ import styles from "./TicketsView.module.css";
 interface TicketsViewProps {
   initialTickets: TicketListItem[];
   droppedMail: DroppedMail[];
+  /** Every row of the Irrelevant list, of which `droppedMail` is the first page. */
+  droppedTotal?: number;
+  /** Blocked emails cleared shop-wide: what « restore » brings back. */
+  clearedMailCount?: number;
+  /**
+   * Closed threads the page did not load. Given, the Closed tab reads them when
+   * first opened; absent, `initialTickets` already holds them.
+   */
+  closedCount?: number;
   loadError: string | null;
   /** Rendered on the server at the header's right: the freshness pills. */
   headerAside?: ReactNode;
@@ -327,6 +336,9 @@ function statusClass(ticket: TicketListItem): string {
 export function TicketsView({
   initialTickets,
   droppedMail,
+  droppedTotal: initialDroppedTotal,
+  clearedMailCount = 0,
+  closedCount,
   loadError,
   initialParams,
   headerAside,
@@ -342,6 +354,17 @@ export function TicketsView({
   const [restored, setRestored] = useState(() => hasPageState(toSearchParams(initialParams)));
   const [tickets, setTickets] = useState(initialTickets);
   const [dropped, setDropped] = useState(droppedMail);
+  // THE IRRELEVANT LIST IS PAGED IN THE DATABASE (78_dropped_mail_list.sql):
+  // `dropped` holds the pages loaded so far, the total is the server's.
+  const [droppedTotal, setDroppedTotal] = useState(initialDroppedTotal ?? droppedMail.length);
+  const [clearedTotal, setClearedTotal] = useState(clearedMailCount);
+  const [moreLoading, setMoreLoading] = useState(false);
+  // CLOSED THREADS ARE READ WHEN THE TAB OPENS. "loaded" from the start when the
+  // page gave every row, as it did before 2026-10-06.
+  const [closedState, setClosedState] = useState<"idle" | "loading" | "loaded" | "failed">(
+    closedCount === undefined ? "loaded" : "idle"
+  );
+  const [initialClosedIds] = useState(() => new Set(initialTickets.filter(isClosed).map((ticket) => ticket.id)));
   const [activeView, setActiveView] = useState<TicketView>(initialState.view);
   const [selectedTicketId, setSelectedTicketId] = useState<string | null>(initialState.ticketId);
   const [selectedDroppedId, setSelectedDroppedId] = useState<string | null>(initialState.mailId);
@@ -368,7 +391,6 @@ export function TicketsView({
   // mode that hides it. Starts empty on both the server and the first client
   // render — `localStorage` is read in an effect below, because this component
   // renders on the server too and reading storage there throws.
-  const [clearedMailIds, setClearedMailIds] = useState<string[]>([]);
   const [selectingMail, setSelectingMail] = useState(false);
   const [pickedMailIds, setPickedMailIds] = useState<string[]>([]);
 
@@ -428,21 +450,11 @@ export function TicketsView({
         .sort((a, b) => Date.parse(a.snooze?.wakeAt ?? "") - Date.parse(b.snooze?.wakeAt ?? "")),
     [tickets]
   );
-  const clearedMail = useMemo(() => new Set(clearedMailIds), [clearedMailIds]);
   const pickedMail = useMemo(() => new Set(pickedMailIds), [pickedMailIds]);
-  // Cleared mail is gone from the tab count as well as from the list: a count
-  // that keeps counting what it will not show reads as a bug.
-  const droppedBase = useMemo(
-    () => dropped.filter((mail) => !clearedMail.has(mail.id)),
-    [dropped, clearedMail]
-  );
-  // How many of the cleared ids are still rows we hold — the number the Restore
-  // button offers to bring back. A promoted mail leaves `dropped` for good, so
-  // its id can sit in storage for ever without meaning anything.
-  const clearedCount = useMemo(
-    () => dropped.reduce((total, mail) => total + (clearedMail.has(mail.id) ? 1 : 0), 0),
-    [dropped, clearedMail]
-  );
+  // Cleared and promoted mail never reaches the page: the database view leaves
+  // it out, and a search is run there too, so what is loaded is what is shown.
+  const droppedBase = dropped;
+  const clearedCount = clearedTotal;
 
   const query = queryByView[activeView];
   const queue = useMemo(() => queueBase.filter((ticket) => matchesTicket(ticket, queryByView.queue)), [queueBase, queryByView.queue]);
@@ -458,10 +470,7 @@ export function TicketsView({
     () => snoozedBase.filter((ticket) => matchesTicket(ticket, queryByView.snoozed)),
     [snoozedBase, queryByView.snoozed]
   );
-  const visibleDropped = useMemo(
-    () => droppedBase.filter((mail) => matchesDroppedMail(mail, queryByView.irrelevant)),
-    [droppedBase, queryByView.irrelevant]
-  );
+  const visibleDropped = droppedBase;
 
   const activeTickets =
     activeView === "queue"
@@ -569,7 +578,26 @@ export function TicketsView({
       // Storage blocked: start from the defaults.
     }
     if (saved) {
-      const next = reconcilePageState(parsePageState(new URLSearchParams(saved)), initialTickets, droppedMail);
+      const parsed = parsePageState(new URLSearchParams(saved));
+      const apply = (rows: TicketListItem[]) => {
+        const next = reconcilePageState(parsed, rows, droppedMail);
+        setActiveView(next.view);
+        setQueryByView({ ...EMPTY_QUERIES, [next.view]: next.query });
+        setLevel(next.level);
+        setCategory(next.category);
+        setSender(next.sender);
+        setSort(next.sort);
+        setSelectedTicketId(next.ticketId);
+        setSelectedDroppedId(next.mailId);
+      };
+      // A saved ticket this page did not load is probably closed: read the
+      // Closed tab's threads, then restore against them.
+      if (parsed.ticketId && !initialTickets.some((ticket) => ticket.id === parsed.ticketId) && closedState !== "loaded") {
+        void loadClosed().then((rows) => apply(rows.length ? rows : initialTickets));
+        setRestored(true);
+        return;
+      }
+      const next = reconcilePageState(parsed, initialTickets, droppedMail);
       setActiveView(next.view);
       setQueryByView({ ...EMPTY_QUERIES, [next.view]: next.query });
       setLevel(next.level);
@@ -583,29 +611,122 @@ export function TicketsView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // What this browser has already cleared out of the Irrelevant list. Runs once,
-  // after mount, for the reason the state above starts empty. Storage is written
-  // by the two handlers rather than by an effect on this state: an effect would
-  // fire with the empty initial value and overwrite what it is about to read.
+  // CLEARS USED TO LIVE IN THIS BROWSER (localStorage), so the server sent every
+  // cleared row anyway. Whatever an older version of the page left there is
+  // moved to the shop's record once, then the key is removed.
   useEffect(() => {
     let saved: string | null = null;
     try {
       saved = window.localStorage.getItem(CLEARED_MAIL_KEY);
     } catch {
-      // Storage blocked: nothing is hidden, which is the right way to fail —
-      // the list showing too much is recoverable, hiding mail is not.
+      return;
     }
     if (!saved) return;
+    let ids: string[] = [];
     try {
-      const ids = JSON.parse(saved);
-      if (Array.isArray(ids)) {
-        setClearedMailIds(ids.filter((id): id is string => typeof id === "string"));
-      }
+      const parsed = JSON.parse(saved);
+      if (Array.isArray(parsed)) ids = parsed.filter((id): id is string => typeof id === "string");
     } catch {
-      // Unparseable: treat it as nothing cleared rather than clearing the key,
-      // in case a later version of this page can read it.
+      // Unparseable: nothing to move.
     }
+    const forget = () => {
+      try {
+        window.localStorage.removeItem(CLEARED_MAIL_KEY);
+      } catch {
+        // Storage blocked: tried again on the next visit.
+      }
+    };
+    if (ids.length === 0) {
+      forget();
+      return;
+    }
+    fetch("/api/dropped-mail/clears", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ids }) })
+      .then((response) => {
+        if (!response.ok) return;
+        forget();
+        return reloadDropped(queryByView.irrelevant);
+      })
+      .catch(() => {
+        // Kept in storage and tried again on the next visit.
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  /** One page of the Irrelevant list from the server, for this search. */
+  async function fetchDroppedPage(offset: number, q: string) {
+    const response = await fetch(`/api/dropped-mail?offset=${offset}&q=${encodeURIComponent(q)}`);
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    return (await response.json()) as { items: DroppedMail[]; total: number; cleared: number };
+  }
+
+  /** The list again from its first page: after a search, a clear or a restore. */
+  async function reloadDropped(q: string) {
+    const page = await fetchDroppedPage(0, q);
+    setDropped(page.items);
+    setDroppedTotal(page.total);
+    setClearedTotal(page.cleared);
+  }
+
+  async function loadMoreDropped() {
+    if (moreLoading) return;
+    setMoreLoading(true);
+    try {
+      const page = await fetchDroppedPage(dropped.length, queryByView.irrelevant);
+      setDropped((current) => {
+        const have = new Set(current.map((mail) => mail.id));
+        return [...current, ...page.items.filter((mail) => !have.has(mail.id))];
+      });
+      setDroppedTotal(page.total);
+    } catch (error) {
+      setActionError(knowledgeErrorMessage(error));
+    } finally {
+      setMoreLoading(false);
+    }
+  }
+
+  // THE SEARCH RUNS ON THE SERVER, a moment after the typing stops: the page
+  // holds only the pages it loaded, so filtering them would miss the rest.
+  // Empty to start: the first page the server rendered was not searched.
+  const searchedDropped = useRef("");
+  useEffect(() => {
+    const q = queryByView.irrelevant;
+    if (q === searchedDropped.current) return;
+    const timer = window.setTimeout(() => {
+      searchedDropped.current = q;
+      reloadDropped(q).catch((error) => setActionError(knowledgeErrorMessage(error)));
+    }, 300);
+    return () => window.clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [queryByView.irrelevant]);
+
+  /** The Closed tab's threads, merged into what the page holds. */
+  async function loadClosed(): Promise<TicketListItem[]> {
+    setClosedState("loading");
+    try {
+      const response = await fetch("/api/tickets/closed");
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const { tickets: closedRows } = (await response.json()) as { tickets: TicketListItem[] };
+      let merged: TicketListItem[] = [];
+      setTickets((current) => {
+        // A row the page already holds wins: it may have been closed or reopened here.
+        const have = new Set(current.map((ticket) => ticket.id));
+        merged = [...current, ...closedRows.filter((ticket) => !have.has(ticket.id))];
+        return merged;
+      });
+      setClosedState("loaded");
+      return merged.length ? merged : closedRows;
+    } catch {
+      setClosedState("failed");
+      return [];
+    }
+  }
+
+  useEffect(() => {
+    if (activeView === "closed" && (closedState === "idle" || closedState === "failed")) {
+      void loadClosed();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeView]);
 
   // The selection is written from what is actually shown, so a ticket a filter
   // has since hidden does not linger in the address.
@@ -640,18 +761,6 @@ export function TicketsView({
     setQueryByView((current) => ({ ...current, [activeView]: value }));
   }
 
-  /** The one writer of the cleared list: state and storage move together. */
-  function rememberCleared(ids: string[]) {
-    setClearedMailIds(ids);
-    try {
-      window.localStorage.setItem(CLEARED_MAIL_KEY, JSON.stringify(ids));
-    } catch {
-      // Storage blocked or full: the clear still holds for this page view, and
-      // the list comes back on the next load. Failing loudly here would put an
-      // error in front of somebody tidying a list.
-    }
-  }
-
   function startSelectingMail() {
     setSelectingMail(true);
     setPickedMailIds([]);
@@ -668,20 +777,43 @@ export function TicketsView({
     );
   }
 
-  function clearPickedMail() {
+  // A CLEAR IS THE SHOP'S, recorded on the server (dropped_mail_clears): a
+  // cleared email is never sent to any page again until someone restores it.
+  async function clearPickedMail() {
     if (pickedMailIds.length === 0) return;
     const picked = pickedMailIds;
-    rememberCleared([...clearedMailIds, ...picked.filter((id) => !clearedMail.has(id))]);
-    // The preview pane is looking at one of these if it was picked.
-    setSelectedDroppedId((current) => (current && picked.includes(current) ? null : current));
     setActionError(null);
+    try {
+      const response = await fetch("/api/dropped-mail/clears", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: picked }),
+      });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    } catch (error) {
+      setActionError(knowledgeErrorMessage(error));
+      return;
+    }
+    const gone = new Set(picked);
+    setDropped((current) => current.filter((mail) => !gone.has(mail.id)));
+    setDroppedTotal((current) => Math.max(0, current - picked.length));
+    setClearedTotal((current) => current + picked.length);
+    // The preview pane is looking at one of these if it was picked.
+    setSelectedDroppedId((current) => (current && gone.has(current) ? null : current));
     setActionNotice(t("tickets.view.notice.cleared", { count: picked.length }));
     stopSelectingMail();
   }
 
-  function restoreClearedMail() {
-    rememberCleared([]);
+  async function restoreClearedMail() {
     setActionError(null);
+    try {
+      const response = await fetch("/api/dropped-mail/clears", { method: "DELETE" });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      await reloadDropped(queryByView.irrelevant);
+    } catch (error) {
+      setActionError(knowledgeErrorMessage(error));
+      return;
+    }
     setActionNotice(t("tickets.view.notice.restored"));
   }
 
@@ -692,6 +824,7 @@ export function TicketsView({
     try {
       const { ticket, ticketCreated } = await promoteDroppedMail(mail.id);
       setDropped((current) => current.filter((row) => row.id !== mail.id));
+      setDroppedTotal((current) => Math.max(0, current - 1));
       setSelectedDroppedId((current) => (current === mail.id ? null : current));
       if (!ticket.isOwnSide) {
         setTickets((current) =>
@@ -793,8 +926,15 @@ export function TicketsView({
     queue: queueBase.length,
     backlog: backlogBase.length,
     snoozed: snoozedBase.length,
-    irrelevant: droppedBase.length,
-    closed: closedBase.length,
+    irrelevant: droppedTotal,
+    // Until the tab has loaded its threads: the server's count, moved by what
+    // was closed or reopened here since.
+    closed:
+      closedState === "loaded"
+        ? closedBase.length
+        : (closedCount ?? 0) +
+          closedBase.filter((ticket) => !initialClosedIds.has(ticket.id)).length -
+          [...initialClosedIds].filter((id) => !closedBase.some((ticket) => ticket.id === id)).length,
   };
 
   return (
@@ -873,6 +1013,9 @@ export function TicketsView({
           selecting={selectingMail}
           picked={pickedMail}
           clearedCount={clearedCount}
+          total={droppedTotal}
+          loadingMore={moreLoading}
+          onLoadMore={loadMoreDropped}
           onStartSelecting={startSelectingMail}
           onCancelSelecting={stopSelectingMail}
           onTogglePick={toggleMailPick}
@@ -884,6 +1027,13 @@ export function TicketsView({
         <TicketWorkspace
           view={activeView}
           tickets={activeTickets}
+          listNotice={
+            activeView === "closed" && closedState === "loading"
+              ? t("tickets.panels.list.loadingClosed")
+              : activeView === "closed" && closedState === "failed"
+                ? t("tickets.panels.list.loadClosedFailed")
+                : null
+          }
           selectedTicket={selectedTicket}
           selectedId={selectedTicketId}
           onSelect={setSelectedTicketId}
@@ -1072,6 +1222,8 @@ type ManualReplyHandler = (reply: TicketManualReply) => void;
 interface TicketWorkspaceProps {
   view: TicketView;
   tickets: TicketListItem[];
+  /** Said in place of the empty list while it is being read, or failed to be. */
+  listNotice?: string | null;
   selectedTicket: TicketListItem | null;
   selectedId: string | null;
   onSelect: (id: string) => void;
@@ -1095,6 +1247,7 @@ interface TicketWorkspaceProps {
 function TicketWorkspace({
   view,
   tickets,
+  listNotice = null,
   selectedTicket,
   selectedId,
   onSelect,
@@ -1117,7 +1270,7 @@ function TicketWorkspace({
   const t = useT();
   return (
     <div className={`${styles.workspace} ${selectedTicket ? styles.hasSelection : ""}`}>
-      <TicketListPane view={view} tickets={tickets} selectedId={selectedId} onSelect={onSelect} />
+      <TicketListPane view={view} tickets={tickets} selectedId={selectedId} onSelect={onSelect} notice={listNotice} />
 
       <section className={styles.detailPane} aria-label={t("tickets.view.detailLabel")}>
         {selectedTicket ? (
@@ -1170,11 +1323,13 @@ function TicketListPane({
   tickets,
   selectedId,
   onSelect,
+  notice = null,
 }: {
   view: TicketView;
   tickets: TicketListItem[];
   selectedId: string | null;
   onSelect: (id: string) => void;
+  notice?: string | null;
 }) {
   const t = useT();
   return (
@@ -1193,7 +1348,9 @@ function TicketListPane({
         </span>
       </div>
 
-      {tickets.length === 0 ? (
+      {tickets.length === 0 && notice ? (
+        <p className={styles.placeholder}>{notice}</p>
+      ) : tickets.length === 0 ? (
         <CompactEmpty title={t("tickets.panels.list.emptyTitle")} body={t("tickets.panels.list.emptyBody")} />
       ) : (
         <ol className={styles.ticketList} role="listbox" aria-label={t("tickets.panels.list.ticketsLabel", { view: t(`tickets.view.tab.${view}`) })}>
@@ -3441,6 +3598,9 @@ function IrrelevantWorkspace({
   selecting,
   picked,
   clearedCount,
+  total,
+  loadingMore,
+  onLoadMore,
   onStartSelecting,
   onCancelSelecting,
   onTogglePick,
@@ -3457,8 +3617,12 @@ function IrrelevantWorkspace({
   /** Select mode: a row click ticks it rather than opening it. */
   selecting: boolean;
   picked: Set<string>;
-  /** Rows this browser is hiding — the number Restore offers to bring back. */
+  /** Rows cleared shop-wide — the number Restore offers to bring back. */
   clearedCount: number;
+  /** Every row the list holds for this search; `mail` is the pages loaded. */
+  total: number;
+  loadingMore: boolean;
+  onLoadMore: () => void;
   onStartSelecting: () => void;
   onCancelSelecting: () => void;
   onTogglePick: (id: string) => void;
@@ -3472,6 +3636,7 @@ function IrrelevantWorkspace({
   // "All" means every row the list shows — a search narrows what Select all
   // ticks, so it never clears mail the reviewer could not see.
   const allPicked = mail.length > 0 && mail.every((item) => picked.has(item.id));
+  const shown = useFullDroppedMail(selectedMail);
 
   return (
     <div className={`${styles.workspace} ${styles.irrelevantWorkspace} ${selectedMail ? styles.hasSelection : ""}`}>
@@ -3482,7 +3647,11 @@ function IrrelevantWorkspace({
             <p>
               {selecting
                 ? t("tickets.panels.irrelevant.selected", { n: formatNumber(picked.size, locale) })
-                : `${t("tickets.panels.irrelevant.count", { count: mail.length })} · ${t("tickets.panels.irrelevant.newestFirst")}`}
+                : `${
+                    total > mail.length
+                      ? t("tickets.panels.irrelevant.shownOf", { shown: formatNumber(mail.length, locale), total: formatNumber(total, locale) })
+                      : t("tickets.panels.irrelevant.count", { count: mail.length })
+                  } · ${t("tickets.panels.irrelevant.newestFirst")}`}
             </p>
           </div>
           <div className={styles.listActions}>
@@ -3565,11 +3734,18 @@ function IrrelevantWorkspace({
             ))}
           </ol>
         )}
+        {total > mail.length && (
+          <div className={styles.listActions}>
+            <Button size="sm" variant="tertiary" loading={loadingMore} onClick={onLoadMore}>
+              {t("tickets.panels.irrelevant.loadMore", { n: formatNumber(Math.min(200, total - mail.length), locale) })}
+            </Button>
+          </div>
+        )}
       </aside>
 
       <section className={styles.detailPane} aria-label={t("tickets.panels.irrelevant.previewLabel")}>
         {selectedMail ? (
-          <DroppedMailPreview mail={selectedMail} />
+          <DroppedMailPreview mail={shown.mail ?? selectedMail} loading={shown.loading} />
         ) : (
           <EmptyDetail title={t("tickets.panels.irrelevant.selectTitle")} body={t("tickets.panels.irrelevant.selectBody")} />
         )}
@@ -3577,7 +3753,7 @@ function IrrelevantWorkspace({
 
       <aside className={styles.contextPane} aria-label={t("tickets.panels.irrelevant.contextLabel")}>
         {selectedMail ? (
-          <DroppedMailContext mail={selectedMail} onPromote={onPromote} pendingId={pendingId} />
+          <DroppedMailContext mail={shown.mail ?? selectedMail} onPromote={onPromote} pendingId={pendingId} />
         ) : (
           <EmptyDetail title={t("tickets.panels.irrelevant.noneTitle")} body={t("tickets.panels.irrelevant.noneBody")} />
         )}
@@ -3586,7 +3762,37 @@ function IrrelevantWorkspace({
   );
 }
 
-function DroppedMailPreview({ mail }: { mail: DroppedMail }) {
+/**
+ * The selected email with its text. The list carries none (1.9 MB of bodies on
+ * every /tickets load until 2026-10-06), so the text is read when a row is
+ * opened, from `/api/dropped-mail/[id]`.
+ */
+function useFullDroppedMail(selected: DroppedMail | null): { mail: DroppedMail | null; loading: boolean } {
+  const [full, setFull] = useState<DroppedMail | null>(null);
+  const id = selected?.id ?? null;
+  const needs = Boolean(selected && selected.bodyLoaded === false);
+  useEffect(() => {
+    setFull(null);
+    if (!id || !needs) return;
+    let live = true;
+    fetch(`/api/dropped-mail/${encodeURIComponent(id)}`)
+      .then((response) => (response.ok ? response.json() : null))
+      .then((mail: DroppedMail | null) => {
+        if (live && mail) setFull(mail);
+      })
+      .catch(() => {
+        // The preview says there is no text; reopening the row asks again.
+      });
+    return () => {
+      live = false;
+    };
+  }, [id, needs]);
+  if (!selected) return { mail: null, loading: false };
+  if (!needs) return { mail: selected, loading: false };
+  return { mail: full, loading: full === null };
+}
+
+function DroppedMailPreview({ mail, loading = false }: { mail: DroppedMail; loading?: boolean }) {
   const t = useT();
   const expired = !mail.body && Boolean(mail.bodyCapturedAt);
   return (
@@ -3603,7 +3809,9 @@ function DroppedMailPreview({ mail }: { mail: DroppedMail }) {
             {t("tickets.panels.irrelevant.failedOpen")}
           </p>
         )}
-        {mail.body ? (
+        {loading ? (
+          <p className={styles.placeholder}>{t("tickets.panels.irrelevant.loadingText")}</p>
+        ) : mail.body ? (
           <pre className={styles.messageBody}>
             <TrackingText text={mail.body} parcels={mail.parcels} />
           </pre>
@@ -3646,11 +3854,11 @@ function DroppedMailContext({
           size="sm"
           variant="primary"
           block
-          disabled={!mail.body}
+          disabled={!(mail.body || mail.hasBody)}
           loading={pendingId === mail.id}
           onClick={() => onPromote(mail)}
           title={
-            mail.body
+            mail.body || mail.hasBody
               ? t("tickets.panels.irrelevant.promoteHint")
               : t("tickets.panels.irrelevant.promoteNoBody")
           }

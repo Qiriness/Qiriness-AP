@@ -847,10 +847,12 @@ export function createTicketRecord(supabase, { shopId, transport = REST_TRANSPOR
     // `withOrderOnly` keeps the rows confirmed against an order, and `caseIds`
     // the threads of those cases: what the Orders page marks, and the siblings
     // its priority can borrow a situation from.
-    /** @param {{ openOnly?: boolean, withOrderOnly?: boolean, caseIds?: string[] | null }} [options] */
-    async queue({ openOnly = false, withOrderOnly = false, caseIds = null } = {}) {
+    // `closedOnly` is the other half: what the Closed tab reads when opened.
+    /** @param {{ openOnly?: boolean, closedOnly?: boolean, withOrderOnly?: boolean, caseIds?: string[] | null }} [options] */
+    async queue({ openOnly = false, closedOnly = false, withOrderOnly = false, caseIds = null } = {}) {
       const where = { shop_id: shopId };
       if (openOnly) where.status = { operator: 'not.in', value: '(closed,resolved)' };
+      if (closedOnly) where.status = { operator: 'in', value: '(closed,resolved)' };
       if (withOrderOnly) where.shopify_order_number = NOT_NULL;
       if (!caseIds) return selectAll(supabase, V.TICKET_QUEUE, where, COLUMNS.ticketQueue);
       const rows = [];

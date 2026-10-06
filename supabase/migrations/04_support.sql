@@ -974,6 +974,25 @@ alter table public.spam_audit enable row level security;
 comment on table public.spam_audit is
   'Audit trail for the agent ingestion spam gate: one row per decision, recording kept/blocked and a one-line reason. Exists because both passes drop mail before any ticket is written, so a blocked email would otherwise leave no trace. Stores sender address and subject (never the body) as decision metadata. Service-role worker only until dashboard roles and policies exist.';
 
+-- ---------------------------------------------------------- dropped_mail_clears
+-- Blocked emails a person cleared out of the Irrelevant list, for the whole shop.
+-- They were hidden per browser, in localStorage, so the server still sent every
+-- one. Recorded here, `dropped_mail_list` leaves them out of the read itself.
+
+create table public.dropped_mail_clears (
+  shop_id uuid not null references public.shops(id) on delete cascade,
+  spam_audit_id uuid not null references public.spam_audit(id) on delete cascade,
+  -- The dashboard user's id. Never a name or an address.
+  cleared_by text,
+  cleared_at timestamptz not null default now(),
+  primary key (shop_id, spam_audit_id)
+);
+
+alter table public.dropped_mail_clears enable row level security;
+
+comment on table public.dropped_mail_clears is
+  'Blocked emails a person cleared out of the dashboard''s Irrelevant list, shop-wide. The spam_audit row is untouched; « restore » deletes these rows.';
+
 comment on column public.spam_audit.outcome is
   'kept (the email was written to tickets/ticket_messages) or blocked (dropped before any write).';
 
@@ -2476,6 +2495,43 @@ revoke all on public.ticket_first_inbound from anon, authenticated;
 
 comment on view public.ticket_first_inbound is
   'One row per ticket: its earliest inbound message, already stripped of quoted reply chains by ingestion. Read by order resolution, which needs the customer''s own words rather than the thread.';
+
+-- ------------------------------------------------------------ dropped_mail_list
+-- The Irrelevant list as the dashboard reads it: blocked decisions minus the ones
+-- a person cleared and the ones already promoted to a ticket, without the text.
+-- `has_body` says whether a text is stored; the dialog reads it on its own.
+
+create view public.dropped_mail_list
+with (security_invoker = true) as
+  select
+    a.id as id,
+    a.shop_id as shop_id,
+    a.graph_message_id as graph_message_id,
+    a.label as label,
+    a.decided_by as decided_by,
+    a.reason as reason,
+    a.from_email as from_email,
+    a.subject as subject,
+    a.body_captured_at as body_captured_at,
+    a.body_expires_at as body_expires_at,
+    a.failed_open as failed_open,
+    a.decided_at as decided_at,
+    (a.body_text is not null) as has_body
+  from public.spam_audit a
+  where a.outcome = 'blocked'
+    and not exists (
+      select 1 from public.dropped_mail_clears c
+      where c.shop_id = a.shop_id and c.spam_audit_id = a.id
+    )
+    and not exists (
+      select 1 from public.ticket_messages m
+      where m.shop_id = a.shop_id and m.graph_message_id = a.graph_message_id
+    );
+
+revoke all on public.dropped_mail_list from anon, authenticated;
+
+comment on view public.dropped_mail_list is
+  'The Irrelevant list: blocked spam_audit rows not cleared (dropped_mail_clears) and not promoted (a ticket_messages row with the same graph_message_id), with has_body instead of the text.';
 
 -- -------------------------------------------------------- case_message_counts
 

@@ -5118,9 +5118,20 @@ The changes:
 - **The other Insights tabs are prefetched in full once the tab bar is on screen**, so switching tabs shows a page already rendered. This is affordable only because every read behind it is the shared cache.
 - **The cold freshness.** `max(updated_at)` on `customers` was a full scan of about 76 MB of pages, slow whenever they had fallen out of the free plan's small cache. `77_updated_at_indexes.sql` adds `(shop_id, updated_at)` indexes on customers, orders and tickets. The worker's change gate asks the same question.
 
-**Not done, deliberately:**
-- **No timed warm-up job.** The stale-while-recompute behaviour already makes every panel and range opened before instant. A job would only speed the first-ever view of a range, at the cost of Shopify and Supabase traffic every 15 minutes through the night.
-- **A paged blocked-email list.** It is about 800 kB even without the text, with 1,272 rows from 22 days. Paging it changes what a reviewer sees, so it is a decision, not a fix.
+**Closed threads are read when the Closed tab opens** (decided by the user). /tickets renders the open threads only (51 kB). The tab's count is a `count=exact` HEAD (`countClosedTickets`), checked equal to the rows the tab loads (847 = 847). `GET /api/tickets/closed` reads them the first time the tab is opened. Three details:
+- **A link to a closed ticket still opens.** `?ticket=` is read on its own by the page. A view restored from sessionStorage loads the closed threads first.
+- **Status changes move rows between the two halves.** The count adjusts for rows closed or reopened before the tab loaded.
+- **The priority of a partial list scores its case siblings too**, as the Orders marks do.
+
+**The blocked-email list is paged, and a clear is the shop's** (decided by the user).
+- `78_dropped_mail_list.sql` adds `dropped_mail_clears` and the view `dropped_mail_list`. The view holds blocked decisions minus the cleared and the promoted ones, with `has_body`, and gave the same 1,272 rows and 1,171 with text as the old two-step logic.
+- The page reads 200 rows at a time, newest first, with the total in the same request (108 kB). « Load more » appends the next page.
+- **The search runs in the database**, because the page holds only what it loaded.
+- **A clear is recorded server-side.** « Clear » was a localStorage list in one browser, so the server still sent every cleared row to every page. Cleared mail is now never sent to the UI again until « restore ».
+- **Shared across the shop.** One person's clear hides the row for everyone, and « restore » brings every cleared row back.
+- **Old clears move over once.** What an older page left in localStorage is posted to the server on the next visit, then the key is removed.
+
+**Not done, deliberately: no timed warm-up job.** The stale-while-recompute behaviour already makes every panel and range opened before instant. A job would only speed the first-ever view of a range, at the cost of Shopify and Supabase traffic every 15 minutes through the night.
 
 
 ## Interface language
