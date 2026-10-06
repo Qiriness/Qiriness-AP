@@ -354,12 +354,7 @@ test('every column in the schema contract exists on the relation it projects', (
     // key rather than naming a column on this relation; strip them before
     // splitting, and assert the embedded columns against the embedded table.
     const embeds = [...projection.matchAll(/(\w+)\(([^)]*)\)/g)];
-    // `alias:column->key` reads into a jsonb column: the column is what must exist.
-    const own = projection
-      .replace(/\w+\([^)]*\)/g, '')
-      .split(',')
-      .filter(Boolean)
-      .map((entry) => entry.replace(/^\w+:/, '').split(/->>?/)[0]);
+    const own = projection.replace(/\w+\([^)]*\)/g, '').split(',').filter(Boolean);
 
     const available = new Set(columnsIn(ALL, source));
     assert.ok(available.size > 0, `${source} has no readable column list`);

@@ -330,10 +330,7 @@ export const COLUMNS = {
     'shopify_order_number,resolved_context,metadata,duplicate_of_ticket_id,overrides,case_id',
 
   /** Customer resolution: an address hash and somewhere to record the attempt. */
-  // One key of `metadata`, not the object: read for ~330 tickets on every poll
-  // to find the few due an attempt. `linkCustomer` merges into the row as it stands.
-  ticketForCustomerResolution:
-    'id,customer_id,requester_email_hash,last_message_at,customer_resolution:metadata->customer_resolution',
+  ticketForCustomerResolution: 'id,customer_id,requester_email_hash,metadata,last_message_at',
 
   /** Order resolution: the text is joined from `ticket_first_inbound` separately. */
   // `status` and `investigated_at`: a ticket investigated before its order was

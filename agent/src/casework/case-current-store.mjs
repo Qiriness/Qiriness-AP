@@ -48,10 +48,6 @@ export function staleTickets({ tickets = [], current = [], readings = [], action
     .map((ticket) => ticket.id);
 }
 
-const FULL_SCAN_EVERY_MS = 24 * 60 * 60 * 1000;
-// The poll's clock is the worker's, `updated_at` / `read_at` the database's.
-const SCAN_OVERLAP_MS = 2 * 60 * 1000;
-
 /** What the status rule reads off the ticket. */
 const TICKET_FOR_STATUS = 'id,status,resolved_at,level,deleted_at,archived_at,needs_categorisation,needs_investigation,metadata,overrides';
 
@@ -61,66 +57,22 @@ export function createCaseCurrentStore(supabase, { shopId }) {
   const snoozes = createSnoozeRecord(supabase, { shopId });
   const parameterMap = async () =>
     toParameterMap(await supabaseSelect(supabase, T.SUPPORT_PARAMETERS, { shop_id: shopId }, 'parameter_key,value'));
-  // WHAT THE LAST POLL SAW, so the next reads only what moved since. Until
-  // 2026-10-06 every poll read every ticket, every reading and every action in
-  // the shop (~110 kB) to find, almost always, nothing stale. Now a poll reads
-  // the rows changed since the last one (any input to `staleTickets` moves
-  // `tickets.updated_at`, a reading or an action), plus whatever was still stale
-  // last time, and judges only those. The whole shop is read again once a day
-  // and after a restart, which is the safety net for anything that moved
-  // without leaving a trace there.
-  const scan = { since: null, lastFullAt: null, carry: new Set() };
-  const TICKET_FOR_STALENESS = 'id,last_message_at,investigated_at,overrides,fact_drift_at:fact_drift->>checked_at';
-  const byIds = async (table, column, ids, columns, options, extra = {}) => {
-    const rows = [];
-    for (let index = 0; index < ids.length; index += 100) {
-      const batch = ids.slice(index, index + 100);
-      rows.push(...(await supabaseSelectAll(supabase, table, { shop_id: shopId, ...extra, [column]: { operator: 'in', value: `(${batch.join(',')})` } }, columns, options)));
-    }
-    return rows;
-  };
   return {
-    async staleTicketIds(limit, { all = false, now = Date.now() } = {}) {
-      const full = all || scan.since === null || now - scan.lastFullAt >= FULL_SCAN_EVERY_MS;
-      const since = scan.since;
-      let inputs;
-      if (full) {
-        const [tickets, current, readings, actions] = await Promise.all([
-          supabaseSelectAll(supabase, T.TICKETS, { shop_id: shopId, deleted_at: { operator: 'is', value: 'null' } }, TICKET_FOR_STALENESS),
-          // Keyed by ticket, with no `id` column for the default paging order.
-          supabaseSelectAll(supabase, T.CASE_CURRENT, { shop_id: shopId }, 'ticket_id,folded_at', { order: 'ticket_id.asc' }),
-          supabaseSelectAll(supabase, T.TICKET_CASE_STATE, { shop_id: shopId }, 'ticket_id,read_at'),
-          supabaseSelectAll(supabase, T.TICKET_CASE_ACTIONS, { shop_id: shopId }, 'ticket_id,acted_at')
-        ]);
-        inputs = { tickets, current, readings, actions };
-        scan.lastFullAt = now;
-      } else {
-        const after = { operator: 'gte', value: since };
-        const [touched, newReadings, newActions] = await Promise.all([
-          supabaseSelectAll(supabase, T.TICKETS, { shop_id: shopId, deleted_at: { operator: 'is', value: 'null' }, updated_at: after }, 'id'),
-          supabaseSelectAll(supabase, T.TICKET_CASE_STATE, { shop_id: shopId, read_at: after }, 'ticket_id', { order: 'ticket_id.asc' }),
-          supabaseSelectAll(supabase, T.TICKET_CASE_ACTIONS, { shop_id: shopId, acted_at: after }, 'ticket_id', { order: 'ticket_id.asc' })
-        ]);
-        const ids = [
-          ...new Set([...scan.carry, ...touched.map((r) => r.id), ...newReadings.map((r) => r.ticket_id), ...newActions.map((r) => r.ticket_id)])
-        ];
-        if (ids.length === 0) {
-          scan.since = new Date(now - SCAN_OVERLAP_MS).toISOString();
-          return [];
-        }
-        const [tickets, current, readings, actions] = await Promise.all([
-          byIds(T.TICKETS, 'id', ids, TICKET_FOR_STALENESS, {}, { deleted_at: { operator: 'is', value: 'null' } }),
-          byIds(T.CASE_CURRENT, 'ticket_id', ids, 'ticket_id,folded_at', { order: 'ticket_id.asc' }),
-          byIds(T.TICKET_CASE_STATE, 'ticket_id', ids, 'ticket_id,read_at', { order: 'ticket_id.asc' }),
-          byIds(T.TICKET_CASE_ACTIONS, 'ticket_id', ids, 'ticket_id,acted_at', { order: 'ticket_id.asc' })
-        ]);
-        inputs = { tickets, current, readings, actions };
-      }
-      scan.since = new Date(now - SCAN_OVERLAP_MS).toISOString();
+    async staleTicketIds(limit, { all = false } = {}) {
+      const [tickets, current, readings, actions] = await Promise.all([
+        supabaseSelectAll(
+          supabase,
+          T.TICKETS,
+          { shop_id: shopId, deleted_at: { operator: 'is', value: 'null' } },
+          'id,last_message_at,investigated_at,overrides,fact_drift_at:fact_drift->>checked_at'
+        ),
+        // Keyed by ticket, with no `id` column for the default paging order.
+        supabaseSelectAll(supabase, T.CASE_CURRENT, { shop_id: shopId }, 'ticket_id,folded_at', { order: 'ticket_id.asc' }),
+        supabaseSelectAll(supabase, T.TICKET_CASE_STATE, { shop_id: shopId }, 'ticket_id,read_at'),
+        supabaseSelectAll(supabase, T.TICKET_CASE_ACTIONS, { shop_id: shopId }, 'ticket_id,acted_at')
+      ]);
       // `all`: every ticket, for after a change to the fold's own rules.
-      const ids = all ? inputs.tickets.map((ticket) => ticket.id) : staleTickets(inputs);
-      // Still stale next poll unless folded, which is what moves `folded_at`.
-      scan.carry = new Set(all ? [] : ids);
+      const ids = all ? tickets.map((ticket) => ticket.id) : staleTickets({ tickets, current, readings, actions });
       return ids.slice(0, limit);
     },
 

@@ -526,12 +526,9 @@ export function createTicketRecord(supabase, { shopId, transport = REST_TRANSPOR
      * see what was already tried against which address.
      */
     async linkCustomer(ticket, { customerId, status, matchedBy, emailHash, attemptedAt }) {
-      // Merged into the metadata as stored NOW: the queue read carries only this
-      // pass's own key, and writing that back would drop every other pass's trail.
-      const [stored] = await select(supabase, T.TICKETS, live({ id: ticket.id }), 'metadata', { limit: 1 });
       return patch(ticket.id, {
         ...(customerId ? { customer_id: customerId } : {}),
-        metadata: withTrail(stored?.metadata ?? ticket.metadata, 'customer_resolution', {
+        metadata: withTrail(ticket.metadata, 'customer_resolution', {
           status,
           matched_by: matchedBy,
           // The hash the attempt was made against. A ticket's requester can be
@@ -704,19 +701,13 @@ export function createTicketRecord(supabase, { shopId, transport = REST_TRANSPOR
 
     /** Tickets that know an address but not which customer it is. */
     async findUnlinkedCustomers({ limit = 500 } = {}) {
-      const rows = await selectAll(
+      return selectAll(
         supabase,
         T.TICKETS,
         live({ customer_id: IS_NULL, requester_email_hash: NOT_NULL }),
         COLUMNS.ticketForCustomerResolution,
         { limit }
       );
-      // The one trail the resolver reads, in the shape it reads it. Partial on
-      // purpose: `linkCustomer` merges into the stored object, not this one.
-      return rows.map(({ customer_resolution: trail, ...row }) => ({
-        ...row,
-        metadata: row.metadata ?? (trail ? { customer_resolution: trail } : {})
-      }));
     },
 
     /**
@@ -788,30 +779,15 @@ export function createTicketRecord(supabase, { shopId, transport = REST_TRANSPOR
      * Tickets whose bundle is already built, with the order version it was built
      * from (`source_updated_at`, read out of the bundle). The context pass
      * rebuilds the ones whose order now carries another (DECISIONS § Change router).
-     *
-     * NARROW BY DEFAULT: what every poll asks of every built ticket is only
-     * « which order, built from which version ». `ids` returns the full rows of
-     * the few found behind, which is what the rebuild needs.
      */
-    async findBuiltContext({ limit = 1000, ids = null } = {}) {
-      const source = 'source_updated_at:resolved_context->>sourceUpdatedAt';
-      const where = live({ shopify_order_number: NOT_NULL, context_resolved_at: NOT_NULL });
-      if (!ids) {
-        return selectAll(supabase, T.TICKETS, where, `id,shopify_order_number,${source}`, { limit });
-      }
-      const rows = [];
-      for (let i = 0; i < ids.length; i += 100) {
-        const chunk = ids.slice(i, i + 100);
-        rows.push(
-          ...(await selectAll(
-            supabase,
-            T.TICKETS,
-            { ...where, id: { operator: 'in', value: `(${chunk.join(',')})` } },
-            `${COLUMNS.ticketForOrderContext},${source}`
-          ))
-        );
-      }
-      return rows;
+    async findBuiltContext({ limit = 1000 } = {}) {
+      return selectAll(
+        supabase,
+        T.TICKETS,
+        live({ shopify_order_number: NOT_NULL, context_resolved_at: NOT_NULL }),
+        `${COLUMNS.ticketForOrderContext},source_updated_at:resolved_context->>sourceUpdatedAt`,
+        { limit }
+      );
     },
 
     /**
