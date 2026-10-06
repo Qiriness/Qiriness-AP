@@ -143,3 +143,13 @@ test('the change router runs after the bundle is rebuilt and before the investig
   assert.ok(stages.indexOf('route') < stages.indexOf('investigate'));
   assert.ok(stages.indexOf('route') < stages.indexOf('fold'));
 });
+
+test('the change gate is the only binding of its name in the worker', () => {
+  // 2026-10-06: it was called `gate`, and the poll body's spam filter declares
+  // its own `gate` (`blocklistStore.loadGate`). The inner one shadowed it, every
+  // `gate.run` threw « not a function », and every poll stopped after ingestion
+  // for 23 minutes. No unit test runs this file, so the name is checked here.
+  const declarations = SOURCE.match(/\b(?:const|let|var)\s+(?:\{[^}]*\bchangeGate\b[^}]*\}|changeGate\b)/g) ?? [];
+  assert.equal(declarations.length, 1, 'declared once, in main');
+  assert.ok(!/\bgate\.run\(/.test(SOURCE), 'nothing calls the ambiguous `gate.run`');
+});

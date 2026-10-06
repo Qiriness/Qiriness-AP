@@ -47,6 +47,7 @@ import {
   runOrderResolution
 } from './resolution/order-resolution-runner.mjs';
 import { createOrderContextStore, runOrderContext } from './resolution/order-context-runner.mjs';
+import { createChangeGate, latestUpdateReader } from './lib/change-gate.mjs';
 import { createChangeRouterStore, runChangeRouter } from './casework/change-router-runner.mjs';
 import { createForwardingStore } from './routing/forwarding-store.mjs';
 import { runForwarding } from './routing/forward-runner.mjs';
@@ -158,6 +159,9 @@ async function main() {
   const store = createSupabaseMessageStore(supabase);
   const caseCurrentStore = createCaseCurrentStore(supabase, { shopId });
   const changeRouterStore = createChangeRouterStore(supabase, { shopId });
+  // Passes that only need to run when their tables moved (or every 15 minutes,
+  // for windows that elapse). See lib/change-gate.mjs.
+  const changeGate = createChangeGate({ read: latestUpdateReader(supabase, shopId) });
   const snoozeRecord = createSnoozeRecord(supabase, { shopId });
   const cursorStore = createSupabaseCursorStore(supabase);
   // The narrow candidate pool duplicate detection decides against: one sender's
@@ -441,16 +445,20 @@ async function main() {
     // order number, or an OpenAI key. Everything after it can then read
     // `customer_id` instead of resolving the sender again.
     if (runsThrough('customers')) {
-      const customers = await runCustomerResolution({
-        record,
-        lookup: customerLookup,
-        shopId,
-        logger,
-        // The support mailbox is not a customer, whatever the customers table says.
-        excludedEmails: [config.graph.mailbox].filter(Boolean)
-      });
+      // Gated on tickets only: a scan of `customers` per poll for its stamp would
+      // cost more than it saves, and a newly synced customer waits ≤ 15 minutes.
+      const customers = await changeGate.run('customers', [T.TICKETS], () =>
+        runCustomerResolution({
+          record,
+          lookup: customerLookup,
+          shopId,
+          logger,
+          // The support mailbox is not a customer, whatever the customers table says.
+          excludedEmails: [config.graph.mailbox].filter(Boolean)
+        })
+      );
       // `considered` and `deferred` count tickets still in their back-off.
-      if (didWork(customers, ['considered', 'deferred'])) {
+      if (customers && didWork(customers, ['considered', 'deferred'])) {
         logger.info('customer.resolution.pass', { shopId, ...customers });
       }
     }
@@ -568,13 +576,15 @@ async function main() {
     // investigation below — and later the drafting pass — reads real order facts
     // rather than waiting a cycle for them.
     if (runsThrough('context')) {
-      const contexts = await runOrderContext({
-        store: orderContextStore,
-        record,
-        shopId,
-        logger
-      });
-      if (didWork(contexts, ['considered'])) {
+      const contexts = await changeGate.run('context', [T.TICKETS, T.ORDERS], () =>
+        runOrderContext({
+          store: orderContextStore,
+          record,
+          shopId,
+          logger
+        })
+      );
+      if (contexts && didWork(contexts, ['considered'])) {
         logger.info('order.context.pass', { shopId, ...contexts });
       }
     }
@@ -613,8 +623,10 @@ async function main() {
     // the drift the fold turns into a new version. DECISIONS § Change router.
     if (runsThrough('route')) {
       try {
-        const routed = await runChangeRouter({ store: changeRouterStore, shopId, logger });
-        if (routed.redraft > 0 || routed.reinvestigate > 0 || routed.skipped) {
+        const routed = await changeGate.run('route', [T.TICKETS, T.ORDERS], () =>
+          runChangeRouter({ store: changeRouterStore, shopId, logger })
+        );
+        if (routed && (routed.redraft > 0 || routed.reinvestigate > 0 || routed.skipped)) {
           logger.info('route.pass', { shopId, ...routed });
         }
       } catch (error) {
@@ -819,8 +831,10 @@ async function main() {
     // the timestamps this poll just advanced, so a thread that received a reply
     // seconds ago is never retired by the same pass that ingested it.
     if (runsThrough('close')) {
-      const autoClosed = await runAutoClose({ record, shopId, logger, snoozes: snoozeRecord, cases: caseRecord });
-      if (autoClosed.closed > 0 || autoClosed.failed > 0) {
+      const autoClosed = await changeGate.run('close', [T.TICKETS], () =>
+        runAutoClose({ record, shopId, logger, snoozes: snoozeRecord, cases: caseRecord })
+      );
+      if (autoClosed && (autoClosed.closed > 0 || autoClosed.failed > 0)) {
         logger.info('lifecycle.auto_close.pass', { shopId, ...autoClosed });
       }
     }

@@ -204,7 +204,15 @@ function project(row, columns) {
   }
   const picked = {};
   for (const column of columns.split(',').map((name) => name.trim()).filter(Boolean)) {
-    picked[column] = row[column] ?? null;
+    // `alias:column->key->>leaf`, as PostgREST reads into jsonb. `->>` yields
+    // text, `->` the value itself.
+    const [alias, path] = column.includes(':') ? column.split(':') : [null, column];
+    const [base, ...steps] = path.split(/->>?/);
+    const textLeaf = path.includes('->>');
+    let value = row[base];
+    for (const step of steps) value = value && typeof value === 'object' ? value[step] : undefined;
+    if (textLeaf && value !== undefined && value !== null && typeof value !== 'string') value = String(value);
+    picked[alias ?? base] = value ?? null;
   }
   return picked;
 }

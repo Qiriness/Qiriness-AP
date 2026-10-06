@@ -358,6 +358,31 @@ Resolution now also reads every later inbound message. Only the customer's own w
 
 Measured over 492 unlinked tickets: **5 become confirmed** (4 by the sender's own address, 1 by an address in a later message) and nothing else moves.
 
+### The other per-poll passes run on change, not on the clock (2026-10-06)
+
+**Measured with writes blocked, after the order-resolution fix:** an idle poll still downloaded about 720 kB. That is the change router 269 kB, the fold's staleness scan 264 kB, customer resolution 127 kB, order context 48 kB and auto-close 15 kB. Every one of them re-read its whole input to conclude that nothing had moved.
+
+**The rule is that a pass reads again only when its inputs could have moved:**
+
+- **Change gate** (`agent/src/lib/change-gate.mjs`, `changeGate` in the worker). Customer resolution, order context, the change router and auto-close run only when the newest `updated_at` of the tables they depend on has moved, or at least every **15 minutes**.
+  - The 15-minute floor covers what moves with time alone: the router's windows and auto-close's days of silence, which are measured in days, so a 15-minute grain changes nothing. It also covers what lives outside those tables, such as a rule edited in Agent Setup.
+  - New mail moves `tickets.updated_at`, so a customer's message still reaches every pass in the same poll.
+  - Customer resolution is gated on `tickets` only. Reading a stamp off 62k `customers` rows per poll would cost more than it saves, so a newly synced customer waits at most 15 minutes.
+- **The fold is incremental** (`staleTicketIds`). It reads the tickets, case-state readings and actions changed since the last poll, plus whatever was still stale, and runs `staleTickets` on those alone. The whole shop is read again once a day and after a restart.
+- **`metadata` is read for one key, or not at all.**
+  - The change router and customer resolution read it only to write one key back.
+  - Customer resolution now selects `metadata->customer_resolution`.
+  - The router selects none.
+  - Both merge their key into the row's metadata as read at write time, which also closes the window where a whole-object write could drop another pass's trail.
+- **Heavy columns only for the rows used.**
+  - The router finds the newest investigation per ticket first, then reads `tool_calls` and `findings_trace` for those runs only.
+  - Order context scans built tickets for `id, order, version` only, and reads full rows for the few behind.
+  - Casework finds unread staff messages by id and reads only their bodies.
+
+Measured: two consecutive dry-run polls on live data cost 723 kB, then **~0 kB**.
+
+**Shipped broken once, 2026-10-06 06:52–07:15 UTC.** The gate was first called `gate`, and the poll body's spam filter declares its own `gate` (`blocklistStore.loadGate`). The inner name shadowed the outer one, `gate.run` threw « not a function » right after ingestion, and every pass after it stopped for 23 minutes until `b3bc979` was reverted. Mail was still stored. It is now `changeGate`, `poll-order.test.mjs` fails on a second binding of that name, and a deploy of `index.mjs` is preceded by one sealed poll (writes blocked, Graph faked, no model calls) of the real worker, since no unit test executes that file.
+
 ### Resolution re-reads only what changed, and writes only a new outcome (2026-10-05)
 
 **Found by the egress bill.** Every 60 s poll took up to 500 unlinked tickets, read the opening body of **every ticket in the shop**, read every later inbound body on the pending threads, and PATCHed all ~490 with `return=representation`. Each row came back whole, and every write was "new" only because of a fresh `resolved_at`. That came to about 3 GB a day, nearly all of it for results that had not moved. It also made `tickets.updated_at` meaningless.
