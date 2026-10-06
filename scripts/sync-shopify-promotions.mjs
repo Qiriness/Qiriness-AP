@@ -16,7 +16,7 @@ import {
 } from './lib/supabase-rest-client.mjs';
 import { syncShop } from './lib/shop-sync-service.mjs';
 import { mapPromotionRows } from './lib/shopify-sync-mappers.mjs';
-import { hashIdentifier, recordDataAccessEvent } from './lib/compliance-audit.mjs';
+import { createSyncAccessLog } from './lib/compliance-audit.mjs';
 
 if (isDirectRun()) {
   main().catch((error) => {
@@ -54,51 +54,52 @@ export async function runShopifyPromotionsSync({ args, shopify, supabase, shopRo
   const methodCounts = new Map();
   const statusCounts = new Map();
 
-  do {
-    const page = await fetchDiscountPage(shopify, args, cursor);
-    const withCodes = await expandDiscountCodePages(shopify, page.discountNodes.nodes);
-    const discountNodes = await expandDiscountItemPages(withCodes, (id, leg, after) => (
-      fetchDiscountItemsPage(shopify, id, leg, after)
-    ));
-    const promotionRows = discountNodes.flatMap((node) => (
-      mapPromotionRows(node, shopRow.id, syncedAt)
-    ));
+  // One access-log row for the whole run (createSyncAccessLog), written even if
+  // the run fails part way.
+  const accessLog = createSyncAccessLog(supabase, {
+    shopId: shopRow.id,
+    integrationEventId,
+    action: 'shopify_promotions_sync_run',
+    resourceType: 'promotions',
+    purpose: 'nightly Shopify promotion snapshot sync'
+  });
+  try {
+    do {
+      const page = await fetchDiscountPage(shopify, args, cursor);
+      const withCodes = await expandDiscountCodePages(shopify, page.discountNodes.nodes);
+      const discountNodes = await expandDiscountItemPages(withCodes, (id, leg, after) => (
+        fetchDiscountItemsPage(shopify, id, leg, after)
+      ));
+      const promotionRows = discountNodes.flatMap((node) => (
+        mapPromotionRows(node, shopRow.id, syncedAt)
+      ));
 
-    totalDiscounts += discountNodes.length;
-    totalPromotions += promotionRows.length;
-    for (const promotion of promotionRows) {
-      seenPromotionKeys.add(promotion.promotion_key);
-      increment(methodCounts, promotion.method || 'unknown');
-      increment(statusCounts, promotion.status || 'UNKNOWN');
-    }
+      totalDiscounts += discountNodes.length;
+      totalPromotions += promotionRows.length;
+      for (const promotion of promotionRows) {
+        seenPromotionKeys.add(promotion.promotion_key);
+        increment(methodCounts, promotion.method || 'unknown');
+        increment(statusCounts, promotion.status || 'UNKNOWN');
+      }
 
-    if (args.dryRun) {
-      console.log(
-        `Dry run: page contains ${discountNodes.length} discounts and ${promotionRows.length} promotion rows.`
-      );
-    } else {
-      await recordDataAccessEvent(supabase, {
-        shop_id: shopRow.id,
-        integration_event_id: integrationEventId,
-        action: 'shopify_promotions_sync_page',
-        resource_type: 'promotions',
-        resource_id_hash: hashIdentifier(`${shopRow.shop_domain}:${cursor || 'first-page'}`),
-        purpose: 'nightly Shopify promotion snapshot sync',
-        metadata: {
-          discount_count: discountNodes.length,
-          promotion_count: promotionRows.length,
-          dry_run: false
-        }
-      });
-      await upsertPromotionPage({ supabase, promotionRows });
-      console.log(`Synced ${totalPromotions} promotion rows from ${totalDiscounts} discounts so far.`);
-    }
+      if (args.dryRun) {
+        console.log(
+          `Dry run: page contains ${discountNodes.length} discounts and ${promotionRows.length} promotion rows.`
+        );
+      } else {
+        accessLog.page({ discounts: discountNodes.length, promotions: promotionRows.length });
+        await upsertPromotionPage({ supabase, promotionRows });
+        console.log(`Synced ${totalPromotions} promotion rows from ${totalDiscounts} discounts so far.`);
+      }
 
-    cursor = page.discountNodes.pageInfo.hasNextPage ? page.discountNodes.pageInfo.endCursor : null;
-    if (args.limit && totalDiscounts >= args.limit) {
-      break;
-    }
-  } while (cursor);
+      cursor = page.discountNodes.pageInfo.hasNextPage ? page.discountNodes.pageInfo.endCursor : null;
+      if (args.limit && totalDiscounts >= args.limit) {
+        break;
+      }
+    } while (cursor);
+  } finally {
+    if (!args.dryRun) await accessLog.flush();
+  }
 
   if (!args.dryRun && !args.limit) {
     deletedPromotions = await deletePromotionsMissingFromShopify({

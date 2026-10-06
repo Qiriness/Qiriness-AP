@@ -126,8 +126,6 @@ create index customers_shop_location_idx on public.customers (shop_id, default_a
 
 create index customers_shop_orders_idx on public.customers (shop_id, number_of_orders);
 
-create index customers_shop_amount_spent_idx on public.customers (shop_id, amount_spent);
-
 create index customers_shop_rfm_group_idx on public.customers (shop_id, rfm_group);
 
 create index customers_shop_last_order_at_idx on public.customers (shop_id, last_order_at);
@@ -171,7 +169,7 @@ comment on column public.customers.rfm_group is
   'Shopify-computed Customer.statistics.rfmGroup category used by Shopify customer segmentation as rfm_group.';
 
 comment on column public.customers.raw_shopify_payload is
-  'Small sanitized customer payload for traceability. Avoid full addresses, notes, and unnecessary personal data.';
+  'Not written since 2026-10-06 (always {}): nothing read it, and its fields are typed columns. Kept as a column so a reader that names it does not break.';
 
 -- ---------------------------------------------------------------- orders
 
@@ -373,9 +371,6 @@ create index orders_deleted_at_idx on public.orders (shop_id, deleted_at);
 
 create index orders_tags_gin_idx on public.orders using gin (tags);
 
-create index orders_line_items_gin_idx on public.orders using gin (line_items);
-
-create index orders_fulfillments_gin_idx on public.orders using gin (fulfillments);
 -- GIN, so the resolver can ask "which order carries any of these numbers?" for a
 -- whole batch of tickets in one indexed overlap (`&&`) rather than one query per
 -- ticket or a scan through the fulfillments jsonb.
@@ -459,7 +454,7 @@ comment on column public.orders.retention_delete_after is
   'Timestamp after which the local operational order snapshot can be deleted: the anchor named by retention_rule plus the shop retention period. NULL MEANS KEPT INDEFINITELY -- not a missing value. The purge selects rows whose date is at or before now, so a null is simply never matched and needs no special case in the delete path.';
 
 comment on column public.orders.raw_shopify_payload is
-  'Sanitized raw Shopify order payload for traceability. Exclude street addresses, raw contact values, payment details, and other unnecessary personal data.';
+  'Not written since 2026-10-06 (always {}): nothing read it, and its fields are typed columns. Kept as a column so a reader that names it does not break.';
 
 -- ---------------------------------------------------------------- products
 
@@ -546,8 +541,6 @@ create index products_product_ingredient_metaobject_ids_gin_idx on public.produc
 create index products_product_faqs_gin_idx on public.products using gin (product_faqs);
 
 create index products_product_faq_metaobject_ids_gin_idx on public.products using gin (product_faq_metaobject_ids);
-
-create index products_structured_facts_gin_idx on public.products using gin (structured_facts);
 
 create index products_variants_gin_idx on public.products using gin (variants);
 
@@ -727,8 +720,6 @@ create index shopify_metaobjects_shop_handle_idx on public.shopify_metaobjects (
 
 create index shopify_metaobjects_shop_deleted_at_idx on public.shopify_metaobjects (shop_id, deleted_at);
 
-create index shopify_metaobjects_fields_gin_idx on public.shopify_metaobjects using gin (fields);
-
 create trigger shopify_metaobjects_set_updated_at
 before update on public.shopify_metaobjects
 for each row
@@ -882,8 +873,6 @@ create index promotions_shop_deleted_at_idx on public.promotions (shop_id, delet
 create index promotions_discount_classes_gin_idx on public.promotions using gin (discount_classes);
 
 create index promotions_combines_with_gin_idx on public.promotions using gin (combines_with);
-
-create index promotions_rule_snapshot_gin_idx on public.promotions using gin (rule_snapshot);
 
 create trigger promotions_set_updated_at
 before update on public.promotions

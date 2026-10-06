@@ -3951,6 +3951,25 @@ This is what put the crash-safety rule in one place instead of five comments: **
 
 ---
 
+### What nothing reads is not kept (2026-10-06)
+
+The database stood at **314 MB of the free plan's 500**. `79_unread_data.sql`, then a `VACUUM FULL` of customers, orders and `data_access_events`, took it to **151 MB**. Every item removed was stored or indexed and never read:
+
+- **`raw_shopify_payload` on customers (39 MB) and orders (12 MB).** No code read either, and every field is a typed column. The mappers write `{}` (the column's object check refuses null). The column stays, so an ad-hoc reader that names it does not break.
+- **Eight indexes with zero scans since statistics began (2026-08-07), 41 MB.**
+  - The two HNSW vector indexes: `ticket_messages` and `support_exemplar_phrasings`. **The vectors are kept** (decided by the user). The exemplar search scans 927 rows directly, as the planner already chose to, and the index is rebuilt in the migration that ships retrieval.
+  - GIN on `orders.line_items` and `orders.fulfillments`, `products.structured_facts`, `promotions.rule_snapshot`, `shopify_metaobjects.fields`.
+  - Btree on `customers.amount_spent`.
+  - **Kept:** GIN on `tracking_numbers`, which order resolution's `ov` uses.
+- **The nightly syncs logged one `data_access_events` row per page of 50**: 47,134 customer rows, 14 MB, and about 1,240 more a night. Each said the same thing: « the nightly sync read customers ».
+  - The access is the run, so a sync now writes one row (`createSyncAccessLog`, `*_sync_run`) with its page and record counts, from a `finally`, so a run that fails part way is still logged.
+  - The history was collapsed the same way, in one statement: 53,807 page rows became 91 run rows with every page and record count kept.
+- **A leftover `tmp_baseline_*` schema (2.4 MB)** from a `_live.test.mjs` run that died before its cleanup.
+
+**One side effect.** Rewriting the payloads moved `updated_at` on every customer and order once. Insights' « customers synced » read as the migration time until the next nightly sync.
+
+**Not done: the nightly customer sync still rewrites all 62k rows.** Postgres keeps the old copies until autovacuum reuses their space, so `customers` (33 MB after the `VACUUM FULL`) will settle back towards twice its live size. Skipping unchanged rows needs a stored hash per customer and a nightly read of the hashes, and `insights_freshness` reads « customers synced » from `max(updated_at)`. Worth it if the table grows, not at today's size.
+
 ## Orders
 
 ### An Orders page replaced the "Knowledge — Soon" placeholder (2026-09-14)

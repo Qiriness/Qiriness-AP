@@ -45,7 +45,10 @@ export function mapCustomer(customer, shopId, syncedAt) {
     synced_at: syncedAt,
     shopify_created_at: customer.createdAt,
     shopify_updated_at: customer.updatedAt,
-    raw_shopify_payload: buildCustomerRawPayload(customer)
+    // NOT WRITTEN SINCE 2026-10-06: no code read it, and every field it held is a
+    // typed column. It was 39 MB on customers and 12 MB on orders of a 500 MB
+    // plan. `{}` rather than null, for the column's object check.
+    raw_shopify_payload: {}
   });
 }
 
@@ -57,54 +60,6 @@ function moneyAmount(value) {
 function integerValue(value) {
   const parsed = Number.parseInt(value, 10);
   return Number.isFinite(parsed) ? parsed : null;
-}
-
-function buildCustomerRawPayload(customer) {
-  const email = customer.defaultEmailAddress || null;
-  const phone = customer.defaultPhoneNumber || null;
-  const address = customer.defaultAddress || null;
-  const lastOrder = customer.lastOrder || null;
-
-  return stripUndefined({
-    id: customer.id,
-    legacyResourceId: customer.legacyResourceId,
-    displayName: customer.displayName,
-    locale: customer.locale,
-    state: customer.state,
-    tags: customer.tags,
-    numberOfOrders: customer.numberOfOrders,
-    amountSpent: customer.amountSpent,
-    verifiedEmail: customer.verifiedEmail,
-    createdAt: customer.createdAt,
-    updatedAt: customer.updatedAt,
-    statistics: customer.statistics ? { rfmGroup: customer.statistics.rfmGroup } : null,
-    defaultEmailAddress: email
-      ? {
-          marketingState: email.marketingState,
-          marketingOptInLevel: email.marketingOptInLevel,
-          marketingUpdatedAt: email.marketingUpdatedAt,
-          validFormat: email.validFormat
-        }
-      : null,
-    defaultPhoneNumber: phone ? { hasPhoneNumber: Boolean(phone.phoneNumber) } : null,
-    defaultAddress: address
-      ? {
-          city: address.city,
-          province: address.province,
-          country: address.country,
-          countryCodeV2: address.countryCodeV2,
-          formattedArea: address.formattedArea
-        }
-      : null,
-    lastOrder: lastOrder
-      ? {
-          id: lastOrder.id,
-          name: lastOrder.name,
-          createdAt: lastOrder.createdAt,
-          currentTotalPriceSet: lastOrder.currentTotalPriceSet
-        }
-      : null
-  });
 }
 
 export function isOnEmailMarketingList(customerRow) {

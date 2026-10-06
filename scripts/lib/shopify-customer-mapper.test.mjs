@@ -62,7 +62,7 @@ test('mapCustomer stores Shopify RFM group without local VIP fields', () => {
   assert.equal(row.is_vip, undefined);
   assert.equal(row.vip_reasons, undefined);
   assert.equal(row.vip_rule_snapshot, undefined);
-  assert.deepEqual(row.raw_shopify_payload.statistics, { rfmGroup: 'LOYAL' });
+  assert.deepEqual(row.raw_shopify_payload, {}, 'the raw payload is no longer kept');
 });
 
 test('isOnEmailMarketingList only treats subscribed customers as on-list', () => {

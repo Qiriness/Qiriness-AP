@@ -89,7 +89,10 @@ export function mapOrder(
     shopify_created_at: order.createdAt,
     shopify_updated_at: order.updatedAt,
     synced_at: syncedAt,
-    raw_shopify_payload: buildOrderRawPayload(order)
+    // NOT WRITTEN SINCE 2026-10-06: no code read it, and every field it held is a
+    // typed column. It was 39 MB on customers and 12 MB on orders of a 500 MB
+    // plan. `{}` rather than null, for the column's object check.
+    raw_shopify_payload: {}
   });
 }
 
@@ -354,47 +357,6 @@ function shippingDestination(address) {
     country: address.country,
     country_code: address.countryCodeV2,
     formatted_area: address.formattedArea
-  }));
-}
-
-function buildOrderRawPayload(order) {
-  return cleanJsonValue(stripUndefined({
-    id: order.id,
-    legacyResourceId: order.legacyResourceId,
-    name: order.name,
-    number: order.number,
-    sourceName: order.sourceName,
-    attribution: order.attribution,
-    displayFinancialStatus: order.displayFinancialStatus,
-    displayFulfillmentStatus: order.displayFulfillmentStatus,
-    returnStatus: order.returnStatus,
-    cancelReason: order.cancelReason,
-    currencyCode: order.currencyCode,
-    presentmentCurrencyCode: order.presentmentCurrencyCode,
-    tags: order.tags,
-    processedAt: order.processedAt,
-    cancelledAt: order.cancelledAt,
-    closedAt: order.closedAt,
-    createdAt: order.createdAt,
-    updatedAt: order.updatedAt,
-    customer: order.customer ? { id: order.customer.id } : null,
-    shippingAddress: shippingDestination(order.shippingAddress),
-    discountCodes: order.discountCodes,
-    discountApplications: order.discountApplications,
-    totals: {
-      subtotalPriceSet: order.subtotalPriceSet,
-      totalDiscountsSet: order.totalDiscountsSet,
-      totalShippingPriceSet: order.totalShippingPriceSet,
-      totalTaxSet: order.totalTaxSet,
-      totalPriceSet: order.totalPriceSet,
-      totalRefundedSet: order.totalRefundedSet,
-      totalOutstandingSet: order.totalOutstandingSet,
-      totalWeight: order.totalWeight
-    },
-    lineItems: (order.lineItems?.nodes || []).map(mapLineItem),
-    fulfillments: (order.fulfillments || []).map(mapFulfillment),
-    returns: (order.returns?.nodes || []).map(mapReturn),
-    refunds: (order.refunds || []).map(mapRefund)
   }));
 }
 

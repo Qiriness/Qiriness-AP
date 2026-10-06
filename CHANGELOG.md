@@ -10,6 +10,22 @@ Three sibling files carry the other halves, and this one deliberately does not d
 
 ---
 
+## Database size, phase 5: what nothing reads is not kept (2026-10-06)
+
+- **`79_unread_data.sql`** (applied):
+  - drops 8 indexes no query has used (41 MB, the two HNSW indexes included; the vectors stay);
+  - empties `raw_shopify_payload` on customers and orders (51 MB);
+  - collapses the syncs' per-page `data_access_events` rows into one row per run (53,807 rows became 91, counts kept).
+- **Code:**
+  - The customer and order mappers write `raw_shopify_payload: {}`.
+  - The customers, orders and promotions syncs log one access row per run through `createSyncAccessLog`, written in a `finally`.
+- **Then:** `VACUUM FULL` on customers, orders and `data_access_events`, and dropped the leftover `tmp_baseline_c24b…` schema.
+- **Proven:**
+  - **314 MB to 151 MB**: customers 104 to 33 MB, orders 52 to 17 MB, `ticket_messages` 46 to 28 MB.
+  - The migration was rehearsed in a rolled-back transaction on production before it was applied.
+  - Root tests 5,089 pass.
+  - The first nightly sync on the new code is not yet run.
+
 ## Egress, phase 4: the dashboard reads what it shows; Insights is cached and pre-loaded (2026-10-06)
 
 - **Sidebar badges:** `queue({ openOnly: true })` (52 rows, 50 kB instead of 993 kB on every page), shared for 60 s (`unstable_cache`, tag `tickets`), and cleared by `ticketsChanged()` in the 7 dashboard routes that change a ticket.

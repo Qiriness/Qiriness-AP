@@ -452,6 +452,8 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |       |-- sender-patterns.mjs           # email/domain matching, shared by the
 |       |                                 # blocklist and the sender directory
 |       |-- compliance-audit.mjs shopify-compliance-webhooks.mjs
+|       |                                # (compliance-audit: createSyncAccessLog, one
+|       |                                # data_access_events row per sync run)
 |       |-- shopify-order-webhooks.mjs   # one order webhook -> re-read that order
 |       |                                # through the nightly's own query and
 |       |                                # mapper, with a replay guard and an

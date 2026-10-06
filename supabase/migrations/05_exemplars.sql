@@ -273,10 +273,6 @@ create table public.support_exemplar_phrasings (
 create index support_exemplar_phrasings_exemplar_id_idx
   on public.support_exemplar_phrasings (support_exemplar_id);
 
-create index support_exemplar_phrasings_embedding_hnsw_idx
-  on public.support_exemplar_phrasings
-  using hnsw (embedding vector_cosine_ops);
-
 create index support_exemplar_phrasings_search_vector_gin_idx
   on public.support_exemplar_phrasings
   using gin (search_vector);

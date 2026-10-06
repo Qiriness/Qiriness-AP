@@ -99,8 +99,7 @@ test('mapOrder stores channel labels and avoids raw contact/address duplication'
   assert.equal(row.customer_phone_hash.length, 64);
   assert.equal(row.shipping_destination.city, 'Paris');
   assert.equal(row.shipping_destination.zip, undefined);
-  assert.equal(row.raw_shopify_payload.email, undefined);
-  assert.equal(row.raw_shopify_payload.shippingAddress.address1, undefined);
+  assert.deepEqual(row.raw_shopify_payload, {}, 'the raw payload is no longer kept');
 });
 
 test('calculateOrderRetention anchors a delivered order to its delivery date', () => {

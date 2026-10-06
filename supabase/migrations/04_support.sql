@@ -703,8 +703,6 @@ create index ticket_messages_shop_received_at_idx on public.ticket_messages (sho
 
 create index ticket_messages_shop_deleted_at_idx on public.ticket_messages (shop_id, deleted_at);
 
-create index ticket_messages_embedding_hnsw_idx on public.ticket_messages using hnsw (embedding vector_cosine_ops);
-
 create trigger ticket_messages_set_updated_at
 before update on public.ticket_messages
 for each row

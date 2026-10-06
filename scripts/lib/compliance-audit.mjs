@@ -160,6 +160,44 @@ export async function failStaleIntegrationEvents(
   return rows || [];
 }
 
+/**
+ * One `data_access_events` row per sync RUN, not per page.
+ *
+ * The nightly customer sync wrote a row for every page of 50 customers: about
+ * 1,240 rows a night, 47,134 rows and 14 MB by 2026-10-06, each saying the same
+ * thing (« the nightly sync read customers »). The access is the run; the row
+ * keeps how many pages and how many records it covered.
+ *
+ * `flush` is meant for a `finally`: a run that dies on page 30 still logs the
+ * 29 pages it read. Nothing is written when no page was read.
+ */
+export function createSyncAccessLog(supabase, { shopId, integrationEventId = null, action, resourceType, purpose }) {
+  const counts = {};
+  let pages = 0;
+  let firstAt = null;
+  return {
+    page(metadata = {}) {
+      pages += 1;
+      firstAt ??= new Date().toISOString();
+      for (const [key, value] of Object.entries(metadata)) {
+        if (typeof value === 'number') counts[key] = (counts[key] || 0) + value;
+      }
+    },
+    async flush() {
+      if (pages === 0) return null;
+      return recordDataAccessEvent(supabase, {
+        shop_id: shopId,
+        integration_event_id: integrationEventId,
+        action,
+        resource_type: resourceType,
+        purpose,
+        occurred_at: firstAt,
+        metadata: { pages, ...counts, dry_run: false }
+      });
+    }
+  };
+}
+
 export async function recordDataAccessEvent(supabase, row) {
   const rows = await supabaseInsert(
     supabase,

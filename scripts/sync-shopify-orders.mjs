@@ -16,7 +16,7 @@ import {
 } from './lib/supabase-rest-client.mjs';
 import { syncShop } from './lib/shop-sync-service.mjs';
 import { mapOrder } from './lib/shopify-sync-mappers.mjs';
-import { hashIdentifier, recordDataAccessEvent } from './lib/compliance-audit.mjs';
+import { createSyncAccessLog } from './lib/compliance-audit.mjs';
 import {
   describeRetentionPolicy,
   isIndefinite,
@@ -81,44 +81,46 @@ export async function runShopifyOrdersSync({ args, shopify, supabase, shopRow, s
         : 'Fetching the FULL order history (--all-orders). Retention still deletes anything past its window.'
   );
 
-  do {
-    const page = await fetchOrderPage(shopify, args, cursor, months);
-    const orderRows = page.orders.nodes.map((order) => (
-      mapOrder(order, shopRow.id, syncedAt, customerIdByShopifyId, retentionPolicy)
-    ));
+  // One access-log row for the whole run (createSyncAccessLog), written even if
+  // the run fails part way.
+  const accessLog = createSyncAccessLog(supabase, {
+    shopId: shopRow.id,
+    integrationEventId,
+    action: 'shopify_orders_sync_run',
+    resourceType: 'orders',
+    purpose: 'nightly Shopify order snapshot sync'
+  });
+  try {
+    do {
+      const page = await fetchOrderPage(shopify, args, cursor, months);
+      const orderRows = page.orders.nodes.map((order) => (
+        mapOrder(order, shopRow.id, syncedAt, customerIdByShopifyId, retentionPolicy)
+      ));
 
-    totalOrders += orderRows.length;
-    for (const order of orderRows) {
-      const rule = order.retention_rule || 'unassigned';
-      retentionRules.set(rule, (retentionRules.get(rule) || 0) + 1);
-    }
+      totalOrders += orderRows.length;
+      for (const order of orderRows) {
+        const rule = order.retention_rule || 'unassigned';
+        retentionRules.set(rule, (retentionRules.get(rule) || 0) + 1);
+      }
 
-    if (args.dryRun) {
-      console.log(
-        `Dry run: page contains ${orderRows.length} orders, ${formatRetentionSummary(orderRows)}.`
-      );
-    } else {
-      await recordDataAccessEvent(supabase, {
-        shop_id: shopRow.id,
-        integration_event_id: integrationEventId,
-        action: 'shopify_orders_sync_page',
-        resource_type: 'orders',
-        resource_id_hash: hashIdentifier(`${shopRow.shop_domain}:${cursor || 'first-page'}`),
-        purpose: 'nightly Shopify order snapshot sync',
-        metadata: {
-          page_count: orderRows.length,
-          dry_run: false
-        }
-      });
-      await upsertOrderPage({ supabase, orderRows });
-      console.log(`Synced ${totalOrders} orders so far.`);
-    }
+      if (args.dryRun) {
+        console.log(
+          `Dry run: page contains ${orderRows.length} orders, ${formatRetentionSummary(orderRows)}.`
+        );
+      } else {
+        accessLog.page({ orders: orderRows.length });
+        await upsertOrderPage({ supabase, orderRows });
+        console.log(`Synced ${totalOrders} orders so far.`);
+      }
 
-    cursor = page.orders.pageInfo.hasNextPage ? page.orders.pageInfo.endCursor : null;
-    if (args.limit && totalOrders >= args.limit) {
-      break;
-    }
-  } while (cursor);
+      cursor = page.orders.pageInfo.hasNextPage ? page.orders.pageInfo.endCursor : null;
+      if (args.limit && totalOrders >= args.limit) {
+        break;
+      }
+    } while (cursor);
+  } finally {
+    if (!args.dryRun) await accessLog.flush();
+  }
 
   // SKIPPED ENTIRELY WHEN RETENTION IS INDEFINITE rather than relied on to match
   // nothing. Every row written above already carries a null delete date, so the

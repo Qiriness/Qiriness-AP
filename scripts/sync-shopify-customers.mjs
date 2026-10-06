@@ -14,7 +14,7 @@ import {
 } from './lib/supabase-rest-client.mjs';
 import { syncShop } from './lib/shop-sync-service.mjs';
 import { mapCustomer } from './lib/shopify-sync-mappers.mjs';
-import { hashIdentifier, recordDataAccessEvent } from './lib/compliance-audit.mjs';
+import { createSyncAccessLog } from './lib/compliance-audit.mjs';
 
 if (isDirectRun()) {
   main().catch((error) => {
@@ -50,47 +50,49 @@ export async function runShopifyCustomersSync({ args, shopify, supabase, shopRow
   const rfmGroups = new Map();
   const seenShopifyCustomerIds = new Set();
 
-  do {
-    const page = await fetchCustomerPage(shopify, args, cursor);
-    const customerRows = page.customers.nodes.map((customer) => (
-      mapCustomer(customer, shopRow.id, syncedAt)
-    ));
+  // One access-log row for the whole run (createSyncAccessLog), written even if
+  // the run fails part way.
+  const accessLog = createSyncAccessLog(supabase, {
+    shopId: shopRow.id,
+    integrationEventId,
+    action: 'shopify_customers_sync_run',
+    resourceType: 'customers',
+    purpose: 'nightly Shopify customer snapshot sync'
+  });
+  try {
+    do {
+      const page = await fetchCustomerPage(shopify, args, cursor);
+      const customerRows = page.customers.nodes.map((customer) => (
+        mapCustomer(customer, shopRow.id, syncedAt)
+      ));
 
-    totalCustomers += customerRows.length;
-    for (const customer of customerRows) {
-      const group = customer.rfm_group || 'UNASSIGNED';
-      rfmGroups.set(group, (rfmGroups.get(group) || 0) + 1);
-    }
-    for (const customer of customerRows) {
-      seenShopifyCustomerIds.add(customer.shopify_customer_id);
-    }
+      totalCustomers += customerRows.length;
+      for (const customer of customerRows) {
+        const group = customer.rfm_group || 'UNASSIGNED';
+        rfmGroups.set(group, (rfmGroups.get(group) || 0) + 1);
+      }
+      for (const customer of customerRows) {
+        seenShopifyCustomerIds.add(customer.shopify_customer_id);
+      }
 
-    if (args.dryRun) {
-      console.log(
-        `Dry run: page contains ${customerRows.length} customers, ${formatRfmSummary(customerRows)}.`
-      );
-    } else {
-      await recordDataAccessEvent(supabase, {
-        shop_id: shopRow.id,
-        integration_event_id: integrationEventId,
-        action: 'shopify_customers_sync_page',
-        resource_type: 'customers',
-        resource_id_hash: hashIdentifier(`${shopRow.shop_domain}:${cursor || 'first-page'}`),
-        purpose: 'nightly Shopify customer snapshot sync',
-        metadata: {
-          page_count: customerRows.length,
-          dry_run: false
-        }
-      });
-      await upsertCustomerPage({ supabase, customerRows });
-      console.log(`Synced ${totalCustomers} customers so far.`);
-    }
+      if (args.dryRun) {
+        console.log(
+          `Dry run: page contains ${customerRows.length} customers, ${formatRfmSummary(customerRows)}.`
+        );
+      } else {
+        accessLog.page({ customers: customerRows.length });
+        await upsertCustomerPage({ supabase, customerRows });
+        console.log(`Synced ${totalCustomers} customers so far.`);
+      }
 
-    cursor = page.customers.pageInfo.hasNextPage ? page.customers.pageInfo.endCursor : null;
-    if (args.limit && totalCustomers >= args.limit) {
-      break;
-    }
-  } while (cursor);
+      cursor = page.customers.pageInfo.hasNextPage ? page.customers.pageInfo.endCursor : null;
+      if (args.limit && totalCustomers >= args.limit) {
+        break;
+      }
+    } while (cursor);
+  } finally {
+    if (!args.dryRun) await accessLog.flush();
+  }
 
   if (!args.dryRun && !args.limit) {
     deletedCustomers = await deleteCustomersMissingFromShopify({
