@@ -1,0 +1,42 @@
+# THE STOREFRONT ADVISOR'S OWN APP — DEV STORE ONLY.
+#
+# A separate Shopify app on purpose. The repo-root `shopify.app.toml` is the
+# support app, installed on the PRODUCTION store; anything deployed through it
+# reaches production. This directory is its own Shopify CLI project, so its
+# extension can never ride along on a deploy of the support app, and this app is
+# installed on the dev store only. Run every `shopify app ...` command for the
+# advisor from THIS directory. See docs/storefront-chatbot.md.
+#
+# `client_id` is filled by `shopify app config link` (choose "Create new app").
+# If the CLI rewrites this file, keep the [app_proxy] block below.
+
+client_id = "b4011a444d526667e9f99e428fd9f05d"
+name = "Storefront Advisor (dev)"
+application_url = "https://shopify.dev/apps/default-app-home"
+embedded = false
+
+[build]
+# `shopify app dev` points the app proxy at its tunnel for the session, so no
+# URL is copied by hand during development.
+automatically_update_urls_on_dev = true
+
+[access_scopes]
+# None. The widget reads nothing from the Admin API: the catalogue comes from
+# the app's own database, and the proxy needs no scope.
+scopes = ""
+
+[auth]
+redirect_urls = [ ]
+
+# Required by the CLI. No subscriptions: the advisor reads no Shopify data.
+[webhooks]
+api_version = "2026-07"
+
+# The storefront calls /apps/storefront-advisor/chat on its own domain; Shopify
+# signs the request and forwards it to `url` + "/chat". During `shopify app dev`
+# the CLI swaps the host for its tunnel (backend/shopify.web.toml starts the
+# dashboard). Never the production dashboard.
+[app_proxy]
+url = "https://example.com/api/storefront"
+subpath = "storefront-advisor"
+prefix = "apps"

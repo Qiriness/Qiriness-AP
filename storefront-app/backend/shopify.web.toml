@@ -1,0 +1,15 @@
+# Lets `shopify app dev` (run from storefront-app/) start the dashboard's
+# Next.js dev server and put the CLI's HTTPS tunnel in front of it, so the
+# dev store's app proxy reaches /api/storefront/chat on this machine. The CLI
+# passes PORT; `next dev` listens on it. The backend reads the repo-root
+# .env.local as always.
+#
+# BOTH ROLES, ON PURPOSE. The CLI's tunnel proxy sends every path to the
+# frontend process and only its own auth/webhook paths to a backend-only one:
+# with `["backend"]` alone the proxy answered « Invalid path » for
+# /api/storefront/chat and Shopify's app proxy never reached the dashboard.
+name = "backend"
+roles = ["frontend", "backend"]
+
+[commands]
+dev = "npm --prefix ../../web run dev"

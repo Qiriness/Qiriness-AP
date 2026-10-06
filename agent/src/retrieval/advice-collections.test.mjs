@@ -146,3 +146,13 @@ test('an empty group is an empty answer, not a crash', () => {
   assert.deepEqual(bestTier([]), []);
   assert.deepEqual(rankGroup([], [RIDES]), []);
 });
+
+test('range collections never reach the support intersection', async () => {
+  const { supportCollections } = await import('./advice-collections.mjs');
+  const rows = [
+    { handle: 'serums', title: 'Sérums', axis: 'category', product_ids: ['a'] },
+    { handle: 'diag-rides', title: 'Diag - Rides', axis: 'concern', product_ids: ['a'] },
+    { handle: 'gamme-temps-sublime', title: 'Temps Sublime', axis: 'range', product_ids: ['a', 'b'] }
+  ];
+  assert.deepEqual(supportCollections(rows).map((c) => c.handle), ['serums', 'diag-rides']);
+});

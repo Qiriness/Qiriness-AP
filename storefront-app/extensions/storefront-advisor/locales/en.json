@@ -1,0 +1,39 @@
+{
+  "advisor": {
+    "title": "{{ shop }} Beauty Advisor",
+    "eyebrow": "Personal advice",
+    "launcher": "Beauty advice",
+    "open": "Open the beauty advisor",
+    "close": "Close the advisor",
+    "greeting": "Hello, how can I help you find the right skincare for you?",
+    "placeholder": "Type your question…",
+    "input_label": "Your message",
+    "send": "Send",
+    "typing": "The advisor is typing…",
+    "error": "Your message could not be sent.",
+    "retry": "Try again",
+    "discover": "Discover",
+    "disclaimer": "Automated advisor. For a question about an order, our customer service team will help.",
+    "quick_actions_label": "Suggestions",
+    "products_label": "Suggested products",
+    "you": "You",
+    "advisor": "Advisor"
+  },
+  "actions": {
+    "find_product": "Find my skincare",
+    "build_routine": "Build my routine",
+    "compare": "Compare products",
+    "delivery_returns": "Delivery & returns",
+    "offers": "Current offers"
+  },
+  "mock": {
+    "default": "Thank you for your message. This is a demo reply: the advisor is not connected yet.",
+    "find_product": "With pleasure. To guide you, tell me a little about your skin: dry, combination, oily or sensitive? (Demo reply.)",
+    "build_routine": "Let's build your routine together. Would you like a morning routine, an evening routine, or both? (Demo reply.)",
+    "compare": "Tell me which products you are hesitating between and I will help you compare them. (Demo reply.)",
+    "delivery_returns": "Delivery and returns information will be available here soon. (Demo reply.)",
+    "offers": "Current offers will be available here soon. (Demo reply.)",
+    "product_name": "Sample product",
+    "product_rationale": "Demo card: real suggestions will come with the catalogue."
+  }
+}

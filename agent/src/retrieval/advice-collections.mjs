@@ -21,6 +21,26 @@ import { T } from '../../../scripts/lib/tables.mjs';
 // maps them onto activated collections, intersects, filters to live products and
 // ranks. Everything after the naming is arithmetic.
 
+/**
+ * Activated rows → the collections this intersection reads.
+ *
+ * RANGES ARE THE STOREFRONT ADVISOR'S, NOT THIS INTERSECTION'S (migration 77).
+ * Everything below treats a non-category collection as a concern, so a
+ * « gamme » here would silently become a requirement to rank by. Whether
+ * support should read ranges is its own decision.
+ */
+export function supportCollections(rows) {
+  return (rows || [])
+    .filter((row) => row.axis !== 'range')
+    .map((row) => ({
+      handle: String(row.handle),
+      title: String(row.title),
+      axis: row.axis ? String(row.axis) : null,
+      productIds: Array.isArray(row.product_ids) ? row.product_ids.map(String) : [],
+      syncedAt: row.products_synced_at ?? null
+    }));
+}
+
 /** Loads the activated collections, newest membership first. */
 export function createAdviceCollections({ supabase, shopId, logger } = {}) {
   let cache = null;
@@ -32,13 +52,7 @@ export function createAdviceCollections({ supabase, shopId, logger } = {}) {
       { shop_id: shopId, is_active: true, deleted_at: { operator: 'is', value: 'null' } },
       'id,shopify_collection_id,handle,title,axis,product_ids,products_synced_at'
     );
-    return (rows || []).map((row) => ({
-      handle: String(row.handle),
-      title: String(row.title),
-      axis: row.axis ? String(row.axis) : null,
-      productIds: Array.isArray(row.product_ids) ? row.product_ids.map(String) : [],
-      syncedAt: row.products_synced_at ?? null
-    }));
+    return supportCollections(rows);
   }
 
   let snapshot = [];

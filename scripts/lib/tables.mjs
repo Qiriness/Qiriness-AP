@@ -121,6 +121,23 @@ export const STOREFRONT_T = {
 };
 
 /**
+ * The storefront advisor's anonymous conversations. Created by the INCREMENTAL
+ * migration `76_storefront_chat.sql`, so kept out of `T` and `RPC`;
+ * `76_storefront_chat.test.mjs` asserts these. Not `CHAT_T`: that is the
+ * management chat, a different audience on a different trust boundary.
+ */
+export const STOREFRONT_CHAT_T = {
+  SESSIONS: 'storefront_chat_sessions',
+  MESSAGES: 'storefront_chat_messages'
+};
+
+export const STOREFRONT_CHAT_RPC = {
+  USER_MESSAGES_SINCE: 'storefront_chat_user_messages_since',
+  RECORD_TURN: 'storefront_chat_record_turn',
+  PURGE: 'storefront_chat_purge'
+};
+
+/**
  * Klaviyo: the connection (the key itself is in Vault) and what each flow and
  * campaign earned. Created by the INCREMENTAL migration `39_klaviyo.sql`, so
  * kept out of `T` and `RPC`; `39_klaviyo.test.mjs` asserts these instead.

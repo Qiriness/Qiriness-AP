@@ -40,6 +40,44 @@ these.
 as its own item: `llm_usage` (item 14), `categorisation_review` (item 15), and
 `category_forwarding` / `ticket_forwards` (item 1).
 
+## 44. Range collections: built, migration applied, none marked yet — 2026-10-06
+
+1. **Mark and sync.** **Check:** in Agent setup → « What we can advise on », set « Gamme » on Temps Sublime, Source d'Eau, Active Énergie and Exception, switch each on, then « Sync from Shopify ». Each should show its product count (11 / 6 / 5 / 4 last measured, possibly stale).
+2. **The resolver reads them.** **Check:** `npm run eval:resolution -- --all` shows the two range cases with `source: collection`. A storefront « toute la gamme Temps Sublime » lists the collection's products, not the title guess.
+3. **Support unchanged.** **Check:** rehearse a support ticket asking « un sérum anti-âge » in /agent-test, before and after marking the ranges. The recommendation does not change.
+
+## 43. Storefront advisor: product resolution, 71/71 offline, not yet on the store — 2026-10-06
+
+1. **Chips on the store.** **Check:** ask « le soin Source d'Eau ». The chips Crème / Coffret / Sérum appear under the reply. Click Sérum: you get the Élixir Source d'Eau card. The chips on an older reply should not be clickable.
+2. **References across turns.** **Check:** get a recommendation with two or three cards, then ask « quelle est la différence entre les deux ? » and « je prends le premier ». Both resolve to the cards just shown (`context.resolution.ids` on the reply row).
+3. **New wording.** **Check:** collect 30 real product mentions from support mail (`ticket_messages`, customer words only) and add them to `resolution-cases.mjs`. Re-run `npm run eval:resolution`. Any silent wrong pick is a fix before a later tool depends on resolution.
+4. **After a product sync.** **Check:** when a product is added or renamed, `eval:resolution` still passes, and the derived synonyms (printed at the top of the run) still read sensibly.
+
+## 42. Storefront advisor, Phase 3: product tools tested by signed requests, not yet on the store — 2026-10-05
+
+1. **On the store.** **Check:** restart `shopify app dev`, then ask « J'ai la peau sèche ». A card should appear, and « Découvrir » should open `/products/<handle>` on the dev store. The dev store holds only a few of the catalogue's products, so set `STOREFRONT_CHAT_PRODUCT_BASE_URL=https://qiriness.com`. « Découvrir » then opens the production product page in a new tab.
+2. **On a product page.** **Check:** open a product on the dev store and ask « Est-ce que ça convient aux peaux sensibles ? ». The trace on that row should show one call and no tools.
+3. **Fifty real product questions.** **Check:** ask the openings of 50 real customer product questions, then read every reply and card. Look for a product, price, ingredient or benefit that isn't in the catalogue, and for out-of-stock suggestions without an alternative.
+4. **Speed on the store.** **Check:** `select context->'trace' from storefront_chat_messages where role='assistant' order by created_at desc limit 50`. Note the median and the worst total. If the worst is over 8 s, look at which call is slow.
+5. **Images.** Cards show a placeholder. **Decide:** add `featuredImage` to the product sync (one GraphQL field and one column), or leave cards without images.
+
+## 41. Storefront advisor, Phase 2: AI replies tested by signed requests, not yet on the store — 2026-10-05
+
+1. **Through the store.** **Check:** add `STOREFRONT_CHAT_AGENT=llm` to `.env.local`, restart `shopify app dev`, and set the embed to Server. A reply that is not a Phase 1 demo sentence proves the proxy path. Rows then appear for `qiriness-dev-iifq3jdg.myshopify.com` with `model = gpt-6-luna`. **Run 2026-10-05, passed:** three store messages arrived through the app proxy for the dev store (page `index`, locale `fr`) and were answered by `gpt-6-luna`. A stalled order went to customer service, a stock question was declined (« Je ne peux pas confirmer ici la disponibilité »), and a glaucoma question went to an ophthalmologist or doctor.
+2. **The app proxy's own timeout.** Not found in Shopify's docs. **Check:** note the slowest reply seen on the store. If Shopify cuts below 12 s, lower `STOREFRONT_CHAT_TIMEOUT_MS` below its limit.
+3. **Fifty real-shaped questions.** **Check:** ask the advisor the openings of 50 real customer messages about products (no orders). Read each reply for an invented product, price, ingredient or result. Any one is a prompt fix before Phase 3.
+4. **Tone.** **Check:** read ten French replies aloud. Declines currently open with « Je ne peux pas confirmer cela ici », which may be too stiff for the brand.
+
+## 40. Storefront advisor, Phase 1: built, guard paths checked, never seen on a store — 2026-10-05
+
+`docs/storefront-chatbot.md`. Nothing here touches the production store.
+
+1. **The 200 path (migration 76 applied 2026-10-05).** **Check:** set `STOREFRONT_APP_CLIENT_SECRET` and `STOREFRONT_CHAT_ALLOWED_SHOPS`, run `npm --prefix web run dev`, then `npm run storefront:chat -- --action find_product`. Expect 200 with a session token, one demo card, one session row and two message rows. Send again with `--session <token>`: same session, `turn_count` 2. **Run 2026-10-05, passed:** both messages answered 200 on one session for `qiriness-dev-iifq3jdg.myshopify.com`, with `turn_count` 2 and four message rows (context stored, product URLs on the reply). The production shop was refused 403 and the unsigned request 401.
+2. **Caps.** **Check:** with `STOREFRONT_CHAT_SESSION_TURN_CAP=2`, the third message in a session answers 429 `session_limit`.
+3. **On the dev store, Demo replies.** **Check:** `shopify app dev` from `storefront-app/`, then turn the embed on. The launcher shows on every page. The panel opens and closes (Esc too), the quick actions answer, the demo card's « Découvrir » goes to `/collections/all`, history survives a page change, and on a phone width the panel is full-screen with the page behind it not scrolling.
+4. **On the dev store, Server replies, through the proxy.** **Check:** with Replies = Server (during `shopify app dev`, which tunnels the proxy), the same conversation works, and rows appear with the dev store's `shop_domain`. Stop the backend: the error notice and « Réessayer » appear, and retry succeeds once the backend is back.
+5. **Theme fonts.** **Check:** on the dev theme the title uses the theme's heading font (`--font-heading-family`), or the serif fallback if the theme publishes none.
+
 ## 39. Refund notice: built and unit-tested, migration applied, not switched on — 2026-10-05
 
 DECISIONS § Refund notice. Target case: `75419781` (#6886), closed, partial refund 2026-09-25 after our 2026-09-07 reply.

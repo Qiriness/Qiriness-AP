@@ -1390,6 +1390,13 @@ export interface DroppedMail {
    * since expired, or a genuinely empty email.
    */
   body: string | null;
+  /**
+   * False in the list, which carries no text (1.9 MB of bodies on every /tickets
+   * load until 2026-10-06): the dialog reads `GET /api/dropped-mail/[id]`.
+   */
+  bodyLoaded?: boolean;
+  /** Whether a text is stored, known without reading it: the list enables « add as ticket » on it. */
+  hasBody?: boolean;
   /** When the body was stored. Null means it never was. */
   bodyCapturedAt: string | null;
   /** When the worker's purge clears the body. Past = already purged. */
@@ -2582,8 +2589,12 @@ export interface PromotionChoice {
  * are relaxed differently when nothing sits in both — a concern is given up
  * before a category, because the customer named the form they want and swapping
  * it hands them a different product.
+ *
+ * `range` is a product line (« Temps Sublime », « Source d'Eau »). It is read
+ * only by the storefront advisor, as the membership of « la gamme X »; the
+ * support agent's intersection ignores it (migration 77).
  */
-export type CollectionAxis = "concern" | "category";
+export type CollectionAxis = "concern" | "category" | "range";
 
 /**
  * One Shopify collection, and what the team has decided about it.

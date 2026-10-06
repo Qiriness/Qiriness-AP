@@ -44,6 +44,53 @@ Three sibling files carry the other halves, and this one deliberately does not d
   - Live dry run on 488 tickets: 303 would be skipped as unchanged. A full pass reads 3.1 MB.
   - **Not yet measured after deploy.** Steady-state polls should read only touched tickets. Re-measure `n_tup_upd` on `tickets` over 10 minutes.
 
+## Collections can be a « Gamme » (2026-10-06)
+
+- Migration 77 (**applied**): `advice_collections.axis` accepts `range`. Agent setup → « What we can advise on » has a third button, « Gamme » / « Range ».
+- The storefront resolver answers « la gamme X » from an active range collection's membership first, with title-derived ranges as the fallback; `range.source` is `collection` or `titles`.
+- The support agent filters range collections out of its intersection (`supportCollections`), so its recommendations are unchanged.
+- **Proven:** migration 77 tests, a resolver test (a curated range that adds and removes products versus the titles), a support test (ranges never reach the intersection), root suite 5,002, agent suite 2,126, web typecheck. **Not yet used:** no collection is marked Gamme yet.
+
+## Storefront advisor: product resolution (2026-10-06)
+
+- `product-resolver.mjs` plus `conversation-refs.mjs`: deterministic resolution of the products a customer names or points at. It runs before the model, and is also a `resolve_products` tool. `get_product` takes `id`, and results carry `id`.
+- Stages: SKU, exclusive commercial name, line + care type / brand synonym, descriptive (support matcher IDF), conversation (« les deux », « l'autre », « le premier »), page (« ça »), typo correction. All vocabulary is derived from the catalogue titles.
+- Ambiguity returns a clarification from the data (3 products, or the care types), shown as widget chips; a click sends `choice`. Nothing about products or types is in the prompt.
+- Memory: `context.refs` and `context.resolution` on assistant rows, read back as history. No migration.
+- Samples are excluded from the advisor's catalogue (they were included in Phase 3).
+- `npm run eval:resolution`: 71 French cases on the live catalogue.
+- **Proven:**
+  - 71/71 on the live catalogue, 0 silent wrong picks, median 0.5 ms per message.
+  - 80 advisor unit tests (on an invented brand), root suite 4,960 pass, web typecheck, Theme Check.
+  - Live through signed requests: a named product in 1 call with no tool; « le soin Source d'Eau » → chips Crème / Coffret / Sérum, and « Sérum » → Élixir Source d'Eau with its card; « les deux premiers » after a single card → the advisor asked which two, instead of inventing one.
+  - **Not yet seen on the store.**
+
+## Storefront advisor, Phase 3: read-only product tools (2026-10-05)
+
+- `search_products` and `get_product` (`product-tools.mjs`) are pure functions over an in-memory catalogue. `product-repository.mjs` is the only reader of `products` and `advice_collections`, using named columns of live products only. `collection` is an enum of the 28 active advice collections.
+- Product cards come from the catalogue (name, price from, link) with the model's one-phrase reason, and only for handles a tool returned or the page's own product. At most 3. No images yet: the sync stores none.
+- Speed: the page product goes into the prompt; searches run in parallel within one round; at most 2 tool rounds, then a forced answer with a note; no search before a need is known; the catalogue refreshes stale-while-revalidate; and the service's database calls run in parallel. Each reply row carries `context.trace` (ms per model call, each tool call).
+- `STOREFRONT_CHAT_PRODUCT_BASE_URL` (dev only): the dev store holds a few products, not the catalogue, so card links can point at the production product page, opened in a new tab. https origins only. The widget now accepts an https link besides a same-site path. Unset, links stay relative.
+- The advisor never genders itself (« Je comprends », never « désolée »).
+- **Proven:** 32 new unit tests, root suite 4,934 pass, web typecheck and build. Live on the real catalogue with `gpt-6-luna`, through signed requests: dry skin, LED mask stock, anti-taches, night-cream price, dark circles in English, a product-page question and a two-concern routine. The right products came back with real prices and stock, nothing was invented, and replies took 1.7–4 s (one 6.6 s). **Not yet seen on the store.**
+
+## Storefront advisor, Phase 2: AI replies, no product data (2026-10-05)
+
+- `storefront_sales_agent` answers with `gpt-6-luna` (`llm-agent.mjs`; first built on `gpt-4o-mini`, switched the same day: 1.6–3.5 s, same cost, the same eight checks passed) through the existing OpenAI client, with one call per message and no tools. It is turned on by `STOREFRONT_CHAT_AGENT=llm`; the default stays the mock.
+- System prompt (`system-prompt.mjs`): the brand comes from shop data, replies are in the customer's language (French and *vous* by default), and it states no product, price, offer, delivery or return fact. Health questions go to a professional and orders to customer service, and it never asks for personal data. It is written in English because a French prompt kept answering English questions in French.
+- Bounded wait: a 12 s request timeout plus a wall-clock deadline, with no rate-limit wait. A failure answers 503 and the widget shows « Réessayer ».
+- `storefront-app/backend/shopify.web.toml` now declares both roles. With `backend` alone, the CLI tunnel answered « Invalid path » for `/api/storefront/chat`, so the store's Server mode never reached the backend; the earlier "server mode works" was the browser's Demo text, identical word for word.
+- **Proven:** 16 new unit tests, root suite 4,902 pass, web typecheck. Live, through a proxy-signed request: 25 replies; English, Spanish and French each answered in their own language; the price, order, offer, delivery and pregnancy questions handled as the prompt says; the injection attempt declined. **Not yet seen on the store**, which needs `STOREFRONT_CHAT_AGENT=llm` in `.env.local` and a restart of `shopify app dev`.
+
+## Storefront advisor, Phase 1: widget + proxied backend round trip with mock replies (2026-10-05)
+
+- **A separate dev-store-only Shopify app** in `storefront-app/`, with its own toml, no scopes and an `[app_proxy]` block. Its theme app extension `storefront-advisor` has one app embed, *Beauty advisor* (`target: body`). The production support app and its `shopify.app.toml` are untouched.
+- **Widget:** launcher, panel « Conseiller Beauté {shop} », opening line, 5 quick actions, customer and advisor bubbles, typing state, error with retry, product card component (demo card), phone full-screen sheet, history per tab. French default, English included. The 4 KB loader fetches the panel on first open. Replies come from the browser (Demo) or the server (app proxy), chosen in the embed settings.
+- **Backend:** `POST /api/storefront/chat`, public to the middleware. It checks the app proxy signature (`STOREFRONT_APP_CLIENT_SECRET`, 404 while unset), then the shop allow-list, then the body. `storefront-chat-service.ts` handles the session (token minted server-side), the per-session and per-shop daily caps, the last 20 messages as history and the log. `storefront_sales_agent` is a deterministic mock.
+- **Seen on the dev store 2026-10-05.** First fix from it: Liquid's `t` filter HTML-escapes translations, so the Demo reply showed « dites-m&#39;en ». The loader now decodes the config strings once (an inert `DOMParser`), and the widget still writes text only, never HTML.
+- **Migration 76** (`storefront_chat_sessions`, `storefront_chat_messages`, three service-role functions). **Applied 2026-10-05**: RLS on, anon has no table or function access. `npm run storefront:chat` sends one message signed exactly as the proxy does.
+- **Proven:** 19 new unit tests (the signature matches Shopify's documented worked example, plus validation and the mock agent) and the migration 76 tests. Root suite 4,886 pass. Web typecheck and build pass. Theme Check is clean on the extension. On a local `next start`, unsigned → 401, production shop → 403, malformed body → 400, GET → 405. **Not run:** the 200 path (needs migration 76), and anything on a store (needs the advisor app linked to the dev store).
+
 ## Closed tickets in order of closure (2026-10-05)
 
 - The Closed section lists the earliest closure at the top, by `closed_at` (or `resolved_at` for a resolved ticket).

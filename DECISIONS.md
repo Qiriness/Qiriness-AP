@@ -5082,6 +5082,46 @@ A plain link to a server-rendered page shows nothing until the new page has arri
 
 **The general lesson for the ranged functions: test a new one under `force_generic_plan`**, not only as a plain query, because the plain query is not what runs. The other Sales reads were measured the same way and are 100–300 ms alone; they are slow in the panel (800 ms–1.4 s) only because eleven run at once and the database queues them. Fewer, combined calls per panel — or more database compute — is what would move that, and it is an open decision, not a fix to make quietly: it reverses "each ranged figure is its own SQL function" (§ Insights).
 
+### Each page reads what it shows, and Insights shares one cached answer (2026-10-06)
+
+The reads were measured live against the free plan's egress and database limits:
+
+| Read | Size | Time | When |
+|---|---|---|---|
+| The whole queue, for the sidebar badges | 993 kB | 3.2 s | every page |
+| Blocked emails with their text | 1.9 MB | — | every /tickets |
+| Priority: linked orders with all their jsonb | 718 kB | — | every /tickets |
+| Priority: every investigation's full `exemplar_match` | 256 kB | 4.9 s | every /tickets |
+| `insights_freshness` | — | 12.3 s cold, 250 ms warm | before every Insights panel |
+
+The changes:
+
+- **The badges count open threads only, shared for a minute.**
+  - `countOpenThreads` reads `queue({ openOnly: true })` (52 rows, 50 kB). Its `open` test discarded every closed or resolved row anyway, and the list item's `status` is the same column, so the counts are identical.
+  - It is cached through `unstable_cache` with tag `tickets`, for 60 s.
+  - Every dashboard route that changes a ticket calls `ticketsChanged()` (`lib/server/cache-tags.ts`), so a person's own change shows at once. Mail the worker stores shows within the minute.
+  - This amends « the queue is read once per request, shared by the badge and the list » above: the badge now has its own, much smaller read.
+- **Blocked emails are listed without their text.**
+  - The dialog reads `GET /api/dropped-mail/[id]` (text and parcels) when it opens.
+  - `hasBody` comes from an id-only read, so « add as ticket » is still enabled exactly where a text exists.
+- **Priority reads what the band needs.**
+  - It reads `exemplar_match->policy->>situation_key` and `exemplar_match->>exemplar_key` instead of the blob: the same situation for all 193 runs, 38 kB against 256.
+  - It reads an order projection without line items, refunds, returns or discounts: the same state, dates and country for all 180 linked orders, 252 kB against 718.
+- **The Orders marks read the order-linked threads and their case siblings, not the queue.** The siblings are read because `withCaseFacts` lets a thread borrow its case's situation, so the bands match the queue's.
+- **Insights reads through Vercel's shared Data Cache, at most 15 minutes old** (`INSIGHTS_TTL_SECONDS`).
+  - `callRpc`, `readView`, the freshness row and ShopifyQL are each cached on their exact arguments, with tag `insights`. Ranges are cut on hour or day boundaries, which is what makes the keys repeat.
+  - A stale entry is served at once and recomputed behind it, so a panel opened before shows instantly.
+  - « Live · HH:MM » now shows when the cached figures were read, not when the page rendered.
+  - The 5-minute auto-refresh re-reads the cache. The ↻ button clears the tag first (`POST /api/insights/refresh`).
+  - The Tickets freshness banner still reads live, because « mail synced 2 minutes ago » must not be 15 minutes old.
+  - Settings → Agents' usage figure goes through `callRpc` and is cached the same way.
+- **The other Insights tabs are prefetched in full once the tab bar is on screen**, so switching tabs shows a page already rendered. This is affordable only because every read behind it is the shared cache.
+- **The cold freshness.** `max(updated_at)` on `customers` was a full scan of about 76 MB of pages, slow whenever they had fallen out of the free plan's small cache. `77_updated_at_indexes.sql` adds `(shop_id, updated_at)` indexes on customers, orders and tickets. The worker's change gate asks the same question.
+
+**Not done, deliberately:**
+- **No timed warm-up job.** The stale-while-recompute behaviour already makes every panel and range opened before instant. A job would only speed the first-ever view of a range, at the cost of Shopify and Supabase traffic every 15 minutes through the night.
+- **A paged blocked-email list.** It is about 800 kB even without the text, with 1,272 rows from 22 days. Paging it changes what a reviewer sees, so it is a decision, not a fix.
+
 
 ## Interface language
 
@@ -5108,3 +5148,75 @@ The dashboard is offered in French (default) and English, chosen per person in t
 - **A blocked reason is a key or a raw string.** `<Tx k={reason}>` prints the translation when the string is a dictionary key and the string itself otherwise, which is how a Shopify error message passes through.
 - **Numbers are hand-built, per language.** French groups with a no-break space and uses a decimal comma; both are produced by `insights-format.ts` rather than `Intl`, because Node and Chrome disagree on `Intl`'s separators and one differing character fails hydration (already the reason this file was hand-built).
 
+
+
+## Storefront advisor
+
+### A separate Shopify app, in its own directory (2026-10-05)
+
+The support app (`shopify.app.toml`, client_id `1d69…`) is installed on the production store, `qiriness.myshopify.com`. A theme app extension shipped through it would appear in the production theme editor. The app proxy is app-wide config, so adding one would add it to production too. The advisor is therefore **its own app** (`storefront-app/shopify.app.toml`), installed on the dev store only. It sits in **its own CLI project directory** because the Shopify CLI deploys every extension under the project it runs in: with the extension under the repo root, a routine `shopify app deploy` of the support app would carry it to production. The directory boundary makes that impossible rather than merely discouraged.
+
+The route's **shop allow-list** (`STOREFRONT_CHAT_ALLOWED_SHOPS`, where empty serves no shop) is the second guard. A production request would be refused with 403 even if the advisor app were installed there by mistake.
+
+### The app proxy, not a direct call to the backend
+
+The browser posts to `/apps/storefront-advisor/chat` on its own storefront domain. That needs no CORS, and no backend URL appears in theme code (the URL lives in the advisor app's toml). Shopify signs every proxied query with the app secret, which proves the request came through a store and names which one. A direct fetch to Vercel would have needed an open CORS origin and something else to prove the shop. The proxy strips cookies, so the session travels in the body. The token is **minted server-side**: one the browser sends is honoured only if it names an active session of the same shop.
+
+### No SQL tool, ever, for the customer-facing agent
+
+The management chat lets its model write SQL, as a read-only role over curated views (§ Management chat). That works because its users are signed-in staff. The storefront agent talks to the public internet, so it gets **narrow, typed, read-only functions** (Phase 3: `search_products`, `get_product` through a product repository returning whitelisted fields) and never a query language or a database handle. It never reads customers or orders. « Where is my order? » is answered by pointing to customer service until a handoff tool exists.
+
+### Caps before the model
+
+The per-session turn cap and the per-shop daily cap on customer messages ship in Phase 1, while replies are still mocked. Attaching an LLM in Phase 2 then attaches it behind a door that is already limited, rather than leaving the limit as an afterthought on a public, paid endpoint.
+
+### The loader is small because Theme Check says so
+
+App-embed JavaScript is capped at 10 KB by Theme Check (`AssetSizeAppBlockJavaScript`), and the full widget was 16 KB. Only the launcher loads on every page (`advisor.js`, about 4 KB). The panel (`advisor-panel.js`) is fetched on first open, or straight away on desktop when the previous page left it open. A visitor who never opens the advisor pays only for the launcher.
+
+### Nothing brand-specific in the code
+
+The header reads « Conseiller Beauté {shop} », filled from `shop.name`. The proxy subpath is `storefront-advisor`, and the strings live in the extension's locale files. Another shop installs the same extension unchanged.
+
+### Phase 2: one model call, opt-in, bounded (2026-10-05)
+
+- **Opt-in by `STOREFRONT_CHAT_AGENT=llm`.** The production dashboard carries `/api/storefront/chat` too. A key being set must never be what starts storefront spend.
+- **`gpt-6-luna` by default** (the owner's choice, same day). The first model was `gpt-4o-mini`: 2–5 s, about 570 input and 40 output tokens, $0.0001 a reply. `gpt-6-luna` on the same eight questions: 1.6–3.5 s, about 560 input and 60–190 output tokens (its reasoning counts as output), and about the same $0.0001 at $0.10 / $0.50 per million. That is under 6 cents a day at the 500-message cap, with the same rule-following and more natural French. The shared client treats it as a reasoning model (no `temperature`, a 4,000-token output ceiling), which costs only the tokens actually produced.
+- **A shopper does not wait out a rate limit.** The worker's client waits up to two minutes on a 429. Here a request is cut at 12 s, the retry wait is refused, and a wall-clock deadline sits on top: one live request ran 51 s behind Next's patched `fetch`. A failure answers 503, and the widget shows « Réessayer ».
+- **The prompt is in English.** A French prompt saying « réponds dans la langue du client » answered English and Spanish questions in French on gpt-4o-mini (3 of 3). In English it answered in the customer's language, though declines still came back in French until the rule said it covers declines too. French stays the default for a message that gives no clue (« Bonjour », a French button label).
+- **The prompt forbids, per phase, what the agent cannot know.** Products, prices, stock, offers, delivery and returns are all forbidden now. Each later phase relaxes exactly the rule its tool makes answerable, and nothing is left for the model to know from training.
+- **Spend is on the message row, not in `llm_usage`.** `llm_usage` is the support pipeline's ledger, constrained to its passes. Each assistant row carries its model and tokens, which is enough to price the advisor separately.
+
+### Phase 3: read-only product tools, built for reply speed (2026-10-05)
+
+- **The catalogue is held in memory, whole.** It's about 100 live products and 28 active collections, read once every 5 minutes by `product-repository.mjs` (about 1 s) and refreshed stale-while-revalidate. A tool call therefore costs no database round trip, and the reply time is the model's alone.
+- **The repository is the only reader**, column by column. The raw Shopify payload is never read: the review badge HTML lives in `structured_facts`. Stock reaches the model only as in stock or not.
+- **`collection` is an enum of the team's active advice collections.** The model filters on curated lists (« Peaux Sensibles », « Sérums Visage ») rather than guessing words, and in the live check it chose a collection on every product question.
+- **The page's product goes into the prompt.** « Est-ce que ça convient aux peaux sensibles ? » on a product page is one call (1.7 s), not a lookup and then an answer.
+- **At most 2 tool rounds, then a forced answer with a note.** Without the note, after two good searches the model answered « je ne peux pas vérifier » with no card (measured). Asked to request several searches in one step, it ran two collections in parallel: one round, not two.
+- **No search before a need is known.** « Construire ma routine » used to spend two searches and then ask a question anyway (3 calls). Now it is one call and the question.
+- **A card is only ever a product a tool returned.** The model writes a handle and a reason, and the catalogue writes the name, price and link. A handle the model invents is dropped.
+- **In stock first.** The only matching anti-taches sérum was out of stock. Before the in-stock rule, it was suggested alone. Now it's named as unavailable, and an in-stock alternative is shown as a card.
+- **No images yet.** The product sync stores none (`raw_shopify_payload` has no `featuredImage`), so cards use the placeholder until the sync reads one.
+- **Measured through the route:** 2–4 s for a search plus an answer, about 2 s with no tool call, and an occasional 6 s on a slow OpenAI call. About 1,800 input tokens per call: the tool definitions and the collection list are a stable prefix, eligible for prompt caching.
+
+### Product resolution: which products, before the model (2026-10-06)
+
+- **Resolution is not discovery.** « la crème Source d'Eau Riche » and « les deux » are references to settle; « quels sérums anti-âge ? » is a search. `resolve_products` and `search_products` are separate tools, and later tools (compare, ingredients, routine) take the resolved `id`s.
+- **It runs before the model, deterministically** (median 0.5 ms). A named product, a clarification answer or « ça » on a product page costs one model call and no tool (measured 1.7–2.4 s).
+- **No hand-written vocabulary.** On this catalogue the title's last segment is the commercial name customers use (« … – Caresse Source d'Eau Riche »), and the head noun is the care type. Brand synonyms are learned as the head noun most of a commercial prefix's products share (Élixir → Sérum, Caresse → Crème, Wrap → Masque, Rituel → Coffret). The unit tests run on an invented brand to keep it that way. The owner asked for this (« don't hardcode any of this into the prompt »).
+- **Identity words versus attribute words.** A word is identity when at least half its title occurrences are in commercial names. Even so, « temps » and « parfum » are ordinary French, so **a lone name word needs a care word just before it**: « combien de temps », « sans parfum » and « la lune est belle » never resolve, while « le masque Hyal-Aqua » and « la Lip Beauty » (two words) do. Description frequency was measured as an alternative and rejected: it would demote « riche » (25 other descriptions, 2 titles) and miss « temps » (3:12).
+- **Typo correction follows how people mistype:** a dropped, swapped or doubled letter, never a stray extra one. « matin » corrected to « main » broke a page question. Grammar words (« trois », « premier ») are never corrected: « trois » once became « trio ».
+- **Never a silent pick; the clarification is data.** Three or fewer candidates, or candidates that share one care type, give `choose_product` with the top 3. More, across several types, gives `choose_care_type` (« Crème / Coffret / Sérum »). Labels are the commercial name when unique and still containing the customer's words, else care type plus last segment (« Crème Source d'Eau 50 ml »). Chips send a `choice`, so the answer resolves by id with no re-parsing. The prompt carries only the generic rule « ask it with exactly its options ».
+- **A plural the memory can't satisfy is reported, not filled.** After one card, « les deux premiers » made the model search and describe a second product the customer had never seen. The resolver now returns the one product plus the cue as unresolved, and the model asked which two.
+- **SKUs can sit on two listings** (the 50 ml multi-size listing reuses E046N). The listing where the SKU stands alone wins; otherwise the result is ambiguous.
+- **Memory lives on the assistant row** (`context.refs`, `context.resolution`), so the question can still be logged in parallel with the model call. No table. Curated aliases wait for a measured miss that only an alias can fix.
+- **Samples left the advisor's catalogue.** They're excluded through the support matcher's own `isCustomerFacing`. Phase 3 had included the 9 `SAMPLE PRODUCT` rows.
+
+### A range is a collection the team marks « Gamme » (2026-10-06)
+
+- **Ranges used to be guessed from titles.** « toute la gamme Source d'Eau » meant every live title containing « source » and « eau ». That works while every line repeats its name in every title. It drifts when one doesn't, and when a word is shared by accident.
+- **The shop already curates them in Shopify:** « Temps Sublime » (11 products), « Source d'Eau » (6), « Active Énergie » (5), « Exception » (4). They were inactive in `advice_collections`, because the only axes were concern and category.
+- **So `axis` gained `range`** (migration 77, chosen in Agent setup → « What we can advise on »). An active range collection is **the** membership of « la gamme X »: the resolver checks the curated ranges first, taking the most specific one the customer's words cover. The title-derived range is the fallback for a line nobody curated. The resolution's `range.source` says which was used.
+- **The support agent ignores ranges** (`supportCollections` in `advice-collections.mjs`). Its intersection treats every non-category collection as a concern, so a range there would silently become a ranking requirement. Whether support should read ranges is its own decision.
+- **Membership needs the collection active.** `product_ids` is refreshed for active collections only (§ Advice comes from collections), so a range is read only after it is switched on and synced.

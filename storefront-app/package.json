@@ -1,0 +1,11 @@
+{
+  "name": "storefront-advisor-app",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Dev-store-only Shopify app carrying the storefront advisor theme app extension.",
+  "scripts": {
+    "dev": "shopify app dev",
+    "build": "shopify app build",
+    "deploy": "shopify app deploy"
+  }
+}

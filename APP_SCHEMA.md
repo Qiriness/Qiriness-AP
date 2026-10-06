@@ -22,6 +22,8 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |                    # sync:social (Meta + Google Ads; tokens from Vault)
 |                    # probe:meta (which Meta metric names still answer)
 |                    # db:apply:migration · test
+|                    # storefront:chat (one proxy-signed message to the advisor)
+|                    # eval:resolution (the advisor's product resolver, live catalogue)
 |-- shopify.app.toml # Shopify app scopes (all read_*)
 |-- web/
 |   |-- app/
@@ -125,6 +127,10 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |   |       |-- reports/sales/route.ts       # PUBLIC (Bearer SALES_REPORT_SECRET; 404
 |   |       |                                  # while unset). GET ?month= -> the same
 |   |       |                                  # report, for the worker's monthly mail
+|   |       |-- storefront/chat/route.ts     # PUBLIC (app proxy signature + shop
+|   |       |                                  # allow-list; 404 while the advisor secret
+|   |       |                                  # is unset). POST -> storefront-chat-service.
+|   |       |                                  # docs/storefront-chatbot.md
 |   |       |-- knowledge/                   # shopify-sources · articles · articles/[id]
 |   |       |                                 # · articles/[id]/resync · format (« Format as
 |   |       |                                 # FAQ », stateless, writes nothing)
@@ -256,7 +262,13 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |   |       |                    # Orders + Fulfilment's waiting orders) ·
 |   |       |                    # chat-service (Home's chat: wires the loop, writes
 |   |       |                    # the chat_* log, owner-only reads) ·
+|   |       |                    # storefront-chat-service (the storefront
+|   |       |                    # advisor: session, caps, history, log; picks
+|   |       |                    # mock or llm by STOREFRONT_CHAT_AGENT) ·
 |   |       |                    # dropped-mail-service · knowledge-errors ·
+|   |       |                    # cache-tags (the shared-cache tags `tickets`
+|   |       |                    # and `insights`; ticketsChanged after a
+|   |       |                    # dashboard write) ·
 |   |       |                    # integrations-service (Klaviyo status/save/remove) ·
 |   |       |                    # social-connections-service (Meta / Google OAuth:
 |   |       |                    # start, callback, queue a sync, track, disconnect)
@@ -407,6 +419,24 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |       |-- chat-agent-loop.mjs          # execute_sql loop: 8 steps, last one forced to
 |       |                                # answer; what the model sees of a result; history
 |       |-- chat-system-prompt.mjs       # the rules + the data's known limits
+|       |-- storefront-chat/             # the storefront advisor: app-proxy-signature
+|       |                                # (verify + allow-list) · request-schema (what
+|       |                                # the widget may send) · agent (the contract +
+|       |                                # the mock) · llm-agent (storefront_sales_agent
+|       |                                # on OpenAI: tool loop <= 2 rounds, bounded wait,
+|       |                                # cards only for tool-returned handles) ·
+|       |                                # system-prompt (brand from shop data) ·
+|       |                                # product-repository (THE reader of products +
+|       |                                # advice_collections: named columns, live only) ·
+|       |                                # product-tools (resolve_products, search_products,
+|       |                                # get_product by id; pure, over the catalogue) ·
+|       |                                # product-resolver (WHICH products: SKU →
+|       |                                # commercial name → type → description →
+|       |                                # conversation → page; vocabulary derived from
+|       |                                # titles; clarification, never a pick) ·
+|       |                                # conversation-refs (« les deux », « ça »; the
+|       |                                # memory folded from context.refs/resolution) ·
+|       |                                # resolution-cases (the French test set)
 |       |-- company.mjs                  # who the company is: shops.shop_name + the
 |       |                                # company_description / logistics_provider_name
 |       |                                # parameters; loadCompany, serviceClientOf. Every
@@ -510,6 +540,16 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |       `-- knowledge/                   # source-discovery · knowledge-source-resolver ·
 |                                        # content-resolvers/ · template-traversal ·
 |                                        # template-extractors/
+|-- storefront-app/              # SEPARATE Shopify app, DEV STORE ONLY (own toml,
+|   |                            # own client_id, no scopes, [app_proxy]). Run its
+|   |                            # `shopify app ...` commands from here, never root
+|   |-- backend/shopify.web.toml # lets `shopify app dev` start web/ behind its tunnel
+|   `-- extensions/storefront-advisor/  # theme app extension: blocks/advisor-embed.liquid
+|                                # (app embed, target body; settings + JSON config)
+|                                # · assets/advisor.js (loader: launcher only) ·
+|                                # advisor-panel.js (panel, fetched on first open)
+|                                # · advisor.css · locales/fr.default + en
+|-- docs/storefront-chatbot.md   # the advisor: architecture, phase, how to run
 |-- agent/                       # always-on worker (own package.json; reuses scripts/lib/*)
 |   |-- src/
 |   |   |-- index.mjs config.mjs # entrypoint (--once) · env/tunables + Graph gate
@@ -729,7 +769,7 @@ Every table has RLS on with no policies: **service-role access only**. Shopify s
 | `products` | snapshots + first-class metafields, `variants` jsonb, `available_stock` |
 | `sales_channels` | the shop's marketplaces (migration 60): `platform_key` (URL/filter id, never `all`/`shopify`, never changes), `label`, `handles` (Shopify `sales_channel_handle`s), `analytics_names` (ShopifyQL `sales_channel`, lower case), `position`. Every handle not listed is the shop's own store. Read by the Insights platform filter and services (`getMarketplaces`), the VIP rule, order resolution's anonymous-buyer rule, the chat prompt and `chat.vip_customer_rows()`. Edited on Setup → Sales channels |
 | `promotions` | one row per discount, its redeem codes in the `codes` jsonb (empty for automatic); `method` `code`/`automatic`; two local columns the sync never writes, `offerable_in_replies` (codes, default false) and `describable_in_replies` (automatic offers, default true); `rule_snapshot` carries values, not just type names — complete product/collection lists per leg and `destination` (country codes) for shipping discounts |
-| `advice_collections` | every Shopify collection (175), plus the team's decision about each: `is_active` (may support answer from it), `axis` (`concern` / `category`), `note`. `product_ids` holds the LIVE products, refreshed for active collections only — see DECISIONS.md § advice from collections |
+| `advice_collections` | every Shopify collection (175), plus the team's decision about each: `is_active` (may support answer from it), `axis` (`concern` / `category` / `range` — a « gamme », storefront advisor only, migration 77), `note`. `product_ids` holds the LIVE products, refreshed for active collections only — see DECISIONS.md § advice from collections |
 | `shopify_metaobjects` | shared metaobjects (FAQ, ingredient lists) referenced by products |
 | `shopify_content_sources` | content-free catalog of live pages + policies. Feeds Agent Setup only; no FK to knowledge |
 
@@ -860,6 +900,16 @@ Migration 17. Two halves, on two connections — see `DECISIONS.md § Management
 | `chat_turns` | one question + answer: `status` (running / ok / step_limit / empty / error), `error`, `model`, `steps`, tokens, `duration_ms`. Spend here, **not** in `llm_usage` |
 | `chat_queries` | every query tried: `sql`, `ok`, `error` (a refusal or a Postgres error), `row_count`, `truncated`, `duration_ms`, `columns`, the first 50 rows |
 
+### Storefront advisor
+
+Migration 76. Named in `STOREFRONT_CHAT_T` / `STOREFRONT_CHAT_RPC`. Not `chat_*` (that is the management chat). No FK to `shops`: the dev store has no row there; the proxy signature names the shop. See `docs/storefront-chatbot.md`.
+
+| Object | Holds |
+| --- | --- |
+| `storefront_chat_sessions` | one anonymous widget conversation: `session_token` (minted server-side, handed back to the browser), `shop_domain` (as signed by the proxy), `source`, `status`, `locale`, `turn_count` (the per-session cap), `last_activity_at` (retention) |
+| `storefront_chat_messages` | each customer message and reply: `role`, `content`, `action` (quick action), `context` jsonb (page type, handles, locale, path; product URLs on replies), `model` + tokens (null for the mock). Cascades with its session |
+| `storefront_chat_user_messages_since` / `_record_turn` / `_purge` | service_role only: the per-shop daily count, the atomic turn increment, the retention delete |
+
 ### Klaviyo
 
 Migration 39. Named in `KLAVIYO_T` / `KLAVIYO_RPC`, not `T` / `RPC`. See `DECISIONS.md § Insights → Klaviyo`.
@@ -954,6 +1004,8 @@ Written by the worker and the CLIs, read only by the Insights panels.
 | `73_automated_actor.sql` | `ticket_messages_actor_check` gains `automated` (an automatic reply; messages only, not `ticket_case_state` or `case_current`). Copied from 04. No data. **Applied 2026-10-05** | 04, 41 |
 | `74_agent_models_casework.sql` | `agent_models_agent_check` gains `casework` and `closure`, so both can be chosen in Settings. Copied from 04. No data. **Applied 2026-10-05** | 53, 61 |
 | `75_queue_closed_at.sql` | `ticket_queue` gains `resolved_at` and `closed_at`, appended last (the Closed section's order). Copied from 04. No data. **Applied 2026-10-05** | 61, 62 |
+| `77_collection_range_axis.sql` | `advice_collections_axis_check` accepts `range` (a product line, « gamme »). Read by the storefront advisor only; `supportCollections` filters it out of the support intersection. No data. **Applied 2026-10-06** | 27 |
+| `76_storefront_chat.sql` | `storefront_chat_sessions` + `storefront_chat_messages` and three service-role functions (daily count, turn, purge). New tables only. No data. **Applied 2026-10-05** | 01 |
 | `72_refund_notice.sql` | `support_answers.notify_on` (`refund_recorded`; marks a notice template) + `ticket_drafts.purpose` (`reply` / `refund_notice`). Copied from 05 / 07. No data. **Applied 2026-10-05** | 05, 07 |
 | `71_ad_campaigns.sql` | `ad_campaigns` + `ad_campaign_days` (`CAMPAIGN_T`) and `insights_paid_campaigns()` (`CAMPAIGN_RPC`). No data. **Applied 2026-10-05** | 70 |
 | `70_social.sql` | the six social tables (`SOCIAL_T`), the Vault token functions and six reads (`SOCIAL_RPC`), and `mail_jobs_kind_check` widened to `sync_social` (copied from 04 / 46). No data. **Applied 2026-10-05** | 01, 46 |
@@ -1111,7 +1163,7 @@ Env: `CHAT_DB_URL` (the role's pooler URL; unset = the page says so and nothing 
 | **Backlog** | `tickets`, status not resolved/closed, waiting 14+ days | Close ticket |
 | **Closed** | `tickets`, status resolved/closed, earliest closure first (`closedAt` from the queue's `closed_at` / `resolved_at`, migration 75) | Reopen ticket |
 
-**Add as ticket** overturns one gate decision. `POST /api/dropped-mail/:id/promote` → `dropped-mail-service.ts` → `agent/src/ingestion/promote-dropped-mail.mjs`, which maps the `spam_audit` row into the shape `mapGraphMessage` produces and writes it through `writeIngestedMessages` — the ordinary ingestion path, so threading, idempotency, `needs_categorisation` and the reopen rule are ingestion's and not a second copy of them. The worker's next poll then categorises, resolves and investigates it like any other ticket. Disabled where the row has no stored body. **No schema change and no write to `spam_audit`**: promoted is derived — a blocked row whose `graph_message_id` now exists in `ticket_messages` — and drops out of the section on that basis.
+The Irrelevant list carries no email text: the dialog reads it with `GET /api/dropped-mail/:id` → `getDroppedMail` (text + parcels) when it opens, and the list's `hasBody` comes from an id-only read. **Add as ticket** overturns one gate decision. `POST /api/dropped-mail/:id/promote` → `dropped-mail-service.ts` → `agent/src/ingestion/promote-dropped-mail.mjs`, which maps the `spam_audit` row into the shape `mapGraphMessage` produces and writes it through `writeIngestedMessages` — the ordinary ingestion path, so threading, idempotency, `needs_categorisation` and the reopen rule are ingestion's and not a second copy of them. The worker's next poll then categorises, resolves and investigates it like any other ticket. Disabled where the row has no stored body. **No schema change and no write to `spam_audit`**: promoted is derived — a blocked row whose `graph_message_id` now exists in `ticket_messages` — and drops out of the section on that basis.
 
 **Select → Clear** hides dropped mail somebody has finished reading. `IrrelevantWorkspace` in `TicketsView.tsx` and nothing else: **no route, no service, no write** — the cleared ids live in `localStorage` under `tickets.clearedMail`, are subtracted from the list and from the tab count, and **Restore N** in the same header brings them all back. Select mode turns each row into a checkbox (row click ticks instead of previewing); Cancel leaves it untouched.
 

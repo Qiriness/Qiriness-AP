@@ -124,6 +124,8 @@ below. `llm_usage` holds 2174 calls.
 
 ## Next Steps
 
+**Storefront advisor (2026-10-06):** product resolution (`resolve_products`, clarification chips, conversation references) is built: 71/71 on `npm run eval:resolution`. Run `VALIDATION_LOG.md` item 43 on the store before building compare / ingredients / routine on top of it. Phase 3 (read-only `search_products` / `get_product`, product cards) is built. Check that the dev store holds the production handles, then run `VALIDATION_LOG.md` item 42. Product images need the sync to read `featuredImage` (decision pending). Phase 2 (AI replies, no product data) is built and tested by signed requests. Set `STOREFRONT_CHAT_AGENT=llm`, restart `shopify app dev`, and run `VALIDATION_LOG.md` item 41 before Phase 3 (read-only product tools). Phase 1 is built (`docs/storefront-chatbot.md`). Link `storefront-app/` to the dev store, set the two `STOREFRONT_*` env vars (migration 76 applied 2026-10-05), then run `VALIDATION_LOG.md` item 40. Phase 2 (an LLM reply) comes only after Phase 1 has been seen working on the dev store. Never on production.
+
 **Social media (2026-10-05):** register the Meta app, and the Google Cloud OAuth client with Basic access on its project (§ Social connectors above), connect both (migration 70 applied 2026-10-05), and run the checks in `VALIDATION_LOG.md` item 38. Start with `npm run probe:meta`: Meta's metric names are the most likely thing to need a change.
 
 **Cases (2026-10-02):** apply migration 61, run `npm run cases:targets` and then

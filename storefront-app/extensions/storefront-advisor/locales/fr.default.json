@@ -1,0 +1,39 @@
+{
+  "advisor": {
+    "title": "Conseiller Beauté {{ shop }}",
+    "eyebrow": "Conseil personnalisé",
+    "launcher": "Conseil beauté",
+    "open": "Ouvrir le conseiller beauté",
+    "close": "Fermer le conseiller",
+    "greeting": "Bonjour, comment puis-je vous aider à trouver le soin qui vous convient ?",
+    "placeholder": "Écrivez votre question…",
+    "input_label": "Votre message",
+    "send": "Envoyer",
+    "typing": "Le conseiller écrit…",
+    "error": "Le message n'a pas pu être envoyé.",
+    "retry": "Réessayer",
+    "discover": "Découvrir",
+    "disclaimer": "Conseiller automatisé. Pour une question sur une commande, notre service client vous répond.",
+    "quick_actions_label": "Suggestions",
+    "products_label": "Soins suggérés",
+    "you": "Vous",
+    "advisor": "Conseiller"
+  },
+  "actions": {
+    "find_product": "Trouver mon soin",
+    "build_routine": "Construire ma routine",
+    "compare": "Comparer des soins",
+    "delivery_returns": "Livraison & retours",
+    "offers": "Offres du moment"
+  },
+  "mock": {
+    "default": "Merci pour votre message. Ceci est une réponse de démonstration : le conseiller n'est pas encore connecté.",
+    "find_product": "Avec plaisir. Pour vous orienter, dites-m'en un peu plus sur votre peau : plutôt sèche, mixte, grasse ou sensible ? (Réponse de démonstration.)",
+    "build_routine": "Construisons votre routine ensemble. Souhaitez-vous une routine du matin, du soir, ou les deux ? (Réponse de démonstration.)",
+    "compare": "Indiquez-moi les soins que vous hésitez à choisir, je vous aiderai à les comparer. (Réponse de démonstration.)",
+    "delivery_returns": "Les informations de livraison et de retour seront bientôt disponibles ici. (Réponse de démonstration.)",
+    "offers": "Les offres du moment seront bientôt disponibles ici. (Réponse de démonstration.)",
+    "product_name": "Exemple de soin",
+    "product_rationale": "Carte de démonstration : les vraies suggestions arriveront avec le catalogue."
+  }
+}

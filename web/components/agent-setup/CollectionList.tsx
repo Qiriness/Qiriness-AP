@@ -198,7 +198,7 @@ export function CollectionList({
 
             <div className={styles.actions}>
               <div className={styles.axis} role="group" aria-label={t("setup.collections.whatIs", { title: collection.title })}>
-                {(["concern", "category"] as CollectionAxis[]).map((axis) => (
+                {(["concern", "category", "range"] as CollectionAxis[]).map((axis) => (
                   <button
                     key={axis}
                     type="button"
@@ -216,7 +216,11 @@ export function CollectionList({
                       )
                     }
                   >
-                    {axis === "concern" ? t("setup.collections.concern") : t("setup.collections.careType")}
+                    {axis === "concern"
+                      ? t("setup.collections.concern")
+                      : axis === "category"
+                        ? t("setup.collections.careType")
+                        : t("setup.collections.range")}
                   </button>
                 ))}
               </div>

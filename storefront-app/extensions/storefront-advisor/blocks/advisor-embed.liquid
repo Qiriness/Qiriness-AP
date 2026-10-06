@@ -1,0 +1,118 @@
+{%- liquid
+  assign product_handle = ''
+  if product
+    assign product_handle = product.handle
+  endif
+  assign collection_handle = ''
+  if collection
+    assign collection_handle = collection.handle
+  endif
+  assign endpoint = block.settings.proxy_path | strip | append: '/chat'
+-%}
+<div
+  id="storefront-advisor"
+  class="sa-root sa-root--{{ block.settings.position }}"
+  style="--sa-accent: {{ block.settings.accent_color }};"
+></div>
+<script type="application/json" id="storefront-advisor-config">
+  {
+    "transport": {{ block.settings.transport | json }},
+    "endpoint": {{ endpoint | json }},
+    "panelScript": {{ 'advisor-panel.js' | asset_url | json }},
+    "context": {
+      "pageType": {{ request.page_type | json }},
+      "productHandle": {{ product_handle | json }},
+      "collectionHandle": {{ collection_handle | json }},
+      "locale": {{ request.locale.iso_code | json }}
+    },
+    "quickActions": [
+      {%- assign first = true -%}
+      {%- if block.settings.action_find_product -%}{"id": "find_product", "label": {{ 'actions.find_product' | t | json }}}{%- assign first = false -%}{%- endif -%}
+      {%- if block.settings.action_build_routine -%}{%- unless first -%},{%- endunless -%}{"id": "build_routine", "label": {{ 'actions.build_routine' | t | json }}}{%- assign first = false -%}{%- endif -%}
+      {%- if block.settings.action_compare -%}{%- unless first -%},{%- endunless -%}{"id": "compare", "label": {{ 'actions.compare' | t | json }}}{%- assign first = false -%}{%- endif -%}
+      {%- if block.settings.action_delivery_returns -%}{%- unless first -%},{%- endunless -%}{"id": "delivery_returns", "label": {{ 'actions.delivery_returns' | t | json }}}{%- assign first = false -%}{%- endif -%}
+      {%- if block.settings.action_offers -%}{%- unless first -%},{%- endunless -%}{"id": "offers", "label": {{ 'actions.offers' | t | json }}}{%- endif -%}
+    ],
+    "strings": {
+      "title": {{ 'advisor.title' | t: shop: shop.name | json }},
+      "eyebrow": {{ 'advisor.eyebrow' | t | json }},
+      "launcher": {{ 'advisor.launcher' | t | json }},
+      "open": {{ 'advisor.open' | t | json }},
+      "close": {{ 'advisor.close' | t | json }},
+      "greeting": {{ 'advisor.greeting' | t | json }},
+      "placeholder": {{ 'advisor.placeholder' | t | json }},
+      "inputLabel": {{ 'advisor.input_label' | t | json }},
+      "send": {{ 'advisor.send' | t | json }},
+      "typing": {{ 'advisor.typing' | t | json }},
+      "error": {{ 'advisor.error' | t | json }},
+      "retry": {{ 'advisor.retry' | t | json }},
+      "discover": {{ 'advisor.discover' | t | json }},
+      "disclaimer": {{ 'advisor.disclaimer' | t | json }},
+      "quickActionsLabel": {{ 'advisor.quick_actions_label' | t | json }},
+      "productsLabel": {{ 'advisor.products_label' | t | json }},
+      "you": {{ 'advisor.you' | t | json }},
+      "advisor": {{ 'advisor.advisor' | t | json }}
+    },
+    "mock": {
+      "default": {{ 'mock.default' | t | json }},
+      "find_product": {{ 'mock.find_product' | t | json }},
+      "build_routine": {{ 'mock.build_routine' | t | json }},
+      "compare": {{ 'mock.compare' | t | json }},
+      "delivery_returns": {{ 'mock.delivery_returns' | t | json }},
+      "offers": {{ 'mock.offers' | t | json }},
+      "productName": {{ 'mock.product_name' | t | json }},
+      "productRationale": {{ 'mock.product_rationale' | t | json }}
+    }
+  }
+</script>
+
+{% schema %}
+{
+  "name": "Beauty advisor",
+  "target": "body",
+  "javascript": "advisor.js",
+  "stylesheet": "advisor.css",
+  "settings": [
+    {
+      "type": "select",
+      "id": "transport",
+      "label": "Replies",
+      "info": "Demo replies need no backend. Server sends messages through the app proxy.",
+      "options": [
+        { "value": "mock", "label": "Demo (no backend)" },
+        { "value": "proxy", "label": "Server (app proxy)" }
+      ],
+      "default": "mock"
+    },
+    {
+      "type": "text",
+      "id": "proxy_path",
+      "label": "App proxy path",
+      "info": "The app proxy prefix and subpath, as shown in Settings > Apps for this app.",
+      "default": "/apps/storefront-advisor"
+    },
+    {
+      "type": "select",
+      "id": "position",
+      "label": "Launcher position",
+      "options": [
+        { "value": "right", "label": "Bottom right" },
+        { "value": "left", "label": "Bottom left" }
+      ],
+      "default": "right"
+    },
+    {
+      "type": "color",
+      "id": "accent_color",
+      "label": "Accent colour",
+      "default": "#23201c"
+    },
+    { "type": "header", "content": "Quick actions" },
+    { "type": "checkbox", "id": "action_find_product", "label": "Find my skincare", "default": true },
+    { "type": "checkbox", "id": "action_build_routine", "label": "Build my routine", "default": true },
+    { "type": "checkbox", "id": "action_compare", "label": "Compare products", "default": true },
+    { "type": "checkbox", "id": "action_delivery_returns", "label": "Delivery & returns", "default": true },
+    { "type": "checkbox", "id": "action_offers", "label": "Current offers", "default": true }
+  ]
+}
+{% endschema %}
