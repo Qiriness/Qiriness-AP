@@ -8,7 +8,9 @@
  */
 
 export const MAX_MESSAGE_CHARS = 1000;
-export const MAX_BODY_BYTES = 8 * 1024;
+import { normalizeSnapshot } from './shopping-evaluator.mjs';
+
+export const MAX_BODY_BYTES = 32 * 1024;
 
 /** The quick actions the widget offers. Anything else is sent as a plain message. */
 export const QUICK_ACTIONS = ['find_product', 'build_routine', 'compare', 'delivery_returns', 'offers'];
@@ -17,6 +19,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const PAGE_TYPE = /^[a-z_]{1,40}$/;
 const HANDLE = /^[\p{Ll}\p{Lo}\p{N}_-]{1,255}$/u;
 const LOCALE = /^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})?$/;
+const COUNTRY = /^[A-Z]{2}$/;
 const MAX_PATH_CHARS = 300;
 const CHOICE = /^[\p{L}\p{N} _'’-]{1,80}$/u;
 
@@ -28,6 +31,7 @@ export class ChatRequestError extends Error {}
  * @property {string | null} productHandle
  * @property {string | null} collectionHandle
  * @property {string | null} locale
+ * @property {string | null} [country]
  * @property {string | null} path
  */
 
@@ -48,7 +52,8 @@ export function parseChatRequest(body) {
     message,
     action: QUICK_ACTIONS.includes(body.action) ? body.action : null,
     choice: typeof body.choice === 'string' && CHOICE.test(body.choice) ? body.choice : null,
-    context: parseContext(body.context)
+    context: parseContext(body.context),
+    ...(body.cart !== undefined ? { cart: normalizeSnapshot(body.cart) } : {})
   };
 }
 
@@ -61,6 +66,11 @@ function parseContext(raw) {
     productHandle: pick(context.productHandle, HANDLE),
     collectionHandle: pick(context.collectionHandle, HANDLE),
     locale: pick(context.locale, LOCALE),
+    ...(pick(context.country, COUNTRY) ? { country: context.country } : {}),
+    ...(pick(context.currency, /^[A-Z]{3}$/) ? { currency: context.currency } : {}),
+    ...(pick(context.market, /^gid:\/\/shopify\/Market\/[1-9][0-9]{0,19}$/) ? { market: context.market } : {}),
+    ...(pick(context.variantId, /^gid:\/\/shopify\/ProductVariant\/[1-9][0-9]{0,19}$/) ? { variantId: context.variantId } : {}),
+    ...(typeof context.loggedIn === 'boolean' ? { loggedIn: context.loggedIn } : {}),
     path: cleanPath(context.path)
   };
 }

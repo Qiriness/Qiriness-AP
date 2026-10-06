@@ -24,6 +24,9 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |                    # db:apply:migration · test
 |                    # storefront:chat (one proxy-signed message to the advisor)
 |                    # eval:resolution (the advisor's product resolver, live catalogue)
+|                    # eval:storefront-knowledge (read-only live policy/FAQ checks)
+|                    # inspect:storefront-knowledge (source keys, headings, parameter availability)
+|                    # inspect:storefront-shopping (shop-scoped inventory counts, no codes)
 |-- shopify.app.toml # Shopify app scopes (all read_*)
 |-- web/
 |   |-- app/
@@ -436,7 +439,25 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |       |                                # titles; clarification, never a pick) ·
 |       |                                # conversation-refs (« les deux », « ça »; the
 |       |                                # memory folded from context.refs/resolution) ·
-|       |                                # resolution-cases (the French test set)
+|       |                                # conversation-language (neutral replies retain session
+|       |                                # context.replyLanguage; explicit language switches win) ·
+|       |                                # resolution-cases (the French test set) ·
+|       |                                # knowledge-repository (active policies + parameters,
+|       |                                # approved general FAQs; lazy product-id-scoped guidance) ·
+|       |                                # shopping-repository (signed-shop-scoped public promotions,
+|       |                                # variants and synced collection membership; separate public
+|       |                                # brand-offer preview for allowed unsynced shops; 30s cache) ·
+|       |                                # shopping-evaluator (cart whitelist, quantity stock,
+|       |                                # deterministic eligibility/stacking; no mutations) ·
+|       |                                # shopping-tools (lazy opening + four read-only tools) ·
+|       |                                # shopping-cases (French deterministic expectations) ·
+|       |                                # knowledge-topics (topic/key bindings, country context) ·
+|       |                                # faq-matcher (runtime section records; exact → alias →
+|       |                                # keywords/topic → fuzzy, no vectors) · knowledge-tools
+|       |                                # (get_policy, search_faqs, get_product_policy) ·
+|       |                                # knowledge-router (opening retrieval before the model;
+|       |                                # product data first, guidance only on a later tool call) ·
+|       |                                # knowledge-cases (French routing/result expectations)
 |       |-- company.mjs                  # who the company is: shops.shop_name + the
 |       |                                # company_description / logistics_provider_name
 |       |                                # parameters; loadCompany, serviceClientOf. Every
@@ -550,6 +571,9 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |                                # (app embed, target body; settings + JSON config)
 |                                # · assets/advisor.js (loader: launcher only) ·
 |                                # advisor-panel.js (panel, fetched on first open)
+|                                # advisor-cart.js (shared cart whitelist incl. observed product/
+|                                # variant labels; fresh locale-aware GET cart.js for shopping
+|                                # and cart-page suitability turns; ephemeral request payload)
 |                                # · advisor.css · locales/fr.default + en
 |-- docs/storefront-chatbot.md   # the advisor: architecture, phase, how to run
 |-- agent/                       # always-on worker (own package.json; reuses scripts/lib/*)
@@ -909,7 +933,7 @@ Migration 76. Named in `STOREFRONT_CHAT_T` / `STOREFRONT_CHAT_RPC`. Not `chat_*`
 | Object | Holds |
 | --- | --- |
 | `storefront_chat_sessions` | one anonymous widget conversation: `session_token` (minted server-side, handed back to the browser), `shop_domain` (as signed by the proxy), `source`, `status`, `locale`, `turn_count` (the per-session cap), `last_activity_at` (retention) |
-| `storefront_chat_messages` | each customer message and reply: `role`, `content`, `action` (quick action), `context` jsonb (page type, handles, locale, path; product URLs on replies), `model` + tokens (null for the mock). Cascades with its session |
+| `storefront_chat_messages` | each customer message and reply: `role`, `content`, `action` (quick action), `context` jsonb (page type, handles, locale, optional country, path; product URLs and refs/resolution on replies; `trace.knowledge` records opening routes, retrieval stages, source IDs/versions and timing), `model` + tokens (null for the mock). Cascades with its session |
 | `storefront_chat_user_messages_since` / `_record_turn` / `_purge` | service_role only: the per-shop daily count, the atomic turn increment, the retention delete |
 
 ### Klaviyo

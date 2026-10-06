@@ -4836,3 +4836,85 @@ Two new investigation tools, plus the attachment metadata that makes the second 
 ## Dashboard fixes (2026-08-16)
 
 - **Insights dev page no longer depends on Google Fonts.** The root layout stopped using `next/font/google` because the local dev environment blocks the font fetch with `EACCES`, which can leave the dev page behind a blank/error overlay. The app now uses the existing system/Satoshi fallback stack from CSS with no network font request.
+
+## Storefront policies and FAQs over existing sources (2026-10-06)
+
+- Added read-only `get_policy`, `search_faqs` and resolved-product-only
+  `get_product_policy`, with deterministic opening retrieval and bounded lexical
+  matching. Policy facts use existing parameter references; passages preserve
+  conditions and exceptions. Policy-linked FAQ answers are replaced by references.
+- Shopify product FAQ snapshots now join normal catalogue facts. Approved linked
+  product guidance loads only after resolution and product-data access, with a
+  separate bounded cache. No storage migration, shared editor/writer changes,
+  support retrieval changes, embeddings or new integrations.
+- Added optional validated country context, topic/country follow-up handling and
+  retrieval provenance/timing in the existing assistant trace. Expired or unavailable
+  sources fail closed; no customer/order reads or policy actions.
+- Verification: 169 relevant storefront/shared-source tests passed; web TypeScript
+  and lint passed. Live read-only retrieval evaluation passed 15/15, median 0.59 ms,
+  no models or writes. French case expectations live in `knowledge-cases.mjs`.
+- Generated replies and widget latency have not been reviewed on the dev store;
+  `VALIDATION_LOG.md` item 45 records that check and current source gaps.
+- Final verification after the account-FAQ distinction: 170 tests passed,
+  TypeScript and lint passed again; live retrieval remained 15/15, warm median
+  3.03 ms while the local checks ran concurrently.
+
+## Storefront cart, stock and public promotions (2026-10-06)
+
+- Added four read-only shopping tools and deterministic opening retrieval. Existing
+  promotions/rules/classifications and variant quantities are combined with the
+  current cart; no schema or shared sync/support behavior changes.
+- Added a shared browser/server cart whitelist, locale-aware GET with a timeout,
+  country/market/currency/selected-variant/logged-in observations, stable product-ID
+  mapping and ephemeral cart payloads. No tokens, notes, properties or identities.
+- Public-code filtering occurs before tool retrieval. Unknown discounts are
+  unnamed; a reply backstop removes codes not supplied by public tool results.
+  Missing customer/collection/currency/stock evidence remains unknown.
+- Reused promotion mechanics, stacking and common basket checks; added separate
+  buy/reward quantity accounting. No delivery calculations, checkout writes,
+  code application, product changes, history personalization or post-purchase access.
+- Verification: 230 relevant tests passed, web TypeScript and lint passed. Live
+  read-only inventory confirmed production shopping sources and the unsynced dev
+  shop. Widget/generated reply validation remains open in validation item 46.
+
+## Cart product labels visible without synced dev data (2026-10-06)
+
+- Fixed the owner's reported cart visibility failure: the shared whitelist had
+  discarded product/variant titles, and the backend returned names only from the
+  unsynced dev database. Bounded plain cart labels now survive both validations
+  and reach the model, with explicit observation provenance. Same-shop database
+  titles still win; no stock, promotion or suitability facts are inferred.
+- Cart-page pronoun/suitability follow-ups also trigger fresh context. The prompt
+  allows naming observed items and avoids asking shoppers to retype supplied names.
+- Five regression cases reproduce the original browser/parser/prompt path and
+  cover safety boundaries. Real widget reply review remains open in item 46.
+- Verification after the fix: 235 relevant tests passed; web TypeScript and lint
+  passed. The original two message regressions failed before the change and passed
+  afterward; no live widget/model review or deployment was performed.
+
+## Conversation language and country follow-ups (2026-10-06)
+
+- Fixed the reported English conversation switching to French after “France”:
+  neutral messages retain the assistant's recorded language in existing context
+  JSON, while explicit/substantive language switches still take precedence. The
+  reply schema records the actual language; older sessions use history as fallback.
+- Bare country replies now continue the immediate delivery topic deterministically.
+  Cart listing instructions suppress technical verification/missing-variant wording
+  while retaining limitations when they affect the customer's question.
+- Five regressions added; 240 relevant tests and web TypeScript passed. Generated
+  dev-widget language replies still need review. Dev promotion data remains absent;
+  choosing a public Qiriness preview versus syncing dev rules is pending.
+- Added explicit public free-shipping offer-term lookup with country-follow-up
+  continuity. No shipping options, cost estimates or shipping eligibility calculations.
+- Final checks: 241 relevant tests, web TypeScript and lint passed. Promotion
+  source selection and live generated dev-store conversation review remain open.
+- Added a separate public Qiriness offer preview for an allow-listed unsynced dev
+  shop. The reader queries public promotion rows only; stock and cart eligibility
+  remain scoped to the signed shop. Preview is explicit in results and never masks
+  a real source outage. Four additional tests cover its boundaries and the reported
+  English → France/public free-shipping terms flow. Live widget review remains open.
+- Live read-only preview check passed: 11 current public non-shipping offers plus
+  one free-shipping offer. Dev-cart eligibility stays unconfirmed. Code redaction
+  now preserves English/Spanish reply wording instead of inserting French text.
+- Final regression checks: 246 relevant tests passed; web TypeScript, lint and
+  `git diff --check` passed. Generated dev-widget replies still need review.

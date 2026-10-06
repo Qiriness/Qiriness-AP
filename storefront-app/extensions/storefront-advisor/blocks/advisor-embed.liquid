@@ -19,11 +19,17 @@
     "transport": {{ block.settings.transport | json }},
     "endpoint": {{ endpoint | json }},
     "panelScript": {{ 'advisor-panel.js' | asset_url | json }},
+    "cartScript": {{ 'advisor-cart.js' | asset_url | json }},
     "context": {
       "pageType": {{ request.page_type | json }},
       "productHandle": {{ product_handle | json }},
       "collectionHandle": {{ collection_handle | json }},
-      "locale": {{ request.locale.iso_code | json }}
+      "locale": {{ request.locale.iso_code | json }},
+      "country": {{ localization.country.iso_code | json }},
+      "currency": {{ cart.currency.iso_code | json }},
+      "market": {{ localization.market.id | prepend: 'gid://shopify/Market/' | json }},
+      "variantId": {{ product.selected_or_first_available_variant.id | prepend: 'gid://shopify/ProductVariant/' | json }},
+      "loggedIn": {% if customer %}true{% else %}false{% endif %}
     },
     "quickActions": [
       {%- assign first = true -%}

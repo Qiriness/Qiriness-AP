@@ -1,0 +1,31 @@
+// French routing expectations. Fixtures are invented; no merchant/customer facts.
+// Product-policy cases describe the second path AFTER the product-data opening.
+export const KNOWLEDGE_CASES = [
+  { message: 'Quels sont les délais de livraison en France ?', route: 'general_policy', tools: ['get_policy'], policies: ['delivery_time_policy', 'delivery_location_policy'], country: 'FR' },
+  { message: 'Combien de temps prend la livraisson en Belgique ?', route: 'general_policy', tools: ['get_policy'], policies: ['delivery_time_policy', 'delivery_location_policy'], country: 'BE' },
+  { message: 'Vous livrez en Suisse ?', route: 'general_policy', tools: ['get_policy'], policies: ['delivery_location_policy'], country: 'CH', support: 'unsupported' },
+  { message: 'Combien coûte la livraison en France ?', route: 'general_policy', tools: ['get_policy'], policies: ['shipping_cost_policy', 'delivery_location_policy'], country: 'FR' },
+  { message: 'La livraison est-elle gratuite ?', route: 'general_policy', tools: ['get_policy'], policies: ['shipping_cost_policy'] },
+  { message: 'Quels sont les délais d’expédition ?', route: 'general_policy', tools: ['get_policy'], policies: ['dispatch_time_policy'] },
+  { message: 'Puis-je retourner un article ?', route: 'general_policy', tools: ['get_policy'], policies: ['return_policy'] },
+  { message: 'Sous combien de temps suis-je remboursée ?', route: 'general_policy', tools: ['get_policy'], policies: ['refund_policy'] },
+  { message: 'Puis-je payer en plusieurs fois ?', route: 'general_policy', tools: ['get_policy'], policies: ['payment_policy'] },
+  { message: 'Le payement en 3 fois est possible ?', route: 'general_policy', tools: ['get_policy'], policies: ['payment_policy'] },
+  { message: 'Acceptez-vous PayPal ?', route: 'general_policy', tools: ['get_policy'], policies: ['payment_policy'] },
+  { message: 'Les codes promo sont cumulables ?', route: 'general_policy', tools: ['get_policy'], policies: ['promotion_discount_policy'] },
+  { message: 'Comment annuler ma commande ?', route: 'general_policy', tools: ['get_policy'], policies: ['order_cancellation_policy'] },
+  { message: 'Comment annuller ma commande ?', route: 'general_policy', tools: ['get_policy'], policies: ['order_cancellation_policy'] },
+  { message: 'Comment modifier mon adresse de livraison ?', route: 'general_policy', tools: ['get_policy'], policies: ['address_change_policy', 'order_modification_policy'] },
+  { message: 'Dois-je créer un compte pour commander ?', route: 'general_faq', tools: ['search_faqs'], faq: 'accounts:account', stage: 'exact' },
+  { message: 'Puis-je commander sans compte ?', route: 'general_faq', tools: ['search_faqs'], faq: 'accounts:account', stage: 'alias' },
+  { message: 'Commander sans créer de compte', route: 'general_faq', tools: ['search_faqs'], faq: 'accounts:account', stage: 'keywords' },
+  { message: 'Faut-il créer un comtpe ?', route: 'general_faq', tools: ['search_faqs'], faq: 'accounts:account', stage: 'fuzzy' },
+  { message: 'Et les délais ?', route: 'unclassified', tools: [] },
+  { message: 'Bonjour', route: 'unclassified', tools: [] },
+  { message: 'Puis-je utiliser Caresse Brume matin et soir ?', route: 'product_data', tools: [], products: ['cream'], forbidden: ['get_product_policy'] },
+  { message: 'Quelles précautions pour le Masque Lumière ?', route: 'product_data', tools: [], products: ['mask'], fallback: { tool: 'get_product_policy', topic: 'precautions', query: 'Quelles précautions pour les yeux ?', result: 'mask-guide:eyes' } },
+  { message: 'Quelle est la garantie du Masque Lumière ?', route: 'product_data', tools: [], products: ['mask'], fallback: { tool: 'get_product_policy', topic: 'warranty', result: 'mask-guide:warranty' } },
+  { message: 'Puis-je retourner Caresse Brume si elle est ouverte ?', route: 'product_and_policy', tools: ['get_policy'], policies: ['return_policy'], products: ['cream'], forbidden: ['get_product_policy'] },
+  { message: 'Quels délais de livraison et puis-je payer en plusieurs fois ?', route: 'general_policy', tools: ['get_policy', 'get_policy'], policies: ['delivery_time_policy', 'payment_policy'] },
+  { message: 'Quelle est votre politique de confidentialité ?', route: 'general_policy', tools: ['get_policy'], status: 'not_found' }
+];

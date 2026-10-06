@@ -5,7 +5,7 @@
  * only `ProductRecord`s, so a schema change is absorbed in this file.
  *
  * READ-ONLY, WHITELISTED, LIVE PRODUCTS ONLY: active, published, not deleted.
- * Never the raw Shopify payload, never metafields (the review badge HTML lives
+ * Never the raw Shopify payload, never unrestricted metafields (the review badge HTML lives
  * there), never stock counts — only whether something is in stock.
  *
  * LOADED WHOLE, ONCE. The catalogue is about 100 products; holding it in memory
@@ -15,6 +15,7 @@
 
 import { isCustomerFacing } from '../../../agent/src/retrieval/product-matching.mjs';
 import { htmlToText } from '../html-to-text.mjs';
+import { keywords } from './faq-matcher.mjs';
 
 export const PRODUCT_COLUMNS = [
   'id',
@@ -27,6 +28,7 @@ export const PRODUCT_COLUMNS = [
   'description',
   'active_ingredients',
   'usage_instructions',
+  'product_faqs',
   'variants',
   'available_stock'
 ].join(',');
@@ -52,6 +54,7 @@ const ACTIVE_COLLECTION = { is_active: true, deleted_at: { operator: 'is', value
  * @property {string | null} description
  * @property {string | null} keyIngredients
  * @property {string | null} usage
+ * @property {object[]} faqs        published Shopify question/answer pairs, selected per question
  * @property {{ title: string | null, price: number, sku: string | null }[]} variants
  * @property {string[]} skus
  * @property {number | null} priceFrom
@@ -113,6 +116,9 @@ export function mapProduct(row, collections = []) {
     description: text(row.description),
     keyIngredients: text(row.active_ingredients),
     usage: text(row.usage_instructions),
+    faqs: (Array.isArray(row.product_faqs) ? row.product_faqs : [])
+      .filter((faq) => faq?.published !== false && text(faq?.question) && text(faq?.answer) && text(faq.answer).length <= 1800)
+      .map((faq, i) => ({ id: faq.faq_id ?? `${row.id}:faq:${i}`, canonical_question: text(faq.question), answer: text(faq.answer), aliases: [], keywords: keywords(text(faq.question)), topic: 'product', locale: 'fr', active: true, updated_at: faq.updated_at ?? null })),
     variants,
     skus: [...new Set(variants.map((v) => v.sku).filter(Boolean))],
     priceFrom: variants.length ? Math.min(...variants.map((v) => v.price)) : null,

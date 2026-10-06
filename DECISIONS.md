@@ -5182,6 +5182,75 @@ The dashboard is offered in French (default) and English, chosen per person in t
 
 ## Storefront advisor
 
+### Neutral replies retain the conversation language (2026-10-06)
+
+The owner reported an English cart/shipping conversation switching to French
+after “France”. The prompt explicitly defaulted short/unclear messages to French,
+and the destination continuation only recognized prepositions such as “en France”.
+Regression tests reproduced both gaps. The model now returns a bounded BCP 47
+reply language, stored in existing assistant context JSON; neutral country/ISO,
+yes/no, number, emoji and clarification answers reuse that language. For old rows
+without metadata the prompt uses conversation history. Explicit language requests
+or substantive language changes still win. No new table or language-detection call.
+
+Bare country answers continue only the immediate assistant's delivery topic,
+not an older delivery discussion after a topic change. Internal cart verification
+and missing variant metadata should not appear in simple cart listings; a limitation
+is explained only when it affects the question. The dev shop still lacks synced
+promotion rules. For dev testing, public brand offers now have a separate read-only
+preview path for an allow-listed unsynced shop. It reads only the catalogue shop's
+public promotion rows and explicitly leaves store/cart eligibility unconfirmed.
+Only `get_active_promotions` may use that path; stock, cart identities and eligibility
+never borrow production data. A source outage does not trigger preview. This lets
+the dev advisor describe the brand's public offers without creating false eligibility.
+
+The reported free-shipping question also exposed a lookup gap: current offer listing
+excluded shipping offers entirely. An explicit `free_shipping` topic now reads only
+published public promotion terms (dates, threshold, destinations), never rates or
+estimated costs. It remains separate from shipping eligibility, which is not implemented.
+
+### Shopping uses the signed shop and existing public promotion gates (2026-10-06)
+
+**Cart labels must survive without a synced shop (2026-10-06 fix).** The owner
+reported counts arriving but names missing for cart suitability questions. The
+browser whitelist discarded `product_title`/`variant_title`, and the tool sourced
+names exclusively from synced products. An integration regression using both
+reported messages reproduced this before the fix. Keep bounded, plain cart labels
+through browser/backend validation and mark their source as `cart_observation`.
+Same-shop synced names take precedence. Observed labels are sufficient to name
+cart contents, not to establish catalogue identity, ingredients, suitability or
+stock. Cart-page pronoun/suitability follow-ups also retrieve fresh cart context;
+payment FAQs still avoid cart reads. No cross-shop mapping or new API is needed.
+
+The current dev widget uses the production advice catalogue. That is acceptable
+for product discovery links, but a dev cart's Shopify IDs cannot safely be checked
+against production stock or promotion rules. A read-only source check found the
+dev shop has no synced shopping data. The new shopping reader therefore keys on
+the signed proxy shop domain and returns unavailable for that shop; no title/handle
+cross-store mapping or production fallback. Existing promotions, variant JSON and
+collection membership are sufficient; no schema redesign or customer-history read.
+
+Public code rows are filtered by the existing merchant `offerable_in_replies` flag
+before retrieval. Automatic offers use `describable_in_replies`. Raw cart labels
+can contain a private code, so unknown discounts become unnamed amounts rather
+than being echoed. Only public codes returned by tools can survive the reply code
+backstop; absence from public records is not evidence a code is invalid.
+
+The proxy proves the shop, not the browser's posted cart. Shopify Ajax snapshots
+are whitelisted on both sides, transient, and explicitly unverified; no token,
+properties or personal data. Failed checkout-only entered codes are unavailable
+unless the shopper supplies them. Synced variant quantities and timestamps are
+the existing stock source; a 36-hour freshness guard covers the daily sync cadence
+without claiming live availability. Missing selected variants, stale inventory,
+restricted customer eligibility, unsupported app/bundle rules and currency or
+discount-allocation ambiguity are unknown. Shopify checkout remains final authority.
+
+The existing support classifier, combination flags and common basket checks are
+reused without changing support behavior. Buy/reward quantities need a separate
+storefront guard: support's multi-buy path assumes overlapping scopes, while a
+current cart can contain distinct purchase and reward products. Shipping and any
+checkout mutations remain outside this layer.
+
 ### A separate Shopify app, in its own directory (2026-10-05)
 
 The support app (`shopify.app.toml`, client_id `1d69…`) is installed on the production store, `qiriness.myshopify.com`. A theme app extension shipped through it would appear in the production theme editor. The app proxy is app-wide config, so adding one would add it to production too. The advisor is therefore **its own app** (`storefront-app/shopify.app.toml`), installed on the dev store only. It sits in **its own CLI project directory** because the Shopify CLI deploys every extension under the project it runs in: with the extension under the repo root, a routine `shopify app deploy` of the support app would carry it to production. The directory boundary makes that impossible rather than merely discouraged.
@@ -5250,3 +5319,36 @@ The header reads « Conseiller Beauté {shop} », filled from `shop.name`. The p
 - **So `axis` gained `range`** (migration 77, chosen in Agent setup → « What we can advise on »). An active range collection is **the** membership of « la gamme X »: the resolver checks the curated ranges first, taking the most specific one the customer's words cover. The title-derived range is the fallback for a line nobody curated. The resolution's `range.source` says which was used.
 - **The support agent ignores ranges** (`supportCollections` in `advice-collections.mjs`). Its intersection treats every non-category collection as a concern, so a range there would silently become a ranking requirement. Whether support should read ranges is its own decision.
 - **Membership needs the collection active.** `product_ids` is refreshed for active collections only (§ Advice comes from collections), so a range is read only after it is switched on and synced.
+
+### Storefront knowledge adapts existing storage (2026-10-06)
+
+The owner explicitly asked to preserve policy/FAQ storage because support already
+depends on it. The storefront therefore has its own read-only adapter, topic/key
+bindings and runtime FAQ records. No shared writer, editor, support retrieval or
+schema changes. The live inventory found 15 active policies and existing parameter
+references; structured delivery/return/refund facts use those references and the
+existing typed parsers rather than extracting numbers from prose.
+
+**A number alone is not the policy.** `shipping_cost_policy` says free delivery
+may be offered periodically above `{free_shipping_threshold}` in France. Returning
+that number as unconditional free shipping would change the rule. Facts therefore
+travel with bounded source passages, applicability, restrictions and source versions.
+Missing/invalid parameters withhold the policy. The existing historical returns
+contradiction is not copied: the current company return policy is the source.
+
+**FAQ is intent; policy is authority.** A policy-related heading redirects to the
+bound company policy and drops its embedded answer. General FAQ retrieval excludes
+product-linked documents. Product guidance requires a resolved product ID and
+catalogue facts already supplied in the turn; the reader filters by that ID, lazily.
+Published Shopify product FAQs are part of catalogue facts, before curated guidance.
+
+**Conservative lexical retrieval first.** Exact questions and explicit leading
+question aliases precede keyword/topic and single-edit fuzzy matching. A broad topic
+never selects an answer alone. Ties return clarification questions, oversized units
+are withheld whole, and no embeddings are added. 15/15 live retrieval checks passed
+with a warm median of 0.59 ms; generated replies and widget latency remain to review.
+
+**Freshness is bounded.** General knowledge and per-product guidance expire after
+five minutes. An agent may retain a catalogue while its background refresh fails,
+but it cannot keep answering policies from an expired knowledge snapshot. Source
+failure returns unavailable and transport details never reach the model.

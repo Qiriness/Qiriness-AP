@@ -112,7 +112,23 @@
   /* ---------- transports ---------- */
 
   function createProxyTransport(config) {
-    return function send(payload) {
+    var cartModule = null;
+    function readCart(payload) {
+      if (!config.cartScript) return Promise.resolve(null);
+      var timer;
+      var controller = typeof AbortController === 'function' ? new AbortController() : null;
+      var work = (cartModule || (cartModule = import(config.cartScript).then(function () { return window.QirinessCart; }).catch(function () { cartModule = null; return null; }))).then(function (api) {
+        if (!api || !api.needsCartSnapshot(payload.message, payload.action, payload.context)) return null;
+        var root = window.Shopify && window.Shopify.routes && window.Shopify.routes.root || '/';
+        if (!/^\/(?!\/)[A-Za-z0-9_/-]*\/$/.test(root) && root !== '/') root = '/';
+        return fetch(root + 'cart.js', { method: 'GET', credentials: 'same-origin', cache: 'no-store', signal: controller ? controller.signal : undefined }).then(function (response) {
+          return response.ok ? response.json() : null;
+        }).then(api.fromAjaxCart);
+      });
+      var deadline = new Promise(function (resolve) { timer = setTimeout(function () { if (controller) controller.abort(); resolve(null); }, 1500); });
+      return Promise.race([work, deadline]).catch(function () { return null; }).finally(function () { clearTimeout(timer); });
+    }
+    function post(payload) {
       var controller = typeof AbortController === 'function' ? new AbortController() : null;
       var timer = controller ? setTimeout(function () { controller.abort(); }, REQUEST_TIMEOUT_MS) : null;
       return fetch(config.endpoint, {
@@ -132,6 +148,9 @@
       }).finally(function () {
         if (timer) clearTimeout(timer);
       });
+    }
+    return function send(payload) {
+      return readCart(payload).then(function (cart) { if (cart) payload.cart = cart; return post(payload); });
     };
   }
 
@@ -372,6 +391,11 @@
           productHandle: config.context && config.context.productHandle || null,
           collectionHandle: config.context && config.context.collectionHandle || null,
           locale: config.context && config.context.locale || document.documentElement.lang || null,
+          country: config.context && config.context.country || null,
+          currency: config.context && config.context.currency || null,
+          market: config.context && config.context.market || null,
+          loggedIn: config.context && config.context.loggedIn === true,
+          variantId: currentVariantId(),
           path: window.location.pathname
         }
       }).then(function (body) {
@@ -390,6 +414,13 @@
         render();
         if (state.open && !mobile.matches) input.focus();
       });
+    }
+
+    function currentVariantId() {
+      if (!config.context || !config.context.productHandle) return null;
+      var selected = document.querySelector('form[action$="/cart/add"] [name="id"]');
+      var id = selected && selected.value || new URLSearchParams(window.location.search).get('variant');
+      return /^[1-9][0-9]{0,19}$/.test(id || '') ? 'gid://shopify/ProductVariant/' + id : config.context.variantId || null;
     }
 
     function render() {

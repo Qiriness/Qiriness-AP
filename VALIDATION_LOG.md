@@ -40,6 +40,89 @@ these.
 as its own item: `llm_usage` (item 14), `categorisation_review` (item 15), and
 `category_forwarding` / `ticket_forwards` (item 1).
 
+## 46. Storefront shopping: deterministic checks passed, dev-store replies pending — 2026-10-06
+
+- **Language/topic regression, 2026-10-06:** reproduced the owner's English →
+  “France” language-memory and country-topic gaps before fixing them. Language is
+  now recorded in existing assistant context JSON; neutral answers inherit it and
+  country-only replies continue the immediate delivery topic. Five added tests
+  cover persistence, neutral languages, topic changes and customer-facing wording.
+  Replay the reported conversation on the dev widget, including an explicit language
+  switch and an older session without language metadata. Live generated replies
+  remain to verify. Public Qiriness offers now have a separate preview path for an
+  allow-listed unsynced dev shop; stock/eligibility remain signed-shop-only.
+  A sixth regression verifies explicit free-shipping offer-term retrieval and its
+  country follow-up, with no cost calculation or cart eligibility assertion.
+  Four additional regressions cover preview isolation, its reader's public filters,
+  source failures and the combined English country-follow-up/public-offer path.
+  The live read-only preview check found 11 active public non-shipping offers and
+  one active free-shipping offer for the dev preview. No codes, customer data or
+  writes were emitted. Generated widget replies remain unreviewed.
+  Final checks passed: 246 relevant tests, web TypeScript, lint and
+  `git diff --check`, including language-preserving private-code redaction.
+
+- **Completed:** French deterministic cart/promotion expectations plus stock,
+  visibility, cache, ID-scoping and injected agent/tool tests. 230 relevant tests,
+  web TypeScript and lint passed. No storage migration or database writes.
+- **Live read-only inventory:** production shop has 119 product rows, 124 variants
+  with quantity data, 23 public promotion rows (12 ACTIVE) and 35 synced collections.
+  Product sync timestamps span October 1–6. `inspect:storefront-shopping` prints
+  counts/timestamps only, no codes or customer/order data.
+- **Dev-shop prerequisite:** the signed dev shop has no synced shopping source
+  (`shop_not_synced`). Cart totals and bounded product/variant labels can still be
+  observed, with `cart_observation` provenance. Stock and promotion
+  eligibility must remain unavailable; production stock/eligibility must not be
+  substituted. General public Qiriness offers can be shown as a separate preview,
+  with no current-store applicability promise.
+  Populate that shop through the existing development sync before checking its
+  authoritative stock/promotions; no sync was run in this task.
+- **Open widget checks:** use empty/one/multiple-product carts; applied automatic
+  offer; public valid, unknown and expired codes; unmet minimum, excluded product,
+  eligible collection, incompatible stacking, already-applied and simultaneous
+  offers. Compare deterministic results before judging generated French wording.
+  Verify cart changes are reflected on the next message and no cart mutation occurs.
+- **Open stock checks:** select different variants and request two units, including
+  duplicate cart lines. Verify unknown/stale inventory is withheld and replies show
+  the sync timestamp. These quantities do not prove live checkout availability.
+- **Open privacy/performance checks:** inspect the browser request and assistant
+  trace: no cart token, notes, properties, identity, private codes or raw cart labels;
+  no persisted cart payload. Test a private code already applied/typed/history and
+  ensure it is not repeated. Payment FAQ should cause no cart GET/database shopping
+  reads after the small helper asset loads. Verify timeout behavior and total latency.
+- No generated live-model replies, widget transport review or theme deployment
+  completed for this layer. These checks remain open.
+- **Cart visibility regression, 2026-10-06:** reproduced the owner's two messages
+  with the real browser whitelist → request parser → agent opening prompt and an
+  unsynced shop. Both failed on missing names before the fix. Five regressions now
+  cover those messages, implicit cart-page suitability, bounded labels and no
+  fabricated identity/stock/eligibility. Refresh the dev widget and verify its
+  real replies name the visible items; generated widget replies remain unreviewed.
+  After the fix, 235 relevant tests, web TypeScript and lint passed.
+
+## 45. Storefront policy/FAQ replies: retrieval proven, widget review pending — 2026-10-06
+
+- **Completed:** live inventory of active policy keys, parameter references and
+  approved FAQ/product links. `npm run eval:storefront-knowledge`: 15/15 read-only
+  retrieval checks passed; warm medians 0.59 ms initially and 3.03 ms during parallel
+  checks. 170 relevant unit and
+  integration tests, TypeScript and lint passed. No model calls or database writes
+  in the live evaluation.
+- **Open check:** on the dev storefront, ask delivery timing/costs with France and
+  Belgium, payment installments, opened-product returns, refunds, cancellation,
+  promotion stacking, account FAQ variations/typos and an ambiguous follow-up.
+  Verify facts, conditions, source selection and total reply latency from traces.
+  The shipping threshold must remain conditional; no current offer may be inferred.
+- **Open product check:** ask morning/evening use for a product with explicit
+  catalogue instructions and verify no product-guidance read. Ask the resolved LED
+  mask's warranty/precautions and verify only its approved guidance is retrieved.
+  Test an explicit different product while viewing a product page and a mixed
+  product/return question. Verify missing guidance leads to an honest limitation.
+- **Open freshness check:** edit/deactivate a source and verify it stops being used
+  within the five-minute cache boundary; source-read failures must not extend it.
+- **Source gaps, not implementation assumptions:** no current company privacy
+  policy, no fixed shipping-price parameter, and oversized FAQ sections withheld
+  without truncation. Review source content separately if those answers are needed.
+
 ## 44. Range collections: built, migration applied, none marked yet — 2026-10-06
 
 1. **Mark and sync.** **Check:** in Agent setup → « What we can advise on », set « Gamme » on Temps Sublime, Source d'Eau, Active Énergie and Exception, switch each on, then « Sync from Shopify ». Each should show its product count (11 / 6 / 5 / 4 last measured, possibly stale).

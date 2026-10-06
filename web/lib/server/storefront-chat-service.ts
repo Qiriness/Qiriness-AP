@@ -25,6 +25,9 @@ import { createOpenAIClient } from "../../../agent/src/llm/openai-client.mjs";
 import { loadCompany } from "../../../scripts/lib/company.mjs";
 import { createMockAgent } from "../../../scripts/lib/storefront-chat/agent.mjs";
 import { loadCatalogue } from "../../../scripts/lib/storefront-chat/product-repository.mjs";
+import { loadKnowledge, createProductPolicyReader } from "../../../scripts/lib/storefront-chat/knowledge-repository.mjs";
+import { createShoppingReader, createPublicPromotionReader } from "../../../scripts/lib/storefront-chat/shopping-repository.mjs";
+import { parseAllowedShops } from "../../../scripts/lib/storefront-chat/app-proxy-signature.mjs";
 import { refsFromHistory } from "../../../scripts/lib/storefront-chat/conversation-refs.mjs";
 import {
   DEFAULT_STOREFRONT_MODEL,
@@ -50,6 +53,11 @@ export interface StorefrontChatContext {
   productHandle: string | null;
   collectionHandle: string | null;
   locale: string | null;
+  country?: string | null;
+  currency?: string | null;
+  market?: string | null;
+  variantId?: string | null;
+  loggedIn?: boolean;
   path: string | null;
 }
 
@@ -60,6 +68,8 @@ export interface StorefrontChatRequest {
   /** A clarification chip's value: a product id or a care type. */
   choice: string | null;
   context: StorefrontChatContext;
+  /** Ephemeral whitelist; never persisted in the session/message log. */
+  cart?: object | null;
 }
 
 export interface StorefrontChoice {
@@ -147,17 +157,20 @@ async function buildAgent(db: ReturnType<typeof client>, model: string): Promise
   // dashboard syncs — not the dev store hosting the widget.
   const shop = await getShop();
   const toolsOn = process.env.STOREFRONT_CHAT_TOOLS !== "off";
-  const [company, catalogue] = shop
+  const reader = { selectAll: (table: string, filters: object, columns: string) => supabaseSelectAll(db, table, filters, columns) };
+  const [company, catalogue, knowledge] = shop
     ? await Promise.all([
         loadCompany(db, shop.id),
         toolsOn
           ? loadCatalogue(
-              { selectAll: (table: string, filters: object, columns: string) => supabaseSelectAll(db, table, filters, columns) },
+              reader,
               shop.id
             )
           : null,
+        // Policy/FAQ failures degrade to explicit unavailable results, not guessed facts.
+        toolsOn ? loadKnowledge(reader, shop.id).catch(() => { console.warn("[storefront chat] knowledge load failed"); return null; }) : null,
       ])
-    : [{}, null];
+    : [{}, null, null];
   const llm = createOpenAIClient({
     apiKey: process.env.OPENAI_API_KEY,
     fetchImpl: storefrontFetch(positiveInt(process.env.STOREFRONT_CHAT_TIMEOUT_MS, DEFAULT_TIMEOUT_MS)),
@@ -168,6 +181,11 @@ async function buildAgent(db: ReturnType<typeof client>, model: string): Promise
     model,
     company,
     catalogue,
+    knowledge,
+    readProductPolicies: toolsOn && shop ? createProductPolicyReader(reader, shop.id) : null,
+    readShopping: toolsOn ? createShoppingReader(reader) : null,
+    readPublicPromotions: toolsOn && shop ? createPublicPromotionReader(reader, { shopId: shop.id, catalogueShopDomain: loadConfig(process.env as Record<string, string | undefined>).shopDomain, allowedShops: parseAllowedShops(process.env.STOREFRONT_CHAT_ALLOWED_SHOPS) }) : null,
+    catalogueShopDomain: loadConfig(process.env as Record<string, string | undefined>).shopDomain,
     currency: process.env.STOREFRONT_CHAT_CURRENCY || "EUR",
     // Dev only: the dev store lacks the catalogue, so cards link to the store
     // that has it. Unset in production, where links stay on the widget's store.
@@ -223,6 +241,8 @@ export async function handleStorefrontChat(shopDomain: string, request: Storefro
       history,
       refs,
       choice: request.choice,
+      cart: request.cart ?? null,
+      shopDomain,
     });
   } catch (error) {
     await logged;
@@ -248,6 +268,7 @@ export async function handleStorefrontChat(shopDomain: string, request: Storefro
         ...("refs" in reply && reply.refs ? { refs: reply.refs } : {}),
         ...("resolution" in reply && reply.resolution ? { resolution: reply.resolution } : {}),
         ...("trace" in reply && reply.trace ? { trace: reply.trace } : {}),
+        ...("replyLanguage" in reply && reply.replyLanguage ? { replyLanguage: reply.replyLanguage } : {}),
       },
       model: reply.model,
       input_tokens: reply.usage?.inputTokens ?? null,

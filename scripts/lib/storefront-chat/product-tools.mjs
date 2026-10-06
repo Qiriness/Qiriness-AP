@@ -20,6 +20,7 @@
  */
 
 import { resolveProducts } from './product-resolver.mjs';
+import { matchFaqs } from './faq-matcher.mjs';
 
 export const RESOLVE_PRODUCTS = 'resolve_products';
 export const SEARCH_PRODUCTS = 'search_products';
@@ -105,7 +106,7 @@ export function toolDefinitions(catalogue) {
  *
  * @returns {{ result: object, handles: string[] }} handles = products the model may now name
  */
-export function runTool(name, args, catalogue, { currency = 'EUR', locale = 'fr', resolution = null } = {}) {
+export function runTool(name, args, catalogue, { currency = 'EUR', locale = 'fr', resolution = null, query = '' } = {}) {
   const money = priceFormatter(currency, locale);
   if (name === RESOLVE_PRODUCTS) {
     if (!resolution?.index) return { result: { error: 'resolution is not available' }, handles: [] };
@@ -149,13 +150,14 @@ export function runTool(name, args, catalogue, { currency = 'EUR', locale = 'fr'
     const key = typeof args?.id === 'string' ? args.id : typeof args?.handle === 'string' ? args.handle : '';
     const product = key && HANDLE.test(key) ? catalogue.products.find((p) => p.id === key || p.handle === key) : null;
     if (!product) return { result: { error: `no live product with id ${key}` }, handles: [] };
-    return { result: productDetail(product, money), handles: [product.handle] };
+    return { result: productDetail(product, money, query), handles: [product.handle] };
   }
   return { result: { error: `unknown tool ${name}` }, handles: [] };
 }
 
 /** The detail block, shared with the "current product" section of the prompt. */
-export function productDetail(product, money) {
+export function productDetail(product, money, query = '') {
+  const faqs = query ? matchFaqs(product.faqs ?? [], { query, limit: 1 }) : null;
   return {
     id: product.id,
     handle: product.handle,
@@ -165,7 +167,8 @@ export function productDetail(product, money) {
     key_ingredients: clip(product.keyIngredients, 700),
     how_to_use: clip(product.usage, 400),
     sizes: product.variants.slice(0, 6).map((v) => ({ size: v.title, price: money(v.price) })),
-    in_stock: product.inStock
+    in_stock: product.inStock,
+    ...(faqs?.status === 'found' ? { faq_answers: faqs.matches } : {})
   };
 }
 
