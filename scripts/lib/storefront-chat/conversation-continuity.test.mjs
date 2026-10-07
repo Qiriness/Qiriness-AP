@@ -129,6 +129,6 @@ test('Language and public promotion preview reach the same opening call on a Fra
 });
 
 test('Private-code redaction retains the English reply language', () => {
-  const turn = createShoppingTurn({ message: 'Does code PRIVATE20 work?', readShopping: async () => ({ status: 'unavailable' }) });
+  const turn = createShoppingTurn({ message: 'Does my code work?', readShopping: async () => ({ status: 'unavailable' }) });
   assert.equal(turn.sanitizeReply('I cannot confirm PRIVATE20.', 'en'), 'I cannot confirm that code.');
 });

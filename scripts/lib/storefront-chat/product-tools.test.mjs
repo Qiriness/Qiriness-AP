@@ -88,7 +88,7 @@ test('a collection filters to the team\'s curated list, and a query is optional'
 test('search_products returns only the whitelisted summary, formatted for the shop', () => {
   const { result, handles } = runTool(SEARCH_PRODUCTS, { query: 'creme seche', collection: null, limit: null }, CATALOGUE);
   assert.deepEqual(handles, ['creme-nuit-reparatrice']);
-  assert.deepEqual(Object.keys(result.products[0]).sort(), ['handle', 'id', 'in_stock', 'name', 'price_from', 'short', 'type']);
+  assert.deepEqual(Object.keys(result.products[0]).sort(), ['handle', 'id', 'in_stock', 'name', 'on_sale', 'price_from', 'short', 'type']);
   assert.equal(result.products[0].price_from, '19,90 €');
 });
 
@@ -147,4 +147,12 @@ test('resolve_products returns the contract without the internal memory field', 
   assert.ok(['resolved', 'ambiguous', 'partial', 'unresolved'].includes(result.status));
   assert.ok(Array.isArray(handles));
   assert.match(runTool('resolve_products', { mentions: [] }, CATALOGUE, { resolution: { index } }).result.error, /no mentions/);
+});
+
+test('a sale is shown with its « was » price; promotions are never computed on it', () => {
+  const onSale = buildCatalogue([{ ...ROWS[0], variants: [{ title: '50 ml', price: '68.95', compare_at_price: '98.50' }] }], []);
+  const { result } = runTool(GET_PRODUCT, { id: 'creme-nuit-reparatrice' }, onSale);
+  assert.deepEqual(result.sizes[0], { size: '50 ml', price: '68,95 €', was: '98,50 €', on_sale: true });
+  const notOnSale = buildCatalogue([{ ...ROWS[0], variants: [{ title: '50 ml', price: '68.95', compare_at_price: '68.95' }] }], []);
+  assert.equal(runTool(GET_PRODUCT, { id: 'creme-nuit-reparatrice' }, notOnSale).result.sizes[0].was, undefined, 'equal compare-at is not a sale');
 });

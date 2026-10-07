@@ -139,6 +139,7 @@ export function runTool(name, args, catalogue, { currency = 'EUR', locale = 'fr'
           type: p.type,
           short: clip(p.short, 220),
           price_from: p.priceFrom === null ? null : money(p.priceFrom),
+          on_sale: p.variants.some((v) => v.compareAt !== null),
           in_stock: p.inStock
         }))
       },
@@ -166,7 +167,9 @@ export function productDetail(product, money, query = '') {
     description: clip(product.description ?? product.short, 900),
     key_ingredients: clip(product.keyIngredients, 700),
     how_to_use: clip(product.usage, 400),
-    sizes: product.variants.slice(0, 6).map((v) => ({ size: v.title, price: money(v.price) })),
+    // `was`: the crossed-out price when the variant is on sale. Every Shopify
+    // promotion is calculated on `price`, never on `was`.
+    sizes: product.variants.slice(0, 6).map((v) => ({ size: v.title, price: money(v.price), ...(v.compareAt !== null ? { was: money(v.compareAt), on_sale: true } : {}) })),
     in_stock: product.inStock,
     ...(faqs?.status === 'found' ? { faq_answers: faqs.matches } : {})
   };

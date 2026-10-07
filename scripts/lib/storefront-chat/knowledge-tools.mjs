@@ -149,6 +149,35 @@ export function explicitProductEvidence(product, query) {
   return matched.status === 'found' ? { faq_answers: matched.matches } : null;
 }
 
+/**
+ * A PRODUCT'S OWN FAQ, WHEN NO SINGLE QUESTION MATCHES. The matcher compares
+ * keywords with the FAQ questions only, so « comment utiliser le masque LED
+ * avec la télécommande ? » matched none of the mask's 12 questions although
+ * three answers explain the remote (2026-10-07). A product's FAQ is small and
+ * already scoped to the product the customer named, so its entries are
+ * returned ranked by how many query words they share (question and answer),
+ * within a fixed size, and the model answers from the relevant ones.
+ */
+const DIGEST_MAX_CHARS = 6000;
+function productFaqDigest(records, query) {
+  const terms = keywords(query);
+  const plain = (s) => keywords(s).join(' ');
+  const scored = records.map((r) => {
+    const text = ` ${plain(`${r.canonical_question} ${r.answer}`)} `;
+    return { r, hits: terms.filter((t) => text.includes(` ${t} `) || text.includes(` ${t}`)).length };
+  }).sort((a, b) => b.hits - a.hits);
+  const entries = [];
+  let size = 0;
+  for (const { r, hits } of scored) {
+    if (terms.length && !hits && entries.length) break;
+    const length = r.canonical_question.length + String(r.answer).length;
+    if (size + length > DIGEST_MAX_CHARS && entries.length) break;
+    size += length;
+    entries.push({ id: r.id, canonical_question: r.canonical_question, answer: r.answer, shared_words: hits });
+  }
+  return { status: 'found', match_stage: 'product_faq_digest', note: 'No single FAQ question matched: these are this product’s FAQ entries, most relevant first. Answer only from the entries that address the question; if none does, say so.', matches: entries };
+}
+
 export async function runKnowledgeTool(name, args, knowledge, { resolvedIds = new Set(), productDataIds = new Set(), catalogue = null, readProductPolicies = null, query = '', country = null, locale = 'fr', currency = 'EUR', now = Date.now() } = {}) {
   try {
     if (name === 'get_policy') {
@@ -178,7 +207,9 @@ export async function runKnowledgeTool(name, args, knowledge, { resolvedIds = ne
     const productWords = new Set(keywords(product.name));
     const reducedQuery = keywords(asked).filter((w) => !productWords.has(w)).join(' ') || asked;
     const exact = matchFaqs(pool, { query: asked, locale, limit: 3 });
-    return { product_id: id, ...(exact.status !== 'not_found' ? exact : matchFaqs(pool, { query: reducedQuery, locale, limit: 3 })) };
+    const matched = exact.status !== 'not_found' ? exact : matchFaqs(pool, { query: reducedQuery, locale, limit: 3 });
+    if (matched.status !== 'not_found' || !records.length) return { product_id: id, ...matched };
+    return { product_id: id, ...productFaqDigest(records, reducedQuery) };
   } catch {
     // Do not put transport errors, credentials or unrestricted rows into the model.
     return { status: 'unavailable', reason: 'source_read_failed' };

@@ -25,7 +25,7 @@ import { createOpenAIClient } from "../../../agent/src/llm/openai-client.mjs";
 import { loadCompany } from "../../../scripts/lib/company.mjs";
 import { createMockAgent } from "../../../scripts/lib/storefront-chat/agent.mjs";
 import { loadCatalogue } from "../../../scripts/lib/storefront-chat/product-repository.mjs";
-import { loadKnowledge, createProductPolicyReader } from "../../../scripts/lib/storefront-chat/knowledge-repository.mjs";
+import { loadKnowledge, createProductPolicyReader, KNOWLEDGE_TTL_MS } from "../../../scripts/lib/storefront-chat/knowledge-repository.mjs";
 import { createShoppingReader, createPublicPromotionReader } from "../../../scripts/lib/storefront-chat/shopping-repository.mjs";
 import { parseAllowedShops } from "../../../scripts/lib/storefront-chat/app-proxy-signature.mjs";
 import { refsFromHistory } from "../../../scripts/lib/storefront-chat/conversation-refs.mjs";
@@ -119,7 +119,8 @@ function client() {
 
 type Agent = ReturnType<typeof createMockAgent> | ReturnType<typeof createLlmAgent>;
 
-const AGENT_TTL_MS = 5 * 60 * 1000;
+const AGENT_TTL_MS = KNOWLEDGE_TTL_MS;
+const AGENT_REFRESH_AHEAD_MS = 60 * 1000;
 let remembered: { at: number; key: string; agent: Agent } | null = null;
 let rebuilding: Promise<Agent> | null = null;
 
@@ -137,25 +138,87 @@ async function currentAgent(db: ReturnType<typeof client>): Promise<Agent> {
   if (process.env.STOREFRONT_CHAT_AGENT !== "llm") return createMockAgent();
 
   const model = process.env.STOREFRONT_CHAT_MODEL || DEFAULT_STOREFRONT_MODEL;
-  if (remembered && remembered.key === model) {
+  const key = `${model}|${process.env.STOREFRONT_CHAT_CATALOGUE_SHOP_DOMAIN || ""}`;
+  if (remembered && remembered.key === key) {
     // STALE WHILE IT REFRESHES. Loading the catalogue takes about a second; the
     // customer who happens to arrive as the copy expires is answered from it
     // while the next one loads, instead of paying that second.
-    if (Date.now() - remembered.at >= AGENT_TTL_MS && !rebuilding) {
-      rebuilding = buildAgent(db, model).finally(() => {
+    //
+    // REFRESHED AHEAD, NEVER SERVED EXPIRED. The agent's policies and FAQs
+    // expire at KNOWLEDGE_TTL_MS (the same five minutes): an agent served stale
+    // after a pause answered every policy question « unavailable » — « do you
+    // allow payments in three times? » with an active payment policy (dev
+    // store, 2026-10-06). So the refresh starts a minute early, and an agent
+    // past its lifetime is waited for, not served.
+    const age = Date.now() - remembered.at;
+    if (age >= AGENT_TTL_MS - AGENT_REFRESH_AHEAD_MS && !rebuilding) {
+      rebuilding = buildAgent(db, model, key).finally(() => {
         rebuilding = null;
       });
       rebuilding.catch((error) => console.warn("[storefront chat] catalogue refresh failed", error instanceof Error ? error.message : error));
     }
+    if (age >= AGENT_TTL_MS && rebuilding) return rebuilding.catch(() => remembered!.agent);
     return remembered.agent;
   }
-  return rebuilding ?? buildAgent(db, model);
+  return rebuilding ?? buildAgent(db, model, key);
 }
 
-async function buildAgent(db: ReturnType<typeof client>, model: string): Promise<Agent> {
+/**
+ * DEV ONLY — `STOREFRONT_CHAT_CATALOGUE_SHOP_DOMAIN`. The dev store holds its
+ * own small set of products; once `npm run dev-store:sync` has copied them into
+ * Supabase under their own shop row, this points the advisor's CATALOGUE
+ * (products, collections, product cards) at them, so a dev cart and the
+ * advisor talk about the same products. Brand, policies and FAQ stay the
+ * dashboard shop's. Unset — production — this returns null and nothing changes.
+ * Removing the dev setup: unset it (docs/storefront-chatbot.md § Dev store).
+ */
+async function devCatalogueShopId(db: ReturnType<typeof client>): Promise<string | null> {
+  const domain = process.env.STOREFRONT_CHAT_CATALOGUE_SHOP_DOMAIN;
+  if (!domain) return null;
+  const rows = (await supabaseSelect(db, "shops", { shop_domain: domain, environment: "development" }, "id", { limit: 1 })) as { id: string }[];
+  if (!rows[0]) console.warn(`[storefront chat] ${domain} is not synced as a development shop; using the dashboard catalogue`);
+  return rows[0]?.id ?? null;
+}
+
+/**
+ * DEV ONLY — product FAQs belong to the dashboard shop's products, and a dev
+ * catalogue's products have their own ids, so « comment utiliser le masque LED
+ * avec la télécommande ? » found no FAQ on the dev store although one exists
+ * (2026-10-07). Under a dev catalogue a dev product's FAQ lookup goes to the
+ * dashboard product with the same handle. Without a dev catalogue — production
+ * — the reader is the plain one.
+ */
+async function productPolicyReader(
+  reader: { selectAll: (table: string, filters: object, columns: string) => Promise<unknown> },
+  shopId: string,
+  devCatalogue: string | null,
+  catalogue: unknown,
+) {
+  const read = createProductPolicyReader(reader, shopId);
+  const devProducts = (catalogue as { products?: { id: string; handle?: string }[] } | null)?.products ?? [];
+  if (!devCatalogue || !devProducts.length) return read;
+  const rows = (await reader.selectAll("products", { shop_id: shopId }, "id,handle").catch(() => [])) as { id: string; handle: string }[];
+  const byHandle = new Map(rows.map((r) => [r.handle, r.id]));
+  const toDashboard = new Map<string, string>();
+  for (const p of devProducts) {
+    const id = p.handle ? byHandle.get(p.handle) : undefined;
+    if (id) toDashboard.set(p.id, id);
+  }
+  // The records are re-labelled with the dev id too: get_product_policy keeps
+  // only records whose product_ids include the product it was asked about.
+  return async (productId: string) => {
+    const dashboardId = toDashboard.get(productId);
+    if (!dashboardId) return read(productId);
+    const records = (await read(dashboardId)) as { product_ids: string[] }[];
+    return records.map((r) => ({ ...r, product_ids: [...r.product_ids, productId] }));
+  };
+}
+
+async function buildAgent(db: ReturnType<typeof client>, model: string, key: string): Promise<Agent> {
   // The brand the advisor speaks for is the catalogue's shop — the one this
   // dashboard syncs — not the dev store hosting the widget.
   const shop = await getShop();
+  const devCatalogue = await devCatalogueShopId(db);
   const toolsOn = process.env.STOREFRONT_CHAT_TOOLS !== "off";
   const reader = { selectAll: (table: string, filters: object, columns: string) => supabaseSelectAll(db, table, filters, columns) };
   const [company, catalogue, knowledge] = shop
@@ -164,7 +227,7 @@ async function buildAgent(db: ReturnType<typeof client>, model: string): Promise
         toolsOn
           ? loadCatalogue(
               reader,
-              shop.id
+              devCatalogue ?? shop.id
             )
           : null,
         // Policy/FAQ failures degrade to explicit unavailable results, not guessed facts.
@@ -182,16 +245,20 @@ async function buildAgent(db: ReturnType<typeof client>, model: string): Promise
     company,
     catalogue,
     knowledge,
-    readProductPolicies: toolsOn && shop ? createProductPolicyReader(reader, shop.id) : null,
+    readProductPolicies: toolsOn && shop ? await productPolicyReader(reader, shop.id, devCatalogue, catalogue) : null,
     readShopping: toolsOn ? createShoppingReader(reader) : null,
     readPublicPromotions: toolsOn && shop ? createPublicPromotionReader(reader, { shopId: shop.id, catalogueShopDomain: loadConfig(process.env as Record<string, string | undefined>).shopDomain, allowedShops: parseAllowedShops(process.env.STOREFRONT_CHAT_ALLOWED_SHOPS) }) : null,
-    catalogueShopDomain: loadConfig(process.env as Record<string, string | undefined>).shopDomain,
+    // The shop whose prices the catalogue holds, so its currency is known:
+    // Buy X Get Y spend thresholds carry none of their own. Left at the
+    // dashboard shop under a dev catalogue, every such offer was « unknown »
+    // (threshold_currency_unknown_or_different, dev store, 2026-10-06).
+    catalogueShopDomain: devCatalogue ? process.env.STOREFRONT_CHAT_CATALOGUE_SHOP_DOMAIN || null : loadConfig(process.env as Record<string, string | undefined>).shopDomain,
     currency: process.env.STOREFRONT_CHAT_CURRENCY || "EUR",
     // Dev only: the dev store lacks the catalogue, so cards link to the store
     // that has it. Unset in production, where links stay on the widget's store.
     productBaseUrl: process.env.STOREFRONT_CHAT_PRODUCT_BASE_URL || null,
   });
-  remembered = { at: Date.now(), key: model, agent };
+  remembered = { at: Date.now(), key, agent };
   return agent;
 }
 

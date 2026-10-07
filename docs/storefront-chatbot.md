@@ -262,3 +262,21 @@ Sessions idle for longer than `STOREFRONT_CHAT_RETENTION_DAYS` (30) are purged, 
 4. **Run:** add `STOREFRONT_CHAT_AGENT=llm` to `.env.local` for AI replies, plus `STOREFRONT_CHAT_PRODUCT_BASE_URL=https://qiriness.com` (the dev store holds only a few of the catalogue's products, so cards link to the real product page in a new tab; leave it unset in production), then `cd storefront-app && shopify app dev`. That one command starts the dashboard's dev server (`backend/shopify.web.toml`), opens an HTTPS tunnel to it, points the app proxy at the tunnel, and serves the extension to the dev store.
 5. **Turn it on:** Online Store → Themes → Customize → App embeds → *Beauty advisor*. Replies = Demo needs no backend; Replies = Server goes through the proxy.
 6. **Without a store:** `npm run storefront:chat -- --message "Bonjour"` signs a request exactly as the proxy does. `--unsigned` expects 401, and `--shop other.myshopify.com` expects 403.
+
+## Dev store: setup and removal
+
+The dev store has its own products and discounts, so cart eligibility, stock and promotions can only be evaluated once they are copied into Supabase. **Everything here is dev-only and is listed below for removal.**
+
+**Setup**
+1. `storefront-app/shopify.app.toml` has read-only scopes (`read_products, read_inventory, read_discounts, read_metaobjects, read_metaobject_definitions`). Run `shopify app deploy` from `storefront-app/`, then approve the new permissions in the dev store admin.
+2. Run `npm run dev-store:sync -- --dry-run`, then `npm run dev-store:sync`. This runs the production sync scripts against the dev store, with the advisor app's credentials, as a `development` shop row: products, stock, collections (all switched on, so collection-scoped discounts have a membership) and discounts. It never touches orders, customers or the production rows. Re-run it after changing the dev store, since nothing refreshes it automatically.
+3. Set `STOREFRONT_CHAT_CATALOGUE_SHOP_DOMAIN=<dev store>` in `.env.local` and unset `STOREFRONT_CHAT_PRODUCT_BASE_URL` (the products now exist on the dev store). Then restart `shopify app dev`.
+   - Product FAQs stay the dashboard shop's. A dev product's FAQ lookup goes to the dashboard product **with the same handle** (`productPolicyReader` in `storefront-chat-service.ts`, dev only). A dev product whose handle exists only on the dev store has no FAQ.
+4. The cart, stock and promotion tools read the widget's own shop, so they now find the dev shop. Brand, policies and FAQ stay the production shop's.
+
+**Removal (when the advisor goes to production)**
+1. `npm run dev-store:remove` (counts only), then `npm run dev-store:remove -- --yes`. This deletes the dev `shops` row; its products, collections and promotions cascade, and the dev chat sessions go too.
+2. Delete `scripts/dev-store/` and the `dev-store:*` npm scripts.
+3. In `.env.local`, unset `STOREFRONT_CHAT_CATALOGUE_SHOP_DOMAIN`, `STOREFRONT_CHAT_PRODUCT_BASE_URL`, `STOREFRONT_DEV_STORE_DOMAIN` and `STOREFRONT_APP_CLIENT_ID`.
+4. In the service, `devCatalogueShopId` (`web/lib/server/storefront-chat-service.ts`) returns null when its env is unset. It can stay, or be deleted along with its two call sites.
+5. Set `storefront-app/shopify.app.toml` scopes back to `""`, or retire the dev app entirely.

@@ -18,7 +18,7 @@
     return plain || null;
   }
   function needsShoppingContext(message, action, context) {
-    return action === 'offers' || /\b(panier|cart|basket|stock|disponib|availab|promo|offre|offer|discount|remise|reduction|réduction|code|cumul|stack|checkout|quantit)/i.test(message || '') || Boolean(context && context.pageType === 'cart' && /\b(they|them|these|adapt|suit|convien|ces|ils|elles)|(?:can you see|voyez.vous)/i.test(message || ''));
+    return action === 'offers' || /\b(panier|cart|basket|stock|disponib|availab|promo|offre|offer|discount|remise|reduction|réduction|code|cumul|stack|checkout|quantit)/i.test(message || '') || /\d+\s*(?:%|percent|pour\s?cent)|\b\d+\s*off\b|\bpercent off\b/i.test(message || '') || Boolean(context && context.pageType === 'cart' && /\b(they|them|these|adapt|suit|convien|ces|ils|elles)|(?:can you see|voyez.vous)/i.test(message || ''));
   }
   function needsCartSnapshot(message, action, context) {
     if (!needsShoppingContext(message, action, context)) return false;
@@ -34,7 +34,8 @@
       if (!line || !gid(line.productId, 'Product') || !gid(line.variantId, 'ProductVariant') || !integer(line.quantity, 999) || !line.quantity) return null;
       if (![line.unitPrice, line.originalTotal, line.finalTotal].every(function (n) { return integer(n, 10000000000); }) || line.finalTotal > line.originalTotal) return null;
       if (Math.abs(line.unitPrice * line.quantity - line.originalTotal) > line.quantity) return null;
-      return { productId: gid(line.productId, 'Product'), variantId: gid(line.variantId, 'ProductVariant'), productName: label(line.productName, 200), variantTitle: label(line.variantTitle, 100), quantity: line.quantity, unitPrice: line.unitPrice, originalTotal: line.originalTotal, finalTotal: line.finalTotal, controlledPricing: line.controlledPricing === true };
+      var titles = Array.isArray(line.discountTitles) ? line.discountTitles.slice(0, 10).map(function (t) { return label(t, 160); }).filter(Boolean) : [];
+      return { productId: gid(line.productId, 'Product'), variantId: gid(line.variantId, 'ProductVariant'), productName: label(line.productName, 200), variantTitle: label(line.variantTitle, 100), quantity: line.quantity, unitPrice: line.unitPrice, originalTotal: line.originalTotal, finalTotal: line.finalTotal, controlledPricing: line.controlledPricing === true, discountTitles: titles };
     });
     if (lines.some(function (l) { return !l; })) return null;
     if (lines.reduce(function (n, l) { return n + l.originalTotal; }, 0) !== raw.originalSubtotal || lines.reduce(function (n, l) { return n + l.finalTotal; }, 0) !== raw.subtotal || raw.total > raw.subtotal) return null;
@@ -59,8 +60,19 @@
     }
     (raw.cart_level_discount_applications || []).forEach(function (a) { add(a, a.total_allocated_amount); });
     var lines = raw.items.map(function (l) {
-      (l.line_level_discount_allocations || []).forEach(function (a) { add(a.discount_application, a.amount); });
-      return { productId: l.product_id, variantId: l.variant_id, productName: l.product_title, variantTitle: l.variant_title, quantity: l.quantity, unitPrice: l.original_price, originalTotal: l.original_line_price, finalTotal: l.final_line_price, controlledPricing: Boolean(l.selling_plan_allocation || l.parent_relationship || l.item_components && l.item_components.length) };
+      // Two shapes exist in cart.js: line_level_discount_allocations with a
+      // discount_application, and the older per-line `discounts: [{ title,
+      // amount }]`. Read the first; fall back to the second, never both.
+      var allocations = l.line_level_discount_allocations || [];
+      // Which discounts sit on THIS line: Shopify applies one product discount
+      // per line by default, so an offer on an already-discounted line cannot apply.
+      var lineTitles = [];
+      if (allocations.some(function (a) { return a && a.discount_application && a.discount_application.title; })) {
+        allocations.forEach(function (a) { add(a.discount_application, a.amount); if (a.discount_application) lineTitles.push(a.discount_application.title); });
+      } else {
+        (l.discounts || []).forEach(function (d) { if (d && typeof d.title === 'string') { add({ title: d.title, type: d.type }, d.amount); lineTitles.push(d.title); } });
+      }
+      return { productId: l.product_id, variantId: l.variant_id, productName: l.product_title, variantTitle: l.variant_title, quantity: l.quantity, unitPrice: l.original_price, originalTotal: l.original_line_price, finalTotal: l.final_line_price, controlledPricing: Boolean(l.selling_plan_allocation || l.parent_relationship || l.item_components && l.item_components.length), discountTitles: lineTitles };
     });
     return normalizeSnapshot({ currency: raw.currency, originalSubtotal: raw.original_total_price, subtotal: raw.items_subtotal_price, total: raw.total_price, lines: lines, discounts: Array.from(applications.values()), codes: Array.from(applications.values()).filter(function (a) { return a.type === 'code'; }).map(function (a) { return a.title; }), enteredCodesAvailable: false });
   }

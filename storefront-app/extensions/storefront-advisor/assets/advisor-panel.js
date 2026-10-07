@@ -113,12 +113,16 @@
 
   function createProxyTransport(config) {
     var cartModule = null;
+    // A FOLLOW-UP CARRIES THE CART. « why did the 30 percent off not apply? »
+    // named no cart word, so no cart was sent and the advisor said it could not
+    // see the basket it had just described (dev store, 2026-10-06).
+    var lastSentCart = false;
     function readCart(payload) {
       if (!config.cartScript) return Promise.resolve(null);
       var timer;
       var controller = typeof AbortController === 'function' ? new AbortController() : null;
       var work = (cartModule || (cartModule = import(config.cartScript).then(function () { return window.QirinessCart; }).catch(function () { cartModule = null; return null; }))).then(function (api) {
-        if (!api || !api.needsCartSnapshot(payload.message, payload.action, payload.context)) return null;
+        if (!api || !(lastSentCart || api.needsCartSnapshot(payload.message, payload.action, payload.context))) return null;
         var root = window.Shopify && window.Shopify.routes && window.Shopify.routes.root || '/';
         if (!/^\/(?!\/)[A-Za-z0-9_/-]*\/$/.test(root) && root !== '/') root = '/';
         return fetch(root + 'cart.js', { method: 'GET', credentials: 'same-origin', cache: 'no-store', signal: controller ? controller.signal : undefined }).then(function (response) {
@@ -150,7 +154,11 @@
       });
     }
     return function send(payload) {
-      return readCart(payload).then(function (cart) { if (cart) payload.cart = cart; return post(payload); });
+      return readCart(payload).then(function (cart) {
+        if (cart) payload.cart = cart;
+        lastSentCart = Boolean(cart);
+        return post(payload);
+      });
     };
   }
 

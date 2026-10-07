@@ -5352,3 +5352,64 @@ with a warm median of 0.59 ms; generated replies and widget latency remain to re
 five minutes. An agent may retain a catalogue while its background refresh fails,
 but it cannot keep answering policies from an expired knowledge snapshot. Source
 failure returns unavailable and transport details never reach the model.
+
+### Free delivery is evaluated against the cart; codes stay private (2026-10-06)
+
+- **Measured on the synced dev store.** Its only public offer is automatic free delivery (FR, from €70). « Quelles sont les offres du moment ? » answered « aucune offre », because the listing excluded shipping offers by default. « Mon panier a-t-il droit à la livraison gratuite ? » on an €80.78 cart answered « je ne peux pas confirmer », because shipping eligibility had been recorded as « not implemented ».
+- **The listing now includes free delivery by default** (`topic: all`), with its published terms and `delivery_cost: not_calculated`.
+- **Free delivery is evaluated on its minimum only.** The cart total after discounts is compared with the threshold:
+  - met → `eligible` with the destination as a condition (« si livraison en France »);
+  - short → `not_eligible` with the exact amount missing (€58.17 on €11.83);
+  - an order discount between total and subtotal → `unknown`, not guessed;
+  - another currency, or an offer limited to some customers → `unknown`.
+  - It never gives a delivery cost.
+- **Codes are not volunteered** (owner, 2026-10-06: « codes are not usually publicly disclosed »). The advisor talks about the offers the website shows, i.e. the automatic ones. The 5 dev codes stay `offerable_in_replies = false`, and a code the shopper types is still evaluated under the existing rule.
+
+### Codes the shopper entered are named back; one product discount per line (2026-10-06)
+
+- **A code already applied in this cart is named back to the shopper,** even when it isn't shareable (QIRINESS20 and BIENVENUE20 on the dev store showed as « Réduction appliquée »). Naming back a code they typed discloses nothing to them, and without it stacking could not be judged.
+  - The shop's active codes are read into a separate `cartCodeRows`, used **only** to recognise a code applied in the cart.
+  - Those rows never enter the offer listing or an evaluation. The repository test asserts it.
+  - Public codes keep the `offerable_in_replies` gate. « Does X work? » about such a code is answered `applied` when it is in the cart, and stays `not_found` otherwise.
+- **Shopify applies one product discount per cart line by default** (`productDiscountsWithTagsOnSameCartLine` is Plus only, and the dev store doesn't use it). September Rose (30 %) was « eligible » by its combination flags while both its lines already held a product discount (the 2-for-1 and the gift).
+  - The widget now sends each line's discount names (`discountTitles`).
+  - A product discount whose every target line already carries another one is `not_eligible`, reason `line_already_discounted`, with `blocked_by` naming the blockers.
+- **A follow-up carries the cart:** after a reply that used the cart, the widget sends it with the next message. The server treats a carted follow-up to a shopping reply as a shopping question.
+- **An amount or a name points at the offer meant.** « 30 % » or an offer's title evaluates that offer on its own (`mentioned_by_customer`). Left to the model, the link was made on one run and missed on the next. After the change it was made 3 runs out of 3.
+- **Product, offer and code names are never translated.** An English reply had invented « Revitalising Body Spa Ritual Kit ».
+
+### A product's own FAQ is read whole when no question matches (2026-10-07)
+
+Product FAQs are scoped to one product the customer has named, and small (the LED mask has 12 entries). The keyword matcher stays first, because a clean single match is the cheapest and most precise answer. But it reads the questions only, and customers ask in words the headings don't use. Failing that, the model gets the product's entries sharing words with the question, answers included, capped at 6,000 characters. Reading a few entries is what the model does well; « not found » with the answer in hand is not acceptable. General FAQs (not product-scoped) keep the strict matcher: across the whole knowledge base, a loose match would pick the wrong topic.
+
+### A code the advisor cannot see is reasoned about from the cart (2026-10-07)
+
+A private code stays private: its rules are never read for the customer, and the reply never says it exists, is valid or what it gives. But « je ne peux pas confirmer » alone is not an answer when the cart holds the likely reason. An applied offer whose `combines_with` refuses a class blocks any new discount of that class, whatever the code is. So a not-found code comes with `cart_reasoning`:
+- the applied offers that refuse new order, product or shipping discounts;
+- whether the 5-code limit is reached;
+- otherwise, the usual hidden conditions.
+
+The customer's own typed code may be repeated back; it discloses nothing to them.
+
+### The advisor speaks as the shop, never as its platform (2026-10-07)
+
+The owner's rule: customers never hear « Shopify » (nor Alpha, apps or tool names). Replies say « votre panier », « automatiquement », « la plus avantageuse pour votre panier a été retenue ». The platform's rules still drive every verdict; only the wording is the shop's. Internal prompt lines may name Shopify to explain the data to the model, never as customer wording.
+
+### The agent is never served past its knowledge's lifetime (2026-10-07)
+
+Stale-while-refresh was right for the catalogue but wrong for policies: `getPolicy` refuses knowledge older than `KNOWLEDGE_TTL_MS`, and the agent's lifetime was the same five minutes. So the first customer after any pause got « no reliable information » on every policy. The agent now refreshes one minute ahead, and one past its lifetime is awaited (about a second, only after five idle minutes) rather than served. The five-minute edit boundary is kept.
+
+### A shopping question with a cart always evaluates it (2026-10-07)
+
+The opening's word lists decide which tools run, and they missed an ordinary English question. When the shopping route is taken with a cart and the lists select nothing, the cart and a full evaluation are fetched anyway: a wasted read costs milliseconds, a missed one costs a « cannot confirm ». Every cart evaluation also carries `simulate_offers`, because « why this offer and not that one » is answered by the combination, not by any single verdict.
+
+### The advisor follows Shopify's discount rules, not the shared outcome check (2026-10-06)
+
+The rules are researched in `docs/shopify-discount-rules.md`; this is why the evaluator encodes them itself.
+
+- **An applied Buy X Get Y locks its « buys » line too.** `cart.js` allocates the discount to the « gets » line only, so the per-line check saw the cream under TEST02 as free and called September Rose eligible on it. On non-Plus, Shopify excludes both items. The lock is read from the applied offer's scopes, not from the allocations. A `shopifyPlus` option exists (default false) and leaves only the « buys » line locked.
+- **Each money minimum is measured the way Shopify measures it for that class** (order: before AND after product discounts; product: after other product discounts; Buy X Get Y: « buys » items at full price). The shared check in `agent/src/retrieval/promotion-outcome.mjs` (support replies) answers `undetermined` whenever a cart straddles a minimum before and after discounts. Here the cart's own allocations are known, so the straddle is decidable. The support side is left as it is: it judges orders, where those allocations are not always in hand.
+- **Which offers apply together is solved, not guessed.** Shopify keeps the allowed combination with the largest saving, which no per-offer verdict can show. Carts are small and offers few, so an exhaustive search (≤ 10 offers) is cheaper and more predictable than any heuristic. It is exposed as a tool (`simulate_offers`), not run on every turn, because only « what would apply / what if I add » questions need it.
+  - Only automatic offers and codes **already entered** are reached: Shopify applies no code nobody typed, and the advisor never offers a private one.
+  - On a real cart, Shopify's result in the cart wins. The solver flags a disagreement rather than overriding it.
+- **A sale price is the price.** Promotions are computed on the current variant price (an Alpha sale included); compare-at is display only. It is synced so the advisor can say « already on sale », never to recompute a discount from it.

@@ -160,6 +160,7 @@ const PRODUCTS_QUERY = `#graphql
             sku
             barcode
             price
+            compareAtPrice
             inventoryQuantity
             selectedOptions {
               name

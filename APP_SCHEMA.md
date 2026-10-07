@@ -24,6 +24,8 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |                    # db:apply:migration · test
 |                    # storefront:chat (one proxy-signed message to the advisor)
 |                    # eval:resolution (the advisor's product resolver, live catalogue)
+|                    # dev-store:sync / dev-store:remove (DEV ONLY, scripts/dev-store/:
+|                    # copy the advisor's dev store into Supabase as a development shop)
 |                    # eval:storefront-knowledge (read-only live policy/FAQ checks)
 |                    # inspect:storefront-knowledge (source keys, headings, parameter availability)
 |                    # inspect:storefront-shopping (shop-scoped inventory counts, no codes)
@@ -448,8 +450,12 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |       |                                # variants and synced collection membership; separate public
 |       |                                # brand-offer preview for allowed unsynced shops; 30s cache) ·
 |       |                                # shopping-evaluator (cart whitelist, quantity stock,
-|       |                                # deterministic eligibility/stacking; no mutations) ·
-|       |                                # shopping-tools (lazy opening + four read-only tools) ·
+|       |                                # deterministic eligibility/stacking; Shopify's per-line,
+|       |                                # Buy X Get Y and per-class minimum rules; no mutations) ·
+|       |                                # offer-solver (which offers apply together: best-saving
+|       |                                # combination, « what if I add »; docs/shopify-discount-rules.md) ·
+|       |                                # shopping-tools (lazy opening + five read-only tools,
+|       |                                # simulate_offers included) ·
 |       |                                # shopping-cases (French deterministic expectations) ·
 |       |                                # knowledge-topics (topic/key bindings, country context) ·
 |       |                                # faq-matcher (runtime section records; exact → alias →

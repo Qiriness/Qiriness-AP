@@ -118,6 +118,11 @@ function mapVariant(variant) {
     sku: variant.sku,
     barcode: variant.barcode,
     price: variant.price,
+    // The crossed-out « was » price (a compare-at sale, or an app like Alpha
+    // that rewrites the price and keeps the old one here). Shopify discounts are
+    // always calculated on `price`; this is display, and lets the advisor say
+    // « already on sale ». Null when the variant is not on sale.
+    compare_at_price: variant.compareAtPrice ?? null,
     inventory_quantity: variant.inventoryQuantity,
     selected_options: variant.selectedOptions || [],
     updated_at: variant.updatedAt

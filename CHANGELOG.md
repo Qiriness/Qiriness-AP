@@ -10,6 +10,73 @@ Three sibling files carry the other halves, and this one deliberately does not d
 
 ---
 
+
+
+
+
+## Dev-store conversation fixes: policies after a pause, offer names, « why this offer and not that one » (2026-10-07)
+
+From one conversation on the dev store (2026-10-06), diagnosed from the stored traces.
+- **Policies « unavailable » after any pause.** The agent was served stale while it refreshed, but its policies expire at the same five minutes, so the first question after a pause found none (payment in three instalments, with an active `payment_policy`). Now it refreshes a minute early and is never served past its lifetime.
+- **« TEST02 » became « ce code ».** The code backstop masked an automatic offer's name. Public automatic offer names are now exempt, and are loaded before the backstop even when no shopping tool ran. Real unreturned codes are still masked.
+- **« pourquoi TEST02 ne s'active pas » → not found.** A « code » that is a public automatic offer's name now evaluates that offer.
+- **TEST02 always « unknown ».** Its spend threshold carries no currency, and the catalogue currency was only trusted for the dashboard shop. The dev catalogue's shop now counts too.
+- **« Why did September Rose apply and not the free Eau Qi? » fetched nothing** (no matching keyword). A shopping question with a cart now always gets the cart and its evaluation, and every cart evaluation comes with `simulate_offers`.
+- **A product's FAQ answers questions its headings don't word.** `get_product_policy` matched keywords against FAQ questions only. « Comment utiliser le masque LED avec la télécommande ? » shared one word with « La télécommande de mon masque ne fonctionne plus », and the usage steps sit in the answers. When no single question matches, it now returns that product's entries that share words with the question (answers included), most relevant first, within 6,000 characters (`product_faq_digest`). Replayed on the real mask FAQ: 5 entries, about 4 KB, including the remote and the session steps.
+- **Product FAQs reach dev products (dev only).** « Comment utiliser le masque LED avec la télécommande ? » found no FAQ on the dev store: the FAQ is linked to the main store's product id. Under a dev catalogue, the lookup now maps by handle (`masque-led-visage`: 0 records → 12), and the records carry the dev id too (the tool keeps only records listing the product asked about; the first version missed that). Production is unchanged.
+- **A private code gets reasoning, not « cannot confirm ».** « J'arrive pas à appliquer QIRINESS10 » now comes with `cart_reasoning`: applied offers that refuse other order/product/shipping discounts, the 5-code limit, else the usual conditions. Nothing about the typed code is read. The customer's own typed code is no longer masked as « ce code ».
+- **Stacking rules are stated, not implied.** Production checked through the Admin API: « Shopify » plan, not Plus, so one product discount per item. Offer and evaluation results carry `stacking_rules`, so « can I combine two promotions on one product? » is answered even without a cart.
+- **Offers described by what they do.** Offer data now carries the reward items and what a Buy X Get Y requires (`requires`). Customers describing an offer (« l'offre qui donne une Eau Qi dès 65 € ») are matched to it (`mentioned_by_customer`). Replies lead with the description, not the internal name, and say « Shopify kept the best offer for your cart » without a price breakdown (`not_chosen_by_shopify`).
+- **A Buy X Get Y whose items take a better offer** is `line_already_discounted` (`blocked_by`), not « spend more ».
+- **Proven:** the question replayed offline on the synced dev data. The opening now carries: TEST02 `line_already_discounted` by September Rose, and the best combination (September Rose on everything −116,66 € vs TEST02 + September Rose on the rest −111,09 €). Root suite 5,165, web typecheck. **Not yet re-run in the widget.**
+
+## Shopify's discount rules: Buy X Get Y lock, minimums by class, combination solver, sale prices (2026-10-06)
+
+The four gaps in `docs/shopify-discount-rules.md` § 7.
+- **Buy X Get Y locks both items.** An applied Buy X Get Y holds its « buys » and « gets » lines against other product discounts (non-Plus), though `cart.js` allocates nothing to the « buys » line. `shopifyPlus` option, default false.
+- **Minimums by class.** Order: met before and after product discounts. Product: after other product discounts. Buy X Get Y: « buys » items at full price, without other product discounts or the reward units. Results carry `measured_on`. The French « threshold-straddle » case changed from `unknown` to `not_eligible` (5 € missing), which is Shopify's rule for an order minimum.
+- **Combination solver** (`offer-solver.mjs`) and the `simulate_offers({ add })` tool: every allowed set of public automatic offers and entered codes, priced product → order → shipping, largest saving kept. Additions only for products resolved that turn.
+- **Sale prices.** The product sync stores `compare_at_price`; search, detail and cart context report `on_sale` and the original price.
+- **Proven:** unit tests only, on the dev-store worked example (cream + Eau Qi → TEST02 37,80 € beats September Rose 32,03 €; cream alone → September Rose, 48,26 €; « what if I add the Eau Qi » → TEST02). Root suite 5,161, web typecheck. **Not yet run against the dev store:** needs `npm run dev-store:sync` (compare-at and TEST02), then the chat.
+
+## Entered codes named; one product discount per line; follow-ups keep the cart (2026-10-06)
+
+- Codes the shopper applied are named back (`cartCodeRows`, recognition only) and used for stacking. Private codes are still never listed or offered.
+- One product discount per line: the widget sends each line's discounts, and the evaluator returns `line_already_discounted` with `blocked_by`.
+- Follow-ups carry the cart (widget, plus a server follow-up route). A discount amount (« 30 % ») or an offer name evaluates that offer first, marked `mentioned_by_customer`.
+- The prompt never translates product, offer or code names.
+- **Proven:**
+  - The user's own conversation replayed through the route: « QIRINESS20 and BIENVENUE20 codes are shown as applied, along with "serum anti tache 2 for 1" and "Kit Revitalisant offert" » / « The 30% "September Rose" offer did not apply because the products in your basket already have product discounts… Shopify applies only one product discount per item », 3 runs out of 3.
+  - Root suite 5,152, web typecheck. One of my own changes (the "percent" vocabulary) briefly emptied the retrieval for the follow-up; the follow-up route now covers it, with a test.
+## An applied discount is recognised and stated plainly (2026-10-06)
+
+- **From the store:** « J'ai droit à quelle promotion ? » answered « votre panier affiche une réduction de 6,28 €, mais je ne peux pas confirmer ». September Rose was applied, but the reduction was never matched to it (`current_discount_combination_unknown`), so stacking was never checked either.
+- `fromAjaxCart` now reads both `cart.js` discount shapes (`line_level_discount_allocations[].discount_application`, falling back to per-line `discounts[]`). A discount whose type the cart doesn't give is matched by title, to exactly one public offer.
+- The reply trace records `cart_discounts` (type, title, amount, matched offer; codes never named), so an unmatched discount on the store shows what actually arrived.
+- Prompt: `applied` and `not_eligible` are definite and stated plainly with their reason; « cannot confirm » is for `unknown` only.
+- **Proven:**
+  - Through the route, a `cart.js`-shaped cart (Baume + Kit Spa Corps, September Rose applied) gave: « La remise September Rose de 9,83 € est déjà appliquée… il manque 47,05 € [livraison gratuite]… le Masque Revitalisant offert ne se cumule pas avec la remise déjà appliquée ».
+  - Root suite 5,148, web typecheck.
+  - **On the store, unconfirmed:** whether the real `cart.js` used the first or the second shape. The trace will show it.
+- **Reward availability, corrected after a 2-for-1 was added on the dev store:** the check now runs only while the reward is NOT in the cart, and a negative synced stock counts as sellable (Shopify sold past zero). Zero stays `unknown`. On real dev data: 1 sérum → « add a 2nd, free » (`reward_not_in_basket`); 2 sérums → 2-for-1 and September Rose both `applied`. Root suite 5,148.
+## Dev store synced; free delivery evaluated against the cart (2026-10-06)
+
+- `npm run dev-store:sync` ran: a development shop with 16 products (all with stock), 3 collections (24 memberships) and 6 discounts (1 automatic free delivery from €70 in FR, plus 5 codes). Production is unchanged (119 / 331).
+- `get_active_promotions` lists free delivery by default. `evaluate_promotions_for_cart` evaluates its minimum against the cart (amount missing, destination condition, never a cost). A free-delivery question that comes with a cart now runs the evaluation.
+- **Proven:**
+  - Live on the dev data through signed requests: €11.83 → « il lui manque 58,17 € »; €80.78 → « éligible, destination France »; « offres du moment » → the free-delivery offer; « un code promo ? » → no code disclosed.
+  - Root suite 5,145 and agent suite 2,126 pass, plus the web typecheck.
+  - One reply added « métropolitaine », which the rule does not say: watch for it.
+- **Same day, from the store:** « Quelle offre puis-je avoir ? » only listed the offers and said « je ne peux pas confirmer » about the cart, because only `get_active_promotions` ran. An offers question with a cart now also evaluates it, using the widget's own `needsCartSnapshot` rule, so « quelles offres en ce moment ? » stays a listing. Live: €11.83 → « ne remplit pas encore ce minimum »; €80.78 → « remplit le seuil », destination France. Root suite 5,146.
+- **Gift offers check the gift can be bought.** The dev store's « Masque Revitalisant offert » (buy the Kit Rituel Spa Corps, get the Kit Rituel Éclat free) has its gift as an unpublished draft with no stock, so « add the gift to your cart » would send a shopper looking for nothing. A named reward that isn't live is now `reward_unavailable`; one that's live but at stock ≤ 0 is `unknown` (`reward_out_of_stock`), since Shopify may allow overselling. On real dev data: the kit alone → `reward_unavailable`; kit + gift applied → `applied`, with free delivery `not_combinable` (the offer combines with nothing). Root suite 5,147.
+## Dev store synced as its own shop, removable (2026-10-06)
+
+- `scripts/dev-store/`, dev only: `npm run dev-store:sync` runs the production product, promotion and collection syncs against the dev store, using the advisor app's credentials (client id from its toml, secret from `STOREFRONT_APP_CLIENT_SECRET`), with production's token blanked and `APP_ENV=development`. It refuses the production store or any shop not allow-listed. `npm run dev-store:remove -- --yes` deletes the development shop row (its data cascades) and the dev chat sessions.
+- The advisor app requests read-only scopes (`read_products, read_inventory, read_discounts, read_metaobjects, read_metaobject_definitions`), for that sync only.
+- `STOREFRONT_CHAT_CATALOGUE_SHOP_DOMAIN` (dev only) points the advisor's catalogue at the synced dev shop. Brand, policies and FAQ stay production's. Unset, nothing changes.
+- The advisor's turn-deadline error now reports the turn's deadline, not the remainder. A test failed about 2 runs in 5.
+- Removal checklist: docs/storefront-chatbot.md § Dev store.
+- **Proven:** guard tests, root suite 5,143, web typecheck. **Not yet run:** the sync itself, which needs the new scopes deployed and approved.
 ## Database size, phase 5: what nothing reads is not kept (2026-10-06)
 
 - **`79_unread_data.sql`** (applied):

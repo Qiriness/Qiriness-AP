@@ -181,7 +181,12 @@ export function createLlmAgent({
       });
       const messages = [...historyMessages(history), { role: 'user', content: message }];
       const trace = { calls: [], tools: [] };
-      if (shoppingOpening) trace.shopping = { route: shoppingOpening.route, topics: shoppingOpening.topics ?? [], retrievals: shoppingOpening.results.map(({ tool, result }) => ({ tool, status: result.status, offer_preview: result.offer_preview === true, reasons: (result.promotions ?? []).map((p) => ({ id: p.promotion_id, status: p.status, reason: p.reason })) })) };
+      if (shoppingOpening) {
+        trace.shopping = { route: shoppingOpening.route, topics: shoppingOpening.topics ?? [], retrievals: shoppingOpening.results.map(({ tool, result }) => ({ tool, status: result.status, offer_preview: result.offer_preview === true, reasons: (result.promotions ?? []).map((p) => ({ id: p.promotion_id, status: p.status, reason: p.reason })) })) };
+        // The cart's discounts as the widget sent them, and whether each matched an
+        // offer: an unmatched one is why « je ne peux pas confirmer » (2026-10-06).
+        if (cart && shopping?.cartDiscounts) trace.shopping.cart_discounts = await shopping.cartDiscounts().catch(() => null);
+      }
       if (opening) trace.knowledge = {
         route: opening.route, topics: opening.topics, country: opening.country, ms: retrievalMs,
         retrievals: opening.results.map(({ tool, result }) => ({ tool, status: result.status, ids: (result.matches ?? []).map((m) => m.id), match_stage: result.matches?.[0]?.match_stage ?? result.match_stage ?? null })),
@@ -215,7 +220,8 @@ export function createLlmAgent({
               maxTokens: MAX_REPLY_TOKENS,
               pass: 'storefront_chat'
             }),
-            remaining
+            remaining,
+            deadlineMs
           );
         } catch (error) {
           throw new StorefrontAgentError(`model call failed: ${error.message}`);
@@ -275,6 +281,7 @@ export function createLlmAgent({
         }
 
         const parsed = parseReply(result?.content);
+        if (shopping?.beforeSanitize) await shopping.beforeSanitize(parsed.text);
         const products = toCards(parsed.products, offered, catalogue, money, linkBase);
         const cardIds = products.map((c) => c.id);
         return {
@@ -389,10 +396,12 @@ export function productLinkBase(value) {
  * request, but a live request ran 51 s on 2026-10-05 behind Next's patched
  * fetch; the shopper's wait is bounded here whatever the transport does.
  */
-export function withDeadline(promise, ms) {
+export function withDeadline(promise, ms, reportedMs = ms) {
   let timer;
   const deadline = new Promise((_, reject) => {
-    timer = setTimeout(() => reject(new Error(`no reply within ${ms} ms`)), ms);
+    // `reportedMs`: what the shopper was promised (the turn's deadline), not the
+    // remainder this call happened to get after earlier work in the same turn.
+    timer = setTimeout(() => reject(new Error(`no reply within ${reportedMs} ms`)), ms);
   });
   return Promise.race([promise, deadline]).finally(() => clearTimeout(timer));
 }

@@ -40,6 +40,14 @@ these.
 as its own item: `llm_usage` (item 14), `categorisation_review` (item 15), and
 `category_forwarding` / `ticket_forwards` (item 1).
 
+## 47. Shopify discount rules in the advisor: unit-tested, not yet on the dev store — 2026-10-06
+
+1. **Re-sync.** **Done 2026-10-06, passed:** 16/16 products carry `compare_at_price` (12 on sale), and TEST02 is synced (spend 65 € on 7 products → Eau Qi). The solver run offline on the synced data: cream + Eau Qi → TEST02 −37,80 €, free delivery missed by 1,05 €; cream alone → September Rose, 48,26 €; 2 sérums + 2 kits → both 2-for-1 offers; the evaluator gives September Rose `line_already_discounted` by TEST02. **Check (as written):** `npm run dev-store:sync`.
+2. **Buy X Get Y lock.** **Check:** cart = Caresse Temps Sublime night cream + Eau Qi, with TEST02 applied. Ask « pourquoi September Rose ne s'applique pas sur la crème ? ». The reply says the cream is part of TEST02 (`line_already_discounted`, `blocked_by: TEST02`).
+3. **Best combination.** **Check:** cart = the cream alone, ask « et si j'ajoute l'Eau Qi ? ». `simulate_offers` in the trace; the reply says TEST02 would apply (Eau Qi free, 37,80 €) instead of September Rose. Then add the Eau Qi for real: `matches_current_cart: true`. If it is false, Shopify chose differently, and the solver is wrong for that case.
+4. **Minimums by class.** **Check:** an order code with a minimum between the cart's subtotal before and after September Rose: the reply says it is not reached, with the missing amount (`measured_on: order_minimum_before_and_after_product_discounts`).
+5. **Sale price.** **Check:** give a dev product a compare-at price above its price, re-sync, ask about it. The reply says it is already on sale, and that offers are calculated on the sale price.
+
 ## 46. Storefront shopping: deterministic checks passed, dev-store replies pending — 2026-10-06
 
 - **Language/topic regression, 2026-10-06:** reproduced the owner's English →
@@ -122,6 +130,13 @@ as its own item: `llm_usage` (item 14), `categorisation_review` (item 15), and
 - **Source gaps, not implementation assumptions:** no current company privacy
   policy, no fixed shipping-price parameter, and oversized FAQ sections withheld
   without truncation. Review source content separately if those answers are needed.
+
+## 45. Dev store synced as a development shop — built, not yet run — 2026-10-06
+
+1. **Scopes.** **Check:** `shopify app deploy` from `storefront-app/`, approve in the dev store admin, then `npm run dev-store:sync -- --dry-run` lists the dev products and discounts. **Done 2026-10-06:** 16 products, 6 discounts and 3 collections read. The collections dry run fails on a never-synced shop (no shop row in a dry run); the real run works.
+2. **Sync.** **Done 2026-10-06, passed:** development row; 16 / 6 / 3 under it; production unchanged. **Check (as written):** `npm run dev-store:sync`. A `shops` row for the dev store with `environment = development`; its products, promotions and collections under that `shop_id`; the production counts unchanged (119 products, 331 promotions).
+3. **The advisor reads it.** **Check:** with `STOREFRONT_CHAT_CATALOGUE_SHOP_DOMAIN` set and `shopify app dev` restarted, add a dev product to the cart and ask « suis-je éligible à une offre ? ». The reply evaluates the dev store's own automatic discount against the cart, and the trace shows `evaluate_promotions_for_cart` without `shop_not_synced`.
+4. **Removal.** **Check:** `npm run dev-store:remove` shows the counts; `--yes` removes them, and production is untouched.
 
 ## 44. Range collections: built, migration applied, none marked yet — 2026-10-06
 

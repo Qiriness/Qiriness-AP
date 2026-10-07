@@ -309,3 +309,16 @@ test('FAQ-linked policy is resolved in the same round and obsolete FAQ prose sta
   await agent.respond({ message: 'Une question générale' });
   assert.equal(calls, 2);
 });
+
+test('a product question no FAQ question matches gets that product’s FAQ, most relevant first', async () => {
+  const guide = faqRecords([doc('mask-remote', [
+    section('remote', 'La télécommande ne fonctionne plus', 'La télécommande pilote l’allumage, les modes et l’intensité.'),
+    section('sessions', 'Combien de séances par semaine ?', 'Mettez les lunettes, puis connectez la télécommande et choisissez un mode.'),
+    section('warranty', 'Quelle est la garantie du masque ?', 'La garantie est décrite dans le manuel fourni.')
+  ], { category: 'product', product_ids: ['mask'] })]);
+  const options = { catalogue: CATALOGUE, resolvedIds: new Set(['mask']), productDataIds: new Set(['mask']), readProductPolicies: async () => guide, query: 'Comment utiliser le masque avec la télécommande ?' };
+  const result = await runKnowledgeTool('get_product_policy', { product_id: 'mask' }, makeKnowledge(), options);
+  assert.equal(result.status, 'found');
+  assert.equal(result.match_stage, 'product_faq_digest');
+  assert.deepEqual(result.matches.map((m) => m.canonical_question), ['La télécommande ne fonctionne plus', 'Combien de séances par semaine ?'], 'entries sharing no word with the question are left out');
+});

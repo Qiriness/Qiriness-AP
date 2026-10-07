@@ -21,9 +21,11 @@ embedded = false
 automatically_update_urls_on_dev = true
 
 [access_scopes]
-# None. The widget reads nothing from the Admin API: the catalogue comes from
-# the app's own database, and the proxy needs no scope.
-scopes = ""
+# READ-ONLY, AND ONLY FOR `npm run dev-store:sync` (scripts/dev-store/), which
+# copies the dev store's products, stock, collections and discounts into
+# Supabase so the advisor can evaluate a dev cart. The widget itself reads
+# nothing from the Admin API. Removing the dev setup: set this back to "".
+scopes = "read_products,read_inventory,read_discounts,read_metaobjects,read_metaobject_definitions"
 
 [auth]
 redirect_urls = [ ]
