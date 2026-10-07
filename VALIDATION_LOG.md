@@ -201,7 +201,13 @@ Everything here was built from Meta's and Google's documented shapes and tested 
    - `insights_paid_series` and `insights_social_series` return 0 rows;
    - `social_save_token` / `social_read_token` cannot be executed by `anon` or `authenticated`.
 2. **Set the app credentials** (README → Social connectors) on Vercel, Render and GitHub Actions. **Check:** Connections shows Connect enabled for both providers, not « credentials are not set ».
-3. **Connect Meta.** **Check:**
+3. **Connect Meta.** **First connect 2026-10-07:**
+   - Meta Ads synced: 281 ad days, 39 campaigns, 151 campaign days.
+   - Page and Instagram failed with code 10. The token carried only `pages_show_list`, `ads_read`, `business_management` and `pages_read_engagement`.
+   - `/{page}/posts` also needs `pages_read_user_content`, which was missing from `META_SCOPES`; it has been added.
+   - Re-check after reconnecting with the full configuration.
+
+   **Check:**
    - the callback lands on `?connected=meta`;
    - `social_accounts` lists the Page, the Instagram account and the ad account;
    - a `sync_social` job is queued, and the worker logs `social.synced` within a few minutes.

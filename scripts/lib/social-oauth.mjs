@@ -21,6 +21,9 @@ export const DEFAULT_GOOGLE_ADS_API_VERSION = 'v21';
 /**
  * What a Meta connection asks for. Read-only, every one:
  *   pages_show_list, pages_read_engagement, read_insights — the Page and its figures
+ *   pages_read_user_content — the Page's own posts (`/{page}/posts`); without it
+ *     Meta answers « (#10) This endpoint requires the 'pages_read_user_content'
+ *     permission » — measured on the first real connect, 2026-10-07
  *   instagram_basic, instagram_manage_insights — the Instagram account linked to it
  *   ads_read — ad account insights
  *   business_management — Pages and ad accounts owned through a Business portfolio
@@ -28,6 +31,7 @@ export const DEFAULT_GOOGLE_ADS_API_VERSION = 'v21';
 export const META_SCOPES = [
   'pages_show_list',
   'pages_read_engagement',
+  'pages_read_user_content',
   'read_insights',
   'instagram_basic',
   'instagram_manage_insights',

@@ -5046,6 +5046,10 @@ Built from the owner's mockup (`HTML_DROPFILE/qiriness_social_media_dashboard_mo
 - The refused names are logged as « not answered » and stored as null.
 - The names live in one table (`META_METRICS`), and `npm run probe:meta` checks them against a connected account.
 
+**A refused insight is not measured; a refused post list is a failure (2026-10-07).** On the first real connect, Meta's Login for Business configuration no longer offered `read_insights`, which Meta's own Page Insights docs still list as required. Without it, `/{page}/insights` answers code 10.
+- **Insights calls:** `insights()` treats codes 10 and 200 like a retired metric. The figures become null and are logged « (permission refused) », so the Page's posts still sync.
+- **Other calls** (`/{page}/posts`, `/{ig}/media`): a refusal still fails the account. Without the list there is nothing to show, and the error names the missing permission (`pages_read_user_content` was the one missed at build time).
+
 **Every upsert writes one column set.** The REST client pads a batch to the union of its rows' keys with nulls. One row carrying `followers` beside thirty without it would erase twenty-nine stored follower counts. So day metrics, follower counts, post fields and post insights are separate upserts. This is also why a post too old to re-read keeps the insights it was last given.
 
 **How far back.**

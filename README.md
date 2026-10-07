@@ -59,7 +59,9 @@ The Insights → Social media tab connects through OAuth. Each shop's token goes
 
 1. **Meta**
    - Create a **Business** app at developers.facebook.com and add **Facebook Login for Business** and the **Marketing API**.
-   - Permissions: `pages_show_list`, `pages_read_engagement`, `read_insights`, `instagram_basic`, `instagram_manage_insights`, `ads_read`, `business_management`.
+   - Permissions: `pages_show_list`, `pages_read_engagement`, `pages_read_user_content`, `read_insights`, `instagram_basic`, `instagram_manage_insights`, `ads_read`, `business_management`. Nothing that writes (`ads_management`, `pages_manage_*`, `instagram_manage_comments` / `_contents`, `instagram_content_publish`).
+   - `read_insights` may no longer be offered in a Login for Business configuration (seen 2026-10-07). Connect without it: Instagram, posts and ads do not need it, and Page-level figures the token cannot read show as « — ».
+   - The token keeps the permissions it was issued with: after changing the configuration, click **Reconnect**.
    - Valid OAuth redirect URI: `https://qiriness-ap.vercel.app/api/settings/integrations/meta/callback`, plus `http://localhost:3000/...` for development.
    - Set `META_APP_ID` and `META_APP_SECRET`. `META_LOGIN_CONFIG_ID` is optional: a Login for Business configuration, used instead of the scope list.
    - In **Development mode**, only people with a role on the app can connect. Add the person who will click Connect.

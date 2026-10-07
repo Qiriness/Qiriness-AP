@@ -24,6 +24,8 @@ const GRAPH = 'https://graph.facebook.com';
 const MAX_RETRIES = 4;
 const RATE_LIMIT_CODES = new Set([4, 17, 32, 613]);
 const isRateLimit = (code) => RATE_LIMIT_CODES.has(code) || (code >= 80000 && code <= 80014);
+/** « (#10) Application does not have permission » and « (#200) Permissions error ». */
+const isDenied = (code) => code === 10 || code === 200;
 
 export function appSecretProof(token, appSecret) {
   return createHmac('sha256', appSecret).update(token).digest('hex');
@@ -97,12 +99,19 @@ export function createMetaClient({
    * metric at a time, and the ones still refused are returned as `failed`
    * rather than failing the account: a missing metric becomes a null (not
    * measured), never a zero, and never a lost night.
+   *
+   * A PERMISSION REFUSAL (code 10 / 200) IS TREATED THE SAME WAY, and says so
+   * (`denied`). Meta no longer offers `read_insights` to new Facebook Login for
+   * Business configurations (seen 2026-10-07) while still documenting it for
+   * Page insights; without it the Page's figures are refused, but its posts are
+   * still readable. Failing the account would have lost the posts too.
    */
   async function insights(objectId, metrics, params = {}, { asToken } = {}) {
     try {
       const page = await request(`${objectId}/insights`, { ...params, metric: metrics.join(',') }, { asToken });
       return { data: page?.data ?? [], failed: [] };
     } catch (error) {
+      if (error instanceof MetaError && isDenied(error.code)) return { data: [], failed: metrics, denied: true };
       if (!(error instanceof MetaError) || error.code !== 100) throw error;
       if (metrics.length === 1) return { data: [], failed: metrics };
     }

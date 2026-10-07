@@ -68,7 +68,18 @@ test('a retired metric is dropped, not fatal: the rest are asked one by one', as
   assert.equal(seen[1].searchParams.get('metric'), 'views');
 });
 
-test('any other error is thrown', async () => {
-  const meta = client([reply(403, { error: { code: 10, message: 'Permission denied' } })]);
-  await assert.rejects(meta.insights('1', ['views']), (error) => error.code === 10 && !error.needsReconnect);
+test('a refused permission on insights is not measured, and says so; other errors are thrown', async () => {
+  const denied = client([reply(403, { error: { code: 10, message: '(#10) Application does not have permission for this action' } })]);
+  assert.deepEqual(await denied.insights('1', ['page_post_engagements', 'page_follows']), {
+    data: [],
+    failed: ['page_post_engagements', 'page_follows'],
+    denied: true
+  });
+  const broken = client([reply(400, { error: { code: 1, message: 'An unknown error occurred' } })]);
+  await assert.rejects(broken.insights('1', ['views']), (error) => error.code === 1 && !error.needsReconnect);
+});
+
+test('outside insights, a refused permission still fails the call', async () => {
+  const meta = client([reply(400, { error: { code: 10, message: "(#10) This endpoint requires the 'pages_read_user_content' permission" } })]);
+  await assert.rejects(meta.pagePosts('1', 'page-token', null), (error) => error.code === 10);
 });

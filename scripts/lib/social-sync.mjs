@@ -378,7 +378,7 @@ async function syncInstagram(ctx, account) {
     const params = { period: 'day', metric_type: 'total_value', since: unix(day), until: unix(addDays(day, 1)) };
     const core = await meta.insights(igId, Object.keys(META_METRICS.instagramDay), params);
     const follows = await meta.insights(igId, [META_METRICS.instagramFollows.metric], { ...params, breakdown: META_METRICS.instagramFollows.breakdown });
-    for (const name of [...core.failed, ...follows.failed]) stats.unanswered.add(`instagram:${name}`);
+    for (const name of [...core.failed, ...follows.failed]) stats.unanswered.add(`instagram:${name}${core.denied || follows.denied ? ' (permission refused)' : ''}`);
     dayRows.push(dayRow(account, shopId, day, { ...foldInstagramDay(core.data, follows.data), posts: perDay.get(day) ?? 0 }));
   }
   await writeDays(ctx, dayRows);
@@ -440,7 +440,7 @@ async function syncFacebookPage(ctx, account) {
   const measured = new Map();
   for (const window of dayWindows(days[0], days[days.length - 1], PAGE_DAYS_PER_REQUEST)) {
     const result = await meta.insights(pageId, Object.keys(META_METRICS.facebookDay), { period: 'day', since: window.since, until: addDays(window.until, 1) }, { asToken: pageToken });
-    for (const name of result.failed) stats.unanswered.add(`facebook:${name}`);
+    for (const name of result.failed) stats.unanswered.add(`facebook:${name}${result.denied ? ' (permission refused)' : ''}`);
     for (const [day, row] of foldPageDays(result.data)) measured.set(day, row);
   }
 
