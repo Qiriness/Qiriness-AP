@@ -95,6 +95,12 @@ export async function runDrafting({
   // The shop's active company policies by key, loaded once per run like the
   // articles. Empty by default and safe: the case's policies are then dropped.
   companyPolicies = new Map(),
+  // Loads the four above (`loadDraftingContext`) the first time a candidate
+  // reaches the composer, replacing them. The worker passes this rather than
+  // the values: it runs this pass every poll and almost every poll drafts
+  // nothing, and reading ~70 kB of promotions, policies and articles each time
+  // was most of an idle day's egress (2026-10-07).
+  loadContext = null,
   // Reads whether the customer's latest message closes their request.
   // ABSENT BY DEFAULT, and absence means no closure: a caller that has not
   // wired it — the rehearsal harness, every existing test — writes exactly the
@@ -166,6 +172,11 @@ export async function runDrafting({
       totals.drafted += 1;
       onDraft?.({ ticket, estimate: true, sourceVerdict: investigation.verdict, level: ticket.level ?? null, caseVersion: caseCurrent?.version ?? null });
       continue;
+    }
+
+    if (loadContext) {
+      ({ parameters, offerableCodes, pinnedArticles, companyPolicies } = await loadContext());
+      loadContext = null;
     }
 
     // ORDER CLAIMS THE ORDER HAS SINCE CONTRADICTED. When the change router found

@@ -706,6 +706,10 @@ async function main() {
     // for a person on the ticket page.
     // One stage, two passes: replies (DRAFT_IN_POLL) and refund notices.
     const draftStage = runsThrough('draft');
+    // Read only when a candidate reaches the composer, at most once a poll for
+    // both passes (`loadContext` in runDrafting).
+    let draftingContext = null;
+    const loadContext = () => (draftingContext ??= loadDraftingContext(supabase, shopId, logger));
     if (drafting && draftStage) {
       try {
         const cursors = (await supabaseSelect(supabase, T.SHOPS, { id: shopId }, 'sync_cursors'))[0]?.sync_cursors ?? {};
@@ -716,7 +720,7 @@ async function main() {
           brandVoice: await drafting.brandVoice.load(shopId),
           shopId,
           model: models.draftingModel,
-          ...(await loadDraftingContext(supabase, shopId, logger)),
+          loadContext,
           senderDirectory,
           closureReader: models.closureModel
             ? ({ message, ticketId, senderDirectory: directory }) =>
@@ -748,7 +752,7 @@ async function main() {
           brandVoice: await noticeDrafting.brandVoice.load(shopId),
           shopId,
           model: models.draftingModel,
-          ...(await loadDraftingContext(supabase, shopId, logger)),
+          loadContext,
           senderDirectory,
           gates: 'notice',
           limit: config.draftPollLimit,

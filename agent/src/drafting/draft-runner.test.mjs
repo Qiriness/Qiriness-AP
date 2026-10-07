@@ -187,6 +187,36 @@ test('level 4 is skipped even with a draftable verdict', async () => {
   assert.deepEqual(totals.skippedBy, { level_4: 1 });
 });
 
+// --- the drafting context is read only when a reply is written ---------------
+
+function countingLoader() {
+  const loader = async () => {
+    loader.calls += 1;
+    return { parameters: new Map(), offerableCodes: new Map(), pinnedArticles: new Map(), companyPolicies: new Map() };
+  };
+  loader.calls = 0;
+  return loader;
+}
+
+test('a run that drafts nothing never reads the drafting context', async () => {
+  // The worker runs this every poll; ~70 kB a read, twice a poll, was most of
+  // an idle day's egress (2026-10-07).
+  for (const candidates of [[], [{ ...CANDIDATE, ticket: { ...CANDIDATE.ticket, level: 4 } }]]) {
+    const h = harness({ candidates });
+    const loadContext = countingLoader();
+    await runDrafting({ ...h.args, loadContext });
+    assert.equal(loadContext.calls, 0);
+  }
+});
+
+test('the drafting context is read once however many replies the run writes', async () => {
+  const h = harness({ candidates: [CANDIDATE, { ...CANDIDATE, ticket: { ...CANDIDATE.ticket, id: 'ticket-2' } }] });
+  const loadContext = countingLoader();
+  const totals = await runDrafting({ ...h.args, loadContext });
+  assert.equal(totals.drafted, 2);
+  assert.equal(loadContext.calls, 1);
+});
+
 // --- the checks decide sendability, not the draft's existence ----------------
 
 test('a draft that fails a check is still stored, and flagged', async () => {

@@ -77,6 +77,12 @@ The four gaps in `docs/shopify-discount-rules.md` § 7.
 - The advisor's turn-deadline error now reports the turn's deadline, not the remainder. A test failed about 2 runs in 5.
 - Removal checklist: docs/storefront-chatbot.md § Dev store.
 - **Proven:** guard tests, root suite 5,143, web typecheck. **Not yet run:** the sync itself, which needs the new scopes deployed and approved.
+## Egress: the draft stage reads its context only when it writes a reply (2026-10-07)
+
+- **Measured (2026-10-07, live):** an idle worker still downloaded about 360 MB a day. Both draft passes, run on every poll (about every 33 s), each re-read promotions, company policies, policy links, pinned articles and parameters. That is about 69 kB a read, nearly always for nothing, and it accounts for the 181 MB PostgREST egress by morning.
+- **Change:** `runDrafting({ loadContext })` loads them the first time a candidate reaches the composer. The worker gives both passes one memoised loader per poll. The CLI still passes the values. Brand voice is still read up front: the run refuses an unapproved voice before it considers any ticket.
+- **Proven:** `draft-runner.test.mjs` checks that no read happens when nothing is drafted and that there is one read for two drafts. The root suite passes 5,225 tests. **Not yet:** the deployed egress chart.
+
 ## Database size, phase 5: what nothing reads is not kept (2026-10-06)
 
 - **`79_unread_data.sql`** (applied):
