@@ -55,11 +55,20 @@ export function normalisePublisher(value) {
   return AD_PUBLISHERS.includes(key) ? key : 'other';
 }
 
-/** The first 140 characters of a caption, on one line. Null when there is none. */
+/**
+ * The first 140 characters of a caption, on one line. Null when there is none.
+ *
+ * CUT BY CHARACTER, NOT BY UTF-16 UNIT. `String.slice` counts an emoji as two
+ * units and can split it, leaving a lone surrogate; JSON.stringify writes that
+ * as an escaped half-pair, which Postgres refuses, and PostgREST answers
+ * « Empty or invalid json » for the whole batch. That is what stopped the first
+ * Facebook post sync (2026-10-07). `Array.from` iterates code points — the unit
+ * Postgres's `char_length` and the 140-character check count in.
+ */
 export function captionExcerpt(caption) {
-  const flat = String(caption ?? '').replace(/\s+/g, ' ').trim();
-  if (!flat) return null;
-  return flat.length <= 140 ? flat : `${flat.slice(0, 139)}…`;
+  const chars = Array.from(String(caption ?? '').replace(/\s+/g, ' ').trim());
+  if (!chars.length) return null;
+  return chars.length <= 140 ? chars.join('') : `${chars.slice(0, 139).join('')}…`;
 }
 
 /**

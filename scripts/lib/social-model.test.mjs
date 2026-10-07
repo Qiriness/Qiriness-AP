@@ -17,6 +17,11 @@ test('captions are one line, at most 140 characters; unknown publishers read as 
   assert.equal(captionExcerpt('  a\n\nb  '), 'a b');
   assert.equal(captionExcerpt('x'.repeat(200)).length, 140);
   assert.equal(captionExcerpt(''), null);
+  // An emoji straddling the cut is kept whole, never split into a lone surrogate.
+  const excerpt = captionExcerpt(`${'a'.repeat(138)}\u{1F60D}\u{1F60D}\u{1F60D}`);
+  assert.equal(Array.from(excerpt).length, 140);
+  assert.ok(excerpt.isWellFormed(), 'no lone surrogate reaches Postgres');
+  assert.equal(captionExcerpt(`${'a'.repeat(139)}\u{1F60D}`), `${'a'.repeat(139)}\u{1F60D}`, 'exactly 140 characters is kept as is');
   assert.equal(normalisePublisher('Instagram'), 'instagram');
   assert.equal(normalisePublisher('threads_new'), 'other');
 });
