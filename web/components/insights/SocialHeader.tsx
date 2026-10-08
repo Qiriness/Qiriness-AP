@@ -2,8 +2,9 @@
 
 import type { ReactNode } from "react";
 import { useFormat, useT } from "@/lib/i18n/client";
-import type { OrganicView, SocialConnectionsStatus, SocialKind, SocialMode } from "@/lib/social-types";
+import type { EngagementBasis, OrganicKind, OrganicView, SocialConnectionsStatus, SocialKind, SocialMode } from "@/lib/social-types";
 import { Button } from "../ui/Button";
+import { EngagementBasisSelect } from "./EngagementBasisSelect";
 import { useInsightsFrame } from "./InsightsFrame";
 import { PlatformIcon } from "./PlatformIcon";
 import { Segmented } from "./Segmented";
@@ -26,6 +27,7 @@ export function SocialHeader({
   connected,
   connectError,
   connectProvider,
+  engagementBasis,
 }: {
   mode: SocialMode;
   network: string;
@@ -36,6 +38,8 @@ export function SocialHeader({
   connected: string | null;
   connectError: string | null;
   connectProvider: string | null;
+  /** The chosen platform's engagement-rate basis; null on the overview and in paid mode. */
+  engagementBasis: EngagementBasis | null;
 }) {
   const t = useT();
   const fmt = useFormat();
@@ -71,6 +75,7 @@ export function SocialHeader({
           <h2>{title}</h2>
           <span>{subtitle}</span>
         </div>
+        <div className={styles.headerRight}>
         <div className={styles.controls}>
           <label className={styles.networkLabel}>
             {t("insights.social.network")}
@@ -97,6 +102,8 @@ export function SocialHeader({
             label={t("insights.social.mode.label")}
           />
           <Button onClick={() => navigate({ connections: "1" })}>{t("insights.social.connections.open")}</Button>
+        </div>
+        {engagementBasis && mode === "organic" && network !== "all" ? <EngagementBasisSelect kind={network as OrganicKind} basis={engagementBasis} /> : null}
         </div>
       </div>
 

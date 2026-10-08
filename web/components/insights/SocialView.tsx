@@ -18,7 +18,6 @@ import { BarList, BlockedCard, Caption, Card, DeltaChip, Grid, KpiCard, type Pol
 import { ConnectPrompt, PlatformCardLink, SocialHeader } from "./SocialHeader";
 import { BandsEditor } from "./BandsEditor";
 import { MetricIcon, PlatformIcon } from "./PlatformIcon";
-import { EngagementBasisSelect } from "./EngagementBasisSelect";
 import { PaidCampaignsTable } from "./PaidCampaignsTable";
 import { PaidTrend } from "./PaidTrend";
 import { SocialPostsTable } from "./SocialPostsTable";
@@ -59,6 +58,9 @@ export function SocialView({
         kinds={kinds}
         connections={panel.connections}
         openConnections={openConnections}
+        engagementBasis={
+          panel.mode === "organic" && panel.organic && panel.network !== "all" ? panel.organic.engagementBases[panel.network as OrganicKind] ?? "reach" : null
+        }
         connected={connected}
         connectError={connectError}
         connectProvider={connectProvider}
@@ -97,7 +99,6 @@ function Organic({
   if (view === "posts" && network !== "all") {
     return (
       <>
-        <EngagementBasisSelect kind={network} basis={panel.engagementBases[network] ?? "reach"} />
         {panel.bandRules[network] ? <BandsEditor kind={network} rules={panel.bandRules[network]!} custom={Boolean(panel.bandsCustom[network])} /> : null}
         <Card title={tr("insights.social.posts.title")} aside={<span>{tr("insights.social.posts.aside")}</span>}>
           <SocialPostsTable posts={panel.posts} capped={panel.postsCapped} tags={panel.postTags} links={panel.postTagLinks} />
@@ -108,7 +109,6 @@ function Organic({
 
   return (
     <div className={network === "all" ? undefined : styles.tinted} data-kind={network === "all" ? undefined : network}>
-      {network !== "all" ? <EngagementBasisSelect kind={network} basis={panel.engagementBases[network] ?? "reach"} /> : null}
       <OrganicKpis panel={panel} network={network} compareLabel={compareLabel} />
 
       <Grid min={26} pin="social-trend" label={tr("insights.social.trend.title")}>

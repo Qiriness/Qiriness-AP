@@ -1107,3 +1107,16 @@
   color: var(--teal-ink);
   text-decoration: underline;
 }
+
+/* --- header: the engagement-rate choice sits under the platform controls --- */
+
+.headerRight {
+  display: grid;
+  justify-items: end;
+  gap: var(--space-2);
+}
+
+.headerRight .basisBar {
+  justify-content: flex-end;
+  margin-bottom: 0;
+}

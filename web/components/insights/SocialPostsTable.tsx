@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { foldForSearch } from "@/lib/insights-format";
 import { useFormat, useLocale, useT } from "@/lib/i18n/client";
@@ -397,13 +398,15 @@ function TagEditor({
   const [name, setName] = useState("");
   const [confirming, setConfirming] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [at, setAt] = useState<{ top: number; left: number } | null>(null);
-  const box = useRef<HTMLSpanElement>(null);
+  const [at, setAt] = useState<{ left: number; top?: number; bottom?: number } | null>(null);
+  const menu = useRef<HTMLSpanElement>(null);
   const button = useRef<HTMLButtonElement>(null);
 
-  // Fixed, from the button's place on screen: the table scrolls sideways, and a
-  // menu positioned inside it would be cut off on the last rows. A scroll
-  // outside the menu closes it rather than leaving it behind.
+  // The menu is drawn on <body>, fixed to the button's place on screen. Inside
+  // the table it was both cut off (the table scrolls sideways) and, under an
+  // ancestor with a transform, positioned against that ancestor instead of the
+  // window: it opened in the middle of the page. A scroll outside the menu
+  // closes it rather than leaving it behind.
   useEffect(() => {
     if (!open) {
       setName("");
@@ -414,17 +417,19 @@ function TagEditor({
     const rect = button.current?.getBoundingClientRect();
     if (rect) {
       const width = 224;
-      const below = window.innerHeight - rect.bottom > 300;
-      setAt({ top: below ? rect.bottom + 4 : Math.max(8, rect.top - 292), left: Math.max(8, Math.min(rect.left, window.innerWidth - width - 8)) });
+      const left = Math.max(8, Math.min(rect.left, window.innerWidth - width - 8));
+      const below = window.innerHeight - rect.bottom > 300 || rect.top < 300;
+      setAt(below ? { left, top: rect.bottom + 4 } : { left, bottom: window.innerHeight - rect.top + 4 });
     }
+    const inside = (target: EventTarget | null) => Boolean(target) && (menu.current?.contains(target as Node) || button.current?.contains(target as Node));
     const outside = (e: MouseEvent) => {
-      if (box.current && !box.current.contains(e.target as Node)) onClose();
+      if (!inside(e.target)) onClose();
     };
     const escape = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
     };
     const scrolled = (e: Event) => {
-      if (box.current && !box.current.contains(e.target as Node)) onClose();
+      if (!inside(e.target)) onClose();
     };
     document.addEventListener("mousedown", outside);
     document.addEventListener("keydown", escape);
@@ -440,12 +445,13 @@ function TagEditor({
   const exists = tags.find((tag) => tag.name.toLowerCase() === trimmed.toLowerCase());
 
   return (
-    <span className={styles.tagEditor} ref={box}>
+    <span className={styles.tagEditor}>
       <button ref={button} type="button" className={styles.tagAdd} aria-expanded={open} aria-label={tr("insights.social.posts.tags.edit")} title={tr("insights.social.posts.tags.edit")} onClick={onOpen}>
         +
       </button>
-      {open && at ? (
-        <span className={styles.tagMenu} style={at} role="dialog" aria-label={tr("insights.social.posts.tags.edit")}>
+      {open && at
+        ? createPortal(
+        <span ref={menu} className={styles.tagMenu} style={at} role="dialog" aria-label={tr("insights.social.posts.tags.edit")}>
           <form
             onSubmit={async (e) => {
               e.preventDefault();
@@ -494,8 +500,10 @@ function TagEditor({
               )}
             </span>
           ))}
-        </span>
-      ) : null}
+        </span>,
+        document.body
+      )
+        : null}
     </span>
   );
 }
