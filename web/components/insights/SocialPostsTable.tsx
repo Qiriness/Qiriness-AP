@@ -13,6 +13,9 @@ type MetricKey = "views" | "reach" | "engagement" | "engagementRate" | "likes" |
 type SortKey = "published" | MetricKey;
 const METRICS: MetricKey[] = ["views", "reach", "engagement", "engagementRate", "likes", "comments", "shares", "follows"];
 
+/** What the team calls a stored media type; the stored value (`image`) is unchanged, so filters keep matching. */
+const TYPE_LABELS: Record<string, string> = { image: "insights.social.posts.mediaType.image" };
+
 const postKey = (accountId: string, postId: string) => `${accountId}|${postId}`;
 const sortValue = (post: SocialPost, key: SortKey) => (key === "published" ? Date.parse(post.publishedAt) : post[key]);
 
@@ -130,6 +133,7 @@ export function SocialPostsTable({
     router.refresh();
   }
 
+  const typeLabel = (value: string) => (TYPE_LABELS[value] ? tr(TYPE_LABELS[value]) : value);
   const n = (value: number | null) => (value === null ? "—" : integer(value));
   const sortHeader = (key: SortKey, label: string, className?: string) => (
     <th key={key} className={className} aria-sort={sort === key ? (desc ? "descending" : "ascending") : "none"}>
@@ -167,7 +171,7 @@ export function SocialPostsTable({
           <option value="all">{tr("insights.social.posts.allTypes")}</option>
           {types.map((x) => (
             <option key={x} value={x}>
-              {x}
+              {typeLabel(x)}
             </option>
           ))}
         </select>
@@ -210,7 +214,7 @@ export function SocialPostsTable({
                         // eslint-disable-next-line @next/next/no-img-element -- platform CDN URLs, signed and short-lived; not for next/image's optimiser
                         <img className={styles.thumb} src={post.thumbnailUrl} alt="" loading="lazy" referrerPolicy="no-referrer" />
                       ) : (
-                        <span className={styles.thumb}>{(post.mediaType ?? "").slice(0, 4).toUpperCase()}</span>
+                        <span className={styles.thumb}>{typeLabel(post.mediaType ?? "").slice(0, 4).toUpperCase()}</span>
                       )}
                       <span className={styles.postCopy}>
                         {post.permalink ? (
@@ -226,7 +230,7 @@ export function SocialPostsTable({
                         )}
                         <span className={t.sub}>
                           {formatDayL(new Date(post.publishedAt), locale)}
-                          {post.mediaType ? ` · ${post.mediaType}` : ""}
+                          {post.mediaType ? ` · ${typeLabel(post.mediaType)}` : ""}
                         </span>
                       </span>
                     </span>
