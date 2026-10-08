@@ -8,6 +8,10 @@
   flex-wrap: wrap;
   gap: var(--space-2);
   margin-bottom: var(--space-4);
+  /* The split between the header's sync row (Orders, Email, Nightly sync) above
+     and this one, which is the social connections'. */
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--border);
 }
 
 .statusPill {
