@@ -35,6 +35,9 @@ import { CAMPAIGN_RPC, SOCIAL_RPC, SOCIAL_T } from "../../../../scripts/lib/tabl
 import { readSocialStatus } from "../../../../scripts/lib/social-sync.mjs";
 import type {
   AudienceBucket,
+  Band,
+  BandMetric,
+  BandRule,
   EngagementBasis,
   MarketingSocial,
   Compared,
@@ -56,6 +59,8 @@ import type {
 import type { InsightsRange, SeriesPoint } from "../../types";
 import { getSocialConnections } from "../social-connections-service";
 import { readSocialTags } from "../social-tags-service";
+import { readBandRows } from "../social-bands-service";
+import { bandPosts, effectiveRules } from "../../../../scripts/lib/social-bands.mjs";
 import type { InsightsContext, SearchParams } from "./context";
 import { callRpc, getSupabaseClient } from "./shared";
 import { previousCovered, toSeries, type Coverage } from "./series";
@@ -147,7 +152,7 @@ async function readOrganic(ctx: InsightsContext, kinds: OrganicKind[], selected:
   const coverage = await coverageOf(SOCIAL_T.ACCOUNT_DAYS, ctx.shopId);
   const compare = previousCovered(ctx.range, coverage);
 
-  const [current, previous, audienceRows, postRows, reach, tags, bases] = await Promise.all([
+  const [current, previous, audienceRows, postRows, reach, tags, bases, bandRows] = await Promise.all([
     readOrganicRows(ctx, ctx.range),
     compare ? readOrganicRows(ctx, ctx.range.previous) : Promise.resolve(null),
     callRpc<{ kind: string; captured_on: string; dimension: string; key: string; value: number }>(SOCIAL_RPC.AUDIENCE, { p_shop: ctx.shopId }),
@@ -155,6 +160,7 @@ async function readOrganic(ctx: InsightsContext, kinds: OrganicKind[], selected:
     selected.includes("instagram") ? liveReach(ctx) : Promise.resolve<LiveReach>({ reach: null, accountsEngaged: null, blockedReason: "insights.social.reach.pageNotUnique" }),
     readSocialTags(ctx.shopId),
     readEngagementBases(ctx.shopId),
+    readBandRows(ctx.shopId),
   ]);
 
   const totalsFor = (only: OrganicKind[]): Compared<OrganicTotals> => ({
@@ -167,9 +173,19 @@ async function readOrganic(ctx: InsightsContext, kinds: OrganicKind[], selected:
   const followersByAccount = new Map(
     (current.followers as { account_id: string; followers_end: number | null }[]).map((f) => [f.account_id, f.followers_end === null ? null : Number(f.followers_end)])
   );
-  const posts = postRows
+  const listed = postRows
     .filter((p) => (selected as string[]).includes(p.kind as string))
     .map((row) => toPost(row, bases, followersByAccount));
+  const bandRules = Object.fromEntries(
+    kinds.map((kind) => [kind, effectiveRules(bandRows.filter((r) => r.kind === kind))])
+  ) as Record<OrganicKind, Record<BandMetric, BandRule>>;
+  // Medians are of each platform's own posts, so bands are decided per platform.
+  const bandOfPost = new Map<SocialPost, Partial<Record<BandMetric, Band>>>();
+  for (const kind of selected) {
+    const ofKind = listed.filter((p) => p.kind === kind);
+    bandPosts(ofKind, bandRules[kind], followersByAccount).forEach((bands: Partial<Record<BandMetric, Band>>, i: number) => bandOfPost.set(ofKind[i], bands));
+  }
+  const posts = listed.map((p) => ({ ...p, bands: bandOfPost.get(p) ?? {} }));
   const publishedCount = sumKnown(current.postTotals.filter((p) => (selected as string[]).includes(p.kind as string)).map((p) => p.posts as number)) ?? 0;
 
   return {
@@ -184,6 +200,8 @@ async function readOrganic(ctx: InsightsContext, kinds: OrganicKind[], selected:
     posts,
     postsCapped: publishedCount > posts.length,
     engagementBases: Object.fromEntries(kinds.map((kind) => [kind, bases[kind] ?? DEFAULT_ENGAGEMENT_BASIS])) as OrganicPanel["engagementBases"],
+    bandRules,
+    bandsCustom: Object.fromEntries(kinds.map((kind) => [kind, bandRows.some((r) => r.kind === kind)])),
     postTags: tags.tags,
     postTagLinks: tags.links,
     activity: selected.length === 1 ? postActivity(posts, tags.tags, tags.links, ctx.tz) : null,
@@ -236,6 +254,7 @@ function toPost(row: Record<string, unknown>, bases: Record<string, EngagementBa
     engagement,
     engagementRate: rate,
     engagementBasis: basis,
+    bands: {},
     likes: n(row.likes),
     comments: n(row.comments),
     shares: n(row.shares),

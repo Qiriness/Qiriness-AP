@@ -210,6 +210,11 @@ export const CAMPAIGN_RPC = {
   CAMPAIGNS: 'insights_paid_campaigns'
 };
 
+/** Low / medium / high limits per platform and metric. Created by the INCREMENTAL migration `83_social_metric_bands.sql`. */
+export const SOCIAL_BAND_T = {
+  BANDS: 'social_metric_bands'
+};
+
 /** The team's own post tags. Created by the INCREMENTAL migration `81_social_post_tags.sql`. */
 export const SOCIAL_TAG_T = {
   TAGS: 'social_post_tags',

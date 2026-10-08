@@ -793,3 +793,130 @@
   gap: var(--space-2);
   margin: 0;
 }
+
+/* --- colour bands (83) --------------------------------------------------- */
+
+.bandLow {
+  color: var(--error);
+  font-weight: var(--weight-semibold);
+}
+
+.bandMedium {
+  color: var(--warning-ink);
+  font-weight: var(--weight-semibold);
+}
+
+.bandHigh {
+  color: var(--priority-low-ink);
+  font-weight: var(--weight-semibold);
+}
+
+.bands {
+  margin-bottom: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+}
+
+.bands summary {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--text-default);
+  cursor: pointer;
+}
+
+.bandLegend {
+  display: inline-flex;
+  gap: var(--space-2);
+  font-size: var(--text-caption);
+}
+
+.bandLegend i {
+  font-style: normal;
+}
+
+.bandRows {
+  display: grid;
+  gap: var(--space-2);
+  margin: var(--space-3) 0;
+}
+
+.bandRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+}
+
+.bandMetric {
+  width: 7rem;
+  font-size: var(--text-sm);
+  color: var(--text-default);
+}
+
+.bandLimits {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+  font-size: var(--text-sm);
+  color: var(--text-default);
+}
+
+.bandLimits label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.bandInput {
+  width: 5.5rem;
+  height: 2.25rem;
+  padding: 0 var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  font: inherit;
+  font-size: var(--text-sm);
+  color: var(--text-default);
+}
+
+.bandActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.bandButton,
+.bandButtonQuiet {
+  height: 2.25rem;
+  padding: 0 var(--space-4);
+  border-radius: var(--radius-md);
+  font: inherit;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  cursor: pointer;
+}
+
+.bandButton {
+  border: 1px solid var(--teal);
+  background: var(--teal);
+  color: var(--white);
+}
+
+.bandButtonQuiet {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-default);
+}
+
+.bandButton:disabled,
+.bandButtonQuiet:disabled {
+  opacity: 0.5;
+  cursor: default;
+}

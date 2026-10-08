@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { foldForSearch } from "@/lib/insights-format";
 import { useFormat, useLocale, useT } from "@/lib/i18n/client";
 import { formatDayL } from "@/lib/insights-labels";
-import type { SocialPost, SocialTag, SocialTagLink } from "@/lib/social-types";
+import type { Band, BandMetric, SocialPost, SocialTag, SocialTagLink } from "@/lib/social-types";
 import t from "./tables.module.css";
 import styles from "./SocialView.module.css";
 
@@ -135,6 +135,17 @@ export function SocialPostsTable({
 
   const typeLabel = (value: string) => (TYPE_LABELS[value] ? tr(TYPE_LABELS[value]) : value);
   const n = (value: number | null) => (value === null ? "—" : integer(value));
+  const BAND_CLASS: Record<Band, string> = { low: styles.bandLow, medium: styles.bandMedium, high: styles.bandHigh };
+  /** A metric cell, coloured by the platform's bands; the band is also said in words, for a reader who cannot see the colour. */
+  const cell = (post: SocialPost, metric: BandMetric, shown: string) => {
+    const band = post.bands[metric];
+    return (
+      <td className={`${t.n} ${band ? BAND_CLASS[band] : ""}`} title={band ? tr(`insights.social.band.${band}`) : undefined}>
+        {shown}
+        {band ? <span className={t.srOnly}> ({tr(`insights.social.band.${band}`)})</span> : null}
+      </td>
+    );
+  };
   const sortHeader = (key: SortKey, label: string, className?: string) => (
     <th key={key} className={className} aria-sort={sort === key ? (desc ? "descending" : "ascending") : "none"}>
       <button
@@ -257,14 +268,14 @@ export function SocialPostsTable({
                       />
                     </span>
                   </td>
-                  <td className={t.n}>{n(post.views)}</td>
-                  <td className={t.n}>{n(post.reach)}</td>
-                  <td className={t.n}>{n(post.engagement)}</td>
-                  <td className={t.n}>{post.engagementRate === null ? "—" : percentOf(post.engagementRate, 1)}</td>
-                  <td className={t.n}>{n(post.likes)}</td>
-                  <td className={t.n}>{n(post.comments)}</td>
-                  <td className={t.n}>{n(post.shares)}</td>
-                  <td className={t.n}>{n(post.follows)}</td>
+                  {cell(post, "views", n(post.views))}
+                  {cell(post, "reach", n(post.reach))}
+                  {cell(post, "engagement", n(post.engagement))}
+                  {cell(post, "engagementRate", post.engagementRate === null ? "—" : percentOf(post.engagementRate, 1))}
+                  {cell(post, "likes", n(post.likes))}
+                  {cell(post, "comments", n(post.comments))}
+                  {cell(post, "shares", n(post.shares))}
+                  {cell(post, "follows", n(post.follows))}
                 </tr>
               );
             })}

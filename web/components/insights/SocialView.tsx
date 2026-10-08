@@ -16,6 +16,7 @@ import type {
 } from "@/lib/social-types";
 import { BarList, BlockedCard, Caption, Card, DeltaChip, Grid, KpiCard, type Polarity } from "./InsightsKit";
 import { ConnectPrompt, PlatformCardLink, SocialHeader } from "./SocialHeader";
+import { BandsEditor } from "./BandsEditor";
 import { EngagementBasisSelect } from "./EngagementBasisSelect";
 import { PaidCampaignsTable } from "./PaidCampaignsTable";
 import { PaidTrend } from "./PaidTrend";
@@ -96,6 +97,7 @@ function Organic({
     return (
       <>
         <EngagementBasisSelect kind={network} basis={panel.engagementBases[network] ?? "reach"} />
+        {panel.bandRules[network] ? <BandsEditor kind={network} rules={panel.bandRules[network]!} custom={Boolean(panel.bandsCustom[network])} /> : null}
         <Card title={tr("insights.social.posts.title")} aside={<span>{tr("insights.social.posts.aside")}</span>}>
           <SocialPostsTable posts={panel.posts} capped={panel.postsCapped} tags={panel.postTags} links={panel.postTagLinks} />
         </Card>

@@ -92,6 +92,18 @@ export interface SocialAudience {
   city: AudienceBucket[];
 }
 
+/** The post metrics that can be colour-banded (83), and a post's band in each. */
+export type BandMetric = "views" | "reach" | "engagement" | "engagementRate" | "likes" | "comments" | "shares" | "follows";
+export type Band = "low" | "medium" | "high";
+export type BandMode = "off" | "absolute" | "followers" | "median";
+
+/** Below `low` is low, `high` and above is high; what they are relative to is `mode`. */
+export interface BandRule {
+  mode: BandMode;
+  low: number | null;
+  high: number | null;
+}
+
 /** What interactions are divided by for a platform's engagement rate (82). */
 export type EngagementBasis = "followers" | "reach" | "views";
 
@@ -111,6 +123,8 @@ export interface SocialPost {
   /** Percent, under `engagementBasis`: this post's platform's choice. */
   engagementRate: number | null;
   engagementBasis: EngagementBasis;
+  /** Low / medium / high per metric under the platform's bands; a metric with no colour is absent. */
+  bands: Partial<Record<BandMetric, Band>>;
   likes: number | null;
   comments: number | null;
   shares: number | null;
@@ -134,6 +148,10 @@ export interface OrganicPanel {
   postsCapped: boolean;
   /** Each tracked platform's engagement-rate basis (82), read live, never cached. */
   engagementBases: Partial<Record<OrganicKind, EngagementBasis>>;
+  /** Each tracked platform's effective band rules (83): stored ones over the suggestions. Read live. */
+  bandRules: Partial<Record<OrganicKind, Record<BandMetric, BandRule>>>;
+  /** True for a platform whose rules the team has saved (so « reset to suggested » means something). */
+  bandsCustom: Partial<Record<OrganicKind, boolean>>;
   /** The team's own tags (81), read live, never cached. */
   postTags: SocialTag[];
   postTagLinks: SocialTagLink[];
