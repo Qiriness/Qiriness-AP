@@ -5,6 +5,7 @@ import { useFormat, useT } from "@/lib/i18n/client";
 import type { OrganicView, SocialConnectionsStatus, SocialKind, SocialMode } from "@/lib/social-types";
 import { Button } from "../ui/Button";
 import { useInsightsFrame } from "./InsightsFrame";
+import { PlatformIcon } from "./PlatformIcon";
 import { Segmented } from "./Segmented";
 import { SocialConnectionsDialog } from "./SocialConnectionsDialog";
 import styles from "./SocialView.module.css";
@@ -148,12 +149,10 @@ export function PlatformCardLink({ kind, label, children }: { kind: string; labe
   const t = useT();
   const { navigate } = useInsightsFrame();
   return (
-    <button type="button" className={styles.platformCard} onClick={() => navigate({ network: kind, view: null })} aria-label={t("insights.social.platforms.open", { name: label })}>
+    <button type="button" className={styles.platformCard} data-kind={kind} onClick={() => navigate({ network: kind, view: null })} aria-label={t("insights.social.platforms.open", { name: label })}>
       <span className={styles.platformTop}>
         <span className={styles.platformId}>
-          <span className={styles.platformIcon} aria-hidden="true">
-            {label.slice(0, 2).toUpperCase()}
-          </span>
+          <PlatformIcon kind={kind} size={22} />
           {label}
         </span>
         <span aria-hidden="true">↗</span>

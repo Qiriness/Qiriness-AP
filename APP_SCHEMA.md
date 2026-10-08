@@ -215,6 +215,7 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |   |   |                            # mode, view, status pills) + SocialTrend + PaidTrend +
 |   |   |                            # SocialPostsTable (# = rank in the sort; by # =
 |   |   |                            # newest first · tag column, filter, TagEditor) +
+|   |   |                            # PlatformIcon + MetricIcon (platform glyphs in `--social-*` colours) +
 |   |   |                            # BandsEditor (per-platform colour bands) +
 |   |   |                            # EngagementBasisSelect (per platform) + TopPosts (All platforms:
 |   |   |                            # the 9 best posts as cards, by each platform's own rate) +

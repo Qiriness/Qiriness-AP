@@ -1,6 +1,5 @@
 import type { ReactNode } from "react";
 import { getFormat, getLocale, getT } from "@/lib/i18n/server";
-import { formatDayL } from "@/lib/insights-labels";
 import { formatMoney } from "@/lib/i18n/format";
 import type { Locale } from "@/lib/i18n/locales";
 import type {
@@ -11,12 +10,14 @@ import type {
   PaidPanel,
   PaidTotals,
   PostActivity,
+  SocialPost,
   SocialAudience,
   SocialPanel,
 } from "@/lib/social-types";
 import { BarList, BlockedCard, Caption, Card, DeltaChip, Grid, KpiCard, type Polarity } from "./InsightsKit";
 import { ConnectPrompt, PlatformCardLink, SocialHeader } from "./SocialHeader";
 import { BandsEditor } from "./BandsEditor";
+import { MetricIcon, PlatformIcon } from "./PlatformIcon";
 import { EngagementBasisSelect } from "./EngagementBasisSelect";
 import { PaidCampaignsTable } from "./PaidCampaignsTable";
 import { PaidTrend } from "./PaidTrend";
@@ -106,7 +107,7 @@ function Organic({
   }
 
   return (
-    <>
+    <div className={network === "all" ? undefined : styles.tinted} data-kind={network === "all" ? undefined : network}>
       {network !== "all" ? <EngagementBasisSelect kind={network} basis={panel.engagementBases[network] ?? "reach"} /> : null}
       <OrganicKpis panel={panel} network={network} compareLabel={compareLabel} />
 
@@ -127,7 +128,7 @@ function Organic({
       {network === "all" ? <TopPosts panel={panel} /> : null}
       {view === "profile" && network === "instagram" ? <Audience audience={panel.audience} /> : null}
       {view === "profile" && network !== "all" && panel.activity ? <ContentActivity activity={panel.activity} /> : null}
-    </>
+    </div>
   );
 }
 
@@ -264,19 +265,21 @@ function PlatformCards({ panel }: { panel: OrganicPanel }) {
 }
 
 /**
- * The period's nine best posts across every platform, as cards. Each post's
- * rate is under ITS platform's chosen basis (followers, reach or views), so a
- * card names the basis it was ranked by. A post with no rate (a missing half)
- * cannot be ranked and is left out; the caption says how many.
+ * The period's nine best posts across every platform, as cards: three to a row,
+ * a platform-coloured edge, the platform's icon (not its name), the type, the
+ * rank, the views / likes / comments, the engagement rate and a link to the
+ * post. Each post's rate is under ITS platform's chosen basis (followers, reach
+ * or views), which the card names. A post with no rate (a missing half) cannot
+ * be ranked and is left out; the caption says how many.
  */
 function TopPosts({ panel }: { panel: OrganicPanel }) {
   const tr = getT();
-  const locale = getLocale();
   const { integer, percentOf } = getFormat();
   const rated = panel.posts.filter((p) => p.engagementRate !== null);
   const top = [...rated].sort((a, b) => b.engagementRate! - a.engagementRate! || Date.parse(b.publishedAt) - Date.parse(a.publishedAt)).slice(0, TOP_POSTS);
   const count = (v: number | null) => (v === null ? "—" : integer(v));
   const mixed = new Set(Object.values(panel.engagementBases)).size > 1;
+  const typeName = (post: SocialPost) => (post.mediaType === "image" ? tr("insights.social.posts.mediaType.image") : post.mediaType ?? "");
   return (
     <Card title={tr("insights.social.top.title", { n: TOP_POSTS })} aside={<span>{tr("insights.social.top.aside")}</span>}>
       {top.length === 0 ? (
@@ -284,45 +287,51 @@ function TopPosts({ panel }: { panel: OrganicPanel }) {
       ) : (
         <ol className={styles.topGrid}>
           {top.map((post, i) => (
-            <li key={`${post.accountId}-${post.id}`} className={styles.topCard}>
+            <li key={`${post.accountId}-${post.id}`} className={styles.topCard} data-kind={post.kind}>
               <div className={styles.topHead}>
+                <PlatformIcon kind={post.kind} size={22} label={tr(`insights.social.kind.${post.kind}`)} />
+                {post.mediaType ? <span className={styles.topType}>{typeName(post)}</span> : null}
                 <span className={styles.topRank}>#{i + 1}</span>
-                <span className={styles.badge}>{tr(`insights.social.kind.${post.kind}`)}</span>
-                <span className={styles.topRate}>
-                  <strong>{percentOf(post.engagementRate!, 2)}</strong>
-                  <small>{tr(`insights.social.rateBasis.${post.engagementBasis}.short`)}</small>
-                </span>
               </div>
-              <div className={styles.postCell}>
+              <div className={styles.topBody}>
                 {post.thumbnailUrl ? (
                   // eslint-disable-next-line @next/next/no-img-element -- platform CDN URLs, signed and short-lived; not for next/image's optimiser
                   <img className={styles.topThumb} src={post.thumbnailUrl} alt="" loading="lazy" referrerPolicy="no-referrer" />
                 ) : (
-                  <span className={styles.topThumb}>{(post.mediaType ?? "").slice(0, 4).toUpperCase()}</span>
+                  <span className={styles.topThumb}>{typeName(post).slice(0, 4).toUpperCase()}</span>
                 )}
-                <span className={styles.postCopy}>
-                  {post.permalink ? (
-                    <a href={post.permalink} target="_blank" rel="noreferrer" title={tr(`insights.social.posts.open.${post.kind}`)}>
-                      {post.caption ?? tr("insights.social.posts.noCaption")}
-                      <span className={styles.external} aria-hidden="true">
-                        ↗
-                      </span>
-                      <span className={t.srOnly}> ({tr(`insights.social.posts.open.${post.kind}`)})</span>
-                    </a>
-                  ) : (
-                    <strong>{post.caption ?? tr("insights.social.posts.noCaption")}</strong>
-                  )}
-                  <span className={t.sub}>
-                    {formatDayL(new Date(post.publishedAt), locale)}
-                    {post.mediaType ? ` · ${post.mediaType === "image" ? tr("insights.social.posts.mediaType.image") : post.mediaType}` : ""}
-                  </span>
-                </span>
+                <p className={styles.topCaption}>{post.caption ?? tr("insights.social.posts.noCaption")}</p>
               </div>
-              <dl className={styles.topStats}>
-                <Mini label={tr("insights.social.posts.col.engagement")} value={count(post.engagement)} />
-                <Mini label={tr("insights.social.posts.col.views")} value={count(post.views)} />
-                <Mini label={tr("insights.social.posts.col.reach")} value={count(post.reach)} />
-              </dl>
+              <ul className={styles.topFigures} aria-label={tr("insights.social.top.figures")}>
+                <li title={tr("insights.social.posts.col.views")}>
+                  <MetricIcon name="views" />
+                  {count(post.views)}
+                  <span className={t.srOnly}> {tr("insights.social.posts.col.views")}</span>
+                </li>
+                <li title={tr("insights.social.posts.col.likes")}>
+                  <MetricIcon name="likes" />
+                  {count(post.likes)}
+                  <span className={t.srOnly}> {tr("insights.social.posts.col.likes")}</span>
+                </li>
+                <li title={tr("insights.social.posts.col.comments")}>
+                  <MetricIcon name="comments" />
+                  {count(post.comments)}
+                  <span className={t.srOnly}> {tr("insights.social.posts.col.comments")}</span>
+                </li>
+              </ul>
+              <div className={styles.topFoot}>
+                <span className={styles.topRate}>
+                  <strong>{percentOf(post.engagementRate!, 1)}</strong> {tr("insights.social.top.engagement")}
+                  <small> · {tr(`insights.social.rateBasis.${post.engagementBasis}.short`)}</small>
+                </span>
+                {post.permalink ? (
+                  <a className={styles.topLink} href={post.permalink} target="_blank" rel="noreferrer">
+                    <MetricIcon name="open" />
+                    {tr("insights.social.top.view")}
+                    <span className={t.srOnly}> ({tr(`insights.social.posts.open.${post.kind}`)})</span>
+                  </a>
+                ) : null}
+              </div>
             </li>
           ))}
         </ol>

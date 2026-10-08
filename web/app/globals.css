@@ -112,6 +112,14 @@
      orange and violet, so slot 1 is one step more chromatic. Slot 4 is below 3:1
      and is only used with a visible label beside it. */
   --chart-line: var(--teal);
+  /* Platform colours: a card's edge, a platform's icon and, on a per-platform
+     screen, its charts (they read --chart-line / --chart-area). */
+  --social-instagram: #e1306c;
+  --social-instagram-area: rgba(225, 48, 108, 0.12);
+  --social-facebook: #1877f2;
+  --social-facebook-area: rgba(24, 119, 242, 0.12);
+  --social-tiktok: #f5b800;
+  --social-tiktok-area: rgba(245, 184, 0, 0.16);
   --chart-area: rgba(0, 128, 128, 0.1);
   --chart-grid: #eef1f3;
   --chart-axis: #d5dade;

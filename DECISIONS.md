@@ -5064,6 +5064,8 @@ Built from the owner's mockup (`HTML_DROPFILE/qiriness_social_media_dashboard_mo
 
 **The share of non-followers is entered, not synced (2026-10-08).** Meta refuses the follower breakdown on every post metric (tried: `reach`, `views`, `follow_type`, `follower_type`, `media_views`, `media_viewers`; reels and feed posts; v21 to v25). `social_posts.non_followers_pct` is typed in from the platform's app. The sync's post upserts name their columns, so it never touches it (checked live). It is read beside the cached panel reads, not through them.
 
+**Platform colours are tokens, and a per-platform screen re-points the chart variables (2026-10-08).** Charts already read `--chart-line` / `--chart-area`; the Social screen sets them on a `data-kind` wrapper rather than adding a colour prop to every chart. A platform's colour is for identity (a card's edge, an icon, its own screen), never for meaning: the low / medium / high colours stay separate. The All-platforms trend, which sums platforms, stays teal.
+
 **Post tags are the team's, never the sync's (2026-10-08).** `social_post_tags` and `_links` (81) are written only from the Posts table. They are read live, beside the cached panel reads, so a tag shows on the next render. Names are unique per shop, ignoring case: creating an existing name returns that tag. Deleting a tag removes it from every post, which is why the editor asks twice.
 
 **How far back.**
