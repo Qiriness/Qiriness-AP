@@ -5058,6 +5058,8 @@ Built from the owner's mockup (`HTML_DROPFILE/qiriness_social_media_dashboard_mo
 - **Facebook is the same without `read_insights`, but silently.** Meta answers a valid post metric with an empty list, not code 10. An empty answer is therefore not a read: `insights_at` stays null and the posts are asked again. Seen 2026-10-08: the 31 Page posts had likes, comments and shares from the post list, but no views or reach. `/me/permissions` lacked `read_insights`.
 - **The per-type skip list learns only from a partial refusal.** Some names refused while others answer means those names are retired. All names refused means the post is the problem, so one old post cannot strip `views` from every later post of its type.
 
+**Engagement rate has three denominators, one chosen per platform (2026-10-08).** Interactions ÷ followers, ÷ reach, ÷ views; `social_accounts.engagement_basis`, default `reach` (the pre-existing rate). Pooled ratios (Σ interactions ÷ Σ denominator) over posts carrying both halves; followers uses the count at the end of the range for every post. **Two platforms on different bases are never pooled**: the All-platforms KPI is blocked with the reason, and the top-9 cards each name their basis. The choice is read live, so it applies on the next render despite the 15-minute Insights cache.
+
 **Post tags are the team's, never the sync's (2026-10-08).** `social_post_tags` and `_links` (81) are written only from the Posts table. They are read live, beside the cached panel reads, so a tag shows on the next render. Names are unique per shop, ignoring case: creating an existing name returns that tag. Deleting a tag removes it from every post, which is why the editor asks twice.
 
 **How far back.**

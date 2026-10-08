@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { getFormat, getLocale, getT } from "@/lib/i18n/server";
+import { formatDayL } from "@/lib/insights-labels";
 import { formatMoney } from "@/lib/i18n/format";
 import type { Locale } from "@/lib/i18n/locales";
 import type {
@@ -15,6 +16,7 @@ import type {
 } from "@/lib/social-types";
 import { BarList, BlockedCard, Caption, Card, DeltaChip, Grid, KpiCard, type Polarity } from "./InsightsKit";
 import { ConnectPrompt, PlatformCardLink, SocialHeader } from "./SocialHeader";
+import { EngagementBasisSelect } from "./EngagementBasisSelect";
 import { PaidCampaignsTable } from "./PaidCampaignsTable";
 import { PaidTrend } from "./PaidTrend";
 import { SocialPostsTable } from "./SocialPostsTable";
@@ -76,6 +78,8 @@ export function SocialView({
 
 // --- organic -------------------------------------------------------------------
 
+const TOP_POSTS = 9;
+
 function Organic({
   panel,
   network,
@@ -90,14 +94,18 @@ function Organic({
   const tr = getT();
   if (view === "posts" && network !== "all") {
     return (
-      <Card title={tr("insights.social.posts.title")} aside={<span>{tr("insights.social.posts.aside")}</span>}>
-        <SocialPostsTable posts={panel.posts} capped={panel.postsCapped} tags={panel.postTags} links={panel.postTagLinks} />
-      </Card>
+      <>
+        <EngagementBasisSelect kind={network} basis={panel.engagementBases[network] ?? "reach"} />
+        <Card title={tr("insights.social.posts.title")} aside={<span>{tr("insights.social.posts.aside")}</span>}>
+          <SocialPostsTable posts={panel.posts} capped={panel.postsCapped} tags={panel.postTags} links={panel.postTagLinks} />
+        </Card>
+      </>
     );
   }
 
   return (
     <>
+      {network !== "all" ? <EngagementBasisSelect kind={network} basis={panel.engagementBases[network] ?? "reach"} /> : null}
       <OrganicKpis panel={panel} network={network} compareLabel={compareLabel} />
 
       <Grid min={26} pin="social-trend" label={tr("insights.social.trend.title")}>
@@ -114,11 +122,7 @@ function Organic({
       </Grid>
 
       {network === "all" ? <PlatformCards panel={panel} /> : null}
-      {network === "all" ? (
-        <Card title={tr("insights.social.posts.title")} aside={<span>{tr("insights.social.posts.aside")}</span>}>
-          <SocialPostsTable posts={panel.posts} capped={panel.postsCapped} tags={panel.postTags} links={panel.postTagLinks} />
-        </Card>
-      ) : null}
+      {network === "all" ? <TopPosts panel={panel} /> : null}
       {view === "profile" && network === "instagram" ? <Audience audience={panel.audience} /> : null}
       {view === "profile" && network !== "all" && panel.activity ? <ContentActivity activity={panel.activity} /> : null}
     </>
@@ -171,7 +175,7 @@ function OrganicKpis({ panel, network, compareLabel }: { panel: OrganicPanel; ne
           ]
         : [
             kpi(tr("insights.social.kpi.totalEngagement"), "engagement"),
-            kpi(tr("insights.social.kpi.engagementRate"), "engagementRate", "up", "insights.social.rateNeedsReach"),
+            kpi(tr("insights.social.kpi.engagementRate"), "engagementRate", "up", new Set(Object.values(panel.engagementBases)).size > 1 ? "insights.social.rateMixedBasis" : "insights.social.rateNeedsData"),
             kpi(tr("insights.social.kpi.totalViews"), "views"),
             kpi(tr("insights.social.kpi.totalFollowers"), "followers"),
             kpi(tr("insights.social.kpi.growth"), "growth"),
@@ -242,7 +246,7 @@ function PlatformCards({ panel }: { panel: OrganicPanel }) {
                 <Mini label={tr("insights.social.kpi.views")} value={count(c.views)} />
                 <Mini label={tr("insights.social.kpi.posts")} value={count(c.posts)} />
                 <Mini label={tr("insights.social.kpi.engagement")} value={count(c.engagement)} />
-                <Mini label={tr("insights.social.kpi.rate")} value={c.engagementRate === null ? "—" : percentOf(c.engagementRate, 1)} />
+                <Mini label={`${tr("insights.social.kpi.rate")} · ${tr(`insights.social.rateBasis.${panel.engagementBases[kind] ?? "reach"}.short`)}`} value={c.engagementRate === null ? "—" : percentOf(c.engagementRate, 1)} />
                 <Mini label={tr("insights.social.kpi.reach")} value={count(reach)} />
               </dl>
               <div className={styles.growth}>
@@ -254,6 +258,80 @@ function PlatformCards({ panel }: { panel: OrganicPanel }) {
         })}
       </Grid>
     </>
+  );
+}
+
+/**
+ * The period's nine best posts across every platform, as cards. Each post's
+ * rate is under ITS platform's chosen basis (followers, reach or views), so a
+ * card names the basis it was ranked by. A post with no rate (a missing half)
+ * cannot be ranked and is left out; the caption says how many.
+ */
+function TopPosts({ panel }: { panel: OrganicPanel }) {
+  const tr = getT();
+  const locale = getLocale();
+  const { integer, percentOf } = getFormat();
+  const rated = panel.posts.filter((p) => p.engagementRate !== null);
+  const top = [...rated].sort((a, b) => b.engagementRate! - a.engagementRate! || Date.parse(b.publishedAt) - Date.parse(a.publishedAt)).slice(0, TOP_POSTS);
+  const count = (v: number | null) => (v === null ? "—" : integer(v));
+  const mixed = new Set(Object.values(panel.engagementBases)).size > 1;
+  return (
+    <Card title={tr("insights.social.top.title", { n: TOP_POSTS })} aside={<span>{tr("insights.social.top.aside")}</span>}>
+      {top.length === 0 ? (
+        <p className={t.muted}>{panel.posts.length === 0 ? tr("insights.social.posts.none") : tr("insights.social.top.noRate")}</p>
+      ) : (
+        <ol className={styles.topGrid}>
+          {top.map((post, i) => (
+            <li key={`${post.accountId}-${post.id}`} className={styles.topCard}>
+              <div className={styles.topHead}>
+                <span className={styles.topRank}>#{i + 1}</span>
+                <span className={styles.badge}>{tr(`insights.social.kind.${post.kind}`)}</span>
+                <span className={styles.topRate}>
+                  <strong>{percentOf(post.engagementRate!, 2)}</strong>
+                  <small>{tr(`insights.social.rateBasis.${post.engagementBasis}.short`)}</small>
+                </span>
+              </div>
+              <div className={styles.postCell}>
+                {post.thumbnailUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element -- platform CDN URLs, signed and short-lived; not for next/image's optimiser
+                  <img className={styles.topThumb} src={post.thumbnailUrl} alt="" loading="lazy" referrerPolicy="no-referrer" />
+                ) : (
+                  <span className={styles.topThumb}>{(post.mediaType ?? "").slice(0, 4).toUpperCase()}</span>
+                )}
+                <span className={styles.postCopy}>
+                  {post.permalink ? (
+                    <a href={post.permalink} target="_blank" rel="noreferrer" title={tr(`insights.social.posts.open.${post.kind}`)}>
+                      {post.caption ?? tr("insights.social.posts.noCaption")}
+                      <span className={styles.external} aria-hidden="true">
+                        ↗
+                      </span>
+                      <span className={t.srOnly}> ({tr(`insights.social.posts.open.${post.kind}`)})</span>
+                    </a>
+                  ) : (
+                    <strong>{post.caption ?? tr("insights.social.posts.noCaption")}</strong>
+                  )}
+                  <span className={t.sub}>
+                    {formatDayL(new Date(post.publishedAt), locale)}
+                    {post.mediaType ? ` · ${post.mediaType === "image" ? tr("insights.social.posts.mediaType.image") : post.mediaType}` : ""}
+                  </span>
+                </span>
+              </div>
+              <dl className={styles.topStats}>
+                <Mini label={tr("insights.social.posts.col.engagement")} value={count(post.engagement)} />
+                <Mini label={tr("insights.social.posts.col.views")} value={count(post.views)} />
+                <Mini label={tr("insights.social.posts.col.reach")} value={count(post.reach)} />
+              </dl>
+            </li>
+          ))}
+        </ol>
+      )}
+      {top.length > 0 ? (
+        <Caption>
+          {tr(mixed ? "insights.social.top.captionMixed" : "insights.social.top.caption", { rated: rated.length, total: panel.posts.length })}
+          {panel.postsCapped ? ` ${tr("insights.social.top.capped", { n: panel.posts.length })}` : ""}
+        </Caption>
+      ) : null}
+    </Card>
   );
 }
 

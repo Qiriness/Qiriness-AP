@@ -92,6 +92,9 @@ export interface SocialAudience {
   city: AudienceBucket[];
 }
 
+/** What interactions are divided by for a platform's engagement rate (82). */
+export type EngagementBasis = "followers" | "reach" | "views";
+
 export interface SocialPost {
   id: string;
   /** The `social_accounts` row; with `id`, what a tag is put on. */
@@ -105,8 +108,9 @@ export interface SocialPost {
   views: number | null;
   reach: number | null;
   engagement: number | null;
-  /** Percent. */
+  /** Percent, under `engagementBasis`: this post's platform's choice. */
   engagementRate: number | null;
+  engagementBasis: EngagementBasis;
   likes: number | null;
   comments: number | null;
   shares: number | null;
@@ -128,6 +132,8 @@ export interface OrganicPanel {
   posts: SocialPost[];
   /** True when more posts were published than the table lists. */
   postsCapped: boolean;
+  /** Each tracked platform's engagement-rate basis (82), read live, never cached. */
+  engagementBases: Partial<Record<OrganicKind, EngagementBasis>>;
   /** The team's own tags (81), read live, never cached. */
   postTags: SocialTag[];
   postTagLinks: SocialTagLink[];

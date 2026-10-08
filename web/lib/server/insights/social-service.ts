@@ -23,17 +23,19 @@ import {
   organicTotals,
   postActivity,
   paidTotals,
+  postEngagementRate,
   ratio,
   withRates,
   sumKnown,
 } from "../../../../scripts/lib/social-figures.mjs";
-import { ORGANIC_KINDS, PAID_KINDS, campaignUrl } from "../../../../scripts/lib/social-model.mjs";
+import { DEFAULT_ENGAGEMENT_BASIS, ENGAGEMENT_BASES, ORGANIC_KINDS, PAID_KINDS, campaignUrl } from "../../../../scripts/lib/social-model.mjs";
 import { socialAppConfig } from "../../../../scripts/lib/social-oauth.mjs";
 import { supabaseRpc, supabaseSelect } from "../../../../scripts/lib/supabase-rest-client.mjs";
 import { CAMPAIGN_RPC, SOCIAL_RPC, SOCIAL_T } from "../../../../scripts/lib/tables.mjs";
 import { readSocialStatus } from "../../../../scripts/lib/social-sync.mjs";
 import type {
   AudienceBucket,
+  EngagementBasis,
   MarketingSocial,
   Compared,
   LiveReach,
@@ -145,25 +147,29 @@ async function readOrganic(ctx: InsightsContext, kinds: OrganicKind[], selected:
   const coverage = await coverageOf(SOCIAL_T.ACCOUNT_DAYS, ctx.shopId);
   const compare = previousCovered(ctx.range, coverage);
 
-  const [current, previous, audienceRows, postRows, reach, tags] = await Promise.all([
+  const [current, previous, audienceRows, postRows, reach, tags, bases] = await Promise.all([
     readOrganicRows(ctx, ctx.range),
     compare ? readOrganicRows(ctx, ctx.range.previous) : Promise.resolve(null),
     callRpc<{ kind: string; captured_on: string; dimension: string; key: string; value: number }>(SOCIAL_RPC.AUDIENCE, { p_shop: ctx.shopId }),
     callRpc<Record<string, unknown>>(SOCIAL_RPC.POSTS, { p_shop: ctx.shopId, p_from: ctx.range.from, p_to: ctx.range.to, p_tz: ctx.tz, p_limit: POST_LIMIT }),
     selected.includes("instagram") ? liveReach(ctx) : Promise.resolve<LiveReach>({ reach: null, accountsEngaged: null, blockedReason: "insights.social.reach.pageNotUnique" }),
     readSocialTags(ctx.shopId),
+    readEngagementBases(ctx.shopId),
   ]);
 
   const totalsFor = (only: OrganicKind[]): Compared<OrganicTotals> => ({
-    current: organicTotals(current, only),
-    previous: previous ? organicTotals(previous, only) : null,
+    current: organicTotals(current, only, bases),
+    previous: previous ? organicTotals(previous, only, bases) : null,
   });
   const totals = totalsFor(selected);
   const drivers = organicDrivers(totals.current, totals.previous);
 
+  const followersByAccount = new Map(
+    (current.followers as { account_id: string; followers_end: number | null }[]).map((f) => [f.account_id, f.followers_end === null ? null : Number(f.followers_end)])
+  );
   const posts = postRows
     .filter((p) => (selected as string[]).includes(p.kind as string))
-    .map(toPost);
+    .map((row) => toPost(row, bases, followersByAccount));
   const publishedCount = sumKnown(current.postTotals.filter((p) => (selected as string[]).includes(p.kind as string)).map((p) => p.posts as number)) ?? 0;
 
   return {
@@ -177,6 +183,7 @@ async function readOrganic(ctx: InsightsContext, kinds: OrganicKind[], selected:
     audience: selected.includes("instagram") ? toAudience(audienceRows.filter((r) => r.kind === "instagram")) : null,
     posts,
     postsCapped: publishedCount > posts.length,
+    engagementBases: Object.fromEntries(kinds.map((kind) => [kind, bases[kind] ?? DEFAULT_ENGAGEMENT_BASIS])) as OrganicPanel["engagementBases"],
     postTags: tags.tags,
     postTagLinks: tags.links,
     activity: selected.length === 1 ? postActivity(posts, tags.tags, tags.links, ctx.tz) : null,
@@ -189,11 +196,32 @@ function organicSeries(range: InsightsRange, rows: DayRow[], kinds: OrganicKind[
   return { views: line("views"), engagement: line("engagement"), growth: line(netFollows), posts: line("posts") };
 }
 
-function toPost(row: Record<string, unknown>): SocialPost {
+/**
+ * Each platform's chosen basis, read live (not through the Insights cache) so a
+ * change shows on the next render. A missing column or a failed read is the
+ * default basis, never an error: the panel works without the choice.
+ */
+async function readEngagementBases(shopId: string): Promise<Record<string, EngagementBasis>> {
+  try {
+    const rows = (await supabaseSelect(getSupabaseClient(), SOCIAL_T.ACCOUNTS, { shop_id: shopId, enabled: true }, "kind,engagement_basis", { limit: 50 })) as {
+      kind: string;
+      engagement_basis: string;
+    }[];
+    return Object.fromEntries(
+      rows.filter((r) => (ENGAGEMENT_BASES as string[]).includes(r.engagement_basis)).map((r) => [r.kind, r.engagement_basis as EngagementBasis])
+    );
+  } catch {
+    return {};
+  }
+}
+
+function toPost(row: Record<string, unknown>, bases: Record<string, EngagementBasis>, followersByAccount: Map<string, number | null>): SocialPost {
   const n = (v: unknown) => (v === null || v === undefined ? null : Number(v));
   const engagement = n(row.engagement);
   const reach = n(row.reach);
-  const rate = ratio(engagement, reach);
+  const views = n(row.views);
+  const basis = bases[row.kind as string] ?? (DEFAULT_ENGAGEMENT_BASIS as EngagementBasis);
+  const rate = postEngagementRate({ engagement, reach, views }, basis, followersByAccount.get(String(row.account_id)) ?? null);
   return {
     id: String(row.external_id),
     accountId: String(row.account_id),
@@ -203,10 +231,11 @@ function toPost(row: Record<string, unknown>): SocialPost {
     caption: (row.caption_excerpt as string) ?? null,
     permalink: (row.permalink as string) ?? null,
     thumbnailUrl: (row.thumbnail_url as string) ?? null,
-    views: n(row.views),
+    views,
     reach,
     engagement,
-    engagementRate: rate === null ? null : rate * 100,
+    engagementRate: rate,
+    engagementBasis: basis,
     likes: n(row.likes),
     comments: n(row.comments),
     shares: n(row.shares),

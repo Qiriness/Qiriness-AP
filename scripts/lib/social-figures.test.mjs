@@ -101,3 +101,25 @@ test('post activity: counts by type and tag, and the best hours and weekdays by 
   assert.deepEqual(out.peakDays[0], { slot: 0, average: 200, posts: 2 });
   assert.ok(out.peakHours.every((h) => h.slot !== 12), 'a post with no engagement does not make a slot');
 });
+
+test('engagement rate by basis: per post, and pooled per platform', async () => {
+  const { postEngagementRate, organicTotals } = await import('./social-figures.mjs');
+  const post = { engagement: 50, reach: 400, views: 1000 };
+  assert.equal(postEngagementRate(post, 'reach', 5000), 12.5);
+  assert.equal(postEngagementRate(post, 'views', 5000), 5);
+  assert.equal(postEngagementRate(post, 'followers', 5000), 1);
+  assert.equal(postEngagementRate(post, 'followers', null), null, 'no follower count, no rate');
+  assert.equal(postEngagementRate({ ...post, views: 0 }, 'views', 5000), null, 'a zero denominator is not a rate');
+
+  const totals = [
+    { kind: 'instagram', account_id: 'a', posts: 3, engagement: 150, engaged_posts: 3, rated_engagement: 100, rated_reach: 800, rated_views_engagement: 150, rated_views: 3000 },
+    { kind: 'facebook', account_id: 'b', posts: 2, engagement: 20, engaged_posts: 2, rated_engagement: 20, rated_reach: 200, rated_views_engagement: null, rated_views: null }
+  ];
+  const followers = [{ kind: 'instagram', account_id: 'a', followers_end: 1000 }, { kind: 'facebook', account_id: 'b', followers_end: 500 }];
+  const rate = (kinds, bases) => organicTotals({ postTotals: totals, followers }, kinds, bases).engagementRate;
+  assert.equal(rate(['instagram'], {}), 12.5, 'reach is the default');
+  assert.equal(rate(['instagram'], { instagram: 'views' }), 5);
+  assert.equal(rate(['instagram'], { instagram: 'followers' }), 5, '150 interactions over 3 posts × 1000 followers');
+  assert.equal(rate(['instagram', 'facebook'], {}), 12, 'two platforms on the same basis pool: 120 / 1000');
+  assert.equal(rate(['instagram', 'facebook'], { instagram: 'views' }), null, 'two definitions are not pooled');
+});

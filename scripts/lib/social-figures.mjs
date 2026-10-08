@@ -40,15 +40,23 @@ const pick = (rows, kinds) => (kinds ? rows.filter((r) => kinds.includes(/** @ty
  *
  * - views, engagement, profile visits, link taps: summed days.
  * - posts: from the post totals (every post published in the range).
- * - engagement rate: Σ engagement / Σ reach over posts carrying both, in %.
+ * - engagement rate, in %, by the platform's chosen basis (`bases[kind]`, default
+ *   reach), always over the posts that carry both halves:
+ *     reach     Σ engagement / Σ reach
+ *     views     Σ engagement / Σ views
+ *     followers Σ engagement / (followers × posts), i.e. the average post's
+ *               interactions over the followers at the end of the range.
+ *   Platforms on different bases are NOT pooled: the rate is null, because one
+ *   number from two definitions would be read as if it were one.
  * - followers: the last measured count inside the range, per account, summed.
  * - growth: per account, net follows when the platform reported them, else the
  *   difference between the follower counts at the two ends; null when neither.
  *
  * @param {{ series?: any[], followers?: any[], postTotals?: any[] }} rows
  * @param {string[] | null} [kinds]
+ * @param {Record<string, string>} [bases] engagement-rate basis per platform kind
  */
-export function organicTotals({ series = [], followers = [], postTotals = [] }, kinds = null) {
+export function organicTotals({ series = [], followers = [], postTotals = [] }, kinds = null, bases = {}) {
   const days = pick(series, kinds);
   const posts = pick(postTotals, kinds);
   const ends = pick(followers, kinds);
@@ -74,7 +82,7 @@ export function organicTotals({ series = [], followers = [], postTotals = [] }, 
     })
   );
 
-  const rated = ratio(sumKnown(posts.map((p) => p.rated_engagement)), sumKnown(posts.map((p) => p.rated_reach)));
+  const rated = pooledRate(posts, ends, bases);
   const postCount = posts.length ? sumKnown(posts.map((p) => p.posts)) : days.length ? 0 : null;
 
   return {
@@ -87,6 +95,47 @@ export function organicTotals({ series = [], followers = [], postTotals = [] }, 
     followers: sumKnown(ends.map((e) => e.followers_end)),
     growth
   };
+}
+
+const basisOf = (bases, kind) => bases?.[kind] ?? 'reach';
+
+/** Σ numerator / Σ denominator for the accounts' common basis, or null (see organicTotals). */
+function pooledRate(posts, ends, bases) {
+  const used = new Set(posts.map((p) => basisOf(bases, p.kind)));
+  if (used.size !== 1) return null;
+  const [basis] = used;
+  const followersOf = new Map(ends.map((e) => [e.account_id, e.followers_end]));
+  let numerator = null;
+  let denominator = null;
+  const add = (n, d) => {
+    if (n === null || n === undefined || d === null || d === undefined) return;
+    numerator = (numerator ?? 0) + Number(n);
+    denominator = (denominator ?? 0) + Number(d);
+  };
+  for (const p of posts) {
+    if (basis === 'reach') add(p.rated_engagement, p.rated_reach);
+    else if (basis === 'views') add(p.rated_views_engagement, p.rated_views);
+    else {
+      const followers = followersOf.get(p.account_id);
+      if (followers !== null && followers !== undefined && Number(p.engaged_posts) > 0) add(p.engagement, Number(followers) * Number(p.engaged_posts));
+    }
+  }
+  return ratio(numerator, denominator);
+}
+
+/**
+ * One post's engagement rate, in %, under a basis: its interactions divided by
+ * the account's followers, the post's reach or the post's views. Null when
+ * either half is unknown or the denominator is zero.
+ *
+ * @param {{ engagement: number | null, reach: number | null, views: number | null }} post
+ * @param {'followers' | 'reach' | 'views'} basis
+ * @param {number | null} followers the account's follower count
+ */
+export function postEngagementRate(post, basis, followers) {
+  const whole = basis === 'followers' ? followers : basis === 'views' ? post.views : post.reach;
+  const rate = ratio(post.engagement, whole);
+  return rate === null ? null : rate * 100;
 }
 
 /**

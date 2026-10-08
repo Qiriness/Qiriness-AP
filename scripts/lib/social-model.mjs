@@ -91,3 +91,14 @@ export function campaignUrl({ kind, accountExternalId, campaignId }) {
   if (kind === 'google_ads') return `https://ads.google.com/aw/overview?__e=${account.replace(/-/g, '')}&campaignId=${campaign}`;
   return null;
 }
+
+/**
+ * How a platform's engagement rate is divided. Interactions are always the
+ * numerator; the team picks the denominator per platform, one at a time:
+ *   followers — interactions / followers (the account's size)
+ *   reach     — interactions / reach (unique accounts that saw the post)
+ *   views     — interactions / views (plays and impressions; TikTok's habit)
+ * `reach` is the default: it is what the panel computed before the choice existed.
+ */
+export const ENGAGEMENT_BASES = ['followers', 'reach', 'views'];
+export const DEFAULT_ENGAGEMENT_BASIS = 'reach';

@@ -15,9 +15,9 @@
  */
 
 import { createMailJobRecord } from "../../../scripts/lib/mail-job-record.mjs";
-import { supabaseSelect } from "../../../scripts/lib/supabase-rest-client.mjs";
-import { T } from "../../../scripts/lib/tables.mjs";
-import { UPCOMING_NETWORKS } from "../../../scripts/lib/social-model.mjs";
+import { supabaseSelect, supabaseUpdate } from "../../../scripts/lib/supabase-rest-client.mjs";
+import { SOCIAL_T, T } from "../../../scripts/lib/tables.mjs";
+import { ENGAGEMENT_BASES, ORGANIC_KINDS, UPCOMING_NETWORKS } from "../../../scripts/lib/social-model.mjs";
 import {
   STATE_COOKIE,
   createState,
@@ -163,6 +163,17 @@ export async function disconnect(provider: SocialProvider): Promise<void> {
 export async function setTracked(accountId: string, enabled: boolean): Promise<boolean> {
   const row = await setAccountEnabled({ supabase: getSupabaseClient(), shopId: await getShopId(), accountId, enabled });
   return Boolean(row);
+}
+
+/**
+ * Sets which denominator a platform's engagement rate uses (82). One choice per
+ * platform, so it is written on every account of that kind. False for a kind or
+ * a basis the app does not offer.
+ */
+export async function setEngagementBasis(kind: unknown, basis: unknown): Promise<boolean> {
+  if (!(ORGANIC_KINDS as string[]).includes(kind as string) || !(ENGAGEMENT_BASES as string[]).includes(basis as string)) return false;
+  const rows = await supabaseUpdate(getSupabaseClient(), SOCIAL_T.ACCOUNTS, { shop_id: await getShopId(), kind: kind as string }, { engagement_basis: basis }, { select: "id" });
+  return rows.length > 0;
 }
 
 async function queuedProviders(shopId: string): Promise<Set<string>> {

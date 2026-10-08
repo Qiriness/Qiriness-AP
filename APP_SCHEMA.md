@@ -117,6 +117,7 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |   |       |                                  # DELETE disconnect. social-connections-service
 |   |       |-- insights/vip-rule/route.ts   # GET the rule / preview a draft count ·
 |   |       |                                  # PUT save or clear it (vip-rule.mjs)
+|   |       |-- insights/social/engagement-basis  # PUT {kind, basis}: followers · reach · views
 |   |       |-- insights/social/tags/        # post tags (81): GET all + links · POST
 |   |       |                                  # {name} · [id] DELETE · [id]/posts PUT
 |   |       |                                  # {accountId, postId, tagged}.
@@ -210,6 +211,8 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |   |   |                            # mode, view, status pills) + SocialTrend + PaidTrend +
 |   |   |                            # SocialPostsTable (# = rank in the sort; by # =
 |   |   |                            # newest first · tag column, filter, TagEditor) +
+|   |   |                            # EngagementBasisSelect (per platform) + TopPosts (All platforms:
+|   |   |                            # the 9 best posts as cards, by each platform's own rate) +
 |   |   |                            # ContentActivity (per-platform Profile: posts by type / tag,
 |   |   |                            # best hours and days, from `postActivity`) +
 |   |   |                            # PaidCampaignsTable (links to Ads
@@ -1003,6 +1006,7 @@ Migration 70. Named in `SOCIAL_T` / `SOCIAL_RPC`. See `DECISIONS.md § Insights 
 | `social_accounts` | what a connection sees: `kind` (`instagram` · `facebook` · `meta_ads` · `google_ads`), `external_id`, name, handle, currency, `login_customer_id` (Google manager), `enabled` (the team's choice; reads skip disabled) |
 | `social_account_days` | per organic account and day: followers (that day's count), follows, unfollows, views, engagement, profile visits, link taps, posts — additive counts only, null = not measured |
 | `social_posts` | per post: published_at, type, 140-char caption, permalink, thumbnail, lifetime views / reach / likes / comments / shares / saves / follows / engagement, `insights_at` (81: when Meta last answered; null = never read, so the sync reads it once whatever its age) |
+| `social_accounts.engagement_basis` | migration 82: `followers` · `reach` (default) · `views`, the denominator of that platform's engagement rate; `insights_social_post_totals` gained `engaged_posts`, `rated_views_engagement`, `rated_views` |
 | `social_post_tags` · `social_post_tag_links` | migration 81 (`SOCIAL_TAG_T`): the team's own post labels (unique per shop, case ignored) and which post carries which; written only from the Posts table, through `social-tags-service.ts` |
 | `social_audience` | per Instagram account and capture day: follower counts by gender / age / country / city |
 | `ad_days` | per ad account, day and publisher: spend, impressions, clicks, conversions, conversion value, currency |
@@ -1079,6 +1083,7 @@ Written by the worker and the CLIs, read only by the Insights panels.
 | `77_collection_range_axis.sql` | `advice_collections_axis_check` accepts `range` (a product line, « gamme »). Read by the storefront advisor only; `supportCollections` filters it out of the support intersection. No data. **Applied 2026-10-06** | 27 |
 | `76_storefront_chat.sql` | `storefront_chat_sessions` + `storefront_chat_messages` and three service-role functions (daily count, turn, purge). New tables only. No data. **Applied 2026-10-05** | 01 |
 | `72_refund_notice.sql` | `support_answers.notify_on` (`refund_recorded`; marks a notice template) + `ticket_drafts.purpose` (`reply` / `refund_notice`). Copied from 05 / 07. No data. **Applied 2026-10-05** | 05, 07 |
+| `82_engagement_basis.sql` | `social_accounts.engagement_basis` + check; `insights_social_post_totals` dropped and recreated with three more columns (same args and grants). No data. **Applied 2026-10-08** | 70, 81 |
 | `81_social_post_tags.sql` | `social_posts.insights_at`; `social_post_tags` + `social_post_tag_links` (`SOCIAL_TAG_T`). New column and tables only. No data. **Applied 2026-10-08** | 70 |
 | `71_ad_campaigns.sql` | `ad_campaigns` + `ad_campaign_days` (`CAMPAIGN_T`) and `insights_paid_campaigns()` (`CAMPAIGN_RPC`). No data. **Applied 2026-10-05** | 70 |
 | `70_social.sql` | the six social tables (`SOCIAL_T`), the Vault token functions and six reads (`SOCIAL_RPC`), and `mail_jobs_kind_check` widened to `sync_social` (copied from 04 / 46). No data. **Applied 2026-10-05** | 01, 46 |

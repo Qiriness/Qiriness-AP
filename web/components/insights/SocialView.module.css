@@ -694,3 +694,102 @@
   font-size: var(--text-sm);
   color: var(--error);
 }
+
+/* --- engagement-rate basis, and the top-posts cards ---------------------- */
+
+.basisBar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+  margin-bottom: var(--space-3);
+}
+
+.basisLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--text-default);
+}
+
+.basisHint {
+  font-size: var(--text-caption);
+  color: var(--text-subtle);
+}
+
+.topGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(17rem, 1fr));
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.topCard {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+}
+
+.topHead {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.topRank {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--text-subtle);
+}
+
+.topRate {
+  display: grid;
+  margin-left: auto;
+  text-align: right;
+}
+
+.topRate strong {
+  font-size: var(--text-lg);
+  color: var(--teal-ink);
+}
+
+.topRate small {
+  font-size: var(--text-caption);
+  color: var(--text-subtle);
+}
+
+.topThumb {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 4.5rem;
+  height: 4.5rem;
+  border-radius: var(--radius-sm);
+  background: var(--mist-050);
+  object-fit: cover;
+  font-size: 0.7rem;
+  color: var(--text-subtle);
+}
+
+.topCard .postCell {
+  min-width: 0;
+  align-items: flex-start;
+}
+
+.topCard .postCopy {
+  max-width: none;
+}
+
+.topStats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-2);
+  margin: 0;
+}
