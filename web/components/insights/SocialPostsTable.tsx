@@ -9,9 +9,10 @@ import type { Band, BandMetric, SocialPost, SocialTag, SocialTagLink } from "@/l
 import t from "./tables.module.css";
 import styles from "./SocialView.module.css";
 
-type MetricKey = "views" | "reach" | "engagement" | "engagementRate" | "likes" | "comments" | "shares" | "follows";
+type MetricKey = "views" | "reach" | "engagementRate" | "likes" | "comments" | "shares" | "follows" | "engagement" | "nonFollowersPct";
 type SortKey = "published" | MetricKey;
-const METRICS: MetricKey[] = ["views", "reach", "engagement", "engagementRate", "likes", "comments", "shares", "follows"];
+/** The metric columns, in the order the team reads them. */
+const METRICS: MetricKey[] = ["views", "reach", "engagementRate", "likes", "comments", "shares", "follows", "engagement", "nonFollowersPct"];
 
 /** What the team calls a stored media type; the stored value (`image`) is unchanged, so filters keep matching. */
 const TYPE_LABELS: Record<string, string> = { image: "insights.social.posts.mediaType.image" };
@@ -30,7 +31,7 @@ const sortValue = (post: SocialPost, key: SortKey) => (key === "published" ? Dat
  * written at once, held in this component so a tag shows without a reload.
  */
 export function SocialPostsTable({
-  posts,
+  posts: listed,
   capped,
   tags: initialTags,
   links: initialLinks,
@@ -53,6 +54,13 @@ export function SocialPostsTable({
   const [links, setLinks] = useState(initialLinks);
   const [editing, setEditing] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [manual, setManual] = useState<Record<string, number | null>>({});
+
+  // A typed-in share of non-followers shows and sorts at once, before the page re-reads it.
+  const posts = useMemo(
+    () => listed.map((p) => (postKey(p.accountId, p.id) in manual ? { ...p, nonFollowersPct: manual[postKey(p.accountId, p.id)] } : p)),
+    [listed, manual]
+  );
 
   useEffect(() => setTags(initialTags), [initialTags]);
   useEffect(() => setLinks(initialLinks), [initialLinks]);
@@ -114,6 +122,13 @@ export function SocialPostsTable({
     const ok = await call(`/api/insights/social/tags/${tag.id}/posts`, { method: "PUT", body: JSON.stringify({ accountId: post.accountId, postId: post.id, tagged }) });
     if (!ok) setLinks(before);
     else router.refresh();
+  }
+
+  async function saveNonFollowers(post: SocialPost, percent: number | null): Promise<boolean> {
+    const body = await call("/api/insights/social/non-followers", { method: "PUT", body: JSON.stringify({ accountId: post.accountId, postId: post.id, percent }) });
+    if (!body) return false;
+    setManual((m) => ({ ...m, [postKey(post.accountId, post.id)]: (body.percent as number | null) ?? null }));
+    return true;
   }
 
   async function create(post: SocialPost, name: string) {
@@ -270,12 +285,13 @@ export function SocialPostsTable({
                   </td>
                   {cell(post, "views", n(post.views))}
                   {cell(post, "reach", n(post.reach))}
-                  {cell(post, "engagement", n(post.engagement))}
                   {cell(post, "engagementRate", post.engagementRate === null ? "—" : percentOf(post.engagementRate, 1))}
                   {cell(post, "likes", n(post.likes))}
                   {cell(post, "comments", n(post.comments))}
                   {cell(post, "shares", n(post.shares))}
                   {cell(post, "follows", n(post.follows))}
+                  {cell(post, "engagement", n(post.engagement))}
+                  <NonFollowersCell value={post.nonFollowersPct} onSave={(percent) => saveNonFollowers(post, percent)} />
                 </tr>
               );
             })}
@@ -284,6 +300,72 @@ export function SocialPostsTable({
       </div>
       {capped ? <p className={t.muted}>{tr("insights.social.posts.capped", { n: posts.length })}</p> : null}
     </>
+  );
+}
+
+/**
+ * The share of non-followers a post reached, typed in by hand: Meta gives no
+ * per-post figure, so a person copies it from the platform's own app. Click to
+ * edit, Enter or leaving the box saves, Escape cancels, an empty box clears it.
+ */
+function NonFollowersCell({ value, onSave }: { value: number | null; onSave: (percent: number | null) => Promise<boolean> }) {
+  const tr = useT();
+  const { percentOf } = useFormat();
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  async function commit() {
+    if (saving) return;
+    const text = draft.trim().replace(",", ".").replace(/%$/, "");
+    const next = text === "" ? null : Number(text);
+    if (next !== null && (!Number.isFinite(next) || next < 0 || next > 100)) {
+      setEditing(false);
+      return;
+    }
+    if (next === value) {
+      setEditing(false);
+      return;
+    }
+    setSaving(true);
+    const ok = await onSave(next);
+    setSaving(false);
+    if (ok) setEditing(false);
+  }
+
+  return (
+    <td className={t.n}>
+      {editing ? (
+        <input
+          className={styles.manualInput}
+          type="text"
+          inputMode="decimal"
+          autoFocus
+          disabled={saving}
+          value={draft}
+          aria-label={tr("insights.social.posts.col.nonFollowersPct")}
+          placeholder="0–100"
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={commit}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") e.currentTarget.blur();
+            if (e.key === "Escape") setEditing(false);
+          }}
+        />
+      ) : (
+        <button
+          type="button"
+          className={styles.manualCell}
+          title={tr("insights.social.posts.nonFollowers.edit")}
+          onClick={() => {
+            setDraft(value === null ? "" : String(value));
+            setEditing(true);
+          }}
+        >
+          {value === null ? <span className={styles.manualEmpty}>{tr("insights.social.posts.nonFollowers.add")}</span> : percentOf(value, 1)}
+        </button>
+      )}
+    </td>
   );
 }
 

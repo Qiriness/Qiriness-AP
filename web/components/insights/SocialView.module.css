@@ -920,3 +920,39 @@
   opacity: 0.5;
   cursor: default;
 }
+
+/* --- non-followers reached, typed in by hand (84) ------------------------ */
+
+.manualCell {
+  min-width: 3.5rem;
+  padding: 2px var(--space-2);
+  border: 1px dashed transparent;
+  border-radius: var(--radius-sm);
+  background: none;
+  font: inherit;
+  color: inherit;
+  text-align: right;
+  cursor: text;
+}
+
+.manualCell:hover,
+.manualCell:focus-visible {
+  border-color: var(--teal);
+}
+
+.manualEmpty {
+  color: var(--text-subtle);
+}
+
+.manualInput {
+  width: 4.5rem;
+  height: 2rem;
+  padding: 0 var(--space-2);
+  border: 1px solid var(--teal);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  font: inherit;
+  font-size: var(--text-sm);
+  text-align: right;
+  color: var(--text-default);
+}

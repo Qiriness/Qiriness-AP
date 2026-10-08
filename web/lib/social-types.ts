@@ -123,6 +123,8 @@ export interface SocialPost {
   /** Percent, under `engagementBasis`: this post's platform's choice. */
   engagementRate: number | null;
   engagementBasis: EngagementBasis;
+  /** Percent (0-100) of the people reached who do not follow, typed in by hand (84); null = not entered. */
+  nonFollowersPct: number | null;
   /** Low / medium / high per metric under the platform's bands; a metric with no colour is absent. */
   bands: Partial<Record<BandMetric, Band>>;
   likes: number | null;

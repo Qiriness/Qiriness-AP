@@ -117,6 +117,8 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |   |       |                                  # DELETE disconnect. social-connections-service
 |   |       |-- insights/vip-rule/route.ts   # GET the rule / preview a draft count ·
 |   |       |                                  # PUT save or clear it (vip-rule.mjs)
+|   |       |-- insights/social/non-followers  # PUT {accountId, postId, percent}: the typed-in
+|   |       |                                  # share of non-followers (social-post-manual-service)
 |   |       |-- insights/social/bands        # PUT {kind, rules} or {kind, reset}: colour bands
 |   |       |                                  # (social-bands-service; rules in social-bands.mjs)
 |   |       |-- insights/social/engagement-basis  # PUT {kind, basis}: followers · reach · views
@@ -1010,6 +1012,7 @@ Migration 70. Named in `SOCIAL_T` / `SOCIAL_RPC`. See `DECISIONS.md § Insights 
 | `social_account_days` | per organic account and day: followers (that day's count), follows, unfollows, views, engagement, profile visits, link taps, posts — additive counts only, null = not measured |
 | `social_posts` | per post: published_at, type, 140-char caption, permalink, thumbnail, lifetime views / reach / likes / comments / shares / saves / follows / engagement, `insights_at` (81: when Meta last answered; null = never read, so the sync reads it once whatever its age) |
 | `social_accounts.engagement_basis` | migration 82: `followers` · `reach` (default) · `views`, the denominator of that platform's engagement rate; `insights_social_post_totals` gained `engaged_posts`, `rated_views_engagement`, `rated_views` |
+| `social_posts.non_followers_pct` | migration 84: percent 0-100 of non-followers reached, **typed in by hand** (Meta gives no per-post figure); never written by a sync; read live |
 | `social_metric_bands` | migration 83 (`SOCIAL_BAND_T`): per shop, platform kind and post metric, `mode` (`off` · `absolute` · `followers` · `median`) + `low` / `high`; a metric with no row uses the suggestion in `social-bands.mjs`. Read live |
 | `social_post_tags` · `social_post_tag_links` | migration 81 (`SOCIAL_TAG_T`): the team's own post labels (unique per shop, case ignored) and which post carries which; written only from the Posts table, through `social-tags-service.ts` |
 | `social_audience` | per Instagram account and capture day: follower counts by gender / age / country / city |
@@ -1087,6 +1090,7 @@ Written by the worker and the CLIs, read only by the Insights panels.
 | `77_collection_range_axis.sql` | `advice_collections_axis_check` accepts `range` (a product line, « gamme »). Read by the storefront advisor only; `supportCollections` filters it out of the support intersection. No data. **Applied 2026-10-06** | 27 |
 | `76_storefront_chat.sql` | `storefront_chat_sessions` + `storefront_chat_messages` and three service-role functions (daily count, turn, purge). New tables only. No data. **Applied 2026-10-05** | 01 |
 | `72_refund_notice.sql` | `support_answers.notify_on` (`refund_recorded`; marks a notice template) + `ticket_drafts.purpose` (`reply` / `refund_notice`). Copied from 05 / 07. No data. **Applied 2026-10-05** | 05, 07 |
+| `84_post_non_followers.sql` | `social_posts.non_followers_pct` + 0-100 check. No data. **Applied 2026-10-08** | 70 |
 | `83_social_metric_bands.sql` | `social_metric_bands` (`SOCIAL_BAND_T`). New table only. No data. **Applied 2026-10-08** | 01 |
 | `82_engagement_basis.sql` | `social_accounts.engagement_basis` + check; `insights_social_post_totals` dropped and recreated with three more columns (same args and grants). No data. **Applied 2026-10-08** | 70, 81 |
 | `81_social_post_tags.sql` | `social_posts.insights_at`; `social_post_tags` + `social_post_tag_links` (`SOCIAL_TAG_T`). New column and tables only. No data. **Applied 2026-10-08** | 70 |

@@ -6,7 +6,7 @@ import { useT } from "@/lib/i18n/client";
 import type { BandMetric, BandMode, BandRule, OrganicKind } from "@/lib/social-types";
 import styles from "./SocialView.module.css";
 
-const METRICS: BandMetric[] = ["views", "reach", "engagement", "engagementRate", "likes", "comments", "shares", "follows"];
+const METRICS: BandMetric[] = ["views", "reach", "engagementRate", "likes", "comments", "shares", "follows", "engagement"];
 /** A rate is already a ratio, so « % of followers » is not offered for it (as social-bands.mjs `modesFor`). */
 const modesFor = (metric: BandMetric): BandMode[] => (metric === "engagementRate" ? ["off", "absolute", "median"] : ["off", "absolute", "followers", "median"]);
 

@@ -60,6 +60,7 @@ import type { InsightsRange, SeriesPoint } from "../../types";
 import { getSocialConnections } from "../social-connections-service";
 import { readSocialTags } from "../social-tags-service";
 import { readBandRows } from "../social-bands-service";
+import { readNonFollowers } from "../social-post-manual-service";
 import { bandPosts, effectiveRules } from "../../../../scripts/lib/social-bands.mjs";
 import type { InsightsContext, SearchParams } from "./context";
 import { callRpc, getSupabaseClient } from "./shared";
@@ -152,7 +153,7 @@ async function readOrganic(ctx: InsightsContext, kinds: OrganicKind[], selected:
   const coverage = await coverageOf(SOCIAL_T.ACCOUNT_DAYS, ctx.shopId);
   const compare = previousCovered(ctx.range, coverage);
 
-  const [current, previous, audienceRows, postRows, reach, tags, bases, bandRows] = await Promise.all([
+  const [current, previous, audienceRows, postRows, reach, tags, bases, bandRows, nonFollowers] = await Promise.all([
     readOrganicRows(ctx, ctx.range),
     compare ? readOrganicRows(ctx, ctx.range.previous) : Promise.resolve(null),
     callRpc<{ kind: string; captured_on: string; dimension: string; key: string; value: number }>(SOCIAL_RPC.AUDIENCE, { p_shop: ctx.shopId }),
@@ -161,6 +162,7 @@ async function readOrganic(ctx: InsightsContext, kinds: OrganicKind[], selected:
     readSocialTags(ctx.shopId),
     readEngagementBases(ctx.shopId),
     readBandRows(ctx.shopId),
+    readNonFollowers(ctx.shopId),
   ]);
 
   const totalsFor = (only: OrganicKind[]): Compared<OrganicTotals> => ({
@@ -185,7 +187,7 @@ async function readOrganic(ctx: InsightsContext, kinds: OrganicKind[], selected:
     const ofKind = listed.filter((p) => p.kind === kind);
     bandPosts(ofKind, bandRules[kind], followersByAccount).forEach((bands: Partial<Record<BandMetric, Band>>, i: number) => bandOfPost.set(ofKind[i], bands));
   }
-  const posts = listed.map((p) => ({ ...p, bands: bandOfPost.get(p) ?? {} }));
+  const posts = listed.map((p) => ({ ...p, bands: bandOfPost.get(p) ?? {}, nonFollowersPct: nonFollowers.get(`${p.accountId}|${p.id}`) ?? null }));
   const publishedCount = sumKnown(current.postTotals.filter((p) => (selected as string[]).includes(p.kind as string)).map((p) => p.posts as number)) ?? 0;
 
   return {
@@ -255,6 +257,7 @@ function toPost(row: Record<string, unknown>, bases: Record<string, EngagementBa
     engagementRate: rate,
     engagementBasis: basis,
     bands: {},
+    nonFollowersPct: null,
     likes: n(row.likes),
     comments: n(row.comments),
     shares: n(row.shares),
