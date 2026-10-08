@@ -479,7 +479,10 @@ async function syncFacebookPage(ctx, account) {
         ctx.pagePostSkip.add(name);
         stats.unanswered.add(`facebook:${name}${result.denied ? ' (permission refused)' : ''}`);
       }
-      return { row: foldPagePost(p, result?.data ?? []), read: Boolean(result) && !result.denied };
+      // Without `read_insights` Meta answers a valid metric with an empty list, not
+      // an error, so an answer with no data is not a read: the post is asked again
+      // once the permission is granted.
+      return { row: foldPagePost(p, result?.data ?? []), read: Boolean(result?.data?.length) };
     }
   });
 }
