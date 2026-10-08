@@ -90,7 +90,7 @@ function Organic({
   if (view === "posts" && network !== "all") {
     return (
       <Card title={tr("insights.social.posts.title")} aside={<span>{tr("insights.social.posts.aside")}</span>}>
-        <SocialPostsTable posts={panel.posts} capped={panel.postsCapped} />
+        <SocialPostsTable posts={panel.posts} capped={panel.postsCapped} tags={panel.postTags} links={panel.postTagLinks} />
       </Card>
     );
   }
@@ -115,7 +115,7 @@ function Organic({
       {network === "all" ? <PlatformCards panel={panel} /> : null}
       {network === "all" ? (
         <Card title={tr("insights.social.posts.title")} aside={<span>{tr("insights.social.posts.aside")}</span>}>
-          <SocialPostsTable posts={panel.posts} capped={panel.postsCapped} />
+          <SocialPostsTable posts={panel.posts} capped={panel.postsCapped} tags={panel.postTags} links={panel.postTagLinks} />
         </Card>
       ) : null}
       {view === "profile" && network === "instagram" ? <Audience audience={panel.audience} /> : null}

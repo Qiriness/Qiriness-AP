@@ -94,6 +94,8 @@ export interface SocialAudience {
 
 export interface SocialPost {
   id: string;
+  /** The `social_accounts` row; with `id`, what a tag is put on. */
+  accountId: string;
   kind: OrganicKind;
   publishedAt: string;
   mediaType: string | null;
@@ -126,6 +128,21 @@ export interface OrganicPanel {
   posts: SocialPost[];
   /** True when more posts were published than the table lists. */
   postsCapped: boolean;
+  /** The team's own tags (81), read live, never cached. */
+  postTags: SocialTag[];
+  postTagLinks: SocialTagLink[];
+}
+
+/** A label a person made for posts (« launch », « UGC »…). */
+export interface SocialTag {
+  id: string;
+  name: string;
+}
+
+export interface SocialTagLink {
+  tagId: string;
+  accountId: string;
+  postId: string;
 }
 
 export interface PaidTotals {

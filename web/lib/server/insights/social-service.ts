@@ -52,6 +52,7 @@ import type {
 } from "../../social-types";
 import type { InsightsRange, SeriesPoint } from "../../types";
 import { getSocialConnections } from "../social-connections-service";
+import { readSocialTags } from "../social-tags-service";
 import type { InsightsContext, SearchParams } from "./context";
 import { callRpc, getSupabaseClient } from "./shared";
 import { previousCovered, toSeries, type Coverage } from "./series";
@@ -143,12 +144,13 @@ async function readOrganic(ctx: InsightsContext, kinds: OrganicKind[], selected:
   const coverage = await coverageOf(SOCIAL_T.ACCOUNT_DAYS, ctx.shopId);
   const compare = previousCovered(ctx.range, coverage);
 
-  const [current, previous, audienceRows, postRows, reach] = await Promise.all([
+  const [current, previous, audienceRows, postRows, reach, tags] = await Promise.all([
     readOrganicRows(ctx, ctx.range),
     compare ? readOrganicRows(ctx, ctx.range.previous) : Promise.resolve(null),
     callRpc<{ kind: string; captured_on: string; dimension: string; key: string; value: number }>(SOCIAL_RPC.AUDIENCE, { p_shop: ctx.shopId }),
     callRpc<Record<string, unknown>>(SOCIAL_RPC.POSTS, { p_shop: ctx.shopId, p_from: ctx.range.from, p_to: ctx.range.to, p_tz: ctx.tz, p_limit: POST_LIMIT }),
     selected.includes("instagram") ? liveReach(ctx) : Promise.resolve<LiveReach>({ reach: null, accountsEngaged: null, blockedReason: "insights.social.reach.pageNotUnique" }),
+    readSocialTags(ctx.shopId),
   ]);
 
   const totalsFor = (only: OrganicKind[]): Compared<OrganicTotals> => ({
@@ -174,6 +176,8 @@ async function readOrganic(ctx: InsightsContext, kinds: OrganicKind[], selected:
     audience: selected.includes("instagram") ? toAudience(audienceRows.filter((r) => r.kind === "instagram")) : null,
     posts,
     postsCapped: publishedCount > posts.length,
+    postTags: tags.tags,
+    postTagLinks: tags.links,
   };
 }
 
@@ -190,6 +194,7 @@ function toPost(row: Record<string, unknown>): SocialPost {
   const rate = ratio(engagement, reach);
   return {
     id: String(row.external_id),
+    accountId: String(row.account_id),
     kind: row.kind as OrganicKind,
     publishedAt: String(row.published_at),
     mediaType: (row.media_type as string) ?? null,

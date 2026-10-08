@@ -40,6 +40,14 @@ these.
 as its own item: `llm_usage` (item 14), `categorisation_review` (item 15), and
 `category_forwarding` / `ticket_forwards` (item 1).
 
+## 49. Social posts: insights backfill and manual tags — unit-tested, not yet synced — 2026-10-08
+
+1. **Apply migration 81.** **Done 2026-10-08:** `insights_at` exists and is null on all 60 posts, and both tag tables exist. A live round-trip passed: a duplicate name in another case was refused, a re-link was idempotent, and deleting a tag cascaded.
+2. **Backfill.** **Check:** deploy the worker, then run Sync now on Meta (Settings → Integrations). Then run `select a.kind, count(*), count(p.views), count(p.insights_at) from social_posts p join social_accounts a on a.id = p.account_id group by 1`.
+   - **Instagram:** `views` filled on most of the 29 posts. A post left null with `insights_at` set is one Meta cannot answer.
+   - **Facebook:** engagement filled on all 31 posts. `views` stays null while `read_insights` is not granted: the sync log shows `facebook:post_media_view (permission refused)`, and `insights_at` stays null so the posts are retried once it is granted.
+3. **Tags in the panel.** **Check:** on Social media → Instagram → Posts, create a tag from « + », apply it to two posts and filter by it. Reload: the tag is still on both posts. Delete it: it disappears from both.
+
 ## 48. Storefront advice (profile, playbooks, routine builder): offline-proven, not yet on the dev store — 2026-10-07
 
 Offline, 2026-10-07: `npm run eval:advisory` on the live catalogue gives 21/21 cases, and 0 rule violations across 3,936 profiles. The checks below need the migration, the load and a live model.

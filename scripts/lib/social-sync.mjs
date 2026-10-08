@@ -20,7 +20,7 @@ import {
 } from './meta-insights.mjs';
 import { SOCIAL_PROVIDERS } from './social-model.mjs';
 import { socialAppConfig } from './social-oauth.mjs';
-import { supabaseRpc, supabaseSelect, supabaseUpdate, supabaseUpsert } from './supabase-rest-client.mjs';
+import { supabaseRpc, supabaseSelect, supabaseSelectAll, supabaseUpdate, supabaseUpsert } from './supabase-rest-client.mjs';
 import { CAMPAIGN_T, SOCIAL_RPC, SOCIAL_T } from './tables.mjs';
 
 // Connecting Meta and Google Ads, and pulling what they report into Supabase.
@@ -36,7 +36,9 @@ import { CAMPAIGN_T, SOCIAL_RPC, SOCIAL_T } from './tables.mjs';
 //     reaches 30 days further back, until a year is stored.
 //   Facebook Page days: a daily series, 365 days in 90-day requests.
 //   Posts: listed a year back (cheap: no insights); insights re-read for the
-//     posts of the last 30 days (90 on the first sync), when counts still move.
+//     posts of the last 30 days (90 on the first sync), when counts still move,
+//     and read once for any older post never read (`insights_at` null, 81), at
+//     most POST_BACKFILL_PER_SYNC per account per sync, newest first.
 //   Ads: 395 days (13 months, a full year-on-year), then the last 28.
 //
 // EVERY UPSERT WRITES ONE COLUMN SET. The REST client pads a batch's rows to the
@@ -53,6 +55,7 @@ export const PAGE_TRAILING_DAYS = 7;
 export const POST_LIST_DAYS = 365;
 export const POST_REFRESH_DAYS = 30;
 export const POST_FIRST_REFRESH_DAYS = 90;
+export const POST_BACKFILL_PER_SYNC = 50;
 export const ADS_FIRST_DAYS = 395;
 export const ADS_TRAILING_DAYS = 28;
 export const AUDIENCE_EVERY_DAYS = 7;
@@ -263,7 +266,7 @@ export async function runSocialSync({
  */
 async function syncProvider({ supabase, shopId, connection, appConfig, now, log, dryRun, createMeta, createAds }) {
   const provider = connection.provider;
-  const stats = { accounts: 0, days: 0, posts: 0, ad_days: 0, campaign_days: 0, audience: 0, failed: [], unanswered: new Set() };
+  const stats = { accounts: 0, days: 0, posts: 0, post_insights: 0, ad_days: 0, campaign_days: 0, audience: 0, failed: [], unanswered: new Set() };
   let status = 'ok';
   let error = null;
 
@@ -393,13 +396,16 @@ async function syncInstagram(ctx, account) {
     withInsights: async (m) => {
       const metrics = META_METRICS.instagramMedia.filter((name) => !(ctx.mediaSkip?.get(m.media_product_type) ?? new Set()).has(name));
       const result = await meta.insights(m.id, metrics, {});
-      if (result.failed.length) {
+      // Some names refused while others answer: those names are retired for
+      // this media type. ALL refused is this post (e.g. published before the
+      // account became a business account), and must not blind the rest.
+      if (result.failed.length && result.data.length) {
         ctx.mediaSkip ??= new Map();
         const skip = ctx.mediaSkip.get(m.media_product_type) ?? new Set();
         for (const name of result.failed) skip.add(name);
         ctx.mediaSkip.set(m.media_product_type, skip);
       }
-      return foldInstagramMedia(m, result.data);
+      return { row: foldInstagramMedia(m, result.data), read: !result.denied };
     }
   });
 
@@ -467,13 +473,13 @@ async function syncFacebookPage(ctx, account) {
     base: (p) => foldPagePost(p, []),
     withInsights: async (p) => {
       const metrics = Object.keys(META_METRICS.facebookPost).filter((name) => !(ctx.pagePostSkip ?? new Set()).has(name));
-      const result = metrics.length ? await meta.insights(p.id, metrics, { period: 'lifetime' }, { asToken: pageToken }) : { data: [], failed: [] };
-      for (const name of result.failed) {
+      const result = metrics.length ? await meta.insights(p.id, metrics, { period: 'lifetime' }, { asToken: pageToken }) : null;
+      for (const name of result?.failed ?? []) {
         ctx.pagePostSkip ??= new Set();
         ctx.pagePostSkip.add(name);
-        stats.unanswered.add(`facebook:${name}`);
+        stats.unanswered.add(`facebook:${name}${result.denied ? ' (permission refused)' : ''}`);
       }
-      return foldPagePost(p, result.data);
+      return { row: foldPagePost(p, result?.data ?? []), read: Boolean(result) && !result.denied };
     }
   });
 }
@@ -568,20 +574,45 @@ const POST_BASE = ['external_id', 'published_at', 'media_type', 'caption_excerpt
 const POST_INSIGHTS = ['views', 'reach', 'shares', 'saves', 'follows', 'engagement'];
 
 /**
- * Every listed post's fields, then the recent posts' insights — two upserts, so
- * a post too old to re-read keeps the insights it was last given.
+ * Every listed post's fields, then insights — two upserts, so a post too old to
+ * re-read keeps the insights it was last given.
+ *
+ * Insights are read for the recent posts, whose counts still move, and for
+ * older posts never read before (`insights_at` null), newest first and at most
+ * POST_BACKFILL_PER_SYNC of them, so a first connect to an account whose posts
+ * are all older than the window still gets every post's views within a few
+ * syncs, inside Meta's hourly call budget. `insights_at` is stamped when Meta
+ * was asked and did not refuse the permission: a post it cannot answer (all
+ * names refused) is not asked again, while a permission granted later still
+ * reaches posts that were refused for want of it.
  */
 async function writePosts(ctx, account, items, { refreshSince, timestampOf, base, withInsights }) {
   const { supabase, shopId, now, dryRun, stats } = ctx;
   const pick = (row, columns) => Object.fromEntries(columns.map((c) => [c, row[c] ?? null]));
   const baseRows = items.map((item) => ({ account_id: account.id, shop_id: shopId, ...pick(base(item), POST_BASE), fetched_at: now.toISOString() }));
 
+  const read = new Set(
+    ((await supabaseSelectAll(supabase, SOCIAL_T.POSTS, { account_id: account.id, insights_at: { operator: 'not.is', value: 'null' } }, 'external_id', { order: 'external_id.asc' })) ?? []).map((r) => String(r.external_id))
+  );
+  const newestFirst = [...items].sort((a, b) => Date.parse(timestampOf(b)) - Date.parse(timestampOf(a)));
+  const recent = newestFirst.filter((item) => isoDay(timestampOf(item)) >= refreshSince);
+  const backfill = newestFirst
+    .filter((item) => isoDay(timestampOf(item)) < refreshSince && !read.has(String(item.id)))
+    .slice(0, POST_BACKFILL_PER_SYNC);
+
   const insightRows = [];
-  for (const item of items) {
-    if (isoDay(timestampOf(item)) < refreshSince) continue;
-    const row = await withInsights(item);
-    insightRows.push({ account_id: account.id, shop_id: shopId, external_id: row.external_id, published_at: row.published_at, ...pick(row, POST_INSIGHTS) });
+  for (const item of [...recent, ...backfill]) {
+    const { row, read: answered } = await withInsights(item);
+    insightRows.push({
+      account_id: account.id,
+      shop_id: shopId,
+      external_id: row.external_id,
+      published_at: row.published_at,
+      ...pick(row, POST_INSIGHTS),
+      insights_at: answered ? now.toISOString() : null
+    });
   }
+  stats.post_insights += insightRows.length;
   stats.posts += baseRows.length;
   if (dryRun) return;
   await upsertChunks(supabase, SOCIAL_T.POSTS, baseRows, 'account_id,external_id');

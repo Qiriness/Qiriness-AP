@@ -91,7 +91,11 @@ function fakeMeta(overrides = {}) {
 }
 
 function metaDb({ enabled = ['instagram'] } = {}) {
-  return fakeSupabase((call) => {
+  return fakeSupabase(metaRespond({ enabled }));
+}
+
+function metaRespond({ enabled = ['instagram'] } = {}) {
+  return (call) => {
     if (call.url.includes('/social_connections?select=provider')) return [{ provider: 'meta', last_sync_status: null }];
     if (call.url.includes('/rpc/social_read_token')) return 'user-token';
     if (call.url.includes('/social_accounts?select=') && call.url.includes('enabled=eq.true')) {
@@ -99,7 +103,7 @@ function metaDb({ enabled = ['instagram'] } = {}) {
     }
     if (call.url.includes('/social_connections?select=conversion_action')) return [{ conversion_action: null }];
     return [];
-  });
+  };
 }
 
 test('a first Instagram sync: 30 days, followers apart, every post listed and the recent ones read', async () => {
@@ -126,10 +130,76 @@ test('a first Instagram sync: 30 days, followers apart, every post listed and th
     assert.equal(posts.length, 2, 'fields and insights are two upserts');
     assert.deepEqual(posts[0].body.map((r) => r.external_id), ['M1', 'M0']);
     assert.ok(posts[0].body.every((r) => !('reach' in r)), 'the fields upsert never erases insights');
-    assert.deepEqual(posts[1].body.map((r) => [r.external_id, r.reach, r.engagement]), [['M1', 400, 30]]);
+    assert.deepEqual(
+      posts[1].body.map((r) => [r.external_id, r.reach, r.engagement, r.insights_at]),
+      [
+        ['M1', 400, 30, NOW.toISOString()],
+        ['M0', null, 55, NOW.toISOString()]
+      ],
+      'the recent post is read, and so is an older post never read before'
+    );
 
     const status = db.calls.find((c) => c.method === 'PATCH' && c.url.includes('/social_connections?'));
     assert.equal(status.body.last_sync_status, 'ok');
+  } finally {
+    db.restore();
+  }
+});
+
+test('an older post already read is not read again; a recent one is', async () => {
+  let pages = 0;
+  const db = fakeSupabase((call) => {
+    // One page, then the empty page that ends the paging.
+    if (call.url.includes('/social_posts?select=external_id')) return pages++ === 0 ? [{ external_id: 'M0' }] : [];
+    return metaRespond()(call);
+  });
+  const asked = [];
+  try {
+    await runSocialSync({
+      supabase: db.client,
+      shopRow: SHOP,
+      env: ENV,
+      now: NOW,
+      log: () => {},
+      createMeta: () => {
+        const meta = fakeMeta();
+        return { ...meta, insights: async (id, ...rest) => (asked.push(id), meta.insights(id, ...rest)) };
+      }
+    });
+    assert.ok(asked.includes('M1'));
+    assert.ok(!asked.includes('M0'));
+    const read = db.calls.find((c) => c.url.includes('/social_posts?select=external_id'));
+    assert.match(read.url, /insights_at=not\.is\.null/);
+  } finally {
+    db.restore();
+  }
+});
+
+test('a post Meta cannot answer at all does not blind the next post of its type', async () => {
+  const db = metaDb();
+  const asked = new Map();
+  try {
+    await runSocialSync({
+      supabase: db.client,
+      shopRow: SHOP,
+      env: ENV,
+      now: NOW,
+      log: () => {},
+      createMeta: () =>
+        fakeMeta({
+          instagramMedia: async () => [
+            { id: 'A', media_type: 'IMAGE', media_product_type: 'FEED', timestamp: '2026-10-03T08:00:00+0000' },
+            { id: 'B', media_type: 'IMAGE', media_product_type: 'FEED', timestamp: '2026-10-02T08:00:00+0000' }
+          ],
+          insights: async (id, metrics, params) => {
+            if (id === 'A') return { data: [], failed: metrics };
+            if (id === 'B') asked.set(id, metrics);
+            if (params?.breakdown) return { data: [], failed: metrics };
+            return { data: [], failed: [] };
+          }
+        })
+    });
+    assert.ok(asked.get('B').includes('views'), 'B is still asked for views');
   } finally {
     db.restore();
   }

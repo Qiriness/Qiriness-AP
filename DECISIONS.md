@@ -5052,6 +5052,13 @@ Built from the owner's mockup (`HTML_DROPFILE/qiriness_social_media_dashboard_mo
 
 **Every upsert writes one column set.** The REST client pads a batch to the union of its rows' keys with nulls. One row carrying `followers` beside thirty without it would erase twenty-nine stored follower counts. So day metrics, follower counts, post fields and post insights are separate upserts. This is also why a post too old to re-read keeps the insights it was last given.
 
+**A post's insights are read at least once, whatever its age (2026-10-08).** At first, only posts of the last 30 days (90 on a first sync) were read. The first real account had posted nothing for six months, so all 60 posts showed a dash for views, reach and engagement.
+- **`insights_at`** marks when Meta answered. A never-read post is read on the next sync, newest first, at most 50 per account per sync. That keeps a large back catalogue inside Meta's hourly call budget, spread over a few syncs.
+- **The stamp is withheld on a permission refusal (code 10 / 200).** Granting the permission later then reaches those posts. A post Meta cannot answer at all (every name refused with code 100, as for media from before a business-account conversion) is stamped and not asked again.
+- **The per-type skip list learns only from a partial refusal.** Some names refused while others answer means those names are retired. All names refused means the post is the problem, so one old post cannot strip `views` from every later post of its type.
+
+**Post tags are the team's, never the sync's (2026-10-08).** `social_post_tags` and `_links` (81) are written only from the Posts table. They are read live, beside the cached panel reads, so a tag shows on the next render. Names are unique per shop, ignoring case: creating an existing name returns that tag. Deleting a tag removes it from every post, which is why the editor asks twice.
+
 **How far back.**
 - **Instagram account days** take one request per day, because `total_value` metrics come back as one total. The first sync reads 30 days, and each later sync reaches 30 days further back, up to a year. The aim is to keep a first connect inside Instagram's hourly call budget.
 - **Instagram follower history** is not offered by the API. A follower count is snapshotted each day from the connection on. Growth comes from Meta's follows / unfollows where Meta reports them, and otherwise from the counts at the two ends of the range.

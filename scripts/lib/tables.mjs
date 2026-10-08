@@ -210,6 +210,12 @@ export const CAMPAIGN_RPC = {
   CAMPAIGNS: 'insights_paid_campaigns'
 };
 
+/** The team's own post tags. Created by the INCREMENTAL migration `81_social_post_tags.sql`. */
+export const SOCIAL_TAG_T = {
+  TAGS: 'social_post_tags',
+  LINKS: 'social_post_tag_links'
+};
+
 /**
  * Views. Selected from exactly like tables through PostgREST, and listed apart
  * because they are read-only: a write to one of these names is a mistake the

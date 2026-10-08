@@ -117,6 +117,10 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |   |       |                                  # DELETE disconnect. social-connections-service
 |   |       |-- insights/vip-rule/route.ts   # GET the rule / preview a draft count ·
 |   |       |                                  # PUT save or clear it (vip-rule.mjs)
+|   |       |-- insights/social/tags/        # post tags (81): GET all + links · POST
+|   |       |                                  # {name} · [id] DELETE · [id]/posts PUT
+|   |       |                                  # {accountId, postId, tagged}.
+|   |       |                                  # social-tags-service
 |   |       |-- insights/segment-finder/route.ts  # POST a segment -> matching customers
 |   |       |                                  # (validated by segment-finder.mjs; logs
 |   |       |                                  # access when it names anyone)
@@ -204,7 +208,9 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |   |   |                            # VipRuleCard + SegmentFinder + CustomerActivityRows · AgentView ·
 |   |   |                            # SocialView (organic / paid) + SocialHeader (network,
 |   |   |                            # mode, view, status pills) + SocialTrend + PaidTrend +
-|   |   |                            # SocialPostsTable + PaidCampaignsTable (links to Ads
+|   |   |                            # SocialPostsTable (# = rank in the sort; by # =
+|   |   |                            # newest first · tag column, filter, TagEditor) +
+|   |   |                            # PaidCampaignsTable (links to Ads
 |   |   |                            # Manager / Google Ads) + SocialConnectionsDialog +
 |   |   |                            # SocialProviderCard (also on Settings → Integrations)
 |   |   |-- tickets/                 # TicketsView (orchestrator) · TicketSection ·
@@ -280,6 +286,8 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |   |       |                    # social-connections-service (Meta / Google OAuth:
 |   |       |                    # start, callback, queue a sync, track, disconnect)
 |   |       |                    # + social-return (the fixed return paths) ·
+|   |       |                    # social-tags-service (post tags, read live,
+|   |       |                    # never through the Insights cache) ·
 |   |       |                    # auth (getSession, re-checked not trusted) ·
 |   |       |                    # access-log (a data_access_events row per
 |   |       |                    # named-customer view, actor = the user) ·
@@ -992,7 +1000,8 @@ Migration 70. Named in `SOCIAL_T` / `SOCIAL_RPC`. See `DECISIONS.md § Insights 
 | `social_connections` | per shop and provider (`meta` / `google`): `secret_id` (the OAuth token, in **`vault.secrets`**), `token_expires_at`, `scopes`, `conversion_action` (Meta; null = `omni_purchase`), `last_sync_at` / `_status` (`ok` · `failed` · `needs_reconnect`) / `_error` |
 | `social_accounts` | what a connection sees: `kind` (`instagram` · `facebook` · `meta_ads` · `google_ads`), `external_id`, name, handle, currency, `login_customer_id` (Google manager), `enabled` (the team's choice; reads skip disabled) |
 | `social_account_days` | per organic account and day: followers (that day's count), follows, unfollows, views, engagement, profile visits, link taps, posts — additive counts only, null = not measured |
-| `social_posts` | per post: published_at, type, 140-char caption, permalink, thumbnail, lifetime views / reach / likes / comments / shares / saves / follows / engagement |
+| `social_posts` | per post: published_at, type, 140-char caption, permalink, thumbnail, lifetime views / reach / likes / comments / shares / saves / follows / engagement, `insights_at` (81: when Meta last answered; null = never read, so the sync reads it once whatever its age) |
+| `social_post_tags` · `social_post_tag_links` | migration 81 (`SOCIAL_TAG_T`): the team's own post labels (unique per shop, case ignored) and which post carries which; written only from the Posts table, through `social-tags-service.ts` |
 | `social_audience` | per Instagram account and capture day: follower counts by gender / age / country / city |
 | `ad_days` | per ad account, day and publisher: spend, impressions, clicks, conversions, conversion value, currency |
 | `ad_campaigns` · `ad_campaign_days` | migration 71 (`CAMPAIGN_T`): per campaign name / status / objective, and the same counts per campaign and day. Read by `insights_paid_campaigns` (the Paid view's campaign table) |
@@ -1068,6 +1077,7 @@ Written by the worker and the CLIs, read only by the Insights panels.
 | `77_collection_range_axis.sql` | `advice_collections_axis_check` accepts `range` (a product line, « gamme »). Read by the storefront advisor only; `supportCollections` filters it out of the support intersection. No data. **Applied 2026-10-06** | 27 |
 | `76_storefront_chat.sql` | `storefront_chat_sessions` + `storefront_chat_messages` and three service-role functions (daily count, turn, purge). New tables only. No data. **Applied 2026-10-05** | 01 |
 | `72_refund_notice.sql` | `support_answers.notify_on` (`refund_recorded`; marks a notice template) + `ticket_drafts.purpose` (`reply` / `refund_notice`). Copied from 05 / 07. No data. **Applied 2026-10-05** | 05, 07 |
+| `81_social_post_tags.sql` | `social_posts.insights_at`; `social_post_tags` + `social_post_tag_links` (`SOCIAL_TAG_T`). New column and tables only. No data. **Applied 2026-10-08** | 70 |
 | `71_ad_campaigns.sql` | `ad_campaigns` + `ad_campaign_days` (`CAMPAIGN_T`) and `insights_paid_campaigns()` (`CAMPAIGN_RPC`). No data. **Applied 2026-10-05** | 70 |
 | `70_social.sql` | the six social tables (`SOCIAL_T`), the Vault token functions and six reads (`SOCIAL_RPC`), and `mail_jobs_kind_check` widened to `sync_social` (copied from 04 / 46). No data. **Applied 2026-10-05** | 01, 46 |
 | `69_fact_drift.sql` | `tickets.fact_drift` jsonb (null until something moves; object check) + `outbound_actions.cancel_reason` comment gains `facts_pending`. Copied from 04 / 07. No data. **Applied 2026-10-04** | 04, 47 |

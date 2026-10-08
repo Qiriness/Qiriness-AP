@@ -14,6 +14,16 @@ Three sibling files carry the other halves, and this one deliberately does not d
 
 
 
+## Social posts: views for older posts, rank by date, the team's own tags (2026-10-08)
+
+- **Why no post had views.** All 60 stored posts (31 Facebook, 29 Instagram) had null views, reach and engagement. Insights were read only for posts of the last 30 days (90 on a first sync), and every post on the connected accounts dates from 2025-10-15 to 2026-03-16. Their insights had never been requested once.
+- **Fix.** `social_posts.insights_at` (migration 81) records when Meta last answered a post's insights. The sync now also reads every never-read post once, whatever its age, newest first, at most 50 per account per sync (`POST_BACKFILL_PER_SYNC`).
+  - A post refused for want of a permission is not stamped, so it is retried once the permission is granted.
+  - An Instagram post Meta cannot answer at all, such as one published before the account became a business account, no longer adds every metric to the skip list for its media type. Before this, one such post blinded the rest of the sync.
+- **Ranking.** # is still the post's place in the current sort. Clicking # sorts by date posted (1 = newest), and ties in any column fall back to newest first.
+- **Manual tags.** There is a new Tags column with a « + » editor: tick a tag, type a new one and press Enter, or delete a tag everywhere (two clicks). A tag filter also offers « Untagged ». Tags are written at once through `/api/insights/social/tags`, and read live rather than through the 15-minute Insights cache.
+- **Proven:** migration 81 applied, and a live round-trip worked: a duplicate name in another case is refused, a re-link is idempotent, and deleting a tag cascades to its links. Sync tests cover the backfill, the not-again rule and the skip-list fix. Web typecheck is clean. **Not yet seen:** real views on these posts. That needs the worker deployed and a Meta sync run (VALIDATION_LOG 49).
+
 ## Storefront advisor: the beauty consultation — profile, Qiriness playbooks, merchandising, events (2026-10-07)
 
 Chatbot only. Nothing in the email agent, its prompts, tickets or the dashboard changed. The one shared-app change is that the middleware lets `/api/storefront/event` through (same guards as `/api/storefront/chat`).
