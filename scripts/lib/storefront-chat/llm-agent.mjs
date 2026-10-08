@@ -38,6 +38,7 @@ import { knowledgeToolDefinitions, KNOWLEDGE_TOOL_NAMES, runKnowledgeTool, getPo
 import { retrieveKnowledge } from './knowledge-router.mjs';
 import { createShoppingTurn, shoppingToolDefinitions, SHOPPING_TOOL_NAMES } from './shopping-tools.mjs';
 import { languageContext, validReplyLanguage } from './conversation-language.mjs';
+import { ADVISE, PROFILE_CHOICE, adviseToolDefinition, createAdvisorTurn } from './advisor-tools.mjs';
 
 export const DEFAULT_STOREFRONT_MODEL = 'gpt-6-luna';
 /** One model request. */
@@ -97,8 +98,13 @@ export class StorefrontAgentError extends Error {}
  *   currency?: string,
  *   productBaseUrl?: string | null,
  *   deadlineMs?: number,
- *   maxToolRounds?: number
+ *   maxToolRounds?: number,
+ *   advisor?: ReturnType<import('../advisory/recommend.mjs').createAdvisor> | null
  * }} deps
+ *
+ * `advisor` is the beauty consultation engine (scripts/lib/advisory/), built
+ * from the shop's playbooks over the catalogue. Without it the agent advises
+ * as before, from search alone.
  */
 export function createLlmAgent({
   client,
@@ -113,10 +119,12 @@ export function createLlmAgent({
   currency = 'EUR',
   productBaseUrl = null,
   deadlineMs = DEFAULT_TURN_DEADLINE_MS,
-  maxToolRounds = DEFAULT_MAX_TOOL_ROUNDS
+  maxToolRounds = DEFAULT_MAX_TOOL_ROUNDS,
+  advisor = null
 }) {
   if (!client?.completeWithTools) throw new Error('createLlmAgent needs an OpenAI client.');
-  const definitions = [...(catalogue ? toolDefinitions(catalogue) : []), ...(knowledge ? knowledgeToolDefinitions() : []), ...(readShopping ? shoppingToolDefinitions() : [])];
+  if (advisor && !catalogue) advisor = null;
+  const definitions = [...(catalogue ? toolDefinitions(catalogue) : []), ...(advisor ? [adviseToolDefinition(advisor)] : []), ...(knowledge ? knowledgeToolDefinitions() : []), ...(readShopping ? shoppingToolDefinitions() : [])];
   const tools = definitions.length ? definitions : null;
   const linkBase = productLinkBase(productBaseUrl);
   const resolutionIndex = catalogue ? buildResolutionIndex(catalogue) : null;
@@ -133,11 +141,14 @@ export function createLlmAgent({
      *   refs?: import('./conversation-refs.mjs').ConversationRefs | null,
      *   choice?: string | null
      *   cart?: object | null,
-     *   shopDomain?: string | null
+     *   shopDomain?: string | null,
+     *   action?: string | null,
+     *   advisorState?: object | null,
+     *   conversationRef?: string | null
      * }} turn
      * @returns {Promise<import('./agent.mjs').AgentReply>}
      */
-    async respond({ message, context = {}, history = [], refs = null, choice = null, cart = null, shopDomain = null }) {
+    async respond({ message, context = {}, history = [], refs = null, choice = null, cart = null, shopDomain = null, action = null, advisorState = null, conversationRef = null }) {
       const endsAt = Date.now() + deadlineMs;
       const locale = context.locale || 'fr';
       const money = priceFormatter(currency, locale);
@@ -148,8 +159,10 @@ export function createLlmAgent({
 
       // Resolve first: deterministic, from memory, before any model call.
       const byId = (id) => catalogue?.products.find((p) => p.id === id) ?? null;
+      // A profile chip (« Sèche ») answers the consultation, not a product clarification.
+      const profileChoice = typeof choice === 'string' && PROFILE_CHOICE.test(choice);
       let resolution = resolutionIndex
-        ? resolveProducts(message, { index: resolutionIndex, pageProductId: pageProduct?.id ?? null, refs, choice })
+        ? resolveProducts(message, { index: resolutionIndex, pageProductId: pageProduct?.id ?? null, refs, choice: profileChoice ? null : choice })
         : null;
       const resolvedIds = new Set(resolution?.products.map((p) => p.id) ?? []);
       const productDataIds = new Set(resolution?.products.slice(0, 3).map((p) => p.id) ?? []);
@@ -158,6 +171,25 @@ export function createLlmAgent({
       for (const id of resolution?.range?.ids ?? []) if (byId(id)) offered.add(byId(id).handle);
 
       const retrievalStarted = Date.now();
+      // The consultation: profile from the message (and chip), advice before the model.
+      const advisorTurn = advisor
+        ? createAdvisorTurn({
+            advisor,
+            state: advisorState,
+            message,
+            choice,
+            action,
+            locale,
+            catalogue,
+            money,
+            productQuestion: !profileChoice && (resolution?.products.length ?? 0) > 0,
+            turn: history.filter((m) => m.role === 'user').length + 1
+          })
+        : null;
+      const advisorStarted = Date.now();
+      const advice = advisorTurn ? advisorTurn.opening() : null;
+      const adviceMs = Date.now() - advisorStarted;
+      for (const h of advisorTurn?.handles() ?? []) offered.add(h);
       const opening = knowledge ? retrieveKnowledge({ message, knowledge, resolution, context, history, currency }) : null;
       const shopping = readShopping ? createShoppingTurn({ readShopping: (domain) => withDeadline(readShopping(domain), 2500), readPublicPromotions: readPublicPromotions ? (domain) => withDeadline(readPublicPromotions(domain), 2500) : null, shopDomain, cart, context, message, history, resolvedProducts: [...resolvedIds].map(byId).filter(Boolean), baseCurrency: shopDomain === catalogueShopDomain ? currency : null }) : null;
       const shoppingOpening = shopping ? await shopping.opening() : null;
@@ -174,6 +206,8 @@ export function createLlmAgent({
         hasTools: Boolean(catalogue),
         hasKnowledge: Boolean(knowledge),
         hasShopping: Boolean(shopping),
+        hasAdvisor: Boolean(advisor),
+        advice: advice ? advisorTurn.describe() : null,
         shopping: shoppingOpening,
         knowledge: opening,
         pageProduct: pageProduct && !resolvedIds.has(pageProduct.id) ? productDetail(pageProduct, money, message) : null,
@@ -181,6 +215,7 @@ export function createLlmAgent({
       });
       const messages = [...historyMessages(history), { role: 'user', content: message }];
       const trace = { calls: [], tools: [] };
+      if (advisorTurn) trace.advice = { ...advisorTurn.trace(), ms: adviceMs };
       if (shoppingOpening) {
         trace.shopping = { route: shoppingOpening.route, topics: shoppingOpening.topics ?? [], retrievals: shoppingOpening.results.map(({ tool, result }) => ({ tool, status: result.status, offer_preview: result.offer_preview === true, reasons: (result.promotions ?? []).map((p) => ({ id: p.promotion_id, status: p.status, reason: p.reason })) })) };
         // The cart's discounts as the widget sent them, and whether each matched an
@@ -243,6 +278,8 @@ export function createLlmAgent({
               : null;
             const ran = call.argsError
               ? { result: { error: `arguments were not valid JSON: ${call.argsError}` }, handles: [] }
+              : call.name === ADVISE
+                ? advisorTurn ? { result: advisorTurn.run(call.args), handles: advisorTurn.handles() } : { result: { error: 'advice unavailable' }, handles: [] }
               : isShopping
                 ? { result: shopping ? await withDeadline(shopping.run(call.name, call.args), Math.max(1, endsAt - Date.now())).catch(() => ({ status: 'unavailable', reason: 'shopping_source_timeout' })) : { status: 'unavailable' }, handles: [] }
               : isKnowledge
@@ -282,14 +319,23 @@ export function createLlmAgent({
 
         const parsed = parseReply(result?.content);
         if (shopping?.beforeSanitize) await shopping.beforeSanitize(parsed.text);
-        const products = toCards(parsed.products, offered, catalogue, money, linkBase);
+        let products = toCards(parsed.products, offered, catalogue, money, linkBase);
+        // A recommended routine always shows its products, even when the model
+        // forgot to list them: the cards ARE the recommendation.
+        const finalAdvice = advisorTurn?.advice ?? null;
+        if (!products.length && finalAdvice?.status === 'recommended') {
+          products = toCards(finalAdvice.steps.map((s) => ({ handle: s.handle, rationale: '' })), offered, catalogue, money, linkBase);
+        }
         const cardIds = products.map((c) => c.id);
+        if (advisorTurn) trace.advice = { ...advisorTurn.trace(), ms: adviceMs };
+        const advisorChoices = advisorTurn ? advisorTurn.choices() : [];
         return {
           text: shopping ? shopping.sanitizeReply(parsed.text, parsed.replyLanguage ?? language.previous_language ?? 'fr') : parsed.text,
           replyLanguage: parsed.replyLanguage ?? null,
           products,
-          // The clarification's options as chips: from the resolver, never the model.
-          choices: resolution?.clarification ? resolution.clarification.options.map((o) => ({ label: o.label, value: o.id ?? o.label })) : [],
+          // Chips: the resolver's clarification first (which product?), else the
+          // consultation's next question. From the data, never the model.
+          choices: resolution?.clarification ? resolution.clarification.options.map((o) => ({ label: o.label, value: o.id ?? o.label })) : advisorChoices,
           model,
           usage: usage.inputTokens || usage.outputTokens ? usage : null,
           trace,
@@ -297,7 +343,14 @@ export function createLlmAgent({
           resolution: resolution
             ? { status: resolution.status, ids: [...resolvedIds], pending: resolution.pending ?? null }
             : null,
-          refs: { recommended: cardIds, mentioned: [...new Set([...resolvedIds, ...cardIds])] }
+          refs: { recommended: cardIds, mentioned: [...new Set([...resolvedIds, ...cardIds])] },
+          // The consultation's memory and this turn's analytics events.
+          ...(advisorTurn
+            ? {
+                advisor: advisorTurn.nextState(),
+                events: conversationRef ? advisorTurn.events({ conversationRef, firstTurn: !history.length }) : []
+              }
+            : {})
         };
       }
     }

@@ -5417,3 +5417,67 @@ The rules are researched in `docs/shopify-discount-rules.md`; this is why the ev
   - Only automatic offers and codes **already entered** are reached: Shopify applies no code nobody typed, and the advisor never offers a private one.
   - On a real cart, Shopify's result in the cart wins. The solver flags a disagreement rather than overriding it.
 - **A sale price is the price.** Promotions are computed on the current variant price (an Alpha sale included); compare-at is display only. It is synced so the advisor can say « already on sale », never to recompute a discount from it.
+
+### The engine decides the advice; the model converses (2026-10-07)
+
+- **Why not the old way.** Advice used to be `search_products` on a collection: the products that came up most often won. Nothing remembered the customer. Nothing encoded how Qiriness trains its advisers. Nothing separated « suits this customer » from « the brand wants to sell it ».
+- **What replaces it.** A deterministic engine in `scripts/lib/advisory/`, with no model and no I/O:
+  - a profile, where each field carries a value, source, confidence and turn;
+  - the brand's playbooks;
+  - eligibility, then suitability, then routine fit, then merchandising, with each term returned as reason codes.
+  - It runs before the model, in about 0.1 ms. The model gets the advice as data, asks the one question it carries, or explains the routine from reason codes and product facts. A turn is one model call unless the lexicon missed something, and then the model calls `advise` with `profile_updates`.
+- **The playbooks are the brand's, as data.** Qiriness supplied 11 routine playbooks (2026-10-07). `data/advisor/qiriness.json` transcribes them faithfully, and `npm run advisor:load` loads them into `advisor_playbooks` / `advisor_mappings` / `advisor_merchandising` (migration 80).
+  - The prose rules are kept as `notes`. The model reads them as guidance, never as claims.
+  - Keys marked `_added` are interpretations needed to execute them, and Qiriness should confirm them:
+    - the concern lists of the men's routes;
+    - their targeted slot;
+    - `distinguish_by`, how a concern is offered when two playbooks tie.
+- **No product id anywhere in the config.** Families map to range collections (« Active Énergie Lift » = the Active Énergie range narrowed by the name word « lift »). Slots map to category collections, care types (the title's head noun) and name words. Concerns, skin types, textures and areas map to tags and collections. `checkCatalogue` reports every reference that resolves to nothing, at load and in `eval:advisory`.
+- **The user's eleven rules are tests, not intentions.** `advisory.test.mjs` has one test per rule on an invented brand. `eval:advisory` checks the same rules as invariants over every concern × skin type × sensitivity × target × scope × age × routine combination of the live catalogue: 3,936 profiles, 0 violations.
+  - **Stock, area and target** are hard filters.
+  - **Eye steps** in a face routine take eye products, because the slot carries its own area.
+  - **Men's products only on an explicit request.** An unknown target means the main catalogue, never men's products.
+  - **Age** adds at most 0.05 and is never read by playbook selection.
+  - **Skin type picks the texture before any behaviour.** « mixte et déshydratée » first went to the standard cream because the dehydration group came first; skin type now wins.
+  - **The current routine removes its steps.** « Targeted » picks the first priority step not already covered.
+- **A treatment step must address the need.** On the 12-product dev catalogue, « premières rides » got the only serum there, an anti-spot one, recommended as « the best available ». Steps marked `concern_required` (serums, treatments, eye care, masks, lotions, the booster) now take only a product matching one of the customer's concerns or in the preferred family. A cleanser or cream may be generic. A targeted reply then moves to the next priority step and never mentions the step it passed over.
+- **Merchandising cannot rescue an unsuitable product.**
+  - A tier boost (at most 0.2) applies only to eligible products within `tie_window` (0.15) of the best suitability in that step, and never below the suitability floor.
+  - A tolerance-first playbook (sensitive skin) boosts only products made for sensitive skin.
+  - No priorities are loaded yet: Qiriness has given the tiers, not the products.
+- **One question, and only one that changes something.**
+  - **Selection gates:**
+    - **Area, then primary concern**, with two exceptions: two plausible playbooks give one question built from the concerns that tell them apart; a skin type implies the face (« peau mixte et déshydratée » is not a body question).
+  - **Questions in the routine builder:**
+    - **Which field:** the next field in the brand's `selection_priority` whose possible answers would change the playbook, steps or products. This is checked by running the engine with each answer.
+    - **Never asked:** sex and age. « Je ne sais pas » counts as an answer, and a field is never asked twice.
+  - **Conversation mode** recommends at once, as soon as a playbook is selected.
+- **Chips come from the engine, never the model.** Their value is `profile:<field>:<value>`, recorded with source `quick_choice`, and it outranks an inference. The resolver's « which product? » clarification wins over an advice question.
+- **The profile lives on the assistant row** (`context.advisor`), folded back like `refs`. There is no table: the consultation is per conversation, and the message log already has retention.
+
+### Advice is built to be lifted out for email, later (2026-10-07)
+
+- **The rule.** `scripts/lib/advisory/` imports nothing outside itself (it carries its own `norm` and care type). Nothing outside the storefront advisor may import it yet. `isolation.test.mjs` enforces both rules.
+- **Stays the same for email:**
+  - profile, lexicon, config, selection, ranking, reason codes;
+  - the event schema;
+  - the config repository.
+- **Changes for email:**
+  - **Where the profile comes from:** a thread or case file instead of a turn.
+  - **What a `next_question` becomes:** at most two questions in a draft, or stated assumptions (replies are asynchronous).
+  - **How the advice is delivered:** drafting instead of cards and chips.
+  - **Events:** `channel: 'email'`, with `conversation_ref` set to the ticket id.
+- **Kept chat-only:** the chat glue (`advisor-tools.mjs`, `advisor-state.mjs`, the prompt section, the widget).
+- **Not touched:** nothing in `agent/`, the support prompts or the dashboard changed. The only shared-app change is the middleware's public path for `/api/storefront/event`, which carries the same signature and allow-list as `/api/storefront/chat`.
+
+### Advisory events are channel-aware and hold no words (2026-10-07)
+
+- **Storage.** `advisory_events`: channel, conversation_ref, event_type, playbook_key, product_ids, payload (codes, counts, ids).
+- **Writing.** Events are derived per turn from the state before and after (`turnEvents`) and written after the reply without being waited for. Card clicks arrive by beacon through `/apps/storefront-advisor/event`.
+- **Shape.** There is no foreign key to sessions or shops (an email's conversation is a ticket), the same as 76. There is no customer identity, and no free text: `profile_field_collected` records the field and its source, not what was said.
+- **Not built yet:**
+  - `added_to_cart` (from the next cart snapshot);
+  - `recommendation_abandoned` (derived later);
+  - `purchase` (order attribution);
+  - `unresolved_question` / `support_handoff`.
+  - All four types are in the schema already. Dashboard integration is a separate task (`docs/storefront-chatbot.md` § Advice).

@@ -139,6 +139,24 @@ export const STOREFRONT_CHAT_RPC = {
 };
 
 /**
+ * The storefront advisor's advice config and its analytics events. Created by
+ * the INCREMENTAL migration `80_advisor.sql`, so kept out of `T` and `RPC`;
+ * `80_advisor.test.mjs` asserts these, and that the advisory core's own copy
+ * (scripts/lib/advisory/advisory-repository.mjs, which imports nothing outside
+ * its directory) matches.
+ */
+export const ADVISOR_T = {
+  PLAYBOOKS: 'advisor_playbooks',
+  MAPPINGS: 'advisor_mappings',
+  MERCHANDISING: 'advisor_merchandising',
+  EVENTS: 'advisory_events'
+};
+
+export const ADVISOR_RPC = {
+  EVENTS_PURGE: 'advisory_events_purge'
+};
+
+/**
  * Klaviyo: the connection (the key itself is in Vault) and what each flow and
  * campaign earned. Created by the INCREMENTAL migration `39_klaviyo.sql`, so
  * kept out of `T` and `RPC`; `39_klaviyo.test.mjs` asserts these instead.

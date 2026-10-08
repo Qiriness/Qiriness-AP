@@ -29,6 +29,9 @@ import { loadKnowledge, createProductPolicyReader, KNOWLEDGE_TTL_MS } from "../.
 import { createShoppingReader, createPublicPromotionReader } from "../../../scripts/lib/storefront-chat/shopping-repository.mjs";
 import { parseAllowedShops } from "../../../scripts/lib/storefront-chat/app-proxy-signature.mjs";
 import { refsFromHistory } from "../../../scripts/lib/storefront-chat/conversation-refs.mjs";
+import { advisorStateFromHistory } from "../../../scripts/lib/storefront-chat/advisor-state.mjs";
+import { loadAdvisoryConfig } from "../../../scripts/lib/advisory/advisory-repository.mjs";
+import { createAdvisor } from "../../../scripts/lib/advisory/recommend.mjs";
 import {
   DEFAULT_STOREFRONT_MODEL,
   DEFAULT_TIMEOUT_MS,
@@ -37,7 +40,7 @@ import {
   noRetryWait,
   storefrontFetch,
 } from "../../../scripts/lib/storefront-chat/llm-agent.mjs";
-import { STOREFRONT_CHAT_RPC, STOREFRONT_CHAT_T } from "../../../scripts/lib/tables.mjs";
+import { ADVISOR_T, STOREFRONT_CHAT_RPC, STOREFRONT_CHAT_T } from "../../../scripts/lib/tables.mjs";
 import { loadConfig } from "../../../scripts/lib/sync-config.mjs";
 import {
   createSupabaseClient,
@@ -214,6 +217,44 @@ async function productPolicyReader(
   };
 }
 
+/**
+ * The beauty consultation engine: the brand's playbooks (advisor_* tables,
+ * loaded by `npm run advisor:load`) over the advisor's catalogue. No playbook
+ * loaded, or a config that does not validate: null, and the advisor advises
+ * from search as before.
+ *
+ * DEV ONLY — under a dev catalogue the dev products sit in no curated
+ * collection, so a playbook's slots and families (« serums-visage », the
+ * « Temps Sublime » range) would match nothing. The engine reads each dev
+ * product with the dashboard product's collections (same handle); ids, stock
+ * and cards stay the dev store's.
+ */
+async function buildAdvisor(
+  reader: { selectAll: (table: string, filters: object, columns: string) => Promise<unknown> },
+  shopId: string,
+  catalogue: { products: { handle: string; collections: string[] }[]; collections: unknown[] } | null,
+  devCatalogue: string | null,
+) {
+  if (!catalogue) return null;
+  try {
+    const raw = await loadAdvisoryConfig(reader as never, shopId);
+    if (!raw) return null;
+    let advisorCatalogue = catalogue;
+    if (devCatalogue) {
+      const dashboard = (await loadCatalogue(reader as never, shopId)) as typeof catalogue;
+      const collectionsOf = new Map(dashboard.products.map((p) => [p.handle, p.collections]));
+      advisorCatalogue = {
+        products: catalogue.products.map((p) => ({ ...p, collections: collectionsOf.get(p.handle) ?? p.collections })),
+        collections: dashboard.collections,
+      };
+    }
+    return createAdvisor(raw, advisorCatalogue);
+  } catch (error) {
+    console.warn("[storefront chat] advisor unavailable", error instanceof Error ? error.message : error);
+    return null;
+  }
+}
+
 async function buildAgent(db: ReturnType<typeof client>, model: string, key: string): Promise<Agent> {
   // The brand the advisor speaks for is the catalogue's shop — the one this
   // dashboard syncs — not the dev store hosting the widget.
@@ -257,6 +298,7 @@ async function buildAgent(db: ReturnType<typeof client>, model: string, key: str
     // Dev only: the dev store lacks the catalogue, so cards link to the store
     // that has it. Unset in production, where links stay on the widget's store.
     productBaseUrl: process.env.STOREFRONT_CHAT_PRODUCT_BASE_URL || null,
+    advisor: toolsOn && shop ? await buildAdvisor(reader, shop.id, catalogue as never, devCatalogue) : null,
   });
   remembered = { at: Date.now(), key, agent };
   return agent;
@@ -288,6 +330,8 @@ export async function handleStorefrontChat(shopDomain: string, request: Storefro
   const history = recent.reverse();
   // « les deux », « l'autre », a clarification just asked: folded from the log.
   const refs = refsFromHistory(history);
+  // The consultation so far: profile, mode, questions already asked.
+  const advisorState = advisorStateFromHistory(history);
 
   // Logged whatever happens to the reply, so a failed turn still leaves the question.
   const logged = Promise.all([
@@ -310,6 +354,8 @@ export async function handleStorefrontChat(shopDomain: string, request: Storefro
       choice: request.choice,
       cart: request.cart ?? null,
       shopDomain,
+      advisorState,
+      conversationRef: session.id,
     });
   } catch (error) {
     await logged;
@@ -334,6 +380,9 @@ export async function handleStorefrontChat(shopDomain: string, request: Storefro
         // clarification). The next turn's « les deux » reads these.
         ...("refs" in reply && reply.refs ? { refs: reply.refs } : {}),
         ...("resolution" in reply && reply.resolution ? { resolution: reply.resolution } : {}),
+        // The consultation's memory: profile (value, source, confidence), mode,
+        // questions asked, last advice. The next turn folds it back.
+        ...("advisor" in reply && reply.advisor ? { advisor: reply.advisor } : {}),
         ...("trace" in reply && reply.trace ? { trace: reply.trace } : {}),
         ...("replyLanguage" in reply && reply.replyLanguage ? { replyLanguage: reply.replyLanguage } : {}),
       },
@@ -343,8 +392,32 @@ export async function handleStorefrontChat(shopDomain: string, request: Storefro
     },
   ]);
 
+  recordAdvisoryEvents(db, shopDomain, "events" in reply && Array.isArray(reply.events) ? reply.events : []);
+
   const choices = ("choices" in reply && Array.isArray(reply.choices) ? reply.choices : []) as StorefrontChoice[];
   return { ok: true, sessionId: session.session_token, reply: { text: reply.text, products: reply.products, choices } };
+}
+
+/**
+ * Advisory analytics (advisory_events), written after the reply and never
+ * waited for: a failed write costs a data point, not the customer's answer.
+ */
+export function recordAdvisoryEvents(db: ReturnType<typeof client>, shopDomain: string, events: object[]) {
+  if (!events.length) return;
+  supabaseInsert(db, ADVISOR_T.EVENTS, events.map((e) => ({ ...e, shop_domain: shopDomain }))).catch((error: unknown) => {
+    console.warn("[storefront chat] advisory events not recorded", error instanceof Error ? error.message : error);
+  });
+}
+
+/** A card click from the widget, through the signed event route. */
+export async function recordProductClick(shopDomain: string, sessionToken: string, productId: string) {
+  const db = client();
+  const rows = (await supabaseSelect(db, STOREFRONT_CHAT_T.SESSIONS, { session_token: sessionToken, shop_domain: shopDomain }, "id", { limit: 1 })) as { id: string }[];
+  if (!rows[0]) return false;
+  recordAdvisoryEvents(db, shopDomain, [
+    { channel: "storefront_chat", conversation_ref: rows[0].id, event_type: "product_clicked", playbook_key: null, product_ids: [productId], payload: {} },
+  ]);
+  return true;
 }
 
 async function findOrOpenSession(

@@ -136,6 +136,8 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |   |       |                                  # allow-list; 404 while the advisor secret
 |   |       |                                  # is unset). POST -> storefront-chat-service.
 |   |       |                                  # docs/storefront-chatbot.md
+|   |       |-- storefront/event/route.ts    # PUBLIC (same guards as chat). POST a
+|   |       |                                  # card click -> advisory_events
 |   |       |-- knowledge/                   # shopify-sources · articles · articles/[id]
 |   |       |                                 # · articles/[id]/resync · format (« Format as
 |   |       |                                 # FAQ », stateless, writes nothing)
@@ -463,7 +465,19 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |       |                                # (get_policy, search_faqs, get_product_policy) ·
 |       |                                # knowledge-router (opening retrieval before the model;
 |       |                                # product data first, guidance only on a later tool call) ·
-|       |                                # knowledge-cases (French routing/result expectations)
+|       |                                # knowledge-cases (French routing/result expectations) ·
+|       |                                # advisor-tools (one consultation turn: profile pre-pass,
+|       |                                # advice in the prompt, the advise tool, chips, cards, events) ·
+|       |                                # advisor-state (context.advisor folded from the log)
+|       |-- advisory/                    # the beauty consultation core, CHANNEL-FREE (imports
+|       |                                # nothing outside itself; isolation.test.mjs): profile ·
+|       |                                # lexicon-fr · config (validate, compile, check against a
+|       |                                # catalogue; no product ids) · select-playbook · ranking
+|       |                                # (eligibility → suitability → routine fit → merchandising) ·
+|       |                                # recommend (createAdvisor: advise + next question) ·
+|       |                                # reason-codes · events (advisory_events schema) ·
+|       |                                # advisory-repository (config <-> advisor_* tables) ·
+|       |                                # advisory-cases (eval:advisory)
 |       |-- company.mjs                  # who the company is: shops.shop_name + the
 |       |                                # company_description / logistics_provider_name
 |       |                                # parameters; loadCompany, serviceClientOf. Every
@@ -576,12 +590,17 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |   `-- extensions/storefront-advisor/  # theme app extension: blocks/advisor-embed.liquid
 |                                # (app embed, target body; settings + JSON config)
 |                                # · assets/advisor.js (loader: launcher only) ·
-|                                # advisor-panel.js (panel, fetched on first open)
+|                                # advisor-panel.js (panel, fetched on first open;
+|                                # chips up to 8; card-click beacon to /event)
 |                                # advisor-cart.js (shared cart whitelist incl. observed product/
 |                                # variant labels; fresh locale-aware GET cart.js for shopping
 |                                # and cart-page suitability turns; ephemeral request payload)
 |                                # · advisor.css · locales/fr.default + en
 |-- docs/storefront-chatbot.md   # the advisor: architecture, phase, how to run
+|-- data/advisor/qiriness.json  # the brand's advisory playbooks + mappings +
+|                                # merchandising, as authored; npm run advisor:load
+|                                # (scripts/advisor/load-advisor-config.mjs) loads it;
+|                                # npm run eval:advisory checks it on the live catalogue
 |-- agent/                       # always-on worker (own package.json; reuses scripts/lib/*)
 |   |-- src/
 |   |   |-- index.mjs config.mjs # entrypoint (--once) · env/tunables + Graph gate
@@ -941,6 +960,16 @@ Migration 76. Named in `STOREFRONT_CHAT_T` / `STOREFRONT_CHAT_RPC`. Not `chat_*`
 | `storefront_chat_sessions` | one anonymous widget conversation: `session_token` (minted server-side, handed back to the browser), `shop_domain` (as signed by the proxy), `source`, `status`, `locale`, `turn_count` (the per-session cap), `last_activity_at` (retention) |
 | `storefront_chat_messages` | each customer message and reply: `role`, `content`, `action` (quick action), `context` jsonb (page type, handles, locale, optional country, path; product URLs and refs/resolution on replies; `trace.knowledge` records opening routes, retrieval stages, source IDs/versions and timing), `model` + tokens (null for the mock). Cascades with its session |
 | `storefront_chat_user_messages_since` / `_record_turn` / `_purge` | service_role only: the per-shop daily count, the atomic turn increment, the retention delete |
+
+Migration 80, named in `ADVISOR_T` / `ADVISOR_RPC`. Written by `npm run advisor:load` from `data/advisor/<brand>.json` (config) and by the storefront chat service (events); read by the storefront advisor only.
+
+| Object | Holds |
+| --- | --- |
+| `advisor_playbooks` | the brand's routine playbooks, one row each (`key`, `position`, `status`, `definition` jsonb as authored). FK `shops` |
+| `advisor_mappings` | `kind` + `key` → `definition`: families, slots, concerns, skin types, textures, areas, targets, labels (+ single sections under `_`). Makes playbooks executable without product ids |
+| `advisor_merchandising` | priority entries: product / collection / family, tier, optional concern / slot, dates |
+| `advisory_events` | channel-aware advice analytics: `channel` (storefront_chat, email reserved), `conversation_ref` (session id; ticket id later), `event_type`, `playbook_key`, `product_ids`, `payload` (codes and counts only). No FK, like 76 |
+| `advisory_events_purge` | service_role only: the events retention delete |
 
 ### Klaviyo
 

@@ -23,6 +23,8 @@
   var REQUEST_TIMEOUT_MS = 30000;
   var MOCK_DELAY_MS = 700;
   var MOBILE_QUERY = '(max-width: 640px)';
+  /** Chips under one reply: a skin-type question has five, a concern question up to eight. */
+  var MAX_CHOICES = 8;
 
   /* ---------- small helpers ---------- */
 
@@ -111,6 +113,19 @@
 
   /* ---------- transports ---------- */
 
+  /*
+   * A card click as a beacon to the proxy's /event route, next to /chat. It
+   * never delays the navigation and never reports an error to the shopper.
+   */
+  function reportClick(endpoint, sessionId, productId) {
+    try {
+      var url = String(endpoint).replace(/\/chat$/, '/event');
+      var body = JSON.stringify({ sessionId: sessionId, productId: productId });
+      if (navigator.sendBeacon && navigator.sendBeacon(url, new Blob([body], { type: 'application/json' }))) return;
+      fetch(url, { method: 'POST', credentials: 'same-origin', keepalive: true, headers: { 'Content-Type': 'application/json' }, body: body }).catch(function () {});
+    } catch (e) { /* a lost click is a lost data point, nothing more */ }
+  }
+
   function createProxyTransport(config) {
     var cartModule = null;
     // A FOLLOW-UP CARRIES THE CART. « why did the 30 percent off not apply? »
@@ -181,6 +196,9 @@
 
   /* ---------- components ---------- */
 
+  /* A card click, reported to the advisor (advisory_events): set by the proxy transport only. */
+  var onCardClick = null;
+
   function ProductCard(product, strings) {
     var link = safeLink(product.url);
     var image = safeImage(product.image);
@@ -199,7 +217,8 @@
           target: link.external ? '_blank' : null,
           rel: link.external ? 'noopener noreferrer' : null,
           text: strings.discover,
-          'aria-label': strings.discover + ' — ' + title
+          'aria-label': strings.discover + ' — ' + title,
+          onClick: function () { if (onCardClick && typeof product.id === 'string') onCardClick(product.id); }
         }) : null
       ])
     ]);
@@ -212,12 +231,13 @@
   }
 
   /*
-   * A clarification's options, as chips under the advisor's latest reply. The
-   * labels and values come from the server's resolver, never from the model;
-   * a click sends the label as the message and the value as `choice`.
+   * Chips under the advisor's latest reply: a clarification's options (which
+   * product?) or the consultation's next question (« Sèche », « Mixte », « Je
+   * ne sais pas »). Labels and values come from the server, never from the
+   * model; a click sends the label as the message and the value as `choice`.
    */
   function Choices(choices, onPick) {
-    var valid = (choices || []).filter(function (c) { return c && typeof c.label === 'string' && typeof c.value === 'string'; }).slice(0, 3);
+    var valid = (choices || []).filter(function (c) { return c && typeof c.label === 'string' && typeof c.value === 'string'; }).slice(0, MAX_CHOICES);
     if (!valid.length) return null;
     return el('div', { className: 'sa-choices', role: 'group' }, valid.map(function (choice) {
       return el('button', { type: 'button', className: 'sa-chip sa-chip--choice', text: choice.label, onClick: function () { onPick(choice); } });
@@ -271,6 +291,7 @@
     var strings = config.strings || {};
     var actions = Array.isArray(config.quickActions) ? config.quickActions.filter(function (a) { return a && a.id && a.label; }) : [];
     var send = config.transport === 'proxy' && config.endpoint ? createProxyTransport(config) : createMockTransport(config);
+    if (config.transport === 'proxy' && config.endpoint) onCardClick = function (productId) { reportClick(config.endpoint, state.sessionId, productId); };
     var mobile = window.matchMedia ? window.matchMedia(MOBILE_QUERY) : { matches: false };
 
     var stored = loadState();

@@ -1,0 +1,393 @@
+{
+  "version": 1,
+  "brand": "Qiriness",
+  "_about": "Qiriness advisory routine playbooks (authored by Qiriness, 2026-10-07) plus the mappings that make them executable against the catalogue. Products are NEVER named by id: families, slots and signals resolve through collections, tags, care types and name words, checked by `npm run advisor:load -- --dry-run`. Product facts and claims come from product data only, never from this file. Keys marked `_added` are interpretations needed to execute the playbooks, to be confirmed by Qiriness.",
+
+  "principles": [
+    "Primary concern drives playbook selection.",
+    "Skin type mainly determines texture / variant.",
+    "Sensitivity can override normal recommendations.",
+    "Age is a weak modifier only.",
+    "Current routine should prevent unnecessary duplicate recommendations.",
+    "Stock remains a hard constraint.",
+    "Merchandising priority is applied AFTER suitability."
+  ],
+
+  "selection_priority": ["body_area", "primary_concern", "skin_type_and_behaviour", "sensitivity", "current_routine", "requested_product_or_routine_scope", "secondary_concerns", "sex_target", "age"],
+  "ambiguity_rule": [
+    "if two playbooks remain genuinely plausible, ask one conversational question that best distinguishes them",
+    "do not simply choose based on age"
+  ],
+  "routine_completion": {
+    "logic": [
+      "determine applicable playbook",
+      "determine desired routine scope",
+      "compare required slots against customer's existing routine",
+      "recommend missing/high-value slots only",
+      "don't replace suitable existing products unless the customer wants to"
+    ]
+  },
+
+  "playbooks": [
+    {
+      "key": "face_hydration",
+      "distinguish_by": ["dehydration","tightness"],
+      "_added_distinguish_by": "how the concern is offered when two playbooks are plausible; Qiriness to confirm",
+      "area": "face",
+      "primary_concerns": ["dehydration", "dryness", "tightness", "lack_of_comfort"],
+      "preferred_family": "Source d'Eau",
+      "targeted": { "priority_slots": ["serum", "moisturiser"] },
+      "essential": { "slots": ["serum", "moisturiser"] },
+      "complete": { "slots": ["cleanser", "serum", "moisturiser", "weekly_mask"] },
+      "texture": { "moisturiser": [["dry_or_very_dry", "richer_texture"], ["normal_or_dehydrated", "standard_texture"], ["combination_or_oily", "lighter_texture"]] },
+      "notes": [
+        "dehydration can exist with any skin type",
+        "skin type should mainly choose moisturiser texture",
+        "if the customer already has a suitable moisturiser, consider adding serum rather than replacing it"
+      ]
+    },
+    {
+      "key": "face_radiance_energy",
+      "distinguish_by": ["dullness","early_signs_of_ageing"],
+      "_added_distinguish_by": "how the concern is offered when two playbooks are plausible; Qiriness to confirm",
+      "area": "face",
+      "primary_concerns": ["dullness", "tired_skin", "lack_of_radiance", "early_signs_of_ageing"],
+      "preferred_family": "Active Énergie",
+      "targeted": { "priority_slots": ["serum", "moisturiser"] },
+      "essential": { "slots": ["treatment_or_serum", "moisturiser"] },
+      "complete": { "slots": ["cleanser", "treatment_or_serum", "moisturiser", "eye_care"] },
+      "notes": [
+        "prioritise radiance and vitality",
+        "do not move automatically into a stronger anti-ageing range because of age",
+        "if firmness is the dominant need, consider face_firmness_lift"
+      ]
+    },
+    {
+      "key": "face_firmness_lift",
+      "distinguish_by": ["loss_of_firmness","facial_contours"],
+      "_added_distinguish_by": "how the concern is offered when two playbooks are plausible; Qiriness to confirm",
+      "area": "face",
+      "primary_concerns": ["loss_of_firmness", "loss_of_tone", "facial_contours", "wrinkles"],
+      "preferred_family": "Active Énergie Lift",
+      "targeted": { "priority_slots": ["serum", "moisturiser"] },
+      "essential": { "slots": ["serum", "moisturiser"] },
+      "complete": { "slots": ["cleanser", "serum", "moisturiser", "eye_care"] },
+      "notes": [
+        "firmness must be an actual customer concern",
+        "age can reinforce but should not trigger this playbook alone",
+        "if the customer's need is broader mature anti-ageing, compare against face_global_anti_age"
+      ]
+    },
+    {
+      "key": "face_global_anti_age",
+      "distinguish_by": ["global_signs_of_ageing","mature_skin"],
+      "_added_distinguish_by": "how the concern is offered when two playbooks are plausible; Qiriness to confirm",
+      "area": "face",
+      "primary_concerns": ["wrinkles", "firmness", "loss_of_density", "mature_skin", "global_signs_of_ageing"],
+      "preferred_family": "Temps Sublime",
+      "targeted": { "priority_slots": ["serum", "moisturiser"] },
+      "essential": { "slots": ["serum", "moisturiser"] },
+      "complete": { "slots": ["cleanser", "serum", "day_moisturiser", "night_moisturiser", "eye_care", "optional_booster"] },
+      "texture": { "moisturiser": [["dry_or_very_dry", "richer_texture"], ["normal_or_dry", "standard_texture"], ["combination_or_oily", "lighter_texture"]] },
+      "notes": [
+        "use for genuinely global anti-ageing needs",
+        "don't recommend the complete routine unless the customer wants it",
+        "current routine should determine which slots actually need filling"
+      ]
+    },
+    {
+      "key": "face_advanced_anti_age",
+      "distinguish_by": ["deep_wrinkles","regeneration"],
+      "_added_distinguish_by": "how the concern is offered when two playbooks are plausible; Qiriness to confirm",
+      "area": "face",
+      "primary_concerns": ["deep_wrinkles", "significant_loss_of_density", "advanced_loss_of_firmness", "regeneration", "demanding_mature_skin"],
+      "preferred_family": "Exception",
+      "essential": { "slots": ["serum", "moisturiser"] },
+      "complete": { "slots": ["cleanser", "serum", "moisturiser", "eye_care"] },
+      "notes": [
+        "reserve for concerns that justify advanced correction",
+        "do not choose Exception purely because of age",
+        "do not automatically favour the premium range over a better customer fit"
+      ]
+    },
+    {
+      "key": "face_dark_spots",
+      "distinguish_by": ["dark_spots","uneven_tone"],
+      "_added_distinguish_by": "how the concern is offered when two playbooks are plausible; Qiriness to confirm",
+      "area": "face",
+      "primary_concerns": ["dark_spots", "pigmentation", "uneven_tone", "lack_of_uniformity"],
+      "preferred_family": "Éclat Parfait",
+      "targeted": { "priority_slots": ["serum", "treatment"] },
+      "essential": { "slots": ["serum", "moisturiser"] },
+      "complete": { "slots": ["lotion", "serum", "moisturiser"] },
+      "notes": [
+        "pigmentation should be a significant customer concern",
+        "claims must always come from authoritative product data",
+        "if a preferred product is unavailable, use the best valid alternative rather than inventing one"
+      ]
+    },
+    {
+      "key": "face_sensitive_comfort",
+      "distinguish_by": ["sensitivity","redness"],
+      "_added_distinguish_by": "how the concern is offered when two playbooks are plausible; Qiriness to confirm",
+      "area": "face",
+      "primary_concerns": ["sensitivity", "reactive_skin", "discomfort", "tightness", "redness"],
+      "preferred_family": "sensitive_skin_range",
+      "targeted": { "priority_slots": ["moisturiser"] },
+      "essential": { "slots": ["gentle_cleanser", "moisturiser"] },
+      "complete": { "slots": ["gentle_cleanser", "compatible_treatment", "moisturiser"] },
+      "tolerance_first": true,
+      "notes": [
+        "sensitivity is separate from dry/oily skin type",
+        "tolerance takes priority over merchandising priority",
+        "avoid unnecessarily complex routines",
+        "product-specific policies can override normal playbook logic"
+      ]
+    },
+    {
+      "key": "face_oily_imperfections",
+      "distinguish_by": ["imperfections","shine"],
+      "_added_distinguish_by": "how the concern is offered when two playbooks are plausible; Qiriness to confirm",
+      "area": "face",
+      "primary_concerns": ["excess_sebum", "shine", "imperfections", "clogged_pores"],
+      "essential": { "slots": ["cleanser", "moisturiser"] },
+      "complete": { "slots": ["cleanser", "targeted_treatment", "moisturiser", "weekly_mask"] },
+      "texture": { "moisturiser": [["any", "lighter_texture"]] },
+      "notes": [
+        "oily skin still requires appropriate hydration",
+        "prefer lighter compatible moisturiser textures",
+        "don't confuse complexion/makeup products with core treatment steps"
+      ]
+    },
+    {
+      "key": "eye_advisor",
+      "area": "eyes",
+      "routes": [
+        { "key": "fatigue", "concerns": ["tired_eyes", "early_signs"], "slots": ["eye_care"] },
+        { "key": "dark_circles_puffiness", "concerns": ["dark_circles", "puffiness", "fatigue"], "slots": ["targeted_eye_treatment"] },
+        { "key": "anti_age", "concerns": ["eye_wrinkles", "mature_eye_area"], "slots": ["anti_age_eye_care"] },
+        { "key": "advanced_anti_age", "concerns": ["advanced_eye_wrinkles", "loss_of_firmness"], "slots": ["advanced_eye_care"] }
+      ],
+      "notes": [
+        "only recommend products explicitly suitable for the eye area",
+        "concern matters more than age",
+        "don't build a whole face routine if the customer only asks about eyes"
+      ]
+    },
+    {
+      "key": "men_face",
+      "area": "face",
+      "target": "men",
+      "routes": [
+        {
+          "key": "hydration",
+          "concerns": ["dehydration", "dryness", "tightness", "lack_of_comfort"],
+          "_added": "concerns and targeted slot: the playbook names the route, not its concerns",
+          "targeted": ["moisturiser"],
+          "essential": ["cleanser", "moisturiser"],
+          "texture": { "moisturiser": [["dry_skin", "richer_texture"], ["normal_combination", "lighter_texture"]] }
+        },
+        {
+          "key": "anti_age",
+          "concerns": ["wrinkles", "early_signs_of_ageing", "loss_of_firmness", "global_signs_of_ageing", "deep_wrinkles"],
+          "_added": "concerns and targeted slot: the playbook names the route, not its concerns",
+          "targeted": ["anti_age_moisturiser"],
+          "essential": ["cleanser", "anti_age_moisturiser"]
+        },
+        {
+          "key": "radiance",
+          "concerns": ["dullness", "tired_skin", "lack_of_radiance"],
+          "_added": "concerns: the playbook names the route, not its concerns",
+          "optional": ["complexion_or_radiance_product"]
+        }
+      ],
+      "notes": [
+        "use when the customer explicitly wants men's skincare or context strongly indicates it",
+        "concern and skin type still determine the recommendation",
+        "don't add anti-ageing merely because the customer is male or older"
+      ]
+    },
+    {
+      "key": "body_hydration",
+      "distinguish_by": ["dryness"],
+      "_added_distinguish_by": "how the concern is offered when two playbooks are plausible; Qiriness to confirm",
+      "area": "body",
+      "primary_concerns": ["dryness", "dehydration", "discomfort"],
+      "targeted": { "priority_slots": ["body_moisturiser"] },
+      "essential": { "slots": ["body_moisturiser"] },
+      "complete": { "slots": ["body_cleanser", "body_moisturiser", "optional_targeted_body_care"] },
+      "notes": [
+        "only use products explicitly suitable for the body",
+        "never substitute face products unless product data explicitly supports body use"
+      ]
+    }
+  ],
+
+  "families": {
+    "Source d'Eau": { "collections": ["source-deau"] },
+    "Active Énergie": { "collections": ["active-energie-soins-coup-de-boost-pour-un-teint-eclatant-une-peau-revitalisee"] },
+    "Active Énergie Lift": { "collections": ["active-energie-soins-coup-de-boost-pour-un-teint-eclatant-une-peau-revitalisee"], "name_words": ["lift"] },
+    "Temps Sublime": { "collections": ["gamme-anti-age-temps-sublime"] },
+    "Exception": { "collections": ["exception-la-ligne-anti-age-regenerante-pour-peaux-exigeantes"] },
+    "Éclat Parfait": { "collections": ["eclat-parfait"] },
+    "sensitive_skin_range": { "collections": ["peaux-sensibles"] }
+  },
+
+  "slots": {
+    "serum": { "kind": "serum", "concern_required": true, "collections": ["serums-visage"], "care_types": ["serum"] },
+    "treatment_or_serum": { "kind": "serum", "concern_required": true, "collections": ["serums-visage"], "care_types": ["serum"] },
+    "treatment": { "kind": "serum", "concern_required": true, "collections": ["serums-visage", "patchs-visage"], "care_types": ["serum", "patch"] },
+    "targeted_treatment": { "kind": "serum", "concern_required": true, "collections": ["serums-visage", "patchs-visage"], "care_types": ["serum", "patch"] },
+    "compatible_treatment": { "kind": "serum", "concern_required": true, "collections": ["serums-visage", "peaux-sensibles"], "care_types": ["serum", "brume"] },
+    "optional_booster": { "kind": "booster", "concern_required": true, "optional": true, "collections": ["serums-visage"], "care_types": ["serum"], "name_words": ["booster"] },
+    "moisturiser": { "kind": "moisturiser", "texture_slot": "moisturiser", "collections": ["cremes-de-jour", "cremes-hydratantes", "creme-de-nuit", "soins-hydratants"], "care_types": ["creme"] },
+    "day_moisturiser": { "kind": "moisturiser", "texture_slot": "moisturiser", "collections": ["cremes-de-jour"], "care_types": ["creme"], "exclude_name_words": ["nuit"] },
+    "night_moisturiser": { "kind": "night_cream", "texture_slot": "moisturiser", "collections": ["creme-de-nuit", "cremes-visage-nuit"], "care_types": ["creme"], "prefer_name_words": ["nuit"] },
+    "cleanser": { "kind": "cleanser", "collections": ["nettoyants-et-lotions"], "care_types": ["lait", "eau", "mousse", "gel", "pain", "nettoyant"] },
+    "gentle_cleanser": { "kind": "cleanser", "collections": ["nettoyants-et-lotions"], "care_types": ["lait", "eau", "mousse", "pain"] },
+    "lotion": { "kind": "lotion", "concern_required": true, "collections": ["exfoliant-lotion-gommage"], "care_types": ["lotion"] },
+    "weekly_mask": { "kind": "mask", "concern_required": true, "collections": ["masques-patch"], "care_types": ["masque"] },
+    "eye_care": { "kind": "eye_care", "concern_required": true, "area": "eyes", "collections": ["soins-contour-des-yeux"] },
+    "targeted_eye_treatment": { "kind": "eye_care", "concern_required": true, "area": "eyes", "collections": ["soins-contour-des-yeux"] },
+    "anti_age_eye_care": { "kind": "eye_care", "concern_required": true, "area": "eyes", "collections": ["soins-contour-des-yeux"] },
+    "advanced_eye_care": { "kind": "eye_care", "concern_required": true, "area": "eyes", "collections": ["soins-contour-des-yeux"] },
+    "anti_age_moisturiser": { "kind": "moisturiser", "texture_slot": "moisturiser", "care_types": ["creme", "fluide", "baume"] },
+    "complexion_or_radiance_product": { "kind": "complexion", "optional": true, "name_words": ["bonne mine"] },
+    "body_cleanser": { "kind": "body_cleanser", "collections": ["cremes-corps-hydratation"], "care_types": ["huile", "gel"], "name_words": ["douche"] },
+    "body_moisturiser": { "kind": "body_moisturiser", "collections": ["cremes-corps-hydratation"], "care_types": ["creme", "lait", "huile", "baume"], "exclude_name_words": ["douche"] },
+    "optional_targeted_body_care": { "kind": "body_treatment", "optional": true, "collections": ["masques-corps"], "care_types": ["masque"] }
+  },
+
+  "_concern_required_note": "A treatment step (serum, treatment, eye care, mask, lotion, booster) is filled only by a product that addresses one of the customer's concerns or belongs to the playbook's preferred family; a cleanser or cream may be generic. Added 2026-10-07: on the dev catalogue an anti-spot serum was recommended for first wrinkles.",
+  "_men_slots_note": "Men's products sit in no collection: with target men, cleanser and moisturiser match by care type alone (see slot_overrides).",
+  "slot_overrides": {
+    "men": {
+      "cleanser": { "kind": "cleanser", "care_types": ["mousse", "nettoyant", "gel"] },
+      "moisturiser": { "kind": "moisturiser", "texture_slot": "moisturiser", "care_types": ["creme", "fluide", "baume"] }
+    }
+  },
+
+  "areas": {
+    "eyes": { "exclusive": true, "collections": ["soins-contour-des-yeux"], "tags": ["yeux"] },
+    "lips": { "exclusive": true, "tags": ["lèvres"], "not_if_area": "eyes" },
+    "hands": { "exclusive": true, "tags": ["mains"] },
+    "body": { "tags": ["corps", "hydrater corps", "hydratation corps"], "collections": ["cremes-corps-hydratation", "masques-corps"] },
+    "face": { "tags": ["visage"] }
+  },
+  "targets": { "men": { "tags": ["homme"] } },
+  "bundles": { "care_types": ["coffret", "kit", "duo", "trio"], "name_words": ["coffret", "kit", "duo", "trio"] },
+
+  "skin_types": {
+    "very_dry": { "tags": ["peaux sèches", "peaux sèche"] },
+    "dry": { "tags": ["peaux sèches", "peaux sèche"] },
+    "normal": { "tags": ["peaux normales"] },
+    "combination": { "tags": ["peaux mixtes", "peaux mixte"] },
+    "oily": { "tags": ["peaux grasses"] },
+    "_all": { "tags": ["tous les types de peaux"] }
+  },
+  "skin_type_groups": {
+    "dry_or_very_dry": { "skin_types": ["very_dry", "dry"] },
+    "normal_or_dehydrated": { "skin_types": ["normal"], "behaviours": ["dehydration"] },
+    "normal_or_dry": { "skin_types": ["normal", "dry"] },
+    "combination_or_oily": { "skin_types": ["combination", "oily"] },
+    "dry_skin": { "skin_types": ["very_dry", "dry"] },
+    "normal_combination": { "skin_types": ["normal", "combination"] },
+    "any": { "any": true }
+  },
+  "textures": {
+    "richer_texture": { "name_words": ["riche"], "tags": ["crème riche"], "opposite": "lighter_texture" },
+    "lighter_texture": { "name_words": ["light", "voile", "fluide"], "tags": ["légère"], "opposite": "richer_texture" },
+    "standard_texture": { "unmarked": true }
+  },
+  "sensitivity": { "collections": ["peaux-sensibles"], "tags": ["peaux sensibles"] },
+  "maturity": { "tags": ["peau mature", "peaux matures"] },
+
+  "concerns": {
+    "dehydration": { "collections": ["soins-hydratants"], "tags": ["hydratation", "hydratant", "hydrater"] },
+    "dryness": { "collections": ["soins-hydratants", "cremes-hydratantes"], "tags": ["hydratation", "nourrissant", "hydrater corps", "hydratation corps"] },
+    "tightness": { "collections": ["soins-hydratants", "peaux-sensibles"], "tags": ["hydratation", "Apaisant"] },
+    "lack_of_comfort": { "collections": ["soins-hydratants", "peaux-sensibles"], "tags": ["Apaisant"] },
+    "discomfort": { "collections": ["peaux-sensibles"], "tags": ["Apaisant"] },
+    "dullness": { "collections": ["eclat-et-bonne-mine-1", "anti-fatigue"], "tags": ["éclat"] },
+    "tired_skin": { "collections": ["anti-fatigue"], "tags": ["défatiguant", "Réénergisant"] },
+    "lack_of_radiance": { "collections": ["eclat-et-bonne-mine-1"], "tags": ["éclat", "teint lumineux"] },
+    "early_signs_of_ageing": { "collections": ["diag-rides-legeres"], "tags": ["premieres rides"] },
+    "loss_of_firmness": { "tags": ["Liftant", "redensifiant"] },
+    "loss_of_tone": { "tags": ["Liftant", "Repulpant"] },
+    "facial_contours": { "tags": ["Liftant"] },
+    "firmness": { "tags": ["Liftant", "redensifiant"] },
+    "wrinkles": { "collections": ["cremes-anti-age-anti-rides", "diag-rides-et-ridules"], "tags": ["rides", "anti-âge"] },
+    "loss_of_density": { "tags": ["redensifiant"] },
+    "mature_skin": { "collections": ["diag-anti-age"], "tags": ["peaux matures", "anti age global"] },
+    "global_signs_of_ageing": { "collections": ["diag-anti-age"], "tags": ["anti age global", "anti age intégral"] },
+    "deep_wrinkles": { "collections": ["diag-rides-visibles"], "tags": ["rides", "anti age intégral"] },
+    "significant_loss_of_density": { "tags": ["redensifiant"] },
+    "advanced_loss_of_firmness": { "tags": ["Liftant", "redensifiant"] },
+    "regeneration": { "collections": ["diag-rides-visibles"], "tags": ["anti age intégral"] },
+    "demanding_mature_skin": { "collections": ["diag-anti-age"], "tags": ["peaux matures"] },
+    "dark_spots": { "collections": ["anti-taches-et-anti-rougeurs", "diag-taches"], "tags": ["anti-taches", "anti-tâches"] },
+    "pigmentation": { "collections": ["anti-taches-et-anti-rougeurs", "diag-taches"], "tags": ["anti-taches", "anti-tâches"] },
+    "uneven_tone": { "collections": ["anti-taches-et-anti-rougeurs"], "tags": ["unifier", "teint unifié"] },
+    "lack_of_uniformity": { "collections": ["anti-taches-et-anti-rougeurs"], "tags": ["unifier", "teint unifié"] },
+    "sensitivity": { "collections": ["peaux-sensibles"], "tags": ["peaux sensibles", "Apaisant"] },
+    "reactive_skin": { "collections": ["peaux-sensibles"], "tags": ["peaux sensibles", "Apaisant"] },
+    "redness": { "collections": ["anti-taches-et-anti-rougeurs", "peaux-sensibles"], "tags": ["anti-taches et anti-rougeurs", "Apaisant"] },
+    "excess_sebum": { "collections": ["anti-imperfections"], "tags": ["matifiant", "matifier"] },
+    "shine": { "collections": ["anti-imperfections"], "tags": ["matifiant", "matifier"] },
+    "imperfections": { "collections": ["anti-imperfections"], "tags": ["anti-imperfections", "anti acné", "anti bouton"] },
+    "clogged_pores": { "collections": ["anti-imperfections"], "tags": ["pores dilatés", "purifiant"] },
+    "tired_eyes": { "collections": ["anti-fatigue"], "tags": ["défatiguant", "Décongestionnant"] },
+    "early_signs": { "collections": ["diag-rides-legeres"], "tags": ["premieres rides"] },
+    "dark_circles": { "collections": ["diag-cernes-et-poches"], "tags": ["Anti-Cerne", "Anti-Cernes"] },
+    "puffiness": { "collections": ["diag-cernes-et-poches"], "tags": ["anti-poches", "Décongestionnant"] },
+    "fatigue": { "collections": ["anti-fatigue", "diag-cernes-et-poches"], "tags": ["défatiguant"] },
+    "eye_wrinkles": { "collections": ["diag-rides-et-ridules"], "tags": ["rides", "anti-âge"] },
+    "mature_eye_area": { "collections": ["diag-anti-age"], "tags": ["peaux matures"] },
+    "advanced_eye_wrinkles": { "collections": ["diag-rides-visibles"], "tags": ["anti age intégral"] }
+  },
+
+  "labels": {
+    "fr": {
+      "body_area": { "face": "Visage", "eyes": "Contour des yeux", "body": "Corps" },
+      "skin_type": { "very_dry": "Très sèche", "dry": "Sèche", "normal": "Équilibrée", "combination": "Mixte", "oily": "Grasse", "unknown": "Je ne sais pas" },
+      "sensitivity": { "sensitive": "Oui, sensible", "none": "Non" },
+      "routine_scope": { "targeted": "Un soin ciblé", "essential": "Une routine essentielle", "complete": "Une routine complète", "complete_existing": "Compléter ma routine" },
+      "current_routine": { "none": "Aucune routine", "moisturiser": "Une crème", "cleanser+moisturiser": "Nettoyant et crème", "cleanser+serum+moisturiser": "Nettoyant, sérum et crème" },
+      "age_band": { "under_30": "Moins de 30 ans", "30_44": "30 à 44 ans", "45_59": "45 à 59 ans", "60_plus": "60 ans et plus" },
+      "concern": {
+        "dehydration": "Déshydratation", "dryness": "Sécheresse", "tightness": "Tiraillements", "lack_of_comfort": "Manque de confort",
+        "dullness": "Teint terne", "tired_skin": "Peau fatiguée", "lack_of_radiance": "Manque d'éclat", "early_signs_of_ageing": "Premières rides",
+        "loss_of_firmness": "Perte de fermeté", "loss_of_tone": "Perte de tonicité", "facial_contours": "Contours du visage", "wrinkles": "Rides",
+        "firmness": "Fermeté", "loss_of_density": "Perte de densité", "mature_skin": "Peau mature", "global_signs_of_ageing": "Signes de l'âge globaux",
+        "deep_wrinkles": "Rides marquées", "significant_loss_of_density": "Forte perte de densité", "advanced_loss_of_firmness": "Relâchement marqué",
+        "regeneration": "Régénération", "demanding_mature_skin": "Peau mature exigeante",
+        "dark_spots": "Taches", "pigmentation": "Pigmentation", "uneven_tone": "Teint irrégulier", "lack_of_uniformity": "Manque d'uniformité",
+        "sensitivity": "Sensibilité", "reactive_skin": "Peau réactive", "discomfort": "Inconfort", "redness": "Rougeurs",
+        "excess_sebum": "Excès de sébum", "shine": "Brillances", "imperfections": "Imperfections", "clogged_pores": "Pores obstrués",
+        "tired_eyes": "Regard fatigué", "early_signs": "Premières ridules", "dark_circles": "Cernes", "puffiness": "Poches", "fatigue": "Fatigue",
+        "eye_wrinkles": "Rides du contour des yeux", "mature_eye_area": "Contour des yeux mature", "advanced_eye_wrinkles": "Rides marquées du contour des yeux"
+      }
+    },
+    "en": {
+      "body_area": { "face": "Face", "eyes": "Eye area", "body": "Body" },
+      "skin_type": { "very_dry": "Very dry", "dry": "Dry", "normal": "Balanced", "combination": "Combination", "oily": "Oily", "unknown": "I don't know" },
+      "sensitivity": { "sensitive": "Yes, sensitive", "none": "No" },
+      "routine_scope": { "targeted": "One targeted product", "essential": "An essential routine", "complete": "A complete routine", "complete_existing": "Complete my routine" },
+      "current_routine": { "none": "No routine", "moisturiser": "A cream", "cleanser+moisturiser": "Cleanser and cream", "cleanser+serum+moisturiser": "Cleanser, serum and cream" },
+      "age_band": { "under_30": "Under 30", "30_44": "30 to 44", "45_59": "45 to 59", "60_plus": "60 and over" },
+      "concern": {}
+    }
+  },
+
+  "merchandising": {
+    "rule": [
+      "playbook establishes suitability first",
+      "rank suitable products by customer fit",
+      "then apply Qiriness merchandising priority",
+      "merchandising must never make an unsuitable product eligible"
+    ],
+    "tiers": { "neutral": 0, "preferred": 0.05, "hero": 0.1, "strategic_launch": 0.1 },
+    "tie_window": 0.15,
+    "entries": []
+  }
+}

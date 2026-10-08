@@ -4,7 +4,8 @@
  * anything unrecognised is dropped rather than passed on.
  *
  * Request: { sessionId?, message, action?, choice?, context? }
- *   choice  the value of a clarification chip the customer clicked (a product id or a care type)
+ *   choice  the value of a chip the customer clicked: a product id or a care type
+ *           (resolver clarification), or `profile:<field>:<value>` (advisor question)
  */
 
 export const MAX_MESSAGE_CHARS = 1000;
@@ -21,7 +22,8 @@ const HANDLE = /^[\p{Ll}\p{Lo}\p{N}_-]{1,255}$/u;
 const LOCALE = /^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})?$/;
 const COUNTRY = /^[A-Z]{2}$/;
 const MAX_PATH_CHARS = 300;
-const CHOICE = /^[\p{L}\p{N} _'’-]{1,80}$/u;
+// A product id, a care type, or a profile answer (`profile:skin_type:dry`, `profile:current_routine:cleanser+moisturiser`).
+const CHOICE = /^[\p{L}\p{N} _'’:+-]{1,80}$/u;
 
 export class ChatRequestError extends Error {}
 

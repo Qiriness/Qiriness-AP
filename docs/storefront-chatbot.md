@@ -46,6 +46,84 @@ Supabase: storefront_chat_sessions / _messages      migration 76
 - **Memory:** each assistant row stores `context.refs` `{ recommended, mentioned }` and `context.resolution` `{ status, ids, pending }`, folded by `refsFromHistory`. No new table. Curated aliases are deferred; the resolver already accepts an alias map.
 - **Measured:** `npm run eval:resolution` gives 71/71 on the live catalogue with 0 silent wrong picks. The unit tests run on an invented brand, to show nothing is hardcoded.
 
+## Advice: the beauty consultation (2026-10-07)
+
+The customer talks naturally. Behind the conversation, an engine keeps a profile, applies the brand's routine playbooks and decides what to recommend. The model converses and explains. The rationale is in `DECISIONS.md` § Storefront advisor.
+
+```
+message (+ chip value, + quick action)
+  → lexicon-fr (~ms): « peau sèche », « premières rides », « j'utilise déjà un nettoyant » → profile updates
+  → mergeProfile: value · source (quick_choice | natural_language | model_inferred) · confidence
+  → advise (~0.1 ms):
+       hard eligibility: stock, area, men only on explicit request, bundles, exclusions
+       playbook: area → primary concern; two plausible playbooks → ONE question
+       steps for the scope (targeted · essential · complete · complete_existing) minus the current routine
+       each step: suitability (concern > sensitivity > secondary; skin type → texture; age ≤ 0.05)
+                  → preferred family → merchandising tier, only within the tie window
+       routine builder: the next field whose answer would change the routine (never sex or age)
+  → prompt: ADVICE (profile, playbook notes, steps with product facts + reason codes, next_question)
+  → reply; cards = the steps; chips = next_question options (profile:<field>:<value>)
+  → context.advisor on the assistant row; advisory_events
+```
+
+| Piece | Where | Channel |
+|---|---|---|
+| profile schema, merge rules | `scripts/lib/advisory/profile.mjs` | shared later |
+| French phrasing → profile | `scripts/lib/advisory/lexicon-fr.mjs` | shared later |
+| config validate / compile / check against the catalogue | `scripts/lib/advisory/config.mjs` | shared later |
+| playbook selection, ambiguity | `scripts/lib/advisory/select-playbook.mjs` | shared later |
+| eligibility, suitability, texture, merchandising | `scripts/lib/advisory/ranking.mjs` | shared later |
+| the engine, next question | `scripts/lib/advisory/recommend.mjs` | shared later |
+| reason codes, event schema | `scripts/lib/advisory/reason-codes.mjs`, `events.mjs` | shared later |
+| config ↔ tables | `scripts/lib/advisory/advisory-repository.mjs` | shared later |
+| one chat turn: chips, cards, prompt block, `advise` tool | `scripts/lib/storefront-chat/advisor-tools.mjs` | storefront only |
+| profile memory from the message log | `scripts/lib/storefront-chat/advisor-state.mjs` | storefront only |
+| card click beacon | widget → `/apps/storefront-advisor/event` → `web/app/api/storefront/event/route.ts` | storefront only |
+
+**Already channel-independent, and unchanged:** product resolution, product facts, policies and FAQs, product-specific policies.
+
+### The playbooks
+
+- **Content:** `data/advisor/qiriness.json` holds the 11 Qiriness playbooks as authored. Each has `area`, `primary_concerns` (or `routes` for the eyes and men), `preferred_family`, `targeted` / `essential` / `complete` slots, a `texture` rule for the cream step, and `notes`.
+- **Mappings:** `families`, `slots`, `concerns`, `skin_types`, `textures`, `areas`, `targets` and `labels` map everything to collections, tags, care types and name words. No product id appears anywhere.
+- **Load:** `npm run advisor:load -- --dry-run` validates the file and checks every reference against the live catalogue. `npm run advisor:load` then replaces the shop's config in `advisor_playbooks` / `advisor_mappings` / `advisor_merchandising`. The advisor reads them at its next five-minute refresh. When no playbook is loaded, the advisor advises from search, as before.
+- **Merchandising:** `merchandising.entries` takes `{ target_kind: product | collection | family, target, tier: neutral | preferred | hero | strategic_launch, concern?, slot?, starts_at?, ends_at? }`. The boosts per tier are config, at most 0.2, and apply only within `tie_window` of the best fit.
+- **Dev catalogue:** the dev products sit in no curated collection, so the engine reads each dev product with the collections of the dashboard product that has the same handle. Ids, stock and cards stay the dev store's.
+
+### Evaluation
+
+- `npm run eval:advisory` runs on the live catalogue and costs nothing (no model).
+- It covers 21 French conversations, including chips and the routine builder.
+- It checks the brand's rules as invariants over 3,936 profile combinations.
+- Bar: every case passes and there are 0 violations. Measured 2026-10-07: 21/21 cases, 0 violations, 0.1 ms per profile.
+
+### Events (`advisory_events`)
+
+**Event types:**
+
+| Group | Events |
+|---|---|
+| Conversation | `conversation_started`, `advisory_started` |
+| Routine builder | `routine_builder_started` / `_completed` |
+| Profile | `profile_field_collected` (field + source) |
+| Questions | `clarification_asked` (field + why) |
+| Recommendation | `products_considered` (counts per exclusion code), `products_recommended` (ids, step reason codes, merchandised ids, skipped steps) |
+| Clicks | `product_clicked` |
+| In the schema, not written yet | `added_to_cart`, `recommendation_abandoned`, `unresolved_question`, `support_handoff`, `purchase` |
+
+**Each row:**
+- channel: `storefront_chat` now; `email` is reserved;
+- `conversation_ref`: the chat session id, or a ticket id later;
+- `shop_domain`.
+
+Events never hold the customer's words.
+
+**Future dashboard mapping (not built; a separate task):**
+- **Advice funnel:** per channel and per day, conversations → advisory started → question asked → recommended → clicked → added to cart → purchase. These are counts by `event_type`; rates are rebuilt from counts, as in § Storefront analytics.
+- **Playbook mix and question load:** `products_recommended.playbook_key` and `clarification_asked.payload.field`.
+- **Product advice performance:** `products_recommended.product_ids` joined to `products` alongside the existing product-performance table, with `merchandised_ids` kept separate so pushed and earned recommendations can be compared.
+- **Email later:** the same table, with `channel = 'email'` and `conversation_ref = tickets.id`, so the support dashboard can join its tickets.
+
 ## Policies and FAQs (2026-10-06)
 
 The storefront uses the existing policy, parameter and FAQ storage. No migration,
@@ -249,7 +327,7 @@ Sessions idle for longer than `STOREFRONT_CHAT_RETENTION_DAYS` (30) are purged, 
 | --- | --- |
 | 2 | **built**: LLM reply, concise system prompt, no tools |
 | 3 | **built**: `search_products`, `get_product` over a product repository (whitelisted columns, live products only) |
-| 4 | recommendation service (structured needs → ranked products → LLM explains); `compare_products` |
+| 4 | **built (advice, 2026-10-07):** profile → brand playbooks → eligibility → suitability → routine fit → merchandising, routine builder, advisory events (§ Advice). `compare_products` still to build |
 | 5 | **built:** general policies/FAQs, product guidance, read-only cart context, synced stock and deterministic public-promotion evaluation. Dev-store shopping reply validation remains open; routine builder deferred |
 | 6 | `support_handoff` (email, order number, summary, transcript to the support system) |
 | Later | carefully controlled order/customer access |

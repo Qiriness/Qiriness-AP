@@ -40,6 +40,24 @@ these.
 as its own item: `llm_usage` (item 14), `categorisation_review` (item 15), and
 `category_forwarding` / `ticket_forwards` (item 1).
 
+## 48. Storefront advice (profile, playbooks, routine builder): offline-proven, not yet on the dev store — 2026-10-07
+
+Offline, 2026-10-07: `npm run eval:advisory` on the live catalogue gives 21/21 cases, and 0 rule violations across 3,936 profiles. The checks below need the migration, the load and a live model.
+
+1. **Apply migration 80.** **Done 2026-10-07.** **Check:** the 4 tables and `advisory_events_purge` exist, and `80_advisor.test.mjs` passes.
+2. **Load the config.** **Done 2026-10-07:** 11 playbooks and 100 mapping entries loaded, every reference resolving; `eval:advisory -- --from-db` gives 21/21 and 0 violations. **Check:** `npm run advisor:load -- --dry-run` reports every reference resolving, then `npm run advisor:load` loads it. A read-back gives 11 `advisor_playbooks` rows, and `npm run eval:advisory -- --from-db` passes too.
+3. **Qiriness review of the interpretations.** **Check:** Qiriness confirms or corrects the `_added` keys in `data/advisor/qiriness.json`:
+   - the men's routes' concerns and targeted slot;
+   - `distinguish_by`;
+   - the slot → collection mapping.
+   - It also says whether eye routes should prefer a range: none was given, so eye products rank by concern alone.
+4. **Free text.** **Signed requests to a local server, 2026-10-07, on the 12-product dev catalogue:** one call, Caresse Temps Sublime night cream (the dev catalogue has no Active Énergie product). The first attempt recommended the anti-spot serum for first wrinkles, so treatment steps now require a concern match (`concern_required`). **Check (on the store):** on the dev store, « J'ai la peau sèche et je commence à avoir des rides ». One model call (`trace.advice.status: recommended`, playbook `face_radiance_energy`), an Active Énergie product as a card, and no question.
+5. **Ambiguity.** **Signed requests, 2026-10-07:** « J'ai des rides » → one question with 4 chips; the chip « Signes de l'âge globaux » → Temps Sublime. **Check (on the store):** « J'ai des rides ». One question with chips (Perte de fermeté / Signes de l'âge globaux / …). Click one: the profile shows `source: quick_choice`, and the reply recommends from that playbook.
+6. **Routine builder.** **Signed requests, 2026-10-07:** intro sentence + concern chips; the free-text answer « rides marquées, peau mixte » set both fields (skin type never asked); recommended at turn 4. **Check (on the store):** « Construire ma routine ». The reply says a few questions will help, then asks the concern with chips. About 3 to 5 turns lead to a routine. Each chip question is new. The events show `routine_builder_started`, then `routine_builder_completed`.
+7. **Men.** **Check:** « une crème pour homme, peau sèche et déshydratée » → only men's products. The same question without « homme » → no men's product.
+8. **Events.** **Signed requests, 2026-10-07:** started / builder started / fields collected (with source) / questions / considered / recommended / builder completed, all present for the session. The first run dropped the step reason codes from the payload, and every profile field said turn 0: both fixed. Card clicks not yet seen. **Check:** `select event_type, count(*) from advisory_events group by 1` after the above runs: the turn events are present, a card click gives `product_clicked`, and no payload holds customer words.
+9. **Dev catalogue bridge.** **Check:** with `STOREFRONT_CHAT_CATALOGUE_SHOP_DOMAIN` set, the advice cards are dev-store products (dev ids and links).
+
 ## 47. Shopify discount rules in the advisor: unit-tested, not yet on the dev store — 2026-10-06
 
 1. **Re-sync.** **Done 2026-10-06, passed:** 16/16 products carry `compare_at_price` (12 on sale), and TEST02 is synced (spend 65 € on 7 products → Eau Qi). The solver run offline on the synced data: cream + Eau Qi → TEST02 −37,80 €, free delivery missed by 1,05 €; cream alone → September Rose, 48,26 €; 2 sérums + 2 kits → both 2-for-1 offers; the evaluator gives September Rose `line_already_discounted` by TEST02. **Check (as written):** `npm run dev-store:sync`.

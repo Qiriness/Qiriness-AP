@@ -51,6 +51,8 @@ import { clearSession, writeSession, type SupabaseSession } from "./lib/session-
  * Shopify app proxy. A shopper has no session; Shopify signs the query with the
  * advisor app's secret, and the route checks that and a shop allow-list. It
  * answers 404 while STOREFRONT_APP_CLIENT_SECRET is unset.
+ * `/api/storefront/event` is the same advisor's card-click beacon, behind the
+ * same signature and allow-list.
  */
 const PUBLIC = new Set([
   "/login",
@@ -60,6 +62,7 @@ const PUBLIC = new Set([
   "/api/webhooks/graph",
   "/api/reports/sales",
   "/api/storefront/chat",
+  "/api/storefront/event",
 ]);
 
 export async function middleware(request: NextRequest) {

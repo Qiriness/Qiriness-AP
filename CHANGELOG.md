@@ -14,6 +14,22 @@ Three sibling files carry the other halves, and this one deliberately does not d
 
 
 
+## Storefront advisor: the beauty consultation — profile, Qiriness playbooks, merchandising, events (2026-10-07)
+
+Chatbot only. Nothing in the email agent, its prompts, tickets or the dashboard changed. The one shared-app change is that the middleware lets `/api/storefront/event` through (same guards as `/api/storefront/chat`).
+- **Conversation first.** « J'ai la peau sèche et je commence à avoir des rides » becomes `skin_type: dry` and `primary_concern: early_signs_of_ageing` through a French lexicon before the model is called. Each profile field keeps its value, source and confidence. Chips appear only when the engine has a question, and they fill the same profile (`quick_choice`).
+- **Qiriness playbooks as data.** The 11 playbooks supplied today are in `data/advisor/qiriness.json`, loaded by `npm run advisor:load` into three new tables (migration 80). Families, slots, concerns, textures and areas resolve through collections, tags, care types and name words. There are no product ids, and every reference resolves on the live catalogue.
+- **Recommendation engine** (`scripts/lib/advisory/`, channel-free, 0.1 ms):
+  - hard eligibility: stock, area, men only on explicit request, bundles, exclusions;
+  - the playbook by area then concern, with one distinguishing question when two are plausible;
+  - steps for the scope, minus the current routine;
+  - suitability: concern > sensitivity > secondary; skin type chooses the texture; age at most 0.05;
+  - then the preferred family, then a merchandising tier, only within a tie window.
+- **Routine builder** (« Construire ma routine »): it asks only the fields whose answer would change the routine, in the brand's priority order. It never asks sex or age, never asks twice, and ends in a routine.
+- **Analytics:** `advisory_events`, channel-aware (`storefront_chat` now, `email` reserved), with codes and ids only. Card clicks arrive by beacon.
+- **Measured** on the live catalogue (`npm run eval:advisory`): 21/21 French conversations, and 0 violations of the brand's rules across 3,936 profile combinations. Tests: 5,222 pass (23 new advisory unit tests, 7 chat-turn tests, 24 migration tests). Web typecheck clean.
+- **Applied and loaded the same day:** migration 80 and the 11 playbooks. Signed requests to a local server proved free text, ambiguity with chips, the routine builder and the events. Two fixes came out of that: a treatment step needs a concern match, and a targeted reply hides the steps passed over. Not yet seen in the storefront widget (VALIDATION_LOG 48).
+
 ## Dev-store conversation fixes: policies after a pause, offer names, « why this offer and not that one » (2026-10-07)
 
 From one conversation on the dev store (2026-10-06), diagnosed from the stored traces.
