@@ -131,6 +131,19 @@ export interface OrganicPanel {
   /** The team's own tags (81), read live, never cached. */
   postTags: SocialTag[];
   postTagLinks: SocialTagLink[];
+  /** The listed posts' mix and timing (`postActivity`); null in the all-platforms overview. */
+  activity: PostActivity | null;
+}
+
+export interface PostActivity {
+  total: number;
+  byType: { key: string; posts: number }[];
+  byTag: { id: string; name: string; posts: number }[];
+  untagged: number;
+  /** Hour 0-23 in the shop's timezone. */
+  peakHours: { slot: number; average: number; posts: number }[];
+  /** 0 = Monday. */
+  peakDays: { slot: number; average: number; posts: number }[];
 }
 
 /** A label a person made for posts (« launch », « UGC »…). */

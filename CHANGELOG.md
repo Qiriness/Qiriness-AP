@@ -16,6 +16,8 @@ Three sibling files carry the other halves, and this one deliberately does not d
 
 ## Social posts: views for older posts, rank by date, the team's own tags (2026-10-08)
 
+- **Later the same day:** « image » reads « Static » (« Statique ») in the Posts table, display only. A per-platform **Content activity** section sits under Audience in the Profile view: posts by type, posts by tag (with an « Untagged » row), and the best hours and weekdays. Peak times rank the hours and days by the average engagement of the posts published then, in the shop's timezone, because Meta timestamps no like or comment. A slot needs two posts to be ranked unless none has. The counts cover the posts listed (200 at most). Facebook's engagement is likes + comments + shares until `read_insights` is granted.
+
 - **Why no post had views.** All 60 stored posts (31 Facebook, 29 Instagram) had null views, reach and engagement. Insights were read only for posts of the last 30 days (90 on a first sync), and every post on the connected accounts dates from 2025-10-15 to 2026-03-16. Their insights had never been requested once.
 - **Fix.** `social_posts.insights_at` (migration 81) records when Meta last answered a post's insights. The sync now also reads every never-read post once, whatever its age, newest first, at most 50 per account per sync (`POST_BACKFILL_PER_SYNC`).
   - A post refused for want of a permission is not stamped, so it is retried once the permission is granted.

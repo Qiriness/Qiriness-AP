@@ -83,3 +83,21 @@ test('drivers: four in order, the rate in points, bars against the largest move'
   assert.equal(driverSummary(drivers), 'exposureUpRateDown');
   assert.equal(driverSummary(organicDrivers({ views: 1 }, null)), 'none');
 });
+
+test('post activity: counts by type and tag, and the best hours and weekdays by average engagement', async () => {
+  const { postActivity } = await import('./social-figures.mjs');
+  const post = (id, publishedAt, engagement, mediaType = 'image') => ({ accountId: 'a', id, mediaType, publishedAt, engagement });
+  const posts = [
+    post('1', '2026-10-05T07:30:00Z', 100), // Mon 09:30 Paris
+    post('2', '2026-10-05T07:45:00Z', 300, 'reel'), // Mon 09:45 Paris
+    post('3', '2026-10-06T16:00:00Z', 50), // Tue 18:00 Paris
+    post('4', '2026-10-07T10:00:00Z', null) // no engagement measured
+  ];
+  const out = postActivity(posts, [{ id: 't1', name: 'promo' }, { id: 't2', name: 'unused' }], [{ tagId: 't1', accountId: 'a', postId: '1' }, { tagId: 't1', accountId: 'a', postId: 'gone' }], 'Europe/Paris');
+  assert.deepEqual(out.byType, [{ key: 'image', posts: 3 }, { key: 'reel', posts: 1 }]);
+  assert.deepEqual(out.byTag, [{ id: 't1', name: 'promo', posts: 1 }], 'a tag on a post outside the set is not counted, and an unused tag is left out');
+  assert.equal(out.untagged, 3);
+  assert.deepEqual(out.peakHours[0], { slot: 9, average: 200, posts: 2 });
+  assert.deepEqual(out.peakDays[0], { slot: 0, average: 200, posts: 2 });
+  assert.ok(out.peakHours.every((h) => h.slot !== 12), 'a post with no engagement does not make a slot');
+});

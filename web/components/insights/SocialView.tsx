@@ -9,6 +9,7 @@ import type {
   PaidKind,
   PaidPanel,
   PaidTotals,
+  PostActivity,
   SocialAudience,
   SocialPanel,
 } from "@/lib/social-types";
@@ -119,6 +120,7 @@ function Organic({
         </Card>
       ) : null}
       {view === "profile" && network === "instagram" ? <Audience audience={panel.audience} /> : null}
+      {view === "profile" && network !== "all" && panel.activity ? <ContentActivity activity={panel.activity} /> : null}
     </>
   );
 }
@@ -301,6 +303,71 @@ function Audience({ audience }: { audience: SocialAudience | null }) {
         ))}
       </Grid>
       <Caption>{tr("insights.social.audience.caption")}</Caption>
+    </>
+  );
+}
+
+/**
+ * The mix and timing of the period's posts, for one platform: how many of each
+ * type, how many under each of the team's tags, and the hours and weekdays whose
+ * posts earned the most engagement on average. Peak times are when posts went
+ * out, not when people reacted (Meta timestamps no like): the caption says so.
+ */
+function ContentActivity({ activity }: { activity: PostActivity }) {
+  const tr = getT();
+  const { integer } = getFormat();
+  const hour = (h: number) => `${String(h).padStart(2, "0")}:00–${String((h + 1) % 24).padStart(2, "0")}:00`;
+  const typeLabel = (key: string) => (key === "image" ? tr("insights.social.posts.mediaType.image") : key);
+  const posts = (n: number) => tr("insights.social.activity.posts", { n: integer(n) });
+  const peaks = (rows: PostActivity["peakHours"], label: (slot: number) => string) =>
+    rows.map((r) => ({
+      key: String(r.slot),
+      label: label(r.slot),
+      value: r.average,
+      display: tr("insights.social.activity.avg", { avg: integer(Math.round(r.average)), posts: posts(r.posts) }),
+    }));
+  const counts = (rows: { key: string; label: string; n: number }[]) =>
+    rows.map((r) => ({ key: r.key, label: r.label, value: r.n, display: posts(r.n) }));
+  const tagRows = [
+    ...activity.byTag.map((x) => ({ key: x.id, label: x.name, n: x.posts })),
+    ...(activity.untagged > 0 ? [{ key: "untagged", label: tr("insights.social.posts.tags.untagged"), n: activity.untagged }] : []),
+  ];
+  return (
+    <>
+      <h2 className={styles.sectionTitle}>{tr("insights.social.activity.title")}</h2>
+      {activity.total === 0 ? (
+        <p className={t.muted}>{tr("insights.social.posts.none")}</p>
+      ) : (
+        <>
+          <Grid min={14} pin="social-activity" label={tr("insights.social.activity.title")}>
+            <Card title={tr("insights.social.activity.byType")}>
+              <BarList ariaLabel={tr("insights.social.activity.byType")} data={counts(activity.byType.map((x) => ({ key: x.key, label: typeLabel(x.key), n: x.posts })))} />
+            </Card>
+            <Card title={tr("insights.social.activity.byTag")}>
+              {activity.byTag.length ? (
+                <BarList ariaLabel={tr("insights.social.activity.byTag")} data={counts(tagRows)} />
+              ) : (
+                <p className={t.muted}>{tr("insights.social.activity.noTags")}</p>
+              )}
+            </Card>
+            <Card title={tr("insights.social.activity.peakHours")}>
+              {activity.peakHours.length ? (
+                <BarList ariaLabel={tr("insights.social.activity.peakHours")} data={peaks(activity.peakHours, hour)} />
+              ) : (
+                <p className={t.muted}>{tr("insights.social.activity.noEngagement")}</p>
+              )}
+            </Card>
+            <Card title={tr("insights.social.activity.peakDays")}>
+              {activity.peakDays.length ? (
+                <BarList ariaLabel={tr("insights.social.activity.peakDays")} data={peaks(activity.peakDays, (d) => tr(`insights.social.activity.day.${d}`))} />
+              ) : (
+                <p className={t.muted}>{tr("insights.social.activity.noEngagement")}</p>
+              )}
+            </Card>
+          </Grid>
+          <Caption>{tr("insights.social.activity.caption")}</Caption>
+        </>
+      )}
     </>
   );
 }

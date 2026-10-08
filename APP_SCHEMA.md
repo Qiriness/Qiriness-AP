@@ -210,6 +210,8 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |   |   |                            # mode, view, status pills) + SocialTrend + PaidTrend +
 |   |   |                            # SocialPostsTable (# = rank in the sort; by # =
 |   |   |                            # newest first · tag column, filter, TagEditor) +
+|   |   |                            # ContentActivity (per-platform Profile: posts by type / tag,
+|   |   |                            # best hours and days, from `postActivity`) +
 |   |   |                            # PaidCampaignsTable (links to Ads
 |   |   |                            # Manager / Google Ads) + SocialConnectionsDialog +
 |   |   |                            # SocialProviderCard (also on Settings → Integrations)

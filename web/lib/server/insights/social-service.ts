@@ -21,6 +21,7 @@ import {
   netFollows,
   organicDrivers,
   organicTotals,
+  postActivity,
   paidTotals,
   ratio,
   withRates,
@@ -178,6 +179,7 @@ async function readOrganic(ctx: InsightsContext, kinds: OrganicKind[], selected:
     postsCapped: publishedCount > posts.length,
     postTags: tags.tags,
     postTagLinks: tags.links,
+    activity: selected.length === 1 ? postActivity(posts, tags.tags, tags.links, ctx.tz) : null,
   };
 }
 

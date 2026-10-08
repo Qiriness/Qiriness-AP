@@ -207,3 +207,81 @@ export function driverSummary(drivers) {
   if (!exposureUp && !rateUp) return 'allDown';
   return exposureUp ? 'exposureUpRateDown' : 'exposureDownRateUp';
 }
+
+const PEAK_TOP = 3;
+const PEAK_MIN_POSTS = 2;
+
+/**
+ * What a set of posts says about the content itself: how many of each media
+ * type, how many carry each of the team's tags, and when the posts that earned
+ * the most engagement went out.
+ *
+ * PEAK TIMES ARE WHEN A POST WAS PUBLISHED, NOT WHEN PEOPLE REACTED. Meta
+ * timestamps no like or comment, so « when people engage » cannot be measured
+ * from the API; the nearest true thing is the average engagement of the posts
+ * published in each hour of the day and each weekday, in the shop's timezone.
+ * Each slot carries its post count, and slots with a single post are ranked
+ * only when no slot has two. Posts without a measured engagement are left out of the averages.
+ *
+ * @param {{ accountId: string, id: string, mediaType: string|null, publishedAt: string, engagement: number|null }[]} posts
+ * @param {{ id: string, name: string }[]} tags
+ * @param {{ tagId: string, accountId: string, postId: string }[]} links
+ * @param {string} tz IANA timezone
+ */
+export function postActivity(posts, tags = [], links = [], tz = 'UTC') {
+  const count = (keys) => {
+    const map = new Map();
+    for (const key of keys) map.set(key, (map.get(key) ?? 0) + 1);
+    return map;
+  };
+  const byType = [...count(posts.map((p) => p.mediaType ?? 'other'))]
+    .map(([key, posts]) => ({ key, posts }))
+    .sort((a, b) => b.posts - a.posts || a.key.localeCompare(b.key));
+
+  const inRange = new Set(posts.map((p) => `${p.accountId}|${p.id}`));
+  const tagged = new Map(tags.map((t) => [t.id, new Set()]));
+  for (const link of links) {
+    const key = `${link.accountId}|${link.postId}`;
+    if (inRange.has(key)) tagged.get(link.tagId)?.add(key);
+  }
+  const byTag = tags
+    .map((t) => ({ id: t.id, name: t.name, posts: tagged.get(t.id).size }))
+    .filter((t) => t.posts > 0)
+    .sort((a, b) => b.posts - a.posts || a.name.localeCompare(b.name));
+  const anyTag = new Set([...tagged.values()].flatMap((s) => [...s]));
+
+  const parts = new Intl.DateTimeFormat('en-GB', { timeZone: tz, hour: '2-digit', hourCycle: 'h23', weekday: 'short' });
+  const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+  const hours = new Map();
+  const days = new Map();
+  const add = (map, key, engagement) => {
+    const cell = map.get(key) ?? { total: 0, posts: 0 };
+    cell.total += engagement;
+    cell.posts += 1;
+    map.set(key, cell);
+  };
+  for (const post of posts) {
+    if (post.engagement === null || post.engagement === undefined) continue;
+    const p = Object.fromEntries(parts.formatToParts(new Date(post.publishedAt)).map((x) => [x.type, x.value]));
+    add(hours, Number(p.hour), post.engagement);
+    add(days, WEEKDAYS.indexOf(p.weekday), post.engagement);
+  }
+  // One post is an anecdote: slots with at least PEAK_MIN_POSTS posts are ranked
+  // when there are any, and only otherwise are single-post slots shown.
+  const top = (map) => {
+    const slots = [...map].map(([slot, c]) => ({ slot, average: c.total / c.posts, posts: c.posts }));
+    const steady = slots.filter((x) => x.posts >= PEAK_MIN_POSTS);
+    return (steady.length ? steady : slots)
+      .sort((a, b) => b.average - a.average || b.posts - a.posts || a.slot - b.slot)
+      .slice(0, PEAK_TOP);
+  };
+
+  return {
+    total: posts.length,
+    byType,
+    byTag,
+    untagged: posts.length - anyTag.size,
+    peakHours: top(hours),
+    peakDays: top(days)
+  };
+}
