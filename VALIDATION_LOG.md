@@ -2298,3 +2298,10 @@ Rules written to `support_answers` 2026-10-01 (11 rows; the previous rows are ke
 4. **The first real cosmetovigilance ticket since the switch.** **Check:** the queue row shows « To Cosmétovigilance after first reply » before our reply; after a person sends it, the next poll forwards it and the row shows « Forwarded to Cosmétovigilance ». The ticket stays in the queue with its status unchanged.
 5. **On screen.** **Check:** the chip fits a narrow list row next to the level badge, and the banner sits under the snooze banner.
 6. **Situations tagged on the Rules page.** **Check:** in the cosmetovigilance set, CV-01 to CV-04 each show « To Cosmétovigilance after 1st reply » in the rail and the sentence under the title. Switch the Cosmétovigilance destination off: the tags go after a reload. No other set shows one.
+
+
+## Social report integration (2026-10-09) — open
+
+Built and verified with synthetic data: dated complete-month adapter, enabled-platform controls, saved band thresholds/ER basis, offline editor and Chromium PDF. No production export has been downloaded in an authenticated session yet.
+
+Check: open Insights → Social → All platforms as Management/Developer, pick an ended month and platforms, download HTML, and reconcile additive totals against provider exports using the same provider clock. Confirm disabled/unselected platforms do not render, saved bands and ER basis match the selected platform, and historical observations later than period end are excluded. Verify the single-account Instagram <=30-day unique read when provider permissions allow. Attempt unauthenticated and Contact-role API calls (401/403). Inspect a real exported PDF and reopen a saved revision. Historical posts, exact follower endpoints, long-period reach and account follower splits may be unavailable under current source retention; this is documented in the report, not filled with estimates.

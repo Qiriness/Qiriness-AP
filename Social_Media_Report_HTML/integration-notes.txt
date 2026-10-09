@@ -1,0 +1,191 @@
+SOCIAL MEDIA REPORT TEMPLATE - REVISION 6
+
+STATUS
+Standalone HTML editor with illustrative data, not connected to the dashboard.
+The preview contains synthetic Qiriness results. Import a company-scoped data
+snapshot to populate a real report. Do not reuse the example as company facts.
+
+FILES
+social-report-template.html - editable, offline report and print template.
+example-data.json - synthetic schema example for your dashboard adapter.
+print-report.mjs - controlled Chromium PDF export example.
+integration-notes.txt - this guide.
+
+REVISED DESIGN
+All report footers and page numbers have been removed.
+The overview image is anchored flush to the bottom edge of its page.
+The default two-platform example contains 12 pages:
+1 cover; 2 platform overview; 3 Instagram divider; 4-6 Instagram report;
+7 TikTok divider; 8-10 TikTok report; 11 concluding summary;
+12 definitions and colour coding. Paid media is omitted. Each selected
+platform receives one divider before its first visible report section.
+Additional platforms, long commentary or large post inventories add pages.
+
+- No numbered section eyebrows. The cover image spans the page edge to edge
+  from the top, with the editable brand masthead overlaid in white. The report
+  title and dates sit below it, following the Epoque reference.
+- All photo areas have square corners and span the page width. Divider photos
+  instead occupy the left 65% of the page at full page height, without margins.
+  The company logo/name appears at the top right and platform name below.
+  Click each divider image to upload its photograph; titles remain editable.
+  The default preview uses image placeholders, not the reference brand photos.
+- Slightly rounded, platform-coloured cards. Platform colours are separately
+  editable per company; brand paper, ink and fonts remain configurable.
+- Overview begins with the platform table, without combined KPI cards.
+  Its image spans the page width and adapts to its native ratio within 150-330px.
+- Performance: title on the left, total followers on the right; four cards
+  below for ER, follower/non-follower split, unique reach and profile visits.
+  Two editable text columns precede the six-month trend at the page bottom.
+  The trend always covers the last six months, including for MoM and 12m.
+- Audience: male/female bars, age doughnut, country percentage list, peak
+  audience activity. No cities or discovery panel. Two editable text columns.
+- Content: every eligible post for MoM; top 10 with a ranking value for both
+  6m and 12m. Dates are omitted from rows; format and pillar tags are inline.
+  No featured-post block. Two editable text columns follow the table.
+- Conclusion follows the Epoque reference's first concluding-summary page:
+  title, introductory assessment, then two columns. The left contains the
+  progress-against-objectives heading and objective 1; the right contains
+  objective 2. Both include editable titles, status and commentary.
+  Reference-company claims have not been copied into the reusable template.
+
+COLOUR CODING
+Platform hue identifies each platform. Metric-cell shades describe relative
+performance within that platform and the selected publication cohort:
+- Strong: value at or above the 75th percentile (dark).
+- Moderate: value between the 25th and 75th percentiles (mid).
+- Weak: value at or below the 25th percentile (light).
+Percentiles use sorted numeric observations with linear interpolation.
+Comparisons use ALL eligible posts, not only the displayed top 10. Null values
+are excluded. No shading when fewer than four values exist or the two
+quartiles are equal. Follower shares only compare observations with the same
+views/reach denominator. Ties can make band counts differ from 25/50/25%.
+These are cohort-relative bands, not industry benchmarks or causal judgments.
+If the dashboard already has brand-specific thresholds, replace relativeBand
+and the explanatory legend together; keep the denominator explicit.
+
+DASHBOARD INTEGRATION
+Keep four components distinct:
+1. Data adapter: normalised source metrics, availability and date coverage.
+2. Company profile: colours, fonts, logo, locale, author.
+3. Report draft: reporting context, editable text, images and snapshot version.
+4. Renderer: HTML, pagination and PDF generation.
+
+The sidebar demonstrates controls that can move into the existing dashboard.
+The report does not fetch social APIs or contain credentials. Supply an
+immutable, authorised company snapshot and render that exact report revision.
+Enforce tenant/account access on the server, including exports.
+
+Browser API:
+SocialReport.getData()
+SocialReport.setData(dataset)
+SocialReport.getState()
+SocialReport.setState(state)
+SocialReport.setContext({ months: 1|6|12, endMonth: 'YYYY-MM',
+  platform: 'all'|platformId, erBasis: 'views'|'reach',
+  rank: 'views'|'reach'|'engagementRate'|'interactions'|'saves'|'shares'|'follows' })
+SocialReport.getComputed()
+await SocialReport.ready
+
+Legacy postCount values are accepted for saved-state compatibility but do
+not control table length. Monthly/all and longer-period/top-10 are automatic.
+Existing paid section entries are removed when importing a saved state.
+
+EDITING AND SAVING
+Brand identity > Cover brand heading position selects Left or Right.
+This is saved per company as brand.coverHeadingPosition, defaulting to Right
+for existing reports. The text alignment and image contrast overlay follow it.
+Click report titles and text to edit. Click images to upload PNG/JPEG/WebP.
+Font controls accept licensed WOFF2 files; assets are embedded in Save HTML.
+The overview image preserves width and crops only where its min/max height
+requires it. Other image slots retain their defined height and crop position.
+
+Platform colours are stored in brand.platformColors, keyed by platform ID.
+Defaults support Instagram, TikTok, Facebook, LinkedIn, YouTube, Pinterest,
+Threads and X, with a fallback palette for other platforms.
+
+Commentary is scoped by company, period, end month, platform, ER basis,
+ranking and the legacy postCount key. Existing overrides remain in saved
+state; removed layout elements are no longer rendered. A datasetVersion
+change marks edited commentary for review. Autosave is browser-local; use
+Save HTML or Export JSON to retain a portable report revision.
+Save HTML and Export JSON include ONLY the selected company. getState() can
+include multiple company profiles and should not be shared without scoping.
+Importing a saved report replaces the working editor state; export other
+unsaved company profiles first if necessary.
+
+DATA CONTRACT
+See example-data.json for exact field shapes. Schema version remains 1.
+Top level: companyId, isDemo, datasetVersion, source, asOf (YYYY-MM-DD),
+timezone, currency, platforms[]. Imported companyId must match the profile.
+Set isDemo=false only when importing real data.
+
+Per platform: unique id, name, scope='organic', monthly[],
+nativePeriodMetrics[], audienceSnapshots[], posts[], optional activityTimes.
+Use real organic values. If source totals include paid activity, do not
+mislabel them as organic; adapt the scope model before using such totals.
+Legacy paidMonthly and cities fields may be retained but are not required
+or rendered. Paid reporting should be handled in a separate report.
+
+monthly[]:
+month (YYYY-MM), status ('complete'|'partial'), views, impressions,
+interactions, likes, comments, shares, saves, profileVisits, linkTaps,
+followersStart, followersEnd, postsPublished. Numeric fields are numbers or
+null. Missing does not mean zero. Keep provider definitions consistent.
+
+nativePeriodMetrics[]:
+start/end inclusive dates, reach, accountsEngaged, nonFollowerShare (0-1),
+nonFollowerBasis ('views'|'reach'), provenance. Supply an exact-period native
+unique reach for 6m/12m; never sum monthly unique reach. The performance-page
+follower doughnut uses this account-period split, not an average of post
+percentages. Missing splits display unavailable, with no estimated substitute.
+
+audienceSnapshots[]:
+asOf, basis (followers/viewers/etc.), gender[], age[], countries[], where
+items are {label,value} and value is a percentage from 0 to 100. The latest
+snapshot on/before period end is selected; older snapshots are labelled.
+Retain all source categories. The gender chart intentionally displays only
+male/female and rebases them to their reported total, as labelled on the card.
+Age and country percentages are preserved, including Other if supplied.
+
+activityTimes:
+asOf, timezone, items[{day,time}]. No activity windows are inferred.
+
+posts[]:
+id, publishedAt, observedAt, caption, format, pillar, views, reach, likes,
+comments, shares, saves, interactions, follows, nonFollowerShare (0-1/null),
+nonFollowerBasis, metricScope='lifetime-at-snapshot'. Multiple observations
+per post are supported; choose the latest on/before period end. Include all
+posts from the selected publication period in the adapter, not a shortlist.
+Monthly tables retain posts whose ranking metric is missing and place them
+last. Longer-period rankings require a numeric value for the chosen metric.
+The synthetic snapshots are dated 2026-09-30, so earlier reporting ends have
+no post/audience history unless additional dated snapshots are supplied.
+
+CALCULATIONS
+MoM = selected complete calendar month versus the preceding month.
+6m/12m = consecutive, non-overlapping windows ending in the selected month.
+The six-month trend is a separate context window, not the comparison window.
+Additive totals require all included months to be complete with known values.
+Followers = final snapshot; net follows = final minus initial snapshot.
+Account ER = total interactions / total views or exact-period reach.
+Post ER = interactions / reach. Rates are never averaged across months/posts.
+Rate changes use percentage points. Positive-baseline changes are percentage
+changes; zero/negative baselines receive absolute changes. Missing values
+remain unavailable. Reach is not summed across posts or months.
+Post lifetime-to-snapshot metrics do not reconcile to account-period activity.
+Profile visits and saves do not independently establish sales or intent.
+
+PDF EXPORT AND VERIFICATION
+Use the provided print-report.mjs in a project with Playwright installed:
+node print-report.mjs template.html report-state.json output.pdf
+Use '-' for the template's default/embedded dataset.
+The print CSS specifies A4, embedded assets, vector charts and automatic page
+continuations. Long post tables split between rows with repeated headings.
+Long two-column commentary is split without dropping words.
+Browser print settings: A4, 100%, no margins, background graphics enabled,
+browser-added headers and footers disabled.
+
+Revision checks cover all three reporting modes, platform filtering, all-post
+and top-10 row counts, missing ranking values, 90-post pagination, long
+commentary, bounded image dimensions, saved/reopened edits and platform hues,
+and a rendered inspection of the default 12-page PDF.

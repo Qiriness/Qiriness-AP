@@ -1,3 +1,4 @@
+import { lastCompleteMonth } from "../../../../scripts/lib/insights-range.mjs";
 import { InsightsPage } from "@/components/insights/InsightsPage";
 import { SocialView } from "@/components/insights/SocialView";
 import { getSocialPanel, parseSocialParams } from "@/lib/server/insights/social-service";
@@ -19,6 +20,7 @@ export default function SocialInsightsPage({ searchParams }: { searchParams: Sea
         <SocialView
           panel={await getSocialPanel(ctx, params)}
           compareLabel={ctx.range.compareLabel}
+          reportOptions={{ months: ctx.months, initial: ctx.range.query.month ?? lastCompleteMonth({ tz: ctx.tz }), span: ctx.range.preset === "6m" ? 6 : ctx.range.preset === "1y" ? 12 : 1 }}
           openConnections={first(searchParams.connections) === "1"}
           connected={first(searchParams.connected) ?? null}
           connectError={first(searchParams.connect_error) ?? null}

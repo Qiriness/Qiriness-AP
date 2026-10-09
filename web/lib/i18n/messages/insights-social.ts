@@ -1,5 +1,17 @@
 /** Insights → Social media (organic + paid) and its Connections dialog. */
 export const en = {
+  "insights.social.report.title": "Social media report",
+  "insights.social.report.endMonth": "Report ending month",
+  "insights.social.report.period": "Reporting period",
+  "insights.social.report.mom": "Month on month",
+  "insights.social.report.six": "6 months vs previous 6 months",
+  "insights.social.report.year": "12 months vs previous 12 months",
+  "insights.social.report.platforms": "Include platforms",
+  "insights.social.report.download": "Download report",
+  "insights.social.report.building": "Building report…",
+  "insights.social.report.hint": "Download the editable HTML report. Open it to edit text and images, choose platforms, or print / save as PDF. Calendar periods and dated snapshots determine which figures are available.",
+  "insights.social.report.choose": "Select at least one platform.",
+  "insights.social.report.error": "The report could not be downloaded. Please try again.",
   "insights.social.platformReason": "Social and ad platforms are not sales channels: the platform filter does not apply here",
   "insights.social.title.organicAll": "Cross-platform overview",
   "insights.social.title.paidAll": "Paid media overview",
@@ -270,6 +282,18 @@ export const en = {
 } as const;
 
 export const fr: Record<keyof typeof en, string> = {
+  "insights.social.report.title": "Rapport réseaux sociaux",
+  "insights.social.report.endMonth": "Mois de fin du rapport",
+  "insights.social.report.period": "Période du rapport",
+  "insights.social.report.mom": "Mois comparé au mois précédent",
+  "insights.social.report.six": "6 mois comparés aux 6 mois précédents",
+  "insights.social.report.year": "12 mois comparés aux 12 mois précédents",
+  "insights.social.report.platforms": "Plateformes à inclure",
+  "insights.social.report.download": "Télécharger le rapport",
+  "insights.social.report.building": "Préparation du rapport…",
+  "insights.social.report.hint": "Téléchargez le rapport HTML modifiable. Ouvrez-le pour modifier les textes et images, choisir les plateformes ou imprimer / enregistrer en PDF. Les périodes calendaires et les dates des données déterminent les chiffres disponibles.",
+  "insights.social.report.choose": "Sélectionnez au moins une plateforme.",
+  "insights.social.report.error": "Le téléchargement du rapport a échoué. Veuillez réessayer.",
   "insights.social.platformReason": "Les réseaux sociaux et publicitaires ne sont pas des canaux de vente : le filtre plateforme ne s'applique pas ici",
   "insights.social.title.organicAll": "Vue multi-plateformes",
   "insights.social.title.paidAll": "Vue publicité",

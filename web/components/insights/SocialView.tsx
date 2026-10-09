@@ -22,6 +22,7 @@ import { PaidCampaignsTable } from "./PaidCampaignsTable";
 import { PaidTrend } from "./PaidTrend";
 import { SocialPostsTable } from "./SocialPostsTable";
 import { SocialTrend } from "./SocialTrend";
+import { SocialReportDownload, type SocialReportOptions } from "./SocialReportDownload";
 import o from "./OverviewView.module.css";
 import t from "./tables.module.css";
 import styles from "./SocialView.module.css";
@@ -40,6 +41,7 @@ export function SocialView({
   connected,
   connectError,
   connectProvider,
+  reportOptions,
 }: {
   panel: SocialPanel;
   compareLabel: string;
@@ -47,6 +49,7 @@ export function SocialView({
   connected: string | null;
   connectError: string | null;
   connectProvider: string | null;
+  reportOptions: SocialReportOptions;
 }) {
   const kinds = panel.mode === "organic" ? panel.organic?.kinds ?? [] : panel.paid?.kinds ?? [];
   return (
@@ -76,6 +79,7 @@ export function SocialView({
       ) : (
         <ConnectPrompt kind="paid" />
       )}
+      {panel.mode === "organic" && panel.network === "all" && panel.organic ? <SocialReportDownload key={JSON.stringify(reportOptions)} kinds={panel.organic.kinds} options={reportOptions} /> : null}
     </>
   );
 }

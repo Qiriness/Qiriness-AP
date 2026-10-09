@@ -1,0 +1,11 @@
+.controls { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--space-4); }
+.label { display: grid; gap: var(--space-1); color: var(--text-subtle); font-size: var(--text-sm); }
+.select { min-height: 2.25rem; padding: 0 var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface); color: var(--text-strong); font: inherit; }
+.platforms { display: flex; flex-wrap: wrap; gap: var(--space-3); padding: 0; margin: 0; border: 0; color: var(--text-subtle); font-size: var(--text-sm); }
+.platforms legend { margin-bottom: var(--space-2); }
+.platforms label { display: flex; align-items: center; gap: var(--space-1); min-height: 2.25rem; }
+.button { display: inline-flex; align-items: center; min-height: 2.25rem; padding: 0 var(--space-4); border: 0; border-radius: var(--radius-md); background: var(--teal); color: var(--text-on-teal); font: inherit; font-weight: var(--weight-semibold); cursor: pointer; }
+.button:hover { background: var(--teal-strong); }
+.button:disabled { opacity: .5; cursor: default; }
+.button:focus-visible, .select:focus-visible, .platforms input:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
+.hint, .error { color: var(--text-subtle); font-size: var(--text-sm); margin: var(--space-3) 0 0; }

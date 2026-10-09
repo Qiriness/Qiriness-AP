@@ -77,6 +77,12 @@ The Insights → Social media tab connects through OAuth. Each shop's token goes
 
 `cd web && npm install`, then `npm run dev` and open `http://localhost:3000` (redirects to `/agent-setup`). `npm run build`, `npm run lint`, `npm run typecheck` for checks. Set `PAGE_TIMING=1` to print how long each page's reads take to the server console. `next dev` compiles each page on first visit, so measure page speed on `npm run build && npm run start` — and stop the dev server first, since both use `web/.next`. Run the root sync scripts at least once first — the Knowledge API looks the shop up by domain and returns a clear 404 until a `shops` row and the `shopify_content_sources` catalog exist.
 
+### Social media reports
+
+On Insights → Social media → All platforms, use the report card at the bottom to choose the ending calendar month, a 1/6/12-month comparison, and platforms. Download the editable HTML, then open it in a browser to edit commentary, images or branding, adjust included platforms, save the revision, or print/save as PDF. Historical figures appear only when dated source observations support the period. Saved platform bands and engagement-rate bases are captured at download time.
+
+From `web/`, `npm run report:social:verify` runs synthetic Chromium checks and writes a sample PDF/screenshots under `.next/social-report-validation/`. It uses installed Edge/Chrome on Windows; elsewhere install a Playwright Chromium browser or set `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH`.
+
 ### Agent worker (`agent/`)
 
 `cd agent && npm install`, then `npm run ingest:once` for a single pass or `npm start` to poll. For a backlog review pass that stores and categorises mail without investigation or forwarding, run `npm run ingest:once -- --limit=500 --stop-after=categorise`. Every pipeline stage also has a standalone CLI, most with a `:dry-run` twin — see `APP_SCHEMA.md` § Agent CLIs.

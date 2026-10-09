@@ -5497,3 +5497,18 @@ The rules are researched in `docs/shopify-discount-rules.md`; this is why the ev
   - `purchase` (order attribution);
   - `unresolved_question` / `support_handoff`.
   - All four types are in the schema already. Dashboard integration is a separate task (`docs/storefront-chatbot.md` § Advice).
+
+
+## Social report (2026-10-09)
+
+### The supplied editor stays intact; data and platform selection are bound around it
+
+The owner supplied revision 6 and explicitly required its design and behavior to remain. Its CSS and chapter/pagination functions are preserved; the dashboard downloads a shop-scoped editable HTML file. Calendar report periods remain 1, 6 or 12 complete months, independent of arbitrary rolling dashboard presets. A picked calendar month initializes the report end; otherwise the last complete shop month does.
+
+### Historical figures require dated evidence
+
+The supplied contract selects post observations and audience snapshots on/before period end. Existing social_posts overwrites lifetime figures rather than retaining observations, so a later fetch is ineligible for an earlier report. Daily totals require every day and every metric; missing values never become zero. Follower endpoints require exact boundary snapshots. The adapter pages in stable composite-key order, including the full post inventory, rather than reusing the dashboard’s capped 200-post list. Unique reach is never summed over days or accounts; a single Instagram account may reuse the existing native <=30-day read. Account-period follower splits and peak audience activity remain unavailable because existing sync does not supply them. Source labels say Account activity because stored metrics do not establish an organic-only breakdown.
+
+### Report shading uses the platform rules, with the denominator shown
+
+The owner explicitly asked for the post shading to match saved platform bands. The report embeds the same bandOf/median implementation and effectiveRules values read live at download time. ER values use each platform’s dashboard basis; ratio values are converted to percentages for ER thresholds. Follower bands use each post account’s dated period-end snapshot. Median bands use all eligible report posts, including those outside the displayed top ten; a dashboard capped at 200 posts may therefore have a different cohort median. The existing legend now describes configured limits and includes the saved values. Saves/non-follower share have no corresponding dashboard rule and receive no shading.

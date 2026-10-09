@@ -117,6 +117,9 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |   |       |                                  # DELETE disconnect. social-connections-service
 |   |       |-- insights/vip-rule/route.ts   # GET the rule / preview a draft count ·
 |   |       |                                  # PUT save or clear it (vip-rule.mjs)
+|   |       |-- insights/social/report/route.ts # GET ?month=&months=1|6|12&platforms=
+|   |       |                                  # authenticated editable HTML report download;
+|   |       |                                  # same roles as the Social panel
 |   |       |-- insights/social/non-followers  # PUT {accountId, postId, percent}: the typed-in
 |   |       |                                  # share of non-followers (social-post-manual-service)
 |   |       |-- insights/social/bands        # PUT {kind, rules} or {kind, reset}: colour bands
@@ -211,6 +214,8 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |   |   |                            # table, Overview + Fulfilment) · FulfilmentView ·
 |   |   |                            # OpenOrders · SupportView + TopicMap · CustomersView +
 |   |   |                            # VipRuleCard + SegmentFinder + CustomerActivityRows · AgentView ·
+|   |   |                            # SocialReportDownload (organic All platforms footer:
+|   |   |                            # calendar end month, 1/6/12 months, platform inclusion) +
 |   |   |                            # SocialView (organic / paid) + SocialHeader (network,
 |   |   |                            # mode, view, status pills) + SocialTrend + PaidTrend +
 |   |   |                            # SocialPostsTable (# = rank in the sort; by # =
@@ -329,6 +334,7 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |   |                             # and platform mix) ·
 |   |                             # marketable-contacts (CSV; consent is the
 |   |                             # query filter) · topic-map-rebuild · social-service
+|   |                             # social-report-service (shop-scoped dated snapshot + HTML)
 |   |                             # (the Social panel + Marketing's Paid / Social
 |   |                             # tabs; Instagram reach read live, <= 30 days)
 |   |-- middleware.ts            # THE GATE: every page + API needs a Supabase
@@ -570,6 +576,10 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |       |-- social-sync.mjs              # connectMeta / connectGoogle (code -> Vault +
 |       |                                # accounts) · runSocialSync (never throws;
 |       |                                # status on social_connections)
+|       |-- social-report-data.mjs      # dated, complete-month snapshot adapter; full paged
+|       |                               # source inventory, no historical metrics substitution
+|       |-- social-report.mjs           # company-scoped snapshot + saved platform bands ->
+|       |                               # supplied revision 6 editor (social-report-template.mjs)
 |       |-- social-figures.mjs           # pure: organic / paid totals, series sums,
 |       |                                # drivers, never across currencies
 |       |-- shopifyql-client.mjs         # one ShopifyQL query per request; reads THROTTLED
@@ -1412,6 +1422,10 @@ From `agent/`. Every pass has a standalone runner, most with `:dry-run`.
 | `eval:casework [-- --repeat N] [--show]` | today's pipeline against the multi-turn labelled set, per inbound cut: the Case Manager's `effect` and `answered`, and the next action (`draftDecision` skips, closure through the real case file's gate where one existed at that message, else taken as open). Each cut starts from the labels, not the model's previous answer. Outcomes are agree / disagree / **inexpressible** (a label the pipeline has no value for) / unlabelled. Outbound cuts, case state and internal checks are counted, not scored. Writes nothing; no gate yet |
 | `eval:delta [-- --show]` | what follow-up investigations did with the « Dossier connu » section: calls per run with and without it, runs where the model re-fetched a fact the section said was established, runs where a fact to refresh was not looked at. Rebuilds each delta with the runner's own `caseDeltaFrom`. No model call, no write |
 | `eval:categorise` · `eval:retrieval` · `eval:diagnose` · `eval:exemplars` (`-- --authored-only` drops the translations, for a same-corpus A/B) · `review:sample` · `review:compare` | every measurement — indexed in **`agent/eval/README.md`**, which says what each is judged against (three labelled sets, two proxies) |
+
+### Social report flow
+
+`Social_Media_Report_HTML/` supplies revision 6 HTML and the synthetic JSON contract. `social-report-template.mjs` bundles the HTML verbatim. `SocialReportDownload` → authenticated `/api/insights/social/report` → `social-report-service.ts` → paged account/day/post/audience reads + live tags/bands → `social-report-data.mjs` → `social-report.mjs` → editable offline HTML. Single-account Instagram exact-period reach reuses `getSocialReportReach` where supported. Snapshots carry platform bands, post ER bases and dated per-account follower counts. Post observations later than period end are excluded. No schema change or customer data. Browser QA: `cd web; npm run report:social:verify` (synthetic fixtures; PDF/screenshots in `.next/social-report-validation/`).
 
 ## Read Order
 

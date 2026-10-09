@@ -5025,3 +5025,10 @@ Two new investigation tools, plus the attachment metadata that makes the second 
   now preserves English/Spanish reply wording instead of inserting French text.
 - Final regression checks: 246 relevant tests passed; web TypeScript, lint and
   `git diff --check` passed. Generated dev-widget replies still need review.
+
+
+## Social media report integration (2026-10-09)
+
+- Added a report download card below the organic All-platforms overview, with calendar end month, MoM/6m/12m comparisons and platform inclusion checkboxes. Downloaded HTML retains revision 6 styling, editing, sections, branding, images, print/PDF and pagination; platform checkboxes also work inside the editor.
+- Connected enabled shop accounts, daily activity, dated post/audience observations, post tags, platform engagement bases and saved colour bands. Live unique reach is reused only for supported complete periods on one Instagram account. Missing historical evidence stays unavailable. Reports contain aggregate social metrics and brand captions only.
+- Verified focused adapter/band tests and related social/access regressions, TypeScript, ESLint and the production build; Chromium checks cover all periods, inclusion, exact configured shading, historical snapshot exclusion, editing/reopening, 90-post tables, long commentary and PDF generation. The supplied stylesheet is asserted byte-identical. Real authenticated exports and provider reconciliation remain in VALIDATION_LOG.

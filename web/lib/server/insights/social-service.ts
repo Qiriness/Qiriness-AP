@@ -291,7 +291,7 @@ function toAudience(rows: { captured_on: string; dimension: string; key: string;
 const reachCache = new Map<string, { at: number; value: LiveReach }>();
 
 /** Instagram reach and accounts engaged over the range, summed across tracked accounts. */
-async function liveReach(ctx: InsightsContext): Promise<LiveReach> {
+async function liveReach(ctx: { shopId: string; range: { from: string; to: string } }): Promise<LiveReach> {
   const fromMs = Date.parse(`${ctx.range.from}Z`);
   const toMs = Math.min(Date.parse(`${ctx.range.to}Z`), Date.now());
   if (toMs - fromMs > LIVE_REACH_MAX_DAYS * 24 * 3600 * 1000 + 3600 * 1000) {
@@ -309,7 +309,7 @@ async function liveReach(ctx: InsightsContext): Promise<LiveReach> {
   return value;
 }
 
-async function readLiveReach(ctx: InsightsContext, since: number, until: number): Promise<LiveReach> {
+async function readLiveReach(ctx: { shopId: string; range: { from: string; to: string } }, since: number, until: number): Promise<LiveReach> {
   const app = socialAppConfig(process.env).meta;
   const supabase = getSupabaseClient();
   const token = app.canSync ? await supabaseRpc(supabase, SOCIAL_RPC.READ_TOKEN, { p_shop: ctx.shopId, p_provider: "meta" }) : null;
@@ -517,4 +517,9 @@ export async function getMarketingSocial(ctx: InsightsContext): Promise<Marketin
     console.warn("marketing social unreadable", (error as Error).message);
     return empty;
   }
+}
+
+/** Exact-period unique figures shared with the calendar report; the same 30-day/provider limits apply. */
+export function getSocialReportReach(shopId: string, from: string, to: string): Promise<LiveReach> {
+  return liveReach({ shopId, range: { from, to } });
 }
