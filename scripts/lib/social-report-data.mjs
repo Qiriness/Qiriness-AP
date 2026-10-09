@@ -23,7 +23,7 @@ const sum = values => values.length && values.every(v => v !== null) ? values.re
  * @param {{companyId: string, timezone: string, endMonth: string, asOf: string, accounts: Account[], days: Day[], posts: Post[], audience: Audience[], tags?: {id: string, name: string}[], links?: {accountId: string, postId: string, tagId: string}[], bands?: {kind: string, metric: string, mode: string, low: number|null, high: number|null}[]}} input
  * Strict, dated adapter. No daily unique reach, post shortlist, or current demographic substitution. */
 export function adaptSocialReport({ companyId, timezone, endMonth, asOf, accounts, days, posts, audience, tags = [], links = [], bands = [] }) {
-  const enabled = accounts.filter(a => a.enabled && ['instagram', 'facebook'].includes(a.kind));
+  const enabled = accounts.filter(a => a.enabled && ['instagram', 'facebook', 'tiktok'].includes(a.kind));
   const platforms = [...new Set(enabled.map(a => a.kind))].map(kind => {
     const group = enabled.filter(a => a.kind === kind);
     const ids = new Set(group.map(a => a.id));
@@ -54,7 +54,7 @@ export function adaptSocialReport({ companyId, timezone, endMonth, asOf, account
       };
       return { asOf: date, basis: 'followers', gender: buckets('gender'), age: buckets('age'), countries: buckets('country') };
     });
-    return { id: kind, name: kind === 'instagram' ? 'Instagram' : 'Facebook', scope: 'account', monthly,
+    return { id: kind, name: kind === 'instagram' ? 'Instagram' : kind === 'tiktok' ? 'TikTok' : 'Facebook', scope: 'account', monthly,
       engagementBasis: group[0].engagement_basis ?? 'reach',
       bandRules: effectiveRules(bands.filter(b => b.kind === kind)),
       followersByMonth: Object.fromEntries(monthly.map(m => [m.month, Object.fromEntries(group.map(a => [a.id, number(byDay.get(a.id + '|' + endOfMonth(m.month))?.followers)]))])),

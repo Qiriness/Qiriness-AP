@@ -53,7 +53,7 @@ Pending: ORM/DB client for app reads (scripts use `pg` + a Supabase REST client)
 
 **Shopify scopes:** `read_discounts` for promotions; `read_content`/`read_online_store_pages` and `read_legal_policies` for the content catalog; `read_themes` for the theme-template content fallback. Missing optional scopes surface as a clear import error rather than silent failure. For Shopify Dev Dashboard apps, leave `SHOPIFY_ADMIN_API_ACCESS_TOKEN` blank and the scripts request a short-lived Admin token from the client ID/secret at runtime.
 
-### Social connectors (Meta, Google Ads)
+### Social connectors (Meta, Google Ads, TikTok)
 
 The Insights → Social media tab connects through OAuth. Each shop's token goes to Supabase Vault. **This app's own credentials** are set once, as env vars, in three places: **Vercel** (the connect callback), **Render** (the worker's sync) and **GitHub Actions secrets** (the nightly). Until they are set, Connect is shown disabled with the missing names.
 
@@ -71,8 +71,15 @@ The Insights → Social media tab connects through OAuth. Each shop's token goes
    - On the Google Ads API page of that **same Cloud project**, apply for **Basic access**. It needs brand verification and is then reviewed automatically within minutes. A new project starts at **Test** access, which is refused on real (production) ad accounts.
    - **No developer token and no manager account are needed.** Google sunset developer tokens on 2026-09-09; access levels now belong to the Cloud project. A manager account matters only if the ad accounts are reached through one.
    - Set `GOOGLE_OAUTH_CLIENT_ID` and `GOOGLE_OAUTH_CLIENT_SECRET`.
-3. Set `SOCIAL_OAUTH_STATE_SECRET` (32+ random characters) on Vercel. Set `PUBLIC_APP_URL` if the dashboard is reached through another host than the one registered.
-4. Apply `supabase/migrations/70_social.sql`, then open Insights → Social media → **Connections** and click **Connect**. The worker runs the first sync within minutes. `npm run probe:meta` lists which Meta metric names still answer.
+3. **TikTok**
+   - Configure Login Kit for Web and Display API in the TikTok developer app; request `user.info.basic`, `user.info.stats`, and `video.list`. Production access depends on TikTok approving the app and scopes.
+   - Register `https://qiriness-ap.vercel.app/api/settings/integrations/tiktok/callback` exactly (or the callback under `PUBLIC_APP_URL`).
+   - Set `TIKTOK_CLIENT_KEY` and `TIKTOK_CLIENT_SECRET` on Vercel, the Render worker and GitHub Actions secrets. The nightly workflow forwards both secrets.
+   - Apply migration `85_tiktok.sql` after the existing social migrations through 84. Connect and **Sync now** enqueue the same `sync_social` worker jobs as Meta/Google; nightly and `npm run sync:social -- --provider=tiktok` use the same implementation.
+   - One TikTok login per shop. Connecting a different login disables the previous account for sync while retaining its history. Reconnecting the same account preserves its tracking and engagement basis choices. New TikTok accounts use interactions ÷ views.
+   - Tokens refresh automatically and rotate together in Vault. Public videos from the last year carry lifetime views/likes/comments/shares; follower history starts at the first sync. Daily views, unique reach and audience demographics remain unavailable. See [TikTok video list](https://developers.tiktok.com/doc/tiktok-api-v2-video-list/) and [token management](https://developers.tiktok.com/doc/oauth-user-access-token-management/).
+4. Set `SOCIAL_OAUTH_STATE_SECRET` (32+ random characters) on Vercel. Set `PUBLIC_APP_URL` if the dashboard is reached through another host than the one registered.
+5. Apply the required social migrations, then open Insights → Social media → **Connections** and click **Connect**. The worker runs the first sync within minutes. `npm run probe:meta` lists which Meta metric names still answer.
 
 
 `cd web && npm install`, then `npm run dev` and open `http://localhost:3000` (redirects to `/agent-setup`). `npm run build`, `npm run lint`, `npm run typecheck` for checks. Set `PAGE_TIMING=1` to print how long each page's reads take to the server console. `next dev` compiles each page on first visit, so measure page speed on `npm run build && npm run start` — and stop the dev server first, since both use `web/.next`. Run the root sync scripts at least once first — the Knowledge API looks the shop up by domain and returns a clear 404 until a `shops` row and the `shopify_content_sources` catalog exist.
@@ -131,6 +138,8 @@ below. `llm_usage` holds 2174 calls.
 **Tests:** 2013 from the repo root, 1299 in `agent/`. Both suites pass as of 2026-09-09.
 
 ## Next Steps
+
+**TikTok (2026-10-09):** connector and worker integration are implemented; migration 85 is applied and verified on Qiriness Supabase. Configure the TikTok app credentials on Vercel/Render/GitHub Actions, deploy web/worker changes, and complete the remaining live checks in `VALIDATION_LOG.md` → TikTok. TikTok app approval, live OAuth and deployment remain unverified.
 
 **Storefront shopping:** run `VALIDATION_LOG.md` item 46 before treating generated
 cart/stock/promotion replies as validated. The dev shop needs its own synced shopping

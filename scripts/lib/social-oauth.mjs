@@ -1,4 +1,5 @@
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
+import { tiktokConfig } from './tiktok-client.mjs';
 
 // Connecting Meta and Google through OAuth: the app's own credentials, the
 // consent URLs, and the `state` that ties a provider's answer to the person
@@ -65,6 +66,7 @@ export function socialAppConfig(env = process.env) {
   const googleMissing = missing(['GOOGLE_OAUTH_CLIENT_ID', 'GOOGLE_OAUTH_CLIENT_SECRET']);
 
   return {
+    tiktok: tiktokConfig(env),
     publicUrl: value('PUBLIC_APP_URL'),
     stateSecret,
     meta: {

@@ -158,7 +158,7 @@ async function readOrganic(ctx: InsightsContext, kinds: OrganicKind[], selected:
     compare ? readOrganicRows(ctx, ctx.range.previous) : Promise.resolve(null),
     callRpc<{ kind: string; captured_on: string; dimension: string; key: string; value: number }>(SOCIAL_RPC.AUDIENCE, { p_shop: ctx.shopId }),
     callRpc<Record<string, unknown>>(SOCIAL_RPC.POSTS, { p_shop: ctx.shopId, p_from: ctx.range.from, p_to: ctx.range.to, p_tz: ctx.tz, p_limit: POST_LIMIT }),
-    selected.includes("instagram") ? liveReach(ctx) : Promise.resolve<LiveReach>({ reach: null, accountsEngaged: null, blockedReason: "insights.social.reach.pageNotUnique" }),
+    selected.includes("instagram") ? liveReach(ctx) : Promise.resolve<LiveReach>({ reach: null, accountsEngaged: null, blockedReason: selected.includes("facebook") ? "insights.social.reach.pageNotUnique" : "insights.social.notAnswered" }),
     readSocialTags(ctx.shopId),
     readEngagementBases(ctx.shopId),
     readBandRows(ctx.shopId),

@@ -21,6 +21,19 @@ function fakeJobs(claimed) {
   };
 }
 
+test('TikTok uses the same worker lease, completion, retry and reconnect outcomes', async () => {
+  for (const status of ['ok', 'failed', 'needs_reconnect', 'skipped']) {
+    const jobs = fakeJobs([{ id: 'tik-job', payload: { provider: 'tiktok' } }]);
+    await runSocialJobs({ jobs, supabase: {}, shopId: 'shop-a', env: {}, sync: async input => {
+      assert.equal(input.provider, 'tiktok');
+      assert.equal(input.shopRow.id, 'shop-a');
+      return { tiktok: { status, error: 'Dummy failure' } };
+    } });
+    assert.equal(jobs.failed.length, status === 'failed' ? 1 : 0);
+    assert.equal(jobs.done.length, status === 'failed' ? 0 : 1);
+  }
+});
+
 test('a synced provider closes its job; a refused token closes it too, since retrying cannot help', async () => {
   const jobs = fakeJobs([
     { id: 'j1', payload: { provider: 'meta' } },

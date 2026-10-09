@@ -19,7 +19,7 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |                    # report:collection-planner · report:collection-replay
 |                    # probe:analytics (what ShopifyQL will answer)
 |                    # sync:klaviyo (flows + campaigns; key from Vault)
-|                    # sync:social (Meta + Google Ads; tokens from Vault)
+|                    # sync:social (Meta + Google Ads + TikTok; tokens from Vault)
 |                    # probe:meta (which Meta metric names still answer)
 |                    # db:apply:migration · test
 |                    # storefront:chat (one proxy-signed message to the advisor)
@@ -566,6 +566,11 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |       |                                # campaignUrl (the one place campaign links are built)
 |       |-- social-oauth.mjs             # app credentials from env, signed state,
 |       |                                # Meta / Google consent URLs
+|       |-- tiktok-client.mjs            # Clara-derived Login Kit + Display API client;
+|       |                                # consent, token exchange/rotation, public video counters
+|       |-- tiktok-sync.mjs              # shop-scoped connect, identity guard, Vault rotation;
+|       |                                # follower snapshots + year of lifetime video counts;
+|       |                                # social-sync dispatches worker/nightly/CLI to this module
 |       |-- meta-client.mjs              # Graph API (appsecret_proof, rate-limit waits,
 |       |                                # a retired metric -> null, 190 -> reconnect)
 |       |-- meta-insights.mjs            # pure: META_METRICS (the one name table) +
@@ -1102,6 +1107,7 @@ Written by the worker and the CLIs, read only by the Insights panels.
 | `76_storefront_chat.sql` | `storefront_chat_sessions` + `storefront_chat_messages` and three service-role functions (daily count, turn, purge). New tables only. No data. **Applied 2026-10-05** | 01 |
 | `72_refund_notice.sql` | `support_answers.notify_on` (`refund_recorded`; marks a notice template) + `ticket_drafts.purpose` (`reply` / `refund_notice`). Copied from 05 / 07. No data. **Applied 2026-10-05** | 05, 07 |
 | `84_post_non_followers.sql` | `social_posts.non_followers_pct` + 0-100 check. No data. **Applied 2026-10-08** | 70 |
+| `85_tiktok.sql` | TikTok provider/kind/band constraints, follower RPC widened; `social_refresh_token` rotates Vault bundle and expiry, service role only. **Applied and verified 2026-10-09** | 70, 82, 83, 84 |
 | `83_social_metric_bands.sql` | `social_metric_bands` (`SOCIAL_BAND_T`). New table only. No data. **Applied 2026-10-08** | 01 |
 | `82_engagement_basis.sql` | `social_accounts.engagement_basis` + check; `insights_social_post_totals` dropped and recreated with three more columns (same args and grants). No data. **Applied 2026-10-08** | 70, 81 |
 | `81_social_post_tags.sql` | `social_posts.insights_at`; `social_post_tags` + `social_post_tag_links` (`SOCIAL_TAG_T`). New column and tables only. No data. **Applied 2026-10-08** | 70 |

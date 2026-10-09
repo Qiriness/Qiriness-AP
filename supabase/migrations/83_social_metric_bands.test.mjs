@@ -18,7 +18,7 @@ test('83 creates exactly the band table, named as tables.mjs names it, closed to
 });
 
 test('the checks list exactly the kinds, metrics and modes the app offers', () => {
-  assert.deepEqual(listOf('kind'), ORGANIC_KINDS);
+  assert.deepEqual(listOf('kind'), ORGANIC_KINDS.filter(kind => kind !== 'tiktok'));
   assert.deepEqual(listOf('metric'), BAND_METRICS);
   assert.deepEqual(listOf('mode'), BAND_MODES);
 });

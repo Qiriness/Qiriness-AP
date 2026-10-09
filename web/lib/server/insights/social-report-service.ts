@@ -23,7 +23,7 @@ export async function buildSocialReport(params: URLSearchParams, locale: "fr" | 
   }
   const client = getSupabaseClient();
   const accounts = await supabaseSelectAll(client, SOCIAL_T.ACCOUNTS, { shop_id: shop.id, enabled: true }, "id,kind,enabled,engagement_basis", { order: "id.asc" });
-  const kinds = [...new Set(accounts.filter((a: { kind: string }) => ["instagram", "facebook"].includes(a.kind)).map((a: { kind: string }) => a.kind))];
+  const kinds = [...new Set(accounts.filter((a: { kind: string }) => ["instagram", "facebook", "tiktok"].includes(a.kind)).map((a: { kind: string }) => a.kind))];
   const platforms = params.has("platforms") ? [...new Set((params.get("platforms") ?? "").split(","))] : kinds;
   if (!platforms.length || platforms.some(id => !kinds.includes(id))) throw new SocialReportInputError("Choose at least one connected social platform.");
   // One additional boundary day is needed for the first comparison month's starting followers.

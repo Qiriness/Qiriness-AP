@@ -104,15 +104,15 @@ function ProviderCard({
   const t = useT();
   const locale = useLocale();
   const connectHref = `${BASE}/${p.provider}/start?return=${returnKey}`;
-  const expiresSoon =
+  const expiresSoon = p.provider !== "tiktok" &&
     p.tokenExpiresAt !== null && Date.parse(p.tokenExpiresAt) - Date.now() < RECONNECT_WARN_DAYS * 24 * 3600 * 1000;
-  const needsReconnect = p.lastSyncStatus === "needs_reconnect" || (p.tokenExpiresAt !== null && Date.parse(p.tokenExpiresAt) < Date.now());
+  const needsReconnect = p.lastSyncStatus === "needs_reconnect" || (p.provider !== "tiktok" && p.tokenExpiresAt !== null && Date.parse(p.tokenExpiresAt) < Date.now());
 
   return (
     <section className={styles.provider}>
       <header className={styles.providerHead}>
         <span className={styles.platformIcon} aria-hidden="true">
-          {p.provider === "meta" ? "M" : "G"}
+          {p.provider === "meta" ? "M" : p.provider === "tiktok" ? "T" : "G"}
         </span>
         <span className={styles.providerName}>
           <strong>{t(`insights.social.provider.${p.provider}`)}</strong>

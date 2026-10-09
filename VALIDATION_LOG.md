@@ -2300,6 +2300,16 @@ Rules written to `support_answers` 2026-10-01 (11 rows; the previous rows are ke
 6. **Situations tagged on the Rules page.** **Check:** in the cosmetovigilance set, CV-01 to CV-04 each show « To Cosmétovigilance after 1st reply » in the rail and the sentence under the title. Switch the Cosmétovigilance destination off: the tags go after a reload. No other set shows one.
 
 
+## TikTok connection and worker sync (2026-10-09) — open
+
+Fixture checks passed: scope refusal, exact consent/callback parameters, token rotation/persistence ordering, secret-safe errors, account identity, paging, reconnect preservation, dry-run behavior, report metric scope and the real worker sync entry point. **Migration 85 applied and verified on Qiriness Supabase 2026-10-09.** No production TikTok login has been authorized and no worker deployment was performed.
+
+1. **PROVEN 2026-10-09:** applied migration 85 to Qiriness project `gvgcvftjtgtnpkdonooh` and requested PostgREST schema reload. Verified all four widened constraints, the TikTok follower read, pinned security-definer refresh RPC, and EXECUTE denied to anon/authenticated but granted to service_role. Before/after counts unchanged: 1 connection, 10 accounts, 731 account-day rows, 60 posts and 8 bands. No tokens were read during verification. Actual rotation with an authorized TikTok token remains in check 4.
+2. Configure the approved TikTok Login Kit/Display API app with the exact callback in README. Set `TIKTOK_CLIENT_KEY` and `TIKTOK_CLIENT_SECRET` on Vercel, Render and GitHub Actions; retain the existing 32+ character OAuth state secret on Vercel. Deploy web and worker changes.
+3. Connect an authorized brand account through Connections. Confirm the callback queues a shop-scoped `sync_social` job with provider `tiktok`; the worker leases and completes it, the connection status updates, and profile/posts appear. Sync now uses the same queue. Compare public video counters and the follower snapshot with TikTok at the observation time.
+4. Run nightly/CLI sync and repeat it: no duplicate videos/day rows, manual tags/non-follower percentages and the existing tracking/basis choice stay intact. Verify rotation after access-token expiry saves the renewed bundle in Vault without changing connecting user/date. Revoke TikTok access: needs_reconnect closes the job; retry transient rate limits/server failures through existing worker backoff.
+5. Connect a different login: previous accounts retain history but stop tracking, and neither login receives the other's videos. Confirm declined scopes, mismatched OAuth state/user and unauthorized dashboard roles cannot connect or read credentials. Check English/French UI and TikTok report naming; daily views/unique reach remain unavailable and video metrics are labeled lifetime snapshots.
+
 ## Social report integration (2026-10-09) — open
 
 Built and verified with synthetic data: dated complete-month adapter, enabled-platform controls, saved band thresholds/ER basis, offline editor and Chromium PDF. No production export has been downloaded in an authenticated session yet.

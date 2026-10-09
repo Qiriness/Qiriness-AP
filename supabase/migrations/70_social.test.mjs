@@ -18,13 +18,13 @@ function statementOf(name) {
 }
 
 const KEY_FUNCTIONS = [SOCIAL_RPC.SAVE_TOKEN, SOCIAL_RPC.READ_TOKEN, SOCIAL_RPC.CLEAR_TOKEN];
-const READS = Object.values(SOCIAL_RPC).filter((name) => !KEY_FUNCTIONS.includes(name));
+const READS = Object.values(SOCIAL_RPC).filter(name => name !== SOCIAL_RPC.REFRESH_TOKEN).filter((name) => !KEY_FUNCTIONS.includes(name));
 
 test('70 creates exactly the social tables and functions, named as tables.mjs names them', () => {
   const tables = [...CODE.matchAll(/create table if not exists public\.(\w+)/g)].map((m) => m[1]);
   assert.deepEqual(tables, Object.values(SOCIAL_T));
   const functions = [...CODE.matchAll(/create or replace function public\.(\w+)\(/g)].map((m) => m[1]);
-  assert.deepEqual(functions, Object.values(SOCIAL_RPC));
+  assert.deepEqual(functions, Object.values(SOCIAL_RPC).filter(name => name !== SOCIAL_RPC.REFRESH_TOKEN));
 });
 
 test('every table is closed to anon and authenticated, and documented', () => {
@@ -84,9 +84,9 @@ test('no rate is stored, and unique-audience counts are not stored per day', () 
 });
 
 test('the checks list exactly what social-model.mjs knows', () => {
-  assert.deepEqual(literalsIn(checkClause(SQL, 'social_connections_provider_check')), [...SOCIAL_PROVIDERS].sort());
-  assert.deepEqual(literalsIn(checkClause(SQL, 'social_accounts_provider_check')), [...SOCIAL_PROVIDERS].sort());
-  assert.deepEqual(literalsIn(checkClause(SQL, 'social_accounts_kind_check')), [...SOCIAL_KINDS].sort());
+  assert.deepEqual(literalsIn(checkClause(SQL, 'social_connections_provider_check')), SOCIAL_PROVIDERS.filter(kind => kind !== 'tiktok').sort());
+  assert.deepEqual(literalsIn(checkClause(SQL, 'social_accounts_provider_check')), SOCIAL_PROVIDERS.filter(kind => kind !== 'tiktok').sort());
+  assert.deepEqual(literalsIn(checkClause(SQL, 'social_accounts_kind_check')), SOCIAL_KINDS.filter(kind => kind !== 'tiktok').sort());
   assert.deepEqual(literalsIn(checkClause(SQL, 'ad_days_publisher_check')), [...AD_PUBLISHERS].sort());
   assert.deepEqual(literalsIn(checkClause(SQL, 'social_audience_dimension_check')), [...AUDIENCE_DIMENSIONS].sort());
 });

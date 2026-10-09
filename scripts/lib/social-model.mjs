@@ -5,22 +5,23 @@
 // these lists and 70_social.test.mjs holds the two together.
 
 /** Who a connection is made with, through OAuth. */
-export const SOCIAL_PROVIDERS = ['meta', 'google'];
+export const SOCIAL_PROVIDERS = ['meta', 'google', 'tiktok'];
 
 /**
  * What a connection can see. `instagram` and `facebook` are ORGANIC accounts;
  * `meta_ads` and `google_ads` are PAID ones. One provider sees several kinds.
  */
-export const SOCIAL_KINDS = ['instagram', 'facebook', 'meta_ads', 'google_ads'];
+export const SOCIAL_KINDS = ['instagram', 'facebook', 'meta_ads', 'google_ads', 'tiktok'];
 
-export const ORGANIC_KINDS = ['instagram', 'facebook'];
+export const ORGANIC_KINDS = ['instagram', 'facebook', 'tiktok'];
 export const PAID_KINDS = ['meta_ads', 'google_ads'];
 
 export const PROVIDER_OF_KIND = {
   instagram: 'meta',
   facebook: 'meta',
   meta_ads: 'meta',
-  google_ads: 'google'
+  google_ads: 'google',
+  tiktok: 'tiktok'
 };
 
 /**
@@ -47,7 +48,7 @@ export const AUDIENCE_DIMENSIONS = ['gender', 'age', 'country', 'city'];
  * « Coming soon », never in the platform selector: a network nobody can connect
  * would only ever show an empty panel.
  */
-export const UPCOMING_NETWORKS = ['tiktok', 'youtube', 'pinterest'];
+export const UPCOMING_NETWORKS = ['youtube', 'pinterest'];
 
 /** Keep a publisher inside the vocabulary; anything new reads as `other`. */
 export function normalisePublisher(value) {

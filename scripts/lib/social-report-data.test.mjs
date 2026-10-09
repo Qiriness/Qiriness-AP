@@ -15,6 +15,21 @@ function fixture() {
   };
 }
 
+test('TikTok reports keep lifetime video counters separate from unavailable daily activity', () => {
+  const input = fixture();
+  input.accounts = [{ id: 'tik', kind: 'tiktok', enabled: true, engagement_basis: 'views' }];
+  input.days = input.days.map(({ day, followers }) => ({ account_id: 'tik', day, followers }));
+  input.posts = [{ ...input.posts[0], account_id: 'tik', published_at: '2026-09-20T10:00:00Z', insights_at: '2026-09-30T10:00:00Z', views: 120, reach: null }];
+  const platform = adaptSocialReport(input).platforms[0];
+  assert.equal(platform.id, 'tiktok');
+  assert.equal(platform.name, 'TikTok');
+  assert.equal(platform.monthly.at(-1).views, null);
+  assert.equal(platform.monthly.at(-1).followersEnd, 130);
+  assert.equal(platform.posts[0].views, 120);
+  assert.equal(platform.posts[0].metricScope, 'lifetime-at-snapshot');
+  assert.equal(platform.posts[0].reach, null);
+});
+
 test('complete month totals preserve zero, null, exact followers and platform selection', () => {
   const data = adaptSocialReport(fixture());
   assert.equal(data.isDemo, false);

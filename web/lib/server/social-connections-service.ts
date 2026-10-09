@@ -15,6 +15,7 @@
  */
 
 import { createMailJobRecord } from "../../../scripts/lib/mail-job-record.mjs";
+import { tiktokAuthorizeUrl } from "../../../scripts/lib/tiktok-client.mjs";
 import { supabaseSelect, supabaseUpdate } from "../../../scripts/lib/supabase-rest-client.mjs";
 import { SOCIAL_T, T } from "../../../scripts/lib/tables.mjs";
 import { ENGAGEMENT_BASES, ORGANIC_KINDS, UPCOMING_NETWORKS } from "../../../scripts/lib/social-model.mjs";
@@ -30,6 +31,7 @@ import {
 import {
   connectGoogle,
   connectMeta,
+  connectTikTok,
   disconnectSocial,
   readSocialStatus,
   setAccountEnabled,
@@ -40,7 +42,7 @@ import type { SocialConnectionsStatus, SocialProvider } from "../social-types";
 
 export { STATE_COOKIE };
 
-export const PROVIDERS: SocialProvider[] = ["meta", "google"];
+export const PROVIDERS: SocialProvider[] = ["meta", "google", "tiktok"];
 
 export function isProvider(value: unknown): value is SocialProvider {
   return typeof value === "string" && (PROVIDERS as string[]).includes(value);
@@ -106,7 +108,9 @@ export async function startConnect(provider: SocialProvider, origin: string, use
           state,
           loginConfigId: config.meta.loginConfigId,
         })
-      : googleAuthorizeUrl({ clientId: config.google.clientId!, redirect, state });
+      : provider === "tiktok"
+        ? tiktokAuthorizeUrl({ clientKey: config.tiktok.clientKey!, redirect, state })
+        : googleAuthorizeUrl({ clientId: config.google.clientId!, redirect, state });
   return { ok: true as const, url, nonce };
 }
 
@@ -124,10 +128,10 @@ export async function completeConnect(
   if (!checked.ok) return { ok: false, code: "state" };
 
   const shopId = await getShopId();
-  if (checked.shopId !== shopId) return { ok: false, code: "state" };
+  if (checked.shopId !== shopId || checked.userId !== input.userId) return { ok: false, code: "state" };
   if (!input.code) return { ok: false, code: "denied" };
 
-  const connect = provider === "meta" ? connectMeta : connectGoogle;
+  const connect = provider === "meta" ? connectMeta : provider === "tiktok" ? connectTikTok : connectGoogle;
   let result: { ok: boolean; code?: string; error?: string; accounts?: number };
   try {
     result = await connect({

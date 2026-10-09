@@ -1,5 +1,10 @@
 /** Insights → Social media (organic + paid) and its Connections dialog. */
 export const en = {
+  "insights.social.provider.tiktok": "TikTok",
+  "insights.social.provider.tiktok.covers": "Profile statistics and public videos",
+  "insights.social.kind.tiktok": "TikTok",
+  "insights.social.subtitle.tiktok": "Follower snapshots and lifetime video performance",
+  "insights.social.tiktok.coverage": "TikTok reports lifetime video counts, not daily views or unique reach. Follower history starts when syncing begins.",
   "insights.social.report.title": "Social media report",
   "insights.social.report.endMonth": "Report ending month",
   "insights.social.report.period": "Reporting period",
@@ -255,6 +260,7 @@ export const en = {
   "insights.social.connect.error.exchange_failed": "{provider} did not complete the connection. Try again; if it repeats, the details are in the server log.",
   "insights.social.connect.error.unknown": "Unknown provider.",
   "insights.social.posts.open.instagram": "Open on Instagram",
+  "insights.social.posts.open.tiktok": "Open on TikTok",
   "insights.social.posts.open.facebook": "Open on Facebook",
   "insights.social.campaigns.title": "Campaigns",
   "insights.social.campaigns.aside": "Every campaign that delivered in the period — click one to open it",
@@ -282,6 +288,11 @@ export const en = {
 } as const;
 
 export const fr: Record<keyof typeof en, string> = {
+  "insights.social.provider.tiktok": "TikTok",
+  "insights.social.provider.tiktok.covers": "Statistiques du profil et vidéos publiques",
+  "insights.social.kind.tiktok": "TikTok",
+  "insights.social.subtitle.tiktok": "Abonnés et performances cumulées des vidéos",
+  "insights.social.tiktok.coverage": "TikTok fournit les compteurs cumulés des vidéos, pas les vues quotidiennes ni la portée unique. L’historique des abonnés commence avec la synchronisation.",
   "insights.social.report.title": "Rapport réseaux sociaux",
   "insights.social.report.endMonth": "Mois de fin du rapport",
   "insights.social.report.period": "Période du rapport",
@@ -537,6 +548,7 @@ export const fr: Record<keyof typeof en, string> = {
   "insights.social.connect.error.exchange_failed": "{provider} n'a pas terminé la connexion. Réessayez ; si cela se répète, le détail est dans le journal du serveur.",
   "insights.social.connect.error.unknown": "Fournisseur inconnu.",
   "insights.social.posts.open.instagram": "Ouvrir sur Instagram",
+  "insights.social.posts.open.tiktok": "Ouvrir sur TikTok",
   "insights.social.posts.open.facebook": "Ouvrir sur Facebook",
   "insights.social.campaigns.title": "Campagnes",
   "insights.social.campaigns.aside": "Chaque campagne diffusée sur la période — cliquez pour l'ouvrir",

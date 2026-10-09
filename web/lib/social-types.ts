@@ -6,9 +6,9 @@
 
 import type { SeriesPoint } from "./types";
 
-export type SocialProvider = "meta" | "google";
-export type SocialKind = "instagram" | "facebook" | "meta_ads" | "google_ads";
-export type OrganicKind = "instagram" | "facebook";
+export type SocialProvider = "meta" | "google" | "tiktok";
+export type SocialKind = "instagram" | "facebook" | "meta_ads" | "google_ads" | "tiktok";
+export type OrganicKind = "instagram" | "facebook" | "tiktok";
 export type PaidKind = "meta_ads" | "google_ads";
 export type SocialMode = "organic" | "paid";
 export type OrganicView = "profile" | "content" | "posts";

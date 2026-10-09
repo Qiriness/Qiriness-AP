@@ -1,4 +1,6 @@
 import { createGoogleAdsClient, exchangeGoogleCode, GoogleAdsError } from './google-ads-client.mjs';
+import { prepareTikTok, syncTikTokAccount } from './tiktok-sync.mjs';
+export { connectTikTok } from './tiktok-sync.mjs';
 import { CLIENTS_QUERY, CUSTOMER_QUERY, campaignDailyQuery, dailyQuery, foldCampaignDaily, foldDaily, foldDiscovery } from './google-ads-reports.mjs';
 import { createMetaClient, exchangeMetaCode, MetaError } from './meta-client.mjs';
 import {
@@ -239,7 +241,8 @@ export async function runSocialSync({
   fetchImpl = fetch,
   dryRun = false,
   createMeta = (token, appConfig) => createMetaClient({ token, appSecret: appConfig.appSecret, graphVersion: appConfig.graphVersion, fetchImpl, log }),
-  createAds = (token, appConfig) => googleClient(token, appConfig, { fetchImpl, log })
+  createAds = (token, appConfig) => googleClient(token, appConfig, { fetchImpl, log }),
+  createTikTok
 }) {
   const shopId = shopRow.id;
   const config = socialAppConfig(env);
@@ -253,7 +256,7 @@ export async function runSocialSync({
       results[connection.provider] = { status: 'skipped', reason: `app credentials missing: ${appConfig?.missing?.join(', ')}` };
       continue;
     }
-    results[connection.provider] = await syncProvider({ supabase, shopId, connection, appConfig, now, log, dryRun, createMeta, createAds });
+    results[connection.provider] = await syncProvider({ supabase, shopId, connection, appConfig, now, log, dryRun, createMeta, createAds, createTikTok, env, fetchImpl });
   }
   if (provider && !results[provider]) results[provider] = { status: 'skipped', reason: 'not connected' };
   return results;
@@ -264,7 +267,7 @@ export async function runSocialSync({
  * the connection row and returned as `{ status, error, ...counts }`, so one
  * provider's failure cannot cost the other its night.
  */
-async function syncProvider({ supabase, shopId, connection, appConfig, now, log, dryRun, createMeta, createAds }) {
+async function syncProvider({ supabase, shopId, connection, appConfig, now, log, dryRun, createMeta, createAds, createTikTok, env, fetchImpl }) {
   const provider = connection.provider;
   const stats = { accounts: 0, days: 0, posts: 0, post_insights: 0, ad_days: 0, campaign_days: 0, audience: 0, failed: [], unanswered: new Set() };
   let status = 'ok';
@@ -283,6 +286,8 @@ async function syncProvider({ supabase, shopId, connection, appConfig, now, log,
       await upsertAccounts(supabase, shopId, 'meta', await discoverMetaAccounts(meta, { pages }));
       const fullConnection = await supabaseSelect(supabase, SOCIAL_T.CONNECTIONS, { shop_id: shopId, provider }, 'conversion_action', { limit: 1 });
       ctx.conversionAction = fullConnection?.[0]?.conversion_action || DEFAULT_META_CONVERSION_ACTION;
+    } else if (provider === 'tiktok') {
+      await prepareTikTok(ctx, token, { env, fetchImpl, createTikTok });
     } else {
       const ads = createAds(token, appConfig);
       ctx.ads = ads;
@@ -296,6 +301,7 @@ async function syncProvider({ supabase, shopId, connection, appConfig, now, log,
         else if (account.kind === 'facebook') await syncFacebookPage(ctx, account);
         else if (account.kind === 'meta_ads') await syncMetaAds(ctx, account);
         else if (account.kind === 'google_ads') await syncGoogleAds(ctx, account);
+        else if (account.kind === 'tiktok') await syncTikTokAccount(ctx, account);
         stats.accounts += 1;
       } catch (accountError) {
         if (accountError?.needsReconnect) throw accountError;

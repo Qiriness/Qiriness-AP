@@ -104,6 +104,8 @@ jobs:
           # credentials; each shop's token is in Supabase Vault. Unset, that
           # provider is skipped, not failed.
           META_APP_ID: ${{ secrets.META_APP_ID }}
+          TIKTOK_CLIENT_KEY: ${{ secrets.TIKTOK_CLIENT_KEY }}
+          TIKTOK_CLIENT_SECRET: ${{ secrets.TIKTOK_CLIENT_SECRET }}
           META_APP_SECRET: ${{ secrets.META_APP_SECRET }}
           META_GRAPH_VERSION: ${{ vars.META_GRAPH_VERSION }}
           GOOGLE_OAUTH_CLIENT_ID: ${{ secrets.GOOGLE_OAUTH_CLIENT_ID }}

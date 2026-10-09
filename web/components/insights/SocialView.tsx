@@ -103,6 +103,7 @@ function Organic({
   if (view === "posts" && network !== "all") {
     return (
       <>
+        {network === "tiktok" ? <p className={o.chartBlocked}>{tr("insights.social.tiktok.coverage")}</p> : null}
         {panel.bandRules[network] ? <BandsEditor kind={network} rules={panel.bandRules[network]!} custom={Boolean(panel.bandsCustom[network])} /> : null}
         <Card title={tr("insights.social.posts.title")} aside={<span>{tr("insights.social.posts.aside")}</span>}>
           <SocialPostsTable posts={panel.posts} capped={panel.postsCapped} tags={panel.postTags} links={panel.postTagLinks} />
@@ -113,6 +114,7 @@ function Organic({
 
   return (
     <div className={network === "all" ? undefined : styles.tinted} data-kind={network === "all" ? undefined : network}>
+      {network === "tiktok" ? <p className={o.chartBlocked}>{tr("insights.social.tiktok.coverage")}</p> : null}
       <OrganicKpis panel={panel} network={network} compareLabel={compareLabel} />
 
       <Grid min={26} pin="social-trend" label={tr("insights.social.trend.title")}>

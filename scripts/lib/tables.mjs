@@ -189,6 +189,7 @@ export const SOCIAL_T = {
 };
 
 export const SOCIAL_RPC = {
+  REFRESH_TOKEN: 'social_refresh_token',
   SAVE_TOKEN: 'social_save_token',
   READ_TOKEN: 'social_read_token',
   CLEAR_TOKEN: 'social_clear_token',
