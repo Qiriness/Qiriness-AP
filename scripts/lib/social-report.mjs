@@ -29,6 +29,14 @@ export function renderSocialReport(state) {
   // An invalid stored draft must never fall back to the illustrative company's results.
   html = html.replace('catch(e){state=initialState()}', 'catch(e){state=clone(embedded)}');
 
+  // Publication belongs to the period; lifetime counters belong to their observation.
+  // Imported historical-snapshot datasets retain revision 6's strict cutoff.
+  html = html.replace('x.observedAt<=r.current.end', "(company().data.postObservationPolicy==='latest-available'?x.observedAt<=company().data.asOf:x.observedAt<=r.current.end)");
+  const snapshotNote = "function postSnapshotNote(posts){if(company().data.postObservationPolicy!=='latest-available'||!posts.length)return '';const dates=[...new Set(posts.map(x=>x.observedAt))].sort();const observed=dates.length===1?dates[0]:dates[0]+' to '+dates.at(-1);return '<p class=\"caption\">Posts published in the selected period. Lifetime figures observed '+esc(observed)+'; these are not activity totals for the selected period.</p>';}";
+  html = html.replace('function contentChapter(p)', snapshotNote + '\nfunction contentChapter(p)');
+  html = html.replace("${posts.length?`<div class=\"table-wrap\"><table class=\"post-table\">", "${postSnapshotNote(posts)}${posts.length?`<div class=\"table-wrap\"><table class=\"post-table\">");
+  html = html.replace('<span class="post-tags"><span class="post-tag">${esc(x.format)}</span>', '<span class="post-tags"><span class="post-tag">Published ${esc(x.publishedAt)}</span><span class="post-tag">${esc(x.format)}</span>');
+
   // Share the dashboard's exact threshold implementation (including the low/high boundary rules).
   const bandScript = 'const dashboardBandOf=' + bandOf.toString() + ';const dashboardMedian=' + median.toString() + ';' +
     "function configuredBand(x,key,p,all){const metric=key==='interactions'?'engagement':key;const rule=p.bandRules?.[metric];const value=key==='engagementRate'&&numeric(x[key])?x[key]*100:x[key];const peers=all.map(v=>key==='engagementRate'&&numeric(v[key])?v[key]*100:v[key]);const band=dashboardBandOf(value,rule,{followers:p.followersByMonth?.[state.settings.endMonth]?.[x.accountId]??null,median:dashboardMedian(peers)});return {low:'weak',medium:'moderate',high:'strong'}[band]||''}";

@@ -68,6 +68,18 @@ test('timezone boundaries and snapshot revisions follow dates and rules', () => 
   assert.notEqual(socialReportVersion(data), data.datasetVersion);
 });
 
+test('historical dashboard exports retain publication date and label later lifetime observations', () => {
+  const input = fixture();
+  input.endMonth = '2025-12';
+  input.posts[0].published_at = '2025-12-31T23:30:00Z';
+  const data = adaptSocialReport(input);
+  assert.equal(data.postObservationPolicy, 'latest-available');
+  assert.equal(data.platforms[0].posts[0].publishedAt, '2026-01-01');
+  assert.equal(data.platforms[0].posts[0].observedAt, '2026-10-01');
+  assert.match(data.source, /not period-only activity totals/);
+  assert.equal(data.platforms[0].monthly.at(-1).views, null);
+});
+
 test('report embeds only supplied company, escapes scripts, preserves CSS and rejects empty platforms', () => {
   const data = adaptSocialReport(fixture());
   const state = socialReportState(data, { name: '</script><script>bad()</script> $&', endMonth: '2026-09', platforms: ['instagram'] });

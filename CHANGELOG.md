@@ -5044,3 +5044,9 @@ Two new investigation tools, plus the attachment metadata that makes the second 
 
 - Applied `85_tiktok.sql` to the verified Qiriness Supabase project `gvgcvftjtgtnpkdonooh` through the existing migration runner; PostgREST schema reload requested.
 - Verified the four TikTok constraints, widened follower read, security-definer/pinned-search-path token refresh and service-role-only execute permissions. Social table counts were unchanged: 1 connection, 10 accounts, 731 account-day rows, 60 posts, 8 bands. No tokens or personal records were fetched for verification. Live OAuth, token rotation with real TikTok credentials and web/worker deployment remain pending.
+
+## Historical social report post tables fixed (2026-10-09)
+
+- Reproduced December 2025's empty table in the actual renderer: a post published in December but synced in October was excluded by the historical observation cutoff. A read-only Qiriness audit confirmed 11 Instagram and 11 Facebook December posts, all observed later.
+- Connected exports now select posts by publication date and display latest stored lifetime figures with observation dates and an explicit distinction from period-only activity. Daily totals and strict imported historical-snapshot behavior remain unchanged; the supplied stylesheet is unchanged. No migration or production data write was needed.
+- Verified the real stored December data through the browser renderer using anonymized IDs/captions: 22 post rows, Instagram 422,383 views / 1,069 interactions / 11 posts, Facebook 11 posts with unavailable daily views preserved as null. Added adapter and browser regressions; six adapter tests, existing editing/pagination/PDF browser checks, TypeScript, lint and production build passed. Fix is local; deployment and a fresh authenticated download remain pending.

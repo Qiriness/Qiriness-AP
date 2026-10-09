@@ -70,7 +70,10 @@ export function adaptSocialReport({ companyId, timezone, endMonth, asOf, account
       }), activityTimes: null };
   });
   const data = { schemaVersion: 1, companyId, isDemo: false, source: 'Connected dashboard · provider-reported account activity (paid activity is not separately identified). Daily metrics use the provider clock; post dates use the company timezone. Historical post observations are not retained; only observations on or before the report end are eligible. Exact-period reach is available only for a single Instagram account over a complete period of at most 30 days. Account follower splits and audience activity windows are unavailable.', asOf, timezone, currency: 'EUR', platforms };
-  return { ...data, datasetVersion: socialReportVersion(data) };
+  const snapshot = { ...data, postObservationPolicy: 'latest-available',
+    source: data.source.replace('Historical post observations are not retained; only observations on or before the report end are eligible.',
+      'Post tables include posts published in the report period with the latest stored lifetime figures as of the download date, even when observed after the period. These are not period-only activity totals. Historical post observations are not retained.') };
+  return { ...snapshot, datasetVersion: socialReportVersion(snapshot) };
 }
 
 export function socialReportVersion(data) {

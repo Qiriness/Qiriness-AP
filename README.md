@@ -86,7 +86,7 @@ The Insights → Social media tab connects through OAuth. Each shop's token goes
 
 ### Social media reports
 
-On Insights → Social media → All platforms, use the report card at the bottom to choose the ending calendar month, a 1/6/12-month comparison, and platforms. Download the editable HTML, then open it in a browser to edit commentary, images or branding, adjust included platforms, save the revision, or print/save as PDF. Historical figures appear only when dated source observations support the period. Saved platform bands and engagement-rate bases are captured at download time.
+On Insights → Social media → All platforms, use the report card at the bottom to choose the ending calendar month, a 1/6/12-month comparison, and platforms. Download the editable HTML, then open it in a browser to edit commentary, images or branding, adjust included platforms, save the revision, or print/save as PDF. Post tables include posts published in the selected period with latest stored lifetime figures and observation dates. These differ from the report's period-only daily activity totals; missing daily metrics or follower history remain unavailable. Imported historical-snapshot datasets retain their strict observation cutoff. Saved platform bands and engagement-rate bases are captured at download time.
 
 From `web/`, `npm run report:social:verify` runs synthetic Chromium checks and writes a sample PDF/screenshots under `.next/social-report-validation/`. It uses installed Edge/Chrome on Windows; elsewhere install a Playwright Chromium browser or set `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH`.
 
@@ -138,6 +138,8 @@ below. `llm_usage` holds 2174 calls.
 **Tests:** 2013 from the repo root, 1299 in `agent/`. Both suites pass as of 2026-09-09.
 
 ## Next Steps
+
+**Historical reports (2026-10-09):** deploy the post-table correction and download a fresh December 2025 report. Stored December counts and post membership have been verified in the renderer; reconciliation against the Meta UI/export remains open in VALIDATION_LOG.
 
 **TikTok (2026-10-09):** connector and worker integration are implemented; migration 85 is applied and verified on Qiriness Supabase. Configure the TikTok app credentials on Vercel/Render/GitHub Actions, deploy web/worker changes, and complete the remaining live checks in `VALIDATION_LOG.md` → TikTok. TikTok app approval, live OAuth and deployment remain unverified.
 
